@@ -101,7 +101,7 @@ describe("queued NPC redemption cash witness", () => {
       await f.db.collection("indexFundRedemptionQueue").findOne({ _id: f.entry._id })
     ).toMatchObject({ status: "queued", units: 10 });
   });
-  it("retains the cross-currency anchor witness without inventing a mirror", async () => {
+  it("mirrors an anchor-stated cross-currency redemption onto the fund's own key", async () => {
     const f = world("UK");
     expect(await processQueuedRedemptions(f.db, f.fund, false, 7)).toBe(1);
     const row = f.memory.collection("financialTxLog").docs[0] as unknown as DerivableTx;
@@ -111,8 +111,16 @@ describe("queued NPC redemption cash witness", () => {
       currencyCode: "GBP",
       meta: { fundCurrency: "USD" },
     });
-    expect(fundMirrorAccount(row)).toBeNull();
-    expect(deriveLedgerEntries([row])).toHaveLength(1);
-    expect(f.memory.collection("ledgerEntries").docs).toHaveLength(1);
+    // NPP cash is ₳-denominated, so the fund's debit is exactly the row's anchor.
+    expect(fundMirrorAccount(row)).toBe(`fund:${f.fundId}:USD`);
+    const entries = deriveLedgerEntries([row]);
+    expect(entries).toHaveLength(2);
+    expect(entries[1].legs[0]).toMatchObject({
+      account: `fund:${f.fundId}:USD`,
+      currencyCode: "USD",
+      anchorAmount: -1000,
+      role: "primary",
+    });
+    expect(f.memory.collection("ledgerEntries").docs).toHaveLength(2);
   });
 });

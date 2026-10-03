@@ -57,9 +57,9 @@ export interface OrgSummary {
     status: "founding" | "active";
     joinedTurn: number;
     /**
-     * Whether this member casts a ballot on an ADMISSION or a BLOC WAR ENTRY —
-     * the two where a member consents to someone else's business and its silence
-     * blocks. Vote rosters must filter on it.
+     * Whether this member casts a ballot on an ADMISSION, a BLOC WAR DECLARATION,
+     * or a BLOC WAR ENTRY — the ballots where a member consents to someone else's
+     * business and its silence blocks. Vote rosters must filter on it.
      */
     hasVote: boolean;
     /**

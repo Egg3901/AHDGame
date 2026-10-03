@@ -4,10 +4,11 @@ import { ColdWarDialHydrator } from "./_coldwar/ColdWarDialHydrator";
 
 /**
  * Wraps every Cold War section route in the themed-island shell: the `.cw-root`
- * scope (dark palette + scrollbars + `cw*` keyframes) and the bespoke fonts
- * (Lora + IBM Plex Mono) the design references by literal family name. Loaded
- * via the same Google Fonts stylesheet the mockups use so the verbatim-ported
- * inline `font-family:Lora` / `'IBM Plex Mono'` references resolve.
+ * scope (dark palette + scrollbars + `cw*` keyframes) and the bespoke mono
+ * (IBM Plex Mono) the design references by literal family name. Loaded via a
+ * Google Fonts stylesheet so the verbatim-ported inline `'IBM Plex Mono'`
+ * references resolve. Headings use the app's Geist sans, which is already
+ * loaded app-wide.
  */
 export default function ConflictsLayout({ children }: { children: ReactNode }) {
   return (
@@ -20,7 +21,7 @@ export default function ConflictsLayout({ children }: { children: ReactNode }) {
       {/* eslint-disable-next-line @next/next/no-page-custom-font */}
       <link
         rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,500;0,600;0,700;1,500&family=IBM+Plex+Mono:wght@400;500;600;700&family=Permanent+Marker&display=swap"
+        href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap"
       />
       {/* Pulls the console's dials from the server into its localStorage cache,
           whichever route in the section the player entered through. */}

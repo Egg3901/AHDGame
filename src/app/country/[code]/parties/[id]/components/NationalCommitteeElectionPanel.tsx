@@ -155,10 +155,7 @@ export function NationalCommitteeElectionPanel({
               <div className="flex items-center gap-2 mb-1">
                 <h3 className="font-bold text-base text-foreground">{committeeLabel} Election</h3>
                 {isVoting && (
-                  <span
-                    className="animate-pulse h-2 w-2 rounded-full bg-red-500"
-                    title="Voting in progress"
-                  />
+                  <span className="h-2 w-2 rounded-full bg-red-500" title="Voting in progress" />
                 )}
               </div>
               <p className="text-xs text-muted">{`Elect 6 members to the ${committeeLabel}`}</p>

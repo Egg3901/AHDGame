@@ -169,6 +169,39 @@ describe("gameHealthSnapshot bounded reads (#2166)", () => {
   );
 
   it(
+    "reads the economy's federalBudget docs once and keeps the integrity issue order",
+    { timeout: 60000 },
+    async () => {
+      await setupQuietWorld();
+      mockAggregate("electionCandidates", [{ count: 2 }]);
+      mockAggregate("partyMembers", [{ count: 1 }]);
+      mockAggregate("elections", [{ count: 4 }]);
+
+      const { processGameHealthSnapshot } = await import("./gameHealthSnapshot");
+      await processGameHealthSnapshot(db as unknown as Db, 12, 2026, 100, true, []);
+
+      // Discovery and the inflation lookup share one read. The other
+      // federalBudget reads belong to the integrity helpers.
+      const economyBudgetReads = db.collectionMocks.federalBudget.find.mock.calls.filter(
+        (call) =>
+          (call[1] as { projection?: Record<string, number> } | undefined)?.projection?.[
+            "economicFactors.inflationRate"
+          ] === 1
+      );
+      expect(economyBudgetReads).toHaveLength(1);
+      // One integrity helper read (country mismatch; the missing-budget helper
+      // exits early with no central banks) plus the single economy read. A
+      // separate discovery read would make it three.
+      expect(db.collectionMocks.federalBudget.find).toHaveBeenCalledTimes(2);
+
+      // The checks are issued together, but issues keep the fixed check order.
+      const doc = db.collectionMocks.gameHealthSnapshots.insertOne.mock.calls[0][0];
+      const categories = doc.dataIntegrity.issues.map((i: { category: string }) => i.category);
+      expect(categories).toEqual(["orphanedCandidate", "orphanedMember", "electionNoCandidates"]);
+    }
+  );
+
+  it(
     "still detects orphaned candidates with identical counts (integrity preserved)",
     { timeout: 60000 },
     async () => {

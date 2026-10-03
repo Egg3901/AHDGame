@@ -16,7 +16,7 @@ export type EraAccess = {
   status: "active" | "beta" | "coming-soon";
 };
 
-/** The seven bento tiles on the landing "halls of power" grid. */
+/** The seven bento tiles in the landing feature grid. */
 export type EraTileKey =
   "stateMetrics" | "ballot" | "bills" | "industrial" | "markets" | "newsroom" | "centralBanks";
 
@@ -76,7 +76,7 @@ export type EraConfig = {
   eraChips: string[];
   playSectionDek: string;
   /**
-   * Per-tile body copy for the "halls of power" grid. Optional: anything left
+   * Per-tile body copy for the landing feature grid. Optional: anything left
    * out falls back to era-neutral copy in the landing page.
    *
    * These used to be hardcoded in the page with 1979 flavour baked in, so a
@@ -129,7 +129,7 @@ export const SOVIET_REPUBLIC_FEATURE_IDS: readonly string[] = [
  * A curated roster entry: the display NAME and the order it appears in.
  *
  * The tier is no longer written here. It is derived from `ERA_ROSTER`, because
- * this file and the world-entity manifest used to disagree — the 1991 landing
+ * this file and the world-entity manifest used to disagree: the 1991 landing
  * page advertised Germany as playable while the manifest had it economy-only.
  * Names and ordering stay authored; access does not.
  */
@@ -314,23 +314,17 @@ export const ERA_CONFIGS: Record<EraId, EraConfig> = {
     ],
     playSectionDek: "Build your party, contest elections, and shape post-war domestic policy.",
     tileBodies: {
-      stateMetrics:
-        "Track demographics, unemployment, and the loyalty tests an early Cold War electorate applies to every incumbent.",
-      bills:
-        "Draft bills, whip votes, and trade amendments across a New Deal coalition at its height.",
-      industrial:
-        "Found corporations and pay dividends from a post-war manufacturing boom that is only just getting started.",
       markets:
-        "Trade commodities and currencies under Bretton Woods, where the peg is the whole argument.",
+        "Trade commodities and currencies while exchange rates are held inside Bretton Woods bands.",
       centralBanks:
         "Set the prime rate and manage a line of credit inside a fixed-exchange-rate system.",
     },
     worldSectionDek:
-      "A handful of nations in 1953. {playableCount} are open to players. The rest run their own economies and one-party machines. Drag the globe to explore.",
-    closingHeadline: "The post-war order is still being written.",
-    closingDek: "Pick a country, pick a role. The simulation runs whether you're in it or not.",
+      "{playableCount} of these nations are open to players. The rest run their own economies. Drag the globe to explore.",
+    closingHeadline: "Pick a country and a role.",
+    closingDek: "A turn resolves every hour, and the world keeps running while you are offline.",
     closingCta: "Get started",
-    footerTagline: "Persistent simulation. Multiple nations. No resets.",
+    footerTagline: "A persistent political and economic simulation with no seasonal resets.",
     accessMap: accessFor("1953-default", NATIONS_1953),
     nations: nationsFor("1953-default", NATIONS_1953),
   },
@@ -356,23 +350,12 @@ export const ERA_CONFIGS: Record<EraId, EraConfig> = {
       "Brezhnev Doctrine",
     ],
     playSectionDek: "Run for office, draft legislation, and manage the business of government.",
-    tileBodies: {
-      stateMetrics:
-        "Track demographics, unemployment, and the post-Watergate trust deficit that haunts every incumbent.",
-      bills:
-        "Draft bills, whip votes, and trade amendments across the aisle of a fraying New Deal coalition.",
-      industrial:
-        "Found corporations and pay dividends from a manufacturing economy at its modern peak.",
-      markets:
-        "Trade commodities and currencies as central banks fight an inflation spiral neither can quite win.",
-      centralBanks: "Set the prime rate and manage a line of credit while inflation runs hot.",
-    },
     worldSectionDek:
-      "Twenty-two nations in 1979. {playableCount} are open to players. The rest run their own economies and one-party machines. Drag the globe to explore.",
-    closingHeadline: "22 nations. One timeline.",
-    closingDek: "Pick a country, pick a role. The simulation runs whether you're in it or not.",
+      "{playableCount} of these nations are open to players. The rest run their own economies. Drag the globe to explore.",
+    closingHeadline: "Pick a country and a role.",
+    closingDek: "A turn resolves every hour, and the world keeps running while you are offline.",
     closingCta: "Get started",
-    footerTagline: "Persistent simulation. 22 nations. No resets.",
+    footerTagline: "A persistent political and economic simulation with no seasonal resets.",
     accessMap: accessFor("1979-default", NATIONS_1979),
     nations: nationsFor("1979-default", NATIONS_1979),
   },
@@ -401,11 +384,11 @@ export const ERA_CONFIGS: Record<EraId, EraConfig> = {
     playSectionDek:
       "Manage a post-Cold War economy, contest elections, and navigate a world in rapid transition.",
     worldSectionDek:
-      "Nations redrawn by history. {playableCount} are open to players. The rest run their own economies through the turbulence of transition. Drag the globe to explore.",
-    closingHeadline: "The map just changed. What comes next is up to you.",
-    closingDek: "Pick a country, pick a role. The simulation runs whether you're in it or not.",
+      "{playableCount} of these nations are open to players. The rest run their own economies. Drag the globe to explore.",
+    closingHeadline: "Pick a country and a role.",
+    closingDek: "A turn resolves every hour, and the world keeps running while you are offline.",
     closingCta: "Get started",
-    footerTagline: "Persistent simulation. Multiple nations. No resets.",
+    footerTagline: "A persistent political and economic simulation with no seasonal resets.",
     accessMap: accessFor("1991-default", NATIONS_1991),
     nations: nationsFor("1991-default", NATIONS_1991),
     // Open over the Balkans so the old Soviet outline fills the right of the
@@ -436,11 +419,11 @@ export const ERA_CONFIGS: Record<EraId, EraConfig> = {
     playSectionDek:
       "Manage a booming economy, navigate a tech revolution, and set policy for a new millennium.",
     worldSectionDek:
-      "Nations navigating prosperity and instability in equal measure. {playableCount} are open to players. The rest run their own economies. Drag the globe to explore.",
-    closingHeadline: "A new century starts in twelve months.",
-    closingDek: "Pick a country, pick a role. The simulation runs whether you're in it or not.",
+      "{playableCount} of these nations are open to players. The rest run their own economies. Drag the globe to explore.",
+    closingHeadline: "Pick a country and a role.",
+    closingDek: "A turn resolves every hour, and the world keeps running while you are offline.",
     closingCta: "Get started",
-    footerTagline: "Persistent simulation. Multiple nations. No resets.",
+    footerTagline: "A persistent political and economic simulation with no seasonal resets.",
     accessMap: accessFor("1999-default", NATIONS_1999),
     nations: nationsFor("1999-default", NATIONS_1999),
   },
@@ -454,7 +437,7 @@ export const ERA_CONFIGS: Record<EraId, EraConfig> = {
     loginTagline: "A political simulation set in 2007.",
     heroHeadline: "A political simulation set in 2007.",
     heroDek:
-      "Credit is cheap and leverage is high. The housing market shows cracks. Iraq and Afghanistan grind on. Every real hour is a game week. Govern before the storm.",
+      "Credit is cheap and leverage is high. The housing market shows cracks. Iraq and Afghanistan grind on. Every real hour is a game week.",
     primaryCta: "Start playing",
     secondaryCta: "Explore the map",
     eraChips: [
@@ -468,11 +451,11 @@ export const ERA_CONFIGS: Record<EraId, EraConfig> = {
     playSectionDek:
       "Manage an overleveraged economy, contest a polarized electorate, and navigate a shifting geopolitical order.",
     worldSectionDek:
-      "A multipolar world in 2007. {playableCount} nations are open to players. The rest run their own economies and politics. Drag the globe to explore.",
-    closingHeadline: "The crash hasn't happened yet.",
-    closingDek: "Pick a country, pick a role. The simulation runs whether you're in it or not.",
+      "{playableCount} of these nations are open to players. The rest run their own economies and politics. Drag the globe to explore.",
+    closingHeadline: "Pick a country and a role.",
+    closingDek: "A turn resolves every hour, and the world keeps running while you are offline.",
     closingCta: "Get started",
-    footerTagline: "Persistent simulation. Multiple nations. No resets.",
+    footerTagline: "A persistent political and economic simulation with no seasonal resets.",
     accessMap: accessFor("2007-default", NATIONS_2007),
     nations: nationsFor("2007-default", NATIONS_2007),
   },
@@ -493,11 +476,11 @@ export const ERA_CONFIGS: Record<EraId, EraConfig> = {
     playSectionDek:
       "Navigate polarized electorates, manage trade policy, and govern in an era of institutional distrust.",
     worldSectionDek:
-      "A fractured international order in 2019. {playableCount} nations are open to players. The rest run their own economies and politics. Drag the globe to explore.",
-    closingHeadline: "Institutions are under pressure everywhere.",
-    closingDek: "Pick a country, pick a role. The simulation runs whether you're in it or not.",
+      "{playableCount} of these nations are open to players. The rest run their own economies and politics. Drag the globe to explore.",
+    closingHeadline: "Pick a country and a role.",
+    closingDek: "A turn resolves every hour, and the world keeps running while you are offline.",
     closingCta: "Get started",
-    footerTagline: "Persistent simulation. Multiple nations. No resets.",
+    footerTagline: "A persistent political and economic simulation with no seasonal resets.",
     accessMap: accessFor("2019-default", NATIONS_2019),
     nations: nationsFor("2019-default", NATIONS_2019),
   },
@@ -525,11 +508,11 @@ export const ERA_CONFIGS: Record<EraId, EraConfig> = {
     playSectionDek:
       "Govern through an era of rapid technological change, geopolitical realignment, and fiscal pressure.",
     worldSectionDek:
-      "A multipolar world in 2023. {playableCount} nations are open to players. The rest run their own economies and politics. Drag the globe to explore.",
-    closingHeadline: "The decade is still being written.",
-    closingDek: "Pick a country, pick a role. The simulation runs whether you're in it or not.",
+      "{playableCount} of these nations are open to players. The rest run their own economies and politics. Drag the globe to explore.",
+    closingHeadline: "Pick a country and a role.",
+    closingDek: "A turn resolves every hour, and the world keeps running while you are offline.",
     closingCta: "Get started",
-    footerTagline: "Persistent simulation. Multiple nations. No resets.",
+    footerTagline: "A persistent political and economic simulation with no seasonal resets.",
     accessMap: accessFor("2023-default", NATIONS_2023),
     nations: nationsFor("2023-default", NATIONS_2023),
   },
@@ -556,11 +539,11 @@ export const ERA_CONFIGS: Record<EraId, EraConfig> = {
     playSectionDek:
       "Govern through an era of rapid technological change, geopolitical realignment, and fiscal pressure.",
     worldSectionDek:
-      "A multipolar world in 2027. {playableCount} nations are open to players. The rest run their own economies and politics. Drag the globe to explore.",
-    closingHeadline: "The decade is still being written.",
-    closingDek: "Pick a country, pick a role. The simulation runs whether you're in it or not.",
+      "{playableCount} of these nations are open to players. The rest run their own economies and politics. Drag the globe to explore.",
+    closingHeadline: "Pick a country and a role.",
+    closingDek: "A turn resolves every hour, and the world keeps running while you are offline.",
     closingCta: "Get started",
-    footerTagline: "Persistent simulation. Multiple nations. No resets.",
+    footerTagline: "A persistent political and economic simulation with no seasonal resets.",
     accessMap: accessFor("2027-default", NATIONS_2027),
     nations: nationsFor("2027-default", NATIONS_2027),
   },

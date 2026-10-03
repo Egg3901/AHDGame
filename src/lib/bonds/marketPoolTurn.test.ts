@@ -3,7 +3,7 @@ import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
 vi.mock("@/lib/sovereignDefault/snapshotLoader", () => ({
-  loadCountrySovereignSnapshot: vi.fn(),
+  loadCountrySovereignSnapshots: vi.fn(),
 }));
 vi.mock("@/lib/sovereignDefault/marketDemand", () => ({
   computeMarketDemand: vi.fn(),
@@ -12,7 +12,7 @@ vi.mock("@/lib/bonds/sovereign", () => ({
   SOVEREIGN_ISSUANCE_INTERVAL_TURNS: 12,
 }));
 
-import { loadCountrySovereignSnapshot } from "@/lib/sovereignDefault/snapshotLoader";
+import { loadCountrySovereignSnapshots } from "@/lib/sovereignDefault/snapshotLoader";
 import { computeMarketDemand } from "@/lib/sovereignDefault/marketDemand";
 import {
   countriesForCurrency,
@@ -70,7 +70,9 @@ describe("processBondMarketPoolTurn", () => {
     db.collectionMocks.moneySupplySnapshots.find.mockReturnValue({
       toArray: async () => [{ currencyCode: "GBP", m2: 10_000, turn: 583 }],
     });
-    vi.mocked(loadCountrySovereignSnapshot).mockResolvedValue({ countryCode: "UK" } as never);
+    vi.mocked(loadCountrySovereignSnapshots).mockImplementation(
+      async (_db, codes) => new Map(codes.map((code) => [code, { countryCode: code } as never]))
+    );
     vi.mocked(computeMarketDemand).mockReturnValue({ demandRatio: 0.7321, components: [] });
 
     const result = await processBondMarketPoolTurn(db as unknown as Db, 584, new Date());
@@ -97,6 +99,44 @@ describe("processBondMarketPoolTurn", () => {
     expect(result.appetitesRefreshed).toBeGreaterThan(0);
   });
 
+  it("loads every pool's issuer snapshots in one batched call and keys appetite by country", async () => {
+    db.collectionMocks.bondMarketPools.find.mockReturnValue({
+      toArray: async () => [
+        { _id: "GBP", cashLocal: 100, targetCashLocal: 5 },
+        { _id: "USD", cashLocal: 100, targetCashLocal: 5 },
+      ],
+    });
+    db.collectionMocks.moneySupplySnapshots.find.mockReturnValue({ toArray: async () => [] });
+    vi.mocked(loadCountrySovereignSnapshots).mockImplementation(
+      async (_db, codes) => new Map(codes.map((code) => [code, { countryCode: code } as never]))
+    );
+    vi.mocked(computeMarketDemand).mockImplementation((snapshot) => ({
+      demandRatio: snapshot.countryCode === "UK" ? 0.5 : 0.9,
+      components: [],
+    }));
+
+    const result = await processBondMarketPoolTurn(db as unknown as Db, 584, new Date());
+
+    expect(loadCountrySovereignSnapshots).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(loadCountrySovereignSnapshots).mock.calls[0]![1]).toEqual([
+      ...countriesForCurrency("GBP"),
+      ...countriesForCurrency("USD"),
+    ]);
+    const appetites = db.collectionMocks.bondMarketPools.updateOne.mock.calls
+      .map(([filter, update]) => [filter, (update as { $set?: Record<string, unknown> }).$set])
+      .filter(([, set]) => set?.appetiteByCountry);
+    const expected = (currency: "GBP" | "USD") =>
+      Object.fromEntries(
+        countriesForCurrency(currency).map((code) => [code, code === "UK" ? 0.5 : 0.9])
+      );
+    expect(appetites).toEqual([
+      [{ _id: "GBP" }, expect.objectContaining({ appetiteByCountry: expected("GBP") })],
+      [{ _id: "USD" }, expect.objectContaining({ appetiteByCountry: expected("USD") })],
+    ]);
+    expect(expected("GBP")).toMatchObject({ UK: 0.5 });
+    expect(result.poolsProcessed).toBe(2);
+  });
+
   it("holds a quarter of maturing sovereign face as a working balance when that exceeds the M2 share", async () => {
     db.collectionMocks.bondMarketPools.find.mockReturnValue({
       toArray: async () => [{ _id: "GBP", cashLocal: 100, targetCashLocal: 5 }],
@@ -107,7 +147,7 @@ describe("processBondMarketPoolTurn", () => {
     db.collectionMocks.bonds.find.mockReturnValue({
       toArray: async () => [{ totalIssued: 4_000 }, { totalIssued: 2_000 }],
     });
-    vi.mocked(loadCountrySovereignSnapshot).mockResolvedValue(null);
+    vi.mocked(loadCountrySovereignSnapshots).mockResolvedValue(new Map());
 
     await processBondMarketPoolTurn(db as unknown as Db, 584, new Date());
 
@@ -125,7 +165,7 @@ describe("processBondMarketPoolTurn", () => {
     });
     db.collectionMocks.moneySupplySnapshots.find.mockReturnValue({ toArray: async () => [] });
     db.collectionMocks.bondMarketPools.findOneAndUpdate.mockResolvedValue({ cashLocal: 750 });
-    vi.mocked(loadCountrySovereignSnapshot).mockResolvedValue(null);
+    vi.mocked(loadCountrySovereignSnapshots).mockResolvedValue(new Map());
 
     const result = await processBondMarketPoolTurn(db as unknown as Db, 584, new Date());
 

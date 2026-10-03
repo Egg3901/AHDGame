@@ -54,7 +54,6 @@ export function LiveResultsShell({
   onStopSimulation,
 }: LiveResultsShellProps) {
   const { election, summary } = data;
-  const isLive = election.status === "active";
   const title = `${election.electionYear ?? ""} ${
     TYPE_TITLES[election.electionType] ?? "Election"
   }`.trim();
@@ -99,7 +98,7 @@ export function LiveResultsShell({
         {simulating && (
           <div className="flex items-center justify-between gap-3 rounded-xl border border-warning/50 bg-warning/10 px-4 py-2.5">
             <span className="inline-flex items-center gap-2 text-sm font-semibold text-warning">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-warning" />
+              <span className="h-2 w-2 rounded-full bg-warning" aria-hidden />
               SIMULATION — test data, not real results
             </span>
             <button
@@ -135,7 +134,6 @@ export function LiveResultsShell({
               totalUnits={summary.totalUnits}
               unitsCalled={summary.unitsCalled}
               unitLabel={UNIT_LABELS[election.electionType] ?? "races"}
-              isLive={isLive}
             />
             <ResultsViewRouter data={data} />
           </>

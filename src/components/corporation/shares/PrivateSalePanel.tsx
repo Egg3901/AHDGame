@@ -180,7 +180,7 @@ export default function PrivateSalePanel({
         onToast(data.error ?? "Failed to submit offer", "error");
       } else {
         onToast(
-          `Offer submitted — ${fmtFull(escrowToAnchor(data.escrowAmount))} in escrow`,
+          `Offer submitted. ${fmtFull(escrowToAnchor(data.escrowAmount))} in escrow.`,
           "success"
         );
         setOfferShares((prev) => ({ ...prev, [listingId]: 0 }));
@@ -229,7 +229,7 @@ export default function PrivateSalePanel({
         onToast(data.error ?? "Failed to accept offer", "error");
       } else {
         onToast(
-          `Accepted ${data.sharesTransferred.toLocaleString("en-US")} shares — ${fmtFull(data.proceeds)} received`,
+          `Accepted ${data.sharesTransferred.toLocaleString("en-US")} shares. ${fmtFull(data.proceeds)} received.`,
           "success"
         );
         await loadListings();
@@ -243,13 +243,11 @@ export default function PrivateSalePanel({
   const otherListings = listings.filter((l) => !l.isMySelling);
 
   const innerContent = (
-    <div
-      className={forceOpen ? "space-y-5" : "border-t border-card-border px-6 pb-6 pt-4 space-y-6"}
-    >
+    <div className={forceOpen ? "space-y-4" : "space-y-4 pt-2"}>
       {/* Create listing — only shown if you own shares */}
       {myCharacterId && myShares > 0 && (
         <div>
-          <h3 className="text-sm font-semibold text-foreground mb-3">List Your Shares</h3>
+          <h3 className="mb-1.5 text-xs font-medium text-muted">List your shares</h3>
           <div className="flex items-end gap-3 flex-wrap">
             <div>
               <label className="block text-xs text-muted mb-1">Shares to list</label>
@@ -260,28 +258,28 @@ export default function PrivateSalePanel({
                 placeholder="Quantity"
                 min={1}
                 max={myShares}
-                className="w-36 rounded-lg border border-card-border bg-background px-3 py-2 text-sm focus:border-primary/60 focus:outline-none"
+                className="h-7 w-36 rounded-md border border-card-border bg-background px-2 text-right text-[13px] tabular-nums text-foreground focus:border-foreground focus:outline-none"
               />
             </div>
             <button
               onClick={() => void handleCreateListing()}
               disabled={loading || listingShares <= 0}
-              className="rounded-lg bg-primary/80 px-4 py-2 text-sm font-medium text-white hover:bg-primary transition-colors disabled:opacity-50"
+              className="inline-flex h-7 items-center rounded-md border border-primary bg-primary px-2.5 text-xs font-medium text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {loading ? "..." : "Create Listing"}
+              {loading ? "Listing" : "Create listing"}
             </button>
           </div>
           {sharePrice > 0 && (
             <p className="mt-2 text-xs text-muted">
               Current market: {fmtLocalPrice(sharePrice)} · Buyers may offer{" "}
-              {fmtLocalPrice(sharePrice * 0.5)}–{fmtLocalPrice(sharePrice * 2.0)}
+              {fmtLocalPrice(sharePrice * 0.5)} to {fmtLocalPrice(sharePrice * 2.0)}
             </p>
           )}
           {isCeo && listingShares > 0 && listingShares === myShares && (
-            <p className="mt-2 rounded-lg border border-error/30 bg-error/5 px-3 py-2.5 text-xs text-error">
+            <p className="mt-2 text-xs text-error">
               You are the CEO. Listing all {myShares.toLocaleString("en-US")} of your remaining
-              shares will remove you as CEO — you&apos;ll need to be re-appointed to become CEO
-              again. You&apos;ll be asked to confirm before this goes through.
+              shares will remove you as CEO, and you would need to be re-appointed. You will be
+              asked to confirm first.
             </p>
           )}
         </div>
@@ -305,7 +303,7 @@ export default function PrivateSalePanel({
                 disabled={loading}
                 className="rounded-lg bg-error px-3 py-1.5 text-xs font-medium text-white hover:bg-error/90 disabled:opacity-50"
               >
-                {loading ? "..." : "List & Step Down"}
+                {loading ? "Listing" : "List and step down"}
               </button>
             </div>
           </div>
@@ -315,13 +313,10 @@ export default function PrivateSalePanel({
       {/* Your active listings (seller view) */}
       {myListings.length > 0 && (
         <div>
-          <h3 className="text-sm font-semibold text-foreground mb-3">Your Active Listings</h3>
-          <div className="space-y-4">
+          <h3 className="mb-1.5 text-xs font-medium text-muted">Your listings</h3>
+          <div>
             {myListings.map((listing) => (
-              <div
-                key={listing._id}
-                className="rounded-lg border border-card-border bg-card-elevated/30 p-4"
-              >
+              <div key={listing._id} className="border-b border-card-border/60 py-2">
                 <div className="flex items-start justify-between mb-3">
                   <div>
                     <span className="text-sm font-medium text-foreground">
@@ -333,7 +328,7 @@ export default function PrivateSalePanel({
                     <div className="text-xs text-muted mt-0.5">
                       Offer range:{" "}
                       <span className="text-foreground">
-                        {fmtLocalPrice(listing.priceFloor)}–{fmtLocalPrice(listing.priceCeiling)}
+                        {fmtLocalPrice(listing.priceFloor)} to {fmtLocalPrice(listing.priceCeiling)}
                       </span>
                       {" · "}Expires{" "}
                       <LocalTime
@@ -354,19 +349,19 @@ export default function PrivateSalePanel({
                 {listing.offers.length === 0 ? (
                   <p className="text-xs text-muted">No offers yet</p>
                 ) : (
-                  <div className="divide-y divide-card-border/50 rounded-lg border border-card-border overflow-hidden">
+                  <div className="divide-y divide-card-border/50">
                     {listing.offers.map((offer) => {
                       const maxAccept = Math.min(offer.shares, listing.sharesRemaining);
                       const inputVal = acceptAmounts[offer._id] ?? maxAccept;
                       return (
-                        <div key={offer._id} className="px-3 py-2.5 bg-card-elevated/20">
+                        <div key={offer._id} className="py-1.5 pl-3">
                           <div className="flex items-center justify-between gap-3">
                             <div className="space-y-0.5 min-w-0">
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 {offer.buyerSequentialId ? (
                                   <Link
                                     href={`/character/${offer.buyerSequentialId}`}
-                                    className="text-xs font-medium text-primary hover:underline truncate"
+                                    className="truncate text-xs font-medium text-foreground hover:underline"
                                   >
                                     {offer.buyerName}
                                   </Link>
@@ -379,7 +374,7 @@ export default function PrivateSalePanel({
                                   {offer.shares.toLocaleString("en-US")} @{" "}
                                   {fmtLocalPrice(offer.pricePerShare)}
                                 </span>
-                                <span className="text-xs text-success font-medium">
+                                <span className="text-xs font-medium tabular-nums text-foreground">
                                   = {fmtFull(Math.round(escrowToAnchor(offer.escrowAmount)))}
                                 </span>
                               </div>
@@ -399,12 +394,12 @@ export default function PrivateSalePanel({
                                 }
                                 min={1}
                                 max={maxAccept}
-                                className="w-24 rounded border border-card-border bg-background px-2 py-1 text-xs focus:border-primary/60 focus:outline-none"
+                                className="h-6 w-24 rounded border border-card-border bg-background px-1.5 text-right text-xs tabular-nums text-foreground focus:border-foreground focus:outline-none"
                               />
                               <button
                                 onClick={() => handleAcceptOffer(listing._id, offer._id, maxAccept)}
                                 disabled={loading}
-                                className="rounded bg-success/80 px-3 py-1 text-xs font-medium text-white hover:bg-success transition-colors disabled:opacity-50"
+                                className="inline-flex h-6 items-center rounded border border-primary bg-primary px-2 text-xs font-medium text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
                               >
                                 Accept
                               </button>
@@ -424,21 +419,18 @@ export default function PrivateSalePanel({
       {/* Other open listings (buyer view) */}
       {otherListings.length > 0 && myCharacterId && (
         <div>
-          <h3 className="text-sm font-semibold text-foreground mb-3">Open Listings</h3>
-          <div className="space-y-4">
+          <h3 className="mb-1.5 text-xs font-medium text-muted">Open listings</h3>
+          <div>
             {otherListings.map((listing) => {
               const myExistingOffer = listing.offers.find((o) => o.isMyOffer);
               return (
-                <div
-                  key={listing._id}
-                  className="rounded-lg border border-card-border bg-card-elevated/30 p-4"
-                >
+                <div key={listing._id} className="border-b border-card-border/60 py-2">
                   <div className="flex items-start justify-between mb-3">
                     <div>
                       {listing.sellerSequentialId ? (
                         <Link
                           href={`/character/${listing.sellerSequentialId}`}
-                          className="text-sm font-medium text-primary hover:underline"
+                          className="text-sm font-medium text-foreground hover:underline"
                         >
                           {listing.sellerName}
                         </Link>
@@ -453,7 +445,8 @@ export default function PrivateSalePanel({
                       <div className="text-xs text-muted mt-0.5">
                         Offer range:{" "}
                         <span className="text-foreground">
-                          {fmtLocalPrice(listing.priceFloor)}–{fmtLocalPrice(listing.priceCeiling)}
+                          {fmtLocalPrice(listing.priceFloor)} to{" "}
+                          {fmtLocalPrice(listing.priceCeiling)}
                         </span>
                         {" · "}
                         {listing.offerCount} offer
@@ -469,8 +462,8 @@ export default function PrivateSalePanel({
 
                   {/* My existing offer */}
                   {myExistingOffer && (
-                    <div className="mb-3 flex items-center justify-between rounded-lg bg-primary/5 border border-primary/20 px-3 py-2">
-                      <span className="text-xs text-primary">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <span className="text-xs text-foreground">
                         Your offer: {myExistingOffer.shares.toLocaleString("en-US")} @{" "}
                         {fmtLocalPrice(myExistingOffer.pricePerShare)} (
                         {fmtFull(Math.round(escrowToAnchor(myExistingOffer.escrowAmount)))}{" "}
@@ -506,7 +499,7 @@ export default function PrivateSalePanel({
                           placeholder="Quantity"
                           min={1}
                           max={listing.sharesRemaining}
-                          className="w-28 rounded-lg border border-card-border bg-background px-3 py-2 text-sm focus:border-primary/60 focus:outline-none"
+                          className="h-7 w-28 rounded-md border border-card-border bg-background px-2 text-right text-[13px] tabular-nums text-foreground focus:border-foreground focus:outline-none"
                         />
                       </div>
                       <div>
@@ -526,7 +519,7 @@ export default function PrivateSalePanel({
                             corpCurrencyCode
                               ? toInternalFrom(listing.priceFloor, corpCurrencyCode)
                               : listing.priceFloor
-                          ).toFixed(4)}–${toDisplay(
+                          ).toFixed(4)} to ${toDisplay(
                             corpCurrencyCode
                               ? toInternalFrom(listing.priceCeiling, corpCurrencyCode)
                               : listing.priceCeiling
@@ -542,15 +535,15 @@ export default function PrivateSalePanel({
                               : listing.priceCeiling
                           )}
                           step={0.0001}
-                          className="w-36 rounded-lg border border-card-border bg-background px-3 py-2 text-sm focus:border-primary/60 focus:outline-none"
+                          className="h-7 w-36 rounded-md border border-card-border bg-background px-2 text-right text-[13px] tabular-nums text-foreground focus:border-foreground focus:outline-none"
                         />
                       </div>
                       <button
                         onClick={() => handleSubmitOffer(listing._id)}
                         disabled={loading || !offerShares[listing._id] || !offerPrice[listing._id]}
-                        className="rounded-lg bg-primary/80 px-4 py-2 text-sm font-medium text-white hover:bg-primary transition-colors disabled:opacity-50"
+                        className="inline-flex h-7 items-center rounded-md border border-primary bg-primary px-2.5 text-xs font-medium text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        {loading ? "..." : "Make Offer"}
+                        {loading ? "Submitting" : "Make offer"}
                       </button>
                     </div>
                   )}
@@ -578,7 +571,7 @@ export default function PrivateSalePanel({
       )}
 
       {listings.length === 0 && (
-        <p className="text-sm text-muted">No open private listings for this corporation.</p>
+        <p className="py-1 text-xs text-muted">No open private listings for this corporation.</p>
       )}
     </div>
   );
@@ -588,21 +581,24 @@ export default function PrivateSalePanel({
   }
 
   return (
-    <div className="rounded-xl border border-card-border bg-card">
-      {/* Accordion header */}
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between px-6 py-4 text-left"
-      >
-        <div>
-          <span className="text-base font-bold text-foreground">Private Sale</span>
-          <span className="ml-2 text-xs text-muted">
-            List shares for private offers · 24h expiry · 50–200% of market
+    <section className="min-w-0">
+      <div className="flex min-h-8 flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-card-border pb-1.5">
+        <h2 className="flex min-w-0 items-baseline gap-2 text-sm font-semibold text-foreground">
+          Private sale
+          <span className="text-xs font-normal text-muted">
+            listings expire after 24 hours; offers run 50% to 200% of market
           </span>
-        </div>
-        <span className="text-muted text-sm">{open ? "▲" : "▼"}</span>
-      </button>
+        </h2>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          className="inline-flex h-7 items-center rounded-md border border-card-border px-2.5 text-xs font-medium text-foreground hover:bg-card-elevated"
+        >
+          {open ? "Hide" : "Show"}
+        </button>
+      </div>
       {open && innerContent}
-    </div>
+    </section>
   );
 }

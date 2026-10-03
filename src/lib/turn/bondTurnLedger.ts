@@ -18,6 +18,53 @@ export type PartialTxEntry = Omit<
   "_id" | "expiresAt" | "flagged" | "subjectName"
 > & { charId?: string; isImperial?: boolean };
 
+/** Key of the bondHistory index that answers the per-bond maximum from the index alone. */
+export const BOND_HISTORY_INTEREST_INDEX_KEY = { bondId: 1, totalInterestPaid: -1 } as const;
+
+/**
+ * Largest `totalInterestPaid` recorded for each bond, the base each new
+ * history row accumulates onto.
+ *
+ * bondHistory gains a row per live bond per turn, so a `$group`/`$max` over it
+ * fetches every row the game has ever written for those bonds (about a million
+ * documents by the time a world is a few hundred turns old). Sorting on
+ * `{ bondId, totalInterestPaid: -1 }` and taking `$first` asks the same
+ * question, and with that index Mongo answers it with a DISTINCT_SCAN that
+ * reads one key per bond. `$sort` descending orders values the way `$max`
+ * compares them (null and missing last), so the two return the same number.
+ *
+ * The index is hinted so the fast plan is never a planner guess. A world that
+ * has not installed it yet rejects the hint with BadValue; that falls back to
+ * the original `$max` pipeline, so the answer never depends on the index.
+ */
+export async function loadPriorBondInterest(
+  db: Db,
+  bondIds: ObjectId[]
+): Promise<Array<{ _id: ObjectId; maxInterest: number }>> {
+  const collection = db.collection("bondHistory");
+  const match = { $match: { bondId: { $in: bondIds } } };
+  try {
+    return await collection
+      .aggregate<{ _id: ObjectId; maxInterest: number }>(
+        [
+          match,
+          { $sort: { ...BOND_HISTORY_INTEREST_INDEX_KEY } },
+          { $group: { _id: "$bondId", maxInterest: { $first: "$totalInterestPaid" } } },
+        ],
+        { hint: { ...BOND_HISTORY_INTEREST_INDEX_KEY } }
+      )
+      .toArray();
+  } catch (error) {
+    if ((error as { codeName?: string } | null)?.codeName !== "BadValue") throw error;
+    return collection
+      .aggregate<{ _id: ObjectId; maxInterest: number }>([
+        match,
+        { $group: { _id: "$bondId", maxInterest: { $max: "$totalInterestPaid" } } },
+      ])
+      .toArray();
+  }
+}
+
 /**
  * Phase 7: Snapshot bond price history. Returns the number of history
  * snapshots written (the count of still-active bonds after price updates).
@@ -38,13 +85,10 @@ export async function snapshotBondHistory(args: {
     .toArray();
 
   // Calculate cumulative interest paid per bond from existing history
-  const existingHistory = await db
-    .collection("bondHistory")
-    .aggregate<{ _id: ObjectId; maxInterest: number }>([
-      { $match: { bondId: { $in: updatedBonds.map((b) => b._id) } } },
-      { $group: { _id: "$bondId", maxInterest: { $max: "$totalInterestPaid" } } },
-    ])
-    .toArray();
+  const existingHistory = await loadPriorBondInterest(
+    db,
+    updatedBonds.map((b) => b._id as ObjectId)
+  );
   const prevInterestMap = new Map(existingHistory.map((h) => [h._id.toString(), h.maxInterest]));
   const activeBondById = new Map(activeBonds.map((bond) => [bond._id.toString(), bond]));
 

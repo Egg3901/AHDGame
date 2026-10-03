@@ -6,6 +6,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { publicPageMetadata } from "@/lib/siteMetadata";
+import {
+  Callout,
+  FormulaBlock,
+  SectionHeader,
+  SubHeader,
+  TableOfContents,
+  Tag,
+} from "@/app/guides/_components/GuideBlocks";
 
 export const metadata: Metadata = publicPageMetadata({
   title: "Corporation Guide | A House Divided",
@@ -14,85 +22,20 @@ export const metadata: Metadata = publicPageMetadata({
   pathname: "/guides/corporations",
 });
 
-function SectionHeader({ id, children }: { id: string; children: React.ReactNode }) {
-  return (
-    <h2
-      id={id}
-      className="scroll-mt-4 text-xl font-bold tracking-tight text-foreground border-l-4 border-primary/60 pl-3"
-    >
-      {children}
-    </h2>
-  );
-}
-
-function SubHeader({ children }: { children: React.ReactNode }) {
-  return <h3 className="font-semibold text-foreground">{children}</h3>;
-}
-
-function Callout({
-  children,
-  variant = "info",
-}: {
-  children: React.ReactNode;
-  variant?: "info" | "warn" | "tip";
-}) {
-  const colors = {
-    info: "border-primary/40 bg-primary/5",
-    warn: "border-amber-500/40 bg-amber-500/5",
-    tip: "border-emerald-500/40 bg-emerald-500/5",
-  };
-  return (
-    <div
-      className={`rounded-r-lg border-l-4 px-4 py-3 text-sm text-muted leading-relaxed ${colors[variant]}`}
-    >
-      {children}
-    </div>
-  );
-}
-
-function FormulaBlock({ children }: { children: React.ReactNode }) {
-  return (
-    <pre className="overflow-x-auto rounded-lg border border-card-border bg-background px-4 py-3 font-mono text-xs text-foreground/80 leading-relaxed whitespace-pre-wrap">
-      {children}
-    </pre>
-  );
-}
-
-function Tag({
-  children,
-  variant,
-}: {
-  children: React.ReactNode;
-  variant: "positive" | "negative" | "neutral";
-}) {
-  const colors = {
-    positive: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-    negative: "bg-red-500/10 text-red-400 border-red-500/20",
-    neutral: "bg-primary/10 text-primary border-primary/20",
-  };
-  return (
-    <span
-      className={`inline-flex items-center rounded border px-1.5 py-0.5 font-mono text-xs font-semibold ${colors[variant]}`}
-    >
-      {children}
-    </span>
-  );
-}
-
 const TOC_ITEMS = [
-  { id: "founding", label: "Founding Your Corporation" },
-  { id: "focus", label: "Choosing Sector Focus" },
-  { id: "expansion", label: "Expanding Into States" },
-  { id: "margins", label: "Profit Margin Modifiers" },
-  { id: "commodities", label: "The Commodity Market" },
-  { id: "strategies", label: "Operating Strategies" },
-  { id: "sprawl", label: "Managing Sprawl" },
-  { id: "ceo", label: "CEO: Salary, Marketing & Policy" },
-  { id: "shares", label: "Shares & Dividends" },
-  { id: "bonds", label: "Corporate Bonds" },
-  { id: "politics", label: "The Political Angle" },
-  { id: "shareprice", label: "How Share Price Works" },
-  { id: "tips", label: "Quick Tips" },
+  { id: "founding", label: "Founding your corporation" },
+  { id: "focus", label: "Choosing sector focus" },
+  { id: "expansion", label: "Expanding into states" },
+  { id: "margins", label: "Profit margin modifiers" },
+  { id: "commodities", label: "The commodity market" },
+  { id: "strategies", label: "Operating strategies" },
+  { id: "sprawl", label: "Managing sprawl" },
+  { id: "ceo", label: "CEO controls: salary, marketing & policy" },
+  { id: "shares", label: "Shares & dividends" },
+  { id: "bonds", label: "Corporate bonds" },
+  { id: "politics", label: "The political angle" },
+  { id: "shareprice", label: "How share price works" },
+  { id: "tips", label: "Quick tips" },
 ];
 
 export default function CorporationGuidePage() {
@@ -117,23 +60,11 @@ export default function CorporationGuidePage() {
         </div>
 
         <div className="space-y-10">
-          {/* Table of Contents */}
-          <div className="rounded-xl border border-card-border bg-card p-5">
-            <p className="mb-3 text-xs font-bold uppercase tracking-wider text-muted">Contents</p>
-            <ol className="grid gap-y-1 gap-x-4 text-sm sm:grid-cols-2">
-              {TOC_ITEMS.map((item, i) => (
-                <li key={item.id}>
-                  <a href={`#${item.id}`} className="text-primary hover:underline">
-                    {i + 1}. {item.label}
-                  </a>
-                </li>
-              ))}
-            </ol>
-          </div>
+          <TableOfContents items={TOC_ITEMS} />
 
           {/* ── 1. Founding ── */}
           <section className="space-y-4">
-            <SectionHeader id="founding">1. Founding Your Corporation</SectionHeader>
+            <SectionHeader id="founding">1. Founding your corporation</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Head to{" "}
               <Link href="/corporations" className="text-primary hover:underline font-mono text-xs">
@@ -146,9 +77,7 @@ export default function CorporationGuidePage() {
             </p>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="rounded-xl border border-card-border bg-card p-4 space-y-2">
-                <p className="text-xs font-bold uppercase tracking-wider text-muted">
-                  What you start with
-                </p>
+                <p className="text-sm font-semibold text-foreground">What you start with</p>
                 <ul className="space-y-1 text-sm text-muted">
                   <li>• $1,000,000 liquid capital (in the corp)</li>
                   <li>• 10,000,000 CEO shares @ $0.10</li>
@@ -157,7 +86,7 @@ export default function CorporationGuidePage() {
                 </ul>
               </div>
               <div className="rounded-xl border border-card-border bg-card p-4 space-y-2">
-                <p className="text-xs font-bold uppercase tracking-wider text-muted">Key rules</p>
+                <p className="text-sm font-semibold text-foreground">Key rules</p>
                 <ul className="space-y-1 text-sm text-muted">
                   <li>• One corporation per character</li>
                   <li>• HQ set to your current home state</li>
@@ -165,17 +94,16 @@ export default function CorporationGuidePage() {
                 </ul>
               </div>
             </div>
-            <Callout variant="warn">
-              <strong className="text-foreground">Residence lock:</strong> If you plan to run for
-              office in another state, be aware that relocating to any state auto-resigns you as
-              CEO. Plan your political career around your corporation&apos;s HQ state, or hand off
-              the CEO role before relocating.
+            <Callout kind="warning" label="Residence lock:">
+              If you plan to run for office in another state, be aware that relocating to any state
+              auto-resigns you as CEO. Plan your political career around your corporation&apos;s HQ
+              state, or hand off the CEO role before relocating.
             </Callout>
           </section>
 
           {/* ── 2. Sector Focus ── */}
           <section className="space-y-4">
-            <SectionHeader id="focus">2. Choosing Sector Focus</SectionHeader>
+            <SectionHeader id="focus">2. Choosing sector focus</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Your corporation has a <strong className="text-foreground">primary type</strong>{" "}
               (required) and an optional <strong className="text-foreground">secondary type</strong>
@@ -223,16 +151,15 @@ export default function CorporationGuidePage() {
               Agriculture, Real Estate, Defense, Telecommunications, Entertainment, Logistics,
               Extraction, Chemical Industries, and Construction.
             </p>
-            <SubHeader>Secondary Type Trade-off</SubHeader>
+            <SubHeader>Secondary type trade-off</SubHeader>
             <p className="text-sm text-muted leading-relaxed">
               A secondary type gives you +5% on a second sector class instead of −15%. The cost: it{" "}
               <strong className="text-foreground">doubles the sprawl penalty</strong> once you
               exceed the 15-sector threshold (see Sprawl section). Worth it if you genuinely want
               two sector classes and invest in Logistics & Operations Strength.
             </p>
-            <Callout variant="warn">
-              <strong className="text-foreground">Type switching costs you:</strong> Changing your
-              primary or secondary type triggers a{" "}
+            <Callout kind="warning" label="Type switching costs you:">
+              Changing your primary or secondary type triggers a{" "}
               <strong className="text-foreground">
                 −10% margin penalty on all sectors for 24 hours
               </strong>
@@ -243,7 +170,7 @@ export default function CorporationGuidePage() {
 
           {/* ── 3. Expansion ── */}
           <section className="space-y-4">
-            <SectionHeader id="expansion">3. Expanding Into States</SectionHeader>
+            <SectionHeader id="expansion">3. Expanding into states</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Each sector you own is a specific type in a specific state. Expand from the CEO Office
               Overview tab.
@@ -274,7 +201,7 @@ export default function CorporationGuidePage() {
               </table>
             </div>
 
-            <SubHeader>Market Capture (Splits)</SubHeader>
+            <SubHeader>Market capture (splits)</SubHeader>
             <p className="text-sm text-muted leading-relaxed">
               Once you own a sector in a state, use{" "}
               <strong className="text-foreground">splits</strong> to capture unowned market share.
@@ -285,13 +212,13 @@ MS cost    = 2^splitEscalation  →  1 → 2 → 4 → 8 → 16 MS per split
 Capture    ≈ 6% of unowned × (1 + marketingStrength ÷ 100)
 
 Escalation drops by 1 each turn. Costs halve if you wait`}</FormulaBlock>
-            <Callout variant="tip">
-              <strong className="text-foreground">Split pacing:</strong> Don&apos;t spam splits.
-              Each one doubles the next MS cost. At 8 MS/split, waiting 2 turns brings it back to 2.
-              Patience saves MS and lets you capture more total share for the same marketing budget.
+            <Callout label="Split pacing:">
+              Don&apos;t spam splits. Each one doubles the next MS cost. At 8 MS/split, waiting 2
+              turns brings it back to 2. Patience saves MS and lets you capture more total share for
+              the same marketing budget.
             </Callout>
 
-            <SubHeader>Unowned Sectors Grow Back</SubHeader>
+            <SubHeader>Unowned sectors grow back</SubHeader>
             <p className="text-sm text-muted leading-relaxed">
               The unowned portion of a sector{" "}
               <strong className="text-foreground">grows every turn</strong> at the average growth
@@ -302,7 +229,7 @@ Escalation drops by 1 each turn. Costs halve if you wait`}</FormulaBlock>
 
           {/* ── 4. Margins ── */}
           <section className="space-y-4">
-            <SectionHeader id="margins">4. Profit Margin Modifiers</SectionHeader>
+            <SectionHeader id="margins">4. Profit margin modifiers</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Sectors start at <strong className="text-foreground">35% margin</strong> and receive
               additive modifiers from state conditions, national macro, and your corporation&apos;s
@@ -459,14 +386,13 @@ Escalation drops by 1 each turn. Costs halve if you wait`}</FormulaBlock>
                 </tbody>
               </table>
             </div>
-            <Callout variant="info">
-              <strong className="text-foreground">Three national macro modifiers</strong>{" "}
+            <Callout label="Three national macro modifiers">
               (inflation, debt/GDP, deficit/GDP) apply to your entire corporation based on the
               country your HQ is in. These can swing margins ±13% on top of everything else. Watch
               national fiscal health as much as state conditions.
             </Callout>
 
-            <SubHeader>Home Location Bonus</SubHeader>
+            <SubHeader>Home location bonus</SubHeader>
             <p className="text-sm text-muted leading-relaxed">
               Sectors in your <strong className="text-foreground">HQ state</strong> get +10%;
               sectors in the same country (different state) get +5%. This makes early expansion in
@@ -474,7 +400,7 @@ Escalation drops by 1 each turn. Costs halve if you wait`}</FormulaBlock>
               other modifier.
             </p>
 
-            <SubHeader>Subsidies Are Huge</SubHeader>
+            <SubHeader>Subsidies are large</SubHeader>
             <p className="text-sm text-muted leading-relaxed">
               Each active subsidy adds{" "}
               <strong className="text-foreground">+15 percentage points</strong> to qualifying
@@ -485,7 +411,7 @@ Escalation drops by 1 each turn. Costs halve if you wait`}</FormulaBlock>
 
           {/* ── 5. Commodities ── */}
           <section className="space-y-4">
-            <SectionHeader id="commodities">5. The Commodity Market</SectionHeader>
+            <SectionHeader id="commodities">5. The commodity market</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Your sectors buy and sell commodities each turn. Commodity prices and supply/demand
               ratios modify your margins, sometimes dramatically. Check{" "}
@@ -565,11 +491,10 @@ Margin modifier = 40 × Σ(rate × ln(effectiveRatio))
                 </tbody>
               </table>
             </div>
-            <Callout variant="tip">
-              <strong className="text-foreground">Be a seller in shortage markets.</strong> If your
-              output commodity is in shortage (demand &gt; supply), you get a large positive margin
-              modifier. Watch commodity pages to identify which sector types are underserved, then
-              expand into them.
+            <Callout label="Be a seller in shortage markets.">
+              If your output commodity is in shortage (demand &gt; supply), you get a large positive
+              margin modifier. Watch commodity pages to identify which sector types are underserved,
+              then expand into them.
             </Callout>
             <p className="text-sm text-muted leading-relaxed">
               <strong className="text-foreground">Retail is special:</strong> Retail sectors take
@@ -582,7 +507,7 @@ Margin modifier = 40 × Σ(rate × ln(effectiveRatio))
 
           {/* ── 6. Strategies ── */}
           <section className="space-y-4">
-            <SectionHeader id="strategies">6. Operating Strategies</SectionHeader>
+            <SectionHeader id="strategies">6. Operating strategies</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Each sector has an <strong className="text-foreground">operating strategy</strong>{" "}
               that changes which commodities it buys and sells (and at what rates), plus a separate{" "}
@@ -591,9 +516,7 @@ Margin modifier = 40 × Σ(rate × ln(effectiveRatio))
             </p>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="rounded-xl border border-card-border bg-card p-4 space-y-3">
-                <p className="text-xs font-bold uppercase tracking-wider text-muted">
-                  Operating Strategy
-                </p>
+                <p className="text-sm font-semibold text-foreground">Operating strategy</p>
                 <p className="text-sm text-muted">
                   Each sector type has 3-4 named strategies that change commodity supply/demand
                   rates.
@@ -610,9 +533,7 @@ Margin modifier = 40 × Σ(rate × ln(effectiveRatio))
                 </ul>
               </div>
               <div className="rounded-xl border border-card-border bg-card p-4 space-y-3">
-                <p className="text-xs font-bold uppercase tracking-wider text-muted">
-                  Production Policy
-                </p>
+                <p className="text-sm font-semibold text-foreground">Production policy</p>
                 <p className="text-sm text-muted">
                   A continuous <strong className="text-foreground">−25 to +25 scale</strong>. You
                   set a target; the active level moves toward it at 1 unit per turn.
@@ -632,7 +553,7 @@ Margin modifier = 40 × Σ(rate × ln(effectiveRatio))
                 </ul>
               </div>
             </div>
-            <Callout variant="info">
+            <Callout>
               Before switching strategy, the confirmation panel shows a per-commodity comparison
               (old vs new rates) and current market status. Use it. Don&apos;t switch into a
               strategy that demands an already-scarce commodity.
@@ -641,7 +562,7 @@ Margin modifier = 40 × Σ(rate × ln(effectiveRatio))
 
           {/* ── 7. Sprawl ── */}
           <section className="space-y-4">
-            <SectionHeader id="sprawl">7. Managing Sprawl</SectionHeader>
+            <SectionHeader id="sprawl">7. Managing sprawl</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Every sector beyond 15 applies a{" "}
               <strong className="text-foreground">logistical sprawl penalty</strong> to all your
@@ -687,7 +608,7 @@ Logistics & Operations Strength (LS) raises the threshold and halves the slope:
                 </tbody>
               </table>
             </div>
-            <Callout variant="tip">
+            <Callout>
               Invest in <strong className="text-foreground">Logistics & Operations Strength</strong>{" "}
               before aggressively expanding past 15 sectors. At LS 200, your penalty-free threshold
               doubles to 30 and the slope halves. Find the spending option in CEO Office → Settings.
@@ -696,9 +617,9 @@ Logistics & Operations Strength (LS) raises the threshold and halves the slope:
 
           {/* ── 8. CEO: Salary, Marketing, Policy ── */}
           <section className="space-y-4">
-            <SectionHeader id="ceo">8. CEO Controls: Salary, Marketing & Policy</SectionHeader>
+            <SectionHeader id="ceo">8. CEO controls: salary, marketing & policy</SectionHeader>
 
-            <SubHeader>CEO Salary</SubHeader>
+            <SubHeader>CEO salary</SubHeader>
             <p className="text-sm text-muted leading-relaxed">
               You can configure a daily salary for yourself in CEO Office → Settings. The amount is
               deducted from the corporation&apos;s liquid capital each turn (spread evenly over 24
@@ -706,7 +627,7 @@ Logistics & Operations Strength (LS) raises the threshold and halves the slope:
               maximum, but high salaries drain capital and depress the share price over time.
             </p>
 
-            <SubHeader>Marketing Budget & Marketing Strength</SubHeader>
+            <SubHeader>Marketing budget & marketing strength</SubHeader>
             <p className="text-sm text-muted leading-relaxed">
               Marketing Strength (MS) determines how much unowned market share you capture per
               split. It grows each turn based on your daily marketing budget (set in CEO Office →
@@ -725,7 +646,7 @@ Scaled growth  = 0.65 × ln(1 + dailyBudget / 100,000)
 
           {/* ── 9. Shares ── */}
           <section className="space-y-4">
-            <SectionHeader id="shares">9. Shares & Dividends</SectionHeader>
+            <SectionHeader id="shares">9. Shares & dividends</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               You can trade shares in any corporation from its page, accessible via the stock
               exchange (
@@ -745,7 +666,7 @@ Scaled growth  = 0.65 × ln(1 + dailyBudget / 100,000)
               ).
             </p>
 
-            <SubHeader>As CEO: Raising Capital</SubHeader>
+            <SubHeader>As CEO: raising capital</SubHeader>
             <ul className="space-y-1.5 text-sm text-muted">
               <li>
                 <strong className="text-foreground">Public issuance</strong>. Sell up to 50% of
@@ -768,14 +689,13 @@ Scaled growth  = 0.65 × ln(1 + dailyBudget / 100,000)
               Set your dividend rate (0-100%) in CEO Office → Settings. Dividends are paid pro-rata
               to all shareholders each turn from post-tax income. 24-hour cooldown on rate changes.
             </p>
-            <Callout variant="info">
-              <strong className="text-foreground">High dividends vs. reinvestment:</strong>{" "}
+            <Callout label="High dividends vs. reinvestment:">
               Dividends move money from the corporation to shareholders. Early-stage corps should
               reinvest. Retain capital for expansion and logistics spend. Mature corps with excess
               capital can reward shareholders.
             </Callout>
 
-            <SubHeader>CEO Elections</SubHeader>
+            <SubHeader>CEO elections</SubHeader>
             <p className="text-sm text-muted leading-relaxed">
               When the CEO position is contested, votes are{" "}
               <strong className="text-foreground">weighted by share count</strong>, not
@@ -783,7 +703,7 @@ Scaled growth  = 0.65 × ln(1 + dailyBudget / 100,000)
               majority ownership (or build a loyal shareholder bloc) to control any leadership vote.
             </p>
 
-            <SubHeader>Shareholder Address</SubHeader>
+            <SubHeader>Shareholder address</SubHeader>
             <p className="text-sm text-muted leading-relaxed">
               CEOs can broadcast a message to all current shareholders via CEO Office → Admin
               subtab. Useful for announcing strategy changes or rallying investors. Limited to once
@@ -793,7 +713,7 @@ Scaled growth  = 0.65 × ln(1 + dailyBudget / 100,000)
 
           {/* ── 10. Bonds ── */}
           <section className="space-y-4">
-            <SectionHeader id="bonds">10. Corporate Bonds</SectionHeader>
+            <SectionHeader id="bonds">10. Corporate bonds</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Issue bonds to raise capital without diluting equity. Other players and corporations
               can buy them as investments.
@@ -823,7 +743,7 @@ Scaled growth  = 0.65 × ln(1 + dailyBudget / 100,000)
               </table>
             </div>
 
-            <SubHeader>Credit Rating</SubHeader>
+            <SubHeader>Credit rating</SubHeader>
             <p className="text-sm text-muted leading-relaxed">
               Your credit rating (0-100) is computed from four factors:{" "}
               <strong className="text-foreground">debt-to-equity ratio</strong> (is the company
@@ -834,16 +754,16 @@ Scaled growth  = 0.65 × ln(1 + dailyBudget / 100,000)
               on hand). A higher rating means a lower credit spread and cheaper borrowing. Keep your
               corp profitable and debt-light to maintain it.
             </p>
-            <Callout variant="warn">
-              <strong className="text-foreground">Debt ceiling:</strong> Total debt cannot exceed 2×
-              equity. If equity shrinks through losses or heavy dividends, you may lose issuance
-              capacity or face pressure to retire outstanding bonds.
+            <Callout kind="warning" label="Debt ceiling:">
+              Total debt cannot exceed 2× equity. If equity shrinks through losses or heavy
+              dividends, you may lose issuance capacity or face pressure to retire outstanding
+              bonds.
             </Callout>
           </section>
 
           {/* ── 11. Politics ── */}
           <section className="space-y-4">
-            <SectionHeader id="politics">11. The Political Angle</SectionHeader>
+            <SectionHeader id="politics">11. The political angle</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Your corporation lives in states with legislators, governors, and national policies
               that directly affect your margins. The political and economic systems are deeply
@@ -851,9 +771,7 @@ Scaled growth  = 0.65 × ln(1 + dailyBudget / 100,000)
             </p>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 space-y-2">
-                <p className="text-xs font-bold uppercase tracking-wider text-emerald-400">
-                  Legislation that helps
-                </p>
+                <p className="text-sm font-semibold text-success">Legislation that helps</p>
                 <ul className="space-y-1 text-sm text-muted">
                   <li>
                     • <strong className="text-foreground">Sector subsidies</strong>. +7.5% margin
@@ -881,9 +799,7 @@ Scaled growth  = 0.65 × ln(1 + dailyBudget / 100,000)
                 </ul>
               </div>
               <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4 space-y-2">
-                <p className="text-xs font-bold uppercase tracking-wider text-red-400">
-                  Legislation that hurts
-                </p>
+                <p className="text-sm font-semibold text-error">Legislation that hurts</p>
                 <ul className="space-y-1 text-sm text-muted">
                   <li>
                     • <strong className="text-foreground">High corporate tax rates</strong>. The
@@ -909,7 +825,7 @@ Scaled growth  = 0.65 × ln(1 + dailyBudget / 100,000)
 
           {/* ── 12. Share Price ── */}
           <section className="space-y-4">
-            <SectionHeader id="shareprice">12. How Share Price Works</SectionHeader>
+            <SectionHeader id="shareprice">12. How share price works</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Share price is recalculated every turn as a weighted blend of three components:
             </p>
@@ -970,7 +886,7 @@ sectorNPV = (yearly sector profit) ÷ 0.25         ← 25% discount rate`}</Form
 
           {/* ── 13. Quick Tips ── */}
           <section className="space-y-4">
-            <SectionHeader id="tips">13. Quick Tips</SectionHeader>
+            <SectionHeader id="tips">13. Quick tips</SectionHeader>
             <div className="rounded-xl border border-card-border bg-card p-5">
               <ul className="space-y-3 text-sm text-muted">
                 {[

@@ -1,0 +1,37 @@
+{
+  "issue": 2983,
+  "part": 1,
+  "runtimeSource": "c8a7f351d9e9e4fc0cf705bf2828b0d6aeca0bd7",
+  "flows": {
+    "regulatory_fine": [
+      "src/lib/corporations/mergerReview/lifecycle.ts",
+      "src/lib/corporations/groups/applyTransferPricingAudit.ts"
+    ],
+    "group_loss_relief": ["src/lib/corporations/groups/applyGroupRelief.ts"],
+    "nationalization_compensation": [
+      "src/lib/nationalization/ownershipTransition.ts",
+      "src/lib/nationalization/nationalizeSectorWide.ts"
+    ]
+  },
+  "remainingGaps": [
+    "whole-corporation nationalization payout pool and recouped cash",
+    "privatization IPO proceeds",
+    "privatization auction proceeds"
+  ],
+  "qualification": {
+    "integrationCases": { "memory": 4, "nativeMongo": 4 },
+    "redWithOptInDisabled": "three cash cases fail",
+    "registryGuardCases": 15,
+    "focusedSuites": { "files": 93, "passed": 783, "skipped": 12, "failed": 0 },
+    "changedTypeScriptFiles": 15,
+    "scopedLint": "pass",
+    "scopedSemanticDiagnostics": "pass",
+    "formatting": "pass",
+    "architectureAuditBlocking": 0
+  },
+  "limits": [
+    "Fixtures qualify the treasury boundary for these flows, not the whole world.",
+    "Whole-corporation nationalization and privatization proceeds remain open under #2983.",
+    "No production database was reset or repaired."
+  ]
+}

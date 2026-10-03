@@ -105,7 +105,6 @@ export function StatAllocationGate() {
       />
       <div className="relative z-10 w-full max-w-lg rounded-xl border border-card-border bg-card shadow-2xl">
         <div className="relative px-5 pt-5 pb-4">
-          <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-primary/50 via-secondary/30 to-transparent" />
           <h2 className="text-lg font-semibold text-foreground">Allocate Your Stats</h2>
           <p className="mt-1 text-xs text-muted">
             Your politician has earned a stat sheet. We&apos;ve suggested a build from your career —

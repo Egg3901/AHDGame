@@ -1,6 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { publicPageMetadata } from "@/lib/siteMetadata";
+import {
+  Callout,
+  SectionHeader,
+  SubHeader,
+  TableOfContents,
+} from "@/app/guides/_components/GuideBlocks";
 
 export const metadata: Metadata = publicPageMetadata({
   title: "Planned / Command Economies Guide | A House Divided",
@@ -9,54 +15,18 @@ export const metadata: Metadata = publicPageMetadata({
   pathname: "/guides/planned-economies",
 });
 
-function SectionHeader({ id, children }: { id: string; children: React.ReactNode }) {
-  return (
-    <h2
-      id={id}
-      className="scroll-mt-4 text-xl font-bold tracking-tight text-foreground border-l-4 border-primary/60 pl-3"
-    >
-      {children}
-    </h2>
-  );
-}
-
-function SubHeader({ children }: { children: React.ReactNode }) {
-  return <h3 className="font-semibold text-foreground">{children}</h3>;
-}
-
-function Callout({
-  children,
-  variant = "info",
-}: {
-  children: React.ReactNode;
-  variant?: "info" | "warn" | "tip";
-}) {
-  const colors = {
-    info: "border-primary/40 bg-primary/5",
-    warn: "border-amber-500/40 bg-amber-500/5",
-    tip: "border-emerald-500/40 bg-emerald-500/5",
-  };
-  return (
-    <div
-      className={`rounded-r-lg border-l-4 px-4 py-3 text-sm text-muted leading-relaxed ${colors[variant]}`}
-    >
-      {children}
-    </div>
-  );
-}
-
 const TOC_ITEMS = [
-  { id: "overview", label: "What This Is" },
-  { id: "how-it-starts", label: "How a Country Becomes One" },
-  { id: "soes", label: "State-Owned Enterprises" },
-  { id: "seats", label: "The Three Seats" },
-  { id: "credit", label: "Directed Credit and Its Cost" },
-  { id: "marketization", label: "Marketization Is Earned" },
-  { id: "loops", label: "The Feedback Loops" },
-  { id: "repression", label: "Repression: Holding the Line" },
-  { id: "planned-rules", label: "The Planned Rules Still Apply" },
-  { id: "dual-track", label: "Dual-Track Transition" },
-  { id: "what-to-do", label: "What You Can Do" },
+  { id: "overview", label: "What this is" },
+  { id: "how-it-starts", label: "How a country becomes one" },
+  { id: "soes", label: "State-owned enterprises" },
+  { id: "seats", label: "The three seats" },
+  { id: "credit", label: "Directed credit and its cost" },
+  { id: "marketization", label: "Marketization is earned" },
+  { id: "loops", label: "The feedback loops" },
+  { id: "repression", label: "Repression: holding the line" },
+  { id: "planned-rules", label: "The planned rules still apply" },
+  { id: "dual-track", label: "Dual-track transition" },
+  { id: "what-to-do", label: "What you can do" },
 ];
 
 export default function PlannedEconomiesGuidePage() {
@@ -81,23 +51,11 @@ export default function PlannedEconomiesGuidePage() {
         </div>
 
         <div className="space-y-10">
-          {/* Table of Contents */}
-          <div className="rounded-xl border border-card-border bg-card p-5">
-            <p className="mb-3 text-xs font-bold uppercase tracking-wider text-muted">Contents</p>
-            <ol className="grid gap-y-1 gap-x-4 text-sm sm:grid-cols-2">
-              {TOC_ITEMS.map((item, i) => (
-                <li key={item.id}>
-                  <a href={`#${item.id}`} className="text-primary hover:underline">
-                    {i + 1}. {item.label}
-                  </a>
-                </li>
-              ))}
-            </ol>
-          </div>
+          <TableOfContents items={TOC_ITEMS} />
 
           {/* ── 1. Overview ── */}
           <section className="space-y-4">
-            <SectionHeader id="overview">1. What This Is</SectionHeader>
+            <SectionHeader id="overview">1. What this is</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Most countries in A House Divided are market economies: floating currencies, a
               central-bank chair setting rates, commodity prices that clear on supply and demand.
@@ -107,10 +65,10 @@ export default function PlannedEconomiesGuidePage() {
               <strong className="text-foreground">decided by how well the plan is run</strong>, not
               by a script.
             </p>
-            <Callout variant="warn">
-              <strong className="text-foreground">This is not a bug.</strong> If a Soviet-era ruble
-              never drifts, national commodity prices ignore S/D, or a state firm stays alive while
-              insolvent, you are looking at planned-economy rules. The market guides (
+            <Callout label="This is not a bug.">
+              If a Soviet-era ruble never drifts, national commodity prices ignore S/D, or a state
+              firm stays alive while insolvent, you are looking at planned-economy rules. The market
+              guides (
               <Link href="/guides/commodities" className="text-primary hover:underline">
                 Commodities
               </Link>
@@ -131,7 +89,7 @@ export default function PlannedEconomiesGuidePage() {
 
           {/* ── 2. How it starts ── */}
           <section className="space-y-4">
-            <SectionHeader id="how-it-starts">2. How a Country Becomes One</SectionHeader>
+            <SectionHeader id="how-it-starts">2. How a country becomes one</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">Two gates must both be true:</p>
             <ol className="list-decimal space-y-2 pl-5 text-sm text-muted leading-relaxed">
               <li>
@@ -190,7 +148,7 @@ export default function PlannedEconomiesGuidePage() {
 
           {/* ── 3. SOEs ── */}
           <section className="space-y-4">
-            <SectionHeader id="soes">3. State-Owned Enterprises</SectionHeader>
+            <SectionHeader id="soes">3. State-owned enterprises</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Instead of one national conglomerate, a command country&apos;s commanding heights are
               split into{" "}
@@ -225,7 +183,7 @@ export default function PlannedEconomiesGuidePage() {
                 missed plan (the soft-budget bill).
               </li>
             </ul>
-            <Callout variant="tip">
+            <Callout>
               When lots of SOEs beat their targets, the plan is working and the command model holds.
               When they chronically miss, shortages build and pressure to reform the whole system
               grows.
@@ -234,7 +192,7 @@ export default function PlannedEconomiesGuidePage() {
 
           {/* ── 4. Three seats ── */}
           <section className="space-y-4">
-            <SectionHeader id="seats">4. The Three Seats</SectionHeader>
+            <SectionHeader id="seats">4. The three seats</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               A command economy is run through three offices. Each is filled by the government
               (cabinet or Supreme Soviet). If a seat is empty, the state brain runs it competently
@@ -298,7 +256,7 @@ export default function PlannedEconomiesGuidePage() {
 
           {/* ── 5. Directed credit ── */}
           <section className="space-y-4">
-            <SectionHeader id="credit">5. Directed Credit and Its Cost</SectionHeader>
+            <SectionHeader id="credit">5. Directed credit and its cost</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Directed credit is the Gosbank Chair&apos;s main lever, and it is a genuine tradeoff.
             </p>
@@ -314,17 +272,16 @@ export default function PlannedEconomiesGuidePage() {
                 which drives shortage. Fund everyone generously and you empty the shelves.
               </li>
             </ul>
-            <Callout variant="warn">
-              <strong className="text-foreground">The Gosbank tightrope:</strong> you can grow
-              industry with cheap credit, but the more you print the worse the shortages get, and
-              shortages are one of the forces that push the country toward the market. You have to
-              choose favorites.
+            <Callout label="The Gosbank tightrope:">
+              you can grow industry with cheap credit, but the more you print the worse the
+              shortages get, and shortages are one of the forces that push the country toward the
+              market. You have to choose favorites.
             </Callout>
           </section>
 
           {/* ── 6. Marketization earned ── */}
           <section className="space-y-4">
-            <SectionHeader id="marketization">6. Marketization Is Earned</SectionHeader>
+            <SectionHeader id="marketization">6. Marketization is earned</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               The single most important change: marketization is{" "}
               <strong className="text-foreground">no longer scripted</strong>. The era sets the
@@ -349,7 +306,7 @@ export default function PlannedEconomiesGuidePage() {
                   key={term}
                   className="rounded-xl border border-card-border bg-card p-4 space-y-1.5"
                 >
-                  <p className="text-xs font-bold uppercase tracking-wider text-muted">{term}</p>
+                  <p className="text-sm font-semibold text-foreground">{term}</p>
                   <p className="text-sm text-muted leading-relaxed">{def}</p>
                 </div>
               ))}
@@ -361,18 +318,17 @@ export default function PlannedEconomiesGuidePage() {
               with a disciplined plan can hold command indefinitely; a reformist government that
               lets the enterprises fail will marketize.
             </p>
-            <Callout variant="tip">
-              <strong className="text-foreground">Government reformism is live.</strong> The ruling
-              party&apos;s economic position feeds the policy driver directly. Win an election with
-              a market-leaning party, or shift the ruling party&apos;s economic stance through
-              gameplay, and marketization responds. This works whether the government is player-led
-              or run by the state brain.
+            <Callout label="Government reformism is live.">
+              The ruling party&apos;s economic position feeds the policy driver directly. Win an
+              election with a market-leaning party, or shift the ruling party&apos;s economic stance
+              through gameplay, and marketization responds. This works whether the government is
+              player-led or run by the state brain.
             </Callout>
           </section>
 
           {/* ── 7. Feedback loops ── */}
           <section className="space-y-4">
-            <SectionHeader id="loops">7. The Feedback Loops</SectionHeader>
+            <SectionHeader id="loops">7. The feedback loops</SectionHeader>
             <ul className="list-disc space-y-2 pl-5 text-sm text-muted leading-relaxed">
               <li>
                 <strong className="text-foreground">Reform spiral</strong>: underfund the SOEs, they
@@ -395,7 +351,7 @@ export default function PlannedEconomiesGuidePage() {
 
           {/* ── 8. Repression ── */}
           <section className="space-y-4">
-            <SectionHeader id="repression">8. Repression: Holding the Line</SectionHeader>
+            <SectionHeader id="repression">8. Repression: holding the line</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Reform is not the only answer to a swelling black market. A hardline government can
               crack down instead. The Gosbank Chair (or head of government) can set an{" "}
@@ -410,18 +366,17 @@ export default function PlannedEconomiesGuidePage() {
               shortage is a pressure cooker that bleeds legitimacy while the underlying problem
               festers.
             </p>
-            <Callout variant="warn">
-              <strong className="text-foreground">The hardliner tradeoff:</strong> repression buys
-              time against reform and keeps the country command for longer, but it treats the
-              symptom, not the disease. Deliver the goods and it stays cheap; repress amid empty
-              shelves and it becomes expensive fast. Reform or repress, either way the shortage
-              still has to be answered.
+            <Callout label="The hardliner tradeoff:">
+              repression buys time against reform and keeps the country command for longer, but it
+              treats the symptom, not the disease. Deliver the goods and it stays cheap; repress
+              amid empty shelves and it becomes expensive fast. Reform or repress, either way the
+              shortage still has to be answered.
             </Callout>
           </section>
 
           {/* ── 9. Planned rules still apply ── */}
           <section className="space-y-4">
-            <SectionHeader id="planned-rules">9. The Planned Rules Still Apply</SectionHeader>
+            <SectionHeader id="planned-rules">9. The planned rules still apply</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               While a country sits in the command or dual-track bands, the planned machinery is in
               force. Read shortage, overhang, and the black-market premium as your signals rather
@@ -459,7 +414,7 @@ export default function PlannedEconomiesGuidePage() {
 
           {/* ── 10. Dual-track ── */}
           <section className="space-y-4">
-            <SectionHeader id="dual-track">10. Dual-Track Transition</SectionHeader>
+            <SectionHeader id="dual-track">10. Dual-track transition</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Dual-track means plan and market run in parallel: a share of pricing and shortage
               machinery stays planned, the rest clears like a market. As the marketization level
@@ -471,7 +426,7 @@ export default function PlannedEconomiesGuidePage() {
 
           {/* ── 11. What to do ── */}
           <section className="space-y-4">
-            <SectionHeader id="what-to-do">11. What You Can Do</SectionHeader>
+            <SectionHeader id="what-to-do">11. What you can do</SectionHeader>
             <SubHeader>As a player</SubHeader>
             <ul className="list-disc space-y-2 pl-5 text-sm text-muted leading-relaxed">
               <li>
@@ -508,7 +463,7 @@ export default function PlannedEconomiesGuidePage() {
                 everything after that is earned.
               </li>
             </ul>
-            <Callout variant="tip">
+            <Callout>
               For market mechanics this page deliberately does not repeat, start with{" "}
               <Link href="/guides/commodities" className="text-primary hover:underline">
                 Commodities

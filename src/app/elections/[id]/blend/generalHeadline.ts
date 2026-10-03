@@ -1,7 +1,7 @@
 /**
  * The general-election screen's newsroom headline.
  *
- * Proposal D sets a Lora headline over the live tally ("Vance clears 270 as the
+ * Proposal D sets a headline over the live tally ("Vance clears 270 as the
  * belt turns"). That is editorial prose, so it is generated here from the
  * standing rather than invented per render: a fixed phrase set, every number
  * taken from the tally, and no claim the figures do not support.

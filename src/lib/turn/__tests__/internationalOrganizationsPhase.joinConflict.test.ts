@@ -38,12 +38,19 @@ const stubDb = () =>
   }) as unknown as Db;
 
 const buildJoinConflictBill = vi.fn().mockResolvedValue(new ObjectId());
+const buildOrganizationWarDeclarationBills = vi.fn().mockResolvedValue(new Map());
+const enactAutomaticOrganizationWar = vi.fn().mockResolvedValue("war_fr_cn_10");
+const planOrganizationWarDeclarationFromDb = vi.fn();
+const loadOrganizationWarPlanningContext = vi.fn().mockResolvedValue({ snapshot: true });
+const loadPolicyHeadSponsors = vi.fn();
+const legislationUpdateOne = vi.fn().mockResolvedValue({ modifiedCount: 1 });
 const enactImmediateWarEntry = vi.fn().mockResolvedValue({ joined: true, deployedUnits: 1 });
 const loadCollectiveDefenseEntryBlocks = vi.fn().mockResolvedValue(new Map());
 let conflict: ConflictDoc | null = null;
 let roster: string[] = [];
 let defendingCountryId: string | undefined;
 let applicantStillPending = true;
+let resolutionFixture: Record<string, unknown> | null = null;
 const { headlessCountries } = vi.hoisted(() => ({ headlessCountries: new Set<string>() }));
 
 vi.mock("@/lib/db/collections", () => ({
@@ -86,6 +93,22 @@ vi.mock("@/lib/internationalOrganizations/joinApplication", () => ({
 vi.mock("@/lib/db/collections/conflicts", () => ({ getConflict: vi.fn(async () => conflict) }));
 vi.mock("@/lib/internationalOrganizations/commands/buildJoinConflictBill", () => ({
   buildJoinConflictBill: (...args: unknown[]) => buildJoinConflictBill(...args),
+}));
+vi.mock("@/lib/internationalOrganizations/commands/buildOrganizationWarDeclarationBills", () => ({
+  buildOrganizationWarDeclarationBills: (...args: unknown[]) =>
+    buildOrganizationWarDeclarationBills(...args),
+}));
+vi.mock("@/lib/internationalOrganizations/enactAutomaticWarDeclaration", () => ({
+  enactAutomaticOrganizationWar: (...args: unknown[]) => enactAutomaticOrganizationWar(...args),
+}));
+vi.mock("@/lib/internationalOrganizations/warDeclarationPlanning", () => ({
+  loadOrganizationWarPlanningContext: (...args: unknown[]) =>
+    loadOrganizationWarPlanningContext(...args),
+  planOrganizationWarDeclarationFromDb: (...args: unknown[]) =>
+    planOrganizationWarDeclarationFromDb(...args),
+}));
+vi.mock("@/lib/internationalOrganizations/policyHeadSponsors", () => ({
+  loadPolicyHeadSponsors: (...args: unknown[]) => loadPolicyHeadSponsors(...args),
 }));
 vi.mock("@/lib/internationalOrganizations/reconcileAutonomousWarEntry", () => ({
   reconcileAutonomousWarEntryBills: vi.fn().mockResolvedValue(0),
@@ -165,7 +188,7 @@ async function runPhase(voters?: string[]) {
       .fn()
       .mockReturnValueOnce({
         toArray: vi.fn().mockResolvedValue([
-          {
+          resolutionFixture ?? {
             _id: new ObjectId("507f1f77bcf86cd799439091"),
             organizationId: "NATO",
             type: "join_conflict",
@@ -183,7 +206,7 @@ async function runPhase(voters?: string[]) {
         ]),
       })
       .mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
-    updateOne: vi.fn().mockResolvedValue({ modifiedCount: 1 }),
+    updateOne: legislationUpdateOne,
     updateMany: vi.fn().mockResolvedValue({ modifiedCount: 0 }),
   } as never);
 
@@ -203,8 +226,16 @@ describe("join_conflict enactment", () => {
     roster = ["US", "UK"];
     defendingCountryId = undefined;
     applicantStillPending = true;
+    resolutionFixture = null;
     policyMode = "shadow";
     headlessCountries.clear();
+    buildOrganizationWarDeclarationBills.mockClear();
+    enactAutomaticOrganizationWar.mockClear();
+    planOrganizationWarDeclarationFromDb.mockReset();
+    loadOrganizationWarPlanningContext.mockClear();
+    loadPolicyHeadSponsors.mockReset();
+    legislationUpdateOne.mockClear();
+    legislationUpdateOne.mockResolvedValue({ modifiedCount: 1 });
     const access = await import("@/lib/countryAccess");
     vi.mocked(access.getAllCountryAccess).mockResolvedValue(accessSilencing() as never);
     const service = await import("@/lib/internationalOrganizations/service");
@@ -437,6 +468,141 @@ describe("join_conflict enactment", () => {
     conflict = null;
     await runPhase();
     expect(buildJoinConflictBill).not.toHaveBeenCalled();
+  });
+
+  it("auto-enlists NPP members and opens concurrent declarations for player members", async () => {
+    policyMode = "active";
+    roster = ["US", "UK", "FR"];
+    resolutionFixture = {
+      _id: new ObjectId("507f1f77bcf86cd799439099"),
+      organizationId: "NATO",
+      type: "declare_war",
+      warDeclarationTargetCountryId: "CN",
+      warDeclarationGoal: "punitive",
+      parties: [],
+      proposingCountryId: "US",
+      proposedByCharacterId: new ObjectId("507f1f77bcf86cd799439092"),
+      proposedByCharacterName: "Secretary of State",
+      title: "NATO Declaration of War against China",
+      status: "pending",
+      closesOnTurn: 10,
+      votes: [
+        { countryId: "US", vote: "yes" },
+        { countryId: "UK", vote: "yes" },
+      ],
+    };
+    const access = await import("@/lib/countryAccess");
+    vi.mocked(access.getAllCountryAccess).mockResolvedValue(accessSilencing("FR") as never);
+    planOrganizationWarDeclarationFromDb.mockResolvedValue({
+      conflictsEnabled: true,
+      targetEnabled: true,
+      playerLegislation: ["US", "UK"],
+      automaticNpp: ["FR"],
+      excluded: [],
+    });
+    loadPolicyHeadSponsors.mockResolvedValue(
+      new Map([
+        ["US", { _id: new ObjectId(), name: "US President", isNpp: false }],
+        ["UK", { _id: new ObjectId(), name: "UK Prime Minister", isNpp: false }],
+      ])
+    );
+
+    await runPhase(["US", "UK"]);
+
+    expect(enactAutomaticOrganizationWar).toHaveBeenCalledWith(
+      expect.objectContaining({ declarers: ["FR"], defender: "CN", warGoal: "punitive" })
+    );
+    expect(buildOrganizationWarDeclarationBills).toHaveBeenCalledWith(
+      expect.objectContaining({
+        targetCountryId: "CN",
+        sponsors: expect.arrayContaining([
+          expect.objectContaining({ countryId: "US" }),
+          expect.objectContaining({ countryId: "UK" }),
+        ]),
+      })
+    );
+    expect(legislationUpdateOne).toHaveBeenCalledWith(
+      { _id: new ObjectId("507f1f77bcf86cd799439099"), status: "pending" },
+      expect.objectContaining({
+        $set: expect.objectContaining({ status: "terminated" }),
+      })
+    );
+  });
+
+  it("lets a declaration lapse when conflicts are disabled before close", async () => {
+    roster = ["US", "UK"];
+    resolutionFixture = {
+      _id: new ObjectId("507f1f77bcf86cd799439099"),
+      organizationId: "NATO",
+      type: "declare_war",
+      warDeclarationTargetCountryId: "CN",
+      warDeclarationGoal: "punitive",
+      parties: [],
+      proposingCountryId: "US",
+      proposedByCharacterId: new ObjectId("507f1f77bcf86cd799439092"),
+      status: "pending",
+      closesOnTurn: 10,
+      votes: [
+        { countryId: "US", vote: "yes" },
+        { countryId: "UK", vote: "yes" },
+      ],
+    };
+    planOrganizationWarDeclarationFromDb.mockResolvedValue({
+      conflictsEnabled: false,
+      targetEnabled: true,
+      playerLegislation: ["US", "UK"],
+      automaticNpp: [],
+      excluded: [],
+    });
+
+    await runPhase(["US", "UK"]);
+
+    expect(enactAutomaticOrganizationWar).not.toHaveBeenCalled();
+    expect(buildOrganizationWarDeclarationBills).not.toHaveBeenCalled();
+    expect(legislationUpdateOne).toHaveBeenCalledWith(
+      { _id: new ObjectId("507f1f77bcf86cd799439099"), status: "pending" },
+      { $set: { status: "expired" } }
+    );
+  });
+
+  it("keeps a declaration pending when national bill creation fails", async () => {
+    roster = ["US"];
+    resolutionFixture = {
+      _id: new ObjectId("507f1f77bcf86cd799439099"),
+      organizationId: "NATO",
+      type: "declare_war",
+      warDeclarationTargetCountryId: "CN",
+      warDeclarationGoal: "punitive",
+      parties: [],
+      proposingCountryId: "US",
+      proposedByCharacterId: new ObjectId("507f1f77bcf86cd799439092"),
+      status: "pending",
+      closesOnTurn: 10,
+      votes: [{ countryId: "US", vote: "yes" }],
+    };
+    planOrganizationWarDeclarationFromDb.mockResolvedValue({
+      conflictsEnabled: true,
+      targetEnabled: true,
+      playerLegislation: ["US"],
+      automaticNpp: [],
+      excluded: [],
+    });
+    loadPolicyHeadSponsors.mockResolvedValue(
+      new Map([["US", { _id: new ObjectId(), name: "US President", isNpp: false }]])
+    );
+    buildOrganizationWarDeclarationBills.mockRejectedValueOnce(
+      new Error("transient write failure")
+    );
+
+    await expect(runPhase(["US"])).rejects.toThrow("transient write failure");
+
+    expect(
+      legislationUpdateOne.mock.calls.some(
+        ([filter, update]) =>
+          (filter as { _id?: ObjectId })._id?.toString() === "507f1f77bcf86cd799439099" &&
+          (update as { $set?: { status?: string } }).$set?.status === "active"
+      )
+    ).toBe(false);
   });
 });
 

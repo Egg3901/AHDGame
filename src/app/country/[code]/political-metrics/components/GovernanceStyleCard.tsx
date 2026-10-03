@@ -180,8 +180,7 @@ export function GovernanceStyleCard({
       className="overflow-hidden rounded-xl border border-card-border bg-card shadow-card"
       aria-labelledby="governance-style-heading"
     >
-      <div className="relative overflow-hidden border-b border-card-border bg-gradient-to-br from-primary/15 via-card to-secondary/10 px-4 py-5 sm:px-5">
-        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold/80 to-transparent" />
+      <div className="relative overflow-hidden border-b border-card-border px-4 py-5 sm:px-5">
         <div className="relative grid gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(420px,1.1fr)] lg:items-end">
           <div>
             <div className="flex flex-wrap items-center gap-2 font-mono text-body-xs uppercase tracking-[0.18em] text-muted">

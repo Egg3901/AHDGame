@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Skeleton } from "@/components/ui";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import { DenseSection, Segmented, TableScroll, Td, Th } from "./dense/DenseKit";
 import {
   computeSnapshotDeltas,
   toAnchorMetricMap,
@@ -45,17 +46,15 @@ function nearestTurn(points: CorpHistoryComparePoint[], target: number): number 
 
 /**
  * Snapshot tab (suggestion #97): a turn-over-turn compare TABLE. Pick two turns
- * (or a lookback preset) and see the absolute + % change per headline metric —
+ * (or a lookback preset) and see the absolute + % change per headline metric,
  * distinct from the Charts tab, which line-plots one metric across every turn.
  * Reads the already-persisted `corporationHistory` snapshots; no writes.
  */
 export default function SnapshotTab({
   corpId,
-  brandColor,
   modViewEnabled = false,
 }: {
   corpId: string;
-  brandColor?: string;
   modViewEnabled?: boolean;
 }) {
   const { formatAmount, formatPrice, toInternalFrom } = useCurrency();
@@ -105,7 +104,7 @@ export default function SnapshotTab({
     };
   }, [corpId, modViewEnabled]);
 
-  // Rate-aware ₳ normalization — identical approach to the Charts tab: use the
+  // Rate-aware ₳ normalization, the same approach as the Charts tab: use the
   // FX rate recorded at write time so old snapshots don't drift with today's
   // rate (#2958); fall back to the live rate for pre-fxRateAtWrite rows.
   const toAnchor = useCallback(
@@ -134,33 +133,31 @@ export default function SnapshotTab({
 
   if (loading) {
     return (
-      <div className="space-y-4">
-        <Skeleton className="h-24 w-full rounded-xl" />
-        <Skeleton className="h-64 w-full rounded-xl" />
+      <div className="space-y-2">
+        <Skeleton className="h-4 w-40" />
+        <Skeleton className="h-48 w-full" />
       </div>
     );
   }
 
   if (data?.isPrivate) {
     return (
-      <div className="rounded-xl border border-card-border bg-card p-8 text-center">
-        <p className="text-sm font-semibold text-foreground">Private Corporation</p>
-        <p className="mt-1 text-sm text-muted">
-          Historical financials are not publicly disclosed for this corporation.
+      <DenseSection title="Snapshot compare">
+        <p className="py-2 text-xs text-muted">
+          Private corporation. Historical financials are not publicly disclosed.
         </p>
-      </div>
+      </DenseSection>
     );
   }
 
   if (!data || data.points.length < 2) {
     return (
-      <div className="rounded-xl border border-card-border bg-card p-8 text-center">
-        <p className="text-sm font-semibold text-foreground">Not enough history yet</p>
-        <p className="mt-1 text-sm text-muted">
-          The snapshot compare needs at least two turns of recorded history. Check back after a few
-          more turns of activity.
+      <DenseSection title="Snapshot compare">
+        <p className="py-2 text-xs text-muted">
+          Not enough history yet. The snapshot compare needs at least two turns of recorded history.
+          Check back after a few more turns of activity.
         </p>
-      </div>
+      </DenseSection>
     );
   }
 
@@ -169,138 +166,86 @@ export default function SnapshotTab({
   const firstTurn = points[0].turn;
   const lastTurn = points[points.length - 1].turn;
   const fullSpan = lastTurn - firstTurn;
-  const accent = brandColor || "#3b82f6";
 
   const fmtMetric = (v: number, format: "money" | "price") =>
     format === "price" ? formatPrice(v, cc) : formatAmount(v, cc);
 
-  const applyLookback = (turns: number) => {
-    setToTurn(lastTurn);
-    setFromTurn(nearestTurn(points, lastTurn - turns));
-  };
-
-  const applyMax = () => {
-    setToTurn(lastTurn);
-    setFromTurn(firstTurn);
-  };
-
   const spanTurns = laterTurn != null && earlierTurn != null ? laterTurn - earlierTurn : 0;
-  const activePreset = (turns: number) =>
-    toTurn === lastTurn && earlierTurn === nearestTurn(points, lastTurn - turns);
+  const presets = [
+    ...LOOKBACK_PRESETS.filter((p) => p.turns <= fullSpan).map((p) => ({
+      value: p.label,
+      label: p.label,
+      from: nearestTurn(points, lastTurn - p.turns),
+    })),
+    { value: "Max", label: "Max", from: firstTurn },
+  ];
+  const activePreset =
+    toTurn === lastTurn ? (presets.find((p) => p.from === earlierTurn)?.value ?? null) : null;
+
+  const selectClass =
+    "h-7 rounded-md border border-card-border bg-background px-2 font-mono text-xs text-foreground focus:border-foreground focus:outline-none";
 
   return (
-    <div className="space-y-4">
-      {/* Selector card */}
-      <div className="rounded-xl border border-card-border bg-card p-4 space-y-4">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <h3 className="text-sm font-semibold text-foreground">Snapshot compare</h3>
-            <p className="mt-0.5 max-w-md text-xs text-muted">
-              Turn-over-turn change across the corporation&apos;s recorded history. Pick two turns
-              or a lookback window.
-            </p>
-          </div>
-          <div className="shrink-0 text-right">
-            <div className="text-[10px] font-bold uppercase tracking-widest text-muted">Span</div>
-            <div className="text-lg font-bold tabular-nums text-foreground">{spanTurns} turns</div>
-          </div>
-        </div>
-
-        {/* Lookback quick-picks */}
-        <div className="flex flex-wrap gap-2">
-          {LOOKBACK_PRESETS.filter((p) => p.turns <= fullSpan).map((preset) => {
-            const isActive = activePreset(preset.turns);
-            return (
-              <button
-                key={preset.label}
-                type="button"
-                onClick={() => applyLookback(preset.turns)}
-                className={`inline-flex items-center rounded-full px-3.5 py-1.5 text-xs font-medium transition-all ${
-                  isActive
-                    ? "text-white shadow"
-                    : "border border-card-border bg-card-elevated text-muted hover:text-foreground hover:border-card-border/80"
-                }`}
-                style={isActive ? { backgroundColor: accent } : undefined}
-              >
-                {preset.label}
-              </button>
-            );
-          })}
-          <button
-            type="button"
-            onClick={applyMax}
-            className={`inline-flex items-center rounded-full px-3.5 py-1.5 text-xs font-medium transition-all ${
-              toTurn === lastTurn && earlierTurn === firstTurn
-                ? "text-white shadow"
-                : "border border-card-border bg-card-elevated text-muted hover:text-foreground hover:border-card-border/80"
-            }`}
-            style={
-              toTurn === lastTurn && earlierTurn === firstTurn
-                ? { backgroundColor: accent }
-                : undefined
-            }
-          >
-            Max
-          </button>
-        </div>
-
-        {/* Precise turn selectors */}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <label className="flex flex-col gap-1">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-muted">
-              From turn
-            </span>
+    <DenseSection
+      title="Snapshot compare"
+      meta={`${spanTurns} turns`}
+      actions={
+        <>
+          <Segmented
+            ariaLabel="Lookback"
+            options={presets.map(({ value, label }) => ({ value, label }))}
+            value={activePreset}
+            onChange={(value) => {
+              const preset = presets.find((p) => p.value === value);
+              if (!preset) return;
+              setToTurn(lastTurn);
+              setFromTurn(preset.from);
+            }}
+          />
+          <label className="flex items-center gap-1.5 text-xs text-muted">
+            From
             <select
               value={fromTurn ?? ""}
               onChange={(e) => setFromTurn(Number(e.target.value))}
-              className="rounded-lg border border-card-border bg-card px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+              className={selectClass}
             >
               {points.map((p) => (
                 <option key={p.turn} value={p.turn}>
-                  Turn {p.turn}
+                  T{p.turn}
                 </option>
               ))}
             </select>
           </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-muted">
-              To turn
-            </span>
+          <label className="flex items-center gap-1.5 text-xs text-muted">
+            to
             <select
               value={toTurn ?? ""}
               onChange={(e) => setToTurn(Number(e.target.value))}
-              className="rounded-lg border border-card-border bg-card px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+              className={selectClass}
             >
               {points.map((p) => (
                 <option key={p.turn} value={p.turn}>
-                  Turn {p.turn}
+                  T{p.turn}
                 </option>
               ))}
             </select>
           </label>
-        </div>
-      </div>
-
-      {/* Delta table */}
-      <div className="overflow-x-auto rounded-xl border border-card-border bg-card">
-        <table className="w-full text-sm">
+        </>
+      }
+    >
+      <p className="py-1 text-xs text-muted">
+        Turn-over-turn change across the corporation&apos;s recorded history. Pick two turns or a
+        lookback window.
+      </p>
+      <TableScroll>
+        <table className="w-full border-collapse">
           <thead>
-            <tr className="border-b border-card-border text-left">
-              <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-muted">
-                Metric
-              </th>
-              <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-widest text-muted">
-                T{earlierTurn}
-              </th>
-              <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-widest text-muted">
-                T{laterTurn}
-              </th>
-              <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-widest text-muted">
-                Change
-              </th>
-              <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-widest text-muted">
-                %
-              </th>
+            <tr>
+              <Th>Metric</Th>
+              <Th align="right">T{earlierTurn}</Th>
+              <Th align="right">T{laterTurn}</Th>
+              <Th align="right">Change</Th>
+              <Th align="right">%</Th>
             </tr>
           </thead>
           <tbody>
@@ -316,38 +261,34 @@ export default function SnapshotTab({
                 row.pctDelta == null
                   ? "n/a"
                   : flat
-                    ? "—"
+                    ? "0.0%"
                     : `${row.pctDelta > 0 ? "+" : "−"}${Math.abs(row.pctDelta).toFixed(1)}%`;
               return (
-                <tr key={row.key} className="border-b border-card-border last:border-0">
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-foreground" title={row.description}>
+                <tr key={row.key}>
+                  <Td>
+                    <span className="text-foreground" title={row.description}>
                       {row.label}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-foreground">
-                    {fmtMetric(row.then, row.format)}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-foreground">
-                    {fmtMetric(row.now, row.format)}
-                  </td>
-                  <td className={`px-4 py-3 text-right font-semibold tabular-nums ${toneClass}`}>
-                    {flat ? "—" : `${good ? "+" : "−"}${deltaBody}`}
-                  </td>
-                  <td className={`px-4 py-3 text-right font-semibold tabular-nums ${pctToneClass}`}>
+                    </span>
+                  </Td>
+                  <Td align="right">{fmtMetric(row.then, row.format)}</Td>
+                  <Td align="right">{fmtMetric(row.now, row.format)}</Td>
+                  <Td align="right" className={toneClass}>
+                    {flat ? "0" : `${good ? "+" : "−"}${deltaBody}`}
+                  </Td>
+                  <Td align="right" className={pctToneClass}>
                     {pctText}
-                  </td>
+                  </Td>
                 </tr>
               );
             })}
           </tbody>
         </table>
-      </div>
+      </TableScroll>
 
-      <p className="px-1 text-xs text-muted">
+      <p className="pt-2 text-xs text-muted">
         Values are per-turn snapshots recorded during turn processing. Revenue and net income are
         per-turn flows; multiply by 24 to compare with the daily Financial Statement.
       </p>
-    </div>
+    </DenseSection>
   );
 }

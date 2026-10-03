@@ -7,17 +7,17 @@ import { buildBlocPalette, type MapBlocStyle } from "../worldBlocs";
 const DEFAULT_BLOC_PALETTE = buildBlocPalette([]);
 
 /** Category display info */
-const CATEGORY_INFO: Record<MetricCategoryId, { name: string; icon: string }> = {
-  economic: { name: "Economic", icon: "💰" },
-  education: { name: "Education", icon: "🎓" },
-  healthcare: { name: "Healthcare", icon: "❤️" },
-  infrastructure: { name: "Infrastructure", icon: "🏗️" },
-  publicSafety: { name: "Public Safety", icon: "🛡️" },
-  environment: { name: "Environment", icon: "🌿" },
-  social: { name: "Social", icon: "👥" },
-  governance: { name: "Governance", icon: "🏛️" },
-  population: { name: "Population", icon: "📊" },
-  mediaInformation: { name: "Media", icon: "📰" },
+const CATEGORY_INFO: Record<MetricCategoryId, { name: string }> = {
+  economic: { name: "Economic" },
+  education: { name: "Education" },
+  healthcare: { name: "Healthcare" },
+  infrastructure: { name: "Infrastructure" },
+  publicSafety: { name: "Public Safety" },
+  environment: { name: "Environment" },
+  social: { name: "Social" },
+  governance: { name: "Governance" },
+  population: { name: "Population" },
+  mediaInformation: { name: "Media" },
 };
 
 /** Short display names for metrics */

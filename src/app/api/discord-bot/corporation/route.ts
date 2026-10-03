@@ -141,7 +141,7 @@ async function buildCorpDetail(nameLower: string): Promise<CorpDetailPayload> {
   });
   const f = detail.financials;
   // Headline net income mirrors the website: prefer engine-realized income when
-  // present, else the projected income (SummaryBand.tsx / CeoCommandStrip.tsx).
+  // present, else the projected income (FinancialsTab.tsx / CorporationMasthead.tsx).
   const netIncome = typeof f.realizedIncome === "number" ? f.realizedIncome : f.income;
 
   // Resolve state names and unemployment for financial calculations

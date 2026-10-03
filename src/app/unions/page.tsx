@@ -283,7 +283,7 @@ export default function UnionsPage() {
               <option value="__all__">All countries</option>
             </select>
           )}
-          <div className="h-px flex-1 bg-gradient-to-r from-card-border to-transparent" />
+          <div className="h-px flex-1 bg-card-border" />
           {!notEnabled && selectedCountry && (
             <button
               type="button"

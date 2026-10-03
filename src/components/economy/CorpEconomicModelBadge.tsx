@@ -46,17 +46,13 @@ export function CorpEconomicModelBadge({ countryId, sectorType }: CorpEconomicMo
 
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${
-        favored
-          ? "border-success/40 bg-success/10 text-success"
-          : "border-error/40 bg-error/10 text-error"
-      }`}
+      className={`inline-flex items-center gap-1 text-xs ${favored ? "text-success" : "text-error"}`}
       title={`${view.currentName} (intensity ${view.intensity}/100)`}
     >
       {favored ? "Favored" : "Disfavored"} under {view.currentName}
       <span className="tabular-nums">
-        {pct >= 0 ? "+" : ""}
-        {pct}% margin
+        ({pct >= 0 ? "+" : ""}
+        {pct}% margin)
       </span>
     </span>
   );

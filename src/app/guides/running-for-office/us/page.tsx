@@ -1,6 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { publicPageMetadata } from "@/lib/siteMetadata";
+import {
+  Callout,
+  FormulaBlock,
+  SectionHeader,
+  SubHeader,
+  TableOfContents,
+} from "@/app/guides/_components/GuideBlocks";
 
 export const metadata: Metadata = publicPageMetadata({
   title: "Running for Office (US) | A House Divided",
@@ -9,60 +16,16 @@ export const metadata: Metadata = publicPageMetadata({
   pathname: "/guides/running-for-office/us",
 });
 
-function SectionHeader({ id, children }: { id: string; children: React.ReactNode }) {
-  return (
-    <h2
-      id={id}
-      className="scroll-mt-4 text-xl font-bold tracking-tight text-foreground border-l-4 border-primary/60 pl-3"
-    >
-      {children}
-    </h2>
-  );
-}
-
-function SubHeader({ children }: { children: React.ReactNode }) {
-  return <h3 className="font-semibold text-foreground">{children}</h3>;
-}
-
-function Callout({
-  children,
-  variant = "info",
-}: {
-  children: React.ReactNode;
-  variant?: "info" | "warn" | "tip";
-}) {
-  const colors = {
-    info: "border-primary/40 bg-primary/5",
-    warn: "border-amber-500/40 bg-amber-500/5",
-    tip: "border-emerald-500/40 bg-emerald-500/5",
-  };
-  return (
-    <div
-      className={`rounded-r-lg border-l-4 px-4 py-3 text-sm text-muted leading-relaxed ${colors[variant]}`}
-    >
-      {children}
-    </div>
-  );
-}
-
-function FormulaBlock({ children }: { children: React.ReactNode }) {
-  return (
-    <pre className="overflow-x-auto rounded-lg border border-card-border bg-background px-4 py-3 font-mono text-xs text-foreground/80 leading-relaxed whitespace-pre-wrap">
-      {children}
-    </pre>
-  );
-}
-
 const TOC_ITEMS = [
-  { id: "eligibility", label: "Eligibility & Requirements" },
-  { id: "races", label: "Choosing Your Race" },
-  { id: "primary", label: "The Primary Phase" },
-  { id: "general", label: "The General Phase" },
-  { id: "vote-formula", label: "What Wins Elections" },
-  { id: "upgrades", label: "Campaign Upgrades" },
+  { id: "eligibility", label: "Eligibility & requirements" },
+  { id: "races", label: "Choosing your race" },
+  { id: "primary", label: "The primary phase" },
+  { id: "general", label: "The general phase" },
+  { id: "vote-formula", label: "What wins elections" },
+  { id: "upgrades", label: "Campaign upgrades" },
   { id: "influence", label: "Political Influence" },
-  { id: "favorability", label: "Building Favorability" },
-  { id: "tips", label: "Quick Tips" },
+  { id: "favorability", label: "Building favorability" },
+  { id: "tips", label: "Quick tips" },
 ];
 
 export default function RunningForOfficePage() {
@@ -94,23 +57,11 @@ export default function RunningForOfficePage() {
         </div>
 
         <div className="space-y-10">
-          {/* Table of Contents */}
-          <div className="rounded-xl border border-card-border bg-card p-5">
-            <p className="mb-3 text-xs font-bold uppercase tracking-wider text-muted">Contents</p>
-            <ol className="grid gap-y-1 gap-x-4 text-sm sm:grid-cols-2">
-              {TOC_ITEMS.map((item, i) => (
-                <li key={item.id}>
-                  <a href={`#${item.id}`} className="text-primary hover:underline">
-                    {i + 1}. {item.label}
-                  </a>
-                </li>
-              ))}
-            </ol>
-          </div>
+          <TableOfContents items={TOC_ITEMS} />
 
           {/* ── 1. Eligibility ── */}
           <section className="space-y-4">
-            <SectionHeader id="eligibility">1. Eligibility & Requirements</SectionHeader>
+            <SectionHeader id="eligibility">1. Eligibility & requirements</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Before you can file for any race, three conditions must be met: you need a character,
               you need to be a member of a political party, and the election must be accepting
@@ -118,7 +69,7 @@ export default function RunningForOfficePage() {
             </p>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="rounded-xl border border-card-border bg-card p-4 space-y-2">
-                <p className="text-xs font-bold uppercase tracking-wider text-muted">Required</p>
+                <p className="text-sm font-semibold text-foreground">Required</p>
                 <ul className="space-y-1 text-sm text-muted">
                   <li>• Active character (created on profile)</li>
                   <li>• Party membership before filing</li>
@@ -127,9 +78,7 @@ export default function RunningForOfficePage() {
                 </ul>
               </div>
               <div className="rounded-xl border border-card-border bg-card p-4 space-y-2">
-                <p className="text-xs font-bold uppercase tracking-wider text-muted">
-                  Restrictions
-                </p>
+                <p className="text-sm font-semibold text-foreground">Restrictions</p>
                 <ul className="space-y-1 text-sm text-muted">
                   <li>• One active race at a time</li>
                   <li>• Switching parties auto-withdraws your candidacy</li>
@@ -137,10 +86,9 @@ export default function RunningForOfficePage() {
                 </ul>
               </div>
             </div>
-            <Callout variant="info">
-              <strong className="text-foreground">Consider joining a party first.</strong> Joining a
-              party before filing gives you access to the party organization bonus in the vote
-              formula; independents compete without it. Check the{" "}
+            <Callout label="Consider joining a party first.">
+              Joining a party before filing gives you access to the party organization bonus in the
+              vote formula; independents compete without it. Check the{" "}
               <Link href="/parties" className="text-primary hover:underline">
                 parties page
               </Link>{" "}
@@ -150,7 +98,7 @@ export default function RunningForOfficePage() {
 
           {/* ── 2. Choosing Your Race ── */}
           <section className="space-y-4">
-            <SectionHeader id="races">2. Choosing Your Race</SectionHeader>
+            <SectionHeader id="races">2. Choosing your race</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Local and state races are your entry point. They are shorter, cheaper to run, and, if
               you win, they grant a permanent bonus to your action count and Political Influence
@@ -191,20 +139,16 @@ export default function RunningForOfficePage() {
                 </tbody>
               </table>
             </div>
-            <Callout variant="tip">
-              <strong className="text-foreground">House races are the fastest ladder.</strong> A
-              House term lasts only 2 game years (about 4 real days). Win one, hold it, and you
+            <Callout label="House races are the fastest ladder.">
+              A House term lasts only 2 game years (about 4 real days). Win one, hold it, and you
               build steady Political Influence that makes every subsequent race easier.
             </Callout>
           </section>
 
           {/* ── 3. The Primary Phase ── */}
           <section className="space-y-4">
-            <SectionHeader id="primary">3. The Primary Phase</SectionHeader>
-            <Callout variant="warn">
-              <strong className="text-foreground">
-                Campaign upgrades are a presidential race feature.
-              </strong>{" "}
+            <SectionHeader id="primary">3. The primary phase</SectionHeader>
+            <Callout label="Campaign upgrades are a presidential race feature.">
               The full campaign system described below (fundraising tiers, media spending, ground
               game, opposition research, and campaign actions) applies to{" "}
               <strong className="text-foreground">presidential elections only</strong>. In
@@ -254,17 +198,17 @@ export default function RunningForOfficePage() {
                 </span>
               </li>
             </ul>
-            <Callout variant="info">
-              <strong className="text-foreground">Endorsements matter.</strong> Your per-turn action
-              count is <code className="font-mono text-xs">1 + floor(√endorsements × 3)</code>.
-              Actively seek endorsements from NPPs and allied players; even a handful meaningfully
-              increases your action rate.
+            <Callout label="Endorsements matter.">
+              Your per-turn action count is{" "}
+              <code className="font-mono text-xs">1 + floor(√endorsements × 3)</code>. Actively seek
+              endorsements from NPPs and allied players; even a handful meaningfully increases your
+              action rate.
             </Callout>
           </section>
 
           {/* ── 4. The General Phase ── */}
           <section className="space-y-4">
-            <SectionHeader id="general">4. The General Phase</SectionHeader>
+            <SectionHeader id="general">4. The general phase</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               If you advance from the primary, the general campaign begins. All upgrade costs rise
               by 50%, so the general phase is about execution, not setup. Front-load your strategic
@@ -272,7 +216,7 @@ export default function RunningForOfficePage() {
             </p>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="rounded-xl border border-card-border bg-card p-4 space-y-2">
-                <p className="text-xs font-bold uppercase tracking-wider text-muted">Do early</p>
+                <p className="text-sm font-semibold text-foreground">Do early</p>
                 <ul className="space-y-1 text-sm text-muted">
                   <li>• Upgrade media spending to your target level</li>
                   <li>• Set up opposition research if running against a strong incumbent</li>
@@ -280,9 +224,7 @@ export default function RunningForOfficePage() {
                 </ul>
               </div>
               <div className="rounded-xl border border-card-border bg-card p-4 space-y-2">
-                <p className="text-xs font-bold uppercase tracking-wider text-muted">
-                  Final 4 turns
-                </p>
+                <p className="text-sm font-semibold text-foreground">Final 4 turns</p>
                 <ul className="space-y-1 text-sm text-muted">
                   <li>
                     • Media spending effectiveness{" "}
@@ -296,10 +238,10 @@ export default function RunningForOfficePage() {
                 </ul>
               </div>
             </div>
-            <Callout variant="warn">
-              <strong className="text-foreground">
-                The late-campaign multiplier does not activate upgrades you haven&apos;t bought.
-              </strong>{" "}
+            <Callout
+              kind="warning"
+              label="The late-campaign multiplier does not activate upgrades you haven't bought."
+            >
               If you spend those final 4 turns purchasing media spending levels, you&apos;re paying
               1.5× cost for half the uptime. Buy early, benefit late.
             </Callout>
@@ -307,7 +249,7 @@ export default function RunningForOfficePage() {
 
           {/* ── 5. What Wins Elections ── */}
           <section className="space-y-4">
-            <SectionHeader id="vote-formula">5. What Wins Elections</SectionHeader>
+            <SectionHeader id="vote-formula">5. What wins elections</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Votes are calculated per demographic group, not as a simple aggregate. Each group
               allocates votes among candidates in proportion to their relative appeal. Your total
@@ -376,10 +318,7 @@ Party Org         = 1.0 + (partyOrg / 100) × 0.6   (range 1.0 to 1.6, no penalt
               states that use Ranked Choice Voting; in RCV races, third-party runs are fully
               competitive.
             </p>
-            <Callout variant="tip">
-              <strong className="text-foreground">
-                State government approval affects your ceiling.
-              </strong>{" "}
+            <Callout label="State government approval affects your ceiling.">
               Voter enthusiasm for state-level races is multiplied by the current state government
               approval rating. Running in a state where the incumbent party is unpopular is a
               structural advantage; the entire vote pool is more energized.
@@ -388,7 +327,7 @@ Party Org         = 1.0 + (partyOrg / 100) × 0.6   (range 1.0 to 1.6, no penalt
 
           {/* ── 6. Campaign Upgrades ── */}
           <section className="space-y-4">
-            <SectionHeader id="upgrades">6. Campaign Upgrades</SectionHeader>
+            <SectionHeader id="upgrades">6. Campaign upgrades</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Upgrades are purchased with campaign funds, a separate pool from your personal cash.
               Campaign funds accumulate from passive fundraising income each turn plus any party
@@ -490,8 +429,7 @@ Gains:
   Campaign action:    +1% PI per action spent
   Holding office:     Bonus actions, easier maintenance
   Endorsements:       Indirectly via more actions per turn`}</FormulaBlock>
-            <Callout variant="info">
-              <strong className="text-foreground">Holding office is the best PI engine.</strong>{" "}
+            <Callout label="Holding office is the best PI engine.">
               Elected officials receive bonus campaign actions each turn. This compounds: more
               actions = more PI = more reach = easier re-election. A single House term meaningfully
               changes your trajectory in future races.
@@ -500,7 +438,7 @@ Gains:
 
           {/* ── 8. Building Favorability ── */}
           <section className="space-y-4">
-            <SectionHeader id="favorability">8. Building Favorability</SectionHeader>
+            <SectionHeader id="favorability">8. Building favorability</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Favorability is the easiest stat to neglect and the most punishing to ignore; a
               candidate at 5% favorability gets roughly 5% of the votes they would otherwise
@@ -508,9 +446,7 @@ Gains:
             </p>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="rounded-xl border border-card-border bg-card p-4 space-y-2">
-                <p className="text-xs font-bold uppercase tracking-wider text-muted">
-                  What raises favorability
-                </p>
+                <p className="text-sm font-semibold text-foreground">What raises favorability</p>
                 <ul className="space-y-1 text-sm text-muted">
                   <li>• Spending campaign actions</li>
                   <li>• Media spending upgrades (+0.5%/level/turn)</li>
@@ -519,9 +455,7 @@ Gains:
                 </ul>
               </div>
               <div className="rounded-xl border border-card-border bg-card p-4 space-y-2">
-                <p className="text-xs font-bold uppercase tracking-wider text-muted">
-                  What lowers it
-                </p>
+                <p className="text-sm font-semibold text-foreground">What lowers it</p>
                 <ul className="space-y-1 text-sm text-muted">
                   <li>• Natural decay each turn</li>
                   <li>• Opponent opposition research (−0.5%/level/turn)</li>
@@ -533,7 +467,7 @@ Gains:
 
           {/* ── 9. Quick Tips ── */}
           <section className="space-y-4">
-            <SectionHeader id="tips">9. Quick Tips</SectionHeader>
+            <SectionHeader id="tips">9. Quick tips</SectionHeader>
             <ul className="space-y-3 text-sm text-muted">
               {[
                 [

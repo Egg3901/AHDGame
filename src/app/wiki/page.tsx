@@ -46,42 +46,6 @@ function formatViewCount(n: number): string {
   return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
 }
 
-function IconBookOpen() {
-  return (
-    <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
-      />
-    </svg>
-  );
-}
-
-function IconClipboard() {
-  return (
-    <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
-      />
-    </svg>
-  );
-}
-
-function IconStar() {
-  return (
-    <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"
-      />
-    </svg>
-  );
-}
-
 const CATEGORY_ICON_PATHS: Record<string, React.ReactNode> = {
   "getting-started": (
     <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -408,7 +372,7 @@ function WikiFullListSection({
           <p className="mt-1 text-sm text-muted">{description}</p>
         </div>
         <span className="shrink-0 text-xs text-muted tabular-nums">
-          {total > 0 ? `${startIdx + 1}–${endIdx} of ${total}` : "0 pages"}
+          {total > 0 ? `${startIdx + 1}-${endIdx} of ${total}` : "0 pages"}
         </span>
       </div>
       {visible.length > 0 ? (
@@ -594,7 +558,7 @@ export default async function WikiOverviewPage({
                 <div>
                   <p className="section-label mb-3">Documentation</p>
                   <h1 className="mb-2 font-serif text-3xl font-bold tracking-tight text-foreground">
-                    Game Wiki
+                    Game wiki
                   </h1>
                 </div>
                 {user && (
@@ -632,20 +596,13 @@ export default async function WikiOverviewPage({
                     href={`/wiki/paths/${path.slug}`}
                     className="group rounded-lg border border-card-border bg-card/40 p-4 transition-colors hover:border-primary/50 hover:bg-card-elevated"
                   >
-                    <div className="flex items-start gap-3">
-                      <span className="text-xl" aria-hidden="true">
-                        {path.icon}
-                      </span>
-                      <div>
-                        <h3 className="text-sm font-semibold text-foreground group-hover:text-primary">
-                          {path.title}
-                        </h3>
-                        <p className="mt-1 line-clamp-2 text-xs text-muted">{path.description}</p>
-                        <p className="mt-2 text-xs text-muted/70">
-                          {path.pages.length} steps · {path.estimatedTime}
-                        </p>
-                      </div>
-                    </div>
+                    <h3 className="text-sm font-semibold text-foreground group-hover:text-primary">
+                      {path.title}
+                    </h3>
+                    <p className="mt-1 line-clamp-2 text-xs text-muted">{path.description}</p>
+                    <p className="mt-2 text-xs text-muted/70">
+                      {path.pages.length} steps · {path.estimatedTime}
+                    </p>
                   </Link>
                 ))}
               </div>
@@ -657,9 +614,7 @@ export default async function WikiOverviewPage({
               <div className="grid gap-6 sm:grid-cols-2">
                 {/* Recently Added */}
                 <div>
-                  <p className="mb-2 text-xs font-bold uppercase tracking-wider text-muted">
-                    Recently Added
-                  </p>
+                  <p className="section-label mb-2">Recently added</p>
                   {recentPages.length > 0 ? (
                     <div className="space-y-0.5">
                       {recentPages.map((page) => (
@@ -673,9 +628,7 @@ export default async function WikiOverviewPage({
 
                 {/* Most Viewed */}
                 <div>
-                  <p className="mb-2 text-xs font-bold uppercase tracking-wider text-muted">
-                    Most Viewed
-                  </p>
+                  <p className="section-label mb-2">Most viewed</p>
                   {mostViewedPages.length > 0 ? (
                     <div className="space-y-0.5">
                       {mostViewedPages.map((page) => (
@@ -725,10 +678,10 @@ export default async function WikiOverviewPage({
             </section>
 
             {/* Player/Corporation page CTA */}
-            <div className="rounded-xl border border-primary/40 bg-primary/5 p-6 shadow-sm">
+            <div className="rounded-xl border border-card-border bg-card p-6 shadow-sm">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <p className="section-label mb-1 text-primary">Your pages</p>
+                  <p className="section-label mb-1">Your pages</p>
                   <h2 className="mb-1 font-serif text-xl font-bold text-foreground">
                     Write a wiki page for yourself or your corporation
                   </h2>
@@ -747,7 +700,7 @@ export default async function WikiOverviewPage({
                   </Link>
                   <Link
                     href="/wiki/new"
-                    className="rounded-md border border-primary/40 bg-card px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
+                    className="rounded-md border border-card-border bg-card px-4 py-2 text-sm font-medium text-foreground hover:bg-card-elevated"
                   >
                     New article
                   </Link>
@@ -761,14 +714,11 @@ export default async function WikiOverviewPage({
                 href="/wiki/getting-started"
                 className="group relative rounded-xl border border-card-border bg-card p-5 transition-all hover:-translate-y-px hover:border-primary/40 hover:shadow-md"
               >
-                <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 border border-primary/30 text-primary">
-                  <IconBookOpen />
-                </div>
                 <h3 className="font-semibold text-foreground transition-colors group-hover:text-primary">
-                  New Player Guide
+                  New player guide
                 </h3>
                 <p className="mt-1 text-sm text-muted">
-                  Learn the basics — campaigns, elections, influence, and the turn cycle.
+                  Learn the basics: campaigns, elections, influence, and the turn cycle.
                 </p>
               </Link>
 
@@ -776,11 +726,8 @@ export default async function WikiOverviewPage({
                 href="/wiki/category/elections"
                 className="group relative rounded-xl border border-card-border bg-card p-5 transition-all hover:-translate-y-px hover:border-primary/40 hover:shadow-md"
               >
-                <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-secondary/10 border border-secondary/30 text-secondary">
-                  <IconClipboard />
-                </div>
                 <h3 className="font-semibold text-foreground transition-colors group-hover:text-primary">
-                  Election Mechanics
+                  Election mechanics
                 </h3>
                 <p className="mt-1 text-sm text-muted">
                   Primaries, general elections, snap elections, and voter behavior.
@@ -791,9 +738,6 @@ export default async function WikiOverviewPage({
                 href="/wiki/category/reference"
                 className="group relative rounded-xl border border-card-border bg-card p-5 transition-all hover:-translate-y-px hover:border-primary/40 hover:shadow-md"
               >
-                <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-card-elevated border border-card-border text-muted">
-                  <IconStar />
-                </div>
                 <h3 className="font-semibold text-foreground transition-colors group-hover:text-primary">
                   Reference
                 </h3>
@@ -806,7 +750,7 @@ export default async function WikiOverviewPage({
             {/* Browse Topics */}
             <div>
               <h2 className="mb-4 font-serif text-lg font-bold text-foreground border-b border-card-border pb-2">
-                Browse Topics
+                Browse topics
               </h2>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {officialCategories.map((category) => (
@@ -832,7 +776,7 @@ export default async function WikiOverviewPage({
             {/* Full Page Index */}
             <div className="space-y-8">
               <div className="border-b border-card-border pb-2">
-                <h2 className="font-serif text-lg font-bold text-foreground">Full Page List</h2>
+                <h2 className="font-serif text-lg font-bold text-foreground">Full page list</h2>
                 <p className="mt-1 text-sm text-muted">
                   Every wiki entry grouped by how it is maintained.
                 </p>
@@ -841,7 +785,7 @@ export default async function WikiOverviewPage({
               <WikiFullListSection
                 id="auto-generated-pages"
                 hash="#auto-generated-pages"
-                title="Auto Generated Pages"
+                title="Auto-generated pages"
                 description="Live pages built from election results, offices, seats, parties, and holder records. Newest first."
                 pages={autoGeneratedList}
                 state={pageState}
@@ -851,7 +795,7 @@ export default async function WikiOverviewPage({
               <WikiFullListSection
                 id="player-pages"
                 hash="#player-pages"
-                title="Player Pages"
+                title="Player pages"
                 description="Biographies, corporations, party profiles, events, and other player-authored articles."
                 pages={playerList}
                 state={pageState}
@@ -861,7 +805,7 @@ export default async function WikiOverviewPage({
               <WikiFullListSection
                 id="system-pages"
                 hash="#system-pages"
-                title="System Pages"
+                title="System pages"
                 description="Seeded rules, mechanics, reference material, and strategy documentation."
                 pages={systemPages}
                 state={pageState}

@@ -65,7 +65,7 @@ Only members a player can act for hold a ballot. Client states are bound by what
 
 Two thresholds apply, and both are measured against the members entitled to vote rather than against turnout. Abstaining, or never voting at all, withholds consent exactly as a "no" does.
 
-- **Unanimous**: entering a conflict at the bloc's call, free trade agreements, and admitting a new member. Any one member can refuse simply by declining to consent.
+- **Unanimous**: declaring a new war, entering a conflict at the bloc's call, free trade agreements, and admitting a new member. Any one member can refuse simply by declining to consent.
 - **Majority**: everything else, including sanctions, directives, aid packages, dues, posture, agency funding and joint statements. More than half the voting members must vote "yes".
 
 A resolution that fails, and a leadership candidate who is not elected, are written to the country history rather than vanishing from the pending list. A joint statement about a country lifts or lowers that country's national approval for as long as it stands (see [Government Approval](/wiki/government-approval)).
@@ -93,6 +93,8 @@ When the attacker is itself a member of the alliance, the alliance takes no side
 
 Admission does not apply the pact retroactively to a war the applicant is already fighting. When an applicant is already defending a live war, the membership ballot shows a warning and a member can table a unanimous defensive-entry resolution. If it passes, eligible alliance members enter the defender's side immediately without votes in their national legislatures. A declaration still before an aggressor's legislature also appears as a warning. If the applicant becomes a member before that declaration is enacted, the normal automatic charter applies when the war begins. Calling the bloc onto the attacking side remains an offensive coalition choice and requires national ratification after the organization vote.
 
+A Bloc can also originate a new war. Only player nations vote on the organization resolution, and every player nation must consent. When it passes, NPP-governed members join automatically. Each eligible player nation receives its own declaration of war, with all of its voting chambers open at the same time. That declaration still needs a two-thirds supermajority in every required chamber. A country whose legislature refuses stays out, while NPP members and every country that ratifies continue into the war.
+
 In worlds that begin at the 1953 preset the two armed blocs also levy a fixed **tribute** on their non-voting client members instead of voted dues. See [Declaring War](/wiki/declaring-war).
 
 Autonomous governments cast opinion-based votes here too, table trade agreements, aid, sanctions and statements, and can call their alliance to war, so a bloc's ballots fill in whether or not players hold the seats.
@@ -105,7 +107,7 @@ Players can **create their own international organizations** with arbitrary para
 - **A player-created flag**: marks the org as player-created (as opposed to built-in)
 - A category, leadership office, charter, and optional emblem
 
-A custom organization may use the **Bloc** category. Founding a Bloc creates a new independent alignment pole named for the organization, with a color chosen by its founder. The founder begins committed to that pole. Bloc members can spend the pooled organization fund on Influence, use aid to reinforce member alignment, draw autonomous countries toward membership, and risk defections when a member remains below the alignment threshold. Custom Blocs also receive the same posture, statement, aid, sanctions, and conflict-entry resolution powers as other Bloc organizations.
+A custom organization may use the **Bloc** category. Founding a Bloc creates a new independent alignment pole named for the organization, with a color chosen by its founder. The founder begins committed to that pole. Bloc members can spend the pooled organization fund on Influence, use aid to reinforce member alignment, draw autonomous countries toward membership, and risk defections when a member remains below the alignment threshold. Custom Blocs also receive the same posture, statement, aid, sanctions, war-declaration, and conflict-entry resolution powers as other Bloc organizations.
 
 Custom orgs function identically to built-in ones for membership, leadership, and legislation purposes. The primary difference is provenance: they did not exist at game start. Categories other than Bloc do not create alignment poles.
 

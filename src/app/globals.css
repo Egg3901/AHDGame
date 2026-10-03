@@ -46,12 +46,6 @@
   --shadow-md: 0 4px 12px -1px rgb(0 0 0 / 0.6), 0 2px 4px -2px rgb(0 0 0 / 0.5);
   --shadow-lg: 0 10px 30px -3px rgb(0 0 0 / 0.7), 0 4px 8px -4px rgb(0 0 0 / 0.6);
 
-  /* Glow */
-  --glow-primary: 0 0 20px rgb(220 38 38 / 0.15), 0 0 40px rgb(220 38 38 / 0.07);
-  --glow-primary-sm: 0 0 8px rgb(220 38 38 / 0.25);
-
-  /* Noise overlay for subtle texture */
-  --noise-opacity: 0.025;
   --track: #27272a;
   --overlay: rgba(0, 0, 0, 0.2);
   --modal-backdrop: rgba(0, 0, 0, 0.6);
@@ -97,9 +91,6 @@
   --shadow-sm: 0 1px 2px 0 rgb(15 23 42 / 0.05);
   --shadow-md: 0 4px 6px -1px rgb(15 23 42 / 0.1), 0 2px 4px -1px rgb(15 23 42 / 0.06);
   --shadow-lg: 0 10px 15px -3px rgb(15 23 42 / 0.1), 0 4px 6px -2px rgb(15 23 42 / 0.05);
-  --glow-primary: 0 0 20px rgb(220 38 38 / 0.1), 0 0 40px rgb(220 38 38 / 0.05);
-  --glow-primary-sm: 0 0 8px rgb(220 38 38 / 0.15);
-  --noise-opacity: 0;
   --track: #e2e8f0;
   --overlay: rgba(0, 0, 0, 0.05);
   --modal-backdrop: rgba(15, 23, 42, 0.4);
@@ -135,9 +126,6 @@
   --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.8), 0 1px 2px -1px rgb(0 0 0 / 0.6);
   --shadow-md: 0 4px 12px -1px rgb(0 0 0 / 0.8), 0 2px 4px -2px rgb(0 0 0 / 0.7);
   --shadow-lg: 0 10px 30px -3px rgb(0 0 0 / 0.9), 0 4px 8px -4px rgb(0 0 0 / 0.8);
-  --glow-primary: 0 0 20px rgb(255 59 59 / 0.22), 0 0 40px rgb(255 59 59 / 0.1);
-  --glow-primary-sm: 0 0 8px rgb(255 59 59 / 0.3);
-  --noise-opacity: 0;
   --track: #1a1a1a;
   --overlay: rgba(0, 0, 0, 0.3);
   --modal-backdrop: rgba(0, 0, 0, 0.75);
@@ -166,9 +154,6 @@
   --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.3);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -1px rgb(0 0 0 / 0.2);
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.5), 0 4px 6px -2px rgb(0 0 0 / 0.3);
-  --glow-primary: 0 0 20px rgb(239 68 68 / 0.15), 0 0 40px rgb(239 68 68 / 0.05);
-  --glow-primary-sm: 0 0 8px rgb(239 68 68 / 0.2);
-  --noise-opacity: 0.02;
   --track: #1e3a5f;
   --overlay: rgba(0, 0, 0, 0.15);
   --modal-backdrop: rgba(0, 0, 0, 0.55);
@@ -205,9 +190,6 @@
   --shadow-sm: 0 1px 2px 0 rgb(192 38 211 / 0.05);
   --shadow-md: 0 4px 6px -1px rgb(192 38 211 / 0.1), 0 2px 4px -1px rgb(192 38 211 / 0.06);
   --shadow-lg: 0 10px 15px -3px rgb(192 38 211 / 0.1), 0 4px 6px -2px rgb(192 38 211 / 0.05);
-  --glow-primary: 0 0 20px rgb(217 70 239 / 0.15), 0 0 40px rgb(217 70 239 / 0.08);
-  --glow-primary-sm: 0 0 8px rgb(217 70 239 / 0.2);
-  --noise-opacity: 0;
   --track: #e9d5ff;
   --overlay: rgba(0, 0, 0, 0.05);
   --modal-backdrop: rgba(74, 4, 78, 0.4);
@@ -231,9 +213,6 @@
   --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.6), 0 1px 2px -1px rgb(0 0 0 / 0.5);
   --shadow-md: 0 4px 12px -1px rgb(0 0 0 / 0.65), 0 2px 4px -2px rgb(0 0 0 / 0.55);
   --shadow-lg: 0 10px 30px -3px rgb(0 0 0 / 0.75), 0 4px 8px -4px rgb(0 0 0 / 0.65);
-  --glow-primary: 0 0 20px rgb(192 132 252 / 0.2), 0 0 40px rgb(192 132 252 / 0.1);
-  --glow-primary-sm: 0 0 8px rgb(192 132 252 / 0.3);
-  --noise-opacity: 0.02;
   --track: #3b2d4a;
   --overlay: rgba(0, 0, 0, 0.2);
   --modal-backdrop: rgba(0, 0, 0, 0.65);
@@ -267,9 +246,6 @@
   --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.6), 0 1px 2px -1px rgb(0 0 0 / 0.5);
   --shadow-md: 0 4px 12px -1px rgb(0 0 0 / 0.65), 0 2px 4px -2px rgb(0 0 0 / 0.55);
   --shadow-lg: 0 10px 30px -3px rgb(0 0 0 / 0.75), 0 4px 8px -4px rgb(0 0 0 / 0.65);
-  --glow-primary: 0 0 20px rgb(74 246 38 / 0.15), 0 0 40px rgb(74 246 38 / 0.07);
-  --glow-primary-sm: 0 0 8px rgb(74 246 38 / 0.25);
-  --noise-opacity: 0.04;
   --track: #1a2e1a;
   --overlay: rgba(0, 0, 0, 0.25);
   --modal-backdrop: rgba(0, 0, 0, 0.7);
@@ -303,9 +279,6 @@
   --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.4), 0 1px 2px -1px rgb(0 0 0 / 0.3);
   --shadow-md: 0 4px 12px -1px rgb(0 0 0 / 0.5), 0 2px 4px -2px rgb(0 0 0 / 0.4);
   --shadow-lg: 0 10px 30px -3px rgb(0 0 0 / 0.6), 0 4px 8px -4px rgb(0 0 0 / 0.5);
-  --glow-primary: 0 0 20px rgb(214 93 14 / 0.2), 0 0 40px rgb(214 93 14 / 0.1);
-  --glow-primary-sm: 0 0 8px rgb(214 93 14 / 0.3);
-  --noise-opacity: 0.015;
   --track: #2a4a40;
   --overlay: rgba(0, 0, 0, 0.2);
   --modal-backdrop: rgba(0, 32, 40, 0.7);
@@ -340,9 +313,6 @@
   --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.55), 0 1px 2px -1px rgb(0 0 0 / 0.45);
   --shadow-md: 0 4px 12px -1px rgb(0 0 0 / 0.6), 0 2px 4px -2px rgb(0 0 0 / 0.5);
   --shadow-lg: 0 10px 30px -3px rgb(0 0 0 / 0.7), 0 4px 8px -4px rgb(0 0 0 / 0.6);
-  --glow-primary: 0 0 20px rgb(155 42 42 / 0.18), 0 0 40px rgb(155 42 42 / 0.08);
-  --glow-primary-sm: 0 0 8px rgb(155 42 42 / 0.28);
-  --noise-opacity: 0.02;
   --track: #2a2620;
   --overlay: rgba(0, 0, 0, 0.25);
   --modal-backdrop: rgba(0, 0, 0, 0.65);
@@ -377,9 +347,6 @@
   --shadow-sm: 0 1px 2px 0 rgb(26 22 20 / 0.06);
   --shadow-md: 0 4px 6px -1px rgb(26 22 20 / 0.1), 0 2px 4px -1px rgb(26 22 20 / 0.06);
   --shadow-lg: 0 10px 15px -3px rgb(26 22 20 / 0.1), 0 4px 6px -2px rgb(26 22 20 / 0.05);
-  --glow-primary: 0 0 20px rgb(140 28 28 / 0.12), 0 0 40px rgb(140 28 28 / 0.05);
-  --glow-primary-sm: 0 0 8px rgb(140 28 28 / 0.18);
-  --noise-opacity: 0;
   --track: #d6cfbd;
   --overlay: rgba(26, 22, 20, 0.08);
   --modal-backdrop: rgba(26, 22, 20, 0.45);
@@ -414,9 +381,6 @@
   --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.65), 0 1px 2px -1px rgb(0 0 0 / 0.5);
   --shadow-md: 0 4px 12px -1px rgb(0 0 0 / 0.7), 0 2px 4px -2px rgb(0 0 0 / 0.55);
   --shadow-lg: 0 10px 30px -3px rgb(0 0 0 / 0.8), 0 4px 8px -4px rgb(0 0 0 / 0.65);
-  --glow-primary: 0 0 20px rgb(255 120 73 / 0.2), 0 0 40px rgb(255 120 73 / 0.08);
-  --glow-primary-sm: 0 0 8px rgb(255 120 73 / 0.3);
-  --noise-opacity: 0.03;
   --track: #2a2416;
   --overlay: rgba(0, 0, 0, 0.3);
   --modal-backdrop: rgba(0, 0, 0, 0.75);
@@ -456,9 +420,7 @@
   --shadow-lg:
     inset 0 1px 0 rgb(184 255 173 / 0.06), inset 0 0 28px rgb(0 0 0 / 0.45),
     0 12px 34px rgb(0 0 0 / 0.88);
-  --glow-primary: 0 0 8px rgb(57 255 20 / 0.28), 0 0 22px rgb(0 255 65 / 0.12);
   --glow-primary-sm: 0 0 5px rgb(57 255 20 / 0.34);
-  --noise-opacity: 0.025;
   --track: #102c14;
   --overlay: rgba(0, 8, 2, 0.34);
   --modal-backdrop: rgba(0, 3, 0, 0.82);
@@ -479,16 +441,31 @@
   );
 }
 
-/* Typography scale */
-:root {
+/* Typography scale. Tailwind v4 builds a font-size utility for every --text-*
+   theme variable, so text-body, text-heading and the rest compile to real
+   rules, each setting a font size and its paired line height. Line heights are
+   unitless ratios, so they stay proportional when a size is overridden (the
+   16px coarse-pointer input rule below). Where a size matches a stock Tailwind
+   step it uses that step's line height too, so text-body and text-sm render
+   identically. `static` emits every variable even when no utility reads it,
+   because CSS modules and arbitrary values use var(--text-body-sm) directly. */
+@theme static {
   --text-body-xs: 0.625rem; /* 10px */
+  --text-body-xs--line-height: calc(0.875 / 0.625); /* 14px */
   --text-body-sm: 0.75rem; /* 12px */
+  --text-body-sm--line-height: calc(1 / 0.75); /* 16px */
   --text-body: 0.875rem; /* 14px */
+  --text-body--line-height: calc(1.25 / 0.875); /* 20px */
   --text-body-lg: 1rem; /* 16px */
+  --text-body-lg--line-height: calc(1.5 / 1); /* 24px */
   --text-heading-sm: 1.125rem; /* 18px */
+  --text-heading-sm--line-height: calc(1.75 / 1.125); /* 28px */
   --text-heading: 1.25rem; /* 20px */
+  --text-heading--line-height: calc(1.75 / 1.25); /* 28px */
   --text-heading-lg: 1.5rem; /* 24px */
+  --text-heading-lg--line-height: calc(2 / 1.5); /* 32px */
   --text-display: 1.875rem; /* 30px */
+  --text-display--line-height: calc(2.25 / 1.875); /* 36px */
 }
 
 @theme inline {
@@ -522,24 +499,16 @@
      fallback applies anywhere the wrapper isn't present. */
   --color-gov: var(--gov, #c9a24b);
   --color-gov-soft: var(--gov-soft, #e2c887);
+  /* One family for headings and body. font-serif and font-display are kept
+     only as aliases of the sans so existing markup renders in Geist. */
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-  --font-serif: var(--font-lora);
-  --font-display: var(--font-fraunces);
-  --font-size-body-xs: var(--text-body-xs);
-  --font-size-body-sm: var(--text-body-sm);
-  --font-size-body: var(--text-body);
-  --font-size-body-lg: var(--text-body-lg);
-  --font-size-heading-sm: var(--text-heading-sm);
-  --font-size-heading: var(--text-heading);
-  --font-size-heading-lg: var(--text-heading-lg);
-  --font-size-display: var(--text-display);
+  --font-serif: var(--font-geist-sans);
+  --font-display: var(--font-geist-sans);
   /* Shadow utilities */
   --shadow-card: var(--shadow-sm);
   --shadow-panel: var(--shadow-md);
   --shadow-modal: var(--shadow-lg);
-  --shadow-glow: var(--glow-primary);
-  --shadow-glow-sm: var(--glow-primary-sm);
   /* Animation utilities */
   --animate-fade-in: fadeIn 0.3s ease forwards;
 }
@@ -645,8 +614,7 @@ body {
 
 [data-theme="command-1953"] .bg-card,
 [data-theme="command-1953"] .bg-card-default,
-[data-theme="command-1953"] .bg-card-elevated,
-[data-theme="command-1953"] .glass-card {
+[data-theme="command-1953"] .bg-card-elevated {
   background-image:
     linear-gradient(180deg, rgb(57 255 20 / 0.018), transparent 32%),
     radial-gradient(ellipse at center, transparent 45%, rgb(0 0 0 / 0.18) 100%);
@@ -774,14 +742,6 @@ html {
   display: none;
 }
 
-/* Gradient text utility */
-.gradient-text {
-  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
 /* Fade-in entry animation */
 @keyframes fadeIn {
   from {
@@ -835,81 +795,20 @@ html {
   }
 }
 
-/* Animated background */
-@keyframes gradient-shift {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
-}
-
-.animated-gradient {
-  background: linear-gradient(-45deg, #dc2626, #1d4ed8, #dc2626, #1d4ed8);
-  background-size: 400% 400%;
-  animation: gradient-shift 15s ease infinite;
-}
-
-/* Serif display headings — apply to h1, .display-heading */
-h1 {
-  font-family: var(--font-lora), Georgia, serif;
-}
-
-/* Glass card utility */
-.glass-card {
-  background: color-mix(in srgb, var(--card) 70%, transparent);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--card-border);
-}
-
-/* Section label with left accent */
+/* Small sentence-case label above a section heading */
 .section-label {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: var(--text-body-xs);
+  font-size: 0.875rem;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
   color: var(--muted);
 }
 
-.section-label::before {
-  content: "";
-  display: block;
-  width: 2px;
-  height: 0.75rem;
-  background: var(--primary);
-  border-radius: 1px;
-  opacity: 0.8;
-  flex-shrink: 0;
-}
-
-/* Glow ring on interactive focus */
-.glow-focus:focus-visible {
-  outline: none;
-  box-shadow:
-    0 0 0 2px var(--background),
-    0 0 0 4px var(--primary),
-    var(--glow-primary-sm);
-}
-
-/* Smooth card lift on hover — apply to interactive cards */
+/* Hover affordance for clickable cards only. It changes the border color and nothing else. */
 .card-hover {
-  transition:
-    transform 0.2s ease,
-    box-shadow 0.2s ease,
-    border-color 0.2s ease;
+  transition: border-color 0.15s ease;
 }
 
 .card-hover:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
+  border-color: color-mix(in srgb, var(--muted) 50%, var(--card-border));
 }
 
 /* Subtle link underline animation */
@@ -930,19 +829,6 @@ h1 {
 
 .link-underline:hover::after {
   width: 100%;
-}
-
-/* Ping animation for live indicators */
-@keyframes ping-slow {
-  75%,
-  100% {
-    transform: scale(2);
-    opacity: 0;
-  }
-}
-
-.animate-ping-slow {
-  animation: ping-slow 2s cubic-bezier(0, 0, 0.2, 1) infinite;
 }
 
 /* Bell halo — soft breathing crimson glow when the player owes input.

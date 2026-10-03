@@ -88,6 +88,23 @@ export async function primarySettlementExists(db: Db, key: string): Promise<bool
   return true;
 }
 
+/**
+ * Which of `keys` already have a settlement record, in one read. Presence only:
+ * a caller still runs `primarySettlementExists` on a present key for its
+ * status check, so a record awaiting recovery throws exactly as before.
+ */
+export async function existingPrimarySettlementKeys(
+  db: Db,
+  keys: readonly string[]
+): Promise<Set<string>> {
+  if (keys.length === 0) return new Set();
+  const rows = await db
+    .collection<{ _id: string }>(MONEY_MOVE_COLLECTION)
+    .find({ _id: { $in: [...keys] } }, { projection: { _id: 1 } })
+    .toArray();
+  return new Set(rows.map((row) => String(row._id)));
+}
+
 export async function commitSovereignPrimary(
   db: Db,
   input: SovereignPrimaryFunding & { countryId: string; now: Date },

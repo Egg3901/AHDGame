@@ -637,39 +637,44 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
       phaseResults.partyMemberCountReconcile = memberCountReconcileResult;
     }
 
-    // Durable long-horizon provenance (#2099/#2100), resolved once per turn and
-    // shared by both writers below: world/run identity, in-game year, and the
-    // governing actor per country. Three round trips; a null result (phase
-    // failure) skips telemetry while the operational snapshots still run.
-    const longHorizonCtx = await runtime.runPhase("longHorizonContext", () =>
-      resolveLongHorizonContext(db, newTurn)
-    );
-
-    const [metricHistResult, approvalSnapshotResult] = await Promise.all([
-      runtime.runPhase("metricHistory", async () => {
-        const steps = substepMarker();
-        await snapshotMetricHistory(db, newTurn);
-        steps.mark("metricArrays");
-        if (longHorizonCtx) await appendMacroTelemetry(db, longHorizonCtx, newTurn);
-        steps.mark("macroTelemetry");
-      }),
-      // Covers the active countries plus any belligerent that is not one of
-      // them, so a war block is computed for every country actually fighting.
-      // The count is read back off the run rather than recomputed here: the
-      // roster is now turn-dependent, and a recomputed constant would report a
-      // number the phase did not do.
-      runtime.runPhase("approvalSnapshot", () =>
-        snapshotApprovalsForTurn(db, newTurn, longHorizonCtx ?? undefined)
-      ),
-      runtime.runPhase("interestRateSnapshot", () => snapshotInterestRateHistory(db, newTurn)),
-      runtime.runPhase("partyHistorySnapshot", () => snapshotPartyHistory(db, newTurn)),
-    ]);
-    phaseResults.metricHistory = { snapshotsTaken: metricHistResult ?? 0 };
-    phaseResults.approvalSnapshot = {
-      countriesProcessed: approvalSnapshotResult?.countriesProcessed ?? 0,
-    };
-
-    const [portfolioSnapshotResult] = await Promise.all([
+    // Two independent snapshot chains run side by side.
+    //
+    // Chain A: durable long-horizon provenance (#2099/#2100), resolved once per
+    // turn and shared by both telemetry writers, then the metric, approval,
+    // interest-rate and party history snapshots. Three round trips for the
+    // context; a null result (phase failure) skips telemetry while the
+    // operational snapshots still run.
+    //
+    // Chain B: the market and wealth snapshots. None of them reads the
+    // long-horizon context or anything chain A writes (metric/approval/party
+    // history, approval telemetry, centralBanks rate history), and chain A never
+    // reads what B writes (portfolio/exchange/ranking/wealth history and the
+    // corporations.hiddenFromExchange repair), so B does not wait on A.
+    const snapshotChainA = (async () => {
+      const longHorizonCtx = await runtime.runPhase("longHorizonContext", () =>
+        resolveLongHorizonContext(db, newTurn)
+      );
+      return Promise.all([
+        runtime.runPhase("metricHistory", async () => {
+          const steps = substepMarker();
+          await snapshotMetricHistory(db, newTurn);
+          steps.mark("metricArrays");
+          if (longHorizonCtx) await appendMacroTelemetry(db, longHorizonCtx, newTurn);
+          steps.mark("macroTelemetry");
+        }),
+        // Covers the active countries plus any belligerent that is not one of
+        // them, so a war block is computed for every country actually fighting.
+        // The count is read back off the run rather than recomputed here: the
+        // roster is now turn-dependent, and a recomputed constant would report a
+        // number the phase did not do.
+        runtime.runPhase("approvalSnapshot", () =>
+          snapshotApprovalsForTurn(db, newTurn, longHorizonCtx ?? undefined)
+        ),
+        runtime.runPhase("interestRateSnapshot", () => snapshotInterestRateHistory(db, newTurn)),
+        runtime.runPhase("partyHistorySnapshot", () => snapshotPartyHistory(db, newTurn)),
+      ]);
+    })();
+    const snapshotChainB = Promise.all([
       runtime.runPhase("portfolioSnapshot", () => snapshotPortfolioValues(newTurn)),
       runtime.runPhase("corpPortfolioSnapshot", () => snapshotCorporationPortfolioValues(newTurn)),
       runtime.runPhase("stockExchangeSnapshot", () =>
@@ -682,6 +687,12 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
         generateWealthListSnapshots(newTurn, context.db)
       ),
     ]);
+    const [[metricHistResult, approvalSnapshotResult], [portfolioSnapshotResult]] =
+      await Promise.all([snapshotChainA, snapshotChainB]);
+    phaseResults.metricHistory = { snapshotsTaken: metricHistResult ?? 0 };
+    phaseResults.approvalSnapshot = {
+      countriesProcessed: approvalSnapshotResult?.countriesProcessed ?? 0,
+    };
     phaseResults.portfolioSnapshot = { charactersSnapshotted: portfolioSnapshotResult ?? 0 };
 
     // auditAnomalyScan and suspiciousDetection run after the turn commits

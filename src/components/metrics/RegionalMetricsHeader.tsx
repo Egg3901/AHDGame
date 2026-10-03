@@ -33,8 +33,7 @@ export function RegionalMetricsHeader({
     "--g1": accent.g1,
     "--g2": accent.g2,
   } as CSSProperties;
-  const bg =
-    "radial-gradient(120% 150% at 0% 0%, color-mix(in srgb, var(--stat-soft) 16%, transparent) 0%, transparent 44%), linear-gradient(135deg, var(--g0) 0%, var(--g1) 52%, var(--g2) 100%)";
+  const bg = "linear-gradient(135deg, var(--g0) 0%, var(--g1) 52%, var(--g2) 100%)";
 
   return (
     <header
@@ -87,14 +86,6 @@ export function RegionalMetricsHeader({
           </div>
         )}
       </div>
-      <div
-        style={{
-          height: 2,
-          opacity: 0.85,
-          background:
-            "linear-gradient(90deg, transparent, var(--stat) 16%, var(--stat-soft) 50%, var(--stat) 84%, transparent)",
-        }}
-      />
     </header>
   );
 }

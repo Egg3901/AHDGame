@@ -60,18 +60,18 @@
       },
       "whatsNewElections": {
         "title": "Wahlen lassen sich schwerer im Vorbeigehen gewinnen",
-        "body": "Der Vorteil eines Amtsinhabers hängt jetzt daran, wie beliebt er wirklich ist, Parteien, die lange an der Macht waren, bekommen einen Malus, und jedes Gouverneurs- und Senatsrennen hat einen echten Gegner. Ein Zensus zeichnet die Sitze alle zehn Jahre neu, sicheres Terrain bleibt also nicht ewig sicher.",
+        "body": "Der Vorteil eines Amtsinhabers hängt jetzt daran, wie beliebt er wirklich ist, Parteien, die lange an der Macht waren, bekommen einen Malus, und jedes Gouverneurs- und Senatsrennen hat einen echten Gegner. Ein Zensus zeichnet die Sitze alle zehn Jahre neu, ein sicherer Sitz kann also umkämpft werden.",
         "readMore": "Zu den Rennen",
         "next": "Verstanden"
       },
       "welcome": {
         "title": "Willkommen bei A House Divided",
-        "body": "{countryName} ist ein lebendiges Land, und die anderen Menschen darin sind echte Spieler. Wer gut abschneidet, baut früh Verbündete und ein Einkommen auf. Ein gutes Programm allein bringt dich nicht weit. Diese Tour zeigt dir die Züge, die wirklich zählen. Du kannst jederzeit aufhören und auf der Tutorial-Seite weitermachen.",
+        "body": "Viele der anderen Politiker in {countryName} sind echte Spieler. Wer gut abschneidet, baut früh Verbündete und ein festes Einkommen auf. Diese Tour zeigt dir die wichtigsten Seiten und Aktionen. Du kannst jederzeit aufhören und auf der Tutorial-Seite weitermachen.",
         "next": "Zeig es mir"
       },
       "howTurnsWork": {
         "title": "Das Spiel läuft in Runden",
-        "body": "Nichts passiert in dem Moment, in dem du klickst. Was du jetzt tust, wird in der nächsten Runde ausgewertet, zusammen mit den Zügen aller anderen und der Wirtschaft. Du bekommst jede Runde eine kleine Zahl an Aktionen. Geld und Einfluss bleiben erhalten, aber eine ungenutzte Runde ist weg.",
+        "body": "Die Welt rückt Runde für Runde vor. In jeder Runde aktualisiert sich die Wirtschaft, Wahlen und Gesetze kommen voran, und du bekommst mindestens 4 neue Aktionen, mehr, wenn du ein Amt hast. Geld, Einfluss und ungenutzte Aktionen bleiben erhalten, aber wenn du mehr als 100 Aktionen ansparst, verlierst du 4 pro Runde.",
         "next": "Weiter"
       },
       "joinDiscord": {
@@ -81,19 +81,19 @@
       },
       "scoutRegion": {
         "title": "Sieh dir deine {region}-Seite an, bevor du etwas ausgibst",
-        "body": "Alles beginnt lokal. Deine {region}-Seite zeigt, wie die Wirtschaft dort läuft, wer gerade im Amt ist und welche Sitze anstehen. Lies sie zuerst, damit du weißt, wo die Lücken sind, statt zu raten.",
+        "body": "Deine {region}-Seite zeigt, wie die Wirtschaft dort läuft, wer dort im Amt ist und welche Sitze als Nächstes zur Wahl stehen. Lies sie, bevor du etwas ausgibst, damit du weißt, bei welchen Wahlen du antreten könntest.",
         "hint": "Öffne deine {region}-Seite, um weiterzumachen.",
         "next": "Weiter"
       },
       "readWire": {
         "title": "Lies jede Runde die Nachrichten",
-        "body": "Die Nachrichtenseite zeigt dir, was andere Spieler letzte Runde getan haben und wie die Wirtschaft darauf reagiert hat. Das ist der Unterschied zwischen auf das Spiel reagieren und von ihm überrascht werden. Die meisten starken Spieler lesen sie, bevor sie etwas ausgeben.",
+        "body": "Die Nachrichtenseite berichtet, was andere Spieler letzte Runde getan haben und wie sich die Wirtschaft daraufhin bewegt hat. Lies sie, bevor du deine Aktionen ausgibst, damit du weißt, was sich verändert hat.",
         "hint": "Öffne die Nachrichtenseite.",
         "next": "Weiter"
       },
       "officeIntro": {
         "title": "Wie hier eine Karriere entsteht",
-        "body": "Niemand schenkt dir ein Amt. Du trittst einer Partei bei, gibst Aktionen aus, um bekannt zu werden, gewinnst einen kleinen Sitz, baust eine Abstimmungsbilanz auf und arbeitest dich hoch. Spieler, die oben anfangen wollen, verlieren fast immer ihre erste Vorwahl und geben auf.",
+        "body": "Ämter gewinnst du Schritt für Schritt. Du trittst einer Partei bei, gibst Aktionen aus, um deinen Einfluss zu steigern, gewinnst einen kleinen Sitz, baust eine Abstimmungsbilanz auf und kandidierst von dort aus für größere Ämter. Einfluss zählt in Vorwahlen, deshalb scheitert eine erste Kandidatur für ein Spitzenamt meistens.",
         "next": "Weiter"
       },
       "joinParty": {
@@ -104,19 +104,19 @@
       },
       "actionsWhat": {
         "title": "Aktionen sind deine Zeit",
-        "body": "Du bekommst jede Runde ein paar Aktionen, und sie sind das Wichtigste, was du ausgeben kannst. Geld kannst du später beschaffen. Aktionen bekommst du nicht zurück. Die nächsten Karten zeigen, was jede tut und wann sie ihren Preis wert ist.",
+        "body": "Aktionspunkte sind das Wichtigste, was du ausgibst. Jede Aktion auf der Aktionsseite kostet welche, und die meisten kosten zusätzlich Wahlkampfgeld. Die nächsten Schritte zeigen, was jede Aktion tut und wann sie ihren Preis wert ist.",
         "hint": "Öffne die Aktionsseite, um mitzumachen.",
         "next": "Weiter"
       },
       "actionCampaign": {
         "title": "Wahlkampf ist der Anfang",
-        "body": "Wahlkampf erhöht deinen politischen Einfluss, also wie bekannt du bist. Es ist die billigste Aktion im Spiel, und sie macht aus einem Niemand jemanden, der eine Vorwahl gewinnen kann. Die Kosten steigen mit deinem Einfluss, sie lohnt sich also gerade jetzt am meisten, solange du keinen hast.",
+        "body": "Wahlkampf erhöht deinen politischen Einfluss, also wie bekannt du bist, und Einfluss zählt, wenn Vorwahlen entschieden werden. Solange dein Einfluss unter 20% liegt, kostet Wahlkampf 1 Aktion, danach wird er teurer. Gerade jetzt ist er also am günstigsten.",
         "hint": "Führe eine Wahlkampf-Aktion aus, um weiterzumachen.",
         "next": "Weiter"
       },
       "actionAdvertise": {
         "title": "Werbung kommt später",
-        "body": "Anzeigen erhöhen deine Beliebtheit, also ob die Leute dich mögen, nicht ob sie dich kennen. Sie kosten etwa fünfmal so viel wie Wahlkampf. Anzeigen zu kaufen, bevor irgendjemand deinen Namen kennt, ist der häufigste Weg, wie neue Spieler eine Runde verschwenden. Bau zuerst deinen Einfluss auf.",
+        "body": "Anzeigen erhöhen deine Beliebtheit, also ob die Leute dich mögen, nicht ob sie dich kennen. Am Anfang kosten sie etwa fünfmal so viel wie Wahlkampf, an Aktionen wie an Geld. Bau also zuerst deinen Einfluss auf.",
         "next": "Weiter"
       },
       "actionFundraise": {
@@ -126,7 +126,7 @@
       },
       "actionDonors": {
         "title": "Bau das Spendernetzwerk früh auf",
-        "body": "Das ist die Aktion, die neue Spieler auslassen und bereuen. Sie kostet vorab viel und zahlt sofort nichts, aber jedes Spendensammeln danach bringt mehr ein. Finanzier deinen Wahlkampf nicht stattdessen aus eigener Tasche. Eigenfinanzierung treibt deine Verrufenheit hoch, kostet jede Runde Beliebtheit und beendet vielversprechende Karrieren am schnellsten.",
+        "body": "Das Spendernetzwerk auszubauen kostet anfangs 4 Aktionen und bringt selbst kein Geld. Du brauchst Spenderlevel 1, bevor du überhaupt Spenden sammeln kannst, und jedes Level erhöht, was jedes spätere Spendensammeln einbringt. Bezahlst du deinen Wahlkampf aus eigener Tasche, geht bei der Überweisung die Hälfte des Geldes verloren und deine Verrufenheit steigt. Verrufenheit über 20 kostet dich jede Runde Beliebtheit.",
         "next": "Verstanden"
       },
       "fileForRace": {
@@ -143,7 +143,7 @@
       },
       "officeWider": {
         "title": "Wohin es von hier aus geht",
-        "body": "Ein Sitz ist der Anfang, nicht das Ziel. Von hier aus jagst du Ausschussplätze, Parteiämter und Führungswahlen, und über jede davon entscheiden Spieler, die du auf deiner Seite brauchst. Das meiste davon wird im Discord ausgehandelt.",
+        "body": "Nach einem Sitz kommen Ausschussplätze, Parteiämter und Führungswahlen. Über jede davon entscheiden andere Spieler, also brauchst du ihre Unterstützung. Die meisten dieser Absprachen laufen im Discord.",
         "readMore": "Alle Rennen ansehen",
         "next": "Verstanden"
       },
@@ -171,7 +171,7 @@
       },
       "companyIntro": {
         "title": "Ein Unternehmen ist hier ein echter Betrieb",
-        "body": "Es ist nicht nur ein Aktienkurs. Ein Unternehmen arbeitet in bestimmten Sektoren, beschäftigt Menschen in bestimmten Regionen, kauft bei anderen Unternehmen ein und verkauft an Haushalte und an den Staat. Führ eines gut und es bezahlt eine politische Karriere, die niemand überbieten kann.",
+        "body": "Ein Unternehmen arbeitet in bestimmten Sektoren, beschäftigt Menschen in bestimmten Regionen, kauft bei anderen Unternehmen ein und verkauft an Haushalte und an den Staat. Aus seinen Gewinnen kann es Dividenden an alle zahlen, die seine Aktien halten.",
         "next": "Weiter"
       },
       "companyTakeCharge": {
@@ -197,7 +197,7 @@
         "next": "Verstanden"
       },
       "unionIntro": {
-        "title": "Eine Gewerkschaft ist Druck, keine Mitgliederliste",
+        "title": "Die Macht einer Gewerkschaft ist ihr Mitgliederdruck",
         "body": "Gewerkschaften sind hier keine Spielergruppen. Jede hat einen Mitgliederdruckwert, der für die Arbeiter der Branche steht. Druck ist das, was einer Gewerkschaft überhaupt Macht gibt, und Organisationskampagnen treiben ihn nach oben. Als Vorsitzender ist es dein Job, ihn aufzubauen und dann für etwas auszugeben, das sich lohnt.",
         "next": "Weiter"
       },
@@ -215,7 +215,7 @@
       },
       "unionPower": {
         "title": "Lohnforderungen und Streiks",
-        "body": "Eine Gewerkschaft mit genug Druck und Geld kann höhere Löhne für die ganze Branche fordern und streiken, wenn die Arbeitgeber ablehnen. Streiks kosten die Gewerkschaft Geld und die Unternehmen Produktion. Es ist also eine Drohung, die du gezielt einsetzt, kein Knopf zum Dauerdrücken. Pass auf Regierungen auf, die ein Verbot beschließen, denn das friert deine Gewerkschaft ein, bis es aufgehoben ist.",
+        "body": "Eine Gewerkschaft mit genug Druck und Geld kann höhere Löhne für die ganze Branche fordern und streiken, wenn die Arbeitgeber ablehnen. Ein Streik kostet die Gewerkschaft Geld und die Unternehmen Produktion. Regierungen können Gewerkschaften per Gesetz verbieten, was deine einfriert, bis das Verbot aufgehoben ist.",
         "next": "Verstanden"
       },
       "nationIntro": {
@@ -231,26 +231,26 @@
       },
       "nationCabinet": {
         "title": "Kabinettsposten sind der realistische erste Schritt",
-        "body": "Kabinettsposten führen einen ganzen Politikbereich und werden vergeben statt gewählt. Für die meisten Spieler ist das der erste echte Vorgeschmack auf nationale Macht, lange bevor das höchste Amt möglich ist. Nützlich zu sein für den, der die Posten vergibt, ist also mehr wert als jede Wahlkampfaktion.",
+        "body": "Kabinettsposten führen einen ganzen Politikbereich und werden ernannt statt gewählt. Für die meisten Spieler ist ein Kabinettsposten das erste nationale Amt in Reichweite. Um einen zu bekommen, brauchst du die Unterstützung dessen, der die Posten vergibt.",
         "readMore": "Zum Kabinett",
         "next": "Weiter"
       },
       "nationBudget": {
-        "title": "Regieren ist vor allem Rechnen",
-        "body": "Im Haushalt treffen Versprechen auf Geld. Jedes Programm kostet etwas, jede Steuer bremst etwas, und Defizite werden zu Schuldenzahlungen, die alles verdrängen, was du eigentlich tun wolltest. Lies ihn, bevor du im Wahlkampf irgendetwas versprichst.",
+        "title": "Lies den nationalen Haushalt",
+        "body": "Der nationale Haushalt zeigt, was der Staat ausgibt, was jede Steuer einbringt und welche Zinsen er auf seine Schulden zahlt. Defizite erhöhen diese Schulden, und die Zinsen gehen von späteren Haushalten ab. Lies ihn, bevor du im Wahlkampf Ausgaben oder Steuersenkungen versprichst.",
         "hint": "Öffne den nationalen Haushalt.",
         "next": "Weiter"
       },
       "nationMoney": {
         "title": "Die Hebel unter dem Haushalt",
-        "body": "Die Zentralbank setzt die Zinsen, und die bewegen Inflation, Kreditkosten und den Wert deiner Währung. Eine Führung, die das ignoriert, bekommt trotzdem die Folgen. Die Stärke der Währung bestimmt außerdem, was Importe dich kosten und was deine Exporteure im Ausland verdienen.",
+        "body": "Die Zentralbank setzt die Zinsen, und die bewegen Inflation, Kreditkosten und den Wert deiner Währung. Der Wechselkurs bestimmt außerdem, was Importe kosten und was Exporteure im Ausland verdienen.",
         "readMore": "Zur Zentralbank",
         "next": "Verstanden"
       }
     },
     "closing": {
       "title": "Das ist der Kreislauf",
-      "bodyFull": "Lies die Nachrichten, setz deine Aktionen dort ein, wo sie zählen, und lass die Runden für dich arbeiten. Du kannst jedes Kapitel jederzeit von der Tutorial-Seite aus wiederholen. Viel Erfolg da draußen.",
+      "bodyFull": "Lies die Nachrichten, setz deine Aktionen ein und sieh dir nach jeder Runde die Ergebnisse an. Du kannst jedes Kapitel jederzeit von der Tutorial-Seite aus wiederholen. Viel Erfolg da draußen.",
       "bodyShort": "Das ist dein Weg. Wenn du später einen der anderen sehen willst, findest du jedes Kapitel auf der Tutorial-Seite und kannst sie einzeln durchspielen. Viel Erfolg da draußen.",
       "next": "Fertig"
     },
@@ -293,7 +293,7 @@
       "mostPlayers": "Die meisten Spieler",
       "aboutMinutesShort": "etwa {minutes} Min.",
       "minutesShort": "{minutes} Min.",
-      "allOfItBlurb": "Das ganze Spiel. Politik und Geld befeuern sich gegenseitig, und wer beides macht, liegt am Ende vor denen, die sich für eine Seite entscheiden.",
+      "allOfItBlurb": "Alle Kapitel unten, von der Kandidatur für ein Amt bis zur Führung eines Landes.",
       "pickAtLeastOne": "Wähl mindestens eins, um weiterzumachen.",
       "estimate": "Etwa {minutes} Minuten, und du kannst jederzeit aufhören.",
       "back": "Zurück",

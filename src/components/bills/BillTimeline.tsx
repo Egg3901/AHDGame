@@ -238,7 +238,7 @@ export function BillTimeline({
                   isFailedNode
                     ? "bg-error"
                     : isActive
-                      ? "bg-primary ring-2 ring-primary/40 animate-pulse"
+                      ? "bg-primary ring-2 ring-primary/40"
                       : isFilled
                         ? isSigned
                           ? "bg-success"

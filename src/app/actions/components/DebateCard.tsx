@@ -117,10 +117,7 @@ export default function DebateCard() {
   // Resolved-this-session summary.
   if (outcome) {
     return (
-      <div
-        ref={cardRef}
-        className="rounded-xl border border-card-border bg-card/50 p-5 shadow-card backdrop-blur-sm"
-      >
+      <div ref={cardRef} className="rounded-xl border border-card-border bg-card p-5 shadow-card">
         <h3 className="text-base font-semibold text-foreground">Debate concluded</h3>
         <p className="mt-1 text-sm text-muted">
           {outcome.result === "draw"
@@ -142,10 +139,7 @@ export default function DebateCard() {
           ? "text-error"
           : "text-muted";
     return (
-      <div
-        ref={cardRef}
-        className="rounded-xl border border-card-border bg-card/50 p-5 shadow-card backdrop-blur-sm"
-      >
+      <div ref={cardRef} className="rounded-xl border border-card-border bg-card p-5 shadow-card">
         <h3 className="text-base font-semibold text-foreground">Recent debate</h3>
         <p className="mt-1 text-sm text-muted">
           vs. {lastResolved.opponentName} —{" "}
@@ -170,10 +164,9 @@ export default function DebateCard() {
   return (
     <div
       ref={cardRef}
-      className="overflow-hidden rounded-xl border border-primary/30 bg-card/50 shadow-card backdrop-blur-sm"
+      className="overflow-hidden rounded-xl border border-primary/30 bg-card shadow-card"
     >
       <div className="relative px-5 pt-5 pb-1">
-        <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-primary/60 via-secondary/30 to-transparent" />
         <div className="flex items-center justify-between gap-3">
           <h3 className="text-base font-semibold text-foreground">
             Debate challenge — {debate.opponentName}

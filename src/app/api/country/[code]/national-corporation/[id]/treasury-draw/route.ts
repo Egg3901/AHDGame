@@ -14,6 +14,7 @@ import type { Corporation } from "@/lib/db/types";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
 import { drawFromTreasury } from "@/lib/nationalization/treasury";
+import { snapshotCorporationCurrency } from "@/lib/ledger/balanceSnapshot";
 import { computeDrawAllowance } from "@/lib/nationalization/ceoFinance";
 import { DEFAULT_TREASURY_DRAW_CAP } from "@/lib/nationalization/constants";
 import { corporationQueryFromParamId } from "@/lib/api/corporations/resolveQuery";
@@ -81,7 +82,16 @@ export async function POST(request: Request, { params }: RouteParams) {
     // The draw is unconditional — it may push the reserve negative (national
     // debt). The per-turn allowance above is the only hard limit; a minister who
     // wants to forbid draws sets treasuryDrawCap to 0.
-    await drawFromTreasury(db, { countryId, corpId: target._id, amountLocal: amount }, now);
+    await drawFromTreasury(
+      db,
+      {
+        countryId,
+        corpId: target._id,
+        amountLocal: amount,
+        corpCurrency: snapshotCorporationCurrency(target),
+      },
+      now
+    );
 
     // Track the per-turn tally (reset on a new turn).
     await db.collection<Corporation>("corporations").updateOne(

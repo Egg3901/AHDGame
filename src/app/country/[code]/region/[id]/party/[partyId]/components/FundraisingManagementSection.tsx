@@ -272,7 +272,7 @@ export function FundraisingManagementSection({
 
       {/* GOTV Budget */}
       {canChangeTax && (
-        <div className="px-6 py-5 border-b border-card-border/40 border-l-[3px] border-l-primary/40">
+        <div className="px-6 py-5 border-b border-card-border/40">
           <div className="flex items-center gap-2 mb-1">
             <svg
               className="h-4 w-4 text-primary"
@@ -396,7 +396,7 @@ export function FundraisingManagementSection({
 
       {/* Voter Suppression */}
       {canChangeTax && (
-        <div className="px-6 py-5 border-b border-card-border/40 border-l-[3px] border-l-error/40">
+        <div className="px-6 py-5 border-b border-card-border/40">
           <div className="flex items-center gap-2 mb-1">
             <svg
               className="h-4 w-4 text-error"

@@ -12,11 +12,7 @@ import {
   assertPrivateEnterprisePermitted,
   isPrivateEnterpriseBlocked,
 } from "@/lib/economy/queries/privateEnterpriseGate";
-import {
-  getGdpAnchorRate,
-  loadWorldEraUnitScale,
-  loadWorldPreset,
-} from "@/lib/currency/gdpAnchorRate";
+import { loadWorldEraUnitScale, loadWorldPreset } from "@/lib/currency/gdpAnchorRate";
 import { getEraFounderShares, getEraNominalScale } from "@/lib/constants/sectorSeedEra";
 import { autoGrantedNodeIds } from "@/lib/constants/techTree";
 import { resolveGameYear } from "@/lib/era/era";
@@ -32,6 +28,8 @@ import {
 } from "@/lib/constants/corporations";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import {
+  anchorToCorpCapital,
+  getCurrencyFxRate,
   getSectorHostFxRate,
   resolveSectorHostCurrencyCode,
 } from "@/lib/currency/corporationCapital";
@@ -44,6 +42,7 @@ import {
   generateTickerSymbol,
   insertCorporationWithTickerRetry,
 } from "@/lib/corporations/tickerSymbol";
+import { witnessCorporationStartingGrant } from "@/lib/corporations/startingGrantLedger";
 import {
   computeUnownedHeadroomUnits,
   unownedHeadroomUnitsPerAnchor,
@@ -359,7 +358,10 @@ export async function spawnNppCorporation(
   //     countries (JP, NG, BR) are not seeded with tiny local books. A flat 2M
   //     LOCAL left e.g. JP corps at ~19k ₳ vs UK/US at ~2M — an ~800x
   //     cross-nation gap that also kept those corps below the nominal cash
-  //     floors gating expansion. See balance audit (2026-07-21).
+  //     floors gating expansion. See balance audit (2026-07-21). Converted at
+  //     the world's market rate, the same rate the cash is valued at: the GDP
+  //     normalization factor differs from it wherever authored GDP is not at
+  //     the era's market rate (1991 NG, PL, BG; 1953 JP, IT), see #2985.
   //  2. ERA: ₳2,000,000 is a MODERN absolute (refs #3778 §3). 1953 nominal GDP
   //     is ~70x smaller, so the unscaled default handed a fresh NPP corp more
   //     cash than several 1953 regional sector markets put together. Deflating
@@ -384,8 +386,11 @@ export async function spawnNppCorporation(
   const startingCapital =
     customCapital ??
     Math.round(
-      (NPP_DEFAULT_STARTING_CAPITAL_ANCHOR * getEraNominalScale(preset)) /
-        getGdpAnchorRate(countryId, preset)
+      anchorToCorpCapital(
+        NPP_DEFAULT_STARTING_CAPITAL_ANCHOR * getEraNominalScale(preset),
+        currencyCode,
+        await getCurrencyFxRate(db, currencyCode)
+      )
     );
 
   // Determine starting revenue: use custom, or derive from unowned market.
@@ -484,6 +489,13 @@ export async function spawnNppCorporation(
   };
 
   await insertCorporationWithTickerRetry(db, corpDoc as Corporation);
+  await witnessCorporationStartingGrant(db, {
+    corporationId: corpId,
+    amountLocal: startingCapital,
+    currencyCode,
+    turn: input.foundedAtTurn,
+    now,
+  });
 
   // ─── Plants: the founding sector is GRANTED capacity, not a revenue line ──
   //

@@ -12,7 +12,7 @@ import {
   convertCashConversion,
   isFundraiseEligible,
 } from "@/lib/actions";
-import { CARD_PHOTO_SCRIM, CATEGORY_ACCENTS, CATEGORY_LABELS } from "../actionsConstants";
+import { CARD_PHOTO_SCRIM, CATEGORY_LABELS } from "../actionsConstants";
 import type { ActionCardProps } from "../actionsTypes";
 import ActionExecuteRow from "./ActionExecuteRow";
 
@@ -127,12 +127,11 @@ const ActionCard = memo(function ActionCard({
   const isMaxed = isCampaign && campaignMaxed;
   const blocked =
     gdpCostsBlocked || isMaxed || noDonor || noCash || cantAffordFunds || cantAffordActions;
-  const accent = CATEGORY_ACCENTS[card.category] ?? CATEGORY_ACCENTS.influence;
 
   return (
     <div
       data-coach={`action-${card.type}`}
-      className={`group relative flex flex-col rounded-xl border border-card-border bg-card overflow-hidden shadow-sm transition-all duration-300 hover:shadow-lg ${accent.border} hover:-translate-y-1
+      className={`relative flex flex-col rounded-xl border border-card-border bg-card overflow-hidden shadow-sm
         ${blocked ? "opacity-60" : ""}
       `}
     >
@@ -146,16 +145,13 @@ const ActionCard = memo(function ActionCard({
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
           loading="lazy"
           unoptimized={bypassNextImageOptimization(imageUrl)}
-          className="object-cover transition-transform duration-700 group-hover:scale-[1.06]"
+          className="object-cover"
         />
         <div className={`absolute inset-0 bg-gradient-to-t ${CARD_PHOTO_SCRIM}`} />
-        <div className={`absolute inset-x-0 top-0 h-0.5 ${accent.bar} opacity-70`} aria-hidden />
 
         <div className="absolute inset-0 p-4 flex flex-col justify-between">
           <div className="flex justify-between items-start gap-2">
-            <span
-              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider backdrop-blur-md ${accent.chip}`}
-            >
+            <span className="inline-flex items-center rounded-full border border-white/20 bg-black px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
               {CATEGORY_LABELS[card.category]}
             </span>
           </div>
@@ -172,7 +168,7 @@ const ActionCard = memo(function ActionCard({
         {/* Flash Message */}
         {didFlash && (
           <div
-            className={`absolute inset-0 flex items-center justify-center bg-card/95 p-6 text-center text-sm font-semibold backdrop-blur-sm animate-in fade-in zoom-in-95 duration-200
+            className={`absolute inset-0 flex items-center justify-center bg-card p-6 text-center text-sm font-semibold animate-in fade-in zoom-in-95 duration-200
               ${flash.ok ? "text-green-400" : "text-red-400"}`}
           >
             {flash.msg}

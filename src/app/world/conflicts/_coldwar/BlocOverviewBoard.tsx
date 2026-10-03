@@ -21,7 +21,7 @@ import { WorldBlocMap } from "./WorldBlocMap";
 import { NationDetailPanel } from "./NationDetailPanel";
 
 const mono = "'IBM Plex Mono',monospace";
-const serif = "Lora,Georgia,serif";
+const serif = "var(--font-geist-sans),system-ui,sans-serif";
 
 type Selected = { name: string; bloc: BlocId } | null;
 type Hover = { name: string; bloc: BlocId; x: number; y: number } | null;

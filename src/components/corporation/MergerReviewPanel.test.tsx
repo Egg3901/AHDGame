@@ -35,7 +35,7 @@ describe("MergerReviewPanel (corporation side)", () => {
     render(<MergerReviewPanel />);
 
     expect(await screen.findByText(/Northern Steel to Clyde Foundry/)).toBeTruthy();
-    expect(screen.getByText(/Deals of yours that competition policy has touched/)).toBeTruthy();
+    expect(screen.getByText(/deals of yours that competition policy has touched/i)).toBeTruthy();
   });
 
   it("never offers the officeholder's decision controls", async () => {

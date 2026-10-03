@@ -19,6 +19,10 @@ vi.mock("@/lib/currency/autoConvert", () => ({
 }));
 vi.mock("@/lib/financialTxLog/emit", () => ({ emitTx: vi.fn().mockResolvedValue(undefined) }));
 
+// Load the route graph at collection time. A cold import inside the first test
+// can outlast its budget and leave that request running into the next test.
+import { POST } from "../[bondId]/buy/route";
+
 let db: MockDb;
 const userId = new ObjectId();
 const charId = new ObjectId();
@@ -74,7 +78,6 @@ describe("bond buy — CEO ⊥ bondholder guard", () => {
       ceoId: new ObjectId(), // someone else is CEO now
       ceoHistory: [{ holderId: charId, ceoType: "character", startTurn: 1, endTurn: 90 }],
     });
-    const { POST } = await import("../[bondId]/buy/route");
     const res = await POST(buyReq(), { params: Promise.resolve({ bondId: bondId.toString() }) });
     expect(res.status).toBe(400);
     expect((await res.json()).error).toContain("Previous CEOs cannot buy bonds");
@@ -87,7 +90,6 @@ describe("bond buy — CEO ⊥ bondholder guard", () => {
       pendingCeoCharacterId: charId,
       ceoHistory: [],
     });
-    const { POST } = await import("../[bondId]/buy/route");
     const res = await POST(buyReq(), { params: Promise.resolve({ bondId: bondId.toString() }) });
     expect(res.status).toBe(400);
     expect((await res.json()).error).toContain("Cannot buy your own corporation's bonds");
@@ -98,7 +100,6 @@ describe("bond buy — CEO ⊥ bondholder guard", () => {
   // mock reasons (e.g. atomic debit), which is out of scope for this guard test.
   async function guardMessage(corp: Record<string, unknown>): Promise<string> {
     db.collectionMocks["corporations"]!.findOne.mockResolvedValue(corp);
-    const { POST } = await import("../[bondId]/buy/route");
     const res = await POST(buyReq(), { params: Promise.resolve({ bondId: bondId.toString() }) });
     const body = await res.json().catch(() => ({}));
     return body.error ?? "";

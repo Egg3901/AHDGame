@@ -86,9 +86,7 @@ export function PresidentialCandidateTable({
       >
         <span className="flex items-center gap-2">
           <span
-            className={`h-1.5 w-1.5 rounded-full ${
-              isEnded ? "bg-green-400" : "bg-blue-400 animate-pulse"
-            }`}
+            className={`h-1.5 w-1.5 rounded-full ${isEnded ? "bg-green-400" : "bg-blue-400"}`}
           />
           {isEnded ? "Final Results" : "Live Tally"}
         </span>

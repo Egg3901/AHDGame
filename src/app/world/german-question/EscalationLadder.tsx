@@ -64,7 +64,7 @@ export function EscalationLadder({ view, onArmed }: { view: DossierView; onArmed
               aria-hidden
               className={`size-2.5 shrink-0 rounded-full border-2 ${
                 rung.here
-                  ? "border-warning bg-warning shadow-glow-sm"
+                  ? "border-warning bg-warning"
                   : rung.passed
                     ? "border-muted bg-muted/40"
                     : "border-card-border bg-background"

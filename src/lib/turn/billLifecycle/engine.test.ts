@@ -804,4 +804,35 @@ describe("runBillLifecycle - concurrentVote stage", () => {
     expect(set.otherChamberVotesFor).toBe(1);
     expect(set.passedOtherChamberAt).toBeInstanceOf(Date);
   });
+
+  it("requires two-thirds in each chamber for a concurrent war declaration", async () => {
+    const houseFor = [new ObjectId(), new ObjectId(), new ObjectId()];
+    const houseAgainst = [new ObjectId(), new ObjectId()];
+    const senateFor = new ObjectId();
+    const bill = {
+      ...concurrentBill(
+        Object.fromEntries([
+          ...houseFor.map((id) => [id.toString(), "for"]),
+          ...houseAgainst.map((id) => [id.toString(), "against"]),
+        ]),
+        { [senateFor.toString()]: "for" }
+      ),
+      provisions: [{ type: "declare_war", targetCountry: "CN", warGoal: "punitive" }],
+    };
+    db.collectionMocks["bills"]!.find.mockImplementation(findByStatus({ active_both: [bill] }));
+    db.collectionMocks["bills"]!.findOne.mockResolvedValue(bill);
+    db.collectionMocks["electedOfficials"]!.find.mockReturnValue(
+      cursor([
+        ...houseFor.map((id) => seat("house", id)),
+        ...houseAgainst.map((id) => seat("house", id)),
+        seat("senate", senateFor),
+      ])
+    );
+
+    await runBillLifecycle(db as unknown as Db, CONCURRENT_CONFIG, NOW, 50);
+
+    // The House's 3-2 vote is a simple majority but below the declaration's
+    // two-thirds bar. The unanimous Senate cannot rescue a failed chamber.
+    expect(lastBillSet().status).toBe("failed");
+  });
 });

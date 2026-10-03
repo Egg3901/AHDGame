@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Toast } from "@/components/ui";
 import type { ToastVariant } from "@/components/ui/Toast";
 import { useCurrency } from "@/contexts/CurrencyContext";
@@ -18,6 +19,7 @@ import SharePurchaseModal from "./shares/SharePurchaseModal";
 import ShareIssuanceModal from "./shares/ShareIssuanceModal";
 import { CorporationVoteCard } from "./votes/CorporationVoteCard";
 import { fetchJson } from "@/lib/observability/fetchJson";
+import { DenseSection, Segmented } from "./dense/DenseKit";
 
 type SharesSubTab = "market" | "history";
 
@@ -59,6 +61,20 @@ export default function SharesTab({
   // ─── Sub-tab + modal visibility ───────────────────────────────────────────────
   const [activeSubTab, setActiveSubTab] = useState<SharesSubTab>("market");
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
+  // `?trade=1` (the masthead's Trade button) opens the ticket on arrival.
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const tradeRequested = searchParams.get("trade") === "1";
+  const purchaseOpen = showPurchaseModal || tradeRequested;
+  const closePurchase = () => {
+    setShowPurchaseModal(false);
+    if (tradeRequested) {
+      const p = new URLSearchParams(searchParams.toString());
+      p.delete("trade");
+      router.replace(`${pathname}?${p.toString()}`, { scroll: false });
+    }
+  };
   const [showIssuanceModal, setShowIssuanceModal] = useState(false);
   const [openVotes, setOpenVotes] = useState<{ _id: string; type: string }[]>([]);
 
@@ -147,7 +163,7 @@ export default function SharesTab({
       )}
 
       {/* ─── Trade / Issue modals (shared across sub-tabs) ───────────────── */}
-      {showPurchaseModal && myCharacterId && (
+      {purchaseOpen && myCharacterId && (
         <SharePurchaseModal
           corporation={corporation}
           corpId={corpId}
@@ -162,7 +178,7 @@ export default function SharesTab({
           myOrders={myOrders}
           marketOrders={marketOrders}
           isCeo={isCeo}
-          onClose={() => setShowPurchaseModal(false)}
+          onClose={closePurchase}
           onSuccess={handleTradeSuccess}
         />
       )}
@@ -180,103 +196,93 @@ export default function SharesTab({
         />
       )}
 
-      {/* ─── Sub-tab bar ─────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-1 rounded-lg bg-card-elevated p-1 w-fit border border-card-border">
-        {[
-          { key: "market" as const, label: "Market Overview" },
-          { key: "history" as const, label: "Share History" },
-        ].map(({ key, label }) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => setActiveSubTab(key)}
-            className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-              activeSubTab === key
-                ? "bg-primary text-white shadow-sm"
-                : "text-muted hover:text-foreground"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <Segmented
+        ariaLabel="Shares view"
+        options={[
+          { value: "market", label: "Market" },
+          { value: "history", label: "History" },
+        ]}
+        value={activeSubTab}
+        onChange={setActiveSubTab}
+      />
 
       {activeSubTab === "market" && (
-        <>
-          {/* ─── Market overview + chart + shareholders ─────────────────── */}
-          <MarketOverviewPanel
-            corporation={corporation}
-            myCharacterId={myCharacterId}
-            corpId={corpId}
-            onTrade={myCharacterId ? () => setShowPurchaseModal(true) : undefined}
-            onIssue={isCeo ? () => setShowIssuanceModal(true) : undefined}
-            onRefresh={onRefresh}
-            setActionError={setActionError}
-            setActionSuccess={setActionSuccess}
-          />
-
-          {/* ─── Holdings + quick sell ──────────────────────────────────── */}
-          {myCharacterId && (
-            <MyHoldingsPanel
-              myShares={trading.myShares}
-              myShareValue={trading.myShareValue}
-              myOwnershipPct={trading.myOwnershipPct}
-              myCashOnHand={myCashOnHand}
-              myEscrowedTotal={myEscrowedTotal}
-            />
-          )}
-
-          {/* ─── Orderbook (other players' open orders to fill) ─────────── */}
-          {marketOrders.length > 0 && (
-            <OpenOrdersPanel
-              marketOrders={marketOrders}
-              myCharacterId={myCharacterId}
-              corpCurrencyCode={corpCurrencyCode}
-              myCorporation={myCorporation ?? null}
-              fillAmounts={fillAmounts}
-              setFillAmounts={setFillAmounts}
-              fillAskAsCorp={trading.fillAskAsCorp}
-              setFillAskAsCorp={trading.setFillAskAsCorp}
-              loading={trading.loading}
-              handleFillOrder={trading.handleFillOrder}
-              handleCancelOrder={trading.handleCancelOrder}
-            />
-          )}
-
-          {/* ─── Private sale listings ──────────────────────────────────── */}
-          {myCharacterId && (
-            <PrivateSalePanel
+        <div className="grid gap-x-8 gap-y-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+          <div className="min-w-0 space-y-6">
+            <MarketOverviewPanel
               corporation={corporation}
               myCharacterId={myCharacterId}
               corpId={corpId}
-              myShares={trading.myShares}
-              isCeo={isCeo}
-              onToast={(message, variant) => setToast({ message, variant })}
+              onTrade={myCharacterId ? () => setShowPurchaseModal(true) : undefined}
+              onIssue={isCeo ? () => setShowIssuanceModal(true) : undefined}
+              onRefresh={onRefresh}
+              setActionError={setActionError}
+              setActionSuccess={setActionSuccess}
             />
-          )}
 
-          {/* ─── CEO: share structure (splits / consolidations) ─────────── */}
-          {isCeo && <ShareStructurePanel corporation={corporation} trading={trading} />}
+            {openVotes.length > 0 && (
+              <DenseSection title="Shareholder votes" meta={`${openVotes.length} open`}>
+                {openVotes.map((v) => (
+                  <CorporationVoteCard
+                    key={v._id}
+                    corporationId={String(corporation.sequentialId ?? corporation._id)}
+                    voteId={v._id}
+                    isCeo={isCeo}
+                    viewerCharacterId={myCharacterId ?? undefined}
+                    viewerShares={trading.myShares ?? 0}
+                    totalShares={corporation.totalShares ?? 0}
+                    viewerVotingPower={myVotingPower}
+                    totalVotingPower={totalVotingPower}
+                    currentTurn={corporation.currentTurn}
+                    onResolved={() => setOpenVotes((prev) => prev.filter((x) => x._id !== v._id))}
+                  />
+                ))}
+              </DenseSection>
+            )}
 
-          {/* ─── Open shareholder votes ──────────────────────────────────── */}
-          {openVotes.map((v) => (
-            <CorporationVoteCard
-              key={v._id}
-              corporationId={String(corporation.sequentialId ?? corporation._id)}
-              voteId={v._id}
-              isCeo={isCeo}
-              viewerCharacterId={myCharacterId ?? undefined}
-              viewerShares={trading.myShares ?? 0}
-              totalShares={corporation.totalShares ?? 0}
-              viewerVotingPower={myVotingPower}
-              totalVotingPower={totalVotingPower}
-              currentTurn={corporation.currentTurn}
-              onResolved={() => setOpenVotes((prev) => prev.filter((x) => x._id !== v._id))}
-            />
-          ))}
+            {/* Other players' open orders, filled from the row */}
+            {marketOrders.length > 0 && (
+              <OpenOrdersPanel
+                marketOrders={marketOrders}
+                myCharacterId={myCharacterId}
+                corpCurrencyCode={corpCurrencyCode}
+                myCorporation={myCorporation ?? null}
+                fillAmounts={fillAmounts}
+                setFillAmounts={setFillAmounts}
+                fillAskAsCorp={trading.fillAskAsCorp}
+                setFillAskAsCorp={trading.setFillAskAsCorp}
+                loading={trading.loading}
+                handleFillOrder={trading.handleFillOrder}
+                handleCancelOrder={trading.handleCancelOrder}
+              />
+            )}
 
-          {!myCharacterId && <SignInPrompt />}
-        </>
+            {myCharacterId && (
+              <PrivateSalePanel
+                corporation={corporation}
+                myCharacterId={myCharacterId}
+                corpId={corpId}
+                myShares={trading.myShares}
+                isCeo={isCeo}
+                onToast={(message, variant) => setToast({ message, variant })}
+              />
+            )}
+          </div>
+
+          <aside className="min-w-0 space-y-6">
+            {myCharacterId && (
+              <MyHoldingsPanel
+                myShares={trading.myShares}
+                myShareValue={trading.myShareValue}
+                myOwnershipPct={trading.myOwnershipPct}
+                myCashOnHand={myCashOnHand}
+                myEscrowedTotal={myEscrowedTotal}
+              />
+            )}
+            {isCeo && <ShareStructurePanel corporation={corporation} trading={trading} />}
+            {!myCharacterId && <SignInPrompt />}
+          </aside>
+        </div>
       )}
 
       {activeSubTab === "history" && <ShareHistoryPanel corpId={corpId} />}

@@ -309,7 +309,8 @@ describe("nationalizeSector", () => {
       "CN",
       20000, // valuation 4000 × fair × buyout premium (5)
       expect.anything(),
-      expect.any(Date)
+      expect.any(Date),
+      expect.objectContaining({ flow: "nationalization_compensation" })
     );
   });
 });
@@ -425,7 +426,13 @@ describe("nationalizeWholeCorp", () => {
 
     // valuation = max(marketCap 2000, equity 500+4000) − 0 = 4500; payout = 4500 × 5 = 22500.
     // cash (500) ≤ payout ⇒ the state recoups all 500; CEO gets nothing.
-    expect(vi.mocked(creditTreasuryProceeds)).toHaveBeenCalledWith(db, "CN", 500, expect.any(Date));
+    expect(vi.mocked(creditTreasuryProceeds)).toHaveBeenCalledWith(
+      db,
+      "CN",
+      500,
+      expect.any(Date),
+      expect.objectContaining({ flow: "corporation_liquidation" })
+    );
     expect(db.collectionMocks.characters.updateOne).not.toHaveBeenCalled();
   });
 
@@ -480,7 +487,8 @@ describe("nationalizeWholeCorp", () => {
       db,
       "CN",
       5000,
-      expect.any(Date)
+      expect.any(Date),
+      expect.objectContaining({ flow: "corporation_liquidation" })
     );
   });
 
@@ -525,7 +533,8 @@ describe("nationalizeWholeCorp", () => {
       db,
       "CN",
       8000,
-      expect.any(Date)
+      expect.any(Date),
+      expect.objectContaining({ flow: "corporation_liquidation" })
     );
     expect(db.collectionMocks.characters.updateOne).not.toHaveBeenCalled();
   });

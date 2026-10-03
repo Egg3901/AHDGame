@@ -196,10 +196,7 @@ export default function IndustrialRelationsSection({ corpId }: { corpId: string 
 
   if (loading) {
     return (
-      <section
-        aria-label="Industrial Relations"
-        className="rounded-xl border border-card-border bg-card p-5"
-      >
+      <section aria-label="Industrial Relations" className="py-2">
         <LoadingSpinner label="Loading industrial relations..." centered />
       </section>
     );
@@ -207,9 +204,9 @@ export default function IndustrialRelationsSection({ corpId }: { corpId: string 
 
   if (loadError) {
     return (
-      <section className="rounded-xl border border-error/30 bg-error/10 p-5">
-        <h3 className="text-heading-sm font-semibold text-foreground">Industrial Relations</h3>
-        <p role="alert" className="mt-1 text-body text-error">
+      <section className="space-y-1 border-y border-card-border py-2">
+        <h3 className="text-sm font-semibold text-foreground">Industrial relations</h3>
+        <p role="alert" className="mt-1 text-[13px] text-error">
           {loadError}
         </p>
         <Button variant="secondary" size="sm" className="mt-3" onClick={() => void load()}>
@@ -222,31 +219,25 @@ export default function IndustrialRelationsSection({ corpId }: { corpId: string 
   if (enabled !== true) return null;
 
   return (
-    <section className="rounded-xl border border-card-border bg-card p-5 space-y-5">
-      <div>
-        <h3 className="text-heading-sm font-semibold text-foreground">Industrial Relations</h3>
-        <p className="mt-1 text-body text-muted">
-          Negotiate wage floors and labour peace with the unions representing your operating
-          sectors.
+    <section aria-label="Industrial Relations" className="min-w-0 space-y-3">
+      <div className="flex min-h-8 flex-wrap items-baseline gap-x-2 border-b border-card-border pb-1.5">
+        <h3 className="text-sm font-semibold text-foreground">Industrial relations</h3>
+        <p className="text-xs text-muted">
+          Wage floors and labour peace with the unions in your sectors.
         </p>
       </div>
 
       {message && (
         <p
           role={message.ok ? "status" : "alert"}
-          className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-body font-medium ${
-            message.ok
-              ? "border-success/30 bg-success/10 text-success"
-              : "border-error/30 bg-error/10 text-error"
-          }`}
+          className={`text-xs font-medium ${message.ok ? "text-success" : "text-error"}`}
         >
-          <span aria-hidden>{message.ok ? "✓" : "⚠"}</span>
-          <span>{message.text}</span>
+          {message.text}
         </p>
       )}
 
       {openCampaigns.length === 0 ? (
-        <p className="text-body text-muted">No open bargaining campaigns.</p>
+        <p className="text-xs text-muted">No open bargaining campaigns.</p>
       ) : (
         <div className="space-y-4">
           {openCampaigns.map((campaign) => {
@@ -275,31 +266,31 @@ export default function IndustrialRelationsSection({ corpId }: { corpId: string 
                     >
                       {campaign.unionName}
                     </Link>
-                    <p className="text-body-sm text-muted">
+                    <p className="text-xs text-muted">
                       {campaign.sectorCount} local(s) · Deadline turn {campaign.deadlineTurn} · Turn{" "}
                       {currentTurn}
                     </p>
                   </div>
-                  <span className="rounded-full bg-warning/15 px-2.5 py-1 text-body-sm font-semibold text-warning">
+                  <span className="rounded-full bg-warning/15 px-2.5 py-1 text-xs font-semibold text-warning">
                     {campaign.status === "dispute" ? "Dispute" : `Offer ${offer.revision}`}
                   </span>
                 </div>
 
                 {campaign.ratification?.status === "open" && (
-                  <p className="rounded-lg border border-info/30 bg-info/5 px-3 py-2 text-body-sm text-info">
+                  <p className="rounded-lg border border-info/30 bg-info/5 px-3 py-2 text-xs text-info">
                     The union has put offer {campaign.ratification.offerRevision} to its members.
                     They vote through turn {campaign.ratification.closesAtTurn}.
                   </p>
                 )}
                 {campaign.ratification?.status === "rejected" && (
-                  <p className="rounded-lg border border-warning/30 bg-warning/5 px-3 py-2 text-body-sm text-warning">
+                  <p className="rounded-lg border border-warning/30 bg-warning/5 px-3 py-2 text-xs text-warning">
                     Union members rejected offer {campaign.ratification.offerRevision}.
                   </p>
                 )}
 
                 {/* Five metrics: three across at sm so the row never leaves one
                     orphan, five across once there is width for it. */}
-                <div className="grid grid-cols-2 gap-3 text-body sm:grid-cols-3 lg:grid-cols-5">
+                <div className="grid grid-cols-2 gap-3 text-[13px] sm:grid-cols-3 lg:grid-cols-5">
                   <Metric label="Wage floor" value={`${offer.wageLevel.toFixed(2)}×`} />
                   <Metric label="Agreement" value={`${offer.agreementDurationTurns} turns`} />
                   <Metric label="Labour peace" value={`${offer.noStrikeTurns} turns`} />
@@ -314,7 +305,7 @@ export default function IndustrialRelationsSection({ corpId }: { corpId: string 
                   <Metric label="Union leverage" value={campaign.mandate.leverage.toFixed(0)} />
                 </div>
 
-                <details className="rounded-lg bg-card px-3 py-2 text-body">
+                <details className="rounded-lg bg-card px-3 py-2 text-[13px]">
                   <summary className="cursor-pointer font-medium text-foreground">
                     What is behind their leverage
                   </summary>
@@ -327,7 +318,7 @@ export default function IndustrialRelationsSection({ corpId }: { corpId: string 
                     />
                     <Metric label="Labour law" value={campaign.mandate.lawSupport.toFixed(0)} />
                   </div>
-                  <p className="mt-2 text-body-sm text-muted">
+                  <p className="mt-2 text-xs text-muted">
                     Recomputed every turn from live conditions: how organized your locals are, the
                     gap between the pay you set and what workers expect, how scarce labour is
                     nationally, and what the law gives collective bargaining. The union&apos;s
@@ -336,11 +327,11 @@ export default function IndustrialRelationsSection({ corpId }: { corpId: string 
                 </details>
 
                 {campaign.offers.length > 1 && (
-                  <details className="rounded-lg bg-card px-3 py-2 text-body">
+                  <details className="rounded-lg bg-card px-3 py-2 text-[13px]">
                     <summary className="cursor-pointer font-medium text-foreground">
                       Offer history ({campaign.offers.length})
                     </summary>
-                    <ol className="mt-2 space-y-1 text-body-sm text-muted">
+                    <ol className="mt-2 space-y-1 text-xs text-muted">
                       {campaign.offers.map((pastOffer) => (
                         <li key={pastOffer.revision}>
                           #{pastOffer.revision} {pastOffer.proposedBy}:{" "}
@@ -354,17 +345,17 @@ export default function IndustrialRelationsSection({ corpId }: { corpId: string 
 
                 {campaign.status === "dispute" && (
                   <div className="rounded-lg border border-warning/30 bg-warning/5 p-3 space-y-3">
-                    <p className="text-body-sm text-muted">
+                    <p className="text-xs text-muted">
                       Industrial action: {campaign.escalationLevel.replaceAll("_", " ")}
                     </p>
                     {mediation ? (
-                      <div className="rounded-lg bg-card p-3 text-body">
+                      <div className="rounded-lg bg-card p-3 text-[13px]">
                         <p className="font-medium text-foreground">
                           Mediation package: {mediation.wageLevel.toFixed(2)}× wage,{" "}
                           {mediation.agreementDurationTurns} turns, {mediation.noStrikeTurns}{" "}
                           no-strike
                         </p>
-                        <p className="mt-1 text-body-sm text-muted">
+                        <p className="mt-1 text-xs text-muted">
                           {mediation.status === "pending"
                             ? `Open through turn ${mediation.expiresAtTurn}. Union ${mediation.unionAccepted ? "accepted" : "pending"}; employer ${mediation.employerAccepted ? "accepted" : "pending"}.`
                             : `Mediation ${mediation.status}.`}
@@ -402,9 +393,7 @@ export default function IndustrialRelationsSection({ corpId }: { corpId: string 
                         Request mediation
                       </Button>
                     ) : campaign.mediationUnavailableReason ? (
-                      <p className="text-body-sm text-muted">
-                        {campaign.mediationUnavailableReason}
-                      </p>
+                      <p className="text-xs text-muted">{campaign.mediationUnavailableReason}</p>
                     ) : null}
                   </div>
                 )}
@@ -502,7 +491,7 @@ export default function IndustrialRelationsSection({ corpId }: { corpId: string 
                     </div>
                   </div>
                 ) : (
-                  <p className="text-body text-muted">
+                  <p className="text-[13px] text-muted">
                     {campaign.status === "dispute"
                       ? "Negotiations are in dispute. The union must answer the current employer offer or withdraw."
                       : "Your counteroffer is awaiting the union's response."}
@@ -516,12 +505,12 @@ export default function IndustrialRelationsSection({ corpId }: { corpId: string 
 
       {agreements.length > 0 && (
         <div className="border-t border-card-border pt-4">
-          <h4 className="mb-3 text-heading-sm font-semibold text-foreground">Active agreements</h4>
+          <h4 className="mb-3 text-sm font-semibold text-foreground">Active agreements</h4>
           <div className="space-y-2">
             {agreements.map((agreement) => (
               <div
                 key={agreement.agreementId}
-                className="flex flex-wrap justify-between gap-2 rounded-lg bg-card-elevated px-3 py-2 text-body"
+                className="flex flex-wrap justify-between gap-2 rounded-lg bg-card-elevated px-3 py-2 text-[13px]"
               >
                 <span>
                   <Link
@@ -548,7 +537,7 @@ export default function IndustrialRelationsSection({ corpId }: { corpId: string 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <div className="text-body-sm text-muted">{label}</div>
+      <div className="text-xs text-muted">{label}</div>
       <div className="font-mono font-semibold text-foreground">{value}</div>
     </div>
   );
@@ -570,7 +559,7 @@ function Field({
   onChange: (value: string) => void;
 }) {
   return (
-    <label className="text-body-sm text-muted">
+    <label className="text-xs text-muted">
       {label}
       <input
         type="number"
@@ -579,7 +568,7 @@ function Field({
         min={min}
         max={max}
         onChange={(event) => onChange(event.target.value)}
-        className="mt-1 w-full rounded-lg border border-card-border bg-background px-3 py-2 text-body text-foreground"
+        className="mt-1 w-full rounded-lg border border-card-border bg-background px-3 py-2 text-[13px] text-foreground"
       />
     </label>
   );

@@ -2,162 +2,16 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Avatar } from "@/components/Avatar";
-import { useLocalCurrency } from "@/hooks/useLocalCurrency";
-import { getExchangeForCountry } from "@/lib/constants/exchangeRegistry";
-import {
-  LiveBadge,
-  Sparkline,
-  Change,
-  Meter,
-} from "@/components/corporation/market/MarketPrimitives";
-import { useSharePriceHistory } from "@/components/corporation/market/useSharePriceHistory";
-import type { CorporationDetail, VoteTally } from "../CorporationPageTypes";
+import type { CorporationDetail, ShareholderInfo, VoteTally } from "../CorporationPageTypes";
 import { shareholderVotingPower, totalVotingPower } from "@/lib/corporations/superShares";
 import {
   insiderConcentrationMultiplier,
   INSIDER_CONCENTRATION_THRESHOLD,
 } from "@/lib/corporations/sharePriceFormula";
 import { fetchJson } from "@/lib/observability/fetchJson";
-import { brandShades, resolveCorpColor } from "@/lib/corporations/brandColor";
+import { DenseSection, KVList, KVRow, SmallButton, TableScroll, Td, Th } from "../dense/DenseKit";
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-// Slices are shades of the corporation's own brand colour, not a fixed rainbow.
-// A cap table is one company's ownership, so the chart should read as that
-// company; the twelve unrelated hues it used before said nothing about whose
-// shares they were. See brandShades() for how the shades stay separable.
-// Public float is deliberately OUTSIDE the ramp: those shares belong to no
-// named holder, and a neutral grey says so at any brand hue.
-const PUBLIC_FLOAT_COLOR = "hsl(215, 10%, 56%)";
-const PENDING_IPO_COLOR = "hsl(42, 70%, 54%)";
-/** Holders named individually in the pie; the rest collapse into one slice. */
-const MAX_NAMED_SLICES = 10;
-const PAGE_SIZE = 8;
-const PIE_SIZE = 160;
-const PIE_CX = PIE_SIZE / 2;
-const PIE_CY = PIE_SIZE / 2;
-const PIE_R = 64;
-
-// ─── Pie slice builder ────────────────────────────────────────────────────────
-
-interface PieSlice {
-  label: string;
-  shares: number;
-  color: string;
-  pct: number;
-}
-
-/**
- * Ranked holders to pie slices, tinted off the corp's own brand colour, with
- * everything past the top few collapsed into one slice.
- *
- * The tail has to collapse. Real cap tables here run to hundreds of holders, and
- * a pie with 250 wedges is 250 invisible slivers under a legend nobody can read.
- * No palette rescues that, so the chart names the holders who actually move the
- * company and totals the rest into one slice.
- */
-function shadedSlices(
-  corporation: CorporationDetail,
-  ranked: Array<{ label: string; shares: number }>,
-  total: number
-): PieSlice[] {
-  const head = ranked.slice(0, MAX_NAMED_SLICES);
-  const tail = ranked.slice(MAX_NAMED_SLICES);
-  const shades = brandShades(
-    resolveCorpColor(corporation.brandColor, corporation._id),
-    head.length + (tail.length > 0 ? 1 : 0)
-  );
-
-  const slices: PieSlice[] = head.map((holder, i) => ({
-    label: holder.label,
-    shares: holder.shares,
-    color: shades[i],
-    pct: total > 0 ? (holder.shares / total) * 100 : 0,
-  }));
-
-  if (tail.length > 0) {
-    const tailShares = tail.reduce((sum, holder) => sum + holder.shares, 0);
-    slices.push({
-      label: `${tail.length} smaller holders`,
-      shares: tailShares,
-      color: shades[head.length],
-      pct: total > 0 ? (tailShares / total) * 100 : 0,
-    });
-  }
-
-  return slices;
-}
-
-function rankedShareholders(corporation: CorporationDetail) {
-  return corporation.shareholders.slice().sort((a, b) => b.shares - a.shares);
-}
-
-function buildSlices(corporation: CorporationDetail): PieSlice[] {
-  const { totalShares, publicFloat } = corporation;
-  if (totalShares <= 0) return [];
-
-  const slices = shadedSlices(
-    corporation,
-    rankedShareholders(corporation).map((sh) => ({ label: sh.name, shares: sh.shares })),
-    totalShares
-  );
-
-  const poolFloat = Math.max(0, (publicFloat ?? 0) - (corporation.pendingIpoShares ?? 0));
-  if (poolFloat > 0) {
-    slices.push({
-      label: "Market-held public float",
-      shares: poolFloat,
-      color: PUBLIC_FLOAT_COLOR,
-      pct: (poolFloat / totalShares) * 100,
-    });
-  }
-
-  if ((corporation.pendingIpoShares ?? 0) > 0) {
-    slices.push({
-      label: "Issuer shares available to buy",
-      shares: corporation.pendingIpoShares!,
-      color: PENDING_IPO_COLOR,
-      pct: (corporation.pendingIpoShares! / totalShares) * 100,
-    });
-  }
-
-  return slices;
-}
-
-function buildVotingSlices(corporation: CorporationDetail): PieSlice[] | null {
-  if (!corporation.superShareMultiplier || corporation.superShareMultiplier < 2) return null;
-  const tvp = totalVotingPower(corporation as Parameters<typeof totalVotingPower>[0]);
-  if (tvp <= 0) return [];
-
-  // Ranked by SHARES, same as the ownership pie, so a holder keeps the same
-  // shade in both charts and the two can be read against each other.
-  const slices = shadedSlices(
-    corporation,
-    rankedShareholders(corporation).map((sh) => ({
-      label: sh.name,
-      shares: shareholderVotingPower(
-        corporation as Parameters<typeof shareholderVotingPower>[0],
-        sh as Parameters<typeof shareholderVotingPower>[1]
-      ),
-    })),
-    tvp
-  );
-
-  // Public float votes 1 per share
-  if ((corporation.publicFloat ?? 0) > 0) {
-    slices.push({
-      label: "Public Float",
-      shares: corporation.publicFloat,
-      color: PUBLIC_FLOAT_COLOR,
-      pct: (corporation.publicFloat / tvp) * 100,
-    });
-  }
-
-  return slices;
-}
-
-// ─── Types ────────────────────────────────────────────────────────────────────
+const PAGE_SIZE = 15;
 
 interface MarketOverviewPanelProps {
   corporation: CorporationDetail;
@@ -170,8 +24,49 @@ interface MarketOverviewPanelProps {
   setActionSuccess: (v: string) => void;
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
+/** Ownership share as a number and a thin bar, so a long register scans by size. */
+function PctBar({ pct }: { pct: number }) {
+  return (
+    <span className="inline-flex items-center justify-end gap-2">
+      <span className="tabular-nums">{pct.toFixed(2)}%</span>
+      <span
+        aria-hidden
+        className="hidden h-1 w-12 overflow-hidden rounded-sm bg-card-elevated sm:inline-block"
+      >
+        <span
+          className="block h-full bg-foreground/60"
+          style={{ width: `${Math.min(100, pct)}%` }}
+        />
+      </span>
+    </span>
+  );
+}
 
+function holderKind(sh: ShareholderInfo): string {
+  if (sh.isFund) return "Index fund";
+  if (sh.isNpp) return "NPP";
+  if (sh.corporationId && !sh.characterId) return "Corporation";
+  if (sh.isImperial) return "Imperial";
+  return "Player";
+}
+
+function holderHref(sh: ShareholderInfo): string | null {
+  if (sh.corporationId && !sh.characterId)
+    return `/corporation/${sh.sequentialId ?? sh.corporationId}`;
+  if (sh.isFund && sh.fundSlug) {
+    return sh.fundScope === "country" && sh.fundCountryId
+      ? `/stockmarket/${sh.fundCountryId.toLowerCase()}/fund/${sh.fundSlug}`
+      : `/stockmarket/global/fund/${sh.fundSlug}`;
+  }
+  if (sh.isNpp || sh.isFund) return null;
+  return `/character/${sh.sequentialId ?? sh.characterId}`;
+}
+
+/**
+ * The market facts the header does not already show, the shareholder register
+ * with its CEO votes, and the running CEO election. The price itself lives in
+ * the page header, so it is not repeated here.
+ */
 export default function MarketOverviewPanel({
   corporation,
   myCharacterId,
@@ -182,35 +77,21 @@ export default function MarketOverviewPanel({
   setActionError,
   setActionSuccess,
 }: MarketOverviewPanelProps) {
-  // sharePrice + marketCapitalization ship in corp LOCAL currency (Task 18A/18B);
-  // useLocalCurrency handles LOCAL → ₳ → wallet-pref rendering in one step.
-  const { fmtPrice, fmtAmount } = useLocalCurrency(corporation.liquidCurrencyCode);
-  // Live price block — share-price sparkline + day change from recent history.
-  const { series: priceSeries, dayChange } = useSharePriceHistory(corpId, true);
-  // No NYSE fallback: a corp whose country has no configured venue is not
-  // listed in New York, it is only on the global board.
-  const exchangeLabel = getExchangeForCountry(corporation.countryId) ?? "Global";
-  // ─── Shareholders pagination ──────────────────────────────────────────────
   const [page, setPage] = useState(0);
 
-  // ─── CEO vote collapsed ───────────────────────────────────────────────────
-  const [ceoVoteOpen, setCeoVoteOpen] = useState(false);
-
-  // ─── Insider concentration penalty ───────────────────────────────────────
+  // Insider concentration: the share price is discounted while the CEO holds
+  // more than the threshold of a public corporation.
   const ceoEntry = corporation.ceoCharacterId
     ? corporation.shareholders.find((sh) => sh.characterId === corporation.ceoCharacterId)
     : undefined;
   const ceoOwnershipFraction =
     ceoEntry && corporation.totalShares > 0 ? ceoEntry.shares / corporation.totalShares : 0;
-  const concMultiplier = insiderConcentrationMultiplier(
-    ceoOwnershipFraction,
-    corporation.isPrivate ?? false
+  const concPenaltyPct = Math.round(
+    (1 - insiderConcentrationMultiplier(ceoOwnershipFraction, corporation.isPrivate ?? false)) * 100
   );
-  const concPenaltyPct = Math.round((1 - concMultiplier) * 100);
   const showConcPenalty =
     !corporation.isPrivate && ceoOwnershipFraction > INSIDER_CONCENTRATION_THRESHOLD;
 
-  // ─── CEO vote state ───────────────────────────────────────────────────────
   const [tallies, setTallies] = useState<VoteTally[]>([]);
   const [myVote, setMyVote] = useState<string | null>(null);
   const [votesLoaded, setVotesLoaded] = useState(false);
@@ -229,34 +110,40 @@ export default function MarketOverviewPanel({
       .catch(() => setVotesLoaded(true));
   }, [corpId]);
 
-  // ─── Pagination math ──────────────────────────────────────────────────────
-  const sortedShareholders = corporation.shareholders.slice().sort((a, b) => b.shares - a.shares);
+  const totalShares = corporation.totalShares ?? 0;
+  const sorted = corporation.shareholders.slice().sort((a, b) => b.shares - a.shares);
   const hasFloat = (corporation.publicFloat ?? 0) > 0;
-  const totalShareholders = sortedShareholders.length;
+  const pendingIpo = corporation.pendingIpoShares ?? 0;
+  const pageCount = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  const pageRows = sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
-  const page0Capacity = PAGE_SIZE - (hasFloat ? 1 : 0);
-  const shareholderOffset = page === 0 ? 0 : page0Capacity + (page - 1) * PAGE_SIZE;
-  const shareholdersOnPage = page === 0 ? page0Capacity : PAGE_SIZE;
-  const pageSlice = sortedShareholders.slice(
-    shareholderOffset,
-    shareholderOffset + shareholdersOnPage
-  );
-  const remainingAfterPage0 = Math.max(0, totalShareholders - page0Capacity);
-  const totalPages = 1 + Math.ceil(remainingAfterPage0 / PAGE_SIZE);
-  const needsPagination = totalPages > 1;
+  const superMultiplier = corporation.superShareMultiplier ?? 1;
+  const dualClass = superMultiplier >= 2;
+  const tvp = dualClass
+    ? totalVotingPower(corporation as Parameters<typeof totalVotingPower>[0])
+    : 0;
+  const votingPct = (sh: ShareholderInfo) =>
+    tvp > 0
+      ? (shareholderVotingPower(
+          corporation as Parameters<typeof shareholderVotingPower>[0],
+          sh as Parameters<typeof shareholderVotingPower>[1]
+        ) /
+          tvp) *
+        100
+      : 0;
 
   const myShares = myCharacterId
     ? (corporation.shareholders.find((sh) => sh.characterId === myCharacterId)?.shares ?? 0)
     : 0;
   const isShareholder = myShares > 0;
 
-  // ─── CEO vote handler ─────────────────────────────────────────────────────
   function refreshTallies() {
     fetchJson<{ tallies?: VoteTally[] }>(`/api/corporations/${corpId}/ceo/vote`, {
       feature: "corp-ceo-vote",
     })
       .then((d) => setTallies(d.tallies ?? []))
-      .catch(() => {});
+      // fetchJson has reported the failure; the tally keeps its last value.
+      .catch(() => undefined);
   }
 
   async function handleVote(candidateCharacterId: string) {
@@ -307,518 +194,305 @@ export default function MarketOverviewPanel({
     }
   }
 
-  // ─── Pie chart paths ──────────────────────────────────────────────────────
-  const slices = buildSlices(corporation);
-  const votingSlices = buildVotingSlices(corporation);
-  const showChart = corporation.totalShares > 0;
-
-  function buildPiePaths(sliceList: PieSlice[], totalUnits: number) {
-    let cumAngle = -Math.PI / 2;
-    return sliceList.map((slice, i) => {
-      const angle = totalUnits > 0 ? (slice.shares / totalUnits) * 2 * Math.PI : 0;
-      const startAngle = cumAngle;
-      const endAngle = cumAngle + angle;
-      cumAngle = endAngle;
-
-      if (angle >= 2 * Math.PI - 0.001) {
-        return <circle key={i} cx={PIE_CX} cy={PIE_CY} r={PIE_R} fill={slice.color} />;
-      }
-
-      const x1 = PIE_CX + PIE_R * Math.cos(startAngle);
-      const y1 = PIE_CY + PIE_R * Math.sin(startAngle);
-      const x2 = PIE_CX + PIE_R * Math.cos(endAngle);
-      const y2 = PIE_CY + PIE_R * Math.sin(endAngle);
-      const largeArc = angle > Math.PI ? 1 : 0;
-
-      return (
-        <path
-          key={i}
-          d={`M ${PIE_CX} ${PIE_CY} L ${x1} ${y1} A ${PIE_R} ${PIE_R} 0 ${largeArc} 1 ${x2} ${y2} Z`}
-          fill={slice.color}
-          stroke="var(--color-card)"
-          strokeWidth={1.5}
-        />
-      );
-    });
+  /**
+   * Who a shareholder may vote for as CEO. Mirrors the server: player holders
+   * resident in the HQ region of the HQ country, plus the sitting CEO wherever
+   * they live, plus a sole owner reclaiming a vacant private seat.
+   */
+  function voteEligibility(sh: ShareholderInfo) {
+    const isCorporate = sh.corporationId != null && sh.characterId == null;
+    const isSeatedCeo = sh.characterId != null && sh.characterId === corporation.ceoCharacterId;
+    const isSoleOwnerReclaim =
+      corporation.isPrivate === true &&
+      corporation.ceoVacant === true &&
+      sh.characterId === myCharacterId &&
+      totalShares > 0 &&
+      sh.shares / totalShares >= 0.99;
+    const eligible =
+      !isCorporate &&
+      !sh.isImperial &&
+      !sh.isNpp &&
+      (isSeatedCeo ||
+        isSoleOwnerReclaim ||
+        (sh.homeState === corporation.headquartersState && sh.countryId === corporation.countryId));
+    return { eligible, isSoleOwnerReclaim };
   }
 
-  const piePaths = buildPiePaths(slices, corporation.totalShares);
-  const tvp = totalVotingPower(corporation as Parameters<typeof totalVotingPower>[0]);
-  const votingPiePaths = votingSlices ? buildPiePaths(votingSlices, tvp) : null;
+  const tallyFor = (characterId: string | undefined) =>
+    characterId ? tallies.find((t) => t.characterId === characterId)?.votes : undefined;
 
-  // ─── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="rounded-xl border border-card-border bg-card p-6">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4 mb-5">
-        <h2 className="text-lg font-bold text-foreground">Market Overview</h2>
-        {(onTrade || onIssue) && (
-          <div className="flex items-center gap-2 shrink-0">
+    <div className="space-y-6">
+      <DenseSection
+        title="Market"
+        actions={
+          <>
             {onTrade && (
-              <button
-                onClick={onTrade}
-                className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90 transition-colors"
-              >
+              <SmallButton tone="primary" onClick={onTrade}>
                 Trade
-              </button>
+              </SmallButton>
             )}
-            {onIssue && (
-              <button
-                onClick={onIssue}
-                className="rounded-lg border border-card-border bg-card-elevated px-4 py-2 text-sm font-semibold text-foreground hover:bg-card-muted transition-colors"
-              >
-                Issue Shares
-              </button>
+            {onIssue && <SmallButton onClick={onIssue}>Issue shares</SmallButton>}
+          </>
+        }
+      >
+        <div className="grid gap-x-8 sm:grid-cols-2">
+          <KVList>
+            <KVRow label="Shares outstanding" value={totalShares.toLocaleString("en-US")} />
+            <KVRow
+              label="Public float"
+              value={(corporation.publicFloat ?? 0).toLocaleString("en-US")}
+              hint={
+                totalShares > 0
+                  ? `${(((corporation.publicFloat ?? 0) / totalShares) * 100).toFixed(2)}%`
+                  : undefined
+              }
+            />
+            {pendingIpo > 0 && (
+              <KVRow
+                label="Issuer shares on offer"
+                value={pendingIpo.toLocaleString("en-US")}
+                title="The company receives the proceeds as these shares are bought."
+              />
             )}
-          </div>
-        )}
-      </div>
-
-      {/* Live price header — market terminal identity */}
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-3 rounded-lg border border-card-border bg-card-elevated/20 px-4 py-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-muted">
-              {exchangeLabel}
-            </span>
-            <LiveBadge exchange={exchangeLabel} />
-          </div>
-          <div className="mt-1 flex items-end gap-2">
-            <span className="font-mono text-3xl font-bold tabular-nums text-foreground">
-              {fmtPrice(corporation.sharePrice)}
-            </span>
-            {dayChange && <Change pct={dayChange.changePct} className="mb-1.5" />}
+          </KVList>
+          <KVList>
+            {corporation.equityMarketPoolActive && corporation.marketDepthShares != null && (
+              <KVRow
+                label="Bid depth"
+                value={corporation.marketDepthShares.toLocaleString("en-US")}
+                hint="shares"
+                title="How many shares the market pool will buy at the bid right now."
+              />
+            )}
+            {dualClass && (
+              <KVRow
+                mono={false}
+                label="Supershares"
+                value={`${superMultiplier}x votes`}
+                title="Founder shares carry this many votes each until sold."
+              />
+            )}
             {showConcPenalty && (
-              <span
-                className="mb-1.5 text-xs font-medium text-warning border border-warning/30 bg-warning/10 rounded px-1.5 py-0.5 cursor-default"
-                title={`Insider concentration: CEO holds ${(ceoOwnershipFraction * 100).toFixed(1)}% — share price reduced by ${concPenaltyPct}% (applies above ${INSIDER_CONCENTRATION_THRESHOLD * 100}%)`}
-              >
-                −{concPenaltyPct}% conc.
-              </span>
+              <KVRow
+                label="Insider concentration"
+                value={<span className="text-warning">-{concPenaltyPct}% on price</span>}
+                title={`The CEO holds ${(ceoOwnershipFraction * 100).toFixed(1)}%. Above ${INSIDER_CONCENTRATION_THRESHOLD * 100}% the share price is discounted.`}
+              />
             )}
-          </div>
-          {dayChange && (
-            <div className="mt-0.5 text-[11px] text-muted">
-              prev close{" "}
-              <span className="tabular-nums text-foreground">{fmtPrice(dayChange.prevClose)}</span>
-            </div>
-          )}
+          </KVList>
         </div>
-        {priceSeries.length >= 2 && (
-          <Sparkline data={priceSeries} w={220} h={56} up={(dayChange?.changePct ?? 0) >= 0} />
-        )}
-      </div>
+      </DenseSection>
 
-      {/* Stats strip — unified container with dividers */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-card-border border border-card-border rounded-lg overflow-hidden mb-6 bg-card-elevated/20">
-        <div className="px-4 py-3">
-          <div className="text-xs text-muted mb-1">Total Shares</div>
-          <div className="text-sm font-semibold text-foreground tabular-nums">
-            {/* ?? 0: totalShares is stripped by redactPrivateCorporation for
-                non-CEO viewers of private corps (GlitchTip AHD-A1). */}
-            {(corporation.totalShares ?? 0).toLocaleString("en-US")}
-          </div>
-        </div>
-        <div className="px-4 py-3">
-          <div className="text-xs text-muted mb-1">Public Float</div>
-          <div
-            className={`text-sm font-semibold tabular-nums ${(corporation.publicFloat ?? 0) > 0 ? "text-success" : "text-muted"}`}
-          >
-            {(corporation.publicFloat ?? 0).toLocaleString("en-US")}
-          </div>
-          <div className="text-xs text-muted">available</div>
-        </div>
-        <div className="px-4 py-3">
-          <div className="text-xs text-muted mb-1">Market Cap</div>
-          <div className="text-sm font-semibold text-foreground tabular-nums">
-            {fmtAmount(corporation.marketCapitalization)}
-          </div>
-        </div>
-      </div>
-
-      {/* Pie chart + Shareholders table */}
-      {showChart && (
-        <div className="border-t border-card-border/60 pt-5 flex flex-col sm:flex-row gap-0 sm:divide-x sm:divide-card-border">
-          {/* Left: pie chart(s) + legend */}
-          <div className="flex flex-col items-center pb-4 sm:pb-0 sm:pr-6 shrink-0">
-            <div className={`flex gap-6 ${votingPiePaths ? "flex-row" : "flex-col items-center"}`}>
-              {/* Economic ownership pie */}
-              <div className="flex flex-col items-center">
-                {votingPiePaths && (
-                  <span className="text-xs font-medium text-muted mb-1">Economic</span>
-                )}
-                {!votingPiePaths && (
-                  <span className="self-start text-sm font-semibold text-foreground mb-2">
-                    Ownership
-                  </span>
-                )}
-                <svg
-                  viewBox={`0 0 ${PIE_SIZE} ${PIE_SIZE}`}
-                  className="w-28 h-28"
-                  aria-hidden="true"
-                >
-                  {piePaths}
-                </svg>
-              </div>
-              {/* Voting power pie — only when supershares are active */}
-              {votingPiePaths && (
-                <div className="flex flex-col items-center">
-                  <span className="text-xs font-medium text-muted mb-1">Voting</span>
-                  <svg
-                    viewBox={`0 0 ${PIE_SIZE} ${PIE_SIZE}`}
-                    className="w-28 h-28"
-                    aria-hidden="true"
-                  >
-                    {votingPiePaths}
-                  </svg>
-                </div>
-              )}
-            </div>
-            <div className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1.5 max-w-[260px]">
-              {slices.map((slice, i) => (
-                <div key={i} className="flex items-center gap-1.5">
-                  <span
-                    className="inline-block h-2.5 w-2.5 rounded-sm shrink-0"
-                    style={{ backgroundColor: slice.color }}
-                  />
-                  <span className="text-xs text-muted truncate max-w-[90px]">{slice.label}</span>
-                </div>
-              ))}
-            </div>
-            {votingPiePaths && (
-              <p className="text-[10px] text-muted mt-2 text-center max-w-[260px]">
-                {corporation.superShareMultiplier}× supershares — voting differs from economic stake
-              </p>
-            )}
-          </div>
-
-          {/* Right: shareholders list */}
-          <div className="flex-1 min-w-0 pt-4 sm:pt-0 sm:pl-6 border-t border-card-border sm:border-t-0">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-semibold text-foreground">Shareholders</span>
-              {needsPagination && (
-                <span className="text-xs text-muted">
-                  {page + 1} / {totalPages}
-                </span>
-              )}
-            </div>
-
-            {totalShareholders === 0 && !hasFloat ? (
-              <p className="text-sm text-muted">No shareholders on record.</p>
-            ) : (
-              <div className="divide-y divide-card-border/50">
-                {/* Public float row (page 0 only) */}
-                {hasFloat && page === 0 && (
-                  <div className="flex items-center justify-between py-2.5 gap-4">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className="h-7 w-7 rounded-lg bg-success/15 border border-success/30 flex items-center justify-center shrink-0">
-                        <span className="text-xs font-bold text-success">PF</span>
-                      </div>
-                      <div>
-                        <div className="text-sm font-medium text-success">Public Float</div>
-                        <div className="text-xs text-muted">Available to buy</div>
-                      </div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <div className="text-sm font-medium text-foreground tabular-nums">
-                        {(corporation.publicFloat ?? 0).toLocaleString("en-US")}
-                      </div>
-                      <div className="text-xs text-muted">
-                        {corporation.totalShares > 0
-                          ? (
-                              ((corporation.publicFloat ?? 0) / corporation.totalShares) *
-                              100
-                            ).toFixed(2)
-                          : "0.00"}
-                        %
-                      </div>
-                    </div>
-                  </div>
-                )}
-                {(corporation.pendingIpoShares ?? 0) > 0 && page === 0 && (
-                  <div className="flex items-center justify-between py-2.5 gap-4">
-                    <div className="text-sm text-muted">
-                      Issuer shares available on the exchange
-                      <div className="text-xs">
-                        Proceeds reach the company when these shares are bought
-                      </div>
-                    </div>
-                    <div className="text-sm tabular-nums text-foreground">
-                      {corporation.pendingIpoShares!.toLocaleString("en-US")}
-                    </div>
-                  </div>
-                )}
-
-                {/* Shareholder rows */}
-                {pageSlice.map((sh) => {
-                  const pct =
-                    corporation.totalShares > 0 ? (sh.shares / corporation.totalShares) * 100 : 0;
-                  const isCorporateShareholder = sh.corporationId != null && sh.characterId == null;
-                  const isFund = sh.isFund === true;
-                  const isNppOrFund = sh.isNpp === true;
-                  const rowKey =
-                    sh.fundSlug ?? sh.corporationId ?? sh.characterId ?? `unknown-${sh.shares}`;
-                  const hasVotedFor =
-                    !isCorporateShareholder && !isNppOrFund && myVote === sh.characterId;
-                  const voteCount =
-                    !isCorporateShareholder && !isNppOrFund
-                      ? tallies.find((t: VoteTally) => t.characterId === sh.characterId)?.votes
-                      : undefined;
-                  // Residency gate, with the sitting CEO exempt — mirrors the
-                  // server rule. Without the exemption a CEO who moved state,
-                  // or whose corp moved its HQ, showed no Vote button on their
-                  // own row and could not be re-affirmed by anyone.
-                  const isSeatedCeo =
-                    sh.characterId != null && sh.characterId === corporation.ceoCharacterId;
-                  const isSoleOwnerReclaim =
-                    corporation.isPrivate === true &&
-                    corporation.ceoVacant === true &&
-                    sh.characterId === myCharacterId &&
-                    corporation.totalShares > 0 &&
-                    sh.shares / corporation.totalShares >= 0.99;
-                  const isVoteEligible =
-                    !isCorporateShareholder &&
-                    !sh.isImperial &&
-                    !isNppOrFund &&
-                    (isSeatedCeo ||
-                      isSoleOwnerReclaim ||
-                      (sh.homeState === corporation.headquartersState &&
-                        sh.countryId === corporation.countryId));
-                  return (
-                    <div key={rowKey} className="py-2.5">
-                      <div className="flex items-center justify-between gap-4">
-                        {isCorporateShareholder ? (
-                          <Link
-                            href={`/corporation/${sh.sequentialId ?? sh.corporationId}`}
-                            className="flex items-center gap-2 hover:opacity-80 transition-opacity min-w-0"
-                          >
-                            <Avatar
-                              url={sh.logoUrl}
-                              name={sh.name}
-                              size="h-7 w-7"
-                              className="rounded-lg shrink-0"
-                            />
-                            <div className="min-w-0">
-                              <span className="text-sm font-medium text-primary truncate block">
-                                {sh.name}
-                              </span>
-                            </div>
-                          </Link>
-                        ) : isFund && sh.fundSlug ? (
-                          <Link
-                            href={
-                              sh.fundScope === "country" && sh.fundCountryId
-                                ? `/stockmarket/${sh.fundCountryId.toLowerCase()}/fund/${sh.fundSlug}`
-                                : `/stockmarket/global/fund/${sh.fundSlug}`
-                            }
-                            className="flex items-center gap-2 hover:opacity-80 transition-opacity min-w-0"
-                          >
-                            <div className="h-7 w-7 rounded-lg bg-card-elevated border border-card-border flex items-center justify-center shrink-0">
-                              <span className="text-xs font-bold text-muted">IF</span>
-                            </div>
-                            <div className="min-w-0">
-                              <span className="text-sm font-medium text-primary truncate block">
-                                {sh.name}
-                              </span>
-                            </div>
-                          </Link>
-                        ) : isNppOrFund ? (
-                          <div className="flex items-center gap-2 min-w-0">
-                            <div className="h-7 w-7 rounded-lg bg-card-elevated border border-card-border flex items-center justify-center shrink-0">
-                              <span className="text-xs font-bold text-muted">
-                                {sh.isNpp ? "NP" : "IF"}
-                              </span>
-                            </div>
-                            <div className="min-w-0">
-                              <span className="text-sm font-medium text-muted truncate block">
-                                {sh.name}
-                              </span>
-                            </div>
-                          </div>
-                        ) : (
-                          <Link
-                            href={`/character/${sh.sequentialId ?? sh.characterId}`}
-                            className="flex items-center gap-2 hover:opacity-80 transition-opacity min-w-0"
-                          >
-                            <Avatar
-                              url={sh.avatarUrl}
-                              name={sh.name}
-                              size="h-7 w-7"
-                              className="rounded-lg shrink-0"
-                              borderKey={sh.borderKey}
-                              tintColor={sh.tintColor}
-                            />
-                            <div className="min-w-0">
-                              <span className="text-sm font-medium text-primary truncate block">
-                                {sh.name}
-                              </span>
-                              {votesLoaded && voteCount !== undefined && (
-                                <span className="text-xs text-muted">
-                                  {voteCount.toLocaleString("en-US")} vote
-                                  {voteCount !== 1 ? "s" : ""}
-                                </span>
-                              )}
-                            </div>
-                          </Link>
-                        )}
-                        <div className="flex items-center gap-3 shrink-0">
-                          {myCharacterId &&
-                            isShareholder &&
-                            sh.characterId != null &&
-                            isVoteEligible && (
-                              <button
-                                onClick={() =>
-                                  hasVotedFor
-                                    ? void handleWithdrawVote()
-                                    : void handleVote(sh.characterId as string)
-                                }
-                                disabled={voteLoading}
-                                title={
-                                  hasVotedFor
-                                    ? "Withdraw your vote"
-                                    : isSoleOwnerReclaim
-                                      ? "Reclaim the vacant CEO seat"
-                                      : `Vote for ${sh.name} as CEO`
-                                }
-                                className={`text-xs px-2 py-1 rounded-md transition-colors ${
-                                  hasVotedFor
-                                    ? "bg-primary/20 text-primary border border-primary/40 hover:bg-primary/30"
-                                    : "border border-card-border text-muted hover:text-foreground hover:border-primary/50 disabled:opacity-50"
-                                }`}
-                              >
-                                {hasVotedFor
-                                  ? "Voted (undo)"
-                                  : isSoleOwnerReclaim
-                                    ? "Reclaim CEO"
-                                    : "Vote CEO"}
-                              </button>
-                            )}
-                          <div className="text-right">
-                            <div className="text-sm font-medium text-foreground tabular-nums">
-                              {sh.shares.toLocaleString("en-US")}
-                            </div>
-                            <div className="text-xs text-muted">{pct.toFixed(2)}%</div>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="mt-1.5">
-                        <Meter value={pct} tone="brand" height={4} />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Pagination controls */}
-            {needsPagination && (
-              <div className="flex items-center justify-center gap-2 mt-3 pt-3 border-t border-card-border">
-                <button
-                  onClick={() => setPage(0)}
-                  disabled={page === 0}
-                  className="text-xs text-muted hover:text-foreground disabled:opacity-40 transition-colors"
-                >
-                  ← First
-                </button>
-                <button
-                  onClick={() => setPage((p) => Math.max(0, p - 1))}
-                  disabled={page === 0}
-                  className="text-xs text-muted hover:text-foreground disabled:opacity-40 transition-colors px-2"
-                >
-                  Prev
-                </button>
-                <span className="text-xs text-muted px-2">
-                  {page + 1} / {totalPages}
-                </span>
-                <button
-                  onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-                  disabled={page >= totalPages - 1}
-                  className="text-xs text-muted hover:text-foreground disabled:opacity-40 transition-colors px-2"
-                >
-                  Next
-                </button>
-                <button
-                  onClick={() => setPage(totalPages - 1)}
-                  disabled={page >= totalPages - 1}
-                  className="text-xs text-muted hover:text-foreground disabled:opacity-40 transition-colors"
-                >
-                  Last →
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* CEO Vote Tally — collapsible */}
-      {votesLoaded && tallies.length > 0 && (
-        <div className="mt-6 pt-6 border-t border-card-border">
-          <button
-            onClick={() => setCeoVoteOpen((v) => !v)}
-            className="flex items-center justify-between w-full text-left group"
-          >
-            <h3 className="text-sm font-semibold text-foreground">CEO Vote Tally</h3>
-            <span className="text-xs text-muted group-hover:text-foreground transition-colors select-none">
-              {ceoVoteOpen ? "Hide ▲" : "Show ▼"}
-            </span>
-          </button>
-
-          {ceoVoteOpen && (
+      <DenseSection
+        title="Shareholders"
+        meta={`${sorted.length} holder${sorted.length === 1 ? "" : "s"}`}
+        actions={
+          pageCount > 1 ? (
             <>
-              <p className="text-xs text-muted mt-2 mb-3">
-                Shareholders vote for their preferred CEO, weighted by voting power (supershares
-                count for dual-class corps). The leading candidate is offered the position.
-                Candidates must be in the HQ state, except the sitting CEO, who stays votable
-                wherever they live. You can change or withdraw your vote at any time.
-              </p>
-              <div className="space-y-1">
-                {tallies.map((t: VoteTally, i: number) => (
-                  <div key={t.characterId} className="flex items-center justify-between py-2 gap-4">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-xs text-muted w-4 shrink-0">{i + 1}.</span>
-                      <Avatar
-                        url={t.avatarUrl}
-                        name={t.name}
-                        size="h-7 w-7"
-                        className="rounded-lg shrink-0"
+              <SmallButton
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={page === 0}
+                ariaLabel="Previous page"
+              >
+                Prev
+              </SmallButton>
+              <span className="text-xs tabular-nums text-muted">
+                {page + 1} / {pageCount}
+              </span>
+              <SmallButton
+                onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+                disabled={page >= pageCount - 1}
+                ariaLabel="Next page"
+              >
+                Next
+              </SmallButton>
+            </>
+          ) : undefined
+        }
+      >
+        {sorted.length === 0 && !hasFloat ? (
+          <p className="py-2 text-xs text-muted">No shareholders on record.</p>
+        ) : (
+          <TableScroll>
+            <table className="w-full min-w-[560px] border-collapse">
+              <thead>
+                <tr>
+                  <Th>Holder</Th>
+                  <Th className="hidden sm:table-cell">Kind</Th>
+                  <Th align="right">Shares</Th>
+                  <Th align="right">Owned</Th>
+                  {dualClass && (
+                    <Th align="right" title="Share of all votes, counting supershares.">
+                      Votes
+                    </Th>
+                  )}
+                  <Th align="right" title="Shareholder votes for this holder as CEO.">
+                    CEO votes
+                  </Th>
+                  <Th align="right">
+                    <span className="sr-only">Actions</span>
+                  </Th>
+                </tr>
+              </thead>
+              <tbody>
+                {page === 0 && hasFloat && (
+                  <tr>
+                    <Td className="text-foreground">Public float</Td>
+                    <Td className="hidden text-muted sm:table-cell">Market</Td>
+                    <Td align="right">{(corporation.publicFloat ?? 0).toLocaleString("en-US")}</Td>
+                    <Td align="right">
+                      <PctBar
+                        pct={
+                          totalShares > 0 ? ((corporation.publicFloat ?? 0) / totalShares) * 100 : 0
+                        }
                       />
-                      <Link
-                        href={`/character/${t.sequentialId ?? t.characterId}`}
-                        className="text-sm font-medium text-primary hover:opacity-80 transition-opacity truncate"
-                      >
-                        {t.name}
-                      </Link>
-                      {corporation.pendingCeoCharacterId === t.characterId && (
-                        <span className="text-xs bg-warning/20 text-warning border border-warning/30 rounded-full px-2 py-0.5 shrink-0">
-                          Offered
-                        </span>
-                      )}
-                      {myVote === t.characterId && (
-                        <span className="text-xs bg-primary/15 text-primary border border-primary/30 rounded-full px-2 py-0.5 shrink-0">
-                          Your vote
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-3 shrink-0">
-                      {myVote === t.characterId && (
+                    </Td>
+                    {dualClass && (
+                      <Td align="right" className="text-muted">
+                        {tvp > 0
+                          ? `${(((corporation.publicFloat ?? 0) / tvp) * 100).toFixed(2)}%`
+                          : "n/a"}
+                      </Td>
+                    )}
+                    <Td />
+                    <Td align="right" numeric={false}>
+                      {onTrade && (
                         <button
-                          onClick={() => void handleWithdrawVote()}
-                          disabled={voteLoading}
-                          className="text-xs px-2 py-1 rounded-md border border-card-border text-muted hover:text-foreground hover:border-primary/50 transition-colors disabled:opacity-50"
+                          type="button"
+                          onClick={onTrade}
+                          className="text-xs text-foreground underline decoration-card-border underline-offset-2 hover:decoration-foreground"
                         >
-                          Withdraw
+                          Buy
                         </button>
                       )}
-                      <span className="text-sm font-medium text-foreground tabular-nums">
-                        {t.votes.toLocaleString("en-US")} vote{t.votes !== 1 ? "s" : ""}
+                    </Td>
+                  </tr>
+                )}
+                {pageRows.map((sh) => {
+                  const pct = totalShares > 0 ? (sh.shares / totalShares) * 100 : 0;
+                  const href = holderHref(sh);
+                  const { eligible, isSoleOwnerReclaim } = voteEligibility(sh);
+                  const hasVotedFor = sh.characterId != null && myVote === sh.characterId;
+                  const votes = tallyFor(sh.characterId);
+                  const rowKey = sh.fundSlug ?? sh.corporationId ?? sh.characterId ?? sh.name;
+                  return (
+                    <tr key={rowKey} className="hover:bg-card-elevated/40">
+                      <Td className="max-w-[14rem] truncate">
+                        {href ? (
+                          <Link href={href} className="text-foreground hover:underline">
+                            {sh.name}
+                          </Link>
+                        ) : (
+                          <span className="text-foreground">{sh.name}</span>
+                        )}
+                        {sh.characterId != null && sh.characterId === myCharacterId && (
+                          <span className="ml-1.5 text-[11px] text-muted">you</span>
+                        )}
+                        {sh.characterId != null &&
+                          sh.characterId === corporation.ceoCharacterId && (
+                            <span className="ml-1.5 text-[11px] text-muted">CEO</span>
+                          )}
+                      </Td>
+                      <Td className="hidden text-muted sm:table-cell">{holderKind(sh)}</Td>
+                      <Td align="right">{sh.shares.toLocaleString("en-US")}</Td>
+                      <Td align="right">
+                        <PctBar pct={pct} />
+                      </Td>
+                      {dualClass && (
+                        <Td align="right" className="text-muted">
+                          {votingPct(sh).toFixed(2)}%
+                        </Td>
+                      )}
+                      <Td align="right" className="text-muted">
+                        {votesLoaded && votes !== undefined ? votes.toLocaleString("en-US") : ""}
+                      </Td>
+                      <Td align="right" numeric={false}>
+                        {myCharacterId && isShareholder && sh.characterId != null && eligible && (
+                          <SmallButton
+                            onClick={() =>
+                              hasVotedFor
+                                ? void handleWithdrawVote()
+                                : void handleVote(sh.characterId as string)
+                            }
+                            disabled={voteLoading}
+                            title={
+                              hasVotedFor
+                                ? "Withdraw your vote"
+                                : isSoleOwnerReclaim
+                                  ? "Reclaim the vacant CEO seat"
+                                  : `Vote for ${sh.name} as CEO`
+                            }
+                            className={hasVotedFor ? "border-foreground/60" : ""}
+                          >
+                            {hasVotedFor
+                              ? "Withdraw vote"
+                              : isSoleOwnerReclaim
+                                ? "Reclaim CEO"
+                                : "Vote CEO"}
+                          </SmallButton>
+                        )}
+                      </Td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </TableScroll>
+        )}
+      </DenseSection>
+
+      {votesLoaded && tallies.length > 0 && (
+        <DenseSection title="CEO election" meta="weighted by voting power">
+          <p className="py-1 text-xs text-muted">
+            The leading candidate is offered the seat. Candidates must live in the HQ region, except
+            the sitting CEO. You can change or withdraw your vote at any time.
+          </p>
+          <table className="w-full border-collapse">
+            <thead>
+              <tr>
+                <Th className="w-8">#</Th>
+                <Th>Candidate</Th>
+                <Th align="right">Votes</Th>
+                <Th align="right">
+                  <span className="sr-only">Status</span>
+                </Th>
+              </tr>
+            </thead>
+            <tbody>
+              {tallies.map((t, i) => (
+                <tr key={t.characterId}>
+                  <Td className="text-muted">{i + 1}</Td>
+                  <Td>
+                    <Link
+                      href={`/character/${t.sequentialId ?? t.characterId}`}
+                      className="text-foreground hover:underline"
+                    >
+                      {t.name}
+                    </Link>
+                    {corporation.pendingCeoCharacterId === t.characterId && (
+                      <span className="ml-1.5 text-[11px] text-warning">offered</span>
+                    )}
+                  </Td>
+                  <Td align="right">{t.votes.toLocaleString("en-US")}</Td>
+                  <Td align="right" numeric={false}>
+                    {myVote === t.characterId && (
+                      <span className="inline-flex items-center gap-2">
+                        <span className="text-xs text-muted">your vote</span>
+                        <SmallButton
+                          onClick={() => void handleWithdrawVote()}
+                          disabled={voteLoading}
+                        >
+                          Withdraw
+                        </SmallButton>
                       </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
+                    )}
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </DenseSection>
       )}
     </div>
   );

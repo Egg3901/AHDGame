@@ -52,6 +52,8 @@ import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { DEFENSE_POSITION_BY_COUNTRY } from "@/lib/constants/military";
 import { applyEstateEffects } from "./estateEffects";
 import { ESTATE_PORTFOLIO_BY_COUNTRY } from "@/lib/constants/cabinetEstates";
+import { getCabinetEstatesCollection } from "@/lib/db/collections/cabinetEstates";
+import type { CabinetEstate } from "@/lib/db/types/cabinetEstate";
 import { applyEnergyEffects } from "./energyEffects";
 import { ENERGY_POSITION_BY_COUNTRY } from "@/lib/constants/cabinetEnergy";
 import { applyInfraEffects } from "./infraEffects";
@@ -555,14 +557,27 @@ export async function processMinisterialOrders(currentTurn: number): Promise<{
   const estateCountryIds = Object.entries(ESTATE_PORTFOLIO_BY_COUNTRY)
     .filter(([, seats]) => Boolean(seats))
     .map(([cid]) => cid);
-  const estateBudgetByCountry = new Map(
-    (
-      await db
-        .collection<FederalBudget>("federalBudget")
-        .find({ countryId: { $in: estateCountryIds } })
-        .toArray()
-    ).map((budget) => [budget.countryId, budget])
-  );
+  // Likewise one estates read for every seat instead of one per seat (76 seats).
+  // Each seat's estates keep the natural order the per-seat query returned, and
+  // a seat's condition-drift write touches only its own estates, so reading them
+  // all up front sees exactly what each per-seat read would have seen.
+  const [estateBudgets, allEstates] = await Promise.all([
+    db
+      .collection<FederalBudget>("federalBudget")
+      .find({ countryId: { $in: estateCountryIds } })
+      .toArray(),
+    getCabinetEstatesCollection(db)
+      .find({ countryId: { $in: estateCountryIds as CountryId[] } })
+      .toArray(),
+  ]);
+  const estateBudgetByCountry = new Map(estateBudgets.map((budget) => [budget.countryId, budget]));
+  const estatesBySeat = new Map<string, CabinetEstate[]>();
+  for (const estate of allEstates) {
+    const key = `${estate.countryId}:${estate.positionId}`;
+    const list = estatesBySeat.get(key);
+    if (list) list.push(estate);
+    else estatesBySeat.set(key, [estate]);
+  }
   for (const [cid, seats] of Object.entries(ESTATE_PORTFOLIO_BY_COUNTRY)) {
     if (!seats) continue;
     ensureCountry(cid);
@@ -572,7 +587,8 @@ export async function processMinisterialOrders(currentTurn: number): Promise<{
         cid,
         positionId,
         sourceBucket(cid, "estates"),
-        estateBudgetByCountry.get(cid) ?? null
+        estateBudgetByCountry.get(cid) ?? null,
+        estatesBySeat.get(`${cid}:${positionId}`) ?? []
       );
     }
   }

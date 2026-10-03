@@ -92,17 +92,17 @@ export function ConstituencySelector() {
   }
 
   return (
-    <div className="rounded-xl border border-card-border bg-card p-5 shadow-card">
+    <div className="rounded-md border border-card-border p-5">
       <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-sm font-semibold text-foreground">
+          <h2 className="text-heading-sm font-semibold text-foreground">
             {data.officeType === "primeMinister" ? t("pmTitle") : t("commonsTitle")}
           </h2>
-          <p className="text-xs text-muted">
+          <p className="text-body-sm text-muted">
             {data.officeType === "primeMinister" ? t("pmSubtitle") : t("commonsSubtitle")}
           </p>
         </div>
-        {data.selected && <span className="text-xs text-muted">{data.selected.id}</span>}
+        {data.selected && <span className="text-body-sm text-muted">{data.selected.id}</span>}
       </div>
 
       <div className="relative">
@@ -144,7 +144,9 @@ export function ConstituencySelector() {
       </div>
 
       <div className="mt-3 flex items-center justify-between gap-3">
-        <p className={`text-xs ${messageIsError ? "text-error" : "text-success"}`}>{message}</p>
+        <p className={`text-body-sm ${messageIsError ? "text-error" : "text-foreground"}`}>
+          {message}
+        </p>
         <Button size="sm" onClick={save} disabled={!selected || saving} isLoading={saving}>
           {t("save")}
         </Button>

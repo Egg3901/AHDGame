@@ -288,7 +288,7 @@ function FundDetailPageInner({ params }: { params: Promise<{ code: string; slug:
                     aria-selected={active}
                     className={`inline-flex items-center gap-2 rounded-[10px] border px-4 py-2 text-[13px] font-semibold transition-all ${
                       active
-                        ? "border-primary/55 bg-card-elevated text-foreground shadow-glow-sm"
+                        ? "border-primary/55 bg-card-elevated text-foreground"
                         : "border-card-border bg-card text-muted hover:text-foreground"
                     }`}
                   >

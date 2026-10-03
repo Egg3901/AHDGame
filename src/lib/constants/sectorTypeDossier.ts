@@ -1,21 +1,15 @@
 /**
- * What each kind of sector actually is. Every sector type a corporation can own
- * has a briefing naming the business and what moves its margin
- * (SECTOR_TYPE_BRIEFING), a colour it is drawn in everywhere
- * (SECTOR_TYPE_PALETTE), and two proposed controls that are not built yet
- * (SECTOR_TYPE_PROPOSED_ACTIONS). The Sectors tab reads all three.
- */
-/**
- * Sector-type dossier copy and palette.
+ * Sector-type dossier copy.
  *
  * The Sectors tab used to be one flat table of every site a corporation owns,
  * with the sector type reduced to a coloured word on each row. A corp running
  * mines, newsrooms and power stations read as one undifferentiated list, and
  * nothing on the page said what any of those businesses actually DO.
  *
- * This file holds the static half of the fix: the per-type briefing, the hero
- * photograph and the colour the type is drawn in. Nothing here is persisted,
- * read by the turn, or allowed to change a number, exactly like
+ * This file holds the static half of the fix: a briefing per type naming the
+ * business and what moves its margin (SECTOR_TYPE_BRIEFING), and two proposed
+ * controls that are not built yet (SECTOR_TYPE_PROPOSED_ACTIONS). Nothing here
+ * is persisted, read by the turn, or allowed to change a number, exactly like
  * facilityVocabulary. The live half (counts, revenue, utilisation) is computed
  * in `sectorTypeMetrics` from the sectors themselves.
  *
@@ -23,79 +17,6 @@
  */
 
 import type { CorporationType } from "./corporations";
-
-/**
- * Type colour as raw hex.
- *
- * `CorporationHelpers.getTypeColor` already names the Tailwind palette for each
- * type, but it returns utility CLASSES, and the dossier needs the same colours
- * at arbitrary alpha in tints, gradients, chain bars and tab underlines.
- * Tailwind 4 cannot build `bg-${type}-500/15` from a runtime string, so the
- * values are written out here at the 400 (text) and 500 (surface) stops that
- * getTypeColor uses. Changing a colour means changing it in both places.
- */
-export interface SectorTypePalette {
-  /** 400 stop: text, headings, chips. */
-  c400: string;
-  /** 500 stop: borders, tints, bars. Always used with alpha. */
-  c500: string;
-}
-
-export const SECTOR_TYPE_PALETTE: Record<CorporationType, SectorTypePalette> = {
-  financial: { c400: "#34d399", c500: "#10b981" }, // emerald
-  media: { c400: "#60a5fa", c500: "#3b82f6" }, // blue
-  manufacturing: { c400: "#fb923c", c500: "#f97316" }, // orange
-  chemical_industries: { c400: "#4ade80", c500: "#22c55e" }, // green
-  healthcare: { c400: "#fb7185", c500: "#f43f5e" }, // rose
-  retail: { c400: "#a78bfa", c500: "#8b5cf6" }, // violet
-  automobiles: { c400: "#38bdf8", c500: "#0ea5e9" }, // sky
-  technology: { c400: "#22d3ee", c500: "#06b6d4" }, // cyan
-  energy: { c400: "#facc15", c500: "#eab308" }, // yellow
-  agriculture: { c400: "#a3e635", c500: "#84cc16" }, // lime
-  real_estate: { c400: "#fbbf24", c500: "#f59e0b" }, // amber
-  construction: { c400: "#fb923c", c500: "#f97316" }, // orange
-  defense: { c400: "#94a3b8", c500: "#64748b" }, // slate
-  telecommunications: { c400: "#818cf8", c500: "#6366f1" }, // indigo
-  entertainment: { c400: "#f472b6", c500: "#ec4899" }, // pink
-  logistics: { c400: "#a8a29e", c500: "#78716c" }, // stone
-  extraction: { c400: "#a3a3a3", c500: "#737373" }, // neutral
-};
-
-const NEUTRAL_PALETTE: SectorTypePalette = { c400: "#8f8f9d", c500: "#64748b" };
-
-/** Palette for a type. Unknown types fall back to neutral rather than throwing. */
-export function sectorTypePalette(type: CorporationType | string | null | undefined) {
-  if (!type) return NEUTRAL_PALETTE;
-  return SECTOR_TYPE_PALETTE[type as CorporationType] ?? NEUTRAL_PALETTE;
-}
-
-/** `#rrggbb` at alpha, for inline tints. */
-export function hexAlpha(hex: string, alpha: number): string {
-  const n = Number.parseInt(hex.slice(1), 16);
-  return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${alpha})`;
-}
-
-/**
- * Period photograph for the type's dossier banner.
- *
- * Six types ship no photo (chemical industries, automobiles, real estate,
- * construction, telecommunications, entertainment). Their banners render the
- * type tint and gradient with no image layer, which reads as deliberate rather
- * than broken, and the dossier needs no other special case.
- */
-export const SECTOR_TYPE_HERO: Partial<Record<CorporationType, string>> = {
-  manufacturing: "/static/heroes/sector-manufacturing.webp",
-  energy: "/static/heroes/sector-energy.webp",
-  extraction: "/static/heroes/sector-extraction.webp",
-  retail: "/static/heroes/sector-retail.webp",
-  financial: "/static/heroes/sector-financial.webp",
-  media: "/static/heroes/sector-media.webp",
-  technology: "/static/heroes/sector-technology.webp",
-  agriculture: "/static/heroes/sector-agriculture.webp",
-  healthcare: "/static/heroes/sector-healthcare.webp",
-  defense: "/static/heroes/sector-defense.webp",
-  logistics: "/static/heroes/sector-logistics.webp",
-};
 
 /**
  * What this business actually is, in two sentences.

@@ -35,6 +35,7 @@ describe("CaretakerCeoCard", () => {
 
   it("explains the cooldown before a player hands the corporation back", async () => {
     renderCard();
+    fireEvent.click(await screen.findByRole("button", { name: /hand over/i }));
 
     expect(await screen.findByText(/resume control immediately/i)).toBeTruthy();
     expect(screen.getByText(/cooldown of three real days/i)).toBeTruthy();
@@ -43,6 +44,7 @@ describe("CaretakerCeoCard", () => {
 
   it("keeps immediate reclaim clear while the caretaker is seated", async () => {
     renderCard({ ceoCharacterId: null });
+    fireEvent.click(await screen.findByRole("button", { name: /manage/i }));
 
     expect(await screen.findByText(/resume control immediately/i)).toBeTruthy();
     expect(screen.getByText(/owner-initiated handoff/i)).toBeTruthy();
@@ -50,6 +52,7 @@ describe("CaretakerCeoCard", () => {
 
   it("lets the owner select a passive caretaker mandate", async () => {
     renderCard({ ceoCharacterId: null, caretakerMandate: "active" });
+    fireEvent.click(await screen.findByRole("button", { name: /manage/i }));
     const select = await screen.findByLabelText("Caretaker mandate");
 
     fireEvent.change(select, { target: { value: "passive" } });

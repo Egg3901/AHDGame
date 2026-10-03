@@ -14,6 +14,7 @@ import { PendingQueuesCard } from "@/components/admin/dashboard/PendingQueuesCar
 import { RecentAdminActionsCard } from "@/components/admin/dashboard/RecentAdminActionsCard";
 import type { AdminBadgeCounts } from "@/components/admin/nav/useAdminBadgeCounts";
 import type { MainTabId } from "@/components/admin/tabs/AdminTabsConfig";
+import { SectionLabel } from "@/components/ui/SectionLabel";
 
 const QUICK_LINKS = [
   {
@@ -21,7 +22,6 @@ const QUICK_LINKS = [
     sub: "elections",
     label: "Elections",
     desc: "Manage officials, party elections, and election log.",
-    accent: "var(--primary)",
     tag: "Politics",
   },
   {
@@ -29,7 +29,6 @@ const QUICK_LINKS = [
     sub: "users",
     label: "Users",
     desc: "View all users, ban/unban accounts, and manage permissions.",
-    accent: "#ef4444",
     tag: "Players",
   },
   {
@@ -37,7 +36,6 @@ const QUICK_LINKS = [
     sub: "suggestions",
     label: "Suggestions",
     desc: "Review player suggestions (forum — separate from legacy feedback).",
-    accent: "#a855f7",
     tag: "Support",
   },
   {
@@ -45,7 +43,6 @@ const QUICK_LINKS = [
     sub: "npps",
     label: "NPPs & Content",
     desc: "Manage NPPs, wiki pages, and politician profiles.",
-    accent: "#3b82f6",
     tag: "World",
   },
   {
@@ -53,7 +50,6 @@ const QUICK_LINKS = [
     sub: "resources",
     label: "Resources",
     desc: "Grant action points and campaign funds to players.",
-    accent: "#22c55e",
     tag: "Players",
   },
   {
@@ -61,19 +57,9 @@ const QUICK_LINKS = [
     sub: "seed",
     label: "System",
     desc: "Seed database, reset game, and destructive operations.",
-    accent: "#eab308",
     tag: "System",
   },
 ];
-
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex items-center gap-2 mb-4">
-      <span className="inline-block h-3.5 w-0.5 rounded-full bg-primary flex-shrink-0" />
-      <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">{children}</h2>
-    </div>
-  );
-}
 
 interface AdminDashboardTabProps {
   counts: AdminBadgeCounts;
@@ -89,7 +75,7 @@ export function AdminDashboardTab({ counts, onNavigate }: AdminDashboardTabProps
       <div className="flex min-w-0 flex-col gap-6 sm:gap-8">
         {/* Turn controls - Primary game management */}
         <section>
-          <SectionLabel>Turn Controls</SectionLabel>
+          <SectionLabel className="mb-4">Turn controls</SectionLabel>
           <TurnControls />
         </section>
 
@@ -97,7 +83,7 @@ export function AdminDashboardTab({ counts, onNavigate }: AdminDashboardTabProps
             maintenance, registration controls, test mode, party mechanics,
             regional conditions, public read-only, public viewing). */}
         <section>
-          <SectionLabel>Kill switches</SectionLabel>
+          <SectionLabel className="mb-4">Kill switches</SectionLabel>
           <KillSwitchBoard />
         </section>
 
@@ -105,31 +91,30 @@ export function AdminDashboardTab({ counts, onNavigate }: AdminDashboardTabProps
             NPP autonomy level, …). Index funds / NPP economy / line of credit are
             now core systems (always on) and intentionally not gated here. */}
         <section>
-          <SectionLabel>Feature gates</SectionLabel>
+          <SectionLabel className="mb-4">Feature gates</SectionLabel>
           <FeatureGatesPanel />
         </section>
 
         {/* Staged activation of savings accounts: mode, read cohort, gate. */}
         <section>
-          <SectionLabel>Banking rollout</SectionLabel>
+          <SectionLabel className="mb-4">Banking rollout</SectionLabel>
           <BankingRolloutPanel />
         </section>
 
         <section>
-          <SectionLabel>Foreign policy operations</SectionLabel>
+          <SectionLabel className="mb-4">Foreign policy operations</SectionLabel>
           <ForeignPolicyLedgerPanel />
         </section>
 
         {/* Quick access */}
         <section>
-          <SectionLabel>Quick Access</SectionLabel>
+          <SectionLabel className="mb-4">Quick access</SectionLabel>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {QUICK_LINKS.map(({ tab, sub, label, desc, accent, tag }) => (
+            {QUICK_LINKS.map(({ tab, sub, label, desc, tag }) => (
               <Link
                 key={`${tab}-${sub}`}
                 href={`${pathname}?tab=${tab}&sub=${sub}`}
                 className="block rounded-lg border border-card-border bg-card p-3 transition-shadow hover:shadow-md sm:p-4"
-                style={{ borderLeft: `3px solid ${accent}` }}
               >
                 <div className="mb-1 flex items-center justify-between">
                   <span className="text-sm font-semibold">{label}</span>
@@ -143,13 +128,13 @@ export function AdminDashboardTab({ counts, onNavigate }: AdminDashboardTabProps
 
         {/* Admin registration */}
         <section>
-          <SectionLabel>Admin Registration</SectionLabel>
+          <SectionLabel className="mb-4">Admin registration</SectionLabel>
           <AdminRegistrationPanel />
         </section>
 
         {/* Referral leaderboard */}
         <section>
-          <SectionLabel>Referrals</SectionLabel>
+          <SectionLabel className="mb-4">Referrals</SectionLabel>
           <ReferralLeaderboardPanel />
         </section>
       </div>

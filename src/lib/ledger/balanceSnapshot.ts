@@ -162,7 +162,7 @@ async function collectBalanceState(db: Db): Promise<{
   const corpCursor = corps.find({}, { projection: { liquidCapital: 1, liquidCurrencyCode: 1 } });
   for await (const corp of corpCursor) {
     if (typeof corp.liquidCapital !== "number") continue;
-    const cur = corp.liquidCurrencyCode ?? "USD";
+    const cur = snapshotCorporationCurrency(corp);
     add(
       balances,
       accountId("corporation", corp._id.toString(), cur),
@@ -200,7 +200,7 @@ async function collectBalanceState(db: Db): Promise<{
   );
   for await (const b of budgetCursor) {
     if (typeof b.treasuryBalance !== "number" || !b.countryId) continue;
-    const cur = b.currencyCode ?? countryCurrency(b.countryId);
+    const cur = snapshotTreasuryCurrency(b);
     const account = accountId("government", b.countryId, cur);
     const valuation = treasuryAnchorValuation({
       countryId: b.countryId,
@@ -304,12 +304,37 @@ async function collectBalanceState(db: Db): Promise<{
  * pensionBenefits.ts, nppFundGeneration.ts), so the snapshot must use the same
  * map or leg and snapshot keys diverge by currency segment.
  */
+/** Currency of a `state_party:` account, backed by statePartyOrg.treasury. */
+export function snapshotStatePartyCurrency(countryId?: string): CurrencyCode {
+  return mapCurrency(countryId);
+}
+
+/** Currency of a national `party:` account, backed by politicalParties.treasury. */
+export function snapshotPartyCurrency(countryId?: string): CurrencyCode {
+  return countryCurrency(countryId);
+}
+
 function mapCurrency(countryId?: string): CurrencyCode {
   if (countryId) {
     const cur = (COUNTRY_CURRENCY_MAP as Record<string, CurrencyCode>)[countryId];
     if (cur) return cur;
   }
   return "USD";
+}
+
+/** Currency of a corporation's `corporation:` account; writers witnessing liquidCapital must match. */
+export function snapshotCorporationCurrency(corp: {
+  liquidCurrencyCode?: CurrencyCode;
+}): CurrencyCode {
+  return corp.liquidCurrencyCode ?? "USD";
+}
+
+/** Currency of a country's `government:` account, backed by federalBudget.treasuryBalance. */
+export function snapshotTreasuryCurrency(budget: {
+  countryId?: string;
+  currencyCode?: CurrencyCode;
+}): CurrencyCode {
+  return budget.currencyCode ?? countryCurrency(budget.countryId);
 }
 
 function countryCurrency(countryId?: string): CurrencyCode {

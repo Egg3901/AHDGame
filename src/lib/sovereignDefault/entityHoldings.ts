@@ -41,6 +41,14 @@ export async function sumQualifyingEntitySovereignHoldings(
     })
     .toArray();
 
+  return qualifyingHoldingsFace(bonds, imfCorpIdStr);
+}
+
+/** Face of the qualifying holdings on a country's live sovereign bonds, IMF Corp excluded. */
+export function qualifyingHoldingsFace(
+  bonds: ReadonlyArray<Pick<Bond, "holders">>,
+  imfCorpIdStr: string | undefined
+): number {
   let totalUnits = 0;
   for (const bond of bonds) {
     for (const holder of bond.holders ?? []) {
