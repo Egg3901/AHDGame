@@ -10,10 +10,12 @@ export function BgFoundingConstituencyPicker({
   regionId,
   value,
   onChange,
+  allowedDistrictIds,
 }: {
   regionId: string;
   value: string;
   onChange: (id: string) => void;
+  allowedDistrictIds?: readonly string[];
 }) {
   const t = useTranslations("elections.bgFounding");
   const areas = new Map(BG_1990_LIST_DISTRICTS.map((row) => [row.id, row.label]));
@@ -29,7 +31,11 @@ export function BgFoundingConstituencyPicker({
         className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
       >
         <option value="">{t("automatic")}</option>
-        {BG_1990_CONSTITUENCIES.filter((row) => row.regionId === regionId).map((row) => (
+        {BG_1990_CONSTITUENCIES.filter(
+          (row) =>
+            row.regionId === regionId &&
+            (!allowedDistrictIds || allowedDistrictIds.includes(row.id))
+        ).map((row) => (
           <option key={row.id} value={row.id}>
             {t("constituency", {
               area: areas.get(row.listDistrictId)!,

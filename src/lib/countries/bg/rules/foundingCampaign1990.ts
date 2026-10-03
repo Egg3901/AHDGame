@@ -5,6 +5,8 @@ export interface BgFoundingCampaignBinding {
   round: 1 | 2;
   registeredVoters: number;
   rootElectionId: string;
+  /** Bounded Article73(3) filing window; the receipt remains authoritative. */
+  newNominationDistrictIds?: string[];
 }
 
 export function isBgFoundingCampaign(election: {

@@ -116,7 +116,11 @@ export async function POST(request: Request, { params }: RouteParams) {
     const bgFounding = isBgFoundingCampaign(election);
     let huDistrictId: string | undefined;
     if (hu1991 || bgFounding) {
-      if (bgFounding && election.bulgarianFoundingRound?.round !== 1)
+      if (
+        bgFounding &&
+        election.bulgarianFoundingRound?.round !== 1 &&
+        !election.bulgarianFoundingRound?.newNominationDistrictIds?.length
+      )
         return NextResponse.json(
           { error: bgFoundingFilingMessages["filing-closed"] },
           { status: 403 }

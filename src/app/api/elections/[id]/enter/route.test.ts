@@ -11,6 +11,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { RUSSIAN_COUNCIL_SUBJECTS_1993 } from "@/lib/countries/ru/data/councilSubjects1993";
+import { BG_1990_CONSTITUENCIES } from "@/lib/countries/bg/data/foundingDistricts1990";
+import { buildBgFoundingSlates } from "@/lib/countries/bg/rules/foundingSlates1990";
+import { projectBgFoundingBallots } from "@/lib/countries/bg/rules/foundingBallots1990";
+import { countBgFoundingElection } from "@/lib/countries/bg/rules/foundingCount1990";
 
 vi.mock("@/lib/db/runRequiredTransaction", () => ({
   runRequiredTransaction: vi.fn(async (body) => body({ inTransaction: () => true })),
@@ -1124,6 +1128,68 @@ describe("Hungarian 1991 constituency filing route", () => {
 });
 
 describe("Bulgarian founding constituency filing route", () => {
+  it("accepts an authorized reopened district and refuses advertised eligibility without a receipt", async () => {
+    const { db, election } = await setupBulgaria(2);
+    const regions = [...new Set(BG_1990_CONSTITUENCIES.map((row) => row.regionId))];
+    const district = BG_1990_CONSTITUENCIES.find((row) => row.regionId === "BG_SOF")!;
+    const { nominations } = buildBgFoundingSlates(
+      regions.map((regionId, index) => ({
+        id: new ObjectId().toHexString(),
+        ownerId: new ObjectId().toHexString(),
+        isNpc: true,
+        partyId: "9",
+        regionId,
+        listOrder: index,
+      }))
+    );
+    const campaigns = regions.map((regionId) => ({
+      regionId,
+      registeredVoters: 10000,
+      candidates: [
+        ...new Set(
+          nominations.people
+            .filter((row) => row.regionId === regionId)
+            .map((row) => row.candidateId)
+        ),
+      ].map((candidateId) => ({ candidateId, votes: 1000 })),
+    }));
+    const first = projectBgFoundingBallots(campaigns, nominations);
+    const rootElectionId = new ObjectId().toHexString();
+    Object.assign(election.bulgarianFoundingRound, {
+      rootElectionId,
+      newNominationDistrictIds: [district.id],
+    });
+    const receipt = {
+      _id: election.bulgarianFoundingRound.receiptId,
+      ruleVersion: "parallel-1990-v1",
+      electionIds: [rootElectionId],
+      nominations,
+      nominees: [],
+      first,
+      count: countBgFoundingElection(first),
+      activeRunoffElectionIds: [electionOid.toHexString()],
+    };
+    db.collection("bgFoundingAssemblyCounts").findOne.mockResolvedValue(receipt);
+    db.collection("bgFoundingAssemblyCounts").updateOne.mockResolvedValue({ modifiedCount: 1 });
+    const parameters = { params: Promise.resolve({ id: electionOid.toHexString() }) };
+    const request = () =>
+      new Request("http://test/route", {
+        method: "POST",
+        body: JSON.stringify({ constituencyId: district.id }),
+      });
+    expect((await POST(request(), parameters)).status).toBe(200);
+    expect(db.collection("bgFoundingAssemblyCounts").updateOne).toHaveBeenCalledWith(
+      expect.objectContaining({ activeRunoffElectionIds: electionOid.toHexString() }),
+      expect.objectContaining({
+        $push: {
+          nominees: expect.objectContaining({ ownerId: characterOid.toHexString(), isNpc: false }),
+        },
+      }),
+      expect.objectContaining({ session: expect.anything() })
+    );
+    db.collection("bgFoundingAssemblyCounts").findOne.mockResolvedValue(null);
+    expect((await POST(request(), parameters)).status).toBe(403);
+  });
   async function setupBulgaria(round: 1 | 2 = 1) {
     const db = setupScenario({
       electionCountry: "US",

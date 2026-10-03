@@ -21,7 +21,10 @@ export function bgFoundingRunoffCampaigns(
     if (pending.kind !== "runoff")
       throw new Error("Bulgarian runoff reopens an elected first-round seat");
     const candidates = regions.get(district.regionId) ?? new Set<string>();
-    for (const personId of pending.personIds) {
+    const personIds = pending.allowNewNominations
+      ? (nominations.constituencies.find((row) => row.id === id)?.candidateIds ?? [])
+      : pending.personIds;
+    for (const personId of personIds) {
       const person = people.get(personId);
       if (!person) throw new Error("Bulgarian runoff has an unknown person");
       candidates.add(person.candidateId);

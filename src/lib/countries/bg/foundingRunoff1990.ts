@@ -13,6 +13,8 @@ import { BG_FOUNDING_COUNTS_COLLECTION, type BgFoundingAssemblyRecord } from "./
 import { bgFoundingRunoffCampaigns } from "./rules/foundingRunoff1990";
 import { projectBgFoundingRunoff } from "./rules/foundingBallots1990";
 import { countBgFoundingElection } from "./rules/foundingCount1990";
+import { bgFoundingOpenNominationDistricts } from "./rules/foundingRenewal1990";
+import { planBgFoundingRenewedNpcSlates } from "./foundingRenewedNpcSlates1990";
 
 function stableId(key: string): ObjectId {
   return new ObjectId(createHash("sha256").update(key).digest("hex").slice(0, 24));
@@ -35,13 +37,15 @@ export async function materializeBgFoundingRunoffOpening(input: {
   )
     throw new Error("Bulgarian runoff opening needs an active transaction, cycle, turn and time");
   const journal = db.collection<BgFoundingAssemblyRecord>(BG_FOUNDING_COUNTS_COLLECTION);
-  const receipt = await journal.findOne({ _id: `BG:founding1990:${cycle}` }, { session });
+  let receipt = await journal.findOne({ _id: `BG:founding1990:${cycle}` }, { session });
   if (!receipt || receipt.seatedAtTurn != null || receipt.count.kind !== "pending") return [];
   const activeIds =
     receipt.activeRunoffElectionIds ?? (!receipt.second ? receipt.runoffElectionIds : undefined);
   if (activeIds?.length) return activeIds;
   const generation = (receipt.runoffGeneration ?? (receipt.runoffElectionIds ? 1 : 0)) + 1;
   const namespace = generation === 1 ? receipt._id : `${receipt._id}:generation:${generation}`;
+  const newSlates = await planBgFoundingRenewedNpcSlates({ db, session, receipt, namespace, now });
+  receipt = newSlates.receipt;
   const planned = bgFoundingRunoffCampaigns(
     receipt.count,
     receipt.nominations,
@@ -63,7 +67,7 @@ export async function materializeBgFoundingRunoffOpening(input: {
     roots.some((row) => row.bulgarianFoundingRound?.receiptId !== receipt._id)
   )
     throw new Error("Bulgarian first-round custody changed");
-  const candidates = await db
+  const retainedCandidates = await db
     .collection<ElectionCandidate>("electionCandidates")
     .find(
       {
@@ -79,10 +83,18 @@ export async function materializeBgFoundingRunoffOpening(input: {
       { session }
     )
     .toArray();
+  const newCandidateIds = new Set(newSlates.candidates.map((row) => row._id.toHexString()));
+  const candidates = [...retainedCandidates, ...newSlates.candidates];
   const polls: Election[] = [];
   const renewedCandidates: ElectionCandidate[] = [];
   for (const { regionId } of planned) {
     const root = roots.find((row) => row.state === regionId)!;
+    const newNominationDistrictIds = bgFoundingOpenNominationDistricts(
+      receipt.count,
+      receipt.first,
+      regionId
+    );
+    const filingTurns = newNominationDistrictIds.length ? 1 : 0;
     const electionId = stableId(`${namespace}:runoff:${regionId}`);
     polls.push({
       ...root,
@@ -90,12 +102,12 @@ export async function materializeBgFoundingRunoffOpening(input: {
       status: "active",
       resolving: false,
       startTurn: turn,
-      primaryEndTurn: turn,
+      primaryEndTurn: turn + filingTurns,
       endTurn: turn + 2,
       durationHours: 2,
-      primaryDurationHours: 0,
+      primaryDurationHours: filingTurns,
       startTime: now,
-      primaryEndTime: now,
+      primaryEndTime: new Date(now.getTime() + filingTurns * MS_PER_TURN),
       endTime: new Date(now.getTime() + 2 * MS_PER_TURN),
       createdAt: now,
       updatedAt: now,
@@ -103,6 +115,7 @@ export async function materializeBgFoundingRunoffOpening(input: {
         ...root.bulgarianFoundingRound!,
         round: 2,
         rootElectionId: root._id.toHexString(),
+        newNominationDistrictIds,
       },
     });
     for (const candidate of candidates.filter((row) =>
@@ -114,9 +127,11 @@ export async function materializeBgFoundingRunoffOpening(input: {
     ))
       renewedCandidates.push({
         ...candidate,
-        _id: stableId(
-          `${namespace}:runoff-candidate:${candidate.bulgarianFoundingNomination?.rootCandidateId ?? candidate._id.toHexString()}`
-        ),
+        _id: newCandidateIds.has(candidate._id.toHexString())
+          ? candidate._id
+          : stableId(
+              `${namespace}:runoff-candidate:${candidate.bulgarianFoundingNomination?.rootCandidateId ?? candidate._id.toHexString()}`
+            ),
         electionId,
         enteredAt: now,
         bulgarianFoundingNomination: {
@@ -141,6 +156,8 @@ export async function materializeBgFoundingRunoffOpening(input: {
         activeRunoffElectionIds: ids,
         runoffGeneration: generation,
         runoffOpenedAtTurn: turn,
+        nominations: receipt.nominations,
+        nominees: receipt.nominees,
       },
     },
     { session }
@@ -152,7 +169,7 @@ export async function materializeBgFoundingRunoffOpening(input: {
       .collection<ElectionCandidate>("electionCandidates")
       .insertMany(renewedCandidates, { session });
     await db.collection<ElectionCandidate>("electionCandidates").updateMany(
-      { _id: { $in: candidates.map((row) => row._id) }, status: "active" },
+      { _id: { $in: retainedCandidates.map((row) => row._id) }, status: "active" },
       {
         $set: { status: "withdrawn", withdrawnAt: now },
       },
@@ -307,7 +324,10 @@ export async function materializeBgFoundingRunoffCount(input: {
           !allowed.get(election.state)?.has(rootId) ||
           nominee.isNpc !== !!row.isNPP ||
           !(row.isNPP ? row.nppId : row.characterId)?.equals(new ObjectId(nominee.ownerId)) ||
-          !row._id.equals(stableId(`${namespace}:runoff-candidate:${rootId}`)) ||
+          (!row._id.equals(stableId(`${namespace}:runoff-candidate:${rootId}`)) &&
+            !(
+              row._id.toHexString() === rootId && nominee.electionId === election._id.toHexString()
+            )) ||
           ((votes[row._id.toHexString()] ?? 0) > 0 &&
             tally.candidateParties[row._id.toHexString()] !== row.party)
         )

@@ -226,24 +226,32 @@ export function projectBgFoundingRunoff(
       const renewed = byDistrict.get(row.id);
       if (!renewed || renewed.registeredVoters !== row.first.registeredVoters)
         throw new Error("Bulgarian runoff changes the frozen constituency register");
-      const weights = row.first.options
-        .filter((option) => pending.personIds.includes(option.personId))
-        .map((option) => {
-          const person = maps.people.get(option.personId)!;
-          return {
-            id: option.personId,
-            weight:
-              person.partyId === "independent"
-                ? (maps.votes.get(person.candidateId) ?? 0)
-                : [...maps.candidates]
-                    .filter(
-                      ([, candidate]) =>
-                        candidate.partyId === person.partyId &&
-                        candidate.regionId === person.regionId
-                    )
-                    .reduce((value, [id]) => value + (maps.votes.get(id) ?? 0), 0),
-          };
-        });
+      const originalOrder = new Map(
+        row.first.options.map((option) => [option.personId, option.tieOrder])
+      );
+      const nextOrder = Math.max(0, ...originalOrder.values()) + 1;
+      const nominees = nominations.constituencies.find((district) => district.id === row.id)!;
+      const options = pending.allowNewNominations
+        ? nominees.candidateIds.map((personId, index) => ({
+            personId,
+            tieOrder: originalOrder.get(personId) ?? nextOrder + index,
+          }))
+        : row.first.options.filter((option) => pending.personIds.includes(option.personId));
+      const weights = options.map((option) => {
+        const person = maps.people.get(option.personId)!;
+        return {
+          id: option.personId,
+          weight:
+            person.partyId === "independent"
+              ? (maps.votes.get(person.candidateId) ?? 0)
+              : [...maps.candidates]
+                  .filter(
+                    ([, candidate]) =>
+                      candidate.partyId === person.partyId && candidate.regionId === person.regionId
+                  )
+                  .reduce((value, [id]) => value + (maps.votes.get(id) ?? 0), 0),
+        };
+      });
       const cast = weights.some((option) => option.weight > 0) ? renewed.ballotsCast : 0;
       const counted = split(cast, weights);
       return {
@@ -255,7 +263,7 @@ export function projectBgFoundingRunoff(
           options: weights.map((option) => ({
             personId: option.id,
             votes: counted[option.id],
-            tieOrder: row.first.options.find((prior) => prior.personId === option.id)!.tieOrder,
+            tieOrder: options.find((prior) => prior.personId === option.id)!.tieOrder,
           })),
         },
       };

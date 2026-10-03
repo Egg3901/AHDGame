@@ -14,6 +14,11 @@ import type {
 import { runRequiredTransaction } from "@/lib/db/runRequiredTransaction";
 import { chooseBgFoundingPlayerDistrict } from "./rules/foundingPlayerFiling1990";
 import { isBgFoundingCampaign } from "./rules/foundingCampaign1990";
+import { BG_FOUNDING_COUNTS_COLLECTION, type BgFoundingAssemblyRecord } from "./foundingCount1990";
+import {
+  addBgFoundingRenewedNominee,
+  bgFoundingOpenNominationDistricts,
+} from "./rules/foundingRenewal1990";
 export const BG_FOUNDING_FILING_LOCKS_COLLECTION = "bgFoundingAssemblyFilingLocks";
 export type BgFoundingFilingFailure =
   | "invalid-ballot"
@@ -28,7 +33,7 @@ export type BgFoundingFilingFailure =
 export const bgFoundingFilingMessages: Record<BgFoundingFilingFailure, string> = {
   "invalid-ballot": "This race no longer belongs to a valid Bulgarian Assembly cohort.",
   "filing-closed":
-    "Bulgarian Assembly filing has closed. Second rounds retain their qualified nominees.",
+    "Bulgarian Assembly filing has closed. New second-round nominations require an eligible constituency.",
   "invalid-residence":
     "Choose a playable Bulgarian residence in this campaign region before filing.",
   "outside-region": "Choose a constituency inside your home campaign region.",
@@ -81,11 +86,11 @@ export async function materializeBgFoundingPlayerFiling(input: {
     game?.preset !== "1991-default" ||
     !isBgFoundingCampaign(election) ||
     !candidate.electionId.equals(electionId) ||
+    ![1, 2].includes(election.bulgarianFoundingRound!.round) ||
     candidate.isNPP
   )
     return reject("invalid-ballot");
   if (
-    election.bulgarianFoundingRound!.round !== 1 ||
     !["active", "upcoming"].includes(election.status) ||
     (election.primaryEndTurn != null
       ? Math.max(turn, game.currentTurn) >= election.primaryEndTurn
@@ -135,12 +140,44 @@ export async function materializeBgFoundingPlayerFiling(input: {
     if (!party || party.regimeStatus === "banned") return reject("unregistered-party");
   }
   const receiptId = election.bulgarianFoundingRound!.receiptId;
+  const receipt =
+    election.bulgarianFoundingRound!.round === 2
+      ? await db
+          .collection<BgFoundingAssemblyRecord>(BG_FOUNDING_COUNTS_COLLECTION)
+          .findOne({ _id: receiptId }, { session })
+      : null;
+  const allowedDistrictIds = receipt
+    ? bgFoundingOpenNominationDistricts(receipt.count, receipt.first, election.state)
+    : undefined;
+  if (
+    election.bulgarianFoundingRound!.round === 2 &&
+    (!receipt ||
+      receipt.ruleVersion !== "parallel-1990-v1" ||
+      receipt.count.kind !== "pending" ||
+      !receipt.electionIds.includes(election.bulgarianFoundingRound!.rootElectionId) ||
+      receipt.seatedAtTurn != null ||
+      !receipt.activeRunoffElectionIds?.includes(electionId.toHexString()) ||
+      !allowedDistrictIds?.length)
+  )
+    return reject("filing-closed");
   const locks = db.collection<FilingLock>(BG_FOUNDING_FILING_LOCKS_COLLECTION);
   const ownerId = candidate.characterId.toHexString();
   const ownerKey = `${receiptId}:player:${ownerId}`;
   const saved = await locks.findOne({ _id: ownerKey }, { session });
   if (saved) {
     if (!saved.electionId.equals(electionId)) return reject("already-filed");
+    if (
+      receipt &&
+      (!allowedDistrictIds?.includes(saved.constituencyId) ||
+        !receipt.nominations.people.some(
+          (person) =>
+            !person.isNpc &&
+            person.candidateId === saved.candidateId.toHexString() &&
+            person.ownerId === ownerId &&
+            person.partyId === saved.party
+        ))
+    )
+      return reject("invalid-ballot");
     if (
       saved.party !== candidate.party ||
       (requestedDistrictId && requestedDistrictId !== saved.constituencyId)
@@ -164,6 +201,8 @@ export async function materializeBgFoundingPlayerFiling(input: {
     );
     return { allowed: true, insertedId: prior._id };
   }
+  if (receipt?.nominations.people.some((person) => !person.isNpc && person.ownerId === ownerId))
+    return reject("already-filed");
   const legacy = await db
     .collection<ElectionCandidate>("electionCandidates")
     .find(
@@ -175,6 +214,7 @@ export async function materializeBgFoundingPlayerFiling(input: {
     )
     .toArray();
   if (legacy.length > 1) return reject("already-filed");
+  if (receipt && legacy.length) return reject("invalid-ballot");
   const prior = legacy[0];
   if (prior?.party !== undefined && prior.party !== candidate.party) return reject("party-changed");
   if (prior?.status === "active") return reject("already-filed");
@@ -185,16 +225,27 @@ export async function materializeBgFoundingPlayerFiling(input: {
   )
     return reject("party-changed");
   const peers = await locks.find({ electionId, party: candidate.party }, { session }).toArray();
+  const existingPeople = new Map(receipt?.nominations.people.map((person) => [person.id, person]));
   const district = chooseBgFoundingPlayerDistrict({
     personId: ownerId,
     regionId: election.state,
     partyId: candidate.party,
     requestedId: prior?.bulgarianFoundingNomination?.constituencyId ?? requestedDistrictId,
-    otherFilings: peers.map((row) => ({
-      personId: row.ownerId,
-      partyId: row.party,
-      constituencyId: row.constituencyId,
-    })),
+    allowedDistrictIds,
+    otherFilings: [
+      ...peers.map((row) => ({
+        personId: row.ownerId,
+        partyId: row.party,
+        constituencyId: row.constituencyId,
+      })),
+      ...(receipt?.nominations.constituencies.flatMap((row) =>
+        row.candidateIds.map((id) => ({
+          personId: existingPeople.get(id)!.ownerId,
+          partyId: existingPeople.get(id)!.partyId,
+          constituencyId: row.id,
+        }))
+      ) ?? []),
+    ],
   });
   if (!district.allowed) return reject(district.reason);
   const partyKey = `${receiptId}:party:${candidate.party}:constituency:${district.constituencyId}`;
@@ -232,10 +283,55 @@ export async function materializeBgFoundingPlayerFiling(input: {
     {
       ...candidate,
       _id: candidateId,
-      bulgarianFoundingNomination: { constituencyId: district.constituencyId },
+      bulgarianFoundingNomination: {
+        constituencyId: district.constituencyId,
+        ...(receipt ? { rootCandidateId: candidateId.toHexString() } : {}),
+      },
     },
     { session }
   );
+  if (receipt) {
+    const nominations = addBgFoundingRenewedNominee({
+      count: receipt.count,
+      first: receipt.first,
+      nominations: receipt.nominations,
+      constituencyId: district.constituencyId,
+      person: {
+        id: candidateId.toHexString(),
+        candidateId: candidateId.toHexString(),
+        ownerId,
+        isNpc: false,
+        partyId: candidate.party,
+        regionId: election.state,
+      },
+    });
+    const updated = await db
+      .collection<BgFoundingAssemblyRecord>(BG_FOUNDING_COUNTS_COLLECTION)
+      .updateOne(
+        {
+          _id: receiptId,
+          seatedAtTurn: { $exists: false },
+          activeRunoffElectionIds: electionId.toHexString(),
+        },
+        {
+          $set: { nominations },
+          $push: {
+            nominees: {
+              id: candidateId.toHexString(),
+              ownerId,
+              electionId: electionId.toHexString(),
+              isNpc: false,
+              party: candidate.party,
+              name: candidate.characterName,
+              regionId: election.state,
+            },
+          },
+        },
+        { session }
+      );
+    if (updated.modifiedCount !== 1)
+      throw new Error("Bulgarian renewed nomination changed concurrently");
+  }
   return { allowed: true, insertedId: candidateId };
 }
 export async function registerBgFoundingPlayerFiling(

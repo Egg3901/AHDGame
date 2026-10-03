@@ -104,7 +104,11 @@ export async function materializeBgFoundingAssemblySeating(input: {
     .toArray();
   const rootCandidates = new Map(
     candidates
-      .filter((row) => receipt.electionIds.includes(row.electionId.toHexString()))
+      .filter(
+        (row) =>
+          receipt.electionIds.includes(row.electionId.toHexString()) ||
+          row.bulgarianFoundingNomination?.rootCandidateId === row._id.toHexString()
+      )
       .map((row) => [row._id.toHexString(), row])
   );
   const npcIds = receipt.nominees
