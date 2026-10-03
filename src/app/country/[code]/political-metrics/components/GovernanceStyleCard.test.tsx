@@ -120,6 +120,9 @@ describe("GovernanceStyleCard", () => {
     expect(within(section).getByText("Points off democratic health")).toBeTruthy();
     expect(section.textContent).toContain("Chamber margins: −1.0.");
     expect(section.textContent).toContain("Legislative continuity: −0.5.");
+    // A zero penalty reads as a plain zero, not a negative zero.
+    expect(section.textContent).toContain("Executive continuity: 0.0.");
+    expect(section.textContent).not.toContain("−0.0");
   });
 
   it("says when concentrated control costs nothing", () => {

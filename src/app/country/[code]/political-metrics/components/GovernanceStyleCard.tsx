@@ -6,6 +6,12 @@ import { healthTone } from "./tones";
 
 const MINUS = "−";
 
+/** A penalty as a signed figure. A zero penalty reads "0.0", never "−0.0". */
+function penaltyFigure(value: number): string {
+  const rounded = value.toFixed(1);
+  return Number(rounded) === 0 ? "0.0" : `${MINUS}${rounded}`;
+}
+
 /**
  * One governance measure: its name, its label and score, and a neutral track
  * with a single marker between the two named poles. No gradient: the marker
@@ -144,11 +150,10 @@ function PowerBalance({
         ))}
       </dl>
       <p className="mt-4 text-body text-muted">
-        Chamber margins: {MINUS}
-        {competition.seatMarginPenalty.toFixed(1)}. Legislative continuity: {MINUS}
-        {competition.legislativeContinuityPenalty.toFixed(1)}. Executive continuity: {MINUS}
-        {competition.executiveContinuityPenalty.toFixed(1)}. Court packing: {MINUS}
-        {competition.courtPenalty.toFixed(1)}.
+        Chamber margins: {penaltyFigure(competition.seatMarginPenalty)}. Legislative continuity:{" "}
+        {penaltyFigure(competition.legislativeContinuityPenalty)}. Executive continuity:{" "}
+        {penaltyFigure(competition.executiveContinuityPenalty)}. Court packing:{" "}
+        {penaltyFigure(competition.courtPenalty)}.
       </p>
       {scopeNote && <p className="mt-2 text-body text-muted">{scopeNote}</p>}
     </section>
