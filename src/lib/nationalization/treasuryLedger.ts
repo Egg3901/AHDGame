@@ -1,10 +1,11 @@
 /**
- * State-enterprise treasury accounting witnesses the cash that remittances, CEO
- * draws, loss backing and capex grants actually move. Treasury legs use the
- * balance snapshot's treasury valuation; both sides of a transfer share the
- * flow's settlement reason so the money-supply check nets them, and a capex
- * grant sinks into the plant it buys. A leg whose counterparty rows settle
- * against a pass-through corporation books its contra on that corporation too.
+ * Treasury cash witnesses for event-driven flows: state enterprises,
+ * nationalization and privatization, crisis responses, settlement plays and
+ * peace terms. Treasury legs use the balance snapshot's treasury valuation;
+ * both sides of a transfer share the flow's settlement reason so the
+ * money-supply check nets them, and a capex grant sinks into the plant it buys.
+ * A leg whose counterparty rows settle against a pass-through corporation books
+ * its contra on that corporation too.
  */
 import * as Sentry from "@sentry/nextjs";
 import type { Db } from "mongodb";
@@ -74,6 +75,18 @@ const FLOW_ACCOUNTING = {
     txType: "privatization_auction_proceeds",
     reason: "privatization_auction_escrow",
   },
+  // A crisis response the government pays for, with no modeled recipient.
+  crisis_response: { txType: "crisis_response_cost", reason: "crisis_response" },
+  // Emergency aid leaves the sender; a failed aid vote refunds it under the same reason.
+  crisis_aid: { txType: "crisis_aid", reason: "crisis_aid" },
+  // Settlement crisis plays and the mobilisation levy, with no modeled recipient.
+  settlement_play: { txType: "settlement_play_cost", reason: "settlement_play" },
+  settlement_mobilisation: {
+    txType: "settlement_mobilisation_levy",
+    reason: "settlement_mobilisation",
+  },
+  // A peace indemnity leaves one treasury for another, in each one's currency.
+  peace_indemnity: { txType: "peace_indemnity", reason: "peace_indemnity" },
 } as const satisfies Record<string, { txType: FinancialTxType; reason: string }>;
 
 export type TreasuryCashFlow = keyof typeof FLOW_ACCOUNTING;
@@ -196,7 +209,8 @@ export async function witnessTreasuryCash(
       turn: context.turn,
       createdAt: input.now,
       txType: FLOW_ACCOUNTING[input.flow].txType,
-      emitSite: `nationalization/${input.site}`,
+      // Sites outside this module name their own path.
+      emitSite: input.site.includes("/") ? input.site : `nationalization/${input.site}`,
       legs: [
         {
           account: ledgerAccount,

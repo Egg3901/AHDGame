@@ -420,6 +420,36 @@ describe("submitCrisisDecision", () => {
     ).rejects.toThrow("Insufficient treasury");
   });
 
+  it("rejects a choice lacking approval before it charges the treasury", async () => {
+    const costly: CrisisDecisionNode = {
+      ...TREE[0],
+      options: [
+        {
+          optionId: "costly",
+          label: "Costly",
+          description: "needs money and approval",
+          requiredBudget: 1_000,
+          requiredApproval: 60,
+          nextNodeId: "terminal",
+          effects: [],
+        },
+      ],
+    };
+    const interaction = makeInteraction({ decisionTree: [costly, TREE[2]] });
+    db.collectionMocks["crisisInteractions"]!.findOne.mockResolvedValue(interaction);
+    db.collectionMocks["federalBudget"]!.findOne.mockResolvedValue({ treasuryBalance: 1_000_000 });
+    db.collection("governmentApprovals");
+    db.collectionMocks["governmentApprovals"]!.findOne.mockResolvedValue({ approvalRating: 40 });
+
+    await expect(
+      submitCrisisDecision(mdb(), interaction._id, "costly", new ObjectId(), "US", [
+        "any",
+        "headOfState",
+      ])
+    ).rejects.toThrow("Insufficient approval");
+    expect(db.collectionMocks["federalBudget"]!.updateOne).not.toHaveBeenCalled();
+  });
+
   it("rejects an invalid option", async () => {
     const interaction = makeInteraction();
     db.collectionMocks["crisisInteractions"]!.findOne.mockResolvedValue(interaction);

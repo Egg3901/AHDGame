@@ -17,6 +17,11 @@ export type FinancialTxType =
   | "privatization_bid_escrow" // privatization auction bid moved into escrow
   | "privatization_bid_refund" // privatization auction escrow returned to a bidder
   | "privatization_auction_proceeds" // winning auction escrow released to the treasury
+  | "crisis_response_cost" // treasury spend on a crisis response
+  | "crisis_aid" // emergency aid pledged from a treasury, or refunded to it
+  | "settlement_play_cost" // treasury spend on a settlement crisis play
+  | "settlement_mobilisation_levy" // treasury share levied by a settlement mobilisation
+  | "peace_indemnity" // indemnity paid between treasuries under a peace term
   // Character / imperial cash
   | "fund_credit" // legacy mixed-source entry — keep for back-compat
   | "fund_debit"

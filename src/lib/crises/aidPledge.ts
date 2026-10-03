@@ -77,6 +77,7 @@ export async function submitCrisisAidPledge(
   // 1. Spend (surplus first, remainder = debt; derived fields resynced now).
   const impact = await spendFromTreasury(db, input.senderCountryId, amountLocal, {
     resyncDerived: true,
+    witness: { flow: "crisis_aid", site: "crises/aidPledge" },
   });
 
   // 2. Provisionally apply benefits.
