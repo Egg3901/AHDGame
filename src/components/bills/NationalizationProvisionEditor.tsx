@@ -436,7 +436,7 @@ function NationalizeRow({
               {detail?.name ?? row.targetCorpName}
             </span>
             {detail && (
-              <span className="text-[11px] uppercase tracking-wide text-muted">
+              <span className="text-body-sm font-medium text-muted">
                 {detail.ownerKind === "npc" ? "NPC-run" : "Player-owned"} · HQ {detail.hqStateName}
               </span>
             )}
@@ -444,7 +444,7 @@ function NationalizeRow({
 
           {detail ? (
             <>
-              <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-3">
+              <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-body sm:grid-cols-3">
                 <Metric label="CEO" value={detail.ceoVacant ? "Vacant" : (detail.ceoName ?? "—")} />
                 <Metric
                   label="Revenue/turn"
@@ -464,7 +464,7 @@ function NationalizeRow({
 
               {detail.triggers.length > 0 && (
                 <div className="mt-2">
-                  <div className="text-[11px] uppercase tracking-wide text-muted/70">
+                  <div className="text-body-sm font-medium text-muted">
                     Why it&apos;s a candidate
                   </div>
                   <div className="mt-1 flex flex-wrap gap-1.5">
@@ -795,7 +795,7 @@ function PrivatizeRow({
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col">
-      <span className="text-[10px] uppercase tracking-wide text-muted/70">{label}</span>
+      <span className="text-body-sm font-medium text-muted">{label}</span>
       <span className="font-medium text-foreground tabular-nums">{value}</span>
     </div>
   );

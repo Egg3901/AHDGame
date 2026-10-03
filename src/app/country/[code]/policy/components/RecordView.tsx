@@ -108,8 +108,8 @@ export function RecordView({
     <div className="space-y-3.5">
       <div className="overflow-hidden rounded-xl border border-card-border bg-card">
         <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-card-border bg-card-muted px-4 py-2.5">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-muted">
-            The Record · since first recorded law
+          <span className="text-sm font-semibold text-foreground">
+            The record · since first recorded law
           </span>
           <span className="flex gap-4 font-mono text-[10px] text-muted">
             <span className="inline-flex items-center gap-1.5">
@@ -231,9 +231,7 @@ export function RecordView({
       {era && (
         <div className="rounded-xl border border-card-border bg-card px-4 py-3">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-primary">
-              {era.label}
-            </span>
+            <span className="text-body-sm font-medium text-primary">{era.label}</span>
             <span className="font-mono text-[10px] text-muted">
               {eraLawCount !== null
                 ? `${eraLawCount} ${eraLawCount === 1 ? "law" : "laws"} this era`

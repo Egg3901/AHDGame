@@ -305,15 +305,15 @@ export default function IntelligenceTab({
         </p>
         <dl className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
           <div>
-            <dt className="text-xs uppercase tracking-wide text-muted">Tradecraft</dt>
+            <dt className="text-body-sm font-medium text-muted">Tradecraft</dt>
             <dd className="text-lg font-semibold text-foreground">{view.agency.tradecraft}</dd>
           </div>
           <div>
-            <dt className="text-xs uppercase tracking-wide text-muted">Counter-Intelligence</dt>
+            <dt className="text-body-sm font-medium text-muted">Counter-intelligence</dt>
             <dd className="text-lg font-semibold text-foreground">{view.agency.counterIntel}</dd>
           </div>
           <div>
-            <dt className="text-xs uppercase tracking-wide text-muted">Operations Left</dt>
+            <dt className="text-body-sm font-medium text-muted">Operations left</dt>
             <dd className="text-lg font-semibold text-foreground">{view.slotsRemaining}</dd>
           </div>
         </dl>
@@ -340,27 +340,27 @@ export default function IntelligenceTab({
             </p>
             <dl className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
               <div>
-                <dt className="text-xs uppercase tracking-wide text-muted">Enacted Line</dt>
+                <dt className="text-body-sm font-medium text-muted">Enacted line</dt>
                 <dd className="text-lg font-semibold text-foreground">
                   {fmtMoneyAbs(currencySymbol, view.funding.enactedLine)}
                 </dd>
                 <dd className="text-xs text-muted">a year</dd>
               </div>
               <div>
-                <dt className="text-xs uppercase tracking-wide text-muted">On Hand</dt>
+                <dt className="text-body-sm font-medium text-muted">On hand</dt>
                 <dd className="text-lg font-semibold text-foreground">
                   {fmtMoneyAbs(currencySymbol, view.funding.balance)}
                 </dd>
               </div>
               <div>
-                <dt className="text-xs uppercase tracking-wide text-muted">Accrues</dt>
+                <dt className="text-body-sm font-medium text-muted">Accrues</dt>
                 <dd className="text-lg font-semibold text-foreground">
                   {fmtMoneyAbs(currencySymbol, view.funding.accrualPerTurn)}
                 </dd>
                 <dd className="text-xs text-muted">a turn</dd>
               </div>
               <div>
-                <dt className="text-xs uppercase tracking-wide text-muted">Committed</dt>
+                <dt className="text-body-sm font-medium text-muted">Committed</dt>
                 <dd className="text-lg font-semibold text-foreground">
                   {fmtMoneyAbs(currencySymbol, view.funding.committedUpkeep)}
                 </dd>

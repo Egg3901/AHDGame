@@ -206,7 +206,7 @@ export function FundraisingManagementSection({
                 d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2zM10 8.5a.5.5 0 11-1 0 .5.5 0 011 0zm5 5a.5.5 0 11-1 0 .5.5 0 011 0z"
               />
             </svg>
-            <div className="text-xs font-semibold uppercase tracking-wide text-muted">Tax Rate</div>
+            <div className="text-sm font-semibold text-foreground">Tax rate</div>
           </div>
           <div className="flex items-center gap-4">
             <Slider
@@ -252,9 +252,7 @@ export function FundraisingManagementSection({
       {canChangeTax && totalBudgetPct > 0 && (
         <div className="px-6 py-3 border-b border-card-border/40 bg-background/20">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wide text-muted">
-              Total Budget Allocation
-            </span>
+            <span className="text-body-sm font-medium text-muted">Total budget allocation</span>
             <span
               className={`text-sm font-bold tabular-nums ${
                 totalBudgetPct > 50
@@ -287,9 +285,7 @@ export function FundraisingManagementSection({
                 d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"
               />
             </svg>
-            <div className="text-xs font-semibold uppercase tracking-wide text-muted">
-              GOTV — Get Out the Vote
-            </div>
+            <div className="text-sm font-semibold text-foreground">GOTV — get out the vote</div>
           </div>
           <p className="text-[11px] text-muted/60 mb-3 ml-6">
             Rally your base. Boost voter turnout for a targeted demographic through door-knocking,
@@ -411,9 +407,7 @@ export function FundraisingManagementSection({
                 d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"
               />
             </svg>
-            <div className="text-xs font-semibold uppercase tracking-wide text-muted">
-              Voter Suppression
-            </div>
+            <div className="text-sm font-semibold text-foreground">Voter suppression</div>
           </div>
           <p className="text-[11px] text-muted/60 mb-3 ml-6">
             Dirty tricks. Spread misinformation, intimidate voters, and reduce turnout among an
@@ -532,9 +526,7 @@ export function FundraisingManagementSection({
             >
               <path strokeLinecap="round" strokeLinejoin="round" d="M7 11l5-5m0 0l5 5m-5-5v12" />
             </svg>
-            <div className="text-xs font-semibold uppercase tracking-wide text-muted">
-              Transfer to National Party
-            </div>
+            <div className="text-sm font-semibold text-foreground">Transfer to national party</div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Input
@@ -575,9 +567,7 @@ export function FundraisingManagementSection({
               d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
             />
           </svg>
-          <div className="text-xs font-semibold uppercase tracking-wide text-muted">
-            Send to Member
-          </div>
+          <div className="text-sm font-semibold text-foreground">Send to member</div>
         </div>
         <p className="text-[11px] text-muted mb-3">
           State party funds count towards the same per-turn ceiling as national funds:{" "}

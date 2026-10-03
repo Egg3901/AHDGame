@@ -33,9 +33,7 @@ export function InstrumentStrip({ tiles }: { tiles: InstrumentTile[] }) {
       {tiles.map((tile) => (
         <div key={tile.label} className="bg-card px-4 py-3.5">
           <div className="flex items-baseline justify-between gap-2">
-            <span className="text-[9px] font-semibold uppercase tracking-widest text-muted">
-              {tile.label}
-            </span>
+            <span className="text-body-sm font-medium text-muted">{tile.label}</span>
             {tile.badge && (
               <span className="rounded border border-card-border bg-card-muted px-1.5 py-px font-mono text-[8px] font-bold text-muted">
                 {tile.badge}

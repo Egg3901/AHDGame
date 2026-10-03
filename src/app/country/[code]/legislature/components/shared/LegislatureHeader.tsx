@@ -115,9 +115,7 @@ export default function LegislatureHeader({
       <HeroStatsStrip>
         {/* Majority party */}
         <div className="flex flex-col px-5 py-3 min-w-[140px]">
-          <span className="text-[10px] uppercase tracking-widest text-muted font-medium">
-            Majority Party
-          </span>
+          <span className="text-body-sm font-medium text-muted">Majority party</span>
           <span
             className="text-base font-bold tabular-nums"
             style={{ color: stats.majorityParty.color }}
@@ -128,9 +126,7 @@ export default function LegislatureHeader({
 
         {/* Seats */}
         <div className="flex flex-col px-5 py-3 min-w-[100px]">
-          <span className="text-[10px] uppercase tracking-widest text-muted font-medium">
-            Seats
-          </span>
+          <span className="text-body-sm font-medium text-muted">Seats</span>
           <span className="text-base font-bold tabular-nums">
             {stats.majorityParty.seats} / {stats.totalSeats}
           </span>
@@ -138,7 +134,7 @@ export default function LegislatureHeader({
 
         {/* Leader (PM/Speaker/Senate Majority Leader) */}
         <div className="flex flex-col px-5 py-3 min-w-[160px]">
-          <span className="text-[10px] uppercase tracking-widest text-muted font-medium">
+          <span className="text-body-sm font-medium text-muted">
             {stats.leader?.label ?? "Leader"}
           </span>
           {stats.leader ? (
@@ -156,7 +152,7 @@ export default function LegislatureHeader({
         {/* Minority/Opposition Leader — omitted where the office does not exist */}
         {stats.minorityLeader !== undefined && (
           <div className="flex flex-col px-5 py-3 min-w-[160px]">
-            <span className="text-[10px] uppercase tracking-widest text-muted font-medium">
+            <span className="text-body-sm font-medium text-muted">
               {stats.minorityLeader?.label ?? "Minority Leader"}
             </span>
             {stats.minorityLeader ? (

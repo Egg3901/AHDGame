@@ -273,7 +273,7 @@ function Tally({
   return (
     <div className="text-center">
       <div className={`text-base font-bold ${color}`}>{value}</div>
-      <div className="text-[10px] uppercase tracking-wide text-muted">{label}</div>
+      <div className="text-body-sm font-medium text-muted">{label}</div>
     </div>
   );
 }

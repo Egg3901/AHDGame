@@ -117,9 +117,7 @@ export function StatePartyMetricsPanel({ stateParty }: StatePartyMetricsPanelPro
 
         {/* What Org does — readable rows with tooltips, not unlabeled icon tiles */}
         <div>
-          <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted">
-            What Org does here
-          </div>
+          <div className="mb-2 text-body-sm font-medium text-muted">What Org does here</div>
           <div className="divide-y divide-card-border/40 rounded-lg border border-card-border/40 bg-background/40">
             {effects.map((effect) => (
               <div

@@ -212,25 +212,21 @@ export function ChancellorFundingPanel({
         </div>
         <div className="grid w-full gap-2 sm:grid-cols-3 lg:w-auto lg:min-w-[440px]">
           <div className="rounded-lg border border-card-border bg-card-elevated px-3 py-2">
-            <div className="text-[11px] font-bold uppercase tracking-widest text-muted">
-              Available Pool
-            </div>
+            <div className="text-body-sm font-medium text-muted">Available pool</div>
             <div className="mt-1 text-sm font-semibold tabular-nums text-foreground">
               {formatMoney(symbol, totalPool)}
             </div>
           </div>
           <div className="rounded-lg border border-card-border bg-card-elevated px-3 py-2">
-            <div className="text-[11px] font-bold uppercase tracking-widest text-muted">
-              {amountMode ? "Allocated" : "Assigned Share"}
+            <div className="text-body-sm font-medium text-muted">
+              {amountMode ? "Allocated" : "Assigned share"}
             </div>
             <div className="mt-1 text-sm font-semibold tabular-nums text-foreground">
               {amountMode ? formatMoney(symbol, totalDraft) : `${totalDraft.toFixed(1)}%`}
             </div>
           </div>
           <div className="rounded-lg border border-card-border bg-card-elevated px-3 py-2">
-            <div className="text-[11px] font-bold uppercase tracking-widest text-muted">
-              {summaryLabel}
-            </div>
+            <div className="text-body-sm font-medium text-muted">{summaryLabel}</div>
             <div
               className={`mt-1 text-sm font-semibold tabular-nums ${
                 remaining >= -0.01 ? "text-success" : "text-error"
@@ -247,9 +243,9 @@ export function ChancellorFundingPanel({
         <div className="w-full lg:max-w-xs">
           <label
             htmlFor="allocation-region-filter"
-            className="mb-1 block text-[11px] font-bold uppercase tracking-widest text-muted"
+            className="mb-1 block text-body-sm font-medium text-muted"
           >
-            Region Filter
+            Region filter
           </label>
           <select
             id="allocation-region-filter"
@@ -324,7 +320,7 @@ export function ChancellorFundingPanel({
                 </div>
 
                 <div>
-                  <div className="mb-1 block text-[11px] font-bold uppercase tracking-widest text-muted md:hidden">
+                  <div className="mb-1 block text-body-sm font-medium text-muted md:hidden">
                     {inputLabel}
                   </div>
                   {amountMode ? (
@@ -369,9 +365,7 @@ export function ChancellorFundingPanel({
 
                 {!amountMode && (
                   <div className="flex items-center justify-between gap-2 md:block md:text-right">
-                    <div className="text-[11px] font-bold uppercase tracking-widest text-muted md:hidden">
-                      Money Value
-                    </div>
+                    <div className="text-body-sm font-medium text-muted md:hidden">Money value</div>
                     <div className="text-sm font-semibold tabular-nums text-foreground">
                       {formatMoney(symbol, projectedValue)}
                     </div>
@@ -379,9 +373,7 @@ export function ChancellorFundingPanel({
                 )}
 
                 <div className="flex items-center justify-between gap-2 md:block md:text-right">
-                  <div className="text-[11px] font-bold uppercase tracking-widest text-muted md:hidden">
-                    % of Pool
-                  </div>
+                  <div className="text-body-sm font-medium text-muted md:hidden">% of pool</div>
                   <div className="text-sm font-semibold tabular-nums text-foreground">
                     {percent.toFixed(1)}%
                   </div>

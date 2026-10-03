@@ -157,9 +157,7 @@ export function StatePartyLeadershipPanel({
           const leader = stateParty[field] as LeaderInfo | null;
           return (
             <div key={field} className="rounded-lg border border-card-border bg-background p-4">
-              <div className="text-xs font-semibold uppercase tracking-wider text-muted mb-3">
-                {label}
-              </div>
+              <div className="text-body-sm font-medium text-muted mb-3">{label}</div>
               <div className="flex items-center gap-3 min-h-[3rem]">
                 {leader ? (
                   <>
@@ -196,9 +194,7 @@ export function StatePartyLeadershipPanel({
       {/* State Campaigner — single slot, in-state members only */}
       <div className="rounded-lg border border-card-border bg-background p-4 space-y-2">
         <div className="flex items-baseline justify-between gap-2">
-          <div className="text-xs font-semibold uppercase tracking-wider text-muted">
-            Campaigner
-          </div>
+          <div className="text-body-sm font-medium text-muted">Campaigner</div>
           <span
             className="rounded-full border border-card-border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-muted"
             title="Chair-assigned. Spends state PS to Build Org on the state party's behalf."

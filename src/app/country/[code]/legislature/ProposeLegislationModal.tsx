@@ -818,7 +818,7 @@ export function ProposeLegislationModal({
                   <option value="ban">Ban unions nationally</option>
                   <option value="repeal_ban">Repeal the union ban</option>
                 </select>
-                <div className="flex items-center justify-between text-[10px] uppercase tracking-wide text-muted/70">
+                <div className="flex items-center justify-between text-body-sm font-medium text-muted">
                   <span>← Right-to-work</span>
                   <span>Neutral (0)</span>
                   <span>Collective bargaining →</span>
@@ -893,7 +893,7 @@ export function ProposeLegislationModal({
                     className="space-y-2 rounded-lg border border-card-border bg-background/40 p-3"
                   >
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold uppercase tracking-wider text-muted">
+                      <span className="text-body-sm font-medium text-muted">
                         Provision {idx + 1}
                       </span>
                       {(rows.length > 1 || hasStandaloneProvision) && (
@@ -1158,7 +1158,7 @@ export function ProposeLegislationModal({
                   />
                   Set registration access
                 </label>
-                <div className="flex items-center justify-between text-[10px] uppercase tracking-wide text-muted/70">
+                <div className="flex items-center justify-between text-body-sm font-medium text-muted">
                   <span>&larr; Restricted</span>
                   <span>Neutral (0)</span>
                   <span>Automatic &rarr;</span>

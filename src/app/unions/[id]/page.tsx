@@ -494,7 +494,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
         {/* Stats strip */}
         <div className="flex items-center overflow-x-auto divide-x divide-card-border border-t border-card-border">
           <div className="flex min-w-[140px] flex-col gap-0.5 px-4 py-3 sm:px-5">
-            <span className="text-[11px] uppercase tracking-wider text-muted">President</span>
+            <span className="text-body-sm font-medium text-muted">President</span>
             {presidentHref && leader ? (
               <Link
                 href={presidentHref}
@@ -536,7 +536,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
             hint="The union's war chest. Dues flow in each turn based on how organized it is; recruitment drives and strikes are paid out of it."
           />
           <StatCell
-            label="Open Campaigns"
+            label="Open campaigns"
             value={String(
               bargainingCampaigns.filter(
                 (campaign) => campaign.status === "negotiating" || campaign.status === "dispute"
@@ -774,7 +774,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
               as the per-local gap column below and as a callout on the CEO's
               own wage panel, and does nothing else. */}
           <div className="space-y-2 border-t border-card-border pt-3">
-            <p className="text-[11px] uppercase tracking-wider text-muted">Public wage claim</p>
+            <p className="text-sm font-semibold text-foreground">Public wage claim</p>
             <p className="text-xs text-muted">
               The wage level this union says the industry should pay. Employers see it on their own
               wage panel and every local&apos;s shortfall is listed below. It binds nobody: to make
@@ -782,7 +782,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
             </p>
             <div className="flex flex-wrap items-end gap-2">
               <label className="flex flex-col gap-1">
-                <span className="text-[11px] uppercase tracking-wider text-muted">Wage level</span>
+                <span className="text-body-sm font-medium text-muted">Wage level</span>
                 <input
                   type="number"
                   step={0.05}
@@ -946,9 +946,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
                 {canVote && (
                   <div className="flex flex-wrap items-end gap-2">
                     <label className="flex flex-col gap-1">
-                      <span className="text-[11px] uppercase tracking-wider text-muted">
-                        Candidate
-                      </span>
+                      <span className="text-body-sm font-medium text-muted">Candidate</span>
                       <select
                         value={candidateDraft}
                         onChange={(e) => setCandidateDraft(e.target.value)}
@@ -1535,7 +1533,7 @@ function StatCell({
     // Tooltip rather than a title attribute: native tooltips never fire on
     // touch, which is where these stats were being misread.
     <div className="flex min-w-max flex-col px-5 py-3">
-      <span className="flex items-center text-[10px] font-medium uppercase tracking-widest text-muted">
+      <span className="flex items-center text-body-sm font-medium text-muted">
         {label}
         {hint && <Tooltip content={hint} label={`What ${label} means`} />}
       </span>

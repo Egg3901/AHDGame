@@ -261,9 +261,7 @@ export function DeliverAddressModal({
 
         {/* Effects preview */}
         <div className="mb-3 rounded-lg border border-card-border bg-background/40 px-3 py-2 text-xs">
-          <div className="font-semibold text-muted uppercase tracking-wider text-[10px] mb-1">
-            Effects
-          </div>
+          <div className="text-muted text-body-sm font-medium mb-1">Effects</div>
           <ul className="space-y-0.5">
             <li>
               <span className="text-foreground">Approval</span>{" "}

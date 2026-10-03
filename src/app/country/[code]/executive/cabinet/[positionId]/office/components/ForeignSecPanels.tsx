@@ -208,9 +208,7 @@ export function ForeignSecPanels({
                 <div className="mb-1 flex items-center justify-between">
                   <span className="text-sm font-semibold text-foreground">{option.label}</span>
                   {isActive && (
-                    <span className="text-[10px] font-bold uppercase tracking-wide text-primary">
-                      Active
-                    </span>
+                    <span className="text-body-sm font-medium text-primary">Active</span>
                   )}
                 </div>
                 <p className="text-xs leading-snug text-muted">{option.description}</p>

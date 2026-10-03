@@ -598,8 +598,8 @@ async function renderGenericRegion(countryId: CountryId, regionCode: string) {
                   />
                 )}
                 <div className="min-w-0 flex-1">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary/80">
-                    {countryConfig.name} · {countryConfig.regionLabel} Profile
+                  <p className="text-body-sm font-medium text-primary/80">
+                    {countryConfig.name} · {countryConfig.regionLabel} profile
                   </p>
                   <h1
                     data-coach="nav-region"
@@ -613,9 +613,7 @@ async function renderGenericRegion(countryId: CountryId, regionCode: string) {
                 </div>
                 {calculatedLeans && (
                   <div className="hidden shrink-0 text-right sm:block">
-                    <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-primary/70">
-                      Political Lean
-                    </p>
+                    <p className="text-body-sm font-medium text-primary/70">Political lean</p>
                     <div className="mt-1 flex justify-end">
                       <PositionBadges
                         economic={calculatedLeans.economicLean}
@@ -638,9 +636,7 @@ async function renderGenericRegion(countryId: CountryId, regionCode: string) {
           <div className="grid grid-cols-2 gap-px bg-card-border rounded-b-2xl overflow-hidden sm:flex sm:items-stretch sm:gap-0 sm:divide-x sm:divide-y-0 sm:bg-card">
             {/* Population */}
             <div className="flex flex-col bg-card px-4 py-3">
-              <span className="text-[9px] font-medium uppercase tracking-widest text-muted">
-                Population
-              </span>
+              <span className="text-body-sm font-medium text-muted">Population</span>
               <span className="text-sm font-bold tabular-nums">
                 {formatPopulation(state.population)}
               </span>
@@ -648,9 +644,7 @@ async function renderGenericRegion(countryId: CountryId, regionCode: string) {
 
             {/* GDP */}
             <div className="flex flex-col bg-card px-4 py-3">
-              <span className="text-[9px] font-medium uppercase tracking-widest text-muted">
-                GDP
-              </span>
+              <span className="text-body-sm font-medium text-muted">GDP</span>
               <span className="text-sm font-bold tabular-nums">
                 {formatGDP(state.gdp, getCurrencyPrefix(countryId))}
               </span>
@@ -658,8 +652,8 @@ async function renderGenericRegion(countryId: CountryId, regionCode: string) {
 
             {/* House/Lower Chamber Districts */}
             <div className="flex flex-col bg-card px-4 py-3">
-              <span className="text-[9px] font-medium uppercase tracking-widest text-muted">
-                {countryConfig.legislature?.lowerChamber?.shortName ?? "House"} Dists.
+              <span className="text-body-sm font-medium text-muted">
+                {countryConfig.legislature?.lowerChamber?.shortName ?? "House"} dists.
               </span>
               <span className="text-sm font-bold tabular-nums">{state.houseDistricts}</span>
             </div>
@@ -667,9 +661,7 @@ async function renderGenericRegion(countryId: CountryId, regionCode: string) {
             {/* Political Lean */}
             {calculatedLeans && (
               <div className="flex flex-col gap-1 bg-card px-4 py-3">
-                <span className="text-[9px] font-medium uppercase tracking-widest text-muted">
-                  Political Lean
-                </span>
+                <span className="text-body-sm font-medium text-muted">Political lean</span>
                 <PositionBadges
                   economic={calculatedLeans.economicLean}
                   social={calculatedLeans.socialLean}
@@ -682,9 +674,7 @@ async function renderGenericRegion(countryId: CountryId, regionCode: string) {
 
             {/* Government Approval */}
             <div className="flex flex-col bg-card px-4 py-3">
-              <span className="text-[9px] font-medium uppercase tracking-widest text-muted">
-                Gov. Approval
-              </span>
+              <span className="text-body-sm font-medium text-muted">Gov. approval</span>
               <span className="text-sm font-bold tabular-nums">
                 {governmentApproval != null ? (
                   <span
@@ -711,9 +701,7 @@ async function renderGenericRegion(countryId: CountryId, regionCode: string) {
 
             {/* Regional chief executive — Governor (US/JP), Minister-President (DE), etc. */}
             <div className="flex flex-col bg-card px-4 py-3 sm:col-span-2 lg:col-span-1">
-              <span className="text-[9px] font-medium uppercase tracking-widest text-muted">
-                {regionalExecutiveLabel}
-              </span>
+              <span className="text-body-sm font-medium text-muted">{regionalExecutiveLabel}</span>
               <span className="mt-0.5 flex items-center gap-2 text-sm font-bold tabular-nums">
                 {serializedGovernor && (serializedGovernor.characterId || serializedGovernor.nppId)
                   ? (serializedGovernor.characterName ?? "Unknown")
@@ -732,9 +720,7 @@ async function renderGenericRegion(countryId: CountryId, regionCode: string) {
             {/* State motto (US only) */}
             {STATE_MOTTOS[state._id] && (
               <div className="flex flex-col bg-card px-4 py-3 col-span-2 sm:col-span-2 lg:col-span-1">
-                <span className="text-[9px] font-medium uppercase tracking-widest text-muted">
-                  Motto
-                </span>
+                <span className="text-body-sm font-medium text-muted">Motto</span>
                 <span
                   className="mt-0.5 truncate text-sm font-medium italic text-foreground"
                   title={STATE_MOTTOS[state._id]}
@@ -747,9 +733,7 @@ async function renderGenericRegion(countryId: CountryId, regionCode: string) {
             {/* IE constituent councils — §3.1 Option C flavor (no game-state impact). */}
             {countryId === "IE" && IE_REGION_CONSTITUENT_COUNCILS[state._id] && (
               <div className="flex flex-col bg-card px-4 py-3 col-span-2 sm:col-span-2 lg:col-span-2">
-                <span className="text-[9px] font-medium uppercase tracking-widest text-muted">
-                  Comprising
-                </span>
+                <span className="text-body-sm font-medium text-muted">Comprising</span>
                 <span
                   className="mt-0.5 text-xs text-muted"
                   title={IE_REGION_CONSTITUENT_COUNCILS[state._id].join(", ")}

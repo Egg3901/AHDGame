@@ -71,9 +71,7 @@ export function PsInvestmentBlock({
         >
           <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
         </svg>
-        <div className="text-xs font-semibold uppercase tracking-wide text-muted">
-          PS Investment / turn
-        </div>
+        <div className="text-sm font-semibold text-foreground">PS investment / turn</div>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <Input
@@ -101,9 +99,7 @@ export function PsInvestmentBlock({
       </div>
       <div className="mt-2 rounded-md border border-card-border/40 bg-background/30 px-3 py-2 text-xs">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <span className="font-semibold text-muted uppercase tracking-wide text-[10px]">
-            Total this turn
-          </span>
+          <span className="text-muted text-body-sm font-medium">Total this turn</span>
           <span className="tabular-nums font-bold text-success">
             +{totalPsPerTurn.toFixed(2)} PS / turn
           </span>

@@ -89,7 +89,7 @@ export function NationalizationProvisionDetailCard({
           ))}
         </span>
       </div>
-      <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-3">
+      <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-body sm:grid-cols-3">
         <Stat label="CEO" value={c.ceoVacant ? "Vacant" : (c.ceoName ?? "—")} />
         <Stat label="Revenue/turn" value={natMoney(c.totalRevenuePerTurn, c.currency)} />
         <Stat label="Avg growth" value={`${c.avgGrowthPct}%`} />
@@ -138,7 +138,7 @@ function ApproximateNote() {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col">
-      <dt className="text-[10px] uppercase tracking-wide text-muted">{label}</dt>
+      <dt className="text-body-sm font-medium text-muted">{label}</dt>
       <dd className="text-foreground">{value}</dd>
     </div>
   );

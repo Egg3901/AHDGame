@@ -110,9 +110,7 @@ export function ChangePolicyModal({
                 }`}
               >
                 <span className="font-medium">{getDevolutionPolicyLabel(stateId, p)}</span>
-                {isCurrent && (
-                  <span className="text-[10px] uppercase tracking-wider text-muted">Current</span>
-                )}
+                {isCurrent && <span className="text-body-sm font-medium text-muted">Current</span>}
               </button>
             );
           })}

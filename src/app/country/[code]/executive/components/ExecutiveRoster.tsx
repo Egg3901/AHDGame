@@ -31,7 +31,7 @@ export function ExecutiveRoster({
   return (
     <div className="overflow-hidden rounded-xl border border-card-border bg-card">
       <div className="flex items-baseline justify-between border-b border-card-border bg-card-muted px-4 py-2.5">
-        <span className="text-[10px] font-bold uppercase tracking-widest text-muted">{title}</span>
+        <span className="text-sm font-semibold text-foreground">{title}</span>
         {filled !== undefined && total !== undefined && (
           <span className="font-mono text-[10px] text-muted/70">
             {filled} / {total}

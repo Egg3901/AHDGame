@@ -133,9 +133,9 @@ export function FoundUnionModal({
             <div>
               <label
                 htmlFor="found-union-name"
-                className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-muted"
+                className="mb-1.5 block text-body-sm font-medium text-muted"
               >
-                Union Name
+                Union name
               </label>
               <input
                 id="found-union-name"
@@ -153,7 +153,7 @@ export function FoundUnionModal({
             <div>
               <label
                 htmlFor="found-union-industry"
-                className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-muted"
+                className="mb-1.5 block text-body-sm font-medium text-muted"
               >
                 Industry
               </label>

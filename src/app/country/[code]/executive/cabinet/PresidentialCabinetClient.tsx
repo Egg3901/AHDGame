@@ -396,9 +396,7 @@ export default function PresidentialCabinetClient({ countryId }: { countryId: Co
             </div>
             <div className="flex items-center overflow-x-auto divide-x divide-card-border border-t border-card-border">
               <div className="flex min-w-[110px] flex-col px-5 py-3">
-                <span className="text-[10px] font-medium uppercase tracking-widest text-muted">
-                  Positions
-                </span>
+                <span className="text-body-sm font-medium text-muted">Positions</span>
                 <span className="text-base font-bold tabular-nums">
                   {filledCount}
                   <span className="text-xs font-normal text-muted">
@@ -408,9 +406,7 @@ export default function PresidentialCabinetClient({ countryId }: { countryId: Co
                 </span>
               </div>
               <div className="flex min-w-[140px] flex-col px-5 py-3">
-                <span className="text-[10px] font-medium uppercase tracking-widest text-muted">
-                  Pending Votes
-                </span>
+                <span className="text-body-sm font-medium text-muted">Pending votes</span>
                 <span className="text-base font-bold tabular-nums">{activeNominations.length}</span>
               </div>
             </div>

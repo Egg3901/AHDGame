@@ -209,9 +209,7 @@ function AuctionRow({
       {/* Bid history — every bid/raise, newest first; the leader is the high bid */}
       {auction.bidHistory.length > 0 && (
         <div className="mt-3 rounded-lg border border-card-border bg-card px-3 py-2">
-          <div className="text-body-xs font-semibold uppercase tracking-wide text-muted">
-            Bid history
-          </div>
+          <div className="text-body-sm font-medium text-muted">Bid history</div>
           <ul className="mt-1 space-y-0.5">
             {auction.bidHistory.map((b, i) => (
               <li

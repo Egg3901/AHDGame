@@ -169,9 +169,7 @@ export default function ApprovalClient({ initialMetrics, initialApproval }: Appr
             {/* Government Approval */}
             {governmentApproval != null && (
               <div className="rounded-xl border border-card-border bg-card p-6 shadow-panel">
-                <p className="text-xs uppercase tracking-widest text-muted font-medium mb-1">
-                  Government Approval
-                </p>
+                <p className="text-body-sm font-medium text-muted mb-1">Government approval</p>
                 <p
                   className={`text-5xl font-bold tabular-nums ${approvalColor(governmentApproval)}`}
                 >
@@ -189,11 +187,9 @@ export default function ApprovalClient({ initialMetrics, initialApproval }: Appr
               <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
                 <h2 className="text-sm font-semibold text-muted">Active effects</h2>
                 {modifiers.length > 0 && (
-                  <div className="flex gap-4 text-right text-xs">
+                  <div className="flex gap-4 text-right text-body">
                     <div>
-                      <div className="text-[10px] uppercase tracking-wider text-muted">
-                        Net approval
-                      </div>
+                      <div className="text-body-sm font-medium text-muted">Net approval</div>
                       <div
                         className={
                           "mt-0.5 font-semibold tabular-nums " +
@@ -209,9 +205,7 @@ export default function ApprovalClient({ initialMetrics, initialApproval }: Appr
                       </div>
                     </div>
                     <div>
-                      <div className="text-[10px] uppercase tracking-wider text-muted">
-                        Net margin
-                      </div>
+                      <div className="text-body-sm font-medium text-muted">Net margin</div>
                       <div
                         className={
                           "mt-0.5 font-semibold tabular-nums " +

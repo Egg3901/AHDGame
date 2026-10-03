@@ -88,9 +88,9 @@ export default async function ArasPage({ params }: PageProps) {
             <img src={heroSrc} alt="Flag of Ireland" className="h-full w-full object-cover" />
           </div>
           <div className="relative p-8">
-            <p className="text-xs uppercase tracking-widest text-muted">
+            <p className="text-body-sm font-medium text-muted">
               <Link href="/country/ie/executive" className="hover:text-foreground">
-                Government Buildings
+                Government buildings
               </Link>{" "}
               · Áras an Uachtaráin
             </p>

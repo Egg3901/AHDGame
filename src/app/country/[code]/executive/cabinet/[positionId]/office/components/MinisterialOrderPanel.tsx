@@ -124,9 +124,7 @@ export function MinisterialOrderPanel({
 
       {activeOrders.length > 0 && (
         <div className="mb-4 rounded-lg border border-primary/20 bg-primary/5 p-3">
-          <p className="mb-2 text-xs font-bold uppercase tracking-widest text-primary">
-            Active Orders
-          </p>
+          <p className="mb-2 text-body-sm font-medium text-primary">Active orders</p>
           <ul className="space-y-1">
             {activeOrders.map((order) => {
               const remaining = formatRemainingTurns(order.expiresTurn);
@@ -191,9 +189,7 @@ export function MinisterialOrderPanel({
                         {isRegional ? "Regional" : "National"}
                       </span>
                       {isActive && (
-                        <span className="text-[10px] font-bold uppercase tracking-wide text-primary">
-                          Active
-                        </span>
+                        <span className="text-body-sm font-medium text-primary">Active</span>
                       )}
                     </div>
                     <p className="mt-1 text-xs leading-snug text-muted">{order.description}</p>

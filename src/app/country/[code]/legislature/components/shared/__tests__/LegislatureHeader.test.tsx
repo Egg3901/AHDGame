@@ -37,7 +37,7 @@ describe("LegislatureHeader", () => {
     expect(img.getAttribute("src")).toContain("commons.jpg");
 
     // Check stats strip
-    expect(screen.getByText("Majority Party")).toBeTruthy();
+    expect(screen.getByText("Majority party")).toBeTruthy();
     expect(screen.getByText("Labour")).toBeTruthy();
     expect(screen.getByText("326 / 650")).toBeTruthy();
 
@@ -178,8 +178,9 @@ describe("LegislatureHeader", () => {
     const img = screen.getByAltText("House of Commons chamber");
     expect(img).toBeTruthy();
 
-    // Stats labels should be uppercase
-    const majorityLabel = screen.getByText("Majority Party");
-    expect(majorityLabel.className).toContain("uppercase");
+    // Stats labels use the sentence-case label style
+    const majorityLabel = screen.getByText("Majority party");
+    expect(majorityLabel.className).toContain("text-body-sm");
+    expect(majorityLabel.className).not.toContain("uppercase");
   });
 });

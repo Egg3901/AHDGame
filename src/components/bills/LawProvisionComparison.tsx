@@ -80,11 +80,9 @@ export function LawProvisionComparison({
     <div className="space-y-2">
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto_1fr]">
         <div className="rounded-lg border border-card-border bg-card/60 p-2.5">
-          <div className="font-mono text-[10px] uppercase tracking-widest text-muted">
-            Current law
-          </div>
+          <div className="text-body-sm font-medium text-muted">Current law</div>
           <div
-            className="mt-0.5 truncate text-xs font-semibold text-foreground"
+            className="mt-0.5 truncate text-body font-semibold text-foreground"
             title={currentName}
           >
             {currentName}
@@ -104,13 +102,11 @@ export function LawProvisionComparison({
             hasProposed ? "border-primary/40 bg-primary/5" : "border-card-border bg-card/60"
           }`}
         >
-          <div className="font-mono text-[10px] uppercase tracking-widest text-primary">
-            Proposed
-          </div>
+          <div className="text-body-sm font-medium text-primary">Proposed</div>
           {hasProposed && proposedLine ? (
             <>
               <div
-                className="mt-0.5 truncate text-xs font-semibold text-foreground"
+                className="mt-0.5 truncate text-body font-semibold text-foreground"
                 title={proposedName}
               >
                 {proposedName}
@@ -144,7 +140,7 @@ export function LawProvisionComparison({
       </div>
       {targets.length > 0 && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <span className="w-full font-mono text-[10px] uppercase tracking-widest text-muted/70">
+          <span className="w-full text-body-sm font-medium text-muted">
             Affected metrics vs current law
           </span>
           {targets.map((t) => {
@@ -210,7 +206,7 @@ export function BillFiscalImpactStrip({
 
   const cell = (label: string, value: string, extra?: React.ReactNode) => (
     <div className="flex-1 px-3 py-2">
-      <div className="font-mono text-[10px] uppercase tracking-widest text-muted">{label}</div>
+      <div className="text-body-sm font-medium text-muted">{label}</div>
       <div className="mt-0.5 font-mono text-sm font-bold tabular-nums text-foreground">
         {value}
         {extra}
@@ -220,7 +216,7 @@ export function BillFiscalImpactStrip({
 
   return (
     <div className="overflow-hidden rounded-lg border border-card-border bg-card/60">
-      <div className="border-b border-card-border px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest text-muted">
+      <div className="border-b border-card-border px-3 py-1.5 text-body-sm font-medium text-muted">
         Fiscal impact — estimated
       </div>
       <div className="flex flex-col divide-y divide-card-border sm:flex-row sm:divide-x sm:divide-y-0">

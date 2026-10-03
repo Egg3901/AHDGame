@@ -1002,7 +1002,7 @@ export function ProposeBillModal({
                     <option value="ban">Ban unions nationally</option>
                     <option value="repeal_ban">Repeal the union ban</option>
                   </select>
-                  <div className="flex items-center justify-between text-[10px] uppercase tracking-wide text-muted/70">
+                  <div className="flex items-center justify-between text-body-sm font-medium text-muted">
                     <span>← Right-to-work</span>
                     <span>Neutral (0)</span>
                     <span>Collective bargaining →</span>
@@ -1318,7 +1318,7 @@ export function ProposeBillModal({
                         />
                         Set registration access
                       </label>
-                      <div className="flex items-center justify-between text-[10px] uppercase tracking-wide text-muted/70">
+                      <div className="flex items-center justify-between text-body-sm font-medium text-muted">
                         <span>&larr; Restricted</span>
                         <span>Neutral (0)</span>
                         <span>Automatic &rarr;</span>

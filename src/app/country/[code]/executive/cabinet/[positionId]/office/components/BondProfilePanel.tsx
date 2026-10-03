@@ -153,9 +153,7 @@ export function BondProfilePanel({
       </div>
 
       <div className="rounded-lg border border-card-border bg-background/60 p-4 mb-4">
-        <div className="text-[11px] font-semibold text-muted uppercase tracking-wider mb-2">
-          Debt Coverage
-        </div>
+        <div className="text-body-sm font-medium text-muted mb-2">Debt coverage</div>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
           <div>
             <div className="text-[11px] text-muted mb-0.5">National debt principal</div>

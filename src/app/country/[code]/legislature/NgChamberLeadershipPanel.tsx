@@ -126,7 +126,7 @@ export function NgChamberLeadershipPanel({ countryId }: { countryId: CountryId }
           >
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-xs uppercase tracking-wider text-muted">{r.label}</p>
+                <p className="text-body-sm font-medium text-muted">{r.label}</p>
                 <p className="text-base font-semibold text-foreground mt-0.5">
                   {r.leader?.characterName ?? "Vacant"}
                 </p>

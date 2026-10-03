@@ -351,9 +351,7 @@ export default function ParliamentaryCabinetClient({ config }: Props) {
             </div>
             <div className="flex items-center overflow-x-auto divide-x divide-card-border border-t border-card-border">
               <div className="flex flex-col px-5 py-3 min-w-[110px]">
-                <span className="text-[10px] uppercase tracking-widest text-muted font-medium">
-                  Positions
-                </span>
+                <span className="text-body-sm font-medium text-muted">Positions</span>
                 <span className="text-base font-bold tabular-nums">
                   {filledCount}
                   <span className="text-xs font-normal text-muted">

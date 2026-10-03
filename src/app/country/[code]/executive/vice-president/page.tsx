@@ -13,9 +13,7 @@ import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 function HolderRow({ label, holder }: { label: string; holder: VpOfficeHolder | null }) {
   return (
     <div className="flex items-center gap-3">
-      <span className="w-28 shrink-0 text-[10px] font-semibold uppercase tracking-widest text-muted">
-        {label}
-      </span>
+      <span className="w-28 shrink-0 text-body-sm font-medium text-muted">{label}</span>
       {holder ? (
         <span className="inline-flex min-w-0 items-center gap-2">
           <Avatar
@@ -85,9 +83,7 @@ export default function VicePresidentOfficePage() {
         <header className="rounded-2xl border border-card-border bg-card p-6">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <div className="text-[10px] font-semibold uppercase tracking-widest text-muted">
-                {countryName}
-              </div>
+              <div className="text-body-sm font-medium text-muted">{countryName}</div>
               <h1 className="mt-1 text-2xl font-bold text-foreground">Vice President</h1>
             </div>
             <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-card-border bg-card-muted px-2.5 py-1 text-xs font-medium text-foreground/80">

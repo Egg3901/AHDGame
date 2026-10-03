@@ -107,11 +107,7 @@ export function TierSettingPanel({
             >
               <div className="flex items-center justify-between mb-1">
                 <span className="font-semibold text-foreground text-sm">{option.label}</span>
-                {isActive && (
-                  <span className="text-[10px] font-bold uppercase tracking-wide text-primary">
-                    Active
-                  </span>
-                )}
+                {isActive && <span className="text-body-sm font-medium text-primary">Active</span>}
               </div>
               <p className="text-xs text-muted leading-snug">{option.description}</p>
             </button>

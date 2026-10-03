@@ -63,10 +63,10 @@ export function AgendaBannerWithEdit({
 
     return (
       <div className="rounded-xl border border-card-border bg-card p-4 shadow-sm space-y-2">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-muted">
+        <div className="text-body-sm font-medium text-muted">
           {partyAbbreviation
-            ? `${partyAbbreviation} National Agenda — Edit`
-            : "National Agenda — Edit"}
+            ? `${partyAbbreviation} national agenda — edit`
+            : "National agenda — edit"}
         </div>
         <input
           type="text"
@@ -111,8 +111,8 @@ export function AgendaBannerWithEdit({
     return (
       <div className="rounded-xl border border-dashed border-card-border bg-card p-4 shadow-sm flex items-center justify-between gap-2">
         <div>
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-muted">
-            {partyAbbreviation ? `${partyAbbreviation} National Agenda` : "National Agenda"}
+          <div className="text-body-sm font-medium text-muted">
+            {partyAbbreviation ? `${partyAbbreviation} national agenda` : "National agenda"}
           </div>
           <p className="text-xs text-muted mt-0.5">No active agenda. Chairs can set one.</p>
         </div>

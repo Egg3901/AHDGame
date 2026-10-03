@@ -280,7 +280,7 @@ export function StateOrganizationTab({
         </p>
         {racePresence.length > 0 && (
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <span className="text-xs uppercase tracking-wide text-muted">Showing</span>
+            <span className="text-body-sm font-medium text-muted">Showing</span>
             <button
               type="button"
               onClick={() => setViewingCharacterId(null)}

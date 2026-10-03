@@ -719,9 +719,7 @@ export function JPDietPage({ countryId }: Props) {
               {/* Leader cards */}
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="rounded-xl border border-card-border bg-card p-5">
-                  <p className="text-xs font-semibold uppercase tracking-widest text-muted mb-2">
-                    Prime Minister
-                  </p>
+                  <p className="text-body-sm font-medium text-muted mb-2">Prime Minister</p>
                   {leaders?.primeMinister ? (
                     <div className="flex items-center gap-3">
                       <Avatar
@@ -744,9 +742,7 @@ export function JPDietPage({ countryId }: Props) {
                   )}
                 </div>
                 <div className="rounded-xl border border-card-border bg-card p-5">
-                  <p className="text-xs font-semibold uppercase tracking-widest text-muted mb-2">
-                    Opposition Leader
-                  </p>
+                  <p className="text-body-sm font-medium text-muted mb-2">Opposition Leader</p>
                   {leaders?.oppositionLeader ? (
                     <div className="flex items-center gap-3">
                       <Avatar

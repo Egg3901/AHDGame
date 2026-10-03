@@ -554,7 +554,7 @@ function BillDetailContent() {
                   )}
                   {bill.canVoteOrigin && (
                     <div className="space-y-2 border-t border-card-border/60 pt-3">
-                      <div className="text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
+                      <div className="text-center text-body-sm font-medium text-muted">
                         Cast your vote
                       </div>
                       <VoteShiftPreview preview={bill.voteShiftPreview} currentVote={bill.myVote} />

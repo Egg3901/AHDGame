@@ -387,27 +387,21 @@ export default async function NppProfilePage({ params }: PageProps) {
           <h2 className="text-sm font-semibold text-zinc-500 mb-4">Economic data</h2>
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="rounded-lg bg-zinc-950/40 border border-zinc-800 p-4">
-              <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1">
-                Campaign Funds
-              </p>
+              <p className="text-body-sm font-medium text-zinc-500 mb-1">Campaign funds</p>
               <p className="text-xl font-bold tabular-nums text-emerald-400">
                 {formatMoney(funds, nppCurrencySymbol ?? "$")}
               </p>
             </div>
 
             <div className="rounded-lg bg-zinc-950/40 border border-zinc-800 p-4">
-              <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1">
-                Donor Base Level
-              </p>
+              <p className="text-body-sm font-medium text-zinc-500 mb-1">Donor base level</p>
               <p className="text-xl font-bold tabular-nums">
                 {donorBaseLevel} / {NPP_MAX_DONOR_BASE_LEVEL}
               </p>
             </div>
 
             <div className="rounded-lg bg-zinc-950/40 border border-zinc-800 p-4">
-              <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">
-                Action Points
-              </p>
+              <p className="text-body-sm font-medium text-zinc-500 mb-2">Action points</p>
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-xl font-bold tabular-nums">{actionPoints}</span>
                 <span className="text-xs text-zinc-500">/ 100</span>

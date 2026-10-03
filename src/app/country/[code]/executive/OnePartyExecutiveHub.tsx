@@ -729,9 +729,7 @@ export async function OnePartyExecutiveHub({ countryId }: { countryId: CountryId
 
               {confidencePanel.history.length > 0 && (
                 <div className="border-t border-card-border pt-3">
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
-                    Recent drift
-                  </p>
+                  <p className="mb-2 text-body-sm font-medium text-muted">Recent drift</p>
                   <ul className="space-y-1.5 text-body-sm">
                     {confidencePanel.history.map((entry, idx) => (
                       <li

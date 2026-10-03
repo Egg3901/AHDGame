@@ -241,7 +241,7 @@ function LeaderCard({
 }) {
   return (
     <div className="rounded-xl border border-card-border bg-card p-5">
-      <p className="text-xs font-semibold uppercase tracking-widest text-muted mb-2">{label}</p>
+      <p className="text-body-sm font-medium text-muted mb-2">{label}</p>
       {character ? (
         <div className="flex items-center gap-3">
           <Avatar
@@ -327,7 +327,7 @@ function LeadershipTab({
           character={leaders?.primeMinister ?? null}
         />
         <div className="rounded-xl border border-card-border bg-card p-5">
-          <p className="text-xs font-semibold uppercase tracking-widest text-muted mb-2">
+          <p className="text-body-sm font-medium text-muted mb-2">
             Chairman of the Council of State
           </p>
           {(headOfState?.characterName ?? government?.hosName) ? (

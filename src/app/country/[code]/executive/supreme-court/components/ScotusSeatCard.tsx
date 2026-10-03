@@ -33,9 +33,7 @@ function leanToPercent(lean: number): number {
 function LeanBar({ label, value }: { label: string; value: number | null }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="w-12 shrink-0 text-[10px] font-medium uppercase tracking-wide text-muted">
-        {label}
-      </span>
+      <span className="w-12 shrink-0 text-body-sm font-medium text-muted">{label}</span>
       <div className="relative h-1.5 flex-1 rounded-full bg-card-elevated">
         {value != null && (
           <span
@@ -106,9 +104,7 @@ export function ScotusSeatCard({
   return (
     <div className="rounded-xl border border-card-border bg-card p-4 shadow-card">
       <div className="flex items-start justify-between gap-2">
-        <span className="text-[10px] font-semibold uppercase tracking-widest text-muted">
-          Seat #{seat.seatNumber}
-        </span>
+        <span className="text-body-sm font-medium text-muted">Seat #{seat.seatNumber}</span>
         {seat.isDivergent && (
           <span className="rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-[10px] font-medium text-warning">
             Divergent

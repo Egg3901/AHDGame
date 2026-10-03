@@ -89,10 +89,7 @@ export function UnionFundTreasuryPanel({
       {isHead && (
         <>
           <div className="flex flex-wrap items-center gap-2">
-            <label
-              htmlFor="union-fund-amount"
-              className="text-[11px] uppercase tracking-wider text-muted"
-            >
+            <label htmlFor="union-fund-amount" className="text-body-sm font-medium text-muted">
               Contribute from campaign funds
             </label>
             <input

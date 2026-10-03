@@ -273,9 +273,7 @@ function ToolbarSelect({
 }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
-        {label}
-      </span>
+      <span className="text-body-sm font-medium text-muted">{label}</span>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}

@@ -181,7 +181,7 @@ export default function MetricDetailPage({
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <div
-                  className="text-[10px] font-bold uppercase tracking-[0.16em]"
+                  className="text-body-sm font-medium"
                   style={{ color: "color-mix(in srgb, var(--stat-soft) 80%, transparent)" }}
                 >
                   {CATEGORY_LABELS[category] ?? category} · {stateName} · {countryId}
@@ -208,16 +208,12 @@ export default function MetricDetailPage({
           {/* Stats row */}
           <div className="grid grid-cols-1 divide-y divide-card-border bg-card sm:grid-cols-3 sm:divide-x sm:divide-y-0">
             <div className="px-6 py-4">
-              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted">
-                Current Value
-              </p>
+              <p className="text-body-sm font-medium text-muted">Current value</p>
               <p className="mt-1 text-3xl font-bold tabular-nums text-foreground">{fmt(value)}</p>
             </div>
             {comparisonValue !== undefined && (
               <div className="px-6 py-4">
-                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted">
-                  {comparisonLabel}
-                </p>
+                <p className="text-body-sm font-medium text-muted">{comparisonLabel}</p>
                 <p className="mt-1 text-3xl font-bold tabular-nums text-muted">
                   {fmt(comparisonValue)}
                 </p>
@@ -238,9 +234,7 @@ export default function MetricDetailPage({
               </div>
             )}
             <div className="px-6 py-4">
-              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted">
-                Active Policy Effect
-              </p>
+              <p className="text-body-sm font-medium text-muted">Active policy effect</p>
               {hasTickRate ? (
                 <>
                   <p
@@ -308,18 +302,18 @@ export default function MetricDetailPage({
             <div className="grid grid-cols-2 gap-3">
               {[
                 {
-                  label: "Per Turn",
+                  label: "Per turn",
                   value: `${tickRate! > 0 ? "+" : ""}${tickRate!.toFixed(tickDecimals)}${def.formatSuffix ?? ""}`,
                   color: tickIsGood ? "text-success" : "text-error",
                 },
                 {
-                  label: "Per Year (48 turns)",
+                  label: "Per year (48 turns)",
                   value: `${yearlyChange >= 0 ? "+" : ""}${yearlyChange.toFixed(def.decimals ?? 1)}${def.formatSuffix ?? ""}`,
                   color: tickIsGood ? "text-success" : "text-error",
                 },
                 { label: "Current", value: fmt(value), color: "text-foreground" },
                 {
-                  label: "In 1 Year",
+                  label: "In 1 year",
                   value: fmt(projectedYearValue),
                   color: tickIsGood ? "text-success" : "text-error",
                 },
@@ -328,9 +322,7 @@ export default function MetricDetailPage({
                   key={label}
                   className="rounded-xl border border-card-border/30 bg-card-muted px-4 py-3"
                 >
-                  <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.16em] text-muted/70">
-                    {label}
-                  </p>
+                  <p className="mb-1 text-body-sm font-medium text-muted">{label}</p>
                   <p className={`text-lg font-bold tabular-nums ${color}`}>{v}</p>
                 </div>
               ))}

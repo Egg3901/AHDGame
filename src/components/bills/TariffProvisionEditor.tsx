@@ -53,9 +53,7 @@ export function TariffProvisionEditor({ value, onChange, countryId, enabledCount
   return (
     <div className="space-y-3 rounded-xl border border-dashed border-purple-500/35 bg-purple-500/5 p-4">
       <div className="flex items-center justify-between">
-        <h4 className="text-xs font-semibold uppercase tracking-wider text-purple-200/80">
-          Tariff Provisions
-        </h4>
+        <h4 className="text-sm font-semibold text-purple-200/80">Tariff provisions</h4>
         <span className="text-xs text-muted">
           {rows.length} / {MAX_PROVISIONS}
         </span>
@@ -63,7 +61,7 @@ export function TariffProvisionEditor({ value, onChange, countryId, enabledCount
 
       {rows.map((row, i) => (
         <div key={i} className="space-y-2 rounded-lg border border-card-border bg-card p-3">
-          <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider text-muted">
+          <div className="flex items-center justify-between text-body-sm font-medium text-muted">
             <span>Tariff #{i + 1}</span>
             {rows.length > 1 && (
               <button

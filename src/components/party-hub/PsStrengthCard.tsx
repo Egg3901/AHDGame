@@ -69,7 +69,7 @@ export function PsStrengthCard({
             ? ` + ${treasuryGainPerTurn.toFixed(2)} spend`
             : null}
         </span>
-        <span className="text-[10px] uppercase tracking-wider opacity-70">
+        <span className="text-body-sm font-medium opacity-70">
           {bandLabel} · {scope}
         </span>
       </div>

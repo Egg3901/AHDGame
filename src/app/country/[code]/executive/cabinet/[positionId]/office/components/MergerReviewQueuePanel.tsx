@@ -62,9 +62,7 @@ export function MergerReviewQueuePanel({ data, onDecided, canAct }: Props) {
       )}
       {err && <p className="mt-2 text-xs text-error">{err}</p>}
 
-      <h4 className="mt-4 text-xs font-semibold uppercase tracking-wide text-muted">
-        Awaiting your decision
-      </h4>
+      <h4 className="mt-4 text-sm font-semibold text-foreground">Awaiting your decision</h4>
       {pending.length === 0 ? (
         <p className="mt-2 text-xs text-muted">No merger is waiting on you.</p>
       ) : (
@@ -82,9 +80,7 @@ export function MergerReviewQueuePanel({ data, onDecided, canAct }: Props) {
 
       {decided.length > 0 && (
         <>
-          <h4 className="mt-4 text-xs font-semibold uppercase tracking-wide text-muted">
-            Already decided
-          </h4>
+          <h4 className="mt-4 text-sm font-semibold text-foreground">Already decided</h4>
           <ul className="mt-2 space-y-2">
             {decided.map((review) => (
               <MergerReviewCard key={review.id} review={review} />

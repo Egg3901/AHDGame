@@ -228,7 +228,7 @@ export function TradeEmbargoPanel({ countryId, canAct, actionsRemaining }: Props
                       Lift
                     </Button>
                   ) : (
-                    <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-muted/70">
+                    <span className="shrink-0 text-body-sm font-medium text-muted">
                       {e.origin === "organization"
                         ? "Repeal through organization"
                         : "Repeal via bill"}
