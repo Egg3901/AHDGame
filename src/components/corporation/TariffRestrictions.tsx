@@ -84,7 +84,9 @@ export function TariffRestrictions({
 
   if (countries.length === 0) {
     return (
-      <p className="py-1 text-xs text-muted">No active trade restrictions affect this corporation.</p>
+      <p className="py-1 text-xs text-muted">
+        No active trade restrictions affect this corporation.
+      </p>
     );
   }
 
