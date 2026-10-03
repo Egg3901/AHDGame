@@ -8,6 +8,7 @@ import { resetLedgerShadowFlagCache } from "@/lib/ledger/featureFlag";
 import { writeBalanceSnapshot, writePreForexBalanceCheckpoint } from "@/lib/ledger/balanceSnapshot";
 import { reconcileTurn } from "@/lib/ledger/reconcile";
 import type { LedgerEntry } from "@/lib/ledger/types";
+import { runWithLedgerTurn } from "@/lib/ledger/ledgerTurn";
 import { insertCorporationWithTickerRetry } from "@/lib/corporations/tickerSymbol";
 import { spawnNppCorporation } from "@/lib/admin/spawnNppCorporation";
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
@@ -92,13 +93,16 @@ for (const native of [false, true]) {
       it("witnesses the default treasury in GBP at the processing turn", async () => {
         const db = await world(native, { clock: 9 });
         await writeBalanceSnapshot(db, 1);
-        const spawned = await spawnNppCorporation(db, {
-          name: "Fixture Holdings",
-          type: "technology",
-          countryId: "UK",
-          headquartersState: "LON",
-          foundedAtTurn: 2,
-        });
+        // Founding inside a turn: processTurn runs it in the turn's ledger scope.
+        const spawned = await runWithLedgerTurn(2, () =>
+          spawnNppCorporation(db, {
+            name: "Fixture Holdings",
+            type: "technology",
+            countryId: "UK",
+            headquartersState: "LON",
+            foundedAtTurn: 2,
+          })
+        );
         const corp = await db
           .collection("corporations")
           .findOne({ _id: new ObjectId(spawned.corporationId) });
