@@ -368,7 +368,7 @@ function OperationsRow({
           </span>
         </Td>
         {sector.pricingPosture !== undefined && (
-          <Td align="right">
+          <Td align="right" numeric={false}>
             <select
               aria-label={`Pricing, ${sector.stateName} ${sector.sectorLabel}`}
               value={postureValue == null ? "auto" : String(postureValue)}
@@ -405,7 +405,7 @@ function OperationsRow({
             />
           </Td>
         )}
-        <Td align="right" className="text-xs">
+        <Td align="right" numeric={false} className="text-xs">
           <span className="inline-flex items-center justify-end gap-2">
             {status && (
               <span

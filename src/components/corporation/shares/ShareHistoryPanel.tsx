@@ -148,22 +148,22 @@ export default function ShareHistoryPanel({ corpId }: ShareHistoryPanelProps) {
   const rangeEnd = Math.min(page * PAGE_SIZE, total);
 
   return (
-    <div className="rounded-lg border border-card-border bg-card p-6">
-      <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-lg font-semibold">Share History</h3>
+    <section className="min-w-0">
+      <div className="mb-1 flex min-h-8 items-center justify-between gap-3 border-b border-card-border pb-1.5">
+        <h2 className="text-sm font-semibold text-foreground">Share history</h2>
         {loading ? (
           <Skeleton className="h-4 w-44" />
         ) : (
           <p className="text-xs text-muted">
             {total === 0
               ? "No share activity yet."
-              : `Showing ${rangeStart.toLocaleString("en-US")}–${rangeEnd.toLocaleString("en-US")} of ${total.toLocaleString("en-US")}`}
+              : `${rangeStart.toLocaleString("en-US")} to ${rangeEnd.toLocaleString("en-US")} of ${total.toLocaleString("en-US")}`}
           </p>
         )}
       </div>
 
       {error && (
-        <div className="mb-4 rounded-md border border-error/30 bg-error/10 p-3 text-sm text-error">
+        <div role="alert" className="py-2 text-xs text-error">
           {error}
         </div>
       )}
@@ -177,7 +177,7 @@ export default function ShareHistoryPanel({ corpId }: ShareHistoryPanelProps) {
       )}
 
       {!loading && entries.length === 0 && !error && (
-        <div className="rounded-md border border-dashed border-card-border p-8 text-center text-sm text-muted">
+        <div className="py-2 text-xs text-muted">
           No share movements recorded yet. Issuances, buys, sells, fills, and corrections will
           appear here once they occur.
         </div>
@@ -187,7 +187,7 @@ export default function ShareHistoryPanel({ corpId }: ShareHistoryPanelProps) {
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm">
             <thead>
-              <tr className="border-b border-card-border text-left text-xs uppercase text-muted">
+              <tr className="border-b border-card-border text-left text-[11px] text-muted">
                 <th className="py-2 pr-3 font-medium">Date</th>
                 <th className="py-2 pr-3 font-medium">Event</th>
                 <th className="py-2 pr-3 font-medium">From</th>
@@ -289,6 +289,6 @@ export default function ShareHistoryPanel({ corpId }: ShareHistoryPanelProps) {
           </button>
         </div>
       )}
-    </div>
+    </section>
   );
 }
