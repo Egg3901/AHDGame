@@ -1,4 +1,9 @@
 import { z } from "zod";
+import { isBgFoundingCampaign } from "@/lib/countries/bg/rules/foundingCampaign1990";
+import {
+  registerBgFoundingPlayerFiling,
+  bgFoundingFilingMessages,
+} from "@/lib/countries/bg/foundingPlayerFiling1990";
 import { isHu1991AssemblyCampaign } from "@/lib/countries/hu/rules/assemblyCampaign1991";
 import {
   registerHu1991PlayerFiling,
@@ -108,9 +113,19 @@ export async function POST(request: Request, { params }: RouteParams) {
     const electionObjectId = election._id;
 
     const hu1991 = isHu1991AssemblyCampaign(election) || election.hungarianModernByElection != null;
+    const bgFounding = isBgFoundingCampaign(election);
     let huDistrictId: string | undefined;
-    if (hu1991) {
-      if (!election.hungarianModernByElection && election.hungarianAssemblyRound?.round !== 1)
+    if (hu1991 || bgFounding) {
+      if (bgFounding && election.bulgarianFoundingRound?.round !== 1)
+        return NextResponse.json(
+          { error: bgFoundingFilingMessages["filing-closed"] },
+          { status: 403 }
+        );
+      if (
+        hu1991 &&
+        !election.hungarianModernByElection &&
+        election.hungarianAssemblyRound?.round !== 1
+      )
         return NextResponse.json({ error: hu1991FilingMessages["filing-closed"] }, { status: 403 });
       const text = await request.text();
       let body: unknown = {};
@@ -376,11 +391,14 @@ export async function POST(request: Request, { params }: RouteParams) {
     });
 
     if (
-      hu1991 &&
+      (hu1991 || bgFounding) &&
       existingCandidate?.party !== undefined &&
       existingCandidate.party !== character.party
     )
-      return NextResponse.json({ error: hu1991FilingMessages["party-changed"] }, { status: 403 });
+      return NextResponse.json(
+        { error: (bgFounding ? bgFoundingFilingMessages : hu1991FilingMessages)["party-changed"] },
+        { status: 403 }
+      );
     if (existingCandidate) {
       // If they have an active candidacy under a different party, withdraw it first
       if (existingCandidate.party !== character.party && !councilFiling) {
@@ -483,6 +501,21 @@ export async function POST(request: Request, { params }: RouteParams) {
           logRequest("POST", path, 403, Date.now() - start);
           return NextResponse.json({ error: councilFilingErrors[filed.reason] }, { status: 403 });
         }
+        result = { insertedId: filed.insertedId };
+      } else if (bgFounding) {
+        const filed = await registerBgFoundingPlayerFiling({
+          db,
+          electionId: electionObjectId,
+          candidate: candidateDoc,
+          requestedDistrictId: huDistrictId,
+          turn: currentTurn,
+          now,
+        });
+        if (!filed.allowed)
+          return NextResponse.json(
+            { error: bgFoundingFilingMessages[filed.reason] },
+            { status: 403 }
+          );
         result = { insertedId: filed.insertedId };
       } else if (hu1991) {
         const filed = await registerHu1991PlayerFiling({

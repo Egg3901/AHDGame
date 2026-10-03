@@ -4,6 +4,7 @@
  * which prevents a district from replacing Congress before chamber handover.
  */
 import { isHu1991AssemblyCampaign } from "@/lib/countries/hu/rules/assemblyCampaign1991";
+import { isBgFoundingCampaign } from "@/lib/countries/bg/rules/foundingCampaign1990";
 import { isNativeRussianAssemblyElection } from "@/lib/countries/ru/rules/assemblyElection";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
@@ -113,7 +114,11 @@ export async function resolveOneGeneralElection(
   huMixedCandidateSeats?: Readonly<Record<string, number>>,
   bgOrdinaryCandidateSeats?: Readonly<Record<string, number>>
 ): Promise<OneElectionResult> {
-  if (isNativeRussianAssemblyElection(election) || isHu1991AssemblyCampaign(election))
+  if (
+    isNativeRussianAssemblyElection(election) ||
+    isHu1991AssemblyCampaign(election) ||
+    isBgFoundingCampaign(election)
+  )
     return { resolved: false, newsOutcomes: [] };
   const newsOutcomes: ElectionNewsOutcome[] = [];
 

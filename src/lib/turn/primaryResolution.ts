@@ -3,8 +3,7 @@
  * resolvePrimariesIfNeeded retains all registered Russian national list nominees;
  * constituency contests keep their normal party nomination limit.
  */
-import { hu1991PrimaryAdvanceLimit } from "@/lib/countries/hu/rules/assemblyCampaign1991";
-import { russianAssemblyPrimaryAdvanceLimit } from "@/lib/countries/ru/assemblyPrimaryProgression";
+import { nativeAssemblyPrimaryAdvanceLimit } from "./election/assemblyPrimaryProgression";
 import {
   bindBallotElectorate,
   nationwideBallotCountries,
@@ -250,8 +249,7 @@ export async function resolvePrimariesIfNeeded(
     const partyCounts = new Map<string, number>();
     for (const c of candidates) partyCounts.set(c.party, (partyCounts.get(c.party) ?? 0) + 1);
     const maxAdvancing =
-      hu1991PrimaryAdvanceLimit(election, candidates.length) ??
-      russianAssemblyPrimaryAdvanceLimit(election, candidates.length) ??
+      nativeAssemblyPrimaryAdvanceLimit(election, candidates.length) ??
       getPrimaryWinnersForElection(
         (election.countryId ?? "US") as CountryId,
         election.electionType

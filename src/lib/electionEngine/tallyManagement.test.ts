@@ -1626,6 +1626,7 @@ describe("removeWithdrawnCandidateFromTally", () => {
             russianDumaRound: 1,
             russianCouncilRound: 1,
             hungarianAssemblyRound: 1,
+            bulgarianFoundingRound: 1,
             hungarianModernAssembly: 1,
             hungarianModernByElection: 1,
           },
