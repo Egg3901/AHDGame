@@ -40,15 +40,13 @@ describe("Hungarian electoral decision controls", () => {
   it("shows an unopened date and an existing failed decision's revision", async () => {
     vi.stubGlobal(
       "fetch",
-      vi
-        .fn()
-        .mockResolvedValue(
-          new Response(
-            JSON.stringify({
-              decision: { available: false, reason: "before-date", proposal: null },
-            })
-          )
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            decision: { available: false, reason: "before-date", proposal: null },
+          })
         )
+      )
     );
     show();
     await screen.findByText("This decision opens in January 1994.");
@@ -56,19 +54,17 @@ describe("Hungarian electoral decision controls", () => {
     cleanup();
     vi.stubGlobal(
       "fetch",
-      vi
-        .fn()
-        .mockResolvedValue(
-          new Response(
-            JSON.stringify({
-              decision: {
-                available: true,
-                reason: "available",
-                proposal: { billId: "old-bill", billStatus: "failed", canRevise: true },
-              },
-            })
-          )
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            decision: {
+              available: true,
+              reason: "available",
+              proposal: { billId: "old-bill", billStatus: "failed", canRevise: true },
+            },
+          })
         )
+      )
     );
     show();
     await screen.findByRole("button", { name: "Propose revised amendment" });

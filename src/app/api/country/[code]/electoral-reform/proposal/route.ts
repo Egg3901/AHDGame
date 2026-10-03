@@ -53,17 +53,15 @@ export async function POST(request: Request, { params }: Context) {
       return NextResponse.json({ error: "No electoral decision in this era" }, { status: 409 });
     const character = await getCharacterByUserId(db, auth.user.userId);
     const official = character
-      ? await db
-          .collection("electedOfficials")
-          .findOne(
-            {
-              characterId: character._id,
-              countryId: "HU",
-              officeType: "assemblyDelegate",
-              seatsHeld: { $ne: 0 },
-            },
-            { projection: { party: 1 } }
-          )
+      ? await db.collection("electedOfficials").findOne(
+          {
+            characterId: character._id,
+            countryId: "HU",
+            officeType: "assemblyDelegate",
+            seatsHeld: { $ne: 0 },
+          },
+          { projection: { party: 1 } }
+        )
       : null;
     if (!official && auth.user.isAdmin !== true)
       return NextResponse.json(
