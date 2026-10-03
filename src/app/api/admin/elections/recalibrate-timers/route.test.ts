@@ -155,3 +155,65 @@ describe("shouldReactivatePrematureElection", () => {
     expect(shouldReactivatePrematureElection(sangiinC1, 50, empty, seatedSangiinC2)).toBe(true);
   });
 });
+
+describe("Bulgarian native timer custody", () => {
+  const ctx = { preset: "1991-default", startingYear: 1991 };
+  it.each([0, 1, 4])("retains native ballot turn deadlines for cycle%i", (cycle) => {
+    const election = e("nationalAssembly", cycle, {
+      countryId: "BG",
+      state: "BG-SOF",
+      startTurn: 10,
+      primaryEndTurn: 11,
+      endTurn: 12,
+      bulgarianFoundingRound: {
+        ruleVersion: "parallel-1990-v1",
+        receiptId: `BG:founding1990:${cycle}`,
+        rootElectionId: "root",
+        round: cycle ? 2 : 1,
+        registeredVoters: 100000,
+      },
+    });
+    expect(canonicalTurns(election, 999, ctx)).toEqual({
+      startTurn: 10,
+      primaryEndTurn: 11,
+      endTurn: 12,
+    });
+  });
+  it("retains decision-triggered and unadopted Grand schedules", () => {
+    for (const endTurn of [86, 216, 278]) {
+      expect(
+        canonicalTurns(
+          e("nationalAssembly", 1, {
+            countryId: "BG",
+            startTurn: endTurn - 6,
+            primaryEndTurn: endTurn - 2,
+            endTurn,
+            shiftedScheduleEndTurn: endTurn,
+          }),
+          undefined,
+          ctx
+        )
+      ).toEqual({ startTurn: endTurn - 6, primaryEndTurn: endTurn - 2, endTurn });
+    }
+  });
+  it("leaves a malformed native clock untouched rather than inventing a deadline", () => {
+    expect(
+      canonicalTurns(
+        e("nationalAssembly", 1, {
+          countryId: "BG",
+          startTurn: 10,
+          primaryEndTurn: 14,
+          endTurn: 12,
+          shiftedScheduleEndTurn: 12,
+        }),
+        undefined,
+        ctx
+      )
+    ).toBeNull();
+  });
+  it("retains the generic calendar for unmarked legacy ordinary polls", () => {
+    expect(
+      canonicalTurns(e("nationalAssembly", 1, { countryId: "BG" }), undefined, ctx)?.endTurn
+    ).toBe(38);
+  });
+});

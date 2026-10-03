@@ -37,7 +37,7 @@ export const BG_1991: CountryEraOverride = {
       },
     },
     lowerElectionSystem: {
-      termYears: 1,
+      termYears: 4,
       seatsContested: "all",
       singleMemberConstituencies: false,
       snapElectionsAllowed: true,
@@ -77,7 +77,7 @@ export const BG_1991: CountryEraOverride = {
         chamberKey: "nationalAssembly",
         isExecutive: false,
         isSubNational: false,
-        termYears: 1,
+        termYears: 4,
         actionBonus: 1,
         partyStrengthWeight: 0.9,
       },

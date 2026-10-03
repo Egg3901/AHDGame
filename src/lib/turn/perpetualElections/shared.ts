@@ -64,6 +64,9 @@ export interface RegionalDelegateSpec {
   /** Open the primary immediately (short window vs multi-year cycle). CN/BR: true. */
   openPrimaryImmediately: boolean;
   minPrimaryHours?: number;
+  /** Country-owned clocks can retain founding terms and bound legal standups. */
+  buildSpawn?: typeof buildCanonicalSpawn;
+  canSpawnCohort?: (elections: readonly Election[]) => boolean;
   /**
    * No-op unless the runtime country status is beta/active. CN/BR are always
    * live and omit this; RU (coming-soon, per-game enabled) sets it in Phase 3.
@@ -209,6 +212,9 @@ export async function ensureRegionalDelegateElections(
     .sort({ updatedAt: -1 })
     .toArray();
 
+  if (spec.canSpawnCohort && !spec.canSpawnCohort([...liveElections, ...completedElections]))
+    return;
+
   function lastCompleted(regionId: string): Election | undefined {
     return completedElections.find((e) => e.state === regionId);
   }
@@ -222,7 +228,7 @@ export async function ensureRegionalDelegateElections(
     const prev = lastCompleted(regionId);
     if (justResolvedInSameTurn(prev, now, currentTurn)) continue;
 
-    const doc = buildCanonicalSpawn({
+    const doc = (spec.buildSpawn ?? buildCanonicalSpawn)({
       electionType: spec.electionType,
       countryId: spec.countryId,
       state: regionId,

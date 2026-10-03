@@ -233,6 +233,15 @@ describe.skipIf(!uri)("Bulgarian constituent consent on isolated Mongo", () => {
           );
           expect(after.every((row) => row.bulgarianFoundingRound === undefined)).toBe(true);
           expect(
+            after.every(
+              (row) =>
+                row.startTurn === 26 &&
+                row.primaryEndTurn === 30 &&
+                row.endTurn === 32 &&
+                row.shiftedScheduleEndTurn === 32
+            )
+          ).toBe(true);
+          expect(
             (await db.collection("electionVoteTallies").find().toArray()).every(
               (row) => row.bulgarianFoundingBallot === undefined
             )

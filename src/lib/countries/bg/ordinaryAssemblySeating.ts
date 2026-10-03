@@ -24,7 +24,7 @@ import {
 } from "@/lib/turn/election/bgOrdinaryEligibility";
 import { calendarTurn } from "@/lib/utils/gameDate";
 import { settleBgOrdinaryListHolders } from "./rules/ordinaryElectionPlan";
-import { BG_ORDINARY_ASSEMBLY_START_TURN } from "./rules/assemblyTransition";
+import { bgOrdinarySeatingClockReady } from "./rules/assemblyClock1991";
 
 interface BgAssemblyOfficeArchive {
   _id: string;
@@ -71,11 +71,22 @@ export async function materializeBgOrdinaryAssembly(input: {
     preIterationActive: game.preIteration?.active,
     preIterationTurns: game.preIterationTurns,
   });
-  if (calendar < BG_ORDINARY_ASSEMBLY_START_TURN) return false;
   const country = await db
     .collection<CountryGameState>("countryGameStates")
-    .findOne({ _id: "BG" }, { session, projection: { bgOrdinaryAssemblySinceTurn: 1 } });
+    .findOne(
+      { _id: "BG" },
+      { session, projection: { bgOrdinaryAssemblySinceTurn: 1, bgConstitution1991SinceTurn: 1 } }
+    );
   if (!country) throw new Error("Bulgarian country authority is missing");
+  if (
+    !bgOrdinarySeatingClockReady({
+      preIterationActive: game.preIteration?.active,
+      calendarTurn: calendar,
+      currentTurn: turn,
+      authorizedTurn: country.bgConstitution1991SinceTurn,
+    })
+  )
+    return false;
   const ids = receipt.electionIds.map((id) => new ObjectId(id));
   const elections = await db
     .collection<Election>("elections")
