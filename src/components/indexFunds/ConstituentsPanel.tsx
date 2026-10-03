@@ -259,7 +259,7 @@ function DonutChart({
       </svg>
       <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
         <span className="font-mono text-2xl font-bold">{rows.length}</span>
-        <span className="text-[10px] uppercase tracking-widest text-muted">holdings</span>
+        <span className="text-body-sm font-medium text-muted">holdings</span>
       </div>
     </div>
   );
@@ -733,7 +733,7 @@ function MobileMetric({
 }) {
   return (
     <div className="flex flex-col">
-      <span className="text-[10px] uppercase tracking-wider text-muted">{label}</span>
+      <span className="text-body-sm font-medium text-muted">{label}</span>
       <span className={`font-mono tabular-nums ${valueClass}`} style={valueStyle}>
         {value}
       </span>

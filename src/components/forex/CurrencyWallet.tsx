@@ -113,16 +113,14 @@ export function CurrencyWallet({ wallet, variant, onSavingsUpdated }: Props) {
     return (
       <div className="flex items-center overflow-x-auto divide-x divide-card-border border-t border-card-border">
         <div className="flex flex-col px-5 py-3 min-w-max">
-          <span className="text-[10px] uppercase tracking-widest text-muted font-medium">
-            Campaign
-          </span>
+          <span className="text-body-sm font-medium text-muted">Campaign</span>
           <span className="text-base font-bold tabular-nums">
             {formatCurrencyFaceAmount(wallet.campaign, wallet.homeCurrency)}
           </span>
         </div>
         {personalEntries.map(({ currency, balance }) => (
           <div key={currency} className="flex flex-col px-5 py-3 min-w-max">
-            <span className="text-[10px] uppercase tracking-widest text-muted font-medium">
+            <span className="text-body-sm font-medium text-muted">
               {currency}
               {currency === wallet.homeCurrency && (
                 <span
@@ -148,9 +146,7 @@ export function CurrencyWallet({ wallet, variant, onSavingsUpdated }: Props) {
         <h3 className="text-sm font-bold text-foreground">Currency wallet</h3>
         {showPnlChrome && hasLiveRates && baseRates && (
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[10px] font-medium uppercase tracking-wide text-muted">
-              FX vs base
-            </span>
+            <span className="text-body-sm font-medium text-muted">FX vs base</span>
             <div className="inline-flex rounded-md border border-card-border bg-card-elevated p-0.5 text-[11px] font-semibold">
               <button
                 type="button"
@@ -254,15 +250,13 @@ export function CurrencyWallet({ wallet, variant, onSavingsUpdated }: Props) {
                 <div className="flex min-w-0 flex-1 flex-col gap-4 sm:items-end">
                   <div className="grid w-full gap-4 sm:max-w-md sm:grid-cols-2">
                     <div className="space-y-1 text-right sm:text-right">
-                      <div className="text-[10px] font-medium uppercase tracking-wide text-muted">
-                        Cash (liquid)
-                      </div>
+                      <div className="text-body-sm font-medium text-muted">Cash (liquid)</div>
                       <div className="text-sm font-bold tabular-nums text-foreground">
                         {formatCurrencyFaceAmount(balance, currency)}
                       </div>
                       {showHomeCashEquiv && homeCashCompact && (
                         <>
-                          <div className="text-[10px] font-medium uppercase tracking-wide text-muted">
+                          <div className="text-body-sm font-medium text-muted">
                             Home ({wallet.homeCurrency})
                           </div>
                           <div className="text-xs font-semibold tabular-nums text-foreground/90">
@@ -283,15 +277,13 @@ export function CurrencyWallet({ wallet, variant, onSavingsUpdated }: Props) {
                     </div>
 
                     <div className="space-y-1 text-right sm:text-right">
-                      <div className="text-[10px] font-medium uppercase tracking-wide text-muted">
-                        Savings
-                      </div>
+                      <div className="text-body-sm font-medium text-muted">Savings</div>
                       <div className="text-sm font-bold tabular-nums text-foreground">
                         {formatCurrencyFaceAmount(savingsBal, currency)}
                       </div>
                       {showHomeSavingsEquiv && homeSavingsCompact && (
                         <>
-                          <div className="text-[10px] font-medium uppercase tracking-wide text-muted">
+                          <div className="text-body-sm font-medium text-muted">
                             Home ({wallet.homeCurrency})
                           </div>
                           <div className="text-xs font-semibold tabular-nums text-foreground/90">

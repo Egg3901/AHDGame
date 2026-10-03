@@ -326,9 +326,9 @@ export function BudgetDisplay({
       {/* Headline stats */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         {[
-          { label: "Annual Revenue", value: fHeadline(revenue.total), sub: null, highlight: false },
+          { label: "Annual revenue", value: fHeadline(revenue.total), sub: null, highlight: false },
           {
-            label: "Annual Spending",
+            label: "Annual spending",
             value: fHeadline(spending.total),
             sub: null,
             highlight: false,
@@ -360,7 +360,7 @@ export function BudgetDisplay({
             key={card.label}
             className="rounded-xl border border-card-border bg-card p-4 space-y-1"
           >
-            <p className="text-xs text-muted uppercase tracking-wider">{card.label}</p>
+            <p className="text-body-sm font-medium text-muted">{card.label}</p>
             <p
               className={`text-lg font-semibold ${card.highlight ? "text-error" : "text-foreground"}`}
             >

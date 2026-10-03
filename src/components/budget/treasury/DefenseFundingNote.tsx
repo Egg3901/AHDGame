@@ -58,10 +58,8 @@ export function DefenseFundingNote({
       <div className="text-sm font-semibold text-foreground">Defence funding</div>
       <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-7">
         <div>
-          <div className="text-[10px] font-bold uppercase tracking-wide text-muted">
-            Appropriated per turn
-          </div>
-          <div className="mt-0.5 font-mono text-body-sm font-semibold text-foreground">
+          <div className="text-body-sm font-medium text-muted">Appropriated per turn</div>
+          <div className="mt-0.5 font-mono text-body font-semibold text-foreground">
             {money(funding.accrualPerTurn)}
           </div>
           <p className="mt-1 text-[11px] leading-snug text-muted">
@@ -70,10 +68,8 @@ export function DefenseFundingNote({
           </p>
         </div>
         <div>
-          <div className="text-[10px] font-bold uppercase tracking-wide text-muted">
-            Force upkeep per turn
-          </div>
-          <div className="mt-0.5 font-mono text-body-sm font-semibold text-foreground">
+          <div className="text-body-sm font-medium text-muted">Force upkeep per turn</div>
+          <div className="mt-0.5 font-mono text-body font-semibold text-foreground">
             {money(funding.upkeepPerTurn)}
           </div>
           <p className="mt-1 text-[11px] leading-snug text-muted">
@@ -81,10 +77,8 @@ export function DefenseFundingNote({
           </p>
         </div>
         <div>
-          <div className="text-[10px] font-bold uppercase tracking-wide text-muted">
-            New treasury debt per turn
-          </div>
-          <div className="mt-0.5 font-mono text-body-sm font-semibold text-foreground">
+          <div className="text-body-sm font-medium text-muted">New treasury debt per turn</div>
+          <div className="mt-0.5 font-mono text-body font-semibold text-foreground">
             {money(treasuryDraw)}
           </div>
           <p className="mt-1 text-[11px] leading-snug text-muted">
@@ -93,10 +87,8 @@ export function DefenseFundingNote({
           </p>
         </div>
         <div>
-          <div className="text-[10px] font-bold uppercase tracking-wide text-muted">
-            Appropriation balance
-          </div>
-          <div className="mt-0.5 font-mono text-body-sm font-semibold text-foreground">
+          <div className="text-body-sm font-medium text-muted">Appropriation balance</div>
+          <div className="mt-0.5 font-mono text-body font-semibold text-foreground">
             {funding.potBalance == null ? "—" : moneySigned(funding.potBalance)}
           </div>
           <p className="mt-1 text-[11px] leading-snug text-muted">
@@ -109,10 +101,10 @@ export function DefenseFundingNote({
         </div>
         {soeBacking > 0 ? (
           <div>
-            <div className="text-[10px] font-bold uppercase tracking-wide text-muted">
+            <div className="text-body-sm font-medium text-muted">
               State enterprise backing per turn
             </div>
-            <div className="mt-0.5 font-mono text-body-sm font-semibold text-foreground">
+            <div className="mt-0.5 font-mono text-body font-semibold text-foreground">
               {money(soeBacking)}
             </div>
             <p className="mt-1 text-[11px] leading-snug text-muted">
@@ -123,10 +115,10 @@ export function DefenseFundingNote({
         ) : null}
         {organizationBacking > 0 ? (
           <div>
-            <div className="text-[10px] font-bold uppercase tracking-wide text-muted">
+            <div className="text-body-sm font-medium text-muted">
               International organization contributions per turn
             </div>
-            <div className="mt-0.5 font-mono text-body-sm font-semibold text-foreground">
+            <div className="mt-0.5 font-mono text-body font-semibold text-foreground">
               {money(organizationBacking)}
             </div>
             <p className="mt-1 text-[11px] leading-snug text-muted">

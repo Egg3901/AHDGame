@@ -84,7 +84,7 @@ export function ForexSpreadStrengthControl({
           onChange={(e) => setValue(Number(e.target.value))}
           className="w-full accent-primary disabled:opacity-50"
         />
-        <div className="mt-1 flex justify-between text-[10px] uppercase tracking-wider text-muted">
+        <div className="mt-1 flex justify-between text-body-sm font-medium text-muted">
           <span>{forexSpread.min * 100}% · cheaper, more volume</span>
           <span>100%</span>
           <span>{forexSpread.max * 100}% · pricier, more reserves</span>
@@ -94,7 +94,7 @@ export function ForexSpreadStrengthControl({
       {/* Macro explainer */}
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+          <p className="text-body-sm font-medium text-emerald-600 dark:text-emerald-400">
             ▼ Lower (toward {forexSpread.min * 100}%)
           </p>
           <p className="mt-1 text-xs text-muted">
@@ -106,7 +106,7 @@ export function ForexSpreadStrengthControl({
           </p>
         </div>
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+          <p className="text-body-sm font-medium text-amber-600 dark:text-amber-400">
             ▲ Raise (toward {forexSpread.max * 100}%)
           </p>
           <p className="mt-1 text-xs text-muted">

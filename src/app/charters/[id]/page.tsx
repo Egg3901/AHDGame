@@ -131,9 +131,7 @@ export default async function CharterDetailPage({ params }: PageParams) {
             <strong>{charter.proposedName}</strong> was successfully ratified, but {countryName} is
             a one-party state. New parties are automatically banned at creation by the regime.
           </p>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-rose-300">
-            What this means
-          </p>
+          <p className="mb-2 text-body-sm font-medium text-rose-300">What this means</p>
           <ul className="mb-3 list-disc space-y-1 pl-5 text-sm text-foreground">
             <li>Your party cannot field election candidates.</li>
             <li>Members of your party cannot propose or vote on legislation.</li>
@@ -195,13 +193,11 @@ export default async function CharterDetailPage({ params }: PageParams) {
               >
                 <div className="flex items-center justify-between">
                   <span className="flex items-baseline gap-2">
-                    <span className="text-[10px] uppercase tracking-wide text-muted">{role}</span>
+                    <span className="text-body-sm font-medium text-muted">{role}</span>
                     <span className="font-medium">
                       {characterName}
                       {isMine && (
-                        <span className="ml-2 text-[10px] uppercase tracking-wide text-primary">
-                          yours
-                        </span>
+                        <span className="ml-2 text-body-sm font-medium text-primary">Yours</span>
                       )}
                     </span>
                   </span>

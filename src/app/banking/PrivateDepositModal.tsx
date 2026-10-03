@@ -141,7 +141,7 @@ export function PrivateDepositModal({
             </p>
           </div>
 
-          <label className="block space-y-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
+          <label className="block space-y-1.5 text-body-sm font-medium text-muted">
             Deposit amount ({bank.currency})
             <Input
               type="number"

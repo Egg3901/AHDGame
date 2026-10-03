@@ -53,7 +53,7 @@ describe("EconomicModelCard", () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => view });
     vi.stubGlobal("fetch", fetchMock);
     render(<EconomicModelCard countryId="US" regionId="us1" scopeLabel="California" />);
-    await waitFor(() => expect(screen.getByText("California Economic Model")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("California economic model")).toBeTruthy());
     expect(fetchMock).toHaveBeenCalledWith("/api/country/US/economic-model?regionId=us1");
   });
 });

@@ -97,7 +97,7 @@ export default function RegionalBreakdown({
                   <div key={stateId}>
                     {showHeader && (
                       <div className="flex items-center gap-2 mt-3 mb-1">
-                        <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                        <span className="text-body-sm font-medium text-muted-foreground flex items-center gap-1">
                           <CountryFlag country={country as CountryId} size="sm" />
                           {resolveCountryName(country as CountryId)}
                         </span>

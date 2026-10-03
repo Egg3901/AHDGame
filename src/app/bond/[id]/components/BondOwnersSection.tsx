@@ -270,7 +270,7 @@ export function BondOwnersSection({
                             </div>
                             <div>
                               <span className="font-medium text-foreground">Public Float</span>
-                              <span className="block text-[10px] text-muted uppercase tracking-wide">
+                              <span className="block text-body-sm font-medium text-muted">
                                 Available
                               </span>
                             </div>
@@ -343,7 +343,7 @@ export function BondOwnersSection({
                                 {holder.name}
                               </span>
                             )}
-                            <span className="text-[10px] text-muted uppercase tracking-wide">
+                            <span className="text-body-sm font-medium text-muted">
                               {holder.type === "character" ? "Character" : "Corporation"}
                             </span>
                           </div>

@@ -160,7 +160,7 @@ export function FiscalStatStrip({
         delta={compare ? <Delta now={gdp} prev={prev?.gdp} kind="money" sym={sym} /> : undefined}
       />
       <StatTile
-        label="Treasury Balance"
+        label="Treasury balance"
         value={money(Math.abs(treasuryReserve))}
         tone={treasuryReserve < 0 ? "down" : "foreground"}
         sub={usdNote(treasuryReserve, treasuryReserve < 0 ? "national debt" : "in surplus")}

@@ -37,9 +37,7 @@ function Card({
       className="block rounded-xl border border-card-border bg-card px-4 py-3.5 transition-colors hover:border-foreground/30"
     >
       <div className="flex items-baseline justify-between gap-2">
-        <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted">
-          {label}
-        </span>
+        <span className="text-body-sm font-medium text-muted">{label}</span>
         <span className="text-[11px] text-primary">&rarr;</span>
       </div>
       <div className="mt-1.5 font-mono text-[17px] font-bold tabular-nums text-foreground">
@@ -70,7 +68,7 @@ export function MarketsStrip({ countryId, markets }: MarketsStripProps) {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Card
           href={stockmarketUrl(countryId)}
-          label="Stock Market"
+          label="Stock market"
           stat={markets.stockMarketCap != null ? formatAmount(markets.stockMarketCap) : "—"}
           sub={`total market cap${markets.exchangeName ? ` · ${markets.exchangeName}` : ""}`}
         />

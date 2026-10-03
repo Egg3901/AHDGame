@@ -222,9 +222,7 @@ export function CurrencyTradeModal({
           {/* Currency pair */}
           <div className="flex items-center gap-2">
             <div className="flex-1">
-              <label className="text-[10px] font-semibold uppercase tracking-wider text-muted mb-1 block">
-                From
-              </label>
+              <label className="text-body-sm font-medium text-muted mb-1 block">From</label>
               <select
                 value={from}
                 onChange={(e) => {
@@ -257,9 +255,7 @@ export function CurrencyTradeModal({
             </button>
 
             <div className="flex-1">
-              <label className="text-[10px] font-semibold uppercase tracking-wider text-muted mb-1 block">
-                To
-              </label>
+              <label className="text-body-sm font-medium text-muted mb-1 block">To</label>
               <select
                 value={to}
                 onChange={(e) => setTo(e.target.value as CurrencyCode)}
@@ -284,7 +280,7 @@ export function CurrencyTradeModal({
             <div className="flex items-center justify-between mb-1">
               <label
                 htmlFor={`${idBase}-amount`}
-                className="text-[10px] font-semibold uppercase tracking-wider text-muted block"
+                className="text-body-sm font-medium text-muted block"
               >
                 Amount ({from})
               </label>
@@ -319,9 +315,9 @@ export function CurrencyTradeModal({
             <div>
               <label
                 htmlFor={`${idBase}-limit-rate`}
-                className="text-[10px] font-semibold uppercase tracking-wider text-muted mb-1 block"
+                className="text-body-sm font-medium text-muted mb-1 block"
               >
-                Limit Rate ({to}/{from})
+                Limit rate ({to}/{from})
               </label>
               <input
                 id={`${idBase}-limit-rate`}

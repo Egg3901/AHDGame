@@ -110,9 +110,7 @@ export function GosplanPlannerPanel({ dashboard, onSaved }: Props) {
                 </span>
               </div>
               <label className="mt-2 flex items-center gap-2">
-                <span className="text-[10px] font-bold uppercase tracking-wide text-muted">
-                  Quota
-                </span>
+                <span className="text-body-sm font-medium text-muted">Quota</span>
                 <input
                   type="number"
                   min={0}

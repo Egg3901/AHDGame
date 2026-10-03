@@ -242,7 +242,7 @@ function CardContent({
       <div className="grid grid-cols-2 gap-px bg-card-border/30">
         {activePrice != null && (
           <StatRow
-            label={mode === "price" ? "National Price" : "Avg Price"}
+            label={mode === "price" ? "National price" : "Avg price"}
             value={formatCommodityPrice(activePrice, currencyCode, forexEnabled, exchangeRates)}
             color="text-foreground"
           />
@@ -377,7 +377,7 @@ function StatRow({
 }) {
   return (
     <div className="px-4 py-2 bg-card">
-      <div className="text-[9px] font-semibold text-muted uppercase tracking-wider">{label}</div>
+      <div className="text-body-sm font-medium text-muted">{label}</div>
       <div className={`text-sm font-bold tabular-nums ${color}`}>{value}</div>
       {sub && <div className="text-[9px] text-muted">{sub}</div>}
     </div>

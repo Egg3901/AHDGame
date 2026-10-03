@@ -628,7 +628,7 @@ function PortfolioPageInner({ initialPortfolio }: PortfolioClientProps) {
         <PortfolioShell
           title="Portfolio & Wallet"
           subtitle="Stocks, bonds, currency, and transfers"
-          netWorthLabel="Net Worth"
+          netWorthLabel="Net worth"
           netWorth={formatAmount(combinedTotal)}
           ownerSwitcher={ownerSwitcher}
           rail={rail}
@@ -738,10 +738,10 @@ function OverviewPane({
   return (
     <>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        <StatCard label="Stock Holdings" value={formatAmount(totalValue)} />
-        <StatCard label="Bond Holdings" value={formatAmount(totalBondValue)} />
+        <StatCard label="Stock holdings" value={formatAmount(totalValue)} />
+        <StatCard label="Bond holdings" value={formatAmount(totalBondValue)} />
         <StatCard
-          label="Bond Income"
+          label="Bond income"
           value={`+${formatAmount(totalBondIncomePerTurn)}/turn`}
           accent="success"
         />

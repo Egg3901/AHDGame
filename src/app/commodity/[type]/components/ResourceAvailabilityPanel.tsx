@@ -22,7 +22,7 @@ export default function ResourceAvailabilityPanel({
   capacityByState,
   totalCapacity,
   currentSupply,
-  capacityLabel = "Global Capacity",
+  capacityLabel = "Global capacity",
   stateCountryMap,
   stateNames,
 }: ResourceAvailabilityPanelProps) {
@@ -79,7 +79,7 @@ export default function ResourceAvailabilityPanel({
           </p>
         </div>
         <div className="text-right">
-          <div className="text-body-xs uppercase tracking-widest text-muted">{capacityLabel}</div>
+          <div className="text-body-sm font-medium text-muted">{capacityLabel}</div>
           <div className="text-body-lg font-bold tabular-nums">
             {totalCapacity.toLocaleString("en-US")}
           </div>
@@ -113,9 +113,7 @@ export default function ResourceAvailabilityPanel({
                 className="w-full flex items-center justify-between px-3 py-2 bg-card-elevated hover:bg-card-border/20 transition-colors text-left"
               >
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-foreground uppercase tracking-wider">
-                    {countryId}
-                  </span>
+                  <span className="text-body-sm font-medium text-foreground">{countryId}</span>
                   <span className="text-[10px] text-muted">
                     {rows.length} state{rows.length !== 1 ? "s" : ""}
                   </span>

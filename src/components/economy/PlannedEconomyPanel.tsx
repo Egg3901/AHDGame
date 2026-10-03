@@ -111,7 +111,7 @@ export function PlannedEconomyPanel({
       <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
         {metrics.map((m) => (
           <div key={m.key}>
-            <div className="flex items-center text-[10px] font-bold uppercase tracking-wide text-muted">
+            <div className="flex items-center text-body-sm font-medium text-muted">
               {m.label}
               <Tooltip
                 content={PLANNED_ECONOMY_METRIC_TOOLTIPS[m.key]}

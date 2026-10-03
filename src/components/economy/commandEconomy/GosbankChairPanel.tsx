@@ -263,9 +263,7 @@ export function GosbankChairPanel({ dashboard, onSaved }: Props) {
               effective={rep.blackMarketPressureEffective}
             />
             <div>
-              <div className="text-[10px] font-bold uppercase tracking-wide text-muted">
-                Legitimacy cost / turn
-              </div>
+              <div className="text-body-sm font-medium text-muted">Legitimacy cost / turn</div>
               <div className="mt-0.5 text-sm font-bold tabular-nums text-foreground">
                 {rep.legitimacyCostPerTurn == null || !Number.isFinite(rep.legitimacyCostPerTurn)
                   ? "n/a"
@@ -293,7 +291,7 @@ function PressureReadout({ base, effective }: { base: number | null; effective: 
     v == null || !Number.isFinite(v) ? "n/a" : `${Math.round(v * 100)}%`;
   return (
     <div>
-      <div className="flex items-center justify-center text-[10px] font-bold uppercase tracking-wide text-muted">
+      <div className="flex items-center justify-center text-body-sm font-medium text-muted">
         Black market pressure
         <Tooltip content={CE_TERMS.blackMarketPressure} label="About black market pressure" />
       </div>
@@ -320,7 +318,7 @@ function compactOrNa(value: number | null): string {
 function Readout({ label, value, tip }: { label: string; value: string; tip?: string }) {
   return (
     <div>
-      <div className="flex items-center justify-center text-[10px] font-bold uppercase tracking-wide text-muted">
+      <div className="flex items-center justify-center text-body-sm font-medium text-muted">
         {label}
         {tip && <Tooltip content={tip} label={`About ${label}`} />}
       </div>

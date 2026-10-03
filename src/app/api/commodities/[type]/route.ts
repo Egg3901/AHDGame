@@ -552,7 +552,7 @@ export async function getCommodityDetailData(
     if (commodity === "advertising") {
       demandDriver = {
         type: "corporate",
-        label: "Corporate Demand",
+        label: "Corporate demand",
         description: `Driven by marketing spending. Corporations allocate marketing budgets that convert to advertising commodity demand at a ${(MARKETING_ADVERTISING_DEMAND_RATE * 100).toFixed(0)}% rate. That budget demand is market-level demand reported separately below. Top Consumers shows plant input demand only, on the same realized basis as corporation commodity pages.`,
         ...(includeHeavy && advertisingBudgetTotal > 0
           ? {
@@ -566,7 +566,7 @@ export async function getCommodityDetailData(
     } else if (commodity === "financial_services") {
       demandDriver = {
         type: "macro",
-        label: "Macro Demand",
+        label: "Macro demand",
         description:
           "Most financial contract demand is generated economy-wide from state GDP, interest rates, and GDP growth. Direct corporate input demand is only part of the market.",
         ...(includeHeavy
@@ -582,7 +582,7 @@ export async function getCommodityDetailData(
     } else if (commodity === "retail") {
       demandDriver = {
         type: "consumer",
-        label: "Baseline Consumer Demand",
+        label: "Baseline consumer demand",
         description:
           "Driven by GDP growth. Consumer demand scales with a blend of 50% national and 50% regional GDP growth, ranging from 0.5x to 2.0x the baseline.",
       };

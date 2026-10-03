@@ -209,9 +209,7 @@ function FundDetailPageInner({ params }: { params: Promise<{ code: string; slug:
             </p>
           </div>
           <div className="shrink-0 text-right">
-            <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted">
-              NAV / unit
-            </div>
+            <div className="text-body-sm font-medium text-muted">NAV / unit</div>
             <div className="mt-1 font-mono tabular-nums text-[28px] sm:text-[42px] font-bold leading-none">
               {formatPrice(fund.quotedNav, ccy)}
             </div>
@@ -257,9 +255,7 @@ function FundDetailPageInner({ params }: { params: Promise<{ code: string; slug:
             },
           ].map((s) => (
             <div key={s.label} className="whitespace-nowrap">
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-muted">
-                {s.label}
-              </div>
+              <div className="text-body-sm font-medium text-muted">{s.label}</div>
               <div className="mt-1.5 font-mono tabular-nums text-base font-bold">{s.value}</div>
             </div>
           ))}

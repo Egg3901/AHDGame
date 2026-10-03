@@ -196,9 +196,7 @@ function TabContextStrip({
       <div className="grid grid-cols-2 divide-x divide-card-border">
         {stats.map((s) => (
           <div key={s.label} className="px-4 py-3">
-            <span className="text-[10px] uppercase tracking-widest text-muted font-medium block mb-0.5">
-              {s.label}
-            </span>
+            <span className="text-body-sm font-medium text-muted block mb-0.5">{s.label}</span>
             <span className="text-lg font-bold tabular-nums">{s.value}</span>
           </div>
         ))}
@@ -786,7 +784,7 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
         <div className="rounded-xl border border-card-border bg-card shadow-sm overflow-hidden">
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 divide-x divide-card-border">
             <div className="px-4 py-3">
-              <span className="text-[10px] uppercase tracking-widest text-muted font-medium mb-0.5 inline-flex items-center">
+              <span className="text-body-sm font-medium text-muted mb-0.5 inline-flex items-center">
                 Listed
                 <InfoTooltip content="Only corporations that have IPO'd (gone public) appear here. Privately-held corporations exist but aren't listed until they go public." />
               </span>
@@ -798,21 +796,15 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
               )}
             </div>
             <div className="px-4 py-3">
-              <span className="text-[10px] uppercase tracking-widest text-muted font-medium block mb-0.5">
-                Market Cap
-              </span>
+              <span className="text-body-sm font-medium text-muted block mb-0.5">Market cap</span>
               <span className="text-lg font-bold tabular-nums">{formatAmount(totalMarketCap)}</span>
             </div>
             <div className="px-4 py-3">
-              <span className="text-[10px] uppercase tracking-widest text-muted font-medium block mb-0.5">
-                Revenue
-              </span>
+              <span className="text-body-sm font-medium text-muted block mb-0.5">Revenue</span>
               <span className="text-lg font-bold tabular-nums">{formatAmount(totalRevenue)}</span>
             </div>
             <div className="px-4 py-3">
-              <span className="text-[10px] uppercase tracking-widest text-muted font-medium block mb-0.5">
-                Income
-              </span>
+              <span className="text-body-sm font-medium text-muted block mb-0.5">Income</span>
               <span
                 className={`text-lg font-bold tabular-nums ${totalIncome >= 0 ? "text-success" : "text-error"}`}
               >
@@ -821,9 +813,7 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
               </span>
             </div>
             <div className="px-4 py-3">
-              <span className="text-[10px] uppercase tracking-widest text-muted font-medium block mb-0.5">
-                Profitable
-              </span>
+              <span className="text-body-sm font-medium text-muted block mb-0.5">Profitable</span>
               <span
                 className={`text-lg font-bold tabular-nums ${
                   profitablePct >= 75
@@ -838,7 +828,7 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
             </div>
             <div className="px-4 py-3">
               <div className="flex items-center gap-1.5 mb-0.5">
-                <span className="text-[10px] uppercase tracking-widest text-muted font-medium">
+                <span className="text-body-sm font-medium text-muted">
                   {MARKET_TIMEFRAMES[stockTimeframe].label}
                 </span>
                 <div className="flex items-center gap-0.5 bg-card-elevated rounded px-0.5 py-px border border-card-border">

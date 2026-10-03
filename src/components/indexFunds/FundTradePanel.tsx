@@ -528,10 +528,7 @@ export function FundTradePanel({
       )}
 
       <div>
-        <label
-          htmlFor={unitsInputId}
-          className="text-[10px] uppercase tracking-widest text-muted font-semibold"
-        >
+        <label htmlFor={unitsInputId} className="text-body-sm font-medium text-muted">
           Units (whole numbers)
         </label>
         <input

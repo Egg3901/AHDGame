@@ -135,9 +135,7 @@ export function FundHoldingsPanel({
   return (
     <div className="space-y-6">
       <div className="rounded-xl border border-card-border bg-card p-4 shadow-sm">
-        <p className="text-[10px] uppercase tracking-widest text-muted font-semibold">
-          Total fund holdings
-        </p>
+        <p className="text-body-sm font-medium text-muted">Total fund holdings</p>
         <p className="text-2xl font-bold tabular-nums mt-1">{formatAmount(totalValue)}</p>
         <p className="text-xs text-muted mt-1">
           Browse and subscribe on the{" "}

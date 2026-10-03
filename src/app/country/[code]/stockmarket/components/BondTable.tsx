@@ -185,9 +185,7 @@ export function BondTable({
             : ""}
         </p>
         <div className="flex items-center gap-2 overflow-x-auto pb-2 sm:pb-0 w-full sm:w-auto">
-          <span className="text-xs font-semibold text-muted uppercase tracking-wider shrink-0">
-            Sort by:
-          </span>
+          <span className="text-body-sm font-medium text-muted shrink-0">Sort by:</span>
           {BOND_SORT_OPTIONS.map((opt) => (
             <button
               key={opt.field}

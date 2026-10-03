@@ -128,9 +128,7 @@ export function WireTransferCard({
             </p>
           </div>
           <div className="text-right shrink-0">
-            <span className="block text-[10px] uppercase tracking-widest text-muted font-bold">
-              Available
-            </span>
+            <span className="block text-body-sm font-medium text-muted">Available</span>
             <span className="text-lg font-bold tabular-nums text-foreground">
               {forexEnabled && activeCurrency
                 ? formatBalance(activeBalance, activeCurrency)
@@ -143,9 +141,7 @@ export function WireTransferCard({
       <div className="p-5 sm:p-6 space-y-4">
         {forexEnabled && availableCurrencies.length > 1 && (
           <div>
-            <label className="block text-xs font-semibold text-muted uppercase tracking-wider mb-1.5">
-              Currency
-            </label>
+            <label className="block text-body-sm font-medium text-muted mb-1.5">Currency</label>
             <div
               className="flex flex-wrap gap-1.5"
               role="radiogroup"
@@ -179,11 +175,7 @@ export function WireTransferCard({
                       >
                         {c}
                       </span>
-                      {isHome && (
-                        <span className="text-[9px] font-bold uppercase tracking-wider text-muted">
-                          Home
-                        </span>
-                      )}
+                      {isHome && <span className="text-body-sm font-medium text-muted">Home</span>}
                     </span>
                     <span className="text-[11px] tabular-nums text-muted">
                       {formatBalance(balance, c)}
@@ -196,9 +188,7 @@ export function WireTransferCard({
         )}
 
         <div>
-          <label className="block text-xs font-semibold text-muted uppercase tracking-wider mb-1.5">
-            Recipient
-          </label>
+          <label className="block text-body-sm font-medium text-muted mb-1.5">Recipient</label>
           <PlayerSelector
             onSelect={(c) => {
               setSelected({ id: c.id, name: c.name });
@@ -211,9 +201,7 @@ export function WireTransferCard({
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-muted uppercase tracking-wider mb-1.5">
-            Amount
-          </label>
+          <label className="block text-body-sm font-medium text-muted mb-1.5">Amount</label>
           <div className="relative">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted text-sm pointer-events-none">
               {activeSymbol}

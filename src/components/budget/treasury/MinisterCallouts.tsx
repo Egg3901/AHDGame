@@ -49,7 +49,7 @@ function ProjTile({
   const deltaGood = delta != null && (invert ? -delta : delta) >= 0;
   return (
     <div className="rounded-lg border border-card-border bg-card-muted p-3">
-      <div className="text-[10px] font-bold uppercase tracking-wide text-muted">{label}</div>
+      <div className="text-body-sm font-medium text-muted">{label}</div>
       <div className={`mt-1 text-lg font-bold tabular-nums ${valueTone}`}>{value}</div>
       {delta != null && (
         <div className={`text-[11px] tabular-nums ${deltaGood ? "text-success" : "text-error"}`}>
@@ -89,9 +89,7 @@ export function MinisterCallouts({ inputs, subtitle, fiscalYear }: MinisterCallo
             <path d="M10 2l2.4 4.9 5.4.8-3.9 3.8.9 5.4L10 14.3 5.2 16.7l.9-5.4L2.2 7.7l5.4-.8z" />
           </svg>
           <div>
-            <div className="text-[10px] font-bold uppercase tracking-wide text-gold/80">
-              Finance Minister briefing
-            </div>
+            <div className="text-body-sm font-medium text-gold/80">Finance Minister briefing</div>
             <p className="mt-1 max-w-3xl text-body-sm leading-relaxed text-foreground/90">
               Confidential fiscal-health read for {subtitle}. Public viewers see the published
               accounts only; this lens adds risk flags and a next-fiscal-year projection.

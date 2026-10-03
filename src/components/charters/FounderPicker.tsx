@@ -185,13 +185,13 @@ export function FounderPicker({
                       {r.currentOffice ? ` · ${r.currentOffice}` : ""}
                     </span>
                     {alreadyFounder && (
-                      <span className="ml-auto text-[10px] uppercase tracking-wide text-muted/70">
-                        already a founder
+                      <span className="ml-auto text-body-sm font-medium text-muted">
+                        Already a founder
                       </span>
                     )}
                     {notAdjacent && (
-                      <span className="ml-auto text-[10px] uppercase tracking-wide text-muted/70">
-                        not adjacent
+                      <span className="ml-auto text-body-sm font-medium text-muted">
+                        Not adjacent
                       </span>
                     )}
                   </button>

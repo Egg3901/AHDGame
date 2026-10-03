@@ -209,7 +209,7 @@ export default function CommodityDetailClient({ initialData }: CommodityDetailCl
             totalCapacity={marketScope.totalCapacity ?? 0}
             currentSupply={marketScope.supply}
             capacityLabel={
-              marketScope.activeCountry ? `${marketScope.marketLabel} Capacity` : "Global Capacity"
+              marketScope.activeCountry ? `${marketScope.marketLabel} capacity` : "Global capacity"
             }
             stateCountryMap={marketScope.stateCountryMap}
             stateNames={Object.fromEntries(

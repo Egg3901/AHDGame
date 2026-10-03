@@ -206,19 +206,17 @@ export function DraftCharterForm({ countryCode, proposer, stateNames }: DraftCha
           before the party goes live.
         </p>
         <div>
-          <div className="mb-1 text-[10px] uppercase tracking-wide text-muted">Founder 1</div>
+          <div className="mb-1 text-body-sm font-medium text-muted">Founder 1</div>
           <div className="flex items-center gap-2">
             <div className="flex-1 rounded-lg border border-primary/40 bg-primary/10 px-4 py-3 text-sm">
               <span className="font-medium">{founders[0].name}</span>
-              <span className="ml-2 text-[10px] uppercase tracking-wide text-primary">you</span>
+              <span className="ml-2 text-body-sm font-medium text-primary">You</span>
             </div>
           </div>
         </div>
         {([1, 2] as const).map((index) => (
           <div key={index}>
-            <div className="mb-1 text-[10px] uppercase tracking-wide text-muted">
-              Founder {index + 1}
-            </div>
+            <div className="mb-1 text-body-sm font-medium text-muted">Founder {index + 1}</div>
             <FounderPicker
               countryId={countryCode}
               value={founders[index].characterId}

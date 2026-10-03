@@ -19,9 +19,7 @@ export default function FlowLedgerStrip({
   return (
     <div className="rounded-xl border border-card-border bg-card px-5 py-4 mb-6">
       <div className="flex items-center justify-between mb-3">
-        <span className="text-xs font-semibold text-muted uppercase tracking-wider">
-          Global pooled ledger
-        </span>
+        <span className="text-sm font-semibold text-foreground">Global pooled ledger</span>
         <span className="text-[10px] text-muted tabular-nums">turn {flows.turn}</span>
       </div>
       <div

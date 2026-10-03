@@ -38,9 +38,7 @@ export function GdpDecompositionCard({
   return (
     <div className="rounded-lg border border-card-border bg-card p-4">
       <div className="mb-3 flex items-baseline justify-between">
-        <h4 className="text-[11px] font-semibold uppercase tracking-widest text-muted">
-          GDP &amp; Growth
-        </h4>
+        <h4 className="text-sm font-semibold text-foreground">GDP &amp; growth</h4>
         <span
           className={`text-[10px] font-semibold ${d.isExpansionary ? "text-success" : "text-error"}`}
         >
@@ -50,13 +48,13 @@ export function GdpDecompositionCard({
 
       <div className="mb-4 grid grid-cols-2 gap-3">
         <div>
-          <span className="block text-[10px] uppercase tracking-widest text-muted">GDP</span>
+          <span className="block text-body-sm font-medium text-muted">GDP</span>
           <span className="text-sm font-bold tabular-nums text-foreground">
             {gdp != null ? formatGDP(gdp, getCurrencyPrefix(countryId)) : "—"}
           </span>
         </div>
         <div>
-          <span className="block text-[10px] uppercase tracking-widest text-muted">Growth /yr</span>
+          <span className="block text-body-sm font-medium text-muted">Growth /yr</span>
           <span className="text-sm font-bold tabular-nums text-foreground">{pct(d.total)}</span>
         </div>
       </div>
@@ -87,9 +85,7 @@ export function GdpDecompositionCard({
         <div className="mt-3 grid grid-cols-2 gap-3 border-t border-card-border/50 pt-3">
           {outputGap != null && (
             <div>
-              <span className="block text-[10px] uppercase tracking-widest text-muted">
-                Output gap
-              </span>
+              <span className="block text-body-sm font-medium text-muted">Output gap</span>
               <span className="text-xs font-semibold tabular-nums text-foreground">
                 {pct(outputGap)}
               </span>
@@ -97,9 +93,7 @@ export function GdpDecompositionCard({
           )}
           {laborForce != null && (
             <div>
-              <span className="block text-[10px] uppercase tracking-widest text-muted">
-                Labor force
-              </span>
+              <span className="block text-body-sm font-medium text-muted">Labor force</span>
               <span className="text-xs font-semibold tabular-nums text-foreground">
                 {laborForce.toLocaleString("en-US")}
               </span>

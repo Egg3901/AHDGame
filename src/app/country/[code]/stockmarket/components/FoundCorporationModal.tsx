@@ -311,8 +311,8 @@ export function FoundCorporationModal({
 
           <div className="space-y-4">
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-muted mb-1.5">
-                Founding Type
+              <label className="block text-body-sm font-medium text-muted mb-1.5">
+                Founding type
               </label>
               <div className="grid grid-cols-2 gap-2">
                 <button
@@ -346,8 +346,8 @@ export function FoundCorporationModal({
             </div>
 
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-muted mb-1.5">
-                Corporation Name
+              <label className="block text-body-sm font-medium text-muted mb-1.5">
+                Corporation name
               </label>
               <input
                 type="text"
@@ -360,8 +360,8 @@ export function FoundCorporationModal({
             </div>
 
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-muted mb-1.5">
-                Stock Ticker Symbol
+              <label className="block text-body-sm font-medium text-muted mb-1.5">
+                Stock ticker symbol
               </label>
               <input
                 type="text"
@@ -379,8 +379,8 @@ export function FoundCorporationModal({
             </div>
 
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-muted mb-1.5">
-                Primary Sector
+              <label className="block text-body-sm font-medium text-muted mb-1.5">
+                Primary sector
               </label>
               <div className="relative">
                 <select
@@ -419,8 +419,8 @@ export function FoundCorporationModal({
             </div>
 
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-muted mb-1.5">
-                Secondary Sector <span className="text-muted/60 normal-case">(optional)</span>
+              <label className="block text-body-sm font-medium text-muted mb-1.5">
+                Secondary sector <span className="text-muted/60">(optional)</span>
               </label>
               <div className="relative">
                 <select
@@ -465,8 +465,8 @@ export function FoundCorporationModal({
             </div>
 
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-muted mb-1.5">
-                Starting Treasury
+              <label className="block text-body-sm font-medium text-muted mb-1.5">
+                Starting treasury
               </label>
               <div className="relative">
                 <span className="absolute left-3 top-2 text-sm text-muted pointer-events-none">
@@ -537,7 +537,7 @@ export function FoundCorporationModal({
                   </label>
                   {dualClass && (
                     <div className="mt-3">
-                      <label className="block text-xs font-bold uppercase tracking-wider text-muted mb-1.5">
+                      <label className="block text-body-sm font-medium text-muted mb-1.5">
                         Votes per founder share ({superMultiplier}×)
                       </label>
                       <input
@@ -557,9 +557,7 @@ export function FoundCorporationModal({
                   )}
                 </div>
                 <div className="mb-1.5 flex items-end justify-between gap-3">
-                  <label className="block text-xs font-bold uppercase tracking-wider text-muted">
-                    Public Float
-                  </label>
+                  <label className="block text-body-sm font-medium text-muted">Public float</label>
                   <div className="flex items-center gap-1">
                     <input
                       type="number"

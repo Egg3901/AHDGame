@@ -244,7 +244,7 @@ export default function CorporationPortfolioView({
       <PortfolioShell
         title={`${corpName} Portfolio`}
         subtitle="Corporate stocks, bonds, and investments"
-        netWorthLabel="Total Net Worth"
+        netWorthLabel="Total net worth"
         netWorth={formatAmount(netWorthTotal)}
         ownerSwitcher={ownerSwitcher}
         mastheadAside={viewCorpLink}
@@ -328,12 +328,12 @@ function CorpOverviewPane({
   return (
     <>
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        <StatCard label="Liquid Capital" value={formatAmount(data.cashOnHand)} />
-        <StatCard label="Stock Holdings" value={formatAmount(data.totalStockValue)} />
-        <StatCard label="Bond Holdings" value={formatAmount(data.totalBondValue)} />
+        <StatCard label="Liquid capital" value={formatAmount(data.cashOnHand)} />
+        <StatCard label="Stock holdings" value={formatAmount(data.totalStockValue)} />
+        <StatCard label="Bond holdings" value={formatAmount(data.totalBondValue)} />
         <StatCard label="Liabilities" value={formatAmount(data.totalLiabilityValue)} />
         <StatCard
-          label="Bond Income"
+          label="Bond income"
           value={`+${formatAmount(data.totalCouponIncomePerTurn)}/turn`}
           accent="success"
         />
@@ -407,9 +407,7 @@ function CorpCashPane({ cashOnHand }: { cashOnHand: number }) {
   const { formatAmount } = useCurrency();
   return (
     <div className="rounded-xl border border-card-border bg-card p-6 shadow-sm">
-      <span className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-1">
-        Liquid Capital
-      </span>
+      <span className="block text-body-sm font-medium text-muted mb-1">Liquid capital</span>
       <span className="block text-2xl font-bold text-foreground tabular-nums">
         {formatAmount(cashOnHand)}
       </span>
@@ -578,9 +576,7 @@ function CorpBondsTable({
       <div className="rounded-xl border border-card-border bg-card overflow-hidden shadow-sm">
         {hasImfFacility && (
           <div className="px-4 py-2 border-b border-card-border bg-primary/5">
-            <p className="text-[10px] font-semibold text-foreground tracking-wide uppercase">
-              IMF facility
-            </p>
+            <p className="text-body-sm font-medium text-foreground">IMF facility</p>
             <p className="text-[10px] text-muted mt-0.5">
               Loan receivable from restructuring. Not a tradable bond.
             </p>

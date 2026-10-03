@@ -153,9 +153,7 @@ export default function CommodityCountryDrilldownView({
       {/* Regional data table */}
       <div className="border-t border-card-border">
         <div className="px-4 py-2 bg-card-elevated/30">
-          <h4 className="text-xs font-semibold text-muted uppercase tracking-wider">
-            {config.regionLabel} Breakdown
-          </h4>
+          <h4 className="text-sm font-semibold text-foreground">{config.regionLabel} breakdown</h4>
         </div>
         <div className="max-h-64 overflow-y-auto">
           <table className="w-full text-sm">

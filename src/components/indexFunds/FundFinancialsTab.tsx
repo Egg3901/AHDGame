@@ -185,9 +185,7 @@ export default function FundFinancialsTab({
           <div className="px-6 py-4 space-y-1">
             {incomeStatement ? (
               <>
-                <div className="text-[11px] font-semibold text-muted uppercase tracking-wider pt-1 pb-2">
-                  Revenue
-                </div>
+                <div className="text-body-sm font-medium text-muted pt-1 pb-2">Revenue</div>
                 {Array.from(incomeStatement.byKind.entries())
                   .filter(([, vals]) => vals.income > 0)
                   .map(([kind, vals]) => (
@@ -205,9 +203,7 @@ export default function FundFinancialsTab({
                 )}
 
                 <div className="border-t border-card-border mt-3" />
-                <div className="text-[11px] font-semibold text-muted uppercase tracking-wider pt-3 pb-2">
-                  Expenses
-                </div>
+                <div className="text-body-sm font-medium text-muted pt-3 pb-2">Expenses</div>
                 {Array.from(incomeStatement.byKind.entries())
                   .filter(([, vals]) => vals.expense > 0)
                   .map(([kind, vals]) => (
@@ -249,9 +245,7 @@ export default function FundFinancialsTab({
           </div>
 
           <div className="px-6 py-4 space-y-1">
-            <div className="text-[11px] font-semibold text-muted uppercase tracking-wider pt-1 pb-2">
-              Assets
-            </div>
+            <div className="text-body-sm font-medium text-muted pt-1 pb-2">Assets</div>
             <FinRow
               label="Cash & equivalents"
               value={formatAmount(bs.cashAnchor, ccy)}
@@ -272,9 +266,7 @@ export default function FundFinancialsTab({
             </div>
 
             <div className="border-t border-card-border mt-3" />
-            <div className="text-[11px] font-semibold text-muted uppercase tracking-wider pt-3 pb-2">
-              Liabilities
-            </div>
+            <div className="text-body-sm font-medium text-muted pt-3 pb-2">Liabilities</div>
             <FinRow
               label="Outstanding units (liability)"
               value={formatAmount(bs.quotedLiabilityAnchor, ccy)}
@@ -282,9 +274,7 @@ export default function FundFinancialsTab({
             />
 
             <div className="border-t border-card-border mt-3" />
-            <div className="text-[11px] font-semibold text-muted uppercase tracking-wider pt-3 pb-2">
-              Equity / Coverage
-            </div>
+            <div className="text-body-sm font-medium text-muted pt-3 pb-2">Equity / coverage</div>
             <FinRow
               label="Backing surplus"
               value={formatAmount(bs.totalBackingAnchor - bs.quotedLiabilityAnchor, ccy)}
@@ -320,9 +310,7 @@ export default function FundFinancialsTab({
           </div>
 
           <div className="border-t border-card-border bg-background/40 px-6 py-4">
-            <div className="text-[11px] font-semibold text-muted uppercase tracking-wider mb-3">
-              Key Metrics
-            </div>
+            <div className="text-body-sm font-medium text-muted mb-3">Key metrics</div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div>
                 <div className="text-[11px] text-muted mb-0.5">NAV / unit</div>
