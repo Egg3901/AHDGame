@@ -19,6 +19,8 @@ import {
 export interface TreasuryWitness {
   flow: TreasuryCashFlow;
   ledger?: TreasuryCashOptions;
+  /** The corporation the caller's counterparty rows settle against, when it only passes the cash through. */
+  passThroughCorpId?: string;
 }
 
 async function witnessTreasuryLeg(
@@ -36,6 +38,7 @@ async function witnessTreasuryLeg(
     amount,
     now,
     site: `treasury:${site}`,
+    passThroughCorpId: witness.passThroughCorpId,
   });
 }
 
@@ -132,11 +135,14 @@ export async function creditTreasuryProceeds(
   db: Db,
   countryId: CountryId,
   proceedsLocal: number,
-  now: Date
+  now: Date,
+  witness?: TreasuryWitness
 ): Promise<number> {
   if (proceedsLocal <= 0) return 0;
   const amount = Math.round(proceedsLocal);
-  await incTreasuryBalance(db, countryId, amount, now);
+  if (await incTreasuryBalance(db, countryId, amount, now)) {
+    await witnessTreasuryLeg(db, witness, countryId, amount, now, "proceeds");
+  }
   return amount;
 }
 

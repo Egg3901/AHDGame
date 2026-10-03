@@ -18,6 +18,7 @@ import { isStateOwned, ensurePrimaryNationalCorporation } from "./nationalCorpor
 import { assertPrivateEnterprisePermitted } from "@/lib/economy/queries/privateEnterpriseGate";
 import { computeSpunOutShareStructure } from "./privatizationShares";
 import { creditTreasuryProceeds } from "./treasury";
+import { loadTreasuryCashContext } from "./treasuryLedger";
 import { applyPrivatizationConsequences } from "./consequences/apply";
 import { recordNationalizationLedger } from "./ledger";
 import { notifyCountryResidents } from "./privatizationNotifications";
@@ -406,7 +407,11 @@ export async function privatizeAsset(
       metadata: { href: `/country/${params.countryId.toLowerCase()}/nationalization` },
     });
   } else {
-    await creditTreasuryProceeds(db, params.countryId, structure.proceedsLocal, now);
+    // No buyer pays for the float: the proceeds are an explicit, named mint.
+    await creditTreasuryProceeds(db, params.countryId, structure.proceedsLocal, now, {
+      flow: "privatization_ipo",
+      ledger: { context: await loadTreasuryCashContext(db, params.turn) },
+    });
     proceedsLocal = structure.proceedsLocal;
     // Privatization politics (spec §12.1) — an IPO completes immediately. Auction
     // consequences fire at sale (the resolver), not here at open.

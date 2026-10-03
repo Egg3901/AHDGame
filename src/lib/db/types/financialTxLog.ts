@@ -12,6 +12,11 @@ export type FinancialTxType =
   | "soe_capex_grant"
   | "nationalization_compensation" // treasury compensation for a taken sector, both legs
   | "corp_starting_grant" // system-granted treasury of a spawned corporation
+  | "nationalization_held_equity_credit" // cash credited for shares a seized corporation held
+  | "privatization_ipo_proceeds" // IPO float proceeds credited to the treasury
+  | "privatization_bid_escrow" // privatization auction bid moved into escrow
+  | "privatization_bid_refund" // privatization auction escrow returned to a bidder
+  | "privatization_auction_proceeds" // winning auction escrow released to the treasury
   // Character / imperial cash
   | "fund_credit" // legacy mixed-source entry — keep for back-compat
   | "fund_debit"

@@ -3,7 +3,8 @@
  * draws, loss backing and capex grants actually move. Treasury legs use the
  * balance snapshot's treasury valuation; both sides of a transfer share the
  * flow's settlement reason so the money-supply check nets them, and a capex
- * grant sinks into the plant it buys.
+ * grant sinks into the plant it buys. A leg whose counterparty rows settle
+ * against a pass-through corporation books its contra on that corporation too.
  */
 import * as Sentry from "@sentry/nextjs";
 import type { Db } from "mongodb";
@@ -33,6 +34,45 @@ const FLOW_ACCOUNTING = {
   },
   group_loss_relief: { txType: "corp_group_relief", reason: "corporate_group_transfer" },
   regulatory_fine: { txType: "corp_fine", reason: "regulatory_fine" },
+  // Whole-corporation nationalization: the treasury funds the shareholder pool and
+  // receives the public float's slice. Both pass through the seized corporation,
+  // where the holders' share_buyout_payout rows settle.
+  nationalization_buyout_pool: {
+    txType: "share_buyout_outflow",
+    reason: "nationalization_compensation",
+  },
+  nationalization_buyout_float: {
+    txType: "share_buyout_payout",
+    reason: "nationalization_compensation",
+  },
+  // A dissolved corporation's remaining cash leaves it for its CEO, the treasury
+  // or a National Corporation.
+  corporation_liquidation: {
+    txType: "corp_dissolution_distribution",
+    reason: "corporation_liquidation",
+  },
+  // Shares a seized corporation held elsewhere move to the National Corporation,
+  // which is also credited their market value in cash with no payer.
+  nationalization_held_equity: {
+    txType: "nationalization_held_equity_credit",
+    reason: "nationalization_held_equity",
+  },
+  // IPO float proceeds credit the treasury with no payer: a named mint.
+  privatization_ipo: { txType: "privatization_ipo_proceeds", reason: "privatization_ipo" },
+  // Auction bids leave the bidder into escrow; refunds and the winning amount
+  // leave escrow, so all three share one reason.
+  privatization_bid_escrow: {
+    txType: "privatization_bid_escrow",
+    reason: "privatization_auction_escrow",
+  },
+  privatization_bid_refund: {
+    txType: "privatization_bid_refund",
+    reason: "privatization_auction_escrow",
+  },
+  privatization_auction_proceeds: {
+    txType: "privatization_auction_proceeds",
+    reason: "privatization_auction_escrow",
+  },
 } as const satisfies Record<string, { txType: FinancialTxType; reason: string }>;
 
 export type TreasuryCashFlow = keyof typeof FLOW_ACCOUNTING;
@@ -53,7 +93,8 @@ export interface TreasuryCashOptions {
 
 export type TreasuryCashAccount =
   | { kind: "government"; countryId: CountryId }
-  | { kind: "corporation"; corpId: string; currency: CurrencyCode };
+  | { kind: "corporation"; corpId: string; currency: CurrencyCode }
+  | { kind: "character"; characterId: string; currency: CurrencyCode };
 
 /** One projected read per phase, from the same database as the cash writer. */
 export async function loadTreasuryCashContext(
@@ -114,6 +155,8 @@ export async function witnessTreasuryCash(
     amount: number;
     now: Date;
     site: string;
+    /** Settle against this corporation, which passes the cash through, instead of a mint or sink. */
+    passThroughCorpId?: string;
   }
 ): Promise<void> {
   if (!Number.isFinite(input.amount) || input.amount === 0) return;
@@ -137,9 +180,12 @@ export async function witnessTreasuryCash(
       }).anchorRate;
     } else {
       currency = account.currency;
-      ledgerAccount = accountId("corporation", account.corpId, currency);
+      ledgerAccount =
+        account.kind === "corporation"
+          ? accountId("corporation", account.corpId, currency)
+          : accountId("character", account.characterId, currency);
       const rate = context.rates.get(currency);
-      // Same missing-rate fallback as the snapshot's corporation valuation.
+      // Same missing-rate fallback as the snapshot's corporation and wallet valuation.
       anchorRate = !rate || rate <= 0 ? 1 : rate;
     }
     const anchorAmount = input.amount / anchorRate;
@@ -157,7 +203,9 @@ export async function witnessTreasuryCash(
           role: "primary",
         },
         {
-          account: mintSinkAccount(anchorAmount, FLOW_ACCOUNTING[input.flow].reason, currency),
+          account: input.passThroughCorpId
+            ? accountId("corporation", input.passThroughCorpId, currency)
+            : mintSinkAccount(anchorAmount, FLOW_ACCOUNTING[input.flow].reason, currency),
           amount: -input.amount,
           currencyCode: currency,
           anchorAmount: -anchorAmount,
