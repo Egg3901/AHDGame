@@ -244,7 +244,9 @@ describe("fineOverdueDivestitures", () => {
       db,
       "US",
       50,
-      expect.any(Date)
+      expect.any(Date),
+      // The fine's corporation row lacks a government side, so the treasury witnesses it.
+      { flow: "regulatory_fine" }
     );
   });
 

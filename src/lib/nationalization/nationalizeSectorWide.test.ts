@@ -148,7 +148,9 @@ describe("nationalizeSectorWide", () => {
       "CN",
       1000,
       expect.anything(),
-      expect.any(Date)
+      expect.any(Date),
+      // The taking opts into the treasury-side compensation witness.
+      expect.objectContaining({ flow: "nationalization_compensation" })
     );
     const donorCredit = db.collectionMocks.corporations.updateOne.mock.calls.find(
       (c) => c[0]._id?.toString() === playerCorpId.toString()

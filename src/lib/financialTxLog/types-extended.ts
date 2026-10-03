@@ -20,6 +20,7 @@ export const ALL_TX_TYPES: readonly FinancialTxType[] = [
   "soe_treasury_draw",
   "soe_loss_backing",
   "soe_capex_grant",
+  "nationalization_compensation",
   "corp_starting_grant",
   "fund_credit", // legacy mixed source — still emitted by older paths
   "fund_debit",
@@ -160,6 +161,7 @@ export const TX_TYPE_LABELS: Record<FinancialTxType, string> = {
   soe_treasury_draw: "State Enterprise Treasury Draw",
   soe_loss_backing: "State Enterprise Loss Backing",
   soe_capex_grant: "State Capex Grant",
+  nationalization_compensation: "Nationalization Compensation",
   corp_starting_grant: "Corporation Starting Grant",
   fund_credit: "Fund Credit (legacy)",
   fund_debit: "Fund Debit (legacy)",

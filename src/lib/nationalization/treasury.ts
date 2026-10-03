@@ -7,8 +7,37 @@ import { getCurrencyFxRate } from "@/lib/currency/corporationCapital";
 import {
   resolveTreasuryCashOptions,
   witnessTreasuryCash,
+  type TreasuryCashFlow,
   type TreasuryCashOptions,
 } from "./treasuryLedger";
+
+/**
+ * Opt-in government-side witness for an event-driven caller whose own rows do
+ * not already evidence the treasury. Callers that emit a government row leave
+ * it out, so no flow is witnessed twice.
+ */
+export interface TreasuryWitness {
+  flow: TreasuryCashFlow;
+  ledger?: TreasuryCashOptions;
+}
+
+async function witnessTreasuryLeg(
+  db: Db,
+  witness: TreasuryWitness | undefined,
+  countryId: CountryId,
+  amount: number,
+  now: Date,
+  site: string
+): Promise<void> {
+  if (!witness) return;
+  await witnessTreasuryCash(db, witness.ledger, {
+    flow: witness.flow,
+    account: { kind: "government", countryId },
+    amount,
+    now,
+    site: `treasury:${site}`,
+  });
+}
 
 /**
  * Government cash account for nationalization money flows.
@@ -55,7 +84,8 @@ export async function debitTreasuryCompensation(
   countryId: CountryId,
   payoutAnchor: number,
   fxByCurrency: ReadonlyMap<CurrencyCode, number>,
-  now: Date
+  now: Date,
+  witness?: TreasuryWitness
 ): Promise<number> {
   if (payoutAnchor <= 0) return 0;
 
@@ -63,7 +93,9 @@ export async function debitTreasuryCompensation(
   const rate = fxByCurrency.get(currency) ?? 1;
   const payoutLocal = Math.round(writeGovBudgetLocal(payoutAnchor, currency, rate));
 
-  await incTreasuryBalance(db, countryId, -payoutLocal, now);
+  if (await incTreasuryBalance(db, countryId, -payoutLocal, now)) {
+    await witnessTreasuryLeg(db, witness, countryId, -payoutLocal, now, "compensation");
+  }
   return payoutLocal;
 }
 
@@ -78,11 +110,14 @@ export async function debitTreasury(
   db: Db,
   countryId: CountryId,
   amountLocal: number,
-  now: Date
+  now: Date,
+  witness?: TreasuryWitness
 ): Promise<number> {
   if (!(amountLocal > 0)) return 0;
   const amount = Math.round(amountLocal);
-  await incTreasuryBalance(db, countryId, -amount, now);
+  if (await incTreasuryBalance(db, countryId, -amount, now)) {
+    await witnessTreasuryLeg(db, witness, countryId, -amount, now, "debitTreasury");
+  }
   return amount;
 }
 
@@ -122,14 +157,17 @@ export async function creditTreasuryProceedsFromAnchor(
   db: Db,
   countryId: CountryId,
   proceedsAnchor: number,
-  now: Date
+  now: Date,
+  witness?: TreasuryWitness
 ): Promise<number> {
   if (!(proceedsAnchor > 0)) return 0;
   const currency = (COUNTRY_CURRENCY_MAP[countryId] ?? "USD") as CurrencyCode;
   const rate = await getCurrencyFxRate(db, currency);
   const amount = Math.round(writeGovBudgetLocal(proceedsAnchor, currency, rate));
   if (amount <= 0) return 0;
-  await incTreasuryBalance(db, countryId, amount, now);
+  if (await incTreasuryBalance(db, countryId, amount, now)) {
+    await witnessTreasuryLeg(db, witness, countryId, amount, now, "proceedsFromAnchor");
+  }
   return amount;
 }
 

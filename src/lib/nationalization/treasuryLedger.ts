@@ -15,10 +15,27 @@ import { accountId, mintSinkAccount } from "@/lib/ledger/accounts";
 import { snapshotTreasuryCurrency } from "@/lib/ledger/balanceSnapshot";
 import { emitLedgerEntries } from "@/lib/ledger/emit";
 import type { LedgerEntryInput } from "@/lib/ledger/types";
+import type { FinancialTxType } from "@/lib/db/types/financialTxLog";
 
-/** Each flow is its own transaction type and settlement reason. */
-export type TreasuryCashFlow =
-  "soe_remittance" | "soe_treasury_draw" | "soe_loss_backing" | "soe_capex_grant";
+/**
+ * Each flow's transaction type and settlement reason. Event-driven flows reuse
+ * their counterparty row's type and reason so the money-supply check nets the
+ * treasury leg against it.
+ */
+const FLOW_ACCOUNTING = {
+  soe_remittance: { txType: "soe_remittance", reason: "soe_remittance" },
+  soe_treasury_draw: { txType: "soe_treasury_draw", reason: "soe_treasury_draw" },
+  soe_loss_backing: { txType: "soe_loss_backing", reason: "soe_loss_backing" },
+  soe_capex_grant: { txType: "soe_capex_grant", reason: "soe_capex_grant" },
+  nationalization_compensation: {
+    txType: "nationalization_compensation",
+    reason: "nationalization_compensation",
+  },
+  group_loss_relief: { txType: "corp_group_relief", reason: "corporate_group_transfer" },
+  regulatory_fine: { txType: "corp_fine", reason: "regulatory_fine" },
+} as const satisfies Record<string, { txType: FinancialTxType; reason: string }>;
+
+export type TreasuryCashFlow = keyof typeof FLOW_ACCOUNTING;
 
 export interface TreasuryCashContext {
   turn: number;
@@ -129,7 +146,7 @@ export async function witnessTreasuryCash(
     const entry: LedgerEntryInput = {
       turn: context.turn,
       createdAt: input.now,
-      txType: input.flow,
+      txType: FLOW_ACCOUNTING[input.flow].txType,
       emitSite: `nationalization/${input.site}`,
       legs: [
         {
@@ -140,7 +157,7 @@ export async function witnessTreasuryCash(
           role: "primary",
         },
         {
-          account: mintSinkAccount(anchorAmount, input.flow, currency),
+          account: mintSinkAccount(anchorAmount, FLOW_ACCOUNTING[input.flow].reason, currency),
           amount: -input.amount,
           currencyCode: currency,
           anchorAmount: -anchorAmount,
