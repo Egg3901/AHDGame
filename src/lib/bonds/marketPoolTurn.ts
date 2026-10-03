@@ -15,6 +15,7 @@
  * Runs at the top of the bond turn, before any coupon or trade.
  */
 
+import { boundedParallelMap } from "@/lib/indexFunds/boundedParallelMap";
 import { calibratedPoolTarget, poolLiquidityAllocation } from "@/lib/moneySupply/rules/poolTarget";
 import type { Db } from "mongodb";
 import type { BondMarketPool } from "@/lib/db/types";
@@ -71,6 +72,9 @@ export function countriesForCurrency(currency: CurrencyCode): CountryId[] {
     .map(([countryId]) => countryId);
 }
 
+/** Pools whose inputs are read at once. Each pool issues ~10 reads. */
+const POOL_READ_CONCURRENCY = 6;
+
 /** Face of live sovereign paper in `currency` maturing within the next issuance interval. */
 export async function sovereignFaceMaturingSoon(
   db: Db,
@@ -113,10 +117,14 @@ export async function processBondMarketPoolTurn(
   const context =
     ledgerContext === undefined ? await loadBondPoolLedgerContext(db, turn) : ledgerContext;
 
-  return withBondPoolLedgerBatch(db, context, async (batch) => {
-    for (const pool of pools) {
-      const currency = pool._id;
-      const latest = await db
+  // Every read the pass needs, for every pool, up front: none of them touch the
+  // bond pools the loop below writes, so gathering them concurrently gives the
+  // same inputs the old pool-by-pool, country-by-country chain did (about 330
+  // sequential round trips a turn) while the writes keep their order.
+  const reads = await boundedParallelMap(pools, POOL_READ_CONCURRENCY, async (pool) => {
+    const currency = pool._id;
+    const [latest, rolloverLocal, snapshots] = await Promise.all([
+      db
         .collection<{
           currencyCode: string;
           m2?: number;
@@ -127,12 +135,26 @@ export async function processBondMarketPoolTurn(
           { currencyCode: currency },
           { projection: { m2: 1, turn: 1, accountingVersion: 1 }, sort: { turn: -1 }, limit: 1 }
         )
-        .toArray();
-      const m2 = latest[0]?.m2;
+        .toArray(),
       // Working balance: the pool re-buys every quarter's rollover before the
       // maturing series pays it back, so it must hold one quarter of maturing
       // sovereign face on top of its secondary-liquidity share of M2.
-      const rolloverLocal = await sovereignFaceMaturingSoon(db, currency, turn);
+      sovereignFaceMaturingSoon(db, currency, turn),
+      Promise.all(
+        countriesForCurrency(currency).map(
+          async (countryId) =>
+            [countryId, await loadCountrySovereignSnapshot(db, countryId, turn)] as const
+        )
+      ),
+    ]);
+    return { latest, rolloverLocal, snapshots };
+  });
+
+  return withBondPoolLedgerBatch(db, context, async (batch) => {
+    for (const [index, pool] of pools.entries()) {
+      const currency = pool._id;
+      const { latest, rolloverLocal, snapshots } = reads[index]!;
+      const m2 = latest[0]?.m2;
       const calibration = calibratedPoolTarget({
         previousLiquidityTarget: poolLiquidityAllocation({
           calibratedTarget: pool.liquidityTargetLocal,
@@ -161,8 +183,7 @@ export async function processBondMarketPoolTurn(
       }
 
       const appetiteByCountry: Partial<Record<CountryId, number>> = {};
-      for (const countryId of countriesForCurrency(currency)) {
-        const snapshot = await loadCountrySovereignSnapshot(db, countryId, turn);
+      for (const [countryId, snapshot] of snapshots) {
         if (!snapshot) continue;
         const demand = computeMarketDemand(snapshot);
         if (Number.isFinite(demand.demandRatio)) {
