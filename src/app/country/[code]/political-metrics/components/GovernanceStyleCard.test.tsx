@@ -2,7 +2,7 @@
  * @vitest-environment happy-dom
  */
 import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import type { DemocraticCompetition } from "@/lib/governanceStyle/competition";
 import type { GovernanceStyleScore } from "@/lib/governanceStyle/score";
 import { GovernanceStyleCard } from "./GovernanceStyleCard";
@@ -41,101 +41,87 @@ const COMPETITION: DemocraticCompetition = {
   penalty: 1.5,
 };
 
-/** The value element of a measure: the definition beside its name. */
-function measureValue(name: string): HTMLElement {
-  const term = screen.getByText(name);
-  return term.nextElementSibling as HTMLElement;
+/** The figure printed under one of the balance-of-power box labels. */
+function boxValue(label: string): string {
+  return screen.getByText(label).nextElementSibling?.textContent ?? "";
 }
 
 describe("GovernanceStyleCard", () => {
-  it("heads the section plainly and states the verdict in sentence case", () => {
+  it("heads the card with the national spirit and its first consequence", () => {
     render(<GovernanceStyleCard score={score(52, "Fragile democracy")} />);
-    expect(screen.getByRole("heading", { level: 2, name: "Governance style" })).toBeTruthy();
-    // The catalog headline is title case; the section prints it as a sentence.
-    expect(screen.getByText("Democracy under strain")).toBeTruthy();
-    // The band's first consequence, as one line of meaning under the verdict.
+    expect(screen.getByRole("heading", { level: 2, name: "Democracy Under Strain" })).toBeTruthy();
+    expect(screen.getByText("National spirit")).toBeTruthy();
     expect(
       screen.getByText("Potential GDP growth is up to 1.1 percentage points lower.")
     ).toBeTruthy();
+    expect(screen.getByText("Political character: Civic Balance")).toBeTruthy();
   });
 
-  it("shows each measure's label and score on a plain track with one marker", () => {
+  it("keeps both gradient rails with their coloured value words", () => {
     const { container } = render(<GovernanceStyleCard score={score(52, "Fragile democracy")} />);
-    expect(measureValue("Political direction").textContent).toBe("Centre 50");
-    expect(measureValue("Democratic health").textContent).toBe("Fragile democracy 52");
-    expect(
-      screen.getByRole("img", { name: "50 on a scale from Left at 0 to Right at 100" })
-    ).toBeTruthy();
-    expect(
-      screen.getByRole("img", {
-        name: "52 on a scale from Failed state at 0 to Healthy democracy at 100",
-      })
-    ).toBeTruthy();
-    // No gradient anywhere: the track is one neutral colour.
-    expect(container.innerHTML).not.toContain("gradient");
+    expect(container.querySelectorAll("[class*='bg-gradient-to-r']")).toHaveLength(2);
+    // Political direction keeps its accent; democratic health takes its score tone.
+    const direction = screen
+      .getAllByText("Centre")
+      .find((el) => el.className.includes("text-heading"))!;
+    expect(direction.className).toContain("text-primary");
+    const health = screen
+      .getAllByText("Fragile democracy")
+      .filter((el) => el.className.includes("text-warning"));
+    // The rail's value word and the pill beside the headline.
+    expect(health.length).toBe(2);
   });
 
-  it("keeps political direction neutral, because direction is not quality", () => {
+  it("aligns the headline to the top of the card, not the bottom of the rail panel", () => {
+    const { container } = render(<GovernanceStyleCard score={score(52, "Fragile democracy")} />);
+    const heading = screen.getByRole("heading", { level: 2 });
+    const grid = heading.closest("div.grid") as HTMLElement;
+    expect(grid.className).toContain("lg:items-start");
+    expect(container.innerHTML).not.toContain("lg:items-end");
+  });
+
+  it("keeps the institutional assessment and what this means", () => {
     render(<GovernanceStyleCard score={score(52, "Fragile democracy")} />);
-    expect(measureValue("Political direction").className).toContain("text-foreground");
-    expect(screen.getByText("Political character: Civic balance")).toBeTruthy();
-  });
-
-  it("turns democratic health amber in the penalty range", () => {
-    render(<GovernanceStyleCard score={score(52, "Fragile democracy")} />);
-    expect(measureValue("Democratic health").className).toContain("text-warning");
-  });
-
-  it("leaves democratic health neutral once no penalty applies", () => {
-    render(<GovernanceStyleCard score={score(64, "Functioning democracy")} />);
-    expect(measureValue("Democratic health").className).toContain("text-foreground");
-  });
-
-  it("marks a failed state red", () => {
-    render(<GovernanceStyleCard score={score(12, "Failed state")} />);
-    expect(measureValue("Democratic health").className).toContain("text-error");
-  });
-
-  it("keeps the institutional assessment and what the measures mean", () => {
-    render(<GovernanceStyleCard score={score(52, "Fragile democracy")} />);
-    expect(screen.getByRole("heading", { name: "Institutional assessment" })).toBeTruthy();
+    expect(screen.getByText("The institutional assessment")).toBeTruthy();
     expect(screen.getByText(/Democratic Health is between 40 and 60/)).toBeTruthy();
-    expect(screen.getByText(/describe political direction, not quality/)).toBeTruthy();
+    expect(screen.getByText("What this means")).toBeTruthy();
   });
 
-  it("lists the balance of power as figures, not boxes", () => {
+  it("lays the balance of power out in its boxes with the real figures", () => {
     render(<GovernanceStyleCard score={score(52, "Fragile democracy", COMPETITION)} />);
-    const section = screen
-      .getByRole("heading", { name: "Balance of power" })
-      .closest("section") as HTMLElement;
-    const value = (label: string) =>
-      within(section).getByText(label).nextElementSibling as HTMLElement;
-    expect(value("Chambers").textContent).toBe("62.0%");
-    expect(within(section).getByText("Largest party across 2 elected chambers")).toBeTruthy();
-    expect(value("Government").textContent).toBe("Divided government");
-    expect(value("Continuity").textContent).toBe("New executive");
+    expect(screen.getByText("Balance of power")).toBeTruthy();
+    expect(boxValue("Chambers")).toBe("62.0%");
+    expect(screen.getByText("Largest party across 2 elected chambers")).toBeTruthy();
+    expect(boxValue("Government")).toBe("Divided government");
+    expect(boxValue("Continuity")).toBe("New executive");
     // Three seated justices is too few to score packing.
-    expect(value("Court").textContent).toBe("n/a");
-    expect(value("Institutional cost").textContent).toBe("−1.5");
-    expect(within(section).getByText("Points off democratic health")).toBeTruthy();
-    expect(section.textContent).toContain("Chamber margins: −1.0.");
-    expect(section.textContent).toContain("Legislative continuity: −0.5.");
-    // A zero penalty reads as a plain zero, not a negative zero.
-    expect(section.textContent).toContain("Executive continuity: 0.0.");
-    expect(section.textContent).not.toContain("−0.0");
+    expect(boxValue("Court")).toBe("n/a");
+    expect(boxValue("Institutional cost")).toBe("−1.5");
+    expect(screen.getByText("−1.5 health")).toBeTruthy();
+  });
+
+  it("prints a zero penalty as 0.0, never a negative zero", () => {
+    const { container } = render(
+      <GovernanceStyleCard score={score(52, "Fragile democracy", COMPETITION)} />
+    );
+    expect(container.textContent).toContain("Chamber margins: −1.0.");
+    expect(container.textContent).toContain("Executive continuity: 0.0.");
+    expect(container.textContent).toContain("Court packing: 0.0.");
+    expect(container.textContent).not.toContain("−0.0");
   });
 
   it("says when concentrated control costs nothing", () => {
-    render(
+    const { container } = render(
       <GovernanceStyleCard
         score={score(64, "Functioning democracy", { ...COMPETITION, penalty: 0 })}
       />
     );
-    expect(screen.getByText("None")).toBeTruthy();
-    expect(screen.getByText("No pressure on democratic health")).toBeTruthy();
+    expect(screen.getByText("No pressure")).toBeTruthy();
+    expect(boxValue("Institutional cost")).toBe("0.0");
+    expect(container.textContent).not.toContain("−0.0");
   });
 
-  it("shows a region's scope note under the balance of power, and only with it", () => {
+  it("shows a region's scope note only with the balance of power", () => {
     const note = "The balance of power describes the national legislature.";
     render(
       <GovernanceStyleCard score={score(52, "Fragile democracy", COMPETITION)} scopeNote={note} />
@@ -144,6 +130,13 @@ describe("GovernanceStyleCard", () => {
     cleanup();
     render(<GovernanceStyleCard score={score(52, "Fragile democracy")} scopeNote={note} />);
     expect(screen.queryByText(note)).toBeNull();
-    expect(screen.queryByRole("heading", { name: "Balance of power" })).toBeNull();
+    expect(screen.queryByText("Balance of power")).toBeNull();
+  });
+
+  it("sets nothing under 12px", () => {
+    const { container } = render(
+      <GovernanceStyleCard score={score(52, "Fragile democracy", COMPETITION)} />
+    );
+    expect(container.innerHTML).not.toMatch(/text-body-xs|text-\[(?:[0-9]|1[01])px\]/);
   });
 });
