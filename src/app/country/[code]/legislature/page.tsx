@@ -92,6 +92,9 @@ export default async function LegislaturePage({ params }: PageProps) {
       legislatureName={ru?.name ?? bgName}
       generic={ru?.generic}
       hungarianElectoralDecisions={hungarianElectoralDecisions}
+      romanianElectoralDecision={
+        id === "RO" && (await getGameStatePreset(await getDb())) === "1991-default"
+      }
     />
   );
 }

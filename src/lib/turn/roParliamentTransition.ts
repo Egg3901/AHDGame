@@ -36,9 +36,14 @@ export async function processRoParliamentTransition(
   const countries = db.collection<CountryGameState>("countryGameStates");
   const country = await countries.findOne(
     { _id: "RO" },
-    { projection: { roParliament1992SinceTurn: 1 } }
+    { projection: { roParliament1992SinceTurn: 1, roElectoralLaw1992SinceTurn: 1 } }
   );
-  if (!country || country.roParliament1992SinceTurn != null) return false;
+  if (
+    !country ||
+    country.roParliament1992SinceTurn != null ||
+    country.roElectoralLaw1992SinceTurn == null
+  )
+    return false;
 
   const regions = await db
     .collection<State>("states")
@@ -51,23 +56,34 @@ export async function processRoParliamentTransition(
   )
     return false;
 
-  for (const [electionType, expected] of [
-    ["chamberOfDeputies", RO_1992_DEPUTIES_BY_REGION],
-    ["senat", RO_1992_SENATORS_BY_REGION],
-  ] as const) {
-    const resolved = await db
-      .collection<Election>("elections")
-      .find(
-        { countryId: "RO", electionType, cycle: 1, status: "resolved" },
-        { projection: { state: 1, totalSeats: 1 } }
-      )
-      .toArray();
-    if (
-      resolved.length !== regionIds.length ||
-      resolved.some((race) => expected[race.state] !== race.totalSeats)
+  const slates = await db
+    .collection<Election>("elections")
+    .find(
+      {
+        countryId: "RO",
+        electionType: { $in: ["chamberOfDeputies", "senat"] },
+        cycle: { $gte: 1 },
+        status: "resolved",
+      },
+      { projection: { cycle: 1, electionType: 1, state: 1, totalSeats: 1 } }
     )
-      return false;
-  }
+    .toArray();
+  const complete = [...new Set(slates.map((row) => row.cycle))].some((cycle) =>
+    (
+      [
+        ["chamberOfDeputies", RO_1992_DEPUTIES_BY_REGION],
+        ["senat", RO_1992_SENATORS_BY_REGION],
+      ] as const
+    ).every(([chamber, expected]) => {
+      const rows = slates.filter((row) => row.cycle === cycle && row.electionType === chamber);
+      return (
+        rows.length === regionIds.length &&
+        new Set(rows.map((row) => row.state)).size === regionIds.length &&
+        rows.every((row) => expected[row.state] === row.totalSeats)
+      );
+    })
+  );
+  if (!complete) return false;
 
   await db.collection<State>("states").bulkWrite(
     regionIds.map((id) => ({

@@ -13,13 +13,26 @@ const cursor = <T>(docs: T[]) => ({ toArray: vi.fn().mockResolvedValue(docs) });
 
 function readyDb() {
   const db = createMockDb();
-  db.collection("countryGameStates").findOne.mockResolvedValue({ _id: "RO" });
+  db.collection("countryGameStates").findOne.mockResolvedValue({
+    _id: "RO",
+    roElectoralLaw1992SinceTurn: 73,
+  });
   db.collection("states").find.mockReturnValue(cursor(roRegions1991));
-  db.collection("elections").find.mockImplementation((filter: { electionType: string }) =>
+  db.collection("elections").find.mockReturnValue(
     cursor(
-      Object.entries(
-        filter.electionType === "senat" ? RO_1992_SENATORS_BY_REGION : RO_1992_DEPUTIES_BY_REGION
-      ).map(([state, totalSeats]) => ({ state, totalSeats }))
+      (
+        [
+          ["chamberOfDeputies", RO_1992_DEPUTIES_BY_REGION],
+          ["senat", RO_1992_SENATORS_BY_REGION],
+        ] as const
+      ).flatMap(([electionType, seats]) =>
+        Object.entries(seats).map(([state, totalSeats]) => ({
+          state,
+          totalSeats,
+          electionType,
+          cycle: 1,
+        }))
+      )
     )
   );
   db.collection("electedOfficials").find.mockReturnValue(
@@ -105,14 +118,21 @@ describe("Romania's 1992 parliamentary seat transition", () => {
 
   it("waits when a resolved race still carries the wrong magnitude", async () => {
     const db = readyDb();
-    db.collection("elections").find.mockImplementation((filter: { electionType: string }) =>
+    db.collection("elections").find.mockReturnValue(
       cursor(
-        Object.entries(
-          filter.electionType === "senat" ? RO_1992_SENATORS_BY_REGION : RO_1992_DEPUTIES_BY_REGION
-        ).map(([state, totalSeats], index) => ({
-          state,
-          totalSeats: index === 0 ? totalSeats + 1 : totalSeats,
-        }))
+        (
+          [
+            ["chamberOfDeputies", RO_1992_DEPUTIES_BY_REGION],
+            ["senat", RO_1992_SENATORS_BY_REGION],
+          ] as const
+        ).flatMap(([electionType, seats]) =>
+          Object.entries(seats).map(([state, totalSeats], index) => ({
+            state,
+            totalSeats: index === 0 ? totalSeats + 1 : totalSeats,
+            electionType,
+            cycle: 1,
+          }))
+        )
       )
     );
     expect(
@@ -121,6 +141,14 @@ describe("Romania's 1992 parliamentary seat transition", () => {
     expect(db.collection("states").bulkWrite).not.toHaveBeenCalled();
   });
 
+  it("refuses calendar-only handover without enacted authority", async () => {
+    const db = readyDb();
+    db.collection("countryGameStates").findOne.mockResolvedValue({ _id: "RO" });
+    expect(
+      await processRoParliamentTransition(db as unknown as Db, { preset: "1991-default" }, 288, NOW)
+    ).toBe(false);
+    expect(db.collection("states").bulkWrite).not.toHaveBeenCalled();
+  });
   it("does not repeat after the durable marker", async () => {
     const db = readyDb();
     db.collection("countryGameStates").findOne.mockResolvedValue({

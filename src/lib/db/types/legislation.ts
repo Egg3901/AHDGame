@@ -569,6 +569,12 @@ export interface Bill {
   /** Action points spent to propose — refunded if bill passes */
   proposalActionCost?: number;
   internationalAction?: BillInternationalAction;
+  /** Romanian electoral authority requires a separately recorded bicameral enactment. */
+  romanianElectoralMandate?: {
+    proposalId: string;
+    revision: number;
+    kind: "parliament1992";
+  };
   /** HU electoral law remains bound to its separately journaled parliamentary proposal. */
   hungarianElectoralMandate?: {
     proposalId: string;

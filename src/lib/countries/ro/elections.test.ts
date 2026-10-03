@@ -42,6 +42,11 @@ describe("Romanian election spawner", () => {
       startingYear: 1991,
       currentTurn: 1,
     });
+    db.collection("countryGameStates").findOne.mockResolvedValue({
+      _id: "RO",
+      status: "active",
+      roElectoralLaw1992SinceTurn: 73,
+    });
     await ensureROElections(NOW, 1);
     const batches: SpawnedElection[][] = db
       .collection("elections")
@@ -79,6 +84,20 @@ describe("Romanian election spawner", () => {
     expect(getElectionMethod("RO", "senat")).toBe("pr_hareQuota");
   });
 
+  it("keeps founding capacities without an enacted decision in later campaigns", async () => {
+    db.collection("gameState").findOne.mockResolvedValue({
+      _id: "current",
+      preset: "1991-default",
+      startingYear: 1991,
+      currentTurn: 1,
+    });
+    await ensureROElections(NOW, 1);
+    const batches: SpawnedElection[][] = db
+      .collection("elections")
+      .insertMany.mock.calls.map((call: unknown[]) => call[0] as SpawnedElection[]);
+    expect(batches[0].reduce((n, row) => n + row.totalSeats, 0)).toBe(396);
+    expect(batches[1].reduce((n, row) => n + row.totalSeats, 0)).toBe(119);
+  });
   it("keeps the 396/119 constituent chambers during the founding election", async () => {
     db.collection("gameState").findOne.mockResolvedValue({
       _id: "current",

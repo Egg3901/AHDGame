@@ -18,8 +18,9 @@ export function roElectionSeatsForPreset(
   current: Readonly<Record<string, number>>,
   chamber: "deputies" | "senate",
   preset: string | undefined,
-  founding: boolean
+  founding: boolean,
+  authorized = false
 ): Readonly<Record<string, number>> {
-  if (preset !== "1991-default" || founding) return current;
+  if (preset !== "1991-default" || founding || !authorized) return current;
   return chamber === "deputies" ? RO_1992_DEPUTIES_BY_REGION : RO_1992_SENATORS_BY_REGION;
 }
