@@ -23,11 +23,21 @@ export const BG_ORDINARY_ASSEMBLY_SEATS: Readonly<Record<string, number>> =
 
 export function bgAssemblyName(
   preset: string | undefined,
-  ordinaryAssemblySinceTurn: number | undefined
+  ordinaryAssemblySinceTurn: number | undefined,
+  transition?: {
+    bgConstitution1991SinceTurn?: number;
+    bgGrandAssemblyContinuationSinceTurn?: number;
+    bgGrandAssemblyDissolutionSinceTurn?: number;
+  }
 ): string {
-  return preset === "1991-default" && ordinaryAssemblySinceTurn == null
-    ? "Grand National Assembly"
-    : "National Assembly";
+  if (preset !== "1991-default" || ordinaryAssemblySinceTurn != null) return "National Assembly";
+  if (
+    transition?.bgGrandAssemblyContinuationSinceTurn != null &&
+    transition.bgGrandAssemblyDissolutionSinceTurn == null
+  )
+    return "Continued National Assembly";
+  if (transition?.bgConstitution1991SinceTurn != null) return "Caretaker National Assembly";
+  return "Grand National Assembly";
 }
 
 /** An adopted constitution authorizes ordinary240-seat campaigns after the founding vote. */
@@ -64,4 +74,19 @@ export function isBgOrdinaryCapacity(state: string, totalSeats: number | undefin
       (map) => map[state] != null && map[state] === totalSeats
     )
   );
+}
+
+/** Public chamber composition counts mandate weights and excludes executives. */
+export function bgAssemblyPartySeats(
+  officials: readonly { officeType: string; party?: string | null; seatsHeld?: number }[]
+): Record<string, number> {
+  const seats = new Map<string, number>();
+  for (const official of officials) {
+    if (official.officeType !== "assemblyDeputy") continue;
+    const held = official.seatsHeld ?? 1;
+    if (!Number.isSafeInteger(held) || held < 0)
+      throw new Error("Invalid Bulgarian mandate weight");
+    if (official.party && held) seats.set(official.party, (seats.get(official.party) ?? 0) + held);
+  }
+  return Object.fromEntries(seats);
 }

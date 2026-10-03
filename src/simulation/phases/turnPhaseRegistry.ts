@@ -1202,7 +1202,10 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
             await import("@/lib/countries/bg/constitutionalProposals1991");
           const { processBg1991ConstitutionalNpcProposal } =
             await import("@/lib/countries/bg/constitutionalNpcProposals1991");
+          const { processBg1991AssemblyDissolution } =
+            await import("@/lib/countries/bg/assemblyDissolution1991");
           await processBg1991ConstitutionalMandate(db, context.gameState, newTurn, gameNow);
+          await processBg1991AssemblyDissolution(db, context.gameState, newTurn, gameNow);
           await processBg1991ConstitutionalNpcProposal(db, context.gameState, newTurn, gameNow);
           const { processBgAssemblyTransition } = await import("@/lib/turn/bgAssemblyTransition");
           await processBgAssemblyTransition(db, context.gameState, newTurn, gameNow);

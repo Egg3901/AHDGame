@@ -16,12 +16,24 @@ import {
 } from "@/lib/countries/bg/constitutionalProposals1991";
 import { Bg1991InitiativeConflict } from "@/lib/countries/bg/constitutionalInitiative1991";
 
+import {
+  loadBg1991AssemblyDissolutionDecision,
+  openBg1991AssemblyDissolution,
+} from "@/lib/countries/bg/assemblyDissolution1991";
+
 const bodySchema = z
   .object({
-    kind: z.literal("constitution1991"),
+    kind: z.enum(["constitution1991", "dissolution1991"]),
+    disposition: z.enum(["dissolve", "continue"]).optional(),
     action: z.enum(["introduce", "endorse"]).optional(),
   })
-  .strict();
+  .strict()
+  .refine(
+    (body) =>
+      body.kind !== "dissolution1991" ||
+      (body.action !== "endorse" && body.disposition !== "continue"),
+    { message: "Dissolution is a separate ordinary motion" }
+  );
 type Context = { params: Promise<{ code: string }> };
 
 export async function GET(_request: Request, { params }: Context) {
@@ -37,9 +49,13 @@ export async function GET(_request: Request, { params }: Context) {
     const game = await getGameState(db);
     return NextResponse.json(
       {
-        decision: game
-          ? await loadBg1991ConstitutionalDecision(db, game, game.currentTurn ?? 1)
-          : null,
+        decision:
+          game?.preset === "1991-default"
+            ? {
+                ...(await loadBg1991ConstitutionalDecision(db, game, game.currentTurn ?? 1)),
+                dissolution: await loadBg1991AssemblyDissolutionDecision(db, game.currentTurn ?? 1),
+              }
+            : null,
       },
       { headers: { "Cache-Control": "private, no-store" } }
     );
@@ -74,9 +90,11 @@ export async function POST(request: Request, { params }: Context) {
             countryId: "BG",
             officeType: {
               $in:
-                parsed.data.action === "endorse"
-                  ? ["assemblyDeputy"]
-                  : ["primeMinister", "president"],
+                parsed.data.kind === "dissolution1991"
+                  ? ["assemblyDeputy", "primeMinister", "president"]
+                  : parsed.data.action === "endorse"
+                    ? ["assemblyDeputy"]
+                    : ["primeMinister", "president"],
             },
             seatsHeld: { $ne: 0 },
           },
@@ -87,9 +105,11 @@ export async function POST(request: Request, { params }: Context) {
       return NextResponse.json(
         {
           error:
-            parsed.data.action === "endorse"
-              ? "A seated constituent deputy must endorse this initiative"
-              : "The Bulgarian government or President must introduce this draft",
+            parsed.data.kind === "dissolution1991"
+              ? "A continued deputy, government or President must introduce this motion"
+              : parsed.data.action === "endorse"
+                ? "A seated constituent deputy must endorse this initiative"
+                : "The Bulgarian government or President must introduce this draft",
         },
         { status: 403 }
       );
@@ -102,7 +122,19 @@ export async function POST(request: Request, { params }: Context) {
       now: new Date(),
       sponsor: official && character ? character : null,
       sponsorParty: typeof official?.party === "string" ? official.party : undefined,
+      disposition: parsed.data.disposition,
     };
+    if (parsed.data.kind === "dissolution1991") {
+      const proposal = await openBg1991AssemblyDissolution(input);
+      return NextResponse.json(
+        {
+          billId: proposal.billId.toHexString(),
+          revision: proposal.revision,
+          status: proposal.status,
+        },
+        { status: 201, headers: { "Cache-Control": "private, no-store" } }
+      );
+    }
     if (parsed.data.action === "endorse") {
       const result = await endorseBg1991ConstitutionalInitiative(input);
       return NextResponse.json(

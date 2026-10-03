@@ -13,7 +13,7 @@ import { bgGrandAssemblyRegularAnchor, planBg1991AssemblyClock } from "./rules/a
 
 export function buildBg1991AssemblySpawn(
   input: Parameters<typeof buildCanonicalSpawn>[0],
-  authority: { authorized: boolean; nativeGrandAnchorTurn?: number }
+  authority: { authorized: boolean; nativeGrandAnchorTurn?: number; firstOrdinaryEndTurn?: number }
 ): Omit<Election, "_id"> | null {
   if (input.ctx.preset !== "1991-default") return buildCanonicalSpawn(input);
   if (justResolvedInSameTurn(input.prev, input.now, input.currentTurn)) return null;
@@ -21,6 +21,7 @@ export function buildBg1991AssemblySpawn(
     currentTurn: input.currentTurn,
     preIterationActive: input.ctx.preIterationActive,
     authorized: authority.authorized,
+    firstOrdinaryEndTurn: authority.firstOrdinaryEndTurn,
     previous: input.prev,
     previousOrdinary: !!input.prev && isBgOrdinaryCapacity(input.state, input.prev.totalSeats),
   });

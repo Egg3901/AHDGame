@@ -54,7 +54,12 @@ import {
   BG_1991_PROPOSALS_COLLECTION,
   type Bg1991ConstitutionalProposal,
 } from "@/lib/countries/bg/constitutionalProposals1991";
-import { passesBgConstitution1991 } from "@/lib/countries/bg/rules/constitutionalDecision1991";
+import { BG_CONTINUED_ASSEMBLY_DISSOLUTION_ID } from "@/lib/countries/bg/assemblyDissolution1991";
+import {
+  passesBgConstitution1991,
+  passesBgContinuedAssemblyDissolution,
+  bg1991ConstituentDisposition,
+} from "@/lib/countries/bg/rules/constitutionalDecision1991";
 import { buildConfiguredCountryBillLifecycle } from "@/lib/turn/billLifecycle/configs/configuredCountry";
 import type { CountryGameState } from "@/lib/db/types/gameState";
 import {
@@ -137,26 +142,42 @@ export async function processOnePartyBillLifecycleForCountry(
         }
       }
       if (countryId === "BG") {
-        const proposal = await db
+        const proposals = await db
           .collection<Bg1991ConstitutionalProposal>(BG_1991_PROPOSALS_COLLECTION)
-          .findOne(
-            { _id: "1991-default:bg-constitutional:constitution1991", status: "open" },
-            { projection: { billId: 1, revision: 1, capacity: 1 } }
-          );
+          .find(
+            {
+              _id: {
+                $in: [
+                  "1991-default:bg-constitutional:constitution1991",
+                  BG_CONTINUED_ASSEMBLY_DISSOLUTION_ID,
+                ],
+              },
+              status: "open",
+            },
+            { projection: { billId: 1, revision: 1, capacity: 1, disposition: 1 } }
+          )
+          .toArray();
         for (const stage of lifecycle.stages)
           if (stage.kind === "chamberVote")
             stage.passCheck = (bill, totals) => {
               const mandate = bill.bulgarianConstitutionalMandate;
               if (!mandate) return undefined;
-              return Boolean(
-                proposal &&
-                proposal.capacity === 400 &&
-                proposal.billId.equals(bill._id) &&
-                mandate.proposalId === proposal._id &&
-                mandate.revision === proposal.revision &&
-                mandate.kind === "constitution1991" &&
-                passesBgConstitution1991(totals, proposal.capacity)
-              );
+              const proposal = proposals.find((row) => row._id === mandate.proposalId);
+              if (
+                !proposal ||
+                proposal.capacity !== 400 ||
+                !proposal.billId.equals(bill._id) ||
+                mandate.revision !== proposal.revision ||
+                bg1991ConstituentDisposition(mandate.disposition) !==
+                  bg1991ConstituentDisposition(proposal.disposition)
+              )
+                return false;
+              return mandate.kind === "dissolution1991"
+                ? proposal._id === BG_CONTINUED_ASSEMBLY_DISSOLUTION_ID &&
+                    passesBgContinuedAssemblyDissolution(totals, 400)
+                : mandate.kind === "constitution1991" &&
+                    proposal._id === "1991-default:bg-constitutional:constitution1991" &&
+                    passesBgConstitution1991(totals, 400);
             };
       }
       if (countryId === "RO") {

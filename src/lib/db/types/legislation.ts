@@ -573,7 +573,9 @@ export interface Bill {
   bulgarianConstitutionalMandate?: {
     proposalId: string;
     revision: number;
-    kind: "constitution1991";
+    kind: "constitution1991" | "dissolution1991";
+    /** Absent historical drafts retain immediate dissolution. */
+    disposition?: import("../../countries/bg/rules/constitutionalDecision1991").Bg1991ConstituentDisposition;
   };
   /** Romanian electoral authority requires a separately recorded bicameral enactment. */
   romanianElectoralMandate?: {

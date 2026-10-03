@@ -674,6 +674,10 @@ export interface CountryGameState {
   bgOrdinaryAssemblySinceTurn?: number;
   /** Optional for existing settlements; only a recorded constituent vote authorizes new ordinary rules. */
   bgConstitution1991SinceTurn?: number;
+  /** Explicit alternate transition retains the400-seat chamber until its original term ends. */
+  bgGrandAssemblyContinuationSinceTurn?: number;
+  /** Separate enacted ordinary vote ends an explicitly continued constituent chamber. */
+  bgGrandAssemblyDissolutionSinceTurn?: number;
   /** RO 1991 world: raw turn when the 341/143 parliament replaced the 396/119 constituent chambers. */
   roParliament1992SinceTurn?: number;
   /** Bound bicameral enacted decision, separate from the completed chamber handover. */

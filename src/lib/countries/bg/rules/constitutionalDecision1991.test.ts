@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { bg1991DecisionAvailability, passesBgConstitution1991 } from "./constitutionalDecision1991";
+import {
+  bg1991DecisionAvailability,
+  passesBgConstitution1991,
+  bg1991ConstituentDisposition,
+  passesBgContinuedAssemblyDissolution,
+  bgContinuedAssemblyDissolutionAvailability,
+} from "./constitutionalDecision1991";
 import { bgRegions1991 } from "../data/bgRegions1991";
 import {
   bgElectionSeatsForPreset,
@@ -45,5 +51,60 @@ describe("Bulgarian founding constitutional authority", () => {
         isBgOrdinaryCapacity(String(region._id), BG_ORDINARY_ASSEMBLY_SEATS[String(region._id)])
       ).toBe(true);
     }
+  });
+});
+
+describe("explicit constituent transitional clauses", () => {
+  it("preserves old drafts as dissolution and keeps continuation explicit", () => {
+    expect(bg1991ConstituentDisposition()).toBe("dissolve");
+    expect(bg1991ConstituentDisposition("continue")).toBe("continue");
+  });
+  it.each([
+    [201, 199, 0, true],
+    [200, 200, 0, false],
+    [101, 100, 0, true],
+    [100, 101, 0, false],
+    [200, 0, 0, false],
+    [101, 0, 100, true],
+    [201, 201, 0, false],
+  ] as const)(
+    "requires a quorate ordinary majority for%s/%s/%s",
+    (forVotes, against, abstain, pass) => {
+      expect(
+        passesBgContinuedAssemblyDissolution(
+          { for: forVotes, against: against, abstain: abstain },
+          400
+        )
+      ).toBe(pass);
+    }
+  );
+  it("does not confuse ordinary dissolution with constituent adoption", () => {
+    expect(passesBgContinuedAssemblyDissolution({ for: 201, against: 199, abstain: 0 }, 400)).toBe(
+      true
+    );
+    expect(passesBgConstitution1991({ for: 201, against: 199, abstain: 0 }, 400)).toBe(false);
+    expect(passesBgContinuedAssemblyDissolution({ for: NaN, against: 0, abstain: 0 }, 400)).toBe(
+      false
+    );
+  });
+  it("opens dissolution only under an enacted continuation and preserves existing settlements", () => {
+    const input = { preset: "1991-default", turn: 30, constitutionTurn: 26, continuationTurn: 26 };
+    expect(bgContinuedAssemblyDissolutionAvailability(input).available).toBe(true);
+    expect(
+      bgContinuedAssemblyDissolutionAvailability({ ...input, continuationTurn: undefined })
+        .available
+    ).toBe(false);
+    expect(bgContinuedAssemblyDissolutionAvailability({ ...input, founding: true }).available).toBe(
+      false
+    );
+    expect(
+      bgContinuedAssemblyDissolutionAvailability({ ...input, dissolutionTurn: 29 }).available
+    ).toBe(false);
+    expect(
+      bgContinuedAssemblyDissolutionAvailability({ ...input, ordinaryTurn: 29 }).available
+    ).toBe(false);
+    expect(
+      bgContinuedAssemblyDissolutionAvailability({ ...input, hasParliament: false }).available
+    ).toBe(false);
   });
 });

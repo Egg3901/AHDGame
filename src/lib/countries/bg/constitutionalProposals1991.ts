@@ -18,13 +18,23 @@ import { calendarTurn, turnToGameMonth } from "@/lib/utils/gameDate";
 import {
   passesBgConstitution1991,
   bg1991DecisionAvailability,
+  bg1991ConstituentDisposition,
+  type Bg1991ConstituentDisposition,
 } from "./rules/constitutionalDecision1991";
 
 import { BG_ORDINARY_ASSEMBLY_SEATS } from "./rules/assemblyTransition";
 import type { CountryState } from "@/lib/db/types/countryState";
-import { loadBg1991Initiative, signBg1991Initiative } from "./constitutionalInitiative1991";
+import {
+  loadBg1991Initiative,
+  loadBg1991Initiatives,
+  signBg1991Initiative,
+} from "./constitutionalInitiative1991";
 import { BG_FOUNDING_COUNTS_COLLECTION, type BgFoundingAssemblyRecord } from "./foundingCount1990";
-import { planBg1991AssemblyClock } from "./rules/assemblyClock1991";
+import {
+  planBg1991AssemblyClock,
+  bgGrandAssemblyRegularAnchor,
+  bgFoundingMandateTermAnchor,
+} from "./rules/assemblyClock1991";
 import { turnToWallClock } from "@/lib/elections/canonicalCycle";
 import { canRebindBg1991PrimaryCohort } from "./rules/primaryHandover1991";
 
@@ -37,9 +47,14 @@ export interface Bg1991ConstitutionalProposal {
   revision: number;
   openedOnTurn: number;
   status: "open" | "authorized";
-  reason: "executive_proposal" | "npc_government_constituent_mandate" | "deputy_quarter_initiative";
+  reason:
+    | "executive_proposal"
+    | "npc_government_constituent_mandate"
+    | "deputy_quarter_initiative"
+    | "continued_assembly_motion";
   authorizedOnTurn?: number;
   capacity: number;
+  disposition?: Bg1991ConstituentDisposition;
   createdAt: Date;
 }
 export class Bg1991ConstitutionalConflict extends Error {}
@@ -89,8 +104,10 @@ export async function materializeBg1991ConstitutionalProposal(input: {
   sponsorParty?: string;
   reason?: Bg1991ConstitutionalProposal["reason"];
   newBillId?: ObjectId;
+  disposition?: Bg1991ConstituentDisposition;
 }): Promise<Bg1991ConstitutionalProposal> {
   const { db, session, game, turn, now } = input;
+  const disposition = bg1991ConstituentDisposition(input.disposition);
   if (
     !session.inTransaction() ||
     !Number.isSafeInteger(turn) ||
@@ -122,10 +139,18 @@ export async function materializeBg1991ConstitutionalProposal(input: {
       bill.countryId !== "BG" ||
       bill.bulgarianConstitutionalMandate?.proposalId !== ID ||
       bill.bulgarianConstitutionalMandate.revision !== prior.revision ||
-      bill.bulgarianConstitutionalMandate.kind !== "constitution1991"
+      bill.bulgarianConstitutionalMandate.kind !== "constitution1991" ||
+      bg1991ConstituentDisposition(bill.bulgarianConstitutionalMandate.disposition) !==
+        bg1991ConstituentDisposition(prior.disposition)
     )
       throw new Bg1991ConstitutionalConflict("Electoral proposal no longer matches its bill");
-    if (!["failed", "vetoed", "override_failed"].includes(bill.status)) return prior;
+    if (!["failed", "vetoed", "override_failed"].includes(bill.status)) {
+      if (bg1991ConstituentDisposition(prior.disposition) !== disposition)
+        throw new Bg1991ConstitutionalConflict(
+          "The active draft has a different transitional clause"
+        );
+      return prior;
+    }
     if (turn < prior.openedOnTurn || (bill.voteSnapshot && turn < bill.voteSnapshot.resolvedAtTurn))
       throw new Bg1991ConstitutionalConflict(
         "A revised draft cannot precede the previous decision"
@@ -144,7 +169,8 @@ export async function materializeBg1991ConstitutionalProposal(input: {
   if (input.reason === "deputy_quarter_initiative") {
     if (
       !input.sponsor ||
-      !(await loadBg1991Initiative(db, (prior?.revision ?? 0) + 1, session)).canIntroduce
+      !(await loadBg1991Initiative(db, (prior?.revision ?? 0) + 1, session, disposition))
+        .canIntroduce
     )
       throw new Bg1991ConstitutionalConflict(
         "One hundred constituent deputies must endorse this draft"
@@ -185,6 +211,7 @@ export async function materializeBg1991ConstitutionalProposal(input: {
     status: "open",
     reason: input.reason ?? "executive_proposal",
     capacity,
+    disposition,
     createdAt: now,
   };
   const bill: Bill = {
@@ -193,7 +220,9 @@ export async function materializeBg1991ConstitutionalProposal(input: {
     stateId: "bg_national",
     title: "Bulgarian 1991 Constitution Decision",
     summary:
-      "Authorize the ordinary 240-seat National Assembly with a two-thirds vote of all 400 constituent deputies. The government, President or a quarter of constituent deputies introduces the draft. Existing cast ballots retain their frozen rules.",
+      disposition === "continue"
+        ? "Adopt an alternate constitution whose transitional clause retains the existing 400 deputies as an ordinary chamber until their original four-year term ends. A later ordinary vote may dissolve it sooner. Adoption requires 267 of all 400 constituent deputies. Existing cast ballots retain their frozen rules."
+        : "Adopt the constitution with immediate constituent dissolution and an election for the ordinary 240-seat National Assembly. The 400 deputies continue caretaker legislative functions until the elected chamber takes office. Adoption requires 267 votes. Existing cast ballots retain their frozen rules.",
     originChamber: "nationalAssembly",
     currentChamber: "nationalAssembly",
     sponsorId: input.sponsor?._id ?? null,
@@ -210,6 +239,7 @@ export async function materializeBg1991ConstitutionalProposal(input: {
       proposalId: ID,
       revision: proposal.revision,
       kind: "constitution1991",
+      disposition,
     },
     proposedAt: now,
     createdAt: now,
@@ -282,6 +312,7 @@ export async function endorseBg1991ConstitutionalInitiative(
         revision,
         turn: input.turn,
         characterId: sponsor._id,
+        disposition: input.disposition,
       });
       const proposal = initiative.canIntroduce
         ? await materializeBg1991ConstitutionalProposal({
@@ -334,21 +365,27 @@ export async function authorizeBg1991ConstitutionalProposal(
     !bill ||
     bill.bulgarianConstitutionalMandate?.proposalId !== ID ||
     bill.bulgarianConstitutionalMandate.revision !== proposal.revision ||
-    bill.bulgarianConstitutionalMandate.kind !== "constitution1991"
+    bill.bulgarianConstitutionalMandate.kind !== "constitution1991" ||
+    bg1991ConstituentDisposition(bill.bulgarianConstitutionalMandate.disposition) !==
+      bg1991ConstituentDisposition(proposal.disposition)
   )
     return false;
   if (!bill.voteSnapshot || !passesBgConstitution1991(bill.voteSnapshot.totals, proposal.capacity))
     throw new Bg1991ConstitutionalConflict(
       "Enacted amendment lacks a frozen full-membership constituent result"
     );
-  await rebindBg1991PrimaryCohort(db, game, turn, now, session);
-  await db
-    .collection<CountryGameState>("countryGameStates")
-    .updateOne(
-      { _id: "BG", bgConstitution1991SinceTurn: { $exists: false } },
-      { $set: { bgConstitution1991SinceTurn: turn } },
-      { session, upsert: true }
-    );
+  const disposition = bg1991ConstituentDisposition(proposal.disposition);
+  await rebindBg1991PrimaryCohort(db, game, turn, now, session, disposition);
+  await db.collection<CountryGameState>("countryGameStates").updateOne(
+    { _id: "BG", bgConstitution1991SinceTurn: { $exists: false } },
+    {
+      $set: {
+        bgConstitution1991SinceTurn: turn,
+        ...(disposition === "continue" ? { bgGrandAssemblyContinuationSinceTurn: turn } : {}),
+      },
+    },
+    { session, upsert: true }
+  );
   const updated = await proposals.updateOne(
     { _id: ID, status: "open", revision: proposal.revision },
     { $set: { status: "authorized", authorizedOnTurn: turn } },
@@ -370,21 +407,24 @@ export async function loadBg1991ConstitutionalDecision(db: Db, game: Calendar, t
         .collection<Bill>("bills")
         .findOne({ _id: proposal.billId }, { projection: { status: 1 } })
     : null;
+  const initiatives = await loadBg1991Initiatives(
+    db,
+    proposal && bill && !["failed", "vetoed", "override_failed"].includes(bill.status)
+      ? proposal.revision
+      : (proposal?.revision ?? 0) + 1
+  );
   return {
     kind: "constitution1991" as const,
     ...allowed,
-    initiative: await loadBg1991Initiative(
-      db,
-      proposal && bill && !["failed", "vetoed", "override_failed"].includes(bill.status)
-        ? proposal.revision
-        : (proposal?.revision ?? 0) + 1
-    ),
+    initiatives,
+    initiative: initiatives[bg1991ConstituentDisposition(proposal?.disposition)],
     proposal: proposal
       ? {
           billId: proposal.billId.toHexString(),
           revision: proposal.revision,
           status: proposal.status,
           reason: proposal.reason,
+          disposition: bg1991ConstituentDisposition(proposal.disposition),
           billStatus: bill?.status ?? null,
           canRevise:
             allowed.available &&
@@ -419,19 +459,14 @@ export async function processBg1991ConstitutionalMandate(
 }
 
 /** Only a complete untouched primary cohort may accept the new ordinary capacity. */
-async function rebindBg1991PrimaryCohort(
+export async function rebindBg1991PrimaryCohort(
   db: Db,
   game: Calendar,
   turn: number,
   now: Date,
-  session: ClientSession
+  session: ClientSession,
+  disposition: Bg1991ConstituentDisposition = "dissolve"
 ) {
-  const clock = planBg1991AssemblyClock({
-    currentTurn: turn,
-    authorized: true,
-    previousOrdinary: false,
-  });
-  if (clock.kind !== "ordinary-first") throw new Error("Invalid Bulgarian transition clock");
   const polls = await db
     .collection<Election>("elections")
     .find(
@@ -454,6 +489,7 @@ async function rebindBg1991PrimaryCohort(
       }
     )
     .toArray();
+  if (!polls.length) return;
   const tallies = await db
     .collection<ElectionVoteTally>("electionVoteTallies")
     .find(
@@ -466,12 +502,44 @@ async function rebindBg1991PrimaryCohort(
     ? await db
         .collection<BgFoundingAssemblyRecord>(BG_FOUNDING_COUNTS_COLLECTION)
         .find(
-          { _id: { $in: [...new Set(polls.map((row) => `BG:founding1990:${row.cycle}`))] } },
-          { session, projection: { _id: 1 } }
+          {
+            _id: {
+              $in: [
+                ...new Set([
+                  ...polls.map((row) => `BG:founding1990:${row.cycle}`),
+                  ...(disposition === "continue" ? ["BG:founding1990:0"] : []),
+                ]),
+              ],
+            },
+          },
+          {
+            session,
+            projection: {
+              _id: 1,
+              ...(disposition === "continue" ? { grandTermEndTurn: 1, seatedAtTurn: 1 } : {}),
+            },
+          }
         )
         .toArray()
     : [];
   const certifiedReceiptIds = new Set(receipts.map((row) => row._id));
+  const original = receipts.find((row) => row._id === "BG:founding1990:0");
+  const historicalEnd = bgGrandAssemblyRegularAnchor({
+    startingYear: 1991,
+    preIterationTurns: game.preIterationTurns,
+    nativeAnchorTurn: original?.grandTermEndTurn,
+  });
+  const clock = planBg1991AssemblyClock({
+    currentTurn: turn,
+    authorized: true,
+    previousOrdinary: false,
+    firstOrdinaryEndTurn:
+      disposition === "continue"
+        ? (original?.grandTermEndTurn ??
+          bgFoundingMandateTermAnchor(historicalEnd, original?.seatedAtTurn ?? 0))
+        : undefined,
+  });
+  if (clock.kind !== "ordinary-first") throw new Error("Invalid Bulgarian transition clock");
   const reboundIds: ObjectId[] = [];
   const updates: AnyBulkWriteOperation<Election>[] = [
     ...new Set(polls.map((row) => row.cycle)),

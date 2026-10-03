@@ -158,6 +158,45 @@ describe("Bulgarian electoral proposal routes", () => {
     expect(mem.collection("bills").docs).toHaveLength(2);
     expect(mem.collection("bills").docs[0].status).toBe("failed");
   });
+
+  it("binds a selected continuation clause and refuses silently changing its active draft", async () => {
+    expect(
+      (await POST(request({ kind: "constitution1991", disposition: "continue" }), params)).status
+    ).toBe(201);
+    expect(mem.collection("bills").docs[0]).toMatchObject({
+      bulgarianConstitutionalMandate: { disposition: "continue" },
+    });
+    expect((await POST(request(), params)).status).toBe(409);
+    expect(mem.collection("bills").docs).toHaveLength(1);
+  });
+  it("opens a separate continued-chamber dissolution motion without a quarter-initiative requirement", async () => {
+    mem.collection("countryGameStates").docs[0].bgConstitution1991SinceTurn = 25;
+    mem.collection("countryGameStates").docs[0].bgGrandAssemblyContinuationSinceTurn = 25;
+    mem.collection("electedOfficials").docs[0].officeType = "assemblyDeputy";
+    expect((await POST(request({ kind: "dissolution1991" }), params)).status).toBe(201);
+    expect(mem.collection("bills").docs[0]).toMatchObject({
+      bulgarianConstitutionalMandate: { kind: "dissolution1991" },
+    });
+    const state = await (await GET(new Request("http://localhost"), params)).json();
+    expect(state.decision.dissolution.proposal).toMatchObject({
+      billStatus: "proposed",
+      canRevise: false,
+    });
+  });
+  it.each([
+    { kind: "dissolution1991", disposition: "continue" },
+    { kind: "dissolution1991", action: "endorse" },
+    { kind: "constitution1991", disposition: "invented" },
+  ])("rejects ambiguous or invented transition payloads %j", async (body) => {
+    expect((await POST(request(body), params)).status).toBe(400);
+    expect(mem.collection("bills").docs).toHaveLength(0);
+  });
+  it("does not let an old adoption or a completed settlement imply continuation", async () => {
+    mem.collection("countryGameStates").docs[0].bgConstitution1991SinceTurn = 25;
+    expect((await POST(request({ kind: "dissolution1991" }), params)).status).toBe(409);
+    expect(mem.collection("bills").docs).toHaveLength(0);
+  });
+
   it("rejects another country and an unauthenticated caller", async () => {
     expect((await POST(request(), { params: Promise.resolve({ code: "PL" }) })).status).toBe(404);
     mocks.requireBasicAuth.mockResolvedValue({

@@ -165,6 +165,25 @@ describe("Bulgarian decision-driven Assembly clock", () => {
       })
     ).toBe(false);
   });
+
+  it("retains the original term for an explicitly continued chamber", () => {
+    expect(
+      buildBg1991AssemblySpawn(input({ fallbackTotalSeats: BG_ORDINARY_ASSEMBLY_SEATS[state] }), {
+        authorized: true,
+        firstOrdinaryEndTurn: 216,
+      })
+    ).toMatchObject({
+      endTurn: 216,
+      primaryEndTurn: 214,
+      totalSeats: BG_ORDINARY_ASSEMBLY_SEATS[state],
+    });
+    expect(
+      buildBg1991AssemblySpawn(input({ currentTurn: 220 }), {
+        authorized: true,
+        firstOrdinaryEndTurn: 216,
+      })
+    ).toMatchObject({ endTurn: 226, primaryEndTurn: 224 });
+  });
   it("rejects corrupt native clock inputs", () => {
     expect(() =>
       bgGrandAssemblyRegularAnchor({ startingYear: 1991, nativeAnchorTurn: NaN })
