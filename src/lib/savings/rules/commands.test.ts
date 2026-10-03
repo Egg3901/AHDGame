@@ -203,6 +203,59 @@ describe("withdraw", () => {
   });
 });
 
+describe("central bank payout capacity (ticket 1364)", () => {
+  const cb = (payoutCapacity?: number): HolderSnapshot => ({
+    ...CB,
+    ...(payoutCapacity !== undefined ? { payoutCapacity } : {}),
+  });
+
+  it("refuses a withdrawal the central bank's pool cannot cover, in plain words", () => {
+    const decision = decideSavingsCommand(
+      account({ balance: 1_000_000 }),
+      { type: "withdraw", amount: 900_000, holder: cb(250_000.6) },
+      CTX,
+      "x"
+    );
+    expect(decision).toMatchObject({
+      refusal: { code: "holder_cannot_pay", available: 250_000.6 },
+    });
+    const message = (decision as { message?: string }).message;
+    expect(message).toMatch(/at most 250,000 USD/);
+    expect(message).not.toMatch(/Leg 0|did not apply/);
+  });
+
+  it("allows a withdrawal within the pool", () => {
+    const decision = decideSavingsCommand(
+      account({ balance: 1_000_000 }),
+      { type: "withdraw", amount: 200_000, holder: cb(250_000) },
+      CTX,
+      "x"
+    );
+    expect(decision).toMatchObject({ allowed: true });
+  });
+
+  it("leaves the check to the guarded debit when the pool is not loaded", () => {
+    const decision = decideSavingsCommand(
+      account(),
+      { type: "withdraw", amount: 500, holder: cb() },
+      CTX,
+      "x"
+    );
+    expect(decision).toMatchObject({ allowed: true });
+  });
+
+  it("refuses moving savings off the central bank when its pool cannot release them", () => {
+    expect(
+      decideSavingsCommand(
+        account({ balance: 1_000_000 }),
+        { type: "transfer_holder", from: cb(10), to: bank({ depositCeiling: 1e12 }) },
+        CTX,
+        "x"
+      )
+    ).toMatchObject({ refusal: { code: "holder_cannot_pay", available: 10 } });
+  });
+});
+
 describe("transfer_holder", () => {
   it("moves the whole backing and both liabilities, leaving the balance unchanged", () => {
     const d = allowed(
