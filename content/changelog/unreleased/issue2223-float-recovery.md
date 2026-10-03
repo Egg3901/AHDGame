@@ -1,5 +1,7 @@
 ---
+date: 2026-10-03
 title: "Fund trade recovery"
+summary: Interrupted fund purchases and sales resume their accepted settlement once.
 badges: [patch]
 areas: [backend, engine]
 tags: [funds, settlement, recovery]

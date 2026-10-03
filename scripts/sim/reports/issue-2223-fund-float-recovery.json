@@ -1,0 +1,82 @@
+{
+  "issue": 2223,
+  "source": "a0dfaa5e0701fb1f277897b27c05c747a3185f40",
+  "deliveredQueuedPayoutComponent": {
+    "pr": 2956,
+    "merge": "0538f4264354eeb837dc1b0b47639e74591fca17"
+  },
+  "qualification": {
+    "focusedCases": 157,
+    "nativeFloatCases": {
+      "standalone": 42,
+      "replicaSet": 44
+    },
+    "nativeQueuedPayoutCases": {
+      "standalone": 11,
+      "replicaSet": 11
+    },
+    "nativeTotal": 108,
+    "stockDivergence": 0,
+    "trialImbalance": 0,
+    "unattributedMovement": 0,
+    "repeatedRecoveryStable": true,
+    "transactionAbortRestoresOpening": true,
+    "multiHoldingUndoRestoresOpening": true
+  },
+  "componentPerformance": {
+    "baseline": "0538f4264354eeb837dc1b0b47639e74591fca17",
+    "source": "a0dfaa5e0701fb1f277897b27c05c747a3185f40",
+    "measurements": [
+      {
+        "trades": 0,
+        "beforeCommands": 0,
+        "afterCommands": 1,
+        "beforeReturnedBsonBytes": 0,
+        "afterReturnedBsonBytes": 128,
+        "outcomesIdentical": true,
+        "beforeStockDivergence": 0,
+        "afterStockDivergence": 0,
+        "trialImbalance": 0,
+        "unattributed": 0,
+        "repeatStable": true
+      },
+      {
+        "trades": 1,
+        "beforeCommands": 17,
+        "afterCommands": 55,
+        "beforeReturnedBsonBytes": 1546,
+        "afterReturnedBsonBytes": 58984,
+        "outcomesIdentical": true,
+        "beforeStockDivergence": 1,
+        "afterStockDivergence": 0,
+        "trialImbalance": 0,
+        "unattributed": 0,
+        "repeatStable": true
+      },
+      {
+        "trades": 8,
+        "beforeCommands": 66,
+        "afterCommands": 419,
+        "beforeReturnedBsonBytes": 7895,
+        "afterReturnedBsonBytes": 625242,
+        "outcomesIdentical": true,
+        "beforeStockDivergence": 8,
+        "afterStockDivergence": 0,
+        "trialImbalance": 0,
+        "unattributed": 0,
+        "repeatStable": true
+      }
+    ],
+    "performanceAcceptance": false,
+    "fullTurnAcceptance": false,
+    "productionTouched": false,
+    "passed": true
+  },
+  "scope": {
+    "fullTurnPerformanceAccepted": false,
+    "fullWorldAccountingAccepted": false,
+    "selectedReleaseQualified": false,
+    "productionTouched": false,
+    "databaseDropped": false
+  }
+}
