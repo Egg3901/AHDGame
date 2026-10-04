@@ -1,6 +1,7 @@
 import { ObjectId, type Db } from "mongodb";
 import { describe, expect, it } from "vitest";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
+import { withInjectedCrash } from "@/lib/test-utils/faultyDb";
 import type { CorpSnapshot } from "./types";
 import { settleCorporateOperatingCash } from "./operatingCashSettlement";
 
@@ -142,5 +143,64 @@ describe("corporate operating cash settlement", () => {
     expect(usBudget?.treasuryBalance).toBe(4);
     expect(ukBudget?.treasuryCashLocal).toBeCloseTo(14.8);
     expect(ukBudget?.treasuryBalance).toBeCloseTo(4.8);
+  });
+
+  it.each([
+    ["payer debit", "corporations", "liquidCapital", -20],
+    ["Treasury credit", "federalBudget", "treasuryCashLocal", 20],
+  ])("replays a crash after the %s leg without recalculating or duplicating cash", async (
+    _label,
+    collection,
+    path,
+    amount
+  ) => {
+    const db = createInMemoryDb();
+    const corpId = new ObjectId("650000000000000000000032");
+    db.seed("gameConfig", [{ _id: "default", treasuryCashLedgerEnabled: true }]);
+    db.seed("gameState", [{ _id: "current", currentTurn: 4, preset: "2019-default" }]);
+    db.seed("exchangeRates", [{ currencyCode: "USD", rate: 1 }]);
+    db.seed("federalBudget", [
+      { _id: "US", countryId: "US", currencyCode: "USD", treasuryCashLocal: 100, treasuryBalance: 0 },
+    ]);
+    db.seed("corporations", [{ _id: corpId, liquidCapital: 100 }]);
+    const original = snapshot(corpId, {
+      operatingCashIncomeLocal: 80,
+      operatingCashCurrency: "USD",
+      operatingCashLocalPerAnchor: 1,
+      federalTaxByCountryAnchor: new Map([["US", 20]]),
+    });
+    const fault = withInjectedCrash(db, {
+      collection,
+      op: "updateOne",
+      afterWrite: true,
+      onCall: 1,
+      matches: (args) => {
+        const update = args[1] as { $inc?: Record<string, number> };
+        return update.$inc?.[path] === amount;
+      },
+    });
+
+    await expect(
+      settleCorporateOperatingCash(fault.db, [original], 4, new Date())
+    ).rejects.toThrow("crash after");
+    fault.disarm();
+    // A turn retry may have recomputed operating income and tax. The claimed
+    // receipt must finish from the original per-country native-currency quote.
+    const recomputed = snapshot(corpId, {
+      operatingCashIncomeLocal: 5_000,
+      operatingCashCurrency: "USD",
+      operatingCashLocalPerAnchor: 1,
+      federalTaxByCountryAnchor: new Map([["US", 900]]),
+    });
+    await settleCorporateOperatingCash(fault.db, [recomputed], 4, new Date());
+    await settleCorporateOperatingCash(fault.db, [recomputed], 4, new Date());
+
+    expect(db.collection("corporations").docs[0]?.liquidCapital).toBe(180);
+    expect(db.collection("federalBudget").docs[0]).toMatchObject({
+      treasuryCashLocal: 120,
+      treasuryBalance: 20,
+    });
+    expect(db.collection("bankMoneyMoves").docs).toHaveLength(1);
+    expect(db.collection("bankMoneyMoves").docs[0]).toMatchObject({ status: "applied" });
   });
 });
