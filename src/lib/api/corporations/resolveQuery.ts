@@ -42,9 +42,8 @@ export async function resolveCorporation(
   }
   // Keep the editorial default exclusion with exclusion projections. Inclusion
   // projections already omit it and must not mix Mongo's two projection modes.
-  const inclusion = projection && Object.entries(projection).some(
-    ([key, value]) => key !== "_id" && value === 1
-  );
+  const inclusion =
+    projection && Object.entries(projection).some(([key, value]) => key !== "_id" && value === 1);
   const effectiveProjection = inclusion
     ? projection
     : { editorialStance: 0 as const, ...projection };
