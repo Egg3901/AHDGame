@@ -3,6 +3,7 @@ import { logWarning } from "@/lib/utils/errorLog";
 import type { GameConfig } from "@/lib/db/types";
 import { gameConfig } from "@/lib/seeds/reference/gameConfig";
 import { eraForPreset } from "@/lib/seeds/presetSelector";
+import { splitFreshWorldGameConfigFlags } from "@/lib/seeds/reference/featureFlagDefaults";
 
 export async function seedGameConfig(
   db: Db,
@@ -21,7 +22,10 @@ export async function seedGameConfig(
           metadata: { error: String(error) },
         });
       });
-  const { _id, campaignEraPriceLevelEnabled, ...configData } = gameConfig;
+  const { _id, ...configData } = gameConfig;
+  // Flags and switches are insert-only so a seed run never flips a running
+  // world; a reset dropped the collection above, so it receives all of them.
+  const { settings, flags } = splitFreshWorldGameConfigFlags(configData);
   const extra: Pick<GameConfig, "seedYear"> = preset
     ? { seedYear: parseInt(eraForPreset(preset), 10) }
     : {};
@@ -29,7 +33,7 @@ export async function seedGameConfig(
     .collection<GameConfig>("gameConfig")
     .updateOne(
       { _id },
-      { $set: { ...configData, ...extra }, $setOnInsert: { campaignEraPriceLevelEnabled } },
+      { $set: { ...settings, ...extra }, $setOnInsert: flags },
       { upsert: true }
     );
   log("Seeded game config");

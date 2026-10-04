@@ -56,10 +56,10 @@ describe("initializeGameState", () => {
       autoDisastersEnabled: true,
       crisisAidBillsEnabled: true,
       rpgStatsEnabled: true,
-      // Off by default: the 48-turn automatic sector reseed favours the state
-      // corp over private/spun-out corps (#2926) and re-seeds a deliberately
-      // shaped world. The one gameplay toggle held off; everything else is on.
-      autoSectorSeedEnabled: false,
+      // Fresh-world policy: every gameplay flag on, NPP autonomy at v4.
+      autoSectorSeedEnabled: true,
+      nppOffensiveInitiationEnabled: true,
+      nppOffensiveJoinEnabled: true,
       sectorTechTreesEnabled: true,
       nppAutonomyLevel: "v4",
       nppAutonomyEnabled: true,

@@ -119,7 +119,7 @@ export const BOOLEAN_GATES: BooleanGate[] = [
   {
     key: "extractionAutoStrategyEnabled",
     label: "Extraction auto strategy",
-    desc: "Nudges standard miners on shortage deposits onto the matching focused mining strategy (Phase 1a of the extraction-capacity remediation). Default off.",
+    desc: "Nudges standard miners on shortage deposits onto the matching focused mining strategy (Phase 1a of the extraction-capacity remediation). On for fresh worlds.",
   },
   {
     key: "embargoTradeExposureEnabled",
@@ -137,19 +137,20 @@ export const BOOLEAN_GATES: BooleanGate[] = [
   {
     key: "intOrgAlignmentEnabled",
     label: "IntOrg alignment",
-    desc: "Cold War alignment: every nation holds a share per bloc pole plus a non-aligned remainder, drifting each turn and moved by influence plays. Adds the Cold War Ledger and the per-org Influence tab. Off by default — seeded values are written regardless, so flipping this on shows a populated map rather than blank rows. Tune drift against a live world before enabling.",
+    desc: "Cold War alignment: every nation holds a share per bloc pole plus a non-aligned remainder, drifting each turn and moved by influence plays. Adds the Cold War Ledger and the per-org Influence tab. On for fresh worlds. Seeded values are written regardless, so flipping this on shows a populated map rather than blank rows.",
   },
   {
     key: "settlementCrisisEnabled",
     label: "Settlement crises",
-    desc: "The German Question: a standing contest over whether West Germany stays sovereign in NATO or reunifies into the Warsaw Pact, fought across four weighted institutions by the GDR, USSR, USA and UK. Off by default and incomplete — the turn phase runs but nothing creates a crisis yet, so enabling this on a live world currently does nothing.",
+    desc: "The German Question: a standing contest over whether West Germany stays sovereign in NATO or reunifies into the Warsaw Pact, fought across four weighted institutions by the GDR, USSR, USA and UK. On for fresh worlds but incomplete: the turn phase runs and nothing creates a crisis yet, so the switch currently does nothing.",
   },
 ];
 
 /** Default when gameConfig omits the lever (matches commandEconomyTurn). */
 const COMMAND_ECONOMY_DEFAULT_TOLERANCE = 0.3;
 
-const isDefaultOn = (key: string): boolean => key in DEFAULT_GAME_STATE_FLAGS;
+const isDefaultOn = (key: string): boolean =>
+  (DEFAULT_GAME_STATE_FLAGS as Record<string, unknown>)[key] === true;
 
 const NPP_LEVELS: { value: NppAutonomyLevel; label: string; blurb: string }[] = [
   { value: "off", label: "Off", blurb: "No NPP autonomy anywhere." },
@@ -820,7 +821,7 @@ export function FeatureGatesPanel() {
           </div>
           <p className="mb-3 text-xs text-muted">
             Fixed non-convertible currencies, administered prices, shortage/overhang, second
-            economy. Default off.
+            economy. Set from the era on every bootstrap.
           </p>
           <label className="block text-xs text-muted">
             <span className="mb-1 flex items-center justify-between gap-2">

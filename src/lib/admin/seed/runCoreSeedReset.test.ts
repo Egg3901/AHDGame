@@ -85,14 +85,19 @@ describe("reset adopts the reference market tier", () => {
     expect(reset.$set?.campaignEraPriceLevelEnabled).toBe(true);
     expect(topUp.$set).not.toHaveProperty("marketSystemMode");
     expect(topUp.$set).not.toHaveProperty("campaignEraPriceLevelEnabled");
-    expect(topUp.$setOnInsert).toEqual({
+    expect(topUp.$setOnInsert).toMatchObject({
       marketSystemMode: referenceGameConfig.marketSystemMode,
       campaignEraPriceLevelEnabled: true,
       privateBankingEnabled: true,
       bankPropTradingEnabled: true,
       playerAdvancedBankChartersEnabled: true,
       bankPropForexFeesEnabled: true,
+      treasuryCashLedgerEnabled: true,
     });
+    // A top-up never writes a gate on a running world, in either direction.
+    expect(topUp.$set).not.toHaveProperty("treasuryCashLedgerEnabled");
+    expect(topUp.$set).not.toHaveProperty("adminRegistrationEnabled");
+    expect(reset.$set?.treasuryCashLedgerEnabled).toBe(true);
   });
 
   it("clears the provenance stamps naming whoever set the previous world's tier", () => {

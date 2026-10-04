@@ -46,15 +46,17 @@ const LABELS: Record<SingleplayerFeatureFlagKey, string> = {
   livingConflictsEnabled: "Living conflicts",
   nppOffensiveInitiationEnabled: "Autonomous offensive initiation",
   nppOffensiveJoinEnabled: "Autonomous offensive participation",
+  intelligenceMilitarySabotageEnabled: "Military sabotage effects",
+  nppIntelligenceOperationsEnabled: "Autonomous intelligence operations",
+  granularElectorateEnabled: "Granular electorate",
+  macroGrowthV1: "Macro growth convergence",
+  settlementCrisisEnabled: "Settlement crises",
 };
 
 const descriptions: Partial<Record<SingleplayerFeatureFlagKey, string>> = {
-  autoSectorSeedEnabled:
-    "Periodically seed unowned sectors. Off by default to preserve a world you deliberately shape.",
-  nppOffensiveInitiationEnabled:
-    "Let autonomous countries start wars. Off by default while generals and military technology remain incomplete.",
-  nppOffensiveJoinEnabled:
-    "Let autonomous countries join offensives. Off by default while generals and military technology remain incomplete.",
+  autoSectorSeedEnabled: "Periodically seed unowned sectors.",
+  nppOffensiveInitiationEnabled: "Let autonomous countries start wars.",
+  nppOffensiveJoinEnabled: "Let autonomous countries join offensives.",
 };
 
 /**
