@@ -76,7 +76,12 @@ describe("treasury accrual stock-flow ownership", () => {
     );
 
     await processTreasuryTurn(10);
-    const budget = db.collection("federalBudget").docs[0];
+    const budget = db.collection("federalBudget").docs[0] as {
+      treasuryAccrual?: unknown;
+      spending: { debtInterest: number };
+      bankSovereignClaims: unknown[];
+      treasuryBalance: number;
+    };
     const receipt = budget.treasuryAccrual as {
       cashDelta: number;
       bankCouponPlan?: Array<{ amountLocal: number; bankId: string; charteredTurn: number }>;
