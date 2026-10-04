@@ -15,6 +15,7 @@ import {
   quoteFundedProductAdvertising,
   type ProductAdvertisingObligation,
   type ProductAdvertisingSellerQuote,
+  type ProductAdvertisingDenominationWitness,
 } from "@/lib/products/rules/productAdvertising";
 
 export type ProductAdvertisingFamily = "media" | "manufacturing";

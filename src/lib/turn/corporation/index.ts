@@ -856,6 +856,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     // Product development is capitalized separately, after operating P&L. The
     // explicit sequence keeps its live cash guard from racing unordered corpOps.
     await applyOperatingCashThenDevelopmentCash({
+      productLinesV2Enabled: lookups.productLinesV2Enabled,
       db,
       operations: manufacturingDevelopmentCashOps,
       turn: typeof turn === "number" ? turn : 1,

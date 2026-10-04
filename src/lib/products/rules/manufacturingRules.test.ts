@@ -341,3 +341,44 @@ describe("manufacturing product line rules", () => {
     ).toBe(65);
   });
 });
+
+describe("manufactured product brand price defense", () => {
+  it("uses live quality once and bounds paid brand without changing output quantities", () => {
+    const input = {
+      outputAnchor: 10000,
+      supplyRates: { vehicles: 1 },
+      allocationShare: 0.5,
+      stage: "mature" as const,
+      outputCommodity: "vehicles" as const,
+      basePrices: { vehicles: 100 },
+      currentSectorQualityByCommodity: { vehicles: 60 },
+      paidDevelopmentAnchor: 1200,
+      paidThresholdAnchor: 1200,
+      elapsedThresholdTurns: 12,
+    };
+    const baseline = buildManufacturedSectorOutput(input);
+    const branded = buildManufacturedSectorOutput({ ...input, productBrand: 100 });
+    expect(branded.outputUnitsByCommodity).toEqual(baseline.outputUnitsByCommodity);
+    expect(branded.outputAnchorByCommodity).toEqual(baseline.outputAnchorByCommodity);
+    expect(branded.productQualityByCommodity.vehicles).toBeGreaterThan(
+      baseline.productQualityByCommodity.vehicles ?? 0
+    );
+    // 35% of the commodity is the manufactured product, so its quality
+    // contribution does not improve unrelated baseline output.
+    expect(baseline.productQualityByCommodity.vehicles).toBe(63.5);
+    expect(branded.productQualityByCommodity.vehicles).toBe(65.3);
+    expect(
+      buildManufacturedSectorOutput({ ...input, allocationShare: 0, productBrand: 1e15 })
+        .productQualityByCommodity.vehicles
+    ).toBe(60);
+    expect(
+      productQualityForCommodity({
+        currentSectorQuality: 99,
+        paidDevelopmentAnchor: 1200,
+        paidThresholdAnchor: 1200,
+        stage: "mature",
+        productBrand: 1e15,
+      })
+    ).toBe(100);
+  });
+});

@@ -13,7 +13,10 @@ import {
 } from "@/lib/bonds/corporateCredit";
 import { ceoOwnershipFraction } from "@/lib/corporations/ceoOwnership";
 import { indexFundOwnershipFraction } from "@/lib/corporations/indexOwnership";
-import { settleMediaProductAdvertisingObligations } from "@/lib/products/mediaProductAdvertisingSettlement";
+import {
+  settleMediaProductAdvertisingObligations,
+  settleProductAdvertisingObligations,
+} from "@/lib/products/mediaProductAdvertisingSettlement";
 import {
   corpCapitalToAnchor,
   fxRateForCorpFromMap,
@@ -43,6 +46,7 @@ export interface ManufacturingDevelopmentCashSettlementArgs {
   sectorsByCorp: Map<string, CorporateSector[]>;
   /** Feature gate; disabled turns do not read or settle title advertising obligations. */
   mediaProductSlatesEnabled?: boolean;
+  productLinesV2Enabled?: boolean;
 }
 
 export interface OperatingThenDevelopmentCashArgs extends ManufacturingDevelopmentCashSettlementArgs {
@@ -62,7 +66,18 @@ export async function applyOperatingCashThenDevelopmentCash(
         args.turn
       )
     : [];
-  return settleManufacturingDevelopmentCash(args, mediaAdvertisingIds);
+  const manufacturingAdvertisingIds = args.productLinesV2Enabled
+    ? await settleProductAdvertisingObligations(
+        args.db,
+        args.corporations.map((corp) => corp._id),
+        args.turn,
+        "manufacturing"
+      )
+    : [];
+  return settleManufacturingDevelopmentCash(args, [
+    ...mediaAdvertisingIds,
+    ...manufacturingAdvertisingIds,
+  ]);
 }
 
 /** Apply guarded product debits, then refresh affected snapshots from Mongo in one read. */

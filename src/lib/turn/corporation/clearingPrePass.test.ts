@@ -558,19 +558,19 @@ describe("runClearingPrePass with clearing enabled", () => {
       expect(offered?.productProjectId).toBe("project-1");
       expect(offered?.productOutputTurn).toBe(12);
       expect(offered?.projectOutputUnitsByCommodity?.vehicles).toBeCloseTo(productUnits, 6);
+      // Paid quality belongs only to the redirected product, not the
+      // unallocated baseline units of the same commodity.
       expect(offered?.projectQualityByCommodity?.vehicles).toBeCloseTo(
-        70 +
-          10 *
-            (
-              {
-                development: 0,
-                launch: 0.25,
-                growth: 0.6,
-                mature: 1,
-                decline: 0.6,
-                retired: 0,
-              } as const
-            )[stage],
+        (
+          {
+            development: 70,
+            launch: 70.2,
+            growth: 71.2,
+            mature: 73.5,
+            decline: 71.2,
+            retired: 70,
+          } as const
+        )[stage],
         6
       );
       expect(offered?.projectSoldUnitsByCommodity?.vehicles).toBeCloseTo(
