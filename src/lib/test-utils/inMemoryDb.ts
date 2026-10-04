@@ -236,7 +236,9 @@ function evalExpr(expr: unknown, doc: Doc, variables: Doc = {}): unknown {
   if (typeof expr === "string" && expr.startsWith("$")) return getPath(doc, expr.slice(1));
   if (Array.isArray(expr)) return expr.map((item) => evalExpr(item, doc, variables));
   if (!isPlainObject(expr)) return expr;
-  const [op, rawArgs] = Object.entries(expr)[0];
+  const entry = Object.entries(expr)[0];
+  if (!entry) return expr;
+  const [op, rawArgs] = entry;
   if (op === "$literal") return rawArgs;
   if (op === "$cond" && Array.isArray(rawArgs)) {
     return evalExpr(rawArgs[evalExpr(rawArgs[0], doc, variables) ? 1 : 2], doc, variables);
