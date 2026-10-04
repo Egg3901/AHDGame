@@ -24,9 +24,9 @@ import type { CharacterRecap, RecapCorporation, RecapRaces, RecapWorld } from ".
  * about to wipe (actionLogs, elections, snapshots, bills, portfolioHistory) and
  * hands plain rows to the pure builders in `storyData.ts`.
  *
- * Every section is independent and best-effort: a failed read logs and leaves
- * that section absent, the rest of the recap still builds, and nothing here can
- * throw out to `resetGameWorld`.
+ * Every section is independent and best-effort for preview callers: a failed
+ * read logs and leaves that section absent. Reset callers set `failOnError` so
+ * incomplete source data aborts before the reset destroys it.
  */
 
 const PASSED = new Set(["signed", "enrolled", "veto_override", "override_shugiin"]);
@@ -143,9 +143,12 @@ export async function loadStoryData(
   targets: Character[],
   field: Character[],
   ctx: { currentTurn: number },
-  opts: { includeWorld: boolean; warn?: Warn }
+  opts: { includeWorld: boolean; warn?: Warn; failOnError?: boolean }
 ): Promise<StoryDataResult> {
-  const warn: Warn = opts.warn ?? (() => {});
+  const warn: Warn = (name, err) => {
+    opts.warn?.(name, err);
+    if (opts.failOnError) throw err;
+  };
   const perCharacter = new Map<string, StorySections>();
   if (targets.length === 0) return { perCharacter, world: null };
   const ids = targets.map((c) => c._id);

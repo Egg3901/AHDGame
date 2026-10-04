@@ -236,12 +236,14 @@ export async function resetGameWorld(
           db,
           charsForRecap,
           { iteration: recapIteration, currentTurn: gsForRecap?.currentTurn ?? 1 },
-          { log }
+          { log, requireComplete: true }
         );
         log(`built ${seasonRecaps.size} season recaps`);
       } catch (err) {
-        log(`season recaps skipped: ${err instanceof Error ? err.message : String(err)}`);
-        seasonRecaps = null;
+        log(
+          `season recap capture failed; reset aborted: ${err instanceof Error ? err.message : String(err)}`
+        );
+        throw err;
       }
     }
   }

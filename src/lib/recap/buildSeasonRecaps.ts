@@ -53,7 +53,9 @@ export interface BuildSeasonRecapsOptions {
    * target ⇒ no field-wide action counts ⇒ `actions.rank` is null).
    */
   rankActions?: boolean;
-  /** Progress/warning sink; a failed v2 section is reported here and skipped. */
+  /** Fail instead of emitting an incomplete recap when any source read or build step fails. */
+  requireComplete?: boolean;
+  /** Progress/warning sink; a failed v2 section is reported here. */
   log?: (msg: string) => void;
 }
 
@@ -118,12 +120,13 @@ const PORTFOLIO_LOOKBACK_TURNS = 12;
 
 /**
  * Each character's most recent net portfolio value (anchor units), from the
- * last few turns of portfolioHistory. Empty on failure: callers fall back.
+ * last few turns of portfolioHistory. Best-effort callers fall back to cash.
  */
 async function latestPortfolioNetValues(
   db: Db,
   field: Character[],
-  currentTurn: number
+  currentTurn: number,
+  requireComplete: boolean
 ): Promise<Map<string, number>> {
   const out = new Map<string, number>();
   try {
@@ -147,7 +150,8 @@ async function latestPortfolioNetValues(
       .toArray();
     for (const r of rows)
       if (typeof r.v === "number" && Number.isFinite(r.v)) out.set(String(r._id), r.v);
-  } catch {
+  } catch (err) {
+    if (requireComplete) throw err;
     // fall back to the cash + stock sum
   }
   return out;
@@ -172,6 +176,7 @@ export async function buildSeasonRecaps(
 
   const field = opts?.field ?? targets;
   const rankActions = opts?.rankActions ?? true;
+  const requireComplete = opts?.requireComplete ?? false;
   const canRank = field.length >= 2; // a one-character field cannot be meaningfully ranked
   const ids = targets.map((c) => c._id);
 
@@ -261,7 +266,12 @@ export async function buildSeasonRecaps(
   // both, so a saver with M 115mn in the bank read as worth M 5.8mn. That sum
   // stays as the fallback for characters with no snapshot.
   const rateMap = await fetchExchangeRateMap(db);
-  const latestPortfolio = await latestPortfolioNetValues(db, field, ctx.currentTurn);
+  const latestPortfolio = await latestPortfolioNetValues(
+    db,
+    field,
+    ctx.currentTurn,
+    requireComplete
+  );
   const netWorthByChar = new Map<string, number>(); // local (display)
   const fundsByChar = new Map<string, number>(); // local (display)
   const netWorthInternalByChar = new Map<string, number>(); // fx-normalized (rank)
@@ -350,12 +360,16 @@ export async function buildSeasonRecaps(
   const log = opts?.log ?? (() => {});
   const story = await loadStoryData(db, targets, field, ctx, {
     includeWorld: rankActions,
+    failOnError: requireComplete,
     warn: (name, err) =>
       log(
-        `season recap: ${name} section skipped (${err instanceof Error ? err.message : String(err)})`
+        `season recap: ${name} ${requireComplete ? "section failed" : "section skipped"} (${err instanceof Error ? err.message : String(err)})`
       ),
   }).catch((err: unknown) => {
-    log(`season recap: story data skipped (${err instanceof Error ? err.message : String(err)})`);
+    log(
+      `season recap: story data ${requireComplete ? "capture failed" : "skipped"} (${err instanceof Error ? err.message : String(err)})`
+    );
+    if (requireComplete) throw err;
     return null;
   });
 
@@ -385,10 +399,14 @@ export async function buildSeasonRecaps(
   };
 
   // Money symbols as this world's era showed them (1953 DM, not euros).
-  const era = await db
-    .collection<GameState>("gameState")
-    .findOne({ _id: "current" }, { projection: { preset: 1, eurozoneEnabled: 1 } })
-    .catch(() => null);
+  let era: Pick<GameState, "preset" | "eurozoneEnabled"> | null = null;
+  try {
+    era = await db
+      .collection<GameState>("gameState")
+      .findOne({ _id: "current" }, { projection: { preset: 1, eurozoneEnabled: 1 } });
+  } catch (err) {
+    if (requireComplete) throw err;
+  }
   const symbolFor = (c: Character) =>
     getEraAwareCurrencySymbol(
       getHomeCurrency(c),
@@ -446,7 +464,10 @@ export async function buildSeasonRecaps(
       recap.awards = awards?.get(id) ?? [];
       recap.persona = buildPersona(recap);
     } catch (err) {
-      log(`season recap: persona skipped (${err instanceof Error ? err.message : String(err)})`);
+      log(
+        `season recap: persona ${requireComplete ? "build failed" : "skipped"} (${err instanceof Error ? err.message : String(err)})`
+      );
+      if (requireComplete) throw err;
     }
   }
 
