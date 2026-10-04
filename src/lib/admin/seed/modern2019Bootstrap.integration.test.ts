@@ -9,39 +9,6 @@ vi.mock("@/lib/mongodb", async () => {
   };
 });
 
-// Model a database created before the industry-model index migration. The
-// in-memory driver intentionally throws a plain Error for absent dropIndex,
-// while Mongo reports code 27, which the migration correctly treats as absent.
-vi.mock("@/lib/test-utils/inMemoryDb", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/test-utils/inMemoryDb")>();
-  return {
-    ...actual,
-    createInMemoryDb: (...args: Parameters<typeof actual.createInMemoryDb>) => {
-      const memory = actual.createInMemoryDb(...args);
-      const db = memory as unknown as import("mongodb").Db;
-      void db
-        .collection("corporateSectors")
-        .createIndex(
-          { corporationId: 1, stateId: 1, sectorType: 1 },
-          { name: "corporateSectors_corporationId_stateId_sectorType", unique: true }
-        );
-      void db
-        .collection("unownedSectors")
-        .createIndex(
-          { stateId: 1, sectorType: 1 },
-          { name: "stateId_1_sectorType_1", unique: true }
-        );
-      void db
-        .collection("unions")
-        .createIndex(
-          { countryId: 1, sectorType: 1 },
-          { name: "unions_country_sectorType_seeded_unique", unique: true }
-        );
-      return memory;
-    },
-  };
-});
-
 it("builds the five 2019 transition countries before region-derived stages", async () => {
   const { probeBootstrap } = await import("@/lib/test-utils/__fixtures__/bootstrapProbe");
   const { db } = await probeBootstrap("2019-default");
