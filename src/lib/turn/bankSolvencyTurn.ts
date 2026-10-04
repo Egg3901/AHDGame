@@ -1,4 +1,5 @@
 import { processFinancialCrisisGuarantees } from "@/lib/crises/financialCrisisGuarantees";
+import { ensureBankFailureResponseWindow } from "@/lib/crises/bankFailureResponseWindow";
 /**
  * Bank runs and depositor protection. processBankSolvencyTurn evaluates bank
  * confidence, returns fleeing household deposits with their cash, and resolves
@@ -276,6 +277,7 @@ async function evaluateOneBank(
     { _id: corp._id },
     {
       projection: {
+        countryId: 1,
         liquidCapital: 1,
         bankCharter: 1,
         bankPropBookRevision: 1,
@@ -573,6 +575,18 @@ async function evaluateOneBank(
         db
       );
     }
+  }
+
+  // Give the responsible domestic offices a short response window while the
+  // bank is still active. A bank already determined insolvent above proceeds
+  // directly to the existing same-turn estate and depositor waterfall.
+  if (!fails && band === "red" && live.countryId) {
+    await ensureBankFailureResponseWindow(db, {
+      bankId: corp._id,
+      countryId: live.countryId,
+      charteredTurn: charter.charteredTurn,
+      currentTurn: turn,
+    });
   }
 
   return {

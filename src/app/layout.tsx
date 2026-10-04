@@ -284,7 +284,9 @@ export default async function RootLayout({
   // Server component, so this is a plain call. Throws on a deployment
   // that sets SINGLEPLAYER, by design: see @/lib/singleplayer.
   const singleplayer = isSingleplayer();
-  const renderConsentManagedGoogleTags = shouldRenderConsentManagedGoogleTags(pathname);
+  const renderConsentManagedGoogleTags = shouldRenderConsentManagedGoogleTags(pathname, {
+    storeApp: isStoreApp,
+  });
   const googleTagBootstrap = buildGoogleTagBootstrapScript(
     GA_MEASUREMENT_ID,
     renderGoogleCmp ? "cmp" : "fallback"

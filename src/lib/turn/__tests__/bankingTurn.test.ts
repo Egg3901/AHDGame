@@ -84,6 +84,7 @@ describe("processBankingTurn", () => {
   };
   let loans: BankLoan[];
   let fundState: DepositInsuranceFund;
+  let persisted: ReturnType<typeof createInMemoryDb>;
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -159,11 +160,20 @@ describe("processBankingTurn", () => {
       const u = update as {
         $setOnInsert?: Partial<DepositInsuranceFund>;
         $inc?: Record<string, number>;
+        $min?: Record<string, number>;
       };
       if (u.$inc) {
         for (const [k, v] of Object.entries(u.$inc)) {
           (fundState as unknown as Record<string, number>)[k] =
             ((fundState as unknown as Record<string, number>)[k] ?? 0) + v;
+        }
+      }
+      if (u.$min) {
+        for (const [k, v] of Object.entries(u.$min)) {
+          const current = (fundState as unknown as Record<string, number>)[k];
+          if (current === undefined || v < current) {
+            (fundState as unknown as Record<string, number>)[k] = v;
+          }
         }
       }
       return { matchedCount: 1, modifiedCount: 1, upsertedCount: 0 };
@@ -329,7 +339,7 @@ describe("processBankingTurn", () => {
 
     // Settlement effects need durable document receipts, not write-count stubs.
     // Keep the phase's mutable fixture handles while delegating affected storage.
-    const persisted = createInMemoryDb();
+    persisted = createInMemoryDb();
     liveCorp = bankCorp;
     persisted.collection("corporations").docs.push({ ...liveCorp });
     liveCorp = persisted.collection("corporations").docs[0] as unknown as Corporation;
@@ -463,6 +473,42 @@ describe("processBankingTurn", () => {
     expect(cbState.externalBroadMoney).toBe(cbBefore);
     expect(liveCorp.bankCharter!.cashReserves).toBe(liqBefore);
     expect(characterState.savings).toBe(savBefore);
+  });
+
+  it("does not publish turn aggregates onto a replacement charter", async () => {
+    const originalUpdate = db.collectionMocks.corporations!.updateOne.getMockImplementation();
+    expect(originalUpdate).toBeDefined();
+    let publicationFilter: Record<string, unknown> | undefined;
+    db.collectionMocks.corporations!.updateOne.mockImplementation(async (filter, update) => {
+      const selector = filter as Record<string, unknown>;
+      const patch = update as { $set?: Record<string, unknown> };
+      if (patch.$set?.["bankCharter.lastBankingTurn"] === TURN) {
+        publicationFilter = selector;
+        liveCorp.bankCharter = makeCharter({
+          ...liveCorp.bankCharter,
+          charteredTurn: TURN + 1,
+          currency: "EUR",
+        });
+        const current = liveCorp.bankCharter;
+        const epochMatches =
+          selector["bankCharter.charteredTurn"] === undefined ||
+          selector["bankCharter.charteredTurn"] === current.charteredTurn;
+        const currencyMatches =
+          selector["bankCharter.currency"] === undefined ||
+          selector["bankCharter.currency"] === current.currency;
+        if (!epochMatches || !currencyMatches) return { matchedCount: 0, modifiedCount: 0 };
+      }
+      return originalUpdate!(filter, update);
+    });
+
+    await processBankingTurn(db as unknown as Db, TURN);
+
+    expect(publicationFilter?.["bankCharter.charteredTurn"]).toBe(1);
+    expect(publicationFilter?.["bankCharter.currency"]).toBe("USD");
+    expect(publicationFilter?.countryId).toBe("US");
+    expect(liveCorp.bankCharter?.charteredTurn).toBe(TURN + 1);
+    expect(liveCorp.bankCharter?.currency).toBe("EUR");
+    expect(liveCorp.bankCharter?.lastBankingTurn).toBeUndefined();
   });
 
   it.each(["current", "legacy"])(
@@ -686,12 +732,21 @@ describe("processBankingTurn", () => {
 
     const cap = await getInsuredCap(db as unknown as Db, "USD");
     const insured = sumInsuredPlayerDeposits([characterState.savings], cap);
+    expect(fundState.insuredDepositExposureTurnsLifetime).toBeCloseTo(insured, 8);
+    expect(fundState.pricingEvidenceStartTurn).toBe(TURN);
+    const premiumKey = `insurance-premium:${bankId.toString()}:${liveCorp.bankCharter!.charteredTurn}:${TURN}`;
+    const premiumReceipts = persisted.collection("bankMoneyMoves").docs as Array<{ _id: string }>;
+    expect(premiumReceipts.filter((receipt) => receipt._id === premiumKey)).toHaveLength(1);
     // Premium was computed on post-interest balances; reverse-check magnitude.
     const liqAfterInterest = liqBefore - interestPaid;
     const actual = computeReserveRatioActual(liqAfterInterest, characterState.savings);
     const expectedPremium = computeInsurancePremium(insured, actual, 0.1);
     expect(premiumPaid).toBeCloseTo(expectedPremium, 5);
     expect(BASE_PREMIUM_ANNUAL).toBe(0.004);
+
+    await processBankingTurn(db as unknown as Db, TURN);
+    expect(fundState.insuredDepositExposureTurnsLifetime).toBeCloseTo(insured, 8);
+    expect(premiumReceipts.filter((receipt) => receipt._id === premiumKey)).toHaveLength(1);
   });
 
   it("conserves NPC deposit flow: delta == -externalBroadMoney delta", async () => {
