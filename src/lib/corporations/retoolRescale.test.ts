@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { capacityRescaleRatio } from "@/lib/constants/capacityEconomy";
+import { seedPlantLedger } from "@/lib/corporations/plantLedger";
 import { healAutoRetoolOpexAnchor, retoolRescaleFields } from "./retoolRescale";
 
 const RATIO = capacityRescaleRatio("extraction", "standard", "rare_earth_mining");
@@ -19,6 +20,7 @@ describe("retoolRescaleFields", () => {
     expect(RATIO).not.toBe(1);
     expect(set.retoolRescaleApplied).toBe(true);
     expect(set.capitalStock).toBeCloseTo(capitalStock * RATIO, 6);
+    expect(set).toMatchObject(seedPlantLedger("extraction", set.capitalStock));
     expect(set.otherOpexPerUnitAnchor).toBeCloseTo(otherOpexPerUnitAnchor / RATIO, 8);
     expect((set.otherOpexPerUnitAnchor ?? 0) * (set.capitalStock ?? 0)).toBeCloseTo(
       otherOpexPerUnitAnchor * capitalStock,

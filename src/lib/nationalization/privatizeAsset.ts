@@ -318,9 +318,7 @@ export async function privatizeAsset(
     // `legacyRevenueShadow` restore point rides along in the same fold and is
     // split by the same fraction — without it the carved corp would land in the
     // rollback script's "no restore point, needs a human decision" bucket.
-    const openingPlantCount = Number.isInteger(sector.plantCount)
-      ? (sector.plantCount as number)
-      : seedPlantLedger(sector.sectorType, sector.capitalStock).plantCount;
+    const openingPlantCount = seedPlantLedger(sector.sectorType, sector.capitalStock).plantCount;
     const plantCountSplit = splitWholePlantCount(openingPlantCount, fraction);
     const carvedPlant = carveSectorPlantFields(sector, fraction, plantCountSplit.carved);
     const keptPlant = carveSectorPlantFields(sector, keep, plantCountSplit.kept);

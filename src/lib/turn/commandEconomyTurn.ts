@@ -46,6 +46,7 @@ import {
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { getRegisteredCountryIds } from "@/lib/country/registeredCountries";
 import { capacityPricePerUnit, CAPACITY_ANCHOR_YEAR } from "@/lib/constants/capacityEconomy";
+import { seedPlantLedger } from "@/lib/corporations/plantLedger";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 import {
   loadFxRatesByCurrency,
@@ -850,7 +851,10 @@ async function buildCapacityFromDirectedCredit(
           filter: { _id: sector._id },
           update: {
             $inc: { capitalStock: unitsAdded },
-            $set: { capacityBookAnchor: priorBook + unitsAdded * unitPrice },
+            $set: {
+              ...seedPlantLedger(sector.sectorType, stock + unitsAdded),
+              capacityBookAnchor: priorBook + unitsAdded * unitPrice,
+            },
           },
         },
       });

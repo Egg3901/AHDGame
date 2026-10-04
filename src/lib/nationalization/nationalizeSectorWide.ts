@@ -253,6 +253,10 @@ export async function nationalizeSectorWide(
             null,
             sweepEraUnitScale
           ),
+          ...seedPlantLedger(
+            params.sectorType,
+            computeSectorImpliedUnits(params.sectorType, haircutAnchor, null, sweepEraUnitScale)
+          ),
           // Capacity derived from an ₳ nameplate rather than transferred with a
           // recorded basis (the unowned pool, or a legacy row). Priced at LIST,
           // which is what that capacity cost under the legacy growth stack
@@ -424,9 +428,7 @@ export async function nationalizeSectorWide(
         resolveSectorHostCurrencyCode(sec, donor),
         fxRateForSectorHostFromMap(sec, donor, fxByCurrency)
       );
-      const openingPlantCount = Number.isInteger(sec.plantCount)
-        ? (sec.plantCount as number)
-        : seedPlantLedger(sec.sectorType, sec.capitalStock).plantCount;
+      const openingPlantCount = seedPlantLedger(sec.sectorType, sec.capitalStock).plantCount;
       const plantCountSplit = splitWholePlantCount(openingPlantCount, f);
       // PLANTS — the capacity leg of the carve. Below plants this is null and
       // both writes below are byte identical to the pre-P3b behaviour.
@@ -463,6 +465,10 @@ export async function nationalizeSectorWide(
             return {
               ...sliced,
               capitalStock: sliced.capitalStock * (1 - NATIONALIZATION_REVENUE_HAIRCUT),
+              ...seedPlantLedger(
+                sec.sectorType,
+                sliced.capitalStock * (1 - NATIONALIZATION_REVENUE_HAIRCUT)
+              ),
               // P5: the paid basis takes the SAME haircut as the capacity it
               // prices, so the per-unit basis is invariant across the taking.
               capacityBookAnchor: sliced.capacityBookAnchor * (1 - NATIONALIZATION_REVENUE_HAIRCUT),
@@ -632,6 +638,9 @@ export async function nationalizeSectorWide(
               ...(captureUnits > 0 ? { capitalStock: captureUnits } : {}),
             },
             $set: {
+              ...(captureUnits > 0
+                ? seedPlantLedger(params.sectorType, (ns.capitalStock ?? 0) + captureUnits)
+                : {}),
               nationalizedAtTurn: params.consequence.turn,
               nationalizationTransitionMultiplier: transitionMultiplier,
               sectorNationalizationScope: params.scope,

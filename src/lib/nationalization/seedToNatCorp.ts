@@ -15,6 +15,7 @@ import {
   mergeSectorPlantFields,
   readSectorPlantFields,
 } from "@/lib/corporations/sectorTransferCapex";
+import { seedPlantLedger } from "@/lib/corporations/plantLedger";
 
 const DEFAULT_PROFIT_MARGIN = 20;
 const DEFAULT_GROWTH_RATE = 1;
@@ -125,7 +126,12 @@ export async function incrementNatCorpSectorRevenue(
           revenue: revenueDeltaLocal,
           ...(capacityUnitsDelta > 0 ? { capitalStock: capacityUnitsDelta } : {}),
         },
-        $set: { updatedAt: now },
+        $set: {
+          ...(capacityUnitsDelta > 0
+            ? seedPlantLedger(params.sectorType, (existing.capitalStock ?? 0) + capacityUnitsDelta)
+            : {}),
+          updatedAt: now,
+        },
       }
     );
     return "inc";
@@ -139,6 +145,7 @@ export async function incrementNatCorpSectorRevenue(
     sectorType: params.sectorType,
     revenue: revenueDeltaLocal,
     ...(capacityUnitsDelta > 0 ? { capitalStock: capacityUnitsDelta } : {}),
+    ...(capacityUnitsDelta > 0 ? seedPlantLedger(params.sectorType, capacityUnitsDelta) : {}),
     workers: 0,
     profitMargin: DEFAULT_PROFIT_MARGIN,
     targetGrowthRate: DEFAULT_GROWTH_RATE,

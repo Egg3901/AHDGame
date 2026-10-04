@@ -19,6 +19,7 @@ import { sumCorporateSectorConstructionInProgress } from "@/lib/bonds/corporateC
 import type { CorpSnapshot, SoeBackingSnapshot } from "@/lib/turn/corporation/types";
 import type { ActionAuditInput } from "@/lib/db/types/actionAuditLog";
 import { isStateOwned } from "./nationalCorporation";
+import { seedPlantLedger } from "@/lib/corporations/plantLedger";
 import { findMergedRegionMetricsMany } from "@/lib/macroMetrics/merge";
 import { isMacroMetricPath } from "@/lib/macroMetrics/paths";
 import { boardDeltaForLegacyEffect } from "@/lib/politicalLegislation/legacyEffectBridge";
@@ -816,6 +817,8 @@ function computeSoeShareOfStateSector(
 /** One sector's share of a state capex grant. */
 export interface SoeCapexSectorBuy {
   sectorId: CorporateSector["_id"];
+  sectorType: CorporateSector["sectorType"];
+  capitalStock: number;
   /** Capacity units bought back — exactly this turn's depreciation. */
   unitsAdded: number;
   /** ₳ paid for them at the standing list price. */
@@ -873,6 +876,8 @@ export function buildSoeCapexGrant(
         : stock * unitPrice;
     buys.push({
       sectorId: sector._id,
+      sectorType: sector.sectorType,
+      capitalStock: stock,
       unitsAdded,
       costAnchor,
       nextBookAnchor: priorBook + costAnchor,
@@ -920,7 +925,11 @@ async function applyStateCapexGrants(
           filter: { _id: buy.sectorId },
           update: {
             $inc: { capitalStock: buy.unitsAdded },
-            $set: { capacityBookAnchor: buy.nextBookAnchor, updatedAt: now },
+            $set: {
+              ...seedPlantLedger(buy.sectorType, buy.capitalStock + buy.unitsAdded),
+              capacityBookAnchor: buy.nextBookAnchor,
+              updatedAt: now,
+            },
           },
         },
       });

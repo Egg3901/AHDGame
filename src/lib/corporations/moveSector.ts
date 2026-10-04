@@ -92,6 +92,7 @@ export async function moveSectorToCorp(
       // which is why the rescale above touches units only.
       const merged = mergeSectorPlantFields(
         {
+          sectorType: existing.sectorType,
           capitalStock: existing.capitalStock,
           buildQueue: existing.buildQueue,
           mothballed: existing.mothballed,
@@ -100,6 +101,7 @@ export async function moveSectorToCorp(
           legacyRevenueShadow: existing.legacyRevenueShadow,
         },
         {
+          sectorType: sector.sectorType,
           capitalStock: Math.round(donorStock * ratio * 100) / 100,
           buildQueue: donorQueue,
           mothballed: sector.mothballed,

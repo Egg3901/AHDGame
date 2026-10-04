@@ -20,6 +20,7 @@ import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { computeUnownedHeadroomUnits, unownedPoolBoostSet } from "@/lib/market/unownedHeadroom";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
+import { plantSizeUnits } from "@/lib/constants/facilityQuantum";
 
 // Max per-year revenue boost applied to the most distressed sector type (linearly
 // scaled down the distress ranking). Raised 0.02 → 0.06 (audit t786): at 0.02 the
@@ -172,6 +173,8 @@ export async function processAutoSectorSeed(
     // Using $multiply (not $inc) keeps growth proportional and self-limiting.
     // The old approach used $inc which compounded unboundedly (UK energy runaway).
     if (natCorpObjectIds.length > 0) {
+      const quantum = plantSizeUnits(sectorType);
+      const boostedStock = { $multiply: [{ $ifNull: ["$capitalStock", 0] }, multiplier] };
       const { modifiedCount: natModified } = await db
         .collection("corporateSectors")
         .updateMany({ sectorType, corporationId: { $in: natCorpObjectIds } }, [
@@ -189,6 +192,30 @@ export async function processAutoSectorSeed(
                 ? {
                     capitalStock: {
                       $multiply: [{ $ifNull: ["$capitalStock", 0] }, multiplier],
+                    },
+                    plantCount: {
+                      $cond: [
+                        { $gt: [boostedStock, 0] },
+                        { $max: [1, { $floor: [{ $divide: [boostedStock, quantum] }] }] },
+                        0,
+                      ],
+                    },
+                    plantUnitRemainder: {
+                      $cond: [
+                        { $gte: [boostedStock, quantum] },
+                        {
+                          $subtract: [
+                            boostedStock,
+                            {
+                              $multiply: [
+                                { $floor: [{ $divide: [boostedStock, quantum] }] },
+                                quantum,
+                              ],
+                            },
+                          ],
+                        },
+                        0,
+                      ],
                     },
                   }
                 : {}),

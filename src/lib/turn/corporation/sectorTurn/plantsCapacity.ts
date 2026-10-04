@@ -18,7 +18,7 @@ import type { CorporationType } from "@/lib/constants/corporations";
 import { COMMODITY_BASE_PRICES, type CommodityType } from "@/lib/constants/commodities";
 import type { CorporateSector, Corporation } from "@/lib/db/types";
 import { advanceCapitalStock } from "@/lib/market/capital";
-import { advanceSectorPlantLedger } from "@/lib/corporations/plantLedger";
+import { seedPlantLedger } from "@/lib/corporations/plantLedger";
 import { healRetoolStockBasis, type RetoolStockBasisHeal } from "@/lib/corporations/retoolRescale";
 import {
   retoolOperatingCapacityRatio,
@@ -64,7 +64,7 @@ export interface PlantsCapacityResult {
   mothballed: boolean;
   activeFraction: number;
   plantsBaseStock: number;
-  plantLedger: ReturnType<typeof advanceSectorPlantLedger> | null;
+  plantLedger: ReturnType<typeof seedPlantLedger> | null;
   plantsPrevStock: number;
   plantsOwnedCapacity: number;
   plantsCapacityDepreciationFactor: number;
@@ -188,9 +188,6 @@ export function computePlantsCapacity(input: PlantsCapacityInput): PlantsCapacit
         )
       : workingCapacity
     : 0;
-  const plantLedger = plantsEnabled
-    ? advanceSectorPlantLedger(sector, plantsBaseStock, landedBuildUnits)
-    : null;
   const plantsPrevStock = plantsBaseStock + landedBuildUnits;
   const plantsOwnedCapacity = plantsEnabled
     ? advanceCapitalStock({
@@ -223,6 +220,9 @@ export function computePlantsCapacity(input: PlantsCapacityInput): PlantsCapacit
         currentGrowthRate: 0,
       })
     : 0;
+  const plantLedger = plantsEnabled
+    ? seedPlantLedger(sector.sectorType, plantsOwnedCapacity)
+    : null;
   // ─── P5: the PAID BASIS of that capacity ──────────────────────────────────
   //
   //   book_next = (book_prev + cash of the orders that just landed) × (the same

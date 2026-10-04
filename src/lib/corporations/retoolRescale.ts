@@ -19,6 +19,7 @@ import {
 import { rescaleOtherOpexAnchorForRetool } from "@/lib/corporations/physicalPnl";
 import { needsRetoolStockCatchup } from "@/lib/corporations/retooling/rules";
 import type { SectorBuildOrder } from "@/lib/db/types";
+import { seedPlantLedger } from "@/lib/corporations/plantLedger";
 
 export interface RetoolRescaleInput {
   sectorType: CorporationType;
@@ -32,6 +33,8 @@ export interface RetoolRescaleInput {
 
 export type RetoolRescaleSet = Partial<{
   capitalStock: number;
+  plantCount: number;
+  plantUnitRemainder: number;
   buildQueue: SectorBuildOrder[];
   otherOpexPerUnitAnchor: number;
   retoolRescaleApplied: boolean;
@@ -50,6 +53,7 @@ export function retoolRescaleFields(input: RetoolRescaleInput): RetoolRescaleSet
   const out: RetoolRescaleSet = { retoolRescaleApplied: true };
   if (typeof input.capitalStock === "number" && Number.isFinite(input.capitalStock)) {
     out.capitalStock = input.capitalStock * ratio;
+    Object.assign(out, seedPlantLedger(input.sectorType, out.capitalStock));
   }
   if (Array.isArray(input.buildQueue) && input.buildQueue.length > 0) {
     out.buildQueue = rescaleBuildQueueForStrategyChange(input.buildQueue, ratio);

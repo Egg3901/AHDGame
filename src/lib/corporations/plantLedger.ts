@@ -46,9 +46,9 @@ export function seedPlantLedger(
 }
 
 /**
- * Add newly delivered construction to a persisted whole-plant ledger.
- * Depreciation does not call this function: it changes plant condition and
- * productive capacity, not the number of owned facilities.
+ * Advance the construction ledger with newly delivered capacity.
+ * Turn writers reconcile the persisted count from final capitalStock after
+ * depreciation, so this helper is only for computations before that write.
  */
 export function advancePlantLedger(input: {
   sectorType: CorporationType;

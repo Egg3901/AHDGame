@@ -365,6 +365,8 @@ export async function expandSector(request: Request, { params }: RouteParams) {
       // build window — the written `revenue` above is the legacy nameplate,
       // which plants restates every turn and which non-plants readers still need.
       newSector.capitalStock = 0;
+      newSector.plantCount = 0;
+      newSector.plantUnitRemainder = 0;
       // P5: zero owned capacity ⇒ zero paid basis. Stamped EXPLICITLY rather
       // than left absent so this row never takes the list-price fallback: the
       // founding build is charged at CAPACITY_FOUNDING_DISCOUNT (0.1×), and the
