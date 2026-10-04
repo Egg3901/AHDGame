@@ -31,6 +31,7 @@ const sourceFiles = [
 ];
 
 type Boundary = "none" | "vector" | "history" | "response-completion" | "header-completion";
+type StringIdFixture = { _id: string } & Record<string, unknown>;
 
 async function main() {
   const owned = await startIsolatedMongod("ahd_refugee_fixture_");
@@ -56,7 +57,7 @@ async function main() {
     databases.push(db);
     const interactionId = new ObjectId();
     const crisisId = new ObjectId();
-    await db.collection("gameState").insertOne({
+    await db.collection<StringIdFixture>("gameState").insertOne({
       _id: "current",
       worldEpochId: "fixture-world",
       currentTurn: 7,
@@ -66,19 +67,21 @@ async function main() {
       isProcessing: false,
       preset: "1991-default",
     });
-    await db.collection("gameConfig").insertOne({ _id: "default", labourSystemMode: "legacy" });
+    await db
+      .collection<StringIdFixture>("gameConfig")
+      .insertOne({ _id: "default", labourSystemMode: "legacy" });
     const male = Array.from({ length: 101 }, (_, age) => (age >= 20 && age < 60 ? 1250 : 0));
     for (const [id, countryId] of [
       ["YU_ORIGIN", "YU"],
       [`${host}_HOST`, host],
     ]) {
       await db
-        .collection("states")
+        .collection<StringIdFixture>("states")
         .insertOne({ _id: id, countryId, population: 100_000, gdp: 1000 });
       await db
-        .collection("regionDemographics")
+        .collection<StringIdFixture>("regionDemographics")
         .insertOne({ _id: id, countryId, ages: { male, female: [...male] } });
-      await db.collection("macroMetrics").insertOne({
+      await db.collection<StringIdFixture>("macroMetrics").insertOne({
         _id: id,
         population: { birthRate: { value: 50 }, migrationRate: { value: 0 } },
         economic: {
@@ -87,10 +90,12 @@ async function main() {
           unemploymentRate: { value: 5 },
         },
       });
-      await db.collection("stateMetrics").insertOne({ _id: id });
+      await db.collection<StringIdFixture>("stateMetrics").insertOne({ _id: id });
     }
-    await db.collection("countryGameStates").insertOne({ _id: host, status: "active" });
-    await db.collection("federalBudget").insertOne({
+    await db
+      .collection<StringIdFixture>("countryGameStates")
+      .insertOne({ _id: host, status: "active" });
+    await db.collection<StringIdFixture>("federalBudget").insertOne({
       _id: host,
       countryId: host,
       gdp: 1_000_000_000,
@@ -303,9 +308,11 @@ async function main() {
         throw new Error("Player response and diagnostic history disagree");
       let cashPaid = 0;
       if (boundary === "none") {
-        process.env.NODE_ENV = "test";
-        process.env.MONGODB_URI = owned.uri;
-        process.env.MONGODB_DB = fixture.db.databaseName;
+        Object.assign(process.env, {
+          NODE_ENV: "test",
+          MONGODB_URI: owned.uri,
+          MONGODB_DB: fixture.db.databaseName,
+        });
         const country = fixture.host as FederalBudget["countryId"];
         for (let turn = 8; turn <= 32; turn++) {
           await fixture.db
