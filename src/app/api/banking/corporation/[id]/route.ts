@@ -566,6 +566,7 @@ async function handleGET(_request: Request, { params }: RouteParams) {
               lastBankingFacilityInterest: charter.lastBankingFacilityInterest ?? 0,
               lastBankingInsurancePremium: charter.lastBankingInsurancePremium ?? 0,
               lastBankingWriteoffs: charter.lastBankingWriteoffs ?? 0,
+              lastBankingSovereignCoupons: charter.lastBankingSovereignCoupons ?? 0,
               requiredReserves: requiredReserves(charter, reserveRatio ?? 0, sheetOptions),
               upstreamCapacity: upstreamCapacity(charter, reserveRatio ?? 0, sheetOptions),
               lendingProfile: charter.lendingProfile ?? DEFAULT_LENDING_PROFILE,

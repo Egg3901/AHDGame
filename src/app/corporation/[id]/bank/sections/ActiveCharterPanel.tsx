@@ -113,6 +113,7 @@ function EarningsBreakdown({ data, onTreasury }: { data: ConsolePayload; onTreas
   const loanInterest = charter.lastBankingLoanInterest ?? 0;
   const fees = charter.lastBankingLoanOriginationFees ?? 0;
   const underwritingFees = charter.lastBankingUnderwritingFees ?? 0;
+  const sovereignCoupons = charter.lastBankingSovereignCoupons ?? 0;
   const ibPaid = charter.lastBankingInterbankInterestPaid ?? 0;
   const ibReceived = charter.lastBankingInterbankInterestReceived ?? 0;
   const facility = charter.lastBankingFacilityInterest ?? 0;
@@ -193,6 +194,13 @@ function EarningsBreakdown({ data, onTreasury }: { data: ConsolePayload; onTreas
             value={formatBankMoney(underwritingFees, currency)}
             tooltip="Fees are counted only for proceeds funded by completed market fills."
             aboutLabel="Underwriting fees"
+          />
+          <EarningsRow
+            label="Treasury bill coupons"
+            detail="Funded sovereign coupons paid to this charter. Maturity principal is not income."
+            value={formatBankMoney(sovereignCoupons, currency)}
+            tooltip="Counted only when the Treasury has funded the coupon and the bank vault is credited."
+            aboutLabel="Treasury bill coupons"
           />
           <EarningsRow
             label="Bottom line"

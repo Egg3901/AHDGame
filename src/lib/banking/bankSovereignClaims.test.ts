@@ -763,4 +763,64 @@ describe("bank sovereign claims", () => {
     expect(budget(memory).bankSovereignClaims).toHaveLength(1);
     expect(vault(memory)).toBe(5);
   });
+
+  describe("realized coupon income", () => {
+    const total = (db: InMemoryDb) =>
+      (db.collection("corporations").docs[0].bankCharter as { sovereignCouponIncomeTotal?: number })
+        .sovereignCouponIncomeTotal;
+
+    it("credits a funded coupon to the epoch income counter in the same receipt as the vault", async () => {
+      const memory = world(couponClaim(10));
+      await settleBankSovereignClaims(memory as unknown as Db, budget(memory), 13);
+      expect(vault(memory)).toBe(15);
+      expect(total(memory)).toBe(10);
+    });
+
+    it("does not double count a replayed settlement after a crash past the bank credit", async () => {
+      const claim = couponClaim(10);
+      const memory = world(claim);
+      const crash = withInjectedCrash(memory, {
+        collection: "corporations",
+        op: "updateOne",
+        onCall: 4,
+        afterWrite: true,
+      });
+      await expect(
+        settleBankSovereignClaims(crash.db as unknown as Db, budget(memory), 13)
+      ).rejects.toThrow("crash");
+      expect(total(memory)).toBe(10);
+      await settleBankSovereignClaims(memory as unknown as Db, budget(memory), 14);
+      expect(vault(memory)).toBe(15);
+      expect(total(memory)).toBe(10);
+    });
+
+    it("books nothing for an unfunded coupon until it is actually paid", async () => {
+      const memory = world(couponClaim(120), 100);
+      await settleBankSovereignClaims(memory as unknown as Db, budget(memory), 13);
+      expect(total(memory)).toBeUndefined();
+    });
+
+    it("treats maturity principal as a balance-sheet transfer, not income", async () => {
+      const claim: BankSovereignClaim = {
+        ...couponClaim(10),
+        id: "bank-sovereign-maturity:650000000000000000000002:650000000000000000000001:4",
+        kind: "maturity",
+        bondId: "650000000000000000000002",
+      };
+      const memory = world(claim);
+      await settleBankSovereignClaims(memory as unknown as Db, budget(memory), 13);
+      expect(vault(memory)).toBe(15);
+      expect(total(memory)).toBeUndefined();
+    });
+
+    it("does not give an old epoch's coupon to a replacement charter", async () => {
+      const memory = world(couponClaim(10));
+      await memory
+        .collection("corporations")
+        .updateOne({ _id: bankId }, { $set: { "bankCharter.charteredTurn": 5 } });
+      await settleBankSovereignClaims(memory as unknown as Db, budget(memory), 13);
+      expect(total(memory)).toBeUndefined();
+      expect(vault(memory)).toBe(5);
+    });
+  });
 });

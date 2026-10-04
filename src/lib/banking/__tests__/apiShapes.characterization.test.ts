@@ -328,6 +328,7 @@ describe("GET /api/banking/corporation/[id]", () => {
         "lastBankingInterbankInterestReceived",
         "lastBankingLoanInterest",
         "lastBankingLoanOriginationFees",
+        "lastBankingSovereignCoupons",
         "lastBankingUnderwritingFees",
         "lastBankingWriteoffs",
         "lendingOffset",

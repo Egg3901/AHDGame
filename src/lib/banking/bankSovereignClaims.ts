@@ -15,6 +15,7 @@ import {
 } from "@/lib/banking/settlementJournal";
 import { settleAtomicDocumentTransition } from "@/lib/banking/atomicDocumentSettlement";
 import { oid, type BankingTransition } from "@/lib/banking/rules/boundary";
+import { sovereignClaimIncome } from "@/lib/banking/rules/sovereignCouponIncome";
 
 /** Add a stable principal claim before the legacy holder payout loop can run. */
 export async function addBankMaturityClaims(
@@ -445,6 +446,7 @@ async function ensureLedgerWitness(
 
 function bankPayoutTransition(claim: BankSovereignClaim, attemptTurn: number): BankingTransition {
   const key = `${claim.id}:bank:${attemptTurn}`;
+  const couponIncome = sovereignClaimIncome(claim.kind, claim.amountLocal);
   const projection: BankingTransition["projections"][number] = {
     collection: "corporations",
     filter: { _id: oid(claim.bankId) },
@@ -452,6 +454,9 @@ function bankPayoutTransition(claim: BankSovereignClaim, attemptTurn: number): B
       $inc: {
         [escrowPath(claim)]: -claim.amountLocal,
         "bankCharter.cashReserves": claim.amountLocal,
+        // Only a funded coupon is earnings. It rides the same atomic write as
+        // the cash so a crash or replay can never split income from the vault.
+        ...(couponIncome > 0 ? { "bankCharter.sovereignCouponIncomeTotal": couponIncome } : {}),
       },
     },
     note: `Atomically release funded sovereign ${claim.kind} cash to the matching charter epoch`,

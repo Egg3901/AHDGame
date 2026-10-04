@@ -81,6 +81,7 @@ import { isDepositTakingCharter, isNamedLendingCharter } from "@/lib/banking/cha
 import { charterCapabilities, charterMay } from "@/lib/banking/rules/capabilities";
 import { getCashReserves, bankEquity } from "@/lib/banking/bankCash";
 import { processDeadBankLoans } from "@/lib/banking/deadBankLoans";
+import { unbookedSovereignCouponIncome } from "@/lib/banking/rules/sovereignCouponIncome";
 import { loanCharterEpoch, loanCharterEpochFilter } from "@/lib/banking/loanEpoch";
 import { turnMoveKey, type MoneyTarget } from "@/lib/banking/moneyMove";
 import {
@@ -923,6 +924,9 @@ async function processOneBank(
     corp.bankCharter?.lastBankingUnderwritingFeesTurn === turn
       ? (corp.bankCharter.lastBankingUnderwritingFees ?? 0)
       : 0;
+  // Coupons the Treasury phase (or an earlier BondTurn) paid since the last
+  // stamp. Read from the live document so a payout between passes is kept.
+  const sovereignCouponsForTurn = unbookedSovereignCouponIncome(corp.bankCharter ?? {});
 
   await db.collection<Corporation>("corporations").updateOne(
     {
@@ -951,7 +955,8 @@ async function processOneBank(
           result.depositInterestPaid -
           result.insurancePremiumPaid -
           result.defaultsWrittenOff +
-          underwritingFeesForTurn,
+          underwritingFeesForTurn +
+          sovereignCouponsForTurn,
         "bankCharter.lastBankingIncomeTurn": turn,
         // The per-turn split behind the net above, so the console can show
         // interest paid vs earned from the ledger instead of estimating.
@@ -967,8 +972,12 @@ async function processOneBank(
         "bankCharter.lastBankingFacilityInterest": 0,
         "bankCharter.lastBankingInsurancePremium": result.insurancePremiumPaid,
         "bankCharter.lastBankingWriteoffs": result.defaultsWrittenOff,
+        "bankCharter.lastBankingSovereignCoupons": sovereignCouponsForTurn,
         updatedAt: new Date(),
       },
+      ...(sovereignCouponsForTurn > 0
+        ? { $inc: { "bankCharter.sovereignCouponIncomeBooked": sovereignCouponsForTurn } }
+        : {}),
     }
   );
 
@@ -978,7 +987,8 @@ async function processOneBank(
     result.depositInterestPaid -
     result.insurancePremiumPaid -
     result.defaultsWrittenOff +
-    underwritingFeesForTurn;
+    underwritingFeesForTurn +
+    sovereignCouponsForTurn;
 
   return result;
 }
@@ -1080,6 +1090,7 @@ async function processLoanBookOnlyBank(
   const serviced = await timedBankingStage(db, turn, "loanServicing", () =>
     serviceNamedLoanBook(db, turn, corp, currency, charter.charteredTurn)
   );
+  const sovereignCouponsForTurn = unbookedSovereignCouponIncome(charter);
 
   await db.collection<Corporation>("corporations").updateOne(
     {
@@ -1101,7 +1112,8 @@ async function processLoanBookOnlyBank(
           serviced.writtenOff +
           (charter.lastBankingUnderwritingFeesTurn === turn
             ? (charter.lastBankingUnderwritingFees ?? 0)
-            : 0),
+            : 0) +
+          sovereignCouponsForTurn,
         "bankCharter.lastBankingIncomeTurn": turn,
         // No deposit base, so no deposit interest and no premium; the loan
         // split still applies for the console breakdown.
@@ -1117,8 +1129,12 @@ async function processLoanBookOnlyBank(
         "bankCharter.lastBankingFacilityInterest": 0,
         "bankCharter.lastBankingInsurancePremium": 0,
         "bankCharter.lastBankingWriteoffs": serviced.writtenOff,
+        "bankCharter.lastBankingSovereignCoupons": sovereignCouponsForTurn,
         updatedAt: new Date(),
       },
+      ...(sovereignCouponsForTurn > 0
+        ? { $inc: { "bankCharter.sovereignCouponIncomeBooked": sovereignCouponsForTurn } }
+        : {}),
     }
   );
   return serviced;

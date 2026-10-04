@@ -173,6 +173,12 @@ export interface BankCharter {
   lastBankingInterbankInterestReceived?: number;
   /** CB margin + discount-window interest due this pass (expense). */
   lastBankingFacilityInterest?: number;
+  /** Funded sovereign coupon cash booked into lastBankingIncome this pass (income). */
+  lastBankingSovereignCoupons?: number;
+  /** Cumulative funded coupon cash paid to this charter epoch, written with the vault credit. */
+  sovereignCouponIncomeTotal?: number;
+  /** Portion of `sovereignCouponIncomeTotal` already booked by a banking stamp. */
+  sovereignCouponIncomeBooked?: number;
   /** Deposit-insurance premium paid this pass (expense). */
   lastBankingInsurancePremium?: number;
   /** Loan principal written off as defaults this pass (charge). */
