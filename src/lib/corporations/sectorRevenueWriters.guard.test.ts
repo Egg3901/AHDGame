@@ -204,14 +204,6 @@ const ALLOWED_WRITERS: Record<string, WriterEntry> = {
   },
 
   // ─── Reviewed by the concurrent plants sweeps (already plants-aware) ─────
-  "src/lib/banking/constructionBuildEffects.ts": {
-    writeSites: 1,
-    status: "plants-gated",
-    reason:
-      "GREP FALSE POSITIVE: the zero-revenue insert initializes unownedSectors, " +
-      "whose construction draw uses headroomUnits. The corporateSectors writes " +
-      "debit construction escrow and mark effectsPaid; neither writes sector revenue.",
-  },
   "src/lib/turn/unownedSectorGrowth.ts": {
     writeSites: 2,
     status: "plants-gated",
@@ -355,6 +347,14 @@ const ALLOWED_WRITERS: Record<string, WriterEntry> = {
       "plants: the whole run returns early when marketSystemMode is at the plants tier " +
       "(revenue is derived there and restated in host currency every turn), and any " +
       "individual row with `plantsStartTurn` stamped is skipped by the planner.",
+  },
+  "src/lib/banking/constructionBuildEffects.ts": {
+    writeSites: 1,
+    status: "plants-gated",
+    reason:
+      "GREP FALSE POSITIVE: the detected revenue literal initializes an `unownedSectors` " +
+      "construction market bucket at zero. The corporateSectors projection only marks " +
+      "construction financing effects as paid and does not write sector revenue.",
   },
 };
 

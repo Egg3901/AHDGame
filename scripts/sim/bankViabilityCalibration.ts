@@ -74,7 +74,7 @@ const TURNS = 480;
 
 const us1991Budget = (() => {
   const budget = getInitialNationalBudgetsForPreset("1991-default").find(
-    (budget) => budget.countryId === "US"
+    (entry) => entry.countryId === "US"
   );
   if (!budget) throw new Error("The 1991 US national budget seed is missing");
   return budget;
@@ -862,7 +862,8 @@ const scenarios: Scenario[] = [
 ];
 
 for (const scenario of scenarios) {
-  console.log(JSON.stringify({ ...scenario, ...simulate(scenario) }));
+  const { name, ...inputs } = scenario;
+  console.log(JSON.stringify({ name, ...inputs, ...simulate(scenario) }));
 }
 console.log(
   JSON.stringify({
