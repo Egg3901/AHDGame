@@ -8,3 +8,4 @@
 - [ ] New/changed API routes have integration tests
 - [ ] `CHANGELOG.md` entry added (if player-visible)
 - [ ] No balance constants changed — or a worldsim report is attached
+- [ ] Turn performance change: aged-world gate verdict pasted (`npm run perf:aged-benchmark -- ... --baseline before.json`, see `scripts/perf/aged-benchmark.ts`), or not a turn-path change
