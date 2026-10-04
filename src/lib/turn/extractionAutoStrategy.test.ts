@@ -671,6 +671,138 @@ describe("processExtractionAutoStrategy", () => {
     expect(db.collectionMocks.corporateSectors.bulkWrite).not.toHaveBeenCalled();
   });
 
+  function seedForecastMine(options: {
+    mode: "off" | "realization" | "ledger" | "clearing" | "plants";
+    freight?: "off" | "active";
+    ironRatio?: number;
+    rareRatio?: number;
+    ironReachableRatio?: number;
+    inputPricePartition?: boolean;
+    count?: number;
+  }) {
+    db.collectionMocks.gameConfig.findOne.mockResolvedValue({
+      marketSystemMode: options.mode,
+      freightSettlementMode: options.freight ?? "off",
+      marketGovernorCap: 1,
+    });
+    const corpId = new ObjectId();
+    const priceCursor = cursor([
+      {
+        commodity: "iron",
+        globalSupply: 1000,
+        globalDemand: 1000,
+        globalPrice: (options.ironRatio ?? 1) * 100,
+        basePrice: 100,
+        reachablePrices: { US: (options.ironReachableRatio ?? 1) * 100 },
+      },
+      {
+        commodity: "rare_earth",
+        globalSupply: 1000,
+        globalDemand: 1000,
+        globalPrice: (options.rareRatio ?? 1) * 100,
+        basePrice: 100,
+        reachablePrices: { US: 225 },
+      },
+      {
+        commodity: "chemicals",
+        globalSupply: 1000,
+        globalDemand: 1000,
+        globalPrice: options.inputPricePartition ? 25 : 100,
+        basePrice: 100,
+        reachablePrices: options.inputPricePartition ? { US: 2000 } : undefined,
+        stateInputAvailability: { HB: 0 },
+      },
+    ]);
+    db.collectionMocks.commodityPrices.find.mockReturnValue(priceCursor);
+    db.collectionMocks.stateResourceCapacity.find.mockReturnValue(
+      cursor([{ stateId: "HB", countryId: "US", resources: { iron: 1e6, rare_earth: 1e6 } }])
+    );
+    db.collectionMocks.corporations.find.mockReturnValue(cursor([npcCorp(corpId)]));
+    db.collectionMocks.corporateSectors.find.mockReturnValueOnce(cursor([])).mockReturnValueOnce(
+      cursor(
+        Array.from({ length: options.count ?? 1 }, () => ({
+          _id: new ObjectId(),
+          corporationId: corpId,
+          stateId: "HB",
+          strategyId: "iron_mining",
+          clearingStartTurn: 0,
+          throughputStartTurn: 0,
+        }))
+      )
+    );
+    db.collection("tradeFlowSnapshots").findOne.mockResolvedValue(null);
+    return priceCursor;
+  }
+
+  it.each(["off", "realization", "ledger"] as const)(
+    "uses the correct price tier in %s without loading clearing books",
+    async (mode) => {
+      const prices = seedForecastMine({ mode, ironRatio: 3, rareRatio: 20 });
+      const result = await processExtractionAutoStrategy(db as unknown as Db, 300, ENABLED);
+
+      // Legacy raw ratios favor rare earth; damped global prices keep iron.
+      // Reachable prices would favor rare earth, so this also catches a wrong tier.
+      expect(result.restrategized).toBe(mode === "off" ? 1 : 0);
+      expect(db.collectionMocks.tradeFlowSnapshots.findOne).not.toHaveBeenCalled();
+      expect(db.collectionMocks.gameConfig.findOne).toHaveBeenCalledTimes(1);
+      expect(db.collectionMocks.commodityPrices.find).toHaveBeenCalledTimes(1);
+      expect(db.collectionMocks.commodityPrices.find.mock.calls[0][0].commodity.$in).toEqual(
+        expect.arrayContaining(["energy", "chemicals", "steel", "iron", "rare_earth"])
+      );
+      expect(prices.project).toHaveBeenCalledWith(
+        expect.objectContaining({ stateInputAvailability: 1, reachablePrices: 1 })
+      );
+    }
+  );
+
+  it.each(["off", "active"] as const)(
+    "uses local input delivery only with active freight (%s)",
+    async (freight) => {
+      seedForecastMine({ mode: "clearing", freight });
+      const result = await processExtractionAutoStrategy(db as unknown as Db, 300, ENABLED);
+
+      expect(result.restrategized).toBe(freight === "active" ? 0 : 1);
+      expect(db.collectionMocks.tradeFlowSnapshots.findOne).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  it("reads clearing books once for the cohort and caps forecast switches at three", async () => {
+    seedForecastMine({ mode: "clearing", count: 8 });
+    db.collectionMocks.tradeFlowSnapshots.findOne.mockResolvedValue({
+      books: {
+        US: {
+          iron: { supply: 1000, domesticDemand: 100, exports: 0 },
+          rare_earth: { supply: 1000, domesticDemand: 1000, exports: 0 },
+        },
+      },
+    });
+
+    const result = await processExtractionAutoStrategy(db as unknown as Db, 300, ENABLED);
+
+    expect(result.restrategized).toBe(3);
+    expect(result.restrategizedByStrategy).toEqual({ rare_earth_mining: 3 });
+    expect(db.collectionMocks.corporateSectors.bulkWrite.mock.calls[0][0]).toHaveLength(3);
+    expect(db.collectionMocks.tradeFlowSnapshots.findOne).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.tradeFlowSnapshots.findOne).toHaveBeenCalledWith(
+      { books: { $exists: true } },
+      { sort: { turn: -1 }, projection: { books: 1 } }
+    );
+  });
+
+  it("caps plants input prices at world while retaining reachable output prices", async () => {
+    seedForecastMine({
+      mode: "plants",
+      ironReachableRatio: 1.5,
+      inputPricePartition: true,
+    });
+
+    const result = await processExtractionAutoStrategy(db as unknown as Db, 300, ENABLED);
+
+    // Correct input bills make rare earth worth retooling into. Billing its
+    // chemicals at the uncapped reachable price would keep the current iron mine.
+    expect(result.restrategizedByStrategy).toEqual({ rare_earth_mining: 1 });
+  });
+
   it("skips a sector whose state has no deposit for the shortage resource", async () => {
     db.collectionMocks.commodityPrices.find.mockReturnValue(
       cursor([{ commodity: "rare_earth", globalSupply: 200, globalDemand: 1000, stateSupply: {} }])
