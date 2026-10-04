@@ -56,6 +56,8 @@ import type { SeedDiagnosticCheck } from "@/lib/admin/seedDiagnostic/types";
 import { presetDefaultsToFoundingPhase } from "@/lib/seeds/presetSelector";
 import type { GameIteration, GameState } from "@/lib/db/types/gameState";
 import { isPresetAnchorDate, type ResetStartDate } from "@/lib/admin/resetStartDate";
+import { getValidatedEnv } from "@/lib/env";
+import { assertResetDatabaseMatchesApplication } from "@/lib/admin/resetPreflight";
 
 export interface ResetAndBootstrapOptions {
   /** 1991 only: leave political offices vacant for player-created parties. */
@@ -137,6 +139,15 @@ export interface ResetAndBootstrapResult {
 export async function resetAndBootstrapGameWorld(
   options: ResetAndBootstrapOptions
 ): Promise<ResetAndBootstrapResult> {
+  const applicationEnv = getValidatedEnv();
+  if (options.db.databaseName) {
+    assertResetDatabaseMatchesApplication(
+      applicationEnv,
+      options.db.databaseName,
+      "connected database"
+    );
+  }
+
   const {
     db,
     mode = "historical",

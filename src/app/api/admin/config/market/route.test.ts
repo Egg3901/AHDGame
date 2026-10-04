@@ -670,6 +670,96 @@ describe("GET/PATCH /api/admin/config/market — #1001 sandbox-only gates", () =
   );
 });
 
+describe("PATCH /api/admin/config/market: media slate prerequisites", () => {
+  let db: MockDb;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    db = createMockDb();
+    db.collection("gameConfig");
+    db.collection("gameState");
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+    const { requireAdmin } = await import("@/lib/api/requireAdmin");
+    vi.mocked(requireAdmin).mockResolvedValue({
+      ok: true,
+      admin: { username: "admin" },
+    } as never);
+  });
+
+  it("rejects slate activation when media models are not active", async () => {
+    db.collectionMocks.gameConfig!.findOne.mockResolvedValue({
+      _id: "default",
+      marketSystemMode: "clearing",
+      mediaOperatingModelsEnabled: false,
+      mediaProductSlatesEnabled: false,
+      brandLoyaltyEnabled: true,
+      brandLoyaltySliceEnabled: true,
+      qualityPremiumPricingEnabled: true,
+    });
+    const { PATCH } = await import("./route");
+    const response = await PATCH(
+      makePatchRequest({ mode: "clearing", mediaProductSlatesEnabled: true })
+    );
+
+    expect(response.status).toBe(400);
+    expect(db.collectionMocks.gameConfig!.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("allows same-request prerequisite activation in one guarded config write", async () => {
+    db.collectionMocks.gameConfig!.findOne.mockResolvedValue({
+      _id: "default",
+      marketSystemMode: "clearing",
+    });
+    const { PATCH } = await import("./route");
+    const response = await PATCH(
+      makePatchRequest({
+        mode: "clearing",
+        mediaOperatingModelsEnabled: true,
+        mediaProductSlatesEnabled: true,
+        brandLoyaltyEnabled: true,
+        brandLoyaltySliceEnabled: true,
+        qualityPremiumPricingEnabled: true,
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(db.collectionMocks.gameConfig!.updateOne).toHaveBeenCalledWith(
+      { _id: "default" },
+      {
+        $set: expect.objectContaining({
+          mediaOperatingModelsEnabled: true,
+          mediaProductSlatesEnabled: true,
+          brandLoyaltyEnabled: true,
+          brandLoyaltySliceEnabled: true,
+          qualityPremiumPricingEnabled: true,
+        }),
+      },
+      { upsert: false }
+    );
+  });
+
+  it("fails activation if the guarded write loses a prerequisite race", async () => {
+    db.collectionMocks.gameConfig!.findOne.mockResolvedValue({
+      _id: "default",
+      marketSystemMode: "clearing",
+      mediaOperatingModelsEnabled: true,
+      mediaProductSlatesEnabled: false,
+      brandLoyaltyEnabled: true,
+      brandLoyaltySliceEnabled: true,
+      qualityPremiumPricingEnabled: true,
+    });
+    db.collectionMocks.gameConfig!.updateOne.mockResolvedValue({ matchedCount: 0 } as never);
+    const { PATCH } = await import("./route");
+    const response = await PATCH(
+      makePatchRequest({ mode: "clearing", mediaProductSlatesEnabled: true })
+    );
+
+    expect(response.status).toBe(409);
+    expect(db.collectionMocks.gameState!.updateOne).not.toHaveBeenCalled();
+  });
+});
+
 /**
  * A mode change has to be answerable in TURNS, not just wall-clock.
  *

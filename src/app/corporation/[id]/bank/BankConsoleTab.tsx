@@ -106,6 +106,39 @@ export function BankConsoleTab({ corporationId, isCeo }: Props) {
             showToast={showToast}
           />
           <CapsPanel data={data} />
+          {data.primaryUnderwritingEnabled && (
+            <section className="space-y-3 rounded-lg border border-border bg-surface p-4">
+              <div>
+                <h3 className="text-sm font-semibold">Funded underwriting receipts</h3>
+                <p className="mt-1 text-xs text-muted">
+                  Fees are recorded only after the market pays for equity or corporate bond units.
+                </p>
+              </div>
+              {data.underwritingReceipts?.length ? (
+                <ul className="divide-y divide-border">
+                  {[...data.underwritingReceipts].reverse().map((receipt) => (
+                    <li
+                      key={receipt.key}
+                      className="flex flex-wrap justify-between gap-x-4 gap-y-1 py-2 text-xs"
+                    >
+                      <span>
+                        {receipt.issuerName} ·{" "}
+                        {receipt.instrumentType === "equity" ? "Shares" : "Corporate bond"} · T
+                        {receipt.turn}
+                      </span>
+                      <span className="tabular-nums">
+                        Gross{" "}
+                        {formatUnderwritingMoney(receipt.grossPlacedLocal, receipt.currencyCode)}
+                        {" · "}fee {formatUnderwritingMoney(receipt.feeLocal, receipt.currencyCode)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-muted">No funded placements yet.</p>
+              )}
+            </section>
+          )}
         </>
       ) : (
         <CharterIssueForm
@@ -118,4 +151,16 @@ export function BankConsoleTab({ corporationId, isCeo }: Props) {
       )}
     </div>
   );
+}
+
+function formatUnderwritingMoney(amount: number, currencyCode: string): string {
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: currencyCode,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  } catch {
+    return `${currencyCode} ${amount.toLocaleString()}`;
+  }
 }

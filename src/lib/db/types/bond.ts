@@ -69,6 +69,8 @@ export interface Bond {
    */
   requestedUnits?: number;
   unsoldUnits?: number;
+  /** Frozen issuer-selected underwriter terms for future funded primary fills. */
+  primaryUnderwriting?: import("@/lib/banking/underwritingTypes").PrimaryUnderwritingOffer;
   primaryFillRatio?: number;
   /** Units held off-market by the issuing currency's central bank through QE. */
   centralBankHoldings?: number;

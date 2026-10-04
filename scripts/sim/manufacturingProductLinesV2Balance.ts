@@ -4,6 +4,7 @@ import {
   allocateManufacturingResearchSpend,
   buildManufacturedSectorOutput,
   manufacturingDevelopmentThresholdAnchor,
+  allocatedManufacturingCapitalAnchor,
   scaleManufacturedSectorOutput,
   MANUFACTURING_DEVELOPMENT_ELAPSED_TURNS,
   type ManufacturingLifecycleStage,
@@ -12,8 +13,12 @@ import { chooseNppManufacturingProduct } from "../../src/lib/products/rules/manu
 import { COMMODITY_BASE_PRICES, type CommodityType } from "../../src/lib/constants/commodities";
 import { computeClearingFactors } from "../../src/lib/market/clearing";
 
+import { sectorCapacityBookAnchor } from "../../src/lib/corporations/sectorProfitBasis";
+import { getEraUnitScale } from "../../src/lib/constants/sectorSeedEra";
+
 const allocatedCapitalStock = 100_000;
-const projectCost = manufacturingDevelopmentThresholdAnchor(allocatedCapitalStock);
+const allocatedCapitalAnchor = 100_000;
+const projectCost = manufacturingDevelopmentThresholdAnchor(allocatedCapitalAnchor);
 const basePrices = { steel: 100, building_materials: 50, vehicles: 250 };
 const balanceBasePrices = { ...COMMODITY_BASE_PRICES, ...basePrices };
 const supplyRates = { steel: 0.4, building_materials: 0.2 };
@@ -231,6 +236,34 @@ const nppWinner = chooseNppManufacturingProduct([
   },
 ])?.kindId;
 
+const admissionQuotes = [
+  { label: "Stored paid basis", year: 1991, preset: "1991-default", stored: 50_000 },
+  { label: "Legacy 1953 vehicle plant", year: 1953, preset: "1953-default", stored: undefined },
+  { label: "Legacy 1991 vehicle plant", year: 1991, preset: "1991-default", stored: undefined },
+].map((row) => {
+  const capitalAnchor = sectorCapacityBookAnchor(
+    {
+      sectorType: "manufacturing",
+      industryModel: "vehicles",
+      strategyId: "standard",
+      capitalStock: 1000,
+      capacityBookAnchor: row.stored,
+    },
+    row.year,
+    getEraUnitScale(row.preset)
+  );
+  const allocated = allocatedManufacturingCapitalAnchor(
+    [{ sectorId: "plant", developmentCapitalAnchor: capitalAnchor }],
+    [{ sectorId: "plant", share: 0.5 }]
+  );
+  return {
+    ...row,
+    capitalAnchor,
+    allocated,
+    cost: manufacturingDevelopmentThresholdAnchor(allocated),
+  };
+});
+
 const lines = [
   "# Manufacturing product lines v2 deterministic balance report",
   "",
@@ -238,11 +271,24 @@ const lines = [
   "",
   "## Development funding",
   "",
-  `- Allocated physical capital stock: ${money(allocatedCapitalStock)} anchor units.`,
+  `- Allocated monetary plant capital: ${money(allocatedCapitalAnchor)} anchor units.`,
+  `- Physical capacity stock: ${money(allocatedCapitalStock)} capacity units, kept separate from currency.`,
   `- Development threshold: ${money(projectCost)} anchor units (5% of allocated capital). Elapsed threshold: ${MANUFACTURING_DEVELOPMENT_ELAPSED_TURNS} receipts.`,
   `- Funded at 500 anchor units of paid R&D per turn: ${money(funded.paidDevelopment)} goes to development, ${money(funded.genericResearch)} continues to generic research, and launch occurs on receipt ${funded.launchTurn}.`,
   `- Unfunded for ${MANUFACTURING_DEVELOPMENT_ELAPSED_TURNS} turns: ${money(unfunded.paidDevelopment)} development spend and stage remains ${unfunded.project.stage}.`,
   "- Development is a separate capitalized cash investment, limited to available cash and paid once per turn. The matching paid-R&D allocation funds development first; any remainder continues to generic research.",
+  "",
+  "## New-project admission quotes",
+  "",
+  "These examples use production capital valuation and allocation rules. Every plant holds 1,000 physical capacity units and allocates 50%. Stored paid capital is used when present; legacy rows use the strategy and era-priced replacement value. Existing project quotes are not repriced.",
+  "",
+  "<!-- prettier-ignore -->",
+  "| Basis | Plant capital (anchor) | Allocated capital (anchor) | Development quote (anchor) |",
+  "| --- | ---: | ---: | ---: |",
+  ...admissionQuotes.map(
+    (row) =>
+      `| ${row.label} | ${money(row.capitalAnchor)} | ${money(row.allocated)} | ${money(row.cost)} |`
+  ),
   "",
   "## One representative operating day by stage",
   "",

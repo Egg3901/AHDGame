@@ -4,6 +4,8 @@ export interface GameConfig {
   _id: string;
   /** Enables product-project reads and output adapters; absent remains off. */
   productLinesV2Enabled?: boolean;
+  /** Enables media product project reads and bounded quality/brand overlays; absent remains off. */
+  mediaProductSlatesEnabled?: boolean;
   /** Explicit fresh-reset marker for the 1991 automobile-to-vehicle-model seed. */
   fresh1991VehicleModelSeed?: {
     preset: "1991-default";
@@ -223,6 +225,8 @@ export interface GameConfig {
   bankConstructionAdmissionClosingToken?: string;
   /** Enable funded sovereign-bill holdings for private bank treasuries. Default off. */
   bankTreasuryEnabled?: boolean;
+  /** Fund unplaced sovereign units from investment-bank vault cash. Default off. */
+  bankSovereignPrimaryEnabled?: boolean;
   /** Experimental funded spendable government-cash ledger. Absent means off. */
   treasuryCashLedgerEnabled?: boolean;
   /**
@@ -242,6 +246,8 @@ export interface GameConfig {
   bankPropTradingEnabled?: boolean;
   /** Size-priced forex prop orders and their fee journal. Default off. */
   bankPropForexFeesEnabled?: boolean;
+  /** Funded corporate primary-market underwriting fees. Default off. */
+  bankUnderwritingEnabled?: boolean;
   /** Kill switch: bank-failure contagion cascade. Default on when banking is on. */
   bankContagionEnabled?: boolean;
   /** Funded bank failures affect approval and consumer confidence. Default off. */

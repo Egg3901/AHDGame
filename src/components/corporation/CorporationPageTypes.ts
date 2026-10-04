@@ -166,6 +166,14 @@ export interface CorporationDetail {
   typeSwitchCooldownUntilTurn?: number | null;
   typeSwitchTurn?: number | null;
   currentTurn: number;
+  /** Present only for the owning CEO when primary underwriting is enabled. */
+  primaryUnderwritingEnabled?: boolean;
+  primaryUnderwritingMandate?: {
+    bankCorporationId: string;
+    charteredTurn: number;
+    currencyCode: string;
+    feeRate: number;
+  } | null;
   typeLabel: string;
   headquartersState: string;
   headquartersStateName: string;
@@ -286,6 +294,8 @@ export interface CorporationDetail {
   contractIssuanceEnabled?: boolean;
   /** Global plants-tier feature gate for the manufacturing Product Studio. */
   productLinesV2Enabled?: boolean;
+  /** Global feature gate for the paid Media & Entertainment Product Studio. */
+  mediaProductSlatesEnabled?: boolean;
   /** ID of an open privatization vote, if any. Used to mount the vote panel. */
   openPrivatizationVoteId?: string | null;
   /**

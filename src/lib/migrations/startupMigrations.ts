@@ -13,6 +13,7 @@ import { migration as bankTreasuryTradeIndexes } from "./entries/2026-10-04-bank
 import { migration as industryModelMarketIndexes } from "./entries/2026-10-04-industry-model-market-indexes";
 import { migration as mediaDiscriminatorMarketIndexes } from "./entries/2026-10-04-media-discriminator-market-indexes";
 import { migration as constructionServiceLeaseIndex } from "./entries/2026-10-04-construction-service-lease-index";
+import { migration as mediaProductProjectsV1Index } from "./entries/2026-10-04-media-product-projects-v1-index";
 import { runMigrations, type RunSummary } from "./runner";
 import type { Migration } from "./types";
 
@@ -51,6 +52,7 @@ export const REQUIRED_STARTUP_MIGRATIONS: readonly Migration[] = [
   industryModelMarketIndexes,
   mediaDiscriminatorMarketIndexes,
   constructionServiceLeaseIndex,
+  mediaProductProjectsV1Index,
 ];
 
 export async function runRequiredStartupMigrations(db: Db): Promise<RunSummary> {

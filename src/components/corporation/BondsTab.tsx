@@ -22,6 +22,7 @@ import {
   Th,
 } from "./dense/DenseKit";
 import { corpIncomeBasis } from "./financials/financialsModel";
+import { PrimaryUnderwritingMandateControl } from "./PrimaryUnderwritingMandateControl";
 
 interface BondsTabProps {
   bondInfo: BondInfo | null;
@@ -120,9 +121,11 @@ export default function BondsTab({
       const data = await res.json();
       if (res.ok) {
         setBondActionSuccess(
-          typeof data.unitsUnsold === "number" && data.unitsUnsold > 0
-            ? `Bond issued: ${fmtMoney(data.faceValue)} at ${data.couponRate}% coupon. The market took ${Math.round((data.fillRatio ?? 0) * 100)}% up front; ${data.unitsUnsold.toLocaleString("en-US")} units are still placing and will fund as they sell.`
-            : `Bond issued: ${fmtMoney(data.faceValue)} at ${data.couponRate}% coupon`
+          `${
+            typeof data.unitsUnsold === "number" && data.unitsUnsold > 0
+              ? `Bond issued: ${fmtMoney(data.faceValue)} at ${data.couponRate}% coupon. The market took ${Math.round((data.fillRatio ?? 0) * 100)}% up front; ${data.unitsUnsold.toLocaleString("en-US")} units are still placing and will fund as they sell.`
+              : `Bond issued: ${fmtMoney(data.faceValue)} at ${data.couponRate}% coupon`
+          }${typeof data.underwritingFeeLocal === "number" ? ` Gross funded ${fmtMoney(data.grossPlacedLocal)}, fee ${fmtMoney(data.underwritingFeeLocal)}, net proceeds ${fmtMoney(data.issuerNetLocal)}.` : ""}`
         );
         setBondIssueFaceValue(0);
         onRefresh();
@@ -205,6 +208,9 @@ export default function BondsTab({
   return (
     <div className="space-y-6">
       {viewToggle}
+      {corporation.primaryUnderwritingEnabled === true && bondInfo.isCeo && (
+        <PrimaryUnderwritingMandateControl corpId={corpId} />
+      )}
 
       {bondInfo.imfFacility && (
         <DenseSection title="IMF restructuring facility" meta="replaces the retired bonds">
