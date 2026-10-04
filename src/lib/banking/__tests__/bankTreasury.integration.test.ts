@@ -205,6 +205,92 @@ describe("funded bank treasury settlement", () => {
     expect(balance(db).bond.holders).toEqual([]);
   });
 
+  it("reserves overlapping multi-lot sales atomically so a loser cannot strand units", async () => {
+    const db = world();
+    for (const [tradeId, units] of [
+      ["treasury-race-lot-a", 3],
+      ["treasury-race-lot-b", 4],
+    ] as const) {
+      await expect(
+        tradeBankTreasuryBill(db as unknown as Db, {
+          bankId: BANK,
+          bondId: BOND,
+          side: "buy",
+          units,
+          turn: TURN,
+          policy: POLICY,
+          tradeId,
+        })
+      ).resolves.toMatchObject({ status: "completed", units });
+    }
+
+    const originalCollection = db.collection("bonds");
+    let bondReads = 0;
+    let releaseReaders!: () => void;
+    const bothRead = new Promise<void>((resolve) => {
+      releaseReaders = resolve;
+    });
+    const gatedDb = {
+      collection(name: string) {
+        if (name !== "bonds") return db.collection(name);
+        return new Proxy(originalCollection, {
+          get(target, prop, receiver) {
+            const value = Reflect.get(target, prop, receiver);
+            if (prop !== "findOne" || typeof value !== "function")
+              return typeof value === "function" ? value.bind(target) : value;
+            return async (...args: unknown[]) => {
+              const observed = await value.apply(target, args);
+              if ((args[0] as { _id?: ObjectId } | undefined)?._id?.equals(BOND)) {
+                bondReads += 1;
+                if (bondReads === 2) releaseReaders();
+                if (bondReads <= 2) await bothRead;
+              }
+              return observed;
+            };
+          },
+        });
+      },
+    } as unknown as Db;
+
+    const [saleA, saleB] = await Promise.all([
+      tradeBankTreasuryBill(gatedDb, {
+        bankId: BANK,
+        bondId: BOND,
+        side: "sell",
+        units: 6,
+        turn: TURN,
+        policy: POLICY,
+        tradeId: "treasury-race-sale-a",
+      }),
+      tradeBankTreasuryBill(gatedDb, {
+        bankId: BANK,
+        bondId: BOND,
+        side: "sell",
+        units: 5,
+        turn: TURN,
+        policy: POLICY,
+        tradeId: "treasury-race-sale-b",
+      }),
+    ]);
+
+    expect([saleA.status, saleB.status].sort()).toEqual(["completed", "rejected"]);
+    const winner = saleA.status === "completed" ? saleA : saleB;
+    const loser = saleA.status === "rejected" ? saleA : saleB;
+    expect(winner.units).toBe(saleA.status === "completed" ? 6 : 5);
+    expect(
+      db
+        .collection("bankMoneyMoves")
+        .docs.find((row) => row._id === `bank-treasury:${loser.tradeId}:reserve`)
+    ).toMatchObject({ status: "rejected" });
+    const remaining = balance(db).bond.holders.filter((holder) => holder.charteredTurn === 20);
+    expect(
+      remaining.reduce((sum, holder) => sum + holder.units, 0),
+      JSON.stringify(balance(db).bond.holders)
+    ).toBe(7 - winner.units);
+    expect(remaining.every((holder) => !holder.bankTreasuryTradeId)).toBe(true);
+    expect(balance(db).bond.publicFloat).toBe(100 - (7 - winner.units));
+  });
+
   it("recovers a crash after the bank debit without charging twice", async () => {
     const db = world();
     const initialCash = balance(db).cash;

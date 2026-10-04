@@ -33,6 +33,7 @@ import {
   settleTransition,
   type SettlementResult,
 } from "@/lib/banking/settlementJournal";
+import { MONEY_MOVE_COLLECTION } from "@/lib/banking/moneyMove";
 import { settleAtomicDocumentTransition } from "@/lib/banking/atomicDocumentSettlement";
 import { oid, type BankingTransition } from "@/lib/banking/rules/boundary";
 
@@ -322,33 +323,43 @@ function reserveTransition(receipt: BankTreasuryTradeReceipt, bond: Bond): Banki
           },
           note: "Reserve sovereign float units for the bank purchase before cash moves",
         }
-      : (receipt.allocations ?? []).map((allocation) => ({
-          collection: "bonds",
-          filter: {
-            _id: oid(receipt.bondId.toHexString()),
-            holders: {
-              $elemMatch: {
-                bankId: receipt.bankId,
-                charteredTurn: receipt.charteredTurn,
-                bankTreasuryLotId: allocation.lotId,
-                bankTreasuryTradeId: { $exists: false },
-                units: { $gte: allocation.units },
-              },
+      : (() => {
+          const allocations = new Map(
+            (receipt.allocations ?? []).map((allocation) => [allocation.lotId, allocation.units])
+          );
+          const reservedHolders = (bond.holders ?? []).map((holder) => {
+            const lotId = holder.bankTreasuryLotId;
+            const allocation =
+              holder.bankId?.equals(receipt.bankId) &&
+              holder.charteredTurn === receipt.charteredTurn &&
+              lotId &&
+              !holder.bankTreasuryTradeId
+                ? (allocations.get(lotId) ?? 0)
+                : 0;
+            return allocation > 0 ? { ...holder, units: holder.units - allocation } : holder;
+          });
+          for (const allocation of receipt.allocations ?? []) {
+            reservedHolders.push({
+              ...position,
+              bankTreasuryLotId: allocation.lotId,
+              units: allocation.units,
+            });
+          }
+          return {
+            collection: "bonds",
+            // The whole observed holder array is the reservation guard. One
+            // sale either reserves every source lot or none of them, so a
+            // concurrent sale cannot strand a partially reserved receipt.
+            filter: {
+              _id: oid(receipt.bondId.toHexString()),
+              holders: bond.holders ?? [],
             },
-          },
-          update: {
-            $inc: { "holders.$.units": -allocation.units },
-            $push: {
-              holders: {
-                ...position,
-                bankTreasuryLotId: allocation.lotId,
-                units: allocation.units,
-              },
+            update: {
+              $set: { holders: reservedHolders, updatedAt: receipt.createdAt },
             },
-            $set: { updatedAt: receipt.createdAt },
-          },
-          note: `Reserve ${allocation.units} bank units from lot ${allocation.lotId}`,
-        }));
+            note: `Reserve all ${receipt.units} bank units across ${receipt.allocations?.length ?? 0} lots atomically`,
+          };
+        })();
   return {
     key,
     kind: "bank_treasury_trade_reservation",
@@ -616,6 +627,32 @@ async function finishTransition(db: Db, transition: BankingTransition): Promise<
     result = await resumeSettlement(db, transition.key);
   }
   return result;
+}
+
+/** Terminally reject a stale all-or-nothing inventory reservation. */
+async function rejectUnreservedTransition(
+  db: Db,
+  receipt: BankTreasuryTradeReceipt,
+  error: string
+): Promise<boolean> {
+  const bond = await db
+    .collection<Bond>("bonds")
+    .findOne({ _id: receipt.bondId }, { projection: { holders: 1 } });
+  const reservationLanded = (bond?.holders ?? []).some(
+    (holder) => holder.bankTreasuryTradeId === receipt._id
+  );
+  if (reservationLanded) return false;
+
+  const journal = db.collection<{ _id: string; status: string; legs?: unknown[] }>(
+    MONEY_MOVE_COLLECTION
+  );
+  const record = await journal.findOne({ _id: `bank-treasury:${receipt._id}:reserve` });
+  if (record?.status !== "partial" || (record.legs?.length ?? 0) !== 0) return false;
+  const rejected = await journal.updateOne(
+    { _id: record._id, status: "partial" },
+    { $set: { status: "rejected", error, completedAt: new Date() } }
+  );
+  return rejected.modifiedCount > 0;
 }
 
 async function paySaleEscrow(db: Db, receipt: BankTreasuryTradeReceipt): Promise<SettlementResult> {
@@ -924,7 +961,12 @@ async function runReceipt(
   }
 
   const reserve = reserveTransition(receipt, bond);
-  const reserved = await finishTransition(db, reserve);
+  let reserved = await finishTransition(db, reserve);
+  if (reserved.status === "partial") {
+    const error = "Bond inventory changed before the complete reservation landed";
+    if (await rejectUnreservedTransition(db, receipt, error))
+      reserved = { ...reserved, status: "rejected", error };
+  }
   if (reserved.status === "rejected") {
     await updateReceipt(db, receipt, "rejected", reserved.error);
     return {
