@@ -37,6 +37,7 @@ import { resolvePrimaryTurnsToEnd } from "@/lib/elections/primaryViewModel";
 import { allocateDelegates } from "@/lib/primaryDelegateAllocation";
 import { loadRegionalBonusMaps } from "@/lib/primaryRegionalBonusLoader";
 import { StateOrganizationPanel } from "./StateOrganizationPanel";
+import { NppAbbr } from "@/components/elections/NppAbbr";
 
 // This page is a live view over turn-processed delegate awards and per-state
 // projections. It must render from current DB state every request so its
@@ -526,7 +527,7 @@ export default async function PartyPrimaryStatePage({ params }: PageProps) {
                     </Link>
                     {r.candidate.isNPP && (
                       <span className="ml-2 rounded bg-purple-500/20 px-1.5 py-0.5 text-[10px] text-purple-400">
-                        NPP
+                        <NppAbbr />
                       </span>
                     )}
                     {r.candidate.primaryCampaignState === stateId && (

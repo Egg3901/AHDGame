@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui";
-import { LocalTime } from "@/components/time/LocalTime";
+import { GameMonthTime } from "@/components/time/GameMonthTime";
 import { PARTY_SECTION_HEADING_CLASS } from "@/components/party/partyPageStyles";
 
 /**
@@ -106,11 +106,7 @@ export function RecentActivityCard({ countryCode, partyId }: Props) {
                 <p className="truncate text-foreground">{item.summary}</p>
                 {item.detail && <p className="truncate text-body-sm text-muted">{item.detail}</p>}
               </div>
-              <LocalTime
-                value={item.createdAt}
-                options={{ dateStyle: "medium" }}
-                className="shrink-0 text-body-sm text-muted"
-              />
+              <GameMonthTime value={item.createdAt} className="shrink-0 text-body-sm text-muted" />
             </li>
           ))}
         </ul>

@@ -29,6 +29,7 @@ import {
   resolvePrimaryTurnsToEnd,
 } from "@/lib/elections/primaryViewModel";
 import { loadPrimaryPartyData, type PrimaryDetailViewer } from "@/lib/elections/primaryPartyDetail";
+import { NppAbbr } from "@/components/elections/NppAbbr";
 
 // Presidential primary standings can change every turn and after live player
 // actions (endorsements, surge, in-state campaigning), so cached route output
@@ -632,7 +633,7 @@ export default async function PartyPrimaryPage({ params, searchParams }: PagePro
                         </Link>
                         {s.candidate.isNPP && (
                           <span className="ml-2 rounded bg-purple-500/20 px-1.5 py-0.5 text-[10px] text-purple-400">
-                            NPP
+                            <NppAbbr />
                           </span>
                         )}
                       </td>

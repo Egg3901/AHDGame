@@ -16,6 +16,7 @@ import { Avatar } from "@/components/Avatar";
 import type { LegislatureMember, LegislatureCompositionSectionProps } from "./types";
 import { useCoalitionView, type CoalitionViewData } from "./useCoalitionView";
 import type { CountryId } from "@/lib/constants/countries";
+import { NppAbbr } from "@/components/elections/NppAbbr";
 
 type MemberSortOption = "region" | "name" | "seats";
 
@@ -54,7 +55,7 @@ const MemberListRow = memo(function MemberListRow({
           </Link>
           {member.isNPP && (
             <span className="rounded-full bg-card-border/60 px-2 py-0.5 text-[10px] text-muted">
-              NPP
+              <NppAbbr />
             </span>
           )}
           {leaderBadge && (

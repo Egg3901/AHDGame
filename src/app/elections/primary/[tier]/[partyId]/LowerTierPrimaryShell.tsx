@@ -5,6 +5,7 @@ import { useCallback, useMemo } from "react";
 import { TierSelector, type RaceTier } from "@/components/elections/primary/TierSelector";
 import { PrimaryElectoralMap, type PrimaryStateData } from "@/components/PrimaryElectoralMap";
 import { tierPrimaryRoute } from "@/lib/urls";
+import { NppAbbr } from "@/components/elections/NppAbbr";
 
 interface CandidateRow {
   candidateId: string;
@@ -174,7 +175,7 @@ export function LowerTierPrimaryShell({
                         </span>
                         {c.isNPP && (
                           <span className="rounded bg-purple-500/20 px-1 py-0.5 text-[9px] uppercase tracking-wide text-purple-300">
-                            NPP
+                            <NppAbbr />
                           </span>
                         )}
                       </div>
@@ -235,7 +236,7 @@ export function LowerTierPrimaryShell({
                         <span className="font-medium">{row.leader.candidateName}</span>
                         {row.leader.isNPP && (
                           <span className="rounded bg-purple-500/20 px-1 py-0.5 text-[9px] uppercase tracking-wide text-purple-300">
-                            NPP
+                            <NppAbbr />
                           </span>
                         )}
                       </span>

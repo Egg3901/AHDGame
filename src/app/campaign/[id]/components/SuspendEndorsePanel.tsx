@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Modal } from "@/components/ui";
-import { LocalTime } from "@/components/time/LocalTime";
+import { GameMonthTime } from "@/components/time/GameMonthTime";
 import { BLEND, FONT } from "@/components/blend/tokens";
 import {
   blendButtonStyle,
@@ -107,7 +107,7 @@ export function SuspendEndorsePanel({
               color: BLEND.mutedDimmer,
             }}
           >
-            Suspended <LocalTime value={suspendedAt} />
+            Suspended <GameMonthTime value={suspendedAt} />
           </div>
         )}
       </div>

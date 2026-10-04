@@ -15,6 +15,7 @@ import { ListRowSkeleton } from "@/components/ui";
 import { BillListControls, type BillVoteFilter } from "@/components/bills/BillListControls";
 import { VoteDonut } from "@/components/bills/VoteDonut";
 import { LocalTime } from "@/components/time/LocalTime";
+import { GameMonthTime } from "@/components/time/GameMonthTime";
 import {
   getCurrentCongressBillVote,
   matchesCongressBillStatusFilter,
@@ -92,7 +93,7 @@ function NominationCard({ nom }: { nom: NominationDisplay }) {
             {nom.proposedAt && (
               <>
                 {" "}
-                · <LocalTime value={nom.proposedAt} options={{ dateStyle: "medium" }} />
+                · <GameMonthTime value={nom.proposedAt} />
               </>
             )}
           </p>
@@ -110,11 +111,7 @@ function NominationCard({ nom }: { nom: NominationDisplay }) {
       {/* Footer */}
       <div className="px-5 py-3 border-t border-card-border/40">
         <div className="flex items-center justify-between text-[10px] text-muted">
-          <span>
-            {nom.proposedAt && (
-              <LocalTime value={nom.proposedAt} options={{ dateStyle: "medium" }} />
-            )}
-          </span>
+          <span>{nom.proposedAt && <GameMonthTime value={nom.proposedAt} />}</span>
           {nom.votingEndsAt && (
             <span className="text-yellow-400">
               Closes <LocalTime value={nom.votingEndsAt} />

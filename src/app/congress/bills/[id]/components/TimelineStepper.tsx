@@ -2,6 +2,7 @@ import type { BillDetail } from "../types";
 import { getCountryConfig } from "@/lib/constants/countries";
 import { useActivePreset } from "@/contexts/RegisteredCountriesContext";
 import { LocalTime } from "@/components/time/LocalTime";
+import { GameMonthTime } from "@/components/time/GameMonthTime";
 import { inferCountryIdFromStateId } from "@/lib/congress/resolveBillCountryId";
 import {
   TIMELINE_STEPS,
@@ -153,7 +154,7 @@ export function TimelineStepper({ bill }: { bill: BillDetail }) {
                 </p>
                 {date && (
                   <p className="text-[10px] text-muted mt-0.5">
-                    <LocalTime value={date} />
+                    <GameMonthTime value={date} />
                   </p>
                 )}
               </div>
@@ -181,7 +182,7 @@ export function TimelineStepper({ bill }: { bill: BillDetail }) {
               </p>
               {(bill.failedAt ?? bill.enactedAt) && (
                 <p className="text-[10px] text-muted mt-0.5">
-                  <LocalTime value={(bill.failedAt ?? bill.enactedAt)!} />
+                  <GameMonthTime value={(bill.failedAt ?? bill.enactedAt)!} />
                 </p>
               )}
             </div>
@@ -201,7 +202,7 @@ export function TimelineStepper({ bill }: { bill: BillDetail }) {
                 <p className="text-xs font-medium text-error">Vetoed</p>
                 {bill.failedAt && (
                   <p className="text-[10px] text-muted mt-0.5">
-                    <LocalTime value={bill.failedAt} />
+                    <GameMonthTime value={bill.failedAt} />
                   </p>
                 )}
               </div>
@@ -256,7 +257,7 @@ export function TimelineStepper({ bill }: { bill: BillDetail }) {
                   <p className="text-xs font-medium text-error">Veto Sustained</p>
                   {bill.overrideFailedAt && (
                     <p className="text-[10px] text-muted mt-0.5">
-                      <LocalTime value={bill.overrideFailedAt} />
+                      <GameMonthTime value={bill.overrideFailedAt} />
                     </p>
                   )}
                 </div>
@@ -273,7 +274,7 @@ export function TimelineStepper({ bill }: { bill: BillDetail }) {
                   <p className="text-xs font-medium text-emerald-400">Enacted (Override)</p>
                   {bill.overrideEnactedAt && (
                     <p className="text-[10px] text-muted mt-0.5">
-                      <LocalTime value={bill.overrideEnactedAt} />
+                      <GameMonthTime value={bill.overrideEnactedAt} />
                     </p>
                   )}
                 </div>
@@ -300,7 +301,7 @@ export function TimelineStepper({ bill }: { bill: BillDetail }) {
                 <p className="text-xs font-medium text-error">Sangiin Rejected</p>
                 {bill.otherChamberVotingEndsAt && (
                   <p className="text-[10px] text-muted mt-0.5">
-                    <LocalTime value={bill.otherChamberVotingEndsAt} />
+                    <GameMonthTime value={bill.otherChamberVotingEndsAt} />
                   </p>
                 )}
               </div>
@@ -353,7 +354,7 @@ export function TimelineStepper({ bill }: { bill: BillDetail }) {
                   <p className="text-xs font-medium text-error">Override Failed</p>
                   {bill.failedAt && (
                     <p className="text-[10px] text-muted mt-0.5">
-                      <LocalTime value={bill.failedAt} />
+                      <GameMonthTime value={bill.failedAt} />
                     </p>
                   )}
                 </div>
@@ -370,7 +371,7 @@ export function TimelineStepper({ bill }: { bill: BillDetail }) {
                   <p className="text-xs font-medium text-emerald-400">Enacted (Override)</p>
                   {bill.enactedAt && (
                     <p className="text-[10px] text-muted mt-0.5">
-                      <LocalTime value={bill.enactedAt} />
+                      <GameMonthTime value={bill.enactedAt} />
                     </p>
                   )}
                 </div>

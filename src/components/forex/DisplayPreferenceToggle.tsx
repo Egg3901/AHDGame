@@ -29,7 +29,8 @@ const MODE_OPTIONS: {
   {
     key: "internal",
     label: "Base",
-    description: "Show raw game values in the internal base unit (₳), with no conversion.",
+    description:
+      "Show raw game values in ₳, the game's shared accounting unit, with no conversion. ₳ is not pegged to the dollar: it started near one dollar of the era and floats, so ₳1 can buy more or less than $1. The forex page shows today's rate.",
   },
 ];
 

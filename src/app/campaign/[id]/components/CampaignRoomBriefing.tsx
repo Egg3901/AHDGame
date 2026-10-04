@@ -131,18 +131,20 @@ function Row({ label, value }: { label: string; value: string }) {
       style={{
         display: "flex",
         justifyContent: "space-between",
+        alignItems: "baseline",
         gap: 10,
         padding: "6px 0",
         borderBottom: "1px solid rgba(34,34,47,.7)",
       }}
     >
+      {/* Labels wrap at word boundaries. An ellipsis cut long group and state
+          names mid-word on narrow cards, leaving rows nobody could read. */}
       <span
         style={{
           fontFamily: FONT.sans,
           fontSize: 13.5,
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
+          minWidth: 0,
+          overflowWrap: "break-word",
         }}
       >
         {label}

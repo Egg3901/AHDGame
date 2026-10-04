@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui";
 import { SeasonRecapStory } from "@/components/recap/SeasonRecapStory";
 import type { CharacterRecap } from "@/lib/recap/types";
 import { LocalTime } from "@/components/time/LocalTime";
+import { GameMonthTime } from "@/components/time/GameMonthTime";
 
 interface RetiredCharacterResponse {
   gameDateAnchor: GameDateAnchor | null;
@@ -210,10 +211,8 @@ export default function RetiredCharacterProfilePage() {
                 {snap.homeState && ` · ${snap.homeState}, ${snap.countryId}`}
               </p>
               <p className="text-sm text-muted mt-1">
-                Active:{" "}
-                <LocalTime value={snap.createdAt} options={{ month: "short", year: "numeric" }} />{" "}
-                &mdash;{" "}
-                <LocalTime value={data.retiredAt} options={{ month: "short", year: "numeric" }} />
+                Active: <GameMonthTime value={snap.createdAt} /> &mdash;{" "}
+                <GameMonthTime value={data.retiredAt} />
               </p>
               {data.recap && (
                 <button
@@ -281,10 +280,7 @@ export default function RetiredCharacterProfilePage() {
                           </p>
                           <p className="text-xs text-muted mt-0.5">
                             {gameDateAnchor ? (
-                              <>
-                                {formatGameMonth(event.date, gameDateAnchor)} (
-                                <LocalTime value={event.date} options={RETIRED_DATE_OPTS} />)
-                              </>
+                              formatGameMonth(event.date, gameDateAnchor)
                             ) : (
                               <LocalTime value={event.date} options={RETIRED_DATE_OPTS} />
                             )}

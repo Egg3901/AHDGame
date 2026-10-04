@@ -3,6 +3,7 @@ import { Avatar } from "@/components/Avatar";
 import { notFound } from "next/navigation";
 import { getSeatData } from "@/lib/wiki/seatData";
 import { regionUrl } from "@/lib/urls";
+import { NppAbbr } from "@/components/elections/NppAbbr";
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -102,7 +103,9 @@ export default async function WikiSeatPage({ params }: PageProps) {
                       </span>
                     )}
                     {h.isNPP && (
-                      <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted">NPP</span>
+                      <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted">
+                        <NppAbbr />
+                      </span>
                     )}
                   </div>
                 </div>

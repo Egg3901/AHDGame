@@ -2,6 +2,7 @@
 
 import type { ResultsCandidate } from "@/lib/elections/liveResults/types";
 import { formatVotes } from "./resultsFormat";
+import { NppAbbr } from "@/components/elections/NppAbbr";
 
 interface CandidateTotalsPanelProps {
   candidates: ResultsCandidate[];
@@ -38,7 +39,9 @@ export function CandidateTotalsPanel({
                 />
                 {c.name}
                 {c.isNPP && (
-                  <span className="text-[10px] uppercase tracking-wide text-muted">NPP</span>
+                  <span className="text-[10px] uppercase tracking-wide text-muted">
+                    <NppAbbr />
+                  </span>
                 )}
                 {projectedWinner === c.id && (
                   <span className="rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-success">

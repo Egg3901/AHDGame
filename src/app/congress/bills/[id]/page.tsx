@@ -22,7 +22,7 @@ import { VoteBar } from "./components/VoteBar";
 import { VoteShiftPreview } from "@/components/bills/VoteShiftPreview";
 import { VoteTallyTable } from "./components/VoteTallyTable";
 import { VoteListTable } from "./components/VoteListTable";
-import { LocalTime } from "@/components/time/LocalTime";
+import { GameMonthTime } from "@/components/time/GameMonthTime";
 import { TimelineStepper } from "./components/TimelineStepper";
 import { OverrideChamberBar } from "./components/OverrideChamberBar";
 import { DeadlineCountdown } from "./components/DeadlineCountdown";
@@ -299,7 +299,7 @@ function BillDetailContent() {
               )}
             </span>
             <span>
-              Introduced <LocalTime value={bill.proposedAt} options={{ dateStyle: "medium" }} />
+              Introduced <GameMonthTime value={bill.proposedAt} />
             </span>
           </div>
 

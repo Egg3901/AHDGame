@@ -9,7 +9,7 @@ import { getHomeCurrency, getTotalPersonalLiquidWealth } from "@/lib/currency/ch
 import { formatCurrencyFaceAmount } from "@/lib/currency/formatCurrencyFaceAmount";
 import { useToast } from "@/contexts/ToastContext";
 import { PageLoader } from "@/components/ui/PageLoader";
-import { LocalTime } from "@/components/time/LocalTime";
+import { GameMonthTime } from "@/components/time/GameMonthTime";
 import { PageError, type PageErrorCode } from "@/components/ui/PageError";
 import { formatNum } from "./pollHelpers";
 import { PollResults } from "./components/PollResults";
@@ -472,7 +472,7 @@ export default function PollPage() {
                       <span className="text-sm font-medium truncate">{p.stateName || "Poll"}</span>
                     </div>
                     <p className="text-xs text-muted mt-0.5">
-                      <LocalTime value={p.takenAt} />
+                      <GameMonthTime value={p.takenAt} />
                     </p>
                   </div>
                   <div className="flex items-center gap-4 text-right shrink-0">

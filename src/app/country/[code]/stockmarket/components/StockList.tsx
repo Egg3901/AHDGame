@@ -211,7 +211,7 @@ export function StockList({
   /** Viewer share positions by corporation id (and sequential id). */
   owned?: Map<string, { shares: number; pnl: number | null }>;
 }) {
-  const { formatAmount, formatPrice } = useCurrency();
+  const { formatAmount, formatListingPrice } = useCurrency();
   const countryName = useCountryDisplayName();
   const [sortField, setSortField] = useState<SortField>("marketCap");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -432,10 +432,11 @@ export function StockList({
       </td>
       <td className="px-4 py-3 text-right">
         <div className="font-mono font-bold tabular-nums text-foreground">
-          {formatPrice(
-            listing.sharePriceAnchor ?? listing.sharePrice,
-            (listing.liquidCurrencyCode as CurrencyCode | undefined) ?? undefined
-          )}
+          {/* The listing-currency quote, the same figure the corporation
+              header and status bar print. Sorting still uses the anchor. */}
+          {listing.liquidCurrencyCode
+            ? formatListingPrice(listing.sharePrice, listing.liquidCurrencyCode as CurrencyCode)
+            : formatListingPrice(listing.sharePriceAnchor ?? listing.sharePrice)}
         </div>
       </td>
       <td className="px-4 py-3 text-right">
@@ -661,7 +662,7 @@ export function StockList({
                 </th>
                 <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right">
                   Share Price
-                  <Tooltip content="Current price per share on this exchange" />
+                  <Tooltip content="Price per share in the listing's own currency, as of the snapshot time shown under the market summary. The corporation page shows the live quote." />
                 </th>
                 <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right">
                   {MARKET_TIMEFRAMES[timeframe].label} Change

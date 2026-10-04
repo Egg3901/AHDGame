@@ -16,6 +16,7 @@ import { buildElectionHref } from "@/app/elections/electionsHelpers";
 import { resolveEntryAction } from "@/lib/elections/entryEligibility";
 import type { OfficeSection as OfficeSectionModel } from "../electionsSelectors";
 import { DeadlineCell, FieldCell, PhaseCell, RaceActions, RegionCell } from "./ElectionRowCells";
+import { CLOSE_RACE_RULE_TEXT } from "@/lib/elections/rules/closeRace";
 
 interface OfficeSectionProps {
   section: OfficeSectionModel;
@@ -145,7 +146,9 @@ export function OfficeSection({
             {section.competitive > 0 && (
               <>
                 <span className="mx-1.5 opacity-50">·</span>
-                <span className="text-warning">{section.competitive} close</span>
+                <span className="text-warning" title={CLOSE_RACE_RULE_TEXT}>
+                  {section.competitive} close
+                </span>
               </>
             )}
           </span>

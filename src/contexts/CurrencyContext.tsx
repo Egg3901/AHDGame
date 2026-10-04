@@ -31,6 +31,7 @@ import {
 } from "@/lib/utils/formatters";
 import { displayQuote, validDisplayRate } from "@/lib/currency/rules/display";
 import { resolveForcedDisplay } from "@/lib/currency/resolveForcedDisplay";
+import { formatListingQuote } from "@/lib/currency/listingQuote";
 
 /**
  * Rate map: currencyCode → "local per 1 internal unit"
@@ -224,6 +225,13 @@ interface CurrencyContextValue {
    * viewer's preference converts a weak-currency price into USD or the anchor.
    */
   formatPriceIn: (internalAmount: number, currencyCode: CurrencyCode) => string;
+  /**
+   * Format a share price that is already in its listing currency, with no
+   * forex conversion. The one quote every equity surface prints, so the
+   * corporation header, tape, stocks table and status bar agree. Falls back to
+   * {@link formatPrice} (anchor input) when the listing currency is unknown.
+   */
+  formatListingPrice: (localPrice: number, listingCurrencyCode?: CurrencyCode | null) => string;
   /** True while exchange rates are still loading. */
   ratesLoading: boolean;
   /**
@@ -264,6 +272,7 @@ const USD_FALLBACK: CurrencyContextValue = {
   formatFull: (x) => formatCurrencyFull(x, "₳"),
   formatPriceOrder: (x) => formatSharePriceOrder(x, "₳"),
   formatPriceIn: (x) => formatSharePrice(x, "₳"),
+  formatListingPrice: (x) => formatSharePrice(x, "₳"),
   ratesLoading: false,
   baseRates: null,
   forexRates: null,
@@ -565,6 +574,19 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
     [effectiveRates, worldFlags.preset, worldFlags.eurozoneEnabled]
   );
 
+  const formatListingPriceFn = useCallback(
+    (localPrice: number, listingCurrencyCode?: CurrencyCode | null): string =>
+      listingCurrencyCode
+        ? formatListingQuote(
+            localPrice,
+            listingCurrencyCode,
+            worldFlags.preset,
+            worldFlags.eurozoneEnabled
+          )
+        : formatPriceFn(localPrice),
+    [formatPriceFn, worldFlags.preset, worldFlags.eurozoneEnabled]
+  );
+
   const formatFullFn = useCallback(
     (internalAmount: number, nativeCurrencyCode?: CurrencyCode): string => {
       const { value, symbol } = resolveDisplay(internalAmount, nativeCurrencyCode);
@@ -620,6 +642,7 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
       setDisplayCurrencyPreference,
       formatPrice: formatPriceFn,
       formatPriceIn: formatPriceInFn,
+      formatListingPrice: formatListingPriceFn,
       formatFull: formatFullFn,
       formatPriceOrder: formatPriceOrderFn,
       ratesLoading: ratesState.loading,
@@ -648,6 +671,7 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
       setDisplayCurrencyPreference,
       formatPriceFn,
       formatPriceInFn,
+      formatListingPriceFn,
       formatFullFn,
       formatPriceOrderFn,
       ratesState.loading,

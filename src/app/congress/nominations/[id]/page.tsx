@@ -7,7 +7,7 @@ import { NominationPageErrorBoundary } from "@/components/NominationPageErrorBou
 import { NominationDetailSkeleton } from "./components/NominationDetailSkeleton";
 import { WhippedBadge } from "@/components/bills/WhippedBadge";
 import { useCountdown } from "@/hooks/useCountdown";
-import { LocalTime } from "@/components/time/LocalTime";
+import { GameMonthTime } from "@/components/time/GameMonthTime";
 
 import type { CountryId } from "@/lib/constants/countries";
 
@@ -162,14 +162,7 @@ function NominationDetailContent() {
               Nominated by{" "}
               <span className="font-medium">{nom.proposedByPresidentName ?? "President"}</span>
             </span>
-            <span>
-              Proposed{" "}
-              {nom.proposedAt ? (
-                <LocalTime value={nom.proposedAt} options={{ dateStyle: "medium" }} />
-              ) : (
-                "—"
-              )}
-            </span>
+            <span>Proposed {nom.proposedAt ? <GameMonthTime value={nom.proposedAt} /> : "—"}</span>
             {nom.nomineeParty && <span className="capitalize">{nom.nomineeParty}</span>}
           </div>
 

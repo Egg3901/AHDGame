@@ -29,7 +29,7 @@ import { isVotingDeadlinePassed } from "@/lib/legislature/billVotingWindow";
 import { VetoMessageModal } from "@/app/country/[code]/region/[id]/office/tabs/legislation/VetoMessageModal";
 import { VoteSeatingChart } from "@/components/legislature/dispatch/VoteSeatingChart";
 import { CardSkeleton, Skeleton } from "@/components/ui";
-import { LocalTime } from "@/components/time/LocalTime";
+import { GameMonthTime } from "@/components/time/GameMonthTime";
 
 function StateBillDetailContent() {
   const params = useParams<{ code: string; id: string; billId: string }>();
@@ -247,7 +247,7 @@ function StateBillDetailContent() {
               )}
             </span>
             <span>
-              Introduced <LocalTime value={bill.proposedAt} options={{ dateStyle: "medium" }} />
+              Introduced <GameMonthTime value={bill.proposedAt} />
             </span>
           </div>
 

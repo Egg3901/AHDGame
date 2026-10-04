@@ -3,6 +3,7 @@
 import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
 import { useActivePreset } from "@/contexts/RegisteredCountriesContext";
 import { LocalTime } from "@/components/time/LocalTime";
+import { GameMonthTime } from "@/components/time/GameMonthTime";
 
 const NATIONAL_TIMELINE_NODES = ["Proposed", "Voted", "Passed", "2nd Chamber", "Enacted"] as const;
 const JP_CABINET_TIMELINE_NODES = ["Proposed", "Cabinet", "Shugiin", "Sangiin", "Enacted"] as const;
@@ -275,7 +276,7 @@ export function BillTimeline({
       </div>
 
       <div className="flex items-center justify-between text-[10px] text-muted pt-0.5">
-        <LocalTime value={proposedAt} options={{ dateStyle: "medium" }} />
+        <GameMonthTime value={proposedAt} />
         {failedNote && <span className="text-error/80 font-medium">{failedNote}</span>}
         {isVoting && votingEndsAt && (
           <span className="text-yellow-400">

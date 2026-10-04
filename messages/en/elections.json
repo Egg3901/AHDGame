@@ -19,7 +19,7 @@
     },
     "map": {
       "noPollingData": "No polling data",
-      "competitive": "⚡ Competitive (≤15 pt margin)",
+      "competitive": "⚡ Close (top two within 15 points)",
       "uncontested": "Uncontested",
       "stateSenateShort": "State Sen"
     },

@@ -6,6 +6,7 @@ import { Avatar } from "@/components/Avatar";
 import { PieChart } from "./ElectionDetailCharts";
 import { buildGeneralColors } from "@/lib/utils/politics";
 import type { CandidateDetail } from "./ElectionDetailTypes";
+import { NppAbbr } from "@/components/elections/NppAbbr";
 
 export function GeneralElectionNoTallyPanel({
   candidates,
@@ -128,7 +129,7 @@ export function GeneralElectionNoTallyPanel({
                                 )}
                                 {c.isNPP && (
                                   <span className="rounded-full bg-purple-500/20 border border-purple-500/40 px-1.5 py-0.5 text-[10px] text-purple-400 shrink-0">
-                                    NPP
+                                    <NppAbbr />
                                   </span>
                                 )}
                               </div>

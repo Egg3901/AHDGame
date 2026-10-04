@@ -53,7 +53,7 @@ export function StatusBar({ showOnlineStatus = true }: { showOnlineStatus?: bool
   const { stats, patchStats } = useCharacterStats();
   const {
     displayCurrencyPreference,
-    formatPrice: ctxFormatPrice,
+    formatListingPrice,
     toInternalFrom,
     formatAmount,
     formatAmountChip,
@@ -978,14 +978,7 @@ export function StatusBar({ showOnlineStatus = true }: { showOnlineStatus?: bool
                         ? stats.corp.name.slice(0, 10) + "…"
                         : stats.corp.name}
                     </span>
-                    <span>
-                      {ctxFormatPrice(
-                        ceoCorpCurrency
-                          ? toInternalFrom(stats.corp.sharePrice, ceoCorpCurrency)
-                          : stats.corp.sharePrice,
-                        ceoCorpCurrency
-                      )}
-                    </span>
+                    <span>{formatListingPrice(stats.corp.sharePrice, ceoCorpCurrency)}</span>
                     <span
                       className={
                         (stats.corp.priceChange1h ?? 0) >= 0 ? "text-green-400" : "text-red-400"
@@ -1001,13 +994,8 @@ export function StatusBar({ showOnlineStatus = true }: { showOnlineStatus?: bool
                 <p className="font-semibold text-foreground mb-2">{stats.corp.name}</p>
                 <div className="space-y-1 text-[11px] mb-2">
                   <BreakdownRow
-                    label="Share price"
-                    value={ctxFormatPrice(
-                      ceoCorpCurrency
-                        ? toInternalFrom(stats.corp.sharePrice, ceoCorpCurrency)
-                        : stats.corp.sharePrice,
-                      ceoCorpCurrency
-                    )}
+                    label={`Live share price${ceoCorpCurrency ? ` (${ceoCorpCurrency})` : ""}`}
+                    value={formatListingPrice(stats.corp.sharePrice, ceoCorpCurrency)}
                   />
                   <BreakdownRow
                     label="Change (1 turn)"

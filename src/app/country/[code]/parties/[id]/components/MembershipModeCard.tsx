@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { getMessageStyle } from "@/lib/utils/formatters";
 import { partyApiUrl } from "@/lib/urls";
-import { LocalTime } from "@/components/time/LocalTime";
+import { GameMonthTime } from "@/components/time/GameMonthTime";
 import type { PartyData } from "./types";
 
 interface MembershipModeCardProps {
@@ -151,8 +151,7 @@ export function MembershipModeCard({ party, countryCode, onUpdate }: MembershipM
                       {req.characterName}
                     </Link>
                     <div className="text-xs text-muted mt-0.5">
-                      Requested{" "}
-                      <LocalTime value={req.requestedAt} options={{ dateStyle: "medium" }} />
+                      Requested <GameMonthTime value={req.requestedAt} />
                     </div>
                   </div>
                   <div className="flex gap-2">

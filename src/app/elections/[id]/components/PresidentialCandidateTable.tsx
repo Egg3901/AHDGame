@@ -6,6 +6,7 @@ import { formatFundsCompact, formatCompactNumber } from "@/lib/utils/formatters"
 import { formatVotes } from "./ElectionDetailHelpers";
 import type { CandidateDetail } from "./ElectionDetailTypes";
 import { CsInfoIcon } from "./CsInfoIcon";
+import { NppAbbr } from "@/components/elections/NppAbbr";
 
 /**
  * A candidate's campaign strength as it stands right now: the value the
@@ -170,7 +171,7 @@ export function PresidentialCandidateTable({
                           )}
                           {c.isNPP && (
                             <span className="rounded bg-purple-500/20 px-1.5 py-0.5 text-[10px] text-purple-400">
-                              NPP
+                              <NppAbbr />
                             </span>
                           )}
                           {c.campaignSuspended && (

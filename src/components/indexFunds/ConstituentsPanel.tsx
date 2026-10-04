@@ -280,6 +280,11 @@ type ActualRow = {
   weightActual: number;
 };
 
+const AVG_COST_HELP =
+  "Average price the fund paid per share, in the fund's currency. It is a cost basis, not the current quote.";
+const VALUE_HELP =
+  "Shares at the fund's last mark, in the fund's currency. The live quote is on the corporation page, in the listing currency.";
+
 function ActualHoldings({
   rows,
   totalHoldingsLabel,
@@ -318,10 +323,16 @@ function ActualHoldings({
             <span className="text-right text-[9.5px] font-semibold uppercase tracking-wider text-muted">
               Shares
             </span>
-            <span className="text-right text-[9.5px] font-semibold uppercase tracking-wider text-muted">
+            <span
+              className="text-right text-[9.5px] font-semibold uppercase tracking-wider text-muted"
+              title={AVG_COST_HELP}
+            >
               Avg cost
             </span>
-            <span className="text-right text-[9.5px] font-semibold uppercase tracking-wider text-muted">
+            <span
+              className="text-right text-[9.5px] font-semibold uppercase tracking-wider text-muted"
+              title={VALUE_HELP}
+            >
               Value
             </span>
             <span className="text-right text-[9.5px] font-semibold uppercase tracking-wider text-muted">
@@ -387,6 +398,12 @@ function ActualHoldings({
           </div>
         )}
       </div>
+      {rows.length > 0 && (
+        <p className="border-t border-card-border px-5 py-2 text-[11px] text-muted">
+          Avg cost is what the fund paid per share, not today&apos;s quote. Values use the
+          fund&apos;s last mark in its own currency.
+        </p>
+      )}
     </div>
   );
 }

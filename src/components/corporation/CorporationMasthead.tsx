@@ -415,6 +415,10 @@ export function CorporationMasthead({
                 </span>
               </p>
             )}
+            <p className="mt-1 text-[11px] text-muted">
+              Live quote{money.code ? ` in ${money.code}, the listing currency` : ""}. Market boards
+              show the last snapshot.
+            </p>
           </div>
         )}
 

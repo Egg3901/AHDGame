@@ -13,6 +13,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import type { BlendDetailModel, BlendDetailTallyRow } from "@/lib/elections/blendDetailViewModel";
+import { NppAbbr } from "@/components/elections/NppAbbr";
 
 interface BlendDetailTallyProps {
   model: BlendDetailModel;
@@ -62,7 +63,11 @@ export function BlendDetailTally({ model, renderEndorse, hrefFor }: BlendDetailT
                 </div>
                 <div className="mt-0.5 truncate text-[11px] tracking-wide text-muted">
                   {row.partyName}
-                  {row.isNPP && <span className="ml-1.5 opacity-70">NPP</span>}
+                  {row.isNPP && (
+                    <span className="ml-1.5 opacity-70">
+                      <NppAbbr />
+                    </span>
+                  )}
                 </div>
               </div>
 

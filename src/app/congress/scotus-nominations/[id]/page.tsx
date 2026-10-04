@@ -7,8 +7,9 @@ import { NominationPageErrorBoundary } from "@/components/NominationPageErrorBou
 import { NominationDetailSkeleton } from "@/app/congress/nominations/[id]/components/NominationDetailSkeleton";
 import { WhippedBadge } from "@/components/bills/WhippedBadge";
 import { useCountdown } from "@/hooks/useCountdown";
-import { LocalTime } from "@/components/time/LocalTime";
+import { GameMonthTime } from "@/components/time/GameMonthTime";
 import type { CountryId } from "@/lib/constants/countries";
+import { NppAbbr } from "@/components/elections/NppAbbr";
 
 interface NominationDetail {
   id: string;
@@ -155,7 +156,7 @@ function ScotusNominationDetailContent() {
             {nom.nomineeCharacterName ?? "Unknown"} → {nom.positionName}
             {nom.nomineeMode === "npp" && (
               <span className="ml-2 align-middle rounded-full border border-card-border bg-card-elevated px-2 py-0.5 text-[10px] font-medium text-muted">
-                NPP
+                <NppAbbr />
               </span>
             )}
           </h1>
@@ -170,14 +171,7 @@ function ScotusNominationDetailContent() {
               Nominated by{" "}
               <span className="font-medium">{nom.proposedByPresidentName ?? "President"}</span>
             </span>
-            <span>
-              Proposed{" "}
-              {nom.proposedAt ? (
-                <LocalTime value={nom.proposedAt} options={{ dateStyle: "medium" }} />
-              ) : (
-                "—"
-              )}
-            </span>
+            <span>Proposed {nom.proposedAt ? <GameMonthTime value={nom.proposedAt} /> : "—"}</span>
             {nom.nomineeParty && <span className="capitalize">{nom.nomineeParty}</span>}
           </div>
 

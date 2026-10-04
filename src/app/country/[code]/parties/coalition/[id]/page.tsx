@@ -5,7 +5,7 @@ import Link from "next/link";
 import { CoalitionIdentityForm } from "./CoalitionIdentityForm";
 import { CoalitionLogo } from "@/components/CoalitionLogo";
 import { DiscordInviteButton } from "@/components/DiscordInviteButton";
-import { LocalTime } from "@/components/time/LocalTime";
+import { GameMonthTime } from "@/components/time/GameMonthTime";
 import { PartyLogo } from "@/components/PartyLogo";
 import { PartyRegimeBadge } from "@/components/parties/PartyRegimeBadge";
 import { Skeleton, TabRowSkeleton } from "@/components/ui";
@@ -779,7 +779,7 @@ function CoalitionDetailContent({ params }: { params: Promise<{ code: string; id
                       </div>
                       <div className="text-xs text-muted mt-0.5">
                         {member.memberCount} member{member.memberCount !== 1 ? "s" : ""} · Joined{" "}
-                        <LocalTime value={member.joinedAt} options={{ dateStyle: "medium" }} />
+                        <GameMonthTime value={member.joinedAt} />
                       </div>
                     </div>
                   </div>
@@ -896,8 +896,7 @@ function CoalitionDetailContent({ params }: { params: Promise<{ code: string; id
                     >
                       <span className="text-sm font-medium">{inv.partyName}</span>
                       <span className="text-xs text-muted">
-                        Invited{" "}
-                        <LocalTime value={inv.invitedAt} options={{ dateStyle: "medium" }} />
+                        Invited <GameMonthTime value={inv.invitedAt} />
                       </span>
                     </div>
                   ))}
@@ -920,8 +919,7 @@ function CoalitionDetailContent({ params }: { params: Promise<{ code: string; id
                       <div>
                         <span className="text-sm font-medium">{req.partyName}</span>
                         <div className="text-xs text-muted mt-0.5">
-                          Requested{" "}
-                          <LocalTime value={req.requestedAt} options={{ dateStyle: "medium" }} />
+                          Requested <GameMonthTime value={req.requestedAt} />
                         </div>
                       </div>
                       <div className="flex gap-2">

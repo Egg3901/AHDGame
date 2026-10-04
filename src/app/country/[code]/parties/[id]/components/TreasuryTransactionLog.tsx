@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui";
-import { LocalTime } from "@/components/time/LocalTime";
+import { GameMonthTime } from "@/components/time/GameMonthTime";
 import { CURRENCY_SYMBOLS, type CurrencyCode } from "@/lib/constants/currencies";
 // Imported from the specific types file, not the `db/types` barrel: that module's
 // own imports are all `import type`, so pulling its runtime tuple into a client
@@ -226,7 +226,7 @@ export function TreasuryTransactionLog({ countryCode, partyId }: Props) {
                   <span>turn {row.turn}</span>
                   <span>|</span>
                   <span>
-                    <LocalTime value={row.createdAt} />
+                    <GameMonthTime value={row.createdAt} />
                   </span>
                   {row.counterparty?.label && (
                     <>

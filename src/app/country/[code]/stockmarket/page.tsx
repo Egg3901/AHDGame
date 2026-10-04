@@ -31,6 +31,7 @@ import { CommodityTable } from "./components/CommodityTable";
 import { FoundCorporationModal } from "./components/FoundCorporationModal";
 import { MarketStats } from "./components/MarketStats";
 import { AuctionTable } from "./components/AuctionTable";
+import { quoteTurnLabel } from "@/lib/currency/listingQuote";
 import type { AuctionListing } from "@/lib/nationalization/auctionListing";
 import type { FundTickerInput } from "./components/StockTicker";
 import type { FundListItem } from "@/components/indexFunds/types";
@@ -870,12 +871,15 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
           </div>
           {data?.asOf && (
             <p className="px-4 py-1.5 text-[10px] text-muted border-t border-card-border">
-              Quotes observed <RelativeTime value={data.asOf} /> ({" "}
+              {quoteTurnLabel(data.turn)
+                ? `Quotes as of ${quoteTurnLabel(data.turn)}, observed `
+                : "Quotes observed "}
+              <RelativeTime value={data.asOf} /> (
               <LocalTime
                 value={data.asOf}
                 options={{ month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }}
               />
-              ). Checked every minute.
+              ). Prices are in each listing&apos;s own currency. Checked every minute.
             </p>
           )}
           {quoteError && data && (

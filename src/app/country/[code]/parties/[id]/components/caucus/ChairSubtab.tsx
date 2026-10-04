@@ -18,6 +18,7 @@ import {
   getEffectivePlayerPayoutCap,
   PAYOUT_CAP_MULTI_OFFICER_MULTIPLIER,
 } from "@/lib/treasury/payoutCapValues";
+import { NppAbbr } from "@/components/elections/NppAbbr";
 
 export function ChairSubtab({
   countryCode,
@@ -420,7 +421,7 @@ export function ChairSubtab({
         </div>
 
         <label className="block text-body-sm text-muted">
-          NPP
+          <NppAbbr />
           <select
             value={selectedRecruitNppId}
             onChange={(e) => dispatch({ type: "SET_SELECTED_RECRUIT_NPP", id: e.target.value })}

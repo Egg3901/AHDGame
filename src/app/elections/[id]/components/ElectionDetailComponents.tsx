@@ -8,6 +8,7 @@ import { Card, CardSubLabel } from "@/components/ui";
 import { PrimaryLineGraph } from "./ElectionDetailCharts";
 import { buildCandidateColorMap } from "@/lib/campaigns/candidateColor";
 import type { CandidateDetail, PartyGroup, SnapshotPoint } from "./ElectionDetailTypes";
+import { NppAbbr } from "@/components/elections/NppAbbr";
 
 function RemoveCandidateButton({
   candidateId,
@@ -262,7 +263,7 @@ export function PartySection({
                       )}
                       {c.isNPP && (
                         <span className="rounded-full bg-purple-500/20 border border-purple-500/40 px-1.5 py-0.5 text-[10px] text-purple-400 shrink-0">
-                          NPP
+                          <NppAbbr />
                         </span>
                       )}
                       {c.travelState && (

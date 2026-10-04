@@ -1,6 +1,7 @@
 import { electionToLarpYear } from "@/lib/utils/formatters";
 import { electionRegionUrl } from "@/lib/urls";
 import type { ElectionDisplay } from "@/lib/db/types";
+import { isCloseRace } from "@/lib/elections/rules/closeRace";
 
 export type ElectionType =
   "senate" | "house" | "stateSenate" | "governor" | "president" | "commons" | "primeMinister";
@@ -126,14 +127,9 @@ export function electionGameYearFromState(
   return electionToLarpYear(electionType, cycle, senateClass, chamberClass);
 }
 
+/** The shared "Close" rule (see `@/lib/elections/rules/closeRace`). */
 export function isCompetitiveElection(e: ElectionDisplay): boolean {
-  // Primary shares are normalized within each party. Comparing candidates from
-  // different party primaries can make two 100% leaders look tied.
-  if (e.inPrimary) return false;
-  const pcts = Object.values(e.polling?.sharesPct ?? {});
-  if (pcts.length < 2) return false;
-  const sorted = [...pcts].sort((a, b) => b - a);
-  return sorted[0] - sorted[1] <= 15;
+  return isCloseRace({ inPrimary: e.inPrimary, sharesPct: e.polling?.sharesPct });
 }
 
 /**

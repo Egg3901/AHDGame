@@ -19,6 +19,7 @@ import { PrimaryCardGrid } from "./PrimaryCard";
 import { partyUrl } from "@/lib/urls";
 import { ElectionPhaseStatusStrip } from "./ElectionPhaseStatusStrip";
 import { buildElectionPhaseStatusSummary } from "@/lib/elections/electionPhaseStatus";
+import { NppAbbr } from "@/components/elections/NppAbbr";
 
 const SEAT_ELECTION_TYPES = new Set([
   "house",
@@ -629,7 +630,7 @@ export const ElectionCard = memo(function ElectionCard({
                         {candidate.characterName}
                         {candidate.isNPP && (
                           <span className="opacity-60 text-[10px] uppercase tracking-wide ml-0.5">
-                            NPP
+                            <NppAbbr />
                           </span>
                         )}
                       </Link>

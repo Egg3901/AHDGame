@@ -14,6 +14,7 @@ import type {
 import type { SerializedMP } from "@/app/uk/region/[regionId]/UKRegionClient";
 import { PlayersList } from "@/components/state/politics/PlayersList";
 import { NPPsList } from "@/components/state/politics/NPPsList";
+import { NppAbbr } from "@/components/elections/NppAbbr";
 
 interface StateLike {
   _id: string;
@@ -63,7 +64,7 @@ function MPCard({ mp, isVacant }: { mp: SerializedMP; isVacant: boolean }) {
         />
         {mp.isNPP && !isVacant && (
           <span className="absolute -bottom-1 -right-1 rounded-full border border-purple-500/60 bg-card px-1 py-px text-[8px] font-bold leading-none text-purple-400">
-            NPP
+            <NppAbbr />
           </span>
         )}
       </div>
