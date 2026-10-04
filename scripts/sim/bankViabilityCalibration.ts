@@ -10,7 +10,7 @@
 
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { calculateBondMarketPrice } from "@/lib/constants/bonds";
-import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
+import { BOND_UNIT_FACE_VALUE, type BondMaturityTurns } from "@/lib/db/types/bond";
 import { effectiveBankRatesFromPrime } from "@/lib/banking/rules/rates";
 import { computeNpcDepositShare } from "@/lib/banking/rules/deposits";
 import { npcFlowDelta, fundedNpcFlowDelta, perTurnInterest } from "@/lib/banking/rules/loans";
@@ -21,15 +21,22 @@ import {
   STRESS_LOSS_MULTIPLIER,
   type CreditBandId,
 } from "@/lib/banking/rules/creditBands";
-import { computeInsurancePremium } from "@/lib/banking/rules/insurance";
+import {
+  BASE_PREMIUM_ANNUAL,
+  computeEvidenceBasedPremiumAnnualRate,
+  computeInsurancePremium,
+} from "@/lib/banking/rules/insurance";
 import { quoteLoanOrigination } from "@/lib/banking/rules/loanFees";
 import { computeDepositCeiling } from "@/lib/banking/rules/capacity";
 import { MODERN_DEPOSIT_CORRIDOR, MODERN_LENDING_CORRIDOR } from "@/lib/banking/regulationQ";
+import { computeConfidence } from "@/lib/banking/rules/confidence";
+import { depositFlight, depositTakerFails } from "@/lib/banking/rules/solvency";
 import { savingsApyPercent } from "@/lib/currency/savingsInterest";
 import { quoteBondPrices } from "@/lib/bonds/marketPoolQuotes";
 import {
   calculateQuarterlyIssuanceAmount,
   getSovereignCouponRate,
+  sovereignRolloverFromBonds,
   SOVEREIGN_ISSUANCE_INTERVAL_TURNS,
   SOVEREIGN_RECONCILE_DISTRIBUTION,
 } from "@/lib/bonds/sovereign";
@@ -67,6 +74,8 @@ type Scenario = {
   openingPoolCash?: number;
   /** Experimental balance-based service charge for fee sensitivity only. */
   serviceFeeAnnualBps?: number;
+  /** Premium sensitivity; production rules currently use BASE_PREMIUM_ANNUAL. */
+  insurancePremiumBaseAnnualRate?: number;
   recessionShock?: {
     turn: number;
     primeIncreasePp: number;
@@ -78,10 +87,11 @@ type Scenario = {
 const RESERVE_RATIO = 0.2;
 const TURNS = 480;
 
-const us1991Budget = getInitialNationalBudgetsForPreset("1991-default").find(
+const initialUs1991Budget = getInitialNationalBudgetsForPreset("1991-default").find(
   (budget) => budget.countryId === "US"
 );
-if (!us1991Budget) throw new Error("The 1991 US national budget seed is missing");
+if (!initialUs1991Budget) throw new Error("The 1991 US national budget seed is missing");
+const us1991Budget = initialUs1991Budget as NonNullable<typeof initialUs1991Budget>;
 const us1991ExternalBroadMoney = seedExternalBroadMoney({
   storedGdp: us1991Budget.gdp,
   anchorPerGdpUnit: getGdpAnchorRate("US", "1991-default"),
@@ -111,7 +121,7 @@ const openingSeedTranches = Object.entries(SOVEREIGN_RECONCILE_DISTRIBUTION)
       maturityTurns,
       units,
       face: units * BOND_UNIT_FACE_VALUE,
-      couponRate: getSovereignCouponRate(us1991Prime, maturityTurns),
+      couponRate: getSovereignCouponRate(us1991Prime, maturityTurns as BondMaturityTurns),
     };
   })
   .filter((tranche) => tranche.units > 0);
@@ -126,6 +136,7 @@ type SimBond = {
   totalUnits: number;
   floatUnits: number;
   heldUnits: number;
+  maturityRegistered?: boolean;
 };
 
 type PendingCouponClaim = {
@@ -134,15 +145,29 @@ type PendingCouponClaim = {
   publicFloatLocal: number;
 };
 
+type PendingMaturityClaim = {
+  bondId: string;
+  dueTurn: number;
+  bankLocal: number;
+  publicFloatLocal: number;
+};
+
 function simulate(scenario: Scenario) {
   const openingEquity = scenario.openingEquity ?? INITIAL_EQUITY;
-  const externalCash = scenario.externalCash ?? NPC_ECONOMY_CASH;
+  let externalCash = scenario.externalCash ?? NPC_ECONOMY_CASH;
   const branchDepositCeiling = scenario.branchDepositCeiling ?? BRANCH_DEPOSIT_CEILING;
   let cash = openingEquity;
   let deposits = 0;
   let feeIncome = 0;
   let serviceFeeIncome = 0;
   let premiumExpense = 0;
+  let insuranceFundBalance = 0;
+  let premiumExposureEquivalentDepositTurns = 0;
+  let measuredInsuredDepositTurns = 0;
+  let measuredGrossClaims = 0;
+  const measuredRecoveries = 0;
+  let measuredPaidClaims = 0;
+  let pricingEvidenceStartTurn: number | undefined;
   const tranches = new Map<CreditBandId, { outstanding: number; rate: number }>();
   const sovereignLots: SimBond[] = openingSeedTranches.map((tranche) => ({
     bondId: `USD-seed-${tranche.maturityTurns}`,
@@ -153,7 +178,9 @@ function simulate(scenario: Scenario) {
     floatUnits: tranche.units,
     heldUnits: 0,
   }));
-  let poolCash = scenario.openingPoolCash ?? 0;
+  // The registered pool migration seeds cash at its current M2 target. Zero is
+  // an explicit sensitivity, not the normal seeded-world opening state.
+  let poolCash = scenario.openingPoolCash ?? conservativePoolCashSeed;
   let poolTargetCash = poolCash > 0 ? conservativePoolCashSeed : 0;
   let poolCashInflow = 0;
   let poolCashSweep = 0;
@@ -169,8 +196,7 @@ function simulate(scenario: Scenario) {
   let billCouponIncomeThisTurn = 0;
   const pendingCouponClaims: PendingCouponClaim[] = [];
   let paidPublicFloatCoupons = 0;
-  const pendingBankMaturities: number[] = [];
-  const pendingPoolMaturities: number[] = [];
+  const pendingMaturities: PendingMaturityClaim[] = [];
   let poolMaturityPrincipalDueTotal = 0;
   let paidPoolMaturityPrincipal = 0;
   let poolPurchaseAndSaleUnits = 0;
@@ -178,7 +204,42 @@ function simulate(scenario: Scenario) {
   let forcedSaleUnits = 0;
   let lastNetIncome = 0;
   let realizedRecessionWriteoff = 0;
+  let warningBand: "green" | "amber" | "red" = "green";
+  let failureTurn: number | null = null;
+  let failureCause: "negative_equity" | "deposit_run" | null = null;
+  let failureInsurancePayout = 0;
+  let failureTreasuryBackstopRequired = 0;
+  let failureTreasuryBackstopPaid = 0;
+  let failureUnfundedBackstop = 0;
+  let totalDepositFlight = 0;
   let turnTwelveSnapshot: Record<string, number> = {};
+
+  const settleMaturedClaims = () => {
+    pendingMaturities.sort(
+      (left, right) => left.dueTurn - right.dueTurn || left.bondId.localeCompare(right.bondId)
+    );
+    for (let index = 0; index < pendingMaturities.length;) {
+      const claim = pendingMaturities[index]!;
+      const total = claim.bankLocal + claim.publicFloatLocal;
+      if (treasuryCash < total) {
+        index += 1;
+        continue;
+      }
+      treasuryCash -= total;
+      cash += claim.bankLocal;
+      poolCash += claim.publicFloatLocal;
+      paidMaturityPrincipal += claim.bankLocal;
+      paidPoolMaturityPrincipal += claim.publicFloatLocal;
+      treasuryPosition -= total;
+      sovereignPrincipal = Math.max(0, sovereignPrincipal - total);
+      const bond = sovereignLots.find((row) => row.bondId === claim.bondId);
+      if (bond) {
+        bond.heldUnits = 0;
+        bond.floatUnits = 0;
+      }
+      pendingMaturities.splice(index, 1);
+    }
+  };
 
   for (let turn = 0; turn < scenario.turns; turn += 1) {
     const prime =
@@ -239,18 +300,7 @@ function simulate(scenario: Scenario) {
       paidPublicFloatCoupons += claim.publicFloatLocal;
       billCouponIncomeThisTurn += claim.bankLocal;
     }
-    while (pendingBankMaturities.length > 0 && treasuryCash >= pendingBankMaturities[0]!) {
-      const paid = pendingBankMaturities.shift()!;
-      treasuryCash -= paid;
-      cash += paid;
-      paidMaturityPrincipal += paid;
-    }
-    while (pendingPoolMaturities.length > 0 && treasuryCash >= pendingPoolMaturities[0]!) {
-      const paid = pendingPoolMaturities.shift()!;
-      treasuryCash -= paid;
-      poolCash += paid;
-      paidPoolMaturityPrincipal += paid;
-    }
+    settleMaturedClaims();
     const rates = effectiveBankRatesFromPrime(
       { depositOffset: scenario.depositOffset, lendingOffset: scenario.lendingOffset },
       prime
@@ -282,6 +332,7 @@ function simulate(scenario: Scenario) {
     const depositDelta = Math.max(npcFlowDelta(deposits, targetDeposits), -cash);
     cash += depositDelta;
     deposits += depositDelta;
+    externalCash = Math.max(0, externalCash - depositDelta);
 
     const depositInterest = perTurnInterest(deposits, rates.depositRatePercent, "USD");
     deposits += depositInterest;
@@ -291,9 +342,32 @@ function simulate(scenario: Scenario) {
     );
     deposits -= serviceFee;
     serviceFeeIncome += serviceFee;
-    const premium = computeInsurancePremium(deposits, cash / Math.max(1, deposits), RESERVE_RATIO);
-    cash -= Math.min(premium, Math.max(0, cash));
-    premiumExpense += premium;
+    if (deposits > 0 && pricingEvidenceStartTurn === undefined) pricingEvidenceStartTurn = turn;
+    const evidencePremiumRate = computeEvidenceBasedPremiumAnnualRate({
+      currentTurn: turn,
+      firstMeasuredTurn: pricingEvidenceStartTurn ?? turn,
+      insuredDepositTurns: measuredInsuredDepositTurns,
+      paidClaims: measuredPaidClaims,
+      grossPayouts: measuredGrossClaims,
+      recoveries: measuredRecoveries,
+      fundBalance: insuranceFundBalance,
+    });
+    const premiumBaseRate = scenario.insurancePremiumBaseAnnualRate ?? evidencePremiumRate;
+    const premium = computeInsurancePremium(
+      deposits,
+      cash / Math.max(1, deposits),
+      RESERVE_RATIO,
+      premiumBaseRate
+    );
+    const premiumPaid = Math.min(premium, Math.max(0, cash));
+    cash -= premiumPaid;
+    premiumExpense += premiumPaid;
+    insuranceFundBalance += premiumPaid;
+    // Normalize exposure to the existing risk-weight formula at a 100% annual
+    // base rate. This lets the report show the scenario rate needed to fund
+    // one comparable failure claim without presenting it as a probability.
+    premiumExposureEquivalentDepositTurns += (premium * TURNS_PER_YEAR) / BASE_PREMIUM_ANNUAL;
+    measuredInsuredDepositTurns += deposits;
 
     const fundingCapacity = deposits * (1 - RESERVE_RATIO);
     const targets = bandOriginationTargets({
@@ -411,40 +485,22 @@ function simulate(scenario: Scenario) {
       feesThisTurn +
       billCouponIncomeThisTurn -
       depositInterest -
-      premium -
+      premiumPaid -
       defaultLoss;
     billCouponIncomeThisTurn = 0;
 
-    // BondTurn runs after bank auto-sweep. Its pool cash maintenance happens
-    // before coupon credits and primary settlement, so this affects only the
-    // market depth available to the next bank action and this turn's auction.
-    const rolloverTarget = sovereignLots
-      .filter(
-        (bond) =>
-          bond.maturityTurn >= turn && bond.maturityTurn < turn + SOVEREIGN_ISSUANCE_INTERVAL_TURNS
-      )
-      .reduce((sum, bond) => sum + bond.totalUnits * BOND_UNIT_FACE_VALUE, 0);
-    const poolTarget = Math.max(conservativePoolCashSeed, rolloverTarget);
-    poolTargetCash = poolTarget;
-    const cashMoves = planPoolCashMoves({ cashLocal: poolCash, targetCashLocal: poolTarget });
-    if (cashMoves.inflow > 0) {
-      poolCash += cashMoves.inflow;
-      poolCashInflow += cashMoves.inflow;
-    }
-    if (cashMoves.sweep > 0) {
-      const swept = Math.min(poolCash, cashMoves.sweep);
-      poolCash -= swept;
-      poolCashSweep += swept;
-    }
-
+    // BondTurn places scheduled sovereign issuance before pool maintenance.
     if (turn > 0 && turn % SOVEREIGN_ISSUANCE_INTERVAL_TURNS === 0) {
-      const rolloverFace = sovereignLots
-        .filter(
-          (bond) =>
-            bond.maturityTurn >= turn &&
-            bond.maturityTurn < turn + SOVEREIGN_ISSUANCE_INTERVAL_TURNS
-        )
-        .reduce((sum, bond) => sum + bond.totalUnits * BOND_UNIT_FACE_VALUE, 0);
+      const rolloverFace = sovereignRolloverFromBonds(
+        sovereignLots
+          .filter((bond) => bond.heldUnits + bond.floatUnits > 0)
+          .map((bond) => ({
+            maturityTurn: bond.maturityTurn,
+            totalIssued: (bond.heldUnits + bond.floatUnits) * BOND_UNIT_FACE_VALUE,
+          })),
+        sovereignPrincipal,
+        turn
+      );
       const annualDeficit = Math.max(
         0,
         us1991Budget.spending.total -
@@ -452,11 +508,7 @@ function simulate(scenario: Scenario) {
           annualBudgetInterest -
           us1991Budget.revenue.total
       );
-      const maturedClaimsDue =
-        pendingBankMaturities.reduce((sum, amount) => sum + amount, 0) +
-        pendingPoolMaturities.reduce((sum, amount) => sum + amount, 0);
-      const issueAmount =
-        calculateQuarterlyIssuanceAmount(annualDeficit) + rolloverFace + maturedClaimsDue;
+      const issueAmount = calculateQuarterlyIssuanceAmount(annualDeficit) + rolloverFace;
       const planned = planSovereignTranches(SOVEREIGN_RECONCILE_DISTRIBUTION, issueAmount);
       for (const tranche of planned) {
         const requestedUnits = Math.floor(tranche.amount / BOND_UNIT_FACE_VALUE);
@@ -488,44 +540,51 @@ function simulate(scenario: Scenario) {
       }
     }
 
+    // The production pool target is max(calibrated 5% M2 liquidity,
+    // outstanding sovereign face due over the next issuance interval). The
+    // inflow is applied after scheduled issuance and cannot fund that auction.
+    const rolloverTarget = sovereignLots
+      .filter(
+        (bond) =>
+          bond.maturityTurn >= turn && bond.maturityTurn < turn + SOVEREIGN_ISSUANCE_INTERVAL_TURNS
+      )
+      .reduce((sum, bond) => sum + (bond.heldUnits + bond.floatUnits) * BOND_UNIT_FACE_VALUE, 0);
+    const poolTarget = Math.max(conservativePoolCashSeed, rolloverTarget);
+    poolTargetCash = poolTarget;
+    const cashMoves = planPoolCashMoves({ cashLocal: poolCash, targetCashLocal: poolTarget });
+    if (cashMoves.inflow > 0) {
+      poolCash += cashMoves.inflow;
+      poolCashInflow += cashMoves.inflow;
+    }
+    if (cashMoves.sweep > 0) {
+      const swept = Math.min(poolCash, cashMoves.sweep);
+      poolCash -= swept;
+      poolCashSweep += swept;
+    }
+
     for (const bond of sovereignLots) {
-      if (bond.maturityTurn !== turn) continue;
+      if (bond.maturityTurn > turn || bond.maturityRegistered) continue;
       const bankPrincipalDue = bond.heldUnits * BOND_UNIT_FACE_VALUE;
       const poolPrincipalDue = bond.floatUnits * BOND_UNIT_FACE_VALUE;
-      if (bankPrincipalDue > 0) {
-        pendingBankMaturities.push(bankPrincipalDue);
-        bankMaturityPrincipalDueTotal += bankPrincipalDue;
-      }
-      if (poolPrincipalDue > 0) {
-        pendingPoolMaturities.push(poolPrincipalDue);
-        poolMaturityPrincipalDueTotal += poolPrincipalDue;
-      }
-      // The funded issuer pays matured holders from spendable cash. A short
-      // Treasury keeps claims pending and does not credit pool cash.
-      treasuryPosition -= poolPrincipalDue;
-      sovereignPrincipal = Math.max(0, sovereignPrincipal - bond.totalUnits * BOND_UNIT_FACE_VALUE);
+      if (bankPrincipalDue + poolPrincipalDue <= 0) continue;
+      pendingMaturities.push({
+        bondId: bond.bondId,
+        dueTurn: bond.maturityTurn,
+        bankLocal: bankPrincipalDue,
+        publicFloatLocal: poolPrincipalDue,
+      });
+      bankMaturityPrincipalDueTotal += bankPrincipalDue;
+      poolMaturityPrincipalDueTotal += poolPrincipalDue;
+      bond.maturityRegistered = true;
+      // Contract coupons end on scheduled maturity, even if the principal
+      // claim is not yet funded. Principal and holder units remain outstanding
+      // until both recipient legs of the frozen claim can be paid together.
       annualBudgetInterest = Math.max(
         0,
         annualBudgetInterest - (bond.totalUnits * BOND_UNIT_FACE_VALUE * bond.couponRate) / 100
       );
-      bond.heldUnits = 0;
-      bond.floatUnits = 0;
     }
-    while (pendingBankMaturities.length > 0 && treasuryCash >= pendingBankMaturities[0]!) {
-      const paid = pendingBankMaturities.shift()!;
-      treasuryCash -= paid;
-      cash += paid;
-      paidMaturityPrincipal += paid;
-    }
-    while (pendingPoolMaturities.length > 0 && treasuryCash >= pendingPoolMaturities[0]!) {
-      const paid = pendingPoolMaturities.shift()!;
-      treasuryCash -= paid;
-      poolCash += paid;
-      paidPoolMaturityPrincipal += paid;
-    }
-    for (let i = sovereignLots.length - 1; i >= 0; i -= 1) {
-      if (sovereignLots[i]!.maturityTurn === turn) sovereignLots.splice(i, 1);
-    }
+    settleMaturedClaims();
     if (turn === 11) {
       turnTwelveSnapshot = {
         bankCash: Math.round(cash),
@@ -551,6 +610,83 @@ function simulate(scenario: Scenario) {
         ),
       };
     }
+
+    // Match the production solvency pass. The warning band from the prior
+    // pass controls today's withdrawal run, then this turn's score becomes the
+    // stored band for the next pass. Funded bill value is marked at the
+    // executable pool bid and does not count as cash for the run line.
+    const priorBand = warningBand;
+    const loansAtSolvency = sumLoans(tranches);
+    const maturedGovernmentReceivableAtSolvency = pendingMaturities.reduce(
+      (sum, claim) => sum + claim.bankLocal,
+      0
+    );
+    const billMarkAtSolvency = sovereignLots.reduce((sum, bond) => {
+      if (bond.heldUnits <= 0 || bond.maturityTurn <= turn) return sum;
+      const quote = quoteSimBond(bond, turn, prime, poolCash, poolTargetCash);
+      return sum + Math.round(quote.bid * BOND_UNIT_FACE_VALUE * bond.heldUnits * 100) / 100;
+    }, 0);
+    const confidence = computeConfidence({
+      cashReserves: cash,
+      cashBackedDeposits: deposits,
+      totalLoans: loansAtSolvency,
+      reserveRatioRequired: RESERVE_RATIO,
+      arrearsOutstanding: 0,
+      defaultsLastTurn: defaultLoss,
+      panicTurns: 0,
+    });
+    if (priorBand === "amber" || priorBand === "red") {
+      const flight = depositFlight({ priorBand, npcDeposits: deposits, cashReserves: cash });
+      cash -= flight;
+      deposits -= flight;
+      externalCash += flight;
+      totalDepositFlight += flight;
+    }
+    const netAssets =
+      cash +
+      loansAtSolvency +
+      billMarkAtSolvency +
+      maturedGovernmentReceivableAtSolvency -
+      deposits;
+    const failed = depositTakerFails({
+      priorBand,
+      cashReserves: cash,
+      requiredLiquidity: RESERVE_RATIO * deposits,
+      netAssets,
+    });
+    warningBand = confidence.band;
+    if (failed) {
+      failureTurn = turn;
+      failureCause = netAssets < -0.01 ? "negative_equity" : "deposit_run";
+      const depositShortfall = Math.max(0, deposits - Math.max(0, cash));
+      failureInsurancePayout = Math.min(insuranceFundBalance, depositShortfall);
+      failureTreasuryBackstopRequired = depositShortfall - failureInsurancePayout;
+      if (depositShortfall > 0 && pricingEvidenceStartTurn !== undefined) {
+        measuredGrossClaims += depositShortfall;
+        measuredPaidClaims += 1;
+      }
+      const seniorTreasuryClaims =
+        pendingMaturities.reduce(
+          (sum, claim) => sum + claim.bankLocal + claim.publicFloatLocal,
+          0
+        ) +
+        pendingCouponClaims.reduce(
+          (sum, claim) => sum + claim.bankLocal + claim.publicFloatLocal,
+          0
+        );
+      const availableTreasuryCashAfterSeniorClaims = Math.max(
+        0,
+        treasuryCash - seniorTreasuryClaims
+      );
+      failureTreasuryBackstopPaid = Math.min(
+        availableTreasuryCashAfterSeniorClaims,
+        failureTreasuryBackstopRequired
+      );
+      failureUnfundedBackstop = failureTreasuryBackstopRequired - failureTreasuryBackstopPaid;
+      insuranceFundBalance -= failureInsurancePayout;
+      treasuryCash -= failureTreasuryBackstopPaid;
+      break;
+    }
   }
 
   const totalLoans = sumLoans(tranches);
@@ -567,7 +703,11 @@ function simulate(scenario: Scenario) {
     const quote = quoteSimBond(bond, scenario.turns - 1, primeAtEnd, poolCash, poolTargetCash);
     return sum + Math.round(quote.bid * BOND_UNIT_FACE_VALUE * bond.heldUnits * 100) / 100;
   }, 0);
-  const unpaidMaturityClaims = pendingBankMaturities.reduce((sum, amount) => sum + amount, 0);
+  const unpaidMaturityClaims = pendingMaturities.reduce((sum, claim) => sum + claim.bankLocal, 0);
+  const unpaidPoolMaturityClaims = pendingMaturities.reduce(
+    (sum, claim) => sum + claim.publicFloatLocal,
+    0
+  );
   // Matured but unfunded principal remains a government receivable, not bank
   // cash. Keep it visible in equity and separate from executable liquidity.
   const endingEquity = cash + totalLoans + endingBillMark + unpaidMaturityClaims - deposits;
@@ -616,7 +756,38 @@ function simulate(scenario: Scenario) {
     cumulativeFees: Math.round(feeIncome),
     cumulativeServiceFees: Math.round(serviceFeeIncome),
     cumulativePremiums: Math.round(premiumExpense),
+    insurancePremiumBaseAnnualRatePercent:
+      ((scenario.insurancePremiumBaseAnnualRate ?? BASE_PREMIUM_ANNUAL) * 10000) / 100,
     realizedRecessionWriteoff: Math.round(realizedRecessionWriteoff),
+    turnsCompleted: failureTurn === null ? scenario.turns : failureTurn + 1,
+    lifecycleOutcome: failureTurn === null ? "active" : "failed",
+    failureTurn,
+    failureCause,
+    finalWarningBand: warningBand,
+    totalDepositFlight: Math.round(totalDepositFlight),
+    insuranceFundBalanceBeforeFailure: Math.round(insuranceFundBalance + failureInsurancePayout),
+    failureInsurancePayout: Math.round(failureInsurancePayout),
+    failureTreasuryBackstopRequired: Math.round(failureTreasuryBackstopRequired),
+    failureTreasuryBackstopPaid: Math.round(failureTreasuryBackstopPaid),
+    failureUnfundedBackstop: Math.round(failureUnfundedBackstop),
+    stressEventFullyFundedBasePremiumAnnualPercent:
+      failureTurn === null || premiumExposureEquivalentDepositTurns <= 0
+        ? null
+        : round2(
+            ((failureInsurancePayout + failureTreasuryBackstopRequired) /
+              premiumExposureEquivalentDepositTurns) *
+              TURNS_PER_YEAR *
+              100
+          ),
+    seniorTreasuryClaimsAtFailure: Math.round(
+      pendingMaturities.reduce((sum, claim) => sum + claim.bankLocal + claim.publicFloatLocal, 0) +
+        pendingCouponClaims.reduce(
+          (sum, claim) => sum + claim.bankLocal + claim.publicFloatLocal,
+          0
+        )
+    ),
+    endingInsuranceFundBalance: Math.round(insuranceFundBalance),
+    endingHouseholdExternalCash: Math.round(externalCash),
     outstandingPoolAndBankBillUnits: sovereignLots.reduce(
       (sum, bond) => sum + bond.floatUnits + bond.heldUnits,
       0
@@ -647,9 +818,7 @@ function simulate(scenario: Scenario) {
     endingFundedTreasuryCash: Math.round(treasuryCash),
     paidMaturityPrincipal: Math.round(paidMaturityPrincipal),
     poolMaturityPrincipalDueTotal: Math.round(poolMaturityPrincipalDueTotal),
-    unpaidPoolMaturityPrincipal: Math.round(
-      pendingPoolMaturities.reduce((sum, amount) => sum + amount, 0)
-    ),
+    unpaidPoolMaturityPrincipal: Math.round(unpaidPoolMaturityClaims),
     paidPoolMaturityPrincipal: Math.round(paidPoolMaturityPrincipal),
     endingPoolCash: Math.round(poolCash),
     openingPoolCash: Math.round(scenario.openingPoolCash ?? 0),
@@ -771,7 +940,7 @@ const lendingMidpointOffset =
   (MODERN_LENDING_CORRIDOR.minOffset + MODERN_LENDING_CORRIDOR.maxOffset) / 2;
 const scenarios: Scenario[] = [
   {
-    name: "1991-seed-us-balanced-starting-rates-zero-opening-pool",
+    name: "1991-seed-us-balanced-starting-rates-m2-seeded-pool",
     profile: "balanced",
     prime: us1991Prime,
     inflation: 4.2,
@@ -781,7 +950,7 @@ const scenarios: Scenario[] = [
     treasuryAutoSweep: true,
   },
   {
-    name: "1991-seed-us-balanced-starting-rates-five-percent-m2-opening-pool-sensitivity",
+    name: "1991-seed-us-balanced-starting-rates-zero-opening-pool-sensitivity",
     profile: "balanced",
     prime: us1991Prime,
     inflation: 4.2,
@@ -789,7 +958,18 @@ const scenarios: Scenario[] = [
     lendingOffset: lendingMidpointOffset,
     turns: TURNS,
     treasuryAutoSweep: true,
-    openingPoolCash: conservativePoolCashSeed,
+    openingPoolCash: 0,
+  },
+  {
+    name: "1991-balanced-single-aggressive-failure-coverage-premium-sensitivity",
+    profile: "balanced",
+    prime: us1991Prime,
+    inflation: 4.2,
+    depositOffset: MODERN_DEPOSIT_CORRIDOR.minOffset,
+    lendingOffset: (MODERN_LENDING_CORRIDOR.minOffset + MODERN_LENDING_CORRIDOR.maxOffset) / 2,
+    turns: TURNS,
+    treasuryAutoSweep: true,
+    insurancePremiumBaseAnnualRate: 0.1067,
   },
   {
     name: "1991-seed-us-balanced-apy-plus-two-deposit-offset",
@@ -920,8 +1100,31 @@ const scenarios: Scenario[] = [
   },
 ];
 
+// Severity sweep for the legal aggressive risk posture at the 1991 seed rate.
+// Price offsets remain inside the live modern 1991 corridors; only the
+// recession default shock changes. This identifies the production solvency
+// threshold rather than treating a negative ROE as a failure.
+for (const defaultRateMultiplier of [5, 10, 15, 20]) {
+  scenarios.push({
+    name: `1991-aggressive-legal-max-deposit-min-lending-${defaultRateMultiplier}x-recession-defaults`,
+    profile: "aggressive",
+    prime: us1991Prime,
+    inflation: 4.2,
+    depositOffset: MODERN_DEPOSIT_CORRIDOR.maxOffset,
+    lendingOffset: MODERN_LENDING_CORRIDOR.minOffset,
+    turns: TURNS,
+    recessionShock: {
+      turn: TURNS / 2,
+      primeIncreasePp: 5,
+      defaultRateMultiplier,
+      applyStressLoss: true,
+    },
+    treasuryAutoSweep: true,
+  });
+}
+
 for (const scenario of scenarios) {
-  console.log(JSON.stringify({ name: scenario.name, ...scenario, ...simulate(scenario) }));
+  console.log(JSON.stringify({ ...scenario, ...simulate(scenario) }));
 }
 console.log(
   JSON.stringify({
