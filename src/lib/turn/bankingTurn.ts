@@ -1276,7 +1276,7 @@ async function serviceNpcBulkBook(
       _id: string;
       legs: TransitionLeg[];
       projections?: { projection: TransitionProjection }[];
-      event?: { meta?: { originationFees?: number } };
+      event?: { meta?: { originationFees?: number; interestPaid?: number; writtenOff?: number } };
     }>(MONEY_MOVE_COLLECTION)
     .findOne({ _id: settlementKey });
   if (recorded) {
@@ -1317,12 +1317,22 @@ async function serviceNpcBulkBook(
         .findOne({ _id: state.cbDocId }, { projection: { externalBroadMoney: 1 } }),
     ]);
     if (state.cb && pool) state.cb.externalBroadMoney = pool.externalBroadMoney;
+    // New journals freeze the original income split with their claim. Older
+    // fee receipts can still recover the fee from the protected book memo.
+    const recordedFee =
+      recorded.projections?.reduce((sum, row) => {
+        const value =
+          row.projection.collection === "corporations"
+            ? row.projection.update?.$inc?.["bankCharter.loanOriginationFeesLifetime"]
+            : 0;
+        return sum + (typeof value === "number" && Number.isFinite(value) ? value : 0);
+      }, 0) ?? 0;
     return {
       cashReserves: getCashReserves(bank?.bankCharter),
       totalLoans: loans[0]?.total ?? 0,
-      interestCollected: 0,
-      feesCollected: recorded.event?.meta?.originationFees ?? 0,
-      writtenOff: 0,
+      interestCollected: recorded.event?.meta?.interestPaid ?? 0,
+      feesCollected: recorded.event?.meta?.originationFees ?? recordedFee,
+      writtenOff: recorded.event?.meta?.writtenOff ?? 0,
       shortfall: 0,
     };
   }

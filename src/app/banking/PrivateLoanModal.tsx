@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { Button, Input, useDialogA11y } from "@/components/ui";
 import { WarningBandBadge } from "@/components/banking/WarningBandBadge";
 import { formatBankMoney, formatRatePercent } from "@/components/banking/formatBankMoney";
@@ -83,6 +84,7 @@ export function PrivateLoanModal({
   onChanged,
   showToast,
 }: PrivateLoanModalProps) {
+  const feeText = useTranslations("corporations.loanFees");
   const { dialogProps, titleId } = useDialogA11y(onClose);
   const [bankId, setBankId] = useState(
     initialBankId && banks.some((bank) => bank.corporationId === initialBankId)
@@ -481,20 +483,18 @@ export function PrivateLoanModal({
             {selectedBank && feeQuote && principalNumber > 0 && (
               <div className="mb-2 space-y-1">
                 <div className="flex justify-between gap-3">
-                  <span className="text-muted">Origination fee (1%)</span>
+                  <span className="text-muted">{feeText("fee")}</span>
                   <span className="font-mono">
                     {formatBankMoney(feeQuote.originationFee, selectedBank.currency)}
                   </span>
                 </div>
                 <div className="flex justify-between gap-3">
-                  <span className="text-muted">Cash you receive</span>
+                  <span className="text-muted">{feeText("proceeds")}</span>
                   <span className="font-mono">
                     {formatBankMoney(feeQuote.proceeds, selectedBank.currency)}
                   </span>
                 </div>
-                <p className="text-muted">
-                  The fee is withheld when funded. You repay the full principal.
-                </p>
+                <p className="text-muted">{feeText("explanation")}</p>
               </div>
             )}
             <div className="flex justify-between gap-3">
