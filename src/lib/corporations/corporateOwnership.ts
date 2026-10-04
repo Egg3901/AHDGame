@@ -1,18 +1,13 @@
 import { ObjectId } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
+import { SUBSIDIARY_OWNERSHIP_THRESHOLD_PERCENT } from "./corporateOwnershipConstants";
 import { shareholderVotingPower, totalVotingPower } from "./superShares";
 
-/** Another corporation must hold above this % of outstanding shares for subsidiary status. */
-export const SUBSIDIARY_OWNERSHIP_THRESHOLD_PERCENT = 50;
-
-/** Required corporate ownership % to unlock hostile takeover merge. */
-export const HOSTILE_TAKEOVER_OWNERSHIP_THRESHOLD_PERCENT = 75;
-
-/**
- * Premium over market (25% → pay 125% of share price per minority share).
- * Matches hostile takeover squeeze-out payout.
- */
-export const HOSTILE_TAKEOVER_PREMIUM_RATE = 0.25;
+export {
+  SUBSIDIARY_OWNERSHIP_THRESHOLD_PERCENT,
+  HOSTILE_TAKEOVER_OWNERSHIP_THRESHOLD_PERCENT,
+  HOSTILE_TAKEOVER_PREMIUM_RATE,
+} from "./corporateOwnershipConstants";
 
 /**
  * Corporate holders ranked by CONTROL (voting power), not raw share count.

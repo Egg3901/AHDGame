@@ -3,7 +3,7 @@
 import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { useCurrency } from "@/contexts/CurrencyContext";
-import { HOSTILE_TAKEOVER_PREMIUM_RATE } from "@/lib/corporations/corporateOwnership";
+import { HOSTILE_TAKEOVER_PREMIUM_RATE } from "@/lib/corporations/corporateOwnershipConstants";
 import type { CorporationDetail } from "./CorporationPageTypes";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 

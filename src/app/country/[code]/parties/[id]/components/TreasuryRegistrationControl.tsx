@@ -4,7 +4,7 @@ import { DOLLARS_PER_TURNOUT_POINT } from "@/lib/utils/demographicAlignment";
 import {
   REG_DRIVE_MAX_BOOST_PER_STATE,
   calculateRegistrationDriveBoost,
-} from "@/lib/turn/partyOrg/registrationDrive";
+} from "@/lib/parties/registrationDrive";
 import type { PartyData } from "./types";
 import type { TreasuryAction } from "./treasuryReducer";
 import { fmt } from "./helpers";

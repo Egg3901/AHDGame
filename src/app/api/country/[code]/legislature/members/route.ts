@@ -15,7 +15,10 @@ import {
 } from "@/lib/constants/countries";
 import { getGameStatePreset } from "@/lib/db/collections/gameState";
 import { getOfficeTypeForChamber } from "@/lib/legislature/chamberOfficeType";
-import { getLiveLowerChamberSeats, getLiveUpperChamberSeats } from "@/lib/turn/lowerChamberSeats";
+import {
+  getLiveLowerChamberSeats,
+  getLiveUpperChamberSeats,
+} from "@/lib/legislature/lowerChamberSeats";
 import type { PoliticalParty, ElectedOfficial, State, Character, NPP } from "@/lib/db/types";
 
 export async function GET(request: Request, { params }: { params: Promise<{ code: string }> }) {

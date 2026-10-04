@@ -5,7 +5,7 @@
  * escalation multiplier uses).
  */
 import { SOCI_DANGER_ZONE } from "./constants";
-import { clampConcentration } from "./concentration";
+import { clampConcentration } from "./concentrationClamp";
 
 export type ConcentrationTier = "none" | "low" | "elevated" | "high";
 

@@ -58,6 +58,7 @@ export async function GET() {
     // caller and must never be stored in a shared (CDN) cache — otherwise it can
     // be replayed to non-admins (cross-user leak, #3316). The public variant below
     // is identical for every non-admin viewer and stays share-cacheable.
+    // audit:shared-cache-safe (auth only selects the admin variant above)
     response.headers.set("Cache-Control", "private, no-store");
   } else {
     response.headers.set("Cache-Control", "s-maxage=300, stale-while-revalidate=600, no-transform");
