@@ -1,8 +1,8 @@
 # Government accountability mechanism qualification
 
-The treatment makes sustained poor performance cost the parties responsible for government. It preserves responsibility across nominee replacements, shares executive responsibility across a coalition, and attributes a separate share to a legislative majority. Regional registration advantages are earned by executive approval, and direct executive voting penalties continue to worsen down to zero approval.
+The treatment makes sustained poor performance cost the parties responsible for government. It preserves responsibility across nominee replacements, shares executive responsibility across a coalition, and attributes the legislative share across elected lower and upper chambers. A Senate majority carries responsibility even when the same party lacks a House majority. Regional registration advantages are earned by executive approval, and direct executive voting penalties continue to worsen down to zero approval.
 
-Source: `071b1b66cfed03e189c59bc91f1692ee41db6b8c`. The source worktree was clean at execution. Run `npx tsx scripts/sim/governmentAccountability.ts --out=<report.json>`.
+Source: `7f040eb422e05488dc1a67e3cc2312213f3bc396`. The source worktree was clean at execution. Run `npx tsx scripts/sim/governmentAccountability.ts --out=<report.json>`.
 
 ## Method and findings
 

@@ -1,5 +1,5 @@
 {
-  "sourceCommit": "071b1b66cfed03e189c59bc91f1692ee41db6b8c",
+  "sourceCommit": "7f040eb422e05488dc1a67e3cc2312213f3bc396",
   "sourceDirty": false,
   "kind": "Synthetic paired mechanism qualification using the production swing-flow allocator",
   "limits": "Not a historical replay, full world simulation, or seat-resolution qualification. Office labels select mechanisms; PR seat allocation, demographic evolution and endogenous party supply require integrated sandbox runs.",
