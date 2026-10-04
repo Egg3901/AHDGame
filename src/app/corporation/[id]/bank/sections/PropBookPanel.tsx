@@ -1,6 +1,7 @@
 "use client";
 
 import { useReducer } from "react";
+import { useTranslations } from "next-intl";
 import { formatBankMoney } from "@/components/banking/formatBankMoney";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { assessCapital, type BankBorrowings } from "@/lib/banking/capitalAdequacy";
@@ -36,6 +37,7 @@ type PropBookState = {
   ref: string;
   units: string;
   busy: boolean;
+  quote: { fee: number; cost: number; proceeds: number } | null;
 };
 
 /**
@@ -56,6 +58,7 @@ export function PropBookPanel({
   borrowings,
   propLeverage,
   canMutate,
+  forexFeesEnabled = false,
   onChanged,
   showToast,
 }: {
@@ -70,15 +73,21 @@ export function PropBookPanel({
   /** Leverage against the cap, from the same module that enforces it. */
   propLeverage: OutlookPayload["propLeverage"];
   canMutate: boolean;
+  forexFeesEnabled?: boolean;
   onChanged: () => Promise<void>;
   showToast: ShowToast;
 }) {
-  const [{ asset, ref, units, busy }, updatePropState] = useReducer(mergeState<PropBookState>, {
-    asset: "equity",
-    ref: "",
-    units: "",
-    busy: false,
-  });
+  const t = useTranslations("corporations.propForexFees");
+  const [{ asset, ref, units, busy, quote }, updatePropState] = useReducer(
+    mergeState<PropBookState>,
+    {
+      asset: "equity",
+      ref: "",
+      units: "",
+      busy: false,
+      quote: null,
+    }
+  );
 
   // Capital impact of the book as it stands: every unit of current value sits
   // in risk assets beside the loan book (capitalAdequacy.assessCapital).
@@ -96,10 +105,38 @@ export function PropBookPanel({
       : null;
   const needsConfirm = leverageUsed != null && leverageUsed >= CONFIRM_LEVERAGE_FRACTION;
 
+  const requestQuote = async (position: { asset: PropAsset; ref: string; units: number }) => {
+    const response = await fetch(`/api/corporations/${corporationId}/bank/prop/positions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...position, quoteOnly: true }),
+    });
+    const result = (await response.json()) as {
+      error?: string;
+      fee: number;
+      cost: number;
+      proceeds: number;
+    };
+    if (!response.ok) {
+      showToast(result.error ?? t("unavailable"), "error");
+      return null;
+    }
+    return result;
+  };
+
   const open = async () => {
     const u = parseFloat(units);
     if (!ref.trim() || !(u > 0)) {
       showToast(`${REF_LABEL[asset]} and positive units are required`, "error");
+      return;
+    }
+    if (forexFeesEnabled && asset === "forex" && !quote) {
+      updatePropState({ busy: true });
+      try {
+        updatePropState({ quote: await requestQuote({ asset, ref: ref.trim(), units: u }) });
+      } finally {
+        updatePropState({ busy: false });
+      }
       return;
     }
     if (needsConfirm) {
@@ -113,24 +150,36 @@ export function PropBookPanel({
       const res = await fetch(`/api/corporations/${corporationId}/bank/prop/positions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ asset, ref: ref.trim(), units: u }),
+        body: JSON.stringify({
+          asset,
+          ref: ref.trim(),
+          units: u,
+          ...(forexFeesEnabled && asset === "forex" && quote ? { maxCost: quote.cost } : {}),
+        }),
       });
       const json = (await res.json().catch(() => ({}))) as {
         error?: string;
         cost?: number;
+        fee?: number;
         propBookMarkValue?: number;
       };
       if (!res.ok) {
+        updatePropState({ quote: null });
         showToast(json.error ?? "Could not open position", "error");
         return;
       }
       showToast(
-        json.cost != null
-          ? `Opened ${u} ${ref.trim()}: ${formatBankMoney(json.cost, currency)} left vault cash and now counts toward the leverage cap.`
-          : "Position opened: the purchase price left vault cash and now counts toward the leverage cap.",
+        json.fee != null && json.cost != null
+          ? t("opened", {
+              cost: formatBankMoney(json.cost, currency),
+              fee: formatBankMoney(json.fee, currency),
+            })
+          : json.cost != null
+            ? `Opened ${u} ${ref.trim()}: ${formatBankMoney(json.cost, currency)} left vault cash and now counts toward the leverage cap.`
+            : "Position opened: the purchase price left vault cash and now counts toward the leverage cap.",
         "success"
       );
-      updatePropState({ ref: "", units: "" });
+      updatePropState({ ref: "", units: "", quote: null });
       await onChanged();
     } finally {
       updatePropState({ busy: false });
@@ -140,10 +189,30 @@ export function PropBookPanel({
   const close = async (pos: (typeof positions)[number]) => {
     updatePropState({ busy: true });
     try {
+      let minimumProceeds: number | undefined;
+      if (forexFeesEnabled && pos.asset === "forex") {
+        const preview = await requestQuote({ asset: pos.asset, ref: pos.ref, units: pos.units });
+        if (!preview) return;
+        if (
+          !window.confirm(
+            t("closeQuote", {
+              proceeds: formatBankMoney(preview.proceeds, currency),
+              fee: formatBankMoney(preview.fee, currency),
+            })
+          )
+        )
+          return;
+        minimumProceeds = preview.proceeds;
+      }
       const res = await fetch(`/api/corporations/${corporationId}/bank/prop/positions`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ asset: pos.asset, ref: pos.ref, units: pos.units }),
+        body: JSON.stringify({
+          asset: pos.asset,
+          ref: pos.ref,
+          units: pos.units,
+          ...(minimumProceeds !== undefined ? { minProceeds: minimumProceeds } : {}),
+        }),
       });
       const json = (await res.json().catch(() => ({}))) as {
         error?: string;
@@ -212,7 +281,9 @@ export function PropBookPanel({
               <select
                 className={inputClass}
                 value={asset}
-                onChange={(e) => updatePropState({ asset: e.target.value as PropAsset })}
+                onChange={(e) =>
+                  updatePropState({ asset: e.target.value as PropAsset, quote: null })
+                }
                 aria-label="Investment asset type"
               >
                 <option value="equity">Equity</option>
@@ -225,7 +296,7 @@ export function PropBookPanel({
               {REF_LABEL[asset]}
               <input
                 value={ref}
-                onChange={(e) => updatePropState({ ref: e.target.value })}
+                onChange={(e) => updatePropState({ ref: e.target.value, quote: null })}
                 placeholder={REF_PLACEHOLDER[asset]}
                 aria-label={`Investment position ${REF_LABEL[asset].toLowerCase()}`}
                 className={inputClass}
@@ -235,16 +306,32 @@ export function PropBookPanel({
               Units
               <input
                 value={units}
-                onChange={(e) => updatePropState({ units: e.target.value })}
+                onChange={(e) => updatePropState({ units: e.target.value, quote: null })}
                 inputMode="decimal"
                 aria-label="Investment position units"
                 className={`${inputClass} font-mono`}
               />
             </label>
             <SmallButton tone="primary" onClick={() => void open()} disabled={busy}>
-              {busy ? "Working..." : "Open position"}
+              {busy
+                ? "Working..."
+                : forexFeesEnabled && asset === "forex"
+                  ? quote
+                    ? t("buy")
+                    : t("quote")
+                  : "Open position"}
             </SmallButton>
           </div>
+          {forexFeesEnabled && asset === "forex" && (
+            <p className="text-xs text-muted">
+              {quote
+                ? t("preview", {
+                    cost: formatBankMoney(quote.cost, currency),
+                    fee: formatBankMoney(quote.fee, currency),
+                  })
+                : t("explanation")}
+            </p>
+          )}
           <p className="text-[11px] text-muted">
             Opening quotes units x market price out of vault cash
             {leverage

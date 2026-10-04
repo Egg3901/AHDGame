@@ -1,4 +1,5 @@
 import type { Db } from "mongodb";
+import { migration as bankPropForexFeeIndex } from "./entries/2026-10-04-bank-prop-forex-fee-index";
 import { migration as repairOrphanIndexFundState } from "./entries/2026-09-03-repair-orphan-index-fund-state";
 import { migration as equityMarketPools } from "./entries/2026-09-03-equity-market-pools";
 import { migration as providerIdentityIndexes } from "./entries/2026-09-10-provider-identity-indexes";
@@ -39,6 +40,7 @@ export const REQUIRED_STARTUP_MIGRATIONS: readonly Migration[] = [
   // Existing saves need the political journal indexes before current-turn replay reads.
   politicalMediaOrderIndexes,
   bankTreasuryTradeIndexes,
+  bankPropForexFeeIndex,
 ];
 
 export async function runRequiredStartupMigrations(db: Db): Promise<RunSummary> {

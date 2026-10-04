@@ -150,7 +150,10 @@ async function handleGET(_request: Request, { params }: RouteParams) {
 
     const { id } = await params;
     const db = await getDb();
-    const resolved = await resolveCorporation(db, id);
+    const resolved = await resolveCorporation(db, id, {
+      bankPropForexFee: 0,
+      bankPropForexVolume: 0,
+    });
     if (!resolved.ok) return resolved.response;
     const { corporation } = resolved;
 
@@ -175,6 +178,7 @@ async function handleGET(_request: Request, { params }: RouteParams) {
         bankPropTradingEnabled: propTradingEnabled,
         bankTreasuryEnabled: policy.bankTreasury,
         bankTreasury: null,
+        bankPropForexFeesEnabled: policy.propForexFees,
         visible: false,
         isCeo: false,
         isAdmin: auth.user.isAdmin === true,
@@ -464,6 +468,7 @@ async function handleGET(_request: Request, { params }: RouteParams) {
       bankPropTradingEnabled: propTradingEnabled,
       bankTreasuryEnabled: policy.bankTreasury,
       bankTreasury,
+      bankPropForexFeesEnabled: policy.propForexFees,
       visible: true,
       isCeo,
       isAdmin,

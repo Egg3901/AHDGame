@@ -19,6 +19,7 @@ export interface BankingPolicyConfig {
   privateBankingEnabled?: boolean;
   bankPropTradingEnabled?: boolean;
   bankTreasuryEnabled?: boolean;
+  bankPropForexFeesEnabled?: boolean;
   bankContagionEnabled?: boolean;
   lineOfCreditEnabled?: boolean;
   playerAdvancedBankChartersEnabled?: boolean;
@@ -31,6 +32,7 @@ export const BANKING_POLICY_PROJECTION = Object.freeze({
   privateBankingEnabled: 1,
   bankPropTradingEnabled: 1,
   bankTreasuryEnabled: 1,
+  bankPropForexFeesEnabled: 1,
   bankContagionEnabled: 1,
   lineOfCreditEnabled: 1,
   playerAdvancedBankChartersEnabled: 1,
@@ -45,6 +47,8 @@ export interface BankingPolicySnapshot {
   propTrading: boolean;
   /** Funded short-sovereign treasury holdings; disabled unless explicitly enabled. */
   bankTreasury: boolean;
+  /** Funded size-priced forex fees. Requires banking and prop trading. */
+  propForexFees: boolean;
   /** Failure contagion between same-currency deposit takers. Requires private banking. */
   contagion: boolean;
   /** Player lines of credit at the central bank. */
@@ -81,6 +85,10 @@ export function resolveBankingPolicy(
     privateBanking,
     propTrading: privateBanking && config?.bankPropTradingEnabled !== false,
     bankTreasury: privateBanking && config?.bankTreasuryEnabled === true,
+    propForexFees:
+      privateBanking &&
+      config?.bankPropTradingEnabled !== false &&
+      config?.bankPropForexFeesEnabled === true,
     contagion: privateBanking && config?.bankContagionEnabled !== false,
     lineOfCredit: config?.lineOfCreditEnabled !== false,
     advancedCharters: privateBanking && config?.playerAdvancedBankChartersEnabled === true,
@@ -96,6 +104,8 @@ export const BANKING_POLICY_OFF: BankingPolicySnapshot = resolveBankingPolicy(nu
 export const BANKING_POLICY_ALL_ON: BankingPolicySnapshot = resolveBankingPolicy({
   privateBankingEnabled: true,
   bankPropTradingEnabled: true,
+  bankPropForexFeesEnabled: true,
+  bankTreasuryEnabled: true,
   bankContagionEnabled: true,
   lineOfCreditEnabled: true,
   playerAdvancedBankChartersEnabled: true,

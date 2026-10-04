@@ -231,6 +231,15 @@
       "save": "Publish stance",
       "saving": "Publishing...",
       "saveFailed": "Could not publish the editorial stance."
+    },
+    "propForexFees": {
+      "quote": "Quote forex trade",
+      "buy": "Buy quoted position",
+      "unavailable": "Forex quote is unavailable",
+      "preview": "Vault cash {cost}, including {fee} fee. The fee does not increase the position value.",
+      "explanation": "Forex fees grow with the bank's recent trade size and market liquidity. Quote the cash cost before buying.",
+      "closeQuote": "Receive {proceeds} after a {fee} forex fee. Sell this position?",
+      "opened": "Position opened. Vault cash paid {cost}, including a {fee} forex fee."
     }
   }
 }
