@@ -43,13 +43,15 @@ export interface MediaProductAdvertisingObligationV1 {
   buyerAmountLocal: number;
   buyerCurrencyCode: CurrencyCode;
   buyerLocalPerAnchor: number;
-  buyerDenomination: ProductAdvertisingDenominationWitness;
+  /** Absent on obligations persisted before raw-denomination guards were added. */
+  buyerDenomination?: ProductAdvertisingDenominationWitness;
   sellerAllocations: Array<{
     corporationId: string;
     amountLocal: number;
     currencyCode: CurrencyCode;
     localPerAnchor: number;
-    denomination: ProductAdvertisingDenominationWitness;
+    /** Absent on obligations persisted before raw-denomination guards were added. */
+    denomination?: ProductAdvertisingDenominationWitness;
   }>;
 }
 

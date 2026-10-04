@@ -10,6 +10,7 @@ import { oid } from "@/lib/banking/rules/boundary";
 import { MONEY_MOVE_COLLECTION } from "@/lib/banking/moneyMove";
 import { resumeSettlement, settleTransition } from "@/lib/banking/settlementJournal";
 import {
+  productAdvertisingDenominationWitness,
   quoteFundedProductAdvertising,
   type ProductAdvertisingSellerQuote,
 } from "@/lib/products/rules/productAdvertising";
@@ -19,6 +20,7 @@ const JOURNAL_PREFIX = "media-product-advertising";
 function denominationConditions(
   witness: MediaProductAdvertisingObligationV1["buyerDenomination"]
 ): Record<string, unknown>[] {
+  const frozen = witness ?? productAdvertisingDenominationWitness({});
   const check = (
     field: "liquidCurrencyCode" | "countryId",
     present: boolean,
@@ -29,8 +31,8 @@ function denominationConditions(
     return [{ [field]: value }];
   };
   return [
-    ...check("liquidCurrencyCode", witness.liquidCurrencyCodePresent, witness.liquidCurrencyCode),
-    ...check("countryId", witness.countryIdPresent, witness.countryId),
+    ...check("liquidCurrencyCode", frozen.liquidCurrencyCodePresent, frozen.liquidCurrencyCode),
+    ...check("countryId", frozen.countryIdPresent, frozen.countryId),
   ];
 }
 
@@ -219,11 +221,29 @@ export async function settleMediaProductAdvertisingObligations(
       touched.set(row._id.toHexString(), row._id);
     }
     for (const obligation of row.mediaProductAdvertisingObligationsV1 ?? []) {
-      const transition = mediaProductAdvertisingTransition(row._id, obligation);
-      const prior = await journal.findOne({ _id: transition.key }, { projection: { _id: 1 } });
+      const key = mediaProductAdvertisingSettlementKey(row._id.toHexString(), obligation);
+      const prior = await journal.findOne({ _id: key }, { projection: { _id: 1 } });
+      if (
+        !prior &&
+        (!obligation.buyerDenomination ||
+          obligation.sellerAllocations.some((seller) => !seller.denomination))
+      ) {
+        await db.collection<Corporation>("corporations").updateOne(
+          { _id: row._id },
+          {
+            $pull: {
+              mediaProductAdvertisingObligationsV1: {
+                projectId: obligation.projectId,
+                turn: obligation.turn,
+              },
+            },
+          }
+        );
+        continue;
+      }
       const result = prior
-        ? await resumeSettlement(db, transition.key)
-        : await settleTransition(db, transition);
+        ? await resumeSettlement(db, key)
+        : await settleTransition(db, mediaProductAdvertisingTransition(row._id, obligation));
       if (result.status === "applied" || (result.status === "replayed" && !result.error)) {
         touched.set(row._id.toHexString(), row._id);
       } else if (result.status === "rejected" && result.appliedLegs.length === 0) {

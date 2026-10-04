@@ -9,6 +9,69 @@ import {
 import { productAdvertisingDenominationWitness } from "./rules/productAdvertising";
 
 describe("media product advertising denomination recovery", () => {
+  it("discards an unwitnessed legacy order before creating any journal entry", async () => {
+    const buyerId = new ObjectId();
+    const sellerId = new ObjectId();
+    const obligation = createMediaProductAdvertisingObligation({
+      buyerCorporationId: buyerId.toHexString(),
+      projectId: "legacy-title",
+      turn: 9,
+      amountAnchor: 10,
+      buyerCurrencyCode: "USD",
+      buyerLocalPerAnchor: 1,
+      buyerDenomination: productAdvertisingDenominationWitness({
+        liquidCurrencyCode: "USD",
+        countryId: "US",
+      }),
+      sellers: [
+        {
+          corporationId: sellerId.toHexString(),
+          deliveredValueAnchor: 10,
+          currencyCode: "USD",
+          localPerAnchor: 1,
+          ...productAdvertisingDenominationWitness({
+            liquidCurrencyCode: "USD",
+            countryId: "US",
+          }),
+        },
+      ],
+    });
+    expect(obligation).not.toBeNull();
+    const { buyerDenomination: _buyer, ...legacy } = obligation!;
+    const legacyObligation = {
+      ...legacy,
+      sellerAllocations: legacy.sellerAllocations.map(
+        ({ denomination: _seller, ...seller }) => seller
+      ),
+    };
+    const db = createInMemoryDb();
+    db.seed("corporations", [
+      {
+        _id: buyerId,
+        countryId: "US",
+        liquidCurrencyCode: "USD",
+        liquidCapital: 100,
+        mediaProductAdvertisingObligationsV1: [legacyObligation],
+      },
+      {
+        _id: sellerId,
+        countryId: "US",
+        liquidCurrencyCode: "USD",
+        liquidCapital: 50,
+      },
+    ]);
+
+    await settleMediaProductAdvertisingObligations(db as never, [buyerId], 9);
+
+    const buyer = await db.collection("corporations").findOne({ _id: buyerId });
+    const seller = await db.collection("corporations").findOne({ _id: sellerId });
+    expect(buyer?.liquidCapital).toBe(100);
+    expect(buyer?.mediaProductAdvertisingObligationsV1).toEqual([]);
+    expect(buyer?.mediaProductAdvertisingReceiptV1).toBeUndefined();
+    expect(seller?.liquidCapital).toBe(50);
+    expect(await db.collection("bankMoneyMoves").countDocuments({})).toBe(0);
+  });
+
   it("cancels a frozen order when the buyer denomination changes before any cash leg lands", async () => {
     const buyerId = new ObjectId();
     const sellerId = new ObjectId();
