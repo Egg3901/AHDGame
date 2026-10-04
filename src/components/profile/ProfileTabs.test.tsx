@@ -88,7 +88,7 @@ describe("profile role views", () => {
     const { rerender } = render(
       shell({
         business: {
-          corporation: { name: "Test Corp", id: "1", type: "energy" },
+          corporation: { name: "Test Corp", id: "1", type: "energy", industryModel: null },
           isInvestor: false,
           finances: null,
         },

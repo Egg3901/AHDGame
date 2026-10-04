@@ -41,19 +41,17 @@ type SnapshotMoneySupplyConfig = GameConfig & {
 };
 
 export async function snapshotMoneySupply(db: Db, turn: number): Promise<number> {
-  const config = await db
-    .collection<SnapshotMoneySupplyConfig>("gameConfig")
-    .findOne(
-      { _id: "default" },
-      {
-        projection: {
-          moneySupplyEnabled: 1,
-          treasuryCashLedgerEnabled: 1,
-          privateBankingEnabled: 1,
-          bankConstructionFinanceEnabled: 1,
-        },
-      }
-    );
+  const config = await db.collection<SnapshotMoneySupplyConfig>("gameConfig").findOne(
+    { _id: "default" },
+    {
+      projection: {
+        moneySupplyEnabled: 1,
+        treasuryCashLedgerEnabled: 1,
+        privateBankingEnabled: 1,
+        bankConstructionFinanceEnabled: 1,
+      },
+    }
+  );
   if (!isMoneySupplyEnabledFromConfig(config)) return 0;
   const treasuryCashLedgerEnabled = config?.treasuryCashLedgerEnabled === true;
   const constructionCashEnabled =
@@ -208,7 +206,12 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
         }>("corporateSectors")
         .find(
           { "constructionFinancing.escrowLocal": { $gt: 0 } },
-          { projection: { "constructionFinancing.currency": 1, "constructionFinancing.escrowLocal": 1 } }
+          {
+            projection: {
+              "constructionFinancing.currency": 1,
+              "constructionFinancing.escrowLocal": 1,
+            },
+          }
         )
         .toArray()
     : [];

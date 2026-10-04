@@ -109,7 +109,8 @@ export async function payOrganizationAid(
           filter: { countryId: recipient, treasuryCashLocal: { $exists: true } },
           path: "treasuryCashLocal",
           amount: fundedRecipientLocal,
-          currencyCode: batch.budgetCurrencies.get(recipient) ?? COUNTRY_CURRENCY_MAP[recipient] ?? "USD",
+          currencyCode:
+            batch.budgetCurrencies.get(recipient) ?? COUNTRY_CURRENCY_MAP[recipient] ?? "USD",
           localPerAnchor: treasuryRate,
         },
         destinationTreasuryCountry: recipient,
@@ -133,11 +134,7 @@ export async function payOrganizationAid(
           site: "aid_treasury",
           now: new Date(),
         });
-        await applyOrganizationAidBoost(
-          db,
-          recipient,
-          localToUsd(fundCountry, amountFund, preset)
-        );
+        await applyOrganizationAidBoost(db, recipient, localToUsd(fundCountry, amountFund, preset));
       }
       return true;
     }

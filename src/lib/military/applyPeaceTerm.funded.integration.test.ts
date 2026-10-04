@@ -9,9 +9,7 @@ describe("funded Treasury peace indemnity", () => {
     memory.seed("gameConfig", [
       { _id: "default", treasuryCashLedgerEnabled: true, ledgerShadow: false },
     ]);
-    memory.seed("gameState", [
-      { _id: "current", currentTurn: 100, preset: "2019-default" },
-    ]);
+    memory.seed("gameState", [{ _id: "current", currentTurn: 100, preset: "2019-default" }]);
     memory.seed("exchangeRates", [{ currencyCode: "USD", rate: 1 }]);
     memory.seed("federalBudget", [
       {
