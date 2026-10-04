@@ -137,6 +137,15 @@ describe("runtime lifecycle category determines reset selection", () => {
     expect(getRuntimeCollectionNames()).not.toContain(name);
   });
 
+  it("preserves Patreon leases and support audit history across world resets", () => {
+    for (const name of ["cronLocks", "patreonReconcileUnmatched", "patreonReconcileRuns"]) {
+      expect(getCollectionCategory(name)).toBe("preserved");
+      expect(getPreservedCollectionNames()).toContain(name);
+      expect(getRuntimeCollectionNames()).not.toContain(name);
+      expect(getReferenceCollectionNames()).not.toContain(name);
+    }
+  });
+
   it("keeps actual world reference and account collections in their own lifecycle", () => {
     expect(getReferenceCollectionNames()).toContain("states");
     expect(getRuntimeCollectionNames()).not.toContain("states");

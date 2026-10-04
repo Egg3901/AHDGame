@@ -1217,6 +1217,18 @@ const PRESERVED: CollectionEntry[] = [
   { name: "userApiKeys", category: "preserved" },
   { name: "discordBotFunds", category: "preserved" },
   { name: "userSubscriptions", category: "preserved", notes: "Patreon tier records." },
+  {
+    name: "patreonReconcileUnmatched",
+    category: "preserved",
+    notes:
+      "Pseudonymous unmatched-account fingerprints, retry counts, and resolution history. Preserve this account-linked support audit across world resets.",
+  },
+  {
+    name: "patreonReconcileRuns",
+    category: "preserved",
+    notes:
+      "PII-free Patreon reconciliation run counts and failure status. Operational audit history is independent of the current game world.",
+  },
   { name: "feedback", category: "preserved" },
   {
     name: "tickets",
@@ -1257,6 +1269,12 @@ const PRESERVED: CollectionEntry[] = [
   { name: "apiAccessLog", category: "preserved", notes: "API access audit log." },
   { name: "apiAbuseScans", category: "preserved", notes: "API-abuse detection audit." },
   { name: "rateLimitBuckets", category: "preserved", notes: "Rate-limit infra." },
+  {
+    name: "cronLocks",
+    category: "preserved",
+    notes:
+      "Scheduled-job leases are operational concurrency guards, not world state. Preserve an active lease across reset so another reconciliation cannot overlap it; expired leases are replaced on acquisition.",
+  },
   { name: "ipGeoCache", category: "preserved", notes: "IP-geo lookup cache." },
   { name: "playerBannerAds", category: "preserved", notes: "Banner-ad infra/content." },
   {
