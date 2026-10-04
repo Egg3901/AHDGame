@@ -105,6 +105,16 @@ export async function GET(req: NextRequest) {
       dimension: req.nextUrl.searchParams.get("category") ?? "",
       bucket: req.nextUrl.searchParams.get("group") ?? "",
     };
+    if (
+      target.dimension === "__proto__" ||
+      target.dimension === "constructor" ||
+      target.dimension === "prototype" ||
+      target.bucket === "__proto__" ||
+      target.bucket === "constructor" ||
+      target.bucket === "prototype"
+    ) {
+      return NextResponse.json({ error: "Invalid demographic group" }, { status: 400 });
+    }
     const count = z.coerce
       .number()
       .int()
@@ -169,6 +179,16 @@ export async function POST(req: NextRequest) {
     if (!parsed.success)
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
     const { stateId, category, group, count, electionId } = parsed.data;
+    if (
+      category === "__proto__" ||
+      category === "constructor" ||
+      category === "prototype" ||
+      group === "__proto__" ||
+      group === "constructor" ||
+      group === "prototype"
+    ) {
+      return NextResponse.json({ error: "Invalid demographic group" }, { status: 400 });
+    }
     const resolved = resolveCanvassGroup(user.character.countryId, category, group);
     const modifierCategoryKey = resolved?.categoryKey ?? category;
 

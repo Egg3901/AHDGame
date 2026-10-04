@@ -4,14 +4,31 @@
  */
 
 export function getPath(obj: Record<string, unknown>, path: string): unknown {
-  return path.split(".").reduce<unknown>((acc, k) => (acc as Record<string, unknown>)?.[k], obj);
+  let current: unknown = obj;
+  for (const part of path.split(".")) {
+    if (part === "__proto__" || part === "constructor" || part === "prototype") return undefined;
+    if (current == null || typeof current !== "object") return undefined;
+    current = (current as Record<string, unknown>)[part];
+  }
+  return current;
 }
 
 export function setPath(obj: Record<string, unknown>, path: string, value: unknown): void {
   const parts = path.split(".");
-  let cur = obj;
-  for (let i = 0; i < parts.length - 1; i++) cur = cur[parts[i]] as Record<string, unknown>;
-  cur[parts[parts.length - 1]] = value;
+  for (const part of parts) {
+    if (part === "__proto__" || part === "constructor" || part === "prototype") return;
+  }
+  let current = obj;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const key = parts[i];
+    if (key === "__proto__" || key === "constructor" || key === "prototype") return;
+    const existing = current[key];
+    if (existing === null || typeof existing !== "object") {
+      current[key] = /^(0|[1-9]\d*)$/.test(parts[i + 1]) ? [] : {};
+    }
+    current = current[key] as Record<string, unknown>;
+  }
+  current[parts[parts.length - 1]] = value;
 }
 
 /** Recursively scale every finite number by `weight`; leave Dates/strings/bools. */
@@ -21,7 +38,14 @@ export function scaleDeep(value: unknown, weight: number): unknown {
   if (Array.isArray(value)) return value.map((v) => scaleDeep(v, weight));
   if (typeof value === "object") {
     const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value)) out[k] = scaleDeep(v, weight);
+    for (const [key, nestedValue] of Object.entries(value)) {
+      Object.defineProperty(out, key, {
+        value: scaleDeep(nestedValue, weight),
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
+    }
     return out;
   }
   return value;
