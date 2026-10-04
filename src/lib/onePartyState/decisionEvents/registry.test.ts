@@ -39,7 +39,7 @@ function makeContext(): DecisionContext {
     countryId: "CN",
     currentTurn: 100,
     decision,
-    leaderCharacterId: decision.leaderCharacterId,
+    leaderCharacterId: decision.leaderCharacterId!,
   };
 }
 

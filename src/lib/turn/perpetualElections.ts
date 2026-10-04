@@ -76,6 +76,7 @@ export {
   ensureBRElections,
   ensureBRSenateElections,
   ensureBRGovernorElections,
+  ensureBRPresidentialElection,
 } from "./perpetualElections/countries/br";
 export {
   ensureCNElections,

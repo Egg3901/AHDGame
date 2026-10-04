@@ -2,6 +2,8 @@ import type { EconomicInterventionPlan } from "@/lib/economy/interventionGoverna
 
 export interface GameConfig {
   _id: string;
+  /** Enables product-project reads and output adapters; absent remains off. */
+  productLinesV2Enabled?: boolean;
   /** Shared nominal commodity price level. Scarcity remains in price/base ratios. */
   commodityNominalPriceIndex?: number;
   /** Last commodity turn included in commodityNominalPriceIndex. */
@@ -215,6 +217,8 @@ export interface GameConfig {
   playerFundSponsorshipEnabled?: boolean;
   /** Kill switch: investment-bank proprietary trading (incl. leveraged forex). Default on when banking is on. */
   bankPropTradingEnabled?: boolean;
+  /** Size-priced forex prop orders and their fee journal. Default off. */
+  bankPropForexFeesEnabled?: boolean;
   /** Kill switch: bank-failure contagion cascade. Default on when banking is on. */
   bankContagionEnabled?: boolean;
   /**

@@ -327,6 +327,12 @@ const RUNTIME: CollectionEntry[] = [
       "One bond market pool per currency: the cash side of every bond's publicFloat, with lifetime flow counters. Seeded by migration from a share of M2; wiped with the world.",
   },
   {
+    name: "bankTreasuryTrades",
+    category: "runtime",
+    notes:
+      "Durable frozen intents and recovery receipts for funded bank sovereign treasury trades. Wiped with the game world.",
+  },
+  {
     name: "equityMarketPools",
     category: "runtime",
     notes:
@@ -510,6 +516,7 @@ const RUNTIME: CollectionEntry[] = [
   { name: "ministerialOrders", category: "runtime" },
   { name: "governmentApprovals", category: "runtime" },
   { name: "governmentFormations", category: "runtime" },
+  { name: "governmentAccountability", category: "runtime" },
   { name: "parliamentaryGovernments", category: "runtime" },
   { name: "ukCabinetCooldowns", category: "runtime" },
   { name: "ukGovernment", category: "runtime" },
@@ -523,6 +530,12 @@ const RUNTIME: CollectionEntry[] = [
   { name: "corporationPrivatizationVotes", category: "runtime" },
   { name: "corporationVotes", category: "runtime" },
   { name: "corporateSectors", category: "runtime" },
+  {
+    name: "manufacturingProductProjectsV2",
+    category: "runtime",
+    notes:
+      "Active product development projects, including paid progress and plant allocations. Reset with corporations and sectors; per-turn development receipts are embedded on corporations and are wiped with those rows.",
+  },
   {
     name: "pendingNationalizations",
     category: "runtime",

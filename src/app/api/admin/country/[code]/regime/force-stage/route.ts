@@ -24,7 +24,7 @@ import type {
 } from "@/lib/db/types/regimeEscalation";
 import { offerDecision } from "@/lib/onePartyState/decisionQueue";
 import { fireFactionSplit } from "@/lib/onePartyState/factionSplit";
-import { getHeadOfGovernmentCharacterId } from "@/lib/api/headOfGovernment";
+import { getHeadOfGovernmentReference } from "@/lib/api/headOfGovernmentReference";
 
 const STAGE_VALUES: readonly RegimeStage[] = [
   "stable",
@@ -116,7 +116,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       factionSplitResult = await fireFactionSplit(db, countryId, currentTurn);
     }
     if (toStage !== "stable") {
-      const hogId = await getHeadOfGovernmentCharacterId(db, countryId);
+      const hogId = await getHeadOfGovernmentReference(db, countryId);
       if (hogId) {
         const kind = decisionKindForStage(toStage);
         await offerDecision(db, countryId, {

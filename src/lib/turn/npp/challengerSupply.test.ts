@@ -398,3 +398,45 @@ describe("processChallengerGeneration: qualification coverage (#2072)", () => {
     }
   );
 });
+
+describe("custom-party challenger supply", () => {
+  it("fields a matured custom party with presence without recreating a default roster", async () => {
+    const db = createMockDb();
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+    const fixture: WorldFixture = {
+      currentTurn: 100,
+      elections: [{ ...cnPeoplesCongress("CA"), countryId: "US", electionType: "senate" }],
+      parties: [
+        { sequentialId: 7, countryId: "US", isDefault: false, createdTurn: 40 } as PoliticalParty,
+      ],
+      freeNpps: [],
+      officials: [],
+      statePartyOrgs: [{ ...spo("CA", "7"), countryId: "US" }],
+    };
+    const { insertedCandidates } = mountWorld(db, fixture);
+    expect(await processChallengerGeneration(new Date())).toBe(1);
+    expect(insertedCandidates.map((c) => c.party)).toEqual(["7"]);
+  });
+  it("requires both maturity and genuine local presence for custom parties", async () => {
+    for (const [createdTurn, hasPresence] of [
+      [90, true],
+      [40, false],
+    ] as const) {
+      const db = createMockDb();
+      const { getDb } = await import("@/lib/mongodb");
+      vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+      mountWorld(db, {
+        currentTurn: 100,
+        elections: [{ ...cnPeoplesCongress("CA"), countryId: "US", electionType: "senate" }],
+        parties: [
+          { sequentialId: 7, countryId: "US", isDefault: false, createdTurn } as PoliticalParty,
+        ],
+        freeNpps: [],
+        officials: [],
+        statePartyOrgs: [{ ...spo("CA", "7"), countryId: "US", hasPresence }],
+      });
+      expect(await processChallengerGeneration(new Date())).toBe(0);
+    }
+  });
+});

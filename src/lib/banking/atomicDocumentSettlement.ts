@@ -24,7 +24,7 @@ interface AtomicPlan {
   receipt: string;
   receiptGuard: unknown;
   receiptProtocol?: "protected_v1";
-  nonCashMode?: "central_bank_bond_exchange";
+  nonCashMode?: "central_bank_bond_exchange" | "bank_treasury_inventory";
   cashMode?: "central_bank_reserve_pool";
 }
 interface AtomicRecord extends Document {
@@ -81,7 +81,7 @@ export async function settleAtomicDocumentTransition(
   target: {
     identity: Record<string, unknown>;
     guard?: Record<string, unknown>;
-    nonCashMode?: "central_bank_bond_exchange";
+    nonCashMode?: "central_bank_bond_exchange" | "bank_treasury_inventory";
     cashMode?: "central_bank_reserve_pool";
     /** Receipt generation captured with the caller's quote. Null means absent. */
     expectedSettledKeys?: readonly string[] | null;
@@ -119,17 +119,22 @@ export async function settleAtomicDocumentTransition(
     return bad("Atomic settlement identity must be a stable document id");
   const realLegs = transition.legs.filter((leg) => leg.kind === "debit" || leg.kind === "credit");
   const assetOnly =
-    transition.legs.length === 0 && target.nonCashMode === "central_bank_bond_exchange";
+    transition.legs.length === 0 &&
+    (target.nonCashMode === "central_bank_bond_exchange" ||
+      target.nonCashMode === "bank_treasury_inventory");
   if (!realLegs.length && !assetOnly)
     return bad("Atomic settlement needs a document cash leg or an explicit bond exchange");
   if (assetOnly) {
-    const allowed = new Set([
-      "publicFloat",
-      "centralBankHoldings",
-      "marketPrice",
-      "qeSupportRatio",
-      "updatedAt",
-    ]);
+    const allowed =
+      target.nonCashMode === "bank_treasury_inventory"
+        ? new Set(["holders", "updatedAt"])
+        : new Set([
+            "publicFloat",
+            "centralBankHoldings",
+            "marketPrice",
+            "qeSupportRatio",
+            "updatedAt",
+          ]);
     if (
       projection.collection !== "bonds" ||
       projection.update.$unset ||
@@ -141,6 +146,55 @@ export async function settleAtomicDocumentTransition(
       )
     )
       return bad("Noncash bond exchanges may update only the permitted asset fields");
+    const bankInventorySet = projection.update.$set as Record<string, unknown> | undefined;
+    if (
+      target.nonCashMode === "bank_treasury_inventory" &&
+      (Object.keys(projection.update).some((key) => key !== "$set") ||
+        !Array.isArray(bankInventorySet?.holders) ||
+        !Array.isArray(target.guard?.holders) ||
+        transition.kind !== "bank_treasury_trade_reservation")
+    )
+      return bad(
+        "Bank treasury inventory reservations require one guarded full holder-array update"
+      );
+    if (target.nonCashMode === "bank_treasury_inventory") {
+      const before = target.guard!.holders as Array<{ units?: unknown }>;
+      const after = bankInventorySet!.holders as Array<{ units?: unknown }>;
+      const tradeId = transition.key.slice("bank-treasury:".length, -":reserve".length);
+      const reserved = after.slice(before.length);
+      const allocationByLot = new Map<string, number>();
+      for (const holder of reserved) {
+        const lotId = (holder as { bankTreasuryLotId?: unknown }).bankTreasuryLotId;
+        const holderTradeId = (holder as { bankTreasuryTradeId?: unknown }).bankTreasuryTradeId;
+        const units = holder.units;
+        if (
+          typeof lotId !== "string" ||
+          holderTradeId !== tradeId ||
+          !Number.isSafeInteger(units) ||
+          (units as number) <= 0
+        )
+          return bad("Bank treasury reservation may append only its positive trade lots");
+        allocationByLot.set(lotId, (allocationByLot.get(lotId) ?? 0) + (units as number));
+      }
+      const expectedSources = before.map((holder) => {
+        const lotId = (holder as { bankTreasuryLotId?: unknown }).bankTreasuryLotId;
+        const units = holder.units;
+        const reservedUnits = typeof lotId === "string" ? (allocationByLot.get(lotId) ?? 0) : 0;
+        return reservedUnits > 0 ? { ...holder, units: Number(units) - reservedUnits } : holder;
+      });
+      if (
+        after.length !== before.length + reserved.length ||
+        after.some((holder) => !Number.isFinite(holder.units) || Number(holder.units) < 0) ||
+        !isDeepStrictEqual(after.slice(0, before.length), expectedSources) ||
+        after.reduce((sum, holder) => sum + Number(holder.units), 0) !==
+          before.reduce((sum, holder) => sum + Number(holder.units), 0) ||
+        reserved.reduce((sum, holder) => sum + Number(holder.units), 0) !==
+          [...allocationByLot.values()].reduce((sum, units) => sum + units, 0)
+      )
+        return bad(
+          "Bank treasury reservation must conserve whole units across source and trade lots"
+        );
+    }
   }
   if (target.cashMode === "central_bank_reserve_pool") {
     const increment = projection.update.$inc as Record<string, unknown> | undefined;

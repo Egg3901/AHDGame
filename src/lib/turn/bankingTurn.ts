@@ -18,6 +18,7 @@ import { getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { loadBankingPolicy, type BankingPolicySnapshot } from "@/lib/banking/policy";
+import { processBankTreasuryTurn } from "@/lib/banking/bankTreasury";
 import { savingsReadsAuthoritative } from "@/lib/banking/rules/policy";
 import { recoverBankingSettlements } from "@/lib/banking/recovery";
 import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
@@ -177,7 +178,7 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
   // Finish last turn's unfinished business before any new flow: a settlement
   // that crashed between two legs, an estate claimed and never settled. Doing
   // it first means nothing below builds on money still in flight.
-  const recovered = await recoverBankingSettlements(db, turn);
+  const recovered = await recoverBankingSettlements(db, turn, policy);
   const recovery = {
     resumedSettlements: recovered.resumedSettlements.length,
     stillPartial: recovered.stillPartial.length,
@@ -334,6 +335,12 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
   await timedBankingStage(db, turn, "interbank", () =>
     serviceInterbankAndCbMargin(db, turn, summary, policy.propTrading, cbById)
   );
+
+  if (policy.bankTreasury) {
+    await timedBankingStage(db, turn, "bankTreasury", async () => {
+      await processBankTreasuryTurn(db, turn, policy);
+    });
+  }
 
   // What this pass leaves behind for the repair queue. Reported on the turn
   // summary so a half-applied move shows up in phase results the same turn,

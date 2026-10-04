@@ -95,7 +95,12 @@ type BorrowingCharter = Pick<
 export type BalanceSheetCharter = BorrowingCharter &
   Pick<
     BankCharter,
-    "npcDeposits" | "playerDeposits" | "cashReserves" | "totalLoans" | "propBookMarkValue"
+    | "npcDeposits"
+    | "playerDeposits"
+    | "cashReserves"
+    | "totalLoans"
+    | "propBookMarkValue"
+    | "sovereignTreasuryMarkValue"
   >;
 
 /**
@@ -110,6 +115,8 @@ export type BalanceSheetCharter = BorrowingCharter &
  */
 export interface BalanceSheetOptions {
   playerDepositsAreLiabilities?: boolean;
+  /** Active-epoch sovereign bills marked at executable bid, never reserve cash. */
+  sovereignTreasuryMarkValue?: number;
 }
 
 function finite(value: number | null | undefined): number {
@@ -202,7 +209,10 @@ export function bankEquity(
   charter: BalanceSheetCharter | null | undefined,
   options: BalanceSheetOptions = {}
 ): number {
-  const assets = getCashReserves(charter) + nonNegative(charter?.totalLoans);
+  const treasuryMark =
+    options.sovereignTreasuryMarkValue ?? charter?.sovereignTreasuryMarkValue ?? 0;
+  const assets =
+    getCashReserves(charter) + nonNegative(charter?.totalLoans) + nonNegative(treasuryMark);
   const liabilities =
     cashBackedDeposits(charter, options) + totalBorrowings(borrowingsFromCharter(charter));
   return assets - liabilities;
@@ -216,8 +226,17 @@ export function bankEquity(
  * cash and liability together and leaves this line unchanged, so a bank cannot
  * borrow its way out of a capital breach.
  */
-export function regulatoryCapital(charter: BalanceSheetCharter | null | undefined): number {
-  return nonNegative(charter?.cashReserves) - totalBorrowings(borrowingsFromCharter(charter));
+export function regulatoryCapital(
+  charter: BalanceSheetCharter | null | undefined,
+  options: BalanceSheetOptions = {}
+): number {
+  const treasuryMark =
+    options.sovereignTreasuryMarkValue ?? charter?.sovereignTreasuryMarkValue ?? 0;
+  return (
+    nonNegative(charter?.cashReserves) +
+    nonNegative(treasuryMark) -
+    totalBorrowings(borrowingsFromCharter(charter))
+  );
 }
 
 /**
@@ -260,6 +279,7 @@ export interface BankBalanceSheet {
   pointerDeposits: number;
   totalLoans: number;
   propBookMarkValue: number;
+  sovereignTreasuryMarkValue: number;
   borrowings: BankBorrowings;
   totalBorrowings: number;
   /** Owner's claim. Ceiling on every distribution. */
@@ -291,6 +311,8 @@ export function bankBalanceSheet(input: BankBalanceSheetInput): BankBalanceSheet
   const charter = input.charter;
   const options: BalanceSheetOptions = {
     playerDepositsAreLiabilities: input.playerDepositsAreLiabilities === true,
+    sovereignTreasuryMarkValue:
+      input.sovereignTreasuryMarkValue ?? charter.sovereignTreasuryMarkValue ?? 0,
   };
   const cash = getCashReserves(charter);
   const npc = cashBackedDeposits(charter, options);
@@ -323,10 +345,11 @@ export function bankBalanceSheet(input: BankBalanceSheetInput): BankBalanceSheet
     pointerDeposits: options.playerDepositsAreLiabilities ? 0 : pointerDeposits(charter),
     totalLoans: loans,
     propBookMarkValue: nonNegative(charter?.propBookMarkValue),
+    sovereignTreasuryMarkValue: nonNegative(options.sovereignTreasuryMarkValue),
     borrowings,
     totalBorrowings: borrowed,
     bookEquity: equity,
-    regulatoryCapital: regulatoryCapital(charter),
+    regulatoryCapital: regulatoryCapital(charter, options),
     requiredReserves: required,
     reserveSurplus,
     distributable,

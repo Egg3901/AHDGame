@@ -29,7 +29,9 @@ export interface CountryLeaderState {
   _id: string;
   countryId: CountryId;
   /** Character ID of the current leader */
-  leaderCharacterId: ObjectId;
+  leaderCharacterId: ObjectId | null;
+  /** Autonomous leader, distinct from the player-character collection. */
+  leaderNppId?: ObjectId | null;
   /** Office type the leader holds (e.g. "premier", "primeMinister", "president") */
   leaderOfficeType: string;
   /** Party sequential ID of the governing party */

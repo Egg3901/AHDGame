@@ -292,7 +292,7 @@ export async function getPmAppointmentVoteView(
     nomineeMode: voteDoc.nomineeMode ?? "character",
     nomineeName: voteDoc.nomineeName,
     nomineePartyId: voteDoc.nomineePartyId,
-    nominatedByCharacterId: voteDoc.nominatedByCharacterId.toString(),
+    nominatedByCharacterId: voteDoc.nominatedByCharacterId?.toString() ?? null,
     formationType: voteDoc.formationType,
     coalitionId: voteDoc.coalitionId,
     coalitionPartyIds: voteDoc.coalitionPartyIds,

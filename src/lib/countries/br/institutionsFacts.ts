@@ -76,7 +76,7 @@ export const BR_CONFIG: CountryConfig = {
   electionSystems: {
     lowerChamber: "pr_hareQuota",
     upperChamber: "fptp",
-    headOfState: "electoralCollege",
+    headOfState: "fptp",
   },
   officeTypes: [
     {

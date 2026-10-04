@@ -58,6 +58,10 @@ export interface InventoryTurnInput {
   soldByCommodity: Partial<Record<string, number>>;
   /** The sector's output mix rates (strategy supply: commodity → revenue rate). */
   supplyRates: Partial<Record<CommodityType, number>>;
+  /** Exact produced units by commodity for an active product project. */
+  outputUnitsByCommodity?: Partial<Record<CommodityType, number>>;
+  /** Nominal output anchor by commodity, used to value exact inventory units. */
+  outputAnchorByCommodity?: Partial<Record<CommodityType, number>>;
   /** ₳ per output unit at mix prices (sectorTurn's plantsMixPrice). */
   mixPriceAnchor: number;
 }
@@ -120,6 +124,15 @@ export function advanceSectorInventory(input: InventoryTurnInput): InventoryTurn
   let spoiledUnits = 0;
   let drainedUnits = 0;
   let accruedUnits = 0;
+  let drainedRevenueAnchor = 0;
+  let heldValueAnchor = 0;
+  const unitAnchorFor = (commodity: CommodityType): number => {
+    const units = input.outputUnitsByCommodity?.[commodity];
+    const anchor = input.outputAnchorByCommodity?.[commodity];
+    return typeof units === "number" && units > 0 && typeof anchor === "number" && anchor >= 0
+      ? anchor / units
+      : mixPriceAnchor;
+  };
 
   // The pile can sell down only into a market that cleared the sector's whole
   // fresh offer — selling into a partially-cleared market would jump the queue
@@ -139,6 +152,7 @@ export function advanceSectorInventory(input: InventoryTurnInput): InventoryTurn
     if (fullyCleared && remaining > 0) {
       const drain = remaining * INVENTORY_DRAIN_RATE_PER_TURN;
       drainedUnits += drain;
+      drainedRevenueAnchor += drain * unitAnchorFor(commodity);
       remaining -= drain;
     }
     if (remaining > INVENTORY_EPSILON) next[commodity] = remaining;
@@ -146,7 +160,23 @@ export function advanceSectorInventory(input: InventoryTurnInput): InventoryTurn
 
   // 2. Accrue this turn's unsold storable output (toggle on, clearing ran).
   const unsoldTotal = Math.max(0, producedUnits - soldUnits);
-  if (stockpileEnabled && soldFraction != null && unsoldTotal > 0) {
+  if (stockpileEnabled && soldFraction != null && input.outputUnitsByCommodity) {
+    for (const [commodity, produced] of Object.entries(input.outputUnitsByCommodity) as Array<
+      [CommodityType, number]
+    >) {
+      if (!(produced > 0) || !isStorable(commodity)) continue;
+      const fraction = soldByCommodity[commodity];
+      const sold =
+        typeof fraction === "number" && Number.isFinite(fraction)
+          ? produced * Math.max(0, Math.min(1, fraction))
+          : 0;
+      const unsold = Math.max(0, produced - sold);
+      if (unsold > 0) {
+        accruedUnits += unsold;
+        next[commodity] = (next[commodity] ?? 0) + unsold;
+      }
+    }
+  } else if (stockpileEnabled && soldFraction != null && unsoldTotal > 0) {
     // Per-commodity unsold when clearing itemized it; blended fallback. The
     // itemized path is unit-weighted (`share`) against a revenue-weighted
     // blend, so its sum can overshoot the sector's actual unsold remainder;
@@ -176,15 +206,23 @@ export function advanceSectorInventory(input: InventoryTurnInput): InventoryTurn
 
   let heldUnits = 0;
   for (const held of Object.values(next)) heldUnits += held ?? 0;
+  if (input.outputUnitsByCommodity) {
+    for (const [commodity, held] of Object.entries(next) as Array<[CommodityType, number]>) {
+      heldValueAnchor += held * unitAnchorFor(commodity);
+    }
+  } else {
+    heldValueAnchor = heldUnits * mixPriceAnchor;
+    drainedRevenueAnchor = drainedUnits * mixPriceAnchor;
+  }
 
   return {
     nextInventory: next,
     accruedUnits,
     spoiledUnits,
     drainedUnits,
-    drainedRevenueAnchor: drainedUnits * mixPriceAnchor,
-    carryCostAnchor: heldUnits * mixPriceAnchor * INVENTORY_CARRY_COST_RATE_PER_TURN,
+    drainedRevenueAnchor,
+    carryCostAnchor: heldValueAnchor * INVENTORY_CARRY_COST_RATE_PER_TURN,
     heldUnits,
-    heldValueAnchor: heldUnits * mixPriceAnchor,
+    heldValueAnchor,
   };
 }

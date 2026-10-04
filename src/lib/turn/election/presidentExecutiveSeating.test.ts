@@ -10,6 +10,7 @@ import type { Db } from "mongodb";
 import type { Election, ElectionCandidate } from "@/lib/db/types";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { clearCabinetOnTransition } from "@/lib/cabinetTransition";
+import { seatPresidentialExecutive } from "./presidentExecutiveSeating";
 
 vi.mock("@/lib/cabinetTransition", () => ({
   clearCabinetOnTransition: vi.fn().mockResolvedValue(undefined),
@@ -89,7 +90,6 @@ describe("seatPresidentialExecutive", () => {
         party: "2",
       } as unknown as ElectionCandidate;
 
-      const { seatPresidentialExecutive } = await import("./presidentExecutiveSeating");
       await seatPresidentialExecutive(db as unknown as Db, {
         election,
         winnerCandidate,
@@ -116,6 +116,17 @@ describe("seatPresidentialExecutive", () => {
           $set: expect.objectContaining({ currentOffice: { type: "president" } }),
         })
       );
+      expect(db.collection("governmentFormations").updateOne).toHaveBeenCalledWith(
+        { _id: "US" },
+        {
+          $set: expect.objectContaining({
+            governingPartyId: "2",
+            formationType: null,
+            pmCharacterId: winnerIsNpp ? null : winnerId,
+            pmNppId: winnerIsNpp ? winnerId : null,
+          }),
+        }
+      );
     }
   );
 
@@ -131,7 +142,6 @@ describe("seatPresidentialExecutive", () => {
       party: "1",
     } as unknown as ElectionCandidate;
 
-    const { seatPresidentialExecutive } = await import("./presidentExecutiveSeating");
     await seatPresidentialExecutive(db as unknown as Db, {
       election,
       winnerCandidate,
@@ -162,7 +172,6 @@ describe("seatPresidentialExecutive", () => {
       party: "1",
     } as unknown as ElectionCandidate;
 
-    const { seatPresidentialExecutive } = await import("./presidentExecutiveSeating");
     await seatPresidentialExecutive(db as unknown as Db, {
       election,
       winnerCandidate,
@@ -193,7 +202,6 @@ describe("seatPresidentialExecutive", () => {
       party: "1",
       singleplayerHeadOfState: true,
     });
-    const { seatPresidentialExecutive } = await import("./presidentExecutiveSeating");
     await seatPresidentialExecutive(db as unknown as Db, {
       election: makeElection(),
       winnerCandidate: {

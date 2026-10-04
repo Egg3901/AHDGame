@@ -17,7 +17,12 @@
  * (economy, repression, policy, election credibility, intra-party
  * coupling, natural recovery) live in `popularLegitimacyDrivers.ts`.
  */
-import type { ObjectId, Db } from "mongodb";
+import {
+  leaderStateId,
+  leaderStateIdentity,
+  type LeaderReference,
+} from "@/lib/government/leaderReference";
+import type { Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type {
   CountryLeaderState,
@@ -110,10 +115,6 @@ function trimHistory(history: LeaderConfidenceHistoryEntry[]): LeaderConfidenceH
 
 // ── Persistence helpers ────────────────────────────────────────────────────
 
-function buildId(countryId: CountryId, leaderCharacterId: ObjectId): string {
-  return `${countryId}_${leaderCharacterId.toString()}`;
-}
-
 /**
  * Adjust a leader's popularLegitimacy by a delta. Writes a history entry.
  * Returns the updated state, or null if no leader-state doc exists yet
@@ -126,13 +127,13 @@ function buildId(countryId: CountryId, leaderCharacterId: ObjectId): string {
 export async function adjustPopularLegitimacy(
   db: Db,
   countryId: CountryId,
-  leaderCharacterId: ObjectId,
+  leaderCharacterId: LeaderReference,
   delta: number,
   reason: string,
   currentTurn: number
 ): Promise<CountryLeaderState | null> {
   const coll = getCountryLeaderStatesCollection(db);
-  const _id = buildId(countryId, leaderCharacterId);
+  const _id = leaderStateId(countryId, leaderCharacterId);
 
   // Self-heal missing leader-state (admin-formed governments / fresh
   // games before the per-turn driver has run). Mirrors the same
@@ -158,7 +159,7 @@ export async function adjustPopularLegitimacy(
     const seed: CountryLeaderState = {
       _id,
       countryId,
-      leaderCharacterId,
+      ...leaderStateIdentity(leaderCharacterId),
       leaderOfficeType: "",
       governingPartyId,
       partyConfidence: INITIAL_CONFIDENCE,

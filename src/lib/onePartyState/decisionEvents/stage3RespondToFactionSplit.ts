@@ -8,12 +8,15 @@
  */
 import type { Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
-import type { Character, ElectedOfficial, PoliticalParty } from "@/lib/db/types";
+import type { Character, ElectedOfficial, NPP, PoliticalParty } from "@/lib/db/types";
 import type { DecisionHandler, DecisionOption } from "./types";
 import { adjustLeaderConfidence, installNewLeader } from "@/lib/turn/rulingPartyConfidence";
 import { adjustPopularLegitimacy } from "@/lib/turn/popularLegitimacy";
 import { recordPurgeEvent, banApprovedParty } from "@/lib/onePartyState/partyEffectAdapters";
 import { resetStage3Dwell } from "@/lib/onePartyState/escalationStateMutators";
+import { loadRuntimeCountryOffices } from "@/lib/countries/runtimeOffices";
+import { appointPrimeMinister } from "@/lib/turn/parliamentaryGovernment";
+import { getGovernmentFormationsCollection } from "@/lib/db/collections/governmentFormation";
 import { getCountryState } from "@/lib/countryState";
 
 const negotiate: DecisionOption = {
@@ -84,17 +87,24 @@ const concedeLeadership: DecisionOption = {
       );
     }
 
-    // Pick the new leader: first character whose party === the defected
-    // party's sequentialId. Deterministic so the same payload reliably
-    // installs the same successor across re-runs.
-    const successor = await ctx.db
-      .collection<Character>("characters")
-      .findOne({ party: String(partyId), countryId: ctx.countryId });
-    if (!successor) {
-      throw new Error(
-        `concedeLeadership: no character found in defected party ${partyId} for ${ctx.countryId}`
-      );
+    // A successor must hold a legislative seat, whether player or NPP.
+    const offices = await loadRuntimeCountryOffices(ctx.db, ctx.countryId);
+    const successor = await ctx.db.collection<ElectedOfficial>("electedOfficials").findOne(
+      {
+        party: String(partyId),
+        countryId: ctx.countryId,
+        officeType: offices.lowerOfficeType,
+        $or: [
+          { characterId: { $exists: true, $ne: null } },
+          { nppId: { $exists: true, $ne: null } },
+        ],
+      },
+      { sort: { electedAt: 1, _id: 1 } }
+    );
+    if (!successor || (!successor.characterId && !successor.nppId)) {
+      throw new Error(`concedeLeadership: no seated successor in party ${partyId}`);
     }
+    const successorRef = successor.characterId ?? { kind: "npp" as const, id: successor.nppId! };
 
     // Promote the defected party to ruling, demote the prior ruling
     // party to approved. updateCountryState invalidates the cache so
@@ -117,11 +127,36 @@ const concedeLeadership: DecisionOption = {
     const { updateCountryState } = await import("@/lib/countryState");
     await updateCountryState(ctx.db, ctx.countryId, { rulingPartyId: partyId });
 
-    // Install the new leader (fresh confidence = 75 via INITIAL_CONFIDENCE).
+    await appointPrimeMinister(
+      ctx.db,
+      ctx.countryId,
+      successor.characterId ?? null,
+      successor.characterId ? null : successor.nppId,
+      successor.characterName ?? "Successor",
+      new Date()
+    );
+    await getGovernmentFormationsCollection(ctx.db).updateOne(
+      { _id: ctx.countryId },
+      {
+        $set: {
+          status: "formed",
+          pmCharacterId: successor.characterId ?? null,
+          pmNppId: successor.characterId ? null : successor.nppId,
+          pmName: successor.characterName ?? "Successor",
+          governingPartyId: String(partyId),
+          formationType: "majority",
+          coalitionId: null,
+          coalitionPartyIds: null,
+          formedTurn: ctx.currentTurn,
+          formedAt: new Date(),
+          updatedAt: new Date(),
+        },
+      }
+    );
     await installNewLeader(
       ctx.db,
       ctx.countryId,
-      successor._id,
+      successorRef,
       "premier",
       String(partyId),
       ctx.currentTurn
@@ -131,7 +166,7 @@ const concedeLeadership: DecisionOption = {
     await adjustPopularLegitimacy(
       ctx.db,
       ctx.countryId,
-      successor._id,
+      successorRef,
       5,
       "Decision: Conceded leadership",
       ctx.currentTurn
@@ -173,6 +208,12 @@ async function reMergeDefectors(
     .updateMany(
       { countryId, party: String(defectedPartyId) },
       { $set: { party: String(runtime.rulingPartyId) } }
+    );
+  await db
+    .collection<NPP>("npps")
+    .updateMany(
+      { countryId, party: String(defectedPartyId) },
+      { $set: { party: String(runtime.rulingPartyId), updatedAt: now } }
     );
   // Defected party is now empty — flip to banned so it doesn't linger
   // as a ghost approved party with no members.

@@ -1015,6 +1015,53 @@ describe("computeClearingFactors — plants tier offers produced units", () => {
     });
     expect(results.get("a")!.soldFraction).toBe(1);
   });
+
+  it("uses exact product units, nominal anchors, and commodity quality together", () => {
+    const produced = new Map<string, Map<CommodityType, number>>();
+    const result = computeClearingFactors({
+      sectors: [
+        {
+          sectorId: "line-plant",
+          revenue: 1_000,
+          supplyRates: { steel: 0.4, building_materials: 0.2, vehicles: 0 },
+          posture: 0.2,
+          producedUnits: 99,
+          outputUnitsByCommodity: { steel: 1.4, building_materials: 1.4, vehicles: 0.36 },
+          outputAnchorByCommodity: { steel: 140, building_materials: 70, vehicles: 90 },
+          productQualityByCommodity: { steel: 0, building_materials: 50, vehicles: 100 },
+        },
+      ],
+      balances: bals([
+        ["steel", { supply: 100, demand: 300 }],
+        ["building_materials", { supply: 100, demand: 300 }],
+        ["vehicles", { supply: 100, demand: 300 }],
+      ]),
+      priceRatioByCommodity: new Map([
+        ["steel", 1],
+        ["building_materials", 1],
+        ["vehicles", 1],
+      ]),
+      basePrices: {
+        steel: 100,
+        building_materials: 50,
+        vehicles: 250,
+      } as Record<CommodityType, number>,
+      plantsEnabled: true,
+      qualityPremiumEnabled: true,
+      producedUnitsOut: produced,
+      sectorCorpId: new Map([["line-plant", "C1"]]),
+    });
+
+    expect(produced.get("C1")).toEqual(
+      new Map([
+        ["steel", 1.4],
+        ["building_materials", 1.4],
+        ["vehicles", 0.36],
+      ])
+    );
+    expect(result.get("line-plant")?.soldFraction).toBe(1);
+    expect(result.get("line-plant")?.factor).toBeCloseTo(1.19, 8);
+  });
 });
 
 describe("computeClearingFactors — plants and legacy sellers in the same book", () => {

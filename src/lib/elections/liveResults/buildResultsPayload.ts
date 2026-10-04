@@ -345,7 +345,14 @@ export async function buildResultsPayload(
         ? (tally.russianPresidentialResult.winnerCandidateId ?? null)
         : null;
   const singleWinnerRace =
-    !isRussianDirectBallot && (isPresident || (election.totalSeats ?? 1) <= 1);
+    !isRussianDirectBallot &&
+    !(election.countryId === "BR" && isPresident) &&
+    (isPresident || (election.totalSeats ?? 1) <= 1);
+  if (election.countryId === "BR" && isPresident)
+    projectedWinner =
+      tally?.brazilPresidentialResult?.outcome === "won"
+        ? tally.brazilPresidentialResult.winnerId
+        : null;
   if (!projectedWinner && isEnded && singleWinnerRace && totalCastVotes > 0) {
     projectedWinner = resultsCandidates[0]?.id ?? null;
   }
@@ -365,6 +372,9 @@ export async function buildResultsPayload(
       totalSeats: election.totalSeats ?? 0,
       evNeeded,
       totalEv,
+      ...(election.brazilPresidentialMode === "indirect"
+        ? { ballotLabel: "Congressional electoral college" }
+        : {}),
       finalHour: finalHour
         ? {
             progress: Math.round(finalHour.progress * 1000) / 1000,
@@ -440,6 +450,7 @@ export function snapshotFromPayload(
     capturedAtTurn,
     ...(payload.election.totalEv !== undefined ? { totalEv: payload.election.totalEv } : {}),
     ...(payload.election.evNeeded !== undefined ? { evNeeded: payload.election.evNeeded } : {}),
+    ...(payload.election.ballotLabel ? { ballotLabel: payload.election.ballotLabel } : {}),
     totalSeats: election.totalSeats ?? 0,
     candidates: payload.candidates,
     units: payload.units,
@@ -472,6 +483,7 @@ export function payloadFromSnapshot(
       totalSeats: snapshot.totalSeats,
       ...(snapshot.evNeeded !== undefined ? { evNeeded: snapshot.evNeeded } : {}),
       ...(snapshot.totalEv !== undefined ? { totalEv: snapshot.totalEv } : {}),
+      ...(snapshot.ballotLabel ? { ballotLabel: snapshot.ballotLabel } : {}),
       // A finished race has no final-hour drip; the reveal already happened.
       finalHour: null,
     },

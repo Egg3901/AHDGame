@@ -3,14 +3,15 @@ import type { CountryId } from "@/lib/constants/countries";
 import type { GameConfig, GameState } from "@/lib/db/types";
 import type { BankCharterType } from "@/lib/db/types/bank";
 import { isCommandEconomy } from "@/lib/constants/commandEconomy";
-import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
+import { getEraUnitScale } from "@/lib/constants/sectorSeedEra";
+import { bankingSeparationDefault, bankingWorldYear } from "./rules/charterAccess";
 
 /**
  * Banking charter separation is a per-country law, not a world switch. Any
  * non-command nation's legislature can enact or repeal it by ordinary bill
  * (catalog entry lands with the legislation phase); this collection stores the
- * enacted state, and absent a bill the era default applies: historical worlds
- * (era unit scale > 1) seed "separated", modern worlds default "universal".
+ * enacted state. Without a bill, the US defaults to separation until 1999;
+ * other nations retain their existing era default.
  */
 export type BankingSeparationPolicy = "separated" | "universal";
 
@@ -49,8 +50,17 @@ export async function getBankingSeparationPolicy(
   if (law?.separation) {
     return law.separation;
   }
-  const eraUnitScale = await loadWorldEraUnitScale(db);
-  return eraUnitScale > 1 ? "separated" : "universal";
+  const state = await db
+    .collection<GameState>("gameState")
+    .findOne(
+      { _id: "current" },
+      { projection: { preset: 1, currentYear: 1, startingYear: 1, currentTurn: 1 } }
+    );
+  return bankingSeparationDefault({
+    countryId,
+    year: bankingWorldYear(state),
+    eraUnitScale: getEraUnitScale(state?.preset),
+  });
 }
 
 /**

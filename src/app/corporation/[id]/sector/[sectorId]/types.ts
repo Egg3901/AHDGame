@@ -610,6 +610,7 @@ export interface PlantsData {
     taxRatePercent: number;
     freightNetCostDailyAnchor?: number;
     inventoryRevenueDailyAnchor?: number;
+    bondReference?: import("@/lib/corporations/investment/rules").InvestmentBondReference | null;
   };
   buildQuote: {
     unitPriceAnchor: number;

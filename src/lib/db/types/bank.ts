@@ -1,5 +1,18 @@
 import type { ObjectId } from "mongodb";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import type { BondHolder } from "@/lib/db/types/bond";
+
+export type BankTreasuryHolderSnapshot = Omit<
+  BondHolder,
+  "characterId" | "imperialCharacterId" | "corporationId" | "fundId" | "nppId" | "bankId"
+> & {
+  characterId?: string;
+  imperialCharacterId?: string;
+  corporationId?: string;
+  fundId?: string;
+  nppId?: string;
+  bankId?: string;
+};
 
 /**
  * Private banking (1.1). A corporation owning at least one `financial` sector
@@ -23,6 +36,14 @@ export interface BankCharter {
   status: BankCharterStatus;
   currency: CurrencyCode;
   charteredTurn: number;
+  /** CEO may sweep vault cash above the funded-liquidity floor into short sovereign bills. */
+  sovereignTreasuryAutoSweep?: boolean;
+  /** Conservative executable-bid mark for this charter epoch's sovereign treasury book. */
+  sovereignTreasuryMarkValue?: number;
+  /** Turn the executable-bid treasury mark was last refreshed. */
+  lastTreasuryMarkTurn?: number;
+  /** Idempotency key for the automatic sweep at the end of a banking turn. */
+  lastTreasurySweepTurn?: number;
   /** Capital posted at charter; absorbs losses before depositors do. */
   postedCapital: number;
   /** Cumulative taxpayer capital delivered through funded financial-crisis rescues. */
@@ -224,6 +245,32 @@ export interface BankCharter {
   undercapitalizedSinceTurn?: number;
   /** Idempotency key for the supervisory pass. */
   lastSupervisionTurn?: number;
+}
+
+/** Frozen intent and replay identity for one funded bank treasury trade. */
+export interface BankTreasuryTradeReceipt {
+  _id: string;
+  bankId: ObjectId;
+  charteredTurn: number;
+  bondId: ObjectId;
+  currency: CurrencyCode;
+  side: "buy" | "sell";
+  /** Original whole-unit request before cash and pool-depth clamps. */
+  requestedUnits: number;
+  /** Frozen source lots reserved by a multi-lot sale. */
+  allocations?: Array<{ lotId: string; units: number }>;
+  /** Exact holder array observed when sale pricing and source lots were frozen. */
+  holderSnapshot?: BankTreasuryHolderSnapshot[];
+  units: number;
+  pricePerUnitLocal: number;
+  amountLocal: number;
+  turn: number;
+  /** A failed-estate sale that must finish before depositor resolution closes. */
+  resolutionSale?: true;
+  status: "open" | "completed" | "rejected";
+  createdAt: Date;
+  updatedAt: Date;
+  error?: string;
 }
 
 /**

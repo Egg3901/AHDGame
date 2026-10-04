@@ -53,6 +53,7 @@ export function charterSnapshotFrom(
     cbMarginArrears: charter.cbMarginArrears,
     interbankDebt: charter.interbankDebt,
     propBookMarkValue: charter.propBookMarkValue,
+    sovereignTreasuryMarkValue: charter.sovereignTreasuryMarkValue,
     capitalStanding: charter.capitalStanding,
     warningBand: charter.warningBand,
     undercapitalizedSinceTurn: charter.undercapitalizedSinceTurn,

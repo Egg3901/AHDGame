@@ -29,7 +29,9 @@ function makeMockDb() {
       if (!doc) return Promise.resolve(null);
       return Promise.resolve({
         ...doc,
-        leaderCharacterId: new ObjectId(doc.leaderCharacterId.toString()),
+        leaderCharacterId: doc.leaderCharacterId
+          ? new ObjectId(doc.leaderCharacterId.toString())
+          : null,
         createdAt: new Date(doc.createdAt),
         updatedAt: new Date(doc.updatedAt),
         confidenceHistory: doc.confidenceHistory.map((h: { at: string | number | Date }) => ({
@@ -41,7 +43,9 @@ function makeMockDb() {
     replaceOne: vi.fn().mockImplementation((filter: { _id: string }, doc: CountryLeaderState) => {
       leaderDocs.set(filter._id, {
         ...doc,
-        leaderCharacterId: new ObjectId(doc.leaderCharacterId.toString()),
+        leaderCharacterId: doc.leaderCharacterId
+          ? new ObjectId(doc.leaderCharacterId.toString())
+          : null,
       });
       return Promise.resolve({ modifiedCount: 1, upsertedCount: 1 });
     }),
@@ -56,7 +60,9 @@ function makeMockDb() {
           if (!existing) return Promise.resolve(null);
           const clone: CountryLeaderState = {
             ...existing,
-            leaderCharacterId: new ObjectId(existing.leaderCharacterId.toString()),
+            leaderCharacterId: existing.leaderCharacterId
+              ? new ObjectId(existing.leaderCharacterId.toString())
+              : null,
             createdAt: new Date(existing.createdAt),
             updatedAt: new Date(existing.updatedAt),
             confidenceHistory: existing.confidenceHistory.map((h) => ({
@@ -294,5 +300,37 @@ describe("processRulingPartyConfidenceTurn", () => {
     expect(result!.previousConfidence).toBe(48);
     expect(result!.newConfidence).toBeLessThan(48);
     expect(result!.consequenceLevel).toBe("discipline_loss");
+  });
+  it("runs the same policy and purge drift for an autonomous leader", async () => {
+    const { db, govDocs, leaderDocs } = makeMockDb();
+    const nppId = new ObjectId();
+    const reference = { kind: "npp" as const, id: nppId };
+    govDocs.set("CN", {
+      pmCharacterId: null,
+      pmNppId: nppId,
+      status: "formed",
+    } as GovernmentFormation);
+    await installNewLeader(db, "CN", reference, "premier", "1", 10);
+    const result = await processRulingPartyConfidenceTurn(
+      db,
+      "CN",
+      currentTurn,
+      [],
+      [
+        {
+          countryId: "CN",
+          severity: "senior",
+          reason: "test",
+          turn: currentTurn,
+          processed: false,
+          createdAt: new Date(),
+        },
+      ]
+    );
+    expect(result?.newConfidence).toBe(68);
+    const state = leaderDocs.get(`CN_npp_${nppId}`);
+    expect(state?.leaderCharacterId).toBeNull();
+    expect(state?.leaderNppId?.equals(nppId)).toBe(true);
+    expect(leaderDocs.has(`CN_${nppId}`)).toBe(false);
   });
 });

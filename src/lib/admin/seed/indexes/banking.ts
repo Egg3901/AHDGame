@@ -3,6 +3,12 @@ import { ensureIndex } from "./helpers";
 import { MONEY_MOVE_COLLECTION } from "@/lib/banking/moneyMove";
 import { POLITICAL_MEDIA_ORDER_INDEXES } from "@/lib/politicalMedia/indexes";
 
+export const BANK_TREASURY_TRADES_INDEX = {
+  collection: "bankTreasuryTrades",
+  keys: { status: 1, createdAt: 1, _id: 1 },
+  options: { name: "bankTreasuryTrades_status_createdAt_id", background: true },
+} as const;
+
 /**
  * Indexes for the banking money-movement claim records.
  *
@@ -36,6 +42,14 @@ export async function seedBankingIndexes(db: Db, log: (msg: string) => void) {
   for (const index of POLITICAL_MEDIA_ORDER_INDEXES) {
     await ensureIndex(db, MONEY_MOVE_COLLECTION, index.keys, index.options, log);
   }
+
+  await ensureIndex(
+    db,
+    BANK_TREASURY_TRADES_INDEX.collection,
+    BANK_TREASURY_TRADES_INDEX.keys,
+    BANK_TREASURY_TRADES_INDEX.options,
+    log
+  );
 
   // Turn-scoped lookups: "what did this turn move", which is the first question
   // asked after a turn that produced a conservation warning.
