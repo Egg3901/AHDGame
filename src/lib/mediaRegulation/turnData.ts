@@ -29,6 +29,7 @@ export interface MediaOutletLoadContext {
 }
 
 interface PoliticalSellerReceiptRow extends Document {
+  _id: string;
   kind: string;
   status: string;
   turn: number;
@@ -119,6 +120,7 @@ export async function loadUSMediaOutletDelivery(
   }
 
   const paidPoliticalUnits = new Map<string, number>();
+  const countedReceiptIds = new Set<string>();
   if (
     plannedPoliticalAllocations.size > 0 &&
     typeof context.currentTurn === "number" &&
@@ -134,6 +136,7 @@ export async function loadUSMediaOutletDelivery(
         },
         {
           projection: {
+            _id: 1,
             kind: 1,
             status: 1,
             turn: 1,
@@ -155,6 +158,8 @@ export async function loadUSMediaOutletDelivery(
       )
         continue;
       const allocationKey = `${identity.orderId}:${identity.allocationId}`;
+      const expectedReceiptId = `political-media-seller:${allocationKey}`;
+      if (receipt._id !== expectedReceiptId || countedReceiptIds.has(expectedReceiptId)) continue;
       const planned = plannedPoliticalAllocations.get(allocationKey);
       if (
         !planned ||
@@ -164,6 +169,7 @@ export async function loadUSMediaOutletDelivery(
         planned.corporationId !== identity.corporationId
       )
         continue;
+      countedReceiptIds.add(expectedReceiptId);
       const sectorKey = `${planned.stateId}:${planned.sectorId}`;
       paidPoliticalUnits.set(sectorKey, (paidPoliticalUnits.get(sectorKey) ?? 0) + identity.units!);
     }

@@ -14,7 +14,7 @@
     "audienceAccessLimitDefinition": "each owner's access limit is measured against prior delivered advertising; unserved audience remains unserved",
     "ownershipBillThresholdScope": "national US aggregate, with foreign delivery excluded",
     "enactedAudienceAccessLimitScope": "each US state audience market; no ownership divestiture is modeled",
-    "ownershipBillMeasurement": "current-turn sector sold units less all planned political units, plus only applied seller receipt units"
+    "ownershipBillMeasurement": "current-turn sector sold units less all planned political units, plus each matching applied seller receipt once by stable movement id"
   },
   "audienceLimitCases": [
     {

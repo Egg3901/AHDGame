@@ -136,6 +136,21 @@ describe("loadUSMediaOutletDelivery", () => {
     const receiptFind = vi.fn().mockReturnValue({
       toArray: async () => [
         {
+          _id: "political-media-seller:paid-order:paid-a",
+          kind: "political-media-seller-receipt",
+          status: "applied",
+          turn: 12,
+          politicalMediaOrderIdentity: {
+            orderId: "paid-order",
+            allocationId: "paid-a",
+            targetStateId: "CA",
+            sectorId: "sector-1",
+            corporationId: "corp-1",
+            units: 10,
+          },
+        },
+        {
+          _id: "political-media-seller:paid-order:paid-a",
           kind: "political-media-seller-receipt",
           status: "applied",
           turn: 12,
@@ -167,7 +182,7 @@ describe("loadUSMediaOutletDelivery", () => {
     expect(outlets[0].deliveredAdvertisingUnits).toBeCloseTo(70);
     expect(receiptFind).toHaveBeenCalledWith(
       { kind: "political-media-seller-receipt", status: "applied", turn: 12 },
-      { projection: expect.objectContaining({ politicalMediaOrderIdentity: 1 }) }
+      { projection: expect.objectContaining({ _id: 1, politicalMediaOrderIdentity: 1 }) }
     );
   });
 

@@ -438,33 +438,57 @@ export async function PATCH(request: Request) {
     if (typeof mediaRegulationEnabled === "boolean")
       governorSet.mediaRegulationEnabled = mediaRegulationEnabled;
 
-    await gameConfig.updateOne(
-      { _id: "default" },
-      {
-        $set: {
-          marketSystemMode: mode,
-          marketSystemModeUpdatedBy: auth.admin.username,
-          marketSystemModeUpdatedAt: new Date().toISOString(),
-          marketSystemModeUpdatedTurn: currentTurn,
-          ...governorSet,
-        },
-      },
-      { upsert: true }
-    );
-
-    await db.collection<GameState>("gameState").updateOne(
-      { _id: "current" },
-      {
-        $set: {
-          mediaRegulationSnapshot: {
-            enabled: effectiveMediaRegulationEnabled,
+    const gameState = db.collection<GameState>("gameState");
+    const snapshot = (enabled: boolean) => ({
+      enabled,
+      marketSystemMode: mode,
+      commandEconomyEnabled:
+        commandEconomyEnabled ?? existingConfig?.commandEconomyEnabled === true,
+    });
+    const configUpdate = () =>
+      gameConfig.updateOne(
+        { _id: "default" },
+        {
+          $set: {
             marketSystemMode: mode,
-            commandEconomyEnabled:
-              commandEconomyEnabled ?? existingConfig?.commandEconomyEnabled === true,
+            marketSystemModeUpdatedBy: auth.admin.username,
+            marketSystemModeUpdatedAt: new Date().toISOString(),
+            marketSystemModeUpdatedTurn: currentTurn,
+            ...governorSet,
           },
         },
+        { upsert: true }
+      );
+    const snapshotUpdate = (enabled: boolean) =>
+      gameState.updateOne(
+        { _id: "current" },
+        { $set: { mediaRegulationSnapshot: snapshot(enabled) } }
+      );
+
+    if (typeof mediaRegulationEnabled === "boolean") {
+      try {
+        // Keep public law gates fail-off while the authoritative turn config
+        // and its zero-read route snapshot are synchronized.
+        await snapshotUpdate(false);
+        await configUpdate();
+        await snapshotUpdate(effectiveMediaRegulationEnabled);
+      } catch (error) {
+        // A partial mirror must never leave regulation half-enabled. Require
+        // a fresh synchronized admin activation after any write failure.
+        await Promise.allSettled([
+          gameConfig.updateOne(
+            { _id: "default" },
+            { $set: { mediaRegulationEnabled: false } },
+            { upsert: true }
+          ),
+          snapshotUpdate(false),
+        ]);
+        throw error;
       }
-    );
+    } else {
+      await configUpdate();
+      await snapshotUpdate(effectiveMediaRegulationEnabled);
+    }
 
     await createAdminLog({
       category: "system",

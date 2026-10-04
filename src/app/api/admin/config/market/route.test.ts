@@ -112,7 +112,21 @@ describe("GET/PATCH /api/admin/config/market — extractionOutputScaleEnabled", 
     const res = await PATCH(makePatchRequest({ mode: "clearing", mediaRegulationEnabled: true }));
 
     expect(res.status).toBe(200);
-    expect(db.collectionMocks.gameState!.updateOne).toHaveBeenCalledWith(
+    expect(db.collectionMocks.gameState!.updateOne).toHaveBeenNthCalledWith(
+      1,
+      { _id: "current" },
+      {
+        $set: {
+          mediaRegulationSnapshot: {
+            enabled: false,
+            marketSystemMode: "clearing",
+            commandEconomyEnabled: false,
+          },
+        },
+      }
+    );
+    expect(db.collectionMocks.gameState!.updateOne).toHaveBeenNthCalledWith(
+      2,
       { _id: "current" },
       {
         $set: {
@@ -123,6 +137,34 @@ describe("GET/PATCH /api/admin/config/market — extractionOutputScaleEnabled", 
           },
         },
       }
+    );
+  });
+
+  it("fails regulation off when the synchronized activation snapshot write fails", async () => {
+    db.collectionMocks.gameConfig!.findOne.mockResolvedValue({
+      _id: "default",
+      marketSystemMode: "plants",
+      commandEconomyEnabled: false,
+      mediaRegulationEnabled: false,
+    });
+    db.collectionMocks.gameState!.updateOne
+      .mockImplementationOnce(async () => ({ acknowledged: true }) as never)
+      .mockRejectedValueOnce(new Error("snapshot write failed"))
+      .mockImplementationOnce(async () => ({ acknowledged: true }) as never);
+
+    const { PATCH } = await import("./route");
+    const res = await PATCH(makePatchRequest({ mode: "clearing", mediaRegulationEnabled: true }));
+
+    expect(res.status).toBeGreaterThanOrEqual(500);
+    expect(db.collectionMocks.gameConfig!.updateOne).toHaveBeenCalledTimes(2);
+    expect(db.collectionMocks.gameConfig!.updateOne).toHaveBeenLastCalledWith(
+      { _id: "default" },
+      { $set: { mediaRegulationEnabled: false } },
+      { upsert: true }
+    );
+    expect(db.collectionMocks.gameState!.updateOne).toHaveBeenLastCalledWith(
+      { _id: "current" },
+      { $set: { mediaRegulationSnapshot: expect.objectContaining({ enabled: false }) } }
     );
   });
 

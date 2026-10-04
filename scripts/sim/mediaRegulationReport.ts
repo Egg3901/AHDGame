@@ -140,7 +140,7 @@ const report = {
     enactedAudienceAccessLimitScope:
       "each US state audience market; no ownership divestiture is modeled",
     ownershipBillMeasurement:
-      "current-turn sector sold units less all planned political units, plus only applied seller receipt units",
+      "current-turn sector sold units less all planned political units, plus each matching applied seller receipt once by stable movement id",
   },
   audienceLimitCases,
   censorshipCases,
