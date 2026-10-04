@@ -87,6 +87,7 @@ import {
   type CreditBandId,
   type LendingProfileId,
 } from "@/lib/banking/creditBands";
+import { ZERO_BANKING_TURN_SUMMARY, type BankingTurnSummary } from "@/lib/turn/bankingTurnSummary";
 
 // Re-exported for the turn's tests and dashboards; defined in the rules zone.
 export { ARREARS_DEFAULT_TURNS, MAX_NPC_FLOW_PER_TURN_FRACTION };
@@ -94,67 +95,7 @@ export { ARREARS_DEFAULT_TURNS, MAX_NPC_FLOW_PER_TURN_FRACTION };
 /** Rolling term for the synthetic NPC bulk book (re-sized each bankingTurn). */
 const NPC_BULK_TERM_TURNS = TURNS_PER_YEAR;
 
-export type BankingTurnSummary = {
-  banksProcessed: number;
-  depositInterestPaid: number;
-  depositInterestShortfall: number;
-  loanInterestCollected: number;
-  loanPrincipalRepaid: number;
-  defaultsWrittenOff: number;
-  npcDepositDelta: number;
-  npcBulkShortfall: number;
-  /** Premium due that could not be paid from the bank's cash reserves. */
-  premiumShortfall: number;
-  /** Interbank interest paid borrower → lender. */
-  interbankInterestPaid: number;
-  /** Interbank principal written off on default. */
-  interbankDefaultsWrittenOff: number;
-  /** CB margin interest destroyed from borrower cash. */
-  cbMarginInterestPaid: number;
-  /** CB margin interest that could not be paid. */
-  cbMarginInterestShortfall: number;
-  /** Loans serviced on behalf of a bank that has already been wound up. */
-  deadBankLoansServiced: number;
-  /** Recovered into a failed bank's estate, before its waterfall runs. */
-  deadBankRecoveredToEstate: number;
-  /** Recovered to the insurance fund after the estate was closed. */
-  deadBankRecoveredToInsurer: number;
-  /** Settlements that started and never finished, as of the end of this pass. */
-  unfinishedSettlements: number;
-  /** What the recovery worker finished, and did not, before this pass began. */
-  recovery: {
-    resumedSettlements: number;
-    stillPartial: number;
-    estatesRecovered: number;
-    estatesStillResolving: number;
-  };
-};
-
-const ZERO_SUMMARY: BankingTurnSummary = {
-  banksProcessed: 0,
-  depositInterestPaid: 0,
-  depositInterestShortfall: 0,
-  loanInterestCollected: 0,
-  loanPrincipalRepaid: 0,
-  defaultsWrittenOff: 0,
-  npcDepositDelta: 0,
-  npcBulkShortfall: 0,
-  premiumShortfall: 0,
-  interbankInterestPaid: 0,
-  interbankDefaultsWrittenOff: 0,
-  cbMarginInterestPaid: 0,
-  cbMarginInterestShortfall: 0,
-  deadBankLoansServiced: 0,
-  deadBankRecoveredToEstate: 0,
-  deadBankRecoveredToInsurer: 0,
-  unfinishedSettlements: 0,
-  recovery: {
-    resumedSettlements: 0,
-    stillPartial: 0,
-    estatesRecovered: 0,
-    estatesStillResolving: 0,
-  },
-};
+export type { BankingTurnSummary } from "@/lib/turn/bankingTurnSummary";
 
 type DepositTaker = {
   corp: Corporation;
@@ -181,7 +122,7 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
   if (!policy.privateBanking) {
     const recovered = await recoverBankingSettlements(db, turn, policy);
     return {
-      ...ZERO_SUMMARY,
+      ...ZERO_BANKING_TURN_SUMMARY,
       recovery: {
         resumedSettlements: recovered.resumedSettlements.length,
         stillPartial: recovered.stillPartial.length,
@@ -282,7 +223,7 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
     }
   }
 
-  const summary: BankingTurnSummary = { ...ZERO_SUMMARY, recovery };
+  const summary: BankingTurnSummary = { ...ZERO_BANKING_TURN_SUMMARY, recovery };
 
   for (const row of depositTakers) {
     const bankResult = await processOneBank(
