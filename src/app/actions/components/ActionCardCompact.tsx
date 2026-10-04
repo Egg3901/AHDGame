@@ -10,7 +10,6 @@ import {
   convertCashConversion,
   isFundraiseEligible,
 } from "@/lib/actions";
-import { CATEGORY_LABELS } from "../actionsConstants";
 
 const FLIPFLOP_AXIS_LABELS = { economic: "Economic", social: "Social" } as const;
 const NEUTRAL_BUTTON =
@@ -52,6 +51,7 @@ const ActionCardCompact = memo(function ActionCardCompact({
   onConvertCashOpenChange,
   onConvertCashAmountChange,
   onConvertCashExecute,
+  projection,
 }: ActionCardProps) {
   const {
     formatAmount,
@@ -139,7 +139,7 @@ const ActionCardCompact = memo(function ActionCardCompact({
   return (
     <div
       data-coach={`action-${card.type}`}
-      className={`rounded-lg border border-card-border bg-card ${blocked ? "opacity-60" : ""}`}
+      className={`transition-colors hover:bg-card-elevated ${blocked ? "opacity-60" : ""}`}
     >
       {/* One column on phones; on wider screens the buttons sit in a fixed right column */}
       <div className="grid grid-cols-1 gap-3 px-3 py-3 sm:grid-cols-[1fr_auto] sm:gap-4 sm:px-4">
@@ -147,7 +147,6 @@ const ActionCardCompact = memo(function ActionCardCompact({
         <div className="flex min-w-0 flex-col gap-1">
           <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
             <span className="text-body font-semibold text-foreground">{card.label}</span>
-            <span className="text-body-sm text-muted">{CATEGORY_LABELS[card.category]}</span>
             {warningText && (
               <span className="text-body-sm font-medium text-error">{warningText}</span>
             )}
@@ -165,6 +164,12 @@ const ActionCardCompact = memo(function ActionCardCompact({
                 {effectiveFundLabel}
               </span>
             </span>
+            {projection && (
+              <span className="tabular-nums text-muted">
+                {projection.label} {projection.from} →{" "}
+                <span className="font-medium text-success">{projection.to}</span>
+              </span>
+            )}
           </div>
         </div>
 
@@ -174,9 +179,9 @@ const ActionCardCompact = memo(function ActionCardCompact({
             <button
               type="button"
               onClick={() => onOpenCampaignAction(card.type as "canvass" | "targetedAds")}
-              className="w-full rounded-lg border border-card-border bg-card-elevated px-4 py-2 text-sm font-semibold transition-colors hover:bg-card-muted"
+              className={`w-full px-2.5 py-1.5 text-body-sm font-semibold sm:w-auto ${NEUTRAL_BUTTON}`}
             >
-              {card.label}
+              Choose groups
             </button>
           ) : card.href ? (
             <Link

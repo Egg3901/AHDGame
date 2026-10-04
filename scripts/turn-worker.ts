@@ -61,6 +61,15 @@ async function main(): Promise<void> {
     });
   }
 
+  try {
+    const { getDb } = await import("@/lib/mongodb");
+    const { checkPersistedSectorTypes } =
+      await import("@/lib/corporations/checkPersistedSectorTypes");
+    await checkPersistedSectorTypes(await getDb());
+  } catch (err) {
+    console.error("[sector-types] startup check failed:", err);
+  }
+
   const { initializeCronJobs, stopCronJobs } = await import("@/lib/cron");
   const { releaseLocalProcessingLock } = await import("@/lib/turnSystem");
   console.log("[turn-worker] starting; this process owns the cron schedule");

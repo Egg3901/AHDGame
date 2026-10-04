@@ -53,6 +53,7 @@ const ActionCard = memo(function ActionCard({
   onConvertCashOpenChange,
   onConvertCashAmountChange,
   onConvertCashExecute,
+  projection,
 }: ActionCardProps) {
   const {
     formatAmount,
@@ -133,12 +134,10 @@ const ActionCard = memo(function ActionCard({
   return (
     <div
       data-coach={`action-${card.type}`}
-      className={`relative flex flex-col overflow-hidden rounded-xl border border-card-border bg-card ${
-        blocked ? "opacity-60" : ""
-      }`}
+      className="relative flex flex-col overflow-hidden rounded-xl border border-card-border bg-card transition-colors hover:border-foreground/20"
     >
       {/* Image Header — period photography, resolved for the live era + country */}
-      <div className="relative h-44 overflow-hidden">
+      <div className="relative h-36 overflow-hidden">
         {/* unoptimized: static Cloudflare CDN art — routing through the Railway image optimizer would add egress */}
         <Image
           src={imageUrl}
@@ -147,7 +146,7 @@ const ActionCard = memo(function ActionCard({
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
           loading="lazy"
           unoptimized={bypassNextImageOptimization(imageUrl)}
-          className="object-cover"
+          className={`object-cover transition-[filter] ${blocked ? "grayscale" : ""}`}
         />
         <div className={`absolute inset-0 bg-gradient-to-t ${CARD_PHOTO_SCRIM}`} />
 
@@ -157,17 +156,6 @@ const ActionCard = memo(function ActionCard({
             {CATEGORY_LABELS[card.category]} · {card.tagline}
           </p>
         </div>
-
-        {/* Flash Message */}
-        {didFlash && (
-          <div
-            className={`absolute inset-0 flex items-center justify-center bg-card p-6 text-center text-body font-semibold animate-in fade-in duration-200 ${
-              flash.ok ? "text-success" : "text-error"
-            }`}
-          >
-            {flash.msg}
-          </div>
-        )}
       </div>
 
       {/* Content Body */}
@@ -193,6 +181,19 @@ const ActionCard = memo(function ActionCard({
               <span className="mt-0.5 block text-body-sm text-muted">{card.effectNote}</span>
             )}
           </dd>
+          {projection && (
+            <>
+              <dt className="text-muted">After</dt>
+              <dd className="tabular-nums text-foreground">
+                <span className="text-muted">{projection.label} </span>
+                {projection.from}
+                <span className="mx-1.5 text-muted" aria-label="becomes">
+                  →
+                </span>
+                <span className="font-semibold text-success">{projection.to}</span>
+              </dd>
+            </>
+          )}
         </dl>
 
         {/* Warnings */}
@@ -503,6 +504,32 @@ const ActionCard = memo(function ActionCard({
             />
           )}
         </div>
+
+        {/* Result of the last use, kept until the next action */}
+        {didFlash && (
+          <p
+            role="status"
+            className={`flex items-start gap-1.5 text-body-sm font-medium animate-in fade-in duration-200 ${
+              flash.ok ? "text-success" : "text-error"
+            }`}
+          >
+            <svg
+              className="mt-px h-4 w-4 shrink-0"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+              aria-hidden
+            >
+              {flash.ok ? (
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01" />
+              )}
+            </svg>
+            <span>{flash.msg}</span>
+          </p>
+        )}
       </div>
     </div>
   );

@@ -32,6 +32,17 @@ export interface ActionCard {
 
 export type ActionsViewMode = "cards" | "compact";
 
+/**
+ * What one use of an action does to the stat it moves, from the same quote
+ * the server executes: e.g. Influence 12.0% to 13.0%. Absent for actions
+ * whose outcome is a roll, a choice, or a dashboard.
+ */
+export interface ActionProjection {
+  label: string;
+  from: string;
+  to: string;
+}
+
 export interface ActionCardProps {
   card: ActionCard;
   /** CDN URL already resolved for the live era + the player's country. */
@@ -80,4 +91,6 @@ export interface ActionCardProps {
   onConvertCashOpenChange: (open: boolean) => void;
   onConvertCashAmountChange: (amount: string) => void;
   onConvertCashExecute: (amount: number) => void;
+  /** One-use outcome preview; see ActionProjection. */
+  projection?: ActionProjection;
 }
