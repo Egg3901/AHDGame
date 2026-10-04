@@ -82,56 +82,15 @@ export function quoteConstructionFinance(
   const ratePercent = decision.derived?.ratePercent;
   if (typeof ratePercent !== "number" || !Number.isFinite(ratePercent))
     return { allowed: false, error: "Loan quote is unavailable" };
-  const transition: BankingTransition = {
-    ...decision.transition,
-    legs: decision.transition.legs.map((leg) => {
-      if (
-        leg.kind === "debit" &&
-        leg.collection === "corporations" &&
-        leg.path === "bankCharter.cashReserves"
-      ) {
-        return {
-          ...leg,
-          filter: { ...leg.filter, "bankCharter.charteredTurn": input.bank.charter!.charteredTurn },
-        };
-      }
-      return leg.kind === "credit" &&
-        leg.collection === "corporations" &&
-        leg.path === "liquidCapital"
-        ? {
-            ...leg,
-            collection: "corporateSectors",
-            filter: { _id: oid(input.sectorId), "constructionFinancing.claimId": input.claimId },
-            path: "constructionFinancing.escrowLocal",
-            note: "Fund the quoted construction escrow, not borrower spending cash",
-          }
-        : leg;
-    }),
-    projections: decision.transition.projections.map((projection) =>
-      projection.collection === "bankLoans" && projection.insert
-        ? {
-            ...projection,
-            insert: {
-              ...projection.insert,
-              constructionCollateral: {
-                claimId: input.claimId,
-                sectorId: oid(input.sectorId),
-                quotedCostLocal: input.collateralCostLocal,
-                constructionCostLocal: input.constructionCostLocal,
-              },
-            },
-          }
-        : projection.collection === "corporations" && projection.update
-          ? {
-              ...projection,
-              filter: {
-                ...projection.filter,
-                "bankCharter.charteredTurn": input.bank.charter!.charteredTurn,
-              },
-            }
-          : projection
-    ),
-  };
+  const transition = bindConstructionLoanTransition({
+    transition: decision.transition,
+    charteredTurn: input.bank.charter!.charteredTurn,
+    claimId: input.claimId,
+    sectorId: input.sectorId,
+    collateralCostLocal: input.collateralCostLocal,
+    constructionCostLocal: input.constructionCostLocal,
+  });
+
   return {
     allowed: true,
     pending,
@@ -142,6 +101,76 @@ export function quoteConstructionFinance(
     collateralLimit,
     ratePercent,
     transition,
+  };
+}
+
+/** Bind either an origination or a CEO-approved disbursement to the same build. */
+export function bindConstructionLoanTransition(input: {
+  transition: BankingTransition;
+  charteredTurn: number;
+  claimId: string;
+  sectorId: string;
+  collateralCostLocal: number;
+  constructionCostLocal: number;
+}): BankingTransition {
+  const funded = input.transition.legs.some(
+    (leg) => leg.kind === "credit" && leg.path === "liquidCapital"
+  );
+  return {
+    ...input.transition,
+    legs: input.transition.legs.map((leg) => {
+      if (leg.kind === "debit" && leg.path === "bankCharter.cashReserves")
+        return {
+          ...leg,
+          filter: { ...leg.filter, "bankCharter.charteredTurn": input.charteredTurn },
+        };
+      if (
+        leg.kind === "credit" &&
+        leg.collection === "corporations" &&
+        leg.path === "liquidCapital"
+      )
+        return {
+          ...leg,
+          collection: "corporateSectors",
+          filter: { _id: oid(input.sectorId), "constructionFinancing.claimId": input.claimId },
+          path: "constructionFinancing.escrowLocal",
+          note: "Fund the quoted construction escrow, not borrower spending cash",
+        };
+      return leg;
+    }),
+    projections: [
+      ...input.transition.projections.map((projection) => {
+        if (projection.collection === "bankLoans" && projection.insert)
+          return {
+            ...projection,
+            insert: {
+              ...projection.insert,
+              constructionCollateral: {
+                claimId: input.claimId,
+                sectorId: oid(input.sectorId),
+                quotedCostLocal: input.collateralCostLocal,
+                constructionCostLocal: input.constructionCostLocal,
+              },
+            },
+          };
+        if (projection.collection === "corporations" && projection.update)
+          return {
+            ...projection,
+            filter: { ...projection.filter, "bankCharter.charteredTurn": input.charteredTurn },
+          };
+        return projection;
+      }),
+      ...(funded
+        ? [
+            {
+              collection: "corporateSectors",
+              filter: { _id: oid(input.sectorId), "constructionFinancing.claimId": input.claimId },
+              update: { $set: { "constructionFinancing.loanFunded": true } },
+              note: "Publish delivered loan funding after all cash and loan projections",
+            },
+          ]
+        : []),
+    ],
   };
 }
 
