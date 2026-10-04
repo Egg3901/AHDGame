@@ -24,6 +24,7 @@ import type {
   FederalBudget,
 } from "@/lib/db/types";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
+import { sovereignCreditSpreadPp } from "@/lib/bonds/rules/sovereignCreditSpread";
 import { COUNTRY_ORDER, getCountryConfig, type CountryId } from "@/lib/constants/countries";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { resolveCountryCurrencyCode } from "@/lib/currency/govBudgetFields";
@@ -173,7 +174,12 @@ export async function seedSovereignBondInstruments(
       if (trancheAmount < BOND_UNIT_FACE_VALUE) continue;
 
       const totalUnits = Math.floor(trancheAmount / BOND_UNIT_FACE_VALUE);
-      const couponRate = getSovereignCouponRate(primeRate, maturityTurns);
+      const couponRate = getSovereignCouponRate(
+        primeRate,
+        maturityTurns,
+        0,
+        sovereignCreditSpreadPp(budget.creditRating)
+      );
 
       bondDocs.push({
         issuerType: "sovereign",

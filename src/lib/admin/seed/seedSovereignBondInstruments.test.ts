@@ -141,4 +141,47 @@ describe("seedSovereignBondInstruments", () => {
     expect(result.bondsInserted).toBe(0);
     expect(db.collectionMocks.bonds.insertMany).not.toHaveBeenCalled();
   });
+
+  it("uses the budget credit tier for newly seeded instruments", async () => {
+    const db = createMockDb();
+    const inserted: Array<{ countryId: string; maturityTurns: number; couponRate: number }> = [];
+
+    db.collectionMocks.federalBudget = db.collection("federalBudget");
+    db.collectionMocks.federalBudget.find.mockReturnValue(
+      makeCursor([
+        {
+          _id: "federal",
+          debt: { principal: 10_000_000 },
+          countryId: "US",
+          creditRating: "BBB",
+        },
+      ])
+    );
+    db.collectionMocks.centralBanks = db.collection("centralBanks");
+    db.collectionMocks.centralBanks.find.mockReturnValue(
+      makeCursor([{ _id: getBankId("US"), primeRate: 5 }])
+    );
+    db.collectionMocks.corporations = db.collection("corporations");
+    db.collectionMocks.corporations.find.mockReturnValue(makeCursor([]));
+    db.collectionMocks.corporations.findOne.mockResolvedValue(null);
+    db.collectionMocks.bonds = db.collection("bonds");
+    db.collectionMocks.bonds.find.mockReturnValue(makeCursor([]));
+    db.collectionMocks.bonds.insertMany.mockImplementation(async (docs: unknown[]) => {
+      inserted.push(
+        ...docs.map((doc) => {
+          const { countryId, maturityTurns, couponRate } = doc as (typeof inserted)[number];
+          return { countryId, maturityTurns, couponRate };
+        })
+      );
+      return { insertedCount: docs.length };
+    });
+
+    await seedSovereignBondInstruments(db as unknown as Db, () => {}, 0, new Date());
+
+    expect(inserted.map((bond) => [bond.maturityTurns, bond.couponRate])).toEqual([
+      [48, 8],
+      [96, 8.25],
+      [240, 8.75],
+    ]);
+  });
 });
