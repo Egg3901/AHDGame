@@ -755,6 +755,8 @@ export function buildSectorDetails(ctx: SectorRowContext) {
       forSale: sector.forSale
         ? {
             listedAt: sector.forSale.listedAt,
+            foreclosed: sector.forSale.foreclosed,
+            pledged: sector.forSale.pledged,
             priceAnchor: sector.forSale.priceAnchor,
             npvAnchor: sector.forSale.npvAnchor,
           }

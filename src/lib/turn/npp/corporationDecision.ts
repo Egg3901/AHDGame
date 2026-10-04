@@ -17,6 +17,10 @@ import {
   type StrategySituation,
 } from "@/lib/turn/npp/corpStrategy";
 import { chooseNppStrategyRetool } from "@/lib/turn/npp/strategyRetooling";
+import {
+  hasProtectedConstructionProperty,
+  unprotectedConstructionPropertyFilter,
+} from "@/lib/corporations/securedConstructionProperty";
 import { glutStaggerEligible } from "@/lib/turn/npp/cohort";
 import {
   analyzeSectorProfitability,
@@ -131,6 +135,7 @@ export function makeNppCorpDecision(
   const divestedSectorIds: ObjectId[] = [];
   const unownedDraws: NonNullable<NppCorpDecision["unownedDraws"]> = [];
   const reinvestments: NonNullable<NppCorpDecision["reinvestments"]> = [];
+  const constructionFinanceIntents: NonNullable<NppCorpDecision["constructionFinanceIntents"]> = [];
   let shortageCreditRequest: NppCorpDecision["shortageCreditRequest"];
   let entryDiagnostic: NppCorpDecision["entryDiagnostic"];
 
@@ -287,6 +292,7 @@ export function makeNppCorpDecision(
   if (numSectors > 1) {
     for (const sp of sectorProfits) {
       if (
+        !hasProtectedConstructionProperty(sp.sector) &&
         sp.income < 0 &&
         sp.margin <= modifiers.divestMarginFloor + levers.divestMarginFloorDelta
       ) {
@@ -324,6 +330,7 @@ export function makeNppCorpDecision(
         (sp) =>
           (sp.sector.lowFillTurns ?? 0) >= STRANDED_DIVEST_TURNS &&
           !isCoreSector(sp.sector) &&
+          !hasProtectedConstructionProperty(sp.sector) &&
           sp.sector.mothballed !== true &&
           !divestedSectorIds.includes(sp.sector._id)
       )
@@ -1054,6 +1061,7 @@ export function makeNppCorpDecision(
             sector.mediaDiscriminator
           )
         ),
+        property_unavailable: !!sector.forSale || hasProtectedConstructionProperty(sector),
       });
       if (preSizingGate) {
         observeReinvestCandidate(preSizingGate, sector, capitalStock, null, 0, null);
@@ -1357,7 +1365,29 @@ export function makeNppCorpDecision(
           ? cashLocal - costLocal >= effectiveCashFloor
           : costLocal <= Math.max(0, cashLocal) * NPP_REINVEST_MAINTENANCE_CASH_SHARE &&
             cashLocal - costLocal > 0;
+      const buildTurns = Math.max(1, CAPACITY_BUILD_TURNS(sector.sectorType));
+      const order: SectorBuildOrder = {
+        unitsOrdered: units,
+        strategyId: sector.strategyId ?? null,
+        costPaidAnchor: costAnchor,
+        startTurn: ctx.turn,
+        onlineTurn: ctx.turn + buildTurns,
+        smooth: true,
+      };
       if (!affordable) {
+        const cashContributionLimitLocal =
+          candidate.growthUnits > 0
+            ? Math.max(0, cashLocal - effectiveCashFloor)
+            : Math.max(0, Math.min(cashLocal, cashLocal * NPP_REINVEST_MAINTENANCE_CASH_SHARE));
+        constructionFinanceIntents.push({
+          sector,
+          order,
+          costLocal,
+          cashContributionLimitLocal,
+          growthUnits: candidate.growthUnits,
+          priority: candidate.interventionPriority,
+          fill: candidate.fill,
+        });
         observePricedReinvestCandidate(
           "insufficient_cash",
           sector,
@@ -1371,15 +1401,6 @@ export function makeNppCorpDecision(
         continue;
       }
 
-      const buildTurns = Math.max(1, CAPACITY_BUILD_TURNS(sector.sectorType));
-      const order: SectorBuildOrder = {
-        unitsOrdered: units,
-        strategyId: sector.strategyId ?? null,
-        costPaidAnchor: costAnchor,
-        startTurn: ctx.turn,
-        onlineTurn: ctx.turn + buildTurns,
-        smooth: true,
-      };
       // ─── The queue write is a DELTA, never a whole-array `$set` ───────────
       //
       // `sector.buildQueue` is a snapshot read at the top of this turn phase.
@@ -1391,7 +1412,11 @@ export function makeNppCorpDecision(
       // only what this decision actually owns, and composes with both.
       // Same rule, same reason as `sectorTurn`'s C4 note.
       sectorUpdates.push({
-        filter: { _id: sector._id },
+        filter: {
+          _id: sector._id,
+          corporationId: corp._id,
+          ...unprotectedConstructionPropertyFilter(),
+        },
         update: {
           $set: { updatedAt: now },
           $push: { buildQueue: order },
@@ -1452,6 +1477,8 @@ export function makeNppCorpDecision(
     divestedSectorIds: divestedSectorIds.length > 0 ? divestedSectorIds : undefined,
     unownedDraws: unownedDraws.length > 0 ? unownedDraws : undefined,
     reinvestments: reinvestments.length > 0 ? reinvestments : undefined,
+    constructionFinanceIntents:
+      constructionFinanceIntents.length > 0 ? constructionFinanceIntents : undefined,
     shortageCreditRequest,
     entryDiagnostic,
     strategy: strategyDecision?.state,

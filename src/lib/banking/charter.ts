@@ -379,7 +379,10 @@ async function issueCharterInner(
     },
     {
       identity,
-      guard: { bankCharter: prior === undefined ? { $exists: false } : prior },
+      guard: {
+        bankCharter: prior === undefined ? { $exists: false } : prior,
+        bankConstructionFunding: { $exists: false },
+      },
       expectedSettledKeys,
     }
   );
@@ -489,6 +492,7 @@ async function revokeCharterInner(
       _id: corporationId,
       "bankCharter.status": "active",
       "bankCharter.resolutionClaimedTurn": { $exists: false },
+      bankConstructionFunding: { $exists: false },
     },
     {
       $set: {
@@ -813,7 +817,12 @@ async function switchCharterTypeInner(
   // the waterfall stops half way, because it would hide the hole.
 
   const updated = await db.collection<Corporation>("corporations").findOneAndUpdate(
-    { _id: corporationId, "bankCharter.status": "active", "bankCharter.type": charter.type },
+    {
+      _id: corporationId,
+      "bankCharter.status": "active",
+      "bankCharter.type": charter.type,
+      bankConstructionFunding: { $exists: false },
+    },
     {
       $set: {
         "bankCharter.type": targetType,

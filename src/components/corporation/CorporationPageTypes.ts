@@ -697,6 +697,8 @@ export interface SectorDetail {
   wageLevel?: number;
   /** Active for-sale listing — null when not on the secondary market */
   forSale?: {
+    foreclosed?: boolean;
+    pledged?: boolean;
     listedAt: string;
     /** Asking price in ₳ */
     priceAnchor: number;

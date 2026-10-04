@@ -58,9 +58,19 @@ function renderDialog(onSubmit = vi.fn(), plantData = plants) {
 
 const NO_MODS = { shiftKey: false, ctrlKey: false, metaKey: false };
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 describe("BuildCapacityDialog count control", () => {
+  it("does not mount finance controls or query lenders without the gated payload", () => {
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    renderDialog();
+    expect(screen.queryByLabelText(/Finance this build/)).toBeNull();
+    expect(fetch).not.toHaveBeenCalled();
+  });
   it("lets a player clear the field and type a whole number", () => {
     const { input } = renderDialog();
     expect(input.value).toBe("1");

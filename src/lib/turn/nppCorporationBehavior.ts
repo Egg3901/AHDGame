@@ -8,6 +8,7 @@ import {
 import type { Db, ObjectId } from "mongodb";
 import type { Corporation, CorporateSector, GameState, ExchangeRate } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import { currencyForCountry } from "@/lib/currency/sectorFxSpread";
 import { netPerTurnDebtServiceAnchor } from "@/lib/bonds/corpBondCashflows";
 import { buildActiveMarketBuckets, markMarketsActive } from "@/lib/turn/npp/marketSignals";
 
@@ -80,6 +81,14 @@ import {
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 
 import { loadNppBehaviorConfig } from "@/lib/turn/npp/behaviorConfig";
+import {
+  boundNppConstructionFinanceCandidates,
+  loadNppConstructionFundingPool,
+  NPP_CONSTRUCTION_FINANCE_TERM_TURNS,
+  selectNppConstructionFundingContext,
+  type NppConstructionFinanceCandidate,
+  type NppConstructionFinanceRequest,
+} from "@/lib/turn/npp/nppConstructionFinance";
 import { maybePushNppTechUnlock } from "@/lib/turn/npp/corpBehaviorConfig";
 import { corpDailyGrossRevenueLocalFromSectors } from "@/lib/corporations/dailyGrossRevenue";
 import type { TechUnlockLedgerInput } from "@/lib/corporations/techTree/techUnlockLedger";
@@ -141,6 +150,9 @@ export async function processNppCorporationDecisions(
   foundingCashWitnesses?: NppFoundingCashWitness[];
   reinvestmentCashWitnesses?: NppReinvestmentCashWitness[];
   manufacturingProductProjects: ManufacturingProductProject[];
+  constructionFinanceRequests: NppConstructionFinanceRequest[];
+  constructionFinanceCandidateCount: number;
+  constructionFinanceBacklogCount: number;
 }> {
   const nppCorps = preloaded
     ? preloaded.corporations.filter((corp) => corp.ceoType === "npp" && corp.suspended !== true)
@@ -169,6 +181,9 @@ export async function processNppCorporationDecisions(
       divestedSectorIds: allDivestedSectorIds,
       techLedger,
       manufacturingProductProjects: [],
+      constructionFinanceRequests: [],
+      constructionFinanceCandidateCount: 0,
+      constructionFinanceBacklogCount: 0,
     };
 
   const { corporationIds: corpIds, ceoNppIds } = nppDecisionCohortIds(nppCorps);
@@ -305,6 +320,24 @@ export async function processNppCorporationDecisions(
       fxByCurrency.set(rate.currencyCode, rate.rate);
     }
   }
+  const { labourMode, retailExpansionPaused, ledgerShadow, bankingPolicy } =
+    await loadNppBehaviorConfig(db, turn);
+  const nppConstructionFinanceEnabled =
+    plants?.enabled === true &&
+    bankingPolicy.privateBanking &&
+    bankingPolicy.treasuryCashLedger &&
+    bankingPolicy.constructionFinance;
+  const constructionFundingPool = nppConstructionFinanceEnabled
+    ? await loadNppConstructionFundingPool({
+        db,
+        turn,
+        corporations: nppCorps,
+        policy: bankingPolicy,
+        eraUnitScale: plants?.eraUnitScale ?? 1,
+        fxByCurrency: fxByCurrency as ReadonlyMap<CurrencyCode, number>,
+      })
+    : null;
+  const constructionFinanceCandidates: NppConstructionFinanceCandidate[] = [];
 
   // ─── Debt service, loaded once for the cohort ─────────────────────────────
   // Same two maps `buildCorporationLookups` builds for the turn engine, and the
@@ -331,7 +364,6 @@ export async function processNppCorporationDecisions(
     strategyGate?.frontierEntryExperimentEnabled
   );
 
-  const { labourMode, retailExpansionPaused, ledgerShadow } = await loadNppBehaviorConfig(db, turn);
   const labourWagesEnabled = isLabourSystemMode(labourMode) && labourAtLeast(labourMode, "wages");
 
   for (const corp of nppCorps) {
@@ -397,6 +429,27 @@ export async function processNppCorporationDecisions(
           placementSignals
         ),
     });
+    if (nppConstructionFinanceEnabled && corpCurrency) {
+      for (const intent of decision.constructionFinanceIntents ?? []) {
+        constructionFinanceCandidates.push({
+          ...intent,
+          corporation: corp,
+          currency: corpCurrency,
+          buildContext: {
+            destinationCurrency: currencyForCountry(intent.sector.countryId ?? corp.countryId),
+            bucket: {
+              stateId: intent.sector.stateId,
+              countryId: intent.sector.countryId ?? corp.countryId,
+              sectorType: intent.sector.sectorType,
+              industryModel: intent.sector.industryModel ?? null,
+              mediaDiscriminator: intent.sector.mediaDiscriminator ?? null,
+            },
+            eraUnitScale: plants?.eraUnitScale ?? 1,
+            growthUnits: intent.growthUnits,
+          },
+        });
+      }
+    }
     markMarketsActive(placementSignals, decision.newSectors);
     if (decision.entryDiagnostic) entryDiagnostics.push(decision.entryDiagnostic);
     // Cohort telemetry aggregate (credit-rewrite included); see capacityDecisionTelemetry.
@@ -465,6 +518,32 @@ export async function processNppCorporationDecisions(
     }
   }
 
+  const boundedConstructionFinance = nppConstructionFinanceEnabled
+    ? boundNppConstructionFinanceCandidates(constructionFinanceCandidates)
+    : { selected: [] as NppConstructionFinanceCandidate[], backlogCount: 0 };
+  const constructionFinanceRequests: NppConstructionFinanceRequest[] = [];
+  let constructionFinanceBacklogCount =
+    boundedConstructionFinance.backlogCount +
+    (nppConstructionFinanceEnabled && !constructionFundingPool
+      ? boundedConstructionFinance.selected.length
+      : 0);
+  if (constructionFundingPool) {
+    for (const candidate of boundedConstructionFinance.selected) {
+      const selected = selectNppConstructionFundingContext(constructionFundingPool, candidate);
+      if (!selected) {
+        constructionFinanceBacklogCount += 1;
+        continue;
+      }
+      constructionFinanceRequests.push({
+        ...candidate,
+        bankId: selected.bankId,
+        principal: selected.principal,
+        termTurns: NPP_CONSTRUCTION_FINANCE_TERM_TURNS,
+        preloadedFundingContext: selected.context,
+      });
+    }
+  }
+
   await drawFoundedCapacityFromPools(db, unownedDraws, {
     eraUnitScale: plants?.eraUnitScale ?? 1,
     now,
@@ -487,6 +566,9 @@ export async function processNppCorporationDecisions(
     divestedSectorIds: allDivestedSectorIds,
     techLedger,
     manufacturingProductProjects,
+    constructionFinanceRequests,
+    constructionFinanceCandidateCount: constructionFinanceCandidates.length,
+    constructionFinanceBacklogCount,
     ...(foundingCashWitnesses.length ? { foundingCashWitnesses } : {}),
     ...(reinvestmentCashWitnesses.length ? { reinvestmentCashWitnesses } : {}),
   };

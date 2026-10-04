@@ -231,17 +231,77 @@ function matchesCondition(value: unknown, condition: unknown): boolean {
 }
 
 /** Tiny aggregation-expression evaluator, enough for the `$expr` guards. */
-function evalExpr(expr: unknown, doc: Doc): unknown {
+function evalExpr(expr: unknown, doc: Doc, variables: Doc = {}): unknown {
+  if (typeof expr === "string" && expr.startsWith("$$")) return getPath(variables, expr.slice(2));
   if (typeof expr === "string" && expr.startsWith("$")) return getPath(doc, expr.slice(1));
+  if (Array.isArray(expr)) return expr.map((item) => evalExpr(item, doc, variables));
   if (!isPlainObject(expr)) return expr;
   const [op, rawArgs] = Object.entries(expr)[0];
+  if (op === "$literal") return rawArgs;
   if (op === "$cond" && Array.isArray(rawArgs)) {
-    return evalExpr(rawArgs[evalExpr(rawArgs[0], doc) ? 1 : 2], doc);
+    return evalExpr(rawArgs[evalExpr(rawArgs[0], doc, variables) ? 1 : 2], doc, variables);
+  }
+  if (op === "$map" && isPlainObject(rawArgs)) {
+    const rows = evalExpr(rawArgs.input, doc, variables);
+    if (!Array.isArray(rows)) throw new Error("inMemoryDb: expected array for $map");
+    const variable = typeof rawArgs.as === "string" ? rawArgs.as : "this";
+    return rows.map((row) => evalExpr(rawArgs.in, doc, { ...variables, [variable]: row }));
+  }
+  if (op === "$filter" && isPlainObject(rawArgs)) {
+    const rows = evalExpr(rawArgs.input, doc, variables);
+    if (!Array.isArray(rows)) throw new Error("inMemoryDb: expected array for $filter");
+    const variable = typeof rawArgs.as === "string" ? rawArgs.as : "this";
+    return rows.filter((row) =>
+      Boolean(evalExpr(rawArgs.cond, doc, { ...variables, [variable]: row }))
+    );
+  }
+  if (op === "$let" && isPlainObject(rawArgs)) {
+    const vars = isPlainObject(rawArgs.vars) ? rawArgs.vars : {};
+    const scoped = { ...variables };
+    for (const [name, expression] of Object.entries(vars)) {
+      scoped[name] = evalExpr(expression, doc, variables);
+    }
+    return evalExpr(rawArgs.in, doc, scoped);
+  }
+  if (op === "$mergeObjects") {
+    const parts = Array.isArray(rawArgs) ? rawArgs : [rawArgs];
+    return parts.reduce<Doc>(
+      (merged, value) => ({ ...merged, ...(evalExpr(value, doc, variables) as Doc) }),
+      {}
+    );
+  }
+  if (!op.startsWith("$")) {
+    return Object.fromEntries(
+      Object.entries(expr).map(([key, value]) => [key, evalExpr(value, doc, variables)])
+    );
+  }
+  if (op === "$unsetField" && isPlainObject(rawArgs)) {
+    const value = evalExpr(rawArgs.input, doc, variables);
+    const field = evalExpr(rawArgs.field, doc, variables);
+    if (!isPlainObject(value) || typeof field !== "string")
+      throw new Error("inMemoryDb: invalid $unsetField input");
+    const next = { ...value };
+    delete next[field];
+    return next;
   }
   const args = Array.isArray(rawArgs)
-    ? rawArgs.map((a) => evalExpr(a, doc))
-    : [evalExpr(rawArgs, doc)];
+    ? rawArgs.map((a) => evalExpr(a, doc, variables))
+    : [evalExpr(rawArgs, doc, variables)];
   switch (op) {
+    case "$size":
+      if (!Array.isArray(args[0])) throw new Error("inMemoryDb: expected array for $size");
+      return args[0].length;
+    case "$concatArrays":
+      if (args.some((arg) => !Array.isArray(arg))) throw new Error("inMemoryDb: expected arrays");
+      return args.flat();
+    case "$slice": {
+      if (!Array.isArray(args[0])) throw new Error("inMemoryDb: expected an array to slice");
+      if (args.length === 2) {
+        const n = args[1] as number;
+        return n < 0 ? args[0].slice(n) : args[0].slice(0, n);
+      }
+      return args[0].slice(args[1] as number, (args[1] as number) + (args[2] as number));
+    }
     case "$toString":
       return args[0] === undefined || args[0] === null ? null : String(args[0]);
     case "$and":
@@ -258,6 +318,8 @@ function evalExpr(expr: unknown, doc: Doc): unknown {
       return (args[0] as number) < (args[1] as number);
     case "$eq":
       return sameValue(args[0], args[1]);
+    case "$in":
+      return Array.isArray(args[1]) && args[1].some((value) => sameValue(value, args[0]));
     case "$add":
       return args.reduce((sum: number, a) => sum + ((a as number) ?? 0), 0);
     case "$subtract":

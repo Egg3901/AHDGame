@@ -56,6 +56,8 @@ export type AdminLogAction =
   | "moderator_removed"
   | "line_of_credit_enabled"
   | "line_of_credit_disabled"
+  | "construction_finance_enabled"
+  | "construction_finance_disabled"
   | "savings_rollout_widened"
   | "savings_rollout_narrowed"
   | "index_funds_enabled"
