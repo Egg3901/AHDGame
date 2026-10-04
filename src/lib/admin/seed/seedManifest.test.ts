@@ -24,6 +24,10 @@ const COLLECTIONS_DIR = join(process.cwd(), "src/lib/db/collections");
  * module declares must carry a manifest classification.
  */
 describe("seed manifest classification coverage", () => {
+  it("wipes funded bank-failure receipts with the world they belong to", () => {
+    expect(getCollectionCategory("bankFailurePoliticalEvents")).toBe("runtime");
+    expect(getRuntimeCollectionNames()).toContain("bankFailurePoliticalEvents");
+  });
   it("resets the federation publication and protected-choice journals", () => {
     for (const name of [
       "russianConstitutionalProposals",
