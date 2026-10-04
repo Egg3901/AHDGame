@@ -70,7 +70,10 @@ export async function buildCountryTurnRows(
 ): Promise<CountryTurnRow[]> {
   const [banks, budgets, rates, states, metrics, sovereignBonds, conflicts] = await Promise.all([
     db.collection<CentralBank>("centralBanks").find({}).toArray(),
-    db.collection<FederalBudget>("federalBudget").find({ mergedInto: { $exists: false } }).toArray(),
+    db
+      .collection<FederalBudget>("federalBudget")
+      .find({ mergedInto: { $exists: false } })
+      .toArray(),
     db.collection<ExchangeRate>("exchangeRates").find({}).toArray(),
     db
       .collection<State>("states")
@@ -80,7 +83,13 @@ export async function buildCountryTurnRows(
       .collection<StateMetrics>("macroMetrics")
       .find(
         {},
-        { projection: { countryId: 1, "economic.unemploymentRate.value": 1, "economic.gdpGrowth.value": 1 } }
+        {
+          projection: {
+            countryId: 1,
+            "economic.unemploymentRate.value": 1,
+            "economic.gdpGrowth.value": 1,
+          },
+        }
       )
       .toArray(),
     db

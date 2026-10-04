@@ -9,10 +9,9 @@
  */
 import type { Db } from "mongodb";
 import { BOND_UNIT_FACE_VALUE, perTurnCouponPayment } from "@/lib/constants/bonds";
-import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { getSecurityTelemetryCollection } from "@/lib/db/collections/researchTelemetry";
 import type { Bond } from "@/lib/db/types/bond";
-import type { BondMarketPool } from "@/lib/db/types/bondMarketPool";
+import { BOND_MARKET_POOLS_COLLECTION, type BondMarketPool } from "@/lib/db/types/bondMarketPool";
 import type { Corporation, ShareOrder } from "@/lib/db/types/corporation";
 import type { CorporationHistory } from "@/lib/db/types/corporationHistory";
 import type { ExchangeRate } from "@/lib/db/types/exchangeRate";
@@ -114,7 +113,7 @@ export async function buildSecurityTelemetryRowForTurn(
         holders: 1,
       })
       .toArray(),
-    db.collection<BondMarketPool>("bondMarketPools").find({}).toArray(),
+    db.collection<BondMarketPool>(BOND_MARKET_POOLS_COLLECTION).find({}).toArray(),
     db.collection<ExchangeRate>("exchangeRates").find({}).toArray(),
   ]);
 

@@ -427,7 +427,7 @@ export function sovereignFlowsForTurn(
     if (bond.redeemedAtTurn === turn) retired += face;
     if (bond.defaultedAtTurn === turn && bond.defaulted === true) defaulted += face;
     if (!bond.matured && !bond.defaulted && turnsPerYear > 0) {
-      coupon += ((finiteOrNull(bond.couponRate) ?? 0) / 100) * face / turnsPerYear;
+      coupon += (((finiteOrNull(bond.couponRate) ?? 0) / 100) * face) / turnsPerYear;
     }
   }
   return {
@@ -556,7 +556,9 @@ export function buildAnnualFiscalPanel(rows: readonly CountryTurnRow[]): AnnualF
 
       const gdp = last.macro.gdp;
       const nominalGdpGrowth =
-        priorAnnual?.gdp && gdp !== null ? ratioOrNull(gdp - priorAnnual.gdp, priorAnnual.gdp) : null;
+        priorAnnual?.gdp && gdp !== null
+          ? ratioOrNull(gdp - priorAnnual.gdp, priorAnnual.gdp)
+          : null;
       const meanDebt =
         openingDebt !== null && closingDebt !== null ? (openingDebt + closingDebt) / 2 : null;
       const effectiveInterestRate =
@@ -1014,7 +1016,8 @@ export function securitiesMarketMetrics(
       if (s.book?.twoSided) {
         twoSidedTurns += 1;
         if (s.book.spreadPct !== null && s.book.bestBid !== null && s.book.bestAsk !== null) {
-          const toAnchor = s.fxRate && s.fxRate > 0 ? 1 / s.fxRate : s.fxStatus === "anchor" ? 1 : 0;
+          const toAnchor =
+            s.fxRate && s.fxRate > 0 ? 1 / s.fxRate : s.fxStatus === "anchor" ? 1 : 0;
           const depth =
             (s.book.bidUnits * s.book.bestBid + s.book.askUnits * s.book.bestAsk) * toAnchor;
           if (depth > 0) {
@@ -1143,9 +1146,7 @@ export interface ResearchQuery {
   after: { turn: number; key: string } | null;
 }
 
-export type ResearchQueryResult =
-  | { ok: true; query: ResearchQuery }
-  | { ok: false; error: string };
+export type ResearchQueryResult = { ok: true; query: ResearchQuery } | { ok: false; error: string };
 
 function parseList(raw: string | null | undefined): string[] | null {
   if (!raw) return null;

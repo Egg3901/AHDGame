@@ -88,10 +88,7 @@ function envelope(
 function afterFilter(after: ResearchQuery["after"], keyField: string) {
   if (!after) return {};
   return {
-    $or: [
-      { turn: { $gt: after.turn } },
-      { turn: after.turn, [keyField]: { $gt: after.key } },
-    ],
+    $or: [{ turn: { $gt: after.turn } }, { turn: after.turn, [keyField]: { $gt: after.key } }],
   };
 }
 
