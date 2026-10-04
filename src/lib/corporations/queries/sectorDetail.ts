@@ -1054,6 +1054,15 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
           corporationId: String(corporation._id),
           currency,
           localPerAnchor: corporationFxRate,
+          ...(sector.constructionFinancing?.status === "awaiting_approval" ||
+          sector.constructionFinancing?.status === "funding"
+            ? {
+                pendingRequest: {
+                  claimId: sector.constructionFinancing.claimId,
+                  status: sector.constructionFinancing.status,
+                },
+              }
+            : {}),
         };
     }
 

@@ -14,7 +14,11 @@ export default function ConstructionFinanceControls({
   constructionAnchor,
   cashAnchor,
   onChange,
+  onWithdraw,
+  busy = false,
 }: {
+  onWithdraw?: (claimId: string) => void;
+  busy?: boolean;
   view: ConstructionFinanceView;
   totalAnchor: number;
   constructionAnchor: number;
@@ -50,6 +54,7 @@ export default function ConstructionFinanceControls({
   const native = (amount: number) => formatAmount(amount, view.currency);
 
   useEffect(() => {
+    if (view.pendingRequest) return;
     const controller = new AbortController();
     fetch(`/api/corporations/${view.corporationId}/construction-finance`, {
       signal: controller.signal,
@@ -74,9 +79,9 @@ export default function ConstructionFinanceControls({
           setError(failure instanceof Error ? failure.message : "Lender quotes unavailable");
       });
     return () => controller.abort();
-  }, [view.corporationId, view.currency]);
+  }, [view.corporationId, view.currency, view.pendingRequest]);
   useEffect(() => {
-    if (!enabled) {
+    if (!enabled || view.pendingRequest) {
       onChange(null);
       return;
     }
@@ -97,7 +102,40 @@ export default function ConstructionFinanceControls({
             }
           : null,
     });
-  }, [enabled, valid, affordable, bankId, lender, principal, termTurns, costLocal, onChange]);
+  }, [
+    enabled,
+    valid,
+    affordable,
+    bankId,
+    lender,
+    principal,
+    termTurns,
+    costLocal,
+    onChange,
+    view.pendingRequest,
+  ]);
+
+  const pendingRequest = view.pendingRequest;
+  if (pendingRequest)
+    return (
+      <div className="rounded-lg border border-border p-3 space-y-3">
+        <p className="text-body-sm">
+          {pendingRequest.status === "awaiting_approval"
+            ? "Construction is awaiting lender approval. No cash has moved and no capacity is queued."
+            : "Construction funding is settling. Further capacity changes are paused until it completes."}
+        </p>
+        {pendingRequest.status === "awaiting_approval" && onWithdraw && (
+          <button
+            type="button"
+            disabled={busy}
+            className="rounded border border-border px-3 py-2 text-body-sm disabled:opacity-50"
+            onClick={() => onWithdraw(pendingRequest.claimId)}
+          >
+            Withdraw construction request
+          </button>
+        )}
+      </div>
+    );
 
   return (
     <div className="rounded-lg border border-border p-3 space-y-3">

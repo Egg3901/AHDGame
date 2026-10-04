@@ -12,6 +12,37 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("construction finance consent", () => {
+  it.each(["awaiting_approval", "funding"] as const)(
+    "shows %s without fetching another lender quote",
+    (status) => {
+      const fetch = vi.fn();
+      vi.stubGlobal("fetch", fetch);
+      const onWithdraw = vi.fn();
+      const onChange = vi.fn();
+      render(
+        <ConstructionFinanceControls
+          view={{
+            corporationId: "corp",
+            currency: "USD",
+            localPerAnchor: 1,
+            pendingRequest: { claimId: "original", status },
+          }}
+          totalAnchor={100}
+          constructionAnchor={100}
+          cashAnchor={100}
+          onChange={onChange}
+          onWithdraw={onWithdraw}
+        />
+      );
+      expect(fetch).not.toHaveBeenCalled();
+      expect(screen.queryByLabelText(/Finance this build/)).toBeNull();
+      if (status === "awaiting_approval") {
+        fireEvent.click(screen.getByRole("button", { name: "Withdraw construction request" }));
+        expect(onWithdraw).toHaveBeenCalledWith("original");
+      } else expect(screen.queryByRole("button")).toBeNull();
+      expect(onChange).toHaveBeenCalledWith(null);
+    }
+  );
   it("requires reviewed whole-site consent and sufficient native contribution, preserving one request on retry", async () => {
     vi.stubGlobal(
       "fetch",

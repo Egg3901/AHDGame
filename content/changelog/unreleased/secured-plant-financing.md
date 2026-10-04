@@ -34,3 +34,7 @@ before seller proceeds and transfer paid construction free of the old security.
 Defaulted sites enter the property market after the default turn; listing their
 book value creates no recovery cash. Construction finance cannot be disabled
 while admitted cash work, site pledges or lender recovery leases remain.
+
+Borrowers can withdraw an unfunded approval request. Pending approval and funding
+status appear in the build dialog without another lender lookup. Capacity changes
+check ownership, listing and reservation again at the atomic queue write.

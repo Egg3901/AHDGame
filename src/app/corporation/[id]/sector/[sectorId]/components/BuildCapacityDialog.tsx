@@ -32,6 +32,7 @@ interface BuildCapacityDialogProps {
   submitting: boolean;
   /** Server-side error text from the last attempt, or empty. */
   errorMessage: string;
+  onWithdrawFinancing?: (claimId: string) => void;
   onSubmit: (units: number, financing?: ConstructionFinanceRequest) => void;
 }
 
@@ -81,6 +82,7 @@ export default function BuildCapacityDialog({
   submitting,
   errorMessage,
   onSubmit,
+  onWithdrawFinancing,
 }: BuildCapacityDialogProps) {
   const t = useTranslations("corporations.sectorInvestment");
   const { formatAmount } = useCurrency();
@@ -157,7 +159,12 @@ export default function BuildCapacityDialog({
   const affordable = financingChoice
     ? financingChoice.affordable && !!financingChoice.request
     : preview.affordable;
-  const canSubmit = !submitting && !blockedByMothball && preview.safeCount > 0 && affordable;
+  const canSubmit =
+    !q.financing?.pendingRequest &&
+    !submitting &&
+    !blockedByMothball &&
+    preview.safeCount > 0 &&
+    affordable;
 
   return (
     <Modal
@@ -473,6 +480,8 @@ export default function BuildCapacityDialog({
             constructionAnchor={preview.construction}
             cashAnchor={q.corpCapitalAnchor}
             onChange={setFinancingChoice}
+            busy={submitting}
+            onWithdraw={onWithdrawFinancing}
           />
         )}
 

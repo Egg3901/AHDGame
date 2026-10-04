@@ -1,4 +1,7 @@
-import { requestConstructionFinance } from "@/lib/banking/constructionFinance";
+import {
+  rejectConstructionFinance,
+  requestConstructionFinance,
+} from "@/lib/banking/constructionFinance";
 import { cancelFinancedConstruction } from "@/lib/banking/constructionCancellation";
 import { loadBankingPolicy } from "@/lib/banking/policy";
 import { currencyForCountry } from "@/lib/currency/sectorFxSpread";
@@ -132,6 +135,7 @@ const buildCapacitySchema = z.discriminatedUnion("action", [
     orderIndex: z.number().int().min(0).max(1000),
     constructionClaimId: z.string().min(1).max(120).optional(),
   }),
+  z.object({ action: z.literal("withdraw_financing"), claimId: z.string().min(1).max(120) }),
   z.object({ action: z.literal("resize"), activePercent: z.number().int().min(1).max(100) }),
   z.object({ action: z.literal("mothball") }),
   z.object({ action: z.literal("reactivate") }),
@@ -166,10 +170,22 @@ const MAX_OUTSTANDING_BUILD_ORDERS = 20;
  * `mothball` / `reactivate` need no CAS: they touch a single scalar
  * (`mothballed`) that the turn only reads, never writes.
  */
+function capacityMutationFilter(sector: CorporateSector): Record<string, unknown> {
+  return {
+    corporationId: sector.corporationId,
+    forSale: null,
+    constructionPropertyTransition: { $exists: false },
+    "constructionFinancing.status": { $nin: ["awaiting_approval", "funding"] },
+  };
+}
+
 function queueCasFilter(sector: CorporateSector): Record<string, unknown> {
-  return Array.isArray(sector.buildQueue)
-    ? { buildQueue: sector.buildQueue }
-    : { buildQueue: { $in: [null, []] } };
+  return {
+    ...capacityMutationFilter(sector),
+    ...(Array.isArray(sector.buildQueue)
+      ? { buildQueue: sector.buildQueue }
+      : { buildQueue: { $in: [null, []] } }),
+  };
 }
 
 /**
@@ -241,6 +257,28 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Sector not found" }, { status: 404 });
     }
 
+    if (body.action === "withdraw_financing") {
+      const claim = sector.constructionFinancing;
+      if (
+        !claim ||
+        claim.claimId !== body.claimId ||
+        claim.borrowerId !== corporation._id.toHexString() ||
+        !ObjectId.isValid(claim.bankId) ||
+        !ObjectId.isValid(claim.loanId)
+      )
+        return NextResponse.json({ error: "That construction request changed" }, { status: 409 });
+      const result = await rejectConstructionFinance(
+        db,
+        new ObjectId(claim.bankId),
+        new ObjectId(claim.loanId),
+        true,
+        "Borrower withdrew the construction request"
+      );
+      return result.ok
+        ? NextResponse.json({ success: true, message: "Unfunded construction request withdrawn" })
+        : NextResponse.json({ error: result.error }, { status: 409 });
+    }
+
     const gameState = await db.collection<GameState>("gameState").findOne({ _id: "current" });
     const currentTurn = gameState?.currentTurn ?? 0;
     const currentYear =
@@ -297,6 +335,17 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
     // corp's CEO seat, and the sector was fetched constrained to
     // `corporationId: corporation._id`, so a sector nationalized AWAY from a
     // former-private CEO no longer matches and cannot reach this handler.
+    if (
+      sector.constructionPropertyTransition ||
+      ((sector.constructionFinancing?.status === "awaiting_approval" ||
+        sector.constructionFinancing?.status === "funding") &&
+        !(body.action === "build" && body.financing))
+    )
+      return NextResponse.json(
+        { error: "Finish or withdraw the reserved construction request before changing capacity" },
+        { status: 409 }
+      );
+
     // A sector under offer must not have its capacity gutted mid-sale: CIP and
     // the build queue feed the valuation a buyer is quoted, and cancelling every
     // order refunds 75% to the seller while delivering a hollowed-out asset.
@@ -341,7 +390,7 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
       const changed = await db
         .collection<CorporateSector>("corporateSectors")
         .updateOne(
-          { _id: sector._id, corporationId: corporation._id, forSale: null },
+          { _id: sector._id, ...capacityMutationFilter(sector) },
           { $set: { mothballed, activeCapacityPercent, updatedAt: now } }
         );
       if (changed.matchedCount === 0) {
