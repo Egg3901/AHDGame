@@ -415,7 +415,7 @@ describe("resolveOneGeneralElection", () => {
       JP_SHUGIIN_1994_CONSTITUENCIES.filter((district) => district.regionId === "KAN").map(
         (district) => [
           district.id,
-          district.id === direct.constituencyId ? { [directId]: 100 } : {},
+          district.id === direct.constituencyId ? { [directId.toString()]: 100 } : {},
         ]
       )
     );

@@ -929,8 +929,9 @@ export async function resolveOneGeneralElection(
                 ])
               ),
               listVotesByRegion: {
-                [election.state]: remapJapanShugiinListVotes(listVotes, (partyId) =>
-                  survivingParty(partyId)
+                [election.state]: remapJapanShugiinListVotes(
+                  listVotes,
+                  (partyId) => survivingParty(partyId) ?? null
                 ),
               },
               regionalLists: {

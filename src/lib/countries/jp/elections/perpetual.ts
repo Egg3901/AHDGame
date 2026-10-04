@@ -1,3 +1,5 @@
+/** Create and heal Japan's regional races while retaining their frozen electoral rules. */
+import type { AnyBulkWriteOperation } from "mongodb";
 import { withCampaignRules } from "@/lib/campaignTargeting/rules";
 import { getDb } from "@/lib/mongodb";
 import type { CountryGameState, Election, ElectionStatus, State } from "@/lib/db/types";
@@ -81,7 +83,7 @@ export async function ensureJPElections(now: Date, inFlightTurn?: number): Promi
           e.japanShugiinRules?.ruleVersion !== "mixed-1994-v1" &&
           (e.allocationMethod == null || (e.status === "upcoming" && e.allocationMethod !== "sntv"))
       )
-      .map((e) => ({
+      .map((e): AnyBulkWriteOperation<Election> => ({
         updateOne: {
           filter: {
             _id: e._id,

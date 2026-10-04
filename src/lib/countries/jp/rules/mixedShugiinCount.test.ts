@@ -5,20 +5,19 @@ import {
   buildJapanMixedRegionalList,
   countJapanMixedShugiin,
   remapJapanShugiinListVotes,
+  type ShugiinDistrictCandidate,
+  type ShugiinListCandidate,
 } from "./mixedShugiinCount";
 
 function fullBallot() {
-  const districtVotes = Object.fromEntries(
+  const districtVotes: Record<string, ShugiinDistrictCandidate[]> = Object.fromEntries(
     JP_SHUGIIN_1994_CONSTITUENCIES.map((district) => [
       district.id,
       [{ candidateId: `direct:${district.id}`, partyId: "party-a", votes: 100 }],
     ])
   );
   const listVotesByRegion: Record<string, Record<string, number>> = {};
-  const regionalLists: Record<
-    string,
-    { candidateId: string; partyId: string; listOrder: number }[]
-  > = {};
+  const regionalLists: Record<string, ShugiinListCandidate[]> = {};
   for (const [regionId, seats] of Object.entries(JP_SHUGIIN_1994_LIST_SEATS)) {
     const firstDirect = JP_SHUGIIN_1994_CONSTITUENCIES.find(
       (district) => district.regionId === regionId
