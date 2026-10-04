@@ -251,12 +251,20 @@ export function FundTradePanel({
       ? `Spendable in ${fundCurrency}`
       : `Available in ${selectedPayCurrency}`;
 
+  // With wallet payment controls the budget and after-purchase lines are in
+  // the fund's face currency, so the cost line must be too. Quoting the cost
+  // in the viewer's display preference beside a face-currency balance left the
+  // two numbers incomparable (ticket #2453).
+  const estimatedCostValue = showPaymentControls
+    ? formatCurrencyFaceAmount(totalCostNative, fundCurrency)
+    : formatFull(totalCostAnchor, fundCurrency);
+
   const budgetValue = !showPaymentControls
     ? formatFull(personalCashAnchor)
     : shouldUseImplicitAutoConvert
       ? implicitAutoConvertEstimate
         ? formatCurrencyFaceAmount(implicitAutoConvertEstimate.spendableInTarget, fundCurrency)
-        : formatFull(personalCashAnchor)
+        : formatCurrencyFaceAmount(personalBalances?.[fundCurrency] ?? 0, fundCurrency)
       : formatCurrencyFaceAmount(selectedPayBalance, selectedPayCurrency);
 
   const estimatedFxFeeAnchor = showPaymentControls
@@ -573,7 +581,7 @@ export function FundTradePanel({
               <span
                 className={`font-mono font-semibold tabular-nums ${fundsShort ? "text-error" : ""}`}
               >
-                {formatFull(subscribeEstimate.costAnchor, fundCurrency)}
+                {estimatedCostValue}
               </span>
             </div>
             <div className="flex justify-between gap-2">
