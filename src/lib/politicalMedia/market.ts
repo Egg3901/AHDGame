@@ -117,14 +117,15 @@ export function settlePoliticalAdMarket(args: {
     const effectivePosture = posture > 0 ? posture * premiumMultiplier : posture;
     const priceLeg = priceRealizationFactor(offer.priceRatio);
     const commonOfferFactor =
-      typeof offer.input.inputCostIndex === "number"
+      clearing?.offerFactorByCommodity?.advertising ??
+      (typeof offer.input.inputCostIndex === "number"
         ? costPlusPriceFactor(
             offer.input.inputCostIndex,
-            posture,
+            offer.input.posture ?? 0,
             offer.input.inputCostShare,
             offer.input.fixedCostShare
           )
-        : (1 + effectivePosture) * priceLeg;
+        : (1 + effectivePosture) * priceLeg);
     const unitPriceAnchor = (offer.basePrice * commonOfferFactor) / TURNS_PER_DAY;
     if (!Number.isFinite(unitPriceAnchor) || !(unitPriceAnchor > 0)) continue;
 
