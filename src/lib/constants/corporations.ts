@@ -50,6 +50,9 @@ export const CORPORATION_TYPES = [
 
 export type CorporationType = (typeof CORPORATION_TYPES)[number];
 
+/** Specialized production models that belong to the manufacturing taxonomy. */
+export type ManufacturingIndustryModel = "vehicles";
+
 export const CORPORATION_TYPE_LABELS: Record<CorporationType, string> = {
   financial: "Financial",
   media: "Media",
