@@ -112,6 +112,7 @@ interface JournalExtension {
   /** Original economic quote, frozen atomically with the cash and projection claim. */
   event?: BankingTransition["event"];
   currency?: string;
+  retryCreditLegOnGuardFailure?: boolean;
   projections?: JournalProjectionRecord[];
   projectionsCompletedAt?: Date;
 }
@@ -251,6 +252,7 @@ export async function settleTransition(
   const extension: JournalExtension = {
     transitionKind: transition.kind,
     currency: transition.currency,
+    ...(transition.retryCreditLegOnGuardFailure ? { retryCreditLegOnGuardFailure: true } : {}),
     projections: records,
     event: transition.event,
   };

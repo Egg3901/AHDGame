@@ -90,6 +90,7 @@ import {
   settledMediaAdvertisingAnchor,
 } from "@/lib/products/rules/mediaProductRules";
 import { createMediaProductAdvertisingObligation } from "@/lib/products/mediaProductAdvertisingSettlement";
+import { productAdvertisingDenominationWitness } from "@/lib/products/rules/productAdvertising";
 
 /** Primary commodities that proxy R&D conditions for each sector type. */
 const SECTOR_RD_COMMODITIES: Partial<Record<string, [string, string?]>> = {
@@ -1059,15 +1060,18 @@ export function processSectors(
             deliveredValueAnchor: value,
             currencyCode: resolveCorpLiquidCurrencyCode(seller) ?? "USD",
             localPerAnchor: fxRateForCorpFromMap(seller, lookups.exchangeRatesByCurrency),
+            ...productAdvertisingDenominationWitness(seller),
           },
         ];
       });
       const obligation = createMediaProductAdvertisingObligation({
+        buyerCorporationId: corpId,
         projectId: activeMediaProductProject._id,
         turn: mediaAdvertisingTurn,
         amountAnchor: mediaAdvertisingAnchor,
         buyerCurrencyCode: currencyCode,
         buyerLocalPerAnchor: localFxRate,
+        buyerDenomination: productAdvertisingDenominationWitness(corp),
         sellers: sellerQuotes,
       });
       if (obligation) {

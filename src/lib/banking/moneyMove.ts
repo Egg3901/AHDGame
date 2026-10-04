@@ -156,6 +156,7 @@ interface MoneyMoveRecord {
   legs: MoneyMoveRecordLeg[];
   /** Added by the settlement journal in the original claim, never a second record. */
   projections?: { applied?: boolean; appliedAt?: Date | null }[];
+  retryCreditLegOnGuardFailure?: boolean;
   createdAt: Date;
   completedAt?: Date;
   error?: string;
@@ -539,7 +540,14 @@ async function applyLeg(
     });
     const record = await records.findOne(
       { _id: key },
-      { projection: { status: 1, genericMoneyMoveVersion: 1, legs: 1 } }
+      {
+        projection: {
+          status: 1,
+          genericMoneyMoveVersion: 1,
+          retryCreditLegOnGuardFailure: 1,
+          legs: 1,
+        },
+      }
     );
     const saved = record?.legs[i];
     if (!saved) return `Leg ${i} of ${key} is missing from its journal.`;
@@ -553,7 +561,24 @@ async function applyLeg(
       continue;
     }
     if (saved.applied) return null;
-    if (saved.refusal) return saved.refusal;
+    if (saved.refusal) {
+      if (
+        leg.kind !== "credit" ||
+        record.retryCreditLegOnGuardFailure !== true ||
+        record.status !== "partial"
+      )
+        return saved.refusal;
+      await records.updateOne(
+        {
+          _id: key,
+          status: "partial",
+          [`${path}.applied`]: false,
+          [`${path}.refusal`]: saved.refusal,
+        },
+        { $unset: { [`${path}.refusal`]: "" } }
+      );
+      continue;
+    }
     if (record?.status !== "partial") return `Money move ${key} is already ${record?.status}.`;
     if (!current) return `Leg ${i} of ${key} has no target; reconciliation is required.`;
     if (record.genericMoneyMoveVersion !== 2) {

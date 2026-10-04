@@ -8,7 +8,7 @@
  * pass `partiesAuthored` by asserting a party whose seeds are gated to 1953 and
  * 1979.
  *
- * Five fields have a genuine per-era source and are derived from it. The rest
+ * Six fields have a genuine per-era source and are derived from it. The rest
  * stay authored, because they are not counts: `seatMin` is a deliberate floor
  * ("RU has no static seedSeats section, so a fresh world legitimately starts at
  * 0"), and deriving it would replace documented judgment with arithmetic.
@@ -30,7 +30,7 @@ import {
   COUNTRY_READINESS_EXPECTATIONS,
   type CountryReadinessExpectations,
 } from "@/lib/constants/countryReadinessExpectations";
-import { expectedRegionCount } from "@/lib/admin/seedDiagnostic/regionBundles";
+import { expectedRegionCount, regionBundleFor } from "@/lib/admin/seedDiagnostic/regionBundles";
 import { partyRosterLabel, partySeedsForPreset } from "@/lib/seeds/partySeedRegistry";
 import { checkGovernmentFormation } from "@/lib/constants/readinessChecks";
 
@@ -129,6 +129,7 @@ export function getReadinessExpectations(
   // plus fourteen republics, each with its own demographics and macro vector.
   // The older Soviet bundles deliberately omit three demographic/metric rows.
   const fullSovietCoverage = countryId === "RU" && preset === "1991-default";
+  const sovietRegions = fullSovietCoverage ? regionBundleFor(countryId, preset) : null;
 
   return {
     ...authored,
@@ -149,6 +150,12 @@ export function getReadinessExpectations(
       (regions === null
         ? authored.stateMetricsCount
         : regions - (fullSovietCoverage ? 0 : authored.regionCount - authored.stateMetricsCount)),
+    // Union republic vectors use SU_* identities, while the legacy filter
+    // names only Russian regions and older aggregate rows. Match the roster
+    // that supplies the expected count and exclude national summaries.
+    stateMetricsFilter: sovietRegions
+      ? { countryId, _id: { $in: sovietRegions.map((region) => region._id) } }
+      : authored.stateMetricsFilter,
     // `Math.min` keeps the authored floor as a ceiling on itself: when an era
     // seeds fewer parties than the entry demands, the expectation drops to what
     // the era actually seeds, and it never invents a stricter requirement than

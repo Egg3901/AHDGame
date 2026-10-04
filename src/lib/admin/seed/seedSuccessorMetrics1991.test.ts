@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createMockDb } from "@/lib/test-utils/mockDb";
 import { NATIONAL_SCOPE } from "@/lib/constants/nationalScope";
 import { SUCCESSOR_STATE_METRICS_1991 } from "@/lib/seeds/reference/successorMetrics1991";
+import { buildCountryReadinessReport } from "@/lib/admin/countryReadinessReport";
 import { regionBundleFor } from "@/lib/admin/seedDiagnostic/regionBundles";
 import { regionalMetricCoverage } from "@/lib/admin/seedDiagnostic/regionalCoverage";
 import { seedSuccessorMetrics1991 } from "./seedSuccessorMetrics1991";
@@ -102,6 +103,20 @@ describe.skipIf(process.env.AHD_1991_METRIC_ROSTER_REAL_MONGO !== "1")(
               _id: { $in: SUCCESSOR_STATE_METRICS_1991.map((m) => m._id) },
             })
           ).toBe(SUCCESSOR_STATE_METRICS_1991.length);
+          const readiness = await buildCountryReadinessReport(db, "RU", "1991-default");
+          expect(readiness?.checks.find((check) => check.name === "RegionMetrics")).toMatchObject({
+            count: 24,
+            status: "ok",
+          });
+          const republicId = regionBundleFor("RU", "1991-default")!.find((region) =>
+            region._id.startsWith("SU_")
+          )!._id;
+          await metrics.deleteOne({ _id: republicId });
+          const incomplete = await buildCountryReadinessReport(db, "RU", "1991-default");
+          expect(incomplete?.checks.find((check) => check.name === "RegionMetrics")).toMatchObject({
+            count: 23,
+            status: "warning",
+          });
           await seedSuccessorMetrics1991(db, false, "1991-default", () => {});
           expect(
             (await metrics.find({}, { projection: { _id: 1 } }).toArray())
