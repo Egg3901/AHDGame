@@ -694,7 +694,16 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
       migration.id === "2026-10-04-media-discriminator-market-indexes"
   );
   if (marketIdentityIndexes.length > 0) {
-    await runMigrations(db, { migrations: marketIdentityIndexes, dryRun: false });
+    // Reset drops the runtime market collections (and their indexes) but keeps
+    // migrationsRun markers. Rebuild these idempotent, metadata-only indexes on
+    // every bootstrap instead of trusting the historical marker to mean the
+    // current collection still exists.
+    await runMigrations(db, {
+      migrations: marketIdentityIndexes,
+      dryRun: false,
+      only: marketIdentityIndexes.map((migration) => migration.id),
+      force: true,
+    });
   }
 
   // This marker is opt-in only from resetAndBootstrapGameWorld. Its first call

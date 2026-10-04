@@ -195,6 +195,29 @@ describe("bootstrap contract: seed manifest", () => {
     expect(source.slice(start, end)).toContain("force: forceIndexFundBootstrap");
   });
 
+  it("rebuilds market identity indexes after reset even when migration markers survive", () => {
+    const source = fs.readFileSync(
+      path.resolve(process.cwd(), "src/lib/admin/bootstrapGameWorld.ts"),
+      "utf8"
+    );
+    const start = source.indexOf("const marketIdentityIndexes = MIGRATIONS.filter");
+    const end = source.indexOf(
+      "// This marker is opt-in only from resetAndBootstrapGameWorld",
+      start
+    );
+    const block = source.slice(start, end);
+    expect(start).toBeGreaterThan(-1);
+    expect(block).toContain('migration.id === "2026-10-04-industry-model-market-indexes"');
+    expect(block).toContain('migration.id === "2026-10-04-media-discriminator-market-indexes"');
+    expect(block).toContain("only: marketIdentityIndexes.map((migration) => migration.id)");
+    expect(block).toContain("force: true");
+    // It runs before hard-reference seeding writes corporateSectors and
+    // unownedSectors, after resetGameWorld may have dropped those collections.
+    expect(source.indexOf("const marketIdentityIndexes = MIGRATIONS.filter")).toBeLessThan(
+      source.indexOf("await seedAllCountryData(db, resetReference, log, preset, options.run)")
+    );
+  });
+
   it("findUnclassifiedCollections flags unknown collections", async () => {
     const { findUnclassifiedCollections } = await import("@/lib/admin/seed/seedManifest");
     expect(findUnclassifiedCollections(["states", "elections", "users"])).toEqual([]);
