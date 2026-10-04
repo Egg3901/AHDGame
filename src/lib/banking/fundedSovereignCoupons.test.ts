@@ -34,8 +34,10 @@ function world(treasuryCashLocal = 1_000): InMemoryDb {
   return db;
 }
 
-function savedBudget(db: InMemoryDb): FederalBudget {
-  return db.collection("federalBudget").docs[0] as unknown as FederalBudget;
+function savedBudget(db: InMemoryDb): FederalBudget & { treasuryCashLocal: number } {
+  return db.collection("federalBudget").docs[0] as unknown as FederalBudget & {
+    treasuryCashLocal: number;
+  };
 }
 
 describe("funded sovereign coupon claims", () => {
@@ -50,13 +52,18 @@ describe("funded sovereign coupon claims", () => {
     };
     await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), args);
     const amount = perTurnCouponPayment(4.8, BOND_UNIT_FACE_VALUE) * 12;
-    expect(db.collection("federalBudget").docs[0].treasuryCashLocal).toBe(1_000 - amount);
-    expect(db.collection("characters").docs[0].cashOnHand).toBe(amount / 6);
+    expect(savedBudget(db).treasuryCashLocal).toBe(1_000 - amount);
+    expect((db.collection("characters").docs[0] as { cashOnHand: number }).cashOnHand).toBe(
+      amount / 6
+    );
     expect(db.collection("bondMarketPools").docs[0].cashLocal).toBe((amount * 10) / 12);
-    expect(db.collection("bondMarketPools").docs[0].lifetime.couponsIn).toBe((amount * 10) / 12);
-    expect(db.collection("federalBudget").docs[0].sovereignCouponClaims).toEqual([]);
+    expect(
+      (db.collection("bondMarketPools").docs[0] as { lifetime: { couponsIn: number } }).lifetime
+        .couponsIn
+    ).toBe((amount * 10) / 12);
+    expect(savedBudget(db).sovereignCouponClaims).toEqual([]);
     await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), args);
-    expect(db.collection("federalBudget").docs[0].treasuryCashLocal).toBe(1_000 - amount);
+    expect(savedBudget(db).treasuryCashLocal).toBe(1_000 - amount);
   });
 
   it("retains an unfunded frozen claim, then pays its original quote once when cash arrives", async () => {
@@ -70,21 +77,21 @@ describe("funded sovereign coupon claims", () => {
       fxByCurrency: new Map<CurrencyCode, number>([["USD", 1]]),
     };
     await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), args);
-    const claims = db.collection("federalBudget").docs[0].sovereignCouponClaims;
+    const claims = savedBudget(db).sovereignCouponClaims ?? [];
     expect(claims).toHaveLength(1);
     const frozen = JSON.stringify(claims[0]);
-    db.collection("federalBudget").docs[0].treasuryCashLocal = 100;
+    savedBudget(db).treasuryCashLocal = 100;
     await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), {
       ...args,
       turn: 13,
       bonds: [],
       anchorRate: 2,
     });
-    expect(db.collection("federalBudget").docs[0].treasuryCashLocal).toBe(
-      100 - claims[0].amountLocal
+    expect(savedBudget(db).treasuryCashLocal).toBe(100 - claims[0].amountLocal);
+    expect((db.collection("characters").docs[0] as { cashOnHand: number }).cashOnHand).toBe(
+      claims[0].amountLocal / 6
     );
-    expect(db.collection("characters").docs[0].cashOnHand).toBe(claims[0].amountLocal / 6);
-    expect(db.collection("federalBudget").docs[0].sovereignCouponClaims).toEqual([]);
+    expect(savedBudget(db).sovereignCouponClaims).toEqual([]);
     expect(frozen).toContain('"anchorRate":1');
   });
 
@@ -106,13 +113,16 @@ describe("funded sovereign coupon claims", () => {
     await expect(settleFundedSovereignCoupons(crash.db, savedBudget(db), args)).rejects.toThrow(
       "crash"
     );
-    const cashAfterCrash = db.collection("federalBudget").docs[0].treasuryCashLocal;
+    const cashAfterCrash = savedBudget(db).treasuryCashLocal;
     const poolAfterCrash = db.collection("bondMarketPools").docs[0].cashLocal;
-    const characterAfterCrash = db.collection("characters").docs[0].cashOnHand;
+    const characterAfterCrash = (db.collection("characters").docs[0] as { cashOnHand: number })
+      .cashOnHand;
     await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), args);
-    expect(db.collection("federalBudget").docs[0].treasuryCashLocal).toBe(cashAfterCrash);
+    expect(savedBudget(db).treasuryCashLocal).toBe(cashAfterCrash);
     expect(db.collection("bondMarketPools").docs[0].cashLocal).toBe(poolAfterCrash);
-    expect(db.collection("characters").docs[0].cashOnHand).toBe(characterAfterCrash);
-    expect(db.collection("federalBudget").docs[0].sovereignCouponClaims).toEqual([]);
+    expect((db.collection("characters").docs[0] as { cashOnHand: number }).cashOnHand).toBe(
+      characterAfterCrash
+    );
+    expect(savedBudget(db).sovereignCouponClaims).toEqual([]);
   });
 });

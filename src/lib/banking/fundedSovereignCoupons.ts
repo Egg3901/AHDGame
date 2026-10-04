@@ -277,13 +277,13 @@ export async function settleFundedSovereignCoupons(
     const attemptPrefix = `^${claim.id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}:attempt:`;
     const prior =
       (await db
-        .collection("bankMoneyMoves")
+        .collection<{ _id: string; status: string }>("bankMoneyMoves")
         .findOne(
           { _id: { $regex: attemptPrefix }, status: "partial" },
           { projection: { _id: 1 } }
         )) ??
       (await db
-        .collection("bankMoneyMoves")
+        .collection<{ _id: string; status: string }>("bankMoneyMoves")
         .findOne(
           { _id: { $regex: attemptPrefix }, status: "applied" },
           { projection: { _id: 1 } }
@@ -304,7 +304,7 @@ async function couponTargetsExist(db: Db, claim: FundedSovereignCouponClaim): Pr
   const pools = claim.holders.filter((holder) => holder.kind === "publicFloat");
   if (pools.length > 0) {
     await db
-      .collection("bondMarketPools")
+      .collection<{ _id: string }>("bondMarketPools")
       .updateOne(
         { _id: claim.currencyCode },
         { $setOnInsert: { targetCashLocal: 0, createdAt: new Date() } },

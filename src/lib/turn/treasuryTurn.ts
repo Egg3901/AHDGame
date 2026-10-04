@@ -24,6 +24,7 @@ import { enforcementTreasuryCostPerTurn } from "@/lib/unions/enforcementCosts";
 import { settleBankSovereignClaims } from "@/lib/banking/bankSovereignClaims";
 import { bankCouponClaim, bankCouponPlanForCountry } from "@/lib/banking/rules/sovereignClaims";
 import { settleFundedSovereignCoupons } from "@/lib/banking/fundedSovereignCoupons";
+import { isForexEnabled } from "@/lib/currency/featureFlag";
 
 /**
  * Per-turn fiscal accrual (spec §4). For each country's federalBudget, move a
@@ -78,7 +79,6 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
           ledgerShadow: 1,
           bankTreasuryEnabled: 1,
           treasuryCashLedgerEnabled: 1,
-          forexEnabled: 1,
         },
       }
     ),
@@ -144,7 +144,7 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
           turn: _turn,
           bonds: [],
           anchorRate: b.sovereignCouponClaims[0].anchorRate,
-          forexEnabled: config?.forexEnabled === true,
+          forexEnabled: await isForexEnabled(),
           fxByCurrency: new Map(
             [...rateByCurrency].map(([currency, rate]) => [currency as CurrencyCode, rate])
           ),
@@ -171,7 +171,7 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
                 (bond) => String(bond.countryId) === String(b.countryId)
               ),
               anchorRate: valuation.anchorRate!,
-              forexEnabled: config?.forexEnabled === true,
+              forexEnabled: await isForexEnabled(),
               fxByCurrency: new Map(
                 [...rateByCurrency].map(([currency, rate]) => [currency as CurrencyCode, rate])
               ),
@@ -334,7 +334,7 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
                 (bond) => String(bond.countryId) === String(b.countryId)
               ),
               anchorRate: valuation.anchorRate!,
-              forexEnabled: config?.forexEnabled === true,
+              forexEnabled: await isForexEnabled(),
               fxByCurrency: new Map(
                 [...rateByCurrency].map(([currency, rate]) => [currency as CurrencyCode, rate])
               ),
