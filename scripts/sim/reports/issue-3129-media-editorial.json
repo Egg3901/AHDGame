@@ -1,0 +1,64 @@
+{
+  "title": "Media editorial audience fill diagnostic",
+  "method": "Uses computeClearingFactors and advertisingDeliveredValueByCorp with identical offers, market balances and prices. The only changed input is pre-clearing advertising availability.",
+  "assumptions": {
+    "rawOutputUnitsPerOutlet": 100,
+    "laggedSupplyUnits": 200,
+    "laggedDemandUnits": 100,
+    "baseAndRealizedAdvertisingPrice": 1,
+    "turnsPerDay": 24,
+    "maximumAudienceLoss": 0.25,
+    "audienceLeanForBalancedScenario": {
+      "economic": 0,
+      "social": 0
+    },
+    "divergentStance": {
+      "economic": 5,
+      "social": 5
+    }
+  },
+  "derived": {
+    "maximumDivergenceAvailability": 0.75,
+    "alignedPoliticianNudgeAtFullAudienceShare": 0.5,
+    "alignedPoliticianNudgeAtHalfAudienceShare": 0.25
+  },
+  "scenarios": {
+    "balancedEditorial": {
+      "sectors": {
+        "neutral": {
+          "rawOutputUnits": 100,
+          "soldFraction": 0.5,
+          "commercialRevenuePerTurn": 2.0833333333333335,
+          "adSellerReceiptAnchorPerTurn": 2.0833333333333335
+        },
+        "divergent": {
+          "rawOutputUnits": 100,
+          "soldFraction": 0.5,
+          "commercialRevenuePerTurn": 2.0833333333333335,
+          "adSellerReceiptAnchorPerTurn": 2.0833333333333335
+        }
+      }
+    },
+    "maximumDivergence": {
+      "sectors": {
+        "neutral": {
+          "rawOutputUnits": 100,
+          "soldFraction": 0.5,
+          "commercialRevenuePerTurn": 2.0833333333333335,
+          "adSellerReceiptAnchorPerTurn": 2.0833333333333335
+        },
+        "divergent": {
+          "rawOutputUnits": 100,
+          "soldFraction": 0.375,
+          "commercialRevenuePerTurn": 1.5625,
+          "adSellerReceiptAnchorPerTurn": 1.5625
+        }
+      }
+    }
+  },
+  "accounting": {
+    "buyerValueIsComputedFromTheSameFilledUnitsAsSellerReceipt": true,
+    "reducedAvailabilityRemainsUnsoldOutput": true,
+    "buyerDemandIsNotExpanded": true
+  }
+}
