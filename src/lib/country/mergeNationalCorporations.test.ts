@@ -105,11 +105,8 @@ describe("mergeNationalCorporations", () => {
       corporationId: GHOST_PRIMARY_ID,
     };
     db.collectionMocks.corporateSectors.find.mockImplementation((filter: unknown) => {
-      const f = filter as { corporationId?: ObjectId };
-      if (f?.corporationId?.toString() === GHOST_ENERGY_ID.toString())
-        return cursorOf([ghostEnergySector]);
-      if (f?.corporationId?.toString() === GHOST_PRIMARY_ID.toString())
-        return cursorOf([ghostRetailSector]);
+      const f = filter as { corporationId?: { $in?: ObjectId[] } };
+      if (f?.corporationId?.$in) return cursorOf([ghostEnergySector, ghostRetailSector]);
       return cursorOf([]);
     });
 
@@ -118,13 +115,16 @@ describe("mergeNationalCorporations", () => {
       toCountryId: "DD",
     });
 
-    const updates = db.collectionMocks.corporateSectors.updateMany.mock.calls;
+    const updates = db.collectionMocks.corporateSectors.updateOne.mock.calls.filter(
+      (c) => c[1]?.$set?.corporationId != null
+    );
     const retailUpdate = updates.find(
       (c) =>
         (c[1] as { $set: { corporationId: ObjectId } }).$set.corporationId.toString() ===
         SURVIVOR_PRIMARY_ID.toString()
     );
     expect(retailUpdate).toBeDefined();
+    expect(updates).toHaveLength(2);
     // No survivor split-off claims "energy" here, so energy falls to the primary too.
     const energyUpdate = updates.find(
       (c) =>
@@ -160,7 +160,9 @@ describe("mergeNationalCorporations", () => {
       toCountryId: "DD",
     });
 
-    const updates = db.collectionMocks.corporateSectors.updateMany.mock.calls;
+    const updates = db.collectionMocks.corporateSectors.updateOne.mock.calls.filter(
+      (c) => c[1]?.$set?.corporationId != null
+    );
     expect(updates).toHaveLength(1);
     expect(
       (updates[0][1] as { $set: { corporationId: ObjectId } }).$set.corporationId.toString()
