@@ -65,7 +65,8 @@ export function buildCentralBankCredibilityReport(
       point.codeVersion !== manifest.source?.executedCommit ||
       point.schemaVersion !== 1 ||
       point.sourceClass !== "sandbox" ||
-      point.observation !== "completed-turn-state"
+      (point.observation !== "completed-turn-state" &&
+        !(point.observation === "opening-state" && point.turn === expected?.expectedFirstTurn))
     ) {
       reasons.push(`mixed provenance ${key}`);
     }
@@ -101,7 +102,7 @@ export function buildCentralBankCredibilityReport(
     expectedBankIds: expected?.bankIds ?? [],
     missingValues,
     limits:
-      "Observed completed-world state, not decision inputs, a controlled policy intervention, or causal calibration. End rates may reflect a subsequent autonomous choice. National growth remains null where no national observation exists. Complete capture does not imply issue acceptance.",
+      "Opening state is labeled separately from observed completed-world state. These are not decision inputs, a controlled policy intervention, or causal calibration. End rates may reflect a subsequent autonomous choice. National growth remains null where no national observation exists. Complete capture does not imply issue acceptance.",
     points: sorted,
   };
 }

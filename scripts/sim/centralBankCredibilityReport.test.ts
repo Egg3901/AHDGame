@@ -57,6 +57,19 @@ describe("world credibility evidence qualification", () => {
     ).toContain("duplicate 0:US");
   });
 
+  it("accepts an opening label only at the original capture boundary", () => {
+    const opening = { ...points[0], observation: "opening-state" as const };
+    expect(
+      buildCentralBankCredibilityReport(manifest, [opening, ...points.slice(1)], interval)
+        .captureQualification
+    ).toBe("complete");
+    const misplaced = { ...points[1], observation: "opening-state" as const };
+    expect(
+      buildCentralBankCredibilityReport(manifest, [points[0], misplaced, points[2]], interval)
+        .reasons
+    ).toContain("mixed provenance 1:US");
+  });
+
   it.each([{ runId: "other" }, { seed: "other" }, { codeVersion: "b".repeat(40) }])(
     "rejects mixed run provenance %j",
     (override) => {

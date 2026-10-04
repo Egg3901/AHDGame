@@ -30,7 +30,7 @@ export interface CentralBankCredibilityPoint {
   seed: string;
   codeVersion: string;
   sourceClass: "sandbox";
-  observation: "completed-turn-state";
+  observation: "opening-state" | "completed-turn-state";
   observedAt: string;
   turn: number;
   year: number;
@@ -59,7 +59,13 @@ export function assertCredibilityPhasesCompleted(
 
 export async function captureCentralBankCredibilityTurn(
   db: Db,
-  input: { runId: string; seed: string; codeVersion: string; turn: number }
+  input: {
+    runId: string;
+    seed: string;
+    codeVersion: string;
+    turn: number;
+    observation?: CentralBankCredibilityPoint["observation"];
+  }
 ): Promise<string[]> {
   if (!/^ahd_sim_[a-zA-Z0-9_-]+$/.test(db.databaseName)) {
     throw new Error("Central-bank credibility evidence is sandbox-only");
@@ -129,7 +135,7 @@ export async function captureCentralBankCredibilityTurn(
       schemaVersion: 1,
       ...input,
       sourceClass: "sandbox",
-      observation: "completed-turn-state",
+      observation: input.observation ?? "completed-turn-state",
       observedAt,
       year: game.currentYear,
       bankId: bank._id,

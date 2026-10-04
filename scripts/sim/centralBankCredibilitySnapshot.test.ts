@@ -80,6 +80,14 @@ describe("sandbox central-bank credibility observations", () => {
     expect(points[0].scrutiny).toBe(20);
   });
 
+  it("labels an opening state separately and retains that label on a resume retry", async () => {
+    await captureCentralBankCredibilityTurn(db, { ...input, observation: "opening-state" });
+    await captureCentralBankCredibilityTurn(db, input);
+    expect(memory.collection("simCentralBankCredibility").docs[0].observation).toBe(
+      "opening-state"
+    );
+  });
+
   it.each(["game", "singleplayer", "ahd_sim_"])(
     "rejects non-sandbox database %s before any read",
     async (databaseName) => {

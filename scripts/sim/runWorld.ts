@@ -1260,6 +1260,11 @@ async function main() {
         turn: startTurn,
         seed,
         codeVersion: source.executedCommit,
+        observation:
+          !existing?.centralBankCredibilityTelemetry ||
+          existing.centralBankCredibilityTelemetry.expectedFirstTurn === startTurn
+            ? "opening-state"
+            : "completed-turn-state",
       });
       await simRuns.updateOne(
         { _id: runId },
