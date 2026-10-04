@@ -96,6 +96,47 @@ describe("POST /api/canvassing — eligibility", () => {
     vi.mocked(getStateDemographicTurnoutCollection).mockResolvedValue(turnoutCollection as never);
   });
 
+  it.each(["__proto__", "constructor", "prototype"])(
+    "rejects dangerous demographic keys before spending: %s",
+    async (key) => {
+      const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
+      vi.mocked(requireAuthWithCharacter).mockResolvedValue({
+        ok: true,
+        user: { userId: "u1", character: authedCharacter() },
+      } as never);
+      const { POST } = await import("./route");
+      for (const target of [
+        { category: key, group: "white" },
+        { category: "race", group: key },
+      ]) {
+        const response = await POST(makeRequest({ stateId: "GA", ...target, count: 1 }) as never);
+        expect(response.status).toBe(400);
+      }
+      const { applyCanvassSpend } = await import("@/lib/canvassing/canvassSpend");
+      expect(applyCanvassSpend).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each(["__proto__", "constructor", "prototype"])(
+    "rejects dangerous preview target keys: %s",
+    async (key) => {
+      const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
+      vi.mocked(requireAuthWithCharacter).mockResolvedValue({
+        ok: true,
+        user: { userId: "u1", character: authedCharacter() },
+      } as never);
+      const { GET } = await import("./route");
+      for (const target of [
+        { category: key, group: "white" },
+        { category: "race", group: key },
+      ]) {
+        const query = new URLSearchParams({ stateId: "GA", ...target });
+        const response = await GET(new NextRequest(`http://localhost/api/canvassing?${query}`));
+        expect(response.status).toBe(400);
+      }
+    }
+  );
+
   it("returns 403 when a presidential candidate has no primaryCampaignState set in the primary phase", async () => {
     const character = authedCharacter();
     const future = new Date(Date.now() + 60 * 60 * 1000);
