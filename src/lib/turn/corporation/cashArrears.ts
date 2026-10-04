@@ -31,7 +31,7 @@ async function resumePending(db: Db, prefix: string): Promise<void> {
 }
 
 /** Pay previously recorded obligations from later actual operating cash. */
-export async function settlePriorCorporateCashArrears(input: CashArrearsInput): Promise<void> {
+export async function settlePriorCorporateCashArrears(input: CashArrearsInput): Promise<number> {
   const { db, context, corporationId, currencyCode, localPerAnchor, turn, now } = input;
   const operatingPrefix = `corp-operating-arrears-settle:${corporationId}:`;
   const taxPrefix = `corp-tax-arrears-settle:${corporationId}:`;
@@ -47,7 +47,7 @@ export async function settlePriorCorporateCashArrears(input: CashArrearsInput): 
   };
   const corporations = db.collection<Corporation>("corporations");
   let corp = await corporations.findOne({ _id: new ObjectId(corporationId) }, { projection });
-  if (!corp) return;
+  if (!corp) return 0;
   let cash = Math.max(0, corp.liquidCapital ?? 0);
 
   const operatingTurn = corp.operatingCashArrearsLastTurnByCurrency?.[currencyCode];
@@ -121,7 +121,7 @@ export async function settlePriorCorporateCashArrears(input: CashArrearsInput): 
     }
     cash -= operatingPaid;
     corp = await corporations.findOne({ _id: new ObjectId(corporationId) }, { projection });
-    if (!corp) return;
+    if (!corp) return 0;
     cash = Math.max(0, corp.liquidCapital ?? cash);
   }
 
@@ -142,7 +142,7 @@ export async function settlePriorCorporateCashArrears(input: CashArrearsInput): 
     remainingAnchor -= paid;
   }
   const totalPaidAnchor = [...paidByCountry.values()].reduce((sum, amount) => sum + amount, 0);
-  if (!(totalPaidAnchor > 0)) return;
+  if (!(totalPaidAnchor > 0)) return cash;
 
   const taxKey = `${taxPrefix}${turn}`;
   const existingTax = await db
@@ -153,7 +153,7 @@ export async function settlePriorCorporateCashArrears(input: CashArrearsInput): 
     if (resumed.status !== "applied" && resumed.status !== "replayed") {
       throw new Error(resumed.error ?? `Tax arrears receipt ${taxKey} is incomplete`);
     }
-    return;
+    return cash;
   }
 
   const debitLocal = totalPaidAnchor * localPerAnchor;
@@ -232,8 +232,9 @@ export async function settlePriorCorporateCashArrears(input: CashArrearsInput): 
     },
   };
   const settled = await settleTransition(db, transition);
-  if (settled.status === "rejected") return;
+  if (settled.status === "rejected") return cash;
   if (settled.status !== "applied" && settled.status !== "replayed") {
     throw new Error(settled.error ?? `Tax arrears receipt ${taxKey} is incomplete`);
   }
+  return Math.max(0, cash - debitLocal);
 }

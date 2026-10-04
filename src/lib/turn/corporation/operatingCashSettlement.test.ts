@@ -7,12 +7,14 @@ import { settleCorporateOperatingCash } from "./operatingCashSettlement";
 
 function snapshot(
   corpId: ObjectId,
-  input: Pick<
-    CorpSnapshot,
-    | "operatingCashIncomeLocal"
-    | "operatingCashCurrency"
-    | "operatingCashLocalPerAnchor"
-    | "federalTaxByCountryAnchor"
+  input: Partial<
+    Pick<
+      CorpSnapshot,
+      | "operatingCashIncomeLocal"
+      | "operatingCashCurrency"
+      | "operatingCashLocalPerAnchor"
+      | "federalTaxByCountryAnchor"
+    >
   >
 ): CorpSnapshot {
   return {
@@ -495,4 +497,53 @@ describe("corporate operating cash settlement", () => {
       );
     }
   );
+
+  it("resumes the frozen complete quote after gross cash lands even if the retry quote is missing", async () => {
+    const db = createInMemoryDb();
+    const corpId = new ObjectId("650000000000000000000033");
+    db.seed("gameConfig", [{ _id: "default", treasuryCashLedgerEnabled: true }]);
+    db.seed("gameState", [{ _id: "current", currentTurn: 4, preset: "2019-default" }]);
+    db.seed("exchangeRates", [{ currencyCode: "USD", rate: 1 }]);
+    db.seed("federalBudget", [
+      {
+        _id: "US",
+        countryId: "US",
+        currencyCode: "USD",
+        treasuryCashLocal: 0,
+        treasuryBalance: 0,
+      },
+    ]);
+    db.seed("corporations", [{ _id: corpId, liquidCapital: 100 }]);
+    const original = snapshot(corpId, {
+      operatingCashIncomeLocal: 80,
+      operatingCashCurrency: "USD",
+      operatingCashLocalPerAnchor: 1,
+      federalTaxByCountryAnchor: new Map([["US", 20]]),
+    });
+    const fault = withInjectedCrash(db, {
+      collection: "corporations",
+      op: "updateOne",
+      afterWrite: true,
+      onCall: 1,
+      matches: (args) => {
+        const update = args[1] as { $inc?: Record<string, number> };
+        return update.$inc?.liquidCapital === 100;
+      },
+    });
+
+    await expect(settleCorporateOperatingCash(fault.db, [original], 4, new Date())).rejects.toThrow(
+      "crash after"
+    );
+    fault.disarm();
+    await db.collection("exchangeRates").updateOne({ currencyCode: "USD" }, { $set: { rate: 8 } });
+
+    await settleCorporateOperatingCash(fault.db, [snapshot(corpId, {})], 4, new Date());
+
+    expect(db.collection("corporations").docs[0]?.liquidCapital).toBe(180);
+    expect(db.collection("federalBudget").docs[0]).toMatchObject({
+      treasuryCashLocal: 20,
+      treasuryBalance: 20,
+    });
+    expect(db.collection("bankMoneyMoves").docs).toHaveLength(2);
+  });
 });

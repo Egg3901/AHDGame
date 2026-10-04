@@ -1,4 +1,4 @@
-import { ObjectId, type Db } from "mongodb";
+import type { Db } from "mongodb";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
@@ -10,6 +10,41 @@ import { loadTreasuryCashContext } from "@/lib/nationalization/treasuryLedger";
 import { settleTransition, resumeSettlement } from "@/lib/banking/settlementJournal";
 import { oid, type BankingTransition } from "@/lib/banking/rules/boundary";
 import { settlePriorCorporateCashArrears } from "./cashArrears";
+
+interface OperatingTaxDestinationQuote {
+  country: string;
+  amountAnchor: number;
+  currencyCode: CurrencyCode;
+  localPerAnchor: number;
+}
+
+interface OperatingCashQuote {
+  netLocal: number;
+  grossLocal: number;
+  sourceCurrency: CurrencyCode;
+  sourceLocalPerAnchor: number;
+  taxByCountryAnchor: [string, number][];
+  taxDestinations: OperatingTaxDestinationQuote[];
+}
+
+function readOperatingCashQuote(
+  meta: Record<string, unknown> | undefined
+): OperatingCashQuote | null {
+  const value = meta?.operatingCashQuote;
+  if (!value || typeof value !== "object") return null;
+  const quote = value as Partial<OperatingCashQuote>;
+  if (
+    !Number.isFinite(quote.netLocal) ||
+    !Number.isFinite(quote.grossLocal) ||
+    typeof quote.sourceCurrency !== "string" ||
+    !Number.isFinite(quote.sourceLocalPerAnchor) ||
+    !Array.isArray(quote.taxByCountryAnchor) ||
+    !Array.isArray(quote.taxDestinations)
+  ) {
+    return null;
+  }
+  return quote as OperatingCashQuote;
+}
 
 /**
  * Settle modeled gross operating receipts before federal withholding. These
@@ -33,51 +68,53 @@ export async function settleCorporateOperatingCash(
   }
 
   const ids = snapshots.map((snapshot) => snapshot.corpId);
-  const [journals, corporations] = await Promise.all([
-    db.collection<{ _id: string }>("bankMoneyMoves"),
-    db
-      .collection<Corporation>("corporations")
-      .find(
-        { _id: { $in: ids } },
-        {
-          projection: {
-            _id: 1,
-            liquidCapital: 1,
-            operatingCashArrearsByCurrency: 1,
-            federalTaxArrearsAnchorByCountry: 1,
-          },
-        }
-      )
-      .toArray(),
-  ]);
+  const journals = db.collection<{
+    _id: string;
+    event?: { meta?: Record<string, unknown> };
+  }>("bankMoneyMoves");
   const keys = snapshots.flatMap((snapshot) => {
     const base = `corp-operating-cash:${turn}:${snapshot.corpId.toString()}`;
     return [base, `${base}:gross`, `${base}:tax`, `${base}:arrears`];
   });
   const existingRows = await journals
-    .find({ _id: { $in: keys } }, { projection: { _id: 1 } })
+    .find({ _id: { $in: keys } }, { projection: { _id: 1, event: 1 } })
     .toArray();
   const existingKeys = new Set(existingRows.map((row) => row._id));
+  const journalByKey = new Map(existingRows.map((row) => [row._id, row]));
+
+  // Finish already claimed gross receipts before taking the corporation cash
+  // snapshot used for new work. This keeps the read batched while allowing a
+  // retry to spend the proceeds it just replayed.
+  for (const snapshot of snapshots) {
+    const baseKey = `corp-operating-cash:${turn}:${snapshot.corpId.toString()}`;
+    const grossKey = `${baseKey}:gross`;
+    if (existingKeys.has(baseKey) || !existingKeys.has(grossKey)) continue;
+    const resumed = await resumeSettlement(db, grossKey);
+    if (resumed.status !== "applied" && resumed.status !== "replayed") {
+      throw new Error(resumed.error ?? `Corporate gross receipt ${grossKey} is incomplete`);
+    }
+  }
+
+  const corporations = await db
+    .collection<Corporation>("corporations")
+    .find(
+      { _id: { $in: ids } },
+      {
+        projection: {
+          _id: 1,
+          liquidCapital: 1,
+          operatingCashArrearsByCurrency: 1,
+          federalTaxArrearsAnchorByCountry: 1,
+        },
+      }
+    )
+    .toArray();
+  const corporationById = new Map(corporations.map((corp) => [corp._id.toString(), corp]));
   const cashByCorpId = new Map(
     corporations.map((corp) => [corp._id.toString(), corp.liquidCapital])
   );
 
   for (const snapshot of snapshots) {
-    const netLocal = snapshot.operatingCashIncomeLocal;
-    const sourceCurrency = snapshot.operatingCashCurrency;
-    const sourceRate = snapshot.operatingCashLocalPerAnchor;
-    if (
-      !Number.isFinite(netLocal) ||
-      !sourceCurrency ||
-      !Number.isFinite(sourceRate) ||
-      !(sourceRate! > 0)
-    ) {
-      throw new Error(`Missing frozen operating cash quote for corporation ${snapshot.corpId}`);
-    }
-    const taxByCountry = snapshot.federalTaxByCountryAnchor ?? new Map<string, number>();
-    const taxAnchor = [...taxByCountry.values()].reduce((sum, amount) => sum + amount, 0);
-    const taxSourceLocal = taxAnchor * sourceRate!;
-    const grossLocal = netLocal! + taxSourceLocal;
     const baseKey = `corp-operating-cash:${turn}:${snapshot.corpId.toString()}`;
 
     // Resume receipts created by the previous implementation before starting
@@ -94,21 +131,82 @@ export async function settleCorporateOperatingCash(
     }
 
     const grossKey = `${baseKey}:gross`;
+    const taxKey = `${baseKey}:tax`;
+    const frozenRecord = journalByKey.get(grossKey) ?? journalByKey.get(taxKey);
+    const savedQuote = readOperatingCashQuote(frozenRecord?.event?.meta);
+    if (existingKeys.has(grossKey) && !savedQuote) {
+      throw new Error(`Gross receipt ${grossKey} has no complete frozen operating quote`);
+    }
+    if (!existingKeys.has(grossKey) && existingKeys.has(taxKey) && !savedQuote) {
+      const resumed = await resumeSettlement(db, taxKey);
+      if (resumed.status !== "applied" && resumed.status !== "replayed") {
+        throw new Error(resumed.error ?? `Corporate tax receipt ${taxKey} is incomplete`);
+      }
+      continue;
+    }
+    const quote =
+      savedQuote ??
+      (() => {
+        const netLocal = snapshot.operatingCashIncomeLocal;
+        const sourceCurrency = snapshot.operatingCashCurrency;
+        const sourceRate = snapshot.operatingCashLocalPerAnchor;
+        if (
+          !Number.isFinite(netLocal) ||
+          !sourceCurrency ||
+          !Number.isFinite(sourceRate) ||
+          !(sourceRate! > 0)
+        ) {
+          throw new Error(`Missing frozen operating cash quote for corporation ${snapshot.corpId}`);
+        }
+        const taxByCountryAnchor = [
+          ...(snapshot.federalTaxByCountryAnchor ?? new Map<string, number>()).entries(),
+        ];
+        const taxAnchor = taxByCountryAnchor.reduce((sum, [, amount]) => sum + amount, 0);
+        const taxDestinations = taxByCountryAnchor
+          .filter(([, amount]) => amount > 0)
+          .map(([country, amountAnchor]) => {
+            const treasuryCurrency =
+              context.treasuryCurrencies.get(country) ??
+              COUNTRY_CURRENCY_MAP[country as CountryId] ??
+              snapshotTreasuryCurrency({ countryId: country as CountryId });
+            const treasuryRate = treasuryAnchorValuation({
+              countryId: country,
+              currencyCode: treasuryCurrency,
+              preset: context.preset,
+              observedRate: context.rates.get(treasuryCurrency),
+            }).anchorRate;
+            return {
+              country,
+              amountAnchor,
+              currencyCode: treasuryCurrency,
+              localPerAnchor: treasuryRate,
+            };
+          });
+        return {
+          netLocal: netLocal!,
+          grossLocal: netLocal! + taxAnchor * sourceRate!,
+          sourceCurrency: sourceCurrency as CurrencyCode,
+          sourceLocalPerAnchor: sourceRate!,
+          taxByCountryAnchor,
+          taxDestinations,
+        } satisfies OperatingCashQuote;
+      })();
+    const {
+      sourceCurrency,
+      sourceLocalPerAnchor: sourceRate,
+      taxByCountryAnchor,
+      taxDestinations,
+      grossLocal,
+    } = quote;
+    const taxByCountry = new Map(taxByCountryAnchor);
+    const taxAnchor = taxByCountryAnchor.reduce((sum, [, amount]) => sum + amount, 0);
+    const taxSourceLocal = taxAnchor * sourceRate;
     let availableCash = cashByCorpId.get(snapshot.corpId.toString()) ?? 0;
     if (existingKeys.has(grossKey)) {
-      const resumed = await resumeSettlement(db, grossKey);
-      if (resumed.status !== "applied" && resumed.status !== "replayed") {
-        throw new Error(resumed.error ?? `Corporate gross receipt ${grossKey} is incomplete`);
-      }
-      const freshCorp = await db
-        .collection<Corporation>("corporations")
-        .findOne(
-          { _id: new ObjectId(snapshot.corpId.toString()) },
-          { projection: { liquidCapital: 1 } }
-        );
-      availableCash = freshCorp?.liquidCapital ?? availableCash;
+      // Existing quote is restored from the durable gross/loss journal above;
+      // cash was refreshed in one batched corporation read after resume.
     } else if (grossLocal > 0) {
-      const valuation = { currencyCode: sourceCurrency, localPerAnchor: sourceRate! };
+      const valuation = { currencyCode: sourceCurrency, localPerAnchor: sourceRate };
       const transition: BankingTransition = {
         key: grossKey,
         kind: "corporate_operating_gross_receipt",
@@ -141,7 +239,8 @@ export async function settleCorporateOperatingCash(
           meta: {
             grossOperatingCashLocal: grossLocal,
             sourceCurrency,
-            sourceLocalPerAnchor: sourceRate!,
+            sourceLocalPerAnchor: sourceRate,
+            operatingCashQuote: quote,
           },
         },
       };
@@ -152,9 +251,7 @@ export async function settleCorporateOperatingCash(
       availableCash += grossLocal;
     }
 
-    const originalCorp = corporations.find(
-      (corp) => corp._id.toString() === snapshot.corpId.toString()
-    );
+    const originalCorp = corporationById.get(snapshot.corpId.toString());
     const hasOperatingArrears = Object.values(
       originalCorp?.operatingCashArrearsByCurrency ?? {}
     ).some((amount) => amount > 0);
@@ -162,22 +259,15 @@ export async function settleCorporateOperatingCash(
       (amount) => amount > 0
     );
     if (hasOperatingArrears || hasTaxArrears) {
-      await settlePriorCorporateCashArrears({
+      availableCash = await settlePriorCorporateCashArrears({
         db,
         context,
         corporationId: snapshot.corpId.toString(),
         currencyCode: sourceCurrency as CurrencyCode,
-        localPerAnchor: sourceRate!,
+        localPerAnchor: sourceRate,
         turn,
         now,
       });
-      const freshCorp = await db
-        .collection<Corporation>("corporations")
-        .findOne(
-          { _id: new ObjectId(snapshot.corpId.toString()) },
-          { projection: { liquidCapital: 1 } }
-        );
-      availableCash = Math.max(0, freshCorp?.liquidCapital ?? 0);
     }
 
     if (grossLocal < 0 && !existingKeys.has(grossKey)) {
@@ -188,7 +278,7 @@ export async function settleCorporateOperatingCash(
       const shortfall = loss - paidLoss;
       const legs: BankingTransition["legs"] = [];
       const projections: BankingTransition["projections"] = [];
-      const valuation = { currencyCode: sourceCurrency, localPerAnchor: sourceRate! };
+      const valuation = { currencyCode: sourceCurrency, localPerAnchor: sourceRate };
       if (paidLoss > 0) {
         legs.push(
           {
@@ -240,7 +330,8 @@ export async function settleCorporateOperatingCash(
             paidLossLocal: paidLoss,
             shortfallLocal: shortfall,
             sourceCurrency,
-            sourceLocalPerAnchor: sourceRate!,
+            sourceLocalPerAnchor: sourceRate,
+            operatingCashQuote: quote,
           },
         },
       };
@@ -251,7 +342,6 @@ export async function settleCorporateOperatingCash(
     }
 
     if (!(taxSourceLocal > 0)) continue;
-    const taxKey = `${baseKey}:tax`;
     const arrearsKey = `${baseKey}:arrears`;
     const recordTaxArrears = async () => {
       if (existingKeys.has(arrearsKey)) {
@@ -298,7 +388,11 @@ export async function settleCorporateOperatingCash(
           subjectType: "corporation",
           subjectId: snapshot.corpId.toString(),
           amount: 0,
-          meta: { federalTaxArrearsAnchor: taxAnchor, sourceCurrency },
+          meta: {
+            federalTaxArrearsAnchor: taxAnchor,
+            sourceCurrency,
+            operatingCashQuote: quote,
+          },
         },
       };
       const recorded = await settleTransition(db, arrears);
@@ -319,7 +413,7 @@ export async function settleCorporateOperatingCash(
       continue;
     }
 
-    const sourceValuation = { currencyCode: sourceCurrency, localPerAnchor: sourceRate! };
+    const sourceValuation = { currencyCode: sourceCurrency, localPerAnchor: sourceRate };
     const taxLegs: BankingTransition["legs"] = [
       {
         kind: "debit",
@@ -332,18 +426,13 @@ export async function settleCorporateOperatingCash(
       },
     ];
     const taxProjections: BankingTransition["projections"] = [];
-    for (const [country, amountAnchor] of taxByCountry) {
-      if (!(amountAnchor > 0)) continue;
-      const treasuryCurrency =
-        context.treasuryCurrencies.get(country) ??
-        COUNTRY_CURRENCY_MAP[country as CountryId] ??
-        snapshotTreasuryCurrency({ countryId: country as CountryId });
-      const treasuryRate = treasuryAnchorValuation({
-        countryId: country,
+    for (const destination of taxDestinations) {
+      const {
+        country,
+        amountAnchor,
         currencyCode: treasuryCurrency,
-        preset: context.preset,
-        observedRate: context.rates.get(treasuryCurrency),
-      }).anchorRate;
+        localPerAnchor: treasuryRate,
+      } = destination;
       const treasuryLocal = amountAnchor * treasuryRate;
       const treasuryValuation = { currencyCode: treasuryCurrency, localPerAnchor: treasuryRate };
       taxLegs.push({
@@ -378,7 +467,8 @@ export async function settleCorporateOperatingCash(
         meta: {
           federalTaxAnchor: taxAnchor,
           sourceCurrency,
-          sourceLocalPerAnchor: sourceRate!,
+          sourceLocalPerAnchor: sourceRate,
+          operatingCashQuote: quote,
         },
       },
     };
