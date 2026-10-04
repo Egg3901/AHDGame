@@ -202,10 +202,9 @@ export async function proposeSupplyAgreement(request: Request, initiatingCorpId:
     if (!(COMMODITY_TYPES as readonly string[]).includes(body.commodity)) {
       return NextResponse.json({ error: "Valid commodity required" }, { status: 400 });
     }
-    // A state-scoped commodity (freight) is haulage capacity based in one
-    // state and clears in that state's book, so its contract names the state
-    // it is fulfilled from. Everything else is corporation-wide and ignores
-    // any state the client sends.
+    // A state-scoped service clears in its state's book, so its contract names
+    // the state it is fulfilled in. Everything else is corporation-wide and
+    // ignores any state the client sends.
     const commodity = body.commodity as CommodityType;
     let stateId: string | undefined;
     if (supplyAgreementRequiresState(commodity)) {
@@ -213,7 +212,7 @@ export async function proposeSupplyAgreement(request: Request, initiatingCorpId:
         return NextResponse.json(
           {
             error:
-              "Freight capacity is sold in the state where it is based. Name the state this contract is fulfilled from.",
+              "This service is sold in a local state market. Name the state where this contract is fulfilled.",
           },
           { status: 400 }
         );
