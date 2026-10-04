@@ -145,7 +145,7 @@ describe("resetGameWorld", () => {
     });
 
     expect(retireCharacter).toHaveBeenCalledOnce();
-    expect(retireCharacter.mock.calls[0]?.[4]?.recap).toMatchObject({
+    expect(vi.mocked(retireCharacter).mock.calls[0]?.[4]?.recap).toMatchObject({
       schemaVersion: 2,
       countryName: "United States",
     });
