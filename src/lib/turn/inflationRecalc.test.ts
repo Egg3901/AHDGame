@@ -662,14 +662,17 @@ describe("recalculateInflationPerTurn", () => {
 
   // ── Interest rate history pass-through ────────────────────────────────────
 
-  it("uses the last settled FX history point rather than a mutable current rate field", async () => {
+  it("uses dated settled FX history rather than the base or mutable current rate fields", async () => {
     setupExchangeRates(db, [
       {
         _id: "US",
         countryId: "US",
         rate: 0.5,
         baseRate: 1,
-        rateHistory: [{ turn: 99, rate: 0.98 }],
+        rateHistory: [
+          { turn: 87, rate: 1 },
+          { turn: 99, rate: 0.98 },
+        ],
       },
     ]);
 
@@ -684,7 +687,7 @@ describe("recalculateInflationPerTurn", () => {
     const call = mockCalculateCountryInflation.mock.calls[0];
     const forexPressure = call[4] as number;
 
-    expect(forexPressure).toBeCloseTo(-0.02, 6);
+    expect(forexPressure).toBeCloseTo(Math.pow(0.98, 4) - 1, 6);
   });
 
   // ── Shared central bank (ECB) ──────────────────────────────────────────────
@@ -738,7 +741,10 @@ describe("recalculateInflationPerTurn", () => {
           countryId: "DE",
           rate: 1.05,
           baseRate: 1,
-          rateHistory: [{ turn: 99, rate: 1.1 }],
+          rateHistory: [
+            { turn: 87, rate: 1 },
+            { turn: 99, rate: 1.1 },
+          ],
         },
       ]);
 
@@ -746,7 +752,7 @@ describe("recalculateInflationPerTurn", () => {
       await recalculateInflationPerTurn(db as unknown as Db, 100);
 
       const deCall = mockCalculateCountryInflation.mock.calls.find((c) => c[1] === "DE")!;
-      expect(deCall[4]).toBeCloseTo(0.1, 6);
+      expect(deCall[4]).toBe(0.25);
     });
 
     it("persists currentSavingsPressure to the shared bank _id, not the member countryId", async () => {
@@ -767,7 +773,7 @@ describe("recalculateInflationPerTurn", () => {
   });
 
   describe("IE own central bank + IEP forex", () => {
-    it("recalculates IE inflation from its own bank and IEP rate doc", async () => {
+    it("passes a finite annualized FX depreciation impulse that clears once rates flatten", async () => {
       setupBanks(db, [makeCentralBank("IE", 4.0)]);
       const ieBudget = makeBudget("IE");
       db.collection("federalBudget");
@@ -780,9 +786,12 @@ describe("recalculateInflationPerTurn", () => {
         {
           _id: "IE",
           countryId: "IE",
-          rate: 0.357,
+          rate: 0.44625,
           baseRate: 0.357,
-          rateHistory: [{ turn: 99, rate: 0.36 }],
+          rateHistory: [
+            { turn: 87, rate: 0.357 },
+            { turn: 99, rate: 0.44625 },
+          ],
         },
       ]);
 
@@ -792,8 +801,27 @@ describe("recalculateInflationPerTurn", () => {
       expect(result).toBe(1);
       const ieCall = mockCalculateCountryInflation.mock.calls.find((c) => c[1] === "IE")!;
       expect(ieCall).toBeDefined();
-      // forexPressure = 0.36/0.357 - 1
-      expect(ieCall[4]).toBeCloseTo(0.36 / 0.357 - 1, 6);
+      // The one-quarter depreciation is annualized and bounded before CPI math.
+      expect(ieCall[4]).toBe(0.25);
+
+      vi.clearAllMocks();
+      mockCalculateCountryInflation.mockResolvedValue(3.5);
+      setupExchangeRates(db, [
+        {
+          _id: "IE",
+          countryId: "IE",
+          rate: 0.44625,
+          baseRate: 0.357,
+          rateHistory: [
+            { turn: 99, rate: 0.44625 },
+            { turn: 111, rate: 0.44625 },
+          ],
+        },
+      ]);
+
+      await recalculateInflationPerTurn(db as unknown as Db, 112);
+      const flatIeCall = mockCalculateCountryInflation.mock.calls.find((c) => c[1] === "IE")!;
+      expect(flatIeCall[4]).toBe(0);
     });
   });
 
