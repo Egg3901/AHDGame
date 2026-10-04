@@ -17,7 +17,7 @@ export function LeanChip({
   const tone = leanTone(lean);
   return (
     <span
-      className={`inline-block whitespace-nowrap rounded border px-2 py-0.5 text-body-xs font-bold ${tone.border} ${tone.text} ${tone.bg} ${className ?? ""}`}
+      className={`inline-block whitespace-nowrap rounded border px-2 py-0.5 text-body-sm font-bold ${tone.border} ${tone.text} ${tone.bg} ${className ?? ""}`}
     >
       {label}
     </span>
