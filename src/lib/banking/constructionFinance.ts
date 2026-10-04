@@ -292,7 +292,7 @@ export async function rejectConstructionFinance(
           $set: {
             status: "rejected",
             decisionTurn: claim.order.startTurn,
-            rejectionReason: (reason ?? "").trim().slice(0, 280),
+            rejectedReason: (reason ?? "").trim().slice(0, 280),
           },
         },
         note: "Reject the unfunded construction loan",

@@ -40,7 +40,11 @@ import {
   fundedNpcFlowDelta,
   perTurnInterest,
 } from "@/lib/banking/rules/loans";
-import { loanServiceTransition } from "@/lib/banking/rules/loanServicing";
+import { loanServiceTransition, loanServiceKey } from "@/lib/banking/rules/loanServicing";
+import {
+  acquireConstructionLoanLock,
+  releaseConstructionLoanLock,
+} from "@/lib/banking/constructionLoanLock";
 import {
   facilityInterestTransition,
   facilityInterestAmounts,
@@ -1112,6 +1116,19 @@ async function servicePlayerLoan(
     totalLoansDelta: 0,
   };
   if (loan.lastProcessedTurn === turn) return empty;
+  if (loan.constructionCollateral) {
+    const owned = await acquireConstructionLoanLock(
+      db,
+      loan,
+      loanServiceKey(String(loan._id), turn)
+    );
+    if (!owned) return empty;
+    loan = owned;
+    if (!["current", "arrears"].includes(loan.status) || loan.lastProcessedTurn === turn) {
+      await releaseConstructionLoanLock(db, loan, loanServiceKey(String(loan._id), turn));
+      return empty;
+    }
+  }
 
   // The decision is pure; the transition carries the borrower's debit, the
   // lender's credit and the loan-document update guarded on the turn stamp.
@@ -1132,11 +1149,20 @@ async function servicePlayerLoan(
     bankId: bankCorporationId.toString(),
   });
   if (decision.outcome === "closed") {
-    await settleTransition(db, transition);
+    const closed = await settleTransition(db, transition);
+    if (!closed.error && ["applied", "replayed"].includes(closed.status))
+      await releaseConstructionLoanLock(db, loan, transition.key);
     return empty;
   }
 
   const settled = await settleTransition(db, transition);
+  if (
+    (!settled.error && ["applied", "replayed"].includes(settled.status)) ||
+    (settled.status === "rejected" &&
+      settled.appliedLegs.length === 0 &&
+      settled.appliedProjections.length === 0)
+  )
+    await releaseConstructionLoanLock(db, loan, transition.key);
   if (settled.status === "rejected") return empty;
   const moneyLanded =
     transition.legs.length > 0 && settled.appliedLegs.length === transition.legs.length;
