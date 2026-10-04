@@ -1,5 +1,7 @@
-import { ObjectId } from "mongodb";
+import type { UpdateOneModel } from "mongodb";
 import type { CorporationLookups } from "./types";
+import type { CorporateSector } from "@/lib/db/types/corporation";
+import type { StateResourceCapacity } from "@/lib/db/types/stateResourceCapacity";
 import type { ExtractableResource } from "@/lib/constants/commodities";
 import { EXTRACTABLE_RESOURCES } from "@/lib/constants/commodities";
 import {
@@ -26,19 +28,9 @@ import { plantCapacityDeltaPipeline } from "@/lib/corporations/plantLedger";
  */
 export interface RdInnovationResult {
   /** Bulk ops for sector revenue boosts (corporateSectors collection) */
-  sectorBoostOps: {
-    updateOne: {
-      filter: { _id: ObjectId };
-      update: { $inc: Record<string, number>; $set: Record<string, unknown> };
-    };
-  }[];
+  sectorBoostOps: Array<{ updateOne: UpdateOneModel<CorporateSector> }>;
   /** Bulk ops for state resource capacity boosts (stateResourceCapacity collection) */
-  capacityBoostOps: {
-    updateOne: {
-      filter: { stateId: string };
-      update: { $inc: Record<string, number>; $set: Record<string, unknown> };
-    };
-  }[];
+  capacityBoostOps: Array<{ updateOne: UpdateOneModel<StateResourceCapacity> }>;
   /** Number of innovations that triggered this turn */
   innovationsTriggered: number;
 }
