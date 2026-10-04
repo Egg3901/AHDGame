@@ -12,10 +12,37 @@ import { resumeSettlement, settleTransition } from "@/lib/banking/settlementJour
 import {
   productAdvertisingDenominationWitness,
   quoteFundedProductAdvertising,
+  type ProductAdvertisingObligation,
   type ProductAdvertisingSellerQuote,
 } from "@/lib/products/rules/productAdvertising";
 
-const JOURNAL_PREFIX = "media-product-advertising";
+export type ProductAdvertisingFamily = "media" | "manufacturing";
+
+const ADVERTISING_FAMILY = {
+  media: {
+    journalPrefix: "media-product-advertising",
+    kind: "media.product.advertising",
+    command: "turn.mediaProductAdvertising",
+    obligationsField: "mediaProductAdvertisingObligationsV1",
+    receiptField: "mediaProductAdvertisingReceiptV1",
+  },
+  manufacturing: {
+    journalPrefix: "manufacturing-product-advertising",
+    kind: "manufacturing.product.advertising",
+    command: "turn.manufacturingProductAdvertising",
+    obligationsField: "manufacturingProductAdvertisingObligationsV2",
+    receiptField: "manufacturingProductAdvertisingReceiptV2",
+  },
+} as const satisfies Record<
+  ProductAdvertisingFamily,
+  {
+    journalPrefix: string;
+    kind: string;
+    command: string;
+    obligationsField: string;
+    receiptField: string;
+  }
+>;
 
 function denominationConditions(
   witness: MediaProductAdvertisingObligationV1["buyerDenomination"]
@@ -73,14 +100,25 @@ export function mediaProductAdvertisingSettlementKey(
   corporationId: string,
   obligation: Pick<MediaProductAdvertisingObligationV1, "projectId" | "turn">
 ): string {
-  return `${JOURNAL_PREFIX}:${obligation.turn}:${corporationId}:${obligation.projectId}`;
+  return productAdvertisingSettlementKey(corporationId, obligation);
 }
 
-export function mediaProductAdvertisingTransition(
+export function productAdvertisingSettlementKey(
+  corporationId: string,
+  obligation: Pick<ProductAdvertisingObligation, "projectId" | "turn">,
+  family: ProductAdvertisingFamily = "media"
+): string {
+  const definition = ADVERTISING_FAMILY[family];
+  return `${definition.journalPrefix}:${obligation.turn}:${corporationId}:${obligation.projectId}`;
+}
+
+export function productAdvertisingTransition(
   corporationId: ObjectId,
-  obligation: MediaProductAdvertisingObligationV1
+  obligation: ProductAdvertisingObligation,
+  family: ProductAdvertisingFamily = "media"
 ): BankingTransition {
-  const key = mediaProductAdvertisingSettlementKey(corporationId.toHexString(), obligation);
+  const definition = ADVERTISING_FAMILY[family];
+  const key = productAdvertisingSettlementKey(corporationId.toHexString(), obligation, family);
   const buyerAnchor = obligation.buyerAmountLocal / obligation.buyerLocalPerAnchor;
   let sellerAnchorAssigned = 0;
   const sellerLegs = obligation.sellerAllocations.map((seller, index) => {
@@ -111,7 +149,7 @@ export function mediaProductAdvertisingTransition(
 
   return {
     key,
-    kind: "media.product.advertising",
+    kind: definition.kind,
     turn: obligation.turn,
     currency: obligation.buyerCurrencyCode,
     legs: [
@@ -157,25 +195,25 @@ export function mediaProductAdvertisingTransition(
         filter: { _id: oid(corporationId.toHexString()) },
         update: {
           $set: {
-            mediaProductAdvertisingReceiptV1: {
+            [definition.receiptField]: {
               projectId: obligation.projectId,
               turn: obligation.turn,
               amountAnchor: obligation.amountAnchor,
             },
-          },
+          } as Record<string, unknown>,
           $pull: {
-            mediaProductAdvertisingObligationsV1: {
+            [definition.obligationsField]: {
               projectId: obligation.projectId,
               turn: obligation.turn,
             },
-          },
+          } as Record<string, unknown>,
         },
         note: "Publish funded title advertising and clear its frozen obligation",
       },
     ],
     event: {
       kind: "monetary.executed",
-      command: "turn.mediaProductAdvertising",
+      command: definition.command,
       subjectType: "corporation",
       subjectId: corporationId.toHexString(),
       amount: obligation.amountAnchor,
@@ -188,27 +226,38 @@ export function mediaProductAdvertisingTransition(
 }
 
 /** Resume immutable title orders only after operating cash and arrears settle. */
-export async function settleMediaProductAdvertisingObligations(
+export function mediaProductAdvertisingTransition(
+  corporationId: ObjectId,
+  obligation: MediaProductAdvertisingObligationV1
+): BankingTransition {
+  return productAdvertisingTransition(corporationId, obligation, "media");
+}
+
+export async function settleProductAdvertisingObligations(
   db: Db,
   corporationIds: readonly ObjectId[],
-  currentTurn: number
+  currentTurn: number,
+  family: ProductAdvertisingFamily = "media"
 ): Promise<ObjectId[]> {
   if (corporationIds.length === 0) return [];
+  const definition = ADVERTISING_FAMILY[family];
+  const obligationsField = definition.obligationsField;
+  const receiptField = definition.receiptField;
   const rows = await db
     .collection<Corporation>("corporations")
     .find(
       {
         _id: { $in: [...corporationIds] },
         $or: [
-          { "mediaProductAdvertisingObligationsV1.0": { $exists: true } },
-          { "mediaProductAdvertisingReceiptV1.turn": currentTurn },
+          { [`${obligationsField}.0`]: { $exists: true } },
+          { [`${receiptField}.turn`]: currentTurn },
         ],
       },
       {
         projection: {
           _id: 1,
-          mediaProductAdvertisingObligationsV1: 1,
-          mediaProductAdvertisingReceiptV1: 1,
+          [obligationsField]: 1,
+          [receiptField]: 1,
         },
       }
     )
@@ -217,11 +266,16 @@ export async function settleMediaProductAdvertisingObligations(
   const touched = new Map<string, ObjectId>();
 
   for (const row of rows) {
-    if (row.mediaProductAdvertisingReceiptV1?.turn === currentTurn) {
+    const fields = row as unknown as Record<string, unknown>;
+    const receipt = fields[receiptField] as { turn?: number } | undefined;
+    const obligations = Array.isArray(fields[obligationsField])
+      ? (fields[obligationsField] as ProductAdvertisingObligation[])
+      : [];
+    if (receipt?.turn === currentTurn) {
       touched.set(row._id.toHexString(), row._id);
     }
-    for (const obligation of row.mediaProductAdvertisingObligationsV1 ?? []) {
-      const key = mediaProductAdvertisingSettlementKey(row._id.toHexString(), obligation);
+    for (const obligation of obligations) {
+      const key = productAdvertisingSettlementKey(row._id.toHexString(), obligation, family);
       const prior = await journal.findOne({ _id: key }, { projection: { _id: 1 } });
       if (
         !prior &&
@@ -232,18 +286,18 @@ export async function settleMediaProductAdvertisingObligations(
           { _id: row._id },
           {
             $pull: {
-              mediaProductAdvertisingObligationsV1: {
+              [obligationsField]: {
                 projectId: obligation.projectId,
                 turn: obligation.turn,
               },
-            },
+            } as Record<string, unknown>,
           }
         );
         continue;
       }
       const result = prior
         ? await resumeSettlement(db, key)
-        : await settleTransition(db, mediaProductAdvertisingTransition(row._id, obligation));
+        : await settleTransition(db, productAdvertisingTransition(row._id, obligation, family));
       if (result.status === "applied" || (result.status === "replayed" && !result.error)) {
         touched.set(row._id.toHexString(), row._id);
       } else if (result.status === "rejected" && result.appliedLegs.length === 0) {
@@ -251,15 +305,24 @@ export async function settleMediaProductAdvertisingObligations(
           { _id: row._id },
           {
             $pull: {
-              mediaProductAdvertisingObligationsV1: {
+              [obligationsField]: {
                 projectId: obligation.projectId,
                 turn: obligation.turn,
               },
-            },
+            } as Record<string, unknown>,
           }
         );
       }
     }
   }
   return [...touched.values()];
+}
+
+/** Preserve the media-specific call shape for existing turn and test callers. */
+export async function settleMediaProductAdvertisingObligations(
+  db: Db,
+  corporationIds: readonly ObjectId[],
+  currentTurn: number
+): Promise<ObjectId[]> {
+  return settleProductAdvertisingObligations(db, corporationIds, currentTurn, "media");
 }

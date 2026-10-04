@@ -5,10 +5,67 @@ import { settleMediaProductAdvertisingObligations } from "./mediaProductAdvertis
 import {
   createMediaProductAdvertisingObligation,
   mediaProductAdvertisingTransition,
+  productAdvertisingSettlementKey,
+  productAdvertisingTransition,
 } from "./mediaProductAdvertisingSettlement";
 import { productAdvertisingDenominationWitness } from "./rules/productAdvertising";
 
 describe("media product advertising denomination recovery", () => {
+  it("keeps media journal identity and selects manufacturing receipt fields by family", () => {
+    const buyerId = new ObjectId();
+    const sellerId = new ObjectId();
+    const obligation = createMediaProductAdvertisingObligation({
+      buyerCorporationId: buyerId.toHexString(),
+      projectId: "shared-project",
+      turn: 8,
+      amountAnchor: 10,
+      buyerCurrencyCode: "USD",
+      buyerLocalPerAnchor: 1,
+      buyerDenomination: productAdvertisingDenominationWitness({
+        liquidCurrencyCode: "USD",
+        countryId: "US",
+      }),
+      sellers: [
+        {
+          corporationId: sellerId.toHexString(),
+          deliveredValueAnchor: 10,
+          currencyCode: "USD",
+          localPerAnchor: 1,
+          ...productAdvertisingDenominationWitness({
+            liquidCurrencyCode: "USD",
+            countryId: "US",
+          }),
+        },
+      ],
+    });
+    expect(obligation).not.toBeNull();
+    expect(productAdvertisingSettlementKey(buyerId.toHexString(), obligation!)).toBe(
+      `media-product-advertising:8:${buyerId.toHexString()}:shared-project`
+    );
+
+    const manufacturing = productAdvertisingTransition(buyerId, obligation!, "manufacturing");
+    expect(manufacturing).toMatchObject({
+      key: `manufacturing-product-advertising:8:${buyerId.toHexString()}:shared-project`,
+      kind: "manufacturing.product.advertising",
+      event: { command: "turn.manufacturingProductAdvertising" },
+    });
+    expect(manufacturing.projections[0]?.update).toEqual({
+      $set: {
+        manufacturingProductAdvertisingReceiptV2: {
+          projectId: "shared-project",
+          turn: 8,
+          amountAnchor: 10,
+        },
+      },
+      $pull: {
+        manufacturingProductAdvertisingObligationsV2: {
+          projectId: "shared-project",
+          turn: 8,
+        },
+      },
+    });
+  });
+
   it("discards an unwitnessed legacy order before creating any journal entry", async () => {
     const buyerId = new ObjectId();
     const sellerId = new ObjectId();

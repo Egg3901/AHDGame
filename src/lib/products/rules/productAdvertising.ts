@@ -38,6 +38,22 @@ export interface ProductAdvertisingQuote {
   sellerAllocations: ProductAdvertisingAllocation[];
 }
 
+/** Persisted quote accepted by the shared media and manufacturing settlement shell. */
+export type ProductAdvertisingObligation = Omit<
+  ProductAdvertisingQuote,
+  "buyerDenomination" | "sellerAllocations"
+> & {
+  projectId: string;
+  turn: number;
+  /** Absent only on older media obligations; new quotes always freeze both witnesses. */
+  buyerDenomination?: ProductAdvertisingDenominationWitness;
+  sellerAllocations: Array<
+    Omit<ProductAdvertisingAllocation, "denomination"> & {
+      denomination?: ProductAdvertisingDenominationWitness;
+    }
+  >;
+};
+
 /** Freeze raw field presence and fallback country for replay-safe native cash guards. */
 export function productAdvertisingDenominationWitness(input: {
   liquidCurrencyCode?: string | null;
