@@ -12,6 +12,9 @@ import {
 import { settleTransition } from "./settlementJournal";
 import { oid } from "./rules/boundary";
 import { settleReservedConstruction } from "./constructionSettlement";
+import { prepareConstructionBuildEffects } from "./constructionBuildEffects";
+import type { UnownedPoolBucket } from "@/lib/market/unownedPoolDraw";
+import type { CurrencyCode } from "@/lib/constants/currencies";
 import { releaseCompletedConstructionFunding } from "./constructionFundingLease";
 
 export type ConstructionFinanceResult =
@@ -30,17 +33,17 @@ export async function requestConstructionFinance(input: {
   constructionCostLocal: number;
   collateralCostLocal: number;
   maximumCostLocal: number;
+  maximumRatePercent?: number;
   order: SectorBuildOrder;
+  buildContext?: {
+    destinationCurrency: CurrencyCode | null;
+    bucket: UnownedPoolBucket;
+    eraUnitScale: number;
+  };
 }): Promise<ConstructionFinanceResult> {
   if (!input.enabled) return { ok: false, error: "Construction finance is not enabled" };
   if (!/^[A-Za-z0-9_-]{1,80}$/.test(input.requestId))
     return { ok: false, error: "A valid construction request ID is required" };
-  if (
-    !Number.isFinite(input.maximumCostLocal) ||
-    input.maximumCostLocal < input.constructionCostLocal ||
-    (input.sector.buildQueue?.length && input.sector.buildQueue.length >= 20)
-  )
-    return { ok: false, error: "Construction quote changed or the queue is full" };
   const { db, sector, corporation } = input;
   if (!sector.corporationId.equals(corporation._id) || sector.forSale)
     return { ok: false, error: "The borrower does not own an available construction site" };
@@ -60,6 +63,22 @@ export async function requestConstructionFinance(input: {
   if (claim && claim.claimId !== claimId && !["released", "cancelled"].includes(claim.status))
     return { ok: false, error: "Repay or cancel the sector's existing construction finance first" };
   if (claim?.claimId !== claimId) {
+    if (
+      !Number.isFinite(input.maximumCostLocal) ||
+      input.maximumCostLocal < input.constructionCostLocal
+    )
+      return { ok: false, error: "Construction quote changed or the queue is full" };
+    const previousClaimId = claim?.claimId;
+    if (
+      previousClaimId &&
+      (sector.buildQueue ?? []).some((order) => order.constructionClaimId === previousClaimId)
+    )
+      return {
+        ok: false,
+        error: "Finish or cancel the previous financed build before financing another",
+      };
+    if ((sector.buildQueue?.length ?? 0) >= 20)
+      return { ok: false, error: "The construction queue is full" };
     const loaded = await loadBankingSnapshot(db, input.bankId);
     if (!loaded?.snapshot.charter || !loaded.corporation.bankCharter)
       return { ok: false, error: "An active lending bank is required" };
@@ -85,6 +104,29 @@ export async function requestConstructionFinance(input: {
       borrowerCashLocal: corporation.liquidCapital,
     });
     if (!quote.allowed) return { ok: false, error: quote.error };
+    if (
+      input.maximumRatePercent !== undefined &&
+      (!Number.isFinite(input.maximumRatePercent) || input.maximumRatePercent < quote.ratePercent)
+    )
+      return { ok: false, error: "The lender's rate exceeds the reviewed quote" };
+    const prepared = input.buildContext
+      ? await prepareConstructionBuildEffects({
+          db,
+          enabled: true,
+          sector,
+          claimId,
+          borrowerId: String(corporation._id),
+          loanId: String(loanId),
+          turn: loaded.snapshot.turn,
+          currency: loaded.snapshot.currency,
+          feeLocal: input.constructionCostLocal - input.collateralCostLocal,
+          destinationCurrency: input.buildContext.destinationCurrency,
+          bucket: input.buildContext.bucket,
+          units: input.order.unitsOrdered,
+          eraUnitScale: input.buildContext.eraUnitScale,
+        })
+      : null;
+    if (prepared && !prepared.ok) return { ok: false, error: prepared.error };
     claim = {
       claimId,
       loanId: loanId.toHexString(),
@@ -100,6 +142,7 @@ export async function requestConstructionFinance(input: {
       termTurns: input.termTurns,
       ratePercent: quote.ratePercent,
       order: input.order,
+      ...(prepared?.ok ? { effects: prepared.value } : {}),
       approvalRequired: loaded.snapshot.charter.requireApproval === true,
       requestTransition: quote.transition,
       status: "awaiting_approval",

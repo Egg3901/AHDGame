@@ -153,6 +153,8 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
           explicitPlantCostsEnabled: 1,
           mediaEditorialEnabled: 1,
           mediaOperatingModelsEnabled: 1,
+          privateBankingEnabled: 1,
+          bankConstructionFinanceEnabled: 1,
         },
       }
     );
@@ -1012,6 +1014,23 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
           sectorType === "extraction" &&
           Object.values(thisSectorMultipliers).some((m) => typeof m === "number" && m < 0.999),
       });
+    }
+
+    if (
+      plants &&
+      isCeo &&
+      governorConfig?.privateBankingEnabled === true &&
+      governorConfig.bankConstructionFinanceEnabled === true &&
+      Number.isFinite(corporationFxRate) &&
+      corporationFxRate > 0
+    ) {
+      const currency = resolveCorpLiquidCurrencyCode(corporation);
+      if (currency)
+        plants.buildQuote.financing = {
+          corporationId: String(corporation._id),
+          currency,
+          localPerAnchor: corporationFxRate,
+        };
     }
 
     if (plants?.investment) {

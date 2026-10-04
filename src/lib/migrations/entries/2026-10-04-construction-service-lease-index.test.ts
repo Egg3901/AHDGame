@@ -17,6 +17,17 @@ describe("construction service recovery index", () => {
         key: { "bankConstructionFunding.service.turn": 1 },
         sparse: true,
       },
+      {
+        name: "corporations_construction_lender_currency_status",
+        key: { "bankCharter.currency": 1, "bankCharter.status": 1, _id: 1 },
+      },
+    ]);
+    expect(await memory.collection("corporateSectors").indexes()).toEqual([
+      {
+        name: "corporateSectors_construction_cancel_turn",
+        key: { "constructionFinancing.cancellation.turn": 1 },
+        sparse: true,
+      },
     ]);
   });
 });

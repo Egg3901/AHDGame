@@ -2,7 +2,7 @@
 import type { Db } from "mongodb";
 import type { BankLoan } from "@/lib/db/types/bank";
 import type { CorporateSector } from "@/lib/db/types/corporation";
-import { releaseConstructionFundingLease } from "./constructionFundingLease";
+import { releaseCompletedConstructionFunding } from "./constructionFundingLease";
 import { resumeSettlement } from "./settlementJournal";
 import { releaseConstructionServiceLease } from "./constructionServiceLease";
 
@@ -63,8 +63,7 @@ export async function acquireConstructionLoanLock(
       !["current", "arrears"].includes(current.status)
     )
       return null;
-    await releaseConstructionFundingLease(db, claim);
-    await releaseConstructionLoanLock(db, current, previous);
+    if (!(await releaseCompletedConstructionFunding(db, claim))) return null;
     return acquire();
   }
   if (!previous.startsWith(`loan-service:${loan._id}:`)) return null;

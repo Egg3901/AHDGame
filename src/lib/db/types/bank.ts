@@ -335,7 +335,7 @@ export interface BankLoan {
   constructionDecision?: "approve" | "reject";
   /** One stable cash receipt owns debt quoting until its projections finish. */
   constructionSettlementOwner?: string;
-  /** Security attached only to the capacity paid through this build claim. */
+  /** Sector pledge attached to a paid build, with principal capped by new construction cost. */
   constructionCollateral?: {
     claimId: string;
     sectorId: ObjectId;

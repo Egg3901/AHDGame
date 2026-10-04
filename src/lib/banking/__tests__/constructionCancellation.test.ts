@@ -107,6 +107,17 @@ function world(outstanding = 75_000, epoch = 2, defaults = false) {
 }
 
 describe("principal-first financed build cancellation", () => {
+  it("returns an unencumbered build's refund after secured principal was fully repaid", async () => {
+    const { db, memory, sectorId, borrowerId, loanId } = world(0);
+    await db.collection("bankLoans").updateOne({ _id: loanId }, { $set: { status: "repaid" } });
+    await db
+      .collection("corporateSectors")
+      .updateOne({ _id: sectorId }, { $set: { "constructionFinancing.status": "released" } });
+    expect(
+      await cancelFinancedConstruction({ db, enabled: true, sectorId, borrowerId, turn: 10 })
+    ).toMatchObject({ ok: true, principalRepaid: 0, ownerRefund: 75_000 });
+    expect(memory.collection("corporations").docs[0].liquidCapital).toBe(125_000);
+  });
   it.each([75_000, 25_000])(
     "pays %s principal first and refunds only residual cash once",
     async (outstanding) => {

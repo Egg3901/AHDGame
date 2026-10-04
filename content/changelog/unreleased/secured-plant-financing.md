@@ -2,7 +2,7 @@
 date: 2026-10-04
 title: Construction loan settlement safeguards
 badges: [minor]
-areas: [engine]
+areas: [engine, backend, frontend]
 tags: [banking, manufacturing]
 ---
 
@@ -20,3 +20,10 @@ receipt, preserving concurrent originations and repayments.
 Contractual cancellation refunds stay pledged while outstanding principal is
 paid. Only residual cash returns to the owner. Refund recovery keeps its original
 quote across retries and sends closed-bank recoveries to the insurance fund.
+
+The build dialog offers native-currency bank terms only when construction finance
+is enabled. Its reviewed quote includes the withheld origination fee, borrower
+cash contribution, APR ceiling, and explicit sector pledge. Financed builds route
+FX fees to the proper central-bank recipients and claim unowned market headroom
+once; cancellation returns only undelivered units to the pool. A committed queue
+finishes its original receipt before another recovery may modify it.

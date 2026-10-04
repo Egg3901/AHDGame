@@ -1,5 +1,5 @@
 /**
- * Construction loans fund a specific paid build, with the new capacity pledged
+ * Construction loans fund a specific paid build, with the sector pledged
  * to its lender. quoteConstructionFinance keeps the existing loan affordability
  * rules and limits principal to the build's refundable construction basis.
  */

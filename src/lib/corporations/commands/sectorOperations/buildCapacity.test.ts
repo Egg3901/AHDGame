@@ -15,6 +15,9 @@ import { DOMINANCE_DENSITY_CROWDED_COMPETITORS } from "@/lib/constants/corporati
 // host load arrived as cascading per-test timeouts. `vi.mock` is hoisted
 // above these imports, and no test resets the module registry, so one shared
 // import is behavior-identical to the per-test awaits it replaces.
+import { requestConstructionFinance } from "@/lib/banking/constructionFinance";
+import { loadBankingPolicy } from "@/lib/banking/policy";
+import { BANKING_POLICY_ALL_ON, BANKING_POLICY_OFF } from "@/lib/banking/rules/policy";
 import { buildCapacity } from "./buildCapacity";
 import { POST } from "@/app/api/corporations/[id]/sectors/[sectorId]/build/route";
 
@@ -24,6 +27,9 @@ import { POST } from "@/app/api/corporations/[id]/sectors/[sectorId]/build/route
  * the tier.
  */
 
+vi.mock("@/lib/banking/constructionFinance", () => ({ requestConstructionFinance: vi.fn() }));
+vi.mock("@/lib/banking/constructionCancellation", () => ({ cancelFinancedConstruction: vi.fn() }));
+vi.mock("@/lib/banking/policy", () => ({ loadBankingPolicy: vi.fn() }));
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/api/requireAuth", () => ({ requireBasicAuth: vi.fn() }));
 vi.mock("@/lib/api/corporations/resolveQuery", () => ({
@@ -44,6 +50,7 @@ vi.mock("@/lib/currency/corporationCapital", () => ({
   corpLiquidCapitalToAnchor: vi.fn((local: number) => local),
 }));
 vi.mock("@/lib/currency/sectorFxSpread", () => ({
+  currencyForCountry: vi.fn().mockReturnValue("USD"),
   corpToSectorCountrySpread: vi.fn().mockReturnValue({ spreadAnchor: 0, from: null, to: null }),
 }));
 vi.mock("@/lib/currency/marketMaker", () => ({
@@ -158,6 +165,66 @@ describe("buildCapacity — build", () => {
     db.collection("gameState");
     db.collection("gameConfig");
     db.collection("unownedSectors");
+  });
+
+  it("routes an explicitly consented term loan to the funded build shell without a cash-only debit", async () => {
+    await wireMocks(sectorDoc());
+    vi.mocked(loadBankingPolicy).mockResolvedValue(BANKING_POLICY_ALL_ON);
+    vi.mocked(requestConstructionFinance).mockResolvedValue({
+      ok: true,
+      pending: true,
+      loanId: "loan",
+      claimId: "claim",
+    });
+    const financing = {
+      bankId: new ObjectId().toHexString(),
+      requestId: "build-quote",
+      principal: 1000,
+      termTurns: 48,
+      maximumCostLocal: 1e12,
+      maximumRatePercent: 5,
+      pledgeConsent: true,
+    };
+    const response = await buildCapacity(request({ action: "build", units: 1000, financing }), {
+      params,
+    });
+    expect(await response.json()).toMatchObject({ success: true, financed: true, pending: true });
+    expect(requestConstructionFinance).toHaveBeenCalledWith(
+      expect.objectContaining({
+        principal: 1000,
+        termTurns: 48,
+        maximumRatePercent: 5,
+        order: expect.objectContaining({ unitsOrdered: 1000 }),
+        buildContext: expect.objectContaining({
+          bucket: expect.objectContaining({ industryModel: undefined }),
+        }),
+      })
+    );
+    expect(db.collectionMocks.corporations.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.corporateSectors.updateOne).not.toHaveBeenCalled();
+  });
+  it("refuses new loan funding while disabled before any lending snapshot or cash writer", async () => {
+    await wireMocks(sectorDoc());
+    vi.mocked(loadBankingPolicy).mockResolvedValue(BANKING_POLICY_OFF);
+    const response = await buildCapacity(
+      request({
+        action: "build",
+        units: 1000,
+        financing: {
+          bankId: new ObjectId().toHexString(),
+          requestId: "build-quote",
+          principal: 1000,
+          termTurns: 48,
+          maximumCostLocal: 1e12,
+          maximumRatePercent: 5,
+          pledgeConsent: true,
+        },
+      }),
+      { params }
+    );
+    expect(response.status).toBe(400);
+    expect(requestConstructionFinance).not.toHaveBeenCalled();
+    expect(db.collectionMocks.corporations.updateOne).not.toHaveBeenCalled();
   });
 
   // ─── unowned-pool drawdown (#1145) ──────────────────────────────────────
