@@ -1,6 +1,77 @@
-import { describe, expect, it } from "vitest";
-import { getEffectiveStrategyRates, SECTOR_STRATEGIES } from "./sectorStrategies";
+import { describe, expect, it, vi } from "vitest";
+import * as Sentry from "@sentry/nextjs";
+import type { Db } from "mongodb";
+import { checkPersistedSectorTypes } from "@/lib/corporations/checkPersistedSectorTypes";
+import { getEffectiveStrategyRates, getStrategy, SECTOR_STRATEGIES } from "./sectorStrategies";
 import { COMMODITY_TYPES } from "./commodities";
+
+vi.mock("@sentry/nextjs", () => ({ captureMessage: vi.fn() }));
+
+describe("startup sector type diagnostics", () => {
+  it("logs unknown type counts without changing persisted sectors", async () => {
+    const unknownTypes = [
+      { _id: "retired_sector", count: 3 },
+      { _id: null, count: 1 },
+    ];
+    const aggregate = vi.fn(() => ({ toArray: async () => unknownTypes }));
+    const collection = vi.fn(() => ({ aggregate }));
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await checkPersistedSectorTypes({ collection } as unknown as Db);
+      expect(collection).toHaveBeenCalledExactlyOnceWith("corporateSectors");
+      expect(log).toHaveBeenCalledExactlyOnceWith(
+        "[sector-types] unknown persisted types in corporateSectors:",
+        unknownTypes
+      );
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it("stays quiet when every persisted sector type is recognized", async () => {
+    const db = { collection: () => ({ aggregate: () => ({ toArray: async () => [] }) }) };
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await checkPersistedSectorTypes(db as unknown as Db);
+      expect(log).not.toHaveBeenCalled();
+    } finally {
+      log.mockRestore();
+    }
+  });
+});
+
+describe("unknown persisted sector types", () => {
+  it("uses empty rates and reports the type only once across repeated turn reads", () => {
+    vi.mocked(Sentry.captureMessage).mockClear();
+    const rates = getEffectiveStrategyRates("retired_sector", "legacy", null, null, 1065);
+    expect(rates).toEqual({ supply: {}, demand: {}, isTransitioning: false });
+    expect(getEffectiveStrategyRates("retired_sector", "legacy", null, null, 1066)).toEqual(rates);
+    expect(Sentry.captureMessage).toHaveBeenCalledExactlyOnceWith(
+      "Unknown persisted sector type: using inert strategy",
+      { level: "error", extra: { sectorType: "retired_sector" } }
+    );
+  });
+
+  it("handles unknown types during an active strategy transition", () => {
+    expect(getEffectiveStrategyRates("removed_sector", "new", "old", 1060, 1065)).toEqual({
+      supply: {},
+      demand: {},
+      isTransitioning: true,
+    });
+  });
+
+  it.each(["__proto__", "constructor", "toString"])("rejects inherited key %s", (sectorType) => {
+    expect(getEffectiveStrategyRates(sectorType, "standard", null, null, 1065)).toEqual({
+      supply: {},
+      demand: {},
+      isTransitioning: false,
+    });
+  });
+
+  it("preserves the first-strategy fallback for a known type with an unknown strategy", () => {
+    expect(getStrategy("media", "removed_strategy")).toBe(SECTOR_STRATEGIES.media[0]);
+  });
+});
 
 describe("persisted media and entertainment sectors", () => {
   it("resolves their existing strategies while the product rollout is withdrawn", () => {
