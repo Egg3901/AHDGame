@@ -177,15 +177,17 @@ function EarningsBreakdown({ data, onTreasury }: { data: ConsolePayload; onTreas
             aboutLabel={t("about", { label: "Insurance and write-offs" })}
           />
           <EarningsRow
-            label="Origination fees"
-            detail={`household fees in this pass; all loans since charter ${formatBankMoney(charter.loanOriginationFeesLifetime ?? 0, currency)}`}
+            label={t("originationFees")}
+            detail={t("originationFeesDetail", {
+              lifetime: formatBankMoney(charter.loanOriginationFeesLifetime ?? 0, currency),
+            })}
             value={formatBankMoney(fees, currency)}
-            tooltip="Fees are withheld from newly funded principal. Repayment carries no new origination fee."
-            aboutLabel="About origination fees"
+            tooltip={t("originationFeesTooltip")}
+            aboutLabel={t("about", { label: t("originationFees") })}
           />
           <EarningsRow
             label="Bottom line"
-            detail="net interest plus household fees minus insurance and write-offs"
+            detail={t("feeBottomLine")}
             value={formatBankMoney(charter.lastBankingIncome, currency)}
             tone={charter.lastBankingIncome < 0 ? "text-error" : "text-success"}
             tooltip={t("tooltips.otherCharges")}

@@ -3,6 +3,8 @@
  */
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { NextIntlClientProvider } from "next-intl";
+import english from "../../../messages/en/corporations.json";
 import { PrivateLoanModal } from "./PrivateLoanModal";
 
 vi.mock("@/components/banking/WarningBandBadge", () => ({
@@ -32,18 +34,20 @@ const corporation = {
 describe("PrivateLoanModal", () => {
   it("updates the destination and quote when switching borrower type", () => {
     render(
-      <PrivateLoanModal
-        banks={[bank]}
-        ceoCorporations={[corporation]}
-        personalCash={{ USD: 40_000 }}
-        personalIncomeByCurrency={{ USD: 50_000 }}
-        currentTurn={115}
-        loans={[]}
-        hasCharacter
-        onClose={vi.fn()}
-        onChanged={vi.fn().mockResolvedValue(undefined)}
-        showToast={vi.fn()}
-      />
+      <NextIntlClientProvider locale="en" messages={english}>
+        <PrivateLoanModal
+          banks={[bank]}
+          ceoCorporations={[corporation]}
+          personalCash={{ USD: 40_000 }}
+          personalIncomeByCurrency={{ USD: 50_000 }}
+          currentTurn={115}
+          loans={[]}
+          hasCharacter
+          onClose={vi.fn()}
+          onChanged={vi.fn().mockResolvedValue(undefined)}
+          showToast={vi.fn()}
+        />
+      </NextIntlClientProvider>
     );
 
     expect(screen.getByRole("heading", { name: "Arrange private-bank credit" })).toBeTruthy();
