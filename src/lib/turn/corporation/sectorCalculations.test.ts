@@ -586,7 +586,7 @@ describe("marketing settlement", () => {
     };
     const memory = createInMemoryDb();
     memory.seed("corporations", [{ ...buyer }, { ...seller }]);
-    memory.seed(MEDIA_PRODUCT_PROJECTS, [title]);
+    memory.seed(MEDIA_PRODUCT_PROJECTS, [{ ...title }]);
 
     const firstResult = processSectors(
       makeMediaLookups(buyer, 1),
@@ -662,7 +662,9 @@ describe("marketing settlement", () => {
       [buyer._id, seller._id],
       1
     );
-    const afterRetry = await memory.collection("corporations").findOne({ _id: buyer._id });
+    const afterRetry = (await memory
+      .collection("corporations")
+      .findOne({ _id: buyer._id })) as unknown as Corporation | null;
     expect(afterRetry?.liquidCapital).toBe(980);
     expect(
       (await memory.collection("corporations").findOne({ _id: seller._id }))?.liquidCapital
@@ -680,11 +682,15 @@ describe("marketing settlement", () => {
       )
     ).toHaveLength(1);
     const afterRetrySeller = await memory.collection("corporations").findOne({ _id: seller._id });
-    expect((afterRetrySeller?.liquidCapital ?? 0) + (afterRetry?.liquidCapital ?? 0)).toBe(2_000);
+    expect(
+      Number(afterRetrySeller?.liquidCapital ?? 0) + Number(afterRetry?.liquidCapital ?? 0)
+    ).toBe(2_000);
+
+    if (!afterRetry) throw new Error("Missing persisted buyer fixture");
 
     await processMediaProductProjectsV1({
       db: memory as never,
-      corporations: [afterRetry as Corporation],
+      corporations: [afterRetry],
       projectsByCorporationId: new Map([[buyer._id.toString(), [title]]]),
       currentTurn: 2,
       sectorQualityBySectorId: new Map(),
@@ -732,7 +738,7 @@ describe("marketing settlement", () => {
       advertisingSellerDeliveredValueAnchorByCorpId: new Map([[seller._id.toString(), 100]]),
     });
     const memory = createInMemoryDb();
-    memory.seed("corporations", [buyer, seller]);
+    memory.seed("corporations", [{ ...buyer }, { ...seller }]);
     await applyOperatingCashThenDevelopmentCash({
       db: memory as never,
       operations: [],
@@ -760,7 +766,9 @@ describe("marketing settlement", () => {
       String(row._id).startsWith("media-product-advertising:")
     );
     expect(move?.status).toBe("rejected");
-    expect((buyerAfter?.liquidCapital ?? 0) + (sellerAfter?.liquidCapital ?? 0)).toBe(2_000);
+    expect(Number(buyerAfter?.liquidCapital ?? 0) + Number(sellerAfter?.liquidCapital ?? 0)).toBe(
+      2_000
+    );
   });
 
   it("charges marketing without settlement when no advertising seller exists", () => {

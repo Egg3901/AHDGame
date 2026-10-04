@@ -20,6 +20,8 @@ export interface ManufacturingProductProject {
   allocations: ProductPlantAllocation[];
   startedTurn: number;
   lastProcessedTurn?: number;
+  /** Last paid development receipt acknowledged, separate from the lifecycle clock. */
+  lastDevelopmentReceiptTurn?: number;
   developmentPaidAnchor: number;
   paidThresholdAnchor: number;
   elapsedDevelopmentTurns: number;

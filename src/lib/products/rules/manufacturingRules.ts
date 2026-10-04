@@ -220,6 +220,47 @@ export function advanceManufacturingProject(input: {
   };
 }
 
+/** Advances the completed-turn clock independently from once-only paid cash evidence. */
+export function tickManufacturingProject(input: {
+  project: Parameters<typeof advanceManufacturingProject>[0]["project"] & {
+    lastDevelopmentReceiptTurn?: number;
+  };
+  receipt?: { projectId: string; turn: number; amountAnchor: number };
+  completedTurn: number;
+}): (ManufacturingProjectProgress & { lastDevelopmentReceiptTurn: number }) | null {
+  const project = input.project;
+  // Before a separate cash watermark exists, the old clock was written only
+  // when a cash receipt was consumed. Retain that legacy acknowledgment.
+  const cashWatermark = project.lastDevelopmentReceiptTurn ?? project.lastProcessedTurn ?? 0;
+  if (!Number.isSafeInteger(cashWatermark) || cashWatermark < 0) return null;
+  const receipt = input.receipt;
+  const payableReceipt =
+    receipt &&
+    receipt.projectId === project._id &&
+    Number.isSafeInteger(receipt.turn) &&
+    receipt.turn >= project.startedTurn &&
+    receipt.turn <= input.completedTurn &&
+    receipt.turn > cashWatermark &&
+    Number.isFinite(receipt.amountAnchor) &&
+    receipt.amountAnchor >= 0
+      ? receipt
+      : undefined;
+  const progress = advanceManufacturingProject({
+    project,
+    receipt: {
+      projectId: project._id,
+      turn: input.completedTurn,
+      amountAnchor: payableReceipt?.amountAnchor ?? 0,
+    },
+  });
+  return progress
+    ? {
+        ...progress,
+        lastDevelopmentReceiptTurn: payableReceipt?.turn ?? cashWatermark,
+      }
+    : null;
+}
+
 /** Redirects paid R&D to one active project's remaining development cost first. */
 export function allocateManufacturingResearchSpend(input: {
   paidResearchAnchor: number;
