@@ -443,7 +443,16 @@ describe("processNppGovernment", () => {
       const turn = dueTurn("UK");
       const res = await runWithParty({ economicPosition: 4, socialPosition: 0 }, [], {
         ...parliamentaryGov,
-        governingAgenda: { items: [], archetype: "reformer", computedTurn: turn },
+        governingAgenda: {
+          items: [],
+          archetype: "reformer",
+          computedTurn: turn,
+          reviewSnapshot: agendaReviewSnapshot(
+            {},
+            { signals: {}, latestStartTurn: 0, effectFingerprintByDomain: {} }
+          ),
+          performanceReviewedTurn: turn,
+        },
         electoralMandate: { partyId: "7", sources: [], domains: {}, strength: 1, computedTurn: 1 },
       });
       expect(res).toBeUndefined();
