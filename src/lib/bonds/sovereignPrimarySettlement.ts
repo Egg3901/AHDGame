@@ -22,6 +22,7 @@ import { sovereignPrimaryTransition, type SovereignPrimaryFunding } from "./rule
 
 export interface PrimaryAccountingContext {
   ledgerShadow: boolean;
+  treasuryCashLedgerEnabled?: boolean;
   turnLengthMinutes: number;
   rates: Map<string, number>;
   /** World preset, for the authored era rate of a currency with no exchangeRates row. */
@@ -55,8 +56,22 @@ export function primaryFinancingRate(
 export async function loadPrimaryAccounting(db: Db): Promise<PrimaryAccountingContext> {
   const [config, rates, gameState, ledgerTurn] = await Promise.all([
     db
-      .collection<{ _id: string; ledgerShadow?: boolean; turnLengthMinutes?: number }>("gameConfig")
-      .findOne({ _id: "default" }, { projection: { ledgerShadow: 1, turnLengthMinutes: 1 } }),
+      .collection<{
+        _id: string;
+        ledgerShadow?: boolean;
+        turnLengthMinutes?: number;
+        treasuryCashLedgerEnabled?: boolean;
+      }>("gameConfig")
+      .findOne(
+        { _id: "default" },
+        {
+          projection: {
+            ledgerShadow: 1,
+            turnLengthMinutes: 1,
+            treasuryCashLedgerEnabled: 1,
+          },
+        }
+      ),
     db
       .collection<{ currencyCode: string; rate: number }>("exchangeRates")
       .find({}, { projection: { currencyCode: 1, rate: 1 } })
@@ -68,6 +83,7 @@ export async function loadPrimaryAccounting(db: Db): Promise<PrimaryAccountingCo
   ]);
   return {
     ledgerShadow: config?.ledgerShadow === true,
+    treasuryCashLedgerEnabled: config?.treasuryCashLedgerEnabled === true,
     turnLengthMinutes: config?.turnLengthMinutes ?? DEFAULT_TURN_LENGTH_MINUTES,
     rates: new Map(rates.map((r) => [r.currencyCode, r.rate])),
     preset: gameState?.preset ?? "",
@@ -116,7 +132,10 @@ export async function commitSovereignPrimary(
   projections: TransitionProjection[],
   accounting: PrimaryAccountingContext
 ): Promise<void> {
-  const transition = sovereignPrimaryTransition(input);
+  const transition = sovereignPrimaryTransition({
+    ...input,
+    treasuryCashLedgerEnabled: accounting.treasuryCashLedgerEnabled === true,
+  });
   transition.projections.push(...projections);
   const observedRate = primaryFinancingRate(accounting, input.countryId, input.currency);
   if (
@@ -192,6 +211,37 @@ export async function commitSovereignPrimary(
         legs,
         balanced: true,
         emitSite: "bonds/sovereignPrimarySettlement",
+      },
+    });
+  }
+  if (accounting.ledgerShadow && accounting.treasuryCashLedgerEnabled && input.poolCash > 0) {
+    const currency = input.currency as CurrencyCode;
+    transition.projections.push({
+      collection: "ledgerEntries",
+      note: "Funded treasury cash stock-flow witness",
+      insert: {
+        _id: primaryDocumentId(`${input.key}:treasury-cash-ledger`),
+        turn: accounting.ledgerTurn ?? input.turn,
+        createdAt: input.now,
+        txType: "gov_bond_issuance",
+        legs: [
+          {
+            account: `government_cash:${input.countryId}:${currency}`,
+            amount: input.poolCash,
+            currencyCode: currency,
+            anchorAmount: input.poolCash / rate,
+            role: "primary",
+          },
+          {
+            account: `bond_pool:${currency}:${currency}`,
+            amount: -input.poolCash,
+            currencyCode: currency,
+            anchorAmount: -input.poolCash / rate,
+            role: "contra",
+          },
+        ],
+        balanced: true,
+        emitSite: "bonds/sovereignPrimarySettlement:treasuryCash",
       },
     });
   }

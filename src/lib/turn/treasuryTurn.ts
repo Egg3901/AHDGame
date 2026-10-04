@@ -66,9 +66,16 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
   const budgets = allBudgets.filter((b) => liveCountries.has(String(b.countryId ?? b._id)));
 
   const [config, rates] = await Promise.all([
-    db
-      .collection<GameConfig>("gameConfig")
-      .findOne({ _id: "default" }, { projection: { ledgerShadow: 1, bankTreasuryEnabled: 1 } }),
+    db.collection<GameConfig>("gameConfig").findOne(
+      { _id: "default" },
+      {
+        projection: {
+          ledgerShadow: 1,
+          bankTreasuryEnabled: 1,
+          treasuryCashLedgerEnabled: 1,
+        },
+      }
+    ),
     db
       .collection<{ currencyCode: string; rate: number }>("exchangeRates")
       .find({}, { projection: { currencyCode: 1, rate: 1 } })
@@ -77,6 +84,7 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
   const rateByCurrency = new Map(rates.map((r) => [r.currencyCode, r.rate]));
   const ledgerShadow = config?.ledgerShadow === true;
   const bankTreasuryEnabled = config?.bankTreasuryEnabled === true;
+  const treasuryCashLedgerEnabled = config?.treasuryCashLedgerEnabled === true;
   const sovereignBonds = bankTreasuryEnabled
     ? await db
         .collection<Bond>("bonds")
@@ -191,6 +199,7 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
       const accrualReceipt = treasuryAccrualWithBankCouponReserve(accrualInput, bankCouponAmount);
       const receipt: TreasuryAccrualReceipt = {
         ...accrualReceipt,
+        ...(treasuryCashLedgerEnabled ? { treasuryCashLedgerEnabled: true } : {}),
         ...(bankTreasuryEnabled
           ? {
               bankCouponPlan: bankCouponPlan.map(
@@ -214,6 +223,7 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
           plan,
           anchorRate: valuation.anchorRate ?? undefined,
           ledgerShadow,
+          treasuryCashLedgerEnabled: receipt.treasuryCashLedgerEnabled === true,
           ledgerCreatedAt: new Date(),
         });
         claimById.set(claim.id, claim);

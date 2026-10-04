@@ -428,6 +428,8 @@ export interface TreasuryAccrualReceipt {
   anchorRateSource?: "observed" | "authored_budget_only" | "unpriced";
   anchorRatePreset?: string;
   ledgerShadow: boolean;
+  /** Frozen funding source policy for any bank claims created from this receipt. */
+  treasuryCashLedgerEnabled?: boolean;
   components: {
     revenue: number;
     primarySpending: number;
@@ -464,6 +466,8 @@ export interface BankSovereignClaim {
   ledgerCreatedAt?: Date;
   anchorRate?: number;
   ledgerShadow?: boolean;
+  /** Funding source frozen when the claim is created. */
+  treasuryCashLedgerEnabled?: boolean;
 }
 
 export interface FederalBudget {
@@ -541,6 +545,8 @@ export interface FederalBudget {
    * the bond stock is untouched).
    */
   treasuryBalance: number;
+  /** Feature-gated spendable native cash. Missing legacy value means zero when enabled. */
+  treasuryCashLocal?: number;
   /** Applied automatic disaster crisis IDs; keeps fiscal debits replay-safe. */
   disasterFiscalReceipts?: string[];
   /**

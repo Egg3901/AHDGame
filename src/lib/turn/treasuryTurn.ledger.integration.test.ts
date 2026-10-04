@@ -35,6 +35,23 @@ function world(bankTreasuryEnabled = false) {
 }
 
 describe("treasury accrual stock-flow ownership", () => {
+  it("does not treat modeled revenue totals as spendable cash under the funded-cash flag", async () => {
+    const db = world(false);
+    await db
+      .collection("gameConfig")
+      .updateOne({ _id: "default" }, { $set: { treasuryCashLedgerEnabled: true } });
+    await db
+      .collection("federalBudget")
+      .updateOne({ _id: "federal" }, { $set: { revenue: { total: 4_800_000 } } });
+
+    await processTreasuryTurn(10);
+
+    expect(db.collection("federalBudget").docs[0].treasuryCashLocal).toBeUndefined();
+    expect(db.collection("federalBudget").docs[0].treasuryAccrual).toMatchObject({
+      treasuryCashLedgerEnabled: true,
+    });
+  });
+
   it("does not read bonds while bank treasury holdings are disabled", async () => {
     const db = world(false);
     const bonds = db.collection("bonds");

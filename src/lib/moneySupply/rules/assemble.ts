@@ -74,6 +74,12 @@ export function governmentLiquidFromTreasury(treasuryBalance: unknown): number {
   return Math.max(0, treasuryBalance);
 }
 
+/** Funded Treasury cash is a nonnegative stock and never inherits signed fiscal position. */
+export function governmentLiquidFromSpendableCash(treasuryCashLocal: unknown): number {
+  if (typeof treasuryCashLocal !== "number" || !Number.isFinite(treasuryCashLocal)) return 0;
+  return Math.max(0, treasuryCashLocal);
+}
+
 /** Fiscal advances first cancel a signed deficit, then add spendable cash. */
 export function treasuryAdvanceMoneyDelta(before: number, amount: number): number {
   return governmentLiquidFromTreasury(before + amount) - governmentLiquidFromTreasury(before);
@@ -170,6 +176,56 @@ export function addCentralBankMoney(
     // out of M1/M2 by calculateMoneyAggregates ; counting it alongside deposits
     // would double-count base money.
     addComponent(byCurrency, currency, "bankReserves", bank.reserveBalance);
+  }
+}
+
+export interface FundedBankCashFields {
+  bankCharter?: { currency?: string; cashReserves?: number };
+  bankTreasuryEscrows?: Record<string, { currencyCode?: string; amountLocal?: number }>;
+  bankSovereignEscrows?: Record<string, { currencyCode?: string; amountLocal?: number }>;
+  bankPropForexFee?: { currencyCode?: string; amountLocal?: number };
+}
+
+/**
+ * Include real cash held by bank charters or durable delivery escrows in the
+ * corporate-liquid stock. These fields are separate from parent
+ * `liquidCapital`; securities, loans, and charter posted-capital memos are not
+ * cash. Escrows remain money while a payout waits for epoch-safe delivery.
+ */
+export function addFundedBankCash(
+  byCurrency: Map<CurrencyCode, MutableComponents>,
+  banks: FundedBankCashFields[]
+): void {
+  for (const bank of banks) {
+    const charterCurrency = bank.bankCharter?.currency as CurrencyCode | undefined;
+    if (charterCurrency) {
+      addComponent(byCurrency, charterCurrency, "corporateLiquid", bank.bankCharter?.cashReserves);
+    }
+    for (const escrow of Object.values(bank.bankTreasuryEscrows ?? {})) {
+      if (escrow.currencyCode)
+        addComponent(
+          byCurrency,
+          escrow.currencyCode as CurrencyCode,
+          "corporateLiquid",
+          escrow.amountLocal
+        );
+    }
+    for (const escrow of Object.values(bank.bankSovereignEscrows ?? {})) {
+      if (escrow.currencyCode)
+        addComponent(
+          byCurrency,
+          escrow.currencyCode as CurrencyCode,
+          "corporateLiquid",
+          escrow.amountLocal
+        );
+    }
+    if (bank.bankPropForexFee?.currencyCode)
+      addComponent(
+        byCurrency,
+        bank.bankPropForexFee.currencyCode as CurrencyCode,
+        "corporateLiquid",
+        bank.bankPropForexFee.amountLocal
+      );
   }
 }
 

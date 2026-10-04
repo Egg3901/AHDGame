@@ -510,9 +510,10 @@ export async function submitCrisisDecision(
 
     const already = (interaction.leaderResponses ?? []).some((r) => r.countryId === countryId);
     if (already) throw conflict("Your country has already responded to this crisis");
-    const capabilitySnapshot = crisis.globalResponse
+    const preparedGlobalResponse = crisis.globalResponse
       ? await prepareGlobalResponseOption(db, crisis, countryId, option)
       : undefined;
+    const capabilitySnapshot = preparedGlobalResponse?.capability;
 
     if (option.requiredBudget) {
       const treasury = await getTreasuryBalance(db, countryId);
@@ -585,6 +586,7 @@ export async function submitCrisisDecision(
         characterId,
         countryId,
         currentTurn: gameState?.currentTurn ?? crisis.startTurn,
+        treasuryCashLedgerEnabled: preparedGlobalResponse?.treasuryCashLedgerEnabled,
       });
     }
     if (option.campaignCommitment) {
