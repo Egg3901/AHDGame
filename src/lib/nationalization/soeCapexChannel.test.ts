@@ -99,7 +99,12 @@ describe("buildSoeCapexGrant", () => {
 // ── The wiring: treasury pays, the enterprise receives plant ────────────────
 
 type Written = {
-  sectorBulk: Array<{ updateOne: { filter: { _id: ObjectId }; update: Record<string, unknown> } }>;
+  sectorBulk: Array<{
+    updateOne: {
+      filter: { _id: ObjectId };
+      update: Record<string, unknown> | Record<string, unknown>[];
+    };
+  }>;
   budgetIncs: Array<{ filter: unknown; update: Record<string, unknown> }>;
   corpBulk: unknown[];
 };
@@ -186,7 +191,8 @@ describe("processSoeOperations — state capex grant", () => {
       (op) => String(op.updateOne.filter._id) === String(sector._id)
     );
     expect(buy).toBeDefined();
-    const update = buy!.updateOne.update as Array<Record<string, unknown>>;
+    const update = buy!.updateOne.update;
+    if (!Array.isArray(update)) throw new Error("Expected a plant capacity update pipeline");
     expect(update[0]).toMatchObject({
       $set: {
         capitalStock: {

@@ -1,4 +1,4 @@
-import { ObjectId, type Db } from "mongodb";
+import { ObjectId, type Db, type Filter } from "mongodb";
 import type {
   Bill,
   BillWhip,
@@ -517,10 +517,14 @@ async function buildWhipDefianceSnapshotsForScopes(
     ...(characterIds.length ? [{ characterId: { $in: characterIds } }] : []),
     ...(nppIds.length ? [{ nppId: { $in: nppIds } }] : []),
   ];
-  const membershipClauses = [
+  const membershipClauses: Filter<CaucusMembership>[] = [
     ...(characterIds.length ? [{ memberType: "character", memberId: { $in: characterIds } }] : []),
     ...(nppIds.length ? [{ memberType: "npp", memberId: { $in: nppIds } }] : []),
   ];
+  type VoterOfficial = Pick<
+    ElectedOfficial,
+    "characterId" | "nppId" | "isNPP" | "state" | "officeType"
+  >;
   const [characters, npps, officials] = await Promise.all([
     missingCharacterIds.length
       ? db
@@ -540,9 +544,9 @@ async function buildWhipDefianceSnapshotsForScopes(
       ? db
           .collection<ElectedOfficial>("electedOfficials")
           .find({ officeType: { $in: officeTypes }, $or: officialClauses })
-          .project({ characterId: 1, nppId: 1, isNPP: 1, state: 1, officeType: 1 })
+          .project<VoterOfficial>({ characterId: 1, nppId: 1, isNPP: 1, state: 1, officeType: 1 })
           .toArray()
-      : Promise.resolve([] as ElectedOfficial[]),
+      : Promise.resolve([] as VoterOfficial[]),
   ]);
   const memberships = preloadedMemberships
     ? preloadedMemberships.filter(
@@ -563,7 +567,7 @@ async function buildWhipDefianceSnapshotsForScopes(
     ids.add(membership.caucusId.toString());
     caucusIdsByMember.set(key, ids);
   }
-  const officialByMemberOffice = new Map<string, ElectedOfficial>();
+  const officialByMemberOffice = new Map<string, VoterOfficial>();
   for (const official of officials) {
     if (official.characterId) {
       officialByMemberOffice.set(

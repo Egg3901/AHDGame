@@ -29,7 +29,8 @@ export interface RdInnovationResult {
   sectorBoostOps: {
     updateOne: {
       filter: { _id: ObjectId };
-      update: { $inc: Record<string, number>; $set: Record<string, unknown> };
+      update:
+        { $inc: Record<string, number>; $set: Record<string, unknown> } | Record<string, unknown>[];
     };
   }[];
   /** Bulk ops for state resource capacity boosts (stateResourceCapacity collection) */

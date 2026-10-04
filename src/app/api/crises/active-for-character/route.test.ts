@@ -8,7 +8,7 @@
 import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
-import type { CrisisLeaderResponse } from "@/lib/db/types";
+import type { CrisisLeaderResponse } from "@/lib/db/types/crisis";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));

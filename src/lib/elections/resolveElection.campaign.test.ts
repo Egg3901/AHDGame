@@ -62,7 +62,9 @@ it.each(["summary", "full"] as const)(
     expect(db.collection("states").find).toHaveBeenCalledTimes(2);
     const audienceReads = db
       .collection("states")
-      .find.mock.calls.filter(([query]) => Array.isArray(query.countryId?.$in));
+      .find.mock.calls.filter(([query]: [{ countryId?: { $in?: string[] } }]) =>
+        Array.isArray(query.countryId?.$in)
+      );
     expect(audienceReads).toHaveLength(1);
     expect(_enrichElection).toHaveBeenCalledTimes(3);
     for (const [election, deps] of vi.mocked(_enrichElection).mock.calls)

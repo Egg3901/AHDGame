@@ -9,7 +9,7 @@ if (!beforeSend) throw new Error("Server Sentry beforeSend is not configured");
 
 function disconnectEvent(): Sentry.ErrorEvent {
   return {
-    type: "error",
+    type: undefined,
     exception: {
       values: [
         {
