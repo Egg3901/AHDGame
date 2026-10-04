@@ -11,6 +11,9 @@ import {
 } from "../bankSolvencyTurn";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
+vi.mock("@/lib/crises/bankFailureResponseWindow", () => ({
+  ensureBankFailureResponseWindow: vi.fn().mockResolvedValue(new ObjectId()),
+}));
 
 const TURN = 200;
 
@@ -424,6 +427,60 @@ describe("processBankSolvencyTurn", () => {
     expect(depositor.holder).toBe("centralBank");
     expect(depositor.savings).toBe(80_000);
     expect(cbState.externalBroadMoney).toBe(externalBefore + fledNpc + npcAfterFlight);
+    const { ensureBankFailureResponseWindow } =
+      await import("@/lib/crises/bankFailureResponseWindow");
+    expect(ensureBankFailureResponseWindow).not.toHaveBeenCalled();
+  });
+
+  it("opens a country response window for new red stress that has not failed", async () => {
+    const corp = makeBankCorp(
+      makeCharter({
+        cashReserves: 100_000,
+        totalDeposits: 1_000_000,
+        npcDeposits: 1_000_000,
+        totalLoans: 900_000,
+        warningBand: "amber",
+        panicTurns: 4,
+      })
+    );
+    seedBanks([corp]);
+    persisted.collection("centralBanks").docs[0].bankReserveRequirement = 0.1;
+    db.collectionMocks.gameState!.findOne.mockResolvedValue({
+      _id: "current",
+      preset: "1991-default",
+      currentYear: 1991,
+      currentTurn: TURN,
+    });
+
+    const summary = await processBankSolvencyTurn(db as unknown as Db, TURN);
+    const { ensureBankFailureResponseWindow } =
+      await import("@/lib/crises/bankFailureResponseWindow");
+
+    expect(summary.failures).toBe(0);
+    expect(liveCorps.get(corp._id.toString())!.bankCharter!.status).toBe("active");
+    expect(liveCorps.get(corp._id.toString())!.bankCharter!.warningBand).toBe("red");
+    expect(ensureBankFailureResponseWindow).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({
+        bankId: corp._id,
+        countryId: "US",
+        charteredTurn: 1,
+        currentTurn: TURN,
+      })
+    );
+    const riskPublicationOrder =
+      db.collectionMocks.corporations!.updateOne.mock.invocationCallOrder.find(
+        (_order, index) =>
+          (
+            db.collectionMocks.corporations!.updateOne.mock.calls[index]![1] as {
+              $set?: Record<string, unknown>;
+            }
+          ).$set?.["bankCharter.warningBand"] === "red"
+      );
+    expect(riskPublicationOrder).toBeDefined();
+    expect(vi.mocked(ensureBankFailureResponseWindow).mock.invocationCallOrder[0]).toBeLessThan(
+      riskPublicationOrder!
+    );
   });
 
   it("resolves a prior-turn failed charter that predates this code", async () => {
