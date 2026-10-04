@@ -6,12 +6,15 @@
  * recorded, that a structural abort is recorded as such, and that the record is
  * opened BEFORE anything is destroyed.
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import type { SeedDiagnosticReport } from "@/lib/admin/seedDiagnostic/types";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
-vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
+vi.mock("@/lib/mongodb", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/mongodb")>();
+  return { ...actual, getDb: vi.fn() };
+});
 vi.mock("@/lib/admin/resetGameWorld", () => ({ resetGameWorld: vi.fn() }));
 vi.mock("@/lib/admin/bootstrapGameWorld", () => ({ bootstrapGameWorld: vi.fn() }));
 vi.mock("@/lib/admin/finalizeResetGameWorld", () => ({ finalizeResetGameWorld: vi.fn() }));
@@ -79,6 +82,8 @@ describe("resetAndBootstrapGameWorld — failure handling", () => {
     vi.mocked(finalizeResetGameWorld).mockResolvedValue(okFinalize as never);
   });
 
+  afterEach(() => vi.unstubAllEnvs());
+
   const run = async () => {
     const { resetAndBootstrapGameWorld } = await import("./resetAndBootstrapGameWorld");
     return resetAndBootstrapGameWorld({
@@ -132,6 +137,45 @@ describe("resetAndBootstrapGameWorld — failure handling", () => {
         startingParties: "none",
       })
     ).rejects.toThrow("1991-default");
+    expect(Object.keys(db.collectionMocks)).toHaveLength(0);
+  });
+
+  it.each(["AUTH_SECRET", "ADMIN_REGISTRATION_KEY", "CRON_SECRET"] as const)(
+    "rejects missing %s before any reset mutation",
+    async (missing) => {
+      vi.stubEnv("NODE_ENV", "development");
+      vi.stubEnv("MONGODB_URI", "mongodb://127.0.0.1/fixture-world");
+      vi.stubEnv("MONGODB_DB", "fixture-world");
+      vi.stubEnv("AUTH_SECRET", "reset-orchestrator-test-secret");
+      vi.stubEnv("ADMIN_REGISTRATION_KEY", "admin-key");
+      vi.stubEnv("CRON_SECRET", "cron-key");
+      vi.stubEnv(missing, "");
+
+      const { enableMaintenanceMode } = await import("@/lib/maintenanceStatus");
+      const { resetGameWorld } = await import("@/lib/admin/resetGameWorld");
+      const { bootstrapGameWorld } = await import("@/lib/admin/bootstrapGameWorld");
+
+      await expect(run()).rejects.toThrow(missing);
+
+      expect(enableMaintenanceMode).not.toHaveBeenCalled();
+      expect(resetGameWorld).not.toHaveBeenCalled();
+      expect(bootstrapGameWorld).not.toHaveBeenCalled();
+      expect(Object.keys(db.collectionMocks)).toHaveLength(0);
+    }
+  );
+
+  it("rejects a connected world different from the application before any mutation", async () => {
+    vi.stubEnv("MONGODB_DB", "fixture-world");
+    Object.defineProperty(db, "databaseName", { value: "other-world" });
+    const { enableMaintenanceMode } = await import("@/lib/maintenanceStatus");
+    const { resetGameWorld } = await import("@/lib/admin/resetGameWorld");
+    const { bootstrapGameWorld } = await import("@/lib/admin/bootstrapGameWorld");
+
+    await expect(run()).rejects.toThrow("connected database other-world");
+
+    expect(enableMaintenanceMode).not.toHaveBeenCalled();
+    expect(resetGameWorld).not.toHaveBeenCalled();
+    expect(bootstrapGameWorld).not.toHaveBeenCalled();
     expect(Object.keys(db.collectionMocks)).toHaveLength(0);
   });
 

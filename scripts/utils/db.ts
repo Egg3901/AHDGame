@@ -6,27 +6,97 @@ import * as path from "path";
 dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
 
 let client: MongoClient | null = null;
+let clientUri: string | null = null;
+let connectAttempt: Promise<MongoClient> | null = null;
+let connectAttemptUri: string | null = null;
+let closeAttempt: Promise<void> | null = null;
 
-export async function connectDb(databaseName?: string): Promise<Db> {
-  if (!client) {
-    // Resolved lazily (not at module load) so importing this module — e.g. the
-    // migration registry pulling in a script-wrapped migration under vitest —
-    // does not require a MongoDB URI until a connection is actually opened.
-    const uri = process.env.MONGODB_URI;
-    if (!uri) {
-      throw new Error("Please add your MongoDB URI to .env.local");
-    }
-    client = new MongoClient(uri);
-    await client.connect();
-    console.log("Connected to MongoDB");
+export async function connectDb(databaseName?: string, uriOverride?: string): Promise<Db> {
+  const uri = uriOverride ?? process.env.MONGODB_URI;
+  if (!uri) {
+    throw new Error("Please add your MongoDB URI to .env.local");
   }
-  return client.db(databaseName);
+
+  if (closeAttempt) await closeAttempt;
+
+  if (client) {
+    assertSameUri(uri, clientUri);
+    return client.db(databaseName);
+  }
+
+  if (connectAttempt) {
+    assertSameUri(uri, connectAttemptUri);
+    const attempt = connectAttempt;
+    const connectedClient = await attempt;
+    if (connectAttempt !== attempt || client !== connectedClient) {
+      throw new Error("MongoDB connection was closed while connecting");
+    }
+    return connectedClient.db(databaseName);
+  }
+
+  // Resolve lazily so importing this module does not require a URI or open a
+  // connection. Keep a URI identity alongside the shared in-flight attempt so
+  // concurrent calls cannot silently reuse a client for another deployment.
+  const nextClient = new MongoClient(uri);
+  const attempt: Promise<MongoClient> = (async () => {
+    try {
+      await nextClient.connect();
+      if (connectAttempt === attempt) {
+        client = nextClient;
+        clientUri = uri;
+        console.log("Connected to MongoDB");
+      }
+      return nextClient;
+    } catch (error) {
+      if (connectAttempt === attempt) {
+        connectAttempt = null;
+        connectAttemptUri = null;
+      }
+      try {
+        await nextClient.close();
+      } catch {
+        // Preserve the original connection error; the failed client is discarded.
+      }
+      throw error;
+    }
+  })();
+  connectAttempt = attempt;
+  connectAttemptUri = uri;
+
+  const connectedClient = await attempt;
+  if (connectAttempt !== attempt || client !== connectedClient) {
+    throw new Error("MongoDB connection was closed while connecting");
+  }
+  return connectedClient.db(databaseName);
 }
 
 export async function closeDb(): Promise<void> {
-  if (client) {
-    await client.close();
-    client = null;
-    console.log("Disconnected from MongoDB");
+  if (closeAttempt) return closeAttempt;
+
+  const connectedClient = client;
+  const pendingConnect = connectAttempt;
+  client = null;
+  clientUri = null;
+  connectAttempt = null;
+  connectAttemptUri = null;
+
+  const attempt = (async () => {
+    const clientToClose = connectedClient ?? (await pendingConnect?.catch(() => null));
+    if (clientToClose) {
+      await clientToClose.close();
+      console.log("Disconnected from MongoDB");
+    }
+  })();
+  closeAttempt = attempt;
+  try {
+    await attempt;
+  } finally {
+    if (closeAttempt === attempt) closeAttempt = null;
+  }
+}
+
+function assertSameUri(requestedUri: string, connectedUri: string | null): void {
+  if (requestedUri !== connectedUri) {
+    throw new Error("MongoDB client is already connected to a different URI; close it first");
   }
 }
