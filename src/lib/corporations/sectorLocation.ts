@@ -1,5 +1,4 @@
 import { MongoServerError } from "mongodb";
-import type { Filter } from "mongodb";
 import type { CorporateSector, State } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 
@@ -16,9 +15,17 @@ export function getSectorOperatingCountryId(
   return stateCountryByStateId.get(sector.stateId) ?? sector.countryId;
 }
 
+type SectorLaneClause = Pick<CorporateSector, "sectorType"> & {
+  industryModel: CorporateSector["industryModel"] | null;
+  mediaDiscriminator?: CorporateSector["mediaDiscriminator"] | null;
+};
+
+/** Lane criteria apply to owned sectors and their unowned market buckets. */
+export type SectorLaneQuery = SectorLaneClause | { $or: SectorLaneClause[] };
+
 export function getCorporateSectorLaneQuery(
   sector: Pick<CorporateSector, "sectorType" | "industryModel" | "mediaDiscriminator">
-): Filter<CorporateSector> {
+): SectorLaneQuery {
   if (sector.sectorType === "entertainment" || sector.mediaDiscriminator === "entertainment") {
     return {
       $or: [

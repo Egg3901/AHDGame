@@ -39,6 +39,7 @@ import { stampSubjectDeleted } from "@/lib/financialTxLog/stampDeleted";
 import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { restoreSectorsToUnowned } from "@/lib/corporations/restoreSectorsToUnowned";
+import { reserveSectorsForRestore } from "@/lib/corporations/securedConstructionProperty";
 import { withCorporationSettlementLock } from "@/lib/corporations/settlementLock";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { allocateShareholderPool } from "@/lib/bonds/corporateBondDefault";
@@ -157,6 +158,17 @@ export async function POST(_request: Request, { params }: RouteParams) {
       "dissolutionInProgressAt",
       now,
       async () => {
+        const sectors = await db
+          .collection<CorporateSector>("corporateSectors")
+          .find({ corporationId: corporation._id })
+          .toArray();
+        if (!(await reserveSectorsForRestore(db, sectors))) {
+          return NextResponse.json(
+            { error: "Resolve secured construction before dissolving this corporation" },
+            { status: 409 }
+          );
+        }
+
         await cleanupShareMarketActivityForCorporations(db, [corporation._id], now, forexEnabled);
         await cleanupShareMarketActivityForCorporationTargets(
           db,
@@ -548,11 +560,6 @@ export async function POST(_request: Request, { params }: RouteParams) {
             void emitTxBulk(db, dissolutionTxEntries, thresholds);
           }
         }
-
-        const sectors = await db
-          .collection<CorporateSector>("corporateSectors")
-          .find({ corporationId: refreshedCorporation._id })
-          .toArray();
 
         await restoreSectorsToUnowned(db, sectors, now);
         await releaseCorporationHeldSharesToFloat(db, refreshedCorporation._id, now);

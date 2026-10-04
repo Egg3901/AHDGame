@@ -46,6 +46,10 @@ import { ensurePrimaryNationalCorporation } from "@/lib/nationalization/national
 import { stampSubjectDeleted } from "@/lib/financialTxLog/stampDeleted";
 import { cleanupShareMarketActivityForCorporations } from "@/lib/corporations/cleanupShareMarketActivity";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
+import {
+  releaseConstructionPropertyTransition,
+  reserveSectorsForTransition,
+} from "@/lib/corporations/securedConstructionProperty";
 
 export interface MergeNationalCorporationsArgs {
   fromCountryId: CountryId;
@@ -79,6 +83,20 @@ export async function mergeNationalCorporations(
   if (absorbedCorps.length === 0) {
     return { corpsDissolved: 0, sectorsMoved: 0, bondsRestamped: 0 };
   }
+  const absorbedCorpIds = absorbedCorps.map((corp) => corp._id);
+  const absorbedSectors = await sectors.find({ corporationId: { $in: absorbedCorpIds } }).toArray();
+  const allTransitionKeys = await reserveSectorsForTransition(
+    db,
+    absorbedSectors,
+    "country_national_corporation_merge",
+    `country-merge:${fromCountryId}:${toCountryId}:${new ObjectId().toHexString()}`
+  );
+  if (!allTransitionKeys) {
+    throw new Error("Resolve secured construction before merging National Corporation holdings");
+  }
+  const transitionKeyBySectorId = new Map(
+    absorbedSectors.map((sector, index) => [sector._id.toHexString(), allTransitionKeys[index]])
+  );
 
   // The survivor split-off claiming each sector type, if any. A type both
   // sides split off folds into the SURVIVOR's enterprise of that type, so the
@@ -100,13 +118,13 @@ export async function mergeNationalCorporations(
   }
 
   let sectorsMoved = 0;
-  const absorbedCorpIds: ObjectId[] = [];
+  const movedSectorIds = new Set<string>();
 
   // Sectors first (they read the still-alive shells), then the shells.
   for (const corp of absorbedCorps) {
-    absorbedCorpIds.push(corp._id);
-
-    const corpSectors = await sectors.find({ corporationId: corp._id }).toArray();
+    const corpSectors = absorbedSectors.filter(
+      (sector) => sector.corporationId.toString() === corp._id.toString()
+    );
     if (corpSectors.length === 0) continue;
 
     // Group by destination so each destination needs one update, not one per
@@ -117,11 +135,23 @@ export async function mergeNationalCorporations(
       byDest.set(dest.toString(), [...(byDest.get(dest.toString()) ?? []), sector._id]);
     }
     for (const [destId, sectorIds] of byDest) {
-      const res = await sectors.updateMany(
-        { _id: { $in: sectorIds } },
-        { $set: { corporationId: new ObjectId(destId), updatedAt: now } }
-      );
-      sectorsMoved += res.modifiedCount ?? 0;
+      for (const sectorId of sectorIds) {
+        const sector = corpSectors.find((row) => row._id.equals(sectorId));
+        const key = sector && transitionKeyBySectorId.get(sector._id.toHexString());
+        if (!sector || !key) throw new Error("A secured sector reservation was lost");
+        const moved = await sectors.updateOne(
+          {
+            _id: sectorId,
+            corporationId: corp._id,
+            "constructionPropertyTransition.key": key,
+          },
+          { $set: { corporationId: new ObjectId(destId), updatedAt: now } }
+        );
+        if (moved.matchedCount !== 1)
+          throw new Error("A sector changed during National Corporation consolidation");
+        movedSectorIds.add(sectorId.toHexString());
+        sectorsMoved += 1;
+      }
     }
   }
 
@@ -182,6 +212,21 @@ export async function mergeNationalCorporations(
     });
     await corps.deleteOne({ _id: corp._id });
   }
+
+  // Hold the property lock through bond/share/title settlement and shell
+  // deletion. Sectors that were merged into no shell keep their marker until
+  // their final corporate owner and assumed liabilities are established.
+  await Promise.all(
+    absorbedSectors
+      .filter((sector) => movedSectorIds.has(sector._id.toHexString()))
+      .map((sector) =>
+        releaseConstructionPropertyTransition(
+          db,
+          sector._id,
+          transitionKeyBySectorId.get(sector._id.toHexString())!
+        )
+      )
+  );
 
   return {
     corpsDissolved: absorbedCorps.length,

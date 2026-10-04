@@ -30,6 +30,10 @@ import {
 } from "@/lib/corporations/corporateOwnership";
 import { withCorpLock } from "@/lib/corporations/corpMoneyLock";
 import {
+  hasProtectedConstructionProperty,
+  unprotectedConstructionPropertyFilter,
+} from "@/lib/corporations/securedConstructionProperty";
+import {
   buildPersonalBalanceInc,
   getHomeCurrency,
   loadCharacterFxRate,
@@ -356,6 +360,16 @@ export async function runHostileTakeover(request: Request, { params }: RoutePara
     // the parent's balance writes and silently lose money.
     return await withCorpLock(parent._id, async () => {
       const now = new Date();
+      const targetSectors = await db
+        .collection<CorporateSector>("corporateSectors")
+        .find({ corporationId: target._id })
+        .toArray();
+      if (targetSectors.some(hasProtectedConstructionProperty)) {
+        return NextResponse.json(
+          { error: "Resolve secured construction before completing this takeover" },
+          { status: 409 }
+        );
+      }
 
       const debitResult = await db.collection<Corporation>("corporations").updateOne(
         {
@@ -576,11 +590,6 @@ export async function runHostileTakeover(request: Request, { params }: RoutePara
         );
         const parentShares = parentShareRow?.shares ?? 0;
 
-        const targetSectors = await db
-          .collection<CorporateSector>("corporateSectors")
-          .find({ corporationId: target._id })
-          .toArray();
-
         // Brand facility-loss (Boeing rule): the acquired target loses all of its
         // sectors to the parent, so dent its brand for the loss before the sectors
         // are reassigned (the aggregate still includes them). No-op when the target
@@ -669,7 +678,10 @@ export async function runHostileTakeover(request: Request, { params }: RoutePara
             const mergedPlant = plantsEnabled ? mergeSectorPlantFields(existing, ts) : {};
             sectorMergeOps.push({
               updateOne: {
-                filter: { _id: existing._id },
+                filter: {
+                  _id: existing._id,
+                  ...unprotectedConstructionPropertyFilter(),
+                },
                 update: {
                   $set: {
                     countryId: getSectorOperatingCountryId(existing, stateCountryByStateId),
@@ -692,7 +704,10 @@ export async function runHostileTakeover(request: Request, { params }: RoutePara
             // Reassign: convert revenue into parent's LOCAL currency at transfer time.
             sectorReassignOps.push({
               updateOne: {
-                filter: { _id: ts._id },
+                filter: {
+                  _id: ts._id,
+                  ...unprotectedConstructionPropertyFilter(),
+                },
                 update: {
                   $set: {
                     corporationId: parent._id,
@@ -710,15 +725,29 @@ export async function runHostileTakeover(request: Request, { params }: RoutePara
         }
 
         if (sectorMergeOps.length > 0) {
-          await db.collection<CorporateSector>("corporateSectors").bulkWrite(sectorMergeOps);
+          const merged = await db
+            .collection<CorporateSector>("corporateSectors")
+            .bulkWrite(sectorMergeOps);
+          if (merged.matchedCount !== sectorMergeOps.length) {
+            throw new Error("A takeover destination became secured during the sector merge");
+          }
         }
         if (sectorDeleteIds.length > 0) {
-          await db
-            .collection<CorporateSector>("corporateSectors")
-            .deleteMany({ _id: { $in: sectorDeleteIds } });
+          const removed = await db.collection<CorporateSector>("corporateSectors").deleteMany({
+            _id: { $in: sectorDeleteIds },
+            ...unprotectedConstructionPropertyFilter(),
+          });
+          if (removed.deletedCount !== sectorDeleteIds.length) {
+            throw new Error("A takeover source sector became secured before deletion");
+          }
         }
         if (sectorReassignOps.length > 0) {
-          await db.collection<CorporateSector>("corporateSectors").bulkWrite(sectorReassignOps);
+          const reassigned = await db
+            .collection<CorporateSector>("corporateSectors")
+            .bulkWrite(sectorReassignOps);
+          if (reassigned.matchedCount !== sectorReassignOps.length) {
+            throw new Error("A takeover source sector became secured before reassignment");
+          }
         }
 
         await db.collection<Bond>("bonds").updateMany(

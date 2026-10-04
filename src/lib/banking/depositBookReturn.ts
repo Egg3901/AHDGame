@@ -79,7 +79,8 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import { getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { bankEquity, cashBackedDeposits, getCashReserves } from "@/lib/banking/balanceSheet";
-import { settleTransition } from "@/lib/banking/settlementJournal";
+import { resumeSettlement, settleTransition } from "@/lib/banking/settlementJournal";
+import type { BankingPolicySnapshot } from "./rules/policy";
 import { oid, type TransitionLeg, type TransitionProjection } from "@/lib/banking/rules/boundary";
 import { getNationalBudgetId, issueDepositInsuranceBackstopBond } from "@/lib/bonds/sovereign";
 import type { FederalBudget } from "@/lib/db/types";
@@ -232,30 +233,116 @@ async function ensureTreasuryInsuranceCash(
  * Safe to call on a bank with no deposits (it flips nothing and moves nothing)
  * and safe to call twice with the same turn and cause.
  */
+type DepositReturnOptions = {
+  cause: DepositBookReturnCause;
+  turn: number;
+  /** Current delivery turn, distinct from an older resolution claim. */
+  effectsTurn?: number;
+  releaseResidualToOwner: boolean;
+};
+
 export async function returnDepositBook(
   db: Db,
   corporationId: ObjectId,
-  options: {
-    cause: DepositBookReturnCause;
-    turn: number;
-    /** Current delivery turn, distinct from an older resolution claim. */
-    effectsTurn?: number;
-    /** Pay any surplus above the household book to the parent. */
-    releaseResidualToOwner: boolean;
-  }
+  options: DepositReturnOptions
 ): Promise<DepositBookReturnResult> {
-  const corp = await db
-    .collection<Corporation>("corporations")
-    .findOne({ _id: corporationId }, { projection: { bankCharter: 1, liquidCapital: 1 } });
-  let charter = corp?.bankCharter;
-  if (!corp || !charter) return EMPTY;
+  const corporations = db.collection<Corporation>("corporations");
+  let corp = await corporations.findOne(
+    { _id: corporationId },
+    { projection: { bankCharter: 1, liquidCapital: 1, bankConstructionFunding: 1 } }
+  );
+  if (!corp?.bankCharter) return EMPTY;
+  if (corp.bankConstructionFunding && corp.bankConstructionFunding.kind !== "returning")
+    return { ...EMPTY, error: "Construction funding must settle before returning bank deposits" };
+  const policy = await loadBankingPolicy(db);
+  if (!policy.constructionFinance && !corp.bankConstructionFunding)
+    return returnDepositBookInner(db, corporationId, options, corp, policy);
 
+  // The original return owns its quote across later turns. Admission and
+  // construction funding compete on the same parent document, so neither can
+  // read a vault between the other's cash debit and liability publication.
+  const previous = corp.bankConstructionFunding;
+  if (previous?.kind === "returning") {
+    if (!previous.depositReturn || previous.charteredTurn !== corp.bankCharter.charteredTurn)
+      return { ...EMPTY, error: "The bank deposit-return claim is incomplete" };
+    options = { ...previous.depositReturn, effectsTurn: options.effectsTurn ?? options.turn };
+  }
+  const key = depositBookReturnKey(corporationId, options.cause, options.turn);
+  if (!previous) {
+    const acquired = await corporations.updateOne(
+      {
+        _id: corporationId,
+        "bankCharter.charteredTurn": corp.bankCharter.charteredTurn,
+        bankConstructionFunding: { $exists: false },
+        bankCharterTransfer: { $exists: false },
+      },
+      {
+        $set: {
+          bankConstructionFunding: {
+            loanId: key,
+            charteredTurn: corp.bankCharter.charteredTurn,
+            kind: "returning",
+            disbursed: false,
+            depositReturn: {
+              cause: options.cause,
+              turn: options.turn,
+              releaseResidualToOwner: options.releaseResidualToOwner,
+            },
+          },
+        },
+      }
+    );
+    if (acquired.matchedCount !== 1)
+      return { ...EMPTY, error: "Another bank operation owns deposit return" };
+  }
+  if (previous?.kind === "returning") {
+    const original = await db
+      .collection<{ _id: string }>("bankMoneyMoves")
+      .findOne({ _id: key }, { projection: { _id: 1 } });
+    if (original) {
+      const recovered = await resumeSettlement(db, key);
+      if (recovered.error || !["applied", "replayed"].includes(recovered.status))
+        return { ...EMPTY, error: recovered.error ?? "Original deposit return remains pending" };
+    }
+  }
+  // Reload after admission: funding may have finished since the first read.
+  corp = await corporations.findOne(
+    {
+      _id: corporationId,
+      "bankConstructionFunding.loanId": key,
+      "bankConstructionFunding.kind": "returning",
+    },
+    { projection: { bankCharter: 1, liquidCapital: 1 } }
+  );
+  if (!corp?.bankCharter) return { ...EMPTY, error: "Deposit-return ownership changed" };
+  const result = await returnDepositBookInner(db, corporationId, options, corp, policy);
+  if (!result.error) {
+    await corporations.updateOne(
+      {
+        _id: corporationId,
+        "bankConstructionFunding.loanId": key,
+        "bankConstructionFunding.kind": "returning",
+      },
+      { $unset: { bankConstructionFunding: "" } }
+    );
+  }
+  // An interrupted receipt keeps ownership until its original quote completes.
+  return result;
+}
+
+async function returnDepositBookInner(
+  db: Db,
+  corporationId: ObjectId,
+  options: DepositReturnOptions,
+  corp: Corporation,
+  policy: BankingPolicySnapshot
+): Promise<DepositBookReturnResult> {
+  let charter = corp.bankCharter;
+  if (!charter) return EMPTY;
   const currency = charter.currency as CurrencyCode;
   const bankIdHex = corporationId.toString();
   const holderPath = `currencyBalances.savingsHolder.${currency}`;
   const now = new Date();
-
-  const policy = await loadBankingPolicy(db);
   const playerDepositsAreLiabilities = savingsReadsAuthoritative(policy, currency);
   if (
     policy.bankTreasury &&

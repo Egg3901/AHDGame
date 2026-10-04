@@ -134,9 +134,10 @@ describe("spinOff", () => {
   it("transfers all sectors of the type to the new corp (re-denominated)", async () => {
     await spinOff(db as unknown as Db, { parent: parentCorp(), ...baseInput });
     const upd = db.collection("corporateSectors").updateOne as ReturnType<typeof vi.fn>;
-    expect(upd).toHaveBeenCalledTimes(2);
+    const moves = upd.mock.calls.filter((call) => call[1]?.$set?.corporationId != null);
+    expect(moves).toHaveLength(2);
 
-    const setArg = upd.mock.calls[0][1] as any;
+    const setArg = moves[0][1] as any;
     expect(setArg.$set).toHaveProperty("corporationId");
     // Same currency (USD→USD) ⇒ revenue is preserved through the re-denomination.
     expect(setArg.$set.revenue).toBe(5_000_000);
@@ -168,7 +169,9 @@ describe("spinOff", () => {
     });
 
     const upd = db.collection("corporateSectors").updateOne as ReturnType<typeof vi.fn>;
-    const setArg = (upd.mock.calls[0][1] as any).$set;
+    const move = upd.mock.calls.find((call) => call[1]?.$set?.corporationId != null);
+    expect(move).toBeDefined();
+    const setArg = (move![1] as any).$set;
     // Ownership moves.
     expect(setArg).toHaveProperty("corporationId");
     // The reassign never touches the plant fields: they stay on the doc as-is,
