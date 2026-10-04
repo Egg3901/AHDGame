@@ -1,5 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { playerDepositRatePercent } from "./rates";
+import { playerDepositRatePercent, startingBankOffsets } from "./rates";
+
+describe("startingBankOffsets", () => {
+  it("uses the midpoint of the world's actual legal corridors", () => {
+    expect(
+      startingBankOffsets({
+        deposit: { minOffset: -4, maxOffset: 0.5 },
+        lending: { minOffset: 0.25, maxOffset: 8 },
+      })
+    ).toEqual({ depositOffset: -1.75, lendingOffset: 4.125 });
+    expect(
+      startingBankOffsets({
+        deposit: { minOffset: -4, maxOffset: -0.5 },
+        lending: { minOffset: 0.5, maxOffset: 6 },
+      })
+    ).toEqual({ depositOffset: -2.25, lendingOffset: 3.25 });
+  });
+});
 
 describe("playerDepositRatePercent", () => {
   // Prime 4, inflation 0: base APY = max(0.5, 4) / 2 = 2.

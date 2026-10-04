@@ -10,3 +10,4 @@ areas: [engine]
 - Keep household loan demand comparable across different policy-rate environments at the same lending spread.
 - Use the same demand calculation in the banking turn and CEO outlook.
 - Preserve stored fixed-rate loans and verify modern deposit rules for the 1991 world.
+- Start new charters at the midpoint of their legal deposit and lending corridors.

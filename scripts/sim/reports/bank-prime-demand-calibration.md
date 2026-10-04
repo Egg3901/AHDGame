@@ -14,4 +14,6 @@ The stable loan/deposit ratio confirms that nominal prime no longer throttles de
 
 The 1991 preset already selects modern deposit and lending corridors. A regression test now checks the actual resolver for that preset.
 
-Paired full-world sandbox qualification is pending. This calibration slice remains a draft until that evidence is available.
+New charters use the midpoint of their world's legal deposit and lending corridors. Modern defaults are -1.75/+4.125 percentage points relative to prime, matching the model above. Existing charters retain their chosen offsets.
+
+Funded asset and fee calibration is pending. The combined change will be qualified through focused checks, CI and production rollout validation; overnight world simulations are not part of the qualification plan.
