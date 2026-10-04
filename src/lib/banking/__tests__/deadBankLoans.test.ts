@@ -113,6 +113,17 @@ describe("loans owed to a bank that no longer exists", () => {
     expect(closed.collection).toBe("depositInsuranceFunds");
     expect(closed.filter).toEqual({ _id: "USD" });
     expect(closed.path).toBe("balance");
+
+    const archivedOpen = recoveryTargetFor({
+      corporationId: OPEN_ESTATE,
+      name: "Archived failed bank",
+      currency: "USD",
+      resolved: false,
+      historyId: new ObjectId(),
+    });
+    expect(archivedOpen.collection).toBe("depositInsuranceFunds");
+    expect(archivedOpen.filter).toEqual({ _id: "USD" });
+    expect(archivedOpen.path).toBe("balance");
   });
 
   it("services every dead bank's book and reports the two destinations apart", async () => {
@@ -192,7 +203,14 @@ describe("loans owed to a bank that no longer exists", () => {
         _id: new ObjectId(),
         corporationId: recharteredBank,
         charter: priorCharter,
-        archivedTurn: 30,
+        archivedTurn: 20,
+        reason: "recharter",
+      },
+      {
+        _id: new ObjectId(),
+        corporationId: recharteredBank,
+        charter: charter("active", { charteredTurn: 1 }),
+        archivedTurn: 10,
         reason: "recharter",
       },
     ]);
@@ -202,6 +220,8 @@ describe("loans owed to a bank that no longer exists", () => {
       loan(recharteredBank, { charteredTurn: 30 }),
       // Untagged persisted loans use the originated turn during rollout.
       loan(recharteredBank, { originatedTurn: 2 }),
+      // A loan originated in the same turn the prior charter failed stays in its epoch.
+      loan(recharteredBank, { originatedTurn: 20 }),
     ]);
 
     const summary = await processDeadBankLoans(
@@ -223,9 +243,9 @@ describe("loans owed to a bank that no longer exists", () => {
       }
     );
 
-    expect(summary.loansServiced).toBe(2);
-    expect(summary.recoveredToInsurer).toBe(200);
-    expect(db.collection("depositInsuranceFunds").docs[0].balance).toBe(240);
+    expect(summary.loansServiced).toBe(3);
+    expect(summary.recoveredToInsurer).toBe(300);
+    expect(db.collection("depositInsuranceFunds").docs[0].balance).toBe(340);
     expect(db.collection("corporations").docs[0].bankCharter?.cashReserves).toBe(900);
   });
 });

@@ -1,9 +1,9 @@
 import type { BankLoan } from "@/lib/db/types/bank";
 
 /** Match one charter's loans while still reading documents written before epoch tagging. */
-export function loanCharterEpochFilter(charteredTurn: number, archivedTurn?: number) {
+export function loanCharterEpochFilter(charteredTurn: number, nextCharteredTurn?: number) {
   const originatedTurn: { $gte: number; $lt?: number } = { $gte: charteredTurn };
-  if (archivedTurn !== undefined) originatedTurn.$lt = archivedTurn;
+  if (nextCharteredTurn !== undefined) originatedTurn.$lt = nextCharteredTurn;
   return {
     $or: [
       { charteredTurn },

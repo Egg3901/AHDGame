@@ -2,7 +2,7 @@ import type { BankCharterHistoryEntry, BankLoan } from "@/lib/db/types/bank";
 import type { Corporation } from "@/lib/db/types";
 import type { Migration } from "../types";
 
-type EpochRange = { charteredTurn: number; archivedTurn?: number };
+type EpochRange = { charteredTurn: number; nextCharteredTurn?: number };
 
 /** Backfill loan ownership metadata without changing balances or loan status. */
 export const migration: Migration = {
@@ -22,10 +22,9 @@ export const migration: Migration = {
       db
         .collection<BankCharterHistoryEntry>("bankCharterHistory")
         .find({})
-        .project<Pick<BankCharterHistoryEntry, "corporationId" | "charter" | "archivedTurn">>({
+        .project<Pick<BankCharterHistoryEntry, "corporationId" | "charter">>({
           corporationId: 1,
           charter: 1,
-          archivedTurn: 1,
         })
         .toArray(),
       db
@@ -35,43 +34,59 @@ export const migration: Migration = {
         .toArray(),
     ]);
 
-    const rangesByBank = new Map<string, EpochRange[]>();
+    const turnsByBank = new Map<string, Set<number>>();
+    const addEpoch = (bankId: string, charteredTurn: number) => {
+      const turns = turnsByBank.get(bankId) ?? new Set<number>();
+      turns.add(charteredTurn);
+      turnsByBank.set(bankId, turns);
+    };
     for (const entry of history) {
-      const key = entry.corporationId.toString();
-      const ranges = rangesByBank.get(key) ?? [];
-      ranges.push({
-        charteredTurn: entry.charter.charteredTurn,
-        archivedTurn: entry.archivedTurn,
-      });
-      rangesByBank.set(key, ranges);
+      addEpoch(entry.corporationId.toString(), entry.charter.charteredTurn);
     }
     for (const corporation of corporations) {
       const charter = corporation.bankCharter;
       if (!charter) continue;
-      const key = corporation._id.toString();
-      const ranges = rangesByBank.get(key) ?? [];
-      ranges.push({ charteredTurn: charter.charteredTurn });
-      rangesByBank.set(key, ranges);
+      addEpoch(corporation._id.toString(), charter.charteredTurn);
     }
 
-    const operations = loans.map((loan) => {
+    const rangesByBank = new Map<string, EpochRange[]>();
+    for (const [bankId, turnSet] of turnsByBank) {
+      const turns = [...turnSet].sort((a, b) => a - b);
+      rangesByBank.set(
+        bankId,
+        turns.map((charteredTurn, index) => {
+          const nextCharteredTurn = turns[index + 1];
+          return nextCharteredTurn === undefined
+            ? { charteredTurn }
+            : { charteredTurn, nextCharteredTurn };
+        })
+      );
+    }
+
+    const operations = [];
+    let unmatchedLoans = 0;
+    for (const loan of loans) {
+      if (!Number.isFinite(loan.originatedTurn)) {
+        unmatchedLoans += 1;
+        continue;
+      }
       const ranges = rangesByBank.get(loan.bankCorporationId.toString()) ?? [];
-      const originatedTurn = Number.isFinite(loan.originatedTurn) ? loan.originatedTurn : 0;
-      const matching = ranges
-        .filter(
-          (range) =>
-            range.charteredTurn <= originatedTurn &&
-            (range.archivedTurn === undefined || originatedTurn < range.archivedTurn)
-        )
-        .sort((a, b) => b.charteredTurn - a.charteredTurn)[0];
-      const epoch = matching?.charteredTurn ?? originatedTurn;
-      return {
+      const matching = ranges.find(
+        (range) =>
+          range.charteredTurn <= loan.originatedTurn &&
+          (range.nextCharteredTurn === undefined || loan.originatedTurn < range.nextCharteredTurn)
+      );
+      if (!matching) {
+        unmatchedLoans += 1;
+        continue;
+      }
+      operations.push({
         updateOne: {
           filter: { _id: loan._id, charteredTurn: { $exists: false } },
-          update: { $set: { charteredTurn: epoch } },
+          update: { $set: { charteredTurn: matching.charteredTurn } },
         },
-      };
-    });
+      });
+    }
 
     if (!ctx.dryRun && operations.length > 0) {
       await db.collection<BankLoan>("bankLoans").bulkWrite(operations, { ordered: false });
@@ -81,9 +96,9 @@ export const migration: Migration = {
       documentsUpdated: ctx.dryRun ? 0 : operations.length,
       notes: [
         ctx.dryRun
-          ? "Would tag existing loans using archived and current charter epochs"
-          : "Tagged existing loans using archived and current charter epochs",
-        "Loans without a matching charter record keep their originated turn as the compatibility epoch",
+          ? `Would tag ${operations.length} existing loans using archived and current charter epochs`
+          : `Tagged ${operations.length} existing loans using archived and current charter epochs`,
+        `${unmatchedLoans} loans had no trustworthy charter match and remain untagged`,
       ],
     };
   },
