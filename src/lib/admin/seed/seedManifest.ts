@@ -1177,6 +1177,24 @@ const RUNTIME: CollectionEntry[] = [
 
 const PRESERVED: CollectionEntry[] = [
   {
+    name: "cronLocks",
+    category: "preserved",
+    notes:
+      "Scheduled-job leases are operational concurrency guards. Preserve active leases across world resets; acquisition replaces expired leases.",
+  },
+  {
+    name: "patreonReconcileUnmatched",
+    category: "preserved",
+    notes:
+      "Pseudonymous unmatched identity and retry history is an account support audit independent of the game world.",
+  },
+  {
+    name: "patreonReconcileRuns",
+    category: "preserved",
+    notes:
+      "Reconciliation run counts and failure status are operational audit history independent of the game world.",
+  },
+  {
     name: "unifiedSessions",
     category: "preserved",
     notes:
