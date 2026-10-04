@@ -153,6 +153,10 @@ export function productAdvertisingTransition(
     kind: definition.kind,
     turn: obligation.turn,
     currency: obligation.buyerCurrencyCode,
+    // The journal may retry only these frozen seller credits after a raw
+    // denomination guard temporarily refuses them. The buyer debit remains
+    // terminal and is never replayed.
+    retryCreditLegOnGuardFailure: true,
     legs: [
       {
         kind: "debit",
@@ -193,7 +197,10 @@ export function productAdvertisingTransition(
     projections: [
       {
         collection: "corporations",
-        filter: { _id: oid(corporationId.toHexString()) },
+        filter: {
+          _id: oid(corporationId.toHexString()),
+          [definition.receiptField]: { $exists: false },
+        },
         update: {
           $set: {
             [definition.receiptField]: {
@@ -275,6 +282,9 @@ export async function settleProductAdvertisingObligations(
     if (receipt?.turn === currentTurn) {
       touched.set(row._id.toHexString(), row._id);
     }
+    // A receipt is a one-slot handoff to product progression. Do not settle a
+    // second order until the consumer acknowledges and removes that receipt.
+    if (receipt) continue;
     for (const obligation of obligations) {
       const key = productAdvertisingSettlementKey(row._id.toHexString(), obligation, family);
       const prior = await journal.findOne({ _id: key }, { projection: { _id: 1 } });
@@ -301,6 +311,9 @@ export async function settleProductAdvertisingObligations(
         : await settleTransition(db, productAdvertisingTransition(row._id, obligation, family));
       if (result.status === "applied" || (result.status === "replayed" && !result.error)) {
         touched.set(row._id.toHexString(), row._id);
+        // A corporation can have legacy duplicate obligations. Publish at
+        // most one receipt per handoff, leaving later orders and journals intact.
+        break;
       } else if (result.status === "rejected" && result.appliedLegs.length === 0) {
         await db.collection<Corporation>("corporations").updateOne(
           { _id: row._id },
@@ -313,6 +326,10 @@ export async function settleProductAdvertisingObligations(
             } as Record<string, unknown>,
           }
         );
+      } else {
+        // Partial cash movement or a durable order in progress blocks later
+        // obligations so their receipts cannot overtake this original order.
+        break;
       }
     }
   }
