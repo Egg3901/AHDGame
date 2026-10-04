@@ -118,6 +118,7 @@ export type BankCommand =
       loanId: string;
       borrower: BorrowerSnapshot;
       principal: number;
+      originationFee?: number;
       ratePercent: number;
       termTurns: number;
     }

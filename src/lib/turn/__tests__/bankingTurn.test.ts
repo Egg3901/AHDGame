@@ -659,8 +659,11 @@ describe("processBankingTurn", () => {
       .filter((loan) => loan.borrowerType === "npcBulk")
       .reduce((sum, loan) => sum + (loan.outstanding ?? 0), 0);
     const principalLent = npcLoanOutstanding + summary.defaultsWrittenOff;
+    const fees = liveCorp.bankCharter!.lastBankingLoanOriginationFees ?? 0;
+    expect(fees).toBeGreaterThan(0);
+    expect(liveCorp.bankCharter!.loanOriginationFeesLifetime).toBe(fees);
     expect(broadBefore - broadAfter).toBeCloseTo(
-      summary.npcDepositDelta + summary.loanInterestCollected - principalLent,
+      summary.npcDepositDelta + summary.loanInterestCollected - principalLent + fees,
       5
     );
     // npcDeposits also receives deposit interest after the flow, so final stock
