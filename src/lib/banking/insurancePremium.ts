@@ -5,8 +5,8 @@ import {
   computeEvidenceBasedPremiumAnnualRate,
   computeInsurancePremium,
 } from "@/lib/banking/rules/insurance";
-import { turnMoveKey } from "@/lib/banking/moneyMove";
-import { settleTransition } from "@/lib/banking/settlementJournal";
+import { MONEY_MOVE_COLLECTION, turnMoveKey } from "@/lib/banking/moneyMove";
+import { resumeSettlement, settleTransition } from "@/lib/banking/settlementJournal";
 
 export type SettleInsurancePremiumInput = {
   bankId: ObjectId;
@@ -21,13 +21,66 @@ export type SettleInsurancePremiumInput = {
 };
 
 export type SettleInsurancePremiumResult = {
-  /** Cash actually debited from the frozen bank charter. */
-  paid: number;
+  /** Insured deposit exposure frozen by the original bank-turn receipt. */
+  insuredDeposits: number;
+  /** The premium amount frozen by the original bank-turn receipt. */
+  premiumPaid: number;
+  /** The premium due frozen by the original bank-turn receipt. */
+  premiumDue: number;
+  /** Cash debited during this invocation, for the caller's in-memory balance. */
+  cashDebited: number;
   /** Premium due beyond the bank's available cash. */
   shortfall: number;
   /** Whether the durable receipt applied its cash and exposure legs. */
   applied: boolean;
 };
+
+export type FrozenInsurancePremiumReceipt = {
+  _id: string;
+  status?: string;
+  error?: string;
+  legs?: { applied?: boolean }[];
+  event?: {
+    meta?: Record<string, unknown>;
+  };
+};
+
+export function insurancePremiumReceiptKey(
+  bankId: ObjectId,
+  charteredTurn: number,
+  turn: number
+): string {
+  return turnMoveKey("insurance-premium", `${bankId.toString()}:${charteredTurn}`, turn);
+}
+
+function quoteFromReceipt(receipt: FrozenInsurancePremiumReceipt) {
+  const meta = receipt.event?.meta;
+  if (!meta) return null;
+  const insuredDeposits = Number(meta.insuredDeposits);
+  const reserveRatioActual = Number(meta.reserveRatioActual);
+  const reserveRatioRequired = Number(meta.reserveRatioRequired);
+  const premiumBaseRate = Number(meta.premiumBaseRate);
+  const premiumDue = Number(meta.premiumDue);
+  const premiumPaid = Number(meta.premiumPaid);
+  const shortfall = Number(meta.shortfall);
+  if (
+    ![
+      insuredDeposits,
+      reserveRatioActual,
+      reserveRatioRequired,
+      premiumBaseRate,
+      premiumDue,
+      premiumPaid,
+      shortfall,
+    ].every(Number.isFinite) ||
+    premiumDue < 0 ||
+    premiumPaid < 0 ||
+    premiumPaid > premiumDue ||
+    shortfall < 0
+  )
+    return null;
+  return { insuredDeposits, premiumDue, premiumPaid, shortfall };
+}
 
 /**
  * Price and settle one charter epoch's insurance premium and exposure receipt.
@@ -36,9 +89,45 @@ export type SettleInsurancePremiumResult = {
  */
 export async function settleInsurancePremiumForTurn(
   db: Db,
-  input: SettleInsurancePremiumInput
+  input: SettleInsurancePremiumInput,
+  priorReceipt?: FrozenInsurancePremiumReceipt | null
 ): Promise<SettleInsurancePremiumResult> {
-  if (!(input.insuredDeposits > 0)) return { paid: 0, shortfall: 0, applied: true };
+  const key = insurancePremiumReceiptKey(input.bankId, input.charteredTurn, input.turn);
+  let existing = priorReceipt;
+  if (existing === undefined) {
+    existing = await db
+      .collection<FrozenInsurancePremiumReceipt>(MONEY_MOVE_COLLECTION)
+      .findOne({ _id: key });
+  }
+
+  if (existing) {
+    const quote = quoteFromReceipt(existing);
+    if (!quote) {
+      throw new Error("Existing insurance premium receipt has no valid frozen quote");
+    }
+    if (existing.status === "rejected") {
+      throw new Error(existing.error ?? "Insurance premium receipt was rejected");
+    }
+    const receipt = await resumeSettlement(db, key);
+    if (receipt.status !== "applied") {
+      throw new Error(receipt.error ?? "Insurance premium settlement is awaiting recovery");
+    }
+    return {
+      ...quote,
+      cashDebited: 0,
+      applied: true,
+    };
+  }
+
+  if (!(input.insuredDeposits > 0))
+    return {
+      insuredDeposits: 0,
+      premiumPaid: 0,
+      premiumDue: 0,
+      cashDebited: 0,
+      shortfall: 0,
+      applied: true,
+    };
 
   const fund = await ensureFund(db, input.currency);
   const premiumBaseRate = computeEvidenceBasedPremiumAnnualRate({
@@ -65,11 +154,7 @@ export async function settleInsurancePremiumForTurn(
       : { countryId: input.countryId };
 
   const receipt = await settleTransition(db, {
-    key: turnMoveKey(
-      "insurance-premium",
-      `${input.bankId.toString()}:${input.charteredTurn}`,
-      input.turn
-    ),
+    key,
     kind: "insurance_premium",
     turn: input.turn,
     currency: input.currency,
@@ -130,16 +215,45 @@ export async function settleInsurancePremiumForTurn(
         reserveRatioActual: input.reserveRatioActual,
         reserveRatioRequired: input.reserveRatioRequired,
         premiumBaseRate,
+        premiumDue,
+        premiumPaid,
+        shortfall,
       },
     },
   });
 
+  if (receipt.status === "replayed") {
+    const winner = await db
+      .collection<FrozenInsurancePremiumReceipt>(MONEY_MOVE_COLLECTION)
+      .findOne({ _id: key });
+    const quote = winner ? quoteFromReceipt(winner) : null;
+    if (!winner || !quote) {
+      throw new Error("Concurrent insurance premium receipt has no valid frozen quote");
+    }
+    if (winner.status === "rejected") {
+      throw new Error(winner.error ?? "Concurrent insurance premium receipt was rejected");
+    }
+    const resumed = await resumeSettlement(db, key);
+    if (resumed.status !== "applied") {
+      throw new Error(
+        resumed.error ?? "Concurrent insurance premium settlement is awaiting recovery"
+      );
+    }
+    return { ...quote, cashDebited: 0, applied: true };
+  }
+
+  if (receipt.status !== "applied") {
+    throw new Error(receipt.error ?? "Insurance premium settlement is awaiting recovery");
+  }
+
   const applied =
-    receipt.status === "applied" &&
     receipt.appliedLegs.length === (premiumPaid > 0 ? 2 : 0) &&
     receipt.appliedProjections.length > 0;
   return {
-    paid: applied ? premiumPaid : 0,
+    insuredDeposits: input.insuredDeposits,
+    premiumPaid,
+    premiumDue,
+    cashDebited: receipt.appliedLegs.includes(0) ? premiumPaid : 0,
     shortfall,
     applied,
   };
