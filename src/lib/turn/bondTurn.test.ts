@@ -21,6 +21,7 @@ import {
   getBondCountryId,
   isCorporateBond,
   issueScheduledSovereignBondSeries,
+  settleFundedSovereignBondMaturity,
 } from "@/lib/bonds/sovereign";
 import { emitTxBulk } from "@/lib/financialTxLog/emit";
 import { fireBondDefaultPulse } from "@/lib/corporations/sentimentEvents";
@@ -43,6 +44,13 @@ vi.mock("@/lib/bonds/sovereign", () => ({
   getBondCountryId: vi.fn().mockReturnValue("US"),
   isCorporateBond: vi.fn((b: { isCorporate?: boolean }) => !!b.isCorporate),
   issueScheduledSovereignBondSeries: vi.fn().mockResolvedValue(undefined),
+  settleFundedSovereignBondMaturity: vi.fn(async () => ({
+    status: "applied",
+    key: "sovereign-maturity:test:10",
+    appliedLegs: [],
+    appliedProjections: [],
+    newlyAppliedProjections: [],
+  })),
   settleSovereignBondMaturity: vi.fn(async (_db, _bond, repaymentLocal: number) => ({
     amountLocal: repaymentLocal,
     currencyCode: "USD",
@@ -343,6 +351,48 @@ describe("processBondTurn", () => {
       }),
       expect.objectContaining({ upsert: true })
     );
+  });
+
+  it("does not eagerly retire or pay a funded sovereign maturity outside its receipt", async () => {
+    const bond = {
+      _id: new ObjectId(),
+      issuerType: "sovereign",
+      countryId: "US",
+      couponRate: 0,
+      maturityTurn: 10,
+      matured: false,
+      defaulted: false,
+      holders: [],
+      publicFloat: 3,
+      corporationId: new ObjectId(),
+      currencyCode: "USD" as const,
+    };
+    mockBondFinds([bond], [{ _id: bond._id, marketPrice: 1 }]);
+    db.collectionMocks["centralBanks"]!.find.mockReturnValue(
+      makeCursor([{ countryId: "US", primeRate: 2.75 }])
+    );
+    db.collectionMocks["bondHistory"]!.aggregate.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    db.collection("bondMarketPools");
+    db.collection("federalBudget");
+    db.collection("bankMoneyMoves");
+    db.collection("exchangeRates");
+    db.collectionMocks["exchangeRates"]!.find.mockReturnValue(
+      makeCursor([{ currencyCode: "USD", rate: 1 }])
+    );
+
+    const result = await processBondTurn(10, { treasuryCashLedgerEnabled: true });
+
+    expect(result.bondsMatured).toBe(1);
+    expect(settleFundedSovereignBondMaturity).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({ bond, dueTurn: 10, nonBankRepaymentLocal: 3_000 })
+    );
+    const writes = db.collectionMocks["bonds"]!.bulkWrite.mock.calls.flatMap(
+      ([ops]) => ops as Array<{ updateOne?: { update?: { $set?: Record<string, unknown> } } }>
+    );
+    expect(writes.some((op) => op.updateOne?.update?.$set?.matured === true)).toBe(false);
   });
 
   it("processes coupon payments to NPP holders (v3)", async () => {

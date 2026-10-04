@@ -352,6 +352,7 @@ function reserveTransition(receipt: BankTreasuryTradeReceipt, bond: Bond): Banki
             },
             matured: { $ne: true },
             defaulted: { $ne: true },
+            sovereignMaturityClaim: { $exists: false },
             publicFloat: { $gte: receipt.units },
           },
           update: {
@@ -993,7 +994,10 @@ async function runReceipt(
     receipt.side === "sell"
       ? await settleAtomicDocumentTransition(db, reserve, {
           identity: { _id: oid(receipt.bondId.toHexString()) },
-          guard: { holders: thawHolderSnapshot(receipt.holderSnapshot, bond.holders ?? []) },
+          guard: {
+            holders: thawHolderSnapshot(receipt.holderSnapshot, bond.holders ?? []),
+            sovereignMaturityClaim: { $exists: false },
+          },
           nonCashMode: "bank_treasury_inventory",
         })
       : await finishTransition(db, reserve);

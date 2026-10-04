@@ -113,6 +113,29 @@ export interface Bond {
    * unmatured bonds.
    */
   redeemedAtTurn?: number;
+  /** Frozen, funded payout quote retained until a sovereign maturity fully pays. */
+  sovereignMaturityClaim?: {
+    id: string;
+    dueTurn: number;
+    currencyCode: CurrencyCode;
+    treasuryLocalPerAnchor: number;
+    amountLocal: number;
+    escrowLocal: number;
+    fundingAttemptTurn?: number;
+    paid?: boolean;
+    sourceHolders: BondHolder[];
+    sourcePublicFloat: number;
+    sourceCentralBankHoldings?: number;
+    holderLegs: Array<{
+      collection: string;
+      filter: Record<string, unknown>;
+      path: string;
+      amount: number;
+      currencyCode: CurrencyCode;
+      localPerAnchor: number;
+      note: string;
+    }>;
+  };
   /**
    * Currency the bond's face value, coupon payments, principal, and market
    * price are denominated in (v0.2.6+). Sovereign bonds inherit the issuer

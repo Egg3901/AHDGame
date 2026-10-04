@@ -3,6 +3,7 @@ import type { FederalBudget } from "@/lib/db/types/budget";
 import { computeFiscalImpact } from "@/lib/budget/fiscalImpact";
 import type { CountryId } from "@/lib/constants/countries";
 import {
+  resolveTreasuryCashOptions,
   witnessTreasuryCash,
   type TreasuryCashFlow,
   type TreasuryCashOptions,
@@ -32,6 +33,14 @@ export interface TreasurySpendWitness {
   /** The caller's module path, recorded as the entry's emit site. */
   site: string;
   ledger?: TreasuryCashOptions;
+  treasuryCashLedgerEnabled?: boolean;
+}
+
+export class InsufficientFundedTreasuryCash extends Error {
+  constructor(countryId: string, amount: number) {
+    super(`Funded Treasury cash cannot cover ${amount} for ${countryId}`);
+    this.name = "InsufficientFundedTreasuryCash";
+  }
 }
 
 async function moveTreasury(
@@ -50,14 +59,53 @@ async function moveTreasury(
   const split =
     delta < 0 ? computeFiscalImpact(before, -delta) : { fromSurplus: 0, addedToDebt: 0 };
 
-  const set: Record<string, unknown> = { treasuryBalance: after, updatedAt: new Date() };
+  const now = new Date();
+  const set: Record<string, unknown> = { treasuryBalance: after, updatedAt: now };
   const newDebtPrincipal = Math.max(0, budget?.debt?.principal ?? 0);
+
+  const ledger = witness
+    ? await resolveTreasuryCashOptions(db, witness.ledger)
+    : undefined;
+  const fundedCashEnabled =
+    witness?.treasuryCashLedgerEnabled === true ||
+    ledger?.context?.treasuryCashLedgerEnabled === true;
+  if (fundedCashEnabled) {
+    const amount = Math.abs(delta);
+    const filter =
+      delta < 0
+        ? {
+            countryId: countryId as FederalBudget["countryId"],
+            treasuryCashLocal: { $gte: amount },
+          }
+        : { countryId: countryId as FederalBudget["countryId"] };
+    const result = await db.collection<FederalBudget>("federalBudget").updateOne(filter, {
+      $inc: { treasuryCashLocal: delta, treasuryBalance: delta },
+      $set: { updatedAt: now },
+    });
+    if ((result?.matchedCount ?? 0) === 0 && delta < 0) {
+      throw new InsufficientFundedTreasuryCash(countryId, amount);
+    }
+    if (witness && (result?.matchedCount ?? 0) > 0) {
+      await witnessTreasuryCash(db, ledger, {
+        flow: witness.flow,
+        account: { kind: "government", countryId: countryId as CountryId },
+        amount: delta,
+        now,
+        site: witness.site,
+      });
+    }
+    return {
+      ...split,
+      newTreasuryBalance: after,
+      newDebtPrincipal,
+    };
+  }
 
   const result = await db
     .collection<FederalBudget>("federalBudget")
     .updateOne({ countryId: countryId as FederalBudget["countryId"] }, { $set: set });
   if (witness && (result?.matchedCount ?? 0) > 0) {
-    await witnessTreasuryCash(db, witness.ledger, {
+    await witnessTreasuryCash(db, ledger, {
       flow: witness.flow,
       account: { kind: "government", countryId: countryId as CountryId },
       amount: after - before,
