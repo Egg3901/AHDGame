@@ -25,6 +25,7 @@ import {
   TYPE_SWITCH_PENALTY_TURNS,
 } from "@/lib/constants/corporations";
 import {
+  getOperatingSectorType,
   STRATEGY_TRANSITION_TURNS,
   STRATEGY_TRANSITION_MARGIN_PENALTY,
 } from "@/lib/constants/sectorStrategies";
@@ -61,6 +62,7 @@ export interface MarginStackInput {
     | "countryId"
     | "headquartersState"
     | "type"
+    | "industryModel"
     | "secondaryType"
     | "typeSwitchTurn"
     | "countryOwnerId"
@@ -71,6 +73,7 @@ export interface MarginStackInput {
     CorporateSector,
     | "stateId"
     | "sectorType"
+    | "industryModel"
     | "strategyId"
     | "transitionFromStrategyId"
     | "transitionStartTurn"
@@ -181,6 +184,10 @@ export function accumulateMarginModifiers(input: MarginStackInput): MarginStackR
     wideCommodityBalances,
     politicalBoard,
   } = input;
+  const operatingSectorType = getOperatingSectorType(
+    sector.sectorType,
+    sector.industryModel
+  ) as CorporationType;
 
   // P3.5 SEAM — active-disaster penalties are split at their source
   // (disasterMarginPenalty.ts) into a financial leg and a physical leg.
@@ -193,7 +200,7 @@ export function accumulateMarginModifiers(input: MarginStackInput): MarginStackR
   // exactly 1.
   const disasterPenalty = computeDisasterPenaltySplit(
     lookups.activeDisasterEffectsByState.get(sector.stateId) ?? [],
-    { sectorType: sector.sectorType, strategyId: sector.strategyId ?? null },
+    { sectorType: operatingSectorType, strategyId: sector.strategyId ?? null },
     currentTurn,
     plantsEnabled
   );
@@ -215,7 +222,7 @@ export function accumulateMarginModifiers(input: MarginStackInput): MarginStackR
     getForeignTariffMarginModifier(
       lookups.allTariffs,
       sectorCountryId,
-      sector.sectorType,
+      operatingSectorType,
       corpCountry,
       corp._id,
       lookups.activeFtaPairs
@@ -224,7 +231,7 @@ export function accumulateMarginModifiers(input: MarginStackInput): MarginStackR
   const domesticTariffMod = getDomesticTariffMalus(
     lookups.allTariffs,
     sectorCountryId,
-    sector.sectorType,
+    operatingSectorType,
     corpCountry,
     lookups.ftaCoverage
   );
@@ -232,7 +239,7 @@ export function accumulateMarginModifiers(input: MarginStackInput): MarginStackR
   const subsidyMod = getSubsidyMarginModifier(
     lookups.activeSubsidies,
     corp.headquartersState,
-    sector.sectorType,
+    operatingSectorType,
     sector.stateId,
     sector.strategyId,
     sectorCountryId,
@@ -241,7 +248,7 @@ export function accumulateMarginModifiers(input: MarginStackInput): MarginStackR
   const { globalWeight, nationalWeight, localWeight } = getTariffBlendWeights(
     lookups.allTariffs,
     sectorCountryId,
-    sector.sectorType,
+    operatingSectorType,
     lookups.sectorPresenceKeys,
     lookups.ftaCoverage
   );
@@ -254,7 +261,7 @@ export function accumulateMarginModifiers(input: MarginStackInput): MarginStackR
   // SECTOR_DEMAND/SECTOR_SUPPLY (the "standard" recipe).
   const stateBalances = lookups.rawStateBalances.get(sector.stateId) ?? new Map();
   const baseSupply = applyExtractionResourceCapacityToSupply(
-    sector.sectorType,
+    operatingSectorType,
     strategySupply ?? {},
     lookups.stateResourceCapacityByState.get(sector.stateId)
   );
@@ -263,7 +270,7 @@ export function accumulateMarginModifiers(input: MarginStackInput): MarginStackR
   const effectiveSupply = scaleCommodityRates(baseSupply, techEffects.outputRateMult);
   const effectiveDemand = scaleCommodityRates(strategyDemand ?? {}, techEffects.inputRateMult);
   const { inputMod: commodityMod, surplusMod } = computeBlendedMarginModifiers(
-    sector.sectorType,
+    operatingSectorType,
     wideCommodityBalances,
     nationalBalances,
     stateBalances,
@@ -294,7 +301,7 @@ export function accumulateMarginModifiers(input: MarginStackInput): MarginStackR
   );
   const stateSectorSpecializationMod = getStateSectorSpecializationMarginBonus(
     lookups.stateSectorSpecializationByState.get(sector.stateId),
-    sector.sectorType as CorporationType
+    operatingSectorType
   );
   // Sector type match: +10pp primary, +5pp secondary, -15pp mismatch. SOEs are
   // exempt - a NatCorp is a diversified state holding company, not a
@@ -302,8 +309,8 @@ export function accumulateMarginModifiers(input: MarginStackInput): MarginStackR
   const sectorTypeMatchMod = isStateOwned(corp)
     ? 0
     : getSectorTypeMatchModifier(
-        sector.sectorType as CorporationType,
-        corp.type,
+        operatingSectorType,
+        getOperatingSectorType(corp.type, corp.industryModel) as CorporationType,
         corp.secondaryType
       );
   // Logistical sprawl: -0.5% per 2 sectors over 15 for a single-type corp
@@ -336,7 +343,7 @@ export function accumulateMarginModifiers(input: MarginStackInput): MarginStackR
       : STRATEGY_TRANSITION_MARGIN_PENALTY
     : 0;
   const stateMetricMargin = computeStateMetricMarginModifier({
-    sectorType: sector.sectorType as CorporationType,
+    sectorType: operatingSectorType,
     strategyId: sector.strategyId ?? "standard",
     transitionFromStrategyId: sector.transitionFromStrategyId,
     transitionProgress,
@@ -405,7 +412,7 @@ export function accumulateMarginModifiers(input: MarginStackInput): MarginStackR
   // own strategic sectors.
   const economicModelAlignmentMod = corpAlignmentModifier(
     lookups.economicModelByCountry?.get(sectorCountryId),
-    sector.sectorType as string
+    operatingSectorType
   );
   // P3.5: financial leg only. The physical leg was consumed above as a
   // production haircut (`disasterOutputFactor`); adding it here too would

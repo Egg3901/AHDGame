@@ -30,7 +30,7 @@ import {
   MANUFACTURING_PRODUCT_PROJECTS_V2,
   type ManufacturingProductProject,
 } from "@/lib/products/manufacturingProject";
-import { getEffectiveStrategyRates } from "@/lib/constants/sectorStrategies";
+import { getEffectiveStrategyRatesForOperatingModel } from "@/lib/constants/sectorStrategies";
 import { settleSupplyAgreements, type SettleableSupplyAgreement } from "./settleSupplyAgreements";
 import type { CommodityType } from "@/lib/constants/commodities";
 import { loadSettleableSupplyAgreements } from "./loadSettleableSupplyAgreements";
@@ -459,12 +459,13 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     for (const [corpId, sectors] of lookups.sectorsByCorp) {
       const corp = lookups.corpById.get(corpId);
       const qSectors = sectors.map((sector) => {
-        const rates = getEffectiveStrategyRates(
+        const rates = getEffectiveStrategyRatesForOperatingModel(
           sector.sectorType,
           sector.strategyId ?? "standard",
           sector.transitionFromStrategyId,
           sector.transitionStartTurn,
-          turn ?? 0
+          turn ?? 0,
+          sector.industryModel
         );
         const outputs = (Object.keys(rates.supply ?? {}) as CommodityType[]).filter(
           (c) => (rates.supply?.[c] ?? 0) > 0

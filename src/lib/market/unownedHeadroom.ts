@@ -21,7 +21,7 @@
 
 import type { CorporationType } from "@/lib/constants/corporations";
 import { COMMODITY_BASE_PRICES } from "@/lib/constants/commodities";
-import { getStrategy } from "@/lib/constants/sectorStrategies";
+import { getStrategyForOperatingModel } from "@/lib/constants/sectorStrategies";
 import { impliedOutputUnits } from "@/lib/market/capital";
 
 /** Strategy id used to resolve an unowned sector's commodity mix (no strategyId field exists on UnownedSector). */
@@ -35,13 +35,15 @@ export const UNOWNED_HEADROOM_DEFAULT_STRATEGY_ID = "standard";
 export function computeUnownedHeadroomUnits(
   sectorType: CorporationType,
   revenue: number,
-  unitScale: number
+  unitScale: number,
+  industryModel?: string | null
 ): number {
   return computeSectorImpliedUnits(
     sectorType,
     revenue,
     UNOWNED_HEADROOM_DEFAULT_STRATEGY_ID,
-    unitScale
+    unitScale,
+    industryModel
   );
 }
 
@@ -60,9 +62,14 @@ export function computeSectorImpliedUnits(
   sectorType: CorporationType,
   revenue: number,
   strategyId: string | null | undefined,
-  unitScale: number
+  unitScale: number,
+  industryModel?: string | null
 ): number {
-  const strategy = getStrategy(sectorType, strategyId ?? UNOWNED_HEADROOM_DEFAULT_STRATEGY_ID);
+  const strategy = getStrategyForOperatingModel(
+    sectorType,
+    strategyId ?? UNOWNED_HEADROOM_DEFAULT_STRATEGY_ID,
+    industryModel
+  );
   return impliedOutputUnits(revenue, strategy.supply, COMMODITY_BASE_PRICES, unitScale);
 }
 
@@ -76,9 +83,10 @@ export function computeSectorImpliedUnits(
  */
 export function unownedHeadroomUnitsPerAnchor(
   sectorType: CorporationType,
-  unitScale: number
+  unitScale: number,
+  industryModel?: string | null
 ): number {
-  return computeUnownedHeadroomUnits(sectorType, 1, unitScale);
+  return computeUnownedHeadroomUnits(sectorType, 1, unitScale, industryModel);
 }
 
 /**
@@ -97,14 +105,18 @@ export function unownedHeadroomUnitsPerAnchor(
  * auto-seed boost, founding and the NPP drawdown). It lives here, once, because
  * two of them had already drifted to the `0` fallback independently.
  */
-export function unownedHeadroomBaseExpr(sectorType: CorporationType, unitScale: number): object {
+export function unownedHeadroomBaseExpr(
+  sectorType: CorporationType,
+  unitScale: number,
+  industryModel?: string | null
+): object {
   return {
     $ifNull: [
       "$headroomUnits",
       {
         $multiply: [
           { $ifNull: ["$revenue", 0] },
-          unownedHeadroomUnitsPerAnchor(sectorType, unitScale),
+          unownedHeadroomUnitsPerAnchor(sectorType, unitScale, industryModel),
         ],
       },
     ],
@@ -143,10 +155,11 @@ export function unownedPoolLeadingField(plantsEnabled: boolean): "headroomUnits"
 export function unownedPoolCreditBaseExpr(
   sectorType: CorporationType,
   plantsEnabled: boolean,
-  unitScale: number
+  unitScale: number,
+  industryModel?: string | null
 ) {
   return plantsEnabled
-    ? unownedHeadroomBaseExpr(sectorType, unitScale)
+    ? unownedHeadroomBaseExpr(sectorType, unitScale, industryModel)
     : { $ifNull: ["$revenue", 0] as const };
 }
 
@@ -169,9 +182,10 @@ export function unownedPoolCreditBaseExpr(
 export function unownedPoolTrailingSet(
   sectorType: CorporationType,
   plantsEnabled: boolean,
-  unitScale: number
+  unitScale: number,
+  industryModel?: string | null
 ): object {
-  const unitsPerAnchor = unownedHeadroomUnitsPerAnchor(sectorType, unitScale);
+  const unitsPerAnchor = unownedHeadroomUnitsPerAnchor(sectorType, unitScale, industryModel);
   if (plantsEnabled) {
     const anchorPerUnit = unitsPerAnchor > 0 ? 1 / unitsPerAnchor : 0;
     return { revenue: { $multiply: ["$headroomUnits", anchorPerUnit] } };
@@ -206,10 +220,13 @@ export function unownedPoolBoostSet(
   multiplier: number,
   now: Date,
   plantsEnabled: boolean,
-  unitScale: number
+  unitScale: number,
+  industryModel?: string | null
 ): object {
-  const unitsPerAnchor = unownedHeadroomUnitsPerAnchor(sectorType, unitScale);
-  const boostedUnits = { $multiply: [unownedHeadroomBaseExpr(sectorType, unitScale), multiplier] };
+  const unitsPerAnchor = unownedHeadroomUnitsPerAnchor(sectorType, unitScale, industryModel);
+  const boostedUnits = {
+    $multiply: [unownedHeadroomBaseExpr(sectorType, unitScale, industryModel), multiplier],
+  };
   if (plantsEnabled) {
     return {
       headroomUnits: boostedUnits,

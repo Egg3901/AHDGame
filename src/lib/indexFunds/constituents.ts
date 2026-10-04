@@ -31,6 +31,7 @@ export type IndexFundCandidate = Pick<
   | "_id"
   | "countryId"
   | "type"
+  | "industryModel"
   | "secondaryType"
   | "sharePrice"
   | "totalShares"
@@ -86,6 +87,16 @@ export function isEligibleIndexFundConstituent(
     return false;
   if (definition.kind === "sector") {
     if (!definition.sectorType) return false;
+    if (definition.sectorType === "automobiles") {
+      return (
+        corporation.type === "automobiles" ||
+        (corporation.type === "manufacturing" && corporation.industryModel === "vehicles") ||
+        corporation.secondaryType === "automobiles"
+      );
+    }
+    if (definition.sectorType === "manufacturing" && corporation.industryModel === "vehicles") {
+      return false;
+    }
     return (
       corporation.type === definition.sectorType ||
       corporation.secondaryType === definition.sectorType

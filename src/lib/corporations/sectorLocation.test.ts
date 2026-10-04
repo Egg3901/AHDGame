@@ -27,5 +27,16 @@ describe("sectorLocation", () => {
     expect(getCorporateSectorLocationKey(correctSector, stateCountryByStateId)).toBe(
       getCorporateSectorLocationKey(staleSector, stateCountryByStateId)
     );
+    expect(
+      getCorporateSectorLocationKey(
+        { ...correctSector, sectorType: "manufacturing", industryModel: null },
+        stateCountryByStateId
+      )
+    ).not.toBe(
+      getCorporateSectorLocationKey(
+        { ...correctSector, sectorType: "manufacturing", industryModel: "vehicles" },
+        stateCountryByStateId
+      )
+    );
   });
 });

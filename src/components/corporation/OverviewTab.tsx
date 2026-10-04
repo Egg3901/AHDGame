@@ -608,7 +608,9 @@ export default function OverviewTab({
             <>
               <CorpEconomicModelBadge
                 countryId={corporation.countryId}
-                sectorType={corporation.type}
+                sectorType={
+                  corporation.industryModel === "vehicles" ? "automobiles" : corporation.type
+                }
               />
               <SmallButton onClick={() => onTabChange("sectors")}>
                 {isCeo ? "Manage" : "Details"}

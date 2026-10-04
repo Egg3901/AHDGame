@@ -136,32 +136,40 @@ describe("runClearingPrePass with clearing enabled", () => {
     expect(result.contractedByCorpCommodity).toBeUndefined();
   });
 
-  it("limits the next clearing book using prior measured ad share", () => {
+  it("shares one prior audience allowance across same-owner outlets after capacity grows", () => {
     const { corp, sector, lookups } = makeSectorWorld();
     Object.assign(sector, {
       stateId: "US-CA",
       countryId: "US",
       sectorType: "media",
       strategyId: "standard",
-      producedUnits: 90,
-      soldFraction: 1,
-      soldByCommodity: { advertising: 1 },
+      producedUnits: 2_000,
+      soldFraction: 0.05,
+      soldByCommodity: { advertising: 0.05 },
     });
+    const secondOwned = {
+      ...sector,
+      _id: "sector3",
+      producedUnits: 1_000,
+    };
     const competitor = {
       ...sector,
       _id: "sector2",
       corporationId: "corp2",
-      producedUnits: 10,
+      producedUnits: 1_000,
+      soldFraction: 0.01,
+      soldByCommodity: { advertising: 0.01 },
     };
     Object.assign(lookups, {
       sectorsByCorp: new Map([
-        ["corp1", [sector]],
+        ["corp1", [sector, secondOwned]],
         ["corp2", [competitor]],
       ]),
       corpById: new Map([
         ["corp1", corp],
         ["corp2", { _id: "corp2", brandLoyalty: 0.5, brandPostureNorm: 0 }],
       ]),
+      stateCountryMap: new Map([["US-CA", "US"]]),
       globalCommodityBalances: new Map([["advertising", { supply: 1_000, demand: 1_000 }]]),
       stateMetricsByState: new Map([
         [
@@ -180,23 +188,66 @@ describe("runClearingPrePass with clearing enabled", () => {
     runClearingPrePass(makeInput({ lookups, market }));
 
     const dominantFill = market.clearingBySectorId?.get("sector1")?.soldByCommodity?.advertising;
+    const secondOwnedFill = market.clearingBySectorId?.get("sector3")?.soldByCommodity?.advertising;
     const competitorFill = market.clearingBySectorId?.get("sector2")?.soldByCommodity?.advertising;
     expect(dominantFill).toBeGreaterThan(0);
-    expect(dominantFill).toBeLessThan(competitorFill ?? 0);
+    expect(dominantFill).toBeCloseTo(secondOwnedFill ?? 0);
+    expect(200 * (dominantFill ?? 0) + 100 * (secondOwnedFill ?? 0)).toBeCloseTo(5.6);
+    expect(competitorFill).toBeCloseTo(1);
   });
-  it("uses the pre-repeal fairness law to constrain divergent outlet reach", () => {
+  it("scopes the pre-repeal Fairness Doctrine to US broadcast outlets", () => {
     const { corp, sector, lookups } = makeSectorWorld();
     Object.assign(corp, { editorialStance: { economic: 5, social: 5 } });
     Object.assign(sector, {
-      stateId: "CA",
+      stateId: "US-CA",
       countryId: "US",
       sectorType: "media",
-      strategyId: "standard",
+      strategyId: "radio_network",
       producedUnits: 100,
     });
+    const foreignCorp = {
+      ...corp,
+      _id: "corp2",
+      editorialStance: { economic: 5, social: 5 },
+    };
+    const foreignBroadcast = {
+      ...sector,
+      _id: "sector2",
+      corporationId: "corp2",
+      stateId: "FR-IDF",
+      countryId: "FR",
+    };
+    const newspaperCorp = {
+      ...corp,
+      _id: "corp3",
+      editorialStance: { economic: 5, social: 5 },
+    };
+    const newspaper = {
+      ...sector,
+      _id: "sector3",
+      corporationId: "corp3",
+      strategyId: "standard",
+    };
     Object.assign(lookups, {
-      globalCommodityBalances: new Map([["advertising", { supply: 100, demand: 100 }]]),
-      editorialAudienceLeanByState: new Map([["CA", { economic: -5, social: -5 }]]),
+      sectorsByCorp: new Map([
+        ["corp1", [sector]],
+        ["corp2", [foreignBroadcast]],
+        ["corp3", [newspaper]],
+      ]),
+      corpById: new Map([
+        ["corp1", corp],
+        ["corp2", foreignCorp],
+        ["corp3", newspaperCorp],
+      ]),
+      stateCountryMap: new Map([
+        ["US-CA", "US"],
+        ["FR-IDF", "FR"],
+      ]),
+      globalCommodityBalances: new Map([["advertising", { supply: 300, demand: 300 }]]),
+      editorialAudienceLeanByState: new Map([
+        ["US-CA", { economic: -5, social: -5 }],
+        ["FR-IDF", { economic: -5, social: -5 }],
+      ]),
     });
     const fairMarket = {
       clearingEnabled: true,
@@ -212,14 +263,24 @@ describe("runClearingPrePass with clearing enabled", () => {
     } as MarketContext;
 
     runClearingPrePass(makeInput({ lookups, market: fairMarket }));
-    const fairnessFill =
+    const usFairnessFill =
       fairMarket.clearingBySectorId?.get("sector1")?.soldByCommodity?.advertising;
+    const foreignFairnessFill =
+      fairMarket.clearingBySectorId?.get("sector2")?.soldByCommodity?.advertising;
+    const newspaperFairnessFill =
+      fairMarket.clearingBySectorId?.get("sector3")?.soldByCommodity?.advertising;
     runClearingPrePass(makeInput({ lookups, market: postRepealMarket }));
-    const postRepealFill =
+    const usPostRepealFill =
       postRepealMarket.clearingBySectorId?.get("sector1")?.soldByCommodity?.advertising;
+    const foreignPostRepealFill =
+      postRepealMarket.clearingBySectorId?.get("sector2")?.soldByCommodity?.advertising;
+    const newspaperPostRepealFill =
+      postRepealMarket.clearingBySectorId?.get("sector3")?.soldByCommodity?.advertising;
 
-    expect(fairnessFill).toBeGreaterThan(0);
-    expect(fairnessFill).toBeLessThan(postRepealFill ?? 0);
+    expect(usFairnessFill).toBeGreaterThan(0);
+    expect(usFairnessFill).toBeLessThan(usPostRepealFill ?? 0);
+    expect(foreignFairnessFill).toBeCloseTo(foreignPostRepealFill ?? 0);
+    expect(newspaperFairnessFill).toBeCloseTo(newspaperPostRepealFill ?? 0);
   });
 
   it("limits the Fairness Doctrine to US outlets while preserving global editorial stance effects", () => {
@@ -270,7 +331,6 @@ describe("runClearingPrePass with clearing enabled", () => {
     expect(editorialFill).toBeGreaterThan(0);
     expect(editorialFill).toBeLessThan(noFairnessFill ?? 0);
   });
-
   it("rolls loyalty up and keeps the in-memory corp docs consistent", () => {
     const { corp, lookups } = makeSectorWorld();
     const market = { clearingEnabled: true, plantsEnabled: false } as MarketContext;

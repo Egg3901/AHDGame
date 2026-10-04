@@ -89,6 +89,7 @@ import {
   STRATEGY_TRANSITION_MARGIN_PENALTY,
   STRATEGY_RETOOL_COST_FRACTION,
   CANCEL_COST_FRACTION,
+  getOperatingSectorType,
 } from "@/lib/constants/sectorStrategies";
 import type { EffectiveStrategyRates, SectorStrategy } from "@/lib/constants/sectorStrategies";
 import { computePriceRealization } from "@/lib/market/priceRealization";
@@ -474,12 +475,13 @@ export function computeTechGrowthCostReductionPct(args: {
   techCurrentYear: number;
   techCorpView: TechCorpView;
   sectorType: CorporationType;
+  industryModel?: CorporateSector["industryModel"];
 }): number {
-  const { techTreesEnabled, techCurrentYear, techCorpView, sectorType } = args;
+  const { techTreesEnabled, techCurrentYear, techCorpView, sectorType, industryModel } = args;
   if (!techTreesEnabled) return 0;
   const effects = techCurrentYear
-    ? getSectorTechEffectsForYear(techCorpView, sectorType, techCurrentYear)
-    : getSectorTechEffects(techCorpView, sectorType);
+    ? getSectorTechEffectsForYear(techCorpView, sectorType, techCurrentYear, industryModel)
+    : getSectorTechEffects(techCorpView, sectorType, industryModel);
   return Math.round((1 - effects.growthCostMultiplier) * 100 * 10) / 10;
 }
 
@@ -996,7 +998,7 @@ export function computeSectorMarginSection(args: {
     metrics,
     commodityMarginMod,
     homeLocationBonus,
-    corporation.type,
+    getOperatingSectorType(corporation.type, corporation.industryModel) as CorporationType,
     totalCorpSectors,
     macroEcon,
     corporation.logisticsStrength ?? 0,
@@ -1491,7 +1493,7 @@ export function buildSectorPlantsSection(args: {
   const plantCount =
     Number.isInteger(sector.plantCount) && (sector.plantCount ?? 0) >= 0
       ? (sector.plantCount as number)
-      : seedPlantLedger(sectorType, sector.capitalStock).plantCount;
+      : seedPlantLedger(sectorType, sector.capitalStock, sector.industryModel).plantCount;
   const producedUnits = num(sector.producedUnits);
   const soldUnits = num(sector.soldUnits);
   const mothballed = sector.mothballed === true;
@@ -1601,6 +1603,7 @@ export function buildSectorPlantsSection(args: {
   // ─── Build quote ──────────────────────────────────────────────────────────
   const oneUnit = computeBuildCost({
     sectorType,
+    industryModel: sector.industryModel,
     units: 1,
     // Must match what `buildCapacity` charges, or the quote a player sees is
     // 326.9x off the invoice for a rare-earth sector.

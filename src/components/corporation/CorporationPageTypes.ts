@@ -159,6 +159,7 @@ export interface CorporationDetail {
   tickerSymbol?: string;
   description?: string;
   type: CorporationType;
+  industryModel?: string | null;
   /** Country where the corporation is headquartered */
   countryId: string;
   secondaryType?: CorporationType | null;
@@ -587,6 +588,7 @@ export interface SectorDetail {
   countryId?: string;
   stateName: string;
   sectorType: string;
+  industryModel?: string | null;
   sectorLabel: string;
   displayName?: string | null;
   targetGrowthRate: number;

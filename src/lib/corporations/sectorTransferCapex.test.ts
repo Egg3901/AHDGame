@@ -25,6 +25,15 @@ const midBuild = (over: Partial<SectorPlantFields> = {}): SectorPlantFields => (
 });
 
 describe("mergeSectorPlantFields", () => {
+  it("refuses to merge generic manufacturing capacity with vehicles capacity", () => {
+    expect(() =>
+      mergeSectorPlantFields(
+        { sectorType: "manufacturing", industryModel: null, capitalStock: 25 },
+        { sectorType: "manufacturing", industryModel: "vehicles", capitalStock: 1 }
+      )
+    ).toThrow("different industry models");
+  });
+
   it("seeds canonical count from merged stock instead of adding sub-quantum counts", () => {
     const merged = mergeSectorPlantFields(
       { sectorType: "energy", capitalStock: 100, plantCount: 1, plantUnitRemainder: 0 },

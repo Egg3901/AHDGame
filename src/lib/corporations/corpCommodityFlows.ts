@@ -41,7 +41,7 @@ import type { CommodityType, ExtractableResource } from "@/lib/constants/commodi
 import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
 import {
   applyPlannedEconomyOutputMix,
-  getEffectiveStrategyRates,
+  getEffectiveStrategyRatesForOperatingModel,
   plannedEconomyMediaSupplyFactor,
 } from "@/lib/constants/sectorStrategies";
 import { isPlannedEconomy } from "@/lib/constants/commandEconomy";
@@ -142,6 +142,7 @@ export type FlowSector = Pick<
   | "strategyId"
   | "transitionFromStrategyId"
   | "transitionStartTurn"
+  | "industryModel"
 > & {
   _id?: CorporateSector["_id"];
   /**
@@ -223,12 +224,13 @@ export function computeSectorCommodityUnits(
   // D12: a mothballed plant is cold — it supplies nothing and buys nothing.
   if (plantsEnabled && sector.mothballed === true) return { supply, demand, inMix };
 
-  const rates = getEffectiveStrategyRates(
+  const rates = getEffectiveStrategyRatesForOperatingModel(
     sector.sectorType,
     sector.strategyId ?? "standard",
     sector.transitionFromStrategyId,
     sector.transitionStartTurn,
-    currentTurn
+    currentTurn,
+    sector.industryModel
   );
   // The world ledger treats an unmodified `standard` strategy as the legacy
   // SECTOR_SUPPLY table. Several canonical rates have evolved there without

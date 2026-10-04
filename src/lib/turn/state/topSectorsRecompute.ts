@@ -25,6 +25,7 @@
 import type { Db } from "mongodb";
 import type { CorporationType } from "@/lib/constants/corporations";
 import type { State } from "@/lib/db/types";
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 
 /** How many top sectors to surface per state. */
 const TOP_N = 3;
@@ -36,7 +37,7 @@ export interface TopSectorsRecomputeResult {
 }
 
 interface AggRow {
-  _id: { stateId: string; sectorType: CorporationType };
+  _id: { stateId: string; sectorType: CorporationType; industryModel?: string | null };
   revenue: number;
 }
 
@@ -52,7 +53,11 @@ export async function processTopSectorsRecompute(
     .aggregate<AggRow>([
       {
         $group: {
-          _id: { stateId: "$stateId", sectorType: "$sectorType" },
+          _id: {
+            stateId: "$stateId",
+            sectorType: "$sectorType",
+            industryModel: "$industryModel",
+          },
           revenue: { $sum: "$revenue" },
         },
       },
@@ -62,11 +67,18 @@ export async function processTopSectorsRecompute(
 
   // Group by stateId in memory (already sorted desc by revenue, so the first
   // N entries per state are the top N).
-  const byState = new Map<string, Array<{ sectorType: CorporationType; revenue: number }>>();
+  const byState = new Map<
+    string,
+    Array<{ sectorType: CorporationType; industryModel?: string | null; revenue: number }>
+  >();
   for (const row of rows) {
     const list = byState.get(row._id.stateId) ?? [];
     if (list.length < TOP_N) {
-      list.push({ sectorType: row._id.sectorType, revenue: row.revenue });
+      list.push({
+        sectorType: row._id.sectorType,
+        industryModel: row._id.industryModel,
+        revenue: row.revenue,
+      });
       byState.set(row._id.stateId, list);
     } else if (!byState.has(row._id.stateId)) {
       byState.set(row._id.stateId, list);
@@ -99,11 +111,12 @@ export async function processTopSectorsRecompute(
     const spec = state.sectorSpecializations;
     const sectors = live.map((s) => ({
       sectorType: s.sectorType,
+      ...(s.industryModel != null ? { industryModel: s.industryModel } : {}),
       revenue: s.revenue,
       specializationBonus:
-        spec?.primary === s.sectorType
+        spec?.primary === getOperatingSectorType(s.sectorType, s.industryModel)
           ? ("primary" as const)
-          : spec?.secondary === s.sectorType
+          : spec?.secondary === getOperatingSectorType(s.sectorType, s.industryModel)
             ? ("secondary" as const)
             : null,
     }));

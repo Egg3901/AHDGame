@@ -1257,3 +1257,28 @@ describe("computeRawSupplyDemand — defence output sold to the state", () => {
     expect(supplyOf(computeRawSupplyDemand([plant(-3)]))).toBeCloseTo(none, 6);
   });
 });
+
+describe("manufacturing vehicle ledger compatibility", () => {
+  it("keeps old automobile rows and model-aware manufacturing rows on the same recipes", () => {
+    const legacy = {
+      sectorType: "automobiles",
+      revenue: 125_000,
+      stateId: "MI",
+      strategyId: "ev",
+      transitionFromStrategyId: "standard",
+      transitionStartTurn: 100,
+    };
+    const converted = {
+      ...legacy,
+      sectorType: "manufacturing",
+      industryModel: "vehicles",
+    };
+
+    const oldLedger = computeRawSupplyDemand([legacy], undefined, undefined, 106);
+    const modeledLedger = computeRawSupplyDemand([converted], undefined, undefined, 106);
+    expect([...modeledLedger.byState.get("MI")!.entries()]).toEqual([
+      ...oldLedger.byState.get("MI")!.entries(),
+    ]);
+    expect([...modeledLedger.global.entries()]).toEqual([...oldLedger.global.entries()]);
+  });
+});

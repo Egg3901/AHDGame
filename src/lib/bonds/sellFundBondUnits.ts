@@ -92,7 +92,11 @@ export async function sellFundBondHoldingsForCash(
     const release = await db
       .collection<Bond>("bonds")
       .updateOne(
-        { _id: bond._id, holders: { $elemMatch: { fundId: fund._id, units: { $gte: units } } } },
+        {
+          _id: bond._id,
+          sovereignMaturityClaim: { $exists: false },
+          holders: { $elemMatch: { fundId: fund._id, units: { $gte: units } } },
+        },
         { $inc: { "holders.$.units": -units, publicFloat: units }, $set: { updatedAt: now } }
       );
     if (release.modifiedCount === 0) {

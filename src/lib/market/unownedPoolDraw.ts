@@ -47,6 +47,7 @@ export interface UnownedPoolBucket {
   stateId: string;
   countryId: string;
   sectorType: CorporationType;
+  industryModel?: string | null;
 }
 
 /**
@@ -63,7 +64,7 @@ export function unownedPoolDeltaPipeline(
   now: Date,
   eraUnitScale: number
 ): object[] {
-  const { stateId, countryId, sectorType } = bucket;
+  const { stateId, countryId, sectorType, industryModel } = bucket;
   return [
     {
       $set: {
@@ -73,16 +74,22 @@ export function unownedPoolDeltaPipeline(
         stateId: { $ifNull: ["$stateId", stateId] },
         countryId: { $ifNull: ["$countryId", countryId] },
         sectorType: { $ifNull: ["$sectorType", sectorType] },
+        industryModel: { $ifNull: ["$industryModel", industryModel ?? null] },
         createdAt: { $ifNull: ["$createdAt", now] },
         headroomUnits: {
-          $max: [0, { $add: [unownedHeadroomBaseExpr(sectorType, eraUnitScale), deltaUnits] }],
+          $max: [
+            0,
+            {
+              $add: [unownedHeadroomBaseExpr(sectorType, eraUnitScale, industryModel), deltaUnits],
+            },
+          ],
         },
         updatedAt: now,
       },
     },
     // Own stage: it must read the POST-write units, which are only visible to a
     // later stage.
-    { $set: unownedPoolTrailingSet(sectorType, true, eraUnitScale) },
+    { $set: unownedPoolTrailingSet(sectorType, true, eraUnitScale, industryModel) },
   ];
 }
 

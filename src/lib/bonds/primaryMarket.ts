@@ -338,7 +338,11 @@ export async function placeUnsoldBondUnits(
     advanceBondPoolSnapshot(poolByCurrency, currency, -paid);
     const face = units * BOND_UNIT_FACE_VALUE;
     const claim = await db.collection<Bond>("bonds").updateOne(
-      { _id: bond._id, unsoldUnits: { $gte: units } },
+      {
+        _id: bond._id,
+        unsoldUnits: { $gte: units },
+        sovereignMaturityClaim: { $exists: false },
+      },
       {
         $inc: { unsoldUnits: -units, publicFloat: units, totalIssued: face },
         $set: { updatedAt: now },
@@ -443,7 +447,11 @@ export async function monetizeUnsoldSovereignUnits(
     [
       {
         collection: "bonds",
-        filter: { _id: bond._id, unsoldUnits: { $gte: args.units } },
+        filter: {
+          _id: bond._id,
+          unsoldUnits: { $gte: args.units },
+          sovereignMaturityClaim: { $exists: false },
+        },
         update: {
           $inc: { unsoldUnits: -args.units, centralBankHoldings: args.units, totalIssued: face },
           $set: {

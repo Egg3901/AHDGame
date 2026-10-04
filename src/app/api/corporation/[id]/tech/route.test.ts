@@ -85,6 +85,26 @@ describe("GET /api/corporation/[id]/tech", () => {
     });
   });
 
+  it("serves the automobile tech lane for a manufacturing vehicle corporation", async () => {
+    const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
+    vi.mocked(resolveCorporation).mockResolvedValue({
+      ok: true,
+      corporation: makeCorp({ type: "manufacturing", industryModel: "vehicles" }),
+    } as never);
+
+    const { GET } = await import("./route");
+    const res = await GET(new Request("http://localhost/api/corporation/x/tech"), {
+      params: Promise.resolve({ id: corpId.toString() }),
+    });
+    const body = await res.json();
+    const decade1979 = body.decades.find((d: { id: string }) => d.id === "1979");
+
+    expect(body.sectorType).toBe("automobiles");
+    expect(
+      decade1979.lanes.sector.some((node: { id: string }) => node.id.startsWith("automobiles-"))
+    ).toBe(true);
+  });
+
   it("does not lock either lane in a past decade the corp committed a lane in (ticket #0869)", async () => {
     const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
     vi.mocked(resolveCorporation).mockResolvedValue({

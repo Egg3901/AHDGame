@@ -169,6 +169,7 @@ async function absorbSectorIntoNatCorp(
     corporationId: destId,
     stateId: sector.stateId,
     sectorType: sector.sectorType,
+    industryModel: sector.industryModel ?? null,
   });
   if (existing && !existing._id.equals(sector._id)) {
     // MERGE: the donor row is DELETED below, so anything not folded into the
@@ -180,7 +181,7 @@ async function absorbSectorIntoNatCorp(
       ? mergeSectorPlantFields(readSectorPlantFields(existing), {
           ...readSectorPlantFields(sector),
           capitalStock: haircutStock,
-          ...seedPlantLedger(sector.sectorType, haircutStock),
+          ...seedPlantLedger(sector.sectorType, haircutStock, sector.industryModel),
           capacityBookAnchor: haircutBook,
         })
       : null;
@@ -231,7 +232,9 @@ async function absorbSectorIntoNatCorp(
           corporationId: destId,
           revenue: transferRevenue,
           ...(plantsEnabled ? { capitalStock: haircutStock } : {}),
-          ...(plantsEnabled ? seedPlantLedger(sector.sectorType, haircutStock) : {}),
+          ...(plantsEnabled
+            ? seedPlantLedger(sector.sectorType, haircutStock, sector.industryModel)
+            : {}),
           ...(plantsEnabled && haircutBook != null ? { capacityBookAnchor: haircutBook } : {}),
           absorbedAtTurn,
           nationalizedAtTurn: absorbedAtTurn,
@@ -306,7 +309,8 @@ async function releaseSectorToUnowned(
             revenuePerCapacityUnitForStrategy(
               sector.sectorType as CorporationType,
               sector.strategyId,
-              eraUnitScale
+              eraUnitScale,
+              sector.industryModel
             )
         )
       )
@@ -339,7 +343,8 @@ async function releaseSectorToUnowned(
     // cannot disagree because they no longer each spell the write out.
     const unitsPerAnchor = unownedHeadroomUnitsPerAnchor(
       sector.sectorType as CorporationType,
-      eraUnitScale
+      eraUnitScale,
+      sector.industryModel
     );
     const sectorType = sector.sectorType as CorporationType;
     const creditField = unownedPoolLeadingField(plantsEnabled);
@@ -358,7 +363,13 @@ async function releaseSectorToUnowned(
       .findOne({ _id: sector.stateId }, { projection: { countryId: 1 } });
     const releaseCountryId = releaseState?.countryId ?? sector.countryId;
     await db.collection<UnownedSector>("unownedSectors").updateOne(
-      { stateId: sector.stateId, sectorType: sector.sectorType },
+      {
+        stateId: sector.stateId,
+        sectorType: sector.sectorType,
+        ...(sector.industryModel != null || sector.sectorType === "manufacturing"
+          ? { industryModel: sector.industryModel ?? null }
+          : {}),
+      },
       [
         {
           $set: {
@@ -366,17 +377,32 @@ async function releaseSectorToUnowned(
             stateId: { $ifNull: ["$stateId", sector.stateId] },
             countryId: { $ifNull: ["$countryId", releaseCountryId] },
             sectorType: { $ifNull: ["$sectorType", sector.sectorType] },
+            ...(sector.industryModel != null || sector.sectorType === "manufacturing"
+              ? { industryModel: { $ifNull: ["$industryModel", sector.industryModel ?? null] } }
+              : {}),
             createdAt: { $ifNull: ["$createdAt", now] },
             [creditField]: {
               $add: [
-                unownedPoolCreditBaseExpr(sectorType, plantsEnabled, eraUnitScale),
+                unownedPoolCreditBaseExpr(
+                  sectorType,
+                  plantsEnabled,
+                  eraUnitScale,
+                  sector.industryModel
+                ),
                 creditAmount,
               ],
             },
             updatedAt: now,
           },
         },
-        { $set: unownedPoolTrailingSet(sectorType, plantsEnabled, eraUnitScale) },
+        {
+          $set: unownedPoolTrailingSet(
+            sectorType,
+            plantsEnabled,
+            eraUnitScale,
+            sector.industryModel
+          ),
+        },
       ],
       { upsert: true }
     );
@@ -432,11 +458,14 @@ export async function nationalizeSector(
 
   // Route to the NatCorp that owns this sector type (split-off if one claims it,
   // else the primary). Future takings of a split-off type land in the right corp.
-  const nationalCorp = await resolveNationalCorporationForSector(
-    db,
-    params.countryId,
-    sector.sectorType
-  );
+  const nationalCorp = sector.industryModel
+    ? await resolveNationalCorporationForSector(
+        db,
+        params.countryId,
+        sector.sectorType,
+        sector.industryModel
+      )
+    : await resolveNationalCorporationForSector(db, params.countryId, sector.sectorType);
 
   // Valuation in ₳ via the canonical sector NPV (going-concern, growth-cost-net).
   const [centralBanks, fxByCurrency, donorFxRate, marketMode, gameState] = await Promise.all([
@@ -777,11 +806,19 @@ export async function nationalizeWholeCorp(
 
   const destByType = new Map<string, ObjectId>();
   for (const s of domesticSectors) {
-    let destId = destByType.get(s.sectorType);
+    const modelKey = `${s.sectorType}:${s.industryModel ?? ""}`;
+    let destId = destByType.get(modelKey);
     if (!destId) {
-      const dest = await resolveNationalCorporationForSector(db, params.countryId, s.sectorType);
+      const dest = s.industryModel
+        ? await resolveNationalCorporationForSector(
+            db,
+            params.countryId,
+            s.sectorType,
+            s.industryModel
+          )
+        : await resolveNationalCorporationForSector(db, params.countryId, s.sectorType);
       destId = dest._id;
-      destByType.set(s.sectorType, destId);
+      destByType.set(modelKey, destId);
     }
     await absorbSectorIntoNatCorp(
       db,

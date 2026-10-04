@@ -9,6 +9,7 @@ import {
 } from "@/lib/constants/techTree";
 import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
 import type { TechUnlockLedgerInput } from "@/lib/corporations/techTree/techUnlockLedger";
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 
 /**
  * Pick one deterministic, affordable node per turn. Sector-lane nodes win ties
@@ -25,7 +26,9 @@ export function pickBestNppTechNode(
     0,
     (corp.liquidCapital ?? 0) - Math.max(0, options.cashReserve ?? 0)
   );
-  const candidates = getTreeForType(corp.type)
+  const candidates = getTreeForType(
+    getOperatingSectorType(corp.type, corp.industryModel) as Corporation["type"]
+  )
     .map((node) => ({ node, cashCost: techNodeCashCost(node, dailyGrossRevenue) }))
     .filter(
       ({ node, cashCost }) =>

@@ -135,6 +135,7 @@ export interface NppPlantsContext {
   nationalShareOf?: (
     corporationId: ObjectId,
     countryId: string,
-    sectorType: CorporationType
+    sectorType: CorporationType,
+    industryModel?: string | null
   ) => number;
 }

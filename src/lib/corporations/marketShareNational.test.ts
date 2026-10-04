@@ -45,8 +45,17 @@ describe("fetchCorporationNationalSectorSharesByCountry", () => {
       {
         stateId: { $in: ["US-TX", "US-CA"] },
         sectorType: "logistics",
+        industryModel: null,
       },
-      { projection: { corporationId: 1, stateId: 1, sectorType: 1, revenue: 1 } }
+      {
+        projection: {
+          corporationId: 1,
+          stateId: 1,
+          sectorType: 1,
+          industryModel: 1,
+          revenue: 1,
+        },
+      }
     );
   });
 
@@ -73,6 +82,45 @@ describe("fetchCorporationNationalSectorSharesByCountry", () => {
     expect(
       shares.get(corporationNationalSectorShareKey(corporationId, "US", "logistics"))
     ).toBeCloseTo(40, 8);
+  });
+
+  it("keeps generic manufacturing and vehicle-model national shares separate", () => {
+    const corporationId = new ObjectId();
+    const rivalId = new ObjectId();
+    const shares = buildCorporationNationalRevenueShareByMarket([
+      {
+        corporationId,
+        countryId: "US",
+        stateId: "US-MI",
+        sectorType: "manufacturing",
+        industryModel: "vehicles",
+        revenue: 300,
+      },
+      {
+        corporationId: rivalId,
+        countryId: "US",
+        stateId: "US-TX",
+        sectorType: "manufacturing",
+        industryModel: "vehicles",
+        revenue: 700,
+      },
+      {
+        corporationId,
+        countryId: "US",
+        stateId: "US-NY",
+        sectorType: "manufacturing",
+        revenue: 1_000,
+      },
+    ] as CorporateSector[]);
+
+    expect(
+      shares.get(
+        corporationNationalSectorShareKey(corporationId, "US", "manufacturing", "vehicles")
+      )
+    ).toBe(30);
+    expect(
+      shares.get(corporationNationalSectorShareKey(corporationId, "US", "manufacturing"))
+    ).toBe(100);
   });
 
   it("keeps legacy rows that can inherit a country from their state siblings", () => {

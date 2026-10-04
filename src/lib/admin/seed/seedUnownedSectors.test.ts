@@ -165,4 +165,30 @@ describe("seedUnownedSectors refresh mode", () => {
     const writeOrder = db.collectionMocks.unownedSectors.bulkWrite.mock.invocationCallOrder[0];
     expect(indexOrder).toBeLessThan(writeOrder);
   });
+
+  it("seeds vehicle markets beside generic manufacturing on the registered unique index", async () => {
+    await seedUnownedSectors(
+      db as unknown as Db,
+      () => {},
+      1,
+      "1991-default",
+      true,
+      undefined,
+      true
+    );
+    const operations = bulkOps(db.collectionMocks.unownedSectors.bulkWrite);
+    const generic = operations.find(
+      ([filter]) => filter.sectorType === "manufacturing" && filter.industryModel === null
+    );
+    const vehicles = operations.find(
+      ([filter]) => filter.sectorType === "manufacturing" && filter.industryModel === "vehicles"
+    );
+
+    expect(generic).toBeDefined();
+    expect(vehicles).toBeDefined();
+    expect(db.collectionMocks.unownedSectors.createIndex).toHaveBeenCalledWith(
+      { stateId: 1, sectorType: 1, industryModel: 1 },
+      { name: "unowned_state_type_model_unique", unique: true, background: true }
+    );
+  });
 });

@@ -98,6 +98,7 @@ export async function shedSectorsForCorps(
     {
       stateId: string;
       sectorType: string;
+      industryModel: string | null;
       countryId: CountryId;
       revenue: number;
       /** Capacity units freed to the pool (plants only; 0 otherwise). */
@@ -190,7 +191,7 @@ export async function shedSectorsForCorps(
         const nextBook = priorBook != null ? priorBook * remainingFraction : null;
 
         s.capitalStock = stock - shedUnits;
-        const plantLedger = seedPlantLedger(s.sectorType, s.capitalStock);
+        const plantLedger = seedPlantLedger(s.sectorType, s.capitalStock, s.industryModel);
         s.workers = workers - shedWorkers;
         if (nextBook != null) s.capacityBookAnchor = nextBook;
         s.updatedAt = now;
@@ -212,7 +213,10 @@ export async function shedSectorsForCorps(
           },
         });
 
-        if (shedUnits > 0 && !stateControlled.has(bucketKey(s.stateId, s.sectorType))) {
+        if (
+          shedUnits > 0 &&
+          !stateControlled.has(bucketKey(s.stateId, s.sectorType, s.industryModel))
+        ) {
           // Corp units and pool units are BOTH "output units/day", but each is
           // priced by its own mix: the corp's at its live `strategyId`, the pool
           // at the sector type's default mix (unowned docs carry no strategy).
@@ -224,12 +228,18 @@ export async function shedSectorsForCorps(
             revenuePerCapacityUnitForStrategy(
               s.sectorType as CorporationType,
               s.strategyId,
-              lookups.eraUnitScale
+              lookups.eraUnitScale,
+              s.industryModel
             );
           const poolUnits =
             nameplateAnchor *
-            unownedHeadroomUnitsPerAnchor(s.sectorType as CorporationType, lookups.eraUnitScale);
-          const key = `${s.stateId}\0${s.sectorType}`;
+            unownedHeadroomUnitsPerAnchor(
+              s.sectorType as CorporationType,
+              lookups.eraUnitScale,
+              s.industryModel
+            );
+          const industryModel = s.industryModel ?? null;
+          const key = `${s.stateId}\0${s.sectorType}\0${industryModel ?? ""}`;
           // Host country, not a hardcoded one: the pool row this creates carries
           // a countryId every reader filters on (ticket #1271).
           const countryId = (lookups.stateCountryMap.get(s.stateId) ?? s.countryId) as CountryId;
@@ -239,6 +249,7 @@ export async function shedSectorsForCorps(
             unownedDeltas.set(key, {
               stateId: s.stateId,
               sectorType: s.sectorType,
+              industryModel,
               countryId,
               revenue: 0,
               units: poolUnits,
@@ -264,7 +275,10 @@ export async function shedSectorsForCorps(
         },
       });
 
-      if (shedRev > 0 && !stateControlled.has(bucketKey(s.stateId, s.sectorType))) {
+      if (
+        shedRev > 0 &&
+        !stateControlled.has(bucketKey(s.stateId, s.sectorType, s.industryModel))
+      ) {
         // shedRev is in the sector's host-state currency; convert to the
         // ₳-native unowned pool at the host rate, not the owning corp's.
         const shedRevAnchor = readCorpEconomicAnchor(
@@ -272,7 +286,8 @@ export async function shedSectorsForCorps(
           resolveSectorHostCurrencyCode(s, null),
           fxRateForSectorHostFromMap(s, null, lookups.exchangeRatesByCurrency)
         );
-        const key = `${s.stateId}\0${s.sectorType}`;
+        const industryModel = s.industryModel ?? null;
+        const key = `${s.stateId}\0${s.sectorType}\0${industryModel ?? ""}`;
         // The pool row this shed creates carries a countryId every reader
         // filters on, so it is the country the STATE is in and never a
         // hardcoded one (ticket #1271: the same defect `buildCapacity`,
@@ -286,6 +301,7 @@ export async function shedSectorsForCorps(
           unownedDeltas.set(key, {
             stateId: s.stateId,
             sectorType: s.sectorType,
+            industryModel,
             countryId,
             revenue: shedRevAnchor,
             units: 0,
@@ -309,7 +325,14 @@ export async function shedSectorsForCorps(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const unownedOps: any[] = [];
 
-  for (const { stateId, sectorType, countryId, revenue, units } of unownedDeltas.values()) {
+  for (const {
+    stateId,
+    sectorType,
+    industryModel,
+    countryId,
+    revenue,
+    units,
+  } of unownedDeltas.values()) {
     if (plantsEnabled) {
       // Units are AUTHORITATIVE on the pool under plants, and `revenue` is the
       // derived display/legacy-reader value — the mirror image of the owned
@@ -322,13 +345,20 @@ export async function shedSectorsForCorps(
       // missing field, and the two fields cannot drift.
       unownedOps.push({
         updateOne: {
-          filter: { stateId, sectorType },
+          filter: {
+            stateId,
+            sectorType,
+            ...(industryModel != null || sectorType === "manufacturing" ? { industryModel } : {}),
+          },
           update: [
             {
               $set: {
                 stateId: { $ifNull: ["$stateId", stateId] },
                 countryId: { $ifNull: ["$countryId", countryId] },
                 sectorType: { $ifNull: ["$sectorType", sectorType] },
+                ...(industryModel != null || sectorType === "manufacturing"
+                  ? { industryModel: { $ifNull: ["$industryModel", industryModel] } }
+                  : {}),
                 createdAt: { $ifNull: ["$createdAt", now] },
                 updatedAt: now,
                 headroomUnits: {
@@ -336,7 +366,8 @@ export async function shedSectorsForCorps(
                     unownedPoolCreditBaseExpr(
                       sectorType as CorporationType,
                       true,
-                      lookups.eraUnitScale
+                      lookups.eraUnitScale,
+                      industryModel
                     ),
                     units,
                   ],
@@ -347,7 +378,8 @@ export async function shedSectorsForCorps(
               $set: unownedPoolTrailingSet(
                 sectorType as CorporationType,
                 true,
-                lookups.eraUnitScale
+                lookups.eraUnitScale,
+                industryModel
               ),
             },
           ],
@@ -359,7 +391,11 @@ export async function shedSectorsForCorps(
 
     unownedOps.push({
       updateOne: {
-        filter: { stateId, sectorType },
+        filter: {
+          stateId,
+          sectorType,
+          ...(industryModel != null || sectorType === "manufacturing" ? { industryModel } : {}),
+        },
         update: {
           $inc: { revenue },
           $set: { updatedAt: now },
@@ -368,6 +404,7 @@ export async function shedSectorsForCorps(
             stateId,
             countryId,
             sectorType: sectorType as UnownedSector["sectorType"],
+            ...(industryModel != null || sectorType === "manufacturing" ? { industryModel } : {}),
             createdAt: now,
           },
         },

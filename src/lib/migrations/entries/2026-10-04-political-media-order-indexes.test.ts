@@ -13,7 +13,7 @@ describe("political media order index migration", () => {
     const result = await migration.execute(db, { dryRun: true });
 
     expect(createIndex).not.toHaveBeenCalled();
-    expect(result.documentsScanned).toBe(2);
+    expect(result.documentsScanned).toBe(POLITICAL_MEDIA_ORDER_INDEXES.length);
     expect(result.documentsUpdated).toBe(0);
     expect(result.notes).toEqual(
       POLITICAL_MEDIA_ORDER_INDEXES.map(

@@ -27,4 +27,13 @@ export const POLITICAL_MEDIA_ORDER_INDEXES: readonly PoliticalMediaIndexSpec[] =
       partialFilterExpression: { kind: POLITICAL_MEDIA_ORDER_KIND },
     },
   },
+  {
+    collection: "bankMoneyMoves",
+    keys: { turn: 1, status: 1 },
+    options: {
+      name: "bankMoneyMoves_politicalMedia_sellerReceiptTurn",
+      background: true,
+      partialFilterExpression: { kind: "political-media-seller-receipt" },
+    },
+  },
 ];

@@ -241,12 +241,16 @@ export async function loadCorporationDetailView(args: {
       tickerSymbol: corporation.tickerSymbol ?? undefined,
       description: corporation.description,
       type: corporation.type,
+      industryModel: corporation.industryModel ?? null,
       countryId: corporation.countryId,
       secondaryType: corporation.secondaryType ?? null,
       typeSwitchCooldownUntilTurn: corporation.typeSwitchCooldownUntilTurn ?? null,
       typeSwitchTurn: corporation.typeSwitchTurn ?? null,
       currentTurn,
-      typeLabel: CORPORATION_TYPE_LABELS[corporation.type],
+      typeLabel:
+        corporation.type === "manufacturing" && corporation.industryModel === "vehicles"
+          ? "Vehicle manufacturing"
+          : CORPORATION_TYPE_LABELS[corporation.type],
       headquartersState: corporation.headquartersState,
       federationPendingHeadquartersId: corporation.federationPendingHeadquartersId,
       headquartersStateName:
