@@ -7,6 +7,11 @@
  * carries a 48-turn timeout — if the leader doesn't act before then,
  * the per-stage default-option fires through the registry (Phase 4).
  */
+import {
+  decisionLeaderReference,
+  leaderStateIdentity,
+  type LeaderReference,
+} from "@/lib/government/leaderReference";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
@@ -22,7 +27,7 @@ export const DECISION_TIMEOUT_TURNS = 48;
 
 export interface OfferDecisionInput {
   kind: DecisionKind;
-  leaderCharacterId: ObjectId;
+  leaderCharacterId: LeaderReference;
   offeredAtTurn: number;
   payload: Record<string, unknown>;
 }
@@ -48,7 +53,7 @@ export async function offerDecision(
     kind: input.kind,
     offeredAtTurn: input.offeredAtTurn,
     expiresAtTurn: input.offeredAtTurn + DECISION_TIMEOUT_TURNS,
-    leaderCharacterId: input.leaderCharacterId,
+    ...leaderStateIdentity(input.leaderCharacterId),
     payload: input.payload,
   };
 
@@ -97,7 +102,7 @@ export async function resolveActiveDecision(
       countryId,
       currentTurn,
       decision: state.activeDecision,
-      leaderCharacterId: state.activeDecision.leaderCharacterId,
+      leaderCharacterId: decisionLeaderReference(state.activeDecision),
     },
     optionId
   );

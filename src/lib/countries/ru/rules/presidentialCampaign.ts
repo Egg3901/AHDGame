@@ -7,5 +7,9 @@ export function usesLegacyPresidentialCampaign(election: {
   electionType: string;
   countryId?: string | null;
 }): boolean {
-  return election.electionType === "president" && election.countryId !== "RU";
+  return (
+    election.electionType === "president" &&
+    election.countryId !== "RU" &&
+    election.countryId !== "BR"
+  );
 }

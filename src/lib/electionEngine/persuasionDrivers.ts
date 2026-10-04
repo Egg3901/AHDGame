@@ -24,6 +24,7 @@
  * The returned value is the sum of components clamped to `[-1, +1]`.
  */
 
+import { executiveIncumbencyBudget } from "@/lib/government/rules/accountability";
 import type { EnrichedCandidate, DistributeVotesOptions } from "./types";
 
 /**
@@ -42,9 +43,10 @@ import type { EnrichedCandidate, DistributeVotesOptions } from "./types";
  *     cut significantly; the per-state median voter (M-phase) makes
  *     the remaining magnitude more honest.
  *   - Money (0.20): diminishing returns; capped per log-ratio shape.
- *   - Incumbency (0.10): smallest; matches research on incumbent edge.
+ *   - Incumbency: successful executive shield up to 0.10; failed executive
+ *     drag up to 0.20, continuing to worsen below 36 approval.
  *
- * Sum: 0.75 — leaves the aggregate `[-1, +1]` clamp as a safety rail
+ * Maximum magnitude: 0.85, leaving the aggregate `[-1, +1]` clamp as a safety rail
  * that activates only on driver pile-on, not by structural design.
  * (Presidential coattails are no longer a persuasion driver — they apply
  * as a nominal-share multiplier; see `presidentialCoattail.ts`.)
@@ -69,9 +71,9 @@ export const INCUMBENCY_BUDGET = 0.1 as const;
 // shield and only the weakest (~44-46) tip into mild drag.
 export const INCUMBENCY_APPROVAL_PIVOT = 46 as const;
 export const INCUMBENCY_SHIELD_MAX = 0.1 as const;
-// Symmetric with the shield: incumbency should not penalize an unpopular
-// incumbent harder than it rewards a popular one (was 0.15). (#2899)
-export const INCUMBENCY_DRAG_MAX = 0.1 as const;
+// Severe failure continues beyond the initial drag; the full driver budget
+// remains below one even at the 0.2 maximum.
+export const INCUMBENCY_DRAG_MAX = 0.2 as const;
 export const INCUMBENCY_APPROVAL_SLOPE = 0.01 as const;
 
 /**
@@ -109,11 +111,7 @@ export function approvalAdjustedIncumbencyBudget(
     pivotOverride != null && Number.isFinite(pivotOverride)
       ? pivotOverride
       : INCUMBENCY_APPROVAL_PIVOT;
-  const a = clamp(approval, 0, 100);
-  if (a >= pivot) {
-    return Math.min(INCUMBENCY_SHIELD_MAX, (a - pivot) * INCUMBENCY_APPROVAL_SLOPE);
-  }
-  return -Math.min(INCUMBENCY_DRAG_MAX, (pivot - a) * INCUMBENCY_APPROVAL_SLOPE);
+  return executiveIncumbencyBudget(approval, pivot);
 }
 
 /**

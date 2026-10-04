@@ -11,7 +11,8 @@
  * Phase 4 will add Stage 3 auto-faction-split firing here (before step 5);
  * Phase 6 wires the `conventionInProgress` flag + Stage 4 conversion.
  */
-import type { Db, ObjectId } from "mongodb";
+import type { LeaderReference } from "@/lib/government/leaderReference";
+import type { Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import { getRegimeEscalationCollection } from "@/lib/db/collections/regimeEscalation";
 import type {
@@ -34,7 +35,7 @@ export interface EscalationTurnInputs {
   countryId: CountryId;
   popularLegitimacy: number;
   partyConfidence: number;
-  rulingLeaderCharacterId: ObjectId;
+  rulingLeaderCharacterId: LeaderReference;
   currentTurn: number;
 }
 

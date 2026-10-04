@@ -1,3 +1,4 @@
+import { migration as governmentAccountability } from "./entries/2026-10-04-government-accountability";
 // Central registry of deployable migrations, in chronological order. Each
 // entry's id is stable forever (used as the _id of the migrationsRun marker)
 // and `idempotent` must reflect actual runtime safety.
@@ -321,6 +322,7 @@ export const MIGRATIONS: Migration[] = [
   // Metadata only. Deploy this backfill before relying on charter epoch reads;
   // the runtime also dual-reads untagged legacy rows during rollout.
   bankLoanCharterEpoch,
+  governmentAccountability,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.

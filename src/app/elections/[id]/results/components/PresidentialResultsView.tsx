@@ -69,6 +69,7 @@ export function PresidentialResultsView({ data }: { data: ElectionResultsRespons
 
   return (
     <div className="space-y-4">
+      {election.ballotLabel && <p className="text-sm text-muted">{election.ballotLabel}</p>}
       {election.totalEv ? (
         <div className="rounded-xl border border-card-border bg-card p-5">
           <div className="mb-3 flex items-baseline justify-between gap-2">
@@ -100,7 +101,7 @@ export function PresidentialResultsView({ data }: { data: ElectionResultsRespons
 
       <CandidateTotalsPanel
         candidates={candidates}
-        mode="ev"
+        mode={election.totalEv ? "ev" : "votes"}
         projectedWinner={summary.projectedWinner}
       />
 
@@ -117,7 +118,7 @@ export function PresidentialResultsView({ data }: { data: ElectionResultsRespons
                   unit={unit}
                   candidatesById={candidatesById}
                   index={i}
-                  weightLabel="EV"
+                  weightLabel={election.totalEv ? "EV" : ""}
                 />
               ))}
             </div>

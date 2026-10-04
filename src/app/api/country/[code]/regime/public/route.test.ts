@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { ObjectId } from "mongodb";
 
 const mockGetDb = vi.fn();
+const mockFormationFindOne = vi.fn();
 const mockGetCountryState = vi.fn();
 const mockGetRegimeColl = vi.fn();
 const mockGetLeaderColl = vi.fn();
@@ -9,6 +11,9 @@ const mockLeaderFindOne = vi.fn();
 const mockGetHog = vi.fn();
 
 vi.mock("@/lib/mongodb", () => ({ getDb: () => mockGetDb() }));
+vi.mock("@/lib/db/collections/governmentFormation", () => ({
+  getGovernmentFormationsCollection: () => ({ findOne: mockFormationFindOne }),
+}));
 vi.mock("@/lib/countryState", () => ({
   getCountryState: (...args: unknown[]) => mockGetCountryState(...args),
 }));
@@ -31,6 +36,7 @@ function request(): Request {
 describe("GET /api/country/[code]/regime/public", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockFormationFindOne.mockResolvedValue(null);
     mockGetDb.mockResolvedValue({});
     mockGetRegimeColl.mockReturnValue({ findOne: mockRegimeFindOne });
     mockGetLeaderColl.mockReturnValue({ findOne: mockLeaderFindOne });
@@ -68,6 +74,17 @@ describe("GET /api/country/[code]/regime/public", () => {
     const json = (await res.json()) as Record<string, unknown>;
     expect(json.band).toBe("discontent"); // 42 is in 36..74 band
     expect(json).not.toHaveProperty("popularLegitimacy");
+  });
+
+  it("resolves the current NPP identity without using a former player's party row", async () => {
+    const nppId = new ObjectId();
+    mockGetCountryState.mockResolvedValue({ countryId: "CN", governmentType: "onePartyState", rulingPartyId: 1 });
+    mockFormationFindOne.mockResolvedValue({ pmCharacterId: null, pmNppId: nppId });
+    mockLeaderFindOne.mockResolvedValue(null);
+    const res = await GET(request(), { params: Promise.resolve({ code: "CN" }) });
+    expect(res.status).toBe(200);
+    expect(mockLeaderFindOne).toHaveBeenCalledExactlyOnceWith({ countryId: "CN", leaderCharacterId: null, leaderNppId: nppId });
+    expect((await res.json()).band).toBe("strong");
   });
 
   it("flags under-strain at internalChallenge / collapse", async () => {

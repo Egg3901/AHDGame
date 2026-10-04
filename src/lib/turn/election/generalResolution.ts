@@ -146,6 +146,24 @@ export async function resolveOneGeneralElection(
       (election.countryId !== "IE" || !["dail", "localCouncil"].includes(election.electionType))
     )
       throw new Error("Ranked PR-STV is supported only for Irish Dail and local council races");
+    if (election.countryId === "BR" && election.electionType === "president") {
+      const { resolveBrazilPresidentialElection } =
+        await import("@/lib/countries/br/resolvePresidentialElection");
+      const resolved = await resolveBrazilPresidentialElection(
+        db,
+        election,
+        tally,
+        now,
+        currentTurn
+      );
+      if (resolved) {
+        await db
+          .collection<Election>("elections")
+          .updateOne({ _id: election._id }, { $set: { status: "resolved", updatedAt: now } });
+        await voidDebateSessionsForElection(db, election._id, now);
+      }
+      return { resolved, newsOutcomes: [] };
+    }
     if (tally?.countingMethod === "pr_stv" && election.conversionTerms)
       throw new Error(
         "Ranked PR-STV does not support conversion vote penalties or reserved seat floors"

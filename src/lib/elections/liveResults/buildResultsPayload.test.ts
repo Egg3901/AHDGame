@@ -7,17 +7,74 @@
  * dropped because they are per-request rather than settled.
  */
 import { describe, it, expect, vi } from "vitest";
-import { ObjectId } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
+import { createMockDb } from "@/lib/test-utils/mockDb";
+import type { Election, GameState } from "@/lib/db/types";
 
 vi.mock("@/lib/elections/liveResults/electionNight", () => ({
   buildNationalElectionNight: vi.fn().mockResolvedValue(null),
 }));
 
-import { snapshotFromPayload, payloadFromSnapshot } from "./buildResultsPayload";
+import {
+  buildResultsPayload,
+  snapshotFromPayload,
+  payloadFromSnapshot,
+} from "./buildResultsPayload";
 import type { ElectionResultsResponse } from "./types";
 import type { ElectionResultSnapshot } from "@/lib/db/types/electionResultSnapshot";
 
 const ELECTION_OID = new ObjectId();
+
+describe("certified Brazil results", () => {
+  it("keeps a first-round plurality uncalled until the fresh runoff has a winner", async () => {
+    const mock = createMockDb();
+    const candidates = [new ObjectId(), new ObjectId(), new ObjectId()];
+    mock
+      .collection("electionCandidates")
+      .find()
+      .toArray.mockResolvedValue(
+        candidates.map((id, i) => ({
+          _id: id,
+          party: String(i),
+          characterName: `Candidate ${i}`,
+          status: "active",
+        }))
+      );
+    mock.collection("electionVoteTallies").findOne.mockResolvedValue({
+      totalVotes: Object.fromEntries(candidates.map((id, i) => [String(id), [40, 35, 25][i]])),
+      brazilPresidentialResult: {
+        outcome: "runoff",
+        finalistIds: candidates.slice(0, 2).map(String),
+      },
+    });
+    const race = {
+      _id: ELECTION_OID,
+      countryId: "BR",
+      electionType: "president",
+      state: "BR",
+      status: "resolved",
+      totalSeats: 1,
+    } as Election;
+    const payload = await buildResultsPayload(
+      mock as unknown as Db,
+      race,
+      { currentTurn: 100 } as GameState,
+      { isAdmin: false }
+    );
+    expect(payload.summary.projectedWinner).toBeNull();
+    mock.collection("electionVoteTallies").findOne.mockResolvedValue({
+      totalVotes: { [String(candidates[0])]: 49, [String(candidates[1])]: 51 },
+      brazilPresidentialResult: { outcome: "won", winnerId: String(candidates[1]) },
+    });
+    const final = await buildResultsPayload(
+      mock as unknown as Db,
+      { ...race, brazilPresidentialRound: 2 },
+      { currentTurn: 124 } as GameState,
+      { isAdmin: false }
+    );
+    expect(final.summary.projectedWinner).toBe(String(candidates[1]));
+  });
+});
 
 const election = {
   _id: ELECTION_OID,

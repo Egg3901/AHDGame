@@ -156,7 +156,10 @@ describe("processActionRefresh", () => {
             }),
           };
         }
+        if (name === "governmentAccountability")
+          return { find: vi.fn().mockReturnValue({ toArray: async () => [] }), bulkWrite: vi.fn() };
         return {
+          find: vi.fn().mockReturnValue({ toArray: async () => [] }),
           bulkWrite: mockBulkWrite,
           findOne: vi.fn().mockResolvedValue(null),
           insertOne: vi.fn().mockResolvedValue(undefined),
@@ -748,7 +751,7 @@ describe("processActionRefresh", () => {
     await processActionRefresh([], null, new Date());
 
     const update = mockNppBulkWrite.mock.calls.at(-1)![0][0].updateOne.update.$set;
-    expect(update.favorability).toBeCloseTo(49.85, 5);
+    expect(update.favorability).toBeCloseTo(49.8875, 5);
   });
 
   it("applies accountability in an in-memory persisted fixture while excluding a ceremonial president", async () => {
@@ -838,19 +841,22 @@ describe("processActionRefresh", () => {
 
     // The US executive also takes the ordinary 1-point infamy drain (40 - 20) *
     // 0.05, so the persisted fixture still exposes the exact 0.15 delta.
-    expect(accountable.usMember.favorability).toBeCloseTo(47.85, 5);
-    expect(accountable.usPartyMember.favorability).toBeCloseTo(49.85, 5);
-    expect(accountable.ruPm.favorability).toBeCloseTo(49.85, 5);
-    expect(accountable.nppExecutive.favorability).toBeCloseTo(49.85, 5);
+    expect(accountable.usMember.favorability).toBeCloseTo(47.8875, 5);
+    expect(accountable.usPartyMember.favorability).toBeCloseTo(49.8875, 5);
+    expect(accountable.ruPm.favorability).toBeCloseTo(49.8875, 5);
+    expect(accountable.nppExecutive.favorability).toBeCloseTo(49.8875, 5);
     expect(accountable.ceremonialPresident.favorability).toBeCloseTo(50, 5);
     expect(control.usMember.favorability).toBeCloseTo(48, 5);
     expect(control.usPartyMember.favorability).toBeCloseTo(50, 5);
     expect(control.ruPm.favorability).toBeCloseTo(50, 5);
     expect(control.nppExecutive.favorability).toBeCloseTo(50, 5);
     expect(control.ceremonialPresident.favorability).toBeCloseTo(50, 5);
-    expect(control.usMember.favorability - accountable.usMember.favorability).toBeCloseTo(0.15, 5);
+    expect(control.usMember.favorability - accountable.usMember.favorability).toBeCloseTo(
+      0.1125,
+      5
+    );
     expect(control.nppExecutive.favorability - accountable.nppExecutive.favorability).toBeCloseTo(
-      0.15,
+      0.1125,
       5
     );
   });

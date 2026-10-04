@@ -149,4 +149,36 @@ describe("fireFactionSplit defector eligibility", () => {
     expect(result).toBeNull();
     expect(db.collectionMocks.politicalParties.insertOne).not.toHaveBeenCalled();
   });
+  it("defects autonomous legislators by nppId without changing unrelated NPP seats", async () => {
+    const nppIds = Array.from({ length: 5 }, () => new ObjectId());
+    db.collection("governmentFormations").findOne.mockResolvedValue({
+      pmCharacterId: null,
+      pmNppId: nppIds[0],
+    });
+    db.collection("electedOfficials")
+      .find()
+      .toArray.mockResolvedValue(nppIds.map((nppId) => ({ characterId: null, nppId })));
+    db.collection("npps")
+      .find()
+      .toArray.mockResolvedValue(
+        nppIds.map((_id, index) => ({ _id, policies: { economic: index, social: 0 } }))
+      );
+    const result = await fireFactionSplit(db as unknown as Db, "CN", 1061);
+    expect(result?.defectorCharacterIds).toEqual([]);
+    expect(result?.defectorNppIds).toHaveLength(3);
+    expect(result?.defectorNppIds).not.toContainEqual(nppIds[0]);
+    const updates = db.collection("electedOfficials").updateMany.mock.calls;
+    expect(
+      updates.find(
+        (call: [{ characterId?: { $in: ObjectId[] }; nppId?: { $in: ObjectId[] } }]) =>
+          call[0].characterId
+      )?.[0].characterId.$in
+    ).toEqual([]);
+    expect(
+      updates.find(
+        (call: [{ characterId?: { $in: ObjectId[] }; nppId?: { $in: ObjectId[] } }]) =>
+          call[0].nppId
+      )?.[0].nppId.$in
+    ).toHaveLength(3);
+  });
 });

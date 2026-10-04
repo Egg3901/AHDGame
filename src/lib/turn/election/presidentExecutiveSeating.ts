@@ -13,6 +13,7 @@ import { getOfficeLabel } from "@/lib/utils/politics";
 import { clearCabinetOnTransition } from "@/lib/cabinetTransition";
 import {
   COUNTRY_CONFIGS,
+  getCountryConfig,
   isPresidentialGovernmentType,
   type CountryId,
 } from "@/lib/constants/countries";
@@ -313,7 +314,9 @@ export async function seatPresidentialExecutive(
   }
 
   if (vpNppId) {
-    const vpNpp = await db.collection<NPP>("npps").findOne({ _id: vpNppId });
+    const vpNpp = await db
+      .collection<NPP>("npps")
+      .findOne({ _id: vpNppId }, { projection: { name: 1, party: 1 } });
     if (vpNpp) {
       await db.collection<ElectedOfficial>("electedOfficials").updateOne(
         getExecutiveOfficialFilter(electionCountry, "vicePresident"),
@@ -363,6 +366,36 @@ export async function seatPresidentialExecutive(
       );
   }
 
+  const activePreset = await getGameStatePresetOrDefault(db);
+  const separatePrimeMinister =
+    getCountryConfig(electionCountry, activePreset).electionSystems.headOfGovernment ===
+    "parliamentary";
+  // Keep the government record aligned with elected presidential handovers.
+  // This includes background NPP governments created by the vacancy fallback.
+  await db
+    .collection<import("@/lib/db/types").GovernmentFormation>("governmentFormations")
+    .updateOne(
+      { _id: electionCountry },
+      {
+        $set: {
+          status: "formed",
+          presidentCharacterId: winnerCandidate.isNPP ? null : winnerCandidate.characterId,
+          presidentNppId: winnerCandidate.isNPP ? winnerCandidate.nppId : null,
+          presidentName: winnerCandidate.characterName,
+          ...(!separatePrimeMinister
+            ? {
+                pmName: winnerCandidate.characterName,
+                pmCharacterId: winnerCandidate.isNPP ? null : winnerCandidate.characterId,
+                pmNppId: winnerCandidate.isNPP ? winnerCandidate.nppId : null,
+                governingPartyId: winnerCandidate.party,
+              }
+            : {}),
+          formedTurn: params.turn ?? election.endTurn ?? 0,
+          formedAt: now,
+          updatedAt: now,
+        },
+      }
+    );
   const turn = params.turn ?? election.endTurn ?? 0;
   const transitions: Array<{
     officeType: string;
