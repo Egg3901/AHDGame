@@ -5,6 +5,11 @@ import { execSync } from "child_process";
 import { readFileSync } from "fs";
 import { PRIVATE_PAGE_CACHE_CONTROL } from "./src/lib/cacheHeaders";
 import { retiredChangelogRedirects } from "./src/lib/changelog/retiredSlugs";
+import {
+  resolvePublicSentryDsn,
+  SENTRY_DEFAULT_ORG,
+  SENTRY_DEFAULT_PROJECT,
+} from "./src/lib/observability/sentryIngest";
 
 // Railway's build context no longer exposes the .git directory, so `git
 // rev-parse` fails on every deploy build (#2772). Prefer Railway's injected
@@ -71,8 +76,12 @@ if (sentryAuthToken) {
 if (isProductionBuild && !sentryAuthToken) {
   console.warn("[sentry] SENTRY_AUTH_TOKEN is not set; continuing without source-map upload.");
 }
-const sentryOrg = process.env.SENTRY_ORG || "lakeside-games";
-const sentryProject = process.env.SENTRY_PROJECT || "a-house-divided";
+const sentryOrg = process.env.SENTRY_ORG || SENTRY_DEFAULT_ORG;
+const sentryProject = process.env.SENTRY_PROJECT || SENTRY_DEFAULT_PROJECT;
+// The browser bundle only sees build-time NEXT_PUBLIC_* values. Reuse the server
+// DSN when no public one is set so client errors are not silently dropped.
+const publicSentryDsn = resolvePublicSentryDsn(process.env);
+if (publicSentryDsn) process.env.NEXT_PUBLIC_SENTRY_DSN = publicSentryDsn;
 
 const nextConfig: NextConfig = {
   // Browser qualification warms real routes without a production build. Keep
@@ -129,6 +138,7 @@ const nextConfig: NextConfig = {
     SENTRY_RELEASE,
     NEXT_PUBLIC_SENTRY_RELEASE: SENTRY_RELEASE,
     NEXT_PUBLIC_SENTRY_ENVIRONMENT: process.env.NEXT_PUBLIC_SENTRY_ENVIRONMENT,
+    ...(publicSentryDsn ? { NEXT_PUBLIC_SENTRY_DSN: publicSentryDsn } : {}),
   },
   async headers() {
     return [

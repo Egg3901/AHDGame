@@ -1,6 +1,6 @@
 # Analytics rollout: PostHog and Sentry
 
-Sentry SaaS in the `lakeside-games` US organization is the production error destination. The existing GlitchTip organization and project remain a fallback when `SENTRY_URL` and the GlitchTip DSNs are explicitly set. PostHog Cloud US is for product analytics; Sentry remains the error source of truth.
+Sentry SaaS in the `ahousedivided` US organization is the production error destination. The existing GlitchTip organization and project remain a fallback when `SENTRY_URL` and the GlitchTip DSNs are explicitly set. PostHog Cloud US is for product analytics; Sentry remains the error source of truth.
 
 ## Account and deployment state
 
@@ -10,7 +10,7 @@ Sentry SaaS in the `lakeside-games` US organization is the production error dest
 
 ## Engineering deployment checks
 
-- The A House Divided project and DSN already exist in the Lakeside Games Sentry organization. Verify the deployed `SENTRY_DSN` and `NEXT_PUBLIC_SENTRY_DSN` point to that project, `SENTRY_ORG=lakeside-games`, `SENTRY_PROJECT` matches its actual slug, and no GlitchTip `SENTRY_URL` override remains.
+- The A House Divided project and DSN already exist in the Lakeside Games Sentry organization. Verify the deployed `SENTRY_DSN` and `NEXT_PUBLIC_SENTRY_DSN` point to that project, `SENTRY_ORG=ahousedivided`, `SENTRY_PROJECT` matches its actual slug, and no GlitchTip `SENTRY_URL` override remains.
 - Source-map upload requires build-time `SENTRY_AUTH_TOKEN`. The optional in-game admin issue feed separately needs server-only `SENTRY_API_TOKEN` with read access. Keep tokens out of the repository and chat.
 - Keep PostHog error tracking disabled, then configure failed-turn, crash, and sustained API-failure alerts in Sentry after staging verification.
 - Confirm the Ops Credentials portal save failure is tracked separately; it did not block the direct Railway key entry.
