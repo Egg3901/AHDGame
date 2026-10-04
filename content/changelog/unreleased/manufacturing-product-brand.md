@@ -1,5 +1,6 @@
 ---
 date: 2026-10-04
+title: Funded manufacturing product brand and pricing
 ---
 
 Manufacturing product projects can assign a share of delivered marketing to product advertising during development. Only paid advertising builds the product's own brand, averaged across its development turns. Brand and paid development add a bounded quality contribution to actual product output and support quality-aware premium pricing; unallocated plant output keeps its existing quality.
