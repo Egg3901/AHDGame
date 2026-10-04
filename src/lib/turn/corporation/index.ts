@@ -111,6 +111,7 @@ import {
 import { applyMediaEditorialEffects } from "@/lib/mediaEditorial/applyEffects";
 import { addSettledPoliticalAttention } from "@/lib/mediaOperatingModels/reach";
 import { applyOperatingCashThenDevelopmentCash } from "./manufacturingDevelopmentCashSettlement";
+import { resumeFoundingUnderwritingPlans } from "@/lib/banking/underwritingSettlement";
 
 export type { CorporationTurnResult } from "./corporationTurnRuntime";
 
@@ -186,6 +187,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     getLabourSystemMode(),
   ]);
   mark("preamble");
+  await resumeFoundingUnderwritingPlans(db, now);
   const equityPoolTurn = await processEquityMarketPoolTurn(
     db,
     turn ?? gameState?.currentTurn ?? 0,

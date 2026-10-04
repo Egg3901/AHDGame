@@ -77,6 +77,10 @@ export function FoundCorporationModal({
   // Fetched here so the preview matches the server charge (both use the same
   // getFoundingConfidenceMultiplier formula on this value).
   const [investorConfidence, setInvestorConfidence] = useState<number | null>(null);
+  const [underwritingBanks, setUnderwritingBanks] = useState<
+    { corporationId: string; name: string; feeRate: number }[]
+  >([]);
+  const [underwriterCorporationId, setUnderwriterCorporationId] = useState("");
   // World preset drives era money. The server route deflates the fee, the
   // baseline and the capital bounds by the same function, so preview == charge.
   const [worldPreset, setWorldPreset] = useState<string | undefined>(undefined);
@@ -127,6 +131,30 @@ export function FoundCorporationModal({
       cancelled = true;
     };
   }, [open, countryId]);
+
+  useEffect(() => {
+    if (!open || foundingMode !== "public" || !countryId) return;
+    let cancelled = false;
+    fetchJson<{
+      enabled?: boolean;
+      banks?: { corporationId: string; name: string; feeRate: number }[];
+    }>(`/api/corporations/underwriting-banks?countryId=${encodeURIComponent(countryId)}`, {
+      feature: "primary-underwriting-bank-options",
+    })
+      .then((data) => {
+        if (!cancelled) {
+          setUnderwritingBanks(data?.enabled ? (data.banks ?? []) : []);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setUnderwritingBanks([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, foundingMode, countryId]);
 
   // Re-seed the baseline treasury whenever the modal opens. The FX rate is
   // stable by the time the player can open it; this also corrects the seed when
@@ -243,6 +271,7 @@ export function FoundCorporationModal({
                 ipo: {
                   floatPct,
                   ...(dualClass ? { superShareMultiplier: superMultiplier } : {}),
+                  ...(underwriterCorporationId ? { underwriterCorporationId } : {}),
                 },
               }
             : {}),
@@ -260,6 +289,7 @@ export function FoundCorporationModal({
         setDualClass(false);
         setSuperMultiplier(SUPERSHARE_MAX_MULTIPLIER);
         setHighFloatAck(false);
+        setUnderwriterCorporationId("");
         onClose();
         onSuccess();
       } else {
@@ -511,6 +541,29 @@ export function FoundCorporationModal({
 
             {foundingMode === "public" && (
               <div>
+                {underwritingBanks.length > 0 && (
+                  <label className="mb-3 block text-xs text-muted">
+                    <span className="mb-1 block font-bold uppercase tracking-wider">
+                      IPO underwriter (optional)
+                    </span>
+                    <select
+                      value={underwriterCorporationId}
+                      onChange={(event) => setUnderwriterCorporationId(event.target.value)}
+                      className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm text-foreground"
+                    >
+                      <option value="">Market pool only</option>
+                      {underwritingBanks.map((bank) => (
+                        <option key={bank.corporationId} value={bank.corporationId}>
+                          {bank.name} · {(bank.feeRate * 100).toFixed(1)}% of funded proceeds
+                        </option>
+                      ))}
+                    </select>
+                    <span className="mt-1 block">
+                      The bank pays for the shares it can fund. Its fee applies only to those funded
+                      shares; any remaining float waits for later placement.
+                    </span>
+                  </label>
+                )}
                 <div className="mb-3 rounded-lg border border-card-border bg-card-elevated p-3">
                   <label className="flex items-start gap-2 text-sm cursor-pointer">
                     <input

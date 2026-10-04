@@ -40,6 +40,7 @@ export function bankTransferConflict(
     | "bankPropForexFee"
     | "bankConstructionFunding"
     | "bankPrimaryFunding"
+    | "bankUnderwritingFunding"
   >,
   acquirer: Pick<Corporation, "name" | "bankCharter">
 ): string | null {
@@ -47,6 +48,8 @@ export function bankTransferConflict(
     return `Cannot merge ${target.name} while sovereign primary funding is settling.`;
   if (target.bankConstructionFunding)
     return `Cannot merge ${target.name} while construction funding or deposit return is settling.`;
+  if (target.bankUnderwritingFunding)
+    return `Cannot merge ${target.name} while a funded underwriting placement is settling.`;
   if (target.bankPropForexFee) return `Cannot merge ${target.name} while a forex fee is settling.`;
   if (hasFundedSovereignEscrow(target)) {
     return `Cannot merge ${target.name} while funded sovereign bank payments remain unsettled.`;
@@ -346,6 +349,7 @@ export async function transferBankCharterToAcquirer(
           bankPropForexFee: 1,
           bankConstructionFunding: 1,
           bankPrimaryFunding: 1,
+          bankUnderwritingFunding: 1,
           bankCharterTransfer: 1,
         },
       }
@@ -368,6 +372,8 @@ export async function transferBankCharterToAcquirer(
     };
   if (target.bankPropForexFee)
     return { ok: false, error: "Forex fee settlement must finish before a charter transfer" };
+  if (target.bankUnderwritingFunding)
+    return { ok: false, error: "Underwriting settlement must finish before a charter transfer" };
   if (!acquirer) return { ok: false, error: "Acquiring corporation no longer exists" };
 
   const charter = target.bankCharter ?? null;
@@ -487,6 +493,7 @@ export async function transferBankCharterToAcquirer(
       bankCharterTransfer: { $exists: false },
       bankConstructionFunding: { $exists: false },
       bankPrimaryFunding: { $exists: false },
+      bankUnderwritingFunding: { $exists: false },
     },
     { $set: { bankCharterTransfer: stampPlan, updatedAt: now } }
   );
@@ -532,6 +539,9 @@ export async function transferBankCharterToAcquirer(
       const takeOver = await corps.updateOne(
         {
           _id: targetId,
+          bankConstructionFunding: { $exists: false },
+          bankPrimaryFunding: { $exists: false },
+          bankUnderwritingFunding: { $exists: false },
           ...identityFilter(charter),
           "bankCharterTransfer.attemptId": curPlan.attemptId,
         },
@@ -560,6 +570,9 @@ export async function transferBankCharterToAcquirer(
       const adopt = await corps.updateOne(
         {
           _id: targetId,
+          bankConstructionFunding: { $exists: false },
+          bankPrimaryFunding: { $exists: false },
+          bankUnderwritingFunding: { $exists: false },
           ...identityFilter(charter),
           ...(isOwnedPlan(curRaw)
             ? { "bankCharterTransfer.attemptId": curRaw.attemptId }
@@ -580,6 +593,7 @@ export async function transferBankCharterToAcquirer(
           bankCharterTransfer: { $exists: false },
           bankConstructionFunding: { $exists: false },
           bankPrimaryFunding: { $exists: false },
+          bankUnderwritingFunding: { $exists: false },
         },
         { $set: { bankCharterTransfer: stampPlan, updatedAt: now } }
       );

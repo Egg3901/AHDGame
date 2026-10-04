@@ -195,6 +195,50 @@ export interface Corporation {
       releaseResidualToOwner: boolean;
     };
   };
+  /** Issuer-selected primary-market underwriter for future issues. */
+  primaryUnderwritingMandate?: import("@/lib/banking/rules/underwriting").PrimaryUnderwritingMandate;
+  /** Frozen unpaid founding IPO plan. The corporation remains private until its journal publishes it. */
+  foundingIpoUnderwritingPending?: {
+    offer: import("@/lib/banking/rules/underwriting").PrimaryUnderwritingOffer & {
+      instrumentId: ObjectId;
+    };
+    grossPlacedLocal: number;
+    turn: number;
+    instrumentProjection: import("@/lib/banking/rules/boundary").TransitionProjection;
+  } | null;
+  /** Original-epoch lease held only while a funded underwriting claim is settling. */
+  bankUnderwritingFunding?: {
+    key: string;
+    issuerCorporationId: ObjectId;
+    instrumentType: "equity" | "corporate_bond";
+    instrumentId?: ObjectId;
+    charteredTurn: number;
+    offer: import("@/lib/banking/rules/underwriting").PrimaryUnderwritingOffer;
+    currencyCode: CurrencyCode;
+    grossLocal: number;
+    feeLocal: number;
+    issuerNetLocal: number;
+    turn: number;
+    issuerName: string;
+    poolCollection: "equityMarketPools" | "bondMarketPools";
+    instrumentProjection: import("@/lib/banking/rules/boundary").TransitionProjection;
+  };
+  /** Cumulative fees from actually funded primary placements, by native currency. */
+  bankUnderwritingIncomeByCurrency?: Partial<Record<CurrencyCode, number>>;
+  /** Bounded issuer-readable receipts for funded primary underwriting fees. */
+  bankUnderwritingReceipts?: Array<{
+    key: string;
+    issuerCorporationId: ObjectId;
+    issuerName: string;
+    instrumentType: "equity" | "corporate_bond";
+    instrumentId?: ObjectId;
+    currencyCode: CurrencyCode;
+    grossPlacedLocal: number;
+    feeLocal: number;
+    issuerNetLocal: number;
+    turn: number;
+    charteredTurn: number;
+  }>;
   /** Public media editorial position. Missing means neutral for legacy worlds. */
   editorialStance?: { economic: number; social: number };
   /** Funded sale proceeds held here until delivered to the matching charter or insurer. */
@@ -401,6 +445,7 @@ export interface Corporation {
     issuedUpfront?: boolean;
     createdAtTurn: number;
     initialPriceLocal: number;
+    underwriting?: import("@/lib/banking/rules/underwriting").PrimaryUnderwritingOffer;
   };
   /** Dividend payout rate (0, 100%). Income × this % is distributed to shareholders each turn. */
   dividendRate?: number;

@@ -276,6 +276,12 @@ async function issueCharterInner(
   if (!corporation) {
     return { ok: false, reasons: ["Corporation not found"] };
   }
+  if (corporation.bankUnderwritingFunding) {
+    return {
+      ok: false,
+      reasons: ["Finish the funded underwriting placement before changing this bank"],
+    };
+  }
   const expectedSettledKeys = corporation.settledKeys ? [...corporation.settledKeys] : null;
 
   // skipFlagCheck is for SEED-TIME use only (NPC banks charter before the
@@ -383,6 +389,7 @@ async function issueCharterInner(
         bankCharter: prior === undefined ? { $exists: false } : prior,
         bankConstructionFunding: { $exists: false },
         bankPrimaryFunding: { $exists: false },
+        bankUnderwritingFunding: { $exists: false },
       },
       expectedSettledKeys,
     }
@@ -477,6 +484,12 @@ async function revokeCharterInner(
   if (corporation.bankCharter?.status !== "active") {
     return { ok: false, error: "Corporation has no active bank charter" };
   }
+  if (corporation.bankUnderwritingFunding) {
+    return {
+      ok: false,
+      error: "Finish the funded underwriting placement before revoking this charter",
+    };
+  }
 
   const charter = corporation.bankCharter;
   const currentTurn = await getCurrentTurn(db);
@@ -491,6 +504,7 @@ async function revokeCharterInner(
   const claim = await db.collection<Corporation>("corporations").updateOne(
     {
       _id: corporationId,
+      bankUnderwritingFunding: { $exists: false },
       "bankCharter.status": "active",
       "bankCharter.resolutionClaimedTurn": { $exists: false },
       bankConstructionFunding: { $exists: false },
@@ -581,7 +595,8 @@ export type CharterSwitchBlocker =
   | "discount_window_outstanding"
   | "cb_margin_outstanding"
   /** The charter's lifecycle stage does not admit a switch (impaired, or not active). */
-  | "lifecycle_stage";
+  | "lifecycle_stage"
+  | "underwriting_settlement";
 
 export type CharterSwitchPreview = {
   allowed: boolean;
@@ -616,6 +631,7 @@ const SWITCH_BLOCKER_MESSAGE: Record<CharterSwitchBlocker, string> = {
   cb_margin_outstanding:
     "Repay the CB margin line first. Only investment and universal charters may carry margin debt.",
   lifecycle_stage: "An impaired bank may not change charter type. Restore its capital first.",
+  underwriting_settlement: "Finish the funded underwriting placement before changing this charter.",
 };
 
 function takesDeposits(type: BankCharterType): boolean {
@@ -651,6 +667,8 @@ export async function previewCharterSwitch(
       targetTakesDeposits: takesDeposits(targetType),
     };
   }
+
+  if (corporation.bankUnderwritingFunding) blockers.push("underwriting_settlement");
 
   if (charter.type === targetType) blockers.push("same_type");
 
@@ -825,6 +843,7 @@ async function switchCharterTypeInner(
       "bankCharter.type": charter.type,
       bankConstructionFunding: { $exists: false },
       bankPrimaryFunding: { $exists: false },
+      bankUnderwritingFunding: { $exists: false },
     },
     {
       $set: {

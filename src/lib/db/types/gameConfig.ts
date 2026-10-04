@@ -244,6 +244,8 @@ export interface GameConfig {
   bankPropTradingEnabled?: boolean;
   /** Size-priced forex prop orders and their fee journal. Default off. */
   bankPropForexFeesEnabled?: boolean;
+  /** Funded corporate primary-market underwriting fees. Default off. */
+  bankUnderwritingEnabled?: boolean;
   /** Kill switch: bank-failure contagion cascade. Default on when banking is on. */
   bankContagionEnabled?: boolean;
   /** Funded bank failures affect approval and consumer confidence. Default off. */
