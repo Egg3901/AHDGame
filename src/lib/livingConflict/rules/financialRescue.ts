@@ -34,7 +34,9 @@ export function financialRescueTransition(input: {
   turn: number;
   amount: number;
   response: FinancialRescueResponse;
-  banks: { id: string; confidence: number }[];
+  banks: { id: string; charteredTurn: number; currency: string; confidence: number }[];
+  treasuryCurrencyCodePresent: boolean;
+  treasuryCurrencyCode?: string | null;
   treasuryCashLedgerEnabled?: boolean;
 }): BankingTransition {
   const { key, countryId, currency, turn, amount, response, banks } = input;
@@ -58,7 +60,7 @@ export function financialRescueTransition(input: {
     if (weakest && weakest.confidence <= 0.35)
       transition.projections.push({
         collection: "corporations",
-        filter: { _id: oid(weakest.id) },
+        filter: bankEpochFilter(weakest, countryId),
         update: { $set: { "bankCharter.status": "failed", "bankCharter.failedTurn": turn } },
         note: "Resolve the insolvent domestic bank through the depositor waterfall",
       });
@@ -70,16 +72,29 @@ export function financialRescueTransition(input: {
     kind: "debit",
     amount,
     collection: "federalBudget",
-    filter: input.treasuryCashLedgerEnabled
-      ? { _id: input.treasuryId, countryId, treasuryCashLocal: { $gte: amount } }
-      : { _id: input.treasuryId, countryId },
+    filter: {
+      _id: input.treasuryId,
+      countryId,
+      currencyCode: exactOptionalField(
+        input.treasuryCurrencyCodePresent,
+        input.treasuryCurrencyCode
+      ),
+      ...(input.treasuryCashLedgerEnabled ? { treasuryCashLocal: { $gte: amount } } : {}),
+    },
     path: input.treasuryCashLedgerEnabled ? "treasuryCashLocal" : "treasuryBalance",
     note: "Fund the authorized crisis intervention",
   });
   if (input.treasuryCashLedgerEnabled) {
     transition.projections.push({
       collection: "federalBudget",
-      filter: { _id: input.treasuryId, countryId },
+      filter: {
+        _id: input.treasuryId,
+        countryId,
+        currencyCode: exactOptionalField(
+          input.treasuryCurrencyCodePresent,
+          input.treasuryCurrencyCode
+        ),
+      },
       update: { $inc: { treasuryBalance: -amount } },
       note: "Keep the signed fiscal-position record aligned with the funded cash draw",
     });
@@ -109,13 +124,13 @@ export function financialRescueTransition(input: {
       kind: "credit",
       amount: allocation,
       collection: "corporations",
-      filter: { _id: oid(bank.id) },
+      filter: bankEpochFilter(bank, countryId),
       path: "bankCharter.cashReserves",
       note: "Deliver taxpayer capital into the bank ring fence",
     });
     transition.projections.push({
       collection: "corporations",
-      filter: { _id: oid(bank.id) },
+      filter: bankEpochFilter(bank, countryId),
       update: {
         $inc: {
           "bankCharter.postedCapital": allocation,
@@ -127,4 +142,26 @@ export function financialRescueTransition(input: {
     });
   });
   return transition;
+}
+
+function bankEpochFilter(
+  bank: {
+    id: string;
+    charteredTurn: number;
+    currency: string;
+    confidence: number;
+  },
+  countryId: string
+) {
+  return {
+    _id: oid(bank.id),
+    countryId,
+    "bankCharter.status": "active",
+    "bankCharter.charteredTurn": bank.charteredTurn,
+    "bankCharter.currency": bank.currency,
+  };
+}
+
+function exactOptionalField<T>(present: boolean, value: T | undefined | null) {
+  return present ? { $exists: true, $eq: value } : { $exists: false };
 }

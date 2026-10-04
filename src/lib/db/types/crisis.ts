@@ -274,7 +274,15 @@ export interface CrisisDecisionNode {
   nextNodeId?: string;
   outcomeEffects?: CrisisEffect[];
   outcomeMessage?: string;
-  requiredRoles: ("headOfState" | "cabinet" | "stateGovernor" | "partyLeader" | "any")[];
+  requiredRoles: (
+    | "headOfState"
+    | "cabinet"
+    | "stateGovernor"
+    | "partyLeader"
+    | "centralBankChair"
+    | "financeMinister"
+    | "any"
+  )[];
   /** Optional national allow-list for sequential cross-government negotiations. */
   requiredCountryIds?: string[];
   /** Optional regional allow-list, used with stateGovernor for devolved executives. */

@@ -15,6 +15,7 @@ import type {
   CrisisDecisionNode,
 } from "@/lib/db/types/crisis";
 import type { FederalBudget, ElectedOfficial } from "@/lib/db/types";
+import type { CentralBank } from "@/lib/db/types/centralBank";
 import {
   getCountryConfig,
   getHeadOfStateOfficeType,
@@ -28,6 +29,8 @@ import { spendFromTreasury } from "@/lib/budget/treasurySpend";
 import { isCrisisAidBillsEnabled } from "./featureFlag";
 import { AID_MAX_PCT_GDP, AID_DEFAULT_PCT_GDP } from "@/lib/constants/crises";
 import { getGovernmentFormationsCollection } from "@/lib/db/collections/governmentFormation";
+import { getBankId } from "@/lib/centralBank/helpers";
+import { resolveFinancePosition } from "@/lib/constants/cabinetMonetary";
 import { getGameState } from "@/lib/gameState";
 import {
   globalResponseRoleFor,
@@ -160,6 +163,16 @@ export async function resolveCharacterRoles(
         { projection: { positionId: 1 } }
       );
     if (cabinet?.positionId) roles.push("cabinet", `cabinet:${cabinet.positionId}`);
+  }
+  if (character.countryId) {
+    const financePosition = resolveFinancePosition(character.countryId);
+    if (financePosition && roles.includes(`cabinet:${financePosition}`))
+      roles.push("financeMinister");
+    const centralBankId = getBankId(character.countryId as CountryId);
+    const chair = await db
+      .collection<CentralBank>("centralBanks")
+      .findOne({ _id: centralBankId, chairCharacterId: character._id }, { projection: { _id: 1 } });
+    if (chair) roles.push("centralBankChair");
   }
   const ledParty = await db
     .collection<{ abbreviation: string }>("politicalParties")

@@ -24,8 +24,25 @@ interface FinancialCrisisBankAction {
   response: FinancialCrisisBankResponse;
   amount: number;
   bankIds: ObjectId[];
+  bankEpochs: { bankId: ObjectId; charteredTurn: number; currency: string }[];
   turn: number;
   createdAt: Date;
+}
+
+interface PendingFinancialGuarantee {
+  _id: string;
+  countryId: string;
+  currency: string;
+  bankIds: ObjectId[];
+  bankEpochs: { bankId: ObjectId; charteredTurn: number; currency: string }[];
+  openedTurn: number;
+  treasuryId: FederalBudget["_id"];
+  treasuryCurrencyCodePresent: boolean;
+  treasuryCurrencyCode?: string | null;
+  treasuryCashLedgerEnabled: boolean;
+  amount: number;
+  status: "pending" | "active";
+  expiresTurn: number;
 }
 
 /** Weakest active domestic banks first; stable ordering makes retries deterministic. */
@@ -33,7 +50,12 @@ export function rankBanksForFinancialIntervention(
   banks: Pick<Corporation, "_id" | "bankCharter">[]
 ): Pick<Corporation, "_id" | "bankCharter">[] {
   return [...banks]
-    .filter((bank) => bank.bankCharter?.status === "active")
+    .filter(
+      (bank) =>
+        bank.bankCharter?.status === "active" &&
+        Number.isInteger(bank.bankCharter.charteredTurn) &&
+        typeof bank.bankCharter.currency === "string"
+    )
     .sort(
       (a, b) =>
         (a.bankCharter?.confidence ?? 0.5) - (b.bankCharter?.confidence ?? 0.5) ||
@@ -99,45 +121,95 @@ export async function applyFinancialCrisisBankResponse(
     .findOne({ _id: actionId });
   if (pending)
     throw new Error("Rescue settlement is pending recovery; funding will not be duplicated");
-  const treasuryCashLedgerEnabled =
-    response === "resolve"
+  const guaranteeCollection = ctx.db.collection<PendingFinancialGuarantee>("bankGuarantees");
+  // The unfunded shell is written before settlement so a process crash cannot
+  // cause a retry to quote a different bank cohort, source balance or amount.
+  let pendingGuarantee =
+    response === "guarantee"
+      ? await guaranteeCollection.findOne({ _id: actionId, status: "pending" })
+      : null;
+  const treasuryCashLedgerEnabled = pendingGuarantee
+    ? pendingGuarantee.treasuryCashLedgerEnabled
+    : response === "resolve"
       ? false
       : (ctx.treasuryCashLedgerEnabled ?? (await loadBankingPolicy(ctx.db)).treasuryCashLedger);
-  await prepareFinancialCrisisBankResponse(
-    ctx.db,
-    ctx.countryId,
-    ctx.option,
-    treasuryCashLedgerEnabled
-  );
-  const budget = await ctx.db
-    .collection<FederalBudget>("federalBudget")
-    .findOne({ countryId: ctx.countryId as FederalBudget["countryId"] });
-  const currency = resolveCountryCurrencyCode(budget);
-  if (!budget || !currency) throw new Error("Treasury currency is unavailable");
-  const banks = rankBanksForFinancialIntervention(
-    await ctx.db
+  let budget: FederalBudget | null;
+  let currency: string | undefined;
+  let banks: Pick<Corporation, "_id" | "bankCharter">[];
+  let amount: number;
+  if (pendingGuarantee) {
+    const frozen = pendingGuarantee;
+    budget = (await ctx.db
+      .collection<{
+        _id: string;
+        countryId: string;
+        currencyCode?: string | null;
+      }>("federalBudget")
+      .findOne({
+        _id: frozen.treasuryId,
+        countryId: frozen.countryId,
+        currencyCode: frozen.treasuryCurrencyCodePresent
+          ? { $exists: true, $eq: frozen.treasuryCurrencyCode }
+          : { $exists: false },
+      })) as FederalBudget | null;
+    currency = frozen.currency;
+    if (!budget || ctx.countryId !== frozen.countryId)
+      throw new Error("Original guarantee funding treasury changed before settlement");
+    banks = await ctx.db
       .collection<Corporation>("corporations")
       .find(
         {
-          countryId: ctx.countryId as Corporation["countryId"],
-          "bankCharter.status": "active",
-          "bankCharter.currency": currency,
+          $or: frozen.bankEpochs.map((bank) => ({
+            _id: bank.bankId,
+            countryId: frozen.countryId as Corporation["countryId"],
+            "bankCharter.status": "active",
+            "bankCharter.charteredTurn": bank.charteredTurn,
+            "bankCharter.currency": bank.currency,
+          })),
         },
         { projection: { bankCharter: 1 } }
       )
-      .toArray()
-  ).slice(0, 3);
-  const amount =
-    response === "resolve"
-      ? 0
-      : financialInterventionAmount(
-          budget?.gdpSmoothed || budget?.gdp || 0,
-          ctx.option.treasuryCostPctGdp ?? 0
-        );
-  if (response === "guarantee") {
+      .toArray();
+    amount = frozen.amount;
+    if (banks.length !== frozen.bankEpochs.length)
+      throw new Error("Original guarantee bank charter epoch changed before settlement");
+  } else {
+    await prepareFinancialCrisisBankResponse(
+      ctx.db,
+      ctx.countryId,
+      ctx.option,
+      treasuryCashLedgerEnabled
+    );
+    budget = await ctx.db
+      .collection<FederalBudget>("federalBudget")
+      .findOne({ countryId: ctx.countryId as FederalBudget["countryId"] });
+    currency = resolveCountryCurrencyCode(budget);
+    if (!budget || !currency) throw new Error("Treasury currency is unavailable");
+    banks = rankBanksForFinancialIntervention(
+      await ctx.db
+        .collection<Corporation>("corporations")
+        .find(
+          {
+            countryId: ctx.countryId as Corporation["countryId"],
+            "bankCharter.status": "active",
+            "bankCharter.currency": currency,
+          },
+          { projection: { bankCharter: 1 } }
+        )
+        .toArray()
+    ).slice(0, 3);
+    amount =
+      response === "resolve"
+        ? 0
+        : financialInterventionAmount(
+            budget.gdpSmoothed || budget.gdp || 0,
+            ctx.option.treasuryCostPctGdp ?? 0
+          );
+  }
+  if (response === "guarantee" && !pendingGuarantee) {
     // Zero cash is safe to initialize outside settlement; activation happens
     // only after the journal has delivered every funded leg.
-    await ctx.db.collection<{ _id: string }>("bankGuarantees").updateOne(
+    await guaranteeCollection.updateOne(
       { _id: actionId },
       {
         $setOnInsert: {
@@ -145,30 +217,90 @@ export async function applyFinancialCrisisBankResponse(
           countryId: ctx.countryId,
           currency,
           bankIds: banks.map((bank) => bank._id),
+          bankEpochs: banks.map((bank) => ({
+            bankId: bank._id,
+            charteredTurn: bank.bankCharter!.charteredTurn,
+            currency: bank.bankCharter!.currency,
+          })),
+          openedTurn: ctx.currentTurn,
+          treasuryId: budget._id,
+          treasuryCurrencyCodePresent: Object.hasOwn(budget, "currencyCode"),
+          ...(Object.hasOwn(budget, "currencyCode")
+            ? { treasuryCurrencyCode: budget.currencyCode }
+            : {}),
+          treasuryCashLedgerEnabled,
+          amount,
           guaranteeLimit: amount,
           escrowBalance: 0,
           status: "pending",
-          openedTurn: ctx.currentTurn,
           expiresTurn: ctx.currentTurn + TURNS_PER_YEAR,
         },
       },
       { upsert: true }
     );
+    // A concurrent request may have won the shell upsert with a different
+    // source snapshot. Never fund our local quote unless it matches the
+    // durable winner exactly.
+    pendingGuarantee = await guaranteeCollection.findOne({ _id: actionId, status: "pending" });
+    if (
+      !pendingGuarantee ||
+      pendingGuarantee.amount !== amount ||
+      pendingGuarantee.currency !== currency ||
+      pendingGuarantee.countryId !== ctx.countryId ||
+      String(pendingGuarantee.treasuryId) !== String(budget._id) ||
+      pendingGuarantee.treasuryCurrencyCodePresent !== Object.hasOwn(budget, "currencyCode") ||
+      (pendingGuarantee.treasuryCurrencyCodePresent &&
+        pendingGuarantee.treasuryCurrencyCode !== budget.currencyCode) ||
+      pendingGuarantee.treasuryCashLedgerEnabled !== treasuryCashLedgerEnabled ||
+      pendingGuarantee.openedTurn !== ctx.currentTurn ||
+      pendingGuarantee.expiresTurn !== ctx.currentTurn + TURNS_PER_YEAR ||
+      pendingGuarantee.bankEpochs.length !== banks.length ||
+      pendingGuarantee.bankEpochs.some((epoch, index) => {
+        const bank = banks[index];
+        return (
+          !bank ||
+          !epoch.bankId.equals(bank._id) ||
+          epoch.charteredTurn !== bank.bankCharter!.charteredTurn ||
+          epoch.currency !== bank.bankCharter!.currency
+        );
+      })
+    )
+      throw new Error("A concurrent request froze a different guarantee funding snapshot");
   }
+  const turn = pendingGuarantee?.openedTurn ?? ctx.currentTurn;
   const transition = financialRescueTransition({
     key: actionId,
     countryId: ctx.countryId,
     treasuryId: budget._id,
-    currency,
-    turn: ctx.currentTurn,
+    currency: currency!,
+    turn,
     amount,
     response,
     banks: banks.map((bank) => ({
       id: bank._id.toHexString(),
+      charteredTurn: bank.bankCharter!.charteredTurn,
+      currency: bank.bankCharter!.currency,
       confidence: bank.bankCharter?.confidence ?? 0.5,
     })),
+    treasuryCurrencyCodePresent: Object.hasOwn(budget, "currencyCode"),
+    ...(Object.hasOwn(budget, "currencyCode") ? { treasuryCurrencyCode: budget.currencyCode } : {}),
     treasuryCashLedgerEnabled,
   });
+  if (response === "guarantee") {
+    const frozen = pendingGuarantee!;
+    const guaranteeFilter = {
+      _id: actionId,
+      status: "pending",
+      amount: frozen.amount,
+      currency: frozen.currency,
+      openedTurn: frozen.openedTurn,
+      bankEpochs: frozen.bankEpochs,
+    };
+    for (const leg of transition.legs)
+      if (leg.collection === "bankGuarantees") leg.filter = guaranteeFilter;
+    for (const projection of transition.projections)
+      if (projection.collection === "bankGuarantees") projection.filter = guaranteeFilter;
+  }
   transition.projections.push({
     collection: "financialCrisisBankActions",
     insert: {
@@ -179,7 +311,12 @@ export async function applyFinancialCrisisBankResponse(
       response,
       amount,
       bankIds: banks.map((bank) => ({ $oid: bank._id.toHexString() })),
-      turn: ctx.currentTurn,
+      bankEpochs: banks.map((bank) => ({
+        bankId: { $oid: bank._id.toHexString() },
+        charteredTurn: bank.bankCharter!.charteredTurn,
+        currency: bank.bankCharter!.currency,
+      })),
+      turn,
     },
     note: "Publish the completed funded intervention",
   });

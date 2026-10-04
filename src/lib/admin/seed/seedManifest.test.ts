@@ -105,6 +105,7 @@ describe("runtime lifecycle category determines reset selection", () => {
     "bargainingCampaigns",
     "collectiveAgreements",
     "manufacturingProductProjectsV2",
+    "mediaProductProjectsV1",
     "landeslisten",
     "fundFloatSettlements",
     "bg1991ListReplacements",

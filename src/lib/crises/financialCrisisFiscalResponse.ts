@@ -144,6 +144,18 @@ export async function applyFinancialFiscalResponse(
     .findOne({ countryId: ctx.countryId as CountryId });
   if (!budget) throw new Error("National budget disappeared");
   const currency = resolveCountryCurrencyCode(budget)!;
+  if (!currency) throw new Error("National budget currency disappeared");
+  const centralBankId = getBankId(ctx.countryId as CountryId);
+  const centralBank =
+    response === "stimulus" || response === "sovereign_support"
+      ? await ctx.db
+          .collection<{ _id: string; monetaryAuthorityId?: string }>("centralBanks")
+          .findOne({
+            _id: centralBankId,
+          })
+      : null;
+  if ((response === "stimulus" || response === "sovereign_support") && !centralBank)
+    throw new Error("Monetary authority disappeared");
   const supportRecipient =
     response === "sovereign_support"
       ? await sovereignSupportRecipient(ctx.db, ctx.countryId, currency)
@@ -157,6 +169,25 @@ export async function applyFinancialFiscalResponse(
           ctx.option.treasuryCostPctGdp ?? 0
         )
       : 0;
+  const treasuryCurrencyFilter = exactOptionalField(
+    Object.hasOwn(budget, "currencyCode"),
+    budget.currencyCode
+  );
+  const supportCurrencyFilter = supportRecipient
+    ? exactOptionalField(
+        Object.hasOwn(supportRecipient, "currencyCode"),
+        supportRecipient.currencyCode
+      )
+    : undefined;
+  const centralBankFilter = centralBank
+    ? {
+        _id: centralBank._id,
+        monetaryAuthorityId: exactOptionalField(
+          Object.hasOwn(centralBank, "monetaryAuthorityId"),
+          centralBank.monetaryAuthorityId
+        ),
+      }
+    : undefined;
   const transition: BankingTransition = {
     key,
     kind: `financial_crisis_${response}`,
@@ -176,9 +207,10 @@ export async function applyFinancialFiscalResponse(
           ? {
               _id: budget._id,
               countryId: ctx.countryId,
+              currencyCode: treasuryCurrencyFilter,
               treasuryCashLocal: { $gte: amount },
             }
-          : { _id: budget._id, countryId: ctx.countryId },
+          : { _id: budget._id, countryId: ctx.countryId, currencyCode: treasuryCurrencyFilter },
         path: treasuryCashLedgerEnabled ? "treasuryCashLocal" : "treasuryBalance",
         note: "Fund the household fiscal transfer",
       },
@@ -186,7 +218,7 @@ export async function applyFinancialFiscalResponse(
         kind: "credit",
         amount,
         collection: "centralBanks",
-        filter: { _id: getBankId(ctx.countryId as CountryId) },
+        filter: centralBankFilter!,
         path: "externalBroadMoney",
         note: "Deliver stimulus to the modeled household money stock",
       },
@@ -195,7 +227,7 @@ export async function applyFinancialFiscalResponse(
     const spending = financialAusteritySpending(budget.spending, budget.revenue.total);
     transition.projections.push({
       collection: "federalBudget",
-      filter: { _id: budget._id, countryId: ctx.countryId },
+      filter: { _id: budget._id, countryId: ctx.countryId, currencyCode: treasuryCurrencyFilter },
       update: {
         $set: {
           spending,
@@ -214,13 +246,21 @@ export async function applyFinancialFiscalResponse(
       kind: "credit",
       amount,
       collection: "federalBudget",
-      filter: { _id: recipient._id, countryId: recipient.countryId },
+      filter: {
+        _id: recipient._id,
+        countryId: recipient.countryId,
+        currencyCode: supportCurrencyFilter,
+      },
       path: treasuryCashLedgerEnabled ? "treasuryCashLocal" : "treasuryBalance",
       note: "Deliver the same-currency sovereign rescue grant",
     };
     transition.projections.push({
       collection: "federalBudget",
-      filter: { _id: recipient._id, countryId: recipient.countryId },
+      filter: {
+        _id: recipient._id,
+        countryId: recipient.countryId,
+        currencyCode: supportCurrencyFilter,
+      },
       update: { $inc: { financialCrisisGrantsReceived: amount } },
       note: "Record the grant separately from bond-owned principal",
     });
@@ -228,7 +268,7 @@ export async function applyFinancialFiscalResponse(
   if (treasuryCashLedgerEnabled && amount > 0) {
     transition.projections.push({
       collection: "federalBudget",
-      filter: { _id: budget._id, countryId: ctx.countryId },
+      filter: { _id: budget._id, countryId: ctx.countryId, currencyCode: treasuryCurrencyFilter },
       update: { $inc: { treasuryBalance: -amount } },
       note: "Keep donor signed fiscal position aligned with the funded cash transfer",
     });
@@ -236,7 +276,11 @@ export async function applyFinancialFiscalResponse(
       const recipient = supportRecipient!;
       transition.projections.push({
         collection: "federalBudget",
-        filter: { _id: recipient._id, countryId: recipient.countryId },
+        filter: {
+          _id: recipient._id,
+          countryId: recipient.countryId,
+          currencyCode: supportCurrencyFilter,
+        },
         update: { $inc: { treasuryBalance: amount } },
         note: "Keep recipient signed fiscal position aligned with funded Treasury cash",
       });
@@ -262,4 +306,8 @@ async function sovereignSupportRecipient(db: Db, donor: string, currency: string
     },
     { sort: { treasuryBalance: 1, countryId: 1 } }
   );
+}
+
+function exactOptionalField<T>(present: boolean, value: T | undefined | null) {
+  return present ? { $exists: true, $eq: value } : { $exists: false };
 }
