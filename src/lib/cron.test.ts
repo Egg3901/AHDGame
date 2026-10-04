@@ -20,8 +20,9 @@ vi.mock("./cron/backupFireGuard", () => ({
   shouldFireBackupTurn: vi.fn(),
 }));
 
-const { mockRunShareFillRecoveryPass, mockGetDb } = vi.hoisted(() => ({
+const { mockRunShareFillRecoveryPass, mockRunPatreonReconcile, mockGetDb } = vi.hoisted(() => ({
   mockRunShareFillRecoveryPass: vi.fn(),
+  mockRunPatreonReconcile: vi.fn(),
   mockGetDb: vi.fn(),
 }));
 
@@ -29,6 +30,10 @@ const { mockRunShareFillRecoveryPass, mockGetDb } = vi.hoisted(() => ({
 // gating without running real recovery. The specifier must match cron.ts.
 vi.mock("@/lib/corporations/commands/shareTrading/shareFillAudit", () => ({
   runShareFillRecoveryPass: mockRunShareFillRecoveryPass,
+}));
+
+vi.mock("@/lib/patreon/reconcile", () => ({
+  runPatreonReconcile: mockRunPatreonReconcile,
 }));
 
 // Mock mongodb: the recovery sweep calls getDb() when idle. Other callbacks
@@ -81,6 +86,19 @@ describe("cron jobs", () => {
       incomplete: 0,
     });
     mockGetDb.mockResolvedValue({});
+    mockRunPatreonReconcile.mockResolvedValue({
+      dryRun: false,
+      counts: {
+        patreonMembers: 2,
+        activePaidPatrons: 1,
+        ahdSupporters: 1,
+        toGrant: 1,
+        toDerole: 0,
+        unmatchedActivePatrons: 0,
+        unmatchedAhdSupporters: 0,
+        expired: 0,
+      },
+    });
   });
 
   /** The callback registered for `expression`. Throws rather than returning
@@ -104,6 +122,117 @@ describe("cron jobs", () => {
   });
 
   describe("initializeCronJobs", () => {
+    it("runs Patreon reconciliation in apply mode from the hosted worker schedule", async () => {
+      const { initializeCronJobs, PATREON_RECONCILIATION_SCHEDULE } = await import("./cron");
+      const oldCronOwner = process.env.CRON_OWNER;
+      const oldSingleplayer = process.env.SINGLEPLAYER;
+      const oldNodeEnv = process.env.NODE_ENV;
+      process.env.CRON_OWNER = "worker";
+      delete process.env.SINGLEPLAYER;
+      process.env.NODE_ENV = "production";
+      mockInitializeGameState.mockResolvedValue(undefined);
+      mockGetGameState.mockResolvedValue({ currentTurn: 1, isActive: true });
+      mockSchedule.mockReturnValue({ start: vi.fn(), stop: vi.fn(), getStatus: vi.fn() } as any);
+
+      try {
+        await initializeCronJobs();
+        await findScheduledCallback(PATREON_RECONCILIATION_SCHEDULE)();
+
+        expect(mockRunPatreonReconcile).toHaveBeenCalledWith(expect.anything(), true);
+        const registration = mockSchedule.mock.calls.find(
+          ([schedule]) => schedule === PATREON_RECONCILIATION_SCHEDULE
+        );
+        expect(registration?.[2]).toMatchObject({ timezone: "UTC" });
+      } finally {
+        if (oldCronOwner === undefined) delete process.env.CRON_OWNER;
+        else process.env.CRON_OWNER = oldCronOwner;
+        if (oldSingleplayer === undefined) delete process.env.SINGLEPLAYER;
+        else process.env.SINGLEPLAYER = oldSingleplayer;
+        if (oldNodeEnv === undefined) delete process.env.NODE_ENV;
+        else process.env.NODE_ENV = oldNodeEnv;
+      }
+    });
+
+    it("does not schedule Patreon reconciliation outside the hosted worker", async () => {
+      const oldCronOwner = process.env.CRON_OWNER;
+      const oldSingleplayer = process.env.SINGLEPLAYER;
+      delete process.env.CRON_OWNER;
+      delete process.env.SINGLEPLAYER;
+      mockInitializeGameState.mockResolvedValue(undefined);
+      mockGetGameState.mockResolvedValue({ currentTurn: 1, isActive: true });
+      mockSchedule.mockReturnValue({ start: vi.fn(), stop: vi.fn(), getStatus: vi.fn() } as any);
+
+      try {
+        const { initializeCronJobs, PATREON_RECONCILIATION_SCHEDULE } = await import("./cron");
+        await initializeCronJobs();
+
+        expect(
+          mockSchedule.mock.calls.some(([schedule]) => schedule === PATREON_RECONCILIATION_SCHEDULE)
+        ).toBe(false);
+      } finally {
+        if (oldCronOwner === undefined) delete process.env.CRON_OWNER;
+        else process.env.CRON_OWNER = oldCronOwner;
+        if (oldSingleplayer === undefined) delete process.env.SINGLEPLAYER;
+        else process.env.SINGLEPLAYER = oldSingleplayer;
+      }
+    });
+
+    it("does not schedule Patreon reconciliation in singleplayer even if marked worker", async () => {
+      const { initializeCronJobs, PATREON_RECONCILIATION_SCHEDULE } = await import("./cron");
+      const oldCronOwner = process.env.CRON_OWNER;
+      const oldSingleplayer = process.env.SINGLEPLAYER;
+      const oldNodeEnv = process.env.NODE_ENV;
+      process.env.CRON_OWNER = "worker";
+      process.env.SINGLEPLAYER = "1";
+      process.env.NODE_ENV = "production";
+      mockInitializeGameState.mockResolvedValue(undefined);
+      mockGetGameState.mockResolvedValue({ currentTurn: 1, isActive: true });
+      mockSchedule.mockReturnValue({ start: vi.fn(), stop: vi.fn(), getStatus: vi.fn() } as any);
+
+      try {
+        await initializeCronJobs();
+
+        expect(
+          mockSchedule.mock.calls.some(([schedule]) => schedule === PATREON_RECONCILIATION_SCHEDULE)
+        ).toBe(false);
+      } finally {
+        if (oldCronOwner === undefined) delete process.env.CRON_OWNER;
+        else process.env.CRON_OWNER = oldCronOwner;
+        if (oldSingleplayer === undefined) delete process.env.SINGLEPLAYER;
+        else process.env.SINGLEPLAYER = oldSingleplayer;
+        if (oldNodeEnv === undefined) delete process.env.NODE_ENV;
+        else process.env.NODE_ENV = oldNodeEnv;
+      }
+    });
+
+    it("does not schedule Patreon reconciliation from a development worker process", async () => {
+      const { initializeCronJobs, PATREON_RECONCILIATION_SCHEDULE } = await import("./cron");
+      const oldCronOwner = process.env.CRON_OWNER;
+      const oldSingleplayer = process.env.SINGLEPLAYER;
+      const oldNodeEnv = process.env.NODE_ENV;
+      process.env.CRON_OWNER = "worker";
+      delete process.env.SINGLEPLAYER;
+      process.env.NODE_ENV = "development";
+      mockInitializeGameState.mockResolvedValue(undefined);
+      mockGetGameState.mockResolvedValue({ currentTurn: 1, isActive: true });
+      mockSchedule.mockReturnValue({ start: vi.fn(), stop: vi.fn(), getStatus: vi.fn() } as any);
+
+      try {
+        await initializeCronJobs();
+
+        expect(
+          mockSchedule.mock.calls.some(([schedule]) => schedule === PATREON_RECONCILIATION_SCHEDULE)
+        ).toBe(false);
+      } finally {
+        if (oldCronOwner === undefined) delete process.env.CRON_OWNER;
+        else process.env.CRON_OWNER = oldCronOwner;
+        if (oldSingleplayer === undefined) delete process.env.SINGLEPLAYER;
+        else process.env.SINGLEPLAYER = oldSingleplayer;
+        if (oldNodeEnv === undefined) delete process.env.NODE_ENV;
+        else process.env.NODE_ENV = oldNodeEnv;
+      }
+    });
+
     it("initializes game state before scheduling cron", async () => {
       mockInitializeGameState.mockResolvedValue(undefined);
       mockGetGameState.mockResolvedValue({
