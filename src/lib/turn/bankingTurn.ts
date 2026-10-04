@@ -866,7 +866,7 @@ async function processOneBank(
     ) ?? null
   );
   result.premiumShortfall += premium.shortfall;
-  cashReserves = Math.max(0, cashReserves - premium.cashDebited);
+  cashReserves = premium.cashReservesAfter ?? Math.max(0, cashReserves - premium.cashDebited);
   if (premium.applied) {
     result.insurancePremiumPaid += premium.premiumPaid;
   }
