@@ -105,6 +105,10 @@ describe("snapshotMoneySupply", () => {
   });
 
   it("counts savings held at a private bank once, alongside its separate NPC deposits", async () => {
+    db.collectionMocks.gameConfig.findOne.mockResolvedValue({
+      moneySupplyEnabled: true,
+      treasuryCashLedgerEnabled: true,
+    });
     db.collectionMocks.characters.find.mockReturnValue(
       cursorWith([{ countryId: "US", currencyBalances: { savings: { USD: 700 } } }])
     );
@@ -116,8 +120,10 @@ describe("snapshotMoneySupply", () => {
           bankCharter: {
             status: "active",
             currency: "USD",
+            cashReserves: 700,
             totalDeposits: 1000,
             npcDeposits: 300,
+            playerDeposits: 700,
           },
         },
       ])
@@ -127,6 +133,7 @@ describe("snapshotMoneySupply", () => {
     const doc = db.collectionMocks[MONEY_SUPPLY_SNAPSHOTS_COLLECTION].replaceOne.mock.calls[0][1];
     expect(doc.householdSavings).toBe(700);
     expect(doc.bankDeposits).toBe(300);
+    expect(doc.bankVaultCash).toBe(700);
     expect(doc.m2 - doc.externalBroadMoney).toBe(1000);
   });
 
@@ -222,7 +229,8 @@ describe("snapshotMoneySupply", () => {
     await snapshotMoneySupply(db as unknown as Db, 12);
 
     const snapshot = db.collectionMocks[MONEY_SUPPLY_SNAPSHOTS_COLLECTION].replaceOne.mock.calls[0][1];
-    expect(snapshot.corporateLiquid).toBe(420);
+    expect(snapshot.corporateLiquid).toBe(100);
+    expect(snapshot.bankVaultCash).toBe(320);
     const options = db.collectionMocks.corporations.find.mock.calls[0]?.[1] as {
       projection: Record<string, unknown>;
     };
@@ -271,9 +279,50 @@ describe("snapshotMoneySupply", () => {
     await snapshotMoneySupply(db as unknown as Db, 13);
     const after = db.collectionMocks[MONEY_SUPPLY_SNAPSHOTS_COLLECTION].replaceOne.mock.calls[0][1];
 
-    expect(after.governmentLiquid + after.corporateLiquid).toBe(
-      before.governmentLiquid + before.corporateLiquid
+    expect(after.governmentLiquid + after.bankVaultCash).toBe(
+      before.governmentLiquid + before.bankVaultCash
     );
+    expect(after.m2).toBe(before.m2 - 50);
+  });
+
+  it("does not double-count bank cash backing deposits captured from external money", async () => {
+    db.collectionMocks.gameConfig.findOne.mockResolvedValue({
+      moneySupplyEnabled: true,
+      treasuryCashLedgerEnabled: true,
+    });
+    db.collectionMocks.centralBanks.find.mockReturnValue(
+      cursorWith([{ _id: "US", countryId: "US", externalBroadMoney: 100 }])
+    );
+    db.collectionMocks.corporations.find.mockReturnValue(
+      cursorWith([
+        {
+          countryId: "US",
+          bankCharter: { status: "active", currency: "USD", cashReserves: 0, npcDeposits: 0 },
+        },
+      ])
+    );
+    db.collectionMocks.states.find.mockReturnValue(cursorWith([]));
+    await snapshotMoneySupply(db as unknown as Db, 12);
+    const before = db.collectionMocks[MONEY_SUPPLY_SNAPSHOTS_COLLECTION].replaceOne.mock.calls[0][1];
+
+    db.collectionMocks.centralBanks.find.mockReturnValue(
+      cursorWith([{ _id: "US", countryId: "US", externalBroadMoney: 0 }])
+    );
+    db.collectionMocks.corporations.find.mockReturnValue(
+      cursorWith([
+        {
+          countryId: "US",
+          bankCharter: { status: "active", currency: "USD", cashReserves: 100, npcDeposits: 100 },
+        },
+      ])
+    );
+    db.collectionMocks[MONEY_SUPPLY_SNAPSHOTS_COLLECTION].replaceOne.mockClear();
+    await snapshotMoneySupply(db as unknown as Db, 13);
+    const after = db.collectionMocks[MONEY_SUPPLY_SNAPSHOTS_COLLECTION].replaceOne.mock.calls[0][1];
+
+    expect(before.m2).toBe(100);
+    expect(after.m2).toBe(100);
+    expect(after.bankVaultCash).toBe(100);
   });
 
   it("does not project the new cash stock when the flag is off", async () => {
