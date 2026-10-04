@@ -63,6 +63,19 @@ describe("GET /api/wiki/search", () => {
     await givenNonPageCandidates([]);
   });
 
+  it.each(["\u0000", "election\u0000history"])(
+    "rejects a null byte before database or generated-surface reads (%j)",
+    async (query) => {
+      const { GET } = await import("./route");
+      const res = await GET(get(`q=${encodeURIComponent(query)}`));
+      expect(res.status).toBe(400);
+      const { getDb } = await import("@/lib/mongodb");
+      expect(getDb).not.toHaveBeenCalled();
+      const { getNonPageWikiSearchCandidates } = await import("@/lib/wiki/wikiSearchSources");
+      expect(getNonPageWikiSearchCandidates).not.toHaveBeenCalled();
+    }
+  );
+
   it("returns authored pages with a wiki href and the page kind", async () => {
     givenPages([{ slug: "filibuster", title: "Filibuster" }]);
 
