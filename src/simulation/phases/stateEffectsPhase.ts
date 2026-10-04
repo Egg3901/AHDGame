@@ -513,7 +513,7 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
     if (isLedgerShadowEnabledFromConfig(context.config)) {
       await runtime.runPhase("ledgerPreForexSnapshot", () =>
         writePreForexBalanceCheckpoint(db, newTurn, {
-          treasuryCashLedgerEnabled: context.config.treasuryCashLedgerEnabled,
+          treasuryCashLedgerEnabled: context.config?.treasuryCashLedgerEnabled,
         })
       );
     } else {

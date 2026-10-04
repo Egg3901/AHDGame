@@ -110,6 +110,7 @@ export const BANKING_POLICY_ALL_ON: BankingPolicySnapshot = resolveBankingPolicy
   bankPropTradingEnabled: true,
   bankPropForexFeesEnabled: true,
   bankTreasuryEnabled: true,
+  treasuryCashLedgerEnabled: true,
   bankContagionEnabled: true,
   lineOfCreditEnabled: true,
   playerAdvancedBankChartersEnabled: true,

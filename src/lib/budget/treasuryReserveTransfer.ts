@@ -273,7 +273,7 @@ async function prepare(db: Db, command: Command): Promise<void> {
       });
       projections.push({
         collection: "ledgerEntries",
-        insert: cashEntry,
+        insert: { ...cashEntry },
         note: "Funded Treasury cash debit witness",
       });
     }

@@ -525,7 +525,7 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         const [bondTurnResult, commodityResult] = await Promise.all([
           runtime.runPhase("bondTurn", () =>
             processBondTurn(newTurn, {
-              treasuryCashLedgerEnabled: context.config.treasuryCashLedgerEnabled,
+              treasuryCashLedgerEnabled: context.config?.treasuryCashLedgerEnabled,
             })
           ),
           runtime.runPhase("commodityPrices", () => processCommodityPriceTurn(newTurn)),
@@ -1564,7 +1564,7 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         }
         const accountsSnapshotted = await runtime.runPhase("ledgerBalanceSnapshot", () =>
           writeBalanceSnapshot(db, newTurn, {
-            treasuryCashLedgerEnabled: config.treasuryCashLedgerEnabled,
+            treasuryCashLedgerEnabled: config?.treasuryCashLedgerEnabled,
           })
         );
         if (accountsSnapshotted !== null) {

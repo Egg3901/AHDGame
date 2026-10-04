@@ -41,7 +41,7 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
       { projection: { moneySupplyEnabled: 1, treasuryCashLedgerEnabled: 1 } }
     );
   if (!isMoneySupplyEnabledFromConfig(config)) return 0;
-  const treasuryCashLedgerEnabled = config.treasuryCashLedgerEnabled === true;
+  const treasuryCashLedgerEnabled = config?.treasuryCashLedgerEnabled === true;
 
   const gameState = await db
     .collection<{ _id: string; preset?: string }>("gameState")
