@@ -5,7 +5,12 @@
  * lacks. A running world never re-seeds, so this is how drift is noticed
  * before it shows up as collection scans in turn timings.
  *
- *   npx tsx scripts/perf/index-drift.ts [--json out.json]
+ *   npx tsx scripts/perf/index-drift.ts [--json out.json] [--fail-on-missing]
+ *
+ * `--fail-on-missing` exits 1 when an index the reconcile migration would
+ * build is absent (text and TTL indexes reviewed in
+ * LIVE_WORLD_MANUAL_SEED_INDEXES are reported but never fail), so the check
+ * can gate a deploy or run after a fresh bootstrap.
  *
  * Issues only `listIndexes` and `estimatedDocumentCount`.
  */
@@ -14,6 +19,7 @@ import { connectDb, closeDb } from "../utils/db";
 import {
   collectSeedIndexPlan,
   findMissingSeedIndexes,
+  isAutoReconciledSeedIndex,
   isTextIndex,
   isTtlIndex,
 } from "../../src/lib/admin/seed/indexes/plan";
@@ -52,6 +58,11 @@ async function main() {
   }
   const i = process.argv.indexOf("--json");
   if (i !== -1) writeFileSync(process.argv[i + 1], JSON.stringify(rows, null, 2));
+  const blocking = missing.filter(isAutoReconciledSeedIndex).length;
+  if (process.argv.includes("--fail-on-missing") && blocking > 0) {
+    console.error(`${blocking} reconcilable seed index(es) missing`);
+    process.exitCode = 1;
+  }
 }
 
 main()
