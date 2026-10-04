@@ -1,66 +1,44 @@
 /**
- * NPP corporations choose operating and construction actions from a supplied turn snapshot.
- * makeNppCorpDecision returns cash changes and sector updates without writing them.
+ * Autonomous corporations choose investment, entry, divestment and production.
+ * makeNppCorpDecision uses the corporation, market signals and CEO strategy to
+ * return planned sector and cash changes for the turn processor to apply.
  */
-import type { ObjectId } from "mongodb";
-import type { CorporateSector, SectorBuildOrder } from "@/lib/db/types";
-import {
-  hasEnterableHeadroom,
-  sectorShortageScore,
-  sectorPeakShortageScore,
-  ESSENTIAL_SHORTAGE_SCORE,
-  computeMacroProductionPolicy,
-  type CommodityPriceRatioFn,
-  type PlacementSignals,
-} from "@/lib/turn/npp/marketSignals";
-import {
-  advanceStrategy,
-  strategyLevers,
-  type StrategySituation,
-} from "@/lib/turn/npp/corpStrategy";
-import { chooseNppStrategyRetool } from "@/lib/turn/npp/strategyRetooling";
-import {
-  hasProtectedConstructionProperty,
-  unprotectedConstructionPropertyFilter,
-} from "@/lib/corporations/securedConstructionProperty";
-import { glutStaggerEligible } from "@/lib/turn/npp/cohort";
-import {
-  analyzeSectorProfitability,
-  type SectorProfitInfo,
-} from "@/lib/turn/npp/sectorProfitability";
-import { lossChronicityUpdates } from "@/lib/turn/npp/costMothball";
-import { buildNppGlutMothballUpdates } from "@/lib/turn/npp/glutMothballing";
-import type { UnownedSector } from "@/lib/db/types/unownedSector";
-import type { CorporationType } from "@/lib/constants/corporations";
-import {
-  STRANDED_DIVEST_TURNS,
-  STRANDED_DIVEST_MAX_PER_TURN,
-} from "@/lib/corporations/strandedPlant";
-import { CHRONIC_LOW_FILL_THRESHOLD } from "@/lib/turn/npp/strategyExpectedRevenue";
-import { bucketKey } from "@/lib/nationalization/stateControlledBuckets";
-import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
-import { CAPITAL_DEPRECIATION_PER_TURN } from "@/lib/market/capital";
-import { getLogisticsSupportedSectorCount } from "@/lib/constants/corporations";
-import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import {
   CAPACITY_BUILD_TURNS,
   computeBuildCost,
   MAX_BUILD_UNITS_PER_ORDER,
   revenuePerCapacityUnit,
 } from "@/lib/constants/capacityEconomy";
+import type { CorporationType } from "@/lib/constants/corporations";
+import { getLogisticsSupportedSectorCount } from "@/lib/constants/corporations";
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
+import type { CapacityDecisionObservation } from "@/lib/corporations/capacityDecisionTelemetry/rules";
 import { foundingStarterUnits, sectorEntryFeeAnchor } from "@/lib/corporations/foundingPlant";
 import { unownedHeadroomUnitsOf } from "@/lib/corporations/marketShare";
-import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
-import {
-  anchorToCorpCapital,
-  resolveSectorHostCurrencyCode,
-  resolveCorpLiquidCurrencyCode,
-} from "@/lib/currency/corporationCapital";
-import type { CapacityDecisionObservation } from "@/lib/corporations/capacityDecisionTelemetry/rules";
 import {
   buildNppOperatorObservation,
   type NppDecisionConstraint,
 } from "@/lib/corporations/nppOperatorTelemetry/rules";
+import {
+  hasProtectedConstructionProperty,
+  unprotectedConstructionPropertyFilter,
+} from "@/lib/corporations/securedConstructionProperty";
+import {
+  STRANDED_DIVEST_MAX_PER_TURN,
+  STRANDED_DIVEST_TURNS,
+} from "@/lib/corporations/strandedPlant";
+import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
+import {
+  anchorToCorpCapital,
+  resolveCorpLiquidCurrencyCode,
+  resolveSectorHostCurrencyCode,
+} from "@/lib/currency/corporationCapital";
+import type { CorporateSector, SectorBuildOrder } from "@/lib/db/types";
+import type { UnownedSector } from "@/lib/db/types/unownedSector";
+import { CAPITAL_DEPRECIATION_PER_TURN } from "@/lib/market/capital";
+import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
+import { bucketKey } from "@/lib/nationalization/stateControlledBuckets";
+import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
 import {
   createFoundingCapacityOutcome,
   createReinvestCapacityObserver,
@@ -70,50 +48,73 @@ import {
   pushFoundingCapacityObservation,
   resolveCapacityCohort,
 } from "@/lib/turn/npp/capacityDecisionTelemetry";
-import {
-  createReinvestPoolLookup,
-  reinvestPoolHeadroomUnits,
-  type ReinvestCandidate,
-} from "@/lib/turn/npp/reinvestCandidatePool";
-import { pushNppWageUpdates } from "@/lib/turn/npp/nppWagePolicy";
-import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
-import { getNppCashFloorAnchor } from "@/lib/turn/npp/nppCashReserve";
-import { fragileReinvestmentPriority } from "@/lib/turn/npp/fragileMarketSupply";
-import {
-  resolveFoundingShortfallReason,
-  setNppMarketEntryReason,
-} from "@/lib/turn/npp/entryDiagnostics";
-import { evaluateNppEntry } from "@/lib/turn/npp/entryEvaluation";
-import {
-  evaluateFrontierCandidate,
-  settleFrontierEntryPlacement,
-} from "@/lib/turn/npp/frontierEntryCandidate";
+import { glutStaggerEligible } from "@/lib/turn/npp/cohort";
 import type {
   NppCorpDecision,
   NppCorpDecisionContext,
   NppPlantsContext,
 } from "@/lib/turn/npp/corpDecisionTypes";
 import {
-  GROWTH_COST_MARGIN_SHARE,
-  NPP_REINVEST_AGGRESSION,
-  NPP_REINVEST_MIN_FILL,
-  NPP_REINVEST_MAX_QUEUE_DEPTH,
-  NPP_REINVEST_MAX_GROWTH_QUEUE_DEPTH,
-  NPP_GROWTH_DEPLOY_FRACTION,
-  NPP_GROWTH_MIN_SHORTAGE,
-  NPP_GROWTH_MIN_UTILIZATION,
-  NPP_GROWTH_MAX_STEP_OF_RUN,
-  NPP_REINVEST_MAX_SECTORS_PER_TURN,
-  NPP_REINVEST_MAINTENANCE_CASH_SHARE,
+  advanceStrategy,
+  strategyLevers,
+  type StrategySituation,
+} from "@/lib/turn/npp/corpStrategy";
+import { lossChronicityUpdates } from "@/lib/turn/npp/costMothball";
+import {
+  resolveFoundingShortfallReason,
+  setNppMarketEntryReason,
+} from "@/lib/turn/npp/entryDiagnostics";
+import { evaluateNppEntry } from "@/lib/turn/npp/entryEvaluation";
+import { fragileReinvestmentPriority } from "@/lib/turn/npp/fragileMarketSupply";
+import {
+  evaluateFrontierCandidate,
+  settleFrontierEntryPlacement,
+} from "@/lib/turn/npp/frontierEntryCandidate";
+import { buildNppGlutMothballUpdates } from "@/lib/turn/npp/glutMothballing";
+import {
+  computeMacroProductionPolicy,
+  ESSENTIAL_SHORTAGE_SCORE,
+  hasEnterableHeadroom,
+  sectorPeakShortageScore,
+  sectorShortageScore,
+  type CommodityPriceRatioFn,
+  type PlacementSignals,
+} from "@/lib/turn/npp/marketSignals";
+import { getNppCashFloorAnchor } from "@/lib/turn/npp/nppCashReserve";
+import {
   EXPANSION_COST,
   EXPANSION_MIN_CASH,
   EXPANSION_MIN_MARGIN,
-  NPP_SHORTAGE_ENTRIES_PER_TURN,
+  GROWTH_COST_MARGIN_SHARE,
+  MAX_DIVIDEND_RATE,
+  NPP_EXTRACTION_FOUNDING_MAX_FACILITIES,
   NPP_FOUNDING_DEPLOY_FRACTION,
   NPP_FOUNDING_HEADROOM_SHARE,
-  NPP_EXTRACTION_FOUNDING_MAX_FACILITIES,
-  MAX_DIVIDEND_RATE,
+  NPP_GROWTH_DEPLOY_FRACTION,
+  NPP_GROWTH_MAX_STEP_OF_RUN,
+  NPP_GROWTH_MIN_SHORTAGE,
+  NPP_GROWTH_MIN_UTILIZATION,
+  NPP_REINVEST_AGGRESSION,
+  NPP_REINVEST_MAINTENANCE_CASH_SHARE,
+  NPP_REINVEST_MAX_GROWTH_QUEUE_DEPTH,
+  NPP_REINVEST_MAX_QUEUE_DEPTH,
+  NPP_REINVEST_MAX_SECTORS_PER_TURN,
+  NPP_REINVEST_MIN_FILL,
+  NPP_SHORTAGE_ENTRIES_PER_TURN,
 } from "@/lib/turn/npp/nppCorporationTuning";
+import { pushNppWageUpdates } from "@/lib/turn/npp/nppWagePolicy";
+import {
+  createReinvestPoolLookup,
+  reinvestPoolHeadroomUnits,
+  type ReinvestCandidate,
+} from "@/lib/turn/npp/reinvestCandidatePool";
+import {
+  analyzeSectorProfitability,
+  type SectorProfitInfo,
+} from "@/lib/turn/npp/sectorProfitability";
+import { CHRONIC_LOW_FILL_THRESHOLD } from "@/lib/turn/npp/strategyExpectedRevenue";
+import { chooseNppStrategyRetool } from "@/lib/turn/npp/strategyRetooling";
+import type { ObjectId } from "mongodb";
 
 export function makeNppCorpDecision(
   ctx: NppCorpDecisionContext,

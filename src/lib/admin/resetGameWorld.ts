@@ -200,7 +200,7 @@ export async function resetGameWorld(
   const preset = options.preset ?? DEFAULT_SEED_PRESET;
   const startingParties = resolveStartingPartiesMode(preset, options.startingParties);
   const seedHistorical = startingParties !== "none" && options.seedHistorical !== false;
-  const preIteration = startingParties !== "none" && options.preIteration === true;
+  const preIteration = options.preIteration === true;
   const now = new Date();
 
   // Tagged progress sink — see ResetGameWorldOptions.log for why the prefix is

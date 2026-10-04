@@ -682,7 +682,7 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
   const noStartingParties = startingParties === "none";
   const globallyVacant = preset === "2019-no-parties";
   if (noStartingParties && !globallyVacant) mode = "historical";
-  const preIteration = !noStartingParties && (options.preIteration ?? false);
+  const preIteration = options.preIteration ?? false;
   const log = options.log ?? (() => {});
   const { db } = options;
 
@@ -996,7 +996,7 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
     { _id: "current" },
     {
       $set: { startingPartiesMode: startingParties },
-      ...(noStartingParties ? { $unset: { preIteration: "" as const } } : {}),
+      ...(noStartingParties && !preIteration ? { $unset: { preIteration: "" as const } } : {}),
     }
   );
 
