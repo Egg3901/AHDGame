@@ -41,3 +41,31 @@ export async function resolveCountryPrimeRate(db: Db, countryId: CountryId): Pro
     .findOne({ _id: getBankId(countryId) });
   return centralBank?.primeRate ?? getCountryConfig(countryId).centralBank.defaultPrimeRate;
 }
+
+/** Resolve prime rates for several countries with one central-bank read. */
+export async function resolveCountryPrimeRates(
+  db: Db,
+  countryIds: readonly CountryId[]
+): Promise<Map<CountryId, number>> {
+  const uniqueCountryIds = [...new Set(countryIds)];
+  if (uniqueCountryIds.length === 0) return new Map();
+
+  const bankIdByCountry = new Map(
+    uniqueCountryIds.map((countryId) => [countryId, getBankId(countryId)])
+  );
+  const bankIds = [...new Set(bankIdByCountry.values())];
+  const banks = await db
+    .collection<CentralBank>("centralBanks")
+    .find({ _id: { $in: bankIds } })
+    .project<Pick<CentralBank, "_id" | "primeRate">>({ _id: 1, primeRate: 1 })
+    .toArray();
+  const primeRateByBankId = new Map(banks.map((bank) => [String(bank._id), bank.primeRate]));
+
+  return new Map(
+    uniqueCountryIds.map((countryId) => [
+      countryId,
+      primeRateByBankId.get(String(bankIdByCountry.get(countryId))) ??
+        getCountryConfig(countryId).centralBank.defaultPrimeRate,
+    ])
+  );
+}

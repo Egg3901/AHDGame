@@ -96,6 +96,12 @@ function makeInteraction() {
   };
 }
 
+function mockInteractions(...interactions: ReturnType<typeof makeInteraction>[]) {
+  db.collectionMocks["crisisInteractions"]!.find.mockReturnValue({
+    toArray: vi.fn().mockResolvedValue(interactions),
+  });
+}
+
 async function get() {
   const { GET } = await import("./route");
   return GET(new Request("http://localhost/api/crises/active-for-character"));
@@ -116,7 +122,7 @@ beforeEach(async () => {
   db.collectionMocks["crises"]!.find.mockReturnValue({
     toArray: vi.fn().mockResolvedValue([makeCrisis()]),
   });
-  db.collectionMocks["crisisInteractions"]!.findOne.mockResolvedValue(makeInteraction());
+  mockInteractions(makeInteraction());
   db.collectionMocks["livingConflicts"]!.findOne.mockResolvedValue(null);
   db.collectionMocks["federalBudget"]!.findOne.mockResolvedValue({
     countryId: "US",
@@ -180,6 +186,7 @@ describe("GET /api/crises/active-for-character — query volume", () => {
     // same for every crisis in one request. Reloading them per crisis multiplies
     // a militaryUnits scan across a feed every player polls each minute.
     const second = { ...makeCrisis(), _id: new ObjectId() };
+    mockInteractions(makeInteraction(), { ...makeInteraction(), crisisId: second._id });
     db.collectionMocks["crises"]!.find.mockReturnValue({
       toArray: vi.fn().mockResolvedValue([makeCrisis(), second]),
     });
@@ -191,6 +198,8 @@ describe("GET /api/crises/active-for-character — query volume", () => {
     expect(db.collectionMocks["federalBudget"]!.findOne).toHaveBeenCalledTimes(1);
     expect(db.collectionMocks["governmentApprovals"]!.findOne).toHaveBeenCalledTimes(1);
     expect(db.collectionMocks["militaryUnits"]!.find).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks["crisisInteractions"]!.find).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks["crisisInteractions"]!.findOne).not.toHaveBeenCalled();
   });
 });
 
@@ -224,7 +233,7 @@ describe("GET /api/crises/active-for-character — aid nodes with aid bills off"
     db.collectionMocks["crises"]!.find.mockReturnValue({
       toArray: vi.fn().mockResolvedValue([crisis]),
     });
-    db.collectionMocks["crisisInteractions"]!.findOne.mockResolvedValue({
+    mockInteractions({
       ...makeInteraction(),
       decisionTree: [AID_NODE],
     });
@@ -301,7 +310,7 @@ describe("GET /api/crises/active-for-character — an active crisis the characte
         },
       ]),
     });
-    db.collectionMocks["crisisInteractions"]!.findOne.mockResolvedValue({
+    mockInteractions({
       ...makeInteraction(),
       decisionTree: [STIMULUS_NODE],
       currentNodeId: "stimulus",
@@ -403,7 +412,7 @@ describe("GET /api/crises/active-for-character — redaction and ordering", () =
   };
 
   it("redacts another government's covert choice", async () => {
-    db.collectionMocks["crisisInteractions"]!.findOne.mockResolvedValue({
+    mockInteractions({
       ...makeInteraction(),
       leaderResponses: [OTHERS_COVERT],
     });
@@ -432,7 +441,7 @@ describe("GET /api/crises/active-for-character — redaction and ordering", () =
         },
       ]),
     });
-    db.collectionMocks["crisisInteractions"]!.findOne.mockResolvedValue({
+    mockInteractions({
       ...makeInteraction(),
       leaderResponses: [{ ...OTHERS_COVERT, countryId: "US" }],
     });
@@ -472,10 +481,7 @@ describe("GET /api/crises/active-for-character — redaction and ordering", () =
         { ...makeCrisis(), startTurn: 1 },
       ]),
     });
-    db.collectionMocks["crisisInteractions"]!.findOne.mockImplementation(
-      async (filter: { crisisId: ObjectId }) =>
-        filter.crisisId.equals(crisisId) ? makeInteraction() : null
-    );
+    mockInteractions(makeInteraction());
 
     const res = await get();
     const body = (await res.json()) as {
@@ -491,7 +497,7 @@ describe("GET /api/crises/active-for-character — redaction and ordering", () =
 
 describe("GET /api/crises/active-for-character — a character with no country", () => {
   it("sends no response ledger at all", async () => {
-    db.collectionMocks["crisisInteractions"]!.findOne.mockResolvedValue({
+    mockInteractions({
       ...makeInteraction(),
       leaderResponses: [
         {

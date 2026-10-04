@@ -5,6 +5,13 @@ import type { WikiPage, WikiPageDifficulty, WikiPageContentType } from "@/lib/db
 import { isCustomWikiPage, resolveWikiCategory } from "@/lib/wiki/pageClassification";
 import { getAllCountryAccess } from "@/lib/countryAccess";
 
+/** Wiki index panels share this access snapshot and its 120s freshness window. */
+export const getWikiCountryAccess = unstable_cache(
+  async () => getAllCountryAccess(),
+  ["wiki-country-access"],
+  { revalidate: 120 }
+);
+
 export interface WikiPageData {
   slug: string;
   title: string;
@@ -137,7 +144,7 @@ async function loadAllWikiPagesForDisplay(): Promise<WikiPageData[]> {
     )
     .toArray();
 
-  const accessMap = await getAllCountryAccess();
+  const accessMap = await getWikiCountryAccess();
   const visiblePages = dbPages.filter(
     (p) => !p.countryId || (accessMap[p.countryId]?.enabledForPlayers ?? false)
   );
@@ -193,7 +200,7 @@ async function loadRecentWikiPages(): Promise<WikiPageSpotlight[]> {
     .sort({ createdAt: -1 })
     .limit(5)
     .toArray();
-  const accessMap = await getAllCountryAccess();
+  const accessMap = await getWikiCountryAccess();
   return pages
     .filter((p) => !p.countryId || (accessMap[p.countryId]?.enabledForPlayers ?? false))
     .map((p) => ({
@@ -229,7 +236,7 @@ async function loadMostViewedWikiPages(): Promise<WikiPageSpotlight[]> {
     .sort({ viewCount: -1 })
     .limit(5)
     .toArray();
-  const accessMap = await getAllCountryAccess();
+  const accessMap = await getWikiCountryAccess();
   return pages
     .filter((p) => !p.countryId || (accessMap[p.countryId]?.enabledForPlayers ?? false))
     .map((p) => ({
