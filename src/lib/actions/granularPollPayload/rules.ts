@@ -1,3 +1,8 @@
+/**
+ * Candidate approval in granular polls. Archetype approval is projected into
+ * demographic buckets and modifies appeal through the election engine's
+ * favorability calculation; see applyCandidateApprovalWeight.
+ */
 import { projectArchetypeValuesToBuckets } from "@/lib/demographics/archetypeBucketMap";
 import { calcEffectiveFavorability } from "@/lib/electionEngine/voteCalculations";
 import { approvalScalar } from "@/lib/utils/demographicAppeal";

@@ -417,6 +417,11 @@
       "automatic": "Assign an available constituency in my region",
       "constituency": "{area}, constituency {number}",
       "filingNote": "You may contest one constituency and appear on one party list. You can hold only one seat. Constituency runoffs use a new ballot; party-list results remain fixed."
+    },
+    "granularPoll": {
+      "projectionExplanation": "Cross-tab segments are projections from Layer-1 demographics. The uncertainty band is illustrative; this poll does not sample respondents.",
+      "uncertaintyBand": "Illustrative uncertainty band",
+      "uncertaintyExplanation": "Illustration only: 3 points divided by the square root of the segment's electorate share. It is not a sample-based margin of error."
     }
   }
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { Tooltip } from "@/components/Tooltip";
 import type { GenericGranularCell } from "@/lib/demographics/granularCells";
 import type { GranularCandidateShare } from "@/lib/actions/granularPollPayload";
@@ -270,6 +271,7 @@ function buildCsv(
 }
 
 export function GranularPollPanel({ poll, pollData }: { poll: StoredPoll; pollData: PollData }) {
+  const t = useTranslations("elections.granularPoll");
   const granular = poll.granular!;
   const { dims, dimLabels, cells, candidateShares } = granular;
   const [activeDim, setActiveDim] = useState<string>(dims[0] ?? "");
@@ -426,7 +428,7 @@ export function GranularPollPanel({ poll, pollData }: { poll: StoredPoll; pollDa
         <span className="text-xl shrink-0">🧩</span>
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <Tooltip content="Cross-tab segments are projections from Layer-1 demographics. The uncertainty band is illustrative; this poll does not sample respondents.">
+            <Tooltip content={t("projectionExplanation")}>
               <span className="font-semibold">Granular electorate</span>
             </Tooltip>
             <span className="text-xs rounded-full border border-card-border px-2 py-0.5 text-muted">
@@ -612,8 +614,8 @@ export function GranularPollPanel({ poll, pollData }: { poll: StoredPoll; pollDa
                     </div>
                   </div>
                   <div className="ml-auto text-right">
-                    <div className="text-xs text-muted">Illustrative uncertainty band</div>
-                    <Tooltip content="Illustration only: 3 points divided by the square root of the segment's electorate share. It is not a sample-based margin of error.">
+                    <div className="text-xs text-muted">{t("uncertaintyBand")}</div>
+                    <Tooltip content={t("uncertaintyExplanation")}>
                       <span className="text-lg font-bold tabular-nums cursor-help">
                         ±{segmentUncertainty?.toFixed(1) ?? "-"} pts
                       </span>
