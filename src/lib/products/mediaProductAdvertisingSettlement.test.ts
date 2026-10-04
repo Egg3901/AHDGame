@@ -198,9 +198,10 @@ describe("media product advertising denomination recovery", () => {
     expect(buyer?.mediaProductAdvertisingObligationsV1).toEqual([]);
     expect(buyer?.mediaProductAdvertisingReceiptV1).toBeUndefined();
     expect(seller?.liquidCapital).toBe(50);
-    const move = (await db.collection("bankMoneyMoves").find({}).toArray())[0];
+    const move = (await db.collection("bankMoneyMoves").find({}).toArray())[0] as
+      { status?: string; legs?: Array<{ applied?: boolean }> } | undefined;
     expect(move?.status).toBe("rejected");
-    expect(move?.legs.some((leg) => leg.applied)).toBe(false);
+    expect(move?.legs?.some((leg) => leg.applied)).toBe(false);
   });
 
   it("keeps the original debit frozen when a quoted seller changes denomination", async () => {
@@ -256,8 +257,9 @@ describe("media product advertising denomination recovery", () => {
     expect(buyer?.mediaProductAdvertisingReceiptV1).toBeUndefined();
     expect(buyer?.mediaProductAdvertisingObligationsV1).toHaveLength(1);
     expect(seller?.liquidCapital).toBe(50);
-    const move = (await db.collection("bankMoneyMoves").find({}).toArray())[0];
+    const move = (await db.collection("bankMoneyMoves").find({}).toArray())[0] as
+      { status?: string; legs?: Array<{ applied?: boolean }> } | undefined;
     expect(move?.status).toBe("partial");
-    expect(move?.legs.map((leg) => leg.applied)).toEqual([true, false]);
+    expect(move?.legs?.map((leg) => leg.applied)).toEqual([true, false]);
   });
 });

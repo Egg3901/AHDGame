@@ -4,6 +4,7 @@
  */
 import type { Db } from "mongodb";
 import type { CommodityType } from "@/lib/constants/commodities";
+import type { MediaProductKind } from "./mediaProductCatalog";
 import type { MediaProductProject } from "./mediaProduct";
 import { getMediaProductKind, tailDemandFactor } from "./mediaProductCatalog";
 import type { SectorClearingResult } from "@/lib/market/clearing";
@@ -97,7 +98,7 @@ function buildMediaProductOfferPlan(
   const availabilityByCommodity: Partial<Record<CommodityType, number>> = {};
   const titleShareByProjectId = new Map<string, Partial<Record<CommodityType, number>>>();
   const ordered = [...projects].sort((a, b) => a._id.localeCompare(b._id));
-  const commodities = new Set<CommodityType>();
+  const commodities = new Set<MediaProductKind["outputCommodities"][number]>();
   for (const project of ordered) {
     const kind = getMediaProductKind(project.kindId);
     if (kind) for (const commodity of kind.outputCommodities) commodities.add(commodity);

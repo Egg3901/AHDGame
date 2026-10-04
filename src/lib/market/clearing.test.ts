@@ -92,7 +92,7 @@ describe("computeClearingFactors", () => {
   const basePrices = { steel: 800 } as Record<CommodityType, number>;
 
   it("limits title-reachable output before clearing and records exact paid units only on request", () => {
-    const input = {
+    const input: Parameters<typeof computeClearingFactors>[0] = {
       sectors: [
         {
           sectorId: "newspaper",
@@ -103,7 +103,7 @@ describe("computeClearingFactors", () => {
         },
       ],
       balances: bals([["advertising", { supply: 100, demand: 1_000 }]]),
-      priceRatioByCommodity: new Map([["advertising", 1]]),
+      priceRatioByCommodity: new Map<CommodityType, number>([["advertising", 1]]),
       basePrices: { advertising: 100 } as Record<CommodityType, number>,
     };
     const unrecorded = computeClearingFactors(input).get("newspaper")!;

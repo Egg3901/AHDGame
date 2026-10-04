@@ -5,6 +5,7 @@
 import { ObjectId, type Db } from "mongodb";
 import type { Corporation, MediaProductAdvertisingObligationV1 } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import type { ProductAdvertisingDenominationWitness } from "@/lib/products/rules/productAdvertising";
 import type { BankingTransition } from "@/lib/banking/rules/boundary";
 import { oid } from "@/lib/banking/rules/boundary";
 import { MONEY_MOVE_COLLECTION } from "@/lib/banking/moneyMove";
@@ -72,7 +73,7 @@ export function createMediaProductAdvertisingObligation(input: {
   amountAnchor: number;
   buyerCurrencyCode: CurrencyCode;
   buyerLocalPerAnchor: number;
-  buyerDenomination: MediaProductAdvertisingObligationV1["buyerDenomination"];
+  buyerDenomination: ProductAdvertisingDenominationWitness;
   sellers: readonly MediaAdvertisingSellerQuote[];
 }): MediaProductAdvertisingObligationV1 | null {
   if (!Number.isSafeInteger(input.turn) || !input.projectId || !input.buyerCorporationId) {
