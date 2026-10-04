@@ -25,6 +25,19 @@ describe("shared government accountability", () => {
     expect(accountabilityDrain(20, 1, 768)).toBeGreaterThan(accountabilityDrain(20, 1, 1));
     expect(accountabilityDrain(70, 1, 5000)).toBe(0);
   });
+  it("attributes a Senate majority even when that party lacks a House majority", () => {
+    expect(
+      responsibilityShares({
+        executiveParty: "president",
+        seatsByParty: { senateMajority: 161, other: 255 },
+        chamberSize: 435,
+        legislativeChambers: [
+          { seatsByParty: { senateMajority: 161, other: 255 }, chamberSize: 435 },
+          { seatsByParty: { senateMajority: 71, other: 27 }, chamberSize: 100 },
+        ],
+      })
+    ).toEqual({ president: 0.75, other: 0.125, senateMajority: 0.125 });
+  });
   it("makes worse approval progressively costlier, with bounded registration and voting effects", () => {
     const ratings = [46, 40, 30, 20, 0];
     const budgets = ratings.map((a) => executiveIncumbencyBudget(a));

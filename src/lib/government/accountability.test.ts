@@ -29,6 +29,14 @@ describe("government accountability observation", () => {
       {
         countryId: "US",
         state: "CA",
+        officeType: "senate",
+        nppId: new ObjectId(),
+        party: "senateMajority",
+        seatsHeld: 71,
+      },
+      {
+        countryId: "US",
+        state: "CA",
         officeType: "governor",
         nppId: new ObjectId(),
         party: "regional",
@@ -57,7 +65,8 @@ describe("government accountability observation", () => {
 
     const drains = await observeGovernmentAccountability(mock as unknown as Db);
     expect(drains.get("US:national:executive")).toBeCloseTo(0.225);
-    expect(drains.get("US:national:opposition")).toBeCloseTo(0.0375);
+    expect(drains.get("US:national:opposition")).toBeCloseTo(0.01875);
+    expect(drains.get("US:national:senateMajority")).toBeCloseTo(0.01875);
     // Half the full chamber, even with other seats vacant, is not a majority.
     expect(drains.get("US:CA:regional")).toBeCloseTo(0.1125);
     expect(drains.has("US:national:stale")).toBe(false);

@@ -1,7 +1,10 @@
 /** Batched government responsibility and continuous party-tenure observation. */
 import type { Db, ObjectId } from "mongodb";
 import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
-import { getLowerChamberOfficeType } from "@/lib/legislature/chamberOfficeType";
+import {
+  getLowerChamberOfficeType,
+  getUpperChamberOfficeType,
+} from "@/lib/legislature/chamberOfficeType";
 import type {
   ElectedOfficial,
   GovernmentFormation,
@@ -185,6 +188,28 @@ export async function observeGovernmentAccountability(db: Db): Promise<Map<strin
     for (const o of lower)
       if (o.party && o.party !== "independent")
         seats[o.party] = (seats[o.party] ?? 0) + (o.seatsHeld ?? 1);
+    const legislativeChambers = [
+      { seatsByParty: seats, chamberSize: config.legislature.lowerChamber.seats },
+    ];
+    const upperOffice = getUpperChamberOfficeType(countryId, game?.preset);
+    if (upperOffice && config.legislature.upperChamber) {
+      const upperSeats: Record<string, number> = {};
+      for (const official of officials) {
+        if (
+          official.countryId === countryId &&
+          official.officeType === upperOffice &&
+          (official.characterId || official.nppId) &&
+          official.party &&
+          official.party !== "independent"
+        )
+          upperSeats[official.party] =
+            (upperSeats[official.party] ?? 0) + (official.seatsHeld ?? 1);
+      }
+      legislativeChambers.push({
+        seatsByParty: upperSeats,
+        chamberSize: config.legislature.upperChamber.seats,
+      });
+    }
     const coalition = coalitions.find(
       (c) => c.countryId === countryId && c.sequentialId === formation?.coalitionId
     );
@@ -199,6 +224,7 @@ export async function observeGovernmentAccountability(db: Db): Promise<Map<strin
           : [],
         seatsByParty: seats,
         chamberSize: config.legislature.lowerChamber.seats,
+        legislativeChambers,
       }),
       approvalByCountry.get(countryId) ?? 50
     );

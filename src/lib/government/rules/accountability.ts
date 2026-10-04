@@ -4,6 +4,7 @@ export interface ResponsibilityInput {
   coalitionParties?: string[];
   seatsByParty: Record<string, number>;
   chamberSize: number;
+  legislativeChambers?: { seatsByParty: Record<string, number>; chamberSize: number }[];
 }
 
 export function responsibilityShares(input: ResponsibilityInput): Record<string, number> {
@@ -16,9 +17,14 @@ export function responsibilityShares(input: ResponsibilityInput): Record<string,
     shares[party] =
       0.75 * (support > 0 ? (input.seatsByParty[party] ?? 0) / support : 1 / partners.length);
   }
-  if (input.chamberSize > 0) {
-    for (const [party, seats] of Object.entries(input.seatsByParty)) {
-      if (seats > input.chamberSize / 2) shares[party] = (shares[party] ?? 0) + 0.25;
+  const chambers = input.legislativeChambers ?? [
+    { seatsByParty: input.seatsByParty, chamberSize: input.chamberSize },
+  ];
+  for (const chamber of chambers) {
+    if (chamber.chamberSize <= 0) continue;
+    for (const [party, seats] of Object.entries(chamber.seatsByParty)) {
+      if (seats > chamber.chamberSize / 2)
+        shares[party] = (shares[party] ?? 0) + 0.25 / chambers.length;
     }
   }
   return shares;
