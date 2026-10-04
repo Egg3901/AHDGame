@@ -247,8 +247,8 @@ describe("loans owed to a bank that no longer exists", () => {
     expect(summary.loansServiced).toBe(3);
     expect(summary.recoveredToInsurer).toBe(300);
     expect(db.collection("depositInsuranceFunds").docs[0].balance).toBe(340);
-    expect((db.collection("corporations").docs[0] as Corporation).bankCharter?.cashReserves).toBe(
-      900
-    );
+    expect(
+      (db.collection("corporations").docs[0] as unknown as Corporation).bankCharter?.cashReserves
+    ).toBe(900);
   });
 });
