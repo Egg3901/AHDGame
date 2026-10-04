@@ -123,6 +123,47 @@ describe("resetAndBootstrapGameWorld — failure handling", () => {
     );
   });
 
+  it("clears the old 1991 unowned market pool after teardown and before fresh taxonomy preflight", async () => {
+    const { resetGameWorld } = await import("@/lib/admin/resetGameWorld");
+    const { bootstrapGameWorld } = await import("@/lib/admin/bootstrapGameWorld");
+    const order: string[] = [];
+    db.collection("unownedSectors").deleteMany.mockImplementation(async () => {
+      order.push("clear-unowned");
+      return { deletedCount: 2791 } as never;
+    });
+    vi.mocked(resetGameWorld).mockImplementation(async () => {
+      order.push("teardown");
+      return okTeardown as never;
+    });
+    vi.mocked(bootstrapGameWorld).mockImplementation(async () => {
+      order.push("bootstrap");
+      return {} as never;
+    });
+
+    const { resetAndBootstrapGameWorld } = await import("./resetAndBootstrapGameWorld");
+    await resetAndBootstrapGameWorld({
+      db: db as unknown as Db,
+      preset: "1991-default",
+      startingParties: "none",
+      resetReference: true,
+    });
+
+    expect(order).toEqual(["teardown", "clear-unowned", "bootstrap"]);
+    expect(db.collectionMocks.unownedSectors?.deleteMany).toHaveBeenCalledWith({});
+  });
+
+  it("preserves unowned markets when reset does not request a 1991 reference rebuild", async () => {
+    const { resetAndBootstrapGameWorld } = await import("./resetAndBootstrapGameWorld");
+    await resetAndBootstrapGameWorld({
+      db: db as unknown as Db,
+      preset: "1991-default",
+      startingParties: "none",
+      resetReference: false,
+    });
+
+    expect(db.collectionMocks.unownedSectors?.deleteMany).toBeUndefined();
+  });
+
   it("rejects unsupported empty starts before sealing or touching the database", async () => {
     const { resetAndBootstrapGameWorld } = await import("./resetAndBootstrapGameWorld");
     await expect(

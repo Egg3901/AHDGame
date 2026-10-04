@@ -268,6 +268,18 @@ export async function resetAndBootstrapGameWorld(
 
     // 2) BUILD. `seedOnly` short-circuits before election + officials spawn.
     phaseReached = "build";
+    // The 1991 taxonomy seed is authorized only for a fresh reference rebuild.
+    // `unownedSectors` is classified as reference data, so resetGameWorld's
+    // runtime sweep intentionally leaves the outgoing market pool in place.
+    // Clear that pool here, after teardown and immediately before bootstrap's
+    // empty-world preflight; seedUnownedSectors rebuilds it from the new state
+    // roster later in the same bootstrap.
+    if (preset === "1991-default" && resetReference) {
+      const cleared = await db.collection("unownedSectors").deleteMany({});
+      collect(
+        `Cleared ${cleared.deletedCount ?? 0} stale unowned market(s) for 1991 reference rebuild`
+      );
+    }
     const bootstrap = await bootstrapGameWorld({
       db,
       mode,
