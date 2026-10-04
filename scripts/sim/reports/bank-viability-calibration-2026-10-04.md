@@ -52,12 +52,18 @@ reserve risk weight. This change adds a separate measured cohort: annual
 insured-deposit exposure turns, actual gross insurance shortfalls, paid claim
 count, and recoveries attributable to resolutions opened after evidence
 measurement began. Pre-measurement estates do not supply recovery credit.
-Pricing continues at 0.4% until ten measured years and three paid claims are
-available. After that, it uses same-cohort net claims per insured deposit-year
-plus a bounded reserve refill: at most one year of observed net claims, refilled
-over five years. The existing risk weight remains in place. Premium collection
-is still limited by actual bank cash, and the existing shortfall path records
-any unpaid premium.
+The measured rate is same-cohort net claims per insured deposit-year plus a
+bounded reserve refill: a target of one year of observed net claims, refilled
+over five years. It is blended with the provisional rate by credibility, the
+product of measured years over ten and paid claims over three (each capped at
+one), so a fund moves toward its measured rate gradually and never jumps on a
+threshold turn. The base rate never falls below 0.4% and never exceeds 2%
+before the existing 0.5x to 3x risk weight, so one large failure in a thin
+cohort cannot price surviving banks into a failure spiral; losses beyond what
+the ceiling funds fall to the funded Treasury backstop. Premium collection is
+still limited by actual bank cash, and the existing shortfall path records any
+unpaid premium. No modeled scenario reaches a paid claim before its failure
+turn, so every row above prices at the provisional rate.
 
 The archived 1991 audit reports USD lifetime deposit-insurance payouts of
 $10.46B against $0.16B in premiums, with $10.30B covered by Treasury. These

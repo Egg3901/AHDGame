@@ -15,11 +15,12 @@ areas: [backend, engine]
 
 ## What changed
 
-- Premiums remain at the existing 0.4% provisional annual rate until the fund
-  has ten years of measured exposure and at least three paid claims. After
-  that, the rate reflects same-cohort net claims and refills a one-year claim
-  reserve over five years, while preserving the bank's existing reserve-ratio
-  risk weight.
+- Premiums start at the existing 0.4% provisional annual rate and move
+  toward a measured rate as evidence accumulates: same-cohort net claims plus
+  refilling a one-year claim reserve over five years. The measured rate is
+  weighted by credibility (ten measured years and three paid claims give full
+  weight), stays between 0.4% and 2% before the bank's existing reserve-ratio
+  risk weight, and never jumps on a single turn.
 - The original bank-turn premium quote is frozen in its settlement receipt.
   Retries finish that quote even if cash, deposit exposure, or fund evidence
   has changed, without debiting the bank twice.
