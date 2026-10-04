@@ -780,6 +780,9 @@ export interface SectorBuildOrder {
    * `src/lib/corporations/buildDelivery.ts`.
    */
   smooth?: boolean;
+  /** Paid, secured construction loan. Absent on ordinary cash-funded orders. */
+  constructionLoanId?: string;
+  constructionClaimId?: string;
 }
 
 export interface CorporateSector {
@@ -1158,6 +1161,8 @@ export interface CorporateSector {
    * written outside plants mode.
    */
   buildQueue?: SectorBuildOrder[];
+  /** Frozen funded build claim and its cash escrow; absent on legacy sectors. */
+  constructionFinancing?: import("@/lib/banking/rules/constructionBuild").ConstructionBuildClaim;
   /**
    * Plants tier (P3a): construction in progress, in ₳ (anchor), the sum of
    * `costPaidAnchor` across the outstanding `buildQueue` orders (D10).
