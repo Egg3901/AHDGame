@@ -29,6 +29,14 @@ export interface MarketContext {
   plantsEnabled: boolean;
   /** Default off: explicit positive overhead replaces the margin residual. */
   explicitPlantCostsEnabled?: boolean;
+  /** Default off: ownership limits and censorship constrain media delivery. */
+  mediaRegulationEnabled?: boolean;
+  /** Default off: enacted pre-repeal US fairness doctrine affects outlet reach. */
+  mediaFairnessDoctrineEnabled?: boolean;
+  /** Existing editorial-market gate, threaded to distinguish it from the law. */
+  mediaEditorialEnabled?: boolean;
+  /** Selected US media communications policy option, read only while gated on. */
+  mediaRegulationPolicyOptionIndex?: number;
   /**
    * Pre-pass clearing results per sector id (computed in the corp-phase entry
    * from lagged balances). Absent entries mean "no outputs" → factor 1.

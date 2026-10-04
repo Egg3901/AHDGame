@@ -150,6 +150,8 @@ export interface GameConfig {
   mediaEditorialEnabled?: boolean;
   /** Paid media and entertainment operating-model catalog. Default off. */
   mediaOperatingModelsEnabled?: boolean;
+  /** Media ownership limits and censorship effects in the advertising market. Default off. */
+  mediaRegulationEnabled?: boolean;
   /**
    * Sovereignty transitions (decolonization). Absent/false ⇒ the phase is a
    * no-op, which is the required default: the evaluator returns a "strong

@@ -124,6 +124,7 @@ export const gameConfig: GameConfig = {
   // It stays dark on fresh worlds until its rollout is explicitly approved.
   mediaEditorialEnabled: false,
   mediaOperatingModelsEnabled: false,
+  mediaRegulationEnabled: false,
 
   // Sovereignty transitions (decolonization). Safe as a default because the
   // phase carries its own era ceiling — a modern-preset world is a no-op even
