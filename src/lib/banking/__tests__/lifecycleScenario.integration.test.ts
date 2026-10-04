@@ -156,8 +156,8 @@ function account(db: InMemoryDb): SavingsAccount {
 }
 /**
  * Everything that is cash somewhere. Savings balances are claims, not cash,
- * and the treasury balance is the fiscal ledger: a deficit-financed backstop
- * is booked there as spending while the journal records the money it minted.
+ * and the treasury balance is funded cash. An insurance backstop transfers
+ * that cash to depositors rather than minting money.
  */
 function money(db: InMemoryDb): number {
   return (
@@ -165,7 +165,8 @@ function money(db: InMemoryDb): number {
     bank(db).bankCharter.cashReserves +
     bank(db).liquidCapital +
     owner(db).currencyBalances.personal.USD +
-    fund(db)
+    fund(db) +
+    (db.collection("federalBudget").docs[0] as { treasuryBalance: number }).treasuryBalance
   );
 }
 /** Net money the journal says it created (mint) or destroyed (burn). */
