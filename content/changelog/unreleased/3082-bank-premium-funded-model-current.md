@@ -20,6 +20,9 @@ areas: [backend, engine]
   that, the rate reflects same-cohort net claims and refills a one-year claim
   reserve over five years, while preserving the bank's existing reserve-ratio
   risk weight.
+- The original bank-turn premium quote is frozen in its settlement receipt.
+  Retries finish that quote even if cash, deposit exposure, or fund evidence
+  has changed, without debiting the bank twice.
 - The accompanying 1991 calibration records current funded-cash and bond-pool
   constraints. Its neutral and aggressive cases still fail before acceptance;
   the report does not claim bank viability.
