@@ -57,10 +57,9 @@ describe("POST /api/corporations/[id]/sectors/[sectorId]/abandon", () => {
     } as never);
     vi.mocked(requireCeo).mockReturnValue(null);
 
-    // The command now CLAIMS the sector via findOneAndDelete (atomic guard against
-    // a concurrent double-refund) rather than a plain findOne, so only the winning
-    // request refunds. The returned doc drives the rest of the handler.
-    db.collectionMocks.corporateSectors.findOneAndDelete.mockResolvedValue({
+    // The command reserves the row before refunding, so only the winning request
+    // refunds while the pool restore still deletes after its idempotent credit.
+    db.collectionMocks.corporateSectors.findOneAndUpdate.mockResolvedValue({
       _id: sectorId,
       corporationId: corpId,
       countryId: "US",
@@ -90,11 +89,21 @@ describe("POST /api/corporations/[id]/sectors/[sectorId]/abandon", () => {
     expect(data.success).toBe(true);
     expect(data.message).toContain("returned to the unowned pool");
     expect(db.collectionMocks.unownedSectors.findOneAndUpdate).toHaveBeenCalledTimes(1);
-    expect(db.collectionMocks.corporateSectors.deleteMany).toHaveBeenCalledWith({
-      _id: {
-        $in: [sectorId],
+    expect(db.collectionMocks.corporateSectors.findOneAndUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ _id: sectorId, corporationId: corpId }),
+      {
+        $set: {
+          constructionPropertyTransition: {
+            key: `restore:${sectorId.toHexString()}`,
+            kind: "restore",
+          },
+        },
       },
-    });
+      { returnDocument: "after" }
+    );
+    const deleteFilter = db.collectionMocks.corporateSectors.deleteMany.mock.calls[0]![0];
+    expect(deleteFilter._id.$in).toEqual([sectorId]);
+    expect(deleteFilter["constructionPropertyTransition.kind"]).toBe("restore");
   });
 });
 
@@ -124,7 +133,7 @@ describe("abandon construction settlement", () => {
     vi.mocked(requireCeo).mockReturnValue(null);
     db.collection("gameState");
     db.collectionMocks.gameState.findOne.mockResolvedValue({ _id: "current", currentTurn: 148 });
-    db.collectionMocks.corporateSectors.findOneAndDelete
+    db.collectionMocks.corporateSectors.findOneAndUpdate
       .mockResolvedValueOnce({
         _id: sectorId,
         corporationId: corpId,

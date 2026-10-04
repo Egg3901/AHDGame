@@ -250,8 +250,11 @@ describe("buyListedSector — mid-build transfer moves the queue (P3b)", () => {
     // Ramp anchor keeps the earlier turn so the governor does not restart.
     expect(merged.plantsStartTurn).toBe(12);
     // And the purchased doc is the one deleted.
-    expect(db.collectionMocks.corporateSectors.deleteOne).toHaveBeenCalledWith({
-      _id: sectorId,
-    });
+    expect(db.collectionMocks.corporateSectors.deleteOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        _id: sectorId,
+        $and: expect.any(Array),
+      })
+    );
   });
 });

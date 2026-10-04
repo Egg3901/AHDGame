@@ -1,5 +1,6 @@
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
+import { badRequest } from "@/lib/api/errors";
 import type {
   Bond,
   CentralBank,
@@ -78,6 +79,10 @@ import { applyNationalizationConsequences } from "./consequences/apply";
 import { recordNationalizationLedger } from "./ledger";
 import type { NationalizationMethod, NationalizationTrigger } from "./consequences/types";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
+import {
+  hasProtectedConstructionProperty,
+  unprotectedConstructionPropertyFilter,
+} from "@/lib/corporations/securedConstructionProperty";
 
 /**
  * Politics inputs the caller supplies; the money fields (valuation, compensation,
@@ -171,6 +176,9 @@ async function absorbSectorIntoNatCorp(
     sectorType: sector.sectorType,
     industryModel: sector.industryModel ?? null,
   });
+  if (existing && hasProtectedConstructionProperty(existing)) {
+    throw badRequest("Resolve secured construction before merging this nationalized sector");
+  }
   if (existing && !existing._id.equals(sector._id)) {
     // MERGE: the donor row is DELETED below, so anything not folded into the
     // survivor here is destroyed outright. `mergeSectorPlantFields` sums
@@ -185,8 +193,8 @@ async function absorbSectorIntoNatCorp(
           capacityBookAnchor: haircutBook,
         })
       : null;
-    await sectors.updateOne(
-      { _id: existing._id },
+    const merge = await sectors.updateOne(
+      { _id: existing._id, ...unprotectedConstructionPropertyFilter() },
       {
         $inc: {
           // Revenue merges in EVERY mode, in lockstep with the capacity fold
@@ -217,7 +225,14 @@ async function absorbSectorIntoNatCorp(
         },
       }
     );
-    await sectors.deleteOne({ _id: sector._id });
+    if (merge.matchedCount !== 1)
+      throw badRequest("The National Corporation holding became secured during the taking");
+    const remove = await sectors.deleteOne({
+      _id: sector._id,
+      ...unprotectedConstructionPropertyFilter(),
+    });
+    if (remove.deletedCount !== 1)
+      throw badRequest("The sector became secured during the nationalization");
     return existing._id;
   } else {
     // RE-PARENT: the doc itself is re-pointed, so the plant state rides along
@@ -225,8 +240,8 @@ async function absorbSectorIntoNatCorp(
     // the next tick restates `revenue` from the untouched nameplate straight
     // back to the full pre-taking figure and the transition penalty silently
     // evaporates.
-    await sectors.updateOne(
-      { _id: sector._id },
+    const reparent = await sectors.updateOne(
+      { _id: sector._id, ...unprotectedConstructionPropertyFilter() },
       {
         $set: {
           corporationId: destId,
@@ -244,6 +259,8 @@ async function absorbSectorIntoNatCorp(
         },
       }
     );
+    if (reparent.matchedCount !== 1)
+      throw badRequest("The sector became secured during the nationalization");
     return sector._id;
   }
 }
@@ -452,6 +469,9 @@ export async function nationalizeSector(
 
   const sector = await sectors.findOne({ _id: params.sectorId });
   if (!sector) throw new Error("Sector not found");
+  if (hasProtectedConstructionProperty(sector)) {
+    throw badRequest("Resolve secured construction before nationalizing this sector");
+  }
 
   const donor = await corps.findOne({ _id: sector.corporationId });
   if (!donor) throw new Error("Donor corporation not found");
@@ -636,13 +656,17 @@ export async function nationalizeWholeCorp(
     throw new Error("Cannot nationalize a state-owned corporation");
   }
 
+  const targetSectors = await sectors.find({ corporationId: target._id }).toArray();
+  if (targetSectors.some(hasProtectedConstructionProperty)) {
+    throw badRequest("Resolve secured construction before nationalizing this corporation");
+  }
+
   // The primary NatCorp is the bond-assumption target + the canonical return.
   // Individual sectors may route to split-offs (resolved per type below).
   const nationalCorp = await ensurePrimaryNationalCorporation(db, params.countryId);
 
   // ── 1. Capture valuation inputs BEFORE moving sectors/bonds (₳). ──
   const [
-    targetSectors,
     targetBonds,
     heldStakes,
     centralBanks,
@@ -651,7 +675,6 @@ export async function nationalizeWholeCorp(
     marketMode,
     corpGameState,
   ] = await Promise.all([
-    sectors.find({ corporationId: target._id }).toArray(),
     bonds.find({ corporationId: target._id, matured: false }).toArray(),
     corps
       .find(

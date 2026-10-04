@@ -57,6 +57,10 @@ import {
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { clampProductionPolicy } from "@/lib/utils/productionPolicy";
 import { buySecuredConstructionProperty } from "@/lib/banking/constructionSale";
+import {
+  hasProtectedConstructionProperty,
+  unprotectedConstructionPropertyFilter,
+} from "@/lib/corporations/securedConstructionProperty";
 
 const buySectorSchema = z.object({
   buyerCorporationId: schemas.objectId,
@@ -155,6 +159,12 @@ export async function buyListedSector(request: Request, { params }: RouteParams)
         principalRepaid: result.quote.principalRepaid,
         message: "Property acquired; secured principal paid before seller proceeds.",
       });
+    }
+    if (hasProtectedConstructionProperty(sector)) {
+      return NextResponse.json(
+        { error: "This sector has secured construction and cannot be acquired yet" },
+        { status: 409 }
+      );
     }
     if (securedClaim && !["released", "cancelled"].includes(securedClaim.status))
       return NextResponse.json(
@@ -345,8 +355,8 @@ export async function buyListedSector(request: Request, { params }: RouteParams)
         const mergedPlant = plantsEnabled
           ? mergeSectorPlantFields(existingBuyerSector, sector)
           : {};
-        await db.collection<CorporateSector>("corporateSectors").updateOne(
-          { _id: existingBuyerSector._id },
+        const mergeResult = await db.collection<CorporateSector>("corporateSectors").updateOne(
+          { _id: existingBuyerSector._id, ...unprotectedConstructionPropertyFilter() },
           {
             $set: {
               // Under plants the plant-state fold below is what carries value
@@ -363,7 +373,16 @@ export async function buyListedSector(request: Request, { params }: RouteParams)
             },
           }
         );
-        await db.collection<CorporateSector>("corporateSectors").deleteOne({ _id: sector._id });
+        if (mergeResult.matchedCount !== 1) {
+          throw new Error("The buyer's destination sector became secured during the purchase");
+        }
+        const deleteResult = await db.collection<CorporateSector>("corporateSectors").deleteOne({
+          _id: sector._id,
+          ...unprotectedConstructionPropertyFilter(),
+        });
+        if (deleteResult.deletedCount !== 1) {
+          throw new Error("The listed sector became secured during the purchase");
+        }
         mergeApplied = true;
 
         await db
