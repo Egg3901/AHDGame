@@ -17,7 +17,11 @@ import {
   type AlignmentPoleToken,
   type AlignmentPole,
 } from "@/lib/constants/alignmentEras";
-import { ROSTER_BY_KEY, rosterNameAt, type AlignmentCountryKey } from "@/lib/constants/alignmentRoster";
+import {
+  ROSTER_BY_KEY,
+  rosterNameAt,
+  type AlignmentCountryKey,
+} from "@/lib/constants/alignmentRoster";
 import { COUNTRY_CONFIGS, getCountryDisplayName, type CountryId } from "@/lib/constants/countries";
 import type { CountryAlignment } from "@/lib/db/types/countryAlignment";
 import { roundToShareGrid, type AlignmentShares } from "../normalize";

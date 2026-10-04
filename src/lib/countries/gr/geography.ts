@@ -1,6 +1,7 @@
 import type { CountryGeography } from "../contract";
 import { modernRegionalPopulation2027 } from "@/lib/seeds/reference/modernRegionalPopulation2027";
 import { grMetricPresets1953 } from "./data/grMetricPresets1953";
+import { grMetricPresets1991 } from "./data/grMetricPresets1991";
 import { grRegions } from "./data/grRegions";
 import { grRegions1953 } from "./data/grRegions1953";
 import { grStateMetrics } from "./data/grStateMetrics";
@@ -42,6 +43,7 @@ const censusBundles = {};
 
 const metricPresetBundles = {
   "1953-default": grMetricPresets1953,
+  "1991-default": grMetricPresets1991,
 };
 
 const populationAnchors = {};
