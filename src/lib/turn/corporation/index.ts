@@ -112,6 +112,12 @@ import { applyMediaEditorialEffects } from "@/lib/mediaEditorial/applyEffects";
 import { addSettledPoliticalAttention } from "@/lib/mediaOperatingModels/reach";
 import { applyOperatingCashThenDevelopmentCash } from "./manufacturingDevelopmentCashSettlement";
 import { resumeFoundingUnderwritingPlans } from "@/lib/banking/underwritingSettlement";
+import {
+  processMediaProductProjectsV1,
+  startNppMediaProductsV1,
+} from "@/lib/products/mediaProductPersistence";
+import { getMediaProductKind } from "@/lib/products/mediaProductCatalog";
+import { aggregateMediaProductSectorEffects } from "@/lib/products/rules/mediaProductRules";
 
 export type { CorporationTurnResult } from "./corporationTurnRuntime";
 
@@ -219,6 +225,13 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       ?.canonicalFreightBillingEnabled === true;
   const mediaEditorialEnabled = marketGovernorConfig?.mediaEditorialEnabled === true;
   const mediaOperatingModelsEnabled = marketGovernorConfig?.mediaOperatingModelsEnabled === true;
+  const mediaProductSlatesEnabled =
+    marketAtLeast(marketSystemMode, "clearing") &&
+    mediaOperatingModelsEnabled &&
+    marketGovernorConfig?.mediaProductSlatesEnabled === true &&
+    marketGovernorConfig?.brandLoyaltyEnabled === true &&
+    marketGovernorConfig?.brandLoyaltySliceEnabled === true &&
+    marketGovernorConfig?.qualityPremiumPricingEnabled === true;
   const mediaRegulationEnabled =
     marketAtLeast(marketSystemMode, "clearing") &&
     marketGovernorConfig?.mediaRegulationEnabled === true;
@@ -236,6 +249,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
         (mediaRegulationEnabled &&
           typeof gameState?.currentYear === "number" &&
           gameState.currentYear <= 1986),
+      mediaProductSlatesEnabled,
       productLinesV2Enabled:
         plantsEnabledForMarketShare &&
         (marketGovernorConfig as { productLinesV2Enabled?: boolean } | null)
@@ -250,6 +264,30 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           )
       : Promise.resolve(null),
   ]);
+  if (
+    mediaProductSlatesEnabled &&
+    lookups.mediaProductProjectsByCorpId &&
+    typeof gameState?.currentYear === "number"
+  ) {
+    const startedNppProjects = await startNppMediaProductsV1({
+      db,
+      corporations: lookups.corporations,
+      sectorsByCorp: lookups.sectorsByCorp,
+      projectsByCorporationId: lookups.mediaProductProjectsByCorpId,
+      currentYear: gameState.currentYear,
+      currentTurn: turn ?? 1,
+    });
+    for (const project of startedNppProjects) {
+      const development = lookups.mediaProductDevelopmentByCorpId ?? new Map();
+      development.set(project.corporationId, project);
+      lookups.mediaProductDevelopmentByCorpId = development;
+      const bySector = lookups.mediaProductProjectsBySectorId ?? new Map();
+      const sectorProjects = bySector.get(project.sectorId) ?? [];
+      sectorProjects.push(project);
+      bySector.set(project.sectorId, sectorProjects);
+      lookups.mediaProductProjectsBySectorId = bySector;
+    }
+  }
   const politicalMediaMarketEnabled = marketGovernorConfig?.politicalMediaMarketEnabled === true;
   const politicalMediaOrders: PoliticalMediaOrderForClearing[] = politicalMediaMarketEnabled
     ? await loadPoliticalMediaOrdersForClearing(db, turn ?? 0)
@@ -452,7 +490,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   // Independent of clearing; flag-gated. Display/telemetry only in this phase.
   let qualityCorpUpdates = new Map<string, number>();
   let newCommodityQuality: Map<CommodityType, number> | null = null;
-  if (sectorQualityEnabled || lookups.productLinesV2Enabled) {
+  if (sectorQualityEnabled || lookups.productLinesV2Enabled || mediaProductSlatesEnabled) {
     const laggedQ = new Map<CommodityType, number>();
     const qDocs = await db
       .collection("commodityQuality")
@@ -509,6 +547,60 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       const corp = lookups.corpById.get(corpId);
       if (corp) corp.averageQuality = q;
     }
+  }
+
+  if (mediaProductSlatesEnabled && lookups.mediaProductProjectsByCorpId) {
+    await processMediaProductProjectsV1({
+      db,
+      corporations: lookups.corporations,
+      projectsByCorporationId: lookups.mediaProductProjectsByCorpId,
+      currentTurn: turn ?? 1,
+      sectorQualityBySectorId: lookups.productSectorQualityById ?? new Map(),
+    });
+    const projectsBySectorId = new Map<
+      string,
+      import("@/lib/products/mediaProduct").MediaProductProject[]
+    >();
+    const developmentByCorpId = new Map<
+      string,
+      import("@/lib/products/mediaProduct").MediaProductProject
+    >();
+    for (const [corporationId, projects] of lookups.mediaProductProjectsByCorpId) {
+      for (const project of projects) {
+        const sectorProjects = projectsBySectorId.get(project.sectorId) ?? [];
+        sectorProjects.push(project);
+        projectsBySectorId.set(project.sectorId, sectorProjects);
+        if (project.activeDevelopmentCorporationId) {
+          developmentByCorpId.set(corporationId, project);
+        }
+      }
+    }
+    lookups.mediaProductProjectsBySectorId = projectsBySectorId;
+    lookups.mediaProductDevelopmentByCorpId = developmentByCorpId;
+    const mediaProductQualityBySectorId = new Map<string, number>();
+    const mediaProductLoyaltyBonusBySectorId = new Map<string, number>();
+    for (const sectors of lookups.sectorsByCorp.values()) {
+      for (const sector of sectors) {
+        const sectorId = sector._id.toString();
+        const projects = (projectsBySectorId.get(sectorId) ?? []).flatMap((project) => {
+          const kind = getMediaProductKind(project.kindId);
+          return kind && sector.strategyId === kind.modelId
+            ? [{ project: { ...project, id: project._id }, kind }]
+            : [];
+        });
+        if (projects.length === 0) continue;
+        const effect = aggregateMediaProductSectorEffects({
+          projects,
+          baseQuality: lookups.productSectorQualityById?.get(sectorId) ?? null,
+        });
+        if (effect.quality !== null) mediaProductQualityBySectorId.set(sectorId, effect.quality);
+        if (effect.loyaltyBonus > 0) {
+          mediaProductLoyaltyBonusBySectorId.set(sectorId, effect.loyaltyBonus);
+        }
+      }
+    }
+    lookups.mediaProductQualityBySectorId = mediaProductQualityBySectorId;
+    lookups.mediaProductLoyaltyBonusBySectorId = mediaProductLoyaltyBonusBySectorId;
   }
 
   // Phase 1a2: auto-install NPP caretakers on corps left CEO-less by a hard

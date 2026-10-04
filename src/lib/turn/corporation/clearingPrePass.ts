@@ -534,12 +534,22 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
           lastSoldFraction: typeof sector.soldFraction === "number" ? sector.soldFraction : null,
           // Owning corp's lagged loyalty for the slice pre-pass (A2b).
           brandLoyalty: brandLoyaltySliceEnabled
-            ? (lookups.corpById.get(corpId)?.brandLoyalty ?? 0)
+            ? Math.min(
+                100,
+                (lookups.corpById.get(corpId)?.brandLoyalty ?? 0) +
+                  (lookups.mediaProductSlatesEnabled
+                    ? (lookups.mediaProductLoyaltyBonusBySectorId?.get(sectorId) ?? 0)
+                    : 0)
+              )
             : undefined,
           // Lagged owning-corp output quality for the premium coupling (Package B).
           // Prior-turn averageQuality, consistent with clearing's lagged inputs.
           outputQuality: qualityPremiumPricingEnabled
-            ? (lookups.corpById.get(corpId)?.averageQuality ?? null)
+            ? lookups.mediaProductSlatesEnabled
+              ? (lookups.mediaProductQualityBySectorId?.get(sectorId) ??
+                lookups.corpById.get(corpId)?.averageQuality ??
+                null)
+              : (lookups.corpById.get(corpId)?.averageQuality ?? null)
             : undefined,
           ...(scaledProductOutput
             ? {

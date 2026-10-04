@@ -139,4 +139,33 @@ describe("shared product lifecycle", () => {
 
     expect(progress).toMatchObject({ stage: "retired", stageStartedTurn: 69, active: false });
   });
+
+  it("uses optional product-kind stage cadence and preserves default schedule for other callers", () => {
+    const custom = advanceProductLifecycle({
+      product: {
+        ...product,
+        stage: "launch",
+        stageStartedTurn: 10,
+        developmentPaidAnchor: 100,
+        elapsedDevelopmentTurns: 3,
+        elapsedThresholdTurns: 3,
+      },
+      receipt: receipt({ turn: 11 }),
+      durations: { launch: 2 },
+    });
+    const defaultSchedule = advanceProductLifecycle({
+      product: {
+        ...product,
+        stage: "launch",
+        stageStartedTurn: 10,
+        developmentPaidAnchor: 100,
+        elapsedDevelopmentTurns: 3,
+        elapsedThresholdTurns: 3,
+      },
+      receipt: receipt({ turn: 11 }),
+    });
+
+    expect(custom).toMatchObject({ stage: "growth", stageStartedTurn: 11 });
+    expect(defaultSchedule).toMatchObject({ stage: "launch", stageStartedTurn: 10 });
+  });
 });
