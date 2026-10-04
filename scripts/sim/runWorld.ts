@@ -1243,7 +1243,19 @@ async function main() {
     );
     const { snapshotSectorInvestment, assertInvestmentTurnComplete } =
       await import("./sectorInvestmentSnapshot");
-    if (investmentSnapshots) await snapshotSectorInvestment(db, investmentSnapshots, startTurn);
+    const investmentSnapshotSource =
+      sourceCommit !== undefined && source.executedCommit
+        ? { runId, seed, codeVersion: source.executedCommit }
+        : undefined;
+    if (investmentSnapshots) {
+      await snapshotSectorInvestment(
+        db,
+        investmentSnapshots,
+        startTurn,
+        investmentSnapshotSource,
+        "opening-state"
+      );
+    }
     const targetTurn = startTurn + turns;
     let captureCentralBankCredibilityTurn:
       | (typeof import("./centralBankCredibilitySnapshot"))["captureCentralBankCredibilityTurn"]
@@ -1384,7 +1396,14 @@ async function main() {
             codeVersion: source.executedCommit!,
           });
         }
-        if (investmentSnapshots) await snapshotSectorInvestment(db, investmentSnapshots, lastTurn);
+        if (investmentSnapshots) {
+          await snapshotSectorInvestment(
+            db,
+            investmentSnapshots,
+            lastTurn,
+            investmentSnapshotSource
+          );
+        }
       }
 
       // Sim-harness-only snapshots (seats, corporations-by-country) for the
