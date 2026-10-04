@@ -40,6 +40,7 @@
  */
 
 import type { CorporationType } from "@/lib/constants/corporations";
+import type { MediaDiscriminator } from "@/lib/constants/corporations";
 import { unownedHeadroomBaseExpr, unownedPoolTrailingSet } from "@/lib/market/unownedHeadroom";
 
 /** Identity of one unowned-pool bucket, plus the scaffolding an upsert needs. */
@@ -47,6 +48,8 @@ export interface UnownedPoolBucket {
   stateId: string;
   countryId: string;
   sectorType: CorporationType;
+  industryModel?: string | null;
+  mediaDiscriminator?: MediaDiscriminator | null;
 }
 
 /**
@@ -63,7 +66,7 @@ export function unownedPoolDeltaPipeline(
   now: Date,
   eraUnitScale: number
 ): object[] {
-  const { stateId, countryId, sectorType } = bucket;
+  const { stateId, countryId, sectorType, industryModel, mediaDiscriminator } = bucket;
   return [
     {
       $set: {
@@ -73,16 +76,39 @@ export function unownedPoolDeltaPipeline(
         stateId: { $ifNull: ["$stateId", stateId] },
         countryId: { $ifNull: ["$countryId", countryId] },
         sectorType: { $ifNull: ["$sectorType", sectorType] },
+        industryModel: { $ifNull: ["$industryModel", industryModel ?? null] },
+        mediaDiscriminator: { $ifNull: ["$mediaDiscriminator", mediaDiscriminator ?? null] },
         createdAt: { $ifNull: ["$createdAt", now] },
         headroomUnits: {
-          $max: [0, { $add: [unownedHeadroomBaseExpr(sectorType, eraUnitScale), deltaUnits] }],
+          $max: [
+            0,
+            {
+              $add: [
+                unownedHeadroomBaseExpr(
+                  sectorType,
+                  eraUnitScale,
+                  industryModel,
+                  mediaDiscriminator
+                ),
+                deltaUnits,
+              ],
+            },
+          ],
         },
         updatedAt: now,
       },
     },
     // Own stage: it must read the POST-write units, which are only visible to a
     // later stage.
-    { $set: unownedPoolTrailingSet(sectorType, true, eraUnitScale) },
+    {
+      $set: unownedPoolTrailingSet(
+        sectorType,
+        true,
+        eraUnitScale,
+        industryModel,
+        mediaDiscriminator
+      ),
+    },
   ];
 }
 

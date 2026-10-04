@@ -8,6 +8,7 @@ import type { Db } from "mongodb";
 import type { StrategicSectorDesignation } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CorporationType } from "@/lib/constants/corporations";
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 
 const COLLECTION = "strategicSectorDesignations";
 
@@ -63,7 +64,23 @@ export async function getDesignatedSectorTypes(
 export function corpHasStrategicSector(
   designatedTypes: ReadonlySet<CorporationType>,
   countryId: CountryId,
-  corpSectors: { countryId: CountryId; sectorType: CorporationType }[]
+  corpSectors: {
+    countryId: CountryId;
+    sectorType: CorporationType;
+    industryModel?: string | null;
+    mediaDiscriminator?: string | null;
+  }[]
 ): boolean {
-  return corpSectors.some((s) => s.countryId === countryId && designatedTypes.has(s.sectorType));
+  return corpSectors.some(
+    (s) =>
+      s.countryId === countryId &&
+      (designatedTypes.has(s.sectorType) ||
+        designatedTypes.has(
+          getOperatingSectorType(
+            s.sectorType,
+            s.industryModel,
+            s.mediaDiscriminator
+          ) as CorporationType
+        ))
+  );
 }

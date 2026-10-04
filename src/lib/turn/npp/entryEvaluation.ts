@@ -83,7 +83,9 @@ export function evaluateNppEntry(input: NppEntryEvaluationInput): NppEntryEvalua
   // time on deterministic cohort slots, prefers the neighboring-state frontier,
   // and pauses when the current logistics strength cannot support another site.
   // A critical shortage may use corporate credit on that same cohort slot.
-  const existingBuckets = new Set(sectors.map((s) => bucketKey(s.stateId, s.sectorType)));
+  const existingBuckets = new Set(
+    sectors.map((s) => bucketKey(s.stateId, s.sectorType, s.industryModel))
+  );
   const frontierStates = expansionFrontierStates(corp.countryId, corp.headquartersState, sectors);
   const candidateExclusions = blankNppCandidateExclusions();
   const entryCandidate = findBestUnownedSector(
@@ -99,7 +101,8 @@ export function evaluateNppEntry(input: NppEntryEvaluationInput): NppEntryEvalua
     input.eraUnitScale,
     placementSignals,
     frontierStates,
-    candidateExclusions
+    candidateExclusions,
+    corp.industryModel
   );
   const {
     candidatePriceRatioOf: entryCandidatePriceRatioOf,

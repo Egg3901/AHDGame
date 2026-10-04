@@ -1,3 +1,8 @@
+/**
+ * Corporation share prices combine fundamental value, market sentiment and order flow.
+ * Regional sentiment follows the corporation's operating sector model and geography:
+ * see applyPriceMultipliers.
+ */
 import type { Db, AnyBulkWriteOperation } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import type { Corporation, CorporateSector } from "@/lib/db/types";
@@ -5,6 +10,7 @@ import type { SentimentPulse } from "@/lib/db/types/sentimentPulse";
 import { computeSentimentMultiplier, getHqConfidenceSentiment } from "./sentimentEngine";
 import { computeOrderFlowMultiplier } from "./orderFlowEngine";
 import { loadActiveFtaPairs } from "@/lib/tariffs/ftaOverrides";
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 
 export interface ApplyPriceMultipliersResult {
   updated: number;
@@ -62,6 +68,8 @@ export async function applyPriceMultipliers(db?: Db): Promise<ApplyPriceMultipli
             countryId: 1,
             headquartersState: 1,
             type: 1,
+            industryModel: 1,
+            mediaDiscriminator: 1,
             secondaryType: 1,
             fundamentalSharePrice: 1,
             sharePrice: 1,
@@ -76,7 +84,18 @@ export async function applyPriceMultipliers(db?: Db): Promise<ApplyPriceMultipli
       .toArray(),
     database
       .collection<CorporateSector>("corporateSectors")
-      .find({}, { projection: { corporationId: 1, countryId: 1, sectorType: 1 } })
+      .find(
+        {},
+        {
+          projection: {
+            corporationId: 1,
+            countryId: 1,
+            sectorType: 1,
+            industryModel: 1,
+            mediaDiscriminator: 1,
+          },
+        }
+      )
       .toArray(),
     loadActiveFtaPairs(database),
   ]);
@@ -87,11 +106,16 @@ export async function applyPriceMultipliers(db?: Db): Promise<ApplyPriceMultipli
   const operatingSectorTypesByCorpId = new Map<string, Set<string>>();
   for (const sector of sectors) {
     const corpId = sector.corporationId.toString();
+    const operatingType = getOperatingSectorType(
+      sector.sectorType,
+      sector.industryModel,
+      sector.mediaDiscriminator
+    );
     const sectorKeys = operatingSectorKeysByCorpId.get(corpId) ?? new Set<string>();
-    sectorKeys.add(`${sector.countryId}:${sector.sectorType}`);
+    sectorKeys.add(`${sector.countryId}:${operatingType}`);
     operatingSectorKeysByCorpId.set(corpId, sectorKeys);
     const sectorTypes = operatingSectorTypesByCorpId.get(corpId) ?? new Set<string>();
-    sectorTypes.add(sector.sectorType);
+    sectorTypes.add(operatingType);
     operatingSectorTypesByCorpId.set(corpId, sectorTypes);
   }
 
@@ -101,7 +125,9 @@ export async function applyPriceMultipliers(db?: Db): Promise<ApplyPriceMultipli
     const corpId = corp._id.toString();
     const sectorTypes = [
       ...(operatingSectorTypesByCorpId.get(corpId) ?? new Set<string>()),
-      ...(corp.type ? [corp.type] : []),
+      ...(corp.type
+        ? [getOperatingSectorType(corp.type, corp.industryModel, corp.mediaDiscriminator)]
+        : []),
       ...(corp.secondaryType ? [corp.secondaryType] : []),
     ];
     const operatingSectorKeys = operatingSectorKeysByCorpId.get(corpId) ?? new Set<string>();

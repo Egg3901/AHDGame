@@ -96,7 +96,12 @@ export async function reverseNationalizationTaking(
               ...(typeof prov.formerCapitalStock === "number"
                 ? {
                     capitalStock: prov.formerCapitalStock,
-                    ...seedPlantLedger(sector.sectorType, prov.formerCapitalStock),
+                    ...seedPlantLedger(
+                      sector.sectorType,
+                      prov.formerCapitalStock,
+                      sector.industryModel,
+                      sector.mediaDiscriminator
+                    ),
                   }
                 : {}),
               updatedAt: now,

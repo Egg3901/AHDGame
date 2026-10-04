@@ -35,15 +35,29 @@ export { PERSONS_PER_HOUSEHOLD, HOUSEHOLD_LIQUID_RATIO, HOUSEHOLD_SAVINGS_RATIO 
 
 export const MONEY_SUPPLY_SNAPSHOTS_COLLECTION = "moneySupplySnapshots";
 
+type SnapshotMoneySupplyConfig = GameConfig & {
+  privateBankingEnabled?: boolean;
+  bankConstructionFinanceEnabled?: boolean;
+};
+
 export async function snapshotMoneySupply(db: Db, turn: number): Promise<number> {
-  const config = await db
-    .collection<GameConfig>("gameConfig")
-    .findOne(
-      { _id: "default" },
-      { projection: { moneySupplyEnabled: 1, treasuryCashLedgerEnabled: 1 } }
-    );
+  const config = await db.collection<SnapshotMoneySupplyConfig>("gameConfig").findOne(
+    { _id: "default" },
+    {
+      projection: {
+        moneySupplyEnabled: 1,
+        treasuryCashLedgerEnabled: 1,
+        privateBankingEnabled: 1,
+        bankConstructionFinanceEnabled: 1,
+      },
+    }
+  );
   if (!isMoneySupplyEnabledFromConfig(config)) return 0;
   const treasuryCashLedgerEnabled = config?.treasuryCashLedgerEnabled === true;
+  const constructionCashEnabled =
+    treasuryCashLedgerEnabled &&
+    config?.privateBankingEnabled === true &&
+    config?.bankConstructionFinanceEnabled === true;
 
   const gameState = await db
     .collection<{ _id: string; preset?: string }>("gameState")
@@ -182,6 +196,26 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
   ]);
   const byCurrency = new Map<CurrencyCode, MutableComponents>();
 
+  // Construction escrow is funded native cash held for a corporation, not a
+  // construction-in-progress or collateral mark. Read it only when both the
+  // funded Treasury ledger and bank construction finance are enabled.
+  const constructionEscrows = constructionCashEnabled
+    ? await db
+        .collection<{
+          constructionFinancing?: { currency?: CurrencyCode; escrowLocal?: number };
+        }>("corporateSectors")
+        .find(
+          { "constructionFinancing.escrowLocal": { $gt: 0 } },
+          {
+            projection: {
+              "constructionFinancing.currency": 1,
+              "constructionFinancing.escrowLocal": 1,
+            },
+          }
+        )
+        .toArray()
+    : [];
+
   addCentralBankMoney(byCurrency, banks, preset);
   addHouseholdMoneyFromDemography(byCurrency, states, medianIncomeDocs, preset);
 
@@ -224,6 +258,11 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
       "corporateLiquid",
       corp.liquidCapital
     );
+  for (const sector of constructionEscrows) {
+    const escrow = sector.constructionFinancing;
+    if (escrow?.currency && Number.isFinite(escrow.escrowLocal) && escrow.escrowLocal! > 0)
+      addComponent(byCurrency, escrow.currency, "corporateLiquid", escrow.escrowLocal);
+  }
   if (treasuryCashLedgerEnabled) addFundedBankCash(byCurrency, corporations);
   for (const party of parties)
     addComponent(

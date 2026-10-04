@@ -30,7 +30,7 @@ import {
   MANUFACTURING_PRODUCT_PROJECTS_V2,
   type ManufacturingProductProject,
 } from "@/lib/products/manufacturingProject";
-import { getEffectiveStrategyRates } from "@/lib/constants/sectorStrategies";
+import { getEffectiveStrategyRatesForOperatingModel } from "@/lib/constants/sectorStrategies";
 import { settleSupplyAgreements, type SettleableSupplyAgreement } from "./settleSupplyAgreements";
 import type { CommodityType } from "@/lib/constants/commodities";
 import { loadSettleableSupplyAgreements } from "./loadSettleableSupplyAgreements";
@@ -173,6 +173,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           interstateMoneyWiringEnabled: 1,
           freightSettlementMode: 1,
           canonicalFreightBillingEnabled: 1,
+          treasuryCashLedgerEnabled: 1,
           mediaEditorialEnabled: 1,
           mediaOperatingModelsEnabled: 1,
           mediaRegulationEnabled: 1,
@@ -266,6 +267,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   const privateBankingEnabled =
     (marketGovernorConfig as { privateBankingEnabled?: boolean } | null)?.privateBankingEnabled ===
     true;
+  const treasuryCashLedgerEnabled = marketGovernorConfig?.treasuryCashLedgerEnabled === true;
   const subsidiaryCorporationsEnabled = await isSubsidiaryCorporationsEnabled(
     gameState ?? undefined
   );
@@ -459,12 +461,14 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     for (const [corpId, sectors] of lookups.sectorsByCorp) {
       const corp = lookups.corpById.get(corpId);
       const qSectors = sectors.map((sector) => {
-        const rates = getEffectiveStrategyRates(
+        const rates = getEffectiveStrategyRatesForOperatingModel(
           sector.sectorType,
           sector.strategyId ?? "standard",
           sector.transitionFromStrategyId,
           sector.transitionStartTurn,
-          turn ?? 0
+          turn ?? 0,
+          sector.industryModel,
+          sector.mediaDiscriminator
         );
         const outputs = (Object.keys(rates.supply ?? {}) as CommodityType[]).filter(
           (c) => (rates.supply?.[c] ?? 0) > 0
@@ -622,7 +626,8 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     subsidiaryCorporationsEnabled,
     commandEconomyEnabled,
     privateBankingEnabled,
-    new Set(equityPoolTurn.activeCurrencies)
+    new Set(equityPoolTurn.activeCurrencies),
+    treasuryCashLedgerEnabled
   );
   mark("processSectors(CPU)");
 
@@ -759,6 +764,15 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           foundingCashWitnesses,
           reinvestmentCashWitnesses
         );
+        if (treasuryCashLedgerEnabled) {
+          const { settleCorporateOperatingCash } = await import("./operatingCashSettlement");
+          await settleCorporateOperatingCash(
+            db,
+            corpSnapshots,
+            turn ?? gameState?.currentTurn ?? 1,
+            now
+          );
+        }
       },
     });
   }

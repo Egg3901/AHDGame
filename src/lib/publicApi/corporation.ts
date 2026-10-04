@@ -97,7 +97,13 @@ export async function queryCorporation(db: Db, params: { name?: string; id?: str
     name: corp.name,
     description: ((corp as Record<string, unknown>).description as string) ?? null,
     type: corp.type,
-    typeLabel: ((corp as Record<string, unknown>).typeLabel as string) ?? corp.type,
+    industryModel: corp.industryModel ?? null,
+    mediaDiscriminator: corp.mediaDiscriminator ?? null,
+    typeLabel:
+      ((corp as Record<string, unknown>).typeLabel as string) ??
+      (corp.type === "manufacturing" && corp.industryModel === "vehicles"
+        ? "Vehicle manufacturing"
+        : corp.type),
     brandColor: ((corp as Record<string, unknown>).brandColor as string) ?? null,
     logoUrl: ((corp as Record<string, unknown>).logoUrl as string) ?? null,
     countryId: ((corp as Record<string, unknown>).countryId as string) ?? null,
@@ -159,6 +165,7 @@ export async function queryCorporation(db: Db, params: { name?: string; id?: str
       stateId: s.stateId ?? null,
       stateName: stateNameById.get(s.stateId) ?? s.stateId ?? null,
       sectorType: s.sectorType ?? null,
+      mediaDiscriminator: s.mediaDiscriminator ?? null,
       revenue: s.revenue ?? 0,
       profitMargin: s.profitMargin ?? 0,
       currentGrowthRate: s.currentGrowthRate ?? s.growthRate ?? 0,

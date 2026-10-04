@@ -31,6 +31,7 @@ beforeEach(() => {
   db.collection("characters");
   db.collection("npps");
   db.collection("corporations");
+  db.collection("corporateSectors");
   db.collection("politicalParties");
   db.collection("federalBudget");
   db.collection("indexFunds");
@@ -239,6 +240,68 @@ describe("snapshotMoneySupply", () => {
     expect(options.projection).toHaveProperty("bankTreasuryEscrows", 1);
     expect(options.projection).toHaveProperty("bankSovereignEscrows", 1);
     expect(options.projection).toHaveProperty("bankPropForexFee", 1);
+  });
+
+  it("counts funded construction cash once in its native currency only when both ledgers are enabled", async () => {
+    db.collectionMocks.gameConfig.findOne.mockResolvedValue({
+      moneySupplyEnabled: true,
+      treasuryCashLedgerEnabled: true,
+      privateBankingEnabled: true,
+      bankConstructionFinanceEnabled: true,
+    });
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ preset: "2027-default" });
+    db.collectionMocks.corporations.find.mockReturnValue(
+      cursorWith([{ countryId: "US", liquidCurrencyCode: "USD", liquidCapital: 100 }])
+    );
+    db.collectionMocks.corporateSectors.find.mockReturnValue(
+      cursorWith([
+        { constructionFinancing: { currency: "EUR", escrowLocal: 25, collateralCostLocal: 500 } },
+        { constructionFinancing: { currency: "USD", escrowLocal: 40, status: "building" } },
+        { constructionFinancing: { currency: "EUR", escrowLocal: 0, status: "cancelled" } },
+      ])
+    );
+    db.collectionMocks.federalBudget.find.mockReturnValue(
+      cursorWith([
+        { countryId: "US", currencyCode: "USD", treasuryCashLocal: 0 },
+        { countryId: "FR", currencyCode: "EUR", treasuryCashLocal: 0 },
+      ])
+    );
+    db.collectionMocks.states.find.mockReturnValue(cursorWith([]));
+
+    await snapshotMoneySupply(db as unknown as Db, 12);
+
+    const snapshots = db.collectionMocks[MONEY_SUPPLY_SNAPSHOTS_COLLECTION].replaceOne.mock.calls;
+    const usd = snapshots.find((call) => call[1].currencyCode === "USD")?.[1];
+    const eur = snapshots.find((call) => call[1].currencyCode === "EUR")?.[1];
+    expect(usd?.corporateLiquid).toBe(140);
+    expect(eur?.corporateLiquid).toBe(25);
+    db.collectionMocks.corporateSectors.find.mockReturnValue(cursorWith([]));
+    db.collectionMocks[MONEY_SUPPLY_SNAPSHOTS_COLLECTION].replaceOne.mockClear();
+    await snapshotMoneySupply(db as unknown as Db, 13);
+    const withoutEscrow =
+      db.collectionMocks[MONEY_SUPPLY_SNAPSHOTS_COLLECTION].replaceOne.mock.calls;
+    expect(usd!.m2 - withoutEscrow.find((call) => call[1].currencyCode === "USD")![1].m2).toBe(40);
+    expect(eur!.m2 - withoutEscrow.find((call) => call[1].currencyCode === "EUR")![1].m2).toBe(25);
+    const options = db.collectionMocks.corporateSectors.find.mock.calls[0]?.[1] as {
+      projection: Record<string, unknown>;
+    };
+    expect(options.projection).toEqual({
+      "constructionFinancing.currency": 1,
+      "constructionFinancing.escrowLocal": 1,
+    });
+  });
+
+  it("does not read construction escrow when funded cash is off", async () => {
+    db.collectionMocks.gameConfig.findOne.mockResolvedValue({
+      moneySupplyEnabled: true,
+      privateBankingEnabled: true,
+      bankConstructionFinanceEnabled: true,
+    });
+    db.collectionMocks.states.find.mockReturnValue(cursorWith([]));
+
+    await snapshotMoneySupply(db as unknown as Db, 12);
+
+    expect(db.collectionMocks.corporateSectors.find).not.toHaveBeenCalled();
   });
 
   it("conserves observed cash when a funded coupon moves from Treasury cash to bank vault", async () => {

@@ -8,6 +8,7 @@ import type { Bond, Corporation, CorporateSector } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import {
   computeCorporateCreditAtTurn,
+  corporateCashArrearsAnchor,
   sumCorporateSectorConstructionInProgress,
 } from "@/lib/bonds/corporateCredit";
 import { ceoOwnershipFraction } from "@/lib/corporations/ceoOwnership";
@@ -137,6 +138,11 @@ export async function settleManufacturingDevelopmentCash(
         corp._id,
         args.turn
       ),
+      otherLiabilitiesAnchor: corporateCashArrearsAnchor({
+        operatingByCurrency: corp.operatingCashArrearsByCurrency,
+        federalTaxByCountryAnchor: corp.federalTaxArrearsAnchorByCountry,
+        fxByCurrency: args.exchangeRatesByCurrency,
+      }),
     });
     snapshot.creditComposite = creditPack.creditRating.compositeScore;
     snapshot.creditRating = creditPack.creditRating.rating;

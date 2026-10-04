@@ -29,11 +29,14 @@
 import { mergedActiveCapacityPercent } from "@/lib/corporations/investment/rules";
 import type { CorporateSector, SectorBuildOrder } from "@/lib/db/types/corporation";
 import type { CorporationType } from "@/lib/constants/corporations";
+import type { MediaDiscriminator } from "@/lib/constants/corporations";
 import { seedPlantLedger, splitWholePlantCount } from "@/lib/corporations/plantLedger";
 
 /** The plant-state subset of a sector doc. Structural so projections fit. */
 export interface SectorPlantFields {
   sectorType?: CorporationType | null;
+  industryModel?: string | null;
+  mediaDiscriminator?: MediaDiscriminator | null;
   capitalStock?: number | null;
   operatingCapacityUnits?: number | null;
   operatingCapacityTurn?: number | null;
@@ -81,7 +84,9 @@ const queue = (s: SectorPlantFields): SectorBuildOrder[] =>
   Array.isArray(s.buildQueue) ? s.buildQueue : [];
 
 const count = (s: SectorPlantFields): number => {
-  if (s.sectorType) return seedPlantLedger(s.sectorType, s.capitalStock).plantCount;
+  if (s.sectorType)
+    return seedPlantLedger(s.sectorType, s.capitalStock, s.industryModel, s.mediaDiscriminator)
+      .plantCount;
   if (Number.isInteger(s.plantCount) && (s.plantCount ?? 0) >= 0) {
     return s.plantCount as number;
   }
@@ -89,7 +94,9 @@ const count = (s: SectorPlantFields): number => {
 };
 
 const remainder = (s: SectorPlantFields): number => {
-  if (s.sectorType) return seedPlantLedger(s.sectorType, s.capitalStock).plantUnitRemainder;
+  if (s.sectorType)
+    return seedPlantLedger(s.sectorType, s.capitalStock, s.industryModel, s.mediaDiscriminator)
+      .plantUnitRemainder;
   return typeof s.plantUnitRemainder === "number" &&
     Number.isFinite(s.plantUnitRemainder) &&
     s.plantUnitRemainder > 0
@@ -137,6 +144,12 @@ export function mergeSectorPlantFields(
   survivor: SectorPlantFields,
   incoming: SectorPlantFields
 ): SectorPlantFieldsUpdate {
+  if ((survivor.industryModel ?? null) !== (incoming.industryModel ?? null)) {
+    throw new Error("Cannot merge plant ledgers across different industry models");
+  }
+  if ((survivor.mediaDiscriminator ?? null) !== (incoming.mediaDiscriminator ?? null)) {
+    throw new Error("Cannot merge plant ledgers across different media models");
+  }
   const activePercent = mergedActiveCapacityPercent([survivor, incoming]);
   const mergedQueue = [...queue(survivor), ...queue(incoming)].sort(
     (a, b) => a.onlineTurn - b.onlineTurn
@@ -147,7 +160,14 @@ export function mergeSectorPlantFields(
   const shadows = [shadow(survivor), shadow(incoming)].filter((v): v is number => v !== null);
   const sectorType = survivor.sectorType ?? incoming.sectorType ?? null;
   const capitalStock = num(survivor.capitalStock) + num(incoming.capitalStock);
-  const mergedLedger = sectorType ? seedPlantLedger(sectorType, capitalStock) : null;
+  const mergedLedger = sectorType
+    ? seedPlantLedger(
+        sectorType,
+        capitalStock,
+        survivor.industryModel ?? incoming.industryModel,
+        survivor.mediaDiscriminator ?? incoming.mediaDiscriminator
+      )
+    : null;
   return {
     capitalStock,
     ...(survivor.operatingCapacityUnits != null || incoming.operatingCapacityUnits != null
@@ -191,7 +211,14 @@ export function mergeSectorPlantFields(
  * producing. Every other field round-tripped. Rollbacks must call this instead.
  */
 export function identitySectorPlantFields(sector: SectorPlantFields): SectorPlantFieldsUpdate {
-  const ledger = sector.sectorType ? seedPlantLedger(sector.sectorType, sector.capitalStock) : null;
+  const ledger = sector.sectorType
+    ? seedPlantLedger(
+        sector.sectorType,
+        sector.capitalStock,
+        sector.industryModel,
+        sector.mediaDiscriminator
+      )
+    : null;
   return {
     capitalStock: num(sector.capitalStock),
     operatingCapacityUnits: num(sector.operatingCapacityUnits ?? sector.capitalStock),
@@ -243,7 +270,14 @@ export function carveSectorPlantFields(
       : 0
     : f;
   const capitalStock = num(sector.capitalStock) * stockFraction;
-  const ledger = sector.sectorType ? seedPlantLedger(sector.sectorType, capitalStock) : null;
+  const ledger = sector.sectorType
+    ? seedPlantLedger(
+        sector.sectorType,
+        capitalStock,
+        sector.industryModel,
+        sector.mediaDiscriminator
+      )
+    : null;
   return {
     capitalStock,
     ...(sector.operatingCapacityUnits != null
@@ -289,6 +323,7 @@ export function hasPlantState(sector: SectorPlantFields): boolean {
 export function readSectorPlantFields(sector: Partial<CorporateSector>): SectorPlantFields {
   return {
     sectorType: sector.sectorType,
+    industryModel: sector.industryModel,
     capitalStock: sector.capitalStock,
     operatingCapacityUnits: sector.operatingCapacityUnits,
     operatingCapacityTurn: sector.operatingCapacityTurn,

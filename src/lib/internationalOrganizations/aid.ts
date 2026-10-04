@@ -1,11 +1,15 @@
 import {
   organizationCashContext,
+  organizationLocalPerAnchor,
+  organizationTreasuryLocalPerAnchor,
+  settleOrganizationFundedCashMove,
   withOrganizationCashBatch,
   witnessOrganizationCash,
   type OrganizationCashOptions,
 } from "./cashLedger";
 import type { Db } from "mongodb";
 import { type CountryId } from "@/lib/constants/countries";
+import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { InternationalOrganizationId } from "@/lib/constants/internationalOrganizations";
 import type { FederalBudget } from "@/lib/db/types";
 import { loadWorldPreset } from "@/lib/currency/gdpAnchorRate";
@@ -82,13 +86,62 @@ export async function payOrganizationAid(
   if (!(amountFund > 0)) return false;
   const context = await organizationCashContext(db, options);
   return withOrganizationCashBatch(db, context, async (batch) => {
+    const fundCountry = await resolveOrgFundCurrencyCountry(db, organizationId);
+    const preset = batch?.preset ?? (await loadWorldPreset(db));
+    const recipientLocal = convertLocal(fundCountry, recipient, amountFund, preset);
+    if (batch?.treasuryCashLedgerEnabled) {
+      const fundRate = organizationLocalPerAnchor(batch, fundCountry);
+      const treasuryRate = organizationTreasuryLocalPerAnchor(batch, recipient);
+      const fundedRecipientLocal = (amountFund / fundRate) * treasuryRate;
+      const result = await settleOrganizationFundedCashMove(db, batch, {
+        key: `organization-aid:${batch.turn}:${organizationId}:${recipient}`,
+        kind: "organization_aid",
+        source: {
+          collection: "organizationFunds",
+          filter: { organizationId, balanceLocal: { $gte: amountFund } },
+          path: "balanceLocal",
+          amount: amountFund,
+          currencyCode: COUNTRY_CURRENCY_MAP[fundCountry] ?? "USD",
+          localPerAnchor: fundRate,
+        },
+        destination: {
+          collection: "federalBudget",
+          filter: { countryId: recipient, treasuryCashLocal: { $exists: true } },
+          path: "treasuryCashLocal",
+          amount: fundedRecipientLocal,
+          currencyCode:
+            batch.budgetCurrencies.get(recipient) ?? COUNTRY_CURRENCY_MAP[recipient] ?? "USD",
+          localPerAnchor: treasuryRate,
+        },
+        destinationTreasuryCountry: recipient,
+        command: "organization.aid.pay",
+      });
+      if (result.status !== "applied" && result.status !== "replayed") return false;
+      if (result.status === "applied") {
+        await witnessOrganizationCash(db, batch, {
+          kind: "org",
+          ref: organizationId,
+          countryId: fundCountry,
+          amount: -amountFund,
+          site: "aid_fund",
+          now: new Date(),
+        });
+        await witnessOrganizationCash(db, batch, {
+          kind: "government",
+          ref: recipient,
+          countryId: recipient,
+          amount: fundedRecipientLocal,
+          site: "aid_treasury",
+          now: new Date(),
+        });
+        await applyOrganizationAidBoost(db, recipient, localToUsd(fundCountry, amountFund, preset));
+      }
+      return true;
+    }
     const paid = await disburseFromOrganizationFund(db, organizationId, amountFund, {
       context: batch,
     });
     if (!paid) return false;
-    const fundCountry = await resolveOrgFundCurrencyCountry(db, organizationId);
-    const preset = batch?.preset ?? (await loadWorldPreset(db));
-    const recipientLocal = convertLocal(fundCountry, recipient, amountFund, preset);
     // Aid credits cash, not income: revenue/spending/surplus are untouched, and
     // `debt.principal` belongs to the bond ledger (see bonds/sovereignPrincipal.ts),
     // so a cash-only $inc correctly leaves it alone (#1975).

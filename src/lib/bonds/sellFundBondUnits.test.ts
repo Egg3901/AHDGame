@@ -58,7 +58,11 @@ describe("sellFundBondHoldingsForCash", () => {
     expect(result.unitsSold).toBe(5);
     expect(result.proceedsAnchor).toBe(2_475);
     expect(db.collectionMocks.bonds.updateOne).toHaveBeenCalledWith(
-      { _id: bond._id, holders: { $elemMatch: { fundId, units: { $gte: 5 } } } },
+      {
+        _id: bond._id,
+        sovereignMaturityClaim: { $exists: false },
+        holders: { $elemMatch: { fundId, units: { $gte: 5 } } },
+      },
       expect.objectContaining({ $inc: { "holders.$.units": -5, publicFloat: 5 } })
     );
     expect(db.collectionMocks.indexFunds.updateOne).toHaveBeenCalledWith(

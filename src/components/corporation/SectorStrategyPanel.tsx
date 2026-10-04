@@ -108,8 +108,17 @@ export function SectorStrategyPanel({
   corpId,
   mediaOperatingModelsEnabled,
 }: SectorStrategyPanelProps) {
-  const label = CORPORATION_TYPE_LABELS[sectorType] ?? sectorType;
-  const strategies: SectorStrategy[] = getSectorStrategies(sectorType, mediaOperatingModelsEnabled);
+  const vehicleModel = sectors.some(
+    (sector) => sector.sectorType === "manufacturing" && sector.industryModel === "vehicles"
+  );
+  const strategyType = vehicleModel ? "automobiles" : sectorType;
+  const label = vehicleModel
+    ? "Vehicle manufacturing"
+    : (CORPORATION_TYPE_LABELS[sectorType] ?? sectorType);
+  const strategies: SectorStrategy[] = getSectorStrategies(
+    strategyType,
+    mediaOperatingModelsEnabled
+  );
 
   const [open, setOpen] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);

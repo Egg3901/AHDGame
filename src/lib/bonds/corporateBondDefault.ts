@@ -21,6 +21,7 @@ import {
 } from "@/lib/currency/corporationCapital";
 import { sectorDailyProfitAnchor } from "@/lib/corporations/sectorProfitBasis";
 import { sumBondPrincipalAnchor, sumBondAnnualInterestAnchor } from "@/lib/bonds/bondPrincipalSum";
+import { corporateCashArrearsAnchor } from "@/lib/bonds/corporateCredit";
 import {
   DISSOLUTION_SECTOR_SALVAGE_FRACTION,
   NPV_ANNUAL_DISCOUNT_RATE,
@@ -308,7 +309,12 @@ export function previewDissolveSettlement(
    */
   options?: { plantsEnabled?: boolean; sectorBookAnchor?: number }
 ): DissolveSettlementPreview {
-  const lc = Math.max(0, liquidCapitalAnchor);
+  const liabilitiesAnchor = corporateCashArrearsAnchor({
+    operatingByCurrency: corp.operatingCashArrearsByCurrency,
+    federalTaxByCountryAnchor: corp.federalTaxArrearsAnchorByCountry,
+    fxByCurrency,
+  });
+  const lc = Math.max(0, liquidCapitalAnchor - liabilitiesAnchor);
   // Sectors are abandoned to the unowned market on dissolution (no buyer), so
   // only a salvage fraction of their value is recoverable as cash. Paying the
   // full value minted the corp's enterprise value (the exploit).

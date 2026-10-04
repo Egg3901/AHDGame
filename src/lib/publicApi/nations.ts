@@ -111,6 +111,7 @@ export async function queryCountryRegions(db: Db, country: string) {
       topSectors:
         state.topSectorsCache?.sectors.map((sector) => ({
           type: sector.sectorType,
+          mediaDiscriminator: sector.mediaDiscriminator ?? null,
           revenue: sector.revenue,
           specializationBonus: sector.specializationBonus,
         })) ?? [],

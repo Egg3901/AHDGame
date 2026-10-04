@@ -1,7 +1,8 @@
 import type { CommodityType } from "@/lib/constants/commodities";
 import { commodityMixWeight, eraScaledBasePrices } from "@/lib/constants/commodities";
-import { getEffectiveStrategyRates } from "@/lib/constants/sectorStrategies";
+import { getEffectiveStrategyRatesForOperatingModel } from "@/lib/constants/sectorStrategies";
 import type { CorporateSector } from "@/lib/db/types/corporation";
+import type { TechLane } from "@/lib/constants/techTree/nodes";
 import { analyzeSectorProfitability } from "@/lib/turn/npp/sectorProfitability";
 import {
   isLegalManufacturingProductForPlant,
@@ -22,6 +23,7 @@ export function selectNppManufacturingProduct(input: {
   currentYear?: number;
   techTreesEnabled: boolean;
   unlockedTechNodeIds?: readonly string[];
+  techDecadeLane?: Record<string, TechLane>;
   eraUnitScale: number;
   priceRatioOf: (commodity: CommodityType, countryId: string) => number | null;
 }): NppManufacturingProductCandidate | undefined {
@@ -29,6 +31,7 @@ export function selectNppManufacturingProduct(input: {
     sectorId: sector._id.toString(),
     corporationId: input.corporationId,
     sectorType: sector.sectorType,
+    industryModel: sector.industryModel,
     strategyId: sector.strategyId,
     capitalStock: sector.capitalStock ?? 0,
     plantCount: sector.plantCount ?? 0,
@@ -38,6 +41,7 @@ export function selectNppManufacturingProduct(input: {
     currentYear: input.currentYear,
     techTreesEnabled: input.techTreesEnabled,
     unlockedTechNodeIds: input.unlockedTechNodeIds,
+    techDecadeLane: input.techDecadeLane,
   });
   const profits = analyzeSectorProfitability([...input.sectors], true);
   const sectorById = new Map(input.sectors.map((sector) => [sector._id.toString(), sector]));
@@ -47,7 +51,12 @@ export function selectNppManufacturingProduct(input: {
   const basePrices = eraScaledBasePrices(input.eraUnitScale);
   const candidates = legalKinds.flatMap((kind) => {
     const compatiblePlants = plants.filter((plant) =>
-      isLegalManufacturingProductForPlant(kind.id, plant)
+      isLegalManufacturingProductForPlant(kind.id, plant, {
+        currentYear: input.currentYear,
+        techTreesEnabled: input.techTreesEnabled,
+        unlockedTechNodeIds: input.unlockedTechNodeIds,
+        techDecadeLane: input.techDecadeLane,
+      })
     );
     const capacityStock = compatiblePlants.reduce((sum, plant) => sum + plant.capitalStock, 0);
     if (capacityStock <= 0) return [];
@@ -58,12 +67,13 @@ export function selectNppManufacturingProduct(input: {
     );
     const mixWeight = compatiblePlants.reduce((sum, plant) => {
       const sector = sectorById.get(plant.sectorId);
-      const currentRates = getEffectiveStrategyRates(
+      const currentRates = getEffectiveStrategyRatesForOperatingModel(
         plant.sectorType,
         plant.strategyId ?? "standard",
         sector?.transitionFromStrategyId,
         sector?.transitionStartTurn,
-        input.turn
+        input.turn,
+        sector?.industryModel
       );
       return (
         sum +

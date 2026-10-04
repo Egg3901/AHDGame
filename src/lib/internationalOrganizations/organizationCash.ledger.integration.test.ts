@@ -88,6 +88,100 @@ it.each(cases)("reconciles actual $currency aid and treasury receipts", async (r
   expect(entries).toHaveLength(2);
   await expectConserved(db, opening, entries);
 });
+it("settles funded cross-currency dues once from Treasury cash", async () => {
+  const { memory, db } = fixture(cases[0]);
+  await db
+    .collection("gameConfig")
+    .updateOne({ _id: "default" as never }, { $set: { treasuryCashLedgerEnabled: true } });
+  await db
+    .collection("federalBudget")
+    .updateOne({ countryId: "US" }, { $set: { treasuryCashLocal: 1_000 } });
+  memory.seed("organizationFunds", [
+    {
+      _id: new ObjectId(),
+      organizationId: "EU",
+      currencyCountryId: "DE",
+      balanceLocal: 1_000,
+      duesRateAnnual: 0.00006,
+    },
+  ]);
+  memory.seed("exchangeRates", [
+    { currencyCode: "USD", rate: 1 },
+    { currencyCode: "EUR", rate: 0.9 },
+  ]);
+  expect(await chargeOrganizationDues(db, "EU", [{ countryId: "US", gdpUsd: 48_000_000 }])).toBe(
+    54
+  );
+  await chargeOrganizationDues(db, "EU", [{ countryId: "US", gdpUsd: 48_000_000 }]);
+  expect(
+    (await db.collection("federalBudget").findOne({ countryId: "US" }))?.treasuryCashLocal
+  ).toBe(940);
+  expect((await db.collection("federalBudget").findOne({ countryId: "US" }))?.treasuryBalance).toBe(
+    940
+  );
+  expect(
+    (await db.collection("organizationFunds").findOne({ organizationId: "EU" }))?.balanceLocal
+  ).toBe(1_054);
+  expect(
+    await db
+      .collection("bankMoneyMoves")
+      .countDocuments({ status: "applied", kind: "organization_dues" })
+  ).toBe(1);
+});
+it("does not fund an organization receipt when Treasury cash is unavailable", async () => {
+  const { db } = fixture(cases[0]);
+  await db
+    .collection("gameConfig")
+    .updateOne({ _id: "default" as never }, { $set: { treasuryCashLedgerEnabled: true } });
+  await db
+    .collection("federalBudget")
+    .updateOne({ countryId: "US" }, { $set: { treasuryCashLocal: 0 } });
+  expect(await chargeOrganizationDues(db, "UN", [{ countryId: "US", gdpUsd: 48_000_000 }])).toBe(0);
+  expect((await db.collection("federalBudget").findOne({ countryId: "US" }))?.treasuryBalance).toBe(
+    1_000
+  );
+  expect(
+    (await db.collection("organizationFunds").findOne({ organizationId: "UN" }))?.balanceLocal
+  ).toBe(1_000);
+  expect(await db.collection("bankMoneyMoves").countDocuments()).toBe(0);
+});
+it("funds cross-currency aid from the organization balance and replays once", async () => {
+  const { memory, db } = fixture(cases[1]);
+  await db
+    .collection("gameConfig")
+    .updateOne({ _id: "default" as never }, { $set: { treasuryCashLedgerEnabled: true } });
+  await db
+    .collection("federalBudget")
+    .updateOne({ countryId: "DE" }, { $set: { treasuryCashLocal: 1_000 } });
+  await db.collection("federalBudget").insertOne({
+    _id: new ObjectId(),
+    countryId: "US",
+    currencyCode: "USD",
+    treasuryBalance: 500,
+    treasuryCashLocal: 100,
+  });
+  memory.seed("exchangeRates", [
+    { currencyCode: "EUR", rate: 0.9 },
+    { currencyCode: "USD", rate: 1 },
+  ]);
+  expect(await payOrganizationAid(db, "EU", "US", 90)).toBe(true);
+  const replayed = await payOrganizationAid(db, "EU", "US", 90);
+  expect(replayed).toBe(true);
+  expect(
+    (await db.collection("federalBudget").findOne({ countryId: "US" }))?.treasuryCashLocal
+  ).toBe(200);
+  expect((await db.collection("federalBudget").findOne({ countryId: "US" }))?.treasuryBalance).toBe(
+    600
+  );
+  expect(
+    (await db.collection("organizationFunds").findOne({ organizationId: "EU" }))?.balanceLocal
+  ).toBe(910);
+  expect(
+    await db
+      .collection("bankMoneyMoves")
+      .countDocuments({ status: "applied", kind: "organization_aid" })
+  ).toBe(1);
+});
 it.each(cases)("reconciles actual $currency spending and refund", async (row) => {
   const { db } = fixture(row),
     opening = await collectBalances(db);

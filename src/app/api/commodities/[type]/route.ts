@@ -114,6 +114,7 @@ function buildCorpVolumeRows(
       | "_id"
       | "name"
       | "type"
+      | "industryModel"
       | "marketingBudget"
       | "sequentialId"
       | "logoUrl"
@@ -131,7 +132,12 @@ function buildCorpVolumeRows(
         corpId,
         name: corp?.name ?? "Unknown",
         type: corp?.type,
-        typeLabel: corp?.type ? CORPORATION_TYPE_LABELS[corp.type] : undefined,
+        industryModel: corp?.industryModel,
+        typeLabel: corp?.type
+          ? corp.type === "manufacturing" && corp.industryModel === "vehicles"
+            ? "Vehicle manufacturing"
+            : CORPORATION_TYPE_LABELS[corp.type]
+          : undefined,
         sequentialId: corp?.sequentialId,
         logoUrl: corp?.logoUrl,
         units: Math.round(units * 100) / 100,
@@ -205,6 +211,7 @@ export async function getCommodityDetailData(
               | "_id"
               | "name"
               | "type"
+              | "industryModel"
               | "marketingBudget"
               | "sequentialId"
               | "logoUrl"
@@ -216,6 +223,7 @@ export async function getCommodityDetailData(
             _id: 1,
             name: 1,
             type: 1,
+            industryModel: 1,
             marketingBudget: 1,
             sequentialId: 1,
             logoUrl: 1,

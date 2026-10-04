@@ -203,6 +203,7 @@ const INDEX_FUND_CORP_PROJECTION = {
   _id: 1,
   countryId: 1,
   type: 1,
+  mediaDiscriminator: 1,
   secondaryType: 1,
   sharePrice: 1,
   fundamentalSharePrice: 1,

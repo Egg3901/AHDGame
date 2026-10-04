@@ -3,6 +3,7 @@ import { ObjectId } from "mongodb";
 import type { CorporateSector, UnownedSector } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CorporationType } from "@/lib/constants/corporations";
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import { resolveNationalCorporationForSector } from "./nationalCorporation";
 import { writeCorpEconomicLocal } from "@/lib/currency/corpEconomyFields";
 import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
@@ -54,6 +55,8 @@ export async function incrementNatCorpSectorRevenue(
     countryId: CountryId;
     stateId: string;
     sectorType: CorporationType;
+    industryModel?: CorporateSector["industryModel"];
+    mediaDiscriminator?: CorporateSector["mediaDiscriminator"];
     revenueDelta: number;
   }
 ): Promise<"inc" | "insert" | "noop"> {
@@ -61,7 +64,18 @@ export async function incrementNatCorpSectorRevenue(
   if (revenueDeltaAnchor <= 0) return "noop";
 
   const now = new Date();
-  const corp = await resolveNationalCorporationForSector(db, params.countryId, params.sectorType);
+  const operatingType = getOperatingSectorType(
+    params.sectorType,
+    params.industryModel,
+    params.mediaDiscriminator
+  ) as CorporationType;
+  const corp = await resolveNationalCorporationForSector(
+    db,
+    params.countryId,
+    operatingType,
+    params.industryModel,
+    params.mediaDiscriminator
+  );
 
   // Convert ₳-denominated seed revenue into the natcorp's local currency before
   // persisting. corporateSectors.revenue is stored in liquidCurrencyCode units;
@@ -107,7 +121,9 @@ export async function incrementNatCorpSectorRevenue(
         params.sectorType,
         revenueDeltaAnchor,
         null,
-        await (await import("@/lib/currency/gdpAnchorRate")).loadWorldEraUnitScale(db)
+        await (await import("@/lib/currency/gdpAnchorRate")).loadWorldEraUnitScale(db),
+        params.industryModel,
+        params.mediaDiscriminator
       )
     : 0;
 
@@ -116,6 +132,8 @@ export async function incrementNatCorpSectorRevenue(
     corporationId: corp._id,
     stateId: params.stateId,
     sectorType: params.sectorType,
+    industryModel: params.industryModel ?? null,
+    mediaDiscriminator: params.mediaDiscriminator ?? null,
   });
 
   if (existing) {
@@ -128,7 +146,12 @@ export async function incrementNatCorpSectorRevenue(
         },
         $set: {
           ...(capacityUnitsDelta > 0
-            ? seedPlantLedger(params.sectorType, (existing.capitalStock ?? 0) + capacityUnitsDelta)
+            ? seedPlantLedger(
+                params.sectorType,
+                (existing.capitalStock ?? 0) + capacityUnitsDelta,
+                params.industryModel,
+                params.mediaDiscriminator
+              )
             : {}),
           updatedAt: now,
         },
@@ -143,9 +166,18 @@ export async function incrementNatCorpSectorRevenue(
     countryId: params.countryId,
     stateId: params.stateId,
     sectorType: params.sectorType,
+    ...(params.industryModel ? { industryModel: params.industryModel } : {}),
+    ...(params.mediaDiscriminator ? { mediaDiscriminator: params.mediaDiscriminator } : {}),
     revenue: revenueDeltaLocal,
     ...(capacityUnitsDelta > 0 ? { capitalStock: capacityUnitsDelta } : {}),
-    ...(capacityUnitsDelta > 0 ? seedPlantLedger(params.sectorType, capacityUnitsDelta) : {}),
+    ...(capacityUnitsDelta > 0
+      ? seedPlantLedger(
+          params.sectorType,
+          capacityUnitsDelta,
+          params.industryModel,
+          params.mediaDiscriminator
+        )
+      : {}),
     workers: 0,
     profitMargin: DEFAULT_PROFIT_MARGIN,
     targetGrowthRate: DEFAULT_GROWTH_RATE,
@@ -160,7 +192,16 @@ export async function incrementNatCorpSectorRevenue(
 /** Move an unowned doc's revenue into the National Corporation and delete the doc. */
 export async function absorbUnownedDocIntoNatCorp(
   db: Db,
-  doc: Pick<UnownedSector, "_id" | "stateId" | "sectorType" | "countryId" | "revenue">,
+  doc: Pick<
+    UnownedSector,
+    | "_id"
+    | "stateId"
+    | "sectorType"
+    | "industryModel"
+    | "mediaDiscriminator"
+    | "countryId"
+    | "revenue"
+  >,
   opts?: { revenueOverride?: number; dryRun?: boolean }
 ): Promise<number> {
   const revenue = Math.round(opts?.revenueOverride ?? doc.revenue ?? 0);
@@ -176,6 +217,8 @@ export async function absorbUnownedDocIntoNatCorp(
       countryId: doc.countryId,
       stateId: doc.stateId,
       sectorType: doc.sectorType as CorporationType,
+      industryModel: doc.industryModel as CorporateSector["industryModel"],
+      mediaDiscriminator: doc.mediaDiscriminator,
       revenueDelta: revenue,
     });
     await db.collection<UnownedSector>("unownedSectors").deleteOne({ _id: doc._id });
@@ -186,7 +229,16 @@ export async function absorbUnownedDocIntoNatCorp(
 /** Apply a revenue multiplier by absorbing the boosted amount into the National Corporation. */
 export async function boostUnownedDocIntoNatCorp(
   db: Db,
-  doc: Pick<UnownedSector, "_id" | "stateId" | "sectorType" | "countryId" | "revenue">,
+  doc: Pick<
+    UnownedSector,
+    | "_id"
+    | "stateId"
+    | "sectorType"
+    | "industryModel"
+    | "mediaDiscriminator"
+    | "countryId"
+    | "revenue"
+  >,
   multiplier: number
 ): Promise<number> {
   const boosted = Math.round((doc.revenue ?? 0) * multiplier);
@@ -198,6 +250,8 @@ export type OwnedSectorMergeInput = Pick<
   | "_id"
   | "stateId"
   | "sectorType"
+  | "industryModel"
+  | "mediaDiscriminator"
   | "countryId"
   | "revenue"
   | "workers"
@@ -262,15 +316,29 @@ export async function absorbOwnedSectorIntoNatCorp(
   if (opts?.dryRun) return Math.max(0, revenue);
 
   const now = new Date();
-  const corp = await resolveNationalCorporationForSector(
-    db,
-    sector.countryId,
-    sector.sectorType as CorporationType
-  );
+  const corp = sector.industryModel
+    ? await resolveNationalCorporationForSector(
+        db,
+        sector.countryId,
+        sector.sectorType as CorporationType,
+        sector.industryModel,
+        sector.mediaDiscriminator
+      )
+    : await resolveNationalCorporationForSector(
+        db,
+        sector.countryId,
+        sector.sectorType as CorporationType,
+        sector.industryModel,
+        sector.mediaDiscriminator
+      );
   const existing = await sectors.findOne({
     corporationId: corp._id,
     stateId: sector.stateId,
     sectorType: sector.sectorType,
+    mediaDiscriminator: sector.mediaDiscriminator ?? null,
+    ...(sector.industryModel !== undefined || sector.sectorType === "manufacturing"
+      ? { industryModel: sector.industryModel ?? null }
+      : {}),
   });
 
   if (existing && !existing._id.equals(sector._id)) {

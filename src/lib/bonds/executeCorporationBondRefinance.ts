@@ -225,7 +225,7 @@ export async function executeCorporationBondRefinance(
   // Bonds tab can render the "Default cured" badge. The caller's game-state
   // guard guarantees currentTurn > 0, so the stamp is unconditionally safe.
   await db.collection<Bond>("bonds").updateMany(
-    { _id: { $in: oldIds } },
+    { _id: { $in: oldIds }, sovereignMaturityClaim: { $exists: false } },
     {
       $set: {
         matured: true,

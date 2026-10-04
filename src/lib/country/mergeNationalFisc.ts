@@ -247,7 +247,7 @@ export async function mergeNationalFisc(
     await bonds.bulkWrite(
       absorbedBonds.map((bond) => ({
         updateOne: {
-          filter: { _id: bond._id },
+          filter: { _id: bond._id, sovereignMaturityClaim: { $exists: false } },
           update: {
             $set: {
               countryId: toCountryId,

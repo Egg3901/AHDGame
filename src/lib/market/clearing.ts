@@ -272,6 +272,14 @@ export interface SectorClearingInput {
   outputAnchorByCommodity?: Partial<Record<CommodityType, number>>;
   /** Product quality by output commodity, overriding the legacy corp average for that output. */
   productQualityByCommodity?: Partial<Record<CommodityType, number>>;
+  /** Project-only redirected units offered, excluding the strategy recipe baseline. */
+  projectOutputUnitsByCommodity?: Partial<Record<CommodityType, number>>;
+  /** Product quality for the active project, independent of quality-premium pricing. */
+  projectQualityByCommodity?: Partial<Record<CommodityType, number>>;
+  /** Active project identity for the project-owned offer snapshot. */
+  productProjectId?: string;
+  /** Turn that produced the project-owned offer. */
+  productOutputTurn?: number;
   /** Posted posture (player-set), or null to auto-position (NPP/unowned). */
   posture: number | null;
   /** Flag-gated input basket index for cost-plus pricing, otherwise absent. */
@@ -433,6 +441,12 @@ export interface SectorClearingResult {
   effectivePosture: number;
   /** Exact quoted offer factor per output, before sold quantity is applied. */
   offerFactorByCommodity?: Partial<Record<CommodityType, number>>;
+  /** Project-owned offer identity and units, carried through commodity clearing. */
+  productProjectId?: string;
+  productOutputTurn?: number;
+  projectOutputUnitsByCommodity?: Partial<Record<CommodityType, number>>;
+  projectSoldUnitsByCommodity?: Partial<Record<CommodityType, number>>;
+  projectQualityByCommodity?: Partial<Record<CommodityType, number>>;
 }
 
 /**
@@ -891,6 +905,7 @@ export function computeClearingFactors(args: {
       ...Object.keys(s.supplyRates),
       ...Object.keys(s.outputAnchorByCommodity ?? {}),
       ...Object.keys(s.outputUnitsByCommodity ?? {}),
+      ...Object.keys(s.projectOutputUnitsByCommodity ?? {}),
     ] as CommodityType[]);
     for (const commodity of outputCommodities) {
       const rate = s.supplyRates[commodity] ?? 0;
@@ -937,12 +952,27 @@ export function computeClearingFactors(args: {
       soldByCommodity[commodity] = sold;
     }
     if (rateSum <= 0) continue;
+    const projectSoldUnitsByCommodity = Object.fromEntries(
+      Object.entries(s.projectOutputUnitsByCommodity ?? {}).map(([commodity, units]) => [
+        commodity,
+        Math.max(0, units ?? 0) * (soldByCommodity[commodity as CommodityType] ?? 0),
+      ])
+    ) as Partial<Record<CommodityType, number>>;
     results.set(s.sectorId, {
       factor: factorSum / rateSum,
       soldFraction: soldSum / rateSum,
       soldByCommodity,
       effectivePosture: s.inputCostIndex !== undefined ? quotedPostureSum / rateSum : posture,
       offerFactorByCommodity,
+      ...(s.productProjectId
+        ? {
+            productProjectId: s.productProjectId,
+            productOutputTurn: s.productOutputTurn,
+            projectOutputUnitsByCommodity: s.projectOutputUnitsByCommodity,
+            projectSoldUnitsByCommodity,
+            projectQualityByCommodity: s.projectQualityByCommodity,
+          }
+        : {}),
     });
   }
   return results;

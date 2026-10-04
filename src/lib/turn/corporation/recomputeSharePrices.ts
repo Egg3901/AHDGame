@@ -14,6 +14,7 @@ import { ObjectId, type Db, type AnyBulkWriteOperation } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import type { Corporation, CorporationHistory } from "@/lib/db/types";
 import { STOCK_SPLIT_PRICE_SMOOTHING_TURNS } from "@/lib/constants/corporations";
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import {
   bankNpvBoostMultiplier,
   sectorRiskPremiumAtTurn,
@@ -37,6 +38,7 @@ import { readCorpEconomicAnchor, writeCorpEconomicLocal } from "@/lib/currency/c
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { getGameState } from "@/lib/gameState";
 import { computeTechAssetValueAnchor } from "@/lib/corporations/techAssetValue";
+import { corporateCashArrearsAnchor } from "@/lib/bonds/corporateCredit";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { sumConstructionInProgressAnchor } from "@/lib/corporations/sectorProfitBasis";
 import { ceoOwnershipFraction } from "@/lib/corporations/ceoOwnership";
@@ -240,7 +242,14 @@ export async function recomputeSharePricesAfterBondTurn(
       (lookups.primeRateSmoothedByCountry.get(corp.countryId) ??
         lookups.primeRateByCountry.get(corp.countryId) ??
         countryPrimeRate) / 100;
-    const riskPremium = sectorRiskPremiumAtTurn(corp.type, turn);
+    const riskPremium = sectorRiskPremiumAtTurn(
+      getOperatingSectorType(
+        corp.type,
+        corp.industryModel,
+        corp.mediaDiscriminator
+      ) as Corporation["type"],
+      turn
+    );
 
     // hist.sectorNPV is stored in local currency (converted by marketCapSnapshot);
     // normalize to ₳ to match the formula's anchor space.
@@ -255,7 +264,13 @@ export async function recomputeSharePricesAfterBondTurn(
       liquidCapitalAnchor: Math.max(0, liquidCapitalAnchor),
       bankEquityAnchor,
       sectorNPVAnchor,
-      issuedBondDebt: lookups.issuedBondDebtByCorpId.get(id) ?? 0,
+      issuedBondDebt:
+        (lookups.issuedBondDebtByCorpId.get(id) ?? 0) +
+        corporateCashArrearsAnchor({
+          operatingByCurrency: corp.operatingCashArrearsByCurrency,
+          federalTaxByCountryAnchor: corp.federalTaxArrearsAnchorByCountry,
+          fxByCurrency: lookups.exchangeRatesByCurrency,
+        }),
       bondHoldingsAnchor: lookups.bondAndImfPortfolioAnchorByCorpId.get(id) ?? 0,
       normalizedEarningsAnchor: adjustedEarningsMap.get(id) ?? 0,
       // Annualised bond-coupon income. hist value is per-turn local currency;

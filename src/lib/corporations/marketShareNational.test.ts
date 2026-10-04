@@ -4,10 +4,43 @@ import type { CorporateSector } from "@/lib/db/types";
 import {
   buildCorporationNationalRevenueShareByMarket,
   corporationNationalSectorShareKey,
+  fetchSectorCompetitorCount,
   fetchCorporationNationalSectorSharesByCountry,
 } from "./marketShare";
 
 describe("fetchCorporationNationalSectorSharesByCountry", () => {
+  it("keeps media and entertainment market shares separate", () => {
+    const mediaOwner = new ObjectId();
+    const entertainmentOwner = new ObjectId();
+    const shares = buildCorporationNationalRevenueShareByMarket([
+      {
+        corporationId: mediaOwner,
+        countryId: "US",
+        stateId: "US-CA",
+        sectorType: "media",
+        revenue: 100,
+        mediaDiscriminator: null,
+      },
+      {
+        corporationId: entertainmentOwner,
+        countryId: "US",
+        stateId: "US-CA",
+        sectorType: "media",
+        revenue: 300,
+        mediaDiscriminator: "entertainment",
+      },
+    ]);
+
+    expect(
+      shares.get(corporationNationalSectorShareKey(mediaOwner, "US", "media", null, null))
+    ).toBe(100);
+    expect(
+      shares.get(
+        corporationNationalSectorShareKey(entertainmentOwner, "US", "media", null, "entertainment")
+      )
+    ).toBe(100);
+  });
+
   it("aggregates the corporation and market across every state in the host country", async () => {
     const corporationId = new ObjectId();
     const rivalId = new ObjectId();
@@ -43,10 +76,31 @@ describe("fetchCorporationNationalSectorSharesByCountry", () => {
     );
     expect(sectorsFind).toHaveBeenCalledWith(
       {
-        stateId: { $in: ["US-TX", "US-CA"] },
-        sectorType: "logistics",
+        $or: [
+          {
+            stateId: "US-TX",
+            sectorType: "logistics",
+            industryModel: null,
+            mediaDiscriminator: null,
+          },
+          {
+            stateId: "US-CA",
+            sectorType: "logistics",
+            industryModel: null,
+            mediaDiscriminator: null,
+          },
+        ],
       },
-      { projection: { corporationId: 1, stateId: 1, sectorType: 1, revenue: 1 } }
+      {
+        projection: {
+          corporationId: 1,
+          stateId: 1,
+          sectorType: 1,
+          industryModel: 1,
+          mediaDiscriminator: 1,
+          revenue: 1,
+        },
+      }
     );
   });
 
@@ -73,6 +127,45 @@ describe("fetchCorporationNationalSectorSharesByCountry", () => {
     expect(
       shares.get(corporationNationalSectorShareKey(corporationId, "US", "logistics"))
     ).toBeCloseTo(40, 8);
+  });
+
+  it("keeps generic manufacturing and vehicle-model national shares separate", () => {
+    const corporationId = new ObjectId();
+    const rivalId = new ObjectId();
+    const shares = buildCorporationNationalRevenueShareByMarket([
+      {
+        corporationId,
+        countryId: "US",
+        stateId: "US-MI",
+        sectorType: "manufacturing",
+        industryModel: "vehicles",
+        revenue: 300,
+      },
+      {
+        corporationId: rivalId,
+        countryId: "US",
+        stateId: "US-TX",
+        sectorType: "manufacturing",
+        industryModel: "vehicles",
+        revenue: 700,
+      },
+      {
+        corporationId,
+        countryId: "US",
+        stateId: "US-NY",
+        sectorType: "manufacturing",
+        revenue: 1_000,
+      },
+    ] as CorporateSector[]);
+
+    expect(
+      shares.get(
+        corporationNationalSectorShareKey(corporationId, "US", "manufacturing", "vehicles")
+      )
+    ).toBe(30);
+    expect(
+      shares.get(corporationNationalSectorShareKey(corporationId, "US", "manufacturing"))
+    ).toBe(100);
   });
 
   it("keeps legacy rows that can inherit a country from their state siblings", () => {
@@ -103,5 +196,40 @@ describe("fetchCorporationNationalSectorSharesByCountry", () => {
     expect(
       shares.get(corporationNationalSectorShareKey(corporationId, "US", "logistics"))
     ).toBeCloseTo(50, 8);
+  });
+});
+
+describe("fetchSectorCompetitorCount", () => {
+  it("queries the canonical entertainment lane with legacy alias compatibility", async () => {
+    const ownId = new ObjectId();
+    const rivalId = new ObjectId();
+    const distinct = vi.fn().mockResolvedValue([ownId, rivalId]);
+    const db = {
+      collection: () => ({ distinct }),
+    } as unknown as Db;
+
+    const count = await fetchSectorCompetitorCount(
+      db,
+      {
+        stateId: "US-CA",
+        sectorType: "media",
+        industryModel: null,
+        mediaDiscriminator: "entertainment",
+      },
+      ownId
+    );
+
+    expect(count).toBe(1);
+    expect(distinct).toHaveBeenCalledWith("corporationId", {
+      $or: [
+        {
+          stateId: "US-CA",
+          sectorType: "media",
+          industryModel: null,
+          mediaDiscriminator: "entertainment",
+        },
+        { stateId: "US-CA", sectorType: "entertainment", industryModel: null },
+      ],
+    });
   });
 });

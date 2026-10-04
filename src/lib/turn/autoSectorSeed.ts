@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import type { UnownedSector } from "@/lib/db/types";
 import type { State } from "@/lib/db/types/state";
 import { CORPORATION_TYPES } from "@/lib/constants/corporations";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { CorporationType, ManufacturingIndustryModel } from "@/lib/constants/corporations";
 import { computeUnownedSeedRevenue } from "@/lib/admin/seed/seedUnownedSectors";
 import type { CountryId } from "@/lib/constants/countries";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
@@ -31,7 +31,7 @@ import { plantSizeUnits } from "@/lib/constants/facilityQuantum";
 const AUTO_SEED_MAX_BOOST = 0.06;
 
 /**
- * Owned plant capacity per `state:sectorType` bucket, in the SAME units
+ * Owned plant capacity per `state:sectorType:industryModel` bucket, in the SAME units
  * `unownedSectors.headroomUnits` is denominated in.
  *
  * Under plants `capitalStock` IS a sector's capacity in output units/day, which
@@ -43,10 +43,23 @@ const AUTO_SEED_MAX_BOOST = 0.06;
 async function loadOwnedCapacityByBucket(db: Db): Promise<Map<string, number>> {
   const rows = await db
     .collection("corporateSectors")
-    .aggregate<{ _id: { stateId: string; sectorType: string }; units: number }>([
+    .aggregate<{
+      _id: {
+        stateId: string;
+        sectorType: string;
+        industryModel?: string | null;
+        mediaDiscriminator?: string | null;
+      };
+      units: number;
+    }>([
       {
         $group: {
-          _id: { stateId: "$stateId", sectorType: "$sectorType" },
+          _id: {
+            stateId: "$stateId",
+            sectorType: "$sectorType",
+            industryModel: "$industryModel",
+            mediaDiscriminator: "$mediaDiscriminator",
+          },
           units: { $sum: { $ifNull: ["$capitalStock", 0] } },
         },
       },
@@ -56,7 +69,15 @@ async function loadOwnedCapacityByBucket(db: Db): Promise<Map<string, number>> {
   for (const row of rows) {
     if (!row?._id?.stateId || !row._id.sectorType) continue;
     const units = Number.isFinite(row.units) ? Math.max(0, row.units) : 0;
-    byBucket.set(bucketKey(row._id.stateId, row._id.sectorType), units);
+    byBucket.set(
+      bucketKey(
+        row._id.stateId,
+        row._id.sectorType,
+        row._id.industryModel,
+        row._id.mediaDiscriminator
+      ),
+      units
+    );
   }
   return byBucket;
 }
@@ -95,11 +116,16 @@ export async function processAutoSectorSeed(
   const existingDocs = await db
     .collection<UnownedSector>("unownedSectors")
     .find({})
-    .project({ stateId: 1, sectorType: 1 })
+    .project({ stateId: 1, sectorType: 1, industryModel: 1, mediaDiscriminator: 1 })
     .toArray();
   const existingSet = new Set(
-    existingDocs.map(
-      (d) => `${(d as { stateId: string }).stateId}:${(d as { sectorType: string }).sectorType}`
+    existingDocs.map((d) =>
+      bucketKey(
+        (d as { stateId: string }).stateId,
+        (d as { sectorType: string }).sectorType,
+        (d as { industryModel?: string | null }).industryModel,
+        (d as { mediaDiscriminator?: string | null }).mediaDiscriminator
+      )
     )
   );
 
@@ -110,18 +136,60 @@ export async function processAutoSectorSeed(
   // revenue mid-turn.
   const preset = await getGameStatePresetOrDefault(db);
 
-  for (const sectorType of CORPORATION_TYPES) {
-    const boost = boostMap.get(sectorType as CorporationType) ?? 0;
+  const vehicleModelExists = existingDocs.some(
+    (doc) => (doc as { industryModel?: string }).industryModel === "vehicles"
+  );
+  const profiles: Array<{
+    sectorType: CorporationType;
+    industryModel: ManufacturingIndustryModel | null;
+    mediaDiscriminator: "entertainment" | null;
+    operatingType: CorporationType;
+  }> = CORPORATION_TYPES.flatMap((sectorType) => {
+    if (sectorType === "entertainment") return [];
+    const base: {
+      sectorType: CorporationType;
+      industryModel: ManufacturingIndustryModel | null;
+      mediaDiscriminator: "entertainment" | null;
+      operatingType: CorporationType;
+    }[] = [
+      { sectorType, industryModel: null, mediaDiscriminator: null, operatingType: sectorType },
+    ];
+    return sectorType === "manufacturing" && vehicleModelExists
+      ? [
+          ...base,
+          {
+            sectorType,
+            industryModel: "vehicles",
+            mediaDiscriminator: null,
+            operatingType: "automobiles",
+          },
+        ]
+      : base;
+  });
+  profiles.push({
+    sectorType: "media",
+    industryModel: null,
+    mediaDiscriminator: "entertainment",
+    operatingType: "entertainment",
+  });
+
+  for (const { sectorType, industryModel, mediaDiscriminator, operatingType } of profiles) {
+    const boost = boostMap.get(operatingType as CorporationType) ?? 0;
     if (boost <= 0) continue;
 
     const multiplier = 1 + boost;
 
     const sectorDocs = await db
       .collection<UnownedSector>("unownedSectors")
-      .find({ sectorType })
+      .find({ sectorType, industryModel, mediaDiscriminator })
       .toArray();
     const openIds = sectorDocs
-      .filter((u) => !redirectBuckets.has(bucketKey(u.stateId, u.sectorType)))
+      .filter(
+        (u) =>
+          !redirectBuckets.has(
+            bucketKey(u.stateId, u.sectorType, u.industryModel, u.mediaDiscriminator)
+          )
+      )
       // ─── Cap the boost against actually-built capacity (#1145) ────────────
       //
       // The boost is a $multiply, so it compounds every year a commodity stays
@@ -138,14 +206,19 @@ export async function processAutoSectorSeed(
       // that path is byte-identical to before.
       .filter((u) => {
         if (!plantsEnabled) return true;
-        const owned = ownedCapacityByBucket.get(bucketKey(u.stateId, u.sectorType)) ?? 0;
+        const owned =
+          ownedCapacityByBucket.get(
+            bucketKey(u.stateId, u.sectorType, u.industryModel, u.mediaDiscriminator)
+          ) ?? 0;
         const headroom =
           typeof u.headroomUnits === "number" && Number.isFinite(u.headroomUnits)
             ? u.headroomUnits
             : computeUnownedHeadroomUnits(
                 u.sectorType as CorporationType,
                 u.revenue ?? 0,
-                eraUnitScale
+                eraUnitScale,
+                u.industryModel,
+                u.mediaDiscriminator
               );
         return headroom < owned;
       })
@@ -161,7 +234,8 @@ export async function processAutoSectorSeed(
           multiplier,
           now,
           plantsEnabled,
-          eraUnitScale
+          eraUnitScale,
+          industryModel
         ),
       };
       const { modifiedCount } = await db
@@ -173,11 +247,11 @@ export async function processAutoSectorSeed(
     // Using $multiply (not $inc) keeps growth proportional and self-limiting.
     // The old approach used $inc which compounded unboundedly (UK energy runaway).
     if (natCorpObjectIds.length > 0) {
-      const quantum = plantSizeUnits(sectorType);
+      const quantum = plantSizeUnits(sectorType, industryModel);
       const boostedStock = { $multiply: [{ $ifNull: ["$capitalStock", 0] }, multiplier] };
       const { modifiedCount: natModified } = await db
         .collection("corporateSectors")
-        .updateMany({ sectorType, corporationId: { $in: natCorpObjectIds } }, [
+        .updateMany({ sectorType, industryModel, corporationId: { $in: natCorpObjectIds } }, [
           {
             $set: {
               revenue: { $round: [{ $multiply: ["$revenue", multiplier] }, 0] },
@@ -227,7 +301,7 @@ export async function processAutoSectorSeed(
     }
 
     for (const state of states) {
-      const key = bucketKey(state._id as string, sectorType);
+      const key = bucketKey(state._id as string, sectorType, industryModel, mediaDiscriminator);
       if (existingSet.has(key)) continue;
       // Do not create or grow sectors in nationalized markets.
       if (redirectBuckets.has(key)) continue;
@@ -237,7 +311,7 @@ export async function processAutoSectorSeed(
         countryId: state.countryId as CountryId,
         stateId: state._id as string,
         preset,
-        sectorType,
+        sectorType: operatingType,
         boostMultiplier: multiplier,
       });
 
@@ -246,13 +320,17 @@ export async function processAutoSectorSeed(
         stateId: state._id as string,
         countryId: state.countryId as CountryId,
         sectorType,
+        industryModel,
+        mediaDiscriminator,
         revenue: seedRevenue,
         // Derived from revenue — these inserts omitted it entirely, so every
         // mid-game auto-seeded market was born without the field.
         headroomUnits: computeUnownedHeadroomUnits(
           sectorType as CorporationType,
           seedRevenue,
-          eraUnitScale
+          eraUnitScale,
+          industryModel,
+          mediaDiscriminator
         ),
         createdAt: now,
         updatedAt: now,

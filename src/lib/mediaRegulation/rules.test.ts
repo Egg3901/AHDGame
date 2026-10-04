@@ -1,18 +1,53 @@
 import { describe, expect, it } from "vitest";
 import {
   censorshipReachAvailability,
+  currentTurnDeliveredAdvertisingUnits,
+  isFairnessDoctrineBroadcastOutlet,
   isFairnessDoctrineInEffect,
   isMediaOwnershipBillAvailable,
-  mediaOwnershipAvailabilityByOutlet,
-  mediaRegulationAvailabilityByOutlet,
+  mediaAudienceAccessLimitUnitsByOutlet,
 } from "./rules";
 
 describe("media regulation availability", () => {
+  it("counts current political reach from applied seller receipts, not planned units", () => {
+    expect(
+      currentTurnDeliveredAdvertisingUnits({
+        snapshotTurn: 12,
+        currentTurn: 12,
+        physicalSoldUnits: 80,
+        plannedPoliticalUnits: 20,
+        settledPoliticalUnits: 10,
+      })
+    ).toBe(70);
+    expect(
+      currentTurnDeliveredAdvertisingUnits({
+        snapshotTurn: 11,
+        currentTurn: 12,
+        physicalSoldUnits: 80,
+        plannedPoliticalUnits: 20,
+        settledPoliticalUnits: 10,
+      })
+    ).toBeNull();
+    expect(
+      currentTurnDeliveredAdvertisingUnits({
+        snapshotTurn: 12,
+        currentTurn: 12,
+        physicalSoldUnits: 80,
+        plannedPoliticalUnits: 20,
+        settledPoliticalUnits: 0,
+      })
+    ).toBe(60);
+  });
+
   it("ends the enacted US fairness doctrine at the 1987 repeal boundary", () => {
     expect(isFairnessDoctrineInEffect(1986, 2)).toBe(true);
     expect(isFairnessDoctrineInEffect(1987, 2)).toBe(false);
     expect(isFairnessDoctrineInEffect(1953, 3)).toBe(false);
     expect(isFairnessDoctrineInEffect(undefined, 0)).toBe(false);
+    expect(isFairnessDoctrineBroadcastOutlet("media", "legacy_broadcast")).toBe(true);
+    expect(isFairnessDoctrineBroadcastOutlet("media", "radio_network")).toBe(true);
+    expect(isFairnessDoctrineBroadcastOutlet("media", "newspaper")).toBe(false);
+    expect(isFairnessDoctrineBroadcastOutlet("entertainment", "film_studio")).toBe(false);
   });
 
   it("offers the national ownership bill only after measured US concentration exceeds 65%", () => {
@@ -57,8 +92,8 @@ describe("media regulation availability", () => {
     expect(censorshipReachAvailability({ pressFreedom: 0, stateMediaControl: 100 })).toBe(0.5);
   });
 
-  it("caps only corporations above the enacted ownership limit in each state audience market", () => {
-    const result = mediaOwnershipAvailabilityByOutlet(
+  it("limits prior audience access for corporations above the enacted threshold", () => {
+    const result = mediaAudienceAccessLimitUnitsByOutlet(
       [
         {
           stateId: "CA",
@@ -73,13 +108,30 @@ describe("media regulation availability", () => {
       2
     );
 
-    expect(result.get("CA:dominant")).toBeCloseTo(0.55 / 0.7);
+    expect(result.get("CA:dominant")).toBeCloseTo(55);
     expect(result.has("CA:other")).toBe(false);
     expect(result.has("NY:dominant")).toBe(false);
   });
 
+  it("limits a dominant outlet to 35 units of an 80/20 prior audience budget", () => {
+    const result = mediaAudienceAccessLimitUnitsByOutlet(
+      [
+        {
+          stateId: "CA",
+          countryId: "US",
+          corporationId: "dominant",
+          deliveredAdvertisingUnits: 80,
+        },
+        { stateId: "CA", countryId: "US", corporationId: "other", deliveredAdvertisingUnits: 20 },
+      ],
+      0
+    );
+
+    expect(result.get("CA:dominant")).toBeCloseTo(35);
+  });
+
   it("fails open for incomplete seller history and unregulated policy options", () => {
-    const incomplete = mediaOwnershipAvailabilityByOutlet(
+    const incomplete = mediaAudienceAccessLimitUnitsByOutlet(
       [
         {
           stateId: "CA",
@@ -99,7 +151,7 @@ describe("media regulation availability", () => {
 
     expect(incomplete.size).toBe(0);
     expect(
-      mediaOwnershipAvailabilityByOutlet(
+      mediaAudienceAccessLimitUnitsByOutlet(
         [
           {
             stateId: "CA",
@@ -111,58 +163,5 @@ describe("media regulation availability", () => {
         5
       ).size
     ).toBe(0);
-  });
-
-  it("composes ownership caps and press controls for the same pre-clearing offer", () => {
-    const result = mediaRegulationAvailabilityByOutlet({
-      policyOptionIndex: 0,
-      outlets: [
-        {
-          stateId: "CA",
-          countryId: "US",
-          corporationId: "dominant",
-          deliveredAdvertisingUnits: 90,
-        },
-        { stateId: "CA", countryId: "US", corporationId: "other", deliveredAdvertisingUnits: 10 },
-      ],
-      stateConditionsById: new Map([["CA", { pressFreedom: 60, stateMediaControl: 70 }]]),
-    });
-
-    expect(result.get("CA:dominant")).toBeCloseTo(0.74 * (0.35 / 0.9));
-    expect(result.get("CA:other")).toBeCloseTo(0.74);
-  });
-
-  it("limits ownership only under the US media act, while censorship stays state based", () => {
-    const result = mediaRegulationAvailabilityByOutlet({
-      policyOptionIndex: 0,
-      outlets: [
-        {
-          stateId: "CA",
-          countryId: "US",
-          corporationId: "dominant",
-          deliveredAdvertisingUnits: 90,
-        },
-        { stateId: "CA", countryId: "US", corporationId: "other", deliveredAdvertisingUnits: 10 },
-        {
-          stateId: "CN-11",
-          countryId: "CN",
-          corporationId: "dominant",
-          deliveredAdvertisingUnits: 90,
-        },
-        {
-          stateId: "CN-11",
-          countryId: "CN",
-          corporationId: "other",
-          deliveredAdvertisingUnits: 10,
-        },
-      ],
-      stateConditionsById: new Map([
-        ["CA", { pressFreedom: 100, stateMediaControl: 0 }],
-        ["CN-11", { pressFreedom: 0, stateMediaControl: 100 }],
-      ]),
-    });
-
-    expect(result.get("CA:dominant")).toBeCloseTo(0.35 / 0.9);
-    expect(result.get("CN-11:dominant")).toBe(0.5);
   });
 });

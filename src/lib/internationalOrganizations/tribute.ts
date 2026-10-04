@@ -1,5 +1,8 @@
 import {
   organizationCashContext,
+  organizationLocalPerAnchor,
+  organizationTreasuryLocalPerAnchor,
+  settleOrganizationFundedCashMove,
   withOrganizationCashBatch,
   witnessOrganizationCash,
   type OrganizationCashOptions,
@@ -37,6 +40,7 @@ import {
  */
 import { ObjectId, type Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
+import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { getGdpAnchorRate, loadWorldPreset } from "@/lib/currency/gdpAnchorRate";
 import {
   DEFAULT_ORG_DUES_RATE_ANNUAL,
@@ -114,6 +118,24 @@ export async function chargeOrganizationTribute(
     let collectedLocal = 0;
     let minted = 0;
     let paid = 0;
+    const fundedCash = batch?.treasuryCashLedgerEnabled === true;
+    if (fundedCash) {
+      await getOrganizationFundsCollection(db).then((col) =>
+        col.updateOne(
+          { organizationId: organizationId as InternationalOrganizationId },
+          {
+            $setOnInsert: {
+              _id: new ObjectId(),
+              organizationId: organizationId as InternationalOrganizationId,
+              balanceLocal: 0,
+              currencyCountryId,
+              duesRateAnnual: DEFAULT_ORG_DUES_RATE_ANNUAL,
+            },
+          },
+          { upsert: true }
+        )
+      );
+    }
 
     for (const payer of payers) {
       // Absent from the map means "no economic data", which is not the same as a
@@ -130,7 +152,60 @@ export async function chargeOrganizationTribute(
       // A row at all, not a solvent one: its absence is what marks an entity the
       // game does not model a treasury for, whose tribute has to be minted.
       const treasury = treasuries.get(payer);
-      if (treasury) {
+      if (fundedCash && batch) {
+        if (!treasury) continue;
+        const payerRate = organizationTreasuryLocalPerAnchor(batch, payer as CountryId);
+        const owedLocal = Math.round(owedUsd / payerRate);
+        if (owedLocal <= 0) continue;
+        const fundRate = organizationLocalPerAnchor(batch, currencyCountryId);
+        const fundedAmount = (owedLocal / payerRate) * fundRate;
+        const result = await settleOrganizationFundedCashMove(db, batch, {
+          key: `organization-tribute:${batch.turn}:${organizationId}:${payer}`,
+          kind: "organization_tribute",
+          source: {
+            collection: "federalBudget",
+            filter: { countryId: payer, treasuryCashLocal: { $gte: owedLocal } },
+            path: "treasuryCashLocal",
+            amount: owedLocal,
+            currencyCode:
+              batch.budgetCurrencies.get(payer) ??
+              COUNTRY_CURRENCY_MAP[payer as CountryId] ??
+              "USD",
+            localPerAnchor: payerRate,
+          },
+          destination: {
+            collection: "organizationFunds",
+            filter: { organizationId: organizationId as InternationalOrganizationId },
+            path: "balanceLocal",
+            amount: fundedAmount,
+            currencyCode: COUNTRY_CURRENCY_MAP[currencyCountryId] ?? "USD",
+            localPerAnchor: fundRate,
+          },
+          sourceTreasuryCountry: payer as CountryId,
+          command: "organization.tribute.collect",
+        });
+        if (result.status !== "applied") continue;
+        collectedLocal += fundedAmount;
+        paid++;
+        if (result.status === "applied") {
+          await witnessOrganizationCash(db, batch, {
+            kind: "government",
+            ref: payer,
+            countryId: payer as CountryId,
+            amount: -owedLocal,
+            site: "tribute_treasury",
+            now,
+          });
+          await witnessOrganizationCash(db, batch, {
+            kind: "org",
+            ref: organizationId,
+            countryId: currencyCountryId,
+            amount: fundedAmount,
+            site: "tribute_fund",
+            now,
+          });
+        }
+      } else if (treasury) {
         const payerRate = getGdpAnchorRate(payer as CountryId, preset);
         const owedLocal = Math.round(owedUsd / payerRate);
         // Charged whatever the treasury's sign, exactly as dues are.
@@ -165,7 +240,7 @@ export async function chargeOrganizationTribute(
       paid++;
     }
 
-    if (collectedLocal > 0) {
+    if (!fundedCash && collectedLocal > 0) {
       const col = await getOrganizationFundsCollection(db);
       const credit = await col.updateOne(
         { organizationId: organizationId as InternationalOrganizationId },

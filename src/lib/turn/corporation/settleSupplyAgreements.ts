@@ -48,7 +48,7 @@ import {
   dollarsToUnits,
 } from "@/lib/constants/commodities";
 import type { CorporationType } from "@/lib/constants/corporations";
-import { getEffectiveStrategyRates } from "@/lib/constants/sectorStrategies";
+import { getEffectiveStrategyRatesForOperatingModel } from "@/lib/constants/sectorStrategies";
 import { getInputMultiplier } from "@/lib/utils/productionPolicy";
 import { safeUnitScale } from "@/lib/constants/capacityEconomy";
 import {
@@ -591,6 +591,8 @@ export function computeDemandCappedContractReservations(args: {
 export interface SupplyAgreementDemandSector {
   corporationId: string;
   sectorType: CorporationType;
+  industryModel?: string | null;
+  mediaDiscriminator?: string | null;
   revenueAnchor: number;
   strategyId?: string;
   transitionFromStrategyId?: string | null;
@@ -625,12 +627,14 @@ export function computeSupplyAgreementBuyerDemand(args: {
 
   for (const sector of args.sectors) {
     if (args.plantsEnabled && sector.mothballed === true) continue;
-    const rates = getEffectiveStrategyRates(
+    const rates = getEffectiveStrategyRatesForOperatingModel(
       sector.sectorType,
       sector.strategyId ?? "standard",
       sector.transitionFromStrategyId,
       sector.transitionStartTurn,
-      args.currentTurn
+      args.currentTurn,
+      sector.industryModel,
+      sector.mediaDiscriminator
     );
     const utilization =
       args.plantsEnabled &&

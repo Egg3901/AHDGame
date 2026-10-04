@@ -91,6 +91,7 @@ describe("SectorsTab Build-here deep link", () => {
 
 function sector(over: Partial<SectorDetail> & Pick<SectorDetail, "_id" | "sectorType">) {
   return {
+    industryModel: null,
     stateId: "OH",
     stateName: "Ohio",
     sectorLabel: "Sector",
@@ -157,7 +158,11 @@ const mixedSectors = [
 
 /** Pick a division from the sector type select. */
 function pickType(value: string) {
-  fireEvent.change(screen.getByLabelText("Sector type"), { target: { value } });
+  // The select value is the full model-aware identity. These fixtures are
+  // legacy-shaped sectors, so their canonical model discriminator is empty.
+  fireEvent.change(screen.getByLabelText("Sector type"), {
+    target: { value: value.includes(":") ? value : `${value}:` },
+  });
 }
 
 describe("SectorsTab type select and dossier", () => {
@@ -195,7 +200,9 @@ describe("SectorsTab type select and dossier", () => {
     ).toBeTruthy();
 
     expect(screen.getByRole("heading", { name: "Manufacturing plants" })).toBeTruthy();
-    expect((screen.getByLabelText("Sector type") as HTMLSelectElement).value).toBe("manufacturing");
+    expect((screen.getByLabelText("Sector type") as HTMLSelectElement).value).toBe(
+      "manufacturing:"
+    );
   });
 
   it("filters the table to the chosen type", () => {
@@ -304,7 +311,7 @@ describe("SectorsTab type select and dossier", () => {
     ).toBeTruthy();
 
     pickType("shipbuilding");
-    expect((screen.getByLabelText("Sector type") as HTMLSelectElement).value).toBe("shipbuilding");
+    expect((screen.getByLabelText("Sector type") as HTMLSelectElement).value).toBe("shipbuilding:");
     expect(screen.getAllByText("Bath Yards").length).toBeGreaterThan(0);
     expect(screen.queryAllByText("Cleveland Works")).toHaveLength(0);
     // No dossier and no strategy panel: there is nothing known to describe.

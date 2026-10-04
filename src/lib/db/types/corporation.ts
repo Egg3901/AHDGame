@@ -1,6 +1,10 @@
 import type { ObjectId } from "mongodb";
 import type { ManufacturingDevelopmentCashReceiptV2 } from "@/lib/products/manufacturingProject";
-import type { CorporationType } from "../../constants/corporations";
+import type {
+  CorporationType,
+  ManufacturingIndustryModel,
+  MediaDiscriminator,
+} from "../../constants/corporations";
 import type { CountryId } from "../../constants/countries";
 import type { CurrencyCode } from "../../constants/currencies";
 import type { ExtractableResource } from "../../constants/commodities";
@@ -160,6 +164,10 @@ export interface Corporation {
   tickerSymbol?: string;
   description?: string;
   type: CorporationType;
+  /** Specialized model identity when the primary type is manufacturing. */
+  industryModel?: ManufacturingIndustryModel | null;
+  /** Preserves entertainment's legacy operating identity inside media. */
+  mediaDiscriminator?: MediaDiscriminator | null;
   /** Optional secondary sector focus, halves sector match bonus, doubles base sprawl threshold */
   secondaryType?: CorporationType | null;
   /** Turn when primary/secondary type was last switched (for penalty duration) */
@@ -275,6 +283,14 @@ export interface Corporation {
   /** Atomic admission key for landed NPP capacity-build cash history. */
   nppReinvestmentCashWitnessKey?: string;
   liquidCapital: number;
+  /** Unfunded realized operating costs by native liquid currency. */
+  operatingCashArrearsByCurrency?: Partial<Record<CurrencyCode, number>>;
+  /** Latest turn that added an operating payable for each currency. */
+  operatingCashArrearsLastTurnByCurrency?: Partial<Record<CurrencyCode, number>>;
+  /** Unpaid federal withholding liabilities in anchor units by country. */
+  federalTaxArrearsAnchorByCountry?: Partial<Record<CountryId, number>>;
+  /** Latest turn that added a tax payable for each country. */
+  federalTaxArrearsLastTurnByCountry?: Partial<Record<CountryId, number>>;
   /**
    * Currency denomination of liquidCapital.
    * Set during forex migration to the corp's home currency.
@@ -773,6 +789,10 @@ export interface CorporateSector {
   countryId: CountryId;
   stateId: string;
   sectorType: CorporationType;
+  /** Optional production model for a specialized manufacturing industry. */
+  industryModel?: ManufacturingIndustryModel | null;
+  /** Preserves entertainment's legacy operating lane inside canonical media. */
+  mediaDiscriminator?: MediaDiscriminator | null;
   /** Optional CEO-defined display name for this specific sector instance */
   displayName?: string;
   /** Player-set target growth rate (% per game year, 48 turns, e.g. 1.5) */
@@ -813,6 +833,13 @@ export interface CorporateSector {
   outputAnchorByCommodity?: Partial<Record<string, number>>;
   /** Current bounded product quality by output commodity. */
   productQualityByCommodity?: Partial<Record<string, number>>;
+  /** Project-owned output from one clearing offer, distinct from baseline recipe output. */
+  productLineProjectId?: string;
+  /** Turn whose physical project offer and commodity fills were settled. */
+  productLineOutputTurn?: number;
+  productLineOutputUnitsByCommodity?: Partial<Record<string, number>>;
+  productLineSoldUnitsByCommodity?: Partial<Record<string, number>>;
+  productLineQualityByCommodity?: Partial<Record<string, number>>;
   /** Raw operating-capacity basis used for the measured product output snapshot. */
   productOutputCapacityUnits?: number;
   /**
@@ -1051,6 +1078,8 @@ export interface CorporateSector {
    * selling. Only written when clearing ran.
    */
   soldByCommodity?: Partial<Record<string, number>>;
+  /** Turn whose clearing pass produced soldFraction and soldByCommodity. */
+  soldByCommodityTurn?: number;
   effectivePosture?: number;
   clearingStartTurn?: number | null;
   /**

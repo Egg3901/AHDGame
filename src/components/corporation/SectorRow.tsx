@@ -5,7 +5,7 @@ import Link from "next/link";
 import { InfoTooltip } from "@/components/InfoTooltip";
 import {
   getSectorStrategies,
-  getStrategy,
+  getStrategyForOperatingModel,
   STRATEGY_TRANSITION_TURNS,
   CANCEL_COST_FRACTION,
 } from "@/lib/constants/sectorStrategies";
@@ -34,6 +34,7 @@ import {
 } from "./plantsPresentation";
 import { facilityPlural, facilitySingular } from "@/lib/constants/facilityVocabulary";
 import { facilitiesFromUnits } from "@/lib/constants/facilityQuantum";
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import { GROWTH_RATE_TURNS_PER_YEAR } from "@/lib/constants/corporations";
 import { SectorMarginDrilldown } from "./SectorMarginDrilldown";
 import {
@@ -98,9 +99,19 @@ export function SectorRow({
   const [mobileAbandonConfirm, setMobileAbandonConfirm] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
-  const strategies = getSectorStrategies(sector.sectorType, mediaOperatingModelsEnabled);
+  const operatingSectorType = getOperatingSectorType(
+    sector.sectorType,
+    sector.industryModel,
+    sector.mediaDiscriminator
+  ) as CorporationType;
+  const strategies = getSectorStrategies(operatingSectorType, mediaOperatingModelsEnabled);
   const currentId = sector.strategyId ?? "standard";
-  const currentStrategy = getStrategy(sector.sectorType, currentId);
+  const currentStrategy = getStrategyForOperatingModel(
+    sector.sectorType,
+    currentId,
+    sector.industryModel,
+    sector.mediaDiscriminator
+  );
   const currentStrategyListed = strategies.some((strategy) => strategy.id === currentId);
   const isTransitioning = !!sector.transitionFromStrategyId;
   const isUpdating = strategyUpdatingSectorId === sector._id;
@@ -170,8 +181,7 @@ export function SectorRow({
   // deleting a plant, so only fall back to the old capacity-derived count for
   // payloads served during deployment of the ledger migration.
   const plantCount = plantsMode
-    ? (sector.plantCount ??
-      facilitiesFromUnits(sector.sectorType as CorporationType, sector.capacityUnits ?? 0))
+    ? (sector.plantCount ?? facilitiesFromUnits(operatingSectorType, sector.capacityUnits ?? 0))
     : 0;
   const plantNoun =
     plantCount === 1 ? facilitySingular(sector.sectorType) : facilityPlural(sector.sectorType);

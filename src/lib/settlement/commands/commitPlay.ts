@@ -188,7 +188,11 @@ export async function commitSettlementPlay(
     // first would let a losing race still spend the treasury.
     if (fundsLocal > 0) {
       await spendFromTreasury(db, seat.id as CountryId, fundsLocal, {
-        witness: { flow: "settlement_play", site: "settlement/commitPlay" },
+        witness: {
+          flow: "settlement_play",
+          key: `settlement-play:${play.id}:${seat.id}`,
+          site: "settlement/commitPlay",
+        },
       });
     }
 

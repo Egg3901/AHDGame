@@ -1,5 +1,46 @@
 import { getDb } from "@/lib/mongodb";
 import type { GameConfig } from "@/lib/db/types";
+import type { Db } from "mongodb";
+
+export type ContractIssuanceSettings = Pick<
+  GameConfig,
+  "contractIssuanceEnabled" | "treasuryCashLedgerEnabled"
+>;
+
+export type ProspectingSettings = Pick<
+  GameConfig,
+  "prospectingEnabled" | "treasuryCashLedgerEnabled"
+>;
+
+/** Read the prospecting gate and funded-cash switch from one config row. */
+export async function loadProspectingSettings(db?: Db): Promise<ProspectingSettings> {
+  const database = db ?? (await getDb());
+  const config = await database
+    .collection<GameConfig>("gameConfig")
+    .findOne(
+      { _id: "default" },
+      { projection: { prospectingEnabled: 1, treasuryCashLedgerEnabled: 1 } }
+    );
+  return {
+    prospectingEnabled: config?.prospectingEnabled === true,
+    treasuryCashLedgerEnabled: config?.treasuryCashLedgerEnabled === true,
+  };
+}
+
+/** Read the route gate and funded-cash switch together from one config row. */
+export async function loadContractIssuanceSettings(db?: Db): Promise<ContractIssuanceSettings> {
+  const database = db ?? (await getDb());
+  const config = await database
+    .collection<GameConfig>("gameConfig")
+    .findOne(
+      { _id: "default" },
+      { projection: { contractIssuanceEnabled: 1, treasuryCashLedgerEnabled: 1 } }
+    );
+  return {
+    contractIssuanceEnabled: config?.contractIssuanceEnabled === true,
+    treasuryCashLedgerEnabled: config?.treasuryCashLedgerEnabled === true,
+  };
+}
 
 /**
  * Feature-flag resolvers for the resource-prospecting and extraction-contract

@@ -2,8 +2,9 @@ import { createRequire } from "node:module";
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { runInNewContext } from "node:vm";
 import { afterEach, describe, expect, it } from "vitest";
-import { patchBracesDepth, patchInstalledBracesDepth } from "./patch-braces-depth.mjs";
+import { verifyBracesDepth, verifyInstalledBracesDepth } from "./verify-braces-depth.mjs";
 
 const require = createRequire(import.meta.url);
 const braces = require("braces");
@@ -24,6 +25,17 @@ const nested = (depth: number, open = "{", close = "}") =>
   open.repeat(depth) + "a,b" + close.repeat(depth);
 
 describe("installed braces depth protection", () => {
+  it("installs the security fork for the actual micromatch consumer", () => {
+    const consumerRequire = createRequire(require.resolve("micromatch"));
+    expect(consumerRequire("braces/package.json")).toMatchObject({
+      name: "@lakeside/braces-depth-guard",
+      version: "3.0.3-ahd.1",
+    });
+    expect(consumerRequire("braces/upstream.json").revision).toBe(
+      "28d440b5dd449dbf1fe6f3506cf94ecca4d02660"
+    );
+  });
+
   it("rejects the advisory input before exhausting the call stack", () => {
     for (const run of [braces, braces.parse, braces.compile, braces.expand, braces.stringify]) {
       expect(() => run(nested(4500))).toThrow(/Input depth.*exceeds max depth/);
@@ -77,6 +89,17 @@ describe("installed braces depth protection", () => {
     expect(() => braces[method](ast(101), { maxDepth: 10000 })).toThrow(/max depth \(100\)/);
   });
 
+  it.each([false, true])("rejects cyclic expansion parent chains (multiple: %s)", (multiple) => {
+    const ast: { type: string; nodes: unknown[]; parent?: unknown } = {
+      type: "paren",
+      nodes: [{ type: "text", value: "a" }],
+    };
+    ast.parent = multiple ? { type: "paren", parent: ast } : ast;
+    expect(() =>
+      runInNewContext("expand(ast)", { expand: braces.expand, ast }, { timeout: 250 })
+    ).toThrow(/parent chain contains a cycle/);
+  });
+
   it.each(["{{a}}", "{a,{b}}", "{{x}y}", "{a,{b,{c}}", "{}{a}"])(
     "preserves escapeInvalid output for %s",
     (pattern) => {
@@ -103,30 +126,30 @@ describe("installed braces depth protection", () => {
   });
 });
 
-describe("reviewed braces installation patch", () => {
-  it("is idempotent on every reviewed file", () => {
+describe("reviewed braces security fork", () => {
+  it("verifies the source without rewriting any files", () => {
     const root = fixture();
     const snapshot = () =>
       ["constants", "parse", "compile", "expand", "stringify"].map((file) =>
         readFileSync(join(root, "lib", file + ".js"), "utf8")
       );
-    patchBracesDepth(root);
+    verifyBracesDepth(root);
     const first = snapshot();
-    patchBracesDepth(root);
+    verifyBracesDepth(root);
     expect(snapshot()).toEqual(first);
   });
 
-  it("rejects modified sources before writing any files", () => {
+  it("rejects modified sources without rewriting any files", () => {
     const root = fixture();
     const constantsPath = join(root, "lib/constants.js");
     const constants = readFileSync(constantsPath, "utf8").replace("  MAX_DEPTH: 100,\n", "");
     writeFileSync(constantsPath, constants);
     const path = join(root, "lib/stringify.js");
     writeFileSync(path, readFileSync(path, "utf8") + "\n// unreviewed change\n");
-    expect(() => patchBracesDepth(root)).toThrow("reviewed package source");
+    expect(() => verifyBracesDepth(root)).toThrow("reviewed package source");
     expect(readFileSync(constantsPath, "utf8")).toBe(constants);
     writeFileSync(join(root, "package.json"), JSON.stringify({ version: "3.0.4" }));
-    expect(() => patchBracesDepth(root)).toThrow("Review or remove");
+    expect(() => verifyBracesDepth(root)).toThrow("Review or replace");
   });
 
   it("checks root and nested lockfile copies and allows production-only omission", () => {
@@ -139,9 +162,9 @@ describe("reviewed braces installation patch", () => {
         packages: Object.fromEntries(paths.map((path) => [path, { version: "3.0.3" }])),
       })
     );
-    expect(patchInstalledBracesDepth(project)).toBe(0);
+    expect(verifyInstalledBracesDepth(project)).toBe(0);
     for (const path of paths) cpSync(installed, join(project, path), { recursive: true });
-    expect(patchInstalledBracesDepth(project)).toBe(2);
-    expect(patchInstalledBracesDepth(project)).toBe(2);
+    expect(verifyInstalledBracesDepth(project)).toBe(2);
+    expect(verifyInstalledBracesDepth(project)).toBe(2);
   });
 });

@@ -47,7 +47,12 @@ export function SectorTypeDossier({
   fmtMoney,
   metricContext,
 }: SectorTypeDossierProps) {
-  const label = CORPORATION_TYPE_LABELS[sectorType] ?? sectorType;
+  const vehicleModel = sectors.some(
+    (sector) => sector.sectorType === "manufacturing" && sector.industryModel === "vehicles"
+  );
+  const label = vehicleModel
+    ? "Vehicle manufacturing"
+    : (CORPORATION_TYPE_LABELS[sectorType] ?? sectorType);
   const suffix = MONEY_PERIOD_SUFFIX[timeScale];
 
   const sites = facilityPlural(sectorType);

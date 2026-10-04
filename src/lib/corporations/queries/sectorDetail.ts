@@ -49,7 +49,11 @@ import { latentTopUpForCountry, latentTopUpForState } from "@/lib/market/latentS
 import { bookFor, loadReachableBooks } from "@/lib/trade/queries/loadReachableBooks";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CommodityPrice, GameConfig, GameState } from "@/lib/db/types";
-import { getEffectiveStrategyRates, getSectorStrategies } from "@/lib/constants/sectorStrategies";
+import {
+  getEffectiveStrategyRatesForOperatingModel,
+  getOperatingSectorType,
+  getSectorStrategies,
+} from "@/lib/constants/sectorStrategies";
 import { computeRetoolHint } from "@/lib/corporations/retoolHint";
 import { applyExtractionResourceCapacityToSupply } from "@/lib/corporations/extractionResourceSupply";
 import { capacityRescaleRatio } from "@/lib/constants/capacityEconomy";
@@ -387,12 +391,14 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         // kept for the existing wage-demand display, which predates rivals.
         // Which union actually represents THIS sector is a separate lookup
         // below, keyed on the sector's own `representingUnionId`.
-        db
-          .collection<Union>("unions")
-          .findOne(
-            { countryId: sectorCountryId, sectorType: sector.sectorType },
-            { projection: { name: 1, ownerId: 1, demandedWageLevel: 1, undergroundStrength: 1 } }
-          ),
+        db.collection<Union>("unions").findOne(
+          {
+            countryId: sectorCountryId,
+            sectorType: sector.sectorType,
+            industryModel: sector.industryModel ?? null,
+          },
+          { projection: { name: 1, ownerId: 1, demandedWageLevel: 1, undergroundStrength: 1 } }
+        ),
       ]);
 
     // Union dues v1: the union that actually holds this sector, which may be a
@@ -431,6 +437,8 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
                 stateId: 1,
                 countryId: 1,
                 sectorType: 1,
+                industryModel: 1,
+                mediaDiscriminator: 1,
                 revenue: 1,
               },
             }
@@ -438,7 +446,11 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
           .toArray(),
         db
           .collection<CorporateSector>("corporateSectors")
-          .find({ stateId: sector.stateId, sectorType: sector.sectorType })
+          .find({
+            stateId: sector.stateId,
+            sectorType: sector.sectorType,
+            industryModel: sector.industryModel ?? null,
+          })
           .toArray(),
       ]);
 
@@ -484,6 +496,8 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       db.collection<UnownedSector>("unownedSectors").findOne({
         stateId: sector.stateId,
         sectorType: sector.sectorType,
+        industryModel: sector.industryModel ?? null,
+        mediaDiscriminator: sector.mediaDiscriminator ?? null,
       }),
     ]);
     const corpByIdForLookup = new Map(corpsForLookup.map((c) => [c._id.toString(), c]));
@@ -494,7 +508,11 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
     const ftaCoverage = buildFtaCoverageLookup(allSectorsRaw, corpByIdForLookup, activeFtaPairs);
 
     // Extract raw state metric values for display context and modifier computation
-    const sectorType = sector.sectorType as CorporationType;
+    const sectorType = getOperatingSectorType(
+      sector.sectorType,
+      sector.industryModel,
+      sector.mediaDiscriminator
+    ) as CorporationType;
     const metrics: StateMetricValues = {
       fullMetrics: stateMetrics ?? null,
       unemploymentRate: stateMetrics?.economic?.unemploymentRate?.value ?? null,
@@ -576,15 +594,19 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       STARTING_YEAR + Math.floor((Math.max(1, currentTurn) - 1) / TURNS_PER_YEAR);
     const techCorpView = {
       type: corporation.type,
+      industryModel: corporation.industryModel,
+      mediaDiscriminator: corporation.mediaDiscriminator,
       unlockedTechNodeIds: corporation.unlockedTechNodeIds,
       techDecadeLane: corporation.techDecadeLane,
     };
-    const effectiveRates = getEffectiveStrategyRates(
+    const effectiveRates = getEffectiveStrategyRatesForOperatingModel(
       sectorType,
       sector.strategyId ?? "standard",
       sector.transitionFromStrategyId,
       sector.transitionStartTurn,
-      currentTurn
+      currentTurn,
+      sector.industryModel,
+      sector.mediaDiscriminator
     );
 
     // Extraction-only: resource capacity and per-resource multipliers ,
@@ -779,14 +801,24 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         (ceo as { stats?: { businessAcumen?: number } } | null)?.stats?.businessAcumen ??
         NEUTRAL_STAT;
       const techBuildCostMultiplier = techTreesEnabled
-        ? getSectorTechEffects(techCorpView, corporation.type).growthCostMultiplier
+        ? getSectorTechEffects(
+            techCorpView,
+            sectorType,
+            sector.industryModel,
+            sector.mediaDiscriminator
+          ).growthCostMultiplier
         : 1;
       // Tech margin points ride `policyCredit` under plants like every other
       // non-physical modifier, and `computeAllMarginModifiers` does not carry
       // them, so name the row here rather than letting it fall into the scale
       // factor unlabelled (ticket 1122).
       const techMarginBonusPp = techTreesEnabled
-        ? getSectorTechEffects(techCorpView, corporation.type).marginBonusPp
+        ? getSectorTechEffects(
+            techCorpView,
+            sectorType,
+            sector.industryModel,
+            sector.mediaDiscriminator
+          ).marginBonusPp
         : 0;
       // The physical input bill: the same demand rows the Inputs panel renders,
       // priced at the BILLED unit price (base x realization factor, the price
@@ -866,7 +898,8 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         capacityUnits: sector.operatingCapacityUnits ?? sector.capitalStock,
         strategies: getSectorStrategies(
           sectorType,
-          governorConfig?.mediaOperatingModelsEnabled === true
+          governorConfig?.mediaOperatingModelsEnabled === true,
+          sector.mediaDiscriminator
         ),
         isAvailable: (candidate) =>
           !getStrategyAvailability(techCorpView, candidate, techCurrentYear, techTreesEnabled)
@@ -878,7 +911,13 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
             stateResources === undefined ? undefined : (stateResources ?? {})
           ),
         rescaleRatio: (toStrategyId) =>
-          capacityRescaleRatio(sectorType, sector.strategyId, toStrategyId),
+          capacityRescaleRatio(
+            sectorType,
+            sector.strategyId,
+            toStrategyId,
+            sector.industryModel,
+            sector.mediaDiscriminator
+          ),
         priceRatioFor: marketRatioFor,
         balanceFor: marketBookFor,
         basePrices: eraScaledBasePrices(sectorDetailUnitScale),
@@ -1016,7 +1055,11 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         countryId: sectorCountryId,
         stateName: state?.name ?? sector.stateId,
         sectorType: sector.sectorType,
-        sectorLabel: CORPORATION_TYPE_LABELS[sector.sectorType as CorporationType],
+        industryModel: sector.industryModel ?? null,
+        sectorLabel:
+          sector.sectorType === "manufacturing" && sector.industryModel === "vehicles"
+            ? "Vehicle manufacturing"
+            : CORPORATION_TYPE_LABELS[sectorType],
         displayName: sector.displayName ?? null,
         targetGrowthRate: sector.targetGrowthRate ?? 0,
         currentGrowthRate: sector.currentGrowthRate ?? sector.growthRate ?? 0,
@@ -1159,6 +1202,8 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
           techCurrentYear,
           techCorpView,
           sectorType,
+          industryModel: sector.industryModel,
+          mediaDiscriminator: sector.mediaDiscriminator,
         }),
         profit: Math.round(sectorAmountInCorpCurrency(profit)),
         // Rates displayed to the player are whichever side (domestic/foreign) actually applies

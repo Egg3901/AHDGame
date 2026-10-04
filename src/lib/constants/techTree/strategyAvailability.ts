@@ -13,6 +13,7 @@
 import type { SectorStrategy } from "../sectorStrategies";
 import { isDecadeReached } from "./decades";
 import { autoGrantedNodeIds, getUnlockedStrategyIds, type TechCorpView } from "./selectors";
+import { getOperatingSectorType } from "../sectorStrategies";
 
 export interface StrategyAvailability {
   locked: boolean;
@@ -39,7 +40,12 @@ export function getStrategyAvailability(
     // (a) corps founded before tech trees (empty unlockedTechNodeIds) and
     // (b) late-era corps who never saw past decades in their research UI
     // both inherit the sector unlocks those decades carry.
-    const autoGranted = autoGrantedNodeIds(corp.type, currentYear);
+    const techType = getOperatingSectorType(
+      corp.type,
+      corp.industryModel,
+      corp.mediaDiscriminator
+    ) as TechCorpView["type"];
+    const autoGranted = autoGrantedNodeIds(techType, currentYear);
     const effectiveView: TechCorpView = {
       ...corp,
       unlockedTechNodeIds: [...(corp.unlockedTechNodeIds ?? []), ...autoGranted],

@@ -1,6 +1,9 @@
 import type { ClientSession, Collection, Db, ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { FederalBudget } from "@/lib/db/types";
+import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
+import { resolveCountryCurrencyCode } from "@/lib/currency/govBudgetFields";
+import { treasuryAnchorValuation } from "@/lib/budget/rules/treasuryAccrual";
 import { convertLocal } from "@/lib/internationalOrganizations/organizationFund";
 import { loadWorldPreset } from "@/lib/currency/gdpAnchorRate";
 import { ensureFederalBudget } from "@/lib/turn/ensureFederalBudget";
@@ -18,9 +21,12 @@ import { reunifyByPeaceTerm } from "@/lib/settlement/reunifyByPeaceTerm";
 import { getPeaceOffersCollection } from "@/lib/db/collections/peaceOffers";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
 import {
+  loadTreasuryCashContext,
   resolveTreasuryCashOptions,
   witnessTreasuryCash,
+  type TreasuryCashOptions,
 } from "@/lib/nationalization/treasuryLedger";
+import { settleTransition } from "@/lib/banking/settlementJournal";
 
 export interface ApplyTermContext {
   /** The country imposing or offering. Receives an indemnity it is not paying. */
@@ -200,6 +206,96 @@ async function moveIndemnity(
     throw new Error(`Cannot apply indemnity: missing federal budget for ${payer} or ${recipient}`);
   }
 
+  const treasuryCash = await loadTreasuryCashContext(db, ctx.currentTurn);
+  if (treasuryCash?.treasuryCashLedgerEnabled) {
+    const payerCurrency =
+      resolveCountryCurrencyCode(payerBudget) ?? COUNTRY_CURRENCY_MAP[payer] ?? "USD";
+    const recipientCurrency =
+      resolveCountryCurrencyCode(recipientBudget) ?? COUNTRY_CURRENCY_MAP[recipient] ?? "USD";
+    const payerRate = treasuryAnchorValuation({
+      countryId: payer,
+      currencyCode: payerCurrency,
+      preset: treasuryCash.preset,
+      observedRate: treasuryCash.rates.get(payerCurrency),
+    }).anchorRate;
+    const recipientRate = treasuryAnchorValuation({
+      countryId: recipient,
+      currencyCode: recipientCurrency,
+      preset: treasuryCash.preset,
+      observedRate: treasuryCash.rates.get(recipientCurrency),
+    }).anchorRate;
+    const fundedCredit = (amount / payerRate) * recipientRate;
+    const transition = await settleTransition(db, {
+      key: `peace-indemnity:${ctx.peaceOfferId?.toHexString() ?? ctx.conflictId}:${payer}:${recipient}`,
+      kind: "peace_indemnity",
+      turn: ctx.currentTurn,
+      currency: payerCurrency,
+      legs: [
+        {
+          kind: "debit",
+          amount,
+          valuation: { currencyCode: payerCurrency, localPerAnchor: payerRate },
+          collection: "federalBudget",
+          filter: { _id: payerBudget._id, treasuryCashLocal: { $gte: amount } },
+          path: "treasuryCashLocal",
+          note: "Fund the indemnity from payer Treasury cash",
+        },
+        {
+          kind: "credit",
+          amount: fundedCredit,
+          valuation: { currencyCode: recipientCurrency, localPerAnchor: recipientRate },
+          collection: "federalBudget",
+          filter: { _id: recipientBudget._id, treasuryCashLocal: { $exists: true } },
+          path: "treasuryCashLocal",
+          note: "Deliver the indemnity to recipient Treasury cash",
+        },
+      ],
+      projections: [
+        {
+          collection: "federalBudget",
+          filter: { _id: payerBudget._id },
+          update: { $inc: { treasuryBalance: -amount } },
+          note: "Keep payer signed fiscal position as a noncash projection",
+        },
+        {
+          collection: "federalBudget",
+          filter: { _id: recipientBudget._id },
+          update: { $inc: { treasuryBalance: fundedCredit } },
+          note: "Keep recipient signed fiscal position as a noncash projection",
+        },
+        ...(ctx.peaceOfferId
+          ? [
+              {
+                collection: "peaceOffers",
+                filter: {
+                  _id: ctx.peaceOfferId,
+                  status: "accepted",
+                  "application.phase": "claimed",
+                },
+                update: { $set: { "application.phase": "term_applied" } },
+                note: "Complete the negotiated indemnity after both cash legs land",
+              },
+            ]
+          : []),
+      ],
+      event: {
+        kind: "monetary.executed",
+        command: "peace.indemnity.settle",
+        amount,
+        meta: { sourceCurrency: payerCurrency, destinationCurrency: recipientCurrency },
+      },
+    });
+    if (transition.status !== "applied" && transition.status !== "replayed") {
+      throw new Error(transition.error ?? "Funded peace indemnity is incomplete");
+    }
+    if (transition.status === "applied") {
+      await witnessIndemnity(db, payer, recipient, -amount, fundedCredit, now, {
+        context: treasuryCash,
+      });
+    }
+    return;
+  }
+
   const budgets = db.collection<FederalBudget>("federalBudget");
   if (ctx.peaceOfferId) {
     const receiptId = String(ctx.peaceOfferId);
@@ -269,10 +365,11 @@ async function witnessIndemnity(
   recipient: CountryId,
   paid: number,
   received: number,
-  now: Date
+  now: Date,
+  options?: TreasuryCashOptions
 ): Promise<void> {
   if (paid === 0 && received === 0) return;
-  const ledger = await resolveTreasuryCashOptions(db);
+  const ledger = await resolveTreasuryCashOptions(db, options);
   const site = "military/applyPeaceTerm";
   await witnessTreasuryCash(db, ledger, {
     flow: "peace_indemnity",

@@ -8,6 +8,7 @@ import type { CommodityType } from "@/lib/constants/commodities";
 import { costPlusPriceFactor } from "@/lib/market/costPlusPricing/rules";
 import { TURNS_PER_DAY } from "@/lib/constants/corporations";
 import { settlePoliticalAdMarket, type PoliticalAdClearingOffer } from "./market";
+import { mediaAudienceAccessLimitUnitsByOutlet } from "@/lib/mediaRegulation/rules";
 
 const input: SectorClearingInput = {
   sectorId: "sector-1",
@@ -37,6 +38,81 @@ const offer: PoliticalAdClearingOffer = {
 };
 
 describe("settlePoliticalAdMarket", () => {
+  it("keeps commercial and funded political delivery inside one grown owner's prior audience budget", () => {
+    const accessLimit = mediaAudienceAccessLimitUnitsByOutlet(
+      [
+        {
+          stateId: "CA",
+          countryId: "US",
+          corporationId: "network-a",
+          deliveredAdvertisingUnits: 80,
+        },
+        {
+          stateId: "CA",
+          countryId: "US",
+          corporationId: "network-b",
+          deliveredAdvertisingUnits: 20,
+        },
+      ],
+      0
+    ).get("CA:network-a");
+    expect(accessLimit).toBe(35);
+
+    const currentUnits = [200, 100];
+    const commonAvailability =
+      (accessLimit ?? 0) / currentUnits.reduce((sum, units) => sum + units, 0);
+    const mediaInputs: SectorClearingInput[] = currentUnits.map((units, index) => ({
+      sectorId: `grown-outlet-${index}`,
+      revenue: 100,
+      supplyRates: { advertising: 1 },
+      outputUnitsByCommodity: { advertising: units },
+      posture: 0,
+      editorialAdvertisingAvailability: commonAvailability,
+    }));
+    const commercialClearing = computeClearingFactors({
+      sectors: mediaInputs,
+      balances: new Map([["advertising", { supply: 1_000, demand: 100 }]]),
+      priceRatioByCommodity: new Map([["advertising", 1]]),
+      basePrices: { advertising: 240 } as Record<CommodityType, number>,
+    });
+    const commercialUnits = mediaInputs.reduce(
+      (sum, mediaInput) =>
+        sum +
+        currentUnits[Number(mediaInput.sectorId.slice(-1))]! *
+          (commercialClearing.get(mediaInput.sectorId)?.soldByCommodity?.advertising ?? 0),
+      0
+    );
+    const political = settlePoliticalAdMarket({
+      orders: [
+        {
+          orderId: "funded-order",
+          countryId: "US",
+          stateId: "CA",
+          createdTurn: 12,
+          budgetAnchor: 10_000,
+        },
+      ],
+      offers: mediaInputs.map((mediaInput, index) => ({
+        ...offer,
+        input: mediaInput,
+        clearing: commercialClearing.get(mediaInput.sectorId),
+        corporationId: "network-a",
+        basePrice: 240,
+        offeredUnits: currentUnits[index]!,
+      })),
+      clearingBySectorId: commercialClearing,
+      clearingEnabled: true,
+      qualityPremiumEnabled: false,
+      turn: 12,
+    });
+    const politicalUnits = political.allocations[0]?.deliveredUnits ?? 0;
+
+    expect(commercialUnits).toBeGreaterThan(0);
+    expect(politicalUnits).toBeGreaterThan(0);
+    expect(commercialUnits + politicalUnits).toBeCloseTo(accessLimit ?? 0);
+    expect(commercialUnits + politicalUnits).toBeLessThanOrEqual(accessLimit ?? 0);
+  });
+
   it("caps commercial plus funded political fills at editorially available output", () => {
     const mediaInput: SectorClearingInput = {
       sectorId: "sector-1",

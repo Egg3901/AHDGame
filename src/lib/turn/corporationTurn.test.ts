@@ -20,15 +20,19 @@ vi.mock("@/lib/wireEvent", () => ({
   logWireEvent: vi.fn().mockResolvedValue(undefined),
   wireHeadlineCorpCreditRating: vi.fn().mockReturnValue("Test headline"),
 }));
-vi.mock("@/lib/bonds/corporateCredit", () => ({
-  sumCorporateSectorConstructionInProgress: vi.fn().mockReturnValue(0),
-  computeCorporateCreditAtTurn: vi.fn().mockReturnValue({
-    creditRating: { rating: "BBB", compositeScore: 50 },
-    totalDebt: 0,
-    totalEquity: 1000000,
-  }),
-  isCorporateIssuerBond: vi.fn().mockReturnValue(false),
-}));
+vi.mock("@/lib/bonds/corporateCredit", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/bonds/corporateCredit")>();
+  return {
+    ...actual,
+    sumCorporateSectorConstructionInProgress: vi.fn().mockReturnValue(0),
+    computeCorporateCreditAtTurn: vi.fn().mockReturnValue({
+      creditRating: { rating: "BBB", compositeScore: 50 },
+      totalDebt: 0,
+      totalEquity: 1000000,
+    }),
+    isCorporateIssuerBond: vi.fn().mockReturnValue(false),
+  };
+});
 vi.mock(
   "@/lib/budget/revenue",
   // Partial mock: keep the real `computeTaxBaseGdpShareBaseline` so
@@ -161,6 +165,8 @@ describe("processCorporationTurn", () => {
       sharePrice: 10,
       totalShares: 1000000,
       lastShareTrade: null,
+      type: "manufacturing",
+      industryModel: "vehicles",
       corporationType: "manufacturing",
       sectors: [],
       creditRating: "BBB",
@@ -174,6 +180,7 @@ describe("processCorporationTurn", () => {
       countryId: "US",
       stateId: "CA",
       sectorType: "manufacturing",
+      industryModel: "vehicles",
       revenue: 10000,
       targetGrowthRate: 1.5,
       currentGrowthRate: 1.5,

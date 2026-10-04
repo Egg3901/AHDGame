@@ -3,9 +3,13 @@ import type { CorporateSector, GameConfig, GameState } from "@/lib/db/types";
 import type { UnownedSector } from "@/lib/db/types/unownedSector";
 import type { StateResourceCapacity } from "@/lib/db/types/stateResourceCapacity";
 import type { CommodityType } from "@/lib/constants/commodities";
+import type { CorporationType } from "@/lib/constants/corporations";
 import { STARTING_YEAR, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { isPlannedEconomy } from "@/lib/constants/commandEconomy";
-import { getEffectiveStrategyRates } from "@/lib/constants/sectorStrategies";
+import {
+  getEffectiveStrategyRatesForOperatingModel,
+  getOperatingSectorType,
+} from "@/lib/constants/sectorStrategies";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 import { getExtractionOutputScaleEnabled } from "@/lib/market/featureFlag";
 import { computeExtractionHeadroomByState } from "@/lib/turn/nppExtractionOpportunity";
@@ -124,18 +128,25 @@ export function fragileReinvestmentPriority(
   const localPriceRatioOf: CommodityPriceRatioFn = (commodity, fallbackCountryId) =>
     placementSignals.statePriceRatioOf?.(commodity, sector.stateId) ??
     priceRatioOf(commodity, fallbackCountryId);
-  const commodity = fragileMarketCommodityForSector(
+  const operatingSectorType = getOperatingSectorType(
     sector.sectorType,
+    sector.industryModel,
+    sector.mediaDiscriminator
+  );
+  const commodity = fragileMarketCommodityForSector(
+    operatingSectorType as CorporationType,
     countryId,
     localPriceRatioOf
   );
   if (!commodity) return 0;
-  const effectiveSupply = getEffectiveStrategyRates(
+  const effectiveSupply = getEffectiveStrategyRatesForOperatingModel(
     sector.sectorType,
     sector.strategyId ?? "standard",
     sector.transitionFromStrategyId,
     sector.transitionStartTurn,
-    turn
+    turn,
+    sector.industryModel,
+    sector.mediaDiscriminator
   ).supply;
   if ((effectiveSupply[commodity] ?? 0) <= 0) return 0;
   return localPriceRatioOf(commodity, countryId) ?? 0;

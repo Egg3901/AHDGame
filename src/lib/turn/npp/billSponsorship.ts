@@ -709,7 +709,16 @@ export async function processNppBillSponsorship(ctx: NPPContext): Promise<number
     marketAtLeast(await getMarketSystemMode(cmdConfig), "clearing");
   const currentYear = cmdGameState?.currentYear;
   const mediaOwnershipBillAvailable = mediaRegulationEnabled
-    ? isMediaOwnershipBillAvailable(await loadUSMediaOutletDelivery(db, currentTurn))
+    ? isMediaOwnershipBillAvailable(
+        await loadUSMediaOutletDelivery(db, {
+          // This phase runs before the current turn's corporation clearing.
+          // The latest completed audience snapshot is from the prior turn.
+          currentTurn: Math.max(0, currentTurn - 1),
+          currentYear,
+          commandEconomyEnabled,
+          includeSettledPolitical: true,
+        })
+      )
     : true;
   const europeanContext = cmdGameState?.europeanIntegration
     ? await loadEuropeanTreatyContext(db, currentTurn)
