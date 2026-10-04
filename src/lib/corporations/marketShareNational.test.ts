@@ -4,6 +4,7 @@ import type { CorporateSector } from "@/lib/db/types";
 import {
   buildCorporationNationalRevenueShareByMarket,
   corporationNationalSectorShareKey,
+  fetchSectorCompetitorCount,
   fetchCorporationNationalSectorSharesByCountry,
 } from "./marketShare";
 
@@ -75,10 +76,20 @@ describe("fetchCorporationNationalSectorSharesByCountry", () => {
     );
     expect(sectorsFind).toHaveBeenCalledWith(
       {
-        stateId: { $in: ["US-TX", "US-CA"] },
-        sectorType: "logistics",
-        industryModel: null,
-        mediaDiscriminator: null,
+        $or: [
+          {
+            stateId: "US-TX",
+            sectorType: "logistics",
+            industryModel: null,
+            mediaDiscriminator: null,
+          },
+          {
+            stateId: "US-CA",
+            sectorType: "logistics",
+            industryModel: null,
+            mediaDiscriminator: null,
+          },
+        ],
       },
       {
         projection: {
@@ -185,5 +196,40 @@ describe("fetchCorporationNationalSectorSharesByCountry", () => {
     expect(
       shares.get(corporationNationalSectorShareKey(corporationId, "US", "logistics"))
     ).toBeCloseTo(50, 8);
+  });
+});
+
+describe("fetchSectorCompetitorCount", () => {
+  it("queries the canonical entertainment lane with legacy alias compatibility", async () => {
+    const ownId = new ObjectId();
+    const rivalId = new ObjectId();
+    const distinct = vi.fn().mockResolvedValue([ownId, rivalId]);
+    const db = {
+      collection: () => ({ distinct }),
+    } as unknown as Db;
+
+    const count = await fetchSectorCompetitorCount(
+      db,
+      {
+        stateId: "US-CA",
+        sectorType: "media",
+        industryModel: null,
+        mediaDiscriminator: "entertainment",
+      },
+      ownId
+    );
+
+    expect(count).toBe(1);
+    expect(distinct).toHaveBeenCalledWith("corporationId", {
+      $or: [
+        {
+          stateId: "US-CA",
+          sectorType: "media",
+          industryModel: null,
+          mediaDiscriminator: "entertainment",
+        },
+        { stateId: "US-CA", sectorType: "entertainment", industryModel: null },
+      ],
+    });
   });
 });

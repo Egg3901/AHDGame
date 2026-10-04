@@ -49,7 +49,10 @@ import { emitTx } from "@/lib/financialTxLog/emit";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { logEconomicAction } from "@/lib/corporations/economicActionLog";
 import { createNotification } from "@/lib/notifications";
-import { isCorporateSectorDuplicateKey } from "@/lib/corporations/sectorLocation";
+import {
+  getCorporateSectorLaneQuery,
+  isCorporateSectorDuplicateKey,
+} from "@/lib/corporations/sectorLocation";
 import {
   identitySectorPlantFields,
   mergeSectorPlantFields,
@@ -148,7 +151,7 @@ export async function buyListedSector(request: Request, { params }: RouteParams)
     const existingBuyerSector = await db.collection<CorporateSector>("corporateSectors").findOne({
       corporationId: buyer._id,
       stateId: sector.stateId,
-      sectorType: sector.sectorType,
+      ...getCorporateSectorLaneQuery(sector),
     });
 
     const priceAnchor = sector.forSale.priceAnchor;

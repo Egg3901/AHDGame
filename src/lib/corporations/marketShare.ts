@@ -9,7 +9,7 @@
  * normalization pattern.
  */
 
-import type { Db } from "mongodb";
+import type { Db, Filter } from "mongodb";
 import type { Corporation, CorporateSector, State, UnownedSector } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import {
@@ -32,6 +32,65 @@ import {
   computeUnownedHeadroomUnits,
 } from "@/lib/market/unownedHeadroom";
 
+type MarketIdentity = {
+  sectorType: CorporateSector["sectorType"];
+  industryModel: string | null;
+  mediaDiscriminator: CorporateSector["mediaDiscriminator"] | null;
+};
+
+/** Legacy entertainment rows and canonical media/entertainment rows are one market. */
+function marketIdentity(
+  sectorType: CorporateSector["sectorType"],
+  industryModel?: CorporateSector["industryModel"] | null,
+  mediaDiscriminator?: CorporateSector["mediaDiscriminator"] | null
+): MarketIdentity {
+  if (sectorType === "entertainment") {
+    return { sectorType: "media", industryModel: null, mediaDiscriminator: "entertainment" };
+  }
+  return {
+    sectorType,
+    industryModel: industryModel ?? null,
+    mediaDiscriminator: mediaDiscriminator ?? null,
+  };
+}
+
+function marketIdentityKey(identity: MarketIdentity): string {
+  return `${identity.sectorType}::${identity.industryModel ?? ""}::${identity.mediaDiscriminator ?? ""}`;
+}
+
+function marketIdentityQuery(
+  stateId: string,
+  sectorType: CorporateSector["sectorType"],
+  industryModel?: CorporateSector["industryModel"] | null,
+  mediaDiscriminator?: CorporateSector["mediaDiscriminator"] | null
+): Filter<CorporateSector> {
+  const identity = marketIdentity(sectorType, industryModel, mediaDiscriminator);
+  const conditions = marketIdentityConditions(identity);
+  return {
+    $or: conditions.map((condition) => ({ stateId, ...condition }) as Filter<CorporateSector>),
+  };
+}
+
+function marketIdentityConditions(identity: MarketIdentity): Filter<CorporateSector>[] {
+  if (identity.mediaDiscriminator === "entertainment") {
+    return [
+      {
+        sectorType: "media",
+        industryModel: null,
+        mediaDiscriminator: "entertainment",
+      } as Filter<CorporateSector>,
+      { sectorType: "entertainment", industryModel: null },
+    ];
+  }
+  return [
+    {
+      sectorType: identity.sectorType,
+      industryModel: identity.industryModel,
+      mediaDiscriminator: identity.mediaDiscriminator,
+    } as Filter<CorporateSector>,
+  ];
+}
+
 /** Bounded market share percentage (0–100) given anchor-denominated inputs. */
 export function computeMarketSharePercent(
   sectorRevenueAnchor: number,
@@ -51,8 +110,8 @@ export function corporationNationalSectorShareKey(
   industryModel?: string | null,
   mediaDiscriminator?: MediaDiscriminator | null
 ): string {
-  const modelSuffix = industryModel ?? (mediaDiscriminator ? "-" : null);
-  return `${corporationId.toString()}::${countryId}::${sectorType}${modelSuffix ? `::${modelSuffix}` : ""}${mediaDiscriminator ? `::${mediaDiscriminator}` : ""}`;
+  const identity = marketIdentity(sectorType, industryModel, mediaDiscriminator);
+  return `${corporationId.toString()}::${countryId}::${identity.sectorType}::${identity.industryModel ?? ""}::${identity.mediaDiscriminator ?? ""}`;
 }
 
 /**
@@ -87,8 +146,8 @@ export function buildCorporationNationalRevenueShareByMarket(
     industryModel?: string | null,
     mediaDiscriminator?: MediaDiscriminator | null
   ) => {
-    const modelSuffix = industryModel ?? (mediaDiscriminator ? "-" : null);
-    return `${countryId}::${sectorType}${modelSuffix ? `::${modelSuffix}` : ""}${mediaDiscriminator ? `::${mediaDiscriminator}` : ""}`;
+    const identity = marketIdentity(sectorType, industryModel, mediaDiscriminator);
+    return `${countryId}::${marketIdentityKey(identity)}`;
   };
 
   for (const sector of sectors) {
@@ -124,19 +183,18 @@ export function buildCorporationNationalRevenueShareByMarket(
 
   const shareByKey = new Map<string, number>();
   for (const [corporationKey, corporationRevenue] of corporationRevenueByKey) {
-    const [, countryId, sectorType, industryModel, mediaDiscriminator] = corporationKey.split(
-      "::"
-    ) as [string, CountryId, string, string | undefined, MediaDiscriminator | undefined];
+    const [, countryId, ...identityParts] = corporationKey.split("::");
+    const [sectorType, industryModel, mediaDiscriminator] = identityParts;
     shareByKey.set(
       corporationKey,
       computeMarketSharePercent(
         corporationRevenue,
         marketRevenueByKey.get(
           marketKey(
-            countryId,
+            countryId as CountryId,
             sectorType as CorporateSector["sectorType"],
-            industryModel === "-" ? undefined : industryModel,
-            mediaDiscriminator
+            industryModel || null,
+            (mediaDiscriminator || null) as MediaDiscriminator | null
           )
         ) ?? 0
       )
@@ -386,8 +444,10 @@ export function buildMarketShareBySectorId(
   const bucketKey = (
     stateId: string,
     sectorType: CorporationType,
-    industryModel?: string | null
-  ): BucketKey => `${stateId}::${sectorType}::${industryModel ?? ""}`;
+    industryModel?: string | null,
+    mediaDiscriminator?: MediaDiscriminator | null
+  ): BucketKey =>
+    `${stateId}::${marketIdentityKey(marketIdentity(sectorType, industryModel, mediaDiscriminator))}`;
   const ownedRevenueByBucket = new Map<BucketKey, number>();
   for (const sector of sectors) {
     const key = bucketKey(
@@ -397,7 +457,8 @@ export function buildMarketShareBySectorId(
         sector.industryModel,
         sector.mediaDiscriminator
       ) as CorporationType,
-      sector.industryModel
+      sector.industryModel,
+      sector.mediaDiscriminator
     );
     const rev = sectorRevenueAnchorById.get(sector._id.toString()) ?? 0;
     ownedRevenueByBucket.set(key, (ownedRevenueByBucket.get(key) ?? 0) + rev);
@@ -413,7 +474,8 @@ export function buildMarketShareBySectorId(
         sector.industryModel,
         sector.mediaDiscriminator
       ) as CorporationType,
-      sector.industryModel
+      sector.industryModel,
+      sector.mediaDiscriminator
     );
     // Market share is a sector's revenue over the TOTAL real revenue produced in
     // its (state, sectorType) cell — its slice of the actual market, not of an
@@ -461,8 +523,10 @@ export function buildNationalDominanceShareBySectorId(
   const natKey = (
     countryId: string,
     sectorType: CorporationType,
-    industryModel?: string | null
-  ): string => `${countryId}::${sectorType}::${industryModel ?? ""}`;
+    industryModel?: string | null,
+    mediaDiscriminator?: MediaDiscriminator | null
+  ): string =>
+    `${countryId}::${marketIdentityKey(marketIdentity(sectorType, industryModel, mediaDiscriminator))}`;
 
   // Sector revenue → ₳ anchor, host-state currency (same resolution as the
   // local map so the two shares are on one basis).
@@ -494,9 +558,18 @@ export function buildNationalDominanceShareBySectorId(
   for (const sector of sectors) {
     const state = stateById.get(sector.stateId);
     if (!state) continue;
-    const sectorType = sector.sectorType as CorporationType;
+    const identity = marketIdentity(
+      sector.sectorType,
+      sector.industryModel,
+      sector.mediaDiscriminator
+    );
     const countryId = (sector.countryId as CountryId | undefined) ?? (state.countryId as CountryId);
-    const nKey = natKey(countryId, sectorType, sector.industryModel);
+    const nKey = natKey(
+      countryId,
+      identity.sectorType,
+      identity.industryModel,
+      identity.mediaDiscriminator
+    );
     nationalMarketByKey.set(
       nKey,
       (nationalMarketByKey.get(nKey) ?? 0) + (anchorById.get(sector._id.toString()) ?? 0)
@@ -509,8 +582,10 @@ export function buildNationalDominanceShareBySectorId(
     corpId: string,
     countryId: string,
     sectorType: CorporationType,
-    industryModel?: string | null
-  ): string => `${corpId}::${countryId}::${sectorType}::${industryModel ?? ""}`;
+    industryModel?: string | null,
+    mediaDiscriminator?: MediaDiscriminator | null
+  ): string =>
+    `${corpId}::${countryId}::${marketIdentityKey(marketIdentity(sectorType, industryModel, mediaDiscriminator))}`;
   for (const sector of sectors) {
     const corpId = sector.corporationId?.toString();
     if (!corpId) continue;
@@ -520,7 +595,8 @@ export function buildNationalDominanceShareBySectorId(
       corpId,
       countryId,
       sector.sectorType as CorporationType,
-      sector.industryModel
+      sector.industryModel,
+      sector.mediaDiscriminator
     );
     corpNatRevByKey.set(
       key,
@@ -536,11 +612,25 @@ export function buildNationalDominanceShareBySectorId(
       nationalShareBySectorId.set(sector._id.toString(), 0);
       continue;
     }
-    const sectorType = sector.sectorType as CorporationType;
+    const identity = marketIdentity(
+      sector.sectorType,
+      sector.industryModel,
+      sector.mediaDiscriminator
+    );
     const corpRev =
-      corpNatRevByKey.get(corpNatKey(corpId, countryId, sectorType, sector.industryModel)) ?? 0;
+      corpNatRevByKey.get(
+        corpNatKey(
+          corpId,
+          countryId,
+          identity.sectorType,
+          identity.industryModel,
+          identity.mediaDiscriminator
+        )
+      ) ?? 0;
     const market =
-      nationalMarketByKey.get(natKey(countryId, sectorType, sector.industryModel)) ?? 0;
+      nationalMarketByKey.get(
+        natKey(countryId, identity.sectorType, identity.industryModel, identity.mediaDiscriminator)
+      ) ?? 0;
     nationalShareBySectorId.set(sector._id.toString(), computeMarketSharePercent(corpRev, market));
   }
   return nationalShareBySectorId;
@@ -562,6 +652,7 @@ export async function fetchSectorMarketSharePercent(
     | "stateId"
     | "sectorType"
     | "industryModel"
+    | "mediaDiscriminator"
     | "revenue"
     | "countryId"
     | "capitalStock"
@@ -596,12 +687,22 @@ export async function fetchSectorMarketSharePercent(
     db
       .collection<CorporateSector>("corporateSectors")
       .find(
+        marketIdentityQuery(
+          sector.stateId,
+          sector.sectorType,
+          sector.industryModel,
+          sector.mediaDiscriminator
+        ),
         {
-          stateId: sector.stateId,
-          sectorType: sector.sectorType,
-          industryModel: sector.industryModel ?? null,
-        },
-        { projection: { _id: 1, revenue: 1 } }
+          projection: {
+            _id: 1,
+            revenue: 1,
+            corporationId: 1,
+            sectorType: 1,
+            industryModel: 1,
+            mediaDiscriminator: 1,
+          },
+        }
       )
       .toArray(),
     loadFxRatesByCurrency(db),
@@ -677,10 +778,11 @@ export async function fetchCorporationNationalSectorSharesByCountry(
     .collection<CorporateSector>("corporateSectors")
     .find(
       {
-        stateId: { $in: stateIds },
-        sectorType: inputs.sectorType,
-        industryModel: inputs.industryModel ?? null,
-        mediaDiscriminator: inputs.mediaDiscriminator ?? null,
+        $or: stateIds.flatMap((stateId) =>
+          marketIdentityConditions(
+            marketIdentity(inputs.sectorType, inputs.industryModel, inputs.mediaDiscriminator)
+          ).map((condition) => ({ stateId, ...condition }) as Filter<CorporateSector>)
+        ),
       },
       {
         projection: {
@@ -757,16 +859,20 @@ export async function fetchCorporationNationalSectorSharePercent(
  */
 export async function fetchSectorCompetitorCount(
   db: Db,
-  sector: Pick<CorporateSector, "stateId" | "sectorType" | "industryModel">,
+  sector: Pick<CorporateSector, "stateId" | "sectorType" | "industryModel"> &
+    Partial<Pick<CorporateSector, "mediaDiscriminator">>,
   owningCorporationId: Corporation["_id"]
 ): Promise<number | null> {
   try {
     const corpIds = await db
       .collection<CorporateSector>("corporateSectors")
       .distinct("corporationId", {
-        stateId: sector.stateId,
-        sectorType: sector.sectorType,
-        industryModel: sector.industryModel ?? null,
+        ...marketIdentityQuery(
+          sector.stateId,
+          sector.sectorType,
+          sector.industryModel,
+          sector.mediaDiscriminator
+        ),
       });
     const own = owningCorporationId?.toString();
     return corpIds.filter((id) => id != null && id.toString() !== own).length;
@@ -798,12 +904,12 @@ export async function fetchMarketSharePercentForSectors(
   const { loadFxRatesByCurrency } = await import("@/lib/currency/corporationCapital");
 
   const stateIds = [...new Set(targetSectors.map((s) => s.stateId))];
-  const bucketFilters = targetSectors.map((s) => ({
-    stateId: s.stateId,
-    sectorType: s.sectorType,
-    industryModel: s.industryModel ?? null,
-    mediaDiscriminator: s.mediaDiscriminator ?? null,
-  }));
+  const bucketFilters = targetSectors.flatMap((s) =>
+    marketIdentityConditions(
+      marketIdentity(s.sectorType, s.industryModel, s.mediaDiscriminator)
+    ).map((condition) => ({ stateId: s.stateId, ...condition }))
+  );
+  const unownedBucketFilters = bucketFilters as unknown as Filter<UnownedSector>[];
 
   // Sibling sectors across the spanned buckets (a superset; buildMarketShareBySectorId
   // buckets precisely by (state, sectorType), so non-target buckets don't pollute).
@@ -825,7 +931,7 @@ export async function fetchMarketSharePercentForSectors(
         }
       )
       .toArray(),
-    db.collection<UnownedSector>("unownedSectors").find({ $or: bucketFilters }).toArray(),
+    db.collection<UnownedSector>("unownedSectors").find({ $or: unownedBucketFilters }).toArray(),
     db
       .collection<State>("states")
       .find({ _id: { $in: stateIds } }, { projection: { _id: 1, gdp: 1, countryId: 1 } })
@@ -864,6 +970,7 @@ export async function fetchAttackerDefenderShares(
     | "stateId"
     | "sectorType"
     | "industryModel"
+    | "mediaDiscriminator"
     | "countryId"
     | "revenue"
     | "capitalStock"
@@ -886,12 +993,22 @@ export async function fetchAttackerDefenderShares(
     db
       .collection<CorporateSector>("corporateSectors")
       .find(
+        marketIdentityQuery(
+          targetSector.stateId,
+          targetSector.sectorType,
+          targetSector.industryModel,
+          targetSector.mediaDiscriminator
+        ),
         {
-          stateId: targetSector.stateId,
-          sectorType: targetSector.sectorType,
-          industryModel: targetSector.industryModel ?? null,
-        },
-        { projection: { _id: 1, corporationId: 1, revenue: 1 } }
+          projection: {
+            _id: 1,
+            corporationId: 1,
+            revenue: 1,
+            sectorType: 1,
+            industryModel: 1,
+            mediaDiscriminator: 1,
+          },
+        }
       )
       .toArray(),
     loadFxRatesByCurrency(db),
