@@ -24,6 +24,7 @@ import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { restoreSectorsToUnowned } from "@/lib/corporations/restoreSectorsToUnowned";
 import { applyBrandFacilityLoss } from "@/lib/corporations/brandFacilityLoss";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
+import { unprotectedConstructionPropertyFilter } from "@/lib/corporations/securedConstructionProperty";
 
 interface RouteParams {
   params: Promise<{ id: string; sectorId: string }>;
@@ -54,16 +55,24 @@ export async function abandonSector(_request: Request, { params }: RouteParams) 
       return NextResponse.json({ error: "Invalid sector ID" }, { status: 400 });
     }
 
-    // Claim the sector row up front by deleting it atomically. The build-order
-    // cash refund below is an unguarded `$inc` on liquidCapital; without a claim,
-    // N concurrent abandons of the same sector each `findOne` it before any
-    // delete lands and each pays the refund, minting 0.75×CIP per extra racer
-    // (the pool restore and row delete are already idempotent — only the cash
-    // leg is not). findOneAndDelete lets exactly one request win; the losers see
-    // null and refund nothing. The returned doc carries the buildQueue we need.
-    const sector = await db
-      .collection<CorporateSector>("corporateSectors")
-      .findOneAndDelete({ _id: new ObjectId(sectorId), corporationId: corporation._id });
+    // Reserve the sector without deleting it. The property marker makes this
+    // the one abandon winner, excludes a concurrent construction claim, and
+    // lets the idempotent pool restore delete only after its credit is durable.
+    // The returned snapshot carries the queue needed for the one-time refund.
+    const transitionKey = `restore:${new ObjectId(sectorId).toHexString()}`;
+    const sector = await db.collection<CorporateSector>("corporateSectors").findOneAndUpdate(
+      {
+        _id: new ObjectId(sectorId),
+        corporationId: corporation._id,
+        ...unprotectedConstructionPropertyFilter(),
+      },
+      {
+        $set: {
+          constructionPropertyTransition: { key: transitionKey, kind: "restore" },
+        },
+      },
+      { returnDocument: "after" }
+    );
 
     if (!sector) {
       return NextResponse.json({ error: "Sector not found" }, { status: 404 });

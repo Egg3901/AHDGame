@@ -16,6 +16,7 @@ import {
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { revenuePerCapacityUnitForStrategy } from "@/lib/constants/capacityEconomy";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
+import { reserveSectorsForRestore } from "@/lib/corporations/securedConstructionProperty";
 
 const RESTORE_IDEMPOTENCY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -36,6 +37,8 @@ type RestorableSector = Pick<
   | "industryModel"
   | "mediaDiscriminator"
   | "revenue"
+  | "constructionFinancing"
+  | "constructionPropertyTransition"
 > &
   Partial<Pick<CorporateSector, "capitalStock" | "strategyId" | "buildQueue">>;
 
@@ -125,6 +128,14 @@ export async function restoreSectorsToUnowned(
   const eraUnitScale = await loadWorldEraUnitScale(db);
 
   const deltas: RestorableSectorDelta[] = [];
+
+  // Secure every row before crediting its market pool. The marker closes the
+  // otherwise unsafe interval between a snapshot read and the pool credit:
+  // construction claim installation refuses marked rows, and retrying this
+  // restore may reacquire its deterministic per-sector token.
+  if (!(await reserveSectorsForRestore(db, sectors))) {
+    throw new Error("restoreSectorsToUnowned: secured construction property cannot be disposed");
+  }
 
   for (const sector of sectors) {
     const owningCorporation = corporationById.get(sector.corporationId.toString());
@@ -260,7 +271,12 @@ export async function restoreSectorsToUnowned(
                     $filter: {
                       input: { $ifNull: ["$recentCorporateSectorRestores", []] },
                       as: "restore",
-                      cond: { $gte: ["$$restore.restoredAt", retryWindowStart] },
+                      cond: {
+                        $or: [
+                          { $eq: ["$$restore.pendingSourceDelete", true] },
+                          { $gte: ["$$restore.restoredAt", retryWindowStart] },
+                        ],
+                      },
                     },
                   },
                 },
@@ -293,7 +309,12 @@ export async function restoreSectorsToUnowned(
                     $filter: {
                       input: { $ifNull: ["$recentCorporateSectorRestores", []] },
                       as: "restore",
-                      cond: { $gte: ["$$restore.restoredAt", retryWindowStart] },
+                      cond: {
+                        $or: [
+                          { $eq: ["$$restore.pendingSourceDelete", true] },
+                          { $gte: ["$$restore.restoredAt", retryWindowStart] },
+                        ],
+                      },
                     },
                   },
                 },
@@ -349,7 +370,8 @@ export async function restoreSectorsToUnowned(
       before?.recentCorporateSectorRestores?.some(
         (restore) =>
           restore.sectorId === restoreToken &&
-          restore.restoredAt.getTime() >= retryWindowStart.getTime()
+          (restore.pendingSourceDelete === true ||
+            restore.restoredAt.getTime() >= retryWindowStart.getTime())
       ) ?? false;
     if (!alreadyRestored) {
       // Under plants the ₳ figure callers report is the NAMEPLATE value of the
@@ -360,9 +382,10 @@ export async function restoreSectorsToUnowned(
   }
 
   const sectorIds = sectors.map((sector) => sector._id);
-  const deleteResult = await db
-    .collection<CorporateSector>("corporateSectors")
-    .deleteMany({ _id: { $in: sectorIds } });
+  const deleteResult = await db.collection<CorporateSector>("corporateSectors").deleteMany({
+    _id: { $in: sectorIds },
+    "constructionPropertyTransition.kind": "restore",
+  });
   if (deleteResult.deletedCount !== sectorIds.length) {
     const remaining = await db
       .collection<CorporateSector>("corporateSectors")

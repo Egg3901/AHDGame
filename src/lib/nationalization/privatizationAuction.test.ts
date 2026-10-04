@@ -412,9 +412,18 @@ describe("reabsorbSpunOutCorp", () => {
     );
 
     // Both energy sectors routed back to the primary, absorbedAtTurn re-stamped.
-    const upd = db.collectionMocks.corporateSectors.updateMany.mock.calls[0];
-    expect(upd[1].$set.corporationId).toEqual(primaryId);
-    expect(upd[1].$set.absorbedAtTurn).toBe(42);
+    const moves = db.collectionMocks.corporateSectors.updateOne.mock.calls.filter(
+      (call) => call[1].$set?.corporationId !== undefined
+    );
+    expect(moves).toHaveLength(2);
+    for (const [filter, update] of moves) {
+      expect(filter.corporationId).toEqual(shellId);
+      expect(filter["constructionPropertyTransition.key"]).toBe(
+        `reabsorb:${shellId.toHexString()}:42:${filter._id.toHexString()}`
+      );
+      expect(update.$set.corporationId).toEqual(primaryId);
+      expect(update.$set.absorbedAtTurn).toBe(42);
+    }
     // Residual cash → primary.
     const corpUpd = db.collectionMocks.corporations.findOneAndUpdate.mock.calls.find(
       (c) => c[1].$inc?.liquidCapital === 500

@@ -164,6 +164,12 @@ describe("POST /api/corporations/[id]/hostile-takeover", () => {
 
     db.collectionMocks.states.find.mockReturnValue(makeCursor([{ _id: "LON", countryId: "UK" }]));
 
+    db.collectionMocks.corporateSectors.bulkWrite.mockResolvedValue({
+      matchedCount: 1,
+      modifiedCount: 1,
+    });
+    db.collectionMocks.corporateSectors.deleteMany.mockResolvedValue({ deletedCount: 1 });
+
     db.collectionMocks.corporations.find.mockReturnValue(makeCursor([]));
 
     const { POST } = await import("./route");

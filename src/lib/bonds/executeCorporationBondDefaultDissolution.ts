@@ -44,6 +44,7 @@ import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
+import { reserveSectorsForRestore } from "@/lib/corporations/securedConstructionProperty";
 
 export interface CorporationDissolutionResult {
   bondRecoveryPool: number;
@@ -76,6 +77,14 @@ export async function executeCorporationBondDefaultDissolution(
 
   if (options.requireDefaultedBonds && !bonds.some((b) => b.defaulted)) {
     throw badRequest("Bond default dissolution requires at least one defaulted bond");
+  }
+
+  const sectors = await db
+    .collection<CorporateSector>("corporateSectors")
+    .find({ corporationId: corporation._id })
+    .toArray();
+  if (!(await reserveSectorsForRestore(db, sectors))) {
+    throw badRequest("Resolve secured construction before dissolving this corporation");
   }
 
   const now = new Date();
@@ -154,10 +163,6 @@ export async function executeCorporationBondDefaultDissolution(
     (await db.collection<Corporation>("corporations").findOne({ _id: corporation._id })) ??
     corporation;
 
-  const sectors = await db
-    .collection<CorporateSector>("corporateSectors")
-    .find({ corporationId: refreshedCorporation._id })
-    .toArray();
   const centralBanks = await db.collection<CentralBank>("centralBanks").find({}).toArray();
   const primeMap = buildPrimeRateMap(centralBanks);
   // D11: under plants the settlement basis is replacement-cost book, not NPV.

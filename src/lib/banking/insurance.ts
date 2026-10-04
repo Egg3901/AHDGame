@@ -163,6 +163,7 @@ export async function resolveFailedBankDepositors(
       _id: corporationId,
       "bankCharter.status": "failed",
       "bankCharter.resolutionClaimedTurn": { $exists: false },
+      bankConstructionFunding: { $exists: false },
       $or: [
         { "bankCharter.depositorsResolvedTurn": { $exists: false } },
         { "bankCharter.depositorsResolvedTurn": null },

@@ -90,8 +90,9 @@ export default function ForSalePanel({
         )}
         {forSaleInfo.conflict && (
           <div className="mt-3 rounded-lg border border-primary/30 bg-primary/5 p-3 text-xs text-primary">
-            You already operate this sector type in {sector.stateName}. Purchasing will merge the
-            acquired sector&apos;s revenue and workers into your existing one.
+            {sector.forSale?.pledged
+              ? `You already operate this market in ${sector.stateName}. A financed site must transfer as a separate property.`
+              : `You already operate this market in ${sector.stateName}. Purchasing will merge its revenue and workers into your existing site.`}
           </div>
         )}
         {fundWarning ? (
@@ -211,10 +212,14 @@ export default function ForSalePanel({
         <button
           type="button"
           onClick={onUnlist}
-          disabled={unlisting}
+          disabled={unlisting || sector.forSale.foreclosed === true}
           className="mt-4 w-full rounded-lg border border-warning/30 bg-warning/10 px-4 py-2 text-sm font-semibold text-warning transition-colors hover:bg-warning/20 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {unlisting ? "Unlisting…" : "Unlist Sector"}
+          {sector.forSale.foreclosed
+            ? "Listed for secured recovery"
+            : unlisting
+              ? "Unlisting…"
+              : "Unlist Sector"}
         </button>
       </div>
     );
