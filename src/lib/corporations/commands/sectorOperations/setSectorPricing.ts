@@ -66,17 +66,15 @@ export async function setSectorPricing(request: Request, { params }: RouteParams
             .findOne({ _id: "default" }, { projection: { explicitPlantCostsEnabled: 1 } })
         : null;
 
-    const sector = await db
-      .collection<CorporateSector>("corporateSectors")
-      .findOne(
-        { _id: new ObjectId(sectorId), corporationId: corporation._id },
-        {
-          projection:
-            config?.explicitPlantCostsEnabled === true
-              ? {}
-              : { pricingMode: 0, costPlusCostBasis: 0 },
-        }
-      );
+    const sector = await db.collection<CorporateSector>("corporateSectors").findOne(
+      { _id: new ObjectId(sectorId), corporationId: corporation._id },
+      {
+        projection:
+          config?.explicitPlantCostsEnabled === true
+            ? {}
+            : { pricingMode: 0, costPlusCostBasis: 0 },
+      }
+    );
 
     if (!sector) {
       return NextResponse.json({ error: "Sector not found" }, { status: 404 });
