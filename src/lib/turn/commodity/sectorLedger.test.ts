@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ObjectId } from "mongodb";
-import { COMMODITY_BASE_PRICES } from "@/lib/constants/commodities";
+import { COMMODITY_BASE_PRICES, commodityMixWeight } from "@/lib/constants/commodities";
+import { getEffectiveStrategyRates } from "@/lib/constants/sectorStrategies";
 import type { SectorLedgerRow } from "./ledgerTypes";
 import { accumulatePlantsUnits } from "./sectorLedger";
 
@@ -27,5 +28,35 @@ describe("accumulatePlantsUnits product output", () => {
         ["vehicles", { produced: 1.5, sold: 0.5 }],
       ])
     );
+  });
+
+  it("dual-reads a persisted operating model in the plants commodity ledger", () => {
+    const sector: SectorLedgerRow = {
+      sectorType: "media",
+      revenue: 500,
+      stateId: "S1",
+      sectorId: "media-model-1",
+      corporationId: new ObjectId(),
+      isNatcorp: false,
+      strategyId: "cable_tv",
+      producedUnits: 10,
+      soldUnits: 5,
+      embargoSupplyFactor: 1,
+    };
+    const supply = getEffectiveStrategyRates("media", "cable_tv", null, null, 20).supply;
+    const expected = new Map(
+      Object.keys(supply).map((commodity) => {
+        const weight = commodityMixWeight(
+          supply,
+          COMMODITY_BASE_PRICES,
+          commodity as keyof typeof COMMODITY_BASE_PRICES
+        );
+        return [commodity, { produced: 10 * weight, sold: 5 * weight }];
+      })
+    );
+
+    expect(accumulatePlantsUnits([sector], 20, COMMODITY_BASE_PRICES)).toEqual(expected);
+    expect(expected.has("advertising")).toBe(true);
+    expect(expected.has("entertainment_services")).toBe(true);
   });
 });

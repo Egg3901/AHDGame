@@ -77,3 +77,15 @@ describe("buildModifierTitle", () => {
     }
   });
 });
+
+it("explains funded bank backstop costs without claiming a direct profit-margin effect", () => {
+  const title = buildModifierTitle({
+    id: "bank_failure_backstop",
+    label: "Bank failure backstop",
+    effect: -1,
+    marginEffect: 0,
+    source: "banking",
+  });
+  expect(title).toContain("Taxpayer-funded");
+  expect(title).toContain("confidence is measured separately");
+});

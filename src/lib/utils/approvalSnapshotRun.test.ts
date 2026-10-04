@@ -67,6 +67,32 @@ beforeEach(() => {
 });
 
 describe("snapshotApprovalsForTurn", () => {
+  it("batches funded failure modifiers and passes them to the real national snapshot seam", async () => {
+    wire({ documented: ACTIVE });
+    db.collection("gameConfig").findOne.mockResolvedValue({
+      privateBankingEnabled: true,
+      bankFailurePoliticsEnabled: true,
+    });
+    db.collection("bankFailurePoliticalEvents").find.mockReturnValue(
+      cursorOf([
+        {
+          _id: "one",
+          countryId: "US",
+          paidTurn: 500,
+          gdp: 100000,
+          taxpayerPaid: 200,
+          depositExposure: 1000,
+        },
+      ])
+    );
+    await snapshotApprovalsForTurn(db as unknown as Db, 500, undefined, true);
+    const call = vi.mocked(snapshotApprovalHistory).mock.calls.find((row) => row[1] === "US");
+    expect(call?.[4]).toEqual([
+      expect.objectContaining({ source: "banking", effect: -0.2, marginEffect: 0 }),
+    ]);
+    expect(db.collection("bankFailurePoliticalEvents").find).toHaveBeenCalledTimes(1);
+    expect(db.collection("gameConfig").findOne).not.toHaveBeenCalled();
+  });
   const run = () => snapshotApprovalsForTurn(db as unknown as Db, 500);
   const snapshotted = () =>
     vi.mocked(snapshotApprovalHistory).mock.calls.map((call) => call[1] as string);
@@ -83,6 +109,8 @@ describe("snapshotApprovalsForTurn", () => {
     expect(snapshotted().sort()).toEqual([...ACTIVE].sort());
     expect(result.countriesProcessed).toBe(ACTIVE.length);
     expect(result.guestsReleased).toEqual([]);
+    expect(db.collection("gameConfig").findOne).not.toHaveBeenCalled();
+    expect(db.collection("bankFailurePoliticalEvents").find).not.toHaveBeenCalled();
   });
 
   it("keeps a peaceful seeded NPP country in the permanent snapshot roster", async () => {

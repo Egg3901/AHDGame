@@ -670,7 +670,13 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
         // roster is now turn-dependent, and a recomputed constant would report a
         // number the phase did not do.
         runtime.runPhase("approvalSnapshot", () =>
-          snapshotApprovalsForTurn(db, newTurn, longHorizonCtx ?? undefined)
+          snapshotApprovalsForTurn(
+            db,
+            newTurn,
+            longHorizonCtx ?? undefined,
+            context.config?.privateBankingEnabled === true &&
+              context.config?.bankFailurePoliticsEnabled === true
+          )
         ),
         runtime.runPhase("interestRateSnapshot", () => snapshotInterestRateHistory(db, newTurn)),
         runtime.runPhase("partyHistorySnapshot", () => snapshotPartyHistory(db, newTurn)),

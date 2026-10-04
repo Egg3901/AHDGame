@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import type { CorporationType } from "@/lib/constants/corporations";
 import {
-  SECTOR_STRATEGIES,
+  getSectorStrategies,
+  getStrategy,
   STRATEGY_RETOOL_COST_FRACTION,
   type SectorStrategy,
 } from "@/lib/constants/sectorStrategies";
@@ -20,6 +21,7 @@ import { fetchJson } from "@/lib/observability/fetchJson";
 
 interface StrategyChangeConfirmProps {
   sectorType: CorporationType;
+  mediaOperatingModelsEnabled?: boolean;
   currentStrategyId: string;
   targetStrategyId: string;
   /** Sector revenue in the corp's liquidCurrencyCode (post-v0.2.6). */
@@ -89,6 +91,7 @@ function estimateCommodityMargin(
 
 export default function StrategyChangeConfirm({
   sectorType,
+  mediaOperatingModelsEnabled,
   currentStrategyId,
   targetStrategyId,
   dailyRevenue,
@@ -133,10 +136,10 @@ export default function StrategyChangeConfirm({
     };
   }, []);
 
-  const strategies = SECTOR_STRATEGIES[sectorType];
+  const strategies = getSectorStrategies(sectorType, mediaOperatingModelsEnabled === true);
   if (!strategies) return null;
 
-  const current = strategies.find((s) => s.id === currentStrategyId) as SectorStrategy | undefined;
+  const current = getStrategy(sectorType, currentStrategyId);
   const target = strategies.find((s) => s.id === targetStrategyId) as SectorStrategy | undefined;
   if (!current || !target) return null;
 
