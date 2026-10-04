@@ -36,7 +36,9 @@ export interface SovereignCouponBook {
 }
 
 /** Sum outstanding face and annual coupon across one country's bonds. */
-export function sovereignCouponBook(bonds: readonly CouponBearingSovereignBond[]): SovereignCouponBook {
+export function sovereignCouponBook(
+  bonds: readonly CouponBearingSovereignBond[]
+): SovereignCouponBook {
   let face = 0;
   let annualCoupon = 0;
   for (const bond of bonds) {

@@ -36,6 +36,8 @@ import { getNationalDocId } from "@/lib/constants/nationalScope";
 import type { StateMetrics } from "@/lib/db/types/stateMetrics";
 import { keepLatestActiveLawPerType } from "./keepLatestActiveLawPerType";
 import { nonLawSpendingAmount } from "./rules/nonLawSpending";
+import { loadSovereignCouponBooks } from "@/lib/bonds/sovereignCouponBook";
+import { sovereignStockAnnualService } from "@/lib/budget/rules/sovereignDebtService";
 
 // Re-exported so existing importers of `./spending` keep working.
 export { keepLatestActiveLawPerType } from "./keepLatestActiveLawPerType";
@@ -439,7 +441,15 @@ export async function syncFederalBudgetSpending(db: Db, countryId: CountryId): P
   const budget = await db.collection<FederalBudget>("federalBudget").findOne({ _id: budgetId });
   if (!budget) return;
 
-  const debtInterest = (budget.debt?.principal ?? 0) * (budget.debt?.interestRate ?? 0);
+  // Same stock-service rule as the turn and fiscal-year paths (#2089): bonds
+  // at their locked coupons, any uncovered remainder at the marginal rate.
+  const couponBooks = await loadSovereignCouponBooks(db, [countryId]);
+  const debtInterest = sovereignStockAnnualService({
+    principal: budget.debt?.principal ?? 0,
+    book: couponBooks.get(String(countryId)) ?? null,
+    marginalRate: budget.debt?.interestRate ?? 0,
+    imfBailoutActive: budget.imfSovereignBailoutActive,
+  });
   const spending = await calculateFederalSpending(db, budget, debtInterest);
   if (spending.total === 0) return;
 

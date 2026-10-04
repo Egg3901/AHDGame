@@ -122,12 +122,16 @@ describe("treasury accrual stock-flow ownership", () => {
     });
   });
 
-  it("does not read bonds while bank treasury holdings are disabled", async () => {
+  it("reads bonds without holder arrays while bank treasury holdings are disabled", async () => {
     const db = world(false);
     const bonds = db.collection("bonds");
     const find = vi.spyOn(bonds, "find");
     await processTreasuryTurn(10);
-    expect(find).not.toHaveBeenCalled();
+    // One projected coupon-book read prices debt service (#2089); the funded
+    // holder paths stay off, so holder arrays are never loaded.
+    expect(find).toHaveBeenCalledTimes(1);
+    const options = find.mock.calls[0]?.[1] as { projection?: Record<string, unknown> } | undefined;
+    expect(options?.projection).not.toHaveProperty("holders");
   });
 
   it("funds opening bank-holder coupons once from treasury cash without changing gross budget interest", async () => {
