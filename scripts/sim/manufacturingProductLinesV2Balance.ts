@@ -9,10 +9,13 @@ import {
   type ManufacturingLifecycleStage,
 } from "../../src/lib/products/rules/manufacturingRules";
 import { chooseNppManufacturingProduct } from "../../src/lib/products/rules/manufacturingNpp";
+import { COMMODITY_BASE_PRICES, type CommodityType } from "../../src/lib/constants/commodities";
+import { computeClearingFactors } from "../../src/lib/market/clearing";
 
 const allocatedCapitalStock = 100_000;
 const projectCost = manufacturingDevelopmentThresholdAnchor(allocatedCapitalStock);
 const basePrices = { steel: 100, building_materials: 50, vehicles: 250 };
+const balanceBasePrices = { ...COMMODITY_BASE_PRICES, ...basePrices };
 const supplyRates = { steel: 0.4, building_materials: 0.2 };
 const allocatedShare = 0.5;
 const stages: ManufacturingLifecycleStage[] = [
@@ -91,12 +94,55 @@ const outputByStage = stages.map((stage) => {
     (sum, value) => sum + (value ?? 0),
     0
   );
+  const balances = new Map<CommodityType, { supply: number; demand: number }>();
+  const priceRatios = new Map<CommodityType, number>();
+  for (const [commodity, units] of Object.entries(output.outputUnitsByCommodity) as Array<
+    [CommodityType, number]
+  >) {
+    balances.set(commodity, { supply: units, demand: units * 0.8 });
+    priceRatios.set(commodity, 1);
+  }
+  const clearing = computeClearingFactors({
+    sectors: [
+      {
+        sectorId: "balance-plant",
+        revenue: nominalValue,
+        supplyRates: Object.fromEntries(
+          Object.keys(output.outputUnitsByCommodity).map((commodity) => [commodity, 1])
+        ),
+        outputUnitsByCommodity: output.outputUnitsByCommodity,
+        outputAnchorByCommodity: output.outputAnchorByCommodity,
+        productQualityByCommodity: output.productQualityByCommodity,
+        projectOutputUnitsByCommodity: output.projectOutputUnitsByCommodity,
+        productProjectId: "balance-project",
+        productOutputTurn: 1,
+        posture: 0,
+      },
+    ],
+    balances,
+    priceRatioByCommodity: priceRatios,
+    basePrices: balanceBasePrices,
+    plantsEnabled: true,
+  }).get("balance-plant");
+  if (!clearing) throw new Error(`Expected a clearing result for ${stage}`);
+  const totalSalesCash = nominalValue * clearing.factor;
+  const productSalesCash = Object.entries(clearing.projectSoldUnitsByCommodity ?? {}).reduce(
+    (sum, [commodity, units]) => {
+      const key = commodity as CommodityType;
+      return (
+        sum + (units ?? 0) * balanceBasePrices[key] * (clearing.offerFactorByCommodity?.[key] ?? 1)
+      );
+    },
+    0
+  );
   return {
     stage,
     productValue: output.outputAnchorByCommodity.vehicles ?? 0,
     otherValue: nominalValue - (output.outputAnchorByCommodity.vehicles ?? 0),
     nominalValue,
     quality: output.productQualityByCommodity.vehicles,
+    totalSalesCash,
+    productSalesCash,
   };
 });
 const allocatedPlantOutput = allocateManufacturedOutput({
@@ -200,19 +246,20 @@ const lines = [
   "",
   "## One representative operating day by stage",
   "",
-  "Assumption: the established legacy recipe produces 100,000 anchor units of nominal output value per day. Half of plant capacity is allocated to vehicles. Product output redirects recipe value; it does not add output value. Figures are gross nominal output at base prices, not net income or a sales guarantee.",
+  "Assumptions: the established legacy recipe produces 100,000 anchor units of nominal output value per day. Half of plant capacity is allocated to vehicles. Product output redirects recipe value; it does not add output value. The market has demand for 80% of each offered commodity at base prices and neutral posture, so cash receipts use the production clearing rule. These are gross sales receipts before input, wage, upkeep, tax, financing, and development costs, not net income or a sales guarantee.",
   "",
   "<!-- prettier-ignore -->",
-  "| Stage | Vehicles value | Other recipe value | Total nominal value | Product quality |",
-  "| --- | ---: | ---: | ---: | ---: |",
+  "| Stage | Vehicles value | Other recipe value | Total nominal value | Product-attributed sales cash | Total sales cash | Product quality |",
+  "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
   ...outputByStage.map(
     (row) =>
-      `| ${row.stage} | ${money(row.productValue)} | ${money(row.otherValue)} | ${money(row.nominalValue)} | ${row.quality == null ? "n/a" : row.quality.toFixed(1)} |`
+      `| ${row.stage} | ${money(row.productValue)} | ${money(row.otherValue)} | ${money(row.nominalValue)} | ${money(row.productSalesCash)} | ${money(row.totalSalesCash)} | ${row.quality == null ? "n/a" : row.quality.toFixed(1)} |`
   ),
   "",
   `- Simulated lifecycle transitions from production rules: ${lifecycleTransitions.map((row) => `${row.stage} at turn ${row.turn}`).join(", ")}.`,
   `- Zero-allocation identity check: ${money(identity.outputAnchorByCommodity.steel ?? 0)} steel and ${money(identity.outputAnchorByCommodity.building_materials ?? 0)} building materials, exactly matching the legacy recipe.`,
   `- The allocated ${Math.round(allocatedShare * 100)}% plant portion receives ${money(allocatedPlantValue)} of that value and retains ${Math.round(allocatedPlantOutput.inputThroughputShare * 100)}% input throughput, so redirected units do not multiply recipe value or input charges.`,
+  `- Lifecycle cash timing: the funded path spends ${money(funded.paidDevelopment)} in capitalized development cash over ${MANUFACTURING_DEVELOPMENT_ELAPSED_TURNS} receipts before launch; its first launch day attributes ${money(outputByStage.find((row) => row.stage === "launch")?.productSalesCash ?? 0)} of gross receipts to the redirected vehicle offer at 80% fill. This sales attribution displaces baseline recipe sales rather than adding to them.`,
   `- Applying a ${Math.round(productionHaircut * 100)}% physical production factor scales both commodity quantity and nominal value: 10,000 becomes ${money(scaledNominalValue)} with unchanged unit values.`,
   "",
   "## NPP candidate scoring",
