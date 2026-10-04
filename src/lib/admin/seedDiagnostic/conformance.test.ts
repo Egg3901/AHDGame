@@ -195,7 +195,12 @@ describe("era-derived expectations", () => {
     expect(expectedRegionCount("DE", "2019-default")).toBe(16);
   });
 
-  it("uses seeder defaultPrimeRate, not era monetary baseline", () => {
+  it("uses authored opening benchmarks for 1991 and keeps other defaults", () => {
+    expect(expectedPrimeRate("US", 1991)).toBe(7);
+    expect(expectedPrimeRate("JP", 1991)).toBe(6);
+    expect(expectedPrimeRate("IE", 1991)).toBe(11.25);
+    expect(expectedPrimeRate("JP", 1953)).toBe(1);
+
     expect(expectedPrimeRate("JP")).toBe(COUNTRY_CONFIGS.JP.centralBank.defaultPrimeRate);
     expect(expectedPrimeRate("JP")).toBe(1);
     expect(expectedPrimeRate("TR")).toBe(COUNTRY_CONFIGS.TR.centralBank.defaultPrimeRate);
