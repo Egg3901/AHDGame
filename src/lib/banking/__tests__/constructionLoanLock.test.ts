@@ -93,6 +93,9 @@ describe("construction debt settlement ownership", () => {
         _id: collateral.sectorId,
         constructionFinancing: {
           claimId: collateral.claimId,
+          loanId: String(loan._id),
+          bankId: String(loan.bankCorporationId),
+          charteredTurn: loan.charteredTurn,
           status: "building",
           escrowLocal: 0,
           loanFunded: true,

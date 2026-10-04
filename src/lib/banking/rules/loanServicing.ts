@@ -137,7 +137,10 @@ export interface LoanServiceTarget {
 
 export interface LoanServiceTransitionInput extends LoanServiceInput {
   loan: LoanServiceInput["loan"] &
-    Pick<BankLoan, "borrowerType" | "borrowerId" | "currency" | "constructionCollateral">;
+    Pick<
+      BankLoan,
+      "borrowerType" | "borrowerId" | "currency" | "constructionCollateral" | "charteredTurn"
+    >;
   /** Where the payment lands: a live bank's vault, or the estate / insurer. */
   creditTarget: LoanServiceTarget;
   bankId: string;
@@ -201,6 +204,24 @@ export function loanServiceTransition(input: LoanServiceTransitionInput): {
       note: "the loan advances one turn",
     },
   ];
+
+  if (
+    decision.totalLoansDelta !== 0 &&
+    input.creditTarget.collection === "corporations" &&
+    input.creditTarget.path === "bankCharter.cashReserves"
+  ) {
+    projections.push({
+      collection: "corporations",
+      filter: {
+        ...input.creditTarget.filter,
+        ...(loan.charteredTurn === undefined
+          ? {}
+          : { "bankCharter.charteredTurn": loan.charteredTurn }),
+      },
+      update: { $inc: { "bankCharter.totalLoans": decision.totalLoansDelta } },
+      note: "Advance the named loan book under the original servicing receipt",
+    });
+  }
 
   if (loan.constructionCollateral && decision.status === "repaid") {
     projections.push({

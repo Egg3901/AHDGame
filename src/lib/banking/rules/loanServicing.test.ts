@@ -185,7 +185,9 @@ describe("construction security servicing", () => {
       bankId: BANK,
     });
     expect(paid.decision.status).toBe("repaid");
-    expect(paid.transition.projections[1]).toMatchObject({
+    expect(
+      paid.transition.projections.find((projection) => projection.collection === "corporateSectors")
+    ).toMatchObject({
       collection: "corporateSectors",
       filter: {
         "constructionFinancing.claimId": "build-claim",
@@ -200,7 +202,11 @@ describe("construction security servicing", () => {
       creditTarget: vault,
       bankId: BANK,
     });
-    expect(partial.transition.projections).toHaveLength(1);
+    expect(
+      partial.transition.projections.some(
+        (projection) => projection.collection === "corporateSectors"
+      )
+    ).toBe(false);
   });
   it("retains the pledge on default without generating collateral cash", () => {
     const result = loanServiceTransition({
@@ -211,7 +217,11 @@ describe("construction security servicing", () => {
       bankId: BANK,
     });
     expect(result.transition.legs).toHaveLength(0);
-    expect(result.transition.projections[1]?.update).toEqual({
+    expect(
+      result.transition.projections.find(
+        (projection) => projection.collection === "corporateSectors"
+      )?.update
+    ).toEqual({
       $set: { "constructionFinancing.defaultedTurn": 110 },
     });
     expect(result.decision.writtenOff).toBe(4800);

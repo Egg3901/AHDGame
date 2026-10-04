@@ -927,7 +927,6 @@ async function processOneBank(
         // ledgers each turn and are not balances anyone can claim.
         "bankCharter.npcDeposits": npcDeposits,
         "bankCharter.totalDeposits": totalDeposits,
-        "bankCharter.totalLoans": totalLoans,
         "bankCharter.depositCeiling": depositCeiling,
         "bankCharter.lastBankingTurn": turn,
         "bankCharter.lastBankingIncome":
@@ -1053,7 +1052,6 @@ async function processLoanBookOnlyBank(
   const serviced = await timedBankingStage(db, turn, "loanServicing", () =>
     serviceNamedLoanBook(db, turn, corp, currency, charter.charteredTurn)
   );
-  const totalLoans = Math.max(0, Math.max(0, charter.totalLoans ?? 0) + serviced.totalLoansDelta);
 
   await db.collection<Corporation>("corporations").updateOne(
     {
@@ -1066,9 +1064,9 @@ async function processLoanBookOnlyBank(
     },
     {
       $set: {
-        // Cash moved through the money primitive inside servicing; only the
-        // derived aggregate and the idempotency stamp are written here.
-        "bankCharter.totalLoans": totalLoans,
+        // Cash and the loan book moved through their original receipts. An
+        // end-of-pass snapshot must not overwrite a concurrent origination,
+        // repayment or collateral recovery.
         "bankCharter.lastBankingTurn": turn,
         "bankCharter.lastBankingIncome": serviced.interestCollected - serviced.writtenOff,
         "bankCharter.lastBankingIncomeTurn": turn,

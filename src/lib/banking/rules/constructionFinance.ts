@@ -112,6 +112,9 @@ export function bindConstructionLoanTransition(input: {
   sectorId: string;
   collateralCostLocal: number;
   constructionCostLocal: number;
+  fundingLeaseLoanId?: string;
+  reserveRatio?: number;
+  playerDepositsAreLiabilities?: boolean;
 }): BankingTransition {
   const funded = input.transition.legs.some(
     (leg) => leg.kind === "credit" && leg.path === "liquidCapital"
@@ -122,7 +125,46 @@ export function bindConstructionLoanTransition(input: {
       if (leg.kind === "debit" && leg.path === "bankCharter.cashReserves")
         return {
           ...leg,
-          filter: { ...leg.filter, "bankCharter.charteredTurn": input.charteredTurn },
+          filter: {
+            ...leg.filter,
+            "bankCharter.charteredTurn": input.charteredTurn,
+            ...(input.reserveRatio !== undefined
+              ? {
+                  $expr: {
+                    $gte: [
+                      "$bankCharter.cashReserves",
+                      {
+                        $add: [
+                          leg.amount,
+                          {
+                            $multiply: [
+                              input.reserveRatio,
+                              {
+                                $add: [
+                                  { $ifNull: ["$bankCharter.npcDeposits", 0] },
+                                  input.playerDepositsAreLiabilities
+                                    ? { $ifNull: ["$bankCharter.playerDeposits", 0] }
+                                    : 0,
+                                ],
+                              },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                }
+              : {}),
+            ...(input.fundingLeaseLoanId
+              ? {
+                  "bankConstructionFunding.loanId": input.fundingLeaseLoanId,
+                  "bankConstructionFunding.kind": "funding",
+                }
+              : {}),
+          },
+          ...(input.fundingLeaseLoanId
+            ? { set: { ...leg.set, "bankConstructionFunding.disbursed": true } }
+            : {}),
         };
       if (
         leg.kind === "credit" &&

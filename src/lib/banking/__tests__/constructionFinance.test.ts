@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
+import { withInjectedCrash, InjectedCrash } from "@/lib/test-utils/faultyDb";
 import { makeCorporation } from "@/lib/test-utils/factories";
 import type { CorporateSector } from "@/lib/db/types/corporation";
 import type { BankingSnapshot } from "../rules/boundary";
@@ -121,6 +122,34 @@ describe("construction request lifecycle", () => {
         .cashReserves
     ).toBe(1_925_750);
     expect(memory.collection("bankLoans").docs).toHaveLength(1);
+  });
+
+  it("releases bank admission when replaying a committed paid build after a crash", async () => {
+    const { request, memory } = world();
+    const fault = withInjectedCrash(memory, {
+      collection: "corporateSectors",
+      op: "updateOne",
+      onCall: 1,
+      afterWrite: true,
+      matches: (args) =>
+        Array.isArray((args[1] as { $set?: Record<string, unknown> }).$set?.buildQueue),
+    });
+    await expect(requestConstructionFinance({ ...request, db: fault.db })).rejects.toBeInstanceOf(
+      InjectedCrash
+    );
+    expect(
+      (await request.db.collection("corporations").findOne({ _id: bankId }))
+        ?.bankConstructionFunding
+    ).toMatchObject({ kind: "funding", disbursed: true });
+    expect(await requestConstructionFinance(request)).toMatchObject({ ok: true, pending: false });
+    expect(
+      (await request.db.collection("corporations").findOne({ _id: bankId }))
+        ?.bankConstructionFunding
+    ).toBeUndefined();
+    expect(memory.collection("bankLoans").docs[0]?.constructionSettlementOwner).toBeUndefined();
+    expect(
+      (await request.db.collection("corporateSectors").findOne({ _id: sectorId }))?.buildQueue
+    ).toHaveLength(1);
   });
 
   it("reserves an approval-required quote without moving cash, then funds it", async () => {

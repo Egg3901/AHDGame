@@ -283,6 +283,99 @@ describe("reserved construction funding", () => {
     });
   });
 
+  it("returns a delivered contribution if the bank fails before its debit", async () => {
+    const { memory, bank } = reservedWorld();
+    const db = memory as unknown as Db;
+    const fault = withInjectedCrash(memory, {
+      collection: "corporations",
+      op: "updateOne",
+      onCall: 1,
+      afterWrite: true,
+      matches: (args) => {
+        const update = args[1] as { $inc?: Record<string, number> };
+        return update.$inc?.liquidCapital === -25_750;
+      },
+    });
+    await expect(
+      settleReservedConstruction({ db: fault.db, enabled: true, sectorId, bank, borrower })
+    ).rejects.toBeInstanceOf(InjectedCrash);
+    await db
+      .collection("corporations")
+      .updateOne({ _id: bankId }, { $set: { "bankCharter.status": "failed" } });
+    expect(
+      (await settleReservedConstruction({ db, enabled: true, sectorId, bank, borrower })).ok
+    ).toBe(false);
+    expect(await db.collection("corporations").findOne({ _id: borrowerId })).toMatchObject({
+      liquidCapital: 50_000,
+    });
+    const lender = await db.collection("corporations").findOne({ _id: bankId });
+    expect(lender).toMatchObject({ bankCharter: { cashReserves: 2_000_000, totalLoans: 0 } });
+    expect(lender?.bankConstructionFunding).toBeUndefined();
+    expect(await db.collection("corporateSectors").findOne({ _id: sectorId })).toMatchObject({
+      constructionFinancing: { status: "cancelled", escrowLocal: 0 },
+      buildQueue: [],
+    });
+    expect((await db.collection("bankLoans").findOne({ _id: loanId }))?.status).toBe("rejected");
+  });
+
+  it("finishes a delivered bank debit after failure without refunding it", async () => {
+    const { memory, bank } = reservedWorld();
+    const db = memory as unknown as Db;
+    const fault = withInjectedCrash(memory, {
+      collection: "corporations",
+      op: "updateOne",
+      onCall: 1,
+      afterWrite: true,
+      matches: (args) => {
+        const update = args[1] as { $inc?: Record<string, number> };
+        return update.$inc?.["bankCharter.cashReserves"] === -74_250;
+      },
+    });
+    await expect(
+      settleReservedConstruction({ db: fault.db, enabled: true, sectorId, bank, borrower })
+    ).rejects.toBeInstanceOf(InjectedCrash);
+    const lender = await db.collection("corporations").findOne({ _id: bankId });
+    expect(lender?.bankConstructionFunding).toMatchObject({ disbursed: true });
+    await db
+      .collection("corporations")
+      .updateOne({ _id: bankId }, { $set: { "bankCharter.status": "failed" } });
+    expect(
+      await settleReservedConstruction({ db, enabled: true, sectorId, bank, borrower })
+    ).toEqual({ ok: true });
+    expect(await db.collection("corporations").findOne({ _id: borrowerId })).toMatchObject({
+      liquidCapital: 24_250,
+    });
+    expect(await db.collection("corporateSectors").findOne({ _id: sectorId })).toMatchObject({
+      constructionFinancing: { status: "building", escrowLocal: 0 },
+      buildQueue: [{ unitsOrdered: 100 }],
+    });
+    expect((await db.collection("bankLoans").findOne({ _id: loanId }))?.status).toBe("current");
+  });
+
+  it("keeps the current deposit reserve floor even if the quote predates new liabilities", async () => {
+    const { memory, bank } = reservedWorld();
+    const db = memory as unknown as Db;
+    await db.collection("corporations").updateOne(
+      { _id: bankId },
+      {
+        $set: { "bankCharter.cashReserves": 420_000, "bankCharter.npcDeposits": 2_000_000 },
+      }
+    );
+    expect(
+      (await settleReservedConstruction({ db, enabled: true, sectorId, bank, borrower })).ok
+    ).toBe(false);
+    expect(await db.collection("corporations").findOne({ _id: bankId })).toMatchObject({
+      bankCharter: { cashReserves: 420_000, totalLoans: 0 },
+    });
+    expect(await db.collection("corporations").findOne({ _id: borrowerId })).toMatchObject({
+      liquidCapital: 50_000,
+    });
+    expect(await db.collection("corporateSectors").findOne({ _id: sectorId })).toMatchObject({
+      constructionFinancing: { status: "cancelled", escrowLocal: 0 },
+      buildQueue: [],
+    });
+  });
+
   it("cannot debit a replacement charter even from a stale eligible snapshot", async () => {
     const { memory, bank } = reservedWorld();
     const db = memory as unknown as Db;
@@ -296,7 +389,7 @@ describe("reserved construction funding", () => {
       bankCharter: { cashReserves: 2_000_000 },
     });
     expect(await db.collection("corporateSectors").findOne({ _id: sectorId })).toMatchObject({
-      constructionFinancing: { escrowLocal: 25_750, loanFunded: false },
+      constructionFinancing: { escrowLocal: 0, loanFunded: false },
       buildQueue: [],
     });
     expect((await db.collection("bankLoans").findOne({ _id: loanId }))?.status).toBe("pending");

@@ -12,6 +12,7 @@ import {
 import { settleTransition } from "./settlementJournal";
 import { oid } from "./rules/boundary";
 import { settleReservedConstruction } from "./constructionSettlement";
+import { releaseCompletedConstructionFunding } from "./constructionFundingLease";
 
 export type ConstructionFinanceResult =
   { ok: true; pending: boolean; loanId: string; claimId: string } | { ok: false; error: string };
@@ -149,8 +150,11 @@ export async function requestConstructionFinance(input: {
     return { ok: false, error: "Construction request does not match its original quote" };
   if (["cancelled", "released"].includes(claim.status))
     return { ok: false, error: "This construction request has ended; use a new request ID" };
-  if (claim.status === "building")
+  if (claim.status === "building") {
+    if (!(await releaseCompletedConstructionFunding(db, claim)))
+      return { ok: false, error: "Construction funding is incomplete" };
     return { ok: true, pending: false, loanId: claim.loanId, claimId };
+  }
   const requested = await settleTransition(db, claim.requestTransition);
   if (requested.error || !["applied", "replayed"].includes(requested.status))
     return { ok: false, error: requested.error ?? "Construction loan request is pending recovery" };
@@ -188,8 +192,11 @@ export async function approveConstructionFinance(
     claim.bankId !== bankId.toHexString()
   )
     return { ok: false, error: "The construction site no longer has this claim" };
-  if (claim.status === "building")
+  if (claim.status === "building") {
+    if (!(await releaseCompletedConstructionFunding(db, claim)))
+      return { ok: false, error: "Construction funding is incomplete" };
     return { ok: true, pending: false, loanId: claim.loanId, claimId: claim.claimId };
+  }
   const loaded = await loadBankingSnapshot(db, bankId);
   if (
     !loaded?.corporation.bankCharter ||
