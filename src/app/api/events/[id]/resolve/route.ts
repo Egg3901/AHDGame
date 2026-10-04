@@ -19,7 +19,6 @@ import { getHeadOfGovernmentCharacterId } from "@/lib/api/headOfGovernment";
 import { getGameState } from "@/lib/gameState";
 import type { CountryId } from "@/lib/constants/countries";
 import type { EventEffect } from "@/lib/db/types/events";
-import { pickTier } from "@/lib/events/substrate/tiers";
 
 interface RouteParams {
   params: Promise<{ id: string }>;

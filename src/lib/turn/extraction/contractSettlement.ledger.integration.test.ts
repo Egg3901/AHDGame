@@ -235,8 +235,9 @@ describe("funded national extraction royalties", () => {
     );
 
     expect(emitTx).toHaveBeenCalledTimes(2);
-    expect(emitTx.mock.calls[0]?.[1]).toMatchObject({ amount: -10, currencyCode: "GBP" });
-    expect(emitTx.mock.calls[1]?.[1]).toMatchObject({ amount: 5, currencyCode: "USD" });
+    const emitTxMock = vi.mocked(emitTx) as unknown as ReturnType<typeof vi.fn>;
+    expect(emitTxMock.mock.calls[0]?.[1]).toMatchObject({ amount: -10, currencyCode: "GBP" });
+    expect(emitTxMock.mock.calls[1]?.[1]).toMatchObject({ amount: 5, currencyCode: "USD" });
     expect(db.collection("corporations").docs[0]?.liquidCapital).toBe(90);
     expect(db.collection("federalBudget").docs[0]?.treasuryCashLocal).toBe(15);
   });

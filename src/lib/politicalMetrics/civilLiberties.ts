@@ -53,7 +53,7 @@ export async function applyCivilLibertiesDelta(
           _id: initial._id,
           appliedEventEffects: { $ne: eventEffectKey },
           values: current.values,
-          ...(current.residuals != null ? { residuals: current.residuals } : {}),
+          residuals: current.residuals === undefined ? { $exists: false } : current.residuals,
         };
         for (const metricId of DEMOCRATIC_HEALTH_METRIC_IDS) {
           const previous = current.values[metricId];
@@ -61,7 +61,7 @@ export async function applyCivilLibertiesDelta(
           const next = clampMetric(previous + delta);
           values[metricId] = next;
           if (residuals) {
-            const priorResidual = current.residuals[metricId] ?? 0;
+            const priorResidual = current.residuals?.[metricId] ?? 0;
             residuals[metricId] = priorResidual + (next - previous);
           }
         }
