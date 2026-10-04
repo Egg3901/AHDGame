@@ -19,6 +19,13 @@ interface RouteParams {
 
 const schema = z.discriminatedUnion("action", [
   z.object({
+    action: z.literal("subscribePrimary"),
+    bondId: z.string().regex(/^[a-f\d]{24}$/i),
+    units: z.number().int().positive().max(1_000_000_000),
+    maxCostLocal: z.number().finite().positive(),
+    requestId: z.string().uuid(),
+  }),
+  z.object({
     action: z.literal("toggleAutoSweep"),
     enabled: z.boolean(),
   }),
@@ -46,7 +53,11 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const db = await getDb();
     const policy = await loadBankingPolicy(db);
-    if (!policy.bankTreasury) throw notFound("Not found");
+    if (
+      !policy.bankTreasury ||
+      (parsed.data.action === "subscribePrimary" && !policy.sovereignPrimary)
+    )
+      throw notFound("Not found");
     const turnLock = await rejectDuringTurn(db);
     if (turnLock) return turnLock;
 
@@ -86,7 +97,10 @@ export async function POST(request: Request, { params }: RouteParams) {
     const result = await tradeBankTreasuryBill(db, {
       bankId: corporation._id,
       bondId: new ObjectId(parsed.data.bondId),
-      side: parsed.data.side,
+      side: parsed.data.action === "subscribePrimary" ? "buy" : parsed.data.side,
+      ...(parsed.data.action === "subscribePrimary"
+        ? { primary: true, maxCostLocal: parsed.data.maxCostLocal }
+        : {}),
       units: parsed.data.units,
       turn: await getCurrentTurn(db),
       policy,

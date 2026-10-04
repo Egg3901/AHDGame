@@ -106,7 +106,7 @@ const REGISTRY: Record<string, { count: number; expect: Expectation; why: string
     expect: "sector",
     why: "Prices the flip-turn growth credit for an existing sector.",
   },
-  "src/lib/turn/nppCorporationBehavior.ts": {
+  "src/lib/turn/npp/makeCorpDecision.ts": {
     count: 3,
     expect: "sector",
     why: "One greenfield founding quote (null) and two growth quotes on existing sectors; see the per-call assertions below.",
@@ -116,7 +116,7 @@ const REGISTRY: Record<string, { count: number; expect: Expectation; why: string
 /** Call sites that legitimately pass `null` even though their file is 'sector'. */
 const PER_CALL_NULL_EXCEPTIONS: Record<string, number> = {
   // NPP greenfield founding quote + its starter order.
-  "src/lib/turn/nppCorporationBehavior.ts": 1,
+  "src/lib/turn/npp/makeCorpDecision.ts": 1,
 };
 
 const ROOT = join(__dirname, "..", "..", "..");

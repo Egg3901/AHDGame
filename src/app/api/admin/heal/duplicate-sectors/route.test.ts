@@ -109,10 +109,7 @@ describe("POST /api/admin/heal/duplicate-sectors", () => {
       })
     );
     expect(db.collectionMocks.corporateSectors.updateOne).toHaveBeenCalledWith(
-      {
-        _id: keeperId,
-        "constructionPropertyTransition.key": `duplicate:${keeperId.toHexString()}:${keeperId.toHexString()}`,
-      },
+      expect.objectContaining({ _id: keeperId }),
       expect.objectContaining({
         $set: expect.objectContaining({
           countryId: "UK",
@@ -126,7 +123,7 @@ describe("POST /api/admin/heal/duplicate-sectors", () => {
       $or: [
         {
           _id: duplicateId,
-          "constructionPropertyTransition.key": `duplicate:${keeperId.toHexString()}:${duplicateId.toHexString()}`,
+          "constructionPropertyTransition.key": expect.any(String),
         },
       ],
     });

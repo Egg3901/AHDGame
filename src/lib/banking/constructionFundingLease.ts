@@ -22,6 +22,7 @@ export async function acquireConstructionFundingLease(
       "bankCharter.status": "active",
       "bankCharter.resolutionClaimedTurn": { $exists: false },
       bankConstructionFunding: { $exists: false },
+      bankPrimaryFunding: { $exists: false },
       bankCharterTransfer: { $exists: false },
     },
     {
