@@ -16,4 +16,4 @@ areas: [backend, engine]
 ## What changed
 
 - Extracted product stage progression into a pure industry-neutral rule. The manufacturing adapter keeps the existing paid cash, 12-turn development gate, and stage effects while delegating receipt validation and transitions to the shared rule.
-- A settled zero-spend turn may advance elapsed time, but cannot satisfy a development cost. Wrong-project, stale, and replayed receipts do not change lifecycle state.
+- A settled zero-spend turn may advance elapsed time, but cannot satisfy a development cost. Invalid thresholds and lifecycle stamps, wrong-project receipts, stale receipts, and replays do not change lifecycle state.

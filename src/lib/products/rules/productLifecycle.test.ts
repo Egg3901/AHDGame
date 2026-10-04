@@ -62,6 +62,39 @@ describe("shared product lifecycle", () => {
     expect(advanceProductLifecycle({ product, receipt: receipt({ turn: 9 }) })).toBeNull();
   });
 
+  it("fails closed on invalid spend requirements, elapsed thresholds, stamps, and receipts", () => {
+    expect(
+      advanceProductLifecycle({
+        product: { ...product, paidThresholdAnchor: 0 },
+        receipt: receipt({ paidDevelopmentAnchor: 1_000 }),
+      })
+    ).toBeNull();
+    expect(
+      advanceProductLifecycle({
+        product: { ...product, paidThresholdAnchor: Number.NaN },
+        receipt: receipt({ paidDevelopmentAnchor: 1_000 }),
+      })
+    ).toBeNull();
+    expect(
+      advanceProductLifecycle({
+        product: { ...product, elapsedThresholdTurns: Number.NaN },
+        receipt: receipt({ paidDevelopmentAnchor: 1_000 }),
+      })
+    ).toBeNull();
+    expect(
+      advanceProductLifecycle({
+        product: { ...product, stageStartedTurn: Number.POSITIVE_INFINITY },
+        receipt: receipt({ paidDevelopmentAnchor: 1_000 }),
+      })
+    ).toBeNull();
+    expect(
+      advanceProductLifecycle({
+        product,
+        receipt: receipt({ paidDevelopmentAnchor: Number.NaN }),
+      })
+    ).toBeNull();
+  });
+
   it("advances only one lifecycle stage from each accepted receipt", () => {
     const progress = advanceProductLifecycle({
       product: {

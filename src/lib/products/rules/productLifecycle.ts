@@ -13,6 +13,15 @@ export const PRODUCT_LIFECYCLE_STAGE_TURNS: Partial<Record<ProductLifecycleStage
   decline: 60,
 };
 
+const PRODUCT_LIFECYCLE_STAGES = new Set<ProductLifecycleStage>([
+  "development",
+  "launch",
+  "growth",
+  "mature",
+  "decline",
+  "retired",
+]);
+
 const NEXT_STAGE: Partial<Record<ProductLifecycleStage, ProductLifecycleStage>> = {
   launch: "growth",
   growth: "mature",
@@ -56,31 +65,50 @@ export function advanceProductLifecycle(input: {
   receipt: ProductLifecycleReceipt;
 }): ProductLifecycleProgress | null {
   const { product, receipt } = input;
+  const safeNonNegativeInteger = (value: number): boolean =>
+    Number.isSafeInteger(value) && value >= 0;
+  if (
+    !PRODUCT_LIFECYCLE_STAGES.has(product.stage) ||
+    !safeNonNegativeInteger(product.startedTurn) ||
+    !safeNonNegativeInteger(product.stageStartedTurn) ||
+    product.stageStartedTurn < product.startedTurn ||
+    !safeNonNegativeInteger(product.developmentPaidAnchor) ||
+    !Number.isFinite(product.paidThresholdAnchor) ||
+    product.paidThresholdAnchor <= 0 ||
+    !safeNonNegativeInteger(product.elapsedDevelopmentTurns) ||
+    !safeNonNegativeInteger(product.elapsedThresholdTurns) ||
+    (product.lastProcessedTurn !== undefined &&
+      !safeNonNegativeInteger(product.lastProcessedTurn)) ||
+    !safeNonNegativeInteger(receipt.turn) ||
+    !Number.isFinite(receipt.paidDevelopmentAnchor) ||
+    receipt.paidDevelopmentAnchor < 0
+  ) {
+    return null;
+  }
   if (
     receipt.productId !== product.id ||
-    !Number.isInteger(receipt.turn) ||
     receipt.turn < product.startedTurn ||
+    receipt.turn < product.stageStartedTurn ||
     receipt.turn <= (product.lastProcessedTurn ?? 0)
   ) {
     return null;
   }
 
-  const developmentPaidAnchor =
-    finiteNonNegative(product.developmentPaidAnchor) +
-    finiteNonNegative(receipt.paidDevelopmentAnchor);
+  const developmentPaidAnchor = product.developmentPaidAnchor + receipt.paidDevelopmentAnchor;
   const elapsedDevelopmentTurns =
     product.stage === "development"
-      ? Math.floor(finiteNonNegative(product.elapsedDevelopmentTurns)) + 1
-      : Math.floor(finiteNonNegative(product.elapsedDevelopmentTurns));
+      ? product.elapsedDevelopmentTurns + 1
+      : product.elapsedDevelopmentTurns;
+  if (!Number.isFinite(developmentPaidAnchor) || !safeNonNegativeInteger(elapsedDevelopmentTurns)) {
+    return null;
+  }
   let stage = product.stage;
   let stageStartedTurn = product.stageStartedTurn;
 
   if (stage === "development") {
-    const paidThresholdAnchor = finiteNonNegative(product.paidThresholdAnchor);
-    const elapsedThresholdTurns = Math.floor(finiteNonNegative(product.elapsedThresholdTurns));
     if (
-      developmentPaidAnchor >= paidThresholdAnchor &&
-      elapsedDevelopmentTurns >= elapsedThresholdTurns
+      developmentPaidAnchor >= product.paidThresholdAnchor &&
+      elapsedDevelopmentTurns >= product.elapsedThresholdTurns
     ) {
       stage = "launch";
       stageStartedTurn = receipt.turn;
@@ -103,8 +131,4 @@ export function advanceProductLifecycle(input: {
     elapsedDevelopmentTurns,
     active: stage !== "retired",
   };
-}
-
-function finiteNonNegative(value: number): number {
-  return Number.isFinite(value) ? Math.max(0, value) : 0;
 }
