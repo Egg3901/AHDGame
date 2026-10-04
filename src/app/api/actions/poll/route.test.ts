@@ -8,6 +8,8 @@ import { getDb } from "@/lib/mongodb";
 import { requireHumanSession } from "@/lib/api/requireAuth";
 import { getElectionOpponents } from "@/lib/actions/electionOpponents";
 import { projectCampaignPoll } from "@/lib/campaignTargeting/poll";
+import { isGranularPollEnabled } from "@/lib/demographics/granularPollFlag";
+import { buildGranularPollPayloadForState } from "@/lib/actions/granularPollPayload";
 import { POST } from "./route";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
@@ -22,7 +24,15 @@ vi.mock("@/lib/api/rateLimit", () => ({
 vi.mock("@/lib/currency/featureFlag", () => ({ isForexEnabled: async () => false }));
 vi.mock("@/lib/gameState", () => ({ getGameState: async () => ({ currentTurn: 10 }) }));
 vi.mock("@/lib/demographics/granularPollFlag", () => ({
-  isGranularPollEnabled: async () => false,
+  isGranularPollEnabled: vi.fn(async () => false),
+}));
+vi.mock("@/lib/actions/granularPollPayload", () => ({
+  buildGranularPollPayloadForState: vi.fn(() => ({
+    dims: [],
+    dimLabels: {},
+    cells: [],
+    candidateShares: {},
+  })),
 }));
 vi.mock("@/lib/achievements/triggers", () => ({ checkActionAchievements: vi.fn() }));
 vi.mock("@/lib/actions/electionOpponents", () => ({ getElectionOpponents: vi.fn() }));
@@ -100,6 +110,60 @@ describe("commissioning a campaign-aware poll", () => {
     const write = db.collection("characters").updateOne.mock.calls[0];
     expect(write[1].$set.lastPoll).toEqual(expect.objectContaining({ totalEstimatedVoters: 1000 }));
     expect(write[1].$inc).toEqual({ actions: -2, funds: -25000 });
+  });
+
+  it("passes effective-favorability inputs through to the granular poll builder", async () => {
+    const character = makeCharacter({
+      funds: 100_000,
+      actions: 10,
+      stats: { intellect: 5.5 } as Character["stats"],
+      archetypeApprovals: { retirees: 24, "age:senior": -4 },
+    });
+    db.collection("characters").findOne.mockResolvedValue(character);
+    vi.mocked(isGranularPollEnabled).mockResolvedValue(true);
+    vi.mocked(getElectionOpponents).mockResolvedValue({
+      electionId: new ObjectId().toString(),
+      electionType: "senate",
+      state: "CA",
+      campaignRulesVersion: 1,
+      inPrimary: false,
+      opponents: [
+        {
+          candidateId: "npp-1",
+          name: "NPP candidate",
+          party: "9",
+          isNPP: true,
+          economicPosition: 2,
+          socialPosition: -1,
+          favorability: 34,
+          politicalInfluence: 47,
+          archetypeApprovals: { retirees: -16, "age:senior": 6 },
+          overallAppeal: 0,
+          totalPotentialVoters: 0,
+          totalEstimatedVoters: 0,
+        },
+      ],
+    } as never);
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(200);
+    expect(buildGranularPollPayloadForState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        character: expect.objectContaining({
+          favorability: character.favorability,
+          archetypeApprovals: character.archetypeApprovals,
+        }),
+        opponents: [
+          expect.objectContaining({
+            candidateId: "npp-1",
+            favorability: 34,
+            archetypeApprovals: { retirees: -16, "age:senior": 6 },
+            isNPP: true,
+          }),
+        ],
+      })
+    );
   });
 
   it("leaves a poll without new campaign rules on its previous calculation", async () => {

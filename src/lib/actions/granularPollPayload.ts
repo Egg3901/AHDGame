@@ -13,6 +13,11 @@ import {
 } from "@/lib/seeds/eraSubstrateForYear";
 import { eraIdForYear } from "@/lib/seeds/eraInterpolation";
 import { calcAppeal } from "@/lib/utils/demographicAppeal";
+import { NPP_GENERAL_WEIGHT_MULTIPLIER } from "@/lib/electionEngine/constants";
+import {
+  applyCandidateApprovalWeight,
+  projectCandidateApprovalBuckets,
+} from "./granularPollPayload/rules";
 import {
   deriveGranularCells,
   deriveGranularCellsGeneric,
@@ -53,6 +58,9 @@ export interface GranularPollCandidate {
   economicPosition: number;
   socialPosition: number;
   favorability?: number;
+  archetypeApprovals?: Record<string, number>;
+  /** Vote-engine NPC general-election penalty; granular polls always include a player. */
+  isNPP?: boolean;
   politicalInfluence: number;
 }
 
@@ -69,6 +77,7 @@ export interface GranularPollBuilderInput {
     economicPosition: number;
     socialPosition: number;
     favorability?: number;
+    archetypeApprovals?: Record<string, number>;
     politicalInfluence: number;
   };
   /** Opponent candidates (empty when no active race). */
@@ -109,6 +118,7 @@ export interface GranularPollForStateInput {
     economicPosition: number;
     socialPosition: number;
     favorability?: number;
+    archetypeApprovals?: Record<string, number>;
     politicalInfluence: number;
   };
   /** Opponent candidates (empty when no active race). */
@@ -158,41 +168,68 @@ function computeCandidateShares(
   cells: GenericGranularCell[],
   character: GranularPollBuilderInput["character"],
   opponents: GranularPollCandidate[],
-  campaign?: CampaignPollProjection
+  campaign?: CampaignPollProjection,
+  countryId = "US"
 ): Record<string, GranularCandidateShare> {
   const candidateShares: Record<string, GranularCandidateShare> = {};
+  const characterApprovalBuckets = projectCandidateApprovalBuckets(
+    character.archetypeApprovals,
+    countryId
+  );
+  const opponentApprovalBuckets = new Map(
+    opponents.map((opponent) => [
+      opponent.candidateId,
+      projectCandidateApprovalBuckets(opponent.archetypeApprovals, countryId),
+    ])
+  );
 
   for (const cell of cells) {
+    const rawYouAppeal = calcAppeal(
+      cell.economicLean,
+      cell.socialLean,
+      character.economicPosition,
+      character.socialPosition,
+      character.politicalInfluence ?? 0,
+      false
+    );
     const youAppeal =
-      (1 + (campaign?.bonusesByCandidate[campaign.myCandidateId]?.[cell.id] ?? 0)) *
-      calcAppeal(
+      applyCandidateApprovalWeight(
+        rawYouAppeal,
+        character.favorability,
+        characterApprovalBuckets,
+        cell.buckets
+      ) *
+      (1 + (campaign?.bonusesByCandidate[campaign.myCandidateId]?.[cell.id] ?? 0));
+
+    const opponentEntries = opponents.map((opp) => {
+      const rawAppeal = calcAppeal(
         cell.economicLean,
         cell.socialLean,
-        character.economicPosition,
-        character.socialPosition,
-        character.politicalInfluence ?? 0,
+        opp.economicPosition,
+        opp.socialPosition,
+        opp.politicalInfluence ?? 0,
         false
       );
+      return {
+        id: opp.candidateId,
+        name: opp.name,
+        appeal:
+          applyCandidateApprovalWeight(
+            rawAppeal,
+            opp.favorability,
+            opponentApprovalBuckets.get(opp.candidateId) ?? {},
+            cell.buckets
+          ) *
+          (opp.isNPP ? NPP_GENERAL_WEIGHT_MULTIPLIER : 1) *
+          (1 + (campaign?.bonusesByCandidate[opp.candidateId]?.[cell.id] ?? 0)),
+        rawAppeal,
+      };
+    });
 
-    const opponentEntries = opponents.map((opp) => ({
-      id: opp.candidateId,
-      name: opp.name,
-      appeal:
-        (1 + (campaign?.bonusesByCandidate[opp.candidateId]?.[cell.id] ?? 0)) *
-        calcAppeal(
-          cell.economicLean,
-          cell.socialLean,
-          opp.economicPosition,
-          opp.socialPosition,
-          opp.politicalInfluence ?? 0,
-          false
-        ),
-    }));
-
-    const bestOpponentAppeal = opponentEntries.length
-      ? Math.max(...opponentEntries.map((o) => o.appeal))
+    const bestOpponentRawAppeal = opponentEntries.length
+      ? Math.max(...opponentEntries.map((o) => o.rawAppeal))
       : 0;
-    const undecided = Math.max(0.04, 0.16 - Math.abs(youAppeal - bestOpponentAppeal) / 220);
+    const undecided = Math.max(0.04, 0.16 - Math.abs(rawYouAppeal - bestOpponentRawAppeal) / 220);
 
     const totalAppeal = youAppeal + opponentEntries.reduce((s, o) => s + o.appeal, 0);
     const decidedPool = 1 - undecided;
@@ -215,9 +252,9 @@ function computeCandidateShares(
  * Build the additive granular poll payload from a raw US Layer-1 config.
  *
  * Derives Layer-1 cross-product cells and projects candidate shares per cell
- * using the same appeal formula the existing poll uses (positional alignment
- * + political influence, no favorability). The payload is pure and has no
- * side effects so it can be unit tested without a database.
+ * using the election engine's shared approval scalar and the poll's positional
+ * appeal formula. The payload is pure and has no side effects so it can be unit
+ * tested without a database.
  */
 export function buildGranularPollPayload({
   config,
@@ -247,7 +284,7 @@ export function buildGranularPollPayload({
 
   const dims = [...GRANULAR_DIMENSIONS];
   const dimLabels = Object.fromEntries(dims.map((d) => [d, prettifyDimName(d)]));
-  const candidateShares = computeCandidateShares(cells, character, opponents);
+  const candidateShares = computeCandidateShares(cells, character, opponents, undefined, "US");
 
   return { dims, dimLabels, cells, candidateShares };
 }
@@ -276,7 +313,13 @@ export function buildGranularPollPayloadForState({
       dims,
       dimLabels: Object.fromEntries(dims.map((dim) => [dim, prettifyDimName(dim)])),
       cells: campaign.cells.map(({ identities: _identities, ...cell }) => cell),
-      candidateShares: computeCandidateShares(campaign.cells, character, opponents, campaign),
+      candidateShares: computeCandidateShares(
+        campaign.cells,
+        character,
+        opponents,
+        campaign,
+        countryId
+      ),
     };
   }
   const resolvedEra =
@@ -337,7 +380,7 @@ export function buildGranularPollPayloadForState({
   });
 
   const dimLabels = Object.fromEntries(dimNames.map((d) => [d, prettifyDimName(d)]));
-  const candidateShares = computeCandidateShares(cells, character, opponents);
+  const candidateShares = computeCandidateShares(cells, character, opponents, undefined, countryId);
 
   return { dims: [...dimNames], dimLabels, cells, candidateShares };
 }

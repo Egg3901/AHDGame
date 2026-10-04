@@ -17,6 +17,7 @@ import {
   ARCHETYPE_BUCKET_MAP,
   archetypeValuesToBuckets,
   getUnmappedArchetypeDrops,
+  projectArchetypeValuesToBuckets,
   resetUnmappedArchetypeDrops,
 } from "./archetypeBucketMap";
 
@@ -74,6 +75,18 @@ describe("unmapped archetype visibility", () => {
     resetUnmappedArchetypeDrops();
     const alone = archetypeValuesToBuckets({ [mapped]: 10 });
     expect(withUnmapped).toEqual(alone);
+  });
+
+  it("provides the same bucket projection without mutating drop diagnostics", () => {
+    const values = { retirees: 20, uk_red_wall: -12 };
+    const pureProjection = projectArchetypeValuesToBuckets(values, "US");
+    expect(getUnmappedArchetypeDrops()).toEqual([]);
+
+    const instrumentedProjection = archetypeValuesToBuckets(values, "US");
+    expect(pureProjection).toEqual(instrumentedProjection);
+    expect(getUnmappedArchetypeDrops()).toEqual([
+      { archetypeId: "uk_red_wall", count: 1, magnitude: 12 },
+    ]);
   });
 
   it("reset clears the record", () => {

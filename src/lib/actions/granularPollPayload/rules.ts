@@ -1,0 +1,26 @@
+import { projectArchetypeValuesToBuckets } from "@/lib/demographics/archetypeBucketMap";
+import { calcEffectiveFavorability } from "@/lib/electionEngine/voteCalculations";
+import { approvalScalar } from "@/lib/utils/demographicAppeal";
+
+/** Project authoritative archetype approvals into the active country's cell vocabulary. */
+export function projectCandidateApprovalBuckets(
+  archetypeApprovals: Record<string, number> | undefined,
+  countryId: string
+): Record<string, number> {
+  return projectArchetypeValuesToBuckets(archetypeApprovals ?? {}, countryId);
+}
+
+/** Apply the vote engine's effective-favorability and approval kernels to a cell. */
+export function applyCandidateApprovalWeight(
+  appeal: number,
+  favorability: number | undefined,
+  approvalBuckets: Record<string, number>,
+  cellBuckets: Record<string, string>
+): number {
+  const archetypeApproval = Object.entries(cellBuckets).reduce(
+    (sum, [dimension, bucket]) => sum + (approvalBuckets[`${dimension}:${bucket}`] ?? 0),
+    0
+  );
+  const effectiveFavorability = calcEffectiveFavorability(favorability ?? 50, archetypeApproval);
+  return appeal * approvalScalar(effectiveFavorability);
+}

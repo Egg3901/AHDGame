@@ -7,7 +7,7 @@ import type { GranularCandidateShare } from "@/lib/actions/granularPollPayload";
 import { DEMOGRAPHIC_LABELS } from "@/lib/seeds/demographicLabels";
 import type { PollData, StoredPoll } from "../../types";
 
-const BASE_MOE = 3.0; // Typical large-poll margin of error (percentage points).
+const BASE_UNCERTAINTY_BAND = 3.0; // Illustrative points, not sample-based MoE.
 
 type SortKey = string;
 
@@ -404,9 +404,9 @@ export function GranularPollPanel({ poll, pollData }: { poll: StoredPoll; pollDa
     URL.revokeObjectURL(url);
   };
 
-  const segmentMoe =
+  const segmentUncertainty =
     segmentAggregate && segmentAggregate.share > 0
-      ? BASE_MOE / Math.sqrt(segmentAggregate.share)
+      ? BASE_UNCERTAINTY_BAND / Math.sqrt(segmentAggregate.share)
       : null;
 
   const tableColumns: { key: SortKey; label: string; numeric: boolean }[] = [
@@ -426,7 +426,7 @@ export function GranularPollPanel({ poll, pollData }: { poll: StoredPoll; pollDa
         <span className="text-xl shrink-0">🧩</span>
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <Tooltip content="Exit-poll style marginals and cross-tab segments derived from Layer-1 demographics. Smaller segments have a wider margin of error.">
+            <Tooltip content="Cross-tab segments are projections from Layer-1 demographics. The uncertainty band is illustrative; this poll does not sample respondents.">
               <span className="font-semibold">Granular electorate</span>
             </Tooltip>
             <span className="text-xs rounded-full border border-card-border px-2 py-0.5 text-muted">
@@ -612,10 +612,10 @@ export function GranularPollPanel({ poll, pollData }: { poll: StoredPoll; pollDa
                     </div>
                   </div>
                   <div className="ml-auto text-right">
-                    <div className="text-xs text-muted">Widened margin of error</div>
-                    <Tooltip content="Small segments are noisier. The MoE widens by the inverse square root of the segment's share of the electorate.">
+                    <div className="text-xs text-muted">Illustrative uncertainty band</div>
+                    <Tooltip content="Illustration only: 3 points divided by the square root of the segment's electorate share. It is not a sample-based margin of error.">
                       <span className="text-lg font-bold tabular-nums cursor-help">
-                        ±{segmentMoe?.toFixed(1) ?? "-"} pts
+                        ±{segmentUncertainty?.toFixed(1) ?? "-"} pts
                       </span>
                     </Tooltip>
                   </div>

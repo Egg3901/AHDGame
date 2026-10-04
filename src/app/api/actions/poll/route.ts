@@ -500,6 +500,7 @@ export async function POST(request: NextRequest) {
               economicPosition: character.policies.economic,
               socialPosition: character.policies.social,
               favorability: character.favorability,
+              archetypeApprovals: character.archetypeApprovals,
               politicalInfluence: character.politicalInfluence ?? 0,
             },
             opponents:
@@ -509,6 +510,8 @@ export async function POST(request: NextRequest) {
                 economicPosition: o.economicPosition,
                 socialPosition: o.socialPosition,
                 favorability: o.favorability,
+                archetypeApprovals: o.archetypeApprovals,
+                isNPP: o.isNPP,
                 politicalInfluence: o.politicalInfluence,
               })) ?? [],
           });
