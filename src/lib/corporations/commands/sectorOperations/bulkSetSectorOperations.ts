@@ -146,17 +146,20 @@ export async function bulkSetSectorOperations(request: Request, { params }: Rout
       const techEnabled = await isSectorTechTreesEnabled();
       const techCorpView = {
         type: corporation.type,
+        industryModel: corporation.industryModel,
         unlockedTechNodeIds: corporation.unlockedTechNodeIds,
         techDecadeLane: corporation.techDecadeLane,
       };
-      const techMultFor = (st: CorporationType) =>
-        techEnabled ? getSectorTechEffects(techCorpView, st).growthCostMultiplier : 1;
+      const techMultFor = (s: CorporateSector) =>
+        techEnabled
+          ? getSectorTechEffects(techCorpView, s.sectorType, s.industryModel).growthCostMultiplier
+          : 1;
       let projectedTotal = 0;
       let currentTotal = 0;
       for (const s of sectors) {
         const marketSharePct = await fetchSectorMarketSharePercent(db, s, corporation);
         const activeRate = s.currentGrowthRate ?? s.growthRate ?? 0;
-        const techGrowthMult = techMultFor(s.sectorType);
+        const techGrowthMult = techMultFor(s);
         const persisted = growthCostFor(
           s.revenue,
           activeRate,

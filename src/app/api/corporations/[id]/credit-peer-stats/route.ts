@@ -10,6 +10,7 @@ import { getCountryConfig } from "@/lib/constants/countries";
 import { CREDIT_RATINGS, type CreditRating } from "@/lib/db/types/centralBank";
 import { getGameState } from "@/lib/gameState";
 import { getTurnReferenceData } from "@/lib/corporations/turnReferenceData";
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -39,7 +40,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const currentTurn = gameState?.currentTurn ?? 0;
 
     const countryId = corporation.countryId;
-    const sectorType = corporation.type;
+    const sectorType = getOperatingSectorType(corporation.type, corporation.industryModel);
 
     // Scope the corps scan by country in the DB — previously we pulled every
     // corp in the world and filtered in memory. Also share the centralBanks
@@ -51,11 +52,17 @@ export async function GET(_request: Request, { params }: RouteParams) {
         .project<
           Pick<
             Corporation,
-            "_id" | "type" | "isPrivate" | "creditCompositeSnapshot" | "creditRatingSnapshot"
+            | "_id"
+            | "type"
+            | "industryModel"
+            | "isPrivate"
+            | "creditCompositeSnapshot"
+            | "creditRatingSnapshot"
           >
         >({
           _id: 1,
           type: 1,
+          industryModel: 1,
           isPrivate: 1,
           creditCompositeSnapshot: 1,
           creditRatingSnapshot: 1,
@@ -87,7 +94,9 @@ export async function GET(_request: Request, { params }: RouteParams) {
         c.isPrivate !== true &&
         typeof c.creditCompositeSnapshot === "number"
     );
-    const sameSector = sameCountry.filter((c) => c.type === sectorType);
+    const sameSector = sameCountry.filter(
+      (c) => getOperatingSectorType(c.type, c.industryModel) === sectorType
+    );
 
     function avgStats(peers: typeof sameCountry) {
       if (peers.length === 0) return null;

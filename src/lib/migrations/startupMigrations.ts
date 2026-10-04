@@ -10,6 +10,7 @@ import { migration as appleProviderIdentityIndex } from "./entries/2026-09-30-ap
 import { migration as ukDualMinistryRoleSlot } from "./entries/2026-09-17-uk-dual-ministry-role-slot";
 import { migration as politicalMediaOrderIndexes } from "./entries/2026-10-04-political-media-order-indexes";
 import { migration as bankTreasuryTradeIndexes } from "./entries/2026-10-04-bank-treasury-trade-indexes";
+import { migration as industryModelMarketIndexes } from "./entries/2026-10-04-industry-model-market-indexes";
 import { runMigrations, type RunSummary } from "./runner";
 import type { Migration } from "./types";
 
@@ -43,6 +44,9 @@ export const REQUIRED_STARTUP_MIGRATIONS: readonly Migration[] = [
   bankTreasuryTradeIndexes,
   bankPropForexFeeIndex,
   bankFailurePoliticsIndex,
+  // Model-aware unique keys must be in place before a fresh canonical seed can
+  // create a vehicles market beside generic manufacturing.
+  industryModelMarketIndexes,
 ];
 
 export async function runRequiredStartupMigrations(db: Db): Promise<RunSummary> {

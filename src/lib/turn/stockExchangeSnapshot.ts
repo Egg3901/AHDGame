@@ -72,7 +72,10 @@ import { sectorEconomicRevenue } from "@/lib/corporations/sectorRevenueBasis";
 import { corpLevelDailyCosts } from "./corpLevelDailyCosts";
 import { TURNS_PER_YEAR, TURNS_PER_DAY } from "@/lib/constants/turnTime";
 import { readCorpEconomicAnchor, writeCorpEconomicLocal } from "@/lib/currency/corpEconomyFields";
-import { STRATEGY_TRANSITION_TURNS } from "@/lib/constants/sectorStrategies";
+import {
+  getOperatingSectorType,
+  STRATEGY_TRANSITION_TURNS,
+} from "@/lib/constants/sectorStrategies";
 
 const EXCHANGE_NAMES: Record<string, string> = getExchangeNamesMap();
 
@@ -729,7 +732,7 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
           // until the lookup is wired in. negativeProductionSustainedTurns is
           // available directly on the sector and is passed through correctly.
           const mods = computeAllMarginModifiers(
-            sector.sectorType,
+            getOperatingSectorType(sector.sectorType, sector.industryModel) as Corporation["type"],
             sector.profitMargin,
             {
               fullMetrics: stateMetrics,
@@ -745,7 +748,7 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
             },
             commodityMod,
             homeLocationBonus,
-            corp.type,
+            getOperatingSectorType(corp.type, corp.industryModel) as Corporation["type"],
             corpSectors.length,
             macroEcon,
             corp.logisticsStrength ?? 0,
@@ -938,7 +941,11 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
           name: corp.name,
           ...(corp.tickerSymbol ? { tickerSymbol: corp.tickerSymbol } : {}),
           type: corp.type,
-          typeLabel: CORPORATION_TYPE_LABELS[corp.type],
+          industryModel: corp.industryModel ?? null,
+          typeLabel:
+            corp.type === "manufacturing" && corp.industryModel === "vehicles"
+              ? "Vehicle manufacturing"
+              : CORPORATION_TYPE_LABELS[corp.type],
           headquartersState: corp.headquartersState,
           headquartersStateName: stateNameMap.get(corp.headquartersState) ?? corp.headquartersState,
           logoUrl: isNatcorp

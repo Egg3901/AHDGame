@@ -41,6 +41,11 @@ import { SectorTypeDossier } from "./SectorTypeDossier";
 import { SectorStrategyPanel } from "./SectorStrategyPanel";
 import type { SectorTypeMetricContext } from "./sectorTypeMetrics";
 import { DenseSection, InlineStatus, Segmented, SmallButton, signTone } from "./dense/DenseKit";
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
+
+function sectorIdentity(sector: Pick<SectorDetail, "sectorType" | "industryModel">): string {
+  return `${sector.sectorType}:${sector.industryModel ?? ""}`;
+}
 
 interface SectorsTabProps {
   sectors: SectorDetail[];
@@ -200,12 +205,30 @@ export default function SectorsTab({
   const scaleLabel = MONEY_PERIOD_SUFFIX[timeScale];
 
   const sectorTypes = useMemo(() => {
-    const types = [...new Set(sectors.map((s) => s.sectorType))].sort();
-    return types.map((t) => ({
-      value: t,
-      label: CORPORATION_TYPE_LABELS[t as CorporationType] ?? t,
-      count: sectors.filter((s) => s.sectorType === t).length,
-    }));
+    const groups = new Map<
+      string,
+      { sectorType: string; industryModel: string | null; count: number }
+    >();
+    for (const sector of sectors) {
+      const value = sectorIdentity(sector);
+      const group = groups.get(value) ?? {
+        sectorType: sector.sectorType,
+        industryModel: sector.industryModel ?? null,
+        count: 0,
+      };
+      group.count += 1;
+      groups.set(value, group);
+    }
+    return [...groups.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([value, group]) => ({
+        value,
+        ...group,
+        label:
+          group.sectorType === "manufacturing" && group.industryModel === "vehicles"
+            ? "Vehicle manufacturing"
+            : (CORPORATION_TYPE_LABELS[group.sectorType as CorporationType] ?? group.sectorType),
+      }));
   }, [sectors]);
 
   // A type chip does two jobs, and they have different preconditions.
@@ -233,12 +256,16 @@ export default function SectorsTab({
   // js/xss-through-dom). Resolving through the constant means what flows
   // onward is a compile-time string. An unowned or unknown type simply gets no
   // dossier, while the table above still filters.
-  const dossierType = activeTypeFilter
-    ? (CORPORATION_TYPES.find((t) => t === activeTypeFilter) ?? null)
+  const selectedSectorGroup = sectorTypes.find((group) => group.value === activeTypeFilter) ?? null;
+  const operatingDossierType = selectedSectorGroup
+    ? getOperatingSectorType(selectedSectorGroup.sectorType, selectedSectorGroup.industryModel)
+    : null;
+  const dossierType = operatingDossierType
+    ? (CORPORATION_TYPES.find((t) => t === operatingDossierType) ?? null)
     : null;
   const dossierSectors = useMemo(
-    () => (dossierType ? sectors.filter((s) => s.sectorType === dossierType) : []),
-    [sectors, dossierType]
+    () => (activeTypeFilter ? sectors.filter((s) => sectorIdentity(s) === activeTypeFilter) : []),
+    [sectors, activeTypeFilter]
   );
   const metricContext: SectorTypeMetricContext = {
     plantsMode,
@@ -249,14 +276,15 @@ export default function SectorsTab({
   // Sectors under the current filter, dossier or not, so the header count and
   // the heading both describe what the table is actually showing.
   const filteredTypeSectors = useMemo(
-    () => (activeTypeFilter ? sectors.filter((s) => s.sectorType === activeTypeFilter) : sectors),
+    () =>
+      activeTypeFilter ? sectors.filter((s) => sectorIdentity(s) === activeTypeFilter) : sectors,
     [sectors, activeTypeFilter]
   );
-  const dossierPlural = activeTypeFilter ? facilityPlural(activeTypeFilter) : "";
+  const dossierPlural = dossierType ? facilityPlural(dossierType) : "";
   // "Extraction & Mining" is the only type label that carries a second half;
   // "Extraction mines" reads, "Extraction & Mining mines" does not.
   const dossierHeading = activeTypeFilter
-    ? `${(CORPORATION_TYPE_LABELS[activeTypeFilter as CorporationType] ?? activeTypeFilter).split(" &")[0]} ${dossierPlural}`
+    ? `${selectedSectorGroup?.label.split(" &")[0] ?? activeTypeFilter} ${dossierPlural}`
     : "Owned sectors";
 
   const sortedSectors = useMemo(() => {
@@ -270,7 +298,7 @@ export default function SectorsTab({
           (s.displayName ?? "").toLowerCase().includes(q)
       );
     }
-    if (activeTypeFilter) list = list.filter((s) => s.sectorType === activeTypeFilter);
+    if (activeTypeFilter) list = list.filter((s) => sectorIdentity(s) === activeTypeFilter);
     return sortSectors(list, sortKey, sortDir);
   }, [sectors, filterText, activeTypeFilter, sortKey, sortDir]);
 
@@ -334,7 +362,12 @@ export default function SectorsTab({
           <span />
         )}
         {isCeo && (
-          <SmallButton tone="primary" onClick={() => openExpandModal(dossierType ?? undefined)}>
+          <SmallButton
+            tone="primary"
+            onClick={() =>
+              openExpandModal(selectedSectorGroup?.sectorType as CorporationType | undefined)
+            }
+          >
             + {buildLabel}
           </SmallButton>
         )}

@@ -39,6 +39,7 @@ import { effectiveMarketAnchor, gdpDerivedMarketAnchor } from "@/lib/corporation
 import { loadWorldPreset } from "@/lib/currency/gdpAnchorRate";
 import { defaultSupplyRates, unitYieldForSupply } from "@/lib/constants/capacityEconomy";
 import { getEffectiveStrategyRates } from "@/lib/constants/sectorStrategies";
+import { getEffectiveStrategyRatesForOperatingModel } from "@/lib/constants/sectorStrategies";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 
 export interface CountrySectorMixEntry {
@@ -56,6 +57,7 @@ export interface CountrySectorMixEntry {
 
 interface PlantsSectorMarketInput {
   type: CorporationType;
+  industryModel?: string | null;
   stateId: string;
   revenueAnchor: number;
   capitalStock?: number;
@@ -154,12 +156,13 @@ function outputRatesForSector(
 ): Partial<Record<CommodityType, number>> {
   const transitionActive =
     sector.transitionFromStrategyId && sector.transitionStartTurn != null && currentTurn != null;
-  return getEffectiveStrategyRates(
+  return getEffectiveStrategyRatesForOperatingModel(
     sector.type,
     sector.strategyId ?? "standard",
     transitionActive ? sector.transitionFromStrategyId : null,
     transitionActive ? sector.transitionStartTurn : null,
-    currentTurn ?? 0
+    currentTurn ?? 0,
+    sector.industryModel
   ).supply;
 }
 
@@ -172,28 +175,37 @@ function storedCapacityUnits(sector: PlantsSectorMarketInput): number | null {
 }
 
 interface OutputContribution {
+  type: CorporationType;
+  industryModel?: string | null;
   /** Output-unit capacity contribution used to split a commodity market. */
   units: number;
   /** ₳ of sector nameplate per one unit of this commodity output. */
   anchorPerUnit: number;
 }
 
-type OutputWeights = Map<CommodityType, Map<CorporationType, OutputContribution>>;
+type OutputWeights = Map<CommodityType, Map<string, OutputContribution>>;
 
 function addOutputWeight(
   weights: OutputWeights,
   commodity: CommodityType,
   type: CorporationType,
+  industryModel: string | null | undefined,
   units: number,
   anchorPerUnit: number
 ): void {
   if (!(units > 0) || !Number.isFinite(units) || !(anchorPerUnit > 0)) return;
-  const byType = weights.get(commodity) ?? new Map<CorporationType, OutputContribution>();
-  const previous = byType.get(type);
+  const byType = weights.get(commodity) ?? new Map<string, OutputContribution>();
+  const key = `${type}::${industryModel ?? ""}`;
+  const previous = byType.get(key);
   const previousUnits = previous?.units ?? 0;
   const totalUnits = previousUnits + units;
   const totalAnchor = previousUnits * (previous?.anchorPerUnit ?? 0) + units * anchorPerUnit;
-  byType.set(type, { units: totalUnits, anchorPerUnit: totalAnchor / totalUnits });
+  byType.set(key, {
+    type,
+    industryModel,
+    units: totalUnits,
+    anchorPerUnit: totalAnchor / totalUnits,
+  });
   weights.set(commodity, byType);
 }
 
@@ -201,14 +213,18 @@ function fallbackOutputWeights(
   commodity: CommodityType,
   basePrices: Record<CommodityType, number>,
   eraUnitScale: number
-): Map<CorporationType, OutputContribution> {
-  const weights = new Map<CorporationType, OutputContribution>();
+): Map<string, OutputContribution> {
+  const weights = new Map<string, OutputContribution>();
   for (const type of CORPORATION_TYPES) {
     const mix = defaultSupplyRates(type);
     const weight = commodityMixWeight(mix, basePrices, commodity);
     const unitYield = unitYieldForSupply(mix, eraUnitScale);
     if (weight > 0 && unitYield > 0) {
-      weights.set(type, { units: weight, anchorPerUnit: 1 / unitYield / weight });
+      weights.set(`${type}::`, {
+        type,
+        units: weight,
+        anchorPerUnit: 1 / unitYield / weight,
+      });
     }
   }
   return weights;
@@ -220,7 +236,7 @@ function weightsForCommodity(
   nationalWeights: OutputWeights,
   basePrices: Record<CommodityType, number>,
   eraUnitScale: number
-): Map<CorporationType, OutputContribution> {
+): Map<string, OutputContribution> {
   const state = stateWeights.get(commodity);
   if (state && [...state.values()].some((contribution) => contribution.units > 0)) return state;
   const national = nationalWeights.get(commodity);
@@ -239,7 +255,7 @@ function addAllocatedLatent(
   nationalWeights: OutputWeights,
   basePrices: Record<CommodityType, number>,
   eraUnitScale: number,
-  bucketKey: (stateId: string, type: CorporationType) => string
+  bucketKey: (stateId: string, type: CorporationType, industryModel?: string | null) => string
 ): void {
   // Convert commodity demand back through the same strategy mix that prices
   // plant capacity. Using the commodity's sticker price directly would break
@@ -257,10 +273,10 @@ function addAllocatedLatent(
     0
   );
   if (!(totalWeight > 0)) return;
-  for (const [type, contribution] of weights) {
+  for (const contribution of weights.values()) {
     if (!(contribution.units > 0) || !(contribution.anchorPerUnit > 0)) continue;
     const anchor = ((latentUnits * contribution.units) / totalWeight) * contribution.anchorPerUnit;
-    const key = bucketKey(stateId, type);
+    const key = bucketKey(stateId, contribution.type, contribution.industryModel);
     target.set(key, (target.get(key) ?? 0) + anchor);
   }
 }
@@ -272,7 +288,7 @@ function buildPlantsMarketAggregation(args: {
   prices: CommodityPrice[];
   eraUnitScale: number;
   currentTurn?: number;
-  bucketKey: (stateId: string, type: CorporationType) => string;
+  bucketKey: (stateId: string, type: CorporationType, industryModel?: string | null) => string;
 }): PlantsMarketAggregation {
   const { sectors, states, prices, eraUnitScale, currentTurn, bucketKey } = args;
   const eraBasePrices = eraScaledBasePrices(eraUnitScale);
@@ -293,7 +309,7 @@ function buildPlantsMarketAggregation(args: {
           : 0
         : Math.max(0, sector.revenueAnchor);
     if (ownedAnchor > 0) {
-      const key = bucketKey(sector.stateId, sector.type);
+      const key = bucketKey(sector.stateId, sector.type, sector.industryModel);
       ownedByBucket.set(key, (ownedByBucket.get(key) ?? 0) + ownedAnchor);
     }
 
@@ -310,8 +326,22 @@ function buildPlantsMarketAggregation(args: {
       if (!(weight > 0)) continue;
       const output = outputUnits * weight;
       const anchorPerOutputUnit = unitYield > 0 ? 1 / unitYield / weight : 0;
-      addOutputWeight(nationalOutputWeights, commodity, sector.type, output, anchorPerOutputUnit);
-      addOutputWeight(stateWeights, commodity, sector.type, output, anchorPerOutputUnit);
+      addOutputWeight(
+        nationalOutputWeights,
+        commodity,
+        sector.type,
+        sector.industryModel,
+        output,
+        anchorPerOutputUnit
+      );
+      addOutputWeight(
+        stateWeights,
+        commodity,
+        sector.type,
+        sector.industryModel,
+        output,
+        anchorPerOutputUnit
+      );
     }
   }
 
@@ -446,7 +476,8 @@ export async function aggregateCountrySectorMix(
   // Legacy owned revenue per (state, sectorType) bucket, ₳-normalized; and the
   // running sum/count of current growth per sector type for the national mean.
   // Plants replaces the revenue buckets below with physical capacity.
-  const bucketKey = (stateId: string, type: CorporationType) => `${stateId}::${type}`;
+  const bucketKey = (stateId: string, type: CorporationType, industryModel?: string | null) =>
+    `${stateId}::${type}::${industryModel ?? ""}`;
   const ownedByBucket = new Map<string, number>();
   const growthSumByType = new Map<CorporationType, number>();
   const growthCountByType = new Map<CorporationType, number>();
@@ -455,12 +486,13 @@ export async function aggregateCountrySectorMix(
     const anchor = readCorpEconomicAnchor(s.revenue, hostCode, hostRate);
     const type = s.sectorType as CorporationType;
     ownedByBucket.set(
-      bucketKey(s.stateId, type),
-      (ownedByBucket.get(bucketKey(s.stateId, type)) ?? 0) + anchor
+      bucketKey(s.stateId, type, s.industryModel),
+      (ownedByBucket.get(bucketKey(s.stateId, type, s.industryModel)) ?? 0) + anchor
     );
     if (plantsMode) {
       plantsMarketInputs.push({
         type,
+        industryModel: s.industryModel,
         stateId: s.stateId,
         revenueAnchor: anchor,
         capitalStock: s.capitalStock,
@@ -477,7 +509,7 @@ export async function aggregateCountrySectorMix(
   }
   const unownedByBucket = new Map<string, number>();
   for (const u of unownedDocs) {
-    const key = bucketKey(u.stateId, u.sectorType);
+    const key = bucketKey(u.stateId, u.sectorType, u.industryModel);
     unownedByBucket.set(key, (unownedByBucket.get(key) ?? 0) + (u.revenue ?? 0));
   }
 
@@ -498,15 +530,19 @@ export async function aggregateCountrySectorMix(
     let totalOwned = 0;
     let largest: { stateId: string; stateName: string; market: number } | null = null;
     for (const state of states) {
-      const key = bucketKey(state._id, type);
-      let owned = ownedByBucket.get(key) ?? 0;
+      const matchingKeys = [
+        ...new Set([...ownedByBucket.keys(), ...unownedByBucket.keys()]),
+      ].filter((key) => key.startsWith(`${state._id}::${type}::`));
+      const keys = matchingKeys.length > 0 ? matchingKeys : [bucketKey(state._id, type)];
+      let owned = keys.reduce((sum, key) => sum + (ownedByBucket.get(key) ?? 0), 0);
       const gdpFallback = gdpDerivedMarketAnchor(state.gdp ?? 0, countryId, preset);
       let market: number;
       if (!plantsMode) {
-        market = effectiveMarketAnchor(owned, unownedByBucket.get(key), gdpFallback);
+        const unowned = keys.reduce((sum, key) => sum + (unownedByBucket.get(key) ?? 0), 0);
+        market = effectiveMarketAnchor(owned, unowned, gdpFallback);
       } else {
-        owned = plantsMarket?.ownedByBucket.get(key) ?? 0;
-        market = plantsMarket?.marketByBucket.get(key) ?? owned;
+        owned = keys.reduce((sum, key) => sum + (plantsMarket?.ownedByBucket.get(key) ?? 0), 0);
+        market = keys.reduce((sum, key) => sum + (plantsMarket?.marketByBucket.get(key) ?? 0), 0);
       }
       totalMarket += market;
       totalOwned += owned;

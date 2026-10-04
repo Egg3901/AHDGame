@@ -47,7 +47,7 @@ describe("seedCoreIndexes", () => {
     const uniqueIndexOrder = ensureIndexMock.mock.calls.find(
       (call) =>
         call[1] === "corporateSectors" &&
-        call[3]?.name === "corporateSectors_corporationId_stateId_sectorType"
+        call[3]?.name === "corporateSectors_corporationId_stateId_sectorType_industryModel"
     );
     expect(uniqueIndexOrder).toBeDefined();
     expect(repairOrder).toBeLessThan(
@@ -60,7 +60,7 @@ describe("seedCoreIndexes", () => {
   it("skips the heal when the corporate sector identity index already exists", async () => {
     const indexes = vi.fn().mockResolvedValue([
       {
-        key: { corporationId: 1, stateId: 1, sectorType: 1 },
+        key: { corporationId: 1, stateId: 1, sectorType: 1, industryModel: 1 },
         name: "corp_sector_identity_v2",
         unique: true,
       },

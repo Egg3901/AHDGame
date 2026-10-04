@@ -13,6 +13,7 @@ import { getControllingCorporateParent } from "@/lib/corporations/corporateOwner
 import { activeParentDividendFloorPct } from "@/lib/corporations/subsidiaries/helpers";
 import { COUNTRY_CURRENCY_MAP, SECTOR_FX_SPREAD } from "@/lib/constants/currencies";
 import type { CommodityType } from "@/lib/constants/commodities";
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import { MARKET_DISABLED, type MarketContext } from "@/lib/market/marketContext";
 import {
   computeCorporateCreditAtTurn,
@@ -322,7 +323,10 @@ export function processSectors(
     // versa. Clamped to ±15%. Inert when the feature gate is off.
     const rdDemandFactor = techTreesEnabled
       ? (() => {
-          const [c1, c2] = SECTOR_RD_COMMODITIES[corp.type as string] ?? [];
+          const [c1, c2] =
+            SECTOR_RD_COMMODITIES[
+              getOperatingSectorType(corp.type, corp.industryModel) as string
+            ] ?? [];
           return computeRdDemandFactor(
             lookups.globalCommodityBalances.get("software"),
             lookups.globalCommodityBalances.get("consulting_services"),
@@ -1347,7 +1351,10 @@ export function processSectors(
     const corpPrimeRate =
       (lookups.primeRateByCountry.get(corp.countryId) ??
         getCountryConfig(corp.countryId).centralBank.defaultPrimeRate) / 100;
-    const riskPremium = sectorRiskPremiumAtTurn(corp.type, currentTurn);
+    const riskPremium = sectorRiskPremiumAtTurn(
+      getOperatingSectorType(corp.type, corp.industryModel) as Corporation["type"],
+      currentTurn
+    );
     const growthNumer = corpGrowthNumerByCorpId.get(id) ?? 0;
     const growthDenom = corpGrowthDenomByCorpId.get(id) ?? 0;
     const activeBankCharter = corp.bankCharter?.status === "active" ? corp.bankCharter : null;

@@ -28,7 +28,7 @@ export interface RestoreSectorsToUnownedResult {
 
 type RestorableSector = Pick<
   CorporateSector,
-  "_id" | "corporationId" | "countryId" | "stateId" | "sectorType" | "revenue"
+  "_id" | "corporationId" | "countryId" | "stateId" | "sectorType" | "industryModel" | "revenue"
 > &
   Partial<Pick<CorporateSector, "capitalStock" | "strategyId" | "buildQueue">>;
 
@@ -37,6 +37,7 @@ interface RestorableSectorDelta {
   stateId: string;
   countryId: CorporateSector["countryId"];
   sectorType: CorporateSector["sectorType"];
+  industryModel: CorporateSector["industryModel"];
   revenue: number;
   /** Capacity units returned to the pool (plants only; 0 otherwise). */
   units: number;
@@ -167,9 +168,14 @@ export async function restoreSectorsToUnowned(
         revenuePerCapacityUnitForStrategy(
           sector.sectorType as CorporationType,
           sector.strategyId,
-          eraUnitScale
+          eraUnitScale,
+          sector.industryModel
         ) *
-        unownedHeadroomUnitsPerAnchor(sector.sectorType as CorporationType, eraUnitScale)
+        unownedHeadroomUnitsPerAnchor(
+          sector.sectorType as CorporationType,
+          eraUnitScale,
+          sector.industryModel
+        )
       : 0;
 
     if (plantsEnabled ? units > 0 : revenue > 0) {
@@ -179,6 +185,7 @@ export async function restoreSectorsToUnowned(
           sector.countryId) as RestorableSectorDelta["countryId"],
         stateId: sector.stateId,
         sectorType: sector.sectorType,
+        industryModel: sector.industryModel,
         revenue,
         units,
       });
@@ -193,7 +200,8 @@ export async function restoreSectorsToUnowned(
     const restoreToken = delta.sectorId.toString();
     const unitsPerAnchor = unownedHeadroomUnitsPerAnchor(
       delta.sectorType as CorporationType,
-      eraUnitScale
+      eraUnitScale,
+      delta.industryModel
     );
     const anchorPerUnit = unitsPerAnchor > 0 ? 1 / unitsPerAnchor : 0;
     const creditField = unownedPoolLeadingField(plantsEnabled);
@@ -203,16 +211,26 @@ export async function restoreSectorsToUnowned(
     const creditBaseExpr = unownedPoolCreditBaseExpr(
       delta.sectorType as CorporationType,
       plantsEnabled,
-      eraUnitScale
+      eraUnitScale,
+      delta.industryModel
     );
     const before = await db.collection<UnownedSector>("unownedSectors").findOneAndUpdate(
-      { stateId: delta.stateId, sectorType: delta.sectorType },
+      {
+        stateId: delta.stateId,
+        sectorType: delta.sectorType,
+        ...(delta.industryModel != null || delta.sectorType === "manufacturing"
+          ? { industryModel: delta.industryModel ?? null }
+          : {}),
+      },
       [
         {
           $set: {
             stateId: { $ifNull: ["$stateId", delta.stateId] },
             countryId: { $ifNull: ["$countryId", delta.countryId] },
             sectorType: { $ifNull: ["$sectorType", delta.sectorType] },
+            ...(delta.industryModel != null || delta.sectorType === "manufacturing"
+              ? { industryModel: { $ifNull: ["$industryModel", delta.industryModel ?? null] } }
+              : {}),
             createdAt: { $ifNull: ["$createdAt", now] },
             updatedAt: now,
             // The credited field is the AUTHORITATIVE one for the tier:

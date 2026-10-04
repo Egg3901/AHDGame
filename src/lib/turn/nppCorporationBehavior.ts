@@ -75,6 +75,7 @@ import { STARTING_YEAR, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { CAPITAL_DEPRECIATION_PER_TURN } from "@/lib/market/capital";
 import type { BuildCapexTxInput } from "@/lib/corporations/capexTxLog";
 import { getLogisticsSupportedSectorCount } from "@/lib/constants/corporations";
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import {
   CAPACITY_BUILD_TURNS,
   computeBuildCost,
@@ -611,6 +612,13 @@ export function makeNppCorpDecision(
   placementSignals?: PlacementSignals
 ): NppCorpDecision {
   const { corp, sectors, now, modifiers } = ctx;
+  const coreSectorModel = corp.industryModel ?? null;
+  const isCoreSector = (sector: CorporateSector) =>
+    sector.sectorType === corp.type && (sector.industryModel ?? null) === coreSectorModel;
+  const operatingCorpType = getOperatingSectorType(
+    corp.type,
+    corp.industryModel
+  ) as CorporationType;
   const updates: Record<string, unknown> = { updatedAt: now };
   const sectorUpdates: NppCorpDecision["sectorUpdates"] = [];
   const newSectors: NppCorpDecision["newSectors"] = [];
@@ -632,8 +640,11 @@ export function makeNppCorpDecision(
     anchorToCorpCapital(amountAnchor, corpCurrencyCode, corpFxRate);
   const cashToAnchor = makeCapacityCashToAnchor(corp, corpFxRate);
   const capacityCohort = resolveCapacityCohort(corp);
-  const nationalShare = (countryId: string, sectorType: CorporationType) =>
-    plants?.nationalShareOf?.(corp._id, countryId, sectorType) ?? 0;
+  const nationalShare = (
+    countryId: string,
+    sectorType: CorporationType,
+    industryModel?: string | null
+  ) => plants?.nationalShareOf?.(corp._id, countryId, sectorType, industryModel) ?? 0;
   const capacityObservations: CapacityDecisionObservation[] = [];
   // Which of the four operator decision legs bound this corp this turn (#2122);
   // sections below flag the branch they take and the resolver picks the first.
@@ -766,7 +777,7 @@ export function makeNppCorpDecision(
         sp.margin <= modifiers.divestMarginFloor + levers.divestMarginFloorDelta
       ) {
         // Protect the corp's primary sector type — that's its core business
-        if (sp.sector.sectorType === corp.type) {
+        if (isCoreSector(sp.sector)) {
           constraintFlags.divest_core_protected = true;
           continue;
         }
@@ -798,7 +809,7 @@ export function makeNppCorpDecision(
       .filter(
         (sp) =>
           (sp.sector.lowFillTurns ?? 0) >= STRANDED_DIVEST_TURNS &&
-          sp.sector.sectorType !== corp.type &&
+          !isCoreSector(sp.sector) &&
           sp.sector.mothballed !== true &&
           !divestedSectorIds.includes(sp.sector._id)
       )
@@ -1164,7 +1175,7 @@ export function makeNppCorpDecision(
       sectorUpdates,
       strategy: strategyDecision?.state,
       operatorObservation: buildNppOperatorObservation({
-        sectorType: corp.type,
+        sectorType: operatingCorpType,
         cashNegative: cashLocal < 0,
         passive: true,
         profitable: isProfitable,
@@ -1262,15 +1273,20 @@ export function makeNppCorpDecision(
         foundingTarget.sectorType as CorporationType,
         foundingTarget.headroomUnits,
         foundingTarget.revenue,
-        plants.eraUnitScale
+        plants.eraUnitScale,
+        foundingTarget.industryModel
       );
-      const starterUnits = foundingStarterUnits(foundingTarget.sectorType as CorporationType);
+      const starterUnits = foundingStarterUnits(
+        foundingTarget.sectorType as CorporationType,
+        foundingTarget.industryModel as "vehicles" | null | undefined
+      );
       // Per-unit founding price. computeBuildCost is linear in units, so a
       // one-unit quote scales exactly while retaining its itemized breakdown.
       const foundingUnitQuote =
         starterUnits > 0
           ? computeBuildCost({
               sectorType: foundingTarget.sectorType as CorporationType,
+              industryModel: foundingTarget.industryModel,
               units: 1,
               // Greenfield entry uses the sector-type default strategy.
               strategyId: null,
@@ -1279,7 +1295,8 @@ export function makeNppCorpDecision(
               marketSharePercent: 0,
               nationalMarketSharePercent: nationalShare(
                 foundingTarget.countryId,
-                foundingTarget.sectorType as CorporationType
+                foundingTarget.sectorType as CorporationType,
+                foundingTarget.industryModel
               ),
               primeRate: plants.primeRateOf(foundingTarget.countryId),
               // NPP CEOs have no Character Business Acumen; neutral is honest.
@@ -1742,12 +1759,17 @@ export function makeNppCorpDecision(
         ? toCorpLocal(
             computeBuildCost({
               sectorType: sector.sectorType,
+              industryModel: sector.industryModel,
               units: 1,
               strategyId: sector.strategyId ?? null,
               year: plants.year,
               eraUnitScale: plants.eraUnitScale,
               marketSharePercent: growthShare,
-              nationalMarketSharePercent: nationalShare(sectorCountryId, sector.sectorType),
+              nationalMarketSharePercent: nationalShare(
+                sectorCountryId,
+                sector.sectorType,
+                sector.industryModel
+              ),
               primeRate: plants.primeRateOf(sectorCountryId),
               acumen: NEUTRAL_STAT,
               hostCostOfLivingIndex: plants.costOfLivingOf(sector.stateId),
@@ -1831,6 +1853,7 @@ export function makeNppCorpDecision(
       // Keep the breakdown for capacity-decision telemetry.
       const reinvestPrice = computeBuildCost({
         sectorType: sector.sectorType,
+        industryModel: sector.industryModel,
         units,
         strategyId: sector.strategyId ?? null,
         year: plants.year,
@@ -1838,7 +1861,8 @@ export function makeNppCorpDecision(
         marketSharePercent,
         nationalMarketSharePercent: nationalShare(
           sector.countryId ?? corp.countryId,
-          sector.sectorType
+          sector.sectorType,
+          sector.industryModel
         ),
         primeRate: plants.primeRateOf(sector.countryId ?? corp.countryId),
         // An NPP CEO is an NPP, not a Character — no Business Acumen to read.
@@ -1981,7 +2005,7 @@ export function makeNppCorpDecision(
     strategy: strategyDecision?.state,
     capacityObservations,
     operatorObservation: buildNppOperatorObservation({
-      sectorType: corp.type,
+      sectorType: operatingCorpType,
       cashNegative: cashLocal < 0,
       passive: false,
       profitable: isProfitable,

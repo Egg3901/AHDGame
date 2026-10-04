@@ -86,6 +86,49 @@ beforeEach(async () => {
 });
 
 describe("GET /api/corporations/[id]/expand-suggestions (mode=unowned)", () => {
+  it("queries the vehicle-model market for a manufacturing vehicle corporation", async () => {
+    db.collectionMocks.gameConfig.findOne.mockResolvedValue({
+      _id: "default",
+      marketSystemMode: "plants",
+    });
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      _id: "current",
+      currentYear: 1991,
+      currentTurn: 1,
+    });
+    const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
+    vi.mocked(resolveCorporation).mockResolvedValue({
+      ok: true,
+      corporation: {
+        _id: new ObjectId(),
+        userId: "user1",
+        countryId: "US",
+        type: "manufacturing",
+        industryModel: "vehicles",
+        liquidCapital: 1_000_000,
+      },
+    } as never);
+    const unownedFilters: unknown[] = [];
+    db.collectionMocks.unownedSectors.find.mockImplementation((filter) => {
+      unownedFilters.push(filter);
+      return {
+        project: vi.fn().mockReturnThis(),
+        toArray: vi.fn().mockResolvedValue([]),
+      } as never;
+    });
+    db.collectionMocks.tradeFlowSnapshots.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    } as never);
+    db.collectionMocks.commodityPrices.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    } as never);
+
+    const response = await GET(makeRequest("sectorType=manufacturing&mode=unowned"), ctx());
+
+    expect(response.status).toBe(200);
+    expect(unownedFilters[0]).toEqual({ sectorType: "manufacturing", industryModel: "vehicles" });
+  });
+
   it("surfaces the temporary Retail expansion pause before offering greenfield builds", async () => {
     db.collectionMocks.gameConfig.findOne.mockResolvedValue({
       _id: "default",

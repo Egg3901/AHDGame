@@ -20,7 +20,10 @@
  */
 import type { CorporationType } from "@/lib/constants/corporations";
 import { unitYieldForSupply } from "@/lib/constants/capacityEconomy";
-import { getEffectiveStrategyRates, getStrategy } from "@/lib/constants/sectorStrategies";
+import {
+  getEffectiveStrategyRatesForOperatingModel,
+  getStrategyForOperatingModel,
+} from "@/lib/constants/sectorStrategies";
 
 /**
  * Owned stock and paid orders convert to the destination unit at retool time.
@@ -30,6 +33,7 @@ import { getEffectiveStrategyRates, getStrategy } from "@/lib/constants/sectorSt
  */
 interface RetoolCapacityBasis {
   sectorType: CorporationType;
+  industryModel?: string | null;
   strategyId?: string | null;
   transitionFromStrategyId?: string | null;
   transitionStartTurn?: number | null;
@@ -55,15 +59,20 @@ export function retoolOperatingCapacityRatio(args: RetoolCapacityBasis): number 
  */
 export function retoolBlendRatio(args: Omit<RetoolCapacityBasis, "retoolRescaleApplied">): number {
   if (!args.transitionFromStrategyId) return 1;
-  const effective = getEffectiveStrategyRates(
+  const effective = getEffectiveStrategyRatesForOperatingModel(
     args.sectorType,
     args.strategyId ?? "standard",
     args.transitionFromStrategyId,
     args.transitionStartTurn,
-    args.currentTurn
+    args.currentTurn,
+    args.industryModel
   );
   if (!effective.isTransitioning) return 1;
-  const target = getStrategy(args.sectorType, args.strategyId ?? "standard");
+  const target = getStrategyForOperatingModel(
+    args.sectorType,
+    args.strategyId ?? "standard",
+    args.industryModel
+  );
   const targetYield = unitYieldForSupply(target.supply, 1);
   const effectiveYield = unitYieldForSupply(effective.supply, 1);
   const ratio = effectiveYield / targetYield;

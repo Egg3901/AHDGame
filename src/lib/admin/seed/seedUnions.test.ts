@@ -6,7 +6,15 @@ import { BASE_APPROVAL } from "@/lib/unions/unionDues";
 
 function makeDb(
   countryIds: string[],
-  opts: { worldUnions?: { _id: ObjectId; countryId: string; sectorType: string }[] } = {}
+  opts: {
+    worldUnions?: {
+      _id: ObjectId;
+      countryId: string;
+      sectorType: string;
+      industryModel?: string;
+    }[];
+    modelSectors?: { countryId: string; sectorType: string; industryModel: string }[];
+  } = {}
 ) {
   // Resolves like the real driver: `upsertedCount` is the number of ops that
   // inserted, which is what the seeder reports back.
@@ -23,6 +31,9 @@ function makeDb(
   const unionsFind = vi
     .fn()
     .mockReturnValue({ toArray: () => Promise.resolve(opts.worldUnions ?? []) });
+  const sectorsFind = vi
+    .fn()
+    .mockReturnValue({ toArray: () => Promise.resolve(opts.modelSectors ?? []) });
 
   const db = {
     collection: (name: string) => {
@@ -35,7 +46,7 @@ function makeDb(
       ) {
         return { deleteMany };
       }
-      if (name === "corporateSectors") return { bulkWrite: sectorBulkWrite };
+      if (name === "corporateSectors") return { bulkWrite: sectorBulkWrite, find: sectorsFind };
       throw new Error(`unexpected collection ${name}`);
     },
   } as unknown as Db;
@@ -76,6 +87,24 @@ describe("seedUnions", () => {
     await seedUnions(db, () => {}, "2019-default", true);
 
     expect(deleteMany).toHaveBeenCalledTimes(4);
+  });
+
+  it("adds a separate model-keyed union for vehicle manufacturing", async () => {
+    const { db, bulkWrite } = makeDb(["US"], {
+      modelSectors: [{ countryId: "US", sectorType: "manufacturing", industryModel: "vehicles" }],
+    });
+    await seedUnions(db, () => {}, "1991-default", false);
+    const operations = bulkWrite.mock.calls[0][0];
+    expect(operations).toHaveLength(18);
+    const vehicleUnion = operations.find(
+      (op: { updateOne: { filter: Record<string, unknown> } }) =>
+        op.updateOne.filter.industryModel === "vehicles"
+    );
+    expect(vehicleUnion?.updateOne.filter).toMatchObject({
+      countryId: "US",
+      sectorType: "manufacturing",
+      industryModel: "vehicles",
+    });
   });
 
   it("hands each world-seeded union representation of its own (countryId, sectorType) sectors that nobody holds yet", async () => {

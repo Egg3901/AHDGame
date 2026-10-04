@@ -16,7 +16,10 @@ export function getSectorOperatingCountryId(
 }
 
 export function getCorporateSectorLocationKey(
-  sector: Pick<CorporateSector, "corporationId" | "stateId" | "sectorType" | "countryId">,
+  sector: Pick<
+    CorporateSector,
+    "corporationId" | "stateId" | "sectorType" | "industryModel" | "countryId"
+  >,
   stateCountryByStateId: ReadonlyMap<string, CountryId>
 ): string {
   return [
@@ -24,6 +27,7 @@ export function getCorporateSectorLocationKey(
     getSectorOperatingCountryId(sector, stateCountryByStateId),
     sector.stateId,
     sector.sectorType,
+    sector.industryModel ?? "",
   ].join(":");
 }
 
@@ -32,7 +36,9 @@ export function isCorporateSectorDuplicateKey(error: unknown): error is MongoSer
     error instanceof MongoServerError &&
     error.code === 11000 &&
     (!!error.keyPattern?.corporationId ||
-      /\bcorporationId_1_stateId_1_sectorType_1\b/.test(error.message) ||
-      /\bcorporateSectors_corporationId_stateId_sectorType\b/.test(error.message))
+      /\bcorporationId_1_stateId_1_sectorType_1(?:_industryModel_1)?\b/.test(error.message) ||
+      /\bcorporateSectors_corporationId_stateId_sectorType(?:_industryModel)?\b/.test(
+        error.message
+      ))
   );
 }

@@ -72,6 +72,7 @@ export async function processUnownedSectorGrowth(db: Db): Promise<number> {
             projection: {
               stateId: 1,
               sectorType: 1,
+              industryModel: 1,
               revenue: 1,
               corporationId: 1,
               nationalizedAtTurn: 1,
@@ -102,7 +103,7 @@ export async function processUnownedSectorGrowth(db: Db): Promise<number> {
   if (!plantsEnabled) {
     for (const sector of corpSectors) {
       const rate = Number.isFinite(sector.currentGrowthRate) ? sector.currentGrowthRate : 0;
-      const key = `${sector.stateId}:${sector.sectorType}`;
+      const key = bucketKey(sector.stateId, sector.sectorType, sector.industryModel);
       const acc = growthAccum.get(key) ?? { sum: 0, count: 0 };
       acc.sum += rate;
       acc.count += 1;
@@ -129,7 +130,7 @@ export async function processUnownedSectorGrowth(db: Db): Promise<number> {
   const now = new Date();
   const ops = unownedSectors.map((u) => {
     if (plantsEnabled) {
-      const key = bucketKey(u.stateId, u.sectorType);
+      const key = bucketKey(u.stateId, u.sectorType, u.industryModel);
       // Nationalized bucket: frozen, same as the legacy path.
       const annualRate = stateControlled.has(key)
         ? 0
@@ -143,14 +144,16 @@ export async function processUnownedSectorGrowth(db: Db): Promise<number> {
         u.sectorType as CorporationType,
         u.headroomUnits,
         u.revenue,
-        eraUnitScale
+        eraUnitScale,
+        u.industryModel
       );
       const newUnits = Math.max(0, currentUnits * (1 + perTurnRate / 100));
       // `revenue` is the derived legacy view here — reconstructed FROM the units
       // rather than grown separately, so the two can never drift apart.
       const unitsPerAnchor = unownedHeadroomUnitsPerAnchor(
         u.sectorType as CorporationType,
-        eraUnitScale
+        eraUnitScale,
+        u.industryModel
       );
       const newRevenue =
         unitsPerAnchor > 0 ? Math.max(0, Math.round(newUnits / unitsPerAnchor)) : 0;
@@ -163,7 +166,7 @@ export async function processUnownedSectorGrowth(db: Db): Promise<number> {
         },
       };
     }
-    const key = bucketKey(u.stateId, u.sectorType);
+    const key = bucketKey(u.stateId, u.sectorType, u.industryModel);
     const acc = growthAccum.get(key);
     // State-controlled bucket: freeze the unowned pool (no regrowth) so the
     // nationalized sector doesn't re-fragment turn over turn.

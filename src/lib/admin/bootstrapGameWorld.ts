@@ -56,6 +56,11 @@ import { getPresetSeats } from "@/lib/constants/historicalSeats";
 import { initializeOfficials } from "@/lib/admin/bootstrap/initializeOfficials";
 import { shouldSeedHistoricalOfficials } from "@/lib/admin/seed/historicalSeedGate";
 import {
+  completeFresh1991VehicleModelSeed,
+  convertFresh1991AutomobileSeedRows,
+  prepareFresh1991VehicleModelSeed,
+} from "@/lib/admin/seed/fresh1991VehicleModelSeed";
+import {
   seedStatePolicies,
   seedBudgets,
   seedUkBudgets,
@@ -261,6 +266,8 @@ export interface BootstrapOptions {
   preset?: string;
   skipRegionalCouncil?: boolean;
   resetReference?: boolean;
+  /** Internal, reset-wrapper-only opt-in for the fresh 1991 vehicle seed. */
+  fresh1991VehicleModelSeed?: boolean;
   /** If true, only run seeders — skip election spawning, official seeding, and game state init */
   seedOnly?: boolean;
   /**
@@ -672,6 +679,27 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
   const log = options.log ?? (() => {});
   const { db } = options;
 
+  // The industry-model unique keys must land before any 1991 seed writer can
+  // create vehicle markets beside generic manufacturing. The migration is also
+  // part of the deploy registry; running it here covers reset/bootstrap flows
+  // where reference seeders run before the later, purpose-limited fund pass.
+  const industryModelMarketIndexes = MIGRATIONS.filter(
+    (migration) => migration.id === "2026-10-04-industry-model-market-indexes"
+  );
+  if (industryModelMarketIndexes.length > 0) {
+    await runMigrations(db, { migrations: industryModelMarketIndexes, dryRun: false });
+  }
+
+  // This marker is opt-in only from resetAndBootstrapGameWorld. Its first call
+  // requires an empty economic world, so an existing save can never be healed
+  // or converted by a routine bootstrap/reseed.
+  const freshVehicleSeed = await prepareFresh1991VehicleModelSeed(db, {
+    enabled: options.fresh1991VehicleModelSeed === true,
+    preset,
+    resetReference,
+    dryRun: false,
+  });
+
   // Contain a RECOVERABLE block. Without a run record this is a bare call, so
   // direct callers are unaffected.
   //
@@ -736,6 +764,13 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
   await seedAtBudgets(db, resetReference, log, preset);
   await seedFiBudgets(db, resetReference, log, preset);
   await seedDdBudgets(db, resetReference, log, preset);
+
+  if (freshVehicleSeed.enabled) {
+    const converted = await convertFresh1991AutomobileSeedRows(db);
+    log(
+      `[manufacturing-vehicles] fresh seed re-keyed ${converted.corporations} corporations and ${converted.sectors} sectors`
+    );
+  }
 
   // Warsaw-Pact BUDGETS. The countries themselves are seeded in
   // `seedAllCountryData` with every other country pack; only their budgets live
@@ -833,7 +868,9 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
   // world leaves the $setOnInsert market docs frozen at the old scale (the
   // 2026-05 1991-reset bug). A soft idempotent fill (resetReference=false)
   // stays insert-only so any captured pools on a live world are preserved.
-  await guarded("seedUnownedSectors", () => seedUnownedSectors(db, log, 1, preset, resetReference));
+  await guarded("seedUnownedSectors", () =>
+    seedUnownedSectors(db, log, 1, preset, resetReference, undefined, freshVehicleSeed.enabled)
+  );
   await guarded("seedUnions", () => seedUnions(db, log, preset, resetReference));
   await seedIndexes(db, log);
   await seedCountyMapData(log);
@@ -877,7 +914,13 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
   // worlds are populated too — corps are economic, not political.
   await guarded("seedNppCorporations", async () => {
     const { seedNppCorporations } = await import("@/lib/admin/seed/seedNppCorporations");
-    const r = await seedNppCorporations(db, preset, getStartingYearForPreset(preset), log);
+    const r = await seedNppCorporations(
+      db,
+      preset,
+      getStartingYearForPreset(preset),
+      log,
+      freshVehicleSeed.enabled
+    );
     log(`NPP corporations seeded: ${r.totalSpawned} corps`);
   });
 
@@ -917,6 +960,7 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
   );
 
   if (seedOnly) {
+    if (freshVehicleSeed.enabled) await completeFresh1991VehicleModelSeed(db);
     log("Seed-only complete — skipped elections, officials, and game state init");
     return;
   }
@@ -1458,6 +1502,8 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
     partyBudget: partyBudgetCount,
     unownedSectors: unownedSectorCount,
   };
+
+  if (freshVehicleSeed.enabled) await completeFresh1991VehicleModelSeed(db);
 
   log("Bootstrap summary:");
   log(`- states: ${summary.states}`);

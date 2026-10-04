@@ -29,6 +29,7 @@ export interface StockExchangeListing {
    */
   tickerSymbol?: string;
   type: string;
+  industryModel?: string | null;
   typeLabel: string;
   headquartersState: string;
   headquartersStateName: string;

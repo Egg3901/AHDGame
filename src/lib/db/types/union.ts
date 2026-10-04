@@ -46,6 +46,8 @@ export interface Union {
   _id: ObjectId;
   countryId: CountryId;
   sectorType: CorporationType;
+  /** Optional model identity; absent/null keeps legacy and generic unions readable. */
+  industryModel?: string | null;
   /** Era-appropriate seeded display name (historical where possible, generic fallback). */
   name: string;
   /**

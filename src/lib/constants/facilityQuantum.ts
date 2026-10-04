@@ -30,6 +30,7 @@
  */
 
 import type { CorporationType } from "@/lib/constants/corporations";
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 
 /**
  * The daily nameplate revenue one facility should represent, in modern ₳.
@@ -60,8 +61,9 @@ const FACILITY_SIZE_UNITS: Record<CorporationType, number> = {
 };
 
 /** Capacity units in one facility of `sectorType`. Always a positive integer. */
-export function plantSizeUnits(sectorType: CorporationType): number {
-  return FACILITY_SIZE_UNITS[sectorType] ?? 1;
+export function plantSizeUnits(sectorType: CorporationType, industryModel?: string | null): number {
+  const operatingType = getOperatingSectorType(sectorType, industryModel) as CorporationType;
+  return FACILITY_SIZE_UNITS[operatingType] ?? 1;
 }
 
 /**
@@ -69,7 +71,11 @@ export function plantSizeUnits(sectorType: CorporationType): number {
  * holding less than one facility's worth still shows 1 when it has any
  * capacity at all — a player owns "a small plant", not "0 plants".
  */
-export function facilitiesFromUnits(sectorType: CorporationType, units: number): number {
+export function facilitiesFromUnits(
+  sectorType: CorporationType,
+  units: number,
+  industryModel?: string | null
+): number {
   if (!Number.isFinite(units) || units <= 0) return 0;
-  return Math.max(1, Math.floor(units / plantSizeUnits(sectorType)));
+  return Math.max(1, Math.floor(units / plantSizeUnits(sectorType, industryModel)));
 }

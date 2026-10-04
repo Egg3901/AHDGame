@@ -5,6 +5,7 @@ import type { SentimentPulse } from "@/lib/db/types/sentimentPulse";
 import { computeSentimentMultiplier, getHqConfidenceSentiment } from "./sentimentEngine";
 import { computeOrderFlowMultiplier } from "./orderFlowEngine";
 import { loadActiveFtaPairs } from "@/lib/tariffs/ftaOverrides";
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 
 export interface ApplyPriceMultipliersResult {
   updated: number;
@@ -88,10 +89,10 @@ export async function applyPriceMultipliers(db?: Db): Promise<ApplyPriceMultipli
   for (const sector of sectors) {
     const corpId = sector.corporationId.toString();
     const sectorKeys = operatingSectorKeysByCorpId.get(corpId) ?? new Set<string>();
-    sectorKeys.add(`${sector.countryId}:${sector.sectorType}`);
+    sectorKeys.add(`${sector.countryId}:${sector.sectorType}:${sector.industryModel ?? ""}`);
     operatingSectorKeysByCorpId.set(corpId, sectorKeys);
     const sectorTypes = operatingSectorTypesByCorpId.get(corpId) ?? new Set<string>();
-    sectorTypes.add(sector.sectorType);
+    sectorTypes.add(getOperatingSectorType(sector.sectorType, sector.industryModel));
     operatingSectorTypesByCorpId.set(corpId, sectorTypes);
   }
 
@@ -101,7 +102,7 @@ export async function applyPriceMultipliers(db?: Db): Promise<ApplyPriceMultipli
     const corpId = corp._id.toString();
     const sectorTypes = [
       ...(operatingSectorTypesByCorpId.get(corpId) ?? new Set<string>()),
-      ...(corp.type ? [corp.type] : []),
+      ...(corp.type ? [getOperatingSectorType(corp.type, corp.industryModel)] : []),
       ...(corp.secondaryType ? [corp.secondaryType] : []),
     ];
     const operatingSectorKeys = operatingSectorKeysByCorpId.get(corpId) ?? new Set<string>();

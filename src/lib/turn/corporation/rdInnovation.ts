@@ -200,7 +200,8 @@ export function processRdInnovations(
           update: plantCapacityDeltaPipeline(
             sector.sectorType,
             Math.round(deltaCapacity * 100) / 100,
-            { updatedAt: now }
+            { updatedAt: now },
+            sector.industryModel
           ),
         },
       });

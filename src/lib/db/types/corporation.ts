@@ -160,6 +160,8 @@ export interface Corporation {
   tickerSymbol?: string;
   description?: string;
   type: CorporationType;
+  /** Specialized model identity when the primary type is manufacturing. */
+  industryModel?: ManufacturingIndustryModel | null;
   /** Optional secondary sector focus, halves sector match bonus, doubles base sprawl threshold */
   secondaryType?: CorporationType | null;
   /** Turn when primary/secondary type was last switched (for penalty duration) */

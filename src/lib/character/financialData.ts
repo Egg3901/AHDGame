@@ -155,6 +155,7 @@ export async function getFinancialData(characterId: ObjectId) {
           sequentialId: corporation.sequentialId,
           name: corporation.name,
           type: corporation.type,
+          industryModel: corporation.industryModel ?? null,
           liquidCapital: corporation.liquidCapital,
           liquidCurrencyCode: corporation.liquidCurrencyCode ?? null,
           headquartersState: corporation.headquartersState,

@@ -4,11 +4,13 @@ import { normalizeAndMergeCorporateSectors } from "@/lib/corporations/repairDupl
 import { assertUniqueCorporationSequentialIds } from "./assertUniqueCorporationIds";
 import { ensureIndex } from "./helpers";
 
-const CORPORATE_SECTOR_IDENTITY_INDEX_NAME = "corporateSectors_corporationId_stateId_sectorType";
+const CORPORATE_SECTOR_IDENTITY_INDEX_NAME =
+  "corporateSectors_corporationId_stateId_sectorType_industryModel";
 const CORPORATE_SECTOR_IDENTITY_INDEX_KEY = {
   corporationId: 1,
   stateId: 1,
   sectorType: 1,
+  industryModel: 1,
 } as const;
 
 function hasCorporateSectorIdentityIndex(
