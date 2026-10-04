@@ -34,14 +34,20 @@ export async function detectPreIterationComplete(
 ): Promise<{ completed: boolean }> {
   const gameState = await db
     .collection<GameState>("gameState")
-    .findOne({ _id: "current" }, { projection: { preIteration: 1 } });
+    .findOne(
+      { _id: "current" },
+      { projection: { preIteration: 1, preset: 1, startingPartiesMode: 1 } }
+    );
   if (!gameState?.preIteration?.active) return { completed: false };
 
   const elections = db.collection<Election>("elections");
   const [pending, resolvedElections] = await Promise.all([
     elections.countDocuments({ cycle: 0, status: { $in: ["active", "upcoming"] } }),
     elections
-      .find({ cycle: 0, status: { $in: ["completed", "resolved"] } }, { projection: { _id: 1 } })
+      .find(
+        { cycle: 0, status: { $in: ["completed", "resolved"] } },
+        { projection: { _id: 1, status: 1 } }
+      )
       .toArray(),
   ]);
 
@@ -57,8 +63,7 @@ export async function detectPreIterationComplete(
       .collection("electionCandidates")
       .aggregate([
         { $match: { electionId: { $in: resolvedIds } } },
-        { $group: { _id: "$electionId" } },
-        { $count: "count" },
+        { $group: { _id: "$electionId", candidates: { $sum: 1 } } },
       ])
       .toArray(),
     db
@@ -82,14 +87,29 @@ export async function detectPreIterationComplete(
             },
           },
         },
-        { $group: { _id: "$electionId" } },
-        { $count: "count" },
+        { $group: { _id: "$electionId", tallies: { $sum: 1 } } },
       ])
       .toArray(),
   ]);
-  const candidatesCovered = (candidateCoverage[0] as { count?: number } | undefined)?.count ?? 0;
-  const talliesCovered = (tallyCoverage[0] as { count?: number } | undefined)?.count ?? 0;
-  if (candidatesCovered !== resolvedIds.length || talliesCovered !== resolvedIds.length) {
+  const candidatesByElection = new Set(
+    candidateCoverage.map((row) => String((row as { _id: unknown })._id))
+  );
+  const talliesByElection = new Set(
+    tallyCoverage.map((row) => String((row as { _id: unknown })._id))
+  );
+  const partyless1991 =
+    gameState.preset === "1991-default" && gameState.startingPartiesMode === "none";
+  const incomplete = resolvedElections.some((election) => {
+    const id = String(election._id);
+    const hasCandidates = candidatesByElection.has(id);
+    const hasVotes = talliesByElection.has(id);
+    if (hasCandidates && hasVotes) return false;
+    // A playerless 1991 founding can legitimately have no candidacy for a
+    // race such as the US presidency, where NPP entry is barred. Only a
+    // terminally resolved, truly empty ballot may complete without coverage.
+    return !(partyless1991 && election.status === "resolved" && !hasCandidates && !hasVotes);
+  });
+  if (incomplete) {
     return { completed: false };
   }
 

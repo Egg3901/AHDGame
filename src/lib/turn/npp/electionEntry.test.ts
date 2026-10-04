@@ -841,11 +841,12 @@ describe("processElectionEntry — OPS regime gating", () => {
     expect(db.collectionMocks.electionCandidates.insertOne).toHaveBeenCalledTimes(1);
   });
 
-  it("still lets an independent NPP enter a US primary (gate is no-op for non-OPS)", async () => {
+  it("lets a partyless founding independent enter a US cycle-0 primary", async () => {
     const election = createTestElection({
       countryId: "US",
       electionType: "house",
       state: "CA",
+      cycle: 0,
     });
     const npp = createTestNpp({
       countryId: "US",
