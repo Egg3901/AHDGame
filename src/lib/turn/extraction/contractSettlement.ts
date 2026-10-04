@@ -23,7 +23,11 @@ import type { CountryId } from "@/lib/constants/countries";
 import { CONTRACT_DEFAULT_MISSED_PAYMENTS } from "@/lib/constants/prospecting";
 import { loadTreasuryCashContext } from "@/lib/nationalization/treasuryLedger";
 import { treasuryAnchorValuation } from "@/lib/budget/rules/treasuryAccrual";
-import { resumeSettlement, settleTransition } from "@/lib/banking/settlementJournal";
+import {
+  resumeSettlement,
+  settleTransition,
+  type SettlementResult,
+} from "@/lib/banking/settlementJournal";
 import { oid, type BankingTransition } from "@/lib/banking/rules/boundary";
 
 export interface ContractSettlementResult {
@@ -63,33 +67,115 @@ function stableRoyaltyLogId(key: string): ObjectId {
   return new ObjectId(createHash("sha256").update(key).digest("hex").slice(0, 24));
 }
 
+interface FrozenRoyaltyQuote {
+  turn: number;
+  anchorAmount: number;
+  amountCorp: number;
+  sourceCurrency: CurrencyCode;
+  sourceLocalPerAnchor: number;
+  amountTreasury: number;
+  treasuryCurrency: CurrencyCode;
+  treasuryLocalPerAnchor: number;
+  metadata: {
+    contractId: string;
+    stateId: string;
+    resource: string;
+    grantedByLevel: string;
+  };
+}
+
+interface FundedRoyaltyReceipt {
+  _id: string;
+  turn?: number;
+  event?: { meta?: Record<string, unknown> };
+}
+
+function isCompletedSettlement(result: SettlementResult): boolean {
+  return result.status === "applied" || (result.status === "replayed" && !result.error);
+}
+
+function isValuedQuoteConflict(result: SettlementResult): boolean {
+  return (
+    result.status === "rejected" &&
+    result.error?.includes("already owns a different valued settlement quote") === true
+  );
+}
+
+function parseFrozenRoyaltyQuote(receipt: FundedRoyaltyReceipt): FrozenRoyaltyQuote {
+  const meta = receipt.event?.meta ?? {};
+  const numeric = [
+    receipt.turn,
+    meta.anchorAmount,
+    meta.amountCorp,
+    meta.sourceLocalPerAnchor,
+    meta.amountTreasury,
+    meta.treasuryLocalPerAnchor,
+  ].map(Number);
+  const [turn, anchorAmount, amountCorp, sourceRate, amountTreasury, treasuryRate] = numeric;
+  const sourceCurrency = meta.sourceCurrency;
+  const treasuryCurrency = meta.treasuryCurrency;
+  if (
+    numeric.some((value) => !Number.isFinite(value)) ||
+    !Number.isInteger(turn) ||
+    typeof sourceCurrency !== "string" ||
+    typeof treasuryCurrency !== "string"
+  ) {
+    throw new Error(`National royalty receipt ${receipt._id} is missing its frozen quote`);
+  }
+  return {
+    turn,
+    anchorAmount,
+    amountCorp,
+    sourceCurrency: sourceCurrency as CurrencyCode,
+    sourceLocalPerAnchor: sourceRate,
+    amountTreasury,
+    treasuryCurrency: treasuryCurrency as CurrencyCode,
+    treasuryLocalPerAnchor: treasuryRate,
+    metadata: {
+      contractId: typeof meta.contractId === "string" ? meta.contractId : receipt._id,
+      stateId: typeof meta.stateId === "string" ? meta.stateId : "",
+      resource: typeof meta.resource === "string" ? meta.resource : "",
+      grantedByLevel: typeof meta.grantedByLevel === "string" ? meta.grantedByLevel : "",
+    },
+  };
+}
+
+async function loadFundedRoyaltyReceipt(db: Db, key: string): Promise<FundedRoyaltyReceipt | null> {
+  return db
+    .collection<FundedRoyaltyReceipt>("bankMoneyMoves")
+    .findOne({ _id: key }, { projection: { _id: 1, turn: 1, event: 1 } });
+}
+
+async function resumeFrozenRoyaltyReceipt(db: Db, key: string): Promise<FrozenRoyaltyQuote> {
+  const resumed = await resumeSettlement(db, key);
+  if (!isCompletedSettlement(resumed)) {
+    throw new Error(resumed.error ?? `National royalty receipt ${key} is incomplete`);
+  }
+  const receipt = await loadFundedRoyaltyReceipt(db, key);
+  if (!receipt) throw new Error(`National royalty receipt ${key} disappeared during recovery`);
+  return parseFrozenRoyaltyQuote(receipt);
+}
+
 async function emitFundedRoyaltyLogs(
   db: Db,
   thresholds: Awaited<ReturnType<typeof loadTxThresholds>>,
   contract: ExtractionContract,
   corp: Corporation | undefined,
-  turn: number,
   now: Date,
   receiptKey: string,
-  quote: {
-    anchorAmount: number;
-    amountCorp: number;
-    sourceCurrency: CurrencyCode;
-    amountTreasury: number;
-    treasuryCurrency: CurrencyCode;
-  }
+  quote: FrozenRoyaltyQuote
 ): Promise<void> {
   const sharedMeta = {
-    contractId: contract._id.toString(),
-    stateId: contract.stateId,
-    resource: contract.resource,
-    grantedByLevel: contract.grantedByLevel,
+    contractId: quote.metadata.contractId || contract._id.toString(),
+    stateId: quote.metadata.stateId || contract.stateId,
+    resource: quote.metadata.resource || contract.resource,
+    grantedByLevel: quote.metadata.grantedByLevel || contract.grantedByLevel,
   };
   await emitTx(
     db,
     {
       type: "contract_royalty_payment",
-      turn,
+      turn: quote.turn,
       createdAt: now,
       subjectType: "corporation",
       subjectId: contract.corporationId,
@@ -106,7 +192,7 @@ async function emitFundedRoyaltyLogs(
     db,
     {
       type: "govt_royalty_receipt",
-      turn,
+      turn: quote.turn,
       createdAt: now,
       subjectType: "government",
       countryId: contract.countryId,
@@ -212,8 +298,8 @@ export async function settleExtractionContracts(
     : [];
   const royaltyReceipts = treasuryCashLedgerEnabled
     ? await db
-        .collection<{ _id: string; event?: { meta?: Record<string, unknown> } }>("bankMoneyMoves")
-        .find({ _id: { $in: royaltyReceiptKeys } }, { projection: { _id: 1, event: 1 } })
+        .collection<FundedRoyaltyReceipt>("bankMoneyMoves")
+        .find({ _id: { $in: royaltyReceiptKeys } }, { projection: { _id: 1, turn: 1, event: 1 } })
         .toArray()
     : [];
   const royaltyReceiptByKey = new Map(royaltyReceipts.map((receipt) => [receipt._id, receipt]));
@@ -259,51 +345,28 @@ export async function settleExtractionContracts(
       continue;
     }
 
+    const receiptKey = `extraction-royalty:${contract._id.toString()}:${turn}`;
+    const priorRoyaltyReceipt = treasuryCashLedgerEnabled
+      ? royaltyReceiptByKey.get(receiptKey)
+      : undefined;
     const fundedNational =
       treasuryCashLedgerEnabled &&
-      (contract.grantedByLevel === "national" ||
+      (priorRoyaltyReceipt !== undefined ||
+        contract.grantedByLevel === "national" ||
         !stateBudgetKeys.has(`${contract.stateId}|${contract.countryId}`));
-
-    const receiptKey = `extraction-royalty:${contract._id.toString()}:${turn}`;
-    const priorRoyaltyReceipt = fundedNational ? royaltyReceiptByKey.get(receiptKey) : undefined;
     if (priorRoyaltyReceipt) {
-      const resumed = await resumeSettlement(db, receiptKey);
-      if (resumed.status !== "applied" && resumed.status !== "replayed") {
-        throw new Error(resumed.error ?? `National royalty receipt ${receiptKey} is incomplete`);
-      }
-      const meta = priorRoyaltyReceipt.event?.meta ?? {};
-      const anchorAmount = Number(meta.anchorAmount);
-      const amountCorp = Number(meta.amountCorp);
-      const amountTreasury = Number(meta.amountTreasury);
-      const sourceCurrency = meta.sourceCurrency;
-      const treasuryCurrency = meta.treasuryCurrency;
-      if (
-        !Number.isFinite(anchorAmount) ||
-        !Number.isFinite(amountCorp) ||
-        !Number.isFinite(amountTreasury) ||
-        typeof sourceCurrency !== "string" ||
-        typeof treasuryCurrency !== "string"
-      ) {
-        throw new Error(`National royalty receipt ${receiptKey} is missing its frozen quote`);
-      }
+      const resumed = await resumeFrozenRoyaltyReceipt(db, receiptKey);
       await emitFundedRoyaltyLogs(
         db,
         thresholds,
         contract,
         corpById.get(contract.corporationId.toString()),
-        turn,
         now,
         receiptKey,
-        {
-          anchorAmount,
-          amountCorp,
-          sourceCurrency: sourceCurrency as CurrencyCode,
-          amountTreasury,
-          treasuryCurrency: treasuryCurrency as CurrencyCode,
-        }
+        resumed
       );
       result.royaltiesPaid += 1;
-      result.totalRoyaltyAnchor += anchorAmount;
+      result.totalRoyaltyAnchor += resumed.anchorAmount;
       result.contractsSettled += 1;
       continue;
     }
@@ -393,7 +456,16 @@ export async function settleExtractionContracts(
     }
 
     const corpCode = resolveCorpLiquidCurrencyCode(corp);
-    const corpFxRate = corpCode ? (fxByCurrency.get(corpCode) ?? 1) : 1;
+    const corpFxRate = corpCode
+      ? treasuryCashLedgerEnabled
+        ? treasuryAnchorValuation({
+            countryId: corp.countryId ?? contract.countryId,
+            currencyCode: corpCode,
+            preset: treasuryCashContext!.preset,
+            observedRate: fxByCurrency.get(corpCode),
+          }).anchorRate
+        : (fxByCurrency.get(corpCode) ?? 1)
+      : 1;
     const amountCorp = anchorToCorpLiquidCapital(dueAnchor, corp, corpFxRate);
 
     if (fundedNational) {
@@ -524,19 +596,40 @@ export async function settleExtractionContracts(
         },
       };
       const settled = await settleTransition(db, transition);
-      if (settled.status !== "applied" && settled.status !== "replayed") {
+      let settledQuote: FrozenRoyaltyQuote;
+      if (isCompletedSettlement(settled)) {
+        if (settled.status === "replayed") {
+          const receipt = await loadFundedRoyaltyReceipt(db, receiptKey);
+          if (!receipt)
+            throw new Error(`National royalty receipt ${receiptKey} is missing after replay`);
+          settledQuote = parseFrozenRoyaltyQuote(receipt);
+        } else {
+          settledQuote = {
+            turn,
+            anchorAmount: dueAnchor,
+            amountCorp,
+            sourceCurrency,
+            sourceLocalPerAnchor: sourceRate,
+            amountTreasury,
+            treasuryCurrency: countryCurrency,
+            treasuryLocalPerAnchor: treasuryRate,
+            metadata: {
+              contractId: contract._id.toString(),
+              stateId: contract.stateId,
+              resource: contract.resource,
+              grantedByLevel: contract.grantedByLevel,
+            },
+          };
+        }
+      } else if (isValuedQuoteConflict(settled)) {
+        settledQuote = await resumeFrozenRoyaltyReceipt(db, receiptKey);
+      } else {
         throw new Error(settled.error ?? `National royalty receipt ${receiptKey} is incomplete`);
       }
 
-      await emitFundedRoyaltyLogs(db, thresholds, contract, corp, turn, now, receiptKey, {
-        anchorAmount: dueAnchor,
-        amountCorp,
-        sourceCurrency,
-        amountTreasury,
-        treasuryCurrency: countryCurrency,
-      });
+      await emitFundedRoyaltyLogs(db, thresholds, contract, corp, now, receiptKey, settledQuote);
       result.royaltiesPaid += 1;
-      result.totalRoyaltyAnchor += dueAnchor;
+      result.totalRoyaltyAnchor += settledQuote.anchorAmount;
       result.contractsSettled += 1;
       continue;
     }

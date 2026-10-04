@@ -23,7 +23,11 @@ import { creditTreasury, spendFromTreasury } from "@/lib/budget/treasurySpend";
 import { emitTx } from "@/lib/financialTxLog/emit";
 import { treasuryAnchorValuation } from "@/lib/budget/rules/treasuryAccrual";
 import { loadTreasuryCashContext } from "@/lib/nationalization/treasuryLedger";
-import { resumeSettlement, settleTransition } from "@/lib/banking/settlementJournal";
+import {
+  resumeSettlement,
+  settleTransition,
+  type SettlementResult,
+} from "@/lib/banking/settlementJournal";
 import type { BankingTransition } from "@/lib/banking/rules/boundary";
 import {
   writeSectorDemandModifier,
@@ -33,6 +37,51 @@ import {
 } from "./countryModifiers";
 import { applyCivilLibertiesDelta } from "@/lib/politicalMetrics/civilLiberties";
 import type { EventResolveContext } from "./types";
+
+function isCompletedSettlement(result: SettlementResult): boolean {
+  return result.status === "applied" || (result.status === "replayed" && !result.error);
+}
+
+function isValuedQuoteConflict(result: SettlementResult): boolean {
+  return (
+    result.status === "rejected" &&
+    result.error?.includes("already owns a different valued settlement quote") === true
+  );
+}
+
+function parseFundedEventQuote(
+  receipt: { event?: { meta?: Record<string, unknown> } },
+  receiptKey: string
+): { amountLocal: number; currencyCode: string; turn: number } {
+  const meta = receipt.event?.meta ?? {};
+  const amountLocal = Number(meta.amountLocal);
+  const currencyCode = meta.currencyCode;
+  const turn = Number(meta.turn);
+  if (
+    !Number.isFinite(amountLocal) ||
+    typeof currencyCode !== "string" ||
+    !Number.isInteger(turn)
+  ) {
+    throw new Error(`Funded Treasury event receipt ${receiptKey} has no frozen cash quote`);
+  }
+  return { amountLocal, currencyCode, turn };
+}
+
+async function resumeFrozenFundedEvent(
+  db: Db,
+  receiptKey: string
+): Promise<{ amountLocal: number; currencyCode: string; turn: number }> {
+  const resumed = await resumeSettlement(db, receiptKey);
+  if (!isCompletedSettlement(resumed)) {
+    throw new Error(resumed.error ?? `Funded Treasury event receipt ${receiptKey} is incomplete`);
+  }
+  const receipt = await db
+    .collection<{ _id: string; event?: { meta?: Record<string, unknown> } }>("bankMoneyMoves")
+    .findOne({ _id: receiptKey }, { projection: { _id: 1, event: 1 } });
+  if (!receipt)
+    throw new Error(`Funded Treasury event receipt ${receiptKey} disappeared during recovery`);
+  return parseFundedEventQuote(receipt, receiptKey);
+}
 
 function clampStat(value: number): number {
   return Math.max(0, Math.min(100, value));
@@ -256,23 +305,17 @@ async function applyFundedCountryTreasuryDelta(
   );
   if (existing) {
     const resumed = await resumeSettlement(db, receiptKey);
-    if (resumed.status !== "applied" && resumed.status !== "replayed") {
+    if (!isCompletedSettlement(resumed)) {
       throw new Error(resumed.error ?? `Funded Treasury event receipt ${receiptKey} is incomplete`);
     }
-    const meta = existing.event?.meta ?? {};
-    const amountLocal = Number(meta.amountLocal);
-    const currencyCode = meta.currencyCode;
-    const receiptTurn = Number(meta.turn);
-    if (!Number.isFinite(amountLocal) || typeof currencyCode !== "string") {
-      throw new Error(`Funded Treasury event receipt ${receiptKey} has no frozen cash quote`);
-    }
-    if (amountLocal < 0) {
+    const quote = parseFundedEventQuote(existing, receiptKey);
+    if (quote.amountLocal < 0) {
       await emitFundedTreasurySpend(
         db,
         countryId,
-        Number.isFinite(receiptTurn) ? receiptTurn : currentTurn,
-        amountLocal,
-        currencyCode,
+        quote.turn,
+        quote.amountLocal,
+        quote.currencyCode,
         receiptKey
       );
     }
@@ -351,16 +394,35 @@ async function applyFundedCountryTreasuryDelta(
     },
   };
   const settled = await settleTransition(db, transition);
-  if (settled.status !== "applied" && settled.status !== "replayed") {
+  let settledQuote: { amountLocal: number; currencyCode: string; turn: number };
+  if (isCompletedSettlement(settled)) {
+    if (settled.status === "replayed") {
+      const receipt = await journals.findOne(
+        { _id: receiptKey },
+        { projection: { _id: 1, event: 1 } }
+      );
+      if (!receipt)
+        throw new Error(`Funded Treasury event receipt ${receiptKey} is missing after replay`);
+      settledQuote = parseFundedEventQuote(receipt, receiptKey);
+    } else {
+      settledQuote = {
+        amountLocal: isSpend ? -amountLocal : amountLocal,
+        currencyCode,
+        turn: currentTurn,
+      };
+    }
+  } else if (isValuedQuoteConflict(settled)) {
+    settledQuote = await resumeFrozenFundedEvent(db, receiptKey);
+  } else {
     throw new Error(settled.error ?? `Funded Treasury event receipt ${receiptKey} is incomplete`);
   }
-  if (isSpend) {
+  if (settledQuote.amountLocal < 0) {
     await emitFundedTreasurySpend(
       db,
       countryId,
-      currentTurn,
-      -amountLocal,
-      currencyCode,
+      settledQuote.turn,
+      settledQuote.amountLocal,
+      settledQuote.currencyCode,
       receiptKey
     );
   }

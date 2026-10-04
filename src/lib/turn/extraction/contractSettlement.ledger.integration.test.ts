@@ -17,6 +17,43 @@ const NOW = new Date("2026-10-04T00:00:00Z");
 const CORP_ID = new ObjectId("650000000000000000000050");
 const CONTRACT_ID = new ObjectId("650000000000000000000051");
 
+function hideFirstReceiptBatchRead(db: Db, receiptKey: string): Db {
+  let hidden = false;
+  return new Proxy(db, {
+    get(target, property, receiver) {
+      if (property === "collection") {
+        return (name: string) => {
+          const collection = target.collection(name);
+          if (name !== "bankMoneyMoves") return collection;
+          return new Proxy(collection, {
+            get(collectionTarget, collectionProperty, collectionReceiver) {
+              if (collectionProperty === "find") {
+                return (filter: Record<string, unknown>, ...args: unknown[]) => {
+                  const ids = (filter._id as { $in?: string[] } | undefined)?.$in;
+                  if (!hidden && ids?.includes(receiptKey)) {
+                    hidden = true;
+                    return { toArray: async () => [] };
+                  }
+                  const find = Reflect.get(
+                    collectionTarget,
+                    collectionProperty,
+                    collectionReceiver
+                  ) as (...params: unknown[]) => unknown;
+                  return find.apply(collectionTarget, [filter, ...args]);
+                };
+              }
+              const value = Reflect.get(collectionTarget, collectionProperty, collectionReceiver);
+              return typeof value === "function" ? value.bind(collectionTarget) : value;
+            },
+          });
+        };
+      }
+      const value = Reflect.get(target, property, receiver);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
+
 function setup() {
   const db = createInMemoryDb();
   db.seed("gameConfig", [{ _id: "default", treasuryCashLedgerEnabled: true }]);
@@ -122,6 +159,123 @@ describe("funded national extraction royalties", () => {
     expect(db.collection("bankMoneyMoves").docs[0]).toMatchObject({ status: "applied" });
   });
 
+  it("does not treat an in-flight replay as a completed royalty", async () => {
+    const { db } = setup();
+    const receiptKey = `extraction-royalty:${CONTRACT_ID.toString()}:${TURN}`;
+    const fault = withInjectedCrash(db, {
+      collection: "bankMoneyMoves",
+      op: "insertOne",
+      afterWrite: true,
+      onCall: 1,
+      matches: (args) => {
+        return (args[0] as { _id?: string })._id === receiptKey;
+      },
+    });
+
+    await expect(settleExtractionContracts(fault.db, TURN, NOW, true)).rejects.toThrow(
+      "crash after"
+    );
+    fault.disarm();
+    expect(db.collection("bankMoneyMoves").docs[0]?.status).toBe("partial");
+    expect((db.collection("bankMoneyMoves").docs[0]?.legs as { applied: boolean }[]).map((leg) => leg.applied)).toEqual([false, false]);
+    const { emitTx } = await import("@/lib/financialTxLog/emit");
+    vi.clearAllMocks();
+    const recoveryFault = withInjectedCrash(db, {
+      collection: "corporations",
+      op: "updateOne",
+      onCall: 1,
+      matches: (args) => {
+        const update = args[1] as { $inc?: Record<string, number> };
+        return update.$inc?.liquidCapital === -5;
+      },
+    });
+
+    await expect(
+      settleExtractionContracts(
+        hideFirstReceiptBatchRead(recoveryFault.db, receiptKey),
+        TURN,
+        NOW,
+        true
+      )
+    ).rejects.toThrow("crash before corporations.updateOne");
+
+    expect(emitTx).not.toHaveBeenCalled();
+    expect(db.collection("corporations").docs[0]?.liquidCapital).toBe(100);
+    expect(db.collection("federalBudget").docs[0]?.treasuryCashLocal).toBe(10);
+    expect(db.collection("bankMoneyMoves").docs[0]?.status).toBe("partial");
+  });
+
+  it("logs the winning receipt quote when a concurrent caller has stale FX", async () => {
+    const { db } = setup();
+    await db
+      .collection("corporations")
+      .updateOne({ _id: CORP_ID }, { $set: { liquidCurrencyCode: "GBP" } });
+    await db.collection("exchangeRates").insertOne({ currencyCode: "GBP", rate: 2 } as never);
+    resetCorpFxRateCacheForTests();
+    await settleExtractionContracts(db as unknown as Db, TURN, NOW, true);
+
+    const { emitTx } = await import("@/lib/financialTxLog/emit");
+    vi.clearAllMocks();
+    await db.collection("exchangeRates").updateOne({ currencyCode: "GBP" }, { $set: { rate: 8 } });
+    await db
+      .collection("extractionContracts")
+      .updateOne({ _id: CONTRACT_ID }, { $unset: { lastRoyaltyTurn: "" } });
+    resetCorpFxRateCacheForTests();
+    const receiptKey = `extraction-royalty:${CONTRACT_ID.toString()}:${TURN}`;
+
+    await settleExtractionContracts(
+      hideFirstReceiptBatchRead(db as unknown as Db, receiptKey),
+      TURN,
+      NOW,
+      true
+    );
+
+    expect(emitTx).toHaveBeenCalledTimes(2);
+    expect(emitTx.mock.calls[0]?.[1]).toMatchObject({ amount: -10, currencyCode: "GBP" });
+    expect(emitTx.mock.calls[1]?.[1]).toMatchObject({ amount: 5, currencyCode: "USD" });
+    expect(db.collection("corporations").docs[0]?.liquidCapital).toBe(90);
+    expect(db.collection("federalBudget").docs[0]?.treasuryCashLocal).toBe(15);
+  });
+
+  it("resumes a frozen national fallback receipt if a state budget appears before retry", async () => {
+    const { db } = setup();
+    await db
+      .collection("extractionContracts")
+      .updateOne({ _id: CONTRACT_ID }, { $set: { grantedByLevel: "state" } });
+    const fault = withInjectedCrash(db, {
+      collection: "federalBudget",
+      op: "updateOne",
+      afterWrite: true,
+      onCall: 1,
+      matches: (args) => {
+        const update = args[1] as { $inc?: Record<string, number> };
+        return update.$inc?.treasuryCashLocal === 5;
+      },
+    });
+
+    await expect(settleExtractionContracts(fault.db, TURN, NOW, true)).rejects.toThrow(
+      "crash after"
+    );
+    fault.disarm();
+    await db.collection("stateBudgets").insertOne({
+      _id: "TX",
+      countryId: "US",
+      revenue: { total: 0, resourceRoyalties: 0 },
+    } as never);
+    resetCorpFxRateCacheForTests();
+
+    await settleExtractionContracts(db as unknown as Db, TURN, NOW, true);
+
+    expect(db.collection("corporations").docs[0]?.liquidCapital).toBe(95);
+    expect(db.collection("federalBudget").docs[0]?.treasuryCashLocal).toBe(15);
+    expect(db.collection("stateBudgets").docs[0]?.revenue).toMatchObject({
+      total: 0,
+      resourceRoyalties: 0,
+    });
+    expect(db.collection("bankMoneyMoves").docs).toHaveLength(1);
+    expect(db.collection("bankMoneyMoves").docs[0]).toMatchObject({ status: "applied" });
+  });
+
   it("does not create spendable Treasury cash when the payer lacks funds", async () => {
     const { db } = setup();
     await db.collection("corporations").updateOne({ _id: CORP_ID }, { $set: { liquidCapital: 0 } });
@@ -156,5 +310,21 @@ describe("funded national extraction royalties", () => {
     });
     expect(db.collection("bankMoneyMoves").docs).toHaveLength(1);
     expect(db.collection("bankMoneyMoves").docs[0]).toMatchObject({ status: "applied" });
+  });
+
+  it("fails closed when a required non-anchor corporate exchange rate is missing", async () => {
+    const { db } = setup();
+    await db
+      .collection("corporations")
+      .updateOne({ _id: CORP_ID }, { $set: { liquidCurrencyCode: "GBP" } });
+    resetCorpFxRateCacheForTests();
+
+    await expect(settleExtractionContracts(db as unknown as Db, TURN, NOW, true)).rejects.toThrow(
+      /Missing valid treasury-accrual exchange rate for GBP/
+    );
+
+    expect(db.collection("corporations").docs[0]?.liquidCapital).toBe(100);
+    expect(db.collection("federalBudget").docs[0]?.treasuryCashLocal).toBe(10);
+    expect(db.collection("bankMoneyMoves").docs).toHaveLength(0);
   });
 });
