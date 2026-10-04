@@ -12,10 +12,7 @@ import type {
 } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import { CAUCUS_NPP_RETENTION_MIN_RELATIONSHIP } from "@/lib/constants/partyOrg";
-import {
-  buildWhipDefianceSnapshot,
-  type WhipDefianceSnapshot,
-} from "@/lib/partyWhips/whipDefiance";
+import { buildWhipDefianceSnapshots } from "@/lib/partyWhips/whipDefiance";
 
 const CAUCUS_RECENT_WINDOW_TURNS = 12;
 const CAUCUS_WARNING_BUFFER = 10;
@@ -242,18 +239,6 @@ export async function buildPartyCaucusHealthSnapshot(
       .sort({ createdAt: -1 })
       .toArray(),
   ]);
-  const defianceEntries = await Promise.all(
-    caucuses.map(async (caucus): Promise<readonly [string, WhipDefianceSnapshot]> => [
-      caucus._id.toString(),
-      await buildWhipDefianceSnapshot(
-        db,
-        { countryId, partyId, issuedBy: "caucus", caucusId: caucus._id },
-        25,
-        rawWhips
-      ),
-    ])
-  );
-
   const activeNppMemberships = memberships.filter(
     (membership) => membership.status === "active" && membership.memberType === "npp"
   );
@@ -323,6 +308,20 @@ export async function buildPartyCaucusHealthSnapshot(
           .toArray(),
   ]);
 
+  const defianceByCaucusId = await buildWhipDefianceSnapshots(
+    db,
+    caucuses.map((caucus) => ({
+      countryId,
+      partyId,
+      issuedBy: "caucus" as const,
+      caucusId: caucus._id,
+    })),
+    25,
+    rawWhips,
+    memberships,
+    { characters, npps }
+  );
+
   const membershipsByCaucus = new Map<string, CaucusMembership[]>();
   for (const membership of memberships) {
     const key = membership.caucusId.toString();
@@ -361,8 +360,6 @@ export async function buildPartyCaucusHealthSnapshot(
       relationship.relationshipScore,
     ])
   );
-  const defianceByCaucusId = new Map<string, WhipDefianceSnapshot>(defianceEntries);
-
   const caucusHealthItems: CaucusHealthItem[] = caucuses.map((caucus) => {
     const caucusId = caucus._id.toString();
     const caucusMemberships = membershipsByCaucus.get(caucusId) ?? [];

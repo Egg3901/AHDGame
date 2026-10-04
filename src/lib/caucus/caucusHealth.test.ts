@@ -39,6 +39,97 @@ describe("buildPartyCaucusHealthSnapshot", () => {
     expect(db.collectionMocks.billWhips!.find.mock.calls[0][0].caucusId.$in).toHaveLength(3);
   });
 
+  it("loads shared whip target and voter metadata once across caucuses", async () => {
+    const db = createMockDb();
+    const caucuses = ["a", "b", "c"].map((slug) => ({
+      _id: new ObjectId(),
+      slug,
+      countryId: "US",
+      partyId: "1",
+      name: slug,
+      disbandedAt: null,
+    }));
+    const voterIds = caucuses.map(() => new ObjectId());
+    const billIds = caucuses.map(() => new ObjectId());
+    db.collection("caucuses");
+    db.collection("caucusMemberships");
+    db.collection("caucusChairElections");
+    db.collection("characters");
+    db.collection("electedOfficials");
+    db.collection("billWhips");
+    db.collection("bills");
+    db.collectionMocks.caucuses!.find.mockReturnValue({ toArray: async () => caucuses });
+    db.collectionMocks.caucusMemberships!.find.mockReturnValue({
+      toArray: async () =>
+        caucuses.map((caucus, index) => ({
+          _id: new ObjectId(),
+          caucusId: caucus._id,
+          memberType: "character",
+          memberId: voterIds[index],
+          status: "active",
+        })),
+    });
+    db.collectionMocks.billWhips!.find.mockReturnValue({
+      sort() {
+        return this;
+      },
+      toArray: async () =>
+        caucuses.map((caucus, index) => ({
+          _id: new ObjectId(),
+          targetType: "bill",
+          targetId: billIds[index],
+          chamber: "house",
+          direction: "for",
+          issuedBy: "caucus",
+          countryId: "US",
+          partyId: "1",
+          caucusId: caucus._id,
+          audience: "character",
+          mode: "soft",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })),
+    });
+    db.collectionMocks.bills!.find.mockReturnValue({
+      toArray: async () =>
+        billIds.map((billId, index) => ({
+          _id: billId,
+          title: `Bill ${index}`,
+          status: "active",
+          votes: { [voterIds[index]!.toString()]: "against" },
+        })),
+    });
+    db.collectionMocks.characters!.find.mockReturnValue({
+      project() {
+        return this;
+      },
+      toArray: async () =>
+        voterIds.map((_id, index) => ({
+          _id: voterIds[index],
+          name: `Voter ${index}`,
+          party: "1",
+        })),
+    });
+    db.collectionMocks.electedOfficials!.find.mockReturnValue({
+      project() {
+        return this;
+      },
+      toArray: async () =>
+        voterIds.map((characterId) => ({ characterId, state: "CA", officeType: "house" })),
+    });
+
+    const snapshot = await buildPartyCaucusHealthSnapshot(db as never, "US", "1");
+
+    expect(snapshot.activeDefianceCount).toBe(3);
+    expect(snapshot.caucuses.map((caucus) => caucus.activeDefianceCount)).toEqual([1, 1, 1]);
+    expect(snapshot.caucuses.map((caucus) => caucus.playerDefianceCount)).toEqual([1, 1, 1]);
+    expect(db.collectionMocks.bills!.find).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.characters!.find).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.electedOfficials!.find).toHaveBeenCalledTimes(1);
+    // The caucus membership roster loaded by the parent snapshot is enough to scope voters.
+    expect(db.collectionMocks.caucusMemberships!.find).toHaveBeenCalledTimes(1);
+  });
+
   it("summarizes caucus churn, election status, and at-risk NPP retention", async () => {
     const db = createMockDb();
     const caucusId = new ObjectId();

@@ -500,6 +500,293 @@ function compareByUpdated(a: WhipDefianceItem, b: WhipDefianceItem): number {
   return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
 }
 
+function dedupeWhips(rawWhips: readonly BillWhip[]): BillWhip[] {
+  const seen = new Set<string>();
+  return rawWhips.filter((whip) => {
+    const key = [
+      whip.audience,
+      whip.targetType,
+      whip.targetId instanceof ObjectId ? whip.targetId.toString() : whip.targetId,
+      whip.chamber,
+      whip.candidacyId?.toString() ?? "",
+      whip.audience === "character" ? getModeLabel(whip) : "npp",
+    ].join(":");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function targetCacheKey(whip: BillWhip): string {
+  return [
+    whip.targetType,
+    whip.targetId instanceof ObjectId ? whip.targetId.toString() : whip.targetId,
+    whip.chamber,
+    whip.targetType === "speakerVacateMotion" ? whip.createdAt.toISOString() : "",
+  ].join(":");
+}
+
+/**
+ * Build multiple scoped snapshots while sharing target, voter, seat and caucus
+ * membership reads. This is used by the party caucus overview, where each
+ * caucus needs its own filtered result but the underlying metadata overlaps.
+ */
+export async function buildWhipDefianceSnapshots(
+  db: Db,
+  scopes: readonly WhipDefianceScope[],
+  limit: number,
+  rawWhips: readonly BillWhip[],
+  preloadedMemberships?: readonly CaucusMembership[],
+  preloadedMembers?: { characters?: readonly Character[]; npps?: readonly NPP[] }
+): Promise<Map<string, WhipDefianceSnapshot>> {
+  if (scopes.length === 0) return new Map();
+  const whipsByScope = new Map(
+    scopes.map((scope) => [
+      scope.caucusId!.toString(),
+      dedupeWhips(
+        rawWhips.filter(
+          (whip) =>
+            whip.issuedBy === scope.issuedBy &&
+            whip.countryId === scope.countryId &&
+            whip.partyId === scope.partyId &&
+            (!scope.stateId || whip.stateId === scope.stateId) &&
+            whip.caucusId?.toString() === scope.caucusId?.toString()
+        )
+      ),
+    ])
+  );
+  const allWhips = dedupeWhips([...whipsByScope.values()].flat());
+  const billIds = [
+    ...new Map(
+      allWhips
+        .filter((whip) => whip.targetType === "bill" && whip.targetId instanceof ObjectId)
+        .map((whip) => [whip.targetId.toString(), whip.targetId as ObjectId])
+    ).values(),
+  ];
+  const cabinetIds = [
+    ...new Map(
+      allWhips
+        .filter(
+          (whip) => whip.targetType === "cabinetNomination" && whip.targetId instanceof ObjectId
+        )
+        .map((whip) => [whip.targetId.toString(), whip.targetId as ObjectId])
+    ).values(),
+  ];
+  const [bills, nominations] = await Promise.all([
+    billIds.length
+      ? db
+          .collection<Bill>("bills")
+          .find({ _id: { $in: billIds } })
+          .toArray()
+      : Promise.resolve([] as Bill[]),
+    cabinetIds.length
+      ? db
+          .collection<CabinetNomination>("cabinetNominations")
+          .find({ _id: { $in: cabinetIds }, status: "active" })
+          .toArray()
+      : Promise.resolve([] as CabinetNomination[]),
+  ]);
+  const billsById = new Map(bills.map((bill) => [bill._id.toString(), bill]));
+  const nominationsById = new Map(
+    nominations.map((nomination) => [nomination._id.toString(), nomination])
+  );
+
+  const targetPromises = new Map<string, Promise<TargetContext | null>>();
+  for (const whip of allWhips) {
+    const key = targetCacheKey(whip);
+    if (!targetPromises.has(key)) {
+      targetPromises.set(
+        key,
+        whip.targetType === "bill"
+          ? loadBillTarget(whip, billsById)
+          : whip.targetType === "cabinetNomination"
+            ? Promise.resolve(loadCabinetTarget(whip, nominationsById))
+            : loadTargetContext(db, whip, billsById, nominationsById)
+      );
+    }
+  }
+  const targetByKey = new Map<string, TargetContext | null>();
+  await Promise.all(
+    [...targetPromises].map(async ([key, promise]) => targetByKey.set(key, await promise))
+  );
+
+  const officesByAudience = new Map<WhipAudience, Set<string>>();
+  const voterIdsByAudience = new Map<WhipAudience, Set<string>>();
+  for (const whip of allWhips) {
+    const target = targetByKey.get(targetCacheKey(whip));
+    if (!target) continue;
+    const office = getOfficeTypeForChamber(whip.countryId as CountryId, whip.chamber);
+    (
+      officesByAudience.get(whip.audience) ??
+      officesByAudience.set(whip.audience, new Set()).get(whip.audience)!
+    ).add(office);
+    const ids = voterIdsByAudience.get(whip.audience) ?? new Set<string>();
+    for (const id of parseVoterKeys(
+      Object.fromEntries(target.votes.map((vote) => [vote.voterKey, vote.displayVote])),
+      whip.audience
+    )) {
+      ids.add(id);
+    }
+    voterIdsByAudience.set(whip.audience, ids);
+  }
+  const caucusIds = scopes.map((scope) => scope.caucusId!).filter(Boolean);
+  const characterIds = [...(voterIdsByAudience.get("character") ?? [])].map(
+    (id) => new ObjectId(id)
+  );
+  const nppIds = [...(voterIdsByAudience.get("npp") ?? [])].map((id) => new ObjectId(id));
+  const knownCharacterIds = new Set(
+    (preloadedMembers?.characters ?? []).map((character) => character._id.toString())
+  );
+  const knownNppIds = new Set((preloadedMembers?.npps ?? []).map((npp) => npp._id.toString()));
+  const missingCharacterIds = characterIds.filter((id) => !knownCharacterIds.has(id.toString()));
+  const missingNppIds = nppIds.filter((id) => !knownNppIds.has(id.toString()));
+  const officeTypes = [...new Set([...officesByAudience.values()].flatMap((set) => [...set]))];
+  const officialClauses = [
+    ...(characterIds.length ? [{ characterId: { $in: characterIds } }] : []),
+    ...(nppIds.length ? [{ nppId: { $in: nppIds }, isNPP: true }] : []),
+  ];
+  const [characters, npps, officials] = await Promise.all([
+    missingCharacterIds.length
+      ? db
+          .collection<Character>("characters")
+          .find({ _id: { $in: missingCharacterIds } })
+          .project<Pick<Character, "_id" | "name" | "party">>({ _id: 1, name: 1, party: 1 })
+          .toArray()
+      : Promise.resolve([] as Character[]),
+    missingNppIds.length
+      ? db
+          .collection<NPP>("npps")
+          .find({ _id: { $in: missingNppIds } })
+          .project<Pick<NPP, "_id" | "name" | "party">>({ _id: 1, name: 1, party: 1 })
+          .toArray()
+      : Promise.resolve([] as NPP[]),
+    officialClauses.length
+      ? db
+          .collection<ElectedOfficial>("electedOfficials")
+          .find({ officeType: { $in: officeTypes }, $or: officialClauses })
+          .project({ characterId: 1, nppId: 1, isNPP: 1, state: 1, officeType: 1 })
+          .toArray()
+      : Promise.resolve([] as ElectedOfficial[]),
+  ]);
+  const memberships = preloadedMemberships
+    ? preloadedMemberships.filter(
+        (membership) =>
+          membership.status === "active" &&
+          caucusIds.some((id) => id.toString() === membership.caucusId.toString())
+      )
+    : await db
+        .collection<CaucusMembership>("caucusMemberships")
+        .find({ caucusId: { $in: caucusIds }, status: "active" })
+        .toArray();
+  const caucusIdsByMember = new Map<string, Set<string>>();
+  for (const membership of memberships) {
+    const key = `${membership.memberType}:${membership.memberId.toString()}`;
+    const ids = caucusIdsByMember.get(key) ?? new Set<string>();
+    ids.add(membership.caucusId.toString());
+    caucusIdsByMember.set(key, ids);
+  }
+  const officialByMemberOffice = new Map<string, ElectedOfficial>();
+  for (const official of officials) {
+    if (official.characterId) {
+      officialByMemberOffice.set(
+        `character:${official.officeType}:${official.characterId.toString()}`,
+        official
+      );
+    }
+    if (official.nppId && official.isNPP) {
+      officialByMemberOffice.set(
+        `npp:${official.officeType}:${official.nppId.toString()}`,
+        official
+      );
+    }
+  }
+  const voterMeta = new Map<string, VoterMeta>();
+  for (const character of [...(preloadedMembers?.characters ?? []), ...characters]) {
+    for (const office of officesByAudience.get("character") ?? []) {
+      const official = officialByMemberOffice.get(
+        `character:${office}:${character._id.toString()}`
+      );
+      voterMeta.set(`character:${office}:${character._id.toString()}`, {
+        voterType: "character",
+        voterId: character._id.toString(),
+        voterName: character.name,
+        partyId: character.party ?? null,
+        stateId: official?.state ?? null,
+        office: official?.officeType ?? null,
+        caucusIds: caucusIdsByMember.get(`character:${character._id.toString()}`) ?? new Set(),
+      });
+    }
+  }
+  for (const npp of [...(preloadedMembers?.npps ?? []), ...npps]) {
+    for (const office of officesByAudience.get("npp") ?? []) {
+      const official = officialByMemberOffice.get(`npp:${office}:${npp._id.toString()}`);
+      voterMeta.set(`npp:${office}:${npp._id.toString()}`, {
+        voterType: "npp",
+        voterId: npp._id.toString(),
+        voterName: npp.name,
+        partyId: npp.party ?? null,
+        stateId: official?.state ?? null,
+        office: official?.officeType ?? null,
+        caucusIds: caucusIdsByMember.get(`npp:${npp._id.toString()}`) ?? new Set(),
+      });
+    }
+  }
+
+  return new Map(
+    scopes.map((scope) => {
+      const players: WhipDefianceItem[] = [];
+      const nppsForScope: WhipDefianceItem[] = [];
+      for (const whip of whipsByScope.get(scope.caucusId!.toString()) ?? []) {
+        const target = targetByKey.get(targetCacheKey(whip));
+        if (!target) continue;
+        const office = getOfficeTypeForChamber(scope.countryId, whip.chamber);
+        for (const vote of target.votes) {
+          const id =
+            whip.audience === "character"
+              ? vote.voterKey
+              : vote.voterKey.startsWith("npp_")
+                ? vote.voterKey.slice(4)
+                : vote.voterKey;
+          const voter = voterMeta.get(`${whip.audience}:${office}:${id}`);
+          if (!voter || !voterMatchesScope(voter, scope)) continue;
+          if (voteMatchesWhip(whip, vote.comparableVote)) continue;
+          const item: WhipDefianceItem = {
+            whipId: whip._id.toString(),
+            audience: whip.audience,
+            mode: getModeLabel(whip),
+            issuerRole: whip.issuedByRole,
+            targetType: whip.targetType,
+            targetLabel: target.label,
+            chamber: chamberToOffice(whip.chamber),
+            whipDirection: whip.direction,
+            currentVoteLabel: vote.displayVote,
+            voterType: voter.voterType,
+            voterId: voter.voterId,
+            voterName: voter.voterName,
+            voterState: voter.stateId,
+            voterOffice: voter.office,
+            voterHref: buildVoterHref(voter.voterType, voter.voterId),
+            createdAt: whip.createdAt.toISOString(),
+            updatedAt: whip.updatedAt.toISOString(),
+          };
+          if (voter.voterType === "character") players.push(item);
+          else nppsForScope.push(item);
+        }
+      }
+      players.sort(compareByUpdated);
+      nppsForScope.sort(compareByUpdated);
+      const snapshot = {
+        activeCount: players.length + nppsForScope.length,
+        playerCount: players.length,
+        nppCount: nppsForScope.length,
+        players: players.slice(0, limit),
+        npps: nppsForScope.slice(0, limit),
+      };
+      return [scope.caucusId!.toString(), snapshot];
+    })
+  );
+}
+
 export async function buildWhipDefianceSnapshot(
   db: Db,
   scope: WhipDefianceScope,
