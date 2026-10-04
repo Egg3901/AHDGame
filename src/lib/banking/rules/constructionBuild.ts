@@ -25,6 +25,8 @@ export interface ConstructionBuildClaim {
   escrowLocal: number;
   borrowerContributionPaid?: boolean;
   loanFunded?: boolean;
+  /** Default keeps the pledge in force until an actual funded recovery. */
+  defaultedTurn?: number;
 }
 
 type Result<T> = { ok: true; value: T } | { ok: false; error: string };

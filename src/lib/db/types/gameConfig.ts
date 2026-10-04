@@ -243,6 +243,8 @@ export interface GameConfig {
   bankContagionEnabled?: boolean;
   /** Funded bank failures affect approval and consumer confidence. Default off. */
   bankFailurePoliticsEnabled?: boolean;
+  /** Funded plant construction loans. Off unless explicitly enabled. */
+  bankConstructionFinanceEnabled?: boolean;
   /**
    * Savings account rollout. `off`: legacy character fields only. `shadow`:
    * accounts are materialized from the legacy fields every turn and compared,

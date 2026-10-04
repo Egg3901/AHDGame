@@ -167,3 +167,53 @@ describe("loanServiceTransition", () => {
     expect(transition.legs[1]).toMatchObject(insurer);
   });
 });
+
+describe("construction security servicing", () => {
+  const sectorId = new ObjectId();
+  const collateral = {
+    claimId: "build-claim",
+    sectorId,
+    quotedCostLocal: 10_000,
+    constructionCostLocal: 10_000,
+  };
+  it("releases security only after the final funded payment", () => {
+    const paid = loanServiceTransition({
+      loan: loan({ outstanding: 100, constructionCollateral: collateral }),
+      borrowerAvailable: 1000,
+      turn: 147,
+      creditTarget: vault,
+      bankId: BANK,
+    });
+    expect(paid.decision.status).toBe("repaid");
+    expect(paid.transition.projections[1]).toMatchObject({
+      collection: "corporateSectors",
+      filter: {
+        "constructionFinancing.claimId": "build-claim",
+        "constructionFinancing.escrowLocal": 0,
+      },
+      update: { $set: { "constructionFinancing.status": "released" } },
+    });
+    const partial = loanServiceTransition({
+      loan: loan({ constructionCollateral: collateral }),
+      borrowerAvailable: 1000,
+      turn: 101,
+      creditTarget: vault,
+      bankId: BANK,
+    });
+    expect(partial.transition.projections).toHaveLength(1);
+  });
+  it("retains the pledge on default without generating collateral cash", () => {
+    const result = loanServiceTransition({
+      loan: loan({ constructionCollateral: collateral, arrearsTurns: ARREARS_DEFAULT_TURNS - 1 }),
+      borrowerAvailable: 0,
+      turn: 110,
+      creditTarget: vault,
+      bankId: BANK,
+    });
+    expect(result.transition.legs).toHaveLength(0);
+    expect(result.transition.projections[1]?.update).toEqual({
+      $set: { "constructionFinancing.defaultedTurn": 110 },
+    });
+    expect(result.decision.writtenOff).toBe(4800);
+  });
+});
