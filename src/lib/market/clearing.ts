@@ -419,6 +419,8 @@ export interface SectorClearingResult {
   soldByCommodity?: Partial<Record<CommodityType, number>>;
   /** Posture actually used (player's, or the auto value). */
   effectivePosture: number;
+  /** Exact quoted offer factor per output, before sold quantity is applied. */
+  offerFactorByCommodity?: Partial<Record<CommodityType, number>>;
 }
 
 /**
@@ -852,6 +854,7 @@ export function computeClearingFactors(args: {
         : 1;
     const effectivePremium = posture > 0 ? posture * premiumMult : posture;
     const soldByCommodity: Partial<Record<CommodityType, number>> = {};
+    const offerFactorByCommodity: Partial<Record<CommodityType, number>> = {};
     const sectorGroup = args.groupBySector?.get(s.sectorId);
     const groupRatios = sectorGroup != null ? args.priceRatioByGroup?.get(sectorGroup) : undefined;
     for (const commodity of Object.keys(s.supplyRates) as CommodityType[]) {
@@ -874,6 +877,7 @@ export function computeClearingFactors(args: {
         s.inputCostIndex !== undefined
           ? costPlusPriceFactor(s.inputCostIndex, posture, s.inputCostShare, s.fixedCostShare)
           : (1 + effectivePremium) * priceLeg;
+      offerFactorByCommodity[commodity] = offerFactor;
       factorSum += rate * sold * offerFactor;
       quotedPostureSum += rate * (offerFactor / priceLeg - 1);
       soldSum += rate * sold;
@@ -885,6 +889,7 @@ export function computeClearingFactors(args: {
       soldFraction: soldSum / rateSum,
       soldByCommodity,
       effectivePosture: s.inputCostIndex !== undefined ? quotedPostureSum / rateSum : posture,
+      offerFactorByCommodity,
     });
   }
   return results;

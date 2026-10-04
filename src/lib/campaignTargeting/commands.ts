@@ -5,16 +5,32 @@
  */
 
 import { ObjectId, type Db, type ClientSession } from "mongodb";
+import { randomUUID } from "node:crypto";
 import { COUNTRIES_WITH_BESPOKE_PRESIDENTIAL_ELECTIONS } from "@/lib/constants/countries";
 import type { AuthUserWithCharacter } from "@/lib/auth";
-import type { Campaign, Character, Election, ElectionCandidate, NPP } from "@/lib/db/types";
+import type {
+  Campaign,
+  Character,
+  Election,
+  ElectionCandidate,
+  GameConfig,
+  NPP,
+} from "@/lib/db/types";
 import { badRequest, conflict, forbidden, notFound } from "@/lib/api/errors";
 import { isCampaignManagerUser, isCampaignNomineeUser } from "@/lib/campaigns/access";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
 import { getGameTime } from "@/lib/time/gameTime";
+import { getCampaignCurrency } from "@/lib/campaigns/campaignCurrency";
+import { fundPoliticalMediaOrder } from "@/lib/politicalMedia/journal";
 import { quoteAdAudience } from "./adQuote";
 import { quoteStandingAds, purchaseStandingAds } from "./standingCommands";
-import { AD_ACTION_COST, planAdPurchase, usesCampaignRules, type CampaignTarget } from "./rules";
+import {
+  AD_ACTION_COST,
+  AD_BOOST_PER_ACTION,
+  planAdPurchase,
+  usesCampaignRules,
+  type CampaignTarget,
+} from "./rules";
 
 type Actor = AuthUserWithCharacter & { hasCharacter: true; character: Character };
 
@@ -150,6 +166,53 @@ export async function purchaseTargetedAds(
     throw conflict("The ad quote changed. Refresh before buying.");
   const actions = AD_ACTION_COST * request.count;
   const fundsField = quote.forex ? "currencyBalances.campaign" : "funds";
+  const config = await db
+    .collection<GameConfig>("gameConfig")
+    .findOne({ _id: "default" }, { projection: { politicalMediaMarketEnabled: 1 } });
+  if (config?.politicalMediaMarketEnabled === true) {
+    const orderId = randomUUID();
+    const funding = await fundPoliticalMediaOrder(db, {
+      orderId,
+      source: "targeted_ad",
+      createdTurn: quote.currentTurn,
+      countryId: context.candidate.countryId ?? "US",
+      targetStateId: request.stateId,
+      payer: {
+        collection: "characters",
+        documentId: user.character._id,
+        path: fundsField,
+        currencyCode: quote.forex
+          ? getCampaignCurrency(context.candidate.countryId ?? "US")
+          : "AHD",
+        localPerAnchor: quote.rate,
+        amountLocal: funds,
+        currentActions: user.character.actions ?? 0,
+        actionCost: actions,
+      },
+      details: {
+        effect: {
+          kind: "targeted_ad",
+          targetCollection: "electionCandidates",
+          targetDocumentId: context.candidate._id.toString(),
+          targetDocumentIdIsObjectId: context.candidate._id instanceof ObjectId,
+          ad: {
+            stateId: request.stateId,
+            dimension: request.dimension,
+            bucket: request.bucket,
+            bonus: AD_BOOST_PER_ACTION * request.count,
+            lastPurchaseTurn: quote.currentTurn,
+          },
+        },
+        targetDimension: request.dimension,
+        targetBucket: request.bucket,
+        requestedCount: request.count,
+        candidateId: context.candidate._id.toString(),
+      },
+    });
+    if (funding.status !== "applied")
+      throw conflict("Resources changed before the funded ad order could be placed");
+    return { success: true, pending: true, orderId, cost: funds, actions };
+  }
   const candidateFilter = {
     _id: context.candidate._id,
     status: "active" as const,

@@ -10,7 +10,10 @@ import type { Campaign, ElectionCandidate } from "@/lib/db/types";
 import { calculateCampaignIncome } from "@/lib/campaigns/income";
 import { campaignActionsPerTurn } from "@/lib/campaigns/actions";
 import { diminishPassiveFavorabilityGain } from "@/lib/actions";
-import { calculateMaintenanceCosts } from "@/lib/campaigns/maintenance";
+import {
+  calculateMaintenanceCosts,
+  calculateMediaMaintenanceAfterDowngrade,
+} from "@/lib/campaigns/maintenance";
 import { getCampaignFamilyScalar, getOpsBranchMagnitude } from "@/lib/campaigns/upgradeCosts";
 import { getMediaFavPerTurn, getOppoDrainPerTurn } from "@/lib/campaigns/opsEffects";
 import {
@@ -37,6 +40,8 @@ import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
 import { buildActiveVisibleNppEndorsementFilter } from "@/lib/nppEndorsements";
 import { CAMPAIGN_ACTIVITY_HISTORY_CAP } from "@/lib/campaigns/constants/activityHistory";
 import { logger } from "../observability/logger";
+import { fundPoliticalMediaOrder } from "@/lib/politicalMedia/journal";
+import type { PoliticalMediaPayer } from "@/lib/politicalMedia/journal";
 
 export interface CampaignTurnResults {
   campaignsProcessed: number;
@@ -87,8 +92,13 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
         // Campaign pool is separate from the player's own action pool; endorsements
         // only boost this campaign pool, never the player's.
         const gameConfig = await db
-          .collection<{ _id: string; baseActionsPerTurn?: number }>("gameConfig")
+          .collection<{
+            _id: string;
+            baseActionsPerTurn?: number;
+            politicalMediaMarketEnabled?: boolean;
+          }>("gameConfig")
           .findOne({ _id: "default" });
+        const politicalMediaMarketEnabled = gameConfig?.politicalMediaMarketEnabled === true;
         // Passed through raw. `campaignActionsPerTurn` owns the floor and the
         // halving for NPP-run campaigns, so the desk applies the same ones.
         const rawBaseActionsPerTurn = gameConfig?.baseActionsPerTurn ?? 4;
@@ -252,6 +262,21 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
         const campaignOps: {
           updateOne: { filter: { _id: ObjectId }; update: UpdateFilter<Campaign> };
         }[] = [];
+        const politicalMediaOrders: Array<{
+          orderId: string;
+          countryId: string;
+          targetStateId: string;
+          payer: PoliticalMediaPayer;
+          effect:
+            | { kind: "none" }
+            | {
+                kind: "favorability";
+                targetCollection: "characters" | "npps";
+                targetDocumentId: string;
+                targetDocumentIdIsObjectId: boolean;
+                amount: number;
+              };
+        }> = [];
         /**
          * ElectionCandidate bulkWrite ops for incrementing primaryCampaignTicks
          * (capped at PRIMARY_CAMPAIGN_TICK_CAP). Accumulated alongside campaign
@@ -561,6 +586,30 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
               campaignCountryId,
               campaignRates
             );
+            const mediaMaintenanceAnchor = calculateMediaMaintenanceAfterDowngrade(
+              campaign,
+              downgrade.downgrades,
+              electionTypeForScalar
+            );
+            const campaignTarget = campaign as Campaign & {
+              targetState?: unknown;
+              targetStateId?: unknown;
+            };
+            const targetStateId =
+              (typeof campaignTarget.targetStateId === "string" && campaignTarget.targetStateId) ||
+              (typeof campaignTarget.targetState === "string" && campaignTarget.targetState) ||
+              (typeof candidate.primaryCampaignState === "string" &&
+                candidate.primaryCampaignState) ||
+              (typeof candidate.homeState === "string" && candidate.homeState) ||
+              "";
+            const deferredMediaMaintenanceLocal =
+              politicalMediaMarketEnabled && mediaMaintenanceAnchor > 0 && targetStateId
+                ? campaignAnchorToLocal(
+                    mediaMaintenanceAnchor * priceLevel,
+                    campaignCountryId,
+                    campaignRates
+                  )
+                : 0;
 
             const campaignSet: Record<string, unknown> = { updatedAt: now };
             if (downgrade.downgrades.length > 0) {
@@ -572,7 +621,7 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
 
             const campaignUpdate: UpdateFilter<Campaign> = {
               $inc: {
-                funds: incomeLocal - maintenanceLocal,
+                funds: incomeLocal - maintenanceLocal + deferredMediaMaintenanceLocal,
                 actions: actions,
                 totalFundsGenerated: incomeLocal,
                 totalActionsGenerated: actions,
@@ -700,12 +749,42 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
             // Strategic Operations v2: read favorability/turn from the media tree
             // (starter + Broadcast + Television), with legacy-level fallback.
             const mediaFavPerTurn = getMediaFavPerTurn(campaign);
-            if (applyCampaignPassives && mediaFavPerTurn > 0) {
+            if (
+              applyCampaignPassives &&
+              mediaFavPerTurn > 0 &&
+              deferredMediaMaintenanceLocal <= 0
+            ) {
               const favorabilityBoost = mediaFavPerTurn * seasonMultiplier;
               const key = campaign.candidateId.toString();
               favorabilityChanges.set(key, {
                 collection: candidateCollection,
                 amount: favorabilityBoost,
+              });
+            }
+
+            if (deferredMediaMaintenanceLocal > 0 && targetStateId) {
+              politicalMediaOrders.push({
+                orderId: `campaign-media-${campaign._id.toString()}-${turnNumber}`,
+                countryId: campaignCountryId,
+                targetStateId,
+                payer: {
+                  collection: "campaigns",
+                  documentId: campaign._id,
+                  path: "funds",
+                  currencyCode: getCampaignCurrency(campaignCountryId),
+                  localPerAnchor: campaignRate * priceLevel,
+                  amountLocal: deferredMediaMaintenanceLocal,
+                },
+                effect:
+                  applyCampaignPassives && mediaFavPerTurn > 0
+                    ? {
+                        kind: "favorability",
+                        targetCollection: candidateCollection,
+                        targetDocumentId: campaign.candidateId.toString(),
+                        targetDocumentIdIsObjectId: true,
+                        amount: mediaFavPerTurn * seasonMultiplier,
+                      }
+                    : { kind: "none" },
               });
             }
 
@@ -819,6 +898,32 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
         // Execute bulkWrite for campaigns
         if (campaignOps.length > 0) {
           await db.collection<Campaign>("campaigns").bulkWrite(campaignOps);
+        }
+
+        for (const intent of politicalMediaOrders) {
+          try {
+            const result = await fundPoliticalMediaOrder(db, {
+              orderId: intent.orderId,
+              source: "campaign_maintenance",
+              createdTurn: turnNumber,
+              countryId: intent.countryId,
+              targetStateId: intent.targetStateId,
+              payer: intent.payer,
+              details: { effect: intent.effect },
+            });
+            if (result.status === "rejected") {
+              logger.warn(
+                "Campaign Turn",
+                `Political media order ${intent.orderId} was not funded: ${result.error ?? "payer rejected"}`
+              );
+            }
+          } catch (error) {
+            logger.error(
+              "Campaign Turn",
+              `Political media order ${intent.orderId} funding failed`,
+              error
+            );
+          }
         }
 
         // Flush primaryCampaignTicks increments in one bulkWrite. The cap is
