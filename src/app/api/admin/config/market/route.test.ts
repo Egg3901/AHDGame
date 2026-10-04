@@ -147,8 +147,8 @@ describe("GET/PATCH /api/admin/config/market — extractionOutputScaleEnabled", 
       commandEconomyEnabled: false,
       mediaRegulationEnabled: false,
     });
-    db.collectionMocks.gameState!.updateOne
-      .mockImplementationOnce(async () => ({ acknowledged: true }) as never)
+    db.collectionMocks
+      .gameState!.updateOne.mockImplementationOnce(async () => ({ acknowledged: true }) as never)
       .mockRejectedValueOnce(new Error("snapshot write failed"))
       .mockImplementationOnce(async () => ({ acknowledged: true }) as never);
 

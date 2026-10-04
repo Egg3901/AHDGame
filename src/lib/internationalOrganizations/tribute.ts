@@ -168,7 +168,9 @@ export async function chargeOrganizationTribute(
             path: "treasuryCashLocal",
             amount: owedLocal,
             currencyCode:
-              batch.budgetCurrencies.get(payer) ?? COUNTRY_CURRENCY_MAP[payer as CountryId] ?? "USD",
+              batch.budgetCurrencies.get(payer) ??
+              COUNTRY_CURRENCY_MAP[payer as CountryId] ??
+              "USD",
             localPerAnchor: payerRate,
           },
           destination: {
