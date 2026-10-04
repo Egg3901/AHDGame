@@ -15,6 +15,7 @@ import { choiceNode, responseOpt } from "../authoring";
 import { cfx } from "../effects";
 import { YUGOSLAV_REFUGEE_RECEPTION } from "../rules/refugeeReception";
 import { YUGOSLAV_ESCALATION_CIVILIAN_LOSS } from "../rules/civilianLoss";
+import { YUGOSLAV_ESCALATION_CAPACITY_DESTRUCTION } from "../rules/capacityDestruction";
 
 // Primary historical anchors constrain sanctions, ceasefire, peacekeeping, and
 // intervention pressure without fixing borders or campaigns: UNSC Resolution
@@ -270,6 +271,7 @@ const outcomes: GlobalResponseOutcome[] = [
     priority: 40,
     conditions: [{ axis: "escalation", min: 7 }],
     civilianLoss: YUGOSLAV_ESCALATION_CIVILIAN_LOSS,
+    capacityDestruction: YUGOSLAV_ESCALATION_CAPACITY_DESTRUCTION,
     intensityDelta: 15,
     trackDeltas: {
       constitutionalCohesion: -10,

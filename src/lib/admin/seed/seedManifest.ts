@@ -1071,6 +1071,7 @@ const RUNTIME: CollectionEntry[] = [
   { name: "crisisInteractions", category: "runtime" },
   { name: "refugeeReceptionHistory", category: "runtime" },
   { name: "conflictCivilianLossHistory", category: "runtime" },
+  { name: "conflictCapacityObligations", category: "runtime" },
   {
     name: "crisisAutoCooldowns",
     category: "runtime",

@@ -8,6 +8,7 @@ import type {
   ConflictCivilianLossOrder,
   ConflictCivilianLossResult,
 } from "@/lib/livingConflict/rules/civilianLoss";
+import type { CapacityDestructionSpec, CapacityDestructionSummary } from "./conflictCapacity";
 import { ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CommodityType } from "@/lib/constants/commodities";
@@ -364,6 +365,8 @@ export interface GlobalResponseOutcome {
   tradeSanction?: CrisisTradeSanction;
   /** Explicit resident deaths, independent of campaign risk scores. */
   civilianLoss?: ConflictCivilianLossSpec;
+  /** Physical destruction of named regions' capital stock, repaired through the sovereign's budget. */
+  capacityDestruction?: CapacityDestructionSpec;
   wireMessage: string;
 }
 
@@ -390,6 +393,8 @@ export interface ResolvedGlobalResponse {
   campaignStageAfter?: CampaignStage;
   civilianLossOrder?: ConflictCivilianLossOrder;
   civilianLossResult?: ConflictCivilianLossResult;
+  /** Regions whose capital stock this outcome destroyed, and what was skipped. */
+  capacityDestruction?: CapacityDestructionSummary;
   resolvedAt: Date;
 }
 

@@ -8,6 +8,8 @@
  */
 import { loadTerrorismSignal } from "@/lib/livingConflict/terrorismSignal";
 import { loadRefugeeServiceCosts } from "@/lib/livingConflict/refugeeReception";
+import { loadCapacityRepairSpending } from "@/lib/livingConflict/capacityDestruction";
+import { CAPACITY_REPAIR_SPENDING_KEY } from "@/lib/livingConflict/rules/capacityDestruction";
 import { REFUGEE_SERVICE_SPENDING_KEY } from "@/lib/livingConflict/rules/refugeeReception";
 import {
   terrorismAnnualCost,
@@ -263,7 +265,8 @@ export async function calculateFederalSpending(
   // so the world-constant gameState read happens once per turn instead of once
   // per budget. Omitted => resolved here (single-budget callers).
   hoistedEraContext?: EraContext,
-  hoistedRefugeeServiceCosts?: Readonly<Record<string, number>>
+  hoistedRefugeeServiceCosts?: Readonly<Record<string, number>>,
+  hoistedCapacityRepairSpending?: Readonly<Record<string, number>>
 ): Promise<FederalBudget["spending"]> {
   const budgetCountryId = (budget.countryId ||
     (budget._id === COUNTRY_CONFIGS.UK.id
@@ -370,6 +373,10 @@ export async function calculateFederalSpending(
   const refugeeServiceCosts = hoistedRefugeeServiceCosts ?? (await loadRefugeeServiceCosts(db));
   const refugeeServices = refugeeServiceCosts[budgetCountryId] ?? 0;
   if (refugeeServices > 0) byCategory[REFUGEE_SERVICE_SPENDING_KEY] = refugeeServices;
+  // Rebuilding capital a conflict outcome destroyed is paid by the region's sovereign.
+  const capacityRepair =
+    (hoistedCapacityRepairSpending ?? (await loadCapacityRepairSpending(db)))[budgetCountryId] ?? 0;
+  if (capacityRepair > 0) byCategory[CAPACITY_REPAIR_SPENDING_KEY] = capacityRepair;
 
   return normalizeFederalSpending({
     byCategory,

@@ -4,6 +4,7 @@
  * or money. Stored exposure limits abrupt workforce changes and repeat turns.
  */
 import { arabEconomicTarget } from "./arabRegional";
+import { proxyInfrastructureDamage } from "./capacityDestruction";
 import type { LivingConflictState } from "../types";
 
 export interface CrisisEconomicExposure {
@@ -56,7 +57,16 @@ export function crisisEconomicExposure(
     // Fixed host penalties would charge a country even when its leader closed the border.
     const host = !local && ukraine && ["PL", "RO", "HU", "TR", "DE"].includes(region.countryId);
     const displacement = bounded(current.tracks?.displacement, 100) / 100;
-    const damage = bounded(current.tracks?.infrastructureDamage, 100) / 100;
+    // Track points an outcome already destroyed as real capital stock are not
+    // charged again here; the proxy keeps only the unrealized remainder.
+    const damage =
+      bounded(
+        proxyInfrastructureDamage(
+          current.tracks?.infrastructureDamage,
+          current.realizedInfrastructureDamage
+        ),
+        100
+      ) / 100;
     const reconstruction = bounded(current.tracks?.reconstruction, 100) / 100;
     displaced += local ? displacement * 0.1 : 0;
     hosted += host ? displacement * 0.005 : 0;

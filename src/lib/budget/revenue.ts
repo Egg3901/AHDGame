@@ -31,6 +31,7 @@ import {
 } from "./publicEnterpriseRevenue";
 import { calculateFederalSpending } from "./spending";
 import { loadRefugeeServiceCosts } from "@/lib/livingConflict/refugeeReception";
+import { loadCapacityRepairSpending } from "@/lib/livingConflict/capacityDestruction";
 import { keepLatestActiveLawPerType } from "./keepLatestActiveLawPerType";
 import { countryFiscalBase } from "@/lib/politicalLegislation/fiscalBase";
 import { COST_INCOME_ANCHORS } from "@/lib/politicalLegislation/costAnchors";
@@ -559,6 +560,7 @@ export async function refreshNationalBudgetRevenue(db: Db, budgetIds?: string[])
     fxByCurrency,
     moneyWiringConfig,
     refugeeServiceCosts,
+    capacityRepairSpending,
     couponBooks,
   ] = await Promise.all([
     loadPlantsBudgetContext(db),
@@ -569,6 +571,7 @@ export async function refreshNationalBudgetRevenue(db: Db, budgetIds?: string[])
       .findOne({ _id: "default" }, { projection: { interstateMoneyWiringEnabled: 1 } }),
     // All countries share this projected obligation load; never one per budget.
     loadRefugeeServiceCosts(db),
+    loadCapacityRepairSpending(db),
     // Debt interest on the coupons the stock carries (#2089), one read per pass.
     loadSovereignCouponBooks(db),
   ]);
@@ -606,7 +609,8 @@ export async function refreshNationalBudgetRevenue(db: Db, budgetIds?: string[])
           imfBailoutActive: budget.imfSovereignBailoutActive,
         }),
         eraContext ?? undefined,
-        refugeeServiceCosts
+        refugeeServiceCosts,
+        capacityRepairSpending
       );
       const surplus = revenue.total - spending.total;
       return {

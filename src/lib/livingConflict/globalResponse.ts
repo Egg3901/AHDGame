@@ -2,9 +2,15 @@
  * Shared response votes select authored outcomes and claim their durable result.
  * resolveGlobalResponse freezes civilian mortality authorization in the outcome CAS;
  * demographic receipts apply and report its actual resident losses on a later turn.
+ * Authored physical destruction becomes capital-stock obligations in the same resolution.
  */
 import { ARAB_UPRISINGS_KEY } from "./rules/arabOrigins";
 import { prepareConflictCivilianLossOrder } from "./civilianLoss";
+import {
+  applyConflictCapacityDestruction,
+  loadRealizedCapacityFraction,
+} from "./capacityDestruction";
+import { realizedInfrastructurePoints } from "./rules/capacityDestruction";
 import { resolveArabRegion, describeArabRegion } from "./rules/arabRegional";
 import { projectArabRegion } from "./rules/arabProjection";
 import { prepareFinancialFiscalResponse } from "@/lib/crises/financialCrisisFiscalResponse";
@@ -557,6 +563,7 @@ async function applyOutcomeTrajectory(
   if (!def) return null;
 
   let state = await loadConflictState(db, def.key);
+  const infrastructureBefore = state.tracks?.infrastructureDamage;
   if (
     def.key === "yugoslav_dissolution" &&
     state.appliedResponseOutcomeIds?.includes(resolutionId)
@@ -608,6 +615,18 @@ async function applyOutcomeTrajectory(
   } else {
     state = applyConflictOutcome(def, state, outcome);
   }
+  if (outcome.capacityDestruction) {
+    // Track points that became real capital destruction are not charged again
+    // through the potential-growth proxy.
+    const fraction = await loadRealizedCapacityFraction(db, def.key, resolutionId);
+    state.realizedInfrastructureDamage =
+      (state.realizedInfrastructureDamage ?? 0) +
+      realizedInfrastructurePoints(
+        infrastructureBefore,
+        state.tracks?.infrastructureDamage,
+        fraction
+      );
+  }
   if (def.key === TERRORISM_KEY) {
     state.tracks = {
       ...state.tracks,
@@ -646,10 +665,28 @@ export async function resolveGlobalResponse(
     );
     if (prior) {
       await applyCrisisTradeSanctions(db, crisis, interaction, prior);
+      const resolutionId = crisis.livingConflictEventId ?? crisisId.toString();
+      // A crash between the claim and the destruction write is finished here;
+      // once the readout is stored the destruction is settled and never re-planned.
+      if (prior.capacityDestruction && !interaction.globalResponseOutcome.capacityDestruction) {
+        const summary = await applyConflictCapacityDestruction(db, crisis, prior, resolutionId);
+        if (summary)
+          await db
+            .collection<CrisisInteraction>("crisisInteractions")
+            .updateOne(
+              { _id: interaction._id },
+              {
+                $set: {
+                  "globalResponseOutcome.capacityDestruction": summary,
+                  updatedAt: new Date(),
+                },
+              }
+            );
+      }
       if (
         crisis.globalResponse.conflictKey === ARAB_UPRISINGS_KEY ||
         (crisis.globalResponse.conflictKey === "yugoslav_dissolution" &&
-          interaction.globalResponseOutcome.civilianLossOrder)
+          (interaction.globalResponseOutcome.civilianLossOrder || prior.capacityDestruction))
       )
         await applyOutcomeTrajectory(
           db,
@@ -812,6 +849,24 @@ export async function resolveGlobalResponse(
       cfx("flat", "metric", "publicSafety", "crimeRate", severity, "Attack insecurity"),
       cfx("flat", "metric", "infrastructure", "roadCondition", -severity, "Attack damage"),
     ]);
+  }
+  const capacitySummary = await applyConflictCapacityDestruction(
+    db,
+    crisis,
+    outcome,
+    crisis.livingConflictEventId ?? crisisId.toString()
+  );
+  if (capacitySummary) {
+    resolved.capacityDestruction = capacitySummary;
+    await db.collection<CrisisInteraction>("crisisInteractions").updateOne(
+      { _id: interaction._id },
+      {
+        $set: {
+          "globalResponseOutcome.capacityDestruction": capacitySummary,
+          updatedAt: new Date(),
+        },
+      }
+    );
   }
   const campaignResult = await applyOutcomeTrajectory(
     db,

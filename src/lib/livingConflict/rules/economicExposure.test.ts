@@ -17,6 +17,23 @@ const conflict = normalizeConflictState(YUGOSLAVIA_DEF, {
 });
 
 describe("living crisis economic exposure", () => {
+  it("charges the potential-growth proxy only for damage not already destroyed as capital", () => {
+    const run = (realized?: number) => {
+      const state = normalizeConflictState(YUGOSLAVIA_DEF, {
+        defKey: YUGOSLAVIA_DEF.key,
+        hasOpened: true,
+        tracks: { displacement: 0, infrastructureDamage: 40, reconstruction: 0 },
+        ...(realized !== undefined ? { realizedInfrastructureDamage: realized } : {}),
+      });
+      let exposure: CrisisEconomicExposure | undefined;
+      for (let turn = 1; turn <= 240; turn++)
+        exposure = crisisEconomicExposure(state, region, exposure, turn);
+      return exposure!.infrastructureDamage;
+    };
+    expect(run()).toBeCloseTo(0.4);
+    expect(run(40)).toBeCloseTo(0);
+    expect(run(10)).toBeCloseTo(0.3);
+  });
   it("does not assume Yugoslav reception by fixed host country", () => {
     const host = crisisEconomicExposure(conflict, { _id: "AT", countryId: "AT" }, undefined, 8);
     expect(host.hostingShare).toBe(0);

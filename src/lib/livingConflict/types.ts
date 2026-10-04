@@ -317,6 +317,12 @@ export interface LivingConflictState {
   /** Persistent multi-window campaign depth. Absent legacy rows normalize on read. */
   campaign?: LivingCampaignState;
   representedActors?: ConflictActor[];
+  /**
+   * Infrastructure-track points already charged as real capital destruction.
+   * The potential-growth proxy charges only the remainder, so one outcome's
+   * damage is never paid twice.
+   */
+  realizedInfrastructureDamage?: number;
   updatedAt: Date;
 }
 
