@@ -103,7 +103,8 @@ export function buildSectorRows(inputs: SectorRowInputs): SectorLedgerRow[] {
           stateToCountry.get(s.stateId),
           ledgerCurrentYear,
           ledgerCommandEconomyEnabled
-        )
+        ),
+        s.mediaDiscriminator
       );
     return {
       sectorType: s.sectorType,
