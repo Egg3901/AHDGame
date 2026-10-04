@@ -658,19 +658,21 @@ function cashTransition(
 }
 
 async function ensurePoolExists(db: Db, currency: CurrencyCode, now: Date): Promise<void> {
-  await db.collection(BOND_MARKET_POOLS_COLLECTION).updateOne(
-    { _id: currency },
-    {
-      $setOnInsert: {
-        cashLocal: 0,
-        targetCashLocal: 0,
-        lifetime: {},
-        createdAt: now,
-        updatedAt: now,
+  await db
+    .collection<{ _id: CurrencyCode } & Record<string, unknown>>(BOND_MARKET_POOLS_COLLECTION)
+    .updateOne(
+      { _id: currency },
+      {
+        $setOnInsert: {
+          cashLocal: 0,
+          targetCashLocal: 0,
+          lifetime: {},
+          createdAt: now,
+          updatedAt: now,
+        },
       },
-    },
-    { upsert: true }
-  );
+      { upsert: true }
+    );
 }
 
 async function finishTransition(db: Db, transition: BankingTransition): Promise<SettlementResult> {
@@ -908,15 +910,15 @@ async function runReceipt(
     charter.depositorsResolvedTurn == null;
   if (!exactActive && (receipt.side === "buy" || !sameOpenEstate || !receipt.resolutionSale)) {
     const reserveRecord = await db
-      .collection("bankMoneyMoves")
+      .collection<{ _id: string; status?: string }>("bankMoneyMoves")
       .findOne({ _id: `bank-treasury:${receipt._id}:reserve` }, { projection: { status: 1 } });
     const cashRecord = await db
-      .collection("bankMoneyMoves")
+      .collection<{ _id: string; status?: string }>("bankMoneyMoves")
       .findOne({ _id: `bank-treasury:${receipt._id}:cash` }, { projection: { status: 1 } });
     if (reserveRecord?.status === "applied" && !cashRecord) {
       await finishTransition(db, releaseReservationTransition(receipt));
     } else if (cashRecord?.status === "partial") {
-      const resumed = await resumeSettlement(db, cashRecord._id as string);
+      const resumed = await resumeSettlement(db, cashRecord._id);
       if (resumed.status === "partial" || (resumed.status === "replayed" && resumed.error)) {
         return {
           status: "pending",

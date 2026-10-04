@@ -146,10 +146,11 @@ export async function settleAtomicDocumentTransition(
       )
     )
       return bad("Noncash bond exchanges may update only the permitted asset fields");
+    const bankInventorySet = projection.update.$set as Record<string, unknown> | undefined;
     if (
       target.nonCashMode === "bank_treasury_inventory" &&
       (Object.keys(projection.update).some((key) => key !== "$set") ||
-        !Array.isArray(projection.update.$set?.holders) ||
+        !Array.isArray(bankInventorySet?.holders) ||
         !Array.isArray(target.guard?.holders) ||
         transition.kind !== "bank_treasury_trade_reservation")
     )
@@ -158,7 +159,7 @@ export async function settleAtomicDocumentTransition(
       );
     if (target.nonCashMode === "bank_treasury_inventory") {
       const before = target.guard!.holders as Array<{ units?: unknown }>;
-      const after = projection.update.$set!.holders as Array<{ units?: unknown }>;
+      const after = bankInventorySet!.holders as Array<{ units?: unknown }>;
       const tradeId = transition.key.slice("bank-treasury:".length, -":reserve".length);
       const reserved = after.slice(before.length);
       const allocationByLot = new Map<string, number>();

@@ -146,6 +146,7 @@ export type ConsolePayload = {
     interbankDebt: number;
     cbMarginDebt: number;
     propBookMarkValue: number;
+    sovereignTreasuryMarkValue: number;
     propBook: Array<{
       asset: string;
       ref: string;

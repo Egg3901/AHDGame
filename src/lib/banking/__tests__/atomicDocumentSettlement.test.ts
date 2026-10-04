@@ -416,12 +416,11 @@ describe("guarded funded-bank inventory reservation", () => {
       inventoryTarget(holders)
     );
     expect(result.status).toBe("applied");
-    expect(memory.collection("bonds").docs[0]?.holders).toHaveLength(2);
-    expect(
-      memory
-        .collection("bonds")
-        .docs[0]?.holders?.reduce((sum: number, holder: { units: number }) => sum + holder.units, 0)
-    ).toBe(3);
+    const settledBond = memory.collection("bonds").docs[0] as unknown as {
+      holders: Array<{ units: number }>;
+    };
+    expect(settledBond.holders).toHaveLength(2);
+    expect(settledBond.holders.reduce((sum, holder) => sum + holder.units, 0)).toBe(3);
   });
 
   it.each(["minted trade units", "edited unrelated holder"])(
@@ -435,7 +434,10 @@ describe("guarded funded-bank inventory reservation", () => {
       ];
       memory.seed("bonds", [{ _id: id, holders }]);
       const changed = structuredClone(treasuryTrade);
-      changed.projections[0].update.$set.holders =
+      const projection = changed.projections[0];
+      const set = projection?.update?.$set as Record<string, unknown> | undefined;
+      if (!set) throw new Error("Expected a holder reservation projection");
+      set.holders =
         misuse === "minted trade units"
           ? [
               holders[0],

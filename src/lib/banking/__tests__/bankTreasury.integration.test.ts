@@ -66,7 +66,7 @@ function world(): InMemoryDb {
       defaulted: false,
       publicFloat: 100,
       holders: [],
-    } as unknown as Bond,
+    } as unknown as Record<string, unknown>,
   ]);
   db.seed("bondMarketPools", [
     {
@@ -85,7 +85,7 @@ function balance(db: InMemoryDb) {
   const corp = db.collection("corporations").docs[0] as {
     bankCharter: { cashReserves: number; sovereignTreasuryMarkValue?: number };
   };
-  const bond = db.collection("bonds").docs[0] as Bond;
+  const bond = db.collection("bonds").docs[0] as unknown as Bond;
   const pool = db.collection("bondMarketPools").docs[0] as { cashLocal: number };
   return {
     cash: corp.bankCharter.cashReserves,
@@ -363,7 +363,7 @@ describe("funded bank treasury settlement", () => {
     ).rejects.toBeInstanceOf(InjectedCrash);
     crash.disarm();
 
-    const bond = db.collection("bonds").docs[0] as Bond;
+    const bond = db.collection("bonds").docs[0] as unknown as Bond;
     const holders = structuredClone(bond.holders ?? []);
     holders[0] = { ...holders[0]!, units: holders[0]!.units - 1 };
     await db.collection("bonds").updateOne({ _id: BOND }, { $set: { holders } });

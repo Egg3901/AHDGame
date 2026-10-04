@@ -181,7 +181,7 @@ export function quoteBankTreasuryBond(input: BankTreasuryQuoteInput): BankTreasu
     : -1;
   const quote = quoteBondPrices({
     marketPrice: bond.marketPrice,
-    issuerType: bond.issuerType,
+    issuerType: bond.issuerType ?? "corporation",
     cashLocal: input.poolCashLocal,
     targetCashLocal: input.poolTargetCashLocal,
     appetite: input.appetite,

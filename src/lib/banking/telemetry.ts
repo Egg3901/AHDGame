@@ -44,6 +44,7 @@ export type BankingStage =
   | "householdBook"
   | "deadBankLoans"
   | "interbank"
+  | "bankTreasury"
   | "solvency"
   | "resolution"
   /** The recovery worker at the start of the banking turn. */
