@@ -371,16 +371,15 @@ describe("Incumbency row honors executive approval", () => {
     candidate({ party: "rep", id: "r1", sharePct: 48 }),
   ];
 
-  it("drags an unpopular incumbent governor (-10pp at approval 35, pivot 46)", () => {
+  it("continues the incumbent governor's penalty below approval 36", () => {
     const rows = computePersuasionDriverDisplay(cands, {
       incumbentPartyId: "dem",
       incumbentApproval: 35,
     });
     const inc = rows.find((r) => r.label === "Incumbency");
-    // Pivot recalibrated 50→43 (#2899), then 43→46 as approvals drifted up.
-    // (46−35)×0.01 = −0.11 raw, clamped by INCUMBENCY_DRAG_MAX (0.10) to
-    // −10pp, × no-Reg peelable fraction (0.20) = −2.0 pts displayed.
-    expect(inc?.contributionPct).toBeCloseTo(-2.0, 4);
+    // The penalty reaches 10pp at approval 36, then grows toward 20pp at zero.
+    // At 35 it is 10 + 10/36 pp; the no-registration peelable fraction is 20%.
+    expect(inc?.contributionPct).toBeCloseTo(-2.055556, 4);
   });
 
   it("shields a popular incumbent governor (+10pp at approval 70)", () => {
