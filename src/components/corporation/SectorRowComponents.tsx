@@ -9,7 +9,7 @@ import {
 import { STATE_FLAGS } from "@/lib/constants";
 import { InfoTooltip } from "@/components/InfoTooltip";
 import { Slider } from "@/components/ui";
-import { SECTOR_STRATEGIES } from "@/lib/constants/sectorStrategies";
+import { getStrategy, SECTOR_STRATEGIES } from "@/lib/constants/sectorStrategies";
 import type { SectorStrategy } from "@/lib/constants/sectorStrategies";
 import type { SectorDetail } from "./CorporationPageTypes";
 
@@ -169,7 +169,7 @@ export function StatusBadge({
   if (isTransitioning && isReversing) {
     const targetName =
       strategies?.find((s) => s.id === sector.transitionFromStrategyId)?.name ??
-      sector.transitionFromStrategyId;
+      getStrategy(sector.sectorType, sector.transitionFromStrategyId ?? "standard").name;
     return (
       <InfoTooltip
         trigger={
@@ -192,8 +192,10 @@ export function StatusBadge({
   if (isTransitioning && !isReversing) {
     const fromName =
       strategies?.find((s) => s.id === sector.transitionFromStrategyId)?.name ??
-      sector.transitionFromStrategyId;
-    const toName = strategies?.find((s) => s.id === currentId)?.name ?? currentId;
+      getStrategy(sector.sectorType, sector.transitionFromStrategyId ?? "standard").name;
+    const toName =
+      strategies?.find((s) => s.id === currentId)?.name ??
+      getStrategy(sector.sectorType, currentId).name;
     return (
       <span className="inline-flex items-center gap-1 max-w-full">
         <InfoTooltip

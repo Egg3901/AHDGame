@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { CORPORATION_TYPES } from "../corporations";
-import { SECTOR_STRATEGIES } from "../sectorStrategies";
+import { getSectorStrategies } from "../sectorStrategies";
 import { TECH_DECADES } from "./decades";
 import { TECH_TREE } from "./nodes";
 
@@ -46,7 +46,7 @@ describe("tech tree content (v2)", () => {
 
   it("every unlockStrategy effect references a real strategy in that sector", () => {
     for (const type of CORPORATION_TYPES) {
-      const validIds = new Set((SECTOR_STRATEGIES[type] ?? []).map((s) => s.id));
+      const validIds = new Set(getSectorStrategies(type, true).map((s) => s.id));
       for (const node of TECH_TREE[type]) {
         for (const eff of node.effects) {
           if (eff.kind === "unlockStrategy") {
@@ -66,7 +66,7 @@ describe("tech tree content (v2)", () => {
           n.effects.filter((e) => e.kind === "unlockStrategy").map((e) => e.strategyId)
         )
       );
-      for (const strategy of SECTOR_STRATEGIES[type] ?? []) {
+      for (const strategy of getSectorStrategies(type, true)) {
         if (strategy.requiresTechUnlock) {
           // Without a matching unlock node this strategy is permanently unbuildable
           // once tech trees are on — strand-a-method footgun.
@@ -166,7 +166,7 @@ describe("tech tree content (v3 specializations)", () => {
     for (const type of CORPORATION_TYPES) {
       const supply = new Set<string>();
       const demand = new Set<string>();
-      for (const strategy of SECTOR_STRATEGIES[type] ?? []) {
+      for (const strategy of getSectorStrategies(type, true)) {
         for (const c of Object.keys(strategy.supply ?? {})) supply.add(c);
         for (const c of Object.keys(strategy.demand ?? {})) demand.add(c);
       }

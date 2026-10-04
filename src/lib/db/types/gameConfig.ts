@@ -148,6 +148,8 @@ export interface GameConfig {
   commandEconomyEnabled?: boolean;
   /** Public media editorial stance and audience response rules. Missing means off. */
   mediaEditorialEnabled?: boolean;
+  /** Paid media and entertainment operating-model catalog. Default off. */
+  mediaOperatingModelsEnabled?: boolean;
   /**
    * Sovereignty transitions (decolonization). Absent/false ⇒ the phase is a
    * no-op, which is the required default: the evaluator returns a "strong

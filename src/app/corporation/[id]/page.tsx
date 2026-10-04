@@ -1151,6 +1151,7 @@ export default function CorporationDetailPage() {
                       periodView={periodView}
                       onPeriodViewChange={setPeriodView}
                       plantsMode={corporation.plantsMode === true}
+                      mediaOperatingModelsEnabled={corporation.mediaOperatingModelsEnabled === true}
                       expandOnMount={searchParams.get("expand") === "1"}
                       expandSectorType={
                         CORPORATION_TYPES.includes(

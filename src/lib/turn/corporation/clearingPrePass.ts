@@ -936,6 +936,7 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
               corporationId,
               stance: outlet.stance,
               audienceShare: total > 0 ? outlet.units / total : 0,
+              attentionUnits: outlet.units,
             })),
           ];
         })

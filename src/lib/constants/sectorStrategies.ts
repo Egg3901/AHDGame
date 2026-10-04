@@ -22,6 +22,12 @@ import * as Sentry from "@sentry/nextjs";
 import type { CorporationType } from "./corporations";
 import type { CommodityType } from "./commodities";
 import { COMMODITY_BASE_PRICES } from "./commodities";
+import {
+  MEDIA_OPERATING_MODELS,
+  mediaOperatingModelOutputRates,
+  type MediaOperatingModelId,
+  type MediaOperatingModelSector,
+} from "@/lib/mediaOperatingModels/catalog";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -58,6 +64,8 @@ export interface SectorStrategy {
    */
   minDecade?: string;
   requiresTechUnlock?: boolean;
+  /** Present on virtual strategy definitions backed by the media model catalog. */
+  mediaOperatingModelId?: MediaOperatingModelId;
 }
 
 export interface EffectiveStrategyRates {
@@ -1201,6 +1209,62 @@ const UNKNOWN_SECTOR_STRATEGY: SectorStrategy = {
 };
 
 /**
+ * Build the model recipes from existing physical input baskets and output
+ * patterns. Output rates retain the default sector's base-value budget; input
+ * costs remain on the ordinary strategy demand and physical-cost rails.
+ */
+export function getMediaOperatingModelStrategies(sectorType: string): SectorStrategy[] {
+  if (sectorType !== "media" && sectorType !== "entertainment") return [];
+  const lane = sectorType as MediaOperatingModelSector;
+  const strategies = SECTOR_STRATEGIES[sectorType as CorporationType];
+  const baseline = strategies.find((strategy) => strategy.id === "standard");
+  if (!baseline) return [];
+
+  return MEDIA_OPERATING_MODELS.flatMap((model) => {
+    const recipe = model.recipes[lane];
+    if (!recipe) return [];
+    const input = strategies.find((strategy) => strategy.id === recipe.inputStrategyId);
+    const output = SECTOR_STRATEGIES[lane].find(
+      (strategy) => strategy.id === recipe.outputStrategyId
+    );
+    if (!input || !output) return [];
+
+    const outputSourceRates = Object.fromEntries(
+      model.outputProducts.flatMap((commodity) => {
+        const rate = output.supply[commodity];
+        return typeof rate === "number" && Number.isFinite(rate) && rate > 0
+          ? [[commodity, rate]]
+          : [];
+      })
+    ) as Partial<Record<"advertising" | "entertainment_services", number>>;
+    const sourceBudget = Object.values(outputSourceRates).reduce(
+      (total, rate) => total + (rate ?? 0),
+      0
+    );
+    if (sourceBudget <= 0) return [];
+    const outputValueShares = Object.fromEntries(
+      Object.entries(outputSourceRates).map(([commodity, rate]) => [
+        commodity,
+        (rate ?? 0) / sourceBudget,
+      ])
+    ) as Partial<Record<"advertising" | "entertainment_services", number>>;
+
+    return [
+      {
+        id: model.id,
+        name: model.name,
+        description: `${model.name} operating model using established ${recipe.inputStrategyId.replaceAll("_", " ")} inputs.`,
+        supply: mediaOperatingModelOutputRates(baseline.supply, outputValueShares),
+        demand: { ...input.demand },
+        ...(model.technologies[lane] ? { minDecade: model.technologies[lane]?.decade } : {}),
+        requiresTechUnlock: Boolean(model.technologies[lane]),
+        mediaOperatingModelId: model.id,
+      },
+    ];
+  });
+}
+
+/**
  * Look up a strategy by sector type and strategy ID.
  * Falls back to the sector's first strategy if the strategy ID is unknown.
  * Unknown persisted sector types use an inert strategy until repaired.
@@ -1217,7 +1281,23 @@ export function getStrategy(sectorType: string, strategyId: string): SectorStrat
     return UNKNOWN_SECTOR_STRATEGY;
   }
   const strategies = SECTOR_STRATEGIES[sectorType as CorporationType];
-  return strategies.find((s) => s.id === strategyId) ?? strategies[0];
+  return (
+    strategies.find((s) => s.id === strategyId) ??
+    getMediaOperatingModelStrategies(sectorType).find((s) => s.id === strategyId) ??
+    strategies[0]
+  );
+}
+
+/** Strategy options for queries and menus. Model options are omitted unless enabled. */
+export function getSectorStrategies(
+  sectorType: string,
+  mediaOperatingModelsEnabled = false
+): SectorStrategy[] {
+  if (!Object.hasOwn(SECTOR_STRATEGIES, sectorType)) return [];
+  const strategies = SECTOR_STRATEGIES[sectorType as CorporationType];
+  return mediaOperatingModelsEnabled
+    ? [...strategies, ...getMediaOperatingModelStrategies(sectorType)]
+    : strategies;
 }
 
 /**
