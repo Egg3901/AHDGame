@@ -12,13 +12,15 @@
  * `statePartyOrg.registration`, and asserts the entrenched party's national
  * vote share rises. Fails before the fix (no diff); passes after.
  */
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, beforeAll, vi } from "vitest";
 import { ObjectId } from "mongodb";
 import { demographicCategories } from "@/lib/seeds/demographicCategories";
 import { stateDemographics } from "@/lib/seeds/stateDemographics";
 import { ELECTORAL_VOTE_UNITS } from "@/lib/constants/states";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
+vi.mock("@/lib/elections/referendumInputs", () => ({ loadReferendumInputs: vi.fn() }));
+vi.mock("@/lib/elections/responseCredit", () => ({ loadResponseCredit: vi.fn() }));
 
 const uniqueStateIds = [...new Set(ELECTORAL_VOTE_UNITS.map((u) => u.stateId))];
 
@@ -32,10 +34,19 @@ interface HarnessOpts {
   endTime: Date;
   /** Optional per-party registration applied to every state's statePartyOrg rows. */
   registration?: { democrat: number; republican: number };
+  preset?: string;
+  incumbentParty?: string;
+  referendumInputs?: {
+    unemploymentRate: number;
+    povertyRate: number;
+    inflationRate: number;
+    realIncomeTrendPct?: number;
+  };
 }
 
 function buildMockDb(opts: HarnessOpts) {
-  const { electionId, demId, repId, startTime, endTime, registration } = opts;
+  const { electionId, demId, repId, startTime, endTime, registration, preset, incumbentParty } =
+    opts;
   const charDemId = new ObjectId();
   const charRepId = new ObjectId();
 
@@ -138,6 +149,18 @@ function buildMockDb(opts: HarnessOpts) {
           electionType: "president",
           countryId: "US",
         }),
+      };
+    }
+    if (name === "gameState") {
+      return {
+        findOne: vi.fn().mockResolvedValue(preset ? { _id: "current", preset } : null),
+      };
+    }
+    if (name === "electedOfficials") {
+      return {
+        findOne: vi
+          .fn()
+          .mockResolvedValue(incumbentParty ? { countryId: "US", party: incumbentParty } : null),
       };
     }
     if (name === "demographicCategories") {
@@ -246,7 +269,27 @@ async function runAndGetDemShare(opts: HarnessOpts): Promise<number> {
   return total > 0 ? (dem / total) * 100 : 0;
 }
 
+async function runPresidentDryRun(opts: HarnessOpts) {
+  const { collection } = buildMockDb(opts);
+  const { getDb } = await import("@/lib/mongodb");
+  vi.mocked(getDb).mockResolvedValue({ collection } as never);
+  const { loadReferendumInputs } = await import("@/lib/elections/referendumInputs");
+  vi.mocked(loadReferendumInputs).mockResolvedValue(opts.referendumInputs as never);
+  const { loadResponseCredit } = await import("@/lib/elections/responseCredit");
+  vi.mocked(loadResponseCredit).mockResolvedValue([]);
+
+  const { accumulatePresidentVoteTurn } = await import("./presidentialElectionEngine");
+  const votingTime = new Date((opts.startTime.getTime() + opts.endTime.getTime()) / 2);
+  return accumulatePresidentVoteTurn(opts.electionId, 1, votingTime, { dryRun: true });
+}
+
 describe("presidential engine — registration entrenchment", () => {
+  beforeAll(async () => {
+    // Load the orchestration graph before test fixtures so a cold import cannot
+    // time out mid-test and leave an unfinished vote run using the next fixture.
+    await import("./presidentialElectionEngine");
+  }, 60_000);
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -295,4 +338,37 @@ describe("presidential engine — registration entrenchment", () => {
     // every party, so two no-reg runs are byte-identical.
     expect(a).toBe(b);
   });
+
+  it("applies the 1979 target-relative inflation penalty in the presidential tally pipeline", async () => {
+    const { getEraMonetaryBaseline } = await import("@/lib/constants/monetaryEra");
+    const target = getEraMonetaryBaseline("US", 1979)!.targetInflation;
+    const demId = new ObjectId().toString();
+    const result = await runPresidentDryRun({
+      electionId: new ObjectId(),
+      demId,
+      repId: new ObjectId().toString(),
+      startTime: new Date("1979-11-01T00:00:00Z"),
+      endTime: new Date("1979-11-05T00:00:00Z"),
+      preset: "1979-default",
+      incumbentParty: "democrat",
+      referendumInputs: {
+        unemploymentRate: 6,
+        povertyRate: 20,
+        inflationRate: target + 2,
+        realIncomeTrendPct: 0,
+      },
+    });
+
+    expect(result).toBeDefined();
+    expect(result!.referendum?.sharePts).toBeCloseTo(-0.2, 6);
+    expect(
+      Object.values(result!.totalVotes).reduce((sum, votes) => sum + votes, 0)
+    ).toBeGreaterThan(0);
+    const incumbent = result!.factorLedger?.byCandidateNational.find(
+      (candidate) => candidate.candidateId === demId
+    );
+    expect(
+      incumbent?.factors.find((factor) => factor.key === "nationalEnvironment")?.voteDelta
+    ).toBeLessThan(0);
+  }, 30_000);
 });
