@@ -19,7 +19,8 @@ import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCountryState } from "@/lib/countryState";
 import { getRegimeEscalationCollection } from "@/lib/db/collections/regimeEscalation";
 import { getCountryLeaderStatesCollection } from "@/lib/db/collections/countryLeaderState";
-import { getHeadOfGovernmentCharacterId } from "@/lib/api/headOfGovernment";
+import { leaderStateIdentity } from "@/lib/government/leaderReference";
+import { getHeadOfGovernmentReference } from "@/lib/api/headOfGovernmentReference";
 import { classifyPopularBand, INITIAL_POPULAR_LEGITIMACY } from "@/lib/turn/popularLegitimacy";
 
 const MAX_RECENT_TRANSITIONS = 3;
@@ -53,10 +54,10 @@ export async function GET(_request: Request, { params }: RouteParams) {
     // both surfaces see the same scalar value.
     let popularLegitimacy = INITIAL_POPULAR_LEGITIMACY;
     const leaderColl = getCountryLeaderStatesCollection(db);
-    const hogId = await getHeadOfGovernmentCharacterId(db, countryId);
+    const hogId = await getHeadOfGovernmentReference(db, countryId);
     const leaderRow =
-      (hogId ? await leaderColl.findOne({ countryId, leaderCharacterId: hogId }) : null) ??
-      (runtime.rulingPartyId !== null
+      (hogId ? await leaderColl.findOne({ countryId, ...leaderStateIdentity(hogId) }) : null) ??
+      (!hogId && runtime.rulingPartyId !== null
         ? await leaderColl.findOne({
             countryId,
             governingPartyId: String(runtime.rulingPartyId),

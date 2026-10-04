@@ -3,8 +3,12 @@
 import { useState } from "react";
 import Link from "next/link";
 import { InfoTooltip } from "@/components/InfoTooltip";
-import { STRATEGY_TRANSITION_TURNS, CANCEL_COST_FRACTION } from "@/lib/constants/sectorStrategies";
-import { SECTOR_STRATEGIES } from "@/lib/constants/sectorStrategies";
+import {
+  getSectorStrategies,
+  getStrategy,
+  STRATEGY_TRANSITION_TURNS,
+  CANCEL_COST_FRACTION,
+} from "@/lib/constants/sectorStrategies";
 import { type CorporationType } from "@/lib/constants/corporations";
 import { isExtractionStrategyZeroYield } from "@/lib/corporations/extractionStrategyAvailability";
 import StrategyChangeConfirm from "./StrategyChangeConfirm";
@@ -60,6 +64,7 @@ export interface SectorRowProps {
   fmtAnchor: (val: number) => string;
   /** Plants tier: swap growth columns for capacity + fill. */
   plantsMode?: boolean;
+  mediaOperatingModelsEnabled?: boolean;
 }
 
 export function SectorRow({
@@ -83,6 +88,7 @@ export function SectorRow({
   fmtMoney,
   fmtAnchor,
   plantsMode = false,
+  mediaOperatingModelsEnabled = false,
 }: SectorRowProps) {
   const [pendingChange, setPendingChange] = useState<{
     sectorId: string;
@@ -92,8 +98,10 @@ export function SectorRow({
   const [mobileAbandonConfirm, setMobileAbandonConfirm] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
-  const strategies = SECTOR_STRATEGIES[sector.sectorType as CorporationType];
+  const strategies = getSectorStrategies(sector.sectorType, mediaOperatingModelsEnabled);
   const currentId = sector.strategyId ?? "standard";
+  const currentStrategy = getStrategy(sector.sectorType, currentId);
+  const currentStrategyListed = strategies.some((strategy) => strategy.id === currentId);
   const isTransitioning = !!sector.transitionFromStrategyId;
   const isUpdating = strategyUpdatingSectorId === sector._id;
   const isGrowthUpdating = growthUpdatingSectorId === sector._id;
@@ -322,6 +330,11 @@ export function SectorRow({
         title="Change operating strategy"
         aria-label={`Operating strategy, ${sectorName}`}
       >
+        {!currentStrategyListed && (
+          <option value={currentId} disabled>
+            {currentStrategy.name} (active, selection disabled)
+          </option>
+        )}
         {strategies.map((s) => {
           const zeroYield = isUnavailableExtractionStrategy(s);
           return (
@@ -336,7 +349,7 @@ export function SectorRow({
       <span
         className={`block truncate text-xs ${currentId !== "standard" ? "text-foreground" : "text-muted"}`}
       >
-        {strategies.find((s) => s.id === currentId)?.name ?? currentId}
+        {currentStrategy.name}
       </span>
     ) : null;
 
@@ -827,6 +840,7 @@ export function SectorRow({
             currentStrategyId={currentId}
             targetStrategyId={pendingChange.targetStrategyId}
             dailyRevenue={sector.revenue}
+            mediaOperatingModelsEnabled={mediaOperatingModelsEnabled}
             liquidCurrencyCode={liquidCurrencyCode}
             loading={isUpdating}
             onConfirm={() => {

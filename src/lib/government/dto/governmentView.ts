@@ -29,7 +29,7 @@ export interface PmAppointmentVoteView extends ParliamentaryVoteView {
   nomineeMode?: "character" | "npp";
   nomineeName: string;
   nomineePartyId: string;
-  nominatedByCharacterId: string;
+  nominatedByCharacterId: string | null;
   formationType: string;
   coalitionId: number | null;
   coalitionPartyIds: string[] | null;

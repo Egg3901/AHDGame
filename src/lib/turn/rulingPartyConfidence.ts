@@ -1,4 +1,8 @@
-import type { ObjectId } from "mongodb";
+import {
+  leaderStateId,
+  leaderStateIdentity,
+  type LeaderReference,
+} from "@/lib/government/leaderReference";
 import type { CountryId } from "@/lib/constants/countries";
 import type {
   CountryLeaderState,
@@ -63,10 +67,6 @@ function trimHistory(history: LeaderConfidenceHistoryEntry[]): LeaderConfidenceH
 
 // ── Persistence helpers ──────────────────────────────────────────────────────
 
-function buildId(countryId: CountryId, leaderCharacterId: ObjectId): string {
-  return `${countryId}_${leaderCharacterId.toString()}`;
-}
-
 /**
  * Install a new leader with fresh confidence (75).
  * Overwrites any existing state for this leader.
@@ -74,19 +74,19 @@ function buildId(countryId: CountryId, leaderCharacterId: ObjectId): string {
 export async function installNewLeader(
   db: Db,
   countryId: CountryId,
-  leaderCharacterId: ObjectId,
+  leaderCharacterId: LeaderReference,
   leaderOfficeType: string,
   governingPartyId: string | null,
   currentTurn: number
 ): Promise<CountryLeaderState> {
   const coll = getCountryLeaderStatesCollection(db);
   const now = new Date();
-  const _id = buildId(countryId, leaderCharacterId);
+  const _id = leaderStateId(countryId, leaderCharacterId);
 
   const state: CountryLeaderState = {
     _id,
     countryId,
-    leaderCharacterId,
+    ...leaderStateIdentity(leaderCharacterId),
     leaderOfficeType,
     governingPartyId,
     partyConfidence: INITIAL_CONFIDENCE,
@@ -111,18 +111,23 @@ export async function installNewLeader(
 export async function renewLeaderMandate(
   db: Db,
   countryId: CountryId,
-  leaderCharacterId: ObjectId,
+  leaderCharacterId: LeaderReference,
   leaderOfficeType: string,
   governingPartyId: string | null,
   currentTurn: number
 ): Promise<{ state: CountryLeaderState; bumped: boolean }> {
   const coll = getCountryLeaderStatesCollection(db);
-  const _id = buildId(countryId, leaderCharacterId);
+  const _id = leaderStateId(countryId, leaderCharacterId);
 
   const existing = await coll.findOne({ _id });
 
   // If no prior state, or leader changed: treat as new install
-  if (!existing || !existing.leaderCharacterId.equals(leaderCharacterId)) {
+  if (
+    !existing ||
+    !("kind" in leaderCharacterId
+      ? existing.leaderNppId?.equals(leaderCharacterId.id)
+      : existing.leaderCharacterId?.equals(leaderCharacterId))
+  ) {
     const state = await installNewLeader(
       db,
       countryId,
@@ -193,11 +198,11 @@ export async function renewLeaderMandate(
 export async function ensureLeaderStateExists(
   db: Db,
   countryId: CountryId,
-  leaderCharacterId: ObjectId,
+  leaderCharacterId: LeaderReference,
   currentTurn: number
 ): Promise<CountryLeaderState> {
   const coll = getCountryLeaderStatesCollection(db);
-  const _id = buildId(countryId, leaderCharacterId);
+  const _id = leaderStateId(countryId, leaderCharacterId);
   const existing = await coll.findOne({ _id });
   if (existing) return existing;
 
@@ -222,7 +227,7 @@ export async function ensureLeaderStateExists(
   const seed: CountryLeaderState = {
     _id,
     countryId,
-    leaderCharacterId,
+    ...leaderStateIdentity(leaderCharacterId),
     leaderOfficeType: "",
     governingPartyId,
     partyConfidence: INITIAL_CONFIDENCE,
@@ -249,13 +254,13 @@ export async function ensureLeaderStateExists(
 export async function adjustLeaderConfidence(
   db: Db,
   countryId: CountryId,
-  leaderCharacterId: ObjectId,
+  leaderCharacterId: LeaderReference,
   delta: number,
   reason: string,
   currentTurn: number
 ): Promise<CountryLeaderState | null> {
   const coll = getCountryLeaderStatesCollection(db);
-  const _id = buildId(countryId, leaderCharacterId);
+  const _id = leaderStateId(countryId, leaderCharacterId);
 
   // Self-heal missing leader-state row (admin-formed governments, fresh
   // games before the per-turn driver has run for this country).

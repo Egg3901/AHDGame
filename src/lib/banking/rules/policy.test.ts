@@ -32,6 +32,7 @@ describe("resolveBankingPolicy", () => {
   it("defaults to banking off, LOC on, with a missing config document", () => {
     expect(resolveBankingPolicy(null)).toEqual({
       privateBanking: false,
+      failurePolitics: false,
       propTrading: false,
       propForexFees: false,
       bankTreasury: false,
@@ -47,6 +48,7 @@ describe("resolveBankingPolicy", () => {
   it("treats prop trading and contagion as kill switches that require banking", () => {
     expect(resolveBankingPolicy({ privateBankingEnabled: true })).toEqual({
       privateBanking: true,
+      failurePolitics: false,
       propTrading: true,
       propForexFees: false,
       bankTreasury: false,
@@ -88,11 +90,20 @@ describe("resolveBankingPolicy", () => {
     );
   });
 
+  it("requires both private banking and explicit politics opt-in", () => {
+    expect(resolveBankingPolicy({ bankFailurePoliticsEnabled: true }).failurePolitics).toBe(false);
+    expect(
+      resolveBankingPolicy({ privateBankingEnabled: true, bankFailurePoliticsEnabled: true })
+        .failurePolitics
+    ).toBe(true);
+  });
+
   it("returns a frozen snapshot", () => {
     const snapshot = resolveBankingPolicy({ privateBankingEnabled: true });
     expect(Object.isFrozen(snapshot)).toBe(true);
     expect(BANKING_POLICY_ALL_ON).toEqual({
       privateBanking: true,
+      failurePolitics: true,
       propTrading: true,
       propForexFees: true,
       bankTreasury: true,

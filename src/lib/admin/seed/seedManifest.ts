@@ -516,6 +516,7 @@ const RUNTIME: CollectionEntry[] = [
   { name: "ministerialOrders", category: "runtime" },
   { name: "governmentApprovals", category: "runtime" },
   { name: "governmentFormations", category: "runtime" },
+  { name: "governmentAccountability", category: "runtime" },
   { name: "parliamentaryGovernments", category: "runtime" },
   { name: "ukCabinetCooldowns", category: "runtime" },
   { name: "ukGovernment", category: "runtime" },
@@ -598,6 +599,12 @@ const RUNTIME: CollectionEntry[] = [
       "Idempotency records for crisis recapitalization, guarantee, and resolution actions. Wiped with the crisis and bank state they reference.",
   },
   { name: "depositInsuranceFunds", category: "runtime" },
+  {
+    name: "bankFailurePoliticalEvents",
+    category: "runtime",
+    notes:
+      "Funded bank-failure political receipts belong to the current world and are wiped on reset.",
+  },
   {
     name: "interbankLoans",
     category: "runtime",

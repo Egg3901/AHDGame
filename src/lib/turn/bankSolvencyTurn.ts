@@ -314,7 +314,8 @@ async function evaluateOneBank(
       marked,
       live.bankPropBookRevision,
       corp.name,
-      turn
+      turn,
+      { playerDepositsAreLiabilities: savingsReadsAuthoritative(policy, currency) }
     );
     if (liq.stale) return null;
     cashReserves = liq.cashReserves;
@@ -461,7 +462,9 @@ async function evaluateOneBank(
   }
 
   const priorBand = charter.warningBand;
-  const equityBase = computePropEquityBase(cashReserves, charter);
+  const equityBase = computePropEquityBase(cashReserves, { ...charter, npcDeposits }, undefined, {
+    playerDepositsAreLiabilities: savingsReadsAuthoritative(policy, currency),
+  });
 
   let fails = false;
   if (depositTaking) {

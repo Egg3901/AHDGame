@@ -1351,24 +1351,36 @@ const SECTOR: Partial<Record<CorporationType, Record<string, NodeSpec[]>>> = {
       {
         name: "Radio Network Dominance",
         description: "National radio networks lock in mass advertising revenue.",
-        effects: [{ kind: "marginBonus", pp: 1 }],
+        effects: [
+          { kind: "marginBonus", pp: 1 },
+          { kind: "unlockStrategy", strategyId: "radio_network" },
+        ],
       },
       {
         name: "Wartime Press Partnerships",
         description: "Government media access builds institutional relationships.",
-        effects: [{ kind: "marketingStrength", flat: 15 }],
+        effects: [
+          { kind: "marketingStrength", flat: 15 },
+          { kind: "unlockStrategy", strategyId: "newspaper" },
+        ],
       },
     ],
     "1950": [
       {
         name: "Television Broadcasting",
         description: "TV network affiliates lock in prime-time advertising revenue.",
-        effects: [{ kind: "marginBonus", pp: 2 }],
+        effects: [
+          { kind: "marginBonus", pp: 2 },
+          { kind: "unlockStrategy", strategyId: "broadcast_tv" },
+        ],
       },
       {
         name: "Magazine Publishing Scale",
         description: "Glossy magazines capture consumer brand advertising spend.",
-        effects: [{ kind: "marketingStrength", flat: 20 }],
+        effects: [
+          { kind: "marketingStrength", flat: 20 },
+          { kind: "unlockStrategy", strategyId: "publishing_house" },
+        ],
       },
     ],
     "1960": [
@@ -1429,6 +1441,7 @@ const SECTOR: Partial<Record<CorporationType, Record<string, NodeSpec[]>>> = {
         effects: [
           { kind: "marginBonus", pp: 2 },
           { kind: "marketingStrength", flat: 50 },
+          { kind: "unlockStrategy", strategyId: "cable_tv" },
         ],
       },
       {
@@ -1488,6 +1501,7 @@ const SECTOR: Partial<Record<CorporationType, Record<string, NodeSpec[]>>> = {
         description: "Direct subscriptions unlock the Streaming Media method.",
         effects: [
           { kind: "unlockStrategy", strategyId: "streaming_media" },
+          { kind: "unlockStrategy", strategyId: "streaming_platform" },
           { kind: "marketingStrength", flat: 70 },
         ],
       },
@@ -3619,7 +3633,10 @@ const SECTOR: Partial<Record<CorporationType, Record<string, NodeSpec[]>>> = {
       {
         name: "Hollywood Studio System",
         description: "Vertically integrated studios maximize film revenue and control.",
-        effects: [{ kind: "marginBonus", pp: 1.5 }],
+        effects: [
+          { kind: "marginBonus", pp: 1.5 },
+          { kind: "unlockStrategy", strategyId: "film_studio" },
+        ],
       },
       {
         name: "Radio Entertainment Networks",
@@ -3636,7 +3653,10 @@ const SECTOR: Partial<Record<CorporationType, Record<string, NodeSpec[]>>> = {
       {
         name: "Record Labels",
         description: "LP records monetize music at consumer scale.",
-        effects: [{ kind: "marketingStrength", flat: 25 }],
+        effects: [
+          { kind: "marketingStrength", flat: 25 },
+          { kind: "unlockStrategy", strategyId: "music_label" },
+        ],
       },
     ],
     "1960": [
@@ -3752,6 +3772,7 @@ const SECTOR: Partial<Record<CorporationType, Record<string, NodeSpec[]>>> = {
         name: "Streaming Distribution",
         description: "Direct subscribers capture recurring revenue.",
         effects: [
+          { kind: "unlockStrategy", strategyId: "streaming_platform" },
           { kind: "marginBonus", pp: 3 },
           { kind: "marketingStrength", flat: 70 },
         ],

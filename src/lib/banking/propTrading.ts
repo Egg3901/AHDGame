@@ -26,6 +26,8 @@ import {
 } from "./propForexFees";
 import { addPropForexVolume } from "./rules/propForexFees";
 import { loadBankingPolicy } from "./policy";
+import { savingsReadsAuthoritative } from "./rules/policy";
+import type { BalanceSheetOptions } from "./rules/balanceSheet";
 
 /**
  * Leverage math lives in the rules zone (`rules/propLeverage.ts`) so
@@ -435,7 +437,9 @@ export async function openPosition(
 
   const nextMark = sumPositionMarks(nextBook);
   const nextLiquid = liquid - cost;
-  const equity = computePropEquityBase(nextLiquid, charter, nextMark);
+  const equity = computePropEquityBase(nextLiquid, charter, nextMark, {
+    playerDepositsAreLiabilities: savingsReadsAuthoritative(policy, homeCurrency),
+  });
   if (equity <= 0 || nextMark > PROP_LEVERAGE_MULTIPLE * equity + 1e-9) {
     return { ok: false, error: "Trade would breach prop leverage multiple" };
   }
@@ -624,9 +628,10 @@ export async function forceLiquidateToLeverageCap(
   marked: MarkBookResult,
   revision?: number,
   bankName?: string,
-  turn?: number
+  turn?: number,
+  options: BalanceSheetOptions = {}
 ): Promise<{ cashReserves: number; charter: BankCharter; forced: boolean; stale?: boolean }> {
-  const equity = computePropEquityBase(cashReserves, charter, marked.propBookMarkValue);
+  const equity = computePropEquityBase(cashReserves, charter, marked.propBookMarkValue, options);
   const cap = PROP_LEVERAGE_MULTIPLE * Math.max(0, equity);
   if (!(marked.propBookMarkValue > cap + 1e-9) || marked.propBookMarkValue <= 0) {
     return {

@@ -111,6 +111,19 @@ describe("banking charter", () => {
       return import("../separationLaw");
     }
 
+    it.each([1991, 1998, 1999])("uses live US law defaults in year %s", async (year) => {
+      db.collectionMocks.gameState!.findOne.mockResolvedValue({
+        _id: "current",
+        preset: "1991-default",
+        currentYear: year,
+        currentTurn: 1,
+      });
+      const { getLegalCharterTypes } = await importSeparationLaw();
+      await expect(getLegalCharterTypes(db as unknown as Db, "US")).resolves.toEqual(
+        year < 1999 ? ["retail", "investment"] : ["retail", "investment", "universal"]
+      );
+    });
+
     it("allows universal in a modern world with no enacted law", async () => {
       const { getLegalCharterTypes } = await importSeparationLaw();
       await expect(getLegalCharterTypes(db as unknown as Db, "US")).resolves.toEqual([

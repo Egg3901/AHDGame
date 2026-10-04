@@ -278,6 +278,24 @@ describe("tech outputRate — plants units chain", () => {
   });
 });
 
+describe("persisted media operating models in the corporation turn", () => {
+  it("processes an active model id through the ordinary sector pipeline while selection is off", () => {
+    const result = run(
+      "plants",
+      makeSector({
+        sectorType: "media",
+        strategyId: "cable_tv",
+        capitalStock: 1_000,
+        plantsStartTurn: 900,
+      } as Partial<CorporateSector>),
+      makeCorp({ type: "media", sectorType: "media" } as Partial<Corporation>)
+    );
+
+    expect(Number.isFinite(result.result.hourlyRevenue)).toBe(true);
+    expect(result.result.hourlyRevenue).toBeGreaterThan(0);
+  });
+});
+
 // ─── Dominance toll consolidation ───────────────────────────────────────────
 
 describe("dominance toll consolidation", () => {

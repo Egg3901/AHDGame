@@ -49,7 +49,7 @@ import { latentTopUpForCountry, latentTopUpForState } from "@/lib/market/latentS
 import { bookFor, loadReachableBooks } from "@/lib/trade/queries/loadReachableBooks";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CommodityPrice, GameConfig, GameState } from "@/lib/db/types";
-import { getEffectiveStrategyRates, SECTOR_STRATEGIES } from "@/lib/constants/sectorStrategies";
+import { getEffectiveStrategyRates, getSectorStrategies } from "@/lib/constants/sectorStrategies";
 import { computeRetoolHint } from "@/lib/corporations/retoolHint";
 import { applyExtractionResourceCapacityToSupply } from "@/lib/corporations/extractionResourceSupply";
 import { capacityRescaleRatio } from "@/lib/constants/capacityEconomy";
@@ -148,6 +148,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
           marketGovernorRampTurns: 1,
           explicitPlantCostsEnabled: 1,
           mediaEditorialEnabled: 1,
+          mediaOperatingModelsEnabled: 1,
         },
       }
     );
@@ -863,7 +864,10 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         isTransitioning: effectiveRates.isTransitioning,
         producedUnits: sector.producedUnits,
         capacityUnits: sector.operatingCapacityUnits ?? sector.capitalStock,
-        strategies: SECTOR_STRATEGIES[sectorType] ?? [],
+        strategies: getSectorStrategies(
+          sectorType,
+          governorConfig?.mediaOperatingModelsEnabled === true
+        ),
         isAvailable: (candidate) =>
           !getStrategyAvailability(techCorpView, candidate, techCurrentYear, techTreesEnabled)
             .locked,
@@ -1246,6 +1250,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         techCorpView,
         techCurrentYear,
         techTreesEnabled,
+        mediaOperatingModelsEnabled: governorConfig?.mediaOperatingModelsEnabled === true,
         shouldRedact,
         stateResources,
         strategyCapacityMultipliers,

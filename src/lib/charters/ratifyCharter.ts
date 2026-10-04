@@ -99,6 +99,8 @@ export async function ratifyCharter(
     runtime.governmentType === "onePartyState" ? "banned" : null;
 
   const platform: PartyCharterPlatform = charter.platform;
+
+  const charterCurrentTurn = await getCurrentTurn(db);
   const newParty: PoliticalParty = {
     _id: new ObjectIdCtor(),
     sequentialId,
@@ -129,6 +131,7 @@ export async function ratifyCharter(
     // default to double-approval at ratification, matching default-
     // party seeds.
     transactionApprovalMode: "double",
+    createdTurn: charterCurrentTurn,
     createdAt: now,
     updatedAt: now,
   };
@@ -230,7 +233,7 @@ export async function ratifyCharter(
     .find({ _id: { $in: charter.foundersCharacterIds } })
     .toArray();
   // Founders join the new party now — stamp the tenure anchor (leadershipTenure.ts).
-  const charterCurrentTurn = await getCurrentTurn(db);
+
   // Group departing founders by their former party so per-party cleanup
   // (memberCount recompute, leadership-election withdrawal) runs once each.
   const departuresByOldParty = new Map<number, ObjectId[]>();

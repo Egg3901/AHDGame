@@ -7,6 +7,11 @@ import type { DecisionContext } from "@/lib/onePartyState/decisionEvents/types";
 import type { LeaderDecision } from "@/lib/db/types/regimeEscalation";
 import type { CountryLeaderState } from "@/lib/db/types/countryLeaderState";
 
+vi.mock("@/lib/turn/parliamentaryGovernment", () => ({
+  appointPrimeMinister: vi.fn().mockResolvedValue(undefined),
+}));
+import { appointPrimeMinister } from "@/lib/turn/parliamentaryGovernment";
+
 function makeLeaderState(): CountryLeaderState {
   return {
     _id: "CN_stub",
@@ -170,13 +175,14 @@ describe("stage3RespondToFactionSplit handler", () => {
     const option = stage3RespondToFactionSplitHandler.options.find(
       (o) => o.id === "concedeLeadership"
     )!;
-    await expect(option.apply(ctx)).rejects.toThrow(/no character found in defected party/);
+    await expect(option.apply(ctx)).rejects.toThrow(/no seated successor/);
   });
 
   it("concedeLeadership: installs successor, promotes defected party to ruling, +5 popular, resets dwell", async () => {
     const successorId = new ObjectId();
-    db.collectionMocks.characters.findOne.mockResolvedValue({
-      _id: successorId,
+    db.collectionMocks.electedOfficials.findOne.mockResolvedValue({
+      characterId: successorId,
+      characterName: "Successor",
       party: "11",
       countryId: "CN",
     });
@@ -227,6 +233,15 @@ describe("stage3RespondToFactionSplit handler", () => {
     });
     expect(patchCall).toBeDefined();
 
+    expect(appointPrimeMinister).toHaveBeenCalledWith(
+      expect.anything(),
+      "CN",
+      successorId,
+      null,
+      "Successor",
+      expect.any(Date)
+    );
+
     // installNewLeader → replaceOne on countryLeaderStates with INITIAL_CONFIDENCE=75
     const replaceCalls = db.collectionMocks.countryLeaderStates.replaceOne.mock.calls;
     expect(replaceCalls).toHaveLength(1);
@@ -246,6 +261,52 @@ describe("stage3RespondToFactionSplit handler", () => {
       return op.$set?.["dwellCounters.stage3"] === 0;
     });
     expect(resetCall).toBeDefined();
+  });
+
+  it("concedeLeadership seats an NPP successor and uses its own leader-state identity", async () => {
+    const nppId = new ObjectId();
+    db.collectionMocks.electedOfficials.findOne.mockResolvedValue({
+      characterId: null,
+      nppId,
+      characterName: "Autonomous successor",
+      party: "11",
+      countryId: "CN",
+      officeType: "npcDelegate",
+    });
+    db.collectionMocks.countryState.findOneAndUpdate.mockResolvedValue({
+      _id: "CN",
+      countryId: "CN",
+      governmentType: "onePartyState",
+      rulingPartyId: 11,
+      opsVoteMultipliers: null,
+      hasLeaderConfidenceModel: true,
+    });
+    const option = stage3RespondToFactionSplitHandler.options.find(
+      (o) => o.id === "concedeLeadership"
+    )!;
+    await option.apply(makeContext(db, { defectedPartySequentialId: 11 }));
+    expect(appointPrimeMinister).toHaveBeenCalledWith(
+      expect.anything(),
+      "CN",
+      null,
+      nppId,
+      "Autonomous successor",
+      expect.any(Date)
+    );
+    expect(db.collectionMocks.electedOfficials.findOne.mock.calls[0][0]).toMatchObject({
+      officeType: "npcDelegate",
+    });
+    expect(db.collectionMocks.countryLeaderStates.replaceOne.mock.calls[0][1]).toMatchObject({
+      _id: `CN_npp_${nppId}`,
+      leaderCharacterId: null,
+      leaderNppId: nppId,
+      partyConfidence: 75,
+    });
+    expect(db.collectionMocks.governmentFormations.updateOne.mock.calls[0][1].$set).toMatchObject({
+      pmCharacterId: null,
+      pmNppId: nppId,
+      governingPartyId: "11",
+    });
   });
 
   it("ignore: no-op (no DB writes)", async () => {

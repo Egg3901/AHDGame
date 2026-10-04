@@ -199,3 +199,15 @@ describe("purge rejoin blocks", () => {
     });
   });
 });
+
+it("matures autonomous election entry in game turns even when simulations advance quickly", () => {
+  const party = {
+    sequentialId: 7,
+    countryId: "US",
+    isDefault: false,
+    createdTurn: 10,
+    createdAt: new Date(),
+  } as PoliticalParty;
+  expect(buildNppElectionEligiblePartyKeys([party], new Date(), 57).size).toBe(0);
+  expect(buildNppElectionEligiblePartyKeys([party], new Date(), 58).has("US:7")).toBe(true);
+});

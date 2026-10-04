@@ -536,7 +536,7 @@ describe("resetParliamentaryGovernmentAfterElection — else-branch refactor reg
 });
 
 describe("updateSeatCountsOnly", () => {
-  it("bumps cycle, recalculates seatsByParty and governingPartyId, leaves PM state alone", async () => {
+  it("refreshes the chamber while preserving the sitting PM and governing party", async () => {
     db.collectionMocks["governmentFormations"] = {
       ...db.collection("governmentFormations"),
       findOne: vi.fn().mockResolvedValue({
@@ -544,6 +544,7 @@ describe("updateSeatCountsOnly", () => {
         status: "formed",
         pmCharacterId: new ObjectId(),
         pmName: "Sitting PM",
+        governingPartyId: "2",
         cycle: 5,
       }),
       updateOne: vi.fn().mockResolvedValue({ matchedCount: 1, modifiedCount: 1 }),
@@ -568,7 +569,7 @@ describe("updateSeatCountsOnly", () => {
     const update = call[1].$set;
     expect(update.cycle).toBe(6);
     expect(update.seatsByParty).toEqual({ "1": 340, "2": 200 });
-    expect(update.governingPartyId).toBe("1");
+    expect(update.governingPartyId).toBe("2");
     expect(update.updatedAt).toEqual(now);
 
     // PM fields untouched

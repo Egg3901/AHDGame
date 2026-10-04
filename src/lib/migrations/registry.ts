@@ -1,3 +1,5 @@
+import { migration as governmentAccountability } from "./entries/2026-10-04-government-accountability";
+import { migration as bankFailurePoliticsIndex } from "./entries/2026-10-04-bank-failure-politics-index";
 // Central registry of deployable migrations, in chronological order. Each
 // entry's id is stable forever (used as the _id of the migrationsRun marker)
 // and `idempotent` must reflect actual runtime safety.
@@ -326,10 +328,12 @@ export const MIGRATIONS: Migration[] = [
   // Metadata only. Deploy this backfill before relying on charter epoch reads;
   // the runtime also dual-reads untagged legacy rows during rollout.
   bankLoanCharterEpoch,
+  governmentAccountability,
   politicalMediaOrderIndexes,
   // v2 product lines use a separate collection and one active slot per corporation.
   manufacturingProductProjectsV2Index,
   bankTreasuryTradeIndexes,
+  bankFailurePoliticsIndex,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.

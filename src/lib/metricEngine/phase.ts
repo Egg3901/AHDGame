@@ -1,3 +1,4 @@
+import { loadBankFailureEffects } from "@/lib/banking/failurePolitics";
 import { sumObservedOutput, outputHistorySpanTurns } from "./rules/outputVolume";
 import type { Db } from "mongodb";
 import type { StateMetrics, GameConfig } from "@/lib/db/types";
@@ -324,7 +325,16 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
     // medianIncome at labourSystemMode ≥ "macro".
     db
       .collection<GameConfig>("gameConfig")
-      .findOne({ _id: "default" }, { projection: { labourSystemMode: 1 } })
+      .findOne(
+        { _id: "default" },
+        {
+          projection: {
+            labourSystemMode: 1,
+            bankFailurePoliticsEnabled: 1,
+            privateBankingEnabled: 1,
+          },
+        }
+      )
       .catch(() => null),
     // Bridge A: 4 of the 6 TFP basket inputs live on demolished stateMetrics
     // categories, so playable regions resolved them all to TFP_REFERENCE_INPUTS
@@ -341,6 +351,12 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
     warDamageProvider(db),
   ]);
 
+  const bankFailureEffects = await loadBankFailureEffects(
+    db,
+    turn,
+    labourConfig?.privateBankingEnabled === true &&
+      labourConfig?.bankFailurePoliticsEnabled === true
+  );
   const labourMacroEnabled = await isLabourMacroEnabled(labourConfig ?? null);
 
   // Resolve a country's prime rate: live central-bank doc → config default.
@@ -880,6 +896,11 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
           const nodeId = nodeIdByMetricId.get(metricId);
           if (nodeId) cachedNudges[nodeId] = (cachedNudges[nodeId] ?? 0) + delta;
         }
+      }
+      const bankFailure = bankFailureEffects.get(countryId);
+      if (bankFailure) {
+        const nodeId = "economic.consumerConfidence";
+        cachedNudges[nodeId] = (cachedNudges[nodeId] ?? 0) + bankFailure.consumerConfidence;
       }
       targetNudgesByCountry.set(countryId, cachedNudges);
     }

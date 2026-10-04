@@ -10,7 +10,8 @@
  *
  * Pure types — the registry + dispatch live in `registry.ts`.
  */
-import type { Db, ObjectId } from "mongodb";
+import type { LeaderReference } from "@/lib/government/leaderReference";
+import type { Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { DecisionKind, LeaderDecision } from "@/lib/db/types/regimeEscalation";
 
@@ -19,7 +20,7 @@ export interface DecisionContext {
   countryId: CountryId;
   currentTurn: number;
   decision: LeaderDecision;
-  leaderCharacterId: ObjectId;
+  leaderCharacterId: LeaderReference;
 }
 
 export interface DecisionOption {

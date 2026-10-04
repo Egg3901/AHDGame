@@ -62,6 +62,24 @@ beforeEach(() => {
 });
 
 describe("funded forex prop fees", () => {
+  it.each(["npc", "authoritative-player"])(
+    "keeps %s deposit cash outside prop equity",
+    async (kind) => {
+      const memory = world();
+      const charter = bank(memory).bankCharter!;
+      charter.type = "universal";
+      if (kind === "npc") charter.npcDeposits = 940_000;
+      else {
+        charter.playerDeposits = 940_000;
+        memory.collection("gameConfig").docs[0].savingsAccountsMode = "authoritative";
+        memory.collection("gameConfig").docs[0].savingsAccountsReadCurrencies = ["USD"];
+      }
+      const result = await openPosition(memory as unknown as Db, BANK, ticket);
+      expect(result).toEqual({ ok: false, error: "Trade would breach per-currency forex cap" });
+      expect(charter.cashReserves).toBe(1_000_000);
+      expect(memory.collection("bankMoneyMoves").docs).toHaveLength(0);
+    }
+  );
   it("quotes without writing and refuses a worse live cash price", async () => {
     const memory = world(),
       db = memory as unknown as Db;
