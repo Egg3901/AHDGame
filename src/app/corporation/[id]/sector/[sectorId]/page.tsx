@@ -1136,7 +1136,9 @@ export default function SectorDetailPage() {
             sectorLabel={sector.displayName || sector.sectorLabel}
             submitting={capacityBusy}
             errorMessage={capacityMessage}
-            onSubmit={(units) => runCapacityAction({ action: "build", units })}
+            onSubmit={(units, financing) =>
+              runCapacityAction({ action: "build", units, ...(financing ? { financing } : {}) })
+            }
           />
         )}
       </main>

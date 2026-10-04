@@ -230,8 +230,10 @@ function matchesCondition(value: unknown, condition: unknown): boolean {
 /** Tiny aggregation-expression evaluator, enough for the `$expr` guards. */
 function evalExpr(expr: unknown, doc: Doc): unknown {
   if (typeof expr === "string" && expr.startsWith("$")) return getPath(doc, expr.slice(1));
+  if (Array.isArray(expr)) return expr.map((item) => evalExpr(item, doc));
   if (!isPlainObject(expr)) return expr;
   const [op, rawArgs] = Object.entries(expr)[0];
+  if (op === "$literal") return rawArgs;
   if (op === "$cond" && Array.isArray(rawArgs)) {
     return evalExpr(rawArgs[evalExpr(rawArgs[0], doc) ? 1 : 2], doc);
   }
@@ -239,6 +241,17 @@ function evalExpr(expr: unknown, doc: Doc): unknown {
     ? rawArgs.map((a) => evalExpr(a, doc))
     : [evalExpr(rawArgs, doc)];
   switch (op) {
+    case "$concatArrays":
+      if (args.some((arg) => !Array.isArray(arg))) throw new Error("inMemoryDb: expected arrays");
+      return args.flat();
+    case "$slice": {
+      if (!Array.isArray(args[0])) throw new Error("inMemoryDb: expected an array to slice");
+      if (args.length === 2) {
+        const n = args[1] as number;
+        return n < 0 ? args[0].slice(n) : args[0].slice(0, n);
+      }
+      return args[0].slice(args[1] as number, (args[1] as number) + (args[2] as number));
+    }
     case "$toString":
       return args[0] === undefined || args[0] === null ? null : String(args[0]);
     case "$and":
@@ -389,9 +402,11 @@ function applyUpdate(doc: Doc, update: Update): void {
       if (entries.length !== 1 || entries[0][0] !== "$set") {
         throw new Error(`inMemoryDb: unsupported update pipeline stage ${entries[0]?.[0]}`);
       }
-      for (const [path, expression] of Object.entries(entries[0][1] as Doc)) {
-        setPath(doc, path, evalExpr(expression, doc));
-      }
+      // Mongo expressions in one stage all see the document before that stage.
+      const values = Object.entries(entries[0][1] as Doc).map(
+        ([path, expression]) => [path, evalExpr(expression, doc)] as const
+      );
+      for (const [path, value] of values) setPath(doc, path, value);
     }
     return;
   }

@@ -13,6 +13,12 @@ export const migration: Migration = {
           { name: "corporations_construction_service_turn", sparse: true }
         );
       await db
+        .collection("corporations")
+        .createIndex(
+          { "bankCharter.currency": 1, "bankCharter.status": 1, _id: 1 },
+          { name: "corporations_construction_lender_currency_status" }
+        );
+      await db
         .collection("corporateSectors")
         .createIndex(
           { "constructionFinancing.cancellation.turn": 1 },

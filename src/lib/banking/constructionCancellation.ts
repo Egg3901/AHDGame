@@ -117,6 +117,7 @@ export async function cancelFinancedConstruction(input: {
       queue: sector.buildQueue ?? [],
       turn,
       destination: liveEpoch ? "bank" : "insurance",
+      now: new Date(),
     });
     if (!candidate) {
       await releaseConstructionLoanLock(db, loan, key);

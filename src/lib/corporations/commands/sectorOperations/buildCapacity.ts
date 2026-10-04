@@ -1,3 +1,7 @@
+import { requestConstructionFinance } from "@/lib/banking/constructionFinance";
+import { cancelFinancedConstruction } from "@/lib/banking/constructionCancellation";
+import { loadBankingPolicy } from "@/lib/banking/policy";
+import { currencyForCountry } from "@/lib/currency/sectorFxSpread";
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { z } from "zod";
@@ -110,11 +114,23 @@ const buildCapacitySchema = z.discriminatedUnion("action", [
     units: z.number().int().min(1).max(MAX_BUILD_UNITS_PER_ORDER),
     /** Price-only: compute and return the cost without charging or queueing. */
     preview: z.boolean().optional(),
+    financing: z
+      .object({
+        bankId: z.string().regex(/^[0-9a-fA-F]{24}$/),
+        requestId: z.string().regex(/^[A-Za-z0-9_-]{1,80}$/),
+        principal: z.number().finite().positive(),
+        termTurns: z.number().int().min(4).max(120),
+        maximumCostLocal: z.number().finite().positive(),
+        maximumRatePercent: z.number().finite().min(0).max(100),
+        pledgeConsent: z.literal(true),
+      })
+      .optional(),
   }),
   z.object({
     action: z.literal("cancel"),
     /** Index into the sector's outstanding `buildQueue`. */
     orderIndex: z.number().int().min(0).max(1000),
+    constructionClaimId: z.string().min(1).max(120).optional(),
   }),
   z.object({ action: z.literal("resize"), activePercent: z.number().int().min(1).max(100) }),
   z.object({ action: z.literal("mothball") }),
@@ -364,6 +380,26 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
     // ─── cancel an outstanding order ─────────────────────────────────────────
     if (body.action === "cancel") {
       const order = queue[body.orderIndex];
+      const claim = sector.constructionFinancing;
+      if (body.constructionClaimId || order?.constructionLoanId) {
+        if (
+          !claim ||
+          (body.constructionClaimId && claim.claimId !== body.constructionClaimId) ||
+          (order?.constructionLoanId && order.constructionLoanId !== claim.loanId)
+        )
+          return NextResponse.json({ error: "That financed build claim changed" }, { status: 409 });
+        // A persisted pledge remains recoverable if admission of new finance is disabled.
+        const cancelled = await cancelFinancedConstruction({
+          db,
+          enabled: true,
+          sectorId: sector._id,
+          borrowerId: corporation._id,
+          turn: currentTurn,
+        });
+        return cancelled.ok
+          ? NextResponse.json({ success: true, ...cancelled })
+          : NextResponse.json({ error: cancelled.error }, { status: 409 });
+      }
       if (!order) {
         return NextResponse.json({ error: "No such build order" }, { status: 404 });
       }
@@ -604,6 +640,9 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
         preview: true,
         units,
         costAnchor: Math.round(cost.totalAnchor),
+        totalCostLocal: anchorToCorpLiquidCapital(totalCostAnchor, corporation, corpFxRate),
+        collateralCostLocal: anchorToCorpLiquidCapital(cost.totalAnchor, corporation, corpFxRate),
+        currency: corpCurrencyCode,
         unitPriceAnchor: Math.round(cost.unitPriceAnchor * 100) / 100,
         dominanceMultiplier: Math.round(cost.dominanceMultiplier * 1000) / 1000,
         rateMultiplier: Math.round(cost.rateMultiplier * 1000) / 1000,
@@ -612,6 +651,58 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
         hostPriceMultiplier: Math.round(cost.hostPriceMultiplier * 1000) / 1000,
         buildTurns,
         onlineTurn: currentTurn + buildTurns,
+      });
+    }
+
+    const order: SectorBuildOrder = {
+      unitsOrdered: units,
+      // Freeze the strategy this order was priced at. `cost` above was computed
+      // from the same value, so the two can never drift apart.
+      strategyId: sector.strategyId ?? null,
+      // The FX spread is a transaction fee, not construction spend — it is not
+      // refundable capital, so it stays out of the order's paid cost (and out
+      // of CIP and the cancellation refund base).
+      costPaidAnchor: cost.totalAnchor,
+      startTurn: currentTurn,
+      onlineTurn: currentTurn + buildTurns,
+      // Deliver the capacity a slice per turn across the build window rather than
+      // as one lump on `onlineTurn`. See `buildDelivery.ts`. Only orders placed
+      // through this path ramp; legacy in-flight orders keep all-at-once landing.
+      smooth: true,
+    };
+    if (body.financing) {
+      const policy = await loadBankingPolicy(db);
+      if (!policy.constructionFinance)
+        return NextResponse.json({ error: "Construction finance is not enabled" }, { status: 400 });
+      const finance = await requestConstructionFinance({
+        db,
+        enabled: true,
+        sector,
+        corporation,
+        bankId: new ObjectId(body.financing.bankId),
+        requestId: body.financing.requestId,
+        principal: body.financing.principal,
+        termTurns: body.financing.termTurns,
+        maximumCostLocal: body.financing.maximumCostLocal,
+        maximumRatePercent: body.financing.maximumRatePercent,
+        constructionCostLocal: anchorToCorpLiquidCapital(totalCostAnchor, corporation, corpFxRate),
+        collateralCostLocal: anchorToCorpLiquidCapital(cost.totalAnchor, corporation, corpFxRate),
+        order,
+        buildContext: {
+          destinationCurrency: currencyForCountry(countryId),
+          bucket: poolBucket,
+          eraUnitScale,
+        },
+      });
+      if (!finance.ok) return NextResponse.json({ error: finance.error }, { status: 409 });
+      void observe("order", "placed");
+      return NextResponse.json({
+        success: true,
+        financed: true,
+        ...finance,
+        message: finance.pending
+          ? "Construction is awaiting the lender's approval. Capacity will be queued after cash is funded."
+          : "Construction funded and queued. The sector remains pledged until secured principal is paid.",
       });
     }
 
@@ -642,22 +733,6 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
       );
     }
 
-    const order: SectorBuildOrder = {
-      unitsOrdered: units,
-      // Freeze the strategy this order was priced at. `cost` above was computed
-      // from the same value, so the two can never drift apart.
-      strategyId: sector.strategyId ?? null,
-      // The FX spread is a transaction fee, not construction spend — it is not
-      // refundable capital, so it stays out of the order's paid cost (and out
-      // of CIP and the cancellation refund base).
-      costPaidAnchor: cost.totalAnchor,
-      startTurn: currentTurn,
-      onlineTurn: currentTurn + buildTurns,
-      // Deliver the capacity a slice per turn across the build window rather than
-      // as one lump on `onlineTurn`. See `buildDelivery.ts`. Only orders placed
-      // through this path ramp; legacy in-flight orders keep all-at-once landing.
-      smooth: true,
-    };
     const nextQueue = [...queue, order];
 
     // Charge FIRST, with the balance condition IN THE FILTER. The JS check

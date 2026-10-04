@@ -2,6 +2,11 @@
 
 import { useTranslations } from "next-intl";
 import InvestmentForecast from "./InvestmentForecast";
+import ConstructionFinanceControls from "./ConstructionFinanceControls";
+import type {
+  ConstructionFinanceChoice,
+  ConstructionFinanceRequest,
+} from "@/lib/banking/rules/constructionRequest";
 import { useMemo, useState } from "react";
 import { Modal, Button } from "@/components/ui";
 import { useCurrency } from "@/contexts/CurrencyContext";
@@ -27,7 +32,7 @@ interface BuildCapacityDialogProps {
   submitting: boolean;
   /** Server-side error text from the last attempt, or empty. */
   errorMessage: string;
-  onSubmit: (units: number) => void;
+  onSubmit: (units: number, financing?: ConstructionFinanceRequest) => void;
 }
 
 /** Nobody builds this many at once; the cap only stops a stray paste locking the dialog. */
@@ -87,6 +92,9 @@ export default function BuildCapacityDialog({
   // units. One facility = plantSizeUnits(type) units — see facilityQuantum.ts
   // for why a "power station" is not one ₳92/day unit.
   const [count, setCount] = useState(1);
+  const [financingChoice, setFinancingChoice] = useState<ConstructionFinanceChoice | null>(null);
+  // Drop stale consent before a reopened dialog can submit the previous quote.
+  if (!open && financingChoice !== null) setFinancingChoice(null);
   // Raw text while the field is focused. Without it, clamping on every keystroke
   // means the field can never be empty, so a player cannot clear "1" and type
   // "250" - the leading digit keeps getting eaten.
@@ -146,8 +154,10 @@ export default function BuildCapacityDialog({
   // buyers have no unmet demand, and the player can act on the difference.
   const noShareLeft = plants.headroomUnits < 1;
   const blockedByMothball = plants.mothballed;
-  const canSubmit =
-    !submitting && !blockedByMothball && preview.safeCount > 0 && preview.affordable;
+  const affordable = financingChoice
+    ? financingChoice.affordable && !!financingChoice.request
+    : preview.affordable;
+  const canSubmit = !submitting && !blockedByMothball && preview.safeCount > 0 && affordable;
 
   return (
     <Modal
@@ -341,14 +351,14 @@ export default function BuildCapacityDialog({
               </dt>
               <dd
                 className={`text-heading-sm font-bold tabular-nums ${
-                  preview.affordable ? "text-foreground" : "text-error"
+                  affordable ? "text-foreground" : "text-error"
                 }`}
               >
                 {money(preview.total)}
               </dd>
             </div>
           </dl>
-          {!preview.affordable && (
+          {!affordable && (
             <p className="mt-2 flex gap-2 rounded-md border border-error/30 bg-error/10 p-2 text-body-sm text-error">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
               <span>
@@ -456,6 +466,16 @@ export default function BuildCapacityDialog({
           </p>
         </div>
 
+        {open && q.financing && (
+          <ConstructionFinanceControls
+            view={q.financing}
+            totalAnchor={preview.total}
+            constructionAnchor={preview.construction}
+            cashAnchor={q.corpCapitalAnchor}
+            onChange={setFinancingChoice}
+          />
+        )}
+
         {errorMessage && (
           <p className="rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-body-sm text-error">
             {errorMessage}
@@ -468,7 +488,7 @@ export default function BuildCapacityDialog({
           </Button>
           <Button
             variant="primary"
-            onClick={() => onSubmit(preview.safeUnits)}
+            onClick={() => onSubmit(preview.safeUnits, financingChoice?.request ?? undefined)}
             disabled={!canSubmit}
             isLoading={submitting}
           >
