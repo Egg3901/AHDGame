@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { getEraMonetaryBaseline } from "@/lib/constants/monetaryEra";
+import { MONETARY_BASELINES } from "@/lib/constants/currencies";
 import {
   computeEconomicReferendum,
   referendumFatigueMultiplier,
@@ -114,6 +116,62 @@ describe("computeEconomicReferendum", () => {
     expect(deflation.sharePts).toBeCloseTo(-0.4 * 2, 6);
     const hot = computeEconomicReferendum({ ...NEUTRAL, inflationRate: 6 }, 1);
     expect(hot.sharePts).toBeCloseTo(-0.4 * 2, 6);
+  });
+
+  it("does not penalize inflation at the era target, including the 1979 US baseline", () => {
+    const target = getEraMonetaryBaseline("US", 1979)!.targetInflation;
+    const onTarget1979 = computeEconomicReferendum(
+      {
+        ...NEUTRAL,
+        inflationRate: target,
+        inflationTargetPct: target,
+      },
+      2
+    );
+
+    expect(
+      onTarget1979.components.find((component) => component.key === "inflation")?.contributionPts
+    ).toBe(0);
+    expect(onTarget1979.sharePts).toBe(0);
+  });
+
+  it("centers the same-width neutral band on country targets across authored eras", () => {
+    const cases = [
+      { country: "JP" as const, year: 1953 },
+      { country: "US" as const, year: 1971 },
+      { country: "US" as const, year: 1979 },
+      { country: "US" as const, year: 1991 },
+      { country: "US" as const, year: 1999 },
+      { country: "US" as const, year: 2007 },
+      { country: "US" as const, year: 2019 },
+      { country: "US" as const, year: 2023 },
+      { country: "US" as const, year: 2027 },
+    ];
+
+    for (const { country, year } of cases) {
+      const target =
+        getEraMonetaryBaseline(country, year)?.targetInflation ??
+        MONETARY_BASELINES[country].targetInflation;
+      const onTarget = computeEconomicReferendum(
+        { ...NEUTRAL, inflationRate: target, inflationTargetPct: target },
+        1
+      );
+      const aboveTarget = computeEconomicReferendum(
+        { ...NEUTRAL, inflationRate: target + 2, inflationTargetPct: target },
+        1
+      );
+      const inflation = aboveTarget.components.find((component) => component.key === "inflation");
+
+      expect(onTarget.sharePts, `${country} ${year} on target`).toBe(0);
+      expect(inflation?.contributionPts, `${country} ${year} above target`).toBeCloseTo(-0.2, 6);
+    }
+  });
+
+  it("keeps the original inflation band when no country/era target is available", () => {
+    const legacy = computeEconomicReferendum({ ...NEUTRAL, inflationRate: 10 }, 1);
+    expect(
+      legacy.components.find((component) => component.key === "inflation")?.contributionPts
+    ).toBeCloseTo(-2.4, 6);
   });
 
   it("treats a missing income trend as neutral", () => {

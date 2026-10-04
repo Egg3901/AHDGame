@@ -93,6 +93,9 @@ import { getGroundGameSwingBonus, getGroundGameGotvBonus } from "@/lib/campaigns
 import { loadPartyGroupFavorability } from "@/lib/governorOffice/address/partyGroupFavorabilityLoader";
 import { buildGranularElectorateSubstrate } from "@/lib/demographics/granularElectorate";
 import { eraYearContextFromGameState } from "@/lib/era/context";
+import { getEraMonetaryBaseline } from "@/lib/constants/monetaryEra";
+import { MONETARY_BASELINES } from "@/lib/constants/currencies";
+import { getStartingYearForPreset } from "@/lib/constants/turnTime";
 import { loadRegionalBonusMapsWithLookup } from "@/lib/primaryRegionalBonusLoader";
 import { campaignStrengthLookupKey } from "@/lib/campaigns/suspendEndorseLifecycle";
 import { computeSuspendTransferFraction } from "@/lib/campaigns/suspendEndorseAffinity";
@@ -747,8 +750,17 @@ export async function accumulatePresidentVoteTurn(
       loadReferendumInputs(db, electionCountryId),
       loadResponseCredit(db, electionCountryId, turnNumber),
     ]);
+    const referendumYear =
+      eraYear.year ?? (gsDoc?.preset ? getStartingYearForPreset(gsDoc.preset) : null);
+    const eraInflationTarget =
+      referendumYear === null
+        ? undefined
+        : (getEraMonetaryBaseline(electionCountryId, referendumYear)?.targetInflation ??
+          (referendumYear >= 1999
+            ? MONETARY_BASELINES[electionCountryId]?.targetInflation
+            : undefined));
     referendum = computeEconomicReferendum(
-      miseryInputs,
+      { ...miseryInputs, inflationTargetPct: eraInflationTarget },
       incumbentConsecutiveTerms,
       gsDoc?.preset,
       responseCredit
