@@ -21,6 +21,7 @@ import {
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import type { LegislationType, SubsidyProvision, EndSubsidyProvision } from "@/lib/db/types";
+import type { GameConfig } from "@/lib/db/types/gameConfig";
 import type {
   EmbargoProvision,
   EndEmbargoProvision,
@@ -48,6 +49,9 @@ import {
 import { getEraContext } from "@/lib/era/context";
 import { resolveTaxSliderProvisionFields } from "@/lib/politicalLegislation/taxSlider";
 import { isLegislationTypeActive } from "@/lib/era/legislationCatalog";
+import { getMarketSystemMode, marketAtLeast } from "@/lib/market/featureFlag";
+import { isMediaOwnershipBillAvailable } from "@/lib/mediaRegulation/rules";
+import { loadUSMediaOutletDelivery } from "@/lib/mediaRegulation/turnData";
 
 // snapshotBillPolicyProvisions now lives in the shared provision-enrichment core
 // so the regional bill paths can call it too. Re-exported for existing importers.
@@ -541,6 +545,28 @@ export async function validateBillProvisions(
         status: 400,
         error: "This legislation is not available in this era.",
       };
+    }
+    if (sourceCountry === "US" && lt._id === "us_media_communications") {
+      const mediaConfig = await db
+        .collection<GameConfig>("gameConfig")
+        .findOne(
+          { _id: "default" },
+          { projection: { mediaRegulationEnabled: 1, marketSystemMode: 1 } }
+        );
+      const mediaRegulationEnabled =
+        mediaConfig?.mediaRegulationEnabled === true &&
+        marketAtLeast(await getMarketSystemMode(mediaConfig), "clearing");
+      if (
+        mediaRegulationEnabled &&
+        !isMediaOwnershipBillAvailable(await loadUSMediaOutletDelivery(db))
+      ) {
+        return {
+          ok: false,
+          status: 400,
+          error:
+            "Media ownership legislation is available only after measured outlet concentration exceeds 65%.",
+        };
+      }
     }
     if (!allowedDomains.includes(lt.policyDomain)) {
       return {

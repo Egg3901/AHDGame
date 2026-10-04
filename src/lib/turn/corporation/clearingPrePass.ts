@@ -46,6 +46,11 @@ import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 import { advertisingDeliveredValueByCorp } from "./advertisingDeliveredValue";
 import { mediaAudienceFit } from "@/lib/mediaEditorial/rules";
 import {
+  mediaRegulationAvailabilityByOutlet,
+  type MediaOutletDelivery,
+  type MediaStateRegulation,
+} from "@/lib/mediaRegulation/rules";
+import {
   rawAdvertisingOffer,
   settlePoliticalAdMarket,
   type PoliticalAdClearingOffer,
@@ -169,6 +174,7 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
     // (and every modern world) offer exactly what they offered before.
     const deliveryLimitedBySectorId = new Map<string, number>();
     const deliveryLimitedClassBySectorId = new Map<string, FreightClass | null>();
+    const priorMediaAdOutlets: MediaOutletDelivery[] = [];
     /**
      * Share of a sector's output its host state could place last turn, 1 when
      * there is no measured limit. Min across the sector's output commodities:
@@ -265,6 +271,42 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
             lookups.stateResourceCapacityByState.get(sector.stateId)
           ),
         };
+        if (
+          market.mediaRegulationEnabled &&
+          (sector.sectorType === "media" || sector.sectorType === "entertainment") &&
+          (rates.supply.advertising ?? 0) > 0
+        ) {
+          const outputByCommodity = sector.outputUnitsByCommodity;
+          const producedAdvertising =
+            typeof outputByCommodity?.advertising === "number" &&
+            Number.isFinite(outputByCommodity.advertising)
+              ? Math.max(0, outputByCommodity.advertising)
+              : typeof sector.producedUnits === "number" &&
+                  Number.isFinite(sector.producedUnits) &&
+                  sector.producedUnits >= 0
+                ? sector.producedUnits *
+                  commodityMixWeight(
+                    rates.supply,
+                    eraScaledBasePrices(lookups.eraUnitScale),
+                    "advertising"
+                  )
+                : null;
+          const priorSoldFraction =
+            typeof sector.soldByCommodity?.advertising === "number"
+              ? sector.soldByCommodity.advertising
+              : sector.soldFraction;
+          priorMediaAdOutlets.push({
+            stateId: sector.stateId,
+            countryId: (sector as { countryId?: string }).countryId ?? "US",
+            corporationId: corpId,
+            deliveredAdvertisingUnits:
+              producedAdvertising != null &&
+              typeof priorSoldFraction === "number" &&
+              Number.isFinite(priorSoldFraction)
+                ? producedAdvertising * Math.max(0, Math.min(1, priorSoldFraction))
+                : null,
+          });
+        }
         const productProject = lookups.productLinesV2Enabled
           ? lookups.manufacturingProductByCorpId?.get(corpId)
           : undefined;
@@ -647,7 +689,11 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
           deliveryLimitedBySectorId.set(sectorId, deliveryLimit.fraction);
           deliveryLimitedClassBySectorId.set(sectorId, deliveryLimit.freightClass);
         }
-        if (lookups.editorialAudienceLeanByState && sector.sectorType === "media") {
+        if (
+          lookups.editorialAudienceLeanByState &&
+          sector.sectorType === "media" &&
+          (market.mediaEditorialEnabled || market.mediaFairnessDoctrineEnabled)
+        ) {
           const stance = lookups.corpById.get(corpId)?.editorialStance;
           const audience = lookups.editorialAudienceLeanByState.get(sector.stateId);
           clearingInput.editorialAdvertisingAvailability = mediaAudienceFit(stance, audience);
@@ -696,6 +742,30 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
           ),
           basePrices: eraScaledBasePrices(lookups.eraUnitScale),
         });
+      }
+    }
+    if (market.mediaRegulationEnabled) {
+      const stateConditionsById = new Map<string, MediaStateRegulation>();
+      for (const [stateId, metrics] of lookups.stateMetricsByState ?? []) {
+        stateConditionsById.set(stateId, {
+          pressFreedom: metrics.mediaInformation?.pressFreedom?.value,
+          stateMediaControl: metrics.mediaInformation?.stateMediaControl?.value,
+        });
+      }
+      const availabilityByOutlet = mediaRegulationAvailabilityByOutlet({
+        outlets: priorMediaAdOutlets,
+        policyOptionIndex: market.mediaRegulationPolicyOptionIndex ?? 3,
+        stateConditionsById,
+      });
+      for (const sector of clearingInputs) {
+        const sectorId = sector.sectorId;
+        const stateId = clearingStateBySector.get(sectorId);
+        const corporationId = sectorCorpId.get(sectorId);
+        if (!stateId || !corporationId) continue;
+        const regulationAvailability = availabilityByOutlet.get(`${stateId}:${corporationId}`);
+        if (regulationAvailability == null) continue;
+        sector.editorialAdvertisingAvailability =
+          (sector.editorialAdvertisingAvailability ?? 1) * regulationAvailability;
       }
     }
     // Book-sanity invariant (issue #2054): the diagnostic reports the RAW

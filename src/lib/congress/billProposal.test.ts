@@ -10,6 +10,9 @@ beforeEach(() => {
   db.collection("legislationTypes");
   db.collection("statePolicies");
   db.collection("enactedLaws");
+  db.collection("gameState");
+  db.collection("gameConfig");
+  db.collection("corporateSectors");
 });
 
 describe("validateBillProvisions — embargo", () => {
@@ -110,6 +113,73 @@ describe("validateBillProvisions — embargo", () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.embargoProvisions[0]).toMatchObject({ mode: "block" });
+  });
+});
+
+describe("validateBillProvisions: media ownership availability", () => {
+  const provision = {
+    legislationTypeId: "us_media_communications",
+    policyOptionId: "media_ownership_cap",
+    effectDirection: 1,
+    economic: -1,
+  };
+
+  it("rejects ownership legislation until delivered concentration exceeds the trigger", async () => {
+    db.collectionMocks.legislationTypes.findOne.mockResolvedValue({
+      _id: "us_media_communications",
+      name: "Media and Communications Regulation Act",
+      policyDomain: "mediaInformation",
+      policyOptions: [],
+    });
+    db.collectionMocks.gameState.findOne.mockResolvedValue(null);
+    db.collectionMocks.gameConfig.findOne.mockResolvedValue({
+      mediaRegulationEnabled: true,
+      marketSystemMode: "clearing",
+    });
+    db.collectionMocks.corporateSectors.find.mockReturnValue({
+      toArray: async () => [
+        {
+          stateId: "CA",
+          corporationId: { toString: () => "corp-a" },
+          sectorType: "media",
+          strategyId: "standard",
+          producedUnits: 100,
+          soldByCommodity: { advertising: 0.6 },
+        },
+        {
+          stateId: "CA",
+          corporationId: { toString: () => "corp-b" },
+          sectorType: "media",
+          strategyId: "standard",
+          producedUnits: 100,
+          soldByCommodity: { advertising: 0.4 },
+        },
+      ],
+    } as never);
+
+    const result = await validateBillProvisions(db as unknown as Db, [provision], "social", "US");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/exceeds 65%/);
+  });
+
+  it("does not load sector concentration data with regulation disabled", async () => {
+    db.collectionMocks.legislationTypes.findOne.mockResolvedValue({
+      _id: "us_media_communications",
+      name: "Media and Communications Regulation Act",
+      policyDomain: "mediaInformation",
+      policyOptions: [],
+    });
+    db.collectionMocks.gameState.findOne.mockResolvedValue(null);
+    db.collectionMocks.gameConfig.findOne.mockResolvedValue({
+      mediaRegulationEnabled: false,
+      marketSystemMode: "clearing",
+    });
+
+    const result = await validateBillProvisions(db as unknown as Db, [provision], "social", "US");
+
+    expect(result.ok).toBe(true);
+    expect(db.collectionMocks.corporateSectors.find).not.toHaveBeenCalled();
   });
 });
 
