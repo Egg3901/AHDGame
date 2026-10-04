@@ -170,4 +170,62 @@ describe("loans owed to a bank that no longer exists", () => {
       recoveredToInsurer: 0,
     });
   });
+
+  it("services a resolved prior epoch after recharter and sends recovery to insurance", async () => {
+    const db = createInMemoryDb();
+    const recharteredBank = new ObjectId();
+    const priorCharter = {
+      ...charter("failed", { depositorsResolvedTurn: 20 }),
+      charteredTurn: 1,
+      cashReserves: 500,
+    };
+    db.seed("corporations", [
+      {
+        _id: recharteredBank,
+        name: "Rechartered Bank",
+        countryId: "US",
+        bankCharter: charter("active", { charteredTurn: 30, cashReserves: 900 }),
+      },
+    ]);
+    db.seed("bankCharterHistory", [
+      {
+        _id: new ObjectId(),
+        corporationId: recharteredBank,
+        charter: priorCharter,
+        archivedTurn: 30,
+        reason: "recharter",
+      },
+    ]);
+    db.seed("depositInsuranceFunds", [{ _id: "USD", balance: 40 }]);
+    db.seed("bankLoans", [
+      loan(recharteredBank, { charteredTurn: 1 }),
+      loan(recharteredBank, { charteredTurn: 30 }),
+      // Untagged persisted loans use the originated turn during rollout.
+      loan(recharteredBank, { originatedTurn: 2 }),
+    ]);
+
+    const summary = await processDeadBankLoans(
+      db as unknown as Db,
+      55,
+      async (currentLoan, bank, target) => {
+        expect(bank.charteredTurn).toBe(1);
+        expect(target.collection).toBe("depositInsuranceFunds");
+        await db.collection("depositInsuranceFunds").updateOne(target.filter, {
+          $inc: { balance: 100 },
+        });
+        await db
+          .collection("bankLoans")
+          .updateOne(
+            { _id: currentLoan._id },
+            { $set: { lastProcessedTurn: 55, status: "repaid", outstanding: 0 } }
+          );
+        return { collected: 100 };
+      }
+    );
+
+    expect(summary.loansServiced).toBe(2);
+    expect(summary.recoveredToInsurer).toBe(200);
+    expect(db.collection("depositInsuranceFunds").docs[0].balance).toBe(240);
+    expect(db.collection("corporations").docs[0].bankCharter?.cashReserves).toBe(900);
+  });
 });
