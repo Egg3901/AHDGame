@@ -81,7 +81,7 @@ import { getBankId } from "@/lib/centralBank/helpers";
 import { bankEquity, cashBackedDeposits, getCashReserves } from "@/lib/banking/balanceSheet";
 import { settleTransition } from "@/lib/banking/settlementJournal";
 import { oid, type TransitionLeg, type TransitionProjection } from "@/lib/banking/rules/boundary";
-import { getNationalBudgetId } from "@/lib/bonds/sovereign";
+import { getNationalBudgetId, issueDepositInsuranceBackstopBond } from "@/lib/bonds/sovereign";
 import type { FederalBudget } from "@/lib/db/types";
 import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
 import { loadBankingPolicy } from "@/lib/banking/policy";
@@ -153,6 +153,54 @@ export function depositBookReturnKey(
   turn: number
 ): string {
   return `deposit-book-return:${corporationId.toString()}:${cause}:${turn}`;
+}
+
+async function ensureTreasuryInsuranceCash(
+  db: Db,
+  args: {
+    corporationId: ObjectId;
+    charteredTurn: number;
+    currency: CurrencyCode;
+    turn: number;
+    now: Date;
+    amount: number;
+  }
+): Promise<string | null> {
+  if (!(args.amount > 0)) return null;
+  const countryId = getCountryIdForCurrency(args.currency);
+  const budgetId = getNationalBudgetId(countryId);
+  const budget = await db
+    .collection<FederalBudget>("federalBudget")
+    .findOne({ _id: budgetId }, { projection: { treasuryBalance: 1 } });
+  if (!budget) return `No federal budget is available for ${countryId}.`;
+
+  const treasuryCash =
+    typeof budget.treasuryBalance === "number" && Number.isFinite(budget.treasuryBalance)
+      ? Math.max(0, budget.treasuryBalance)
+      : 0;
+  if (treasuryCash >= args.amount) return null;
+
+  const amountToFinance = args.amount - treasuryCash;
+  const issuance = await issueDepositInsuranceBackstopBond(db, {
+    countryId,
+    turn: args.turn,
+    now: args.now,
+    amount: amountToFinance,
+    issuanceKey: `deposit-insurance-backstop:${args.corporationId.toHexString()}:${args.charteredTurn}`,
+  });
+  if (!issuance) return `Could not issue a funded insurance bond for ${countryId}.`;
+
+  const fundedBudget = await db
+    .collection<FederalBudget>("federalBudget")
+    .findOne({ _id: budgetId }, { projection: { treasuryBalance: 1 } });
+  const fundedCash =
+    typeof fundedBudget?.treasuryBalance === "number" &&
+    Number.isFinite(fundedBudget.treasuryBalance)
+      ? Math.max(0, fundedBudget.treasuryBalance)
+      : 0;
+  return fundedCash >= args.amount
+    ? null
+    : `Treasury cash and the bond pool cannot cover the ${countryId} deposit insurance backstop yet.`;
 }
 
 /**
@@ -246,6 +294,18 @@ export async function returnDepositBook(
   const fundBalance = Math.max(0, fund?.balance ?? 0);
   const fromInsuranceFund = Math.min(fundBalance, shortfall);
   const fromTreasury = Math.max(0, shortfall - fromInsuranceFund);
+
+  if (fromTreasury > 0) {
+    const fundingError = await ensureTreasuryInsuranceCash(db, {
+      corporationId,
+      charteredTurn: charter.charteredTurn,
+      currency,
+      turn: options.turn,
+      now,
+      amount: toCents(fromTreasury),
+    });
+    if (fundingError) return { ...EMPTY, depositorsFlipped, error: fundingError };
+  }
 
   // (3) Interbank lenders, pro rata on outstanding principal. Unlike the two
   // central bank facilities, this money was never minted: it came out of
@@ -355,9 +415,12 @@ export async function returnDepositBook(
     }
     if (fromTreasury > 0) {
       legs.push({
-        kind: "mint",
+        kind: "debit",
         amount: fromTreasury,
-        note: "treasury backstop, deficit financed",
+        collection: "federalBudget",
+        filter: { _id: getNationalBudgetId(getCountryIdForCurrency(currency)) },
+        path: "treasuryBalance",
+        note: "funded treasury deposit insurance backstop",
       });
     }
     legs.push({
@@ -433,7 +496,6 @@ export async function returnDepositBook(
       filter: { _id: getNationalBudgetId(getCountryIdForCurrency(currency)) },
       update: {
         $inc: {
-          treasuryBalance: -fromTreasury,
           [`spending.byCategory.${DEPOSIT_INSURANCE_SPENDING_KEY}`]: fromTreasury,
           "spending.total": fromTreasury,
           surplus: -fromTreasury,
@@ -734,8 +796,8 @@ function depositAggregateClearProjection(
 }
 
 /**
- * Debit treasuryBalance and book the spend on spending.byCategory.depositInsurance.
- * Unconditional: an unaffordable backstop pushes the treasury into debt.
+ * Debit available treasury cash and book the spend on
+ * spending.byCategory.depositInsurance. An unfunded backstop is refused.
  *
  * The balance/spending/surplus legs stay `$inc` (concurrent-safe).
  * `debt.principal` belongs to the bond ledger (see bonds/sovereignPrincipal.ts)
@@ -750,8 +812,8 @@ export async function debitTreasuryDepositInsurance(
   const countryId = getCountryIdForCurrency(currency);
   const budgetId = getNationalBudgetId(countryId);
   const now = new Date();
-  await db.collection<FederalBudget>("federalBudget").updateOne(
-    { _id: budgetId },
+  const result = await db.collection<FederalBudget>("federalBudget").updateOne(
+    { _id: budgetId, treasuryBalance: { $gte: amount } },
     {
       $inc: {
         treasuryBalance: -amount,
@@ -762,4 +824,6 @@ export async function debitTreasuryDepositInsurance(
       $set: { updatedAt: now },
     }
   );
+  if (!result.matchedCount)
+    throw new Error("Treasury cash cannot cover the deposit insurance debit.");
 }

@@ -332,6 +332,7 @@ async function issueSovereignBondSeries(
     issueAmount: number;
     maturityTurns?: BondMaturityTurns;
     issuanceKey: string;
+    poolOnly?: boolean;
   }
 ): Promise<SovereignBondIssueResult | null> {
   const { countryId, turn, now, issueAmount } = params;
@@ -388,7 +389,7 @@ async function issueSovereignBondSeries(
     turn,
     now,
     budget,
-    centralBank,
+    centralBank: params.poolOnly ? null : centralBank,
     bondDocs: [bondDoc],
     accounting,
   });
@@ -408,6 +409,35 @@ async function issueSovereignBondSeries(
     newDebtInterest: updatedBudget.spending.debtInterest,
     newSurplus: updatedBudget.surplus,
   };
+}
+
+/**
+ * Issue a sovereign bond solely against the currency bond pool for a deposit
+ * insurance backstop. Unsold units remain unissued until the normal primary
+ * placement pass finds pool cash; this path never uses central bank money.
+ */
+export async function issueDepositInsuranceBackstopBond(
+  db: Db,
+  args: {
+    countryId: CountryId;
+    turn: number;
+    now: Date;
+    amount: number;
+    issuanceKey: string;
+  }
+): Promise<SovereignBondIssueResult | null> {
+  if (!Number.isFinite(args.amount) || args.amount <= 0) return null;
+  const units = Math.ceil(args.amount / BOND_UNIT_FACE_VALUE);
+  if (!Number.isSafeInteger(units)) return null;
+  const rounded = units * BOND_UNIT_FACE_VALUE;
+  return issueSovereignBondSeries(db, {
+    countryId: args.countryId,
+    turn: args.turn,
+    now: args.now,
+    issueAmount: rounded,
+    issuanceKey: args.issuanceKey,
+    poolOnly: true,
+  });
 }
 
 export async function issueAdminSovereignBondSeries(
