@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { computeClearingFactors, costPlusPriceFactor } from "../clearing";
-import { inputBasketCostIndex } from "./rules";
+import { inputBasketCostIndex, recordCostPlusBasis } from "./rules";
 import { COMMODITY_BASE_PRICES } from "@/lib/constants/commodities";
 
 describe("cost-plus offers", () => {
   it("passes through material inflation only on the recipe's input share", () => {
-    expect(costPlusPriceFactor(1.5, 0, 0.67)).toBeCloseTo(1.335, 10);
-    expect(costPlusPriceFactor(100, 0, 0.67)).toBeCloseTo(1.335, 10);
-    expect(costPlusPriceFactor(Number.NaN, 0.1, 0.67)).toBeCloseTo(1.1, 10);
+    expect(costPlusPriceFactor(1.5, 0, 0.67, 0.238)).toBeCloseTo(1.243, 10);
+    expect(costPlusPriceFactor(100, 0, 0.67, 0.238)).toBeCloseTo(1.243, 10);
+    expect(costPlusPriceFactor(Number.NaN, 0.1, 0.67, 0.238)).toBeCloseTo(0.9988, 10);
     expect(
       inputBasketCostIndex(
         { energy: 0.6, iron: 0.2 },
@@ -18,6 +18,34 @@ describe("cost-plus offers", () => {
       )
     ).toBeCloseTo(1.375, 10);
   });
+  it("quotes actual operating cost at zero markup and retains paid overhead", () => {
+    const basis = recordCostPlusBasis({
+      inputsCost: 100.5,
+      inputCostIndex: 1.5,
+      fixedCost: 23.8,
+      nominalProducedRevenue: 100,
+      turn: 12,
+    });
+    expect(basis?.inputCostShare).toBeCloseTo(0.67);
+    expect(basis?.fixedCostShare).toBeCloseTo(0.238);
+    expect(basis?.turn).toBe(12);
+    expect(
+      costPlusPriceFactor(1.5, 0, basis!.inputCostShare, basis!.fixedCostShare) * 100
+    ).toBeCloseTo(124.3);
+    expect(
+      costPlusPriceFactor(1.5, 0.1, basis!.inputCostShare, basis!.fixedCostShare) * 100
+    ).toBeCloseTo(136.73);
+    expect(
+      recordCostPlusBasis({
+        inputsCost: 1,
+        inputCostIndex: 1,
+        fixedCost: 1,
+        nominalProducedRevenue: 0,
+        turn: 12,
+      })
+    ).toBeUndefined();
+  });
+
   it("sells behind a cheaper market offer and charges the indexed price", () => {
     const result = computeClearingFactors({
       sectors: [

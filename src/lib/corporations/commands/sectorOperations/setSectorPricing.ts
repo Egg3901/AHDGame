@@ -8,7 +8,7 @@ import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQu
 import { clampPricingPosture } from "@/lib/market/clearing";
 import { isMarketSystemMode, marketAtLeast, getMarketSystemMode } from "@/lib/market/featureFlag";
 import type { CorporateSector, GameConfig } from "@/lib/db/types";
-import { supportsCostPlusPricing } from "@/lib/market/costPlusPricing/rules";
+import { supportsCostPlusPricing, validCostPlusBasis } from "@/lib/market/costPlusPricing/rules";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { setSectorPricingSchema } from "@/lib/api/schemas/corporations";
 
@@ -59,18 +59,30 @@ export async function setSectorPricing(request: Request, { params }: RouteParams
       return NextResponse.json({ error: "Invalid sector ID" }, { status: 400 });
     }
 
+    const config =
+      pricingMode === "costPlus"
+        ? await db
+            .collection<GameConfig>("gameConfig")
+            .findOne({ _id: "default" }, { projection: { explicitPlantCostsEnabled: 1 } })
+        : null;
+
     const sector = await db
       .collection<CorporateSector>("corporateSectors")
-      .findOne({ _id: new ObjectId(sectorId), corporationId: corporation._id });
+      .findOne(
+        { _id: new ObjectId(sectorId), corporationId: corporation._id },
+        {
+          projection:
+            config?.explicitPlantCostsEnabled === true
+              ? {}
+              : { pricingMode: 0, costPlusCostBasis: 0 },
+        }
+      );
 
     if (!sector) {
       return NextResponse.json({ error: "Sector not found" }, { status: 404 });
     }
 
     if (pricingMode === "costPlus") {
-      const config = await db
-        .collection<GameConfig>("gameConfig")
-        .findOne({ _id: "default" }, { projection: { explicitPlantCostsEnabled: 1 } });
       if (
         config?.explicitPlantCostsEnabled !== true ||
         !marketAtLeast(mode, "plants") ||
@@ -78,6 +90,12 @@ export async function setSectorPricing(request: Request, { params }: RouteParams
       ) {
         return NextResponse.json(
           { error: "Cost-plus pricing is not available for this sector" },
+          { status: 400 }
+        );
+      }
+      if (!validCostPlusBasis(sector.costPlusCostBasis)) {
+        return NextResponse.json(
+          { error: "Cost-plus pricing needs a producing turn with recorded operating costs" },
           { status: 400 }
         );
       }

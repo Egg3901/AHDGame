@@ -211,7 +211,9 @@ export async function buildCorporationLookups(
         {
           projection: {
             plantsPnl: 0,
-            ...(options?.explicitPlantCostsEnabled === true ? {} : { pricingMode: 0 }),
+            ...(options?.explicitPlantCostsEnabled === true
+              ? {}
+              : { pricingMode: 0, costPlusCostBasis: 0 }),
             ...(options?.omitBuildQueue ? { buildQueue: 0 } : {}),
           },
         }

@@ -1004,6 +1004,12 @@ export interface CorporateSector {
   pricingPosture?: number | null;
   /** Optional industrial input-indexed pricing; ignored while explicit plant costs are off. */
   pricingMode?: "market" | "costPlus";
+  /** Last producing turn's actual operating costs per nominal output value. */
+  costPlusCostBasis?: {
+    inputCostShare: number;
+    fixedCostShare: number;
+    turn: number;
+  };
   clearingFactor?: number;
   soldFraction?: number;
   /**

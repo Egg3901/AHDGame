@@ -29,9 +29,60 @@ export function clampPricingPosture(value: number): number {
   return Math.max(PRICING_POSTURE_MIN, Math.min(PRICING_POSTURE_MAX, value));
 }
 
-/** An indexed nominal offer; output scarcity never multiplies this price. */
-export function costPlusPriceFactor(index: number, markup: number, inputShare = 1): number {
+export interface CostPlusCostBasis {
+  inputCostShare: number;
+  fixedCostShare: number;
+  turn: number;
+}
+
+export function validCostPlusBasis(
+  basis: CostPlusCostBasis | undefined
+): basis is CostPlusCostBasis {
+  return (
+    !!basis &&
+    Number.isSafeInteger(basis.turn) &&
+    basis.turn >= 0 &&
+    Number.isFinite(basis.inputCostShare) &&
+    basis.inputCostShare >= 0 &&
+    Number.isFinite(basis.fixedCostShare) &&
+    basis.fixedCostShare >= 0 &&
+    Number.isFinite(basis.inputCostShare + basis.fixedCostShare) &&
+    basis.inputCostShare + basis.fixedCostShare > 0
+  );
+}
+
+/** Preserve actual operating cost per nominal output value, excluding taxes and financing. */
+export function recordCostPlusBasis(input: {
+  inputsCost: number;
+  fixedCost: number;
+  nominalProducedRevenue: number;
+  inputCostIndex: number;
+  turn: number;
+}): CostPlusCostBasis | undefined {
+  if (
+    !Number.isFinite(input.nominalProducedRevenue) ||
+    input.nominalProducedRevenue <= 0 ||
+    !Number.isFinite(input.inputCostIndex) ||
+    input.inputCostIndex <= 0
+  )
+    return undefined;
+  const basis = {
+    inputCostShare: input.inputsCost / input.inputCostIndex / input.nominalProducedRevenue,
+    fixedCostShare: input.fixedCost / input.nominalProducedRevenue,
+    turn: input.turn,
+  };
+  return validCostPlusBasis(basis) ? basis : undefined;
+}
+
+/** Recorded operating cost plus markup; output scarcity never multiplies this price. */
+export function costPlusPriceFactor(
+  index: number,
+  markup: number,
+  inputShare = 1,
+  fixedShare = 0
+): number {
   const boundedIndex = Number.isFinite(index) ? Math.max(0.7, Math.min(1.5, index)) : 1;
-  const share = Number.isFinite(inputShare) ? Math.max(0, Math.min(1, inputShare)) : 0;
-  return (1 + share * (boundedIndex - 1)) * (1 + clampPricingPosture(markup));
+  const share = Number.isFinite(inputShare) ? Math.max(0, inputShare) : 0;
+  const fixed = Number.isFinite(fixedShare) ? Math.max(0, fixedShare) : 0;
+  return (fixed + share * boundedIndex) * (1 + clampPricingPosture(markup));
 }

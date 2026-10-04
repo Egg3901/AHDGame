@@ -13,7 +13,12 @@ for (const ratio of [1, 2.25, 10]) {
   for (const markup of [0, 0.1]) {
     for (const fill of [1, 0.5]) {
       const index = priceRealizationFactor(ratio);
-      const offered = costPlusPriceFactor(index, markup, inputShare);
+      const offered = costPlusPriceFactor(
+        index,
+        markup,
+        inputShare,
+        payroll + PLANT_OVERHEAD_OUTPUT_SHARE
+      );
       const cost = inputShare * index + payroll + PLANT_OVERHEAD_OUTPUT_SHARE;
       const revenue = offered * fill;
       console.log(

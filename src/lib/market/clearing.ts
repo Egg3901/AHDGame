@@ -268,6 +268,8 @@ export interface SectorClearingInput {
   inputCostIndex?: number;
   /** Recipe's base material spend as a share of nominal output value. */
   inputCostShare?: number;
+  /** Recorded payroll, overhead, upkeep and compliance per nominal output value. */
+  fixedCostShare?: number;
   /**
    * The sector's own soldFraction from the PRIOR turn (lagged, like every
    * other clearing input), if known. Feeds autoPosture's own-fill feedback;
@@ -620,7 +622,12 @@ export function computeClearingFactors(args: {
           ...(s.inputCostIndex !== undefined
             ? {
                 quotedPosture:
-                  costPlusPriceFactor(s.inputCostIndex, posture, s.inputCostShare) /
+                  costPlusPriceFactor(
+                    s.inputCostIndex,
+                    posture,
+                    s.inputCostShare,
+                    s.fixedCostShare
+                  ) /
                     realizedPriceFor(commodity, s.sectorId) -
                   1,
               }
@@ -865,7 +872,7 @@ export function computeClearingFactors(args: {
       rateSum += rate;
       const offerFactor =
         s.inputCostIndex !== undefined
-          ? costPlusPriceFactor(s.inputCostIndex, posture, s.inputCostShare)
+          ? costPlusPriceFactor(s.inputCostIndex, posture, s.inputCostShare, s.fixedCostShare)
           : (1 + effectivePremium) * priceLeg;
       factorSum += rate * sold * offerFactor;
       quotedPostureSum += rate * (offerFactor / priceLeg - 1);

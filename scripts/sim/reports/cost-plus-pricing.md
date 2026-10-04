@@ -1,24 +1,22 @@
 # Cost-plus price scenarios
 
-Reproduce with `npx tsx scripts/sim/costPlusPriceModel.ts`. Standard manufacturing uses the production recipe input share, existing 1991 labour intensity, explicit overhead and clearing quote rules. This normalized model assumes full production, no tech, freight, growth, inventory carry or policy credit. It is not a seeded world simulation.
+Reproduce with `npx tsx scripts/sim/costPlusPriceModel.ts`. This normalized manufacturing scenario uses the production recipe, 1991 payroll intensity, explicit overhead and clearing quote rule. The live adapter records actual operating costs per produced nominal output value on a producing turn, then updates the material share by the current input basket index. Taxes, finance, investment, policy credits and inventory carry do not set the product quote.
 
-The offer is the nominal output price plus the recipe's material price delta, then the player's bounded adjustment. Input ratios use the physical P&L realization curve and its 1.5 ceiling. Output scarcity never multiplies the indexed offer again.
+Zero markup quotes estimated operating break-even at full fill. Unsold output still costs money. Input ratios use the same physical P&L price curve, capped at 1.5. Output scarcity does not multiply the cost-based offer again. The report is a deterministic rules model, not a seeded world simulation.
 
-| Input ratio | Adjustment | Fill | Offered price factor | Profit per nominal unit | Net margin |
-| ----------: | ---------: | ---: | -------------------: | ----------------------: | ---------: |
-|           1 |         0% | 100% |               1.0000 |                  0.0920 |      9.20% |
-|           1 |         0% |  50% |               1.0000 |                 -0.4080 |    -81.60% |
-|           1 |        10% | 100% |               1.1000 |                  0.1920 |     17.45% |
-|           1 |        10% |  50% |               1.1000 |                 -0.3580 |    -65.09% |
-|        2.25 |         0% | 100% |               1.3350 |                  0.0920 |      6.89% |
-|        2.25 |         0% |  50% |               1.3350 |                 -0.5755 |    -86.22% |
-|        2.25 |        10% | 100% |               1.4685 |                  0.2255 |     15.36% |
-|        2.25 |        10% |  50% |               1.4685 |                 -0.5088 |    -69.29% |
-|          10 |         0% | 100% |               1.3350 |                  0.0920 |      6.89% |
-|          10 |         0% |  50% |               1.3350 |                 -0.5755 |    -86.22% |
-|          10 |        10% | 100% |               1.4685 |                  0.2255 |     15.36% |
-|          10 |        10% |  50% |               1.4685 |                 -0.5088 |    -69.29% |
+| Input ratio | Markup | Fill | Offered price factor | Profit per nominal unit | Net margin |
+| ----------: | -----: | ---: | -------------------: | ----------------------: | ---------: |
+|           1 |     0% | 100% |               0.9080 |                  0.0000 |      0.00% |
+|           1 |     0% |  50% |               0.9080 |                 -0.4540 |   -100.00% |
+|           1 |    10% | 100% |               0.9988 |                  0.0908 |      9.09% |
+|           1 |    10% |  50% |               0.9988 |                 -0.4086 |    -81.82% |
+|        2.25 |     0% | 100% |               1.2430 |                  0.0000 |      0.00% |
+|        2.25 |     0% |  50% |               1.2430 |                 -0.6215 |   -100.00% |
+|        2.25 |    10% | 100% |               1.3673 |                  0.1243 |      9.09% |
+|        2.25 |    10% |  50% |               1.3673 |                 -0.5594 |    -81.82% |
+|          10 |     0% | 100% |               1.2430 |                  0.0000 |      0.00% |
+|          10 |     0% |  50% |               1.2430 |                 -0.6215 |   -100.00% |
+|          10 |    10% | 100% |               1.3673 |                  0.1243 |      9.09% |
+|          10 |    10% |  50% |               1.3673 |                 -0.5594 |    -81.82% |
 
-At zero adjustment and full fill, the indexed offer preserves the manufacturing plant's 0.092 operating surplus per nominal unit under material inflation. Margins fall as nominal sales rise. The 10% adjustment is a pricing choice, not a guaranteed margin: cheaper sellers fill first, and 50% fill makes the plant lose money in every scenario. Ratios above 2.25 produce no further price compounding.
-
-Focused clearing tests verify quote ranking, received price, bounded input pass-through and actual price feedback to loyalty. Command tests verify feature gating and CEO ownership. Activation uses the owner-selected production rollout validation.
+A 10% markup on costs gives a 9.09% margin at full fill. At half fill every modeled plant loses money. Quotes use the previous producing turn's cost basis, so changing wages, technology or utilization can change the eventual margin; it is an estimate, not a profit guarantee. Fresh plants require a producing turn before choosing cost-plus. Legacy/flag-off worlds do not read the stored pricing mode or cost basis.

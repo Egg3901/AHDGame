@@ -67,7 +67,7 @@ export default function PricingPanel({
         data.pricingPosture == null
           ? "Pricing set to automatic."
           : mode === "costPlus"
-            ? `Input-indexed price set with ${postureLabel(data.pricingPosture)} adjustment.`
+            ? `Operating-cost price set with ${postureLabel(data.pricingPosture)} adjustment.`
             : `Posted price set to ${postureLabel(data.pricingPosture)} vs market.`
       );
     } catch {
@@ -121,7 +121,7 @@ export default function PricingPanel({
       </div>
       <p className="text-xs text-muted mb-4">
         {pricingMode === "costPlus"
-          ? "Prices follow your recipe's input cost index, with the adjustment below. Cheaper competitors still sell first; this does not guarantee a buyer or profit."
+          ? "Prices use recorded operating costs plus your markup. Material costs follow input prices. Cheaper competitors still sell first; unsold output can cause a loss."
           : "Your posted price relative to the market. Demand fills the cheapest sellers first. Undercut to sell out ahead of rivals, or skim for margin and risk holding unsold output."}
       </p>
 
@@ -138,7 +138,12 @@ export default function PricingPanel({
           </button>
           <button
             type="button"
-            disabled={!isCeo || saving}
+            disabled={!isCeo || saving || !pricing.costPlusReady}
+            title={
+              pricing.costPlusReady
+                ? undefined
+                : "Available after a producing turn records operating costs"
+            }
             onClick={() => void save(draft ?? 0.1, "costPlus")}
             aria-pressed={pricingMode === "costPlus"}
             className="rounded-lg border border-card-border px-3 py-1.5 text-xs disabled:opacity-50"

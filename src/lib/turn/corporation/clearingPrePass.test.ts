@@ -89,6 +89,11 @@ function makeSectorWorld() {
 describe("runClearingPrePass with clearing enabled", () => {
   it("does not read the new pricing mode while explicit costs are disabled", () => {
     const { sector, lookups } = makeSectorWorld();
+    Object.defineProperty(sector, "costPlusCostBasis", {
+      get() {
+        throw new Error("disabled cost basis read");
+      },
+    });
     Object.defineProperty(sector, "pricingMode", {
       get() {
         throw new Error("disabled mode read");

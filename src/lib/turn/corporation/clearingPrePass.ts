@@ -42,7 +42,11 @@ import {
 } from "@/lib/currency/corporationCapital";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 import { advertisingDeliveredValueByCorp } from "./advertisingDeliveredValue";
-import { inputBasketCostIndex, supportsCostPlusPricing } from "@/lib/market/costPlusPricing/rules";
+import {
+  inputBasketCostIndex,
+  supportsCostPlusPricing,
+  validCostPlusBasis,
+} from "@/lib/market/costPlusPricing/rules";
 
 /**
  * Clearing pre-pass for the corporation turn, extracted from index.ts so the
@@ -380,17 +384,16 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
           ...(market.plantsEnabled &&
           market.explicitPlantCostsEnabled === true &&
           supportsCostPlusPricing(sector.sectorType) &&
-          sector.pricingMode === "costPlus"
+          sector.pricingMode === "costPlus" &&
+          validCostPlusBasis(sector.costPlusCostBasis)
             ? {
                 inputCostIndex: inputBasketCostIndex(
                   rates.demand ?? {},
                   lookups.reachableInputPriceRatiosByCountry?.get(sector.countryId ?? "US") ??
                     lookups.priceRatioByCommodity
                 ),
-                inputCostShare: Object.values(rates.demand ?? {}).reduce(
-                  (sum, rate) => sum + Math.max(0, rate ?? 0),
-                  0
-                ),
+                inputCostShare: sector.costPlusCostBasis.inputCostShare,
+                fixedCostShare: sector.costPlusCostBasis.fixedCostShare,
               }
             : {}),
           // Lagged own fill for autoPosture's feedback loop (NPP/unowned only,

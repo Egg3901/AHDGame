@@ -24,7 +24,12 @@ vi.mock("@/lib/market/featureFlag", async (importOriginal) => ({
 let db: MockDb;
 const corpId = new ObjectId();
 const sectorId = new ObjectId();
-const sector = { _id: sectorId, corporationId: corpId, sectorType: "manufacturing" };
+const sector = {
+  _id: sectorId,
+  corporationId: corpId,
+  sectorType: "manufacturing",
+  costPlusCostBasis: { inputCostShare: 0.67, fixedCostShare: 0.238, turn: 12 },
+};
 const params = Promise.resolve({ id: corpId.toString(), sectorId: sectorId.toString() });
 const request = (body: object) =>
   new Request("http://localhost/pricing", { method: "POST", body: JSON.stringify(body) });
@@ -77,6 +82,19 @@ describe("industrial pricing command", () => {
         })
       ).status
     ).toBe(400);
+    expect(db.collectionMocks.corporateSectors.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("refuses an offer without recorded actual operating costs", async () => {
+    db.collectionMocks.corporateSectors.findOne.mockResolvedValue({
+      ...sector,
+      costPlusCostBasis: undefined,
+    });
+    const response = await setSectorPricing(
+      request({ pricingPosture: 0, pricingMode: "costPlus" }),
+      { params }
+    );
+    expect(response.status).toBe(400);
     expect(db.collectionMocks.corporateSectors.updateOne).not.toHaveBeenCalled();
   });
 
