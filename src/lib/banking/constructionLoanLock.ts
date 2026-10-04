@@ -4,6 +4,7 @@ import type { BankLoan } from "@/lib/db/types/bank";
 import type { CorporateSector } from "@/lib/db/types/corporation";
 import { releaseConstructionFundingLease } from "./constructionFundingLease";
 import { resumeSettlement } from "./settlementJournal";
+import { releaseConstructionServiceLease } from "./constructionServiceLease";
 
 export async function releaseConstructionLoanLock(
   db: Db,
@@ -78,6 +79,6 @@ export async function acquireConstructionLoanLock(
     recovered.appliedLegs.length === 0 &&
     recovered.appliedProjections.length === 0;
   if (!complete && !unfunded) return null;
-  await releaseConstructionLoanLock(db, current, previous);
+  await releaseConstructionServiceLease(db, current.bankCorporationId, current._id, previous);
   return acquire();
 }

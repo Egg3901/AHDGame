@@ -33,6 +33,7 @@ describe("runRequiredStartupMigrations", () => {
       "2026-10-04-bank-prop-forex-fee-index",
       "2026-10-04-bank-failure-politics-index",
       "2026-10-04-industry-model-market-indexes",
+      "2026-10-04-construction-service-lease-index",
     ]);
     expect(REQUIRED_STARTUP_MIGRATIONS.every((migration) => migration.idempotent)).toBe(true);
     expect(runMigrationsMock).toHaveBeenCalledWith(db, {

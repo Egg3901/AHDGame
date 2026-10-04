@@ -177,9 +177,10 @@ export interface Corporation {
   bankConstructionFunding?: {
     loanId: string;
     charteredTurn: number;
-    kind: "funding" | "aborting" | "returning";
+    kind: "funding" | "aborting" | "returning" | "servicing";
     /** Written with the actual vault debit, never from a quote or cached book. */
     disbursed: boolean;
+    service?: { key: string; turn: number };
     depositReturn?: {
       cause: "failure" | "revocation" | "admin_unwind" | "charter_switch";
       turn: number;
