@@ -3,11 +3,15 @@ import { unstable_cache } from "next/cache";
 import { handleRouteError } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import type { LegislationType } from "@/lib/db/types";
+import type { GameConfig } from "@/lib/db/types/gameConfig";
 import { BILL_CATEGORIES, CATEGORY_TO_POLICY_DOMAINS } from "@shared/constants/legislation";
 import { LEGISLATION_TYPES_CACHE_TAG } from "@/lib/legislation/cacheTag";
 import { getEraContext } from "@/lib/era/context";
 import { isLegislationTypeActive, isNewThisEra } from "@/lib/era/legislationCatalog";
 import { attachPoliticalLegislationEstimates } from "@/lib/politicalLegislation/estimates";
+import { getMarketSystemMode, marketAtLeast } from "@/lib/market/featureFlag";
+import { isMediaOwnershipBillAvailable } from "@/lib/mediaRegulation/rules";
+import { loadUSMediaOutletDelivery } from "@/lib/mediaRegulation/turnData";
 
 // Legislation types are near-static — written only by admin seed / law-type
 // edit routes, never by gameplay or turn processing. We cache the read with a
@@ -124,6 +128,27 @@ export async function GET(request: Request) {
         : types
             .filter((t) => isLegislationTypeActive(String(t._id), eraYear))
             .map((t) => ({ ...t, eraNew: isNewThisEra(String(t._id), eraYear) }));
+    const usLawPicker = country == null || country === "us";
+    let mediaOwnershipBillAvailable = true;
+    if (usLawPicker && gated.some((type) => String(type._id) === "us_media_communications")) {
+      const mediaConfig = await db
+        .collection<GameConfig>("gameConfig")
+        .findOne(
+          { _id: "default" },
+          { projection: { mediaRegulationEnabled: 1, marketSystemMode: 1 } }
+        );
+      const regulationEnabled =
+        mediaConfig?.mediaRegulationEnabled === true &&
+        marketAtLeast(await getMarketSystemMode(mediaConfig), "clearing");
+      if (regulationEnabled) {
+        mediaOwnershipBillAvailable = isMediaOwnershipBillAvailable(
+          await loadUSMediaOutletDelivery(db)
+        );
+      }
+    }
+    const mediaGated = mediaOwnershipBillAvailable
+      ? gated
+      : gated.filter((type) => String(type._id) !== "us_media_communications");
 
     // Political-legislation v2 (spec §8): attach live fiscal estimates for
     // new-generation types. MUST run OUTSIDE the cached fetch — estimates
@@ -131,7 +156,7 @@ export async function GET(request: Request) {
     // scope for regional proposals; otherwise the national rollup.
     const withEstimates = await attachPoliticalLegislationEstimates(
       db,
-      gated,
+      mediaGated,
       country,
       searchParams.get("regionId"),
       incomeBandIndexByCountry

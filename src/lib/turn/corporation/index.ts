@@ -7,6 +7,7 @@ import { loadConversionQuoteContext } from "@/lib/currency/euro/quotes";
 import { ObjectId } from "mongodb";
 import type { AnyBulkWriteOperation } from "mongodb";
 import type { Character } from "@/lib/db/types";
+import type { StatePolicy } from "@/lib/db/types/statePolicy";
 import type { State } from "@/lib/db/types/state";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
 import { getDb } from "@/lib/mongodb";
@@ -21,6 +22,7 @@ import { processSectors } from "./sectorCalculations";
 import { getLabourSystemMode, labourAtLeast } from "@/lib/labour/featureFlag";
 import { getMarketSystemMode, marketAtLeast } from "@/lib/market/featureFlag";
 import { buildMarketContext } from "@/lib/market/marketContext";
+import { isFairnessDoctrineInEffect } from "@/lib/mediaRegulation/rules";
 import { runClearingPrePass } from "./clearingPrePass";
 import { computeQualityUpdates } from "./brandQualityTurn";
 import { consumeManufacturingDevelopmentReceiptsV2 } from "@/lib/products/manufacturingProjectPersistence";
@@ -173,6 +175,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           canonicalFreightBillingEnabled: 1,
           mediaEditorialEnabled: 1,
           mediaOperatingModelsEnabled: 1,
+          mediaRegulationEnabled: 1,
         },
       }
     ),
@@ -211,20 +214,37 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       ?.canonicalFreightBillingEnabled === true;
   const mediaEditorialEnabled = marketGovernorConfig?.mediaEditorialEnabled === true;
   const mediaOperatingModelsEnabled = marketGovernorConfig?.mediaOperatingModelsEnabled === true;
-  const lookups = await buildCorporationLookups(db, {
-    plantsEnabled: plantsEnabledForMarketShare,
-    explicitPlantCostsEnabled:
-      plantsEnabledForMarketShare && marketGovernorConfig?.explicitPlantCostsEnabled === true,
-    productionTurn: turn,
-    freightSettlementActive,
-    moneyWiringEnabled: interstateMoneyWiringEnabled,
-    canonicalFreightBillingEnabled,
-    mediaEditorialEnabled,
-    productLinesV2Enabled:
-      plantsEnabledForMarketShare &&
-      (marketGovernorConfig as { productLinesV2Enabled?: boolean } | null)
-        ?.productLinesV2Enabled === true,
-  });
+  const mediaRegulationEnabled =
+    marketAtLeast(marketSystemMode, "clearing") &&
+    marketGovernorConfig?.mediaRegulationEnabled === true;
+  const [lookups, mediaRegulationPolicy] = await Promise.all([
+    buildCorporationLookups(db, {
+      plantsEnabled: plantsEnabledForMarketShare,
+      explicitPlantCostsEnabled:
+        plantsEnabledForMarketShare && marketGovernorConfig?.explicitPlantCostsEnabled === true,
+      productionTurn: turn,
+      freightSettlementActive,
+      moneyWiringEnabled: interstateMoneyWiringEnabled,
+      canonicalFreightBillingEnabled,
+      mediaEditorialEnabled:
+        mediaEditorialEnabled ||
+        (mediaRegulationEnabled &&
+          typeof gameState?.currentYear === "number" &&
+          gameState.currentYear <= 1986),
+      productLinesV2Enabled:
+        plantsEnabledForMarketShare &&
+        (marketGovernorConfig as { productLinesV2Enabled?: boolean } | null)
+          ?.productLinesV2Enabled === true,
+    }),
+    mediaRegulationEnabled
+      ? db
+          .collection<StatePolicy>("statePolicies")
+          .findOne(
+            { legislationTypeId: "us_media_communications", stateId: "federal" },
+            { projection: { policyOptionIndex: 1 } }
+          )
+      : Promise.resolve(null),
+  ]);
   const politicalMediaMarketEnabled = marketGovernorConfig?.politicalMediaMarketEnabled === true;
   const politicalMediaOrders: PoliticalMediaOrderForClearing[] = politicalMediaMarketEnabled
     ? await loadPoliticalMediaOrdersForClearing(db, turn ?? 0)
@@ -347,6 +367,18 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     rampTurns: marketGovernorConfig?.marketGovernorRampTurns,
   });
   market.explicitPlantCostsEnabled = marketGovernorConfig?.explicitPlantCostsEnabled === true;
+  market.mediaRegulationEnabled = mediaRegulationEnabled;
+  market.mediaEditorialEnabled = mediaEditorialEnabled;
+  if (mediaRegulationEnabled) {
+    market.mediaRegulationPolicyOptionIndex =
+      typeof mediaRegulationPolicy?.policyOptionIndex === "number"
+        ? Math.max(0, Math.min(6, Math.trunc(mediaRegulationPolicy.policyOptionIndex)))
+        : 3;
+    market.mediaFairnessDoctrineEnabled = isFairnessDoctrineInEffect(
+      gameState?.currentYear,
+      market.mediaRegulationPolicyOptionIndex
+    );
+  }
   // Canonical freight billing (issue #897): apportion last turn's state-scoped
   // shipping money onto sectors once, before the per-corp loop, and thread the
   // result through the market context like the delivery-limited telemetry.

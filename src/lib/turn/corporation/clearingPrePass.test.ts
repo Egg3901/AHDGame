@@ -108,6 +108,18 @@ describe("runClearingPrePass with clearing enabled", () => {
     } as MarketContext;
     expect(() => runClearingPrePass(makeInput({ lookups, market }))).not.toThrow();
   });
+  it("does not read media regulation history while the flag is off", () => {
+    const { sector, lookups } = makeSectorWorld();
+    sector.sectorType = "media";
+    Object.defineProperty(sector, "outputUnitsByCommodity", {
+      get() {
+        throw new Error("disabled media history read");
+      },
+    });
+    const market = { clearingEnabled: true, plantsEnabled: false } as MarketContext;
+
+    expect(() => runClearingPrePass(makeInput({ lookups, market }))).not.toThrow();
+  });
   it("populates clearing results on the market and reports deterministic breaches", () => {
     const { lookups } = makeSectorWorld();
     const market = { clearingEnabled: true, plantsEnabled: false } as MarketContext;
@@ -122,6 +134,141 @@ describe("runClearingPrePass with clearing enabled", () => {
     expect(result.brandLoyaltyUpdates).toEqual([]);
     expect(result.buyerDemandByCorpCommodity).toBeUndefined();
     expect(result.contractedByCorpCommodity).toBeUndefined();
+  });
+
+  it("limits the next clearing book using prior measured ad share", () => {
+    const { corp, sector, lookups } = makeSectorWorld();
+    Object.assign(sector, {
+      stateId: "US-CA",
+      countryId: "US",
+      sectorType: "media",
+      strategyId: "standard",
+      producedUnits: 90,
+      soldFraction: 1,
+      soldByCommodity: { advertising: 1 },
+    });
+    const competitor = {
+      ...sector,
+      _id: "sector2",
+      corporationId: "corp2",
+      producedUnits: 10,
+    };
+    Object.assign(lookups, {
+      sectorsByCorp: new Map([
+        ["corp1", [sector]],
+        ["corp2", [competitor]],
+      ]),
+      corpById: new Map([
+        ["corp1", corp],
+        ["corp2", { _id: "corp2", brandLoyalty: 0.5, brandPostureNorm: 0 }],
+      ]),
+      globalCommodityBalances: new Map([["advertising", { supply: 1_000, demand: 1_000 }]]),
+      stateMetricsByState: new Map([
+        [
+          "US-CA",
+          { mediaInformation: { pressFreedom: { value: 100 }, stateMediaControl: { value: 0 } } },
+        ],
+      ]),
+    });
+    const market = {
+      clearingEnabled: true,
+      plantsEnabled: true,
+      mediaRegulationEnabled: true,
+      mediaRegulationPolicyOptionIndex: 0,
+    } as MarketContext;
+
+    runClearingPrePass(makeInput({ lookups, market }));
+
+    const dominantFill = market.clearingBySectorId?.get("sector1")?.soldByCommodity?.advertising;
+    const competitorFill = market.clearingBySectorId?.get("sector2")?.soldByCommodity?.advertising;
+    expect(dominantFill).toBeGreaterThan(0);
+    expect(dominantFill).toBeLessThan(competitorFill ?? 0);
+  });
+  it("uses the pre-repeal fairness law to constrain divergent outlet reach", () => {
+    const { corp, sector, lookups } = makeSectorWorld();
+    Object.assign(corp, { editorialStance: { economic: 5, social: 5 } });
+    Object.assign(sector, {
+      stateId: "CA",
+      countryId: "US",
+      sectorType: "media",
+      strategyId: "standard",
+      producedUnits: 100,
+    });
+    Object.assign(lookups, {
+      globalCommodityBalances: new Map([["advertising", { supply: 100, demand: 100 }]]),
+      editorialAudienceLeanByState: new Map([["CA", { economic: -5, social: -5 }]]),
+    });
+    const fairMarket = {
+      clearingEnabled: true,
+      plantsEnabled: true,
+      mediaFairnessDoctrineEnabled: true,
+      mediaEditorialEnabled: false,
+    } as MarketContext;
+    const postRepealMarket = {
+      clearingEnabled: true,
+      plantsEnabled: true,
+      mediaFairnessDoctrineEnabled: false,
+      mediaEditorialEnabled: false,
+    } as MarketContext;
+
+    runClearingPrePass(makeInput({ lookups, market: fairMarket }));
+    const fairnessFill =
+      fairMarket.clearingBySectorId?.get("sector1")?.soldByCommodity?.advertising;
+    runClearingPrePass(makeInput({ lookups, market: postRepealMarket }));
+    const postRepealFill =
+      postRepealMarket.clearingBySectorId?.get("sector1")?.soldByCommodity?.advertising;
+
+    expect(fairnessFill).toBeGreaterThan(0);
+    expect(fairnessFill).toBeLessThan(postRepealFill ?? 0);
+  });
+
+  it("limits the Fairness Doctrine to US outlets while preserving global editorial stance effects", () => {
+    const { corp, sector, lookups } = makeSectorWorld();
+    Object.assign(corp, { editorialStance: { economic: 5, social: 5 } });
+    Object.assign(sector, {
+      stateId: "GB-LON",
+      countryId: "GB",
+      sectorType: "media",
+      strategyId: "standard",
+      producedUnits: 100,
+    });
+    Object.assign(lookups, {
+      globalCommodityBalances: new Map([["advertising", { supply: 100, demand: 100 }]]),
+      editorialAudienceLeanByState: new Map([["GB-LON", { economic: -5, social: -5 }]]),
+    });
+
+    const fairnessMarket = {
+      clearingEnabled: true,
+      plantsEnabled: true,
+      mediaFairnessDoctrineEnabled: true,
+      mediaEditorialEnabled: false,
+    } as MarketContext;
+    const noFairnessMarket = {
+      clearingEnabled: true,
+      plantsEnabled: true,
+      mediaFairnessDoctrineEnabled: false,
+      mediaEditorialEnabled: false,
+    } as MarketContext;
+    const editorialMarket = {
+      clearingEnabled: true,
+      plantsEnabled: true,
+      mediaFairnessDoctrineEnabled: false,
+      mediaEditorialEnabled: true,
+    } as MarketContext;
+
+    runClearingPrePass(makeInput({ lookups, market: fairnessMarket }));
+    const fairnessFill =
+      fairnessMarket.clearingBySectorId?.get("sector1")?.soldByCommodity?.advertising;
+    runClearingPrePass(makeInput({ lookups, market: noFairnessMarket }));
+    const noFairnessFill =
+      noFairnessMarket.clearingBySectorId?.get("sector1")?.soldByCommodity?.advertising;
+    runClearingPrePass(makeInput({ lookups, market: editorialMarket }));
+    const editorialFill =
+      editorialMarket.clearingBySectorId?.get("sector1")?.soldByCommodity?.advertising;
+
+    expect(fairnessFill).toBe(noFairnessFill);
+    expect(editorialFill).toBeGreaterThan(0);
+    expect(editorialFill).toBeLessThan(noFairnessFill ?? 0);
   });
 
   it("rolls loyalty up and keeps the in-memory corp docs consistent", () => {
