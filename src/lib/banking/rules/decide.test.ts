@@ -22,6 +22,7 @@ function retail(overrides: Partial<BankCharterSnapshot> = {}): BankCharterSnapsh
     type: "retail",
     status: "active",
     currency: "USD",
+    charteredTurn: 1,
     postedCapital: 1_000_000,
     cashReserves: 1_000_000,
     npcDeposits: 4_000_000,

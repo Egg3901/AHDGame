@@ -68,7 +68,7 @@ import { isDepositTakingCharter, isNamedLendingCharter } from "@/lib/banking/cha
 import { charterCapabilities, charterMay } from "@/lib/banking/rules/capabilities";
 import { getCashReserves, bankEquity } from "@/lib/banking/bankCash";
 import { processDeadBankLoans } from "@/lib/banking/deadBankLoans";
-import { loanCharterEpochFilter } from "@/lib/banking/loanEpoch";
+import { loanCharterEpoch, loanCharterEpochFilter } from "@/lib/banking/loanEpoch";
 import { turnMoveKey, type MoneyTarget } from "@/lib/banking/moneyMove";
 import {
   DEFAULT_LENDING_PROFILE,
@@ -1638,7 +1638,7 @@ async function serviceDeadNpcBulkLoan(
       kind: "loan.paid",
       command: "bank.household.service",
       amount: collected,
-      meta: { borrowerType: "npcBulk", charteredTurn: loan.charteredTurn },
+      meta: { borrowerType: "npcBulk", charteredTurn: loanCharterEpoch(loan) },
     },
   });
   if (settled.status === "partial" || settled.status === "rejected" || settled.error) {

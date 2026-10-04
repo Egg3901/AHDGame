@@ -16,6 +16,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createInMemoryDb, type InMemoryDb } from "@/lib/test-utils/inMemoryDb";
+import type { Corporation } from "@/lib/db/types";
 import type { BankCharter, BankCharterType, BankLoan } from "@/lib/db/types/bank";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { originateLoan } from "@/lib/banking/lending";
@@ -229,7 +230,7 @@ describe("named loan servicing across charter types", () => {
   it("services the prior resolved epoch to insurance after recharter", async () => {
     const world = makeWorld("investment");
     const corporation = world.db
-      .collection("corporations")
+      .collection<Corporation>("corporations")
       .docs.find((row) => row._id.equals(world.bankId))!;
     corporation.liquidCapital = 50_000_000;
     corporation.bankCharter = charter("investment", {

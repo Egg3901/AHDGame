@@ -56,7 +56,7 @@ export const ZERO_DEAD_BANK_SUMMARY: DeadBankLoanSummary = {
   recoveredToInsurer: 0,
 };
 
-type DeadBank = {
+export type DeadBank = {
   corporationId: Corporation["_id"];
   name: string;
   currency: CurrencyCode;

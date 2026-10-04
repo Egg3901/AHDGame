@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
+import type { BankLoan } from "@/lib/db/types/bank";
 import { migration } from "./2026-10-04-bank-loan-charter-epoch";
 
 describe("2026-10-04-bank-loan-charter-epoch migration", () => {
@@ -46,7 +47,7 @@ describe("2026-10-04-bank-loan-charter-epoch migration", () => {
     ]);
 
     const result = await migration.execute(db as unknown as Db, { dryRun: false });
-    const loans = db.collection("bankLoans").docs;
+    const loans = db.collection<BankLoan>("bankLoans").docs;
     const epochById = new Map(loans.map((loan) => [loan._id.toString(), loan.charteredTurn]));
 
     expect(result.documentsUpdated).toBe(3);

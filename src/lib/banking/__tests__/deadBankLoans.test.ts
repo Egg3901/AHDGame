@@ -20,6 +20,7 @@
 import { describe, expect, it } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createInMemoryDb, type InMemoryDb } from "@/lib/test-utils/inMemoryDb";
+import type { Corporation } from "@/lib/db/types";
 import {
   findDeadBanksWithLoans,
   processDeadBankLoans,
@@ -246,6 +247,6 @@ describe("loans owed to a bank that no longer exists", () => {
     expect(summary.loansServiced).toBe(3);
     expect(summary.recoveredToInsurer).toBe(300);
     expect(db.collection("depositInsuranceFunds").docs[0].balance).toBe(340);
-    expect(db.collection("corporations").docs[0].bankCharter?.cashReserves).toBe(900);
+    expect(db.collection<Corporation>("corporations").docs[0].bankCharter?.cashReserves).toBe(900);
   });
 });
