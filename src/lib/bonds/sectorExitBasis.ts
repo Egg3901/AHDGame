@@ -29,6 +29,8 @@ export interface SectorExitBasisOptions {
   plantsEnabled: boolean;
   /** Game year — era-prices the book basis. Only read under plants. */
   currentYear?: number | null;
+  /** Target turn for queue-derived CIP when callers already loaded buildQueue. */
+  currentTurn?: number | null;
   /** The world's era unit-basis scale (`getEraUnitScale(preset)`). Only read under plants. */
   eraUnitScale: number;
   /**
@@ -54,7 +56,12 @@ export function sectorExitValueAnchor(
   options: SectorExitBasisOptions
 ): number {
   if (options.plantsEnabled) {
-    return sumSectorBookValueAnchor(sectors, options.currentYear, options.eraUnitScale);
+    return sumSectorBookValueAnchor(
+      sectors,
+      options.currentYear,
+      options.eraUnitScale,
+      options.currentTurn
+    );
   }
   return computeSectorNpvSum(sectors, primeRateByCountry, corp, fxByCurrency, {
     excludeGrowthCost: options.excludeGrowthCost,
@@ -80,7 +87,7 @@ export function sectorExitValueByIdAnchor(
   return sectors.map((s) => ({
     sectorId: s._id.toString(),
     npvAnchor: options.plantsEnabled
-      ? sectorBookValueAnchor(s, options.currentYear, options.eraUnitScale)
+      ? sectorBookValueAnchor(s, options.currentYear, options.eraUnitScale, options.currentTurn)
       : computeSectorNpvSum([s], primeRateByCountry, corp, fxByCurrency, {
           excludeGrowthCost: options.excludeGrowthCost,
         }),

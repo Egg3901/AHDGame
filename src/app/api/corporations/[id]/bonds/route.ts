@@ -151,7 +151,8 @@ export async function GET(request: Request, { params }: RouteParams) {
       // rating the turn writes disagree for any mid-build corp.
       constructionInProgressAnchor: sumCorporateSectorConstructionInProgress(
         sectors,
-        corporation._id
+        corporation._id,
+        currentTurn
       ),
       bonds,
       corporationId: corporation._id,
@@ -323,6 +324,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       fxByCurrency,
       primeRateByCountry,
       plantsEnabled,
+      currentTurn,
     });
 
     // Effective issuance window the POST handler enforces: the flat minimum is
@@ -571,7 +573,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const totalEquity =
       postLiquidCapitalAnchor +
       sectorNPV +
-      sumCorporateSectorConstructionInProgress(sectors, corporation._id);
+      sumCorporateSectorConstructionInProgress(sectors, corporation._id, currentTurn);
 
     // Per-issuance cap: 25% of annual revenue, floored at $100M
     const annualRevenuePost = sumCorporateSectorAnnualRevenue(
@@ -609,6 +611,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       fxByCurrency,
       primeRateByCountry,
       plantsEnabled: postPlantsEnabled,
+      currentTurn,
     });
 
     const {

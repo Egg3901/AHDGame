@@ -374,7 +374,6 @@ export async function expandSector(request: Request, { params }: RouteParams) {
       // basis.
       newSector.capacityBookAnchor = 0;
       newSector.buildQueue = [starterOrder];
-      newSector.constructionInProgressAnchor = Math.round(starterBuildAnchor);
       // Born under plants, so it never needs the flip-turn migration — stamping
       // this now keeps `sectorTurn`'s `isFlipTurn` (plantsStartTurn == null) from
       // treating a zero-capacity newborn as a legacy sector to convert.

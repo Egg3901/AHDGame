@@ -36,7 +36,7 @@ import {
 } from "@/lib/tariffs/tariffEffects";
 import type { FtaCoverage } from "@/lib/tariffs/ftaOverrides";
 import { sectorEconomicRevenue } from "@/lib/corporations/sectorRevenueBasis";
-import { deliveredFraction } from "@/lib/corporations/buildDelivery";
+import { deliveredFraction, queueUndeliveredCost } from "@/lib/corporations/buildDelivery";
 import { readPlantsPnl, type PolicyStackRow } from "@/lib/corporations/plantsPnlBasis";
 import { seedPlantLedger } from "@/lib/corporations/plantLedger";
 import {
@@ -1787,7 +1787,7 @@ export function buildSectorPlantsSection(args: {
   // Break-even: profit is stored per financial day (TURNS_PER_DAY turns), CIP
   // is a stock. Positive profit pays CIP down in cip / profitPerTurn turns; at
   // zero CIP the sector's own profit sign is the whole story.
-  const cipAnchor = nonNeg(num(sector.constructionInProgressAnchor) ?? 0);
+  const cipAnchor = Math.max(0, queueUndeliveredCost(rawQueue, currentTurn));
   const profitPerTurnAnchor = money.profitAnchor / TURNS_PER_DAY;
   const breakEven: SectorPlantsSection["truth"]["breakEven"] =
     profitPerTurnAnchor > 0
@@ -1834,7 +1834,7 @@ export function buildSectorPlantsSection(args: {
         }
       : {}),
     buildQueue,
-    constructionInProgressAnchor: num(sector.constructionInProgressAnchor) ?? 0,
+    constructionInProgressAnchor: cipAnchor,
     depreciationPerTurn: CAPITAL_DEPRECIATION_PER_TURN,
     buildTurns: CAPACITY_BUILD_TURNS(sectorType),
     workers,
