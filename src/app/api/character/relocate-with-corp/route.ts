@@ -38,7 +38,11 @@ import {
   type ConvertCorpCurrencySuccess,
 } from "@/lib/corporations/convertCorpCurrency";
 import { findActiveResidentCeoCorporation } from "@/lib/corporations/ceoResidency";
-import { hasProtectedConstructionPropertyIn } from "@/lib/corporations/securedConstructionProperty";
+import {
+  hasProtectedConstructionPropertyIn,
+  reserveSectorsForTransition,
+  releaseConstructionPropertyTransition,
+} from "@/lib/corporations/securedConstructionProperty";
 import { commandEconomyRelocationBlock } from "@/lib/corporations/relocationCommandEconomyGate";
 import {
   getRelocationCooldownStatus,
@@ -212,6 +216,7 @@ export async function POST(request: Request) {
       crossCountry && newCurrency !== undefined && newCurrency !== oldCurrency;
 
     // ── No-mutation validations first ──
+    let currencyConversion: ConvertCorpCurrencySuccess | null = null;
     if (paymentMethod === "cash") {
       const capitalAnchor = corpLiquidCapitalToAnchor(corp.liquidCapital, corp, corpFxRate);
       if (capitalAnchor < effectiveCost) {
@@ -252,7 +257,6 @@ export async function POST(request: Request) {
     }
 
     // ── Mutations ──
-    let currencyConversion: ConvertCorpCurrencySuccess | null = null;
     let workingCorp: Corporation = corp;
     let workingFxRate = corpFxRate;
     if (needsCurrencyConversion && newCurrency) {
@@ -288,46 +292,71 @@ export async function POST(request: Request) {
       }
     }
 
-    if (paymentMethod === "cash") {
-      const deltaInCorp = anchorToCorpLiquidCapital(effectiveCost, workingCorp, workingFxRate);
-      await db
-        .collection<Corporation>("corporations")
-        .updateOne(
-          { _id: workingCorp._id },
-          { $set: baseCorpSet, $inc: { liquidCapital: -deltaInCorp } }
+    const hqTransitionKeys = needsCurrencyConversion
+      ? null
+      : await reserveSectorsForTransition(
+          db,
+          propertySectors,
+          "headquarters_relocation",
+          `headquarters:${corp._id.toHexString()}:${targetState.countryId}:${normalizedTarget}`
         );
-    } else if (paymentMethod === "bond") {
-      if (!bondPreflight) {
-        return NextResponse.json({ error: "Internal bond-path error" }, { status: 500 });
+    if (!needsCurrencyConversion && !hqTransitionKeys) {
+      return NextResponse.json(
+        { error: "A sector changed or acquired secured construction during relocation" },
+        { status: 409 }
+      );
+    }
+
+    try {
+      if (paymentMethod === "cash") {
+        const deltaInCorp = anchorToCorpLiquidCapital(effectiveCost, workingCorp, workingFxRate);
+        await db
+          .collection<Corporation>("corporations")
+          .updateOne(
+            { _id: workingCorp._id },
+            { $set: baseCorpSet, $inc: { liquidCapital: -deltaInCorp } }
+          );
+      } else if (paymentMethod === "bond") {
+        if (!bondPreflight) {
+          return NextResponse.json({ error: "Internal bond-path error" }, { status: 500 });
+        }
+        const bondResult = await issueRelocationBond(
+          db,
+          workingCorp,
+          effectiveCost,
+          currentTurn,
+          bondPreflight,
+          fxByCurrency
+        );
+        if (!bondResult.ok) return bondResult.response;
+        bondFaceValue = bondResult.data.bondFaceValue;
+        couponRate = bondResult.data.couponRate;
+        creditRating = bondResult.data.creditRating;
+        const netDelta = anchorToCorpLiquidCapital(
+          bondFaceValue - effectiveCost,
+          workingCorp,
+          workingFxRate
+        );
+        await db
+          .collection<Corporation>("corporations")
+          .updateOne(
+            { _id: workingCorp._id },
+            { $set: baseCorpSet, $inc: { liquidCapital: netDelta } }
+          );
+      } else {
+        // imperial-free — no payment, no bond, just move
+        await db
+          .collection<Corporation>("corporations")
+          .updateOne({ _id: workingCorp._id }, { $set: baseCorpSet });
       }
-      const bondResult = await issueRelocationBond(
-        db,
-        workingCorp,
-        effectiveCost,
-        currentTurn,
-        bondPreflight,
-        fxByCurrency
-      );
-      if (!bondResult.ok) return bondResult.response;
-      bondFaceValue = bondResult.data.bondFaceValue;
-      couponRate = bondResult.data.couponRate;
-      creditRating = bondResult.data.creditRating;
-      const netDelta = anchorToCorpLiquidCapital(
-        bondFaceValue - effectiveCost,
-        workingCorp,
-        workingFxRate
-      );
-      await db
-        .collection<Corporation>("corporations")
-        .updateOne(
-          { _id: workingCorp._id },
-          { $set: baseCorpSet, $inc: { liquidCapital: netDelta } }
+    } finally {
+      if (hqTransitionKeys) {
+        await Promise.all(
+          propertySectors.map((sector, index) =>
+            releaseConstructionPropertyTransition(db, sector._id, hqTransitionKeys[index])
+          )
         );
-    } else {
-      // imperial-free — no payment, no bond, just move
-      await db
-        .collection<Corporation>("corporations")
-        .updateOne({ _id: workingCorp._id }, { $set: baseCorpSet });
+      }
     }
 
     const outcome = await performRelocation(db, auth.character, targetState, {

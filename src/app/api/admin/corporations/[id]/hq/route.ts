@@ -31,7 +31,11 @@ import type { Character } from "@/lib/db/types/character";
 import type { ImperialCharacter } from "@/lib/db/types/imperialCharacter";
 import { doesCeoResideAtHeadquarters, vacateCorporationCeo } from "@/lib/corporations/ceoResidency";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
-import { hasProtectedConstructionPropertyIn } from "@/lib/corporations/securedConstructionProperty";
+import {
+  hasProtectedConstructionPropertyIn,
+  reserveSectorsForTransition,
+  releaseConstructionPropertyTransition,
+} from "@/lib/corporations/securedConstructionProperty";
 
 const schema = z.object({
   countryId: z.enum(["US", "UK", "JP", "DE"]),
@@ -94,16 +98,40 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       currencyConversion = convResult;
     }
 
-    await db.collection<Corporation>("corporations").updateOne(
-      { _id: new ObjectId(id) },
-      {
-        $set: {
-          countryId: parsed.data.countryId,
-          headquartersState: parsed.data.regionId,
-          updatedAt: now,
-        },
+    const hqTransitionKeys = needsCurrencyConversion
+      ? null
+      : await reserveSectorsForTransition(
+          db,
+          propertySectors,
+          "headquarters_relocation",
+          `headquarters:${corp._id.toHexString()}:${parsed.data.countryId}:${parsed.data.regionId}`
+        );
+    if (!needsCurrencyConversion && !hqTransitionKeys) {
+      return NextResponse.json(
+        { error: "A sector changed or acquired secured construction during relocation" },
+        { status: 409 }
+      );
+    }
+    try {
+      await db.collection<Corporation>("corporations").updateOne(
+        { _id: new ObjectId(id) },
+        {
+          $set: {
+            countryId: parsed.data.countryId,
+            headquartersState: parsed.data.regionId,
+            updatedAt: now,
+          },
+        }
+      );
+    } finally {
+      if (hqTransitionKeys) {
+        await Promise.all(
+          propertySectors.map((sector, index) =>
+            releaseConstructionPropertyTransition(db, sector._id, hqTransitionKeys[index])
+          )
+        );
       }
-    );
+    }
     if (corp.ceoId && corp.ceoVacant !== true) {
       const ceoRecord =
         corp.ceoType === "imperial"
