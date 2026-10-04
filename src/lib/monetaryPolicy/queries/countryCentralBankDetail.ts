@@ -194,12 +194,21 @@ export async function loadCountryCentralBankDetail(params: {
     return { ok: false as const, status: 404, error: "Country not found" };
   }
 
-  const { bankId, memberCountries, intorgId } = await getCentralBankScope(db, countryId);
+  const [gameState, { bankId, memberCountries, intorgId }] = await Promise.all([
+    getGameState(),
+    getCentralBankScope(db, countryId),
+  ]);
   const bank = await db
     .collection<CentralBank>("centralBanks")
     .findOneAndUpdate(
       { _id: bankId },
-      buildCentralBankBootstrapUpdate(countryId, bankId, intorgId),
+      buildCentralBankBootstrapUpdate(
+        countryId,
+        bankId,
+        intorgId,
+        undefined,
+        gameState?.currentYear
+      ),
       { upsert: true, returnDocument: "after" }
     );
 
@@ -233,21 +242,15 @@ export async function loadCountryCentralBankDetail(params: {
   // governance (and the government that holds the pen) is the UK's.
   const bankHomeCountryId = (policyBank.countryId ?? countryId) as CountryId;
   // Independent of one another once the bank doc is loaded — one round.
-  const [
-    governmentControlled,
-    { chairData, chairMode, chairNppId },
-    forexEnabled,
-    budgetDoc,
-    gameState,
-  ] = await Promise.all([
-    isBankGovernmentControlledLive(policyBank, bankHomeCountryId),
-    buildCentralBankChairData(db, bank),
-    isForexEnabled(),
-    db
-      .collection<FederalBudget>("federalBudget")
-      .findOne({ _id: getNationalBudgetId(countryId) } as { _id: "federal" }),
-    getGameState(),
-  ]);
+  const [governmentControlled, { chairData, chairMode, chairNppId }, forexEnabled, budgetDoc] =
+    await Promise.all([
+      isBankGovernmentControlledLive(policyBank, bankHomeCountryId),
+      buildCentralBankChairData(db, bank),
+      isForexEnabled(),
+      db
+        .collection<FederalBudget>("federalBudget")
+        .findOne({ _id: getNationalBudgetId(countryId) } as { _id: "federal" }),
+    ]);
   const viewerSetsRate =
     governmentControlled && viewer?.character
       ? await isNationalIssuer(db, bankHomeCountryId, viewer.character._id)

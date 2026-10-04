@@ -3,6 +3,7 @@
  * Do NOT duplicate numbers into new tables — read the seed modules.
  */
 
+import { getOpeningPolicyRate } from "@/lib/centralBank/rules/openingPolicyRate";
 import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CONFIGS, DEFAULT_LEGACY_COUNTRY_ID } from "@/lib/constants/countries";
 import { FOREX_ACTIVE_COUNTRIES, getInitialRates } from "@/lib/constants/currencies";
@@ -230,13 +231,13 @@ function collectBundleFallbacks(preset: string): Array<{ domain: string; note: s
   return out;
 }
 
-/**
- * Expected prime rate for conformance (turn 1): the value the forex seeder
- * actually writes (`COUNTRY_CONFIGS.centralBank.defaultPrimeRate`). Era monetary
- * baselines are runtime steering targets, not seed-time truth.
- */
-export function expectedPrimeRate(countryId: CountryId, _startingYear?: number): number {
-  return COUNTRY_CONFIGS[countryId]?.centralBank.defaultPrimeRate ?? 0;
+/** Seed-time policy benchmark, independent from runtime neutral monetary targets. */
+export function expectedPrimeRate(countryId: CountryId, startingYear?: number): number {
+  return getOpeningPolicyRate(
+    countryId,
+    startingYear,
+    COUNTRY_CONFIGS[countryId]?.centralBank.defaultPrimeRate ?? 0
+  );
 }
 
 /** Country-level normalised sector weight shares for the preset. */

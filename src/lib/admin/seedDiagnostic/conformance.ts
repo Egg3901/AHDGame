@@ -570,7 +570,7 @@ async function checkMonetary(db: Db, expect: SeedExpectations): Promise<SeedDiag
       );
       continue;
     }
-    const expectedRate = expectedPrimeRate(countryId);
+    const expectedRate = expectedPrimeRate(countryId, expect.startingYear);
     checks.push(
       relCheck(
         `centralBank.${countryId}.primeRate`,
@@ -579,7 +579,7 @@ async function checkMonetary(db: Db, expect: SeedExpectations): Promise<SeedDiag
         expectedRate,
         bank.primeRate,
         0.01,
-        "vs seeder defaultPrimeRate"
+        "vs opening seeder policy benchmark"
       )
     );
     const rateHistLen = Array.isArray(bank.rateHistory) ? bank.rateHistory.length : -1;

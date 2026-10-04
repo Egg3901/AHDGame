@@ -10,6 +10,8 @@ import {
   getSeedHardPeg,
 } from "@/lib/constants/currencies";
 import type { CountryId } from "@/lib/constants/countries";
+import { getOpeningPolicyRate } from "@/lib/centralBank/rules/openingPolicyRate";
+import { getStartingYearForPreset } from "@/lib/constants/turnTime";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { getPresetMonetaryScope } from "@/lib/monetaryPolicy/presetMonetaryScope";
@@ -220,7 +222,11 @@ export async function updateCentralBanks(db: Db, preset: string): Promise<void> 
               chairCharacterName: null,
               chairAppointedAt: null,
               chairAppointedBy: null,
-              primeRate: COUNTRY_CONFIGS[countryId].centralBank.defaultPrimeRate,
+              primeRate: getOpeningPolicyRate(
+                countryId,
+                getStartingYearForPreset(preset),
+                COUNTRY_CONFIGS[countryId].centralBank.defaultPrimeRate
+              ),
               rateHistory: [],
               forexRevenue: 0,
               chairInfamy: 0,
