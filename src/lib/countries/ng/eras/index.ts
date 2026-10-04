@@ -16,7 +16,7 @@ import { NG_2027 } from "./2027";
  * asserted against the roster in `contract.test.ts` rather than a literal, so a
  * new preset fails loudly here instead of silently leaving NG without an era.
  *
- * ⚠ CONFIG OVERRIDES: 1953-default. `getCountryConfig` merges SHALLOWLY,
+ * ⚠ CONFIG OVERRIDES: 1953-default and 1991-default. `getCountryConfig` merges SHALLOWLY,
  * so an override supplying `legislature` replaces the base one wholesale -- every
  * field it omits is gone, not inherited.
  */

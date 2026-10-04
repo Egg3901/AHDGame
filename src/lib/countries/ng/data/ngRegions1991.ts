@@ -1,4 +1,6 @@
 import type { State } from "@/lib/db/types";
+import { allocateRegionalGdp } from "@/lib/seeds/reference/rules/allocateRegionalGdp";
+import { NG_1991_NOMINAL_GDP_NGN } from "./ngGdp1991";
 import { allocatePopulationTotal } from "@/lib/seeds/rules/populationAllocation";
 import { POPULATION_TOTALS_1991 } from "@/lib/seeds/reference/populationTotals1991";
 
@@ -9,10 +11,9 @@ import { POPULATION_TOTALS_1991 } from "@/lib/seeds/reference/populationTotals19
  *   Zone shares are existing model estimates, not verified census aggregates.
  *   Counts are normalized to the NPC total reproduced in NBS Annual Abstract
  *   2011 Table 12; see populationTotals1991.ts.
- * GDP: 1991 nominal regional estimates (NGN millions). Nigeria's 1991 GDP was
- *   roughly ₦260–300 billion; figures are proportional approximations based
- *   on oil production (South-South, South-West) and agricultural dominance
- *   (North-East, North-West). Not precise — era-appropriate ballpark.
+ * GDP: NGN millions, scaled to WDI's observed 1991 national nominal total.
+ *   Relative output shares remain existing oil/agriculture model estimates,
+ *   not independently observed regional GDP. See ngGdp1991.ts for the source.
  * House/Senate seats: constitutional allocation unchanged 1991→2019
  *   (360 House, 109 Senate). Zone-level abstraction is a game construct;
  *   zones were created later (Abacha era) but used here for playable regions.
@@ -104,7 +105,18 @@ const ngRegionPopulationWeights1991: State[] = [
 ];
 
 /** Regional counts are estimates normalized to the dated national anchor, not census observations. */
-export const ngRegions1991 = allocatePopulationTotal(
+const populatedRegions = allocatePopulationTotal(
   ngRegionPopulationWeights1991,
   POPULATION_TOTALS_1991.NG.population
 );
+const populations = Object.fromEntries(populatedRegions.map((row) => [row._id, row.population]));
+// The original GDP amounts were mis-scaled, but their relative output shares
+// remain the model proxy. Express that proxy per resident for the allocator.
+const outputPerResident = Object.fromEntries(
+  populatedRegions.map((row) => [row._id, row.gdp / row.population])
+);
+const allocatedGdp = allocateRegionalGdp(NG_1991_NOMINAL_GDP_NGN, populations, outputPerResident);
+export const ngRegions1991: State[] = populatedRegions.map((row) => ({
+  ...row,
+  gdp: allocatedGdp[row._id] / 1_000_000,
+}));
