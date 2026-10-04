@@ -281,6 +281,7 @@ describe("GET /api/banking/corporation/[id]", () => {
         "lifecycle",
         "loans",
         "outlook",
+        "primaryUnderwritingEnabled",
         "primeRate",
         "privateBankingEnabled",
         "rates",
@@ -292,6 +293,7 @@ describe("GET /api/banking/corporation/[id]", () => {
         bankPropForexFeesEnabled: false,
         bankTreasury: null,
         bankTreasuryEnabled: false,
+        primaryUnderwritingEnabled: false,
       });
       expect(sortedKeys(body.charter)).toEqual([
         "appliedStressLossFraction",
@@ -326,6 +328,7 @@ describe("GET /api/banking/corporation/[id]", () => {
         "lastBankingInterbankInterestReceived",
         "lastBankingLoanInterest",
         "lastBankingLoanOriginationFees",
+        "lastBankingUnderwritingFees",
         "lastBankingWriteoffs",
         "lendingOffset",
         "lendingProfile",
@@ -349,6 +352,7 @@ describe("GET /api/banking/corporation/[id]", () => {
         "warningBand",
       ]);
       expect(body.charter.sovereignTreasuryMarkValue).toBe(0);
+      expect(body.charter.lastBankingUnderwritingFees).toBe(0);
       expect(sortedKeys(body.rates)).toEqual(["depositRatePercent", "lendingRatePercent"]);
       expect(sortedKeys(body.householdBook)).toEqual([
         "blendedExpectedDefaultPercent",
@@ -403,6 +407,7 @@ describe("GET /api/banking/corporation/[id]", () => {
         "legalCharterTypes",
         "loans",
         "outlook",
+        "primaryUnderwritingEnabled",
         "primeRate",
         "privateBankingEnabled",
         "rates",
@@ -413,6 +418,7 @@ describe("GET /api/banking/corporation/[id]", () => {
         bankPropForexFeesEnabled: false,
         bankTreasury: null,
         bankTreasuryEnabled: false,
+        primaryUnderwritingEnabled: false,
       });
     },
     CONSOLE_TEST_TIMEOUT_MS
