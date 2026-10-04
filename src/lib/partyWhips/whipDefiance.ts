@@ -522,9 +522,16 @@ function targetCacheKey(whip: BillWhip): string {
     whip.targetType,
     whip.targetId instanceof ObjectId ? whip.targetId.toString() : whip.targetId,
     whip.chamber,
-    whip.targetType === "speakerVacateMotion" ? whip.createdAt.toISOString() : "",
+    whip.targetType === "speakerVacateMotion" || whip.targetType === "bill"
+      ? whip.createdAt.toISOString()
+      : "",
   ].join(":");
 }
+
+type CaucusWhipDefianceScope = WhipDefianceScope & {
+  issuedBy: "caucus";
+  caucusId: ObjectId;
+};
 
 /**
  * Build multiple scoped snapshots while sharing target, voter, seat and caucus
@@ -533,7 +540,7 @@ function targetCacheKey(whip: BillWhip): string {
  */
 export async function buildWhipDefianceSnapshots(
   db: Db,
-  scopes: readonly WhipDefianceScope[],
+  scopes: readonly CaucusWhipDefianceScope[],
   limit: number,
   rawWhips: readonly BillWhip[],
   preloadedMemberships?: readonly CaucusMembership[],
@@ -555,7 +562,13 @@ export async function buildWhipDefianceSnapshots(
       ),
     ])
   );
-  const allWhips = dedupeWhips([...whipsByScope.values()].flat());
+  // Preserve each scope's independently deduplicated rows. Across caucuses a
+  // bill whip's creation time can distinguish the current veto phase from an
+  // earlier one, even when target, chamber, audience, and mode all match.
+  // Preserve each scope's independently deduplicated rows. Across caucuses a
+  // bill whip's creation time can distinguish the current veto phase from an
+  // earlier one, even when target, chamber, audience, and mode all match.
+  const allWhips = [...whipsByScope.values()].flat();
   const billIds = [
     ...new Map(
       allWhips
@@ -643,7 +656,7 @@ export async function buildWhipDefianceSnapshots(
   const officeTypes = [...new Set([...officesByAudience.values()].flatMap((set) => [...set]))];
   const officialClauses = [
     ...(characterIds.length ? [{ characterId: { $in: characterIds } }] : []),
-    ...(nppIds.length ? [{ nppId: { $in: nppIds }, isNPP: true }] : []),
+    ...(nppIds.length ? [{ nppId: { $in: nppIds } }] : []),
   ];
   const [characters, npps, officials] = await Promise.all([
     missingCharacterIds.length
@@ -693,7 +706,7 @@ export async function buildWhipDefianceSnapshots(
         official
       );
     }
-    if (official.nppId && official.isNPP) {
+    if (official.nppId) {
       officialByMemberOffice.set(
         `npp:${official.officeType}:${official.nppId.toString()}`,
         official

@@ -130,6 +130,196 @@ describe("buildPartyCaucusHealthSnapshot", () => {
     expect(db.collectionMocks.caucusMemberships!.find).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps bill phase filtering scoped to each caucus whip", async () => {
+    const db = createMockDb();
+    const oldCaucusId = new ObjectId();
+    const currentCaucusId = new ObjectId();
+    const voterId = new ObjectId();
+    const billId = new ObjectId();
+    const phaseStart = new Date("2026-09-01T00:00:00.000Z");
+    db.collection("caucuses");
+    db.collection("caucusMemberships");
+    db.collection("caucusChairElections");
+    db.collection("characters");
+    db.collection("electedOfficials");
+    db.collection("billWhips");
+    db.collection("bills");
+    db.collectionMocks.caucuses!.find.mockReturnValue({
+      toArray: async () => [
+        {
+          _id: oldCaucusId,
+          slug: "old",
+          countryId: "US",
+          partyId: "1",
+          name: "A Old Phase",
+          disbandedAt: null,
+        },
+        {
+          _id: currentCaucusId,
+          slug: "current",
+          countryId: "US",
+          partyId: "1",
+          name: "B Current Phase",
+          disbandedAt: null,
+        },
+      ],
+    });
+    db.collectionMocks.caucusMemberships!.find.mockReturnValue({
+      toArray: async () =>
+        [oldCaucusId, currentCaucusId].map((caucusId) => ({
+          _id: new ObjectId(),
+          caucusId,
+          memberType: "character",
+          memberId: voterId,
+          status: "active",
+        })),
+    });
+    db.collectionMocks.billWhips!.find.mockReturnValue({
+      sort() {
+        return this;
+      },
+      toArray: async () => [
+        ...[
+          { caucusId: oldCaucusId, createdAt: new Date(phaseStart.getTime() - 1) },
+          { caucusId: currentCaucusId, createdAt: new Date(phaseStart.getTime() + 1) },
+        ].map(({ caucusId, createdAt }) => ({
+          _id: new ObjectId(),
+          targetType: "bill",
+          targetId: billId,
+          chamber: "house",
+          direction: "for",
+          issuedBy: "caucus",
+          countryId: "US",
+          partyId: "1",
+          caucusId,
+          audience: "character",
+          mode: "soft",
+          createdAt,
+          updatedAt: createdAt,
+        })),
+      ],
+    });
+    db.collectionMocks.bills!.find.mockReturnValue({
+      toArray: async () => [
+        {
+          _id: billId,
+          title: "Veto Override",
+          status: "veto_override",
+          overrideVotingStartedAt: phaseStart,
+          vetoOverrideVotes: { [voterId.toString()]: "against" },
+        },
+      ],
+    });
+    db.collectionMocks.characters!.find.mockReturnValue({
+      project() {
+        return this;
+      },
+      toArray: async () => [{ _id: voterId, name: "Voter", party: "1" }],
+    });
+    db.collectionMocks.electedOfficials!.find.mockReturnValue({
+      project() {
+        return this;
+      },
+      toArray: async () => [{ characterId: voterId, state: "CA", officeType: "house" }],
+    });
+
+    const snapshot = await buildPartyCaucusHealthSnapshot(db as never, "US", "1");
+
+    expect(snapshot.caucuses.map((caucus) => caucus.activeDefianceCount)).toEqual([0, 1]);
+    expect(db.collectionMocks.bills!.find).toHaveBeenCalledTimes(1);
+  });
+
+  it("retains NPP office metadata when legacy officials omit isNPP", async () => {
+    const db = createMockDb();
+    const caucusId = new ObjectId();
+    const nppId = new ObjectId();
+    const billId = new ObjectId();
+    db.collection("caucuses");
+    db.collection("caucusMemberships");
+    db.collection("caucusChairElections");
+    db.collection("npps");
+    db.collection("electedOfficials");
+    db.collection("billWhips");
+    db.collection("bills");
+    db.collectionMocks.caucuses!.find.mockReturnValue({
+      toArray: async () => [
+        {
+          _id: caucusId,
+          slug: "npp-caucus",
+          countryId: "US",
+          partyId: "1",
+          name: "NPP Caucus",
+          disbandedAt: null,
+        },
+      ],
+    });
+    db.collectionMocks.caucusMemberships!.find.mockReturnValue({
+      toArray: async () => [
+        {
+          _id: new ObjectId(),
+          caucusId,
+          memberType: "npp",
+          memberId: nppId,
+          status: "active",
+        },
+      ],
+    });
+    db.collectionMocks.billWhips!.find.mockReturnValue({
+      sort() {
+        return this;
+      },
+      toArray: async () => [
+        {
+          _id: new ObjectId(),
+          targetType: "bill",
+          targetId: billId,
+          chamber: "house",
+          direction: "for",
+          issuedBy: "caucus",
+          countryId: "US",
+          partyId: "1",
+          caucusId,
+          audience: "npp",
+          mode: "soft",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ],
+    });
+    db.collectionMocks.bills!.find.mockReturnValue({
+      toArray: async () => [
+        {
+          _id: billId,
+          title: "Current Bill",
+          status: "active",
+          votes: { [`npp_${nppId.toString()}`]: "against" },
+        },
+      ],
+    });
+    db.collectionMocks.npps!.find.mockReturnValue({
+      project() {
+        return this;
+      },
+      toArray: async () => [{ _id: nppId, name: "NPP Voter", party: "1" }],
+    });
+    db.collectionMocks.electedOfficials!.find.mockReturnValue({
+      project() {
+        return this;
+      },
+      toArray: async () => [{ nppId, state: "CA", officeType: "house" }],
+    });
+
+    const snapshot = await buildPartyCaucusHealthSnapshot(db as never, "US", "1");
+
+    expect(snapshot.caucuses[0]).toMatchObject({
+      activeDefianceCount: 1,
+      nppDefianceCount: 1,
+    });
+    expect(db.collectionMocks.electedOfficials!.find.mock.calls[0][0].$or).toContainEqual({
+      nppId: { $in: [nppId] },
+    });
+  });
+
   it("summarizes caucus churn, election status, and at-risk NPP retention", async () => {
     const db = createMockDb();
     const caucusId = new ObjectId();
