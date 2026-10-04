@@ -55,6 +55,7 @@ describe("media product advertising denomination recovery", () => {
           projectId: "shared-project",
           turn: 8,
           amountAnchor: 10,
+          sellerCorporationIds: [sellerId.toHexString()],
         },
       },
       $pull: {
@@ -249,7 +250,7 @@ describe("media product advertising denomination recovery", () => {
       },
     ]);
 
-    await settleMediaProductAdvertisingObligations(db as never, [buyerId], 11);
+    const touched = await settleMediaProductAdvertisingObligations(db as never, [buyerId], 11);
 
     const buyer = await db.collection("corporations").findOne({ _id: buyerId });
     const seller = await db.collection("corporations").findOne({ _id: sellerId });
@@ -261,6 +262,9 @@ describe("media product advertising denomination recovery", () => {
       { status?: string; legs?: Array<{ applied?: boolean }> } | undefined;
     expect(move?.status).toBe("partial");
     expect(move?.legs?.map((leg) => leg.applied)).toEqual([true, false]);
+    expect(touched.map((id) => id.toHexString()).sort()).toEqual(
+      [buyerId.toHexString(), sellerId.toHexString()].sort()
+    );
   });
 
   it("retries only the original seller credit after its denomination returns", async () => {
@@ -320,15 +324,16 @@ describe("media product advertising denomination recovery", () => {
     await db
       .collection("corporations")
       .updateOne({ _id: sellerId }, { $set: { countryId: "US", liquidCurrencyCode: "USD" } });
-    await settleMediaProductAdvertisingObligations(db as never, [buyerId], 12);
+    const touched = await settleMediaProductAdvertisingObligations(db as never, [buyerId], 12);
 
     const buyer = await db.collection("corporations").findOne({ _id: buyerId });
     const seller = await db.collection("corporations").findOne({ _id: sellerId });
     expect(buyer?.liquidCapital).toBe(80);
-    expect(buyer?.mediaProductAdvertisingReceiptV1).toEqual({
+    expect(buyer?.mediaProductAdvertisingReceiptV1).toMatchObject({
       projectId: "title-seller-restored-fx",
       turn: 12,
       amountAnchor: 10,
+      sellerCorporationIds: [sellerId.toHexString()],
     });
     expect(buyer?.mediaProductAdvertisingObligationsV1).toEqual([]);
     expect(seller?.liquidCapital).toBe(70);
@@ -336,6 +341,9 @@ describe("media product advertising denomination recovery", () => {
       { status?: string; legs?: Array<{ applied?: boolean }> } | undefined;
     expect(move?.status).toBe("applied");
     expect(move?.legs?.map((leg) => leg.applied)).toEqual([true, true]);
+    expect(touched.map((id) => id.toHexString()).sort()).toEqual(
+      [buyerId.toHexString(), sellerId.toHexString()].sort()
+    );
   });
 
   it("keeps later obligations behind the single unconsumed receipt slot", async () => {
@@ -393,7 +401,7 @@ describe("media product advertising denomination recovery", () => {
     let buyer = await db.collection("corporations").findOne({ _id: buyerId });
     let seller = await db.collection("corporations").findOne({ _id: sellerId });
     expect(buyer?.liquidCapital).toBe(80);
-    expect(buyer?.mediaProductAdvertisingReceiptV1?.projectId).toBe("title-first");
+    expect(buyer?.mediaProductAdvertisingReceiptV1).toMatchObject({ projectId: "title-first" });
     expect(buyer?.mediaProductAdvertisingObligationsV1).toHaveLength(1);
     expect(seller?.liquidCapital).toBe(70);
     expect(await db.collection("bankMoneyMoves").countDocuments({})).toBe(1);
@@ -405,7 +413,7 @@ describe("media product advertising denomination recovery", () => {
     buyer = await db.collection("corporations").findOne({ _id: buyerId });
     seller = await db.collection("corporations").findOne({ _id: sellerId });
     expect(buyer?.liquidCapital).toBe(60);
-    expect(buyer?.mediaProductAdvertisingReceiptV1?.projectId).toBe("title-second");
+    expect(buyer?.mediaProductAdvertisingReceiptV1).toMatchObject({ projectId: "title-second" });
     expect(buyer?.mediaProductAdvertisingObligationsV1).toEqual([]);
     expect(seller?.liquidCapital).toBe(90);
     expect(await db.collection("bankMoneyMoves").countDocuments({})).toBe(2);

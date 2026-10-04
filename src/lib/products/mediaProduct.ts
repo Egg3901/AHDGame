@@ -54,4 +54,6 @@ export interface MediaProductAdvertisingReceipt {
   projectId: string;
   turn: number;
   amountAnchor: number;
+  /** Seller cash targets refreshed by an interrupted same-turn settlement retry. */
+  sellerCorporationIds?: string[];
 }

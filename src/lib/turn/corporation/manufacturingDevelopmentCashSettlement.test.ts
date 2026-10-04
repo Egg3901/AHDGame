@@ -1,6 +1,12 @@
 import { MongoClient, ObjectId, type AnyBulkWriteOperation, type Db } from "mongodb";
 import { describe, expect, it, vi } from "vitest";
 import type { Corporation } from "@/lib/db/types";
+import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
+import {
+  createMediaProductAdvertisingObligation,
+  settleMediaProductAdvertisingObligations,
+} from "@/lib/products/mediaProductAdvertisingSettlement";
+import { productAdvertisingDenominationWitness } from "@/lib/products/rules/productAdvertising";
 import type { CorpSnapshot } from "./types";
 import { applyOperatingCashThenDevelopmentCash } from "./manufacturingDevelopmentCashSettlement";
 
@@ -68,6 +74,62 @@ describe("manufacturing development cash settlement", () => {
     expect(result).toEqual({ paidReceipts: 1, paidAmountAnchor: 250 });
     expect(snapshots.map((item) => item.liquidCapital)).toEqual([750, 1_000]);
     expect(snapshots.map((item) => item.liquidCapitalAnchorAfterIncome)).toEqual([750, 1_000]);
+  });
+
+  it("refreshes seller cash snapshots when retry resumes an already published ad receipt", async () => {
+    const buyerId = new ObjectId();
+    const sellerId = new ObjectId();
+    const buyer = corporation(buyerId);
+    const seller = corporation(sellerId);
+    const obligation = createMediaProductAdvertisingObligation({
+      buyerCorporationId: buyerId.toHexString(),
+      projectId: "media-title-snapshot",
+      turn: 5,
+      amountAnchor: 10,
+      buyerCurrencyCode: "USD",
+      buyerLocalPerAnchor: 1,
+      buyerDenomination: productAdvertisingDenominationWitness(buyer),
+      sellers: [
+        {
+          corporationId: sellerId.toHexString(),
+          deliveredValueAnchor: 10,
+          currencyCode: "USD",
+          localPerAnchor: 1,
+          ...productAdvertisingDenominationWitness(seller),
+        },
+      ],
+    });
+    expect(obligation).not.toBeNull();
+    const db = createInMemoryDb();
+    db.seed("corporations", [
+      { ...buyer, liquidCapital: 100, mediaProductAdvertisingObligationsV1: [obligation] },
+      { ...seller, liquidCapital: 50 },
+    ]);
+
+    // Simulate completion of both cash legs and receipt projection followed by
+    // a process crash before the turn refreshes its in-memory snapshots.
+    await settleMediaProductAdvertisingObligations(db as never, [buyerId], 5);
+    const snapshots = [snapshot(buyerId, 100), snapshot(sellerId, 50)];
+
+    const result = await applyOperatingCashThenDevelopmentCash({
+      db: db as never,
+      operations: [],
+      turn: 5,
+      corporations: [buyer, seller],
+      snapshots,
+      exchangeRatesByCurrency: new Map([["USD", 1]]),
+      bondsByCorpId: new Map(),
+      sectorsByCorp: new Map(),
+      mediaProductSlatesEnabled: true,
+      applyOperatingCashWrites: async () => undefined,
+    });
+
+    expect(result).toEqual({ paidReceipts: 0, paidAmountAnchor: 0 });
+    expect(snapshots.map((item) => item.liquidCapital)).toEqual([90, 60]);
+    expect((await db.collection("corporations").findOne({ _id: buyerId }))?.liquidCapital).toBe(90);
+    expect((await db.collection("corporations").findOne({ _id: sellerId }))?.liquidCapital).toBe(
+      60
+    );
   });
 
   const mongoUri = process.env.AHD_PRODUCT_DEVELOPMENT_MONGO_TEST_URI;

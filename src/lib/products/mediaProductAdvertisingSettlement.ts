@@ -207,6 +207,9 @@ export function productAdvertisingTransition(
               projectId: obligation.projectId,
               turn: obligation.turn,
               amountAnchor: obligation.amountAnchor,
+              sellerCorporationIds: obligation.sellerAllocations.map(
+                (seller) => seller.corporationId
+              ),
             },
           } as Record<string, unknown>,
           $pull: {
@@ -258,7 +261,7 @@ export async function settleProductAdvertisingObligations(
         _id: { $in: [...corporationIds] },
         $or: [
           { [`${obligationsField}.0`]: { $exists: true } },
-          { [`${receiptField}.turn`]: currentTurn },
+          { [receiptField]: { $exists: true } },
         ],
       },
       {
@@ -272,20 +275,28 @@ export async function settleProductAdvertisingObligations(
     .toArray();
   const journal = db.collection<{ _id: string }>(MONEY_MOVE_COLLECTION);
   const touched = new Map<string, ObjectId>();
+  const touchCorporation = (id: string) => {
+    if (!ObjectId.isValid(id)) return;
+    const corporationId = new ObjectId(id);
+    touched.set(corporationId.toHexString(), corporationId);
+  };
 
   for (const row of rows) {
     const fields = row as unknown as Record<string, unknown>;
-    const receipt = fields[receiptField] as { turn?: number } | undefined;
+    const receipt = fields[receiptField] as
+      { turn?: number; sellerCorporationIds?: string[] } | undefined;
     const obligations = Array.isArray(fields[obligationsField])
       ? (fields[obligationsField] as ProductAdvertisingObligation[])
       : [];
-    if (receipt?.turn === currentTurn) {
-      touched.set(row._id.toHexString(), row._id);
+    if (receipt) {
+      touchCorporation(row._id.toHexString());
+      for (const sellerId of receipt.sellerCorporationIds ?? []) touchCorporation(sellerId);
     }
     // A receipt is a one-slot handoff to product progression. Do not settle a
     // second order until the consumer acknowledges and removes that receipt.
     if (receipt) continue;
     for (const obligation of obligations) {
+      if (obligation.turn > currentTurn) continue;
       const key = productAdvertisingSettlementKey(row._id.toHexString(), obligation, family);
       const prior = await journal.findOne({ _id: key }, { projection: { _id: 1 } });
       if (
@@ -309,8 +320,17 @@ export async function settleProductAdvertisingObligations(
       const result = prior
         ? await resumeSettlement(db, key)
         : await settleTransition(db, productAdvertisingTransition(row._id, obligation, family));
+      if (result.appliedLegs.length > 0) {
+        touchCorporation(row._id.toHexString());
+        for (const seller of obligation.sellerAllocations) {
+          touchCorporation(seller.corporationId);
+        }
+      }
       if (result.status === "applied" || (result.status === "replayed" && !result.error)) {
-        touched.set(row._id.toHexString(), row._id);
+        touchCorporation(row._id.toHexString());
+        for (const seller of obligation.sellerAllocations) {
+          touchCorporation(seller.corporationId);
+        }
         // A corporation can have legacy duplicate obligations. Publish at
         // most one receipt per handoff, leaving later orders and journals intact.
         break;
