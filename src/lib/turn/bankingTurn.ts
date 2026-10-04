@@ -27,12 +27,13 @@ import { MONEY_MOVE_COLLECTION } from "@/lib/banking/moneyMove";
 import { computeNpcDepositShare, equityCappedDepositCeiling } from "@/lib/banking/deposits";
 import { domesticDepositRetention } from "@/lib/centralBank/marketEffects";
 import {
-  computeInsurancePremium,
-  computeReserveRatioActual,
-  ensureFund,
-  getInsuredCap,
-  sumInsuredPlayerDeposits,
-} from "@/lib/banking/insurance";
+  bankPremiumTurnPublicationFilter,
+  insurancePremiumBasisForTurn,
+  insurancePremiumReceiptKey,
+  loadInsurancePremiumReceiptsForTurn,
+  settleInsurancePremiumForTurn,
+  type FrozenInsurancePremiumReceipt,
+} from "@/lib/banking/insurancePremium";
 import {
   ARREARS_DEFAULT_TURNS,
   MAX_NPC_FLOW_PER_TURN_FRACTION,
@@ -53,7 +54,6 @@ import { settleLegacyDepositInterest } from "@/lib/banking/legacyDepositInterest
 import { settleTransition } from "@/lib/banking/settlementJournal";
 import { oid, type TransitionLeg, type TransitionProjection } from "@/lib/banking/rules/boundary";
 import { effectiveBankRatesFromPrime, playerDepositRatePercent } from "@/lib/banking/rates";
-import { getReserveRequirement } from "@/lib/banking/reserves";
 import { getBankDepositCeiling } from "@/lib/banking/capacityAllocation";
 import { roundSavingsAmount, savingsApyPercent } from "@/lib/currency/savingsInterest";
 import { loadCentralBankPricingAdjustment } from "@/lib/monetaryPolicy/centralBankPricing";
@@ -237,6 +237,15 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
     return savingsApyPercent(prime, inflation, centralBankPricing.depositBonusPercentPoints);
   };
 
+  const premiumReceiptByKey = await loadInsurancePremiumReceiptsForTurn(
+    db,
+    depositTakers.map((row) => ({
+      bankId: row.corp._id,
+      charteredTurn: row.charter.charteredTurn ?? 0,
+    })),
+    turn
+  );
+
   // Competing deposit shares once per currency, among the deposit takers.
   const byCurrency = new Map<CurrencyCode, DepositTaker[]>();
   for (const row of depositTakers) {
@@ -277,6 +286,7 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
       {
         npcShareByBankId,
         cbById,
+        premiumReceiptByKey,
       },
       policy
     );
@@ -307,28 +317,40 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
   // borrower simply stopped paying and the value never reached the people who
   // lost out when the bank failed.
   const deadBankStarted = Date.now();
-  const deadBankResult = await processDeadBankLoans(db, turn, async (loan, bank, target) => {
-    if (loan.borrowerType === "npcBulk") {
-      const recovered = await serviceDeadNpcBulkLoan(db, turn, loan, bank.currency, target);
-      summary.loanInterestCollected += recovered.interest;
-      summary.loanPrincipalRepaid += recovered.principal;
-      summary.defaultsWrittenOff += recovered.writtenOff;
-      return { collected: recovered.collected };
+  const deadBankResult = await processDeadBankLoans(
+    db,
+    turn,
+    async (loan, bank, target, trackInsuranceRecovery) => {
+      if (loan.borrowerType === "npcBulk") {
+        const recovered = await serviceDeadNpcBulkLoan(
+          db,
+          turn,
+          loan,
+          bank.currency,
+          target,
+          trackInsuranceRecovery
+        );
+        summary.loanInterestCollected += recovered.interest;
+        summary.loanPrincipalRepaid += recovered.principal;
+        summary.defaultsWrittenOff += recovered.writtenOff;
+        return { collected: recovered.collected };
+      }
+      const serviced = await servicePlayerLoan(
+        db,
+        turn,
+        bank.corporationId,
+        loan,
+        bank.currency,
+        bank.name,
+        target,
+        trackInsuranceRecovery
+      );
+      summary.loanInterestCollected += serviced.interestCollected;
+      summary.loanPrincipalRepaid += serviced.principalRepaid;
+      summary.defaultsWrittenOff += serviced.writtenOff;
+      return { collected: serviced.bankCredit };
     }
-    const serviced = await servicePlayerLoan(
-      db,
-      turn,
-      bank.corporationId,
-      loan,
-      bank.currency,
-      bank.name,
-      target
-    );
-    summary.loanInterestCollected += serviced.interestCollected;
-    summary.loanPrincipalRepaid += serviced.principalRepaid;
-    summary.defaultsWrittenOff += serviced.writtenOff;
-    return { collected: serviced.bankCredit };
-  });
+  );
   summary.deadBankLoansServiced = deadBankResult.loansServiced;
   summary.deadBankRecoveredToEstate = deadBankResult.recoveredToEstate;
   summary.deadBankRecoveredToInsurer = deadBankResult.recoveredToInsurer;
@@ -356,6 +378,7 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
 
 type BankPassCaches = {
   npcShareByBankId: Map<string, number>;
+  premiumReceiptByKey: Map<string, FrozenInsurancePremiumReceipt>;
   cbById: Map<
     string,
     Pick<CentralBank, "_id" | "primeRate" | "inflationHistory" | "externalBroadMoney">
@@ -403,7 +426,7 @@ async function processOneBank(
   // Re-check idempotency against live doc (concurrent / retry safety).
   const live = await db
     .collection<Corporation>("corporations")
-    .findOne({ _id: corp._id }, { projection: { liquidCapital: 1, bankCharter: 1 } });
+    .findOne({ _id: corp._id }, { projection: { liquidCapital: 1, bankCharter: 1, countryId: 1 } });
   if (!live?.bankCharter || live.bankCharter.lastBankingTurn === turn) {
     return result;
   }
@@ -780,81 +803,40 @@ async function processOneBank(
       policy.savingsAccounts === "authoritative" ? paid : (legacyNewCredits.get(id) ?? 0)
     );
   }
-  const postInterestBalances: number[] = [];
-  for (const ch of depositors) {
-    const bal = ch.currencyBalances?.savings?.[currency] ?? 0;
-    const interestPaid = paidByCharId.get(ch._id.toString()) ?? 0;
-    postInterestBalances.push(bal + interestPaid);
-  }
-  const insuredCap = await getInsuredCap(db, currency);
-  const insuredDeposits = sumInsuredPlayerDeposits(postInterestBalances, insuredCap) + npcDeposits;
-  // Reserves are held against deposits the bank actually RECEIVED in cash.
-  // Under the pointer model that is the NPC household book alone: player
-  // savings never left `currencyBalances.savings`, so requiring reserves
-  // against them would demand cash for a balance the bank does not hold. Once
-  // the currency's accounts are authoritative the player balances are cash in
-  // the vault and a liability on the book, and the base includes them.
-  // Insurance covers both either way, because a depositor's claim is a claim.
-  const playerCashDeposits = playerDepositsAreLiabilities
-    ? playerDeposits + playerInterestSettled
-    : 0;
-  const depositBaseForRatio = npcDeposits + playerCashDeposits;
-  const reserveRatioActual = computeReserveRatioActual(cashReserves, depositBaseForRatio);
-  const reserveRatioRequired = await getReserveRequirement(db, currency);
-  const premiumDue = computeInsurancePremium(
-    insuredDeposits,
-    reserveRatioActual,
-    reserveRatioRequired
+  const premiumBasis = await insurancePremiumBasisForTurn(db, {
+    currency,
+    depositorSavings: depositors.map((ch) => ({
+      id: ch._id.toString(),
+      balance: ch.currencyBalances?.savings?.[currency] ?? 0,
+    })),
+    interestPaidByDepositor: paidByCharId,
+    npcDeposits,
+    playerDepositsAreLiabilities,
+    playerDeposits,
+    playerInterestSettled,
+    cashReserves,
+  });
+  const premium = await settleInsurancePremiumForTurn(
+    db,
+    {
+      bankId: corp._id,
+      countryId: live.countryId,
+      charteredTurn: live.bankCharter.charteredTurn,
+      currency,
+      turn,
+      insuredDeposits: premiumBasis.insuredDeposits,
+      cashReserves,
+      reserveRatioActual: premiumBasis.reserveRatioActual,
+      reserveRatioRequired: premiumBasis.reserveRatioRequired,
+    },
+    caches.premiumReceiptByKey.get(
+      insurancePremiumReceiptKey(corp._id, live.bankCharter.charteredTurn ?? 0, turn)
+    ) ?? null
   );
-  if (premiumDue > 0) {
-    const premiumPaid = Math.min(premiumDue, cashReserves);
-    const shortfall = premiumDue - premiumPaid;
-    if (shortfall > 0) result.premiumShortfall += shortfall;
-    if (premiumPaid > 0) {
-      await ensureFund(db, currency);
-      const premium = await settleTransition(db, {
-        key: turnMoveKey("insurance-premium", bankIdHex, turn),
-        kind: "insurance_premium",
-        turn,
-        currency,
-        legs: [
-          {
-            kind: "debit",
-            amount: premiumPaid,
-            collection: "corporations",
-            filter: { _id: oid(bankIdHex), "bankCharter.status": "active" },
-            path: "bankCharter.cashReserves",
-            note: "insurance premium leaves the bank",
-          },
-          {
-            kind: "credit",
-            amount: premiumPaid,
-            collection: "depositInsuranceFunds",
-            filter: { _id: currency },
-            path: "balance",
-            note: "premium into the currency's insurance fund",
-          },
-        ],
-        projections: [
-          {
-            collection: "depositInsuranceFunds",
-            filter: { _id: currency },
-            update: { $inc: { premiumsCollectedLifetime: premiumPaid } },
-            note: "lifetime premium counter follows the cash",
-          },
-        ],
-        event: {
-          kind: "account.withdrawn",
-          command: "bank.insurance.premium",
-          amount: premiumPaid,
-          meta: { insuredDeposits, reserveRatioActual, reserveRatioRequired },
-        },
-      });
-      if (premium.status === "applied" && premium.appliedLegs.length === 2) {
-        cashReserves = Math.max(0, cashReserves - premiumPaid);
-        result.insurancePremiumPaid += premiumPaid;
-      }
-    }
+  result.premiumShortfall += premium.shortfall;
+  cashReserves = premium.cashReservesAfter ?? Math.max(0, cashReserves - premium.cashDebited);
+  if (premium.applied) {
+    result.insurancePremiumPaid += premium.premiumPaid;
   }
 
   stageDone("insurancePremium");
@@ -873,7 +855,8 @@ async function processOneBank(
   // by this bank after its reserve requirement. Rates set utilization, while
   // named loans consume the same capacity inside serviceNpcBulkBook.
   // Only cash-backed deposits can fund a loan; you cannot lend a pointer.
-  const loanFundingCapacity = (npcDeposits + playerCashDeposits) * (1 - reserveRatioRequired);
+  const loanFundingCapacity =
+    (npcDeposits + premiumBasis.playerCashDeposits) * (1 - premiumBasis.reserveRatioRequired);
   const bulkResult = await serviceNpcBulkBook(
     db,
     turn,
@@ -889,7 +872,8 @@ async function processOneBank(
       cbDocId,
       cb,
       bankName: corp.name,
-      requiredReserves: (npcDeposits + playerCashDeposits) * reserveRatioRequired,
+      requiredReserves:
+        (npcDeposits + premiumBasis.playerCashDeposits) * premiumBasis.reserveRatioRequired,
       lendingProfile: live.bankCharter.lendingProfile,
     }
   );
@@ -909,16 +893,22 @@ async function processOneBank(
     corp.bankCharter?.lastBankingUnderwritingFeesTurn === turn
       ? (corp.bankCharter.lastBankingUnderwritingFees ?? 0)
       : 0;
+  const bankingIncome =
+    result.loanInterestCollected +
+    result.loanOriginationFeesCollected -
+    result.depositInterestPaid -
+    result.insurancePremiumPaid -
+    result.defaultsWrittenOff +
+    underwritingFeesForTurn;
 
   await db.collection<Corporation>("corporations").updateOne(
-    {
-      _id: corp._id,
-      "bankCharter.status": "active",
-      $or: [
-        { "bankCharter.lastBankingTurn": { $ne: turn } },
-        { "bankCharter.lastBankingTurn": { $exists: false } },
-      ],
-    },
+    bankPremiumTurnPublicationFilter({
+      bankId: corp._id,
+      countryId: live.countryId,
+      charteredTurn: live.bankCharter.charteredTurn,
+      currency,
+      turn,
+    }),
     {
       $set: {
         // Cash is deliberately absent. Every movement in this pass now applies
@@ -931,13 +921,7 @@ async function processOneBank(
         "bankCharter.totalDeposits": totalDeposits,
         "bankCharter.depositCeiling": depositCeiling,
         "bankCharter.lastBankingTurn": turn,
-        "bankCharter.lastBankingIncome":
-          result.loanInterestCollected +
-          result.loanOriginationFeesCollected -
-          result.depositInterestPaid -
-          result.insurancePremiumPaid -
-          result.defaultsWrittenOff +
-          underwritingFeesForTurn,
+        "bankCharter.lastBankingIncome": bankingIncome,
         "bankCharter.lastBankingIncomeTurn": turn,
         // The per-turn split behind the net above, so the console can show
         // interest paid vs earned from the ledger instead of estimating.
@@ -958,13 +942,7 @@ async function processOneBank(
     }
   );
 
-  result.bankingIncome =
-    result.loanInterestCollected +
-    result.loanOriginationFeesCollected -
-    result.depositInterestPaid -
-    result.insurancePremiumPaid -
-    result.defaultsWrittenOff +
-    underwritingFeesForTurn;
+  result.bankingIncome = bankingIncome;
 
   return result;
 }
@@ -1128,7 +1106,8 @@ async function servicePlayerLoan(
     filter: { _id: bankCorporationId },
     path: "bankCharter.cashReserves",
     note: "instalment reaches the lending bank",
-  }
+  },
+  trackInsuranceRecovery = false
 ): Promise<LoanServiceResult> {
   const empty: LoanServiceResult = {
     interestCollected: 0,
@@ -1194,6 +1173,7 @@ async function servicePlayerLoan(
       note: creditTarget.note,
     },
     bankId: bankCorporationId.toString(),
+    trackInsuranceRecovery,
   });
   if (decision.outcome === "closed") {
     const closed = await settleTransition(db, transition);
@@ -1687,7 +1667,8 @@ async function serviceDeadNpcBulkLoan(
   turn: number,
   loan: BankLoan,
   currency: CurrencyCode,
-  creditTarget: MoneyTarget
+  creditTarget: MoneyTarget,
+  trackInsuranceRecovery: boolean
 ): Promise<{ collected: number; interest: number; principal: number; writtenOff: number }> {
   const empty = { collected: 0, interest: 0, principal: 0, writtenOff: 0 };
   if (loan.lastProcessedTurn === turn) return empty;
@@ -1755,6 +1736,16 @@ async function serviceDeadNpcBulkLoan(
         },
         note: "the resolved charter's household tranche follows its repayment",
       },
+      ...(trackInsuranceRecovery && creditTarget.collection === "depositInsuranceFunds"
+        ? [
+            {
+              collection: "depositInsuranceFunds",
+              filter: creditTarget.filter,
+              update: { $inc: { measuredRecoveriesSincePricingStart: collected } },
+              note: "Record borrower cash recovered for a measured resolved insurance claim",
+            },
+          ]
+        : []),
     ],
     event: {
       kind: "loan.paid",

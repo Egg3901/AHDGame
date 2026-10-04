@@ -182,6 +182,10 @@ export interface BankCharter {
    * resolveFailedBankDepositors finishes (insurance payouts / haircuts / holder flips).
    */
   depositorsResolvedTurn?: number;
+  /** Turn the insured cash claim fully resolved, for matched later recoveries. */
+  insuranceResolutionTurn?: number;
+  /** Resolution turn whose cash shortfall entered the measured premium cohort. */
+  insuranceMeasuredClaimTurn?: number;
   /**
    * Turn on which resolution of a failed estate was claimed. Set before the
    * waterfall moves any money, so a crashed resolution reads as `resolving`
@@ -370,6 +374,16 @@ export interface DepositInsuranceFund {
   premiumsCollectedLifetime: number;
   payoutsLifetime: number;
   treasuryBackstopLifetime: number;
+  /** New-cohort insured currency exposure, summed once per bank-turn. */
+  insuredDepositExposureTurnsLifetime?: number;
+  /** Gross deposit-book claims resolved after the measured cohort began. */
+  measuredGrossClaimsSincePricingStart?: number;
+  /** Post-resolution borrower cash recovered for measured-cohort claims. */
+  measuredRecoveriesSincePricingStart?: number;
+  /** Number of measured-cohort resolutions with a positive gross claim. */
+  measuredPaidClaimsSincePricingStart?: number;
+  /** First turn with measured exposure; legacy lifetime totals predate it. */
+  pricingEvidenceStartTurn?: number;
   lastProcessedTurn?: number;
 }
 
