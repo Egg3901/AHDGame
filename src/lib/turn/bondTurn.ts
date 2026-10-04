@@ -9,7 +9,14 @@ import { loadConversionQuoteContext } from "@/lib/currency/euro/quotes";
 import { roundedAggregateCredit } from "@/lib/bonds/rules/roundedAggregateCredit";
 import { getDb } from "@/lib/mongodb";
 import { ObjectId, type AnyBulkWriteOperation } from "mongodb";
-import type { Bond, Corporation, CentralBank, Character, FederalBudget } from "@/lib/db/types";
+import type {
+  Bond,
+  Corporation,
+  CentralBank,
+  Character,
+  FederalBudget,
+  GameConfig,
+} from "@/lib/db/types";
 import type { ImperialCharacter } from "@/lib/db/types/imperialCharacter";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import {
@@ -94,7 +101,10 @@ export interface BondTurnResult {
  * 3. Check for defaults (corporation liquidCapital < 0 after coupon payments)
  * 4. Settle matured bonds (return face value to holders)
  */
-export async function processBondTurn(turn: number): Promise<BondTurnResult> {
+export async function processBondTurn(
+  turn: number,
+  config?: Pick<GameConfig, "treasuryCashLedgerEnabled">
+): Promise<BondTurnResult> {
   const db = await getDb();
   const steps = substepMarker();
   const now = new Date();
@@ -1217,6 +1227,7 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
         bond,
         anchorRate: valuation?.anchorRate,
         ledgerShadow: poolLedgerContext !== null,
+        treasuryCashLedgerEnabled: config?.treasuryCashLedgerEnabled === true,
       });
       const bankRepaymentLocal = bankMaturityClaims.reduce(
         (sum, claim) => sum + claim.amountLocal,

@@ -8,6 +8,14 @@ import {
 } from "./policy";
 
 describe("resolveBankingPolicy", () => {
+  it("enables the funded Treasury cash ledger only on an explicit true flag", () => {
+    expect(resolveBankingPolicy(null).treasuryCashLedger).toBe(false);
+    expect(resolveBankingPolicy({ treasuryCashLedgerEnabled: false }).treasuryCashLedger).toBe(
+      false
+    );
+    expect(resolveBankingPolicy({ treasuryCashLedgerEnabled: true }).treasuryCashLedger).toBe(true);
+  });
+
   it("enables Treasury holdings only explicitly with banking enabled", () => {
     expect(resolveBankingPolicy({ bankTreasuryEnabled: true }).bankTreasury).toBe(false);
     expect(resolveBankingPolicy({ privateBankingEnabled: true }).bankTreasury).toBe(false);
@@ -36,6 +44,7 @@ describe("resolveBankingPolicy", () => {
       propTrading: false,
       propForexFees: false,
       bankTreasury: false,
+      treasuryCashLedger: false,
       contagion: false,
       lineOfCredit: true,
       advancedCharters: false,
@@ -52,6 +61,7 @@ describe("resolveBankingPolicy", () => {
       propTrading: true,
       propForexFees: false,
       bankTreasury: false,
+      treasuryCashLedger: false,
       contagion: true,
       lineOfCredit: true,
       advancedCharters: false,
@@ -107,6 +117,7 @@ describe("resolveBankingPolicy", () => {
       propTrading: true,
       propForexFees: true,
       bankTreasury: true,
+      treasuryCashLedger: true,
       contagion: true,
       lineOfCredit: true,
       advancedCharters: true,

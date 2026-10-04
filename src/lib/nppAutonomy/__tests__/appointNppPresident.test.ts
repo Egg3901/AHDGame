@@ -4,7 +4,8 @@ import { ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
 // Gate the function on a controllable nppAutonomyAtLeast; everything else
-// (country config, executive-office filter) stays real against country "BR".
+// (country config, executive-office filter) stays real against country "NG".
+// Nigeria retains the coming-soon fallback; Brazil now elects its president.
 const { atLeastMock } = vi.hoisted(() => ({ atLeastMock: vi.fn() }));
 vi.mock("../featureFlag", () => ({
   nppAutonomyAtLeast: (...args: unknown[]) => atLeastMock(...args),
@@ -59,19 +60,19 @@ beforeEach(() => {
 describe("appointNppPresident", () => {
   const winnerId = new ObjectId();
   const runnerUpId = new ObjectId();
-  const pendingGov = { _id: "BR", status: "pending" };
+  const pendingGov = { _id: "NG", status: "pending" };
   const npps = [
     { _id: runnerUpId, name: "Runner Up", party: "9", favorability: 40, politicalInfluence: 80 },
     { _id: winnerId, name: "Top Pol", party: "5", favorability: 72, politicalInfluence: 30 },
   ];
-  // Live Chamber of Deputies seats backing party "5" — the seat count the
+  // Live House of Representatives seats backing party "5" — the seat count the
   // formation record's `totalSeatsSupporting` must reflect.
-  const chamberSeats = [{ officeType: "chamber", countryId: "BR", party: "5", seatsHeld: 200 }];
+  const chamberSeats = [{ officeType: "house", countryId: "NG", party: "5", seatsHeld: 200 }];
 
   it("does nothing when the v1 gate is not met", async () => {
     atLeastMock.mockResolvedValue(false);
     setup({ gov: pendingGov, npps });
-    expect(await appointNppPresident(db as unknown as Db, "BR", 100, now)).toBe(false);
+    expect(await appointNppPresident(db as unknown as Db, "NG", 100, now)).toBe(false);
     expect(db.collectionMocks["governmentFormations"].updateOne).not.toHaveBeenCalled();
   });
 
@@ -94,28 +95,36 @@ describe("appointNppPresident", () => {
     expect(db.collectionMocks["governmentFormations"].updateOne).not.toHaveBeenCalled();
   });
 
+  it("leaves Brazil vacancies to the recurring presidential election", async () => {
+    atLeastMock.mockResolvedValue(true);
+    setup({ gov: { _id: "BR", status: "pending" }, npps });
+    expect(await appointNppPresident(db as unknown as Db, "BR", 100, now)).toBe(false);
+    expect(db.collectionMocks["npps"].updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks["governmentFormations"].updateOne).not.toHaveBeenCalled();
+  });
+
   it("does nothing when a president already holds the office", async () => {
     atLeastMock.mockResolvedValue(true);
     setup({
       gov: pendingGov,
-      seatedPresident: { officeType: "president", countryId: "BR", nppId: winnerId },
+      seatedPresident: { officeType: "president", countryId: "NG", nppId: winnerId },
       npps,
     });
-    expect(await appointNppPresident(db as unknown as Db, "BR", 100, now)).toBe(false);
+    expect(await appointNppPresident(db as unknown as Db, "NG", 100, now)).toBe(false);
     expect(db.collectionMocks["npps"].updateOne).not.toHaveBeenCalled();
   });
 
   it("does nothing when there is no eligible NPP", async () => {
     atLeastMock.mockResolvedValue(true);
     setup({ gov: pendingGov, npps: [] });
-    expect(await appointNppPresident(db as unknown as Db, "BR", 100, now)).toBe(false);
+    expect(await appointNppPresident(db as unknown as Db, "NG", 100, now)).toBe(false);
   });
 
   it("seats the highest-favorability NPP as president and forms the government", async () => {
     atLeastMock.mockResolvedValue(true);
     setup({ gov: pendingGov, npps, electedOfficials: chamberSeats });
 
-    const seated = await appointNppPresident(db as unknown as Db, "BR", 100, now);
+    const seated = await appointNppPresident(db as unknown as Db, "NG", 100, now);
     expect(seated).toBe(true);
 
     // Top Pol (favorability 72) beats Runner Up (40) despite lower influence.
@@ -124,7 +133,7 @@ describe("appointNppPresident", () => {
     ).mock.calls[0];
     expect(officialUpdate[1].$set).toMatchObject({
       officeType: "president",
-      countryId: "BR",
+      countryId: "NG",
       isNPP: true,
       nppId: winnerId,
       characterId: null,
@@ -158,7 +167,7 @@ describe("appointNppPresident", () => {
       { _id: winnerId, name: "High Inf", party: "5", favorability: 60, politicalInfluence: 90 },
     ];
     setup({ gov: pendingGov, npps: tied, electedOfficials: chamberSeats });
-    await appointNppPresident(db as unknown as Db, "BR", 100, now);
+    await appointNppPresident(db as unknown as Db, "NG", 100, now);
     const govUpdate = (
       db.collectionMocks["governmentFormations"].updateOne as ReturnType<typeof vi.fn>
     ).mock.calls[0];
@@ -169,9 +178,9 @@ describe("appointNppPresident", () => {
     atLeastMock.mockResolvedValue(true);
     const winnerRow = {
       _id: new ObjectId(),
-      officeType: "chamber",
-      countryId: "BR",
-      state: "SP",
+      officeType: "house",
+      countryId: "NG",
+      state: "LA",
       party: "5",
       seatsHeld: 1,
       nppId: winnerId,
@@ -180,9 +189,9 @@ describe("appointNppPresident", () => {
     };
     const otherRow = {
       _id: new ObjectId(),
-      officeType: "chamber",
-      countryId: "BR",
-      state: "RJ",
+      officeType: "house",
+      countryId: "NG",
+      state: "FC",
       party: "9",
       seatsHeld: 1,
       nppId: runnerUpId,
@@ -192,7 +201,7 @@ describe("appointNppPresident", () => {
     setup({ gov: pendingGov, npps, electedOfficials: [winnerRow, otherRow] });
     db.collection("statePartyOrg");
 
-    expect(await appointNppPresident(db as unknown as Db, "BR", 100, now)).toBe(true);
+    expect(await appointNppPresident(db as unknown as Db, "NG", 100, now)).toBe(true);
 
     // The appointee's incompatible row is reduced to an unheld vacancy record.
     const vacateCalls = (
@@ -219,7 +228,7 @@ describe("appointNppPresident", () => {
 
     // Presence is recounted for the vacated state/party.
     expect(db.collectionMocks["statePartyOrg"].updateOne).toHaveBeenCalledWith(
-      { _id: "SP_5" },
+      { _id: "LA_5" },
       expect.anything()
     );
 
@@ -238,11 +247,11 @@ describe("appointNppPresident", () => {
     // winning party and assert the formation record reflects the live tally.
     atLeastMock.mockResolvedValue(true);
     setup({
-      gov: { _id: "BR", status: "pending", seatsByParty: { "5": 999_999 } },
+      gov: { _id: "NG", status: "pending", seatsByParty: { "5": 999_999 } },
       npps,
       electedOfficials: chamberSeats, // live truth: party "5" holds 200 seats
     });
-    await appointNppPresident(db as unknown as Db, "BR", 100, now);
+    await appointNppPresident(db as unknown as Db, "NG", 100, now);
     const govUpdate = (
       db.collectionMocks["governmentFormations"].updateOne as ReturnType<typeof vi.fn>
     ).mock.calls[0];
