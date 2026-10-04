@@ -9,6 +9,7 @@ import {
   checkOneAuthoritativeBalance,
   evaluateBankingInvariants,
   legsNet,
+  moneyMoveValuationError,
 } from "./invariants";
 
 describe("banking invariant catalog", () => {
@@ -76,6 +77,65 @@ describe("balanced_transfer", () => {
         { kind: "credit", amount: 40, account: "c" },
       ])
     ).toEqual([]);
+  });
+
+  it("balances different native amounts by their frozen anchor values", () => {
+    const legs = [
+      {
+        kind: "debit" as const,
+        amount: 125,
+        valuation: { currencyCode: "USD", localPerAnchor: 1.25 },
+      },
+      {
+        kind: "credit" as const,
+        amount: 210,
+        valuation: { currencyCode: "EUR", localPerAnchor: 2.1 },
+      },
+    ];
+
+    expect(legsNet(legs)).toBeCloseTo(0, 9);
+    expect(checkBalancedTransfer(legs)).toEqual([]);
+  });
+
+  it("rejects invalid valuations and mixed native-only cash legs", () => {
+    expect(
+      checkBalancedTransfer([
+        {
+          kind: "debit",
+          amount: 100,
+          valuation: { currencyCode: "USD", localPerAnchor: 0 },
+        },
+        {
+          kind: "credit",
+          amount: 100,
+          valuation: { currencyCode: "USD", localPerAnchor: 1 },
+        },
+      ])
+    ).not.toEqual([]);
+    expect(
+      checkBalancedTransfer([
+        {
+          kind: "debit",
+          amount: 100,
+          valuation: { currencyCode: "USD", localPerAnchor: 1 },
+        },
+        { kind: "credit", amount: 100 },
+      ])
+    ).not.toEqual([]);
+  });
+
+  it("validates valued legs even when zero or classified as an asset", () => {
+    expect(
+      moneyMoveValuationError([
+        { kind: "debit", amount: 0, valuation: { currencyCode: "USD", localPerAnchor: 0 } },
+        { kind: "credit", amount: 0, valuation: { currencyCode: "USD", localPerAnchor: 1 } },
+      ])
+    ).toContain("positive finite anchor rate");
+    expect(
+      moneyMoveValuationError([
+        { kind: "asset", amount: 0, valuation: { currencyCode: "", localPerAnchor: 1 } },
+      ])
+    ).toContain("currency code");
   });
 
   it("rejects money created between two correct writes", () => {
