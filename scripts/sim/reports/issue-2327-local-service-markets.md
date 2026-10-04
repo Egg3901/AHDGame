@@ -31,7 +31,7 @@ means the existing `events` commodity, healthcare means `visits`, construction
 means `crew-days`, and real estate means `leases`. A future royalty or digital
 content product requires its own delivery semantics.
 
-The current integration suite passes 168 tests across thirteen files, covering state-market
+The current integration suites pass 214 tests across fourteen files, covering state-market
 sales, reachable demand, trade valuation, contract cancellation notice and
 settlement equivalence. The contract UI and validation describe each on-site service
 and require its fulfilling state. Existing corporation-wide agreements for newly local
