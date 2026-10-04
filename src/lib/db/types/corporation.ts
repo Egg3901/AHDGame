@@ -254,6 +254,27 @@ export interface Corporation {
     poolCollection: "equityMarketPools" | "bondMarketPools";
     instrumentProjection: import("@/lib/banking/rules/boundary").TransitionProjection;
   };
+  /** Frozen relocation-bond quote held until the matching bond and HQ update ACK. */
+  headquartersRelocationBondFunding?: {
+    operationKey: string;
+    targetStateId: string;
+    targetCountryId: CountryId;
+    turn: number;
+    relocationCostAnchor: number;
+    crossCountry: boolean;
+    relocationSpreadAnchor: number;
+    currencyCode: CurrencyCode;
+    nativeFxRate: number;
+    sourceCountryIdPresent: boolean;
+    sourceCountryId?: CountryId;
+    sourceLiquidCurrencyCodePresent: boolean;
+    sourceLiquidCurrencyCode?: CurrencyCode;
+    bondId: ObjectId;
+    preflight: import("@/lib/corporations/issueRelocationBond").RelocationBondPreflight;
+    ceoVacated: boolean;
+    ceoId?: ObjectId;
+    ceoType?: Corporation["ceoType"];
+  };
   /** Cumulative fees from actually funded primary placements, by native currency. */
   bankUnderwritingIncomeByCurrency?: Partial<Record<CurrencyCode, number>>;
   /** Bounded issuer-readable receipts for funded primary underwriting fees. */

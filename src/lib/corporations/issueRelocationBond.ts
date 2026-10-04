@@ -1,4 +1,4 @@
-import type { ClientSession, Db } from "mongodb";
+import { ObjectId, type ClientSession, type Db } from "mongodb";
 import { NextResponse } from "next/server";
 import type { Corporation, Bond, CentralBank, CorporateSector } from "@/lib/db/types";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
@@ -215,7 +215,8 @@ export async function issueRelocationBond(
   preflight: RelocationBondPreflight,
   /** Pre-loaded FX map — reused when the caller already has one. Omit to load fresh. */
   fxByCurrencyOverride?: ReadonlyMap<CurrencyCode, number>,
-  session?: ClientSession
+  session?: ClientSession,
+  bondId?: ObjectId
 ): Promise<{ ok: true; data: IssueRelocationBondResult } | { ok: false; response: Response }> {
   if (preflight.cooldownTurnsRemaining != null) {
     return {
@@ -298,7 +299,54 @@ export async function issueRelocationBond(
     createdAt: now,
     updatedAt: now,
   };
-  await db.collection("bonds").insertOne(bondDoc, session ? { session } : {});
+  const bonds = db.collection<Bond>("bonds");
+  if (bondId) {
+    const existing = await bonds.findOne({ _id: bondId }, session ? { session } : {});
+    if (existing) {
+      if (
+        !existing.corporationId.equals(corporation._id) ||
+        existing.issuedAtTurn !== currentTurn ||
+        existing.currencyCode !== corpCurrencyCode ||
+        existing.totalIssued !== actualFaceValueLocal ||
+        existing.couponRate !== preflight.couponRate
+      ) {
+        return {
+          ok: false,
+          response: NextResponse.json(
+            { error: "The frozen relocation bond identity is already used by another issue" },
+            { status: 409 }
+          ),
+        };
+      }
+    } else {
+      try {
+        await bonds.insertOne({ ...bondDoc, _id: bondId }, session ? { session } : {});
+      } catch (error) {
+        if (!error || typeof error !== "object" || (error as { code?: unknown }).code !== 11000) {
+          throw error;
+        }
+        const raced = await bonds.findOne({ _id: bondId }, session ? { session } : {});
+        if (
+          !raced ||
+          !raced.corporationId.equals(corporation._id) ||
+          raced.issuedAtTurn !== currentTurn ||
+          raced.currencyCode !== corpCurrencyCode ||
+          raced.totalIssued !== actualFaceValueLocal ||
+          raced.couponRate !== preflight.couponRate
+        ) {
+          return {
+            ok: false,
+            response: NextResponse.json(
+              { error: "The frozen relocation bond identity is already used by another issue" },
+              { status: 409 }
+            ),
+          };
+        }
+      }
+    }
+  } else {
+    await bonds.insertOne({ ...bondDoc, _id: new ObjectId() }, session ? { session } : {});
+  }
 
   return {
     ok: true,

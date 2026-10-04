@@ -9,6 +9,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { getDb, getMongoClient } from "@/lib/mongodb";
@@ -35,12 +36,17 @@ import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { computeCorpRelocationCost } from "@/lib/corporations/relocationCost";
 import { previewRelocationBond, issueRelocationBond } from "@/lib/corporations/issueRelocationBond";
 import {
+  acquireRelocationBondFundingLease,
+  hasProtectedRelocationProperty,
+  relocationBondSourceSnapshotFilter,
+  releaseRelocationBondFundingLease,
+} from "@/lib/corporations/relocationBondFunding";
+import {
   convertCorpCurrency,
   type ConvertCorpCurrencySuccess,
 } from "@/lib/corporations/convertCorpCurrency";
 import { findActiveResidentCeoCorporation } from "@/lib/corporations/ceoResidency";
 import {
-  hasProtectedConstructionPropertyIn,
   reserveSectorsForTransition,
   releaseConstructionPropertyTransition,
 } from "@/lib/corporations/securedConstructionProperty";
@@ -166,7 +172,13 @@ export async function POST(request: Request) {
       .collection<CorporateSector>("corporateSectors")
       .find({ corporationId: corp._id })
       .toArray();
-    if (hasProtectedConstructionPropertyIn(propertySectors)) {
+    if (
+      hasProtectedRelocationProperty(
+        propertySectors,
+        corp._id,
+        corp.headquartersRelocationBondFunding
+      )
+    ) {
       return NextResponse.json(
         { error: "Resolve secured construction before relocating corporate headquarters" },
         { status: 409 }
@@ -194,16 +206,33 @@ export async function POST(request: Request) {
     }
 
     const gameState = await getGameState();
-    const currentTurn = gameState?.currentTurn ?? 1;
+    const existingBondLease = corp.headquartersRelocationBondFunding;
+    if (
+      existingBondLease &&
+      (existingBondLease.targetStateId !== normalizedTarget ||
+        existingBondLease.targetCountryId !== targetState.countryId)
+    ) {
+      return NextResponse.json(
+        {
+          error: "A relocation bond is awaiting publication; retry its original headquarters move",
+        },
+        { status: 409 }
+      );
+    }
+    if (existingBondLease && paymentMethod !== "bond") {
+      return NextResponse.json(
+        { error: "A relocation bond is awaiting publication; retry its original payment method" },
+        { status: 409 }
+      );
+    }
+    const currentTurn = existingBondLease?.turn ?? gameState?.currentTurn ?? 1;
     const fxByCurrency = await loadFxRatesByCurrency(db);
     const corpFxRate = fxRateForCorpFromMap(corp, fxByCurrency);
 
     // Helper returns cost in ₳; pass corpFxRate so JPY/GBP corps are normalized.
-    const { cost: relocationCost, crossCountry } = computeCorpRelocationCost(
-      corp,
-      targetState.countryId,
-      corpFxRate
-    );
+    const computedCost = computeCorpRelocationCost(corp, targetState.countryId, corpFxRate);
+    const relocationCost = existingBondLease?.relocationCostAnchor ?? computedCost.cost;
+    const crossCountry = existingBondLease?.crossCountry ?? computedCost.crossCountry;
     const effectiveCost = paymentMethod === "imperial-free" ? 0 : relocationCost;
     const now = new Date();
 
@@ -239,7 +268,9 @@ export async function POST(request: Request) {
     }
 
     let bondPreflight: Awaited<ReturnType<typeof previewRelocationBond>> | null = null;
-    if (paymentMethod === "bond") {
+    if (paymentMethod === "bond" && existingBondLease) {
+      bondPreflight = existingBondLease.preflight;
+    } else if (paymentMethod === "bond") {
       bondPreflight = await previewRelocationBond(
         db,
         corp,
@@ -268,6 +299,7 @@ export async function POST(request: Request) {
     // ── Mutations ──
     let workingCorp: Corporation = corp;
     let workingFxRate = corpFxRate;
+    let frozenBondLease = existingBondLease;
     if (needsCurrencyConversion && newCurrency) {
       const forexEnabled = await isForexEnabled();
       const convResult = await convertCorpCurrency(
@@ -301,13 +333,31 @@ export async function POST(request: Request) {
       }
     }
 
+    if (paymentMethod === "bond" && needsCurrencyConversion && !existingBondLease) {
+      const postConversionPreflight = await previewRelocationBond(
+        db,
+        workingCorp,
+        effectiveCost,
+        currentTurn,
+        fxByCurrency
+      );
+      if (postConversionPreflight.cooldownTurnsRemaining != null || !postConversionPreflight.ok) {
+        return NextResponse.json(
+          { error: "Relocation bond capacity changed during currency conversion; retry" },
+          { status: 409 }
+        );
+      }
+      bondPreflight = postConversionPreflight;
+    }
+
     const hqTransitionKeys = needsCurrencyConversion
       ? null
       : await reserveSectorsForTransition(
           db,
           propertySectors,
           "headquarters_relocation",
-          `headquarters:${corp._id.toHexString()}:${targetState.countryId}:${normalizedTarget}`
+          `headquarters:${corp._id.toHexString()}:${targetState.countryId}:${normalizedTarget}`,
+          true
         );
     if (!needsCurrencyConversion && !hqTransitionKeys) {
       return NextResponse.json(
@@ -324,6 +374,7 @@ export async function POST(request: Request) {
             _id: workingCorp._id,
             primaryUnderwritingIncomingFunding: { $exists: false },
             bankUnderwritingFunding: { $exists: false },
+            headquartersRelocationBondFunding: { $exists: false },
           },
           { $set: baseCorpSet, $inc: { liquidCapital: -deltaInCorp } }
         );
@@ -337,10 +388,60 @@ export async function POST(request: Request) {
         if (!bondPreflight) {
           return NextResponse.json({ error: "Internal bond-path error" }, { status: 500 });
         }
+        if (!frozenBondLease) {
+          const operationKey = `hq-bond:${workingCorp._id.toHexString()}:${targetState.countryId}:${normalizedTarget}:${currentTurn}`;
+          const acquiredLease = await acquireRelocationBondFundingLease(db, workingCorp, {
+            operationKey,
+            targetStateId: normalizedTarget,
+            targetCountryId: targetState.countryId,
+            turn: currentTurn,
+            relocationCostAnchor: effectiveCost,
+            crossCountry,
+            relocationSpreadAnchor: 0,
+            currencyCode: resolveCorpLiquidCurrencyCode(workingCorp) ?? "USD",
+            nativeFxRate: workingFxRate,
+            sourceCountryIdPresent: Object.hasOwn(workingCorp, "countryId"),
+            ...(Object.hasOwn(workingCorp, "countryId")
+              ? { sourceCountryId: workingCorp.countryId }
+              : {}),
+            sourceLiquidCurrencyCodePresent: Object.hasOwn(workingCorp, "liquidCurrencyCode"),
+            ...(Object.hasOwn(workingCorp, "liquidCurrencyCode")
+              ? { sourceLiquidCurrencyCode: workingCorp.liquidCurrencyCode }
+              : {}),
+            bondId: new ObjectId(),
+            preflight: bondPreflight,
+            ceoVacated: false,
+            ...(workingCorp.ceoId ? { ceoId: workingCorp.ceoId } : {}),
+            ...(workingCorp.ceoType ? { ceoType: workingCorp.ceoType } : {}),
+          });
+          if (!acquiredLease) {
+            return NextResponse.json(
+              { error: "Corporate funding changed during relocation; retry the move" },
+              { status: 409 }
+            );
+          }
+          frozenBondLease = acquiredLease;
+        }
+        if (frozenBondLease.currencyCode !== resolveCorpLiquidCurrencyCode(workingCorp)) {
+          return NextResponse.json(
+            { error: "The frozen relocation bond quote no longer matches corporate currency" },
+            { status: 409 }
+          );
+        }
         const bondCommit = await runTransactionWithSessionRetry(getMongoClient, async (session) => {
           if (!session) return { status: "transactions_unavailable" as const };
           const leaseFreeFilter = {
             _id: workingCorp._id,
+            "headquartersRelocationBondFunding.operationKey": frozenBondLease!.operationKey,
+            ...relocationBondSourceSnapshotFilter(frozenBondLease!),
+            ...(frozenBondLease!.ceoId
+              ? {
+                  ceoId: frozenBondLease!.ceoId,
+                  ...(frozenBondLease!.ceoType !== undefined
+                    ? { ceoType: frozenBondLease!.ceoType }
+                    : { ceoType: { $exists: false } }),
+                }
+              : { ceoId: { $exists: false }, ceoType: { $exists: false } }),
             primaryUnderwritingIncomingFunding: { $exists: false },
             bankUnderwritingFunding: { $exists: false },
           };
@@ -349,29 +450,34 @@ export async function POST(request: Request) {
             .findOne(leaseFreeFilter, { projection: { _id: 1 }, session });
           if (!leaseFree) return { status: "underwriting_busy" as const };
 
+          const frozenFxByCurrency = new Map(fxByCurrency);
+          frozenFxByCurrency.set(frozenBondLease!.currencyCode, frozenBondLease!.nativeFxRate);
           const bondResult = await issueRelocationBond(
             db,
             workingCorp,
-            effectiveCost,
-            currentTurn,
-            bondPreflight,
-            fxByCurrency,
-            session
+            frozenBondLease!.relocationCostAnchor,
+            frozenBondLease!.turn,
+            frozenBondLease!.preflight,
+            frozenFxByCurrency,
+            session,
+            frozenBondLease!.bondId
           );
           if (!bondResult.ok)
             return { status: "bond_refused" as const, response: bondResult.response };
           const netDelta = anchorToCorpLiquidCapital(
-            bondResult.data.bondFaceValue - effectiveCost,
+            bondResult.data.bondFaceValue - frozenBondLease!.relocationCostAnchor,
             workingCorp,
-            workingFxRate
+            frozenBondLease!.nativeFxRate
           );
-          const updateResult = await db
-            .collection<Corporation>("corporations")
-            .updateOne(
-              leaseFreeFilter,
-              { $set: baseCorpSet, $inc: { liquidCapital: netDelta } },
-              { session }
-            );
+          const updateResult = await db.collection<Corporation>("corporations").updateOne(
+            leaseFreeFilter,
+            {
+              $set: baseCorpSet,
+              $unset: { headquartersRelocationBondFunding: "" },
+              $inc: { liquidCapital: netDelta },
+            },
+            { session }
+          );
           if (updateResult.matchedCount !== 1) throw new RelocationUnderwritingLeaseConflict();
           return { status: "committed" as const, data: bondResult.data };
         }).catch((error: unknown) => {
@@ -392,7 +498,14 @@ export async function POST(request: Request) {
             { status: 409 }
           );
         }
-        if (bondCommit.status === "bond_refused") return bondCommit.response;
+        if (bondCommit.status === "bond_refused") {
+          await releaseRelocationBondFundingLease(
+            db,
+            workingCorp._id,
+            frozenBondLease.operationKey
+          );
+          return bondCommit.response;
+        }
         bondFaceValue = bondCommit.data.bondFaceValue;
         couponRate = bondCommit.data.couponRate;
         creditRating = bondCommit.data.creditRating;
@@ -403,6 +516,7 @@ export async function POST(request: Request) {
             _id: workingCorp._id,
             primaryUnderwritingIncomingFunding: { $exists: false },
             bankUnderwritingFunding: { $exists: false },
+            headquartersRelocationBondFunding: { $exists: false },
           },
           { $set: baseCorpSet }
         );

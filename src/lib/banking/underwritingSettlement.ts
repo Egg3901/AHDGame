@@ -50,6 +50,7 @@ async function acquireIssuerUnderwritingReceiptLease(
       _id: issuerId,
       ...recipientCurrencySnapshotFilter(offer.issuerCurrencySnapshot),
       primaryUnderwritingIncomingFunding: { $exists: false },
+      headquartersRelocationBondFunding: { $exists: false },
     },
     {
       $set: {
@@ -385,6 +386,7 @@ export async function settlePrimaryUnderwritingFill(
       bankConstructionFunding: { $exists: false },
       bankPrimaryFunding: { $exists: false },
       bankUnderwritingFunding: { $exists: false },
+      headquartersRelocationBondFunding: { $exists: false },
     },
     { $set: { bankUnderwritingFunding: lease, updatedAt: now } }
   );

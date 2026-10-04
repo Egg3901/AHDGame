@@ -145,6 +145,67 @@ describe("settlePrimaryUnderwritingFill", () => {
     ).toBe(undefined);
   });
 
+  it("does not acquire either side of a placement lease during a frozen HQ bond publication", async () => {
+    const db = world();
+    const fill = input();
+    const bank = docs(db).bank;
+    bank.headquartersRelocationBondFunding = {
+      operationKey: "hq-bond:bank:US:TX:31",
+      targetStateId: "TX",
+      targetCountryId: "US",
+      turn: 31,
+      relocationCostAnchor: 10_000,
+      crossCountry: false,
+      currencyCode: "USD",
+      bondId: new ObjectId(),
+      preflight: {
+        ok: true,
+        cooldownTurnsRemaining: null,
+        availableBondCapacity: 10_000,
+        existingDebt: 0,
+        totalEquity: 10_000,
+      },
+      ceoVacated: false,
+    };
+
+    const result = await settlePrimaryUnderwritingFill(db as unknown as Db, fill);
+
+    expect(result.status).toBe("rejected");
+    expect(docs(db).pool.cashLocal).toBe(50_000);
+    expect(docs(db).bank.bankUnderwritingFunding).toBeUndefined();
+  });
+
+  it("releases the bank lease when the issuer has frozen a relocation bond", async () => {
+    const db = world();
+    const fill = input();
+    const issuer = docs(db).issuer;
+    issuer.headquartersRelocationBondFunding = {
+      operationKey: "hq-bond:issuer:US:TX:31",
+      targetStateId: "TX",
+      targetCountryId: "US",
+      turn: 31,
+      relocationCostAnchor: 10_000,
+      crossCountry: false,
+      currencyCode: "USD",
+      bondId: new ObjectId(),
+      preflight: {
+        ok: true,
+        cooldownTurnsRemaining: null,
+        availableBondCapacity: 10_000,
+        existingDebt: 0,
+        totalEquity: 10_000,
+      },
+      ceoVacated: false,
+    };
+
+    const result = await settlePrimaryUnderwritingFill(db as unknown as Db, fill);
+
+    expect(result.status).toBe("rejected");
+    expect(docs(db).pool.cashLocal).toBe(50_000);
+    expect(docs(db).issuer.liquidCapital).toBe(1_000);
+    expect(docs(db).bank.bankUnderwritingFunding).toBeUndefined();
+  });
+
   let db: InMemoryDb;
   beforeEach(() => {
     db = world();

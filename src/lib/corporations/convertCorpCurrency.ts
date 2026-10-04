@@ -99,7 +99,11 @@ export async function convertCorpCurrency(
   forexEnabled: boolean,
   sectorSnapshot?: CorporateSector[]
 ): Promise<ConvertCorpCurrencyResult> {
-  if (corp.primaryUnderwritingIncomingFunding || corp.bankUnderwritingFunding) {
+  if (
+    corp.primaryUnderwritingIncomingFunding ||
+    corp.bankUnderwritingFunding ||
+    corp.headquartersRelocationBondFunding
+  ) {
     return {
       ok: false,
       error: "Primary underwriting proceeds are settling; retry the currency move after settlement",
@@ -337,6 +341,7 @@ export async function convertCorpCurrency(
           _id: corp._id,
           primaryUnderwritingIncomingFunding: { $exists: false },
           bankUnderwritingFunding: { $exists: false },
+          headquartersRelocationBondFunding: { $exists: false },
         },
         { $set: corpSet },
         sessionOpts

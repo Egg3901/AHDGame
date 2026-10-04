@@ -25,6 +25,12 @@ vi.mock("@/lib/api/corporations/resolveQuery", () => ({
   requireCeo: vi.fn(),
 }));
 vi.mock("@/lib/gameState", () => ({ getGameState: vi.fn() }));
+vi.mock("@/lib/countryAccess", () => ({
+  getCountryAccess: vi.fn().mockResolvedValue({ econOnly: false }),
+}));
+vi.mock("@/lib/corporations/relocationCommandEconomyGate", () => ({
+  commandEconomyRelocationBlock: vi.fn().mockResolvedValue(null),
+}));
 vi.mock("@/lib/currency/corporationCapital", () => ({
   getCorpFxRate: vi.fn().mockResolvedValue(1),
   corpLiquidCapitalToAnchor: vi.fn((v: number) => v),
@@ -127,6 +133,7 @@ describe("POST /api/corporations/[id]/relocate", () => {
       targetState: { _id: "TX", name: "Texas", countryId: "US" },
       ceoHomeState: "TX",
     });
+    db.collection("bonds");
 
     const { previewRelocationBond, issueRelocationBond } =
       await import("@/lib/corporations/issueRelocationBond");
@@ -139,9 +146,14 @@ describe("POST /api/corporations/[id]/relocate", () => {
     const { getMongoClient } = await import("@/lib/mongodb");
     vi.mocked(getMongoClient).mockReturnValue({} as never);
 
-    db.collectionMocks.corporations.findOne.mockImplementation(async (filter) => {
-      if (filter && "primaryUnderwritingIncomingFunding" in filter) return null;
+    db.collectionMocks.corporations.findOne.mockImplementation(async (_filter) => {
       return null;
+    });
+    db.collectionMocks.corporations.updateOne.mockImplementation(async (filter) => {
+      if (filter && "headquartersRelocationBondFunding" in filter) {
+        return { matchedCount: 0 } as never;
+      }
+      return { matchedCount: 1 } as never;
     });
 
     const { POST } = await import("./route");
@@ -154,8 +166,9 @@ describe("POST /api/corporations/[id]/relocate", () => {
 
     expect(res.status).toBe(409);
     expect(issueRelocationBond).not.toHaveBeenCalled();
-    expect(db.collectionMocks.corporations.updateOne).not.toHaveBeenCalled();
-  });
+    expect(db.collectionMocks.bonds.insertOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.corporations.updateOne).toHaveBeenCalledTimes(1);
+  }, 35_000);
 
   it("same-country cash move: deducts cost, keeps CEO", async () => {
     const userId = new ObjectId().toString();

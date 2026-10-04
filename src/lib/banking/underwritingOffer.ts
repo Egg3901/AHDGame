@@ -49,6 +49,7 @@ export async function listPrimaryUnderwritingBanks(
         bankPrimaryFunding: { $exists: false },
         bankUnderwritingFunding: { $exists: false },
         bankConstructionFunding: { $exists: false },
+        headquartersRelocationBondFunding: { $exists: false },
       },
       {
         projection: {
@@ -120,6 +121,7 @@ export async function resolvePrimaryUnderwritingOffer(
       bankPrimaryFunding: { $exists: false },
       bankUnderwritingFunding: { $exists: false },
       bankConstructionFunding: { $exists: false },
+      headquartersRelocationBondFunding: { $exists: false },
     },
     {
       projection: {

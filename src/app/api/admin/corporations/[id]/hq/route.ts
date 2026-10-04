@@ -125,6 +125,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           _id: new ObjectId(id),
           primaryUnderwritingIncomingFunding: { $exists: false },
           bankUnderwritingFunding: { $exists: false },
+          headquartersRelocationBondFunding: { $exists: false },
         },
         {
           $set: {
