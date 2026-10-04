@@ -14,7 +14,6 @@ describe("command-economy ownership repair valuation", () => {
       administrativeBookValueAnchor({
         sectorType: "technology",
         capacityBookAnchor: 4_492.986570879902,
-        constructionInProgressAnchor: -12,
         buildQueue: [
           { unitsOrdered: 1, costPaidAnchor: 8.753431363493558, startTurn: 300, onlineTurn: 324 },
           { unitsOrdered: 1, costPaidAnchor: 8.737568837914935, startTurn: 301, onlineTurn: 325 },
@@ -28,7 +27,6 @@ describe("command-economy ownership repair valuation", () => {
       administrativeBookValueAnchor({
         sectorType: "media",
         capacityBookAnchor: 12_403.610080694778,
-        constructionInProgressAnchor: 3,
         buildQueue: [],
       })
     ).toBeCloseTo(12_403.610080694778, 9);
@@ -50,7 +48,6 @@ describe("command-economy ownership repair merge", () => {
         soldUnits: 6,
         capitalStock: 30,
         capacityBookAnchor: 40,
-        constructionInProgressAnchor: 10,
         buildQueue: [],
       },
       {
@@ -64,7 +61,6 @@ describe("command-economy ownership repair merge", () => {
         soldUnits: 4,
         capitalStock: 20,
         capacityBookAnchor: 30,
-        constructionInProgressAnchor: -2,
         buildQueue: [{ unitsOrdered: 2, costPaidAnchor: 6, startTurn: 5, onlineTurn: 9 }],
       },
       sourceId,
