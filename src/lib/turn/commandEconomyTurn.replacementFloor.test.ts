@@ -48,10 +48,34 @@ const SECTOR = {
 
 type Captured = {
   sectorBulk: Array<{
-    updateOne: { filter: unknown; update: { $inc?: { capitalStock?: number } } };
+    updateOne: { filter: unknown; update: Array<Record<string, unknown>> };
   }>;
   budgetSets: Array<Record<string, unknown>>;
 };
+
+function capitalStockUnitsAdded(captured: Captured): number {
+  const pipeline = captured.sectorBulk[0]?.updateOne.update;
+  if (!pipeline) throw new Error("Expected directed credit to persist a capacity pipeline");
+  const firstSet = pipeline[0]?.$set;
+  if (!firstSet || typeof firstSet !== "object") {
+    throw new Error("Expected the capacity pipeline to set capitalStock");
+  }
+  const capitalStock = (firstSet as Record<string, unknown>).capitalStock;
+  if (!capitalStock || typeof capitalStock !== "object") {
+    throw new Error("Expected a capitalStock update expression");
+  }
+  const maxArgs = (capitalStock as { $max?: unknown[] }).$max;
+  const addition = maxArgs?.[1];
+  if (!addition || typeof addition !== "object") {
+    throw new Error("Expected the pipeline to add purchased units to existing stock");
+  }
+  const addArgs = (addition as { $add?: unknown[] }).$add;
+  const unitsAdded = addArgs?.[1];
+  if (typeof unitsAdded !== "number") {
+    throw new Error("Expected the stock pipeline to contain a numeric directed-credit tranche");
+  }
+  return unitsAdded;
+}
 
 function makeDb(creditAggressiveness: number): { db: Db; captured: Captured } {
   const captured: Captured = { sectorBulk: [], budgetSets: [] };
@@ -119,9 +143,8 @@ describe("directed credit — capacity replacement floor", () => {
     const { db, captured } = makeDb(0);
     await processCommandEconomyTurn(db, 1, YEAR);
 
-    const inc = captured.sectorBulk[0]?.updateOne.update.$inc?.capitalStock;
-    expect(inc).toBeDefined();
-    expect(inc!).toBeCloseTo(STOCK * CAPITAL_DEPRECIATION_PER_TURN, 6);
+    const unitsAdded = capitalStockUnitsAdded(captured);
+    expect(unitsAdded).toBeCloseTo(STOCK * CAPITAL_DEPRECIATION_PER_TURN, 6);
   });
 
   it("the floored credit is PAID FOR — its unbacked share prints, like any tranche", async () => {
@@ -138,11 +161,11 @@ describe("directed credit — capacity replacement floor", () => {
     const { db, captured } = makeDb(0);
     await processCommandEconomyTurn(db, 1, YEAR);
 
-    const inc = captured.sectorBulk[0]!.updateOne.update.$inc!.capitalStock!;
+    const unitsAdded = capitalStockUnitsAdded(captured);
     // Units bought == units worn out. `capitalStock` is unchanged net of
     // depreciation, so no amount of restraint or plan-shortfall can make the
     // floor fund growth.
-    expect(inc).toBeLessThanOrEqual(STOCK * CAPITAL_DEPRECIATION_PER_TURN + 1e-6);
+    expect(unitsAdded).toBeLessThanOrEqual(STOCK * CAPITAL_DEPRECIATION_PER_TURN + 1e-6);
     // And it is priced at the standing list price, not discounted.
     expect(soeCapacityReplacementCostAnchor([SECTOR as never], YEAR, 1)).toBeGreaterThan(0);
   });
@@ -168,7 +191,7 @@ describe("directed credit — capacity replacement floor", () => {
   it("an aggressive posture is unchanged — the floor only lifts, never caps", async () => {
     const { db, captured } = makeDb(1);
     await processCommandEconomyTurn(db, 1, YEAR);
-    const inc = captured.sectorBulk[0]!.updateOne.update.$inc!.capitalStock!;
-    expect(inc).toBeGreaterThanOrEqual(STOCK * CAPITAL_DEPRECIATION_PER_TURN);
+    const unitsAdded = capitalStockUnitsAdded(captured);
+    expect(unitsAdded).toBeGreaterThanOrEqual(STOCK * CAPITAL_DEPRECIATION_PER_TURN);
   });
 });
