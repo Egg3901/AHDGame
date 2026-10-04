@@ -72,14 +72,18 @@ import type { Tier1DecisionSkipReason } from "./tier1DecisionSchedule";
 import { isCountryEnabledForPlayers } from "@/lib/countryAccess";
 import { caretakerDecisionAllowed } from "@/lib/world/playerHandoff";
 import { processAutonomousForeignPolicy } from "./foreignPolicy";
+import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
+import {
+  agendaReviewSnapshot,
+  annualPerformanceReviewDue,
+  shouldRecomputeGoverningAgenda,
+} from "./rules/agendaReview";
 
 /**
- * How many turns an agenda stays valid before recompute. The agenda is
- * multi-turn intent, not a per-turn reflex; ~weekly (turns are hourly) keeps it
- * stable across a governing period while still tracking shifting conditions. A
- * freshly-seated government has no agenda, so it always computes immediately.
+ * Routine agenda review interval, measured in game-calendar years (48 turns).
+ * Material conditions and crisis changes can prompt an earlier re-plan.
  */
-export const AGENDA_RECOMPUTE_INTERVAL_TURNS = 168;
+export const AGENDA_RECOMPUTE_INTERVAL_TURNS = TURNS_PER_YEAR;
 
 export interface NppGovernmentResult {
   /** Whether the v1 gate was met and the strategic batch ran for this country. */
@@ -232,18 +236,20 @@ async function computeAndPersistGoverningAgenda(
   const headNppId = gov.presidentNppId ?? gov.pmNppId ?? null;
   if (!headNppId) return false;
 
-  // Crisis intake (V1.8) — load first so a brand-new crisis can force an
-  // immediate recompute even when the standing agenda is otherwise fresh.
+  // These bounded, existing input readers run once per strategic slot. Their
+  // compact snapshots allow material changes to re-plan before the annual review.
   const crisisIntake = await loadCrisisAgendaSignals(db, countryId);
-  const crisisActive = Object.keys(crisisIntake.signals).length > 0;
-
-  // Recompute cadence: skip while the current agenda is fresh — unless a crisis
-  // that started after the last compute now demands the government's attention.
+  const conditions = await loadConditionsSignal(db, countryId);
   const existing = gov.governingAgenda;
-  const fresh = existing && currentTurn - existing.computedTurn < AGENDA_RECOMPUTE_INTERVAL_TURNS;
-  const crisisDemandsRecompute =
-    crisisActive && (!existing || existing.computedTurn < crisisIntake.latestStartTurn);
-  if (fresh && !crisisDemandsRecompute) {
+  if (
+    !shouldRecomputeGoverningAgenda({
+      agenda: existing,
+      currentTurn,
+      intervalTurns: AGENDA_RECOMPUTE_INTERVAL_TURNS,
+      conditions,
+      crisis: crisisIntake,
+    })
+  ) {
     return false;
   }
 
@@ -256,17 +262,16 @@ async function computeAndPersistGoverningAgenda(
   // goal review, and the V5 commitment step. All three grade the government
   // against the same numbers on purpose; a second read could disagree with the
   // first inside one cycle.
+  // Accountability remains an annual report card even when conditions or a
+  // crisis trigger an earlier strategic re-plan. A separate persisted turn keeps
+  // event-driven recomputes from farming repeated favorability nudges.
+  const governingPartyId = gov.governingPartyId;
+  const performanceReviewDue = annualPerformanceReviewDue(existing, currentTurn, TURNS_PER_YEAR);
   const domainHealth =
-    v5Active || (existing && existing.items.length > 0 && gov.governingPartyId)
+    v5Active || (performanceReviewDue && existing && existing.items.length > 0 && governingPartyId)
       ? await loadDomainHealth(db, countryId)
       : {};
-
-  // Accountability (improvement): before replacing the outgoing agenda, grade
-  // the government against the targets it set and nudge the governing party's
-  // favorability — rewarded for meeting goals, punished for missing them. Runs
-  // on the (≈weekly) recompute cadence, a periodic report card.
-  const governingPartyId = gov.governingPartyId;
-  if (existing && existing.items.length > 0 && governingPartyId) {
+  if (performanceReviewDue && existing && existing.items.length > 0 && governingPartyId) {
     const performance = computeGovernmentPerformance(existing.items, domainHealth);
     if (performance.favorabilityDelta !== 0) {
       const nudged = await applyGovernmentPerformanceNudge(
@@ -306,7 +311,6 @@ async function computeAndPersistGoverningAgenda(
     );
   if (!headNpp) return false;
 
-  const conditions = await loadConditionsSignal(db, countryId);
   // Fetched before the agenda (not just for the V1.6 fiscal posture below) so
   // the agenda's own fiscal-distress driver can read the same debt figure:
   // severe distress recolors the government's weakly-justified "raise" items
@@ -338,6 +342,10 @@ async function computeAndPersistGoverningAgenda(
     ...(review ? { goalFeedback: review.feedback } : {}),
     currentTurn,
   });
+  agenda.reviewSnapshot = agendaReviewSnapshot(conditions, crisisIntake);
+  agenda.performanceReviewedTurn = performanceReviewDue
+    ? currentTurn
+    : (existing?.performanceReviewedTurn ?? existing?.computedTurn ?? currentTurn);
 
   // V5 commitment — reconcile the reviewed records against the fresh scan and
   // lead the agenda with what the government is actually committed to. From

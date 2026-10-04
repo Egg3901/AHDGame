@@ -53,6 +53,7 @@ vi.mock("../foreignPolicy", () => ({
 }));
 
 import { processNppGovernment, AGENDA_RECOMPUTE_INTERVAL_TURNS } from "../processNppGovernment";
+import { agendaReviewSnapshot } from "../rules/agendaReview";
 
 let db: MockDb;
 const now = new Date("2026-06-23T12:00:00Z");
@@ -243,13 +244,75 @@ describe("processNppGovernment", () => {
     setup({
       gov: {
         ...formedPresidentialGov,
-        governingAgenda: { items: [], archetype: "reformer", computedTurn: turn },
+        governingAgenda: {
+          items: [],
+          archetype: "reformer",
+          computedTurn: turn,
+          reviewSnapshot: agendaReviewSnapshot(
+            { weakDomains: { healthcare: 0.8 } },
+            { signals: {}, latestStartTurn: 0, effectFingerprintByDomain: {} }
+          ),
+          performanceReviewedTurn: turn,
+        },
       },
       headNpp,
     });
     const res = await processNppGovernment(db as unknown as Db, "BR", turn, now);
     expect(res.agendaUpdated).toBe(false);
     expect(db.collectionMocks["governmentFormations"].updateOne).not.toHaveBeenCalled();
+  });
+
+  it("runs annual accountability at turns 48 and 96 despite early replans at 24 and 78", async () => {
+    atLeastMock.mockResolvedValue(true);
+    const baseTurn = dueTurn("BR", 16);
+    const gov = {
+      ...formedPresidentialGov,
+      governingPartyId: "5",
+      governingAgenda: {
+        items: [{ domain: "healthcare", target: 65, direction: "raise", priority: 1 }],
+        archetype: "reformer",
+        computedTurn: baseTurn,
+        reviewSnapshot: agendaReviewSnapshot(
+          { weakDomains: { healthcare: 0.8 }, inflationRate: 4 },
+          { signals: {}, latestStartTurn: 0, effectFingerprintByDomain: {} }
+        ),
+        performanceReviewedTurn: baseTurn,
+      },
+    };
+    setup({ gov, headNpp, politicalBoard: boardWith(60, { health: 10 }) });
+
+    const processAtOffset = async (offset: number) => {
+      const cycle = 16 + offset / 6;
+      const turn = dueTurn("BR", cycle);
+      const result = await processNppGovernment(db as unknown as Db, "BR", turn, now);
+      expect(result.agendaUpdated).toBe(true);
+      const updates = (
+        db.collectionMocks["governmentFormations"].updateOne as ReturnType<typeof vi.fn>
+      ).mock.calls;
+      gov.governingAgenda = updates[updates.length - 1][1].$set.governingAgenda;
+      return { turn, agenda: gov.governingAgenda };
+    };
+
+    conditionsMock.mockResolvedValue({ weakDomains: { healthcare: 0.5 }, inflationRate: 4 });
+    const at24 = await processAtOffset(24);
+    expect(at24.agenda.performanceReviewedTurn).toBe(baseTurn);
+    expect(db.collectionMocks["npps"].updateMany).not.toHaveBeenCalled();
+
+    await processAtOffset(48);
+    expect(at24.agenda.computedTurn).toBe(baseTurn + 24);
+    expect(gov.governingAgenda.performanceReviewedTurn).toBe(baseTurn + 48);
+    const updateMany = db.collectionMocks["npps"].updateMany as ReturnType<typeof vi.fn>;
+    expect(updateMany).toHaveBeenCalledTimes(1);
+
+    updateMany.mockClear();
+    conditionsMock.mockResolvedValue({ weakDomains: { healthcare: 0.9 }, inflationRate: 4 });
+    const at78 = await processAtOffset(78);
+    expect(at78.agenda.performanceReviewedTurn).toBe(baseTurn + 48);
+    expect(updateMany).not.toHaveBeenCalled();
+
+    await processAtOffset(96);
+    expect(gov.governingAgenda.performanceReviewedTurn).toBe(baseTurn + 96);
+    expect(updateMany).toHaveBeenCalledTimes(1);
   });
 
   it("recomputes when the agenda is stale", async () => {
