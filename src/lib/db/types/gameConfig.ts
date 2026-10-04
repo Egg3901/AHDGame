@@ -218,6 +218,9 @@ export interface GameConfig {
    * read-only freeze: pages render, no actions accepted, nothing unwinds.
    */
   privateBankingEnabled?: boolean;
+  bankConstructionAdmissions?: import("@/lib/banking/constructionAdmission").ConstructionAdmission[];
+  bankConstructionAdmissionClosing?: boolean;
+  bankConstructionAdmissionClosingToken?: string;
   /** Enable funded sovereign-bill holdings for private bank treasuries. Default off. */
   bankTreasuryEnabled?: boolean;
   /** Experimental funded spendable government-cash ledger. Absent means off. */
@@ -243,6 +246,8 @@ export interface GameConfig {
   bankContagionEnabled?: boolean;
   /** Funded bank failures affect approval and consumer confidence. Default off. */
   bankFailurePoliticsEnabled?: boolean;
+  /** Funded plant construction loans. Off unless explicitly enabled. */
+  bankConstructionFinanceEnabled?: boolean;
   /**
    * Savings account rollout. `off`: legacy character fields only. `shadow`:
    * accounts are materialized from the legacy fields every turn and compared,

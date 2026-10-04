@@ -40,7 +40,15 @@ import {
   fundedNpcFlowDelta,
   perTurnInterest,
 } from "@/lib/banking/rules/loans";
-import { loanServiceTransition } from "@/lib/banking/rules/loanServicing";
+import { loanServiceTransition, loanServiceKey } from "@/lib/banking/rules/loanServicing";
+import {
+  acquireConstructionLoanLock,
+  releaseConstructionLoanLock,
+} from "@/lib/banking/constructionLoanLock";
+import {
+  acquireConstructionServiceLease,
+  releaseConstructionServiceLease,
+} from "@/lib/banking/constructionServiceLease";
 import {
   facilityInterestTransition,
   facilityInterestAmounts,
@@ -923,7 +931,6 @@ async function processOneBank(
         // ledgers each turn and are not balances anyone can claim.
         "bankCharter.npcDeposits": npcDeposits,
         "bankCharter.totalDeposits": totalDeposits,
-        "bankCharter.totalLoans": totalLoans,
         "bankCharter.depositCeiling": depositCeiling,
         "bankCharter.lastBankingTurn": turn,
         "bankCharter.lastBankingIncome":
@@ -1009,18 +1016,26 @@ async function serviceNamedLoanBook(
     list.push(loan);
     loansByBorrower.set(key, list);
   }
+  const serviceBorrower = async (borrowerLoans: typeof loans) => {
+    for (const loan of borrowerLoans) {
+      const loanResult = await servicePlayerLoan(db, turn, corp._id, loan, currency, corp.name);
+      total.interestCollected += loanResult.interestCollected;
+      total.principalRepaid += loanResult.principalRepaid;
+      total.writtenOff += loanResult.writtenOff;
+      total.bankCredit += loanResult.bankCredit;
+      total.totalLoansDelta += loanResult.totalLoansDelta;
+    }
+  };
+  const borrowerGroups = [...loansByBorrower.values()];
   await Promise.all(
-    [...loansByBorrower.values()].map(async (borrowerLoans) => {
-      for (const loan of borrowerLoans) {
-        const loanResult = await servicePlayerLoan(db, turn, corp._id, loan, currency, corp.name);
-        total.interestCollected += loanResult.interestCollected;
-        total.principalRepaid += loanResult.principalRepaid;
-        total.writtenOff += loanResult.writtenOff;
-        total.bankCredit += loanResult.bankCredit;
-        total.totalLoansDelta += loanResult.totalLoansDelta;
-      }
-    })
+    borrowerGroups
+      .filter((group) => !group.some((loan) => loan.constructionCollateral))
+      .map(serviceBorrower)
   );
+  // Construction receipts hold one lender epoch. Keep their borrower groups
+  // serial so parallel admission cannot repeatedly starve all but one loan.
+  for (const group of borrowerGroups)
+    if (group.some((loan) => loan.constructionCollateral)) await serviceBorrower(group);
   return total;
 }
 
@@ -1049,7 +1064,6 @@ async function processLoanBookOnlyBank(
   const serviced = await timedBankingStage(db, turn, "loanServicing", () =>
     serviceNamedLoanBook(db, turn, corp, currency, charter.charteredTurn)
   );
-  const totalLoans = Math.max(0, Math.max(0, charter.totalLoans ?? 0) + serviced.totalLoansDelta);
 
   await db.collection<Corporation>("corporations").updateOne(
     {
@@ -1062,9 +1076,9 @@ async function processLoanBookOnlyBank(
     },
     {
       $set: {
-        // Cash moved through the money primitive inside servicing; only the
-        // derived aggregate and the idempotency stamp are written here.
-        "bankCharter.totalLoans": totalLoans,
+        // Cash and the loan book moved through their original receipts. An
+        // end-of-pass snapshot must not overwrite a concurrent origination,
+        // repayment or collateral recovery.
         "bankCharter.lastBankingTurn": turn,
         "bankCharter.lastBankingIncome": serviced.interestCollected - serviced.writtenOff,
         "bankCharter.lastBankingIncomeTurn": turn,
@@ -1112,6 +1126,44 @@ async function servicePlayerLoan(
     totalLoansDelta: 0,
   };
   if (loan.lastProcessedTurn === turn) return empty;
+  if (loan.constructionCollateral) {
+    const owned = await acquireConstructionLoanLock(
+      db,
+      loan,
+      loanServiceKey(String(loan._id), turn)
+    );
+    if (!owned) return empty;
+    loan = owned;
+    if (!["current", "arrears"].includes(loan.status) || loan.lastProcessedTurn === turn) {
+      await releaseConstructionLoanLock(db, loan, loanServiceKey(String(loan._id), turn));
+      return empty;
+    }
+  }
+  const serviceKey = loanServiceKey(String(loan._id), turn);
+  const holdBankEpoch =
+    !!loan.constructionCollateral &&
+    creditTarget.collection === "corporations" &&
+    creditTarget.path === "bankCharter.cashReserves";
+  if (holdBankEpoch) {
+    if (!(await acquireConstructionServiceLease(db, loan, serviceKey, turn))) {
+      await releaseConstructionLoanLock(db, loan, serviceKey);
+      return empty;
+    }
+    creditTarget = {
+      ...creditTarget,
+      filter: {
+        ...creditTarget.filter,
+        "bankCharter.charteredTurn": loan.charteredTurn,
+        "bankConstructionFunding.kind": "servicing",
+        "bankConstructionFunding.service.key": serviceKey,
+      },
+    };
+  }
+  const releaseService = async () => {
+    if (holdBankEpoch)
+      await releaseConstructionServiceLease(db, bankCorporationId, loan._id, serviceKey);
+    else await releaseConstructionLoanLock(db, loan, serviceKey);
+  };
 
   // The decision is pure; the transition carries the borrower's debit, the
   // lender's credit and the loan-document update guarded on the turn stamp.
@@ -1132,11 +1184,19 @@ async function servicePlayerLoan(
     bankId: bankCorporationId.toString(),
   });
   if (decision.outcome === "closed") {
-    await settleTransition(db, transition);
+    const closed = await settleTransition(db, transition);
+    if (!closed.error && ["applied", "replayed"].includes(closed.status)) await releaseService();
     return empty;
   }
 
   const settled = await settleTransition(db, transition);
+  if (
+    (!settled.error && ["applied", "replayed"].includes(settled.status)) ||
+    (settled.status === "rejected" &&
+      settled.appliedLegs.length === 0 &&
+      settled.appliedProjections.length === 0)
+  )
+    await releaseService();
   if (settled.status === "rejected") return empty;
   const moneyLanded =
     transition.legs.length > 0 && settled.appliedLegs.length === transition.legs.length;

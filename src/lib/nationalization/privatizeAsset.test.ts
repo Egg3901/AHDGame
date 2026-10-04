@@ -4,6 +4,9 @@ import { ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
+vi.mock("@/lib/economy/queries/privateEnterpriseGate", () => ({
+  assertPrivateEnterprisePermitted: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock("@/lib/currency/corporationCapital", () => ({
   loadFxRatesByCurrency: vi.fn().mockResolvedValue(new Map([["USD", 1]])),
 }));
@@ -89,8 +92,16 @@ describe("privatizeAsset", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     db = createMockDb();
-    for (const n of ["corporations", "corporateSectors", "centralBanks", "federalBudget"])
+    for (const n of [
+      "corporations",
+      "corporateSectors",
+      "centralBanks",
+      "federalBudget",
+      "gameState",
+    ])
       db.collection(n);
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ _id: "current", currentYear: 2026 });
+    db.collectionMocks.federalBudget.find.mockReturnValue(cursor([]));
     db.collectionMocks.corporations.findOne.mockImplementation(
       async (q: Record<string, unknown>) => {
         if (q._id && (q._id as ObjectId).equals?.(natCorpId)) return source;
@@ -100,11 +111,59 @@ describe("privatizeAsset", () => {
     );
     db.collectionMocks.corporateSectors.findOne.mockResolvedValue({ ...baseSector });
     db.collectionMocks.centralBanks.find.mockReturnValue(cursor([]));
-    db.collectionMocks.corporations.insertOne.mockResolvedValue({ insertedId: new ObjectId() });
+    db.collectionMocks.corporations.insertOne.mockImplementation(
+      async (doc: { _id?: ObjectId }) => ({
+        insertedId: doc._id ?? new ObjectId(),
+      })
+    );
     const { ensurePrimaryNationalCorporation } = await import("./nationalCorporation");
     vi.mocked(ensurePrimaryNationalCorporation).mockResolvedValue(source as never);
     const { fetchSectorMarketSharePercent } = await import("@/lib/corporations/marketShare");
     vi.mocked(fetchSectorMarketSharePercent).mockResolvedValue(0); // tiny share ⇒ full carve allowed
+  });
+
+  it("refuses to carve a sector with an active construction claim", async () => {
+    db.collectionMocks.corporateSectors.findOne.mockResolvedValue({
+      ...baseSector,
+      constructionFinancing: { status: "building", escrowLocal: 500 },
+    });
+    const { privatizeAsset } = await import("./privatizeAsset");
+
+    await expect(
+      privatizeAsset(db as unknown as Db, {
+        countryId: "US",
+        sourceNationalCorporationId: natCorpId,
+        selections: [{ sectorId, carveFraction: 0.3 }],
+        newCorpName: "Pacific Power Co",
+        goldenSharePercent: 0.2,
+        method: "ipo",
+        turn: 10,
+      })
+    ).rejects.toThrow(/secured construction/);
+
+    expect(db.collectionMocks.corporations.insertOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.corporateSectors.insertOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.corporateSectors.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("refuses when the atomic carve reservation loses a concurrent claim race", async () => {
+    db.collectionMocks.corporateSectors.updateOne.mockResolvedValueOnce({ matchedCount: 0 });
+    const { privatizeAsset } = await import("./privatizeAsset");
+
+    await expect(
+      privatizeAsset(db as unknown as Db, {
+        countryId: "US",
+        sourceNationalCorporationId: natCorpId,
+        selections: [{ sectorId, carveFraction: 0.3 }],
+        newCorpName: "Pacific Power Co",
+        goldenSharePercent: 0.2,
+        method: "ipo",
+        turn: 10,
+      })
+    ).rejects.toThrow(/secured construction/);
+
+    expect(db.collectionMocks.corporations.insertOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.corporateSectors.insertOne).not.toHaveBeenCalled();
   });
 
   it("creates a private spun-out corp, carves a sector slice, credits the treasury", async () => {
@@ -139,7 +198,9 @@ describe("privatizeAsset", () => {
     expect(ins.corporationId).toEqual(res.newCorporationId);
     expect(ins.revenue).toBe(300_000);
     expect(ins.absorbedAtTurn).toBeUndefined();
-    const upd = db.collectionMocks.corporateSectors.updateOne.mock.calls[0];
+    const upd = db.collectionMocks.corporateSectors.updateOne.mock.calls.find(
+      (call) => call[1]?.$set?.revenue === 700_000
+    )!;
     expect(upd[1].$set.revenue).toBe(700_000);
 
     // Treasury credited the float proceeds once.
@@ -326,7 +387,12 @@ describe("privatizeAsset", () => {
     });
     expect(res.sectorsCarved).toBe(1);
     // Fully divested ⇒ the emptied source row is deleted, not shrunk to 0.
-    expect(db.collectionMocks.corporateSectors.deleteOne).toHaveBeenCalledWith({ _id: sectorId });
+    expect(db.collectionMocks.corporateSectors.deleteOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        _id: sectorId,
+        "constructionPropertyTransition.key": expect.any(String),
+      })
+    );
   });
 
   it("partial carve clones a fractional sector and reduces the source row", async () => {
@@ -345,7 +411,9 @@ describe("privatizeAsset", () => {
     expect(ins.revenue).toBe(250_000);
     expect(ins.workers).toBe(125);
     expect(ins.corporationId).toBeDefined();
-    const upd = db.collectionMocks.corporateSectors.updateOne.mock.calls[0];
+    const upd = db.collectionMocks.corporateSectors.updateOne.mock.calls.find(
+      (call) => call[1]?.$set?.revenue === 750_000
+    )!;
     expect(upd[1].$set.revenue).toBe(750_000);
     expect(upd[1].$set.workers).toBe(375);
   });

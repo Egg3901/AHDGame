@@ -245,6 +245,7 @@ export interface ReinvestPreSizingGateFlags {
   no_telemetry: boolean;
   fill_below_min: boolean;
   state_controlled: boolean;
+  property_unavailable: boolean;
 }
 
 /**

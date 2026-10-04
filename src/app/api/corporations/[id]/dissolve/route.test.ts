@@ -111,9 +111,9 @@ describe("POST /api/corporations/[id]/dissolve", () => {
     expect(response.status).toBe(200);
     expect(data.success).toBe(true);
     expect(db.collectionMocks.unownedSectors.findOneAndUpdate).toHaveBeenCalledTimes(1);
-    expect(db.collectionMocks.corporateSectors.deleteMany).toHaveBeenCalledWith({
-      _id: { $in: [sectorId] },
-    });
+    const sectorDeleteFilter = db.collectionMocks.corporateSectors.deleteMany.mock.calls[0][0];
+    expect(sectorDeleteFilter._id.$in).toEqual([sectorId]);
+    expect(sectorDeleteFilter["constructionPropertyTransition.kind"]).toBe("restore");
   });
 
   it("returns 409 when a dissolve is already in progress", async () => {

@@ -1,8 +1,26 @@
+import { restoreSectorsToUnowned } from "./restoreSectorsToUnowned";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { CorporateSector, UnownedSector } from "@/lib/db/types";
+import { loadFxRatesByCurrency } from "@/lib/currency/corporationCapital";
+
+vi.mock("@/lib/currency/corporationCapital", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/currency/corporationCapital")>(
+    "@/lib/currency/corporationCapital"
+  );
+  return {
+    ...actual,
+    loadFxRatesByCurrency: vi.fn(
+      async () =>
+        new Map([
+          ["USD", 1],
+          ["GBP", 1],
+        ])
+    ),
+  };
+});
 
 function makeSector(overrides: Partial<CorporateSector> = {}): CorporateSector {
   return {
@@ -35,11 +53,39 @@ describe("restoreSectorsToUnowned", () => {
     db.collection("unownedSectors");
     db.collection("states");
     db.collectionMocks.unownedSectors.findOneAndUpdate.mockResolvedValue(null);
+    vi.mocked(loadFxRatesByCurrency).mockResolvedValue(
+      new Map([
+        ["USD", 1],
+        ["GBP", 1],
+      ])
+    );
+  });
+
+  it("refuses an active construction pledge before reading or crediting the unowned pool", async () => {
+    const sector = makeSector({
+      constructionFinancing: {
+        status: "building",
+        escrowLocal: 0,
+      } as CorporateSector["constructionFinancing"],
+    });
+
+    await expect(
+      restoreSectorsToUnowned(db as unknown as Db, [sector], new Date())
+    ).rejects.toThrow(/secured construction property/);
+    expect(db.collectionMocks.unownedSectors.findOneAndUpdate).not.toHaveBeenCalled();
+    expect(db.collectionMocks.corporateSectors.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.corporateSectors.deleteMany).not.toHaveBeenCalled();
   });
 
   it("normalizes deleted sector revenue to anchor units and deletes sectors after restoring the pool", async () => {
     const corpId = new ObjectId();
     const now = new Date("2026-04-26T23:00:00.000Z");
+    vi.mocked(loadFxRatesByCurrency).mockResolvedValue(
+      new Map([
+        ["GBP", 2],
+        ["USD", 1],
+      ])
+    );
 
     db.collectionMocks.corporations.find.mockReturnValue({
       project: vi.fn().mockReturnValue({
@@ -68,7 +114,6 @@ describe("restoreSectorsToUnowned", () => {
         updatedAt: now,
       } satisfies UnownedSector);
 
-    const { restoreSectorsToUnowned } = await import("./restoreSectorsToUnowned");
     const result = await restoreSectorsToUnowned(
       db as unknown as Db,
       [
@@ -97,11 +142,9 @@ describe("restoreSectorsToUnowned", () => {
       totalRevenueRestored: 125,
     });
     expect(db.collectionMocks.unownedSectors.findOneAndUpdate).toHaveBeenCalledTimes(2);
-    expect(db.collectionMocks.corporateSectors.deleteMany).toHaveBeenCalledWith({
-      _id: {
-        $in: expect.arrayContaining([expect.any(Object), expect.any(Object)]),
-      },
-    });
+    const deletionFilter = db.collectionMocks.corporateSectors.deleteMany.mock.calls[0]![0];
+    expect(deletionFilter._id.$in).toHaveLength(2);
+    expect(deletionFilter["constructionPropertyTransition.kind"]).toBe("restore");
   });
 
   it("skips the unowned write when nothing has positive revenue but still deletes the sectors", async () => {
@@ -117,7 +160,6 @@ describe("restoreSectorsToUnowned", () => {
     });
     db.collectionMocks.corporateSectors.deleteMany.mockResolvedValue({ deletedCount: 1 });
 
-    const { restoreSectorsToUnowned } = await import("./restoreSectorsToUnowned");
     const result = await restoreSectorsToUnowned(
       db as unknown as Db,
       [
@@ -182,7 +224,6 @@ describe("restoreSectorsToUnowned", () => {
       .mockRejectedValueOnce(new Error("simulated delete crash"))
       .mockResolvedValueOnce({ deletedCount: 1 });
 
-    const { restoreSectorsToUnowned } = await import("./restoreSectorsToUnowned");
     await expect(restoreSectorsToUnowned(db as unknown as Db, [sector], now)).rejects.toThrow(
       "simulated delete crash"
     );
@@ -234,7 +275,6 @@ describe("restoreSectorsToUnowned", () => {
     db.collectionMocks.corporateSectors.deleteMany.mockResolvedValue({ deletedCount: 0 });
     db.collectionMocks.corporateSectors.countDocuments.mockResolvedValue(0);
 
-    const { restoreSectorsToUnowned } = await import("./restoreSectorsToUnowned");
     const result = await restoreSectorsToUnowned(db as unknown as Db, [sector], now);
 
     expect(result).toEqual({
@@ -284,7 +324,6 @@ describe("restoreSectorsToUnowned", () => {
     } satisfies UnownedSector);
     db.collectionMocks.corporateSectors.deleteMany.mockResolvedValue({ deletedCount: 1 });
 
-    const { restoreSectorsToUnowned } = await import("./restoreSectorsToUnowned");
     const result = await restoreSectorsToUnowned(db as unknown as Db, [sector], now);
 
     expect(result).toEqual({
@@ -319,7 +358,6 @@ describe("restoreSectorsToUnowned", () => {
     });
     db.collectionMocks.corporateSectors.deleteMany.mockResolvedValue({ deletedCount: 1 });
 
-    const { restoreSectorsToUnowned } = await import("./restoreSectorsToUnowned");
     await restoreSectorsToUnowned(
       db as unknown as Db,
       [

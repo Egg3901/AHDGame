@@ -227,3 +227,93 @@ describe("protected update projection", () => {
     }
   );
 });
+
+describe("protected pipeline projection", () => {
+  function pipelineSetup() {
+    const f = setup();
+    f.target().headroomUnits = 60;
+    f.target().revenue = 600;
+    f.transition.projections[0] = {
+      collection: "corporations",
+      filter: { _id: oid(f.id.toHexString()), status: "pending" },
+      pipelineUpdate: [
+        { $set: { headroomUnits: { $max: [0, { $subtract: ["$headroomUnits", 100] }] } } },
+        { $set: { revenue: { $multiply: ["$headroomUnits", 10] }, status: "current" } },
+      ],
+      note: "clamped capacity pool",
+    };
+    return f;
+  }
+  it("replays a clamped write after its guard changes and bounded history expires", async () => {
+    const f = pipelineSetup();
+    const c = f.memory.collection("corporations");
+    const original = c.updateOne.bind(c);
+    let first = true;
+    vi.spyOn(c, "updateOne").mockImplementation(async (filter, update, options) => {
+      const result = await original(filter, update, options);
+      if (first && Array.isArray(update) && result.matchedCount) {
+        first = false;
+        throw new Error("pipeline acknowledgement lost");
+      }
+      return result;
+    });
+    await expect(settleTransition(f.db, f.transition)).rejects.toThrow("acknowledgement lost");
+    expect(f.target()).toMatchObject({ headroomUnits: 0, revenue: 0, status: "current" });
+    f.target().settledKeys = Array.from({ length: 200 }, (_, i) => `replacement-${i}`);
+    f.target().headroomUnits = 45;
+    f.target().revenue = 450;
+    expect((await recoverProjections(f.db, f.transition.key)).status).toBe("applied");
+    expect((await settleTransition(f.db, f.transition)).status).toBe("replayed");
+    expect(f.target()).toMatchObject({ headroomUnits: 45, revenue: 450 });
+    expect(f.target().pendingSettlementProjection).toBeUndefined();
+  });
+  it("a delayed publisher cannot reuse the original generation after acknowledgement", async () => {
+    const f = pipelineSetup();
+    const c = f.memory.collection("corporations");
+    const original = c.updateOne.bind(c);
+    let release!: () => void;
+    let paused!: () => void;
+    const waiting = new Promise<void>((r) => {
+      paused = r;
+    });
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    let first = true;
+    vi.spyOn(c, "updateOne").mockImplementation(async (filter, update, options) => {
+      if (first && Array.isArray(update)) {
+        first = false;
+        paused();
+        await gate;
+      }
+      return original(filter, update, options);
+    });
+    const delayed = settleTransition(f.db, f.transition);
+    await waiting;
+    expect((await recoverProjections(f.db, f.transition.key)).status).toBe("applied");
+    f.target().headroomUnits = 45;
+    f.target().revenue = 450;
+    f.target().settledKeys = [];
+    release();
+    expect((await delayed).status).toBe("applied");
+    expect(f.target()).toMatchObject({ headroomUnits: 45, revenue: 450 });
+  });
+  it.each(["pendingSettlementProjection", "settlementProjectionRevision", "settledKeys", "_id"])(
+    "refuses pipeline writes to reserved target field %s before claiming",
+    async (field) => {
+      const f = pipelineSetup();
+      f.transition.projections[0].pipelineUpdate = [{ $set: { [field]: 1 } }];
+      expect((await settleTransition(f.db, f.transition)).status).toBe("rejected");
+      expect(f.memory.collection(MONEY_MOVE_COLLECTION).docs).toHaveLength(0);
+    }
+  );
+  it("refuses mixed update plans and stages that could remove publication proof", async () => {
+    const f = pipelineSetup();
+    f.transition.projections[0].update = { $inc: { total: 1 } };
+    expect((await settleTransition(f.db, f.transition)).status).toBe("rejected");
+    delete f.transition.projections[0].update;
+    f.transition.projections[0].pipelineUpdate = [{ $replaceRoot: { newRoot: {} } }];
+    expect((await settleTransition(f.db, f.transition)).status).toBe("rejected");
+    expect(f.memory.collection(MONEY_MOVE_COLLECTION).docs).toHaveLength(0);
+  });
+});

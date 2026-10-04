@@ -59,6 +59,11 @@ import {
 } from "@/lib/corporations/sectorTransferCapex";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { clampProductionPolicy } from "@/lib/utils/productionPolicy";
+import { buySecuredConstructionProperty } from "@/lib/banking/constructionSale";
+import {
+  hasProtectedConstructionProperty,
+  unprotectedConstructionPropertyFilter,
+} from "@/lib/corporations/securedConstructionProperty";
 
 const buySectorSchema = z.object({
   buyerCorporationId: schemas.objectId,
@@ -118,11 +123,57 @@ export async function buyListedSector(request: Request, { params }: RouteParams)
 
     const sector = await db
       .collection<CorporateSector>("corporateSectors")
-      .findOne({ _id: new ObjectId(sectorId), corporationId: seller._id });
-    if (!sector) {
+      .findOne({ _id: new ObjectId(sectorId) });
+    const securedClaim = sector?.constructionFinancing;
+    const saleRetry =
+      securedClaim?.borrowerId === String(seller._id) &&
+      securedClaim.sale?.buyerId === String(buyer._id);
+    if (!sector || (!sector.corporationId.equals(seller._id) && !saleRetry)) {
       return NextResponse.json({ error: "Sector not found" }, { status: 404 });
     }
 
+    if (
+      saleRetry ||
+      (securedClaim?.loanFunded && ["building", "released"].includes(securedClaim.status))
+    ) {
+      if (
+        !saleRetry &&
+        (await isPrivateEnterpriseBlocked(db, sector.countryId ?? seller.countryId))
+      )
+        return NextResponse.json(
+          { error: "This market is state-controlled and closed to private acquisition." },
+          { status: 403 }
+        );
+      const result = await buySecuredConstructionProperty({
+        db,
+        sectorId: sector._id,
+        borrowerId: seller._id,
+        buyerId: buyer._id,
+        turn: await getCurrentTurn(db),
+      });
+      if (!result.ok) return NextResponse.json({ error: result.error }, { status: 409 });
+      return NextResponse.json({
+        success: true,
+        priceAnchor: result.quote.priceAnchor,
+        priceInBuyerCapital: result.quote.buyerCostLocal,
+        priceInSellerCapital: result.quote.ownerProceeds,
+        buyerCurrency: result.quote.buyerCurrency,
+        sellerCurrency: securedClaim?.currency,
+        principalRepaid: result.quote.principalRepaid,
+        message: "Property acquired; secured principal paid before seller proceeds.",
+      });
+    }
+    if (hasProtectedConstructionProperty(sector)) {
+      return NextResponse.json(
+        { error: "This sector has secured construction and cannot be acquired yet" },
+        { status: 409 }
+      );
+    }
+    if (securedClaim && !["released", "cancelled"].includes(securedClaim.status))
+      return NextResponse.json(
+        { error: "Resolve the pending construction request before selling its site." },
+        { status: 409 }
+      );
     if (!sector.forSale) {
       return NextResponse.json(
         { error: "Sector is not currently listed for sale" },
@@ -153,6 +204,11 @@ export async function buyListedSector(request: Request, { params }: RouteParams)
       stateId: sector.stateId,
       ...getCorporateSectorLaneQuery(sector),
     });
+    if (existingBuyerSector && hasProtectedConstructionProperty(existingBuyerSector))
+      return NextResponse.json(
+        { error: "The buyer's existing site has an unfinished secured obligation." },
+        { status: 409 }
+      );
 
     const priceAnchor = sector.forSale.priceAnchor;
     if (!Number.isFinite(priceAnchor) || priceAnchor <= 0) {
@@ -307,8 +363,8 @@ export async function buyListedSector(request: Request, { params }: RouteParams)
         const mergedPlant = plantsEnabled
           ? mergeSectorPlantFields(existingBuyerSector, sector)
           : {};
-        await db.collection<CorporateSector>("corporateSectors").updateOne(
-          { _id: existingBuyerSector._id },
+        const mergeResult = await db.collection<CorporateSector>("corporateSectors").updateOne(
+          { _id: existingBuyerSector._id, ...unprotectedConstructionPropertyFilter() },
           {
             $set: {
               // Under plants the plant-state fold below is what carries value
@@ -325,7 +381,16 @@ export async function buyListedSector(request: Request, { params }: RouteParams)
             },
           }
         );
-        await db.collection<CorporateSector>("corporateSectors").deleteOne({ _id: sector._id });
+        if (mergeResult.matchedCount !== 1) {
+          throw new Error("The buyer's destination sector became secured during the purchase");
+        }
+        const deleteResult = await db.collection<CorporateSector>("corporateSectors").deleteOne({
+          _id: sector._id,
+          ...unprotectedConstructionPropertyFilter(),
+        });
+        if (deleteResult.deletedCount !== 1) {
+          throw new Error("The listed sector became secured during the purchase");
+        }
         mergeApplied = true;
 
         await db
