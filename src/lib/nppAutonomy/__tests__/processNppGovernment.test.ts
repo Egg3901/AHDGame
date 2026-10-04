@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import { POLITICAL_METRIC_FAMILIES } from "@/lib/politicalMetrics/families";
-import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { createAsyncIterableCursor, createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { tier1DecisionTurnForCycle } from "../tier1DecisionSchedule";
 
 const {
@@ -356,6 +356,98 @@ describe("processNppGovernment", () => {
     const updateMany = db.collectionMocks["npps"].updateMany as ReturnType<typeof vi.fn>;
     expect(updateMany).toHaveBeenCalledTimes(1);
     expect(updateMany.mock.calls[0][0]).toMatchObject({ countryId: "BR", party: "5" });
+  });
+
+  describe("electoral mandate (#2321)", () => {
+    const neutralHead = { ...headNpp, policies: { economic: 0, social: 0 } };
+    const parliamentaryGov = {
+      _id: "UK",
+      status: "formed",
+      pmNppId: headId,
+      governingPartyId: "7",
+      seatsByParty: { "7": 330, "8": 270 },
+      totalSeats: 600,
+    };
+
+    async function runWithParty(
+      party: Record<string, unknown>,
+      pledgeIds: string[] = [],
+      gov: Record<string, unknown> = parliamentaryGov
+    ) {
+      atLeastMock.mockResolvedValue(true);
+      conditionsMock.mockResolvedValue({ weakDomains: {} });
+      setup({ gov, headNpp: neutralHead });
+      db.collectionMocks["parties"] = {
+        ...db.collection("parties"),
+        findOne: vi.fn().mockResolvedValue(party),
+      } as MockDb["collectionMocks"][string];
+      db.collectionMocks["manifestos"] = {
+        ...db.collection("manifestos"),
+        find: vi
+          .fn()
+          .mockReturnValue(
+            createAsyncIterableCursor(
+              pledgeIds.length > 0
+                ? [{ pledges: pledgeIds.map((catalogEntryId) => ({ catalogEntryId })) }]
+                : []
+            )
+          ),
+      } as MockDb["collectionMocks"][string];
+      await processNppGovernment(db as unknown as Db, "UK", dueTurn("UK"), now);
+      const calls = (
+        db.collectionMocks["governmentFormations"].updateOne as ReturnType<typeof vi.fn>
+      ).mock.calls;
+      return calls[0]?.[1].$set as {
+        governingAgenda: { items: Array<{ domain: string; direction: string }> };
+        electoralMandate: { partyId: string; sources: string[]; domains: Record<string, number> };
+      };
+    }
+
+    it("steers identical heads under identical conditions toward what their party won on", async () => {
+      const left = await runWithParty({ economicPosition: -4, socialPosition: 0 });
+      const right = await runWithParty({ economicPosition: 4, socialPosition: 0 });
+
+      expect(left.electoralMandate).toMatchObject({ partyId: "7", sources: ["platform"] });
+      const leftRaise = left.governingAgenda.items
+        .filter((i) => i.direction === "raise")
+        .map((i) => i.domain);
+      const rightRaise = right.governingAgenda.items
+        .filter((i) => i.direction === "raise")
+        .map((i) => i.domain);
+      expect(leftRaise).toContain("poverty");
+      expect(rightRaise).toContain("economic_growth");
+      expect(rightRaise).not.toContain("poverty");
+      expect(leftRaise).not.toContain("economic_growth");
+    });
+
+    it("carries locked manifesto pledges into the agenda", async () => {
+      const res = await runWithParty({ economicPosition: 0, socialPosition: 0 }, [
+        "uk.education.secondaryForAll",
+      ]);
+      expect(res.electoralMandate.sources).toEqual(["platform", "manifesto"]);
+      expect(res.electoralMandate.domains.education).toBeGreaterThan(0);
+      expect(res.governingAgenda.items.map((i) => i.domain)).toContain("education");
+    });
+
+    it("recomputes a fresh agenda when the governing party changes", async () => {
+      const turn = dueTurn("UK");
+      const res = await runWithParty({ economicPosition: 4, socialPosition: 0 }, [], {
+        ...parliamentaryGov,
+        governingAgenda: { items: [], archetype: "reformer", computedTurn: turn },
+        electoralMandate: { partyId: "8", sources: [], domains: {}, strength: 1, computedTurn: 1 },
+      });
+      expect(res?.electoralMandate.partyId).toBe("7");
+    });
+
+    it("keeps the cadence for a fresh agenda when the governing party is unchanged", async () => {
+      const turn = dueTurn("UK");
+      const res = await runWithParty({ economicPosition: 4, socialPosition: 0 }, [], {
+        ...parliamentaryGov,
+        governingAgenda: { items: [], archetype: "reformer", computedTurn: turn },
+        electoralMandate: { partyId: "7", sources: [], domains: {}, strength: 1, computedTurn: 1 },
+      });
+      expect(res).toBeUndefined();
+    });
   });
 
   it("does not compute an agenda when the head of government is player-held", async () => {

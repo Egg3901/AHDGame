@@ -40,9 +40,12 @@ export function shouldRecomputeGoverningAgenda(params: {
   intervalTurns: number;
   conditions: ConditionsSignal;
   crisis: CrisisAgendaIntake;
+  /** A new governing party brings a new electoral mandate (#2321). */
+  governmentChanged?: boolean;
 }): boolean {
-  const { agenda, currentTurn, intervalTurns, conditions, crisis } = params;
+  const { agenda, currentTurn, intervalTurns, conditions, crisis, governmentChanged } = params;
   if (!agenda) return true;
+  if (governmentChanged) return true;
   // Existing persisted agendas have no baseline. Recompute once to establish it.
   if (!agenda.reviewSnapshot) return true;
   if (annualPerformanceReviewDue(agenda, currentTurn, intervalTurns)) return true;

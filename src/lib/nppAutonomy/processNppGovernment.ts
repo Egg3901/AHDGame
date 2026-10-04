@@ -56,6 +56,7 @@ import {
 import { loadNppBehaviorPolicy } from "@/lib/singleplayerDifficulty/loadBehaviorPolicy";
 import { appointNppPresident } from "./appointNppPresident";
 import { computeGoverningAgenda } from "./governingAgenda";
+import { loadElectoralMandate } from "./electoralMandateIntake";
 import { loadCrisisAgendaSignals } from "./crisisIntake";
 import { loadDomainHealth } from "./governingMetrics";
 import {
@@ -241,6 +242,13 @@ async function computeAndPersistGoverningAgenda(
   const crisisIntake = await loadCrisisAgendaSignals(db, countryId);
   const conditions = await loadConditionsSignal(db, countryId);
   const existing = gov.governingAgenda;
+  // A change of governing party brings a new electoral mandate (#2321); the
+  // incoming government should not run its predecessor's agenda until the
+  // next scheduled recompute. Only a persisted mandate is compared, so a record
+  // without one waits for the ordinary cadence instead of recomputing every turn.
+  const priorMandate = gov.electoralMandate;
+  const governmentChanged =
+    !!existing && !!priorMandate && priorMandate.partyId !== (gov.governingPartyId ?? null);
   if (
     !shouldRecomputeGoverningAgenda({
       agenda: existing,
@@ -248,6 +256,7 @@ async function computeAndPersistGoverningAgenda(
       intervalTurns: AGENDA_RECOMPUTE_INTERVAL_TURNS,
       conditions,
       crisis: crisisIntake,
+      governmentChanged,
     })
   ) {
     return false;
@@ -329,8 +338,13 @@ async function computeAndPersistGoverningAgenda(
       },
     }
   );
+  // Electoral mandate (#2321): what the governing party ran and won on. The
+  // head's own ideology above is a separate input, so two governments led by
+  // identical heads still diverge when their parties won on opposing platforms.
+  const electoralMandate = await loadElectoralMandate(db, countryId, gov, currentTurn);
   const agenda = computeGoverningAgenda({
     conditions,
+    ...(electoralMandate ? { mandate: electoralMandate.domains } : {}),
     ideology: {
       economic: headNpp.policies?.economic ?? 0,
       social: headNpp.policies?.social ?? 0,
@@ -419,6 +433,7 @@ async function computeAndPersistGoverningAgenda(
     {
       $set: {
         governingAgenda: agenda,
+        electoralMandate,
         fiscalStance,
         ...(commandStance ? { commandStance } : {}),
         ...(commitment
