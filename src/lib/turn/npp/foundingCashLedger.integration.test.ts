@@ -82,6 +82,7 @@ function fixture(row: (typeof cases)[number], mode = "plants", shadow = true) {
       stateId: row.stateId,
       countryId: row.countryId,
       sectorType: "manufacturing",
+      mediaDiscriminator: null,
       revenue: 40000000,
       headroomUnits: computeUnownedHeadroomUnits("manufacturing", 40000000, 1),
     },

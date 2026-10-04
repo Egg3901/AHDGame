@@ -47,8 +47,24 @@ function issue2028Corpora() {
 function mockDb(corps: unknown[], createIndexImpl?: () => Promise<string>) {
   const createIndex = vi.fn().mockImplementation(createIndexImpl ?? (async () => "ok"));
   const db = {
-    collection: vi.fn(() => ({
-      indexes: vi.fn().mockResolvedValue([{ key: { _id: 1 }, name: "_id_" }]),
+    collection: vi.fn((name: string) => ({
+      indexes: vi.fn().mockResolvedValue(
+        name === "corporateSectors"
+          ? [
+              {
+                key: {
+                  corporationId: 1,
+                  stateId: 1,
+                  sectorType: 1,
+                  industryModel: 1,
+                  mediaDiscriminator: 1,
+                },
+                name: "corporateSectors_corporation_state_type_models_unique",
+                unique: true,
+              },
+            ]
+          : [{ key: { _id: 1 }, name: "_id_" }]
+      ),
       find: vi.fn(() => ({ toArray: vi.fn().mockResolvedValue(corps) })),
       createIndex,
     })),
@@ -164,11 +180,27 @@ describe("seedCoreIndexes corporation guard (issue #2028)", () => {
       return "ok";
     });
     const db = {
-      collection: vi.fn(() => ({
-        indexes: vi.fn().mockResolvedValue([
-          { key: { _id: 1 }, name: "_id_" },
-          { key: { sequentialId: 1 }, name: "legacy_corps_seq", unique: true },
-        ]),
+      collection: vi.fn((name: string) => ({
+        indexes: vi.fn().mockResolvedValue(
+          name === "corporateSectors"
+            ? [
+                {
+                  key: {
+                    corporationId: 1,
+                    stateId: 1,
+                    sectorType: 1,
+                    industryModel: 1,
+                    mediaDiscriminator: 1,
+                  },
+                  name: "corporateSectors_corporation_state_type_models_unique",
+                  unique: true,
+                },
+              ]
+            : [
+                { key: { _id: 1 }, name: "_id_" },
+                { key: { sequentialId: 1 }, name: "legacy_corps_seq", unique: true },
+              ]
+        ),
         find: vi.fn(() => ({ toArray: vi.fn().mockResolvedValue([]) })),
         createIndex,
       })),
@@ -186,8 +218,24 @@ describe("seedCoreIndexes corporation guard (issue #2028)", () => {
       return "ok";
     });
     const db = {
-      collection: vi.fn(() => ({
-        indexes: vi.fn().mockResolvedValue([{ key: { _id: 1 }, name: "_id_" }]),
+      collection: vi.fn((name: string) => ({
+        indexes: vi.fn().mockResolvedValue(
+          name === "corporateSectors"
+            ? [
+                {
+                  key: {
+                    corporationId: 1,
+                    stateId: 1,
+                    sectorType: 1,
+                    industryModel: 1,
+                    mediaDiscriminator: 1,
+                  },
+                  name: "corporateSectors_corporation_state_type_models_unique",
+                  unique: true,
+                },
+              ]
+            : [{ key: { _id: 1 }, name: "_id_" }]
+        ),
         find: vi.fn(() => ({ toArray: vi.fn().mockResolvedValue([]) })),
         createIndex,
       })),
