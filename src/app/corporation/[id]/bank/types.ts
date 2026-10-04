@@ -20,6 +20,7 @@ export type ConsolePayload = {
   bankTreasuryEnabled?: boolean;
   bankTreasury?: BankTreasuryOverview | null;
   bankPropForexFeesEnabled?: boolean;
+  propAssetOptions?: readonly import("@/lib/db/types/bank").PropPosition["asset"][];
   visible: boolean;
   isCeo: boolean;
   isAdmin: boolean;

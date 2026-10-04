@@ -8,6 +8,7 @@ import { assessCapital, type BankBorrowings } from "@/lib/banking/capitalAdequac
 import type { ConsolePayload, OutlookPayload, ShowToast } from "../types";
 import { mergeState } from "../lib/helpers";
 import { SmallButton, TableScroll, Td, Th } from "@/components/corporation/dense/DenseKit";
+import { allowedPropOpeningAssets } from "@/lib/banking/rules/propAssets";
 import { BankPanel } from "../components/BankSection";
 
 type PropAsset = "equity" | "bond" | "indexUnit" | "forex";
@@ -59,6 +60,7 @@ export function PropBookPanel({
   propLeverage,
   canMutate,
   forexFeesEnabled = false,
+  assetOptions = allowedPropOpeningAssets(false, undefined),
   onChanged,
   showToast,
 }: {
@@ -74,6 +76,7 @@ export function PropBookPanel({
   propLeverage: OutlookPayload["propLeverage"];
   canMutate: boolean;
   forexFeesEnabled?: boolean;
+  assetOptions?: readonly PropAsset[];
   onChanged: () => Promise<void>;
   showToast: ShowToast;
 }) {
@@ -81,7 +84,7 @@ export function PropBookPanel({
   const [{ asset, ref, units, busy, quote }, updatePropState] = useReducer(
     mergeState<PropBookState>,
     {
-      asset: "equity",
+      asset: assetOptions[0] ?? "bond",
       ref: "",
       units: "",
       busy: false,
@@ -286,10 +289,15 @@ export function PropBookPanel({
                 }
                 aria-label="Investment asset type"
               >
-                <option value="equity">Equity</option>
-                <option value="bond">Bond</option>
-                <option value="indexUnit">Index unit</option>
-                <option value="forex">Forex</option>
+                {assetOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {
+                      { equity: "Equity", bond: "Bond", indexUnit: "Index unit", forex: "Forex" }[
+                        option
+                      ]
+                    }
+                  </option>
+                ))}
               </select>
             </label>
             <label className="flex min-w-48 flex-1 flex-col gap-1 text-xs text-muted">

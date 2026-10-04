@@ -567,6 +567,8 @@ export function ActiveCharterPanel({
         <div className="space-y-6">
           {data.bankPropTradingEnabled ? (
             <PropBookPanel
+              key={data.propAssetOptions?.join(",") ?? "legacy"}
+              assetOptions={data.propAssetOptions}
               corporationId={data.corporation.id}
               currency={charter.currency}
               positions={charter.propBook}
