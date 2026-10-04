@@ -6,6 +6,7 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { CountryId } from "@/lib/constants/countries";
 import {
   computeCorporateCreditAtTurn,
+  corporateCashArrearsAnchor,
   isCorporateIssuerBond,
   sumCorporateSectorPerTurnIncome,
 } from "./corporateCredit";
@@ -175,6 +176,29 @@ describe("corporateCredit", () => {
     });
     // Only the first bond survives filters → totalDebt = 500,000 passthrough (no currencyCode).
     expect(result.totalDebt).toBe(500_000);
+  });
+
+  it("counts cash arrears as debt and subtracts them from equity", () => {
+    const liabilities = corporateCashArrearsAnchor({
+      operatingByCurrency: { JPY: 226 },
+      federalTaxByCountryAnchor: { US: 50 },
+      fxByCurrency: new Map<CurrencyCode, number>([["JPY", 113]]),
+    });
+    const result = computeCorporateCreditAtTurn({
+      liquidCapitalAnchor: 1_000,
+      incomePerTurn: 100,
+      sectorNpv: 500,
+      bonds: [],
+      corporationId: corpId,
+      currentTurn: 100,
+      bondDefaultCreditPenaltyUntilTurn: null,
+      fxByCurrency: new Map(),
+      otherLiabilitiesAnchor: liabilities,
+    });
+
+    expect(liabilities).toBe(52);
+    expect(result.totalDebt).toBe(52);
+    expect(result.totalEquity).toBe(1_448);
   });
 });
 

@@ -277,6 +277,14 @@ export interface Corporation {
   /** Atomic admission key for landed NPP capacity-build cash history. */
   nppReinvestmentCashWitnessKey?: string;
   liquidCapital: number;
+  /** Unfunded realized operating costs by native liquid currency. */
+  operatingCashArrearsByCurrency?: Partial<Record<CurrencyCode, number>>;
+  /** Latest turn that added an operating payable for each currency. */
+  operatingCashArrearsLastTurnByCurrency?: Partial<Record<CurrencyCode, number>>;
+  /** Unpaid federal withholding liabilities in anchor units by country. */
+  federalTaxArrearsAnchorByCountry?: Partial<Record<CountryId, number>>;
+  /** Latest turn that added a tax payable for each country. */
+  federalTaxArrearsLastTurnByCountry?: Partial<Record<CountryId, number>>;
   /**
    * Currency denomination of liquidCapital.
    * Set during forex migration to the corp's home currency.

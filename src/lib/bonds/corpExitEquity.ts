@@ -36,6 +36,7 @@ import { corpCapitalToAnchor } from "@/lib/currency/corporationCapital";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import { sectorExitValueAnchor } from "@/lib/bonds/sectorExitBasis";
 import { totalEquityForBonds } from "@/lib/bonds/corporateBondDefault";
+import { corporateCashArrearsAnchor } from "@/lib/bonds/corporateCredit";
 import {
   sectorConstructionInProgressAnchor,
   sumConstructionInProgressAnchor,
@@ -166,14 +167,20 @@ export function corpExitEquityAnchor(input: CorpExitEquityInput): CorpExitEquity
       );
 
   const heldBondFaceAnchor = sumHeldBondFaceAnchor(input.bonds, id, input.fxByCurrency);
+  const corpArrears = input.corp as
+    (Partial<Corporation> & CorpCapitalCurrencyInfo) | null | undefined;
+  const cashAfterLiabilities =
+    input.liquidCapitalAnchor -
+    corporateCashArrearsAnchor({
+      operatingByCurrency: corpArrears?.operatingCashArrearsByCurrency,
+      federalTaxByCountryAnchor: corpArrears?.federalTaxArrearsAnchorByCountry,
+      fxByCurrency: input.fxByCurrency,
+    });
 
   return {
     exitEquityAnchor:
-      totalEquityForBonds(
-        input.liquidCapitalAnchor,
-        sectorExitAnchor,
-        constructionInProgressAnchor
-      ) + heldBondFaceAnchor,
+      totalEquityForBonds(cashAfterLiabilities, sectorExitAnchor, constructionInProgressAnchor) +
+      heldBondFaceAnchor,
     sectorExitAnchor,
     constructionInProgressAnchor,
     heldBondFaceAnchor,

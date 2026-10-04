@@ -56,6 +56,19 @@ describe("corporateBondDefault", () => {
     expect(preview.totalAssets).toBe(100_000);
   });
 
+  it("subtracts funded cash arrears before allocating a dissolution estate", () => {
+    const corp = {
+      liquidCapital: 100_000,
+      operatingCashArrearsByCurrency: { USD: 30_000 },
+      federalTaxArrearsAnchorByCountry: { US: 20_000 },
+    } as unknown as Corporation;
+
+    const preview = previewDissolveSettlement(corp, 0, [], 100_000, EMPTY_FX);
+
+    expect(preview.totalAssets).toBe(50_000);
+    expect(preview.shareholderPool).toBe(50_000);
+  });
+
   it("previewDissolveSettlement caps bond pool at assets and claims (USD)", () => {
     const corp = {
       liquidCapital: 500_000,

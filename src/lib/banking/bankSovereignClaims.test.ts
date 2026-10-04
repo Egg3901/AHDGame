@@ -281,6 +281,52 @@ describe("bank sovereign claims", () => {
     });
   });
 
+  it("routes a frozen claim to insurance when its bank corporation is gone", async () => {
+    const claim = { ...couponClaim(), treasuryCashLedgerEnabled: true };
+    const memory = world(claim);
+    await memory
+      .collection("federalBudget")
+      .updateOne({ _id: "federal" }, { $set: { treasuryCashLocal: 100 } });
+    await memory.collection("corporations").deleteOne({ _id: bankId });
+
+    await settleBankSovereignClaims(memory as unknown as Db, budget(memory), 13);
+
+    expect(budget(memory)).toMatchObject({ treasuryBalance: 90, treasuryCashLocal: 90 });
+    expect(budget(memory).bankSovereignClaims).toEqual([]);
+    expect(memory.collection("depositInsuranceFunds").docs[0]).toMatchObject({
+      _id: "USD",
+      balance: 10,
+    });
+    expect(memory.collection("bankMoneyMoves").docs).toContainEqual(
+      expect.objectContaining({ _id: `${claim.id}:orphan-insurance:13`, status: "applied" })
+    );
+  });
+
+  it("retries an unfunded orphan claim after cash becomes available", async () => {
+    const claim = { ...couponClaim(120), treasuryCashLedgerEnabled: true };
+    const memory = world(claim, 100);
+    await memory
+      .collection("federalBudget")
+      .updateOne({ _id: "federal" }, { $set: { treasuryCashLocal: 100 } });
+    await memory.collection("corporations").deleteOne({ _id: bankId });
+
+    await settleBankSovereignClaims(memory as unknown as Db, budget(memory), 13);
+    expect(budget(memory)).toMatchObject({ treasuryBalance: 100, treasuryCashLocal: 100 });
+    expect(budget(memory).bankSovereignClaims).toEqual([claim]);
+
+    await memory
+      .collection("federalBudget")
+      .updateOne({ _id: "federal" }, { $set: { treasuryBalance: 200, treasuryCashLocal: 200 } });
+    await settleBankSovereignClaims(memory as unknown as Db, budget(memory), 14);
+
+    expect(budget(memory)).toMatchObject({ treasuryBalance: 80, treasuryCashLocal: 80 });
+    expect(budget(memory).bankSovereignClaims).toEqual([]);
+    expect(memory.collection("depositInsuranceFunds").docs[0]).toMatchObject({
+      _id: "USD",
+      balance: 120,
+    });
+  });
+
   it("sends an unpaid claim to insurance if its charter epoch changes before funding", async () => {
     const claim = couponClaim(120);
     const memory = world(claim, 100);

@@ -11,6 +11,7 @@ import {
 } from "@/lib/currency/corporationCapital";
 import { withCorporationSettlementLock } from "@/lib/corporations/settlementLock";
 import { executeCorporationBondDefaultDissolution } from "@/lib/bonds/executeCorporationBondDefaultDissolution";
+import { corporateCashArrearsAnchor } from "@/lib/bonds/corporateCredit";
 import { recordAuditBulk } from "@/lib/audit/recordAudit";
 import type { ActionAuditInput } from "@/lib/db/types/actionAuditLog";
 
@@ -158,8 +159,13 @@ export async function processNppInsolventCorpDissolution(
   const insolventSinceById = new Map<string, number>();
   for (const corp of corps) {
     const fxRate = fxRateForCorpFromMap(corp, fxByCurrency);
+    const arrearsAnchor = corporateCashArrearsAnchor({
+      operatingByCurrency: corp.operatingCashArrearsByCurrency,
+      federalTaxByCountryAnchor: corp.federalTaxArrearsAnchorByCountry,
+      fxByCurrency,
+    });
     const effectiveLocal = (corp.liquidCapital ?? 0) + Math.max(0, corp.shareEscrowBalance ?? 0);
-    const effectiveAnchor = corpLiquidCapitalToAnchor(effectiveLocal, corp, fxRate);
+    const effectiveAnchor = corpLiquidCapitalToAnchor(effectiveLocal, corp, fxRate) - arrearsAnchor;
     const idStr = corp._id.toString();
     effectiveAnchorById.set(idStr, effectiveAnchor);
 
@@ -191,11 +197,17 @@ export async function processNppInsolventCorpDissolution(
   const insolvent = corps
     .filter((corp) => {
       const idStr = corp._id.toString();
-      const anchor = corpLiquidCapitalToAnchor(
-        corp.liquidCapital ?? 0,
-        corp,
-        fxRateForCorpFromMap(corp, fxByCurrency)
-      );
+      const anchor =
+        corpLiquidCapitalToAnchor(
+          corp.liquidCapital ?? 0,
+          corp,
+          fxRateForCorpFromMap(corp, fxByCurrency)
+        ) -
+        corporateCashArrearsAnchor({
+          operatingByCurrency: corp.operatingCashArrearsByCurrency,
+          federalTaxByCountryAnchor: corp.federalTaxArrearsAnchorByCountry,
+          fxByCurrency,
+        });
       // Trigger 1: terminally deep hole — immediate (pre-#3237 behavior).
       if (anchor < DISSOLUTION_ANCHOR_THRESHOLD) return true;
       // Trigger 2: persistently insolvent past the grace window and still
@@ -212,7 +224,11 @@ export async function processNppInsolventCorpDissolution(
       return lingeringDefaultIssuerIds.has(idStr);
     })
     // Deepest holes first — clear the worst offenders when the per-turn cap bites.
-    .sort((a, b) => (a.liquidCapital ?? 0) - (b.liquidCapital ?? 0));
+    .sort(
+      (a, b) =>
+        (effectiveAnchorById.get(a._id.toString()) ?? 0) -
+        (effectiveAnchorById.get(b._id.toString()) ?? 0)
+    );
 
   let dissolved = 0;
   // Forensics/alt-detection audit spine (plan §3.1, T2.7) — an NPP corp

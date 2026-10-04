@@ -390,6 +390,7 @@ export async function nationalizeSectorWide(
         payoutAnchor > 0 ? await resolveTreasuryCashOptions(db) : undefined;
       await debitTreasuryCompensation(db, params.countryId, payoutAnchor, fxByCurrency, now, {
         flow: "nationalization_compensation",
+        key: `nationalize-sector-wide:${params.countryId}:${sec._id.toString()}:${params.consequence.turn}`,
         ledger: compensationLedger,
       });
       if (payoutAnchor > 0) {

@@ -173,6 +173,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           interstateMoneyWiringEnabled: 1,
           freightSettlementMode: 1,
           canonicalFreightBillingEnabled: 1,
+          treasuryCashLedgerEnabled: 1,
           mediaEditorialEnabled: 1,
           mediaOperatingModelsEnabled: 1,
           mediaRegulationEnabled: 1,
@@ -266,6 +267,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   const privateBankingEnabled =
     (marketGovernorConfig as { privateBankingEnabled?: boolean } | null)?.privateBankingEnabled ===
     true;
+  const treasuryCashLedgerEnabled = marketGovernorConfig?.treasuryCashLedgerEnabled === true;
   const subsidiaryCorporationsEnabled = await isSubsidiaryCorporationsEnabled(
     gameState ?? undefined
   );
@@ -623,7 +625,8 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     subsidiaryCorporationsEnabled,
     commandEconomyEnabled,
     privateBankingEnabled,
-    new Set(equityPoolTurn.activeCurrencies)
+    new Set(equityPoolTurn.activeCurrencies),
+    treasuryCashLedgerEnabled
   );
   mark("processSectors(CPU)");
 
@@ -760,6 +763,15 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           foundingCashWitnesses,
           reinvestmentCashWitnesses
         );
+        if (treasuryCashLedgerEnabled) {
+          const { settleCorporateOperatingCash } = await import("./operatingCashSettlement");
+          await settleCorporateOperatingCash(
+            db,
+            corpSnapshots,
+            turn ?? gameState?.currentTurn ?? 1,
+            now
+          );
+        }
       },
     });
   }

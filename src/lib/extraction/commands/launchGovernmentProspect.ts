@@ -1,5 +1,6 @@
 import { getEraContext } from "@/lib/era/context";
-import type { Db, ObjectId, Filter } from "mongodb";
+import { createHash } from "node:crypto";
+import { ObjectId, type Db, type Filter } from "mongodb";
 import type { StateBudget } from "@/lib/db/types/budget";
 import type { GovernorOfficeState } from "@/lib/db/types/governorOfficeState";
 import type { ProspectingSurvey } from "@/lib/db/types/prospectingSurvey";
@@ -11,6 +12,10 @@ import { getStateResourceCapacityCollection } from "@/lib/db/collections/stateRe
 import { loadFxRatesByCurrency } from "@/lib/currency/corporationCapital";
 import { spendFromTreasury } from "@/lib/budget/treasurySpend";
 import { emitTx } from "@/lib/financialTxLog/emit";
+import { loadTreasuryCashContext } from "@/lib/nationalization/treasuryLedger";
+import { settleTransition, resumeSettlement } from "@/lib/banking/settlementJournal";
+import type { BankingTransition } from "@/lib/banking/rules/boundary";
+import { treasuryAnchorValuation } from "@/lib/budget/rules/treasuryAccrual";
 import { isNationalIssuer, isStateIssuer } from "@/lib/extraction/contractIssuerAuth";
 import {
   prospectDurationTurns,
@@ -56,7 +61,8 @@ export async function launchGovernmentProspect(
   },
   actor: Actor,
   turn: number,
-  now: Date
+  now: Date,
+  treasuryCashLedgerEnabled = false
 ): Promise<LaunchGovernmentProspectResult> {
   const { countryId, stateId, resource, level } = args;
 
@@ -89,14 +95,59 @@ export async function launchGovernmentProspect(
 
   const surveysCol = await getProspectingSurveysCollection(db);
   const initiatorType = level === "national" ? "national_government" : "state_government";
+  const fundedNationalCash = treasuryCashLedgerEnabled && level === "national";
+  let fundedClaim = fundedNationalCash
+    ? await surveysCol.findOne({
+        initiatorType,
+        countryId,
+        stateId,
+        resource,
+        status: "funding",
+      })
+    : null;
+  let fundedPaymentKey = fundedClaim?.fundingKey;
+  let fundedSurveyId = fundedClaim?._id;
+  if (fundedClaim && fundedPaymentKey) {
+    const prior = await db
+      .collection<{ _id: string }>("bankMoneyMoves")
+      .findOne({ _id: fundedPaymentKey }, { projection: { _id: 1 } });
+    if (prior) {
+      const resumed = await resumeSettlement(db, fundedPaymentKey);
+      if (resumed.status === "rejected") {
+        await surveysCol.updateOne(
+          { _id: fundedSurveyId, status: "funding", fundingKey: fundedPaymentKey },
+          { $set: { status: "failed", updatedAt: now, resolvedTurn: fundedClaim.startedTurn } }
+        );
+        return {
+          ok: false,
+          status: 402,
+          error: resumed.error ?? "Insufficient funded Treasury cash.",
+        };
+      }
+      if ((resumed.status !== "applied" && resumed.status !== "replayed") || resumed.error)
+        throw new Error(resumed.error ?? "Funded government prospect receipt is incomplete");
+      fundedClaim = (await surveysCol.findOne({ _id: fundedSurveyId })) ?? fundedClaim;
+      return {
+        ok: true,
+        status: 200,
+        survey: fundedClaim,
+        costs: {
+          costAnchor: fundedClaim.costAnchor,
+          costLocal: fundedClaim.costLocal ?? 0,
+          currencyCode: fundedClaim.currencyCode ?? COUNTRY_CURRENCY_MAP[countryId] ?? "USD",
+          priorSuccessCount: fundedClaim.priorSuccessCount ?? 0,
+        },
+      };
+    }
+  }
 
   // Max active surveys per government (national scope = country; state scope = state).
   const activeScope: Filter<ProspectingSurvey> =
     level === "national"
       ? { initiatorType, countryId, status: "active" }
       : { initiatorType, countryId, stateId, status: "active" };
-  const activeCount = await surveysCol.countDocuments(activeScope);
-  if (activeCount >= PROSPECT_MAX_ACTIVE_PER_INITIATOR) {
+  const activeCount = fundedClaim ? 0 : await surveysCol.countDocuments(activeScope);
+  if (!fundedClaim && activeCount >= PROSPECT_MAX_ACTIVE_PER_INITIATOR) {
     return {
       ok: false,
       status: 409,
@@ -105,13 +156,15 @@ export async function launchGovernmentProspect(
   }
 
   // One active survey per (initiator, state, resource).
-  const dup = await surveysCol.findOne({
-    initiatorType,
-    countryId,
-    stateId,
-    resource,
-    status: "active",
-  });
+  const dup = fundedClaim
+    ? null
+    : await surveysCol.findOne({
+        initiatorType,
+        countryId,
+        stateId,
+        resource,
+        status: "active",
+      });
   if (dup) {
     return {
       ok: false,
@@ -120,16 +173,201 @@ export async function launchGovernmentProspect(
     };
   }
 
-  const priorSuccessCount = await surveysCol.countDocuments({
-    stateId,
-    resource,
-    status: "succeeded",
-  });
-  const costAnchor = prospectCostAnchor(priorSuccessCount);
+  let priorSuccessCount =
+    fundedClaim?.priorSuccessCount ??
+    (await surveysCol.countDocuments({ stateId, resource, status: "succeeded" }));
+  let costAnchor = fundedClaim?.costAnchor ?? prospectCostAnchor(priorSuccessCount);
   const countryCode = COUNTRY_CURRENCY_MAP[countryId] as CurrencyCode | undefined;
   const fxByCurrency = await loadFxRatesByCurrency(db);
-  const fxRate = countryCode ? (fxByCurrency.get(countryCode) ?? 1) : 1;
-  const costLocal = Math.round(costAnchor * fxRate);
+  let cashCurrency: CurrencyCode = (fundedClaim?.currencyCode ??
+    countryCode ??
+    "USD") as CurrencyCode;
+  let fxRate = fundedClaim?.treasuryLocalPerAnchor ?? fxByCurrency.get(cashCurrency) ?? 1;
+  let treasuryCashContext: Awaited<ReturnType<typeof loadTreasuryCashContext>> = null;
+  if (fundedNationalCash && !fundedClaim) {
+    treasuryCashContext = await loadTreasuryCashContext(db, turn);
+    if (!treasuryCashContext?.treasuryCashLedgerEnabled)
+      throw new Error("Funded government prospect requires the enabled Treasury cash ledger");
+    cashCurrency = treasuryCashContext.treasuryCurrencies.get(countryId) ?? cashCurrency;
+    fxRate = treasuryAnchorValuation({
+      countryId,
+      currencyCode: cashCurrency,
+      preset: treasuryCashContext.preset,
+      observedRate: treasuryCashContext.rates.get(cashCurrency) ?? fxByCurrency.get(cashCurrency),
+    }).anchorRate;
+  }
+  let costLocal = fundedClaim?.costLocal ?? Math.round(costAnchor * fxRate);
+
+  if (fundedNationalCash) {
+    if (!fundedClaim) {
+      fundedSurveyId = new ObjectId(
+        createHash("sha256")
+          .update(`government-prospect-claim:${turn}:${countryId}:${stateId}:${resource}`)
+          .digest("hex")
+          .slice(0, 24)
+      );
+      fundedPaymentKey = `government-prospect:${new ObjectId().toHexString()}`;
+      const claim: ProspectingSurvey = {
+        _id: fundedSurveyId,
+        initiatorType,
+        initiatorUserId: actor.userId,
+        countryId,
+        stateId,
+        resource,
+        startedTurn: turn,
+        completesTurn: turn + prospectDurationTurns((await getEraContext(db)).year),
+        costAnchor,
+        status: "funding",
+        fundingKey: fundedPaymentKey,
+        costLocal,
+        currencyCode: cashCurrency,
+        treasuryLocalPerAnchor: fxRate,
+        priorSuccessCount,
+        createdAt: now,
+        updatedAt: now,
+      };
+      const priorClaim = await surveysCol.findOne({ _id: fundedSurveyId });
+      if (priorClaim?.status === "active") {
+        return {
+          ok: false,
+          status: 409,
+          error: "A survey for that resource is already underway here.",
+        };
+      }
+      if (priorClaim?.status === "failed") {
+        const restarted = await surveysCol.updateOne(
+          { _id: fundedSurveyId, status: "failed" },
+          { $set: { ...claim, _id: fundedSurveyId } }
+        );
+        fundedClaim =
+          restarted.matchedCount === 1 ? claim : await surveysCol.findOne({ _id: fundedSurveyId });
+      } else if (priorClaim) {
+        fundedClaim = priorClaim;
+        fundedPaymentKey = priorClaim.fundingKey;
+      } else {
+        try {
+          await surveysCol.insertOne(claim);
+          fundedClaim = claim;
+        } catch (error) {
+          const code =
+            typeof error === "object" && error !== null && "code" in error
+              ? (error as { code?: unknown }).code
+              : undefined;
+          if (code !== 11000) throw error;
+          fundedClaim = await surveysCol.findOne({ _id: fundedSurveyId });
+          fundedPaymentKey = fundedClaim?.fundingKey;
+        }
+      }
+      // The deterministic scope id serializes simultaneous launches, but a
+      // losing request may have priced the survey before it observed the
+      // winner's frozen claim. Always replace every economic input with the
+      // persisted winner's quote before creating or resuming its receipt.
+      if (fundedClaim) {
+        fundedSurveyId = fundedClaim._id;
+        fundedPaymentKey = fundedClaim.fundingKey;
+        priorSuccessCount = fundedClaim.priorSuccessCount ?? priorSuccessCount;
+        costAnchor = fundedClaim.costAnchor;
+        cashCurrency = (fundedClaim.currencyCode as CurrencyCode | undefined) ?? cashCurrency;
+        fxRate = fundedClaim.treasuryLocalPerAnchor ?? fxRate;
+        costLocal = fundedClaim.costLocal ?? Math.round(costAnchor * fxRate);
+      }
+    }
+    if (!fundedPaymentKey || !fundedSurveyId || !fundedClaim)
+      throw new Error("Funded national prospect is missing its frozen receipt claim");
+    const survey: ProspectingSurvey = {
+      ...fundedClaim,
+      status: "active",
+      updatedAt: now,
+    };
+    const valuation = { currencyCode: cashCurrency, localPerAnchor: fxRate };
+    const transition: BankingTransition = {
+      key: fundedPaymentKey,
+      kind: "government_prospect_funding",
+      turn,
+      currency: cashCurrency,
+      legs: [
+        {
+          kind: "debit",
+          amount: costLocal,
+          valuation,
+          collection: "federalBudget",
+          filter: { countryId, treasuryCashLocal: { $gte: costLocal } },
+          path: "treasuryCashLocal",
+          note: "Pay the national prospecting cost from spendable Treasury cash",
+        },
+        {
+          kind: "burn",
+          amount: costLocal,
+          valuation,
+          note: "Settle the prospecting expense outside government cash",
+        },
+      ],
+      projections: [
+        {
+          collection: "federalBudget",
+          filter: { countryId },
+          update: { $inc: { treasuryBalance: -costLocal }, $set: { updatedAt: now } },
+          note: "Record the funded prospecting expense in signed fiscal-position analytics",
+        },
+        {
+          collection: "prospectingSurveys",
+          filter: { _id: fundedSurveyId, status: "funding", fundingKey: fundedPaymentKey },
+          update: { $set: { status: "active", updatedAt: now } },
+          note: "Activate the survey funded by this Treasury receipt",
+        },
+      ],
+      event: {
+        kind: "monetary.executed",
+        command: "extraction.prospecting.launch",
+        subjectType: "government",
+        subjectId: countryId,
+        amount: costLocal,
+        meta: {
+          stateId,
+          resource,
+          level,
+          costAnchor,
+          costLocal,
+          currencyCode: cashCurrency,
+          priorSuccessCount,
+          treasuryLocalPerAnchor: fxRate,
+          surveyId: fundedSurveyId.toHexString(),
+        },
+      },
+    };
+    const settled = await settleTransition(db, transition);
+    if (settled.status === "rejected") {
+      await surveysCol.updateOne(
+        { _id: fundedSurveyId, status: "funding", fundingKey: fundedPaymentKey },
+        { $set: { status: "failed", resolvedTurn: turn, updatedAt: now } }
+      );
+      return {
+        ok: false,
+        status: 402,
+        error: settled.error ?? "Insufficient funded Treasury cash.",
+      };
+    }
+    if ((settled.status !== "applied" && settled.status !== "replayed") || settled.error)
+      throw new Error(settled.error ?? "Funded government prospect receipt is incomplete");
+    void emitTx(db, {
+      type: "govt_prospecting_cost",
+      turn,
+      createdAt: now,
+      subjectType: "government",
+      countryId,
+      subjectName: countryId,
+      amount: -costLocal,
+      currencyCode: cashCurrency,
+      anchorAmount: -costAnchor,
+      meta: { stateId, resource, level, countryId },
+    });
+    return {
+      ok: true,
+      status: 200,
+      survey: { ...survey, status: "active" },
+      costs: { costAnchor, costLocal, currencyCode: cashCurrency, priorSuccessCount },
+    };
+  }
 
   if (level === "national") {
     // NO pre-check. `treasuryBalance` is the SIGNED national cash position,
