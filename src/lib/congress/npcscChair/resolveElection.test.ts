@@ -64,6 +64,10 @@ describe("resolveNpcscChairElection", () => {
       },
     ]);
 
+    db.collection("characters");
+    db.collectionMocks.characters!.findOne.mockResolvedValue({
+      avatarUrl: "https://cdn.example/npcsc-chair.png",
+    });
     const { resolveNpcscChairElection } = await import("./resolveElection");
     const resolved = await resolveNpcscChairElection(db as unknown as Db, new Map(), true);
 
@@ -74,6 +78,16 @@ describe("resolveNpcscChairElection", () => {
     expect(filter).toEqual({ role: "chair_npcsc" });
     expect(update.$set.characterId).toBe(winnerId);
     expect(update.$set.characterName).toBe("Winner");
+    const { sendCountryGameEvent } = await import("@/lib/discordWebhooks");
+    expect(sendCountryGameEvent).toHaveBeenCalledTimes(1);
+    expect(sendCountryGameEvent).toHaveBeenCalledWith("CN", {
+      title: "Leadership Election Result \u2014 Chairman of the NPC Standing Committee",
+      description: "**Winner** has been elected as **Chairman of the NPC Standing Committee**.",
+      color: 0,
+      footer: { text: "A House Divided" },
+      timestamp: expect.any(String),
+      thumbnail: { url: "https://cdn.example/npcsc-chair.png" },
+    });
     // Election is closed afterward via the atomic voting→closed claim.
     expect(db.collectionMocks.npcscChairElections!.updateOne).toHaveBeenCalledWith(
       { _id: "current", status: "voting" },

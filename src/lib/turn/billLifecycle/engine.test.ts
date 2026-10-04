@@ -221,6 +221,70 @@ describe("runBillLifecycle — chamberVote stages (US)", () => {
     expect(res.billsFailed).toBe(1);
   });
 
+  it("publishes a winning national override's frozen tally once across a retry", async () => {
+    const houseFor = new ObjectId();
+    const houseAgainst = new ObjectId();
+    const senateFor = new ObjectId();
+    const bill = {
+      _id: new ObjectId(),
+      countryId: "US",
+      status: "veto_override",
+      originChamber: "house",
+      currentChamber: "house",
+      overrideVotingEndsOnTurn: 5,
+      vetoOverrideVotes: {
+        [`npp_${houseFor.toString()}`]: "for",
+        [`npp_${houseAgainst.toString()}`]: "against",
+        [`npp_${senateFor.toString()}`]: "for",
+      },
+      voteSnapshot: {
+        votes: {},
+        weights: {},
+        totals: { for: 232, against: 198, abstain: 5 },
+        resolvedAtTurn: 4,
+      },
+      sponsorId: new ObjectId(),
+      coSponsors: [],
+    };
+    db.collectionMocks["bills"]!.find.mockImplementation(findByStatus({ veto_override: [bill] }));
+    let statusClaims = 0;
+    db.collectionMocks["bills"]!.updateOne.mockImplementation(async (_filter, update) => {
+      if ((update as { $set?: { status?: string } }).$set?.status === "signed") {
+        statusClaims += 1;
+        return { acknowledged: true, matchedCount: statusClaims === 1 ? 1 : 0, modifiedCount: 1 };
+      }
+      return { acknowledged: true, matchedCount: 1, modifiedCount: 1 };
+    });
+    officials([
+      { nppId: houseFor, characterId: null, countryId: "US", officeType: "house", seatsHeld: 20 },
+      {
+        nppId: houseAgainst,
+        characterId: null,
+        countryId: "US",
+        officeType: "house",
+        seatsHeld: 10,
+      },
+      { nppId: senateFor, characterId: null, countryId: "US", officeType: "senate", seatsHeld: 3 },
+    ]);
+
+    const { onBillEnacted } = await import("@/lib/billEnactment");
+    await runBillLifecycle(db as unknown as Db, US_NATIONAL_CONFIG, NOW, 10);
+    await runBillLifecycle(db as unknown as Db, US_NATIONAL_CONFIG, NOW, 10);
+
+    expect(onBillEnacted).toHaveBeenCalledTimes(1);
+    expect(onBillEnacted).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({
+        presidentAction: "override",
+        overrideDisplaySnapshot: {
+          house: { for: 20, against: 10, seats: 30 },
+          senate: { for: 3, against: 0, seats: 3 },
+        },
+      }),
+      10
+    );
+  });
+
   it("pocket-signs an enrolled bill whose presidential window expired", async () => {
     const bill = {
       _id: new ObjectId(),
@@ -803,6 +867,17 @@ describe("runBillLifecycle - concurrentVote stage", () => {
     expect(set.votesFor).toBe(1);
     expect(set.otherChamberVotesFor).toBe(1);
     expect(set.passedOtherChamberAt).toBeInstanceOf(Date);
+    const { onBillEnacted } = await import("@/lib/billEnactment");
+    expect(onBillEnacted).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({
+        voteSnapshot: expect.objectContaining({ totals: { for: 1, against: 0, abstain: 0 } }),
+        otherChamberVoteSnapshot: expect.objectContaining({
+          totals: { for: 1, against: 0, abstain: 0 },
+        }),
+      }),
+      50
+    );
   });
 
   it("requires two-thirds in each chamber for a concurrent war declaration", async () => {

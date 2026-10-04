@@ -205,6 +205,19 @@ describe("processStateBillTimers — passage threshold", () => {
     expect(statusSetForBill()).toBe("enacted");
     const { applyLegislationEffect } = await import("@/lib/legislationEffects");
     expect(vi.mocked(applyLegislationEffect)).toHaveBeenCalledTimes(1);
+    const { onBillEnacted } = await import("@/lib/billEnactment");
+    expect(vi.mocked(onBillEnacted)).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        status: "enacted",
+        stateId: "NIR",
+        voteSnapshot: expect.objectContaining({
+          totals: { for: 43, against: 28, abstain: 0 },
+          weights: expect.objectContaining({ [`npp_${NPP.a}`]: 42 }),
+        }),
+      }),
+      expect.any(Number)
+    );
   });
 
   it("auto-signs a passed bill once the governor deadline lapses", async () => {
