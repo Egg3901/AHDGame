@@ -1,7 +1,8 @@
 import { ObjectId, type Db } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import { quotePrimaryUnderwritingFee, type PrimaryUnderwritingOffer } from "./rules/underwriting";
+import type { PrimaryUnderwritingOffer } from "./underwritingTypes";
+import { quotePrimaryUnderwritingFee } from "./rules/underwriting";
 import { MONEY_MOVE_COLLECTION } from "./moneyMove";
 import { resumeSettlement, settleTransition, type SettlementResult } from "./settlementJournal";
 import { oid, type BankingTransition, type TransitionProjection } from "./rules/boundary";

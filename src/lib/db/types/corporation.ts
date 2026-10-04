@@ -215,10 +215,10 @@ export interface Corporation {
     };
   };
   /** Issuer-selected primary-market underwriter for future issues. */
-  primaryUnderwritingMandate?: import("@/lib/banking/rules/underwriting").PrimaryUnderwritingMandate;
+  primaryUnderwritingMandate?: import("@/lib/banking/underwritingTypes").PrimaryUnderwritingMandate;
   /** Frozen unpaid founding IPO plan. The corporation remains private until its journal publishes it. */
   foundingIpoUnderwritingPending?: {
-    offer: import("@/lib/banking/rules/underwriting").PrimaryUnderwritingOffer & {
+    offer: import("@/lib/banking/underwritingTypes").PrimaryUnderwritingOffer & {
       instrumentId: ObjectId;
     };
     grossPlacedLocal: number;
@@ -232,7 +232,7 @@ export interface Corporation {
     instrumentType: "equity" | "corporate_bond";
     instrumentId?: ObjectId;
     charteredTurn: number;
-    offer: import("@/lib/banking/rules/underwriting").PrimaryUnderwritingOffer;
+    offer: import("@/lib/banking/underwritingTypes").PrimaryUnderwritingOffer;
     currencyCode: CurrencyCode;
     grossLocal: number;
     feeLocal: number;
@@ -464,7 +464,7 @@ export interface Corporation {
     issuedUpfront?: boolean;
     createdAtTurn: number;
     initialPriceLocal: number;
-    underwriting?: import("@/lib/banking/rules/underwriting").PrimaryUnderwritingOffer;
+    underwriting?: import("@/lib/banking/underwritingTypes").PrimaryUnderwritingOffer;
   };
   /** Dividend payout rate (0, 100%). Income × this % is distributed to shareholders each turn. */
   dividendRate?: number;

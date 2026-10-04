@@ -7,8 +7,8 @@ import {
   DEFAULT_PRIMARY_UNDERWRITING_FEE_RATE,
   primaryUnderwritingCharterEligible,
   quotePrimaryUnderwritingFee,
-  type PrimaryUnderwritingOffer,
 } from "@/lib/banking/rules/underwriting";
+import type { PrimaryUnderwritingOffer } from "@/lib/banking/underwritingTypes";
 import { settlePrimaryUnderwritingFill } from "@/lib/banking/underwritingSettlement";
 import type { TransitionProjection } from "@/lib/banking/rules/boundary";
 import { issuanceDilutionFactorExpr } from "@/lib/corporations/shareConsolidation";
