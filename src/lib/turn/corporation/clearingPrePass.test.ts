@@ -439,4 +439,96 @@ describe("runClearingPrePass with clearing enabled", () => {
     );
     expect(producedByCorpCommodity.get("corp1")?.get("vehicles")).toBeUndefined();
   });
+
+  it.each([
+    ["development", 0],
+    ["launch", 0.15],
+    ["growth", 0.4],
+    ["mature", 0.7],
+    ["decline", 0.4],
+    ["retired", 0],
+  ] as const)(
+    "applies the %s funded stage curve to market offers without changing recipe value",
+    (stage, redirectShare) => {
+      const { lookups } = makeSectorWorld();
+      const sector = lookups.sectorsByCorp.get("corp1")![0];
+      Object.assign(sector, {
+        sectorType: "manufacturing",
+        industryModel: "vehicles",
+        strategyId: "standard",
+        capitalStock: 200,
+        plantCount: 1,
+        producedUnits: 100,
+        operatingCapacityUnits: 200,
+        productOutputCapacityUnits: 100,
+      });
+      Object.assign(lookups, {
+        productLinesV2Enabled: true,
+        manufacturingProductByCorpId: new Map([
+          [
+            "corp1",
+            {
+              _id: "project-1",
+              corporationId: "corp1",
+              activeCorporationId: "corp1",
+              kindId: "passenger_car",
+              stage,
+              stageStartedTurn: 1,
+              allocations: [{ sectorId: "sector1", share: 0.5 }],
+              startedTurn: 1,
+              developmentPaidAnchor: 500,
+              paidThresholdAnchor: 500,
+              elapsedDevelopmentTurns: 12,
+              elapsedThresholdTurns: 12,
+            },
+          ],
+        ]),
+        productSectorQualityById: new Map([["sector1", 70]]),
+      });
+      const market = { clearingEnabled: true, plantsEnabled: true } as MarketContext;
+      const producedByCorpCommodity = new Map<string, Map<string, number>>();
+
+      runClearingPrePass(
+        makeInput({
+          lookups,
+          market,
+          producedByCorpCommodity,
+          supplyAgreementsEnabled: true,
+          settleableAgreements: [],
+          contractedByCorpCommodity: new Map(),
+        })
+      );
+
+      const basePrices = eraScaledBasePrices(lookups.eraUnitScale);
+      const totalNominalValue = 200 * basePrices.vehicles!;
+      const productUnits = 100 * redirectShare;
+      const offered = market.clearingBySectorId?.get("sector1");
+      expect(offered?.productProjectId).toBe("project-1");
+      expect(offered?.productOutputTurn).toBe(12);
+      expect(offered?.projectOutputUnitsByCommodity?.vehicles).toBeCloseTo(productUnits, 6);
+      expect(offered?.projectQualityByCommodity?.vehicles).toBeCloseTo(
+        70 +
+          10 *
+            (
+              {
+                development: 0,
+                launch: 0.25,
+                growth: 0.6,
+                mature: 1,
+                decline: 0.6,
+                retired: 0,
+              } as const
+            )[stage],
+        6
+      );
+      expect(offered?.projectSoldUnitsByCommodity?.vehicles).toBeCloseTo(
+        productUnits * (offered?.soldByCommodity.vehicles ?? 0),
+        6
+      );
+      expect(producedByCorpCommodity.get("corp1")?.get("vehicles")).toBeCloseTo(200, 6);
+      const totalOfferedNominalValue =
+        (producedByCorpCommodity.get("corp1")?.get("vehicles") ?? 0) * basePrices.vehicles!;
+      expect(totalOfferedNominalValue).toBeCloseTo(totalNominalValue, 6);
+    }
+  );
 });

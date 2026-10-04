@@ -817,6 +817,13 @@ export interface CorporateSector {
   outputAnchorByCommodity?: Partial<Record<string, number>>;
   /** Current bounded product quality by output commodity. */
   productQualityByCommodity?: Partial<Record<string, number>>;
+  /** Project-owned output from one clearing offer, distinct from baseline recipe output. */
+  productLineProjectId?: string;
+  /** Turn whose physical project offer and commodity fills were settled. */
+  productLineOutputTurn?: number;
+  productLineOutputUnitsByCommodity?: Partial<Record<string, number>>;
+  productLineSoldUnitsByCommodity?: Partial<Record<string, number>>;
+  productLineQualityByCommodity?: Partial<Record<string, number>>;
   /** Raw operating-capacity basis used for the measured product output snapshot. */
   productOutputCapacityUnits?: number;
   /**

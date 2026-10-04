@@ -97,17 +97,21 @@ vi.mock("@/lib/constants/commodities", async (importOriginal) => {
 vi.mock("@/lib/utils/productionPolicy", () => ({
   trendProductionPolicy: vi.fn().mockImplementation((current: number) => current),
   getRevenueMultiplier: vi.fn().mockReturnValue(1),
+  getInputMultiplier: vi.fn().mockReturnValue(1),
+  getOutputMultiplier: vi.fn().mockReturnValue(1),
 }));
 
 vi.mock("@/lib/constants/sectorStrategies", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/constants/sectorStrategies")>();
+  const mockEffectiveRates = vi.fn().mockReturnValue({
+    growthRate: 1,
+    profitMargin: 0,
+    isTransitioning: false,
+  });
   return {
     ...actual,
-    getEffectiveStrategyRates: vi.fn().mockReturnValue({
-      growthRate: 1,
-      profitMargin: 0,
-      isTransitioning: false,
-    }),
+    getEffectiveStrategyRates: mockEffectiveRates,
+    getEffectiveStrategyRatesForOperatingModel: mockEffectiveRates,
   };
 });
 
@@ -3115,6 +3119,51 @@ describe("throughput coupling", () => {
 // ── Posted-price clearing (marketSystemMode >= "clearing", Fix 2) ──
 
 describe("market clearing", () => {
+  it("persists only project snapshots from this turn's clearing fill", () => {
+    const corp = makeCorp();
+    const sector = makeSector(corp._id, {
+      capitalStock: 500,
+      plantCount: 2,
+      producedUnits: 100,
+      operatingCapacityUnits: 500,
+      productOutputCapacityUnits: 500,
+    });
+    const lookups = baseLookups([corp], [sector]);
+    const clearing = {
+      factor: 1,
+      soldFraction: 0.5,
+      soldByCommodity: { vehicles: 0.5 },
+      effectivePosture: 0,
+      productProjectId: "project-1",
+      productOutputTurn: 2,
+      projectOutputUnitsByCommodity: { vehicles: 10 },
+      projectSoldUnitsByCommodity: { vehicles: 5 },
+      projectQualityByCommodity: { vehicles: 72 },
+    };
+    const run = (productOutputTurn: number) =>
+      processSectors(lookups, 2, new Date(), false, undefined, undefined, {
+        ...MARKET_DISABLED,
+        plantsEnabled: true,
+        clearingEnabled: true,
+        clearingBySectorId: new Map([[sector._id.toString(), { ...clearing, productOutputTurn }]]),
+      });
+    const current = run(2).sectorOps[0] as {
+      updateOne: { update: { $set: Record<string, unknown> } };
+    };
+    const stale = run(1).sectorOps[0] as {
+      updateOne: { update: { $set: Record<string, unknown> } };
+    };
+
+    expect(current.updateOne.update.$set).toMatchObject({
+      productLineProjectId: "project-1",
+      productLineOutputTurn: 2,
+      productLineOutputUnitsByCommodity: { vehicles: 10 },
+      productLineSoldUnitsByCommodity: { vehicles: 5 },
+      productLineQualityByCommodity: { vehicles: 72 },
+    });
+    expect(stale.updateOne.update.$set.productLineProjectId).toBeUndefined();
+  });
+
   it("applies the pre-pass clearing factor to realized revenue and persists telemetry", () => {
     const corp = makeCorp();
     const sector = makeSector(corp._id, { revenue: 24_000, profitMargin: 50 });

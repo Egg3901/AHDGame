@@ -728,6 +728,7 @@ export function processSector(
       sectorId: sector._id.toString(),
       corporationId: corp._id.toString(),
       sectorType: sector.sectorType,
+      industryModel: sector.industryModel,
       strategyId: sector.strategyId,
       capitalStock: sector.capitalStock ?? 0,
       plantCount: sector.plantCount ?? 0,
@@ -832,6 +833,15 @@ export function processSector(
           outputAnchorByCommodity: productOutput.outputAnchorByCommodity,
           productQualityByCommodity: productOutput.productQualityByCommodity,
           productOutputCapacityUnits: plantsCapacity,
+        }
+      : {}),
+    ...(market.plantsEnabled && clearing?.productProjectId && clearing.productOutputTurn === turn
+      ? {
+          productLineProjectId: clearing.productProjectId,
+          productLineOutputTurn: clearing.productOutputTurn,
+          productLineOutputUnitsByCommodity: clearing.projectOutputUnitsByCommodity ?? {},
+          productLineSoldUnitsByCommodity: clearing.projectSoldUnitsByCommodity ?? {},
+          productLineQualityByCommodity: clearing.projectQualityByCommodity ?? {},
         }
       : {}),
     // Ceiling the supply-agreement damages leg clamps a contracted volume to,

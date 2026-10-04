@@ -54,6 +54,8 @@ export interface ManufacturedOutputAllocationInput {
 export interface ManufacturedOutputAllocation {
   nominalOutputAnchorByCommodity: Partial<Record<CommodityType, number>>;
   outputUnitsByCommodity: Partial<Record<CommodityType, number>>;
+  /** Only the redirected product portion, excluding the legacy recipe baseline. */
+  projectOutputUnitsByCommodity: Partial<Record<CommodityType, number>>;
   /** Recipe input demand follows assigned plant capacity once, not output item count. */
   inputThroughputShare: number;
 }
@@ -61,6 +63,7 @@ export interface ManufacturedOutputAllocation {
 export interface ManufacturedSectorOutput {
   outputAnchorByCommodity: Partial<Record<CommodityType, number>>;
   outputUnitsByCommodity: Partial<Record<CommodityType, number>>;
+  projectOutputUnitsByCommodity: Partial<Record<CommodityType, number>>;
   productQualityByCommodity: Partial<Record<CommodityType, number>>;
 }
 
@@ -79,6 +82,12 @@ export function scaleManufacturedSectorOutput(
     ),
     outputUnitsByCommodity: Object.fromEntries(
       Object.entries(output.outputUnitsByCommodity).map(([commodity, units]) => [
+        commodity,
+        finiteNonNegative(units ?? 0) * factor,
+      ])
+    ),
+    projectOutputUnitsByCommodity: Object.fromEntries(
+      Object.entries(output.projectOutputUnitsByCommodity).map(([commodity, units]) => [
         commodity,
         finiteNonNegative(units ?? 0) * factor,
       ])
@@ -283,6 +292,10 @@ export function allocateManufacturedOutput(
       (nominalOutputAnchorByCommodity[input.outputCommodity] ?? 0) + redirectedAnchor;
   }
 
+  const productBasePrice = input.basePrices[input.outputCommodity] ?? 0;
+  const projectOutputUnitsByCommodity: Partial<Record<CommodityType, number>> =
+    productBasePrice > 0 ? { [input.outputCommodity]: redirectedAnchor / productBasePrice } : {};
+
   const outputUnitsByCommodity: Partial<Record<CommodityType, number>> = {};
   for (const [commodity, nominalAnchor] of Object.entries(nominalOutputAnchorByCommodity) as Array<
     [CommodityType, number]
@@ -296,6 +309,7 @@ export function allocateManufacturedOutput(
   return {
     nominalOutputAnchorByCommodity,
     outputUnitsByCommodity,
+    projectOutputUnitsByCommodity,
     inputThroughputShare: allocationShare,
   };
 }
@@ -348,7 +362,10 @@ export function buildManufacturedSectorOutput(input: {
   }
 
   const productQualityByCommodity: Partial<Record<CommodityType, number>> = {};
-  for (const commodity of Object.keys(outputAnchorByCommodity) as CommodityType[]) {
+  for (const commodity of new Set([
+    ...(Object.keys(outputAnchorByCommodity) as CommodityType[]),
+    input.outputCommodity,
+  ])) {
     const currentQuality = input.currentSectorQualityByCommodity?.[commodity];
     if (typeof currentQuality !== "number" || !Number.isFinite(currentQuality)) continue;
     productQualityByCommodity[commodity] = productQualityForCommodity({
@@ -359,7 +376,12 @@ export function buildManufacturedSectorOutput(input: {
     });
   }
 
-  return { outputAnchorByCommodity, outputUnitsByCommodity, productQualityByCommodity };
+  return {
+    outputAnchorByCommodity,
+    outputUnitsByCommodity,
+    projectOutputUnitsByCommodity: allocation.projectOutputUnitsByCommodity,
+    productQualityByCommodity,
+  };
 }
 
 /** Uses live per-commodity sector quality plus a bounded contribution from paid development. */
