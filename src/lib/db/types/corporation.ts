@@ -179,6 +179,8 @@ export interface Corporation {
    * at least one financial sector; one bank per corp. See src/lib/db/types/bank.ts.
    */
   bankCharter?: import("./bank").BankCharter;
+  /** Actual primary cash debit holds its epoch until debt and holdings publish. */
+  bankPrimaryFunding?: { tradeId: string; charteredTurn: number };
   /** Holds an originating epoch until construction cash and its loan book settle. */
   bankConstructionFunding?: {
     loanId: string;
