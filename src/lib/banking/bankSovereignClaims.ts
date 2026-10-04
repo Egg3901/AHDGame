@@ -190,7 +190,7 @@ function ledgerProjection(
   key: string,
   turn: number,
   destination: "bank" | "insurance" = "bank"
-): { collection: "ledgerEntries"; insert: LedgerEntry; note: string } {
+): { collection: "ledgerEntries"; insert: LedgerEntry & Record<string, unknown>; note: string } {
   if (!claim.anchorRate || !Number.isFinite(claim.anchorRate) || claim.anchorRate <= 0)
     throw new Error(`Bank sovereign claim ${claim.id} has no ledger valuation`);
   const anchorAmount = claim.amountLocal / claim.anchorRate;
