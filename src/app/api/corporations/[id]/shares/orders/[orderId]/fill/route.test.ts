@@ -58,6 +58,7 @@ vi.mock("@/lib/corporations/shareholderOps", () => ({
   debitSharesFromImperial: vi.fn().mockResolvedValue(10),
 }));
 vi.mock("@/lib/indexFunds/fundQueries", () => ({
+  FUND_TRANSACTION_COLLECTION: "indexFundTransactions",
   debitFundHoldingShares: vi.fn().mockResolvedValue(true),
   insertFundTransaction: vi.fn().mockResolvedValue(new ObjectId()),
   upsertFundHoldingShares: vi.fn().mockResolvedValue(undefined),
@@ -70,12 +71,12 @@ vi.mock("@/lib/financialTxLog/atomicCashGuard", () => ({
   atomicallyDebitCorpLiquidCapital: vi.fn().mockResolvedValue({ ok: true, newBalance: 900 }),
   refundCorpLiquidCapital: vi.fn().mockResolvedValue(undefined),
 }));
-vi.mock("@/lib/financialTxLog/emit", () => ({ emitTx: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("@/lib/financialTxLog/emit", () => ({ emitTx: vi.fn().mockResolvedValue("applied") }));
 vi.mock("@/lib/corporations/hostileTakeoverNotifications", () => ({
   notifyHostileTakeoverThresholdIfEligible: vi.fn(),
 }));
 vi.mock("@/lib/corporations/shareTradeHistory", () => ({
-  recordShareTrade: vi.fn(),
+  recordShareTrade: vi.fn().mockResolvedValue("applied"),
 }));
 vi.mock("@/lib/turn/currentTurn", () => ({ getCurrentTurn: vi.fn().mockResolvedValue(14) }));
 
@@ -87,6 +88,37 @@ beforeEach(async () => {
   const { getDb } = await import("@/lib/mongodb");
   vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
 });
+
+function expectKeyedCapTransfer(
+  sellerField: "fundId" | "characterId",
+  sellerId: ObjectId,
+  buyerId: ObjectId,
+  shares: number
+) {
+  const writes = db.collectionMocks.corporations.updateOne.mock.calls;
+  expect(
+    writes.some(
+      ([filter, update]) =>
+        filter.shareholders?.$elemMatch?.[sellerField]?.equals(sellerId) &&
+        update.$inc?.["shareholders.$.shares"] === -shares &&
+        update.$push?.appliedMoneyFlowKeys
+    )
+  ).toBe(true);
+  expect(
+    writes.some(
+      ([, update]) =>
+        update.$push?.shareholders?.characterId?.equals(buyerId) &&
+        update.$push.shareholders.shares === shares &&
+        update.$push.appliedMoneyFlowKeys
+    )
+  ).toBe(true);
+  expect(writes.some(([, update]) => update.$inc?.publicFloat !== undefined)).toBe(false);
+  expect(
+    writes.some(([, update]) =>
+      Object.keys(update.$inc ?? {}).some((field) => field.startsWith("orderFlowWindow"))
+    )
+  ).toBe(false);
+}
 
 describe("POST /api/corporations/[id]/shares/orders/[orderId]/fill", () => {
   it("settles a fund-owned executable ask without minting shares", async () => {
@@ -122,6 +154,7 @@ describe("POST /api/corporations/[id]/shares/orders/[orderId]/fill", () => {
     } as never);
     const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
     vi.mocked(resolveCorporation).mockResolvedValue({ ok: true, corporation } as never);
+    db.collection("corporations").findOne.mockResolvedValue(corporation as never);
 
     db.collection("shareOrders");
     db.collectionMocks.shareOrders.findOne.mockResolvedValue(order as never);
@@ -158,32 +191,18 @@ describe("POST /api/corporations/[id]/shares/orders/[orderId]/fill", () => {
     });
 
     expect(res.status).toBe(200);
-    const { creditShares, debitSharesFromFund } = await import("@/lib/corporations/shareholderOps");
-    const { debitFundHoldingShares, insertFundTransaction } =
-      await import("@/lib/indexFunds/fundQueries");
-    expect(debitSharesFromFund).toHaveBeenCalledWith(
-      db,
-      corpId,
-      fundId,
-      10,
-      { $set: { updatedAt: expect.any(Date) } },
-      { requireSufficient: true }
-    );
-    expect(debitFundHoldingShares).toHaveBeenCalledWith(db, fundId, corpId, 10, 12);
-    expect(creditShares).toHaveBeenCalledWith(
-      db,
-      corpId,
-      fillerId,
-      10,
-      { $set: { updatedAt: expect.any(Date) } },
-      { pricePerShare: 12 }
+    expectKeyedCapTransfer("fundId", fundId, fillerId, 10);
+    expect(db.collectionMocks.indexFunds.updateOne).toHaveBeenCalledWith(
+      expect.objectContaining({ _id: fundId }),
+      expect.objectContaining({ $inc: { "holdings.$.shares": -10 } }),
+      undefined
     );
     expect(db.collectionMocks.indexFunds.updateOne).toHaveBeenCalledWith(
-      { _id: fundId },
-      { $inc: { cashAnchor: 120 }, $set: { updatedAt: expect.any(Date) } }
+      expect.objectContaining({ _id: fundId }),
+      expect.objectContaining({ $inc: { cashAnchor: 120 } }),
+      undefined
     );
-    expect(insertFundTransaction).toHaveBeenCalledWith(
-      db,
+    expect(db.collectionMocks.indexFundTransactions.insertOne).toHaveBeenCalledWith(
       expect.objectContaining({
         fundId,
         kind: "liquidity_quote_sell",
@@ -232,6 +251,7 @@ describe("POST /api/corporations/[id]/shares/orders/[orderId]/fill", () => {
       ok: true,
       corporation,
     } as never);
+    db.collection("corporations").findOne.mockResolvedValue(corporation as never);
 
     db.collection("shareOrders");
     db.collectionMocks["shareOrders"].findOne.mockResolvedValue(order as never);
@@ -268,8 +288,6 @@ describe("POST /api/corporations/[id]/shares/orders/[orderId]/fill", () => {
       }
     );
 
-    const { creditShares, debitShares } = await import("@/lib/corporations/shareholderOps");
-
     const { POST } = await import("./route");
     const req = new Request("http://localhost/api/corporations/abc/shares/orders/order/fill", {
       method: "POST",
@@ -281,22 +299,7 @@ describe("POST /api/corporations/[id]/shares/orders/[orderId]/fill", () => {
     });
 
     expect(res.status).toBe(200);
-    expect(debitShares).toHaveBeenCalledWith(
-      expect.anything(),
-      corpId,
-      sellerId,
-      10,
-      { $set: { updatedAt: expect.any(Date) } },
-      { requireSufficient: true }
-    );
-    expect(creditShares).toHaveBeenCalledWith(
-      expect.anything(),
-      corpId,
-      fillerId,
-      10,
-      { $set: { updatedAt: expect.any(Date) } },
-      { pricePerShare: 12 }
-    );
+    expectKeyedCapTransfer("characterId", sellerId, fillerId, 10);
   });
 
   it("does not feed order-flow windows when a character fills another character's buy order", async () => {
@@ -337,6 +340,7 @@ describe("POST /api/corporations/[id]/shares/orders/[orderId]/fill", () => {
       ok: true,
       corporation,
     } as never);
+    db.collection("corporations").findOne.mockResolvedValue(corporation as never);
 
     db.collection("shareOrders");
     db.collectionMocks["shareOrders"].findOne.mockResolvedValue(order as never);
@@ -374,8 +378,6 @@ describe("POST /api/corporations/[id]/shares/orders/[orderId]/fill", () => {
       }
     );
 
-    const { creditShares, debitShares } = await import("@/lib/corporations/shareholderOps");
-
     const { POST } = await import("./route");
     const req = new Request("http://localhost/api/corporations/abc/shares/orders/order/fill", {
       method: "POST",
@@ -387,21 +389,6 @@ describe("POST /api/corporations/[id]/shares/orders/[orderId]/fill", () => {
     });
 
     expect(res.status).toBe(200);
-    expect(debitShares).toHaveBeenCalledWith(
-      expect.anything(),
-      corpId,
-      fillerId,
-      8,
-      { $set: { updatedAt: expect.any(Date) } },
-      { requireSufficient: true }
-    );
-    expect(creditShares).toHaveBeenCalledWith(
-      expect.anything(),
-      corpId,
-      buyerId,
-      8,
-      { $set: { updatedAt: expect.any(Date) } },
-      { pricePerShare: 9 }
-    );
+    expectKeyedCapTransfer("characterId", fillerId, buyerId, 8);
   });
 });

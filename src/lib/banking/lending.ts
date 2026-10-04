@@ -22,6 +22,7 @@ import {
   resolveCorpLiquidCurrencyCode,
 } from "@/lib/currency/corporationCapital";
 import { getHomeCurrency } from "@/lib/currency/characterFunds";
+import { getGameState } from "@/lib/gameState";
 import { estimatePerTurnCurrencyIncomeHomeFace } from "@/lib/lineOfCredit/currencyIncomeEstimate";
 import { emitTx } from "@/lib/financialTxLog/emit";
 import { isNamedLendingCharter } from "./charterKinds";
@@ -183,11 +184,17 @@ export async function characterIncomeInLoanCurrency(
   character: Character,
   loanCurrency: CurrencyCode
 ): Promise<number> {
+  const gameState = await getGameState(db);
   const rates = await loadFxRatesByCurrency(db);
   const rateMap: Partial<Record<CurrencyCode, number>> = {};
   for (const [code, rate] of rates) rateMap[code] = rate;
-  const homeFace = await estimatePerTurnCurrencyIncomeHomeFace(db, character, rateMap);
-  const home = getHomeCurrency(character);
+  const homeFace = await estimatePerTurnCurrencyIncomeHomeFace(
+    db,
+    character,
+    rateMap,
+    gameState ?? undefined
+  );
+  const home = getHomeCurrency(character, gameState?.preset);
   return convertFaceBetweenCurrencies(
     homeFace,
     home,

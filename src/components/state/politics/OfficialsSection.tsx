@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import type { State } from "@/lib/db/types";
-import { OfficialCard } from "./OfficialCard";
+import { OfficialRow } from "./OfficialRow";
 import type { SerializedOfficial } from "../StatePageTabsTypes";
 
 /**
@@ -14,6 +14,61 @@ import type { SerializedOfficial } from "../StatePageTabsTypes";
  */
 function seatCountLabel(seats: number): string {
   return `${seats} seat${seats === 1 ? "" : "s"}`;
+}
+
+/** Lists longer than this show the first rows and a "Show all" control. */
+const COLLAPSED_ROWS = 8;
+
+function Chamber({
+  title,
+  meta,
+  children,
+}: {
+  title: string;
+  meta: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="min-w-0 rounded-xl border border-card-border bg-card p-5 sm:p-6">
+      <div className="flex items-baseline justify-between gap-3 border-b border-card-border pb-3">
+        <h3 className="text-heading-sm font-semibold text-foreground">{title}</h3>
+        <span className="shrink-0 text-body-sm text-muted">{meta}</span>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function EmptyChamber({ children }: { children: React.ReactNode }) {
+  return <div className="py-4 text-body text-muted">{children}</div>;
+}
+
+function CollapsibleRows({
+  count,
+  noun,
+  children,
+}: {
+  count: number;
+  noun: string;
+  children: (limit: number) => React.ReactNode;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const limit = expanded ? count : COLLAPSED_ROWS;
+  return (
+    <>
+      <ul className="divide-y divide-card-border">{children(limit)}</ul>
+      {count > COLLAPSED_ROWS && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+          className="mt-2 text-body font-medium text-foreground underline decoration-card-border underline-offset-4 hover:decoration-foreground"
+        >
+          {expanded ? "Show fewer" : `Show all ${count} ${noun}`}
+        </button>
+      )}
+    </>
+  );
 }
 
 export function SenateSection({
@@ -39,54 +94,49 @@ export function SenateSection({
   const filledCount = isMultiSeat
     ? senators.filter((s) => s.characterId || s.nppId).length
     : senators.length;
+  const meta = !isElected
+    ? `${configuredSeats} members · unelected`
+    : isMultiSeat
+      ? `${filledCount} reps · ${totalSeats} seats`
+      : // One region's seats: the national chamber size (configuredSeats, 100 for
+        // the US Senate) is not what this region holds.
+        `${senators.length > 0 ? senators.length : 2} seats`;
 
   return (
-    <div className="rounded-xl border border-card-border bg-card p-6">
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-xl font-semibold">{label}</h2>
-        <div className="flex items-center gap-2">
-          <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-            {!isElected
-              ? `${configuredSeats} members · unelected`
-              : isMultiSeat
-                ? `${filledCount} reps · ${totalSeats} seats`
-                : `${configuredSeats} seats`}
-          </span>
-        </div>
-      </div>
+    <Chamber title={label} meta={meta}>
       {!isElected ? (
-        <div className="py-8 text-center text-muted">
+        <EmptyChamber>
           <p>{description ?? `${label} is an unelected national institution.`}</p>
-          <p className="text-sm mt-1">It does not have regional elected-official seats.</p>
-        </div>
+          <p className="mt-1 text-body-sm">It does not have regional elected-official seats.</p>
+        </EmptyChamber>
       ) : senators.length > 0 ? (
-        <div
-          className={`grid gap-4 sm:gap-6 ${isMultiSeat ? "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-3 xl:grid-cols-4" : "grid-cols-2"}`}
-        >
-          {senators.map((senator) => {
-            const seats = senator.seatsHeld ?? 1;
-            const subtitle = isMultiSeat
-              ? seatCountLabel(seats)
-              : `Class ${senator.senateClass ?? "—"}`;
-            return (
-              <OfficialCard
-                key={senator._id}
-                official={senator}
-                title={memberTitle}
-                subtitle={subtitle}
-                isVacant={!senator.characterId && !senator.nppId}
-                countryId={state.countryId}
-              />
-            );
-          })}
-        </div>
+        <CollapsibleRows count={senators.length} noun="members">
+          {(limit) =>
+            senators
+              .slice(0, limit)
+              .map((senator) => (
+                <OfficialRow
+                  key={senator._id}
+                  official={senator}
+                  title={memberTitle}
+                  subtitle={
+                    isMultiSeat
+                      ? seatCountLabel(senator.seatsHeld ?? 1)
+                      : `Class ${senator.senateClass ?? "unknown"}`
+                  }
+                  isVacant={!senator.characterId && !senator.nppId}
+                  countryId={state.countryId}
+                />
+              ))
+          }
+        </CollapsibleRows>
       ) : (
-        <div className="py-12 text-center text-muted">
+        <EmptyChamber>
           <p>No {label.toLowerCase()} seats initialized yet.</p>
-          <p className="text-sm mt-1">Admin needs to initialize elected officials.</p>
-        </div>
+          <p className="mt-1 text-body-sm">Admin needs to initialize elected officials.</p>
+        </EmptyChamber>
       )}
-    </div>
+    </Chamber>
   );
 }
 
@@ -101,56 +151,34 @@ export function HouseSection({
   label?: string;
   memberTitle?: string;
 }) {
-  const [houseExpanded, setHouseExpanded] = useState(false);
   const filledReps = houseReps.filter((r) => r.characterId || r.nppId);
 
   return (
-    <div className="rounded-xl border border-card-border bg-card p-6">
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-xl font-semibold">{label}</h2>
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-muted">
-            {filledReps.length} rep
-            {filledReps.length !== 1 ? "s" : ""} · {state.houseDistricts} seats
-          </span>
-        </div>
-      </div>
+    <Chamber
+      title={label}
+      meta={`${filledReps.length} rep${filledReps.length !== 1 ? "s" : ""} · ${state.houseDistricts} seats`}
+    >
       {filledReps.length > 0 ? (
-        <>
-          <div
-            className={`grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-3 xl:grid-cols-4 overflow-y-auto pr-1 ${!houseExpanded ? "max-h-[420px]" : ""}`}
-          >
-            {filledReps.map((rep) => {
-              const seats = rep.seatsHeld ?? 1;
-              const seatLabel = seatCountLabel(seats);
-              return (
-                <OfficialCard
+        <CollapsibleRows count={filledReps.length} noun="representatives">
+          {(limit) =>
+            filledReps
+              .slice(0, limit)
+              .map((rep) => (
+                <OfficialRow
                   key={rep._id}
                   official={rep}
                   title={memberTitle}
-                  subtitle={seatLabel}
+                  subtitle={seatCountLabel(rep.seatsHeld ?? 1)}
                   isVacant={false}
                   countryId={state.countryId}
                 />
-              );
-            })}
-          </div>
-          {filledReps.length > 8 && (
-            <button
-              type="button"
-              onClick={() => setHouseExpanded((v) => !v)}
-              className="mt-3 text-sm text-muted hover:text-foreground transition-colors"
-            >
-              {houseExpanded ? "Show less" : `Show all ${filledReps.length} representatives`}
-            </button>
-          )}
-        </>
+              ))
+          }
+        </CollapsibleRows>
       ) : (
-        <div className="py-12 text-center text-muted">
-          <p>Vacant</p>
-        </div>
+        <EmptyChamber>Vacant</EmptyChamber>
       )}
-    </div>
+    </Chamber>
   );
 }
 
@@ -186,15 +214,9 @@ export function GovernorSection({
   officeType?: string;
 }) {
   return (
-    <div className="rounded-xl border border-card-border bg-card p-6">
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-xl font-semibold">{label}</h2>
-        <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-          1 seat
-        </span>
-      </div>
-      <div className="flex justify-center">
-        <OfficialCard
+    <Chamber title={label} meta="1 seat">
+      <ul>
+        <OfficialRow
           official={
             governor
               ? ({
@@ -202,6 +224,7 @@ export function GovernorSection({
                   characterId: governor.characterId,
                   characterName: governor.characterName ?? undefined,
                   party: governor.party ?? undefined,
+                  partyAbbreviation: governor.partyAbbreviation ?? undefined,
                   partyColor: governor.partyColor ?? undefined,
                   avatarUrl: governor.avatarUrl ?? undefined,
                   isNPP: governor.isNPP,
@@ -215,8 +238,8 @@ export function GovernorSection({
           isVacant={!governor?.characterId && !governor?.nppId}
           countryId={state.countryId}
         />
-      </div>
-    </div>
+      </ul>
+    </Chamber>
   );
 }
 
@@ -229,51 +252,31 @@ export function StateSenateSection({
   stateSenators: SerializedOfficial[];
   label?: string;
 }) {
-  const [stateSenateExpanded, setStateSenateExpanded] = useState(false);
-
   return (
-    <div className="rounded-xl border border-card-border bg-card p-6">
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-xl font-semibold">{label}</h2>
-        <span className="text-sm text-muted">
-          {stateSenators.length} member{stateSenators.length !== 1 ? "s" : ""}
-        </span>
-      </div>
+    <Chamber
+      title={label}
+      meta={`${stateSenators.length} member${stateSenators.length !== 1 ? "s" : ""}`}
+    >
       {stateSenators.length > 0 ? (
-        <>
-          <div
-            className={`grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-3 xl:grid-cols-4 overflow-y-auto pr-1 ${!stateSenateExpanded ? "max-h-[420px]" : ""}`}
-          >
-            {stateSenators.map((senator) => {
-              const seats = senator.seatsHeld ?? 1;
-              const seatLabel = seatCountLabel(seats);
-              return (
-                <OfficialCard
+        <CollapsibleRows count={stateSenators.length} noun="members">
+          {(limit) =>
+            stateSenators
+              .slice(0, limit)
+              .map((senator) => (
+                <OfficialRow
                   key={senator._id}
                   official={senator}
                   title="State Senator"
-                  subtitle={seatLabel}
+                  subtitle={seatCountLabel(senator.seatsHeld ?? 1)}
                   isVacant={!senator.characterId && !senator.nppId}
                   countryId={state.countryId}
                 />
-              );
-            })}
-          </div>
-          {stateSenators.length > 8 && (
-            <button
-              type="button"
-              onClick={() => setStateSenateExpanded((v) => !v)}
-              className="mt-3 text-sm text-muted hover:text-foreground transition-colors"
-            >
-              {stateSenateExpanded ? "Show less" : `Show all ${stateSenators.length} members`}
-            </button>
-          )}
-        </>
+              ))
+          }
+        </CollapsibleRows>
       ) : (
-        <div className="py-12 text-center text-muted">
-          <p>Vacant</p>
-        </div>
+        <EmptyChamber>Vacant</EmptyChamber>
       )}
-    </div>
+    </Chamber>
   );
 }

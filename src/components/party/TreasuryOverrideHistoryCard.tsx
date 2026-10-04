@@ -21,9 +21,7 @@ export function TreasuryOverrideHistoryCard({
   return (
     <div className="rounded-xl border border-card-border bg-card p-5 space-y-4">
       <div>
-        <div className="text-xs font-semibold uppercase tracking-wide text-muted">
-          Emergency Override History
-        </div>
+        <div className="text-xs font-semibold text-muted">Emergency override history</div>
         <h3 className="mt-1 text-heading-sm font-bold text-foreground">{title}</h3>
         <p className="mt-2 text-sm text-muted">{description}</p>
       </div>
@@ -47,7 +45,7 @@ export function TreasuryOverrideHistoryCard({
                 )}
               </div>
               <div className="mt-1 text-sm text-muted">{item.details}</div>
-              <div className="mt-2 text-[11px] text-muted">
+              <div className="mt-2 text-body-sm text-muted">
                 <LocalTime
                   value={item.createdAt}
                   options={{ dateStyle: "medium", timeStyle: "short" }}

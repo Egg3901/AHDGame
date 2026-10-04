@@ -51,7 +51,7 @@ function ForecastChip({
 
   return (
     <div className={`rounded-lg border px-3 py-2 ${toneClasses[tone]}`}>
-      <div className="text-[10px] font-semibold uppercase tracking-wide">{label}</div>
+      <div className="text-body-sm font-semibold">{label}</div>
       <div className="mt-1 text-sm font-bold tabular-nums">{value}</div>
     </div>
   );
@@ -91,16 +91,12 @@ export function TreasuryPlanningCard({
       <div className="border-b border-card-border/40 bg-card-muted/20 px-6 py-5">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <div className="text-xs font-semibold uppercase tracking-wide text-muted">
-              Treasurer Planning
-            </div>
+            <div className="text-xs font-semibold text-muted">Treasurer planning</div>
             <h3 className="mt-1 text-heading-sm font-bold text-foreground">{title}</h3>
             <p className="mt-2 max-w-3xl text-sm text-muted">{description}</p>
           </div>
           <div className="rounded-lg border border-card-border bg-background/60 px-4 py-3">
-            <div className="text-[10px] font-semibold uppercase tracking-wide text-muted">
-              Combined Reserve Target
-            </div>
+            <div className="text-body-sm font-semibold text-muted">Combined reserve target</div>
             <div className="mt-1 text-body-lg font-bold tabular-nums text-foreground">
               {formatLocalAmount(totalReserveTarget, currencyCode)}
             </div>
@@ -109,25 +105,19 @@ export function TreasuryPlanningCard({
 
         <div className="mt-4 grid gap-3 md:grid-cols-4">
           <div className="rounded-lg border border-card-border bg-background/50 px-4 py-3">
-            <div className="text-[10px] font-semibold uppercase tracking-wide text-muted">
-              Treasury
-            </div>
+            <div className="text-body-sm font-semibold text-muted">Treasury</div>
             <div className="mt-1 text-body-lg font-bold tabular-nums text-warning">
               {formatLocalAmount(treasury, currencyCode)}
             </div>
           </div>
           <div className="rounded-lg border border-card-border bg-background/50 px-4 py-3">
-            <div className="text-[10px] font-semibold uppercase tracking-wide text-muted">
-              Discretionary
-            </div>
+            <div className="text-body-sm font-semibold text-muted">Discretionary</div>
             <div className="mt-1 text-body-lg font-bold tabular-nums text-secondary">
               {formatLocalAmount(discretionaryTreasury, currencyCode)}
             </div>
           </div>
           <div className="rounded-lg border border-card-border bg-background/50 px-4 py-3">
-            <div className="text-[10px] font-semibold uppercase tracking-wide text-muted">
-              Net Treasury
-            </div>
+            <div className="text-body-sm font-semibold text-muted">Net treasury</div>
             <div
               className={`mt-1 text-body-lg font-bold tabular-nums ${
                 netHourlyTreasuryChange >= 0 ? "text-success" : "text-error"
@@ -139,9 +129,7 @@ export function TreasuryPlanningCard({
             </div>
           </div>
           <div className="rounded-lg border border-card-border bg-background/50 px-4 py-3">
-            <div className="text-[10px] font-semibold uppercase tracking-wide text-muted">
-              Soft Target Mode
-            </div>
+            <div className="text-body-sm font-semibold text-muted">Soft target mode</div>
             <div className="mt-1 text-body font-bold text-foreground">Warnings only</div>
             <div className="mt-1 text-body-sm text-muted">Chair can still override and spend.</div>
           </div>
@@ -149,7 +137,7 @@ export function TreasuryPlanningCard({
 
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           <ForecastChip
-            label="Reserve Floor"
+            label="Reserve floor"
             value={
               turnsUntilReserveFloor !== null
                 ? `${turnsUntilReserveFloor} turns until breach`
@@ -166,12 +154,12 @@ export function TreasuryPlanningCard({
             }
           />
           <ForecastChip
-            label="Treasury Runway"
+            label="Treasury runway"
             value={turnsUntilZero !== null ? `${turnsUntilZero} turns until zero` : "Stable"}
             tone={turnsUntilZero !== null ? "error" : "success"}
           />
           <ForecastChip
-            label="Emergency Override"
+            label="Emergency override"
             value="Logged when sends/transfers pierce reserve"
             tone="warning"
           />
@@ -183,9 +171,7 @@ export function TreasuryPlanningCard({
           <div className="mb-5 space-y-3 rounded-lg border border-card-border bg-background/30 p-4">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-muted">
-                  Treasurer Presets
-                </div>
+                <div className="text-body-sm font-semibold text-muted">Treasurer presets</div>
                 <p className="mt-1 text-body-sm text-muted">
                   Apply a preset to auto-fill reserve targets and the treasury ratios below.
                 </p>
@@ -226,7 +212,7 @@ export function TreasuryPlanningCard({
                 {budgetSummary.map((item) => (
                   <span
                     key={item.label}
-                    className="rounded-full border border-card-border bg-card px-2.5 py-1 text-[11px] text-muted"
+                    className="rounded-full border border-card-border bg-card px-2.5 py-1 text-body-sm text-muted"
                   >
                     <span className="font-semibold text-foreground">{item.label}</span> {item.value}
                   </span>
@@ -238,9 +224,7 @@ export function TreasuryPlanningCard({
 
         <div className="grid gap-4 md:grid-cols-3">
           <div className="space-y-2">
-            <label className="text-[10px] font-semibold uppercase tracking-wide text-muted">
-              Transfer Reserve
-            </label>
+            <label className="text-body-sm font-semibold text-muted">Transfer reserve</label>
             <Input
               type="number"
               min={0}
@@ -254,9 +238,7 @@ export function TreasuryPlanningCard({
             </p>
           </div>
           <div className="space-y-2">
-            <label className="text-[10px] font-semibold uppercase tracking-wide text-muted">
-              Member Support Reserve
-            </label>
+            <label className="text-body-sm font-semibold text-muted">Member support reserve</label>
             <Input
               type="number"
               min={0}
@@ -270,9 +252,7 @@ export function TreasuryPlanningCard({
             </p>
           </div>
           <div className="space-y-2">
-            <label className="text-[10px] font-semibold uppercase tracking-wide text-muted">
-              NPP Recruitment Reserve
-            </label>
+            <label className="text-body-sm font-semibold text-muted">NPP recruitment reserve</label>
             <Input
               type="number"
               min={0}

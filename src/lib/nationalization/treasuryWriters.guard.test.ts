@@ -48,7 +48,7 @@ const REGISTRY: Record<string, Registered> = {
     witness: [{ kind: "flow", flows: ["nationalization_compensation"] }],
   },
   "src/lib/nationalization/ownershipTransition.ts": {
-    writers: ["debitTreasuryCompensation", "creditTreasuryProceeds"],
+    writers: ["debitTreasuryCompensation", "creditTreasuryProceedsFromAnchor"],
     witness: [
       {
         kind: "flow",

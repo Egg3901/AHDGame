@@ -212,11 +212,9 @@ describe("NPP capacity reinvestment — a selling-out, fully-utilized plant grow
     expect(order.onlineTurn).toBe(TURN + CAPACITY_BUILD_TURNS("manufacturing"));
     expect(order.costPaidAnchor).toBeGreaterThan(0);
 
-    // CIP moves by exactly what this order costs — an increment, so it composes
-    // with the turn processor's own CIP decrement for orders that landed.
-    expect(writes[0].update.$inc!.constructionInProgressAnchor).toBe(
-      Math.round(order.costPaidAnchor)
-    );
+    // CIP has one writer in sectorTurn, which derives it from this queue.
+    expect(writes[0].update.$inc?.constructionInProgressAnchor).toBeUndefined();
+    expect(writes[0].update.$set).not.toHaveProperty("constructionInProgressAnchor");
 
     // Charged, and above the cash floor. The charge is a delta now, not an
     // absolute balance write (ticket #1260).

@@ -28,6 +28,7 @@ vi.mock("@/lib/currency/characterFunds", async (importActual) => {
 });
 
 import { executeCharacterAction } from "./executeAction";
+import { getGameState } from "@/lib/gameState";
 import { getGdpBaseline } from "@/lib/utils/fundGeneration";
 
 describe("executeCharacterAction — campaign-fund de-forex", () => {
@@ -41,7 +42,15 @@ describe("executeCharacterAction — campaign-fund de-forex", () => {
           return {
             find: () => ({
               toArray: async () =>
-                baseRate == null ? [] : [{ currencyCode: "NGN", baseRate, rate: 9999 }],
+                baseRate == null
+                  ? []
+                  : [
+                      {
+                        currencyCode: character.countryId === "DE" ? "EUR" : "NGN",
+                        baseRate,
+                        rate: 9999,
+                      },
+                    ],
             }),
           };
         if (name === "states") {
@@ -85,7 +94,10 @@ describe("executeCharacterAction — campaign-fund de-forex", () => {
       currencyBalances: { campaign: 1_000_000_000_000, personal: {} },
     }) as unknown as Character;
 
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(getGameState).mockResolvedValue({ currentTurn: 1, preset: undefined } as never);
+  });
 
   async function campaignDebit(countryId: string, baseRate?: number): Promise<number> {
     const character = makeCharacter(countryId);
@@ -112,5 +124,11 @@ describe("executeCharacterAction — campaign-fund de-forex", () => {
 
   it("debits the NG campaign at the frozen rate (×1550), ignoring the live 9999 rate", async () => {
     expect(await campaignDebit("NG")).toBe(-100_000 * 1550);
+  });
+
+  it("debits a 2027 DE campaign in its frozen EUR denomination", async () => {
+    vi.mocked(getGameState).mockResolvedValue({ currentTurn: 1, preset: "2027-default" } as never);
+    // The 2027 price-level quote is 90,000 anchor before the EUR basis ×0.92.
+    expect(await campaignDebit("DE", 0.92)).toBe(-82_800);
   });
 });

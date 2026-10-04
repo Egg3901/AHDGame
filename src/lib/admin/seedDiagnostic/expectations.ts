@@ -3,6 +3,7 @@
  * Do NOT duplicate numbers into new tables — read the seed modules.
  */
 
+import { getOpeningPolicyRate } from "@/lib/centralBank/rules/openingPolicyRate";
 import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CONFIGS, DEFAULT_LEGACY_COUNTRY_ID } from "@/lib/constants/countries";
 import { FOREX_ACTIVE_COUNTRIES, getInitialRates } from "@/lib/constants/currencies";
@@ -132,6 +133,7 @@ export function readinessCountryIds(preset: string): CountryId[] {
 export interface NationalBudgetExpectation {
   countryId: string;
   budgetId: string;
+  currencyCode: string;
   gdp: number;
   population: number;
   debtPrincipal: number;
@@ -229,13 +231,13 @@ function collectBundleFallbacks(preset: string): Array<{ domain: string; note: s
   return out;
 }
 
-/**
- * Expected prime rate for conformance (turn 1): the value the forex seeder
- * actually writes (`COUNTRY_CONFIGS.centralBank.defaultPrimeRate`). Era monetary
- * baselines are runtime steering targets, not seed-time truth.
- */
-export function expectedPrimeRate(countryId: CountryId, _startingYear?: number): number {
-  return COUNTRY_CONFIGS[countryId]?.centralBank.defaultPrimeRate ?? 0;
+/** Seed-time policy benchmark, independent from runtime neutral monetary targets. */
+export function expectedPrimeRate(countryId: CountryId, startingYear?: number): number {
+  return getOpeningPolicyRate(
+    countryId,
+    startingYear,
+    COUNTRY_CONFIGS[countryId]?.centralBank.defaultPrimeRate ?? 0
+  );
 }
 
 /** Country-level normalised sector weight shares for the preset. */
@@ -347,6 +349,7 @@ export function buildSeedExpectations(preset: string): SeedExpectations {
     nationalBudgets: configs.map((c) => ({
       countryId: c.countryId,
       budgetId: c.budgetId,
+      currencyCode: c.currencyCode,
       gdp: c.gdp,
       population: c.population,
       debtPrincipal: c.debt.principal,
@@ -356,8 +359,11 @@ export function buildSeedExpectations(preset: string): SeedExpectations {
       inflationRate: c.economicFactors.inflationRate,
     })),
     seededCountryIds,
-    forexRates: getInitialRates(preset),
-    forexActiveCountries: FOREX_ACTIVE_COUNTRIES,
+    forexRates:
+      preset === "2027-default"
+        ? { ...getInitialRates(preset), BG: getInitialRates(preset).DE }
+        : getInitialRates(preset),
+    forexActiveCountries: monetaryScope.forexCountries,
     monetaryCoverage: {
       centralBankCountries: monetaryScope.centralBankCountries,
       exclusions: monetaryScope.exclusions,

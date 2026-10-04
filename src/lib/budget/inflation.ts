@@ -258,10 +258,13 @@ const INERTIA = 0.35;
  *  "inertia trap" where prev≈raw locks the rate at whatever it is. */
 const MEAN_REVERSION_COEFF = 0.08;
 
-/** Maximum |Δ inflation| allowed per turn from this calculation.
+/** Maximum ordinary |Δ inflation| allowed per turn from this calculation.
  *  Prevents a single-turn spike when a previously-stuck wageGrowth value
- *  suddenly normalizes (or vice versa). 1.5pp/turn = up to 18pp/year, more
- *  than enough headroom for genuine economic shocks. */
+ *  suddenly normalizes (or vice versa). At 48 turns per game year, 1.5pp per
+ *  turn permits a 72pp same-direction arithmetic envelope in one year. This
+ *  is not a predicted path: smoothing, mean reversion, and the absolute bounds
+ *  can stop movement sooner. Deep-deflation recovery below deliberately allows
+ *  a larger one-turn upward correction when current drivers return near target. */
 const MAX_PER_TURN_DELTA = 1.5;
 
 /** Deep deflation recovery threshold below target before allowing a faster upward correction. */

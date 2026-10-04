@@ -48,6 +48,58 @@ describe("GET /api/country/[code]/parties/[id]/whippable-bills — CN chamber/of
     } as never);
   });
 
+  it.each(["regionalHeads", "regionalDelegates"] as const)(
+    "surfaces both appointed %s chamber whips for a concurrent bill",
+    async (mode) => {
+      const { getGameState } = await import("@/lib/gameState");
+      vi.mocked(getGameState).mockResolvedValue({
+        currentTurn: 240,
+        preset: "1991-default",
+      } as never);
+      db.collection("countryGameStates").findOne.mockResolvedValue({
+        _id: "RU",
+        ruFederalAssemblySinceTurn: 145,
+        ruCouncilComposition: { mode },
+      });
+      const billId = new ObjectId();
+      db.collectionMocks.bills!.find.mockReturnValue({
+        toArray: async () => [
+          {
+            _id: billId,
+            countryId: "RU",
+            status: "active_both",
+            currentChamber: "stateDuma",
+            title: "Joint vote",
+          },
+        ],
+      });
+      db.collectionMocks.electedOfficials!.find.mockReturnValue({
+        toArray: async () => [
+          { officeType: "dumaDeputy", countryId: "RU", party: "1" },
+          { officeType: "federationCouncilMember", countryId: "RU", party: "1" },
+        ],
+      });
+      const { GET } = await import("./route");
+      const response = await GET(
+        new Request("http://localhost/api/country/ru/parties/1/whippable-bills"),
+        {
+          params: Promise.resolve({ code: "ru", id: "1" }),
+        }
+      );
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.stateDuma).toHaveLength(1);
+      expect(body.federationCouncil).toHaveLength(1);
+      expect(db.collectionMocks.electedOfficials!.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          countryId: "RU",
+          officeType: { $in: ["federationCouncilMember", "dumaDeputy"] },
+        })
+      );
+      vi.mocked(getGameState).mockResolvedValue({ currentTurn: 5 } as never);
+    }
+  );
+
   it("surfaces a CN NPC bill when the party has an npcDelegate, keyed by chamber 'npc'", async () => {
     const billId = new ObjectId("507f1f77bcf86cd799439021");
 

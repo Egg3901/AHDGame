@@ -13,6 +13,8 @@ import {
   isFundraiseEligible,
 } from "@/lib/actions";
 import { CARD_PHOTO_SCRIM, CATEGORY_LABELS } from "../actionsConstants";
+
+const FLIPFLOP_AXIS_LABELS = { economic: "Economic", social: "Social" } as const;
 import type { ActionCardProps } from "../actionsTypes";
 import ActionExecuteRow from "./ActionExecuteRow";
 
@@ -51,6 +53,7 @@ const ActionCard = memo(function ActionCard({
   onConvertCashOpenChange,
   onConvertCashAmountChange,
   onConvertCashExecute,
+  projection,
 }: ActionCardProps) {
   const {
     formatAmount,
@@ -131,12 +134,10 @@ const ActionCard = memo(function ActionCard({
   return (
     <div
       data-coach={`action-${card.type}`}
-      className={`relative flex flex-col rounded-xl border border-card-border bg-card overflow-hidden shadow-sm
-        ${blocked ? "opacity-60" : ""}
-      `}
+      className="relative flex flex-col overflow-hidden rounded-xl border border-card-border bg-card transition-colors hover:border-foreground/20"
     >
       {/* Image Header — period photography, resolved for the live era + country */}
-      <div className="relative h-44 overflow-hidden">
+      <div className="relative h-36 overflow-hidden">
         {/* unoptimized: static Cloudflare CDN art — routing through the Railway image optimizer would add egress */}
         <Image
           src={imageUrl}
@@ -145,62 +146,54 @@ const ActionCard = memo(function ActionCard({
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
           loading="lazy"
           unoptimized={bypassNextImageOptimization(imageUrl)}
-          className="object-cover"
+          className={`object-cover transition-[filter] ${blocked ? "grayscale" : ""}`}
         />
         <div className={`absolute inset-0 bg-gradient-to-t ${CARD_PHOTO_SCRIM}`} />
 
-        <div className="absolute inset-0 p-4 flex flex-col justify-between">
-          <div className="flex justify-between items-start gap-2">
-            <span className="inline-flex items-center rounded-full border border-white/20 bg-black px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
-              {CATEGORY_LABELS[card.category]}
-            </span>
-          </div>
-          <div>
-            <h3 className="text-xl font-bold text-white drop-shadow-md leading-tight">
-              {card.label}
-            </h3>
-            <p className="text-xs text-white/85 font-medium tracking-wide drop-shadow-sm mt-0.5">
-              {card.tagline}
-            </p>
-          </div>
+        <div className="absolute inset-0 flex flex-col justify-end p-4">
+          <h3 className="text-heading font-semibold leading-tight text-white">{card.label}</h3>
+          <p className="mt-0.5 text-body-sm text-white/85">
+            {CATEGORY_LABELS[card.category]} · {card.tagline}
+          </p>
         </div>
-
-        {/* Flash Message */}
-        {didFlash && (
-          <div
-            className={`absolute inset-0 flex items-center justify-center bg-card p-6 text-center text-sm font-semibold animate-in fade-in zoom-in-95 duration-200
-              ${flash.ok ? "text-green-400" : "text-red-400"}`}
-          >
-            {flash.msg}
-          </div>
-        )}
       </div>
 
       {/* Content Body */}
       <div className="flex flex-col flex-1 p-4 gap-4">
-        <p className="text-sm text-muted leading-relaxed flex-1">{card.flavor}</p>
+        <p className="flex-1 text-body leading-relaxed text-muted">{card.flavor}</p>
 
-        {/* Stats/Costs Grid */}
-        <dl className="grid grid-cols-2 divide-x divide-card-border/60 rounded-lg bg-card-elevated border border-card-border/50 overflow-hidden">
-          <div className="flex flex-col gap-0.5 p-3">
-            <dt className="text-[10px] text-muted uppercase tracking-wider font-semibold">Cost</dt>
-            <dd className="flex items-center gap-1.5 text-xs font-medium text-foreground tabular-nums">
-              <span className={cantAffordActions ? "text-error" : ""}>
-                {effectiveActionCost} AP
-              </span>
-              <span className="text-muted/50">•</span>
-              <span className={cantAffordFunds ? "text-error" : ""}>{effectiveFundLabel}</span>
-            </dd>
-          </div>
-          <div className="flex flex-col gap-0.5 p-3">
-            <dt className="text-[10px] text-muted uppercase tracking-wider font-semibold">
-              Effect
-            </dt>
-            <dd className="text-xs font-medium text-primary leading-snug">{card.effect}</dd>
+        {/* Cost and effect: two plain rows */}
+        <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 border-t border-card-border pt-3 text-body">
+          <dt className="text-muted">Cost</dt>
+          <dd className="font-medium tabular-nums text-foreground">
+            <span className={cantAffordActions ? "text-error" : ""}>{effectiveActionCost} AP</span>
+            <span className="mx-1.5 text-muted" aria-hidden>
+              ·
+            </span>
+            <span className={cantAffordFunds ? "text-error" : isFundraise ? "text-success" : ""}>
+              {effectiveFundLabel}
+            </span>
+          </dd>
+          <dt className="text-muted">Effect</dt>
+          <dd className="text-foreground">
+            {card.effect}
             {card.effectNote && (
-              <dd className="text-[10px] leading-snug text-muted">{card.effectNote}</dd>
+              <span className="mt-0.5 block text-body-sm text-muted">{card.effectNote}</span>
             )}
-          </div>
+          </dd>
+          {projection && (
+            <>
+              <dt className="text-muted">After</dt>
+              <dd className="tabular-nums text-foreground">
+                <span className="text-muted">{projection.label} </span>
+                {projection.from}
+                <span className="mx-1.5 text-muted" aria-label="becomes">
+                  →
+                </span>
+                <span className="font-semibold text-success">{projection.to}</span>
+              </dd>
+            </>
+          )}
         </dl>
 
         {/* Warnings */}
@@ -210,7 +203,7 @@ const ActionCard = memo(function ActionCard({
           noCash ||
           cantAffordFunds ||
           cantAffordActions) && (
-          <div className="text-xs font-medium text-error flex items-start gap-1.5 px-1">
+          <div className="flex items-start gap-1.5 text-body-sm font-medium text-error">
             <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path
                 strokeLinecap="round"
@@ -248,16 +241,16 @@ const ActionCard = memo(function ActionCard({
             <button
               type="button"
               onClick={() => onOpenCampaignAction(card.type as "canvass" | "targetedAds")}
-              className="w-full rounded-lg border border-card-border bg-card-elevated px-4 py-2 text-sm font-semibold hover:bg-primary/10"
+              className="w-full rounded-lg border border-card-border bg-card-elevated px-4 py-2 text-sm font-semibold transition-colors hover:bg-card-muted"
             >
               {card.label}
             </button>
           ) : card.href ? (
             <Link
               href={card.href}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-card-elevated border border-card-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-primary/10 hover:text-primary hover:border-primary/30 transition-all"
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-card-border bg-card-elevated px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-card-muted"
             >
-              View Dashboard
+              View dashboard
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path
                   strokeLinecap="round"
@@ -273,9 +266,9 @@ const ActionCard = memo(function ActionCard({
                 <button
                   onClick={() => onFlipflopStepChange("axis")}
                   disabled={blocked || !!executing}
-                  className="w-full rounded-lg bg-card-elevated border border-card-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full rounded-lg border border-card-border bg-card-elevated px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-card-muted disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Start Flip-Flop
+                  Start flip-flop
                 </button>
               )}
 
@@ -289,15 +282,15 @@ const ActionCard = memo(function ActionCard({
                           onFlipflopAxisChange(ax);
                           onFlipflopStepChange("direction");
                         }}
-                        className="rounded-md bg-card-elevated border border-card-border py-1.5 text-xs font-semibold uppercase tracking-wider hover:bg-primary/10 hover:border-primary/30 transition-all"
+                        className="rounded-md border border-card-border bg-card-elevated py-1.5 text-body-sm font-semibold transition-colors hover:bg-card-muted"
                       >
-                        {ax}
+                        {FLIPFLOP_AXIS_LABELS[ax]}
                       </button>
                     ))}
                   </div>
                   <button
                     onClick={() => onFlipflopStepChange(null)}
-                    className="w-full text-xs text-muted hover:text-foreground transition-colors"
+                    className="w-full text-body-sm text-muted transition-colors hover:text-foreground"
                   >
                     Cancel
                   </button>
@@ -307,10 +300,10 @@ const ActionCard = memo(function ActionCard({
               {flipflopStep === "direction" && flipflopAxis && (
                 <div className="animate-in slide-in-from-bottom-2 duration-200 space-y-2">
                   <div className="flex items-center justify-between px-1">
-                    <span className="text-[10px] uppercase tracking-widest text-muted font-bold">
-                      {flipflopAxis}
+                    <span className="text-body-sm text-muted">
+                      {FLIPFLOP_AXIS_LABELS[flipflopAxis]}
                     </span>
-                    <span className="text-xs font-bold tabular-nums">
+                    <span className="text-body-sm font-semibold tabular-nums">
                       {flipflopAxis === "economic"
                         ? character.policies?.economic
                         : character.policies?.social}
@@ -320,20 +313,22 @@ const ActionCard = memo(function ActionCard({
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       onClick={() => onFlipflopDirChange(-1)}
-                      className={`rounded-md border py-1.5 text-xs font-bold uppercase tracking-wider transition-all ${
+                      aria-pressed={flipflopDir === -1}
+                      className={`rounded-md border py-1.5 text-body-sm font-semibold transition-colors ${
                         flipflopDir === -1
-                          ? "bg-red-500/20 border-red-500 text-red-400"
-                          : "bg-card-elevated border-card-border hover:bg-card-elevated/80"
+                          ? "border-foreground/50 bg-card-muted text-foreground"
+                          : "border-card-border bg-card-elevated hover:bg-card-muted"
                       }`}
                     >
                       Left
                     </button>
                     <button
                       onClick={() => onFlipflopDirChange(1)}
-                      className={`rounded-md border py-1.5 text-xs font-bold uppercase tracking-wider transition-all ${
+                      aria-pressed={flipflopDir === 1}
+                      className={`rounded-md border py-1.5 text-body-sm font-semibold transition-colors ${
                         flipflopDir === 1
-                          ? "bg-red-500/20 border-red-500 text-red-400"
-                          : "bg-card-elevated border-card-border hover:bg-card-elevated/80"
+                          ? "border-foreground/50 bg-card-muted text-foreground"
+                          : "border-card-border bg-card-elevated hover:bg-card-muted"
                       }`}
                     >
                       Right
@@ -344,15 +339,15 @@ const ActionCard = memo(function ActionCard({
                     <button
                       onClick={() => onFlipflop(flipflopAxis, flipflopDir)}
                       disabled={!!executing}
-                      className="w-full rounded-lg bg-red-600 px-4 py-2 text-sm font-bold text-white shadow-lg hover:bg-red-500 hover:shadow-red-500/20 transition-all disabled:opacity-50"
+                      className="w-full rounded-lg bg-error px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-error-muted disabled:opacity-50"
                     >
-                      {executing === "flipflop" ? "Shifting..." : "Confirm Shift"}
+                      {executing === "flipflop" ? "Shifting..." : "Confirm shift"}
                     </button>
                   )}
 
                   <button
                     onClick={() => onFlipflopStepChange(null)}
-                    className="w-full text-xs text-muted hover:text-foreground transition-colors"
+                    className="w-full text-body-sm text-muted transition-colors hover:text-foreground"
                   >
                     Cancel
                   </button>
@@ -365,9 +360,9 @@ const ActionCard = memo(function ActionCard({
                 <button
                   onClick={() => onConvertCashOpenChange(true)}
                   disabled={blocked || !!executing}
-                  className="w-full rounded-lg bg-card-elevated border border-card-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-amber-500/10 hover:text-amber-400 hover:border-amber-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full rounded-lg border border-card-border bg-card-elevated px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-card-muted disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Start Donation
+                  Start donation
                 </button>
               )}
 
@@ -393,17 +388,15 @@ const ActionCard = memo(function ActionCard({
                   return (
                     <div className="animate-in slide-in-from-bottom-2 duration-200 space-y-2">
                       <div className="flex items-center justify-between px-1">
-                        <span className="text-[10px] uppercase tracking-widest text-muted font-bold">
-                          Cash on Hand
-                        </span>
-                        <span className="text-xs font-bold tabular-nums">
+                        <span className="text-body-sm text-muted">Cash on hand</span>
+                        <span className="text-body-sm font-semibold tabular-nums">
                           {inputSymbol}
                           {displayCash.toLocaleString("en-US")}
                         </span>
                       </div>
 
                       <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-body-sm text-muted">
                           {inputSymbol}
                         </span>
                         <input
@@ -413,7 +406,7 @@ const ActionCard = memo(function ActionCard({
                           value={convertCashAmount}
                           onChange={(e) => onConvertCashAmountChange(e.target.value)}
                           placeholder="Amount to convert"
-                          className="w-full rounded-md border border-card-border bg-card-elevated pl-7 pr-3 py-1.5 text-xs font-medium text-foreground placeholder:text-muted/60 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/30"
+                          className="w-full rounded-md border border-card-border bg-card-elevated py-1.5 pl-7 pr-3 text-body-sm font-medium text-foreground placeholder:text-muted/60 focus:border-foreground/40 focus:outline-none"
                         />
                       </div>
 
@@ -424,7 +417,7 @@ const ActionCard = memo(function ActionCard({
                             onClick={() =>
                               onConvertCashAmountChange(String(Math.floor(displayCash * pct)))
                             }
-                            className="rounded-md bg-card-elevated border border-card-border py-1 text-[10px] font-bold uppercase tracking-wider hover:bg-amber-500/10 hover:border-amber-500/30 transition-all"
+                            className="rounded-md border border-card-border bg-card-elevated py-1 text-body-sm font-semibold transition-colors hover:bg-card-muted"
                           >
                             {pct === 1 ? "Max" : `${pct * 100}%`}
                           </button>
@@ -432,38 +425,36 @@ const ActionCard = memo(function ActionCard({
                       </div>
 
                       {valid && (
-                        <div className="grid grid-cols-2 gap-2 px-1 text-[10px]">
+                        <dl className="grid grid-cols-2 gap-2 px-1 text-body-sm">
                           <div>
-                            <span className="text-muted uppercase tracking-wider font-semibold">
-                              Campaign Funds
-                            </span>
-                            <p className="text-xs font-bold text-green-400">
+                            <dt className="text-muted">Campaign funds</dt>
+                            <dd className="font-semibold tabular-nums text-success">
                               +{inputSymbol}
                               {previewFunds.toLocaleString("en-US")}
-                            </p>
+                            </dd>
                           </div>
                           <div>
-                            <span className="text-muted uppercase tracking-wider font-semibold">
-                              Infamy
-                            </span>
-                            <p className="text-xs font-bold text-red-400">+{previewInfamy}%</p>
+                            <dt className="text-muted">Infamy</dt>
+                            <dd className="font-semibold tabular-nums text-error">
+                              +{previewInfamy}%
+                            </dd>
                           </div>
-                        </div>
+                        </dl>
                       )}
 
                       {valid && !convertConfirming && (
                         <button
                           onClick={() => setConvertConfirming(true)}
                           disabled={!!executing}
-                          className="w-full rounded-lg bg-amber-600 px-4 py-2 text-sm font-bold text-white shadow-lg hover:bg-amber-500 hover:shadow-amber-500/20 transition-all disabled:opacity-50"
+                          className="w-full rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-dark disabled:opacity-50"
                         >
-                          {executing === "convertCash" ? "Converting..." : "Confirm Donation"}
+                          {executing === "convertCash" ? "Converting..." : "Confirm donation"}
                         </button>
                       )}
 
                       {valid && convertConfirming && (
-                        <div className="rounded-lg border border-red-500/30 bg-red-500/5 p-3 space-y-2">
-                          <p className="text-xs leading-snug text-foreground">
+                        <div className="space-y-2 rounded-lg border border-error/30 p-3">
+                          <p className="text-body-sm leading-snug text-foreground">
                             Self-funding your campaign raises Infamy by +{previewInfamy}%. Infamy
                             decays 5% per turn.
                           </p>
@@ -474,13 +465,13 @@ const ActionCard = memo(function ActionCard({
                                 onConvertCashExecute(localDonation);
                               }}
                               disabled={!!executing}
-                              className="flex-1 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-500 transition-all disabled:opacity-50"
+                              className="flex-1 rounded-lg bg-error px-3 py-1.5 text-body-sm font-semibold text-white transition-colors hover:bg-error-muted disabled:opacity-50"
                             >
                               {executing === "convertCash" ? "Converting..." : "Yes, donate"}
                             </button>
                             <button
                               onClick={() => setConvertConfirming(false)}
-                              className="flex-1 rounded-lg border border-card-border px-3 py-1.5 text-xs font-medium text-muted hover:text-foreground transition-colors"
+                              className="flex-1 rounded-lg border border-card-border px-3 py-1.5 text-body-sm font-medium text-muted transition-colors hover:text-foreground"
                             >
                               Back
                             </button>
@@ -493,7 +484,7 @@ const ActionCard = memo(function ActionCard({
                           setConvertConfirming(false);
                           onConvertCashOpenChange(false);
                         }}
-                        className="w-full text-xs text-muted hover:text-foreground transition-colors"
+                        className="w-full text-body-sm text-muted transition-colors hover:text-foreground"
                       >
                         Cancel
                       </button>
@@ -513,6 +504,32 @@ const ActionCard = memo(function ActionCard({
             />
           )}
         </div>
+
+        {/* Result of the last use, kept until the next action */}
+        {didFlash && (
+          <p
+            role="status"
+            className={`flex items-start gap-1.5 text-body-sm font-medium animate-in fade-in duration-200 ${
+              flash.ok ? "text-success" : "text-error"
+            }`}
+          >
+            <svg
+              className="mt-px h-4 w-4 shrink-0"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+              aria-hidden
+            >
+              {flash.ok ? (
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01" />
+              )}
+            </svg>
+            <span>{flash.msg}</span>
+          </p>
+        )}
       </div>
     </div>
   );

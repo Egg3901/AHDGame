@@ -1,4 +1,8 @@
-import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
+/**
+ * Country chamber keys and deputy offices follow their resolved constitution.
+ * getOfficeTypeForChamber and getChamberKeyForOfficeType accept an active snapshot so successor legislatures keep the same proposal and voting rules.
+ */
+import { getCountryConfig, type CountryId, type CountryConfig } from "@/lib/constants/countries";
 
 /**
  * Resolve the office-type key for a given chamber key in a country.
@@ -14,9 +18,10 @@ import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
 export function getOfficeTypeForChamber(
   countryId: CountryId,
   chamberKey: string,
-  preset?: string
+  preset?: string,
+  runtimeCountry?: CountryConfig
 ): string {
-  const office = getCountryConfig(countryId, preset).officeTypes.find(
+  const office = (runtimeCountry ?? getCountryConfig(countryId, preset)).officeTypes.find(
     (o) => "chamberKey" in o && o.chamberKey === chamberKey
   );
   return office?.key ?? chamberKey;
@@ -36,9 +41,12 @@ export function getOfficeTypeForChamber(
 export function getChamberKeyForOfficeType(
   countryId: CountryId,
   officeType: string,
-  preset?: string
+  preset?: string,
+  runtimeCountry?: CountryConfig
 ): string {
-  const office = getCountryConfig(countryId, preset).officeTypes.find((o) => o.key === officeType);
+  const office = (runtimeCountry ?? getCountryConfig(countryId, preset)).officeTypes.find(
+    (o) => o.key === officeType
+  );
   if (office && "chamberKey" in office && office.chamberKey) {
     return office.chamberKey;
   }

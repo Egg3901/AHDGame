@@ -2,7 +2,7 @@
  * @vitest-environment happy-dom
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { RegionRegistryTab } from "./RegionRegistryTab";
 import { POLITICAL_METRIC_CATEGORIES, FAMILY_SLUGS } from "@/lib/politicalMetrics/types";
 
@@ -81,6 +81,11 @@ function renderTab() {
   render(<RegionRegistryTab countryId="US" regionId="GA" regionName="Georgia" />);
 }
 
+/** The registry header: its readout lines, the region's name and the headline figure. */
+function header() {
+  return screen.getByRole("heading", { level: 1, name: "Georgia" }).closest("header")!;
+}
+
 describe("RegionRegistryTab", () => {
   it("heads the registry with the region, not the country", async () => {
     mockFetch(payload());
@@ -92,10 +97,12 @@ describe("RegionRegistryTab", () => {
     mockFetch(payload());
     renderTab();
     await screen.findByText(/situation registry/);
-    expect(screen.getByText(/STABLE · 68\/100/)).toBeTruthy();
+    // The headline figure with its outlined status tag.
+    expect(within(header()).getByText("68")).toBeTruthy();
+    expect(within(header()).getByText("STABLE")).toBeTruthy();
     // 68 against a national 70, so a two-point deficit.
-    expect(screen.getByText(/national 70/)).toBeTruthy();
-    expect(screen.getByText("(-2)")).toBeTruthy();
+    expect(within(header()).getByText(/national 70/)).toBeTruthy();
+    expect(within(header()).getByText("(-2)")).toBeTruthy();
   });
 
   it("keeps the masthead's three figures reconcilable", async () => {
@@ -104,15 +111,15 @@ describe("RegionRegistryTab", () => {
     mockFetch(payload({ overall: 67.6, nationalOverall: 70 }));
     renderTab();
     await screen.findByText(/situation registry/);
-    expect(screen.getByText(/STABLE · 68\/100/)).toBeTruthy();
-    expect(screen.getByText(/national 70/)).toBeTruthy();
-    expect(screen.getByText("(-2)")).toBeTruthy();
+    expect(within(header()).getByText("68")).toBeTruthy();
+    expect(within(header()).getByText(/national 70/)).toBeTruthy();
+    expect(within(header()).getByText("(-2)")).toBeTruthy();
     expect(screen.queryByText("(-2.4)")).toBeNull();
   });
 
   it("captions the category subtitle with the REGION name", async () => {
     // `countryDisplayName` on the region payload is the country, and the shared
-    // views print it as their subtitle — passing it straight through captioned
+    // views print it as their subtitle. Passing it straight through captioned
     // every Georgia page "United States".
     mockFetch(payload());
     renderTab();
@@ -218,7 +225,7 @@ describe("RegionRegistryTab compare view", () => {
 
   it("scores the home column the same way as the peer columns", async () => {
     // Home used to read `category.score` (derived from unrounded metric values)
-    // while peers were averaged from the rounded values in `regions` — two
+    // while peers were averaged from the rounded values in `regions`: two
     // columns of one table doing different arithmetic.
     mockFetch(payload());
     renderTab();
@@ -227,9 +234,11 @@ describe("RegionRegistryTab compare view", () => {
     fireEvent.click(screen.getByRole("button", { name: "New York" }));
 
     // Every metric is 68 for GA and 72 for NY, so every category row must read
-    // exactly that in both columns.
-    expect(screen.getAllByText("68").length).toBe(9);
-    expect(screen.getAllByText("72").length).toBe(9);
+    // exactly that in both columns. Scoped to the table: the page header shows
+    // Georgia's own 68 as its headline figure.
+    const table = screen.getByRole("table");
+    expect(within(table).getAllByText("68").length).toBe(9);
+    expect(within(table).getAllByText("72").length).toBe(9);
   });
 
   it("names the region plural from the country config, not by appending an s", async () => {

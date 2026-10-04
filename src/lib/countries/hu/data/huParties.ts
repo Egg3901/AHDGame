@@ -1,4 +1,5 @@
 import type { PartySeed } from "@/lib/seeds/reference/politicalParties";
+import { PARTY_ROSTERS_2027 } from "@/lib/seeds/partyRosters2027";
 
 /**
  * Hungary ruling party (Cold-War presets) — era-specific identity.
@@ -16,6 +17,7 @@ import type { PartySeed } from "@/lib/seeds/reference/politicalParties";
  * collides. Positions on the -5..+5 scale.
  */
 export const huParties: PartySeed[] = [
+  ...(PARTY_ROSTERS_2027.HU ?? []),
   {
     seedOrder: 1,
     countryId: "HU",

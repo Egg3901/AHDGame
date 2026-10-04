@@ -76,7 +76,7 @@ export default function PoliticalMetricsClient({ code }: { code: string }) {
             </CardSkeleton>
           ))}
         </div>
-        <div className="text-center font-mono text-body-xs uppercase tracking-widest text-muted">
+        <div className="text-center font-mono text-body-sm uppercase tracking-widest text-muted">
           Retrieving national situation data…
         </div>
       </div>
@@ -86,7 +86,7 @@ export default function PoliticalMetricsClient({ code }: { code: string }) {
   if (error || !data) {
     return (
       <div className="mx-auto mt-12 max-w-lg rounded-lg border border-card-border bg-card p-8 text-center shadow-card">
-        <span className="inline-block -rotate-1 rounded border border-error px-2.5 py-0.5 font-mono text-body-xs uppercase tracking-widest text-error">
+        <span className="inline-block -rotate-1 rounded border border-error px-2.5 py-0.5 font-mono text-body-sm uppercase tracking-widest text-error">
           Transmission interrupted
         </span>
         <h2 className="mt-4 text-heading-lg text-foreground">Registry data unavailable</h2>
@@ -113,6 +113,7 @@ export default function PoliticalMetricsClient({ code }: { code: string }) {
         year={data.year}
         turn={data.turn}
         onCompare={() => setView({ kind: "compare" })}
+        compareLabel="⇄ Compare countries"
       />
       {view.kind === "overview" && (
         <OverviewView

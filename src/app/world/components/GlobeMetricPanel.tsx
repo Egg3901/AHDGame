@@ -185,7 +185,7 @@ export default function GlobeMetricPanel({
                   className="w-2.5 h-2.5 rounded-sm border border-card-border"
                   style={{ backgroundColor: entry.color }}
                 />
-                <span className="text-[10px] text-muted whitespace-nowrap">{entry.label}</span>
+                <span className="whitespace-nowrap text-body-sm text-muted">{entry.label}</span>
               </span>
             ))}
             {filter.type === "blocs" && (
@@ -194,7 +194,7 @@ export default function GlobeMetricPanel({
                   className="w-2.5 h-2.5 rounded-sm border border-card-border"
                   style={{ backgroundColor: TIER_COLORS.background }}
                 />
-                <span className="text-[10px] text-muted whitespace-nowrap">
+                <span className="whitespace-nowrap text-body-sm text-muted">
                   {TIER_LABELS.background}
                 </span>
               </span>
@@ -248,8 +248,8 @@ function FilterChip({
   return (
     <button
       onClick={onClick}
-      className={`shrink-0 rounded-md font-medium transition-all whitespace-nowrap ${
-        small ? "px-2 py-0.5 text-[10px]" : "px-2.5 py-1 text-[11px]"
+      className={`shrink-0 whitespace-nowrap rounded-md text-body-sm font-medium transition-colors ${
+        small ? "px-2 py-0.5" : "px-2.5 py-1"
       } ${
         active
           ? "bg-primary/20 text-primary border border-primary/30"

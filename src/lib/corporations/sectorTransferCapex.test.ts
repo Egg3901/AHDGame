@@ -19,25 +19,23 @@ const order = (over: Partial<SectorBuildOrder> = {}): SectorBuildOrder => ({
 const midBuild = (over: Partial<SectorPlantFields> = {}): SectorPlantFields => ({
   capitalStock: 500,
   buildQueue: [order()],
-  constructionInProgressAnchor: 1_000_000,
   mothballed: false,
   plantsStartTurn: 5,
   ...over,
 });
 
 describe("mergeSectorPlantFields", () => {
-  it("sums capacity and CIP and concatenates the queue", () => {
+  it("sums capacity and concatenates the queue", () => {
     const merged = mergeSectorPlantFields(
       midBuild(),
       midBuild({
         capitalStock: 250,
-        constructionInProgressAnchor: 400_000,
         buildQueue: [order({ costPaidAnchor: 400_000, onlineTurn: 15 })],
       })
     );
     expect(merged.capitalStock).toBe(750);
-    expect(merged.constructionInProgressAnchor).toBe(1_400_000);
     expect(merged.buildQueue).toHaveLength(2);
+    expect(merged).not.toHaveProperty("constructionInProgressAnchor");
   });
 
   it("orders the merged queue oldest-landing-first", () => {
@@ -52,22 +50,10 @@ describe("mergeSectorPlantFields", () => {
     // A JPY seller and a USD buyer: revenue is re-denominated by the caller,
     // these fields must not be.
     const merged = mergeSectorPlantFields(
-      { capitalStock: 0, buildQueue: [], constructionInProgressAnchor: 0 },
+      { capitalStock: 0, buildQueue: [] },
       midBuild({ buildQueue: [order({ costPaidAnchor: 7_654_321 })] })
     );
     expect(merged.buildQueue[0].costPaidAnchor).toBe(7_654_321);
-    expect(merged.constructionInProgressAnchor).toBe(1_000_000);
-  });
-
-  it("keeps the CIP total equal to the sum of the merged queue", () => {
-    const a = midBuild({ constructionInProgressAnchor: 1_000_000 });
-    const b = midBuild({
-      constructionInProgressAnchor: 250_000,
-      buildQueue: [order({ costPaidAnchor: 250_000 })],
-    });
-    const merged = mergeSectorPlantFields(a, b);
-    const queueSum = merged.buildQueue.reduce((s, o) => s + o.costPaidAnchor, 0);
-    expect(merged.constructionInProgressAnchor).toBe(queueSum);
   });
 
   it("mothballs only when BOTH sides are mothballed", () => {
@@ -111,7 +97,6 @@ describe("mergeSectorPlantFields", () => {
       plantUnitRemainder: 0,
       capacityBookAnchor: 0,
       buildQueue: [],
-      constructionInProgressAnchor: 0,
       mothballed: false,
       plantsStartTurn: null,
       legacyRevenueShadow: null,
@@ -119,56 +104,47 @@ describe("mergeSectorPlantFields", () => {
   });
 
   it("conserves a mid-build transfer: nothing is created or destroyed", () => {
-    const survivor = midBuild({ capitalStock: 500, constructionInProgressAnchor: 1_000_000 });
+    const survivor = midBuild({ capitalStock: 500 });
     const incoming = midBuild({
       capitalStock: 120,
-      constructionInProgressAnchor: 3_300_000,
       buildQueue: [order({ costPaidAnchor: 3_300_000, unitsOrdered: 42, onlineTurn: 25 })],
     });
     const merged = mergeSectorPlantFields(survivor, incoming);
     expect(merged.capitalStock).toBe(620);
-    expect(merged.constructionInProgressAnchor).toBe(4_300_000);
     expect(merged.buildQueue.reduce((s, o) => s + o.unitsOrdered, 0)).toBe(142);
+    expect(merged.buildQueue.reduce((s, o) => s + o.costPaidAnchor, 0)).toBe(4_300_000);
   });
 });
 
 describe("carveSectorPlantFields", () => {
-  it("splits capacity, CIP and both legs of each build order", () => {
+  it("splits capacity and both legs of each build order", () => {
     const carved = carveSectorPlantFields(midBuild(), 0.25);
     expect(carved.capitalStock).toBe(125);
-    expect(carved.constructionInProgressAnchor).toBe(250_000);
     expect(carved.buildQueue[0].unitsOrdered).toBe(25);
     expect(carved.buildQueue[0].costPaidAnchor).toBe(250_000);
   });
 
   it("conserves money and units across the split", () => {
-    const source = midBuild({ capitalStock: 800, constructionInProgressAnchor: 2_000_000 });
+    const source = midBuild({ capitalStock: 800 });
     const f = 0.3;
     const carved = carveSectorPlantFields(source, f);
     const kept = carveSectorPlantFields(source, 1 - f);
     expect(carved.capitalStock + kept.capitalStock).toBeCloseTo(800, 6);
-    expect(carved.constructionInProgressAnchor + kept.constructionInProgressAnchor).toBeCloseTo(
-      2_000_000,
-      6
-    );
     expect(carved.buildQueue[0].costPaidAnchor + kept.buildQueue[0].costPaidAnchor).toBeCloseTo(
       1_000_000,
       6
     );
   });
 
-  it("keeps CIP equal to the sum of the carved queue (no refund arbitrage)", () => {
+  it("does not persist CIP when carving the queue", () => {
     const carved = carveSectorPlantFields(
       midBuild({
-        constructionInProgressAnchor: 1_500_000,
         buildQueue: [order({ costPaidAnchor: 1_000_000 }), order({ costPaidAnchor: 500_000 })],
       }),
       0.4
     );
-    expect(carved.buildQueue.reduce((s, o) => s + o.costPaidAnchor, 0)).toBeCloseTo(
-      carved.constructionInProgressAnchor,
-      6
-    );
+    expect(carved.buildQueue.reduce((s, o) => s + o.costPaidAnchor, 0)).toBeCloseTo(600_000, 6);
+    expect(carved).not.toHaveProperty("constructionInProgressAnchor");
   });
 
   it("copies, not splits, plantsStartTurn and mothballed", () => {
@@ -187,7 +163,7 @@ describe("carveSectorPlantFields", () => {
 describe("hasPlantState", () => {
   it("is false for a pre-plants document and true once anything is stamped", () => {
     expect(hasPlantState({})).toBe(false);
-    expect(hasPlantState({ capitalStock: 0, constructionInProgressAnchor: 0 })).toBe(false);
+    expect(hasPlantState({ capitalStock: 0, buildQueue: [] })).toBe(false);
     expect(hasPlantState({ capitalStock: 1 })).toBe(true);
     expect(hasPlantState({ plantsStartTurn: 3 })).toBe(true);
     expect(hasPlantState({ buildQueue: [order()] })).toBe(true);
@@ -242,7 +218,6 @@ describe("identitySectorPlantFields", () => {
       plantUnitRemainder: 0,
       capacityBookAnchor: 0,
       buildQueue: survivor.buildQueue,
-      constructionInProgressAnchor: 1_000_000,
       mothballed: true,
       activeCapacityPercent: 100,
       plantsStartTurn: 5,

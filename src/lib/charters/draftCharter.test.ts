@@ -4,6 +4,8 @@ import { ObjectId } from "mongodb";
 import { draftCharter } from "./draftCharter";
 
 function makeDb(opts: {
+  gameState?: { preset?: string; startingPartiesMode?: string; currentTurn?: number };
+  playerCountry?: boolean;
   founderCharactersOk?: boolean;
   founderCountryMismatch?: boolean;
   founderMissingUser?: boolean;
@@ -51,9 +53,20 @@ function makeDb(opts: {
         insertOne,
       };
     }
+    if (name === "countryGameStates") {
+      return {
+        find: () => ({
+          toArray: vi
+            .fn()
+            .mockResolvedValue([
+              { _id: resolvedCountry, enabledForPlayers: opts.playerCountry ?? true },
+            ]),
+        }),
+      };
+    }
     if (name === "gameState") {
       return {
-        findOne: vi.fn().mockResolvedValue({ _id: "current", currentTurn: 50 }),
+        findOne: vi.fn().mockResolvedValue({ _id: "current", currentTurn: 50, ...opts.gameState }),
       };
     }
     return {};
@@ -218,6 +231,37 @@ describe("draftCharter", () => {
     );
     expect(result).toEqual({ ok: false, reason: "abbreviation-taken" });
   });
+
+  it.each([
+    ["none", true, null, true],
+    ["none", false, null, false],
+    ["default", true, null, false],
+    ["none", true, { abbreviation: "UUP" }, false],
+  ] as const)(
+    "allows an absent UUP only in an empty player start: %s %s %s",
+    async (mode, playerCountry, livePartyConflict, expected) => {
+      const { db, founderCharacterIds, insertOne } = makeDb({
+        founderCountry: "UK",
+        founderHomeState: "NIR",
+        gameState: { preset: "1991-default", startingPartiesMode: mode },
+        playerCountry,
+        livePartyConflict,
+      });
+      const result = await draftCharter(
+        {
+          countryId: "UK",
+          proposedName: "Ulster Unionist Party",
+          proposedAbbr: "UUP",
+          platform: { economic: 0, social: 0 },
+          foundersCharacterIds: founderCharacterIds,
+          proposedBy: founderCharacterIds[0]!,
+        },
+        db
+      );
+      expect(result.ok).toBe(expected);
+      expect(insertOne).toHaveBeenCalledTimes(expected ? 1 : 0);
+    }
+  );
 
   it("rejects names reserved for preset-gated defaults (UUP under 2019)", async () => {
     // UUP is a 1991-only default in `ukParties.ts`. Under 2019-default the

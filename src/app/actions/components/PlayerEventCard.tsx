@@ -181,37 +181,21 @@ export default function PlayerEventCard() {
       <div
         id="event-card"
         ref={cardRef}
-        className="relative overflow-hidden rounded-xl border border-card-border bg-card"
+        className="relative overflow-hidden rounded-xl border border-card-border bg-card px-5 py-4"
       >
-        <div className="flex flex-wrap items-start justify-between gap-3 px-5 py-4">
-          <div className="flex items-center gap-3">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-500/10 text-amber-600">
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-            </span>
-            <div>
-              <div className="text-[10px] font-semibold uppercase tracking-widest text-amber-600">
-                Latest event — {lastResolved.tierLabel}
-              </div>
-              <p className="text-sm font-semibold text-foreground">{lastResolved.title}</p>
-              <p className="mt-0.5 text-xs text-muted">
-                {lastResolved.reason === "timeout"
-                  ? `Time ran out — "${lastResolved.optionLabel}" was applied automatically.`
-                  : `You chose "${lastResolved.optionLabel}".`}
-                {resolvedEffects.length > 0 && <> {resolvedEffects.join(" · ")}</>}
-              </p>
-            </div>
-          </div>
-          <span className="text-[11px] text-muted">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+          <p className="text-body font-semibold text-foreground">{lastResolved.title}</p>
+          <span className="text-body-sm text-muted">
             {formatTimeAgo(lastResolved.resolvedAt, now)}
           </span>
         </div>
+        <p className="mt-0.5 text-body-sm text-muted">Latest event: {lastResolved.tierLabel}</p>
+        <p className="mt-1 text-body-sm text-muted">
+          {lastResolved.reason === "timeout"
+            ? `Time ran out, so "${lastResolved.optionLabel}" was applied automatically.`
+            : `You chose "${lastResolved.optionLabel}".`}
+          {resolvedEffects.length > 0 && <> {resolvedEffects.join(" · ")}</>}
+        </p>
       </div>
     );
   }
@@ -228,35 +212,21 @@ export default function PlayerEventCard() {
     <div
       id="event-card"
       ref={cardRef}
-      className="relative overflow-hidden rounded-xl border-2 border-amber-500/40 bg-card shadow-lg"
+      className="relative overflow-hidden rounded-xl border border-card-border bg-card"
     >
       {event.image && (
         <div className="relative h-40 w-full bg-card sm:h-48">
           <Image src={event.image} alt={event.title} fill className="object-cover" unoptimized />
         </div>
       )}
-      <div className="border-b border-card-border bg-gradient-to-r from-amber-500/10 to-transparent px-5 py-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-500/15 text-amber-500">
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-            </span>
-            <div>
-              <div className="text-[10px] font-semibold uppercase tracking-widest text-amber-600">
-                Event
-              </div>
-              <h2 className="text-base font-bold text-foreground">{event.title}</h2>
-            </div>
-          </div>
+      <div className="border-b border-card-border px-5 py-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+          <h2 className="text-heading-sm font-semibold text-foreground">
+            <span className="sr-only">Event: </span>
+            {event.title}
+          </h2>
           {!result && (
-            <span className="rounded-full bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-600">
+            <span className="text-body-sm font-semibold tabular-nums text-warning">
               Respond within {formatCountdown(msLeft)}
             </span>
           )}
@@ -265,28 +235,28 @@ export default function PlayerEventCard() {
 
       <div className="space-y-4 px-5 py-4">
         <div>
-          <p className="text-sm font-semibold text-foreground">{event.headline}</p>
-          <p className="mt-1 text-sm text-muted">{event.body}</p>
+          <p className="text-body font-semibold text-foreground">{event.headline}</p>
+          <p className="mt-1 text-body text-muted">{event.body}</p>
         </div>
 
         {result ? (
-          <div className="rounded-lg border border-card-border bg-background/40 px-4 py-3">
-            <div className="text-xs font-semibold uppercase tracking-wider text-amber-600">
-              Outcome — {result.tierLabel}
+          <div className="border-t border-card-border pt-3">
+            <div className="text-body-sm font-semibold text-foreground">
+              Outcome: {result.tierLabel}
             </div>
-            <p className="mt-1 text-sm text-foreground">
+            <p className="mt-1 text-body text-foreground">
               You chose &ldquo;
               {event.options.find((o) => o.id === result.optionId)?.label ?? result.optionId}
               &rdquo;.
             </p>
             {effectSummary.length > 0 && (
-              <p className="mt-1 text-xs text-muted">{effectSummary.join(" · ")}</p>
+              <p className="mt-1 text-body-sm text-muted">{effectSummary.join(" · ")}</p>
             )}
             {result.statAdjustment && result.statAdjustment.delta !== 0 && (
               <p
                 className={[
-                  "mt-1.5 text-xs font-medium",
-                  result.statAdjustment.delta > 0 ? "text-emerald-600" : "text-rose-500",
+                  "mt-1.5 text-body-sm font-medium",
+                  result.statAdjustment.delta > 0 ? "text-success" : "text-error",
                 ].join(" ")}
               >
                 {"Your "}
@@ -301,30 +271,27 @@ export default function PlayerEventCard() {
           </div>
         ) : (
           <>
-            <p className="mb-2 text-xs font-semibold text-amber-600">
-              Clicking an option confirms that decision immediately — it&apos;s applied and
-              can&apos;t be undone. Use the arrow (▾) to preview an option before committing.
+            <p className="mb-2 text-body-sm font-medium text-warning">
+              Clicking an option confirms that decision immediately. It is applied and can&apos;t be
+              undone. Use the arrow (▾) to preview an option before committing.
             </p>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {event.options.map((option) => {
                 const expanded = expandedOptionId === option.id;
                 const adj = option.statAdjustment;
                 return (
-                  <div
-                    key={option.id}
-                    className="rounded-lg border border-card-border bg-background/40"
-                  >
+                  <div key={option.id} className="rounded-lg border border-card-border">
                     <div className="flex items-center justify-between gap-2 px-3 py-2.5">
                       <div className="min-w-0 flex-1">
                         <button
                           onClick={() => resolve(option.id)}
                           disabled={resolving}
                           title="Click to confirm this choice"
-                          className="w-full text-left text-sm font-semibold text-foreground transition-colors hover:text-amber-600 disabled:cursor-not-allowed disabled:opacity-50"
+                          className="w-full text-left text-body font-semibold text-foreground transition-colors hover:underline disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           {option.label}
                           {option.isDefault && (
-                            <span className="ml-2 rounded-full bg-muted/15 px-2 py-0.5 text-[10px] font-medium text-muted">
+                            <span className="ml-2 text-body-sm font-normal text-muted">
                               Default
                             </span>
                           )}
@@ -332,8 +299,8 @@ export default function PlayerEventCard() {
                         {adj && adj.delta !== 0 && (
                           <span
                             className={[
-                              "mt-0.5 inline-flex items-center gap-1 text-[10px] font-medium",
-                              adj.delta > 0 ? "text-emerald-600" : "text-rose-500",
+                              "mt-0.5 inline-flex items-center gap-1 text-body-sm font-medium",
+                              adj.delta > 0 ? "text-success" : "text-error",
                             ].join(" ")}
                           >
                             Roll {adj.delta > 0 ? "+" : "−"}
@@ -362,7 +329,7 @@ export default function PlayerEventCard() {
                       </button>
                     </div>
                     {expanded && (
-                      <p className="border-t border-card-border px-3 py-2 text-xs text-muted">
+                      <p className="border-t border-card-border px-3 py-2 text-body-sm text-muted">
                         {option.description}
                       </p>
                     )}
@@ -375,7 +342,7 @@ export default function PlayerEventCard() {
 
         {error && <p className="text-sm font-medium text-error">{error}</p>}
         {!result && (
-          <p className="text-[11px] text-muted">
+          <p className="text-body-sm text-muted">
             No action points required. If you don&apos;t respond in time, &ldquo;
             {event.options.find((o) => o.id === event.defaultOptionId)?.label ?? "the default"}
             &rdquo; is applied automatically.

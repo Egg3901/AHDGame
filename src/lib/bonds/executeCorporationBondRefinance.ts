@@ -115,7 +115,7 @@ export async function executeCorporationBondRefinance(
   const totalEquity = totalEquityForBonds(
     liquidCapitalAnchor,
     sectorNPV,
-    sumCorporateSectorConstructionInProgress(sectors, corporation._id)
+    sumCorporateSectorConstructionInProgress(sectors, corporation._id, currentTurn)
   );
 
   // All values passed to canRefinanceDefaultedDebt are in ₳ so the 2×-equity

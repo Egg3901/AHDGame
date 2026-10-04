@@ -98,6 +98,7 @@ export async function listSectorForSale(_request: Request, { params }: RoutePara
         ? {
             sector,
             currentYear: gameState?.currentYear,
+            currentTurn: listingTurn,
             eraUnitScale: await loadWorldEraUnitScale(db),
           }
         : undefined,

@@ -3,10 +3,11 @@
 import { useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui";
 import { LocalTime } from "@/components/time/LocalTime";
+import { PARTY_SECTION_HEADING_CLASS } from "@/components/party/partyPageStyles";
 
 /**
  * Recent activity feed - a single chronological view of treasury and slate
- * events for this party. Each row carries a small type pill pointing at
+ * events for this party. Each row starts with a plain type label naming
  * the tab that hosts the relevant detail.
  */
 
@@ -27,11 +28,6 @@ interface FeedResponse {
 const TYPE_LABEL: Record<FeedItem["type"], string> = {
   treasury: "Treasury",
   slate: "Slate",
-};
-
-const TYPE_TONE: Record<FeedItem["type"], string> = {
-  treasury: "border-emerald-500/40 bg-emerald-500/15 text-emerald-300",
-  slate: "border-primary/40 bg-primary/15 text-primary",
 };
 
 interface Props {
@@ -73,19 +69,19 @@ export function RecentActivityCard({ countryCode, partyId }: Props) {
   }, [countryCode, partyId]);
 
   return (
-    <div className="rounded-xl border border-card-border bg-card p-5 space-y-3">
+    <section className="min-w-0 space-y-4">
       <div>
-        <h3 className="text-sm font-semibold">Recent activity</h3>
-        <p className="mt-0.5 text-[11px] text-muted">
+        <h2 className={PARTY_SECTION_HEADING_CLASS}>Recent activity</h2>
+        <p className="mt-1 text-body text-muted">
           Latest treasury and slate events for this party.
         </p>
       </div>
 
       {loading && (
-        <div className="min-h-[9rem] divide-y divide-card-border/40">
+        <div className="min-h-[9rem] divide-y divide-card-border">
           {[1, 2, 3, 4].map((i) => (
             <div key={i} className="flex items-center gap-3 py-2">
-              <Skeleton className="h-5 w-14 rounded-full shrink-0" />
+              <Skeleton className="h-4 w-14 shrink-0" />
               <div className="min-w-0 flex-1 space-y-1">
                 <Skeleton className="h-3.5 w-3/4" />
                 <Skeleton className="h-2.5 w-1/2" />
@@ -95,34 +91,30 @@ export function RecentActivityCard({ countryCode, partyId }: Props) {
           ))}
         </div>
       )}
-      {error && <p className="text-xs text-error">{error}</p>}
+      {error && <p className="text-body-sm text-error">{error}</p>}
 
       {!loading && !error && items.length === 0 && (
-        <p className="text-xs text-muted">No activity in the last few turns.</p>
+        <p className="text-body text-muted">No activity in the last few turns.</p>
       )}
 
       {items.length > 0 && (
-        <ul className="divide-y divide-card-border/40">
+        <ul className="divide-y divide-card-border border-y border-card-border">
           {items.map((item) => (
-            <li key={item.id} className="flex items-center gap-3 py-2 text-xs">
-              <span
-                className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${TYPE_TONE[item.type]}`}
-              >
-                {TYPE_LABEL[item.type]}
-              </span>
+            <li key={item.id} className="flex items-baseline gap-3 py-2.5 text-body">
+              <span className="w-16 shrink-0 text-body-sm text-muted">{TYPE_LABEL[item.type]}</span>
               <div className="min-w-0 flex-1">
-                <p className="text-foreground truncate">{item.summary}</p>
-                {item.detail && <p className="text-[10px] text-muted/80 truncate">{item.detail}</p>}
+                <p className="truncate text-foreground">{item.summary}</p>
+                {item.detail && <p className="truncate text-body-sm text-muted">{item.detail}</p>}
               </div>
               <LocalTime
                 value={item.createdAt}
                 options={{ dateStyle: "medium" }}
-                className="shrink-0 text-[10px] text-muted"
+                className="shrink-0 text-body-sm text-muted"
               />
             </li>
           ))}
         </ul>
       )}
-    </div>
+    </section>
   );
 }

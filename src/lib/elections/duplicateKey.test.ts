@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { insertManyIgnoringDuplicateKey, isDuplicateKeyError } from "./duplicateKey";
+import {
+  insertManyIgnoringDuplicateKey,
+  isDuplicateKeyError,
+  isActiveElectionCandidateDuplicateKey,
+} from "./duplicateKey";
 
 describe("isDuplicateKeyError", () => {
   it("matches Mongo 11000 on the error itself", () => {
@@ -49,5 +53,23 @@ describe("insertManyIgnoringDuplicateKey", () => {
   it("rethrows non-duplicate failures", async () => {
     const insertMany = vi.fn().mockRejectedValue(Object.assign(new Error("boom"), { code: 50 }));
     await expect(insertManyIgnoringDuplicateKey({ insertMany }, [{}])).rejects.toThrow("boom");
+  });
+});
+
+describe("bounded NPC player guard error compatibility", () => {
+  it.each([
+    "unique_active_election_candidate_per_character",
+    "unique_active_player_or_unbounded_npc_candidate",
+  ])("recognizes name-only %s collisions", (name) => {
+    expect(
+      isActiveElectionCandidateDuplicateKey(new Error(`E11000 duplicate key index: ${name}`))
+    ).toBe(true);
+  });
+  it("does not confuse a bounded nominee identity collision with a player guard", () => {
+    expect(
+      isActiveElectionCandidateDuplicateKey(
+        new Error("E11000 duplicate key index: unique_active_bounded_npc_nominee")
+      )
+    ).toBe(false);
   });
 });

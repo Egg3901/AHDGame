@@ -20,7 +20,8 @@ import { runTransactionWithSessionRetry } from "@/lib/db/transactionWithRetry";
 import { badRequest } from "@/lib/api/errors";
 import type { PoliticalParty, StatePartyOrg, State } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
-import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
+import { getSeedCurrencyCode, type CurrencyCode } from "@/lib/constants/currencies";
+import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import { emitTreasuryTransaction } from "@/lib/treasury/emit";
 import { emitTx } from "@/lib/financialTxLog/emit";
 import { TreasuryExecutionUncertainError } from "@/lib/treasury/executionUncertain";
@@ -179,6 +180,16 @@ export async function executeTransferToStateParty(
       createdAt: now,
     });
 
+    // Record currency: the world's seed home code, so 2027 euro members
+    // stamp EUR on every audit row. A gameState failure resolves to the
+    // default preset (era-blind map), never to a throw — nothing below may
+    // throw (see the PAST THIS POINT contract above).
+    const gameState = await getGameState().catch(() => null);
+    const txCurrency = getSeedCurrencyCode(
+      countryId,
+      gameState?.preset ?? DEFAULT_SEED_PRESET
+    ) as CurrencyCode;
+
     await emitTreasuryTransaction({
       db,
       countryId,
@@ -196,6 +207,7 @@ export async function executeTransferToStateParty(
         label: initiator.name,
       },
       now,
+      currencyCode: txCurrency,
     });
     await emitTreasuryTransaction({
       db,
@@ -214,11 +226,8 @@ export async function executeTransferToStateParty(
         label: initiator.name,
       },
       now,
+      currencyCode: txCurrency,
     });
-
-    const gameState = await getGameState();
-    const txCurrency = (COUNTRY_CURRENCY_MAP[countryId as keyof typeof COUNTRY_CURRENCY_MAP] ??
-      "USD") as CurrencyCode;
     void emitTx(db, {
       type: "party_transfer",
       turn: gameState?.currentTurn ?? 0,
@@ -266,7 +275,7 @@ export async function executeTransferToStateParty(
       countryId,
       fundEventType: "party_transfer",
       amount,
-      currencyCode: COUNTRY_CURRENCY_MAP[countryId] ?? "USD",
+      currencyCode: txCurrency,
       fromId: party._id,
       fromName: party.name,
       fromType: "party",

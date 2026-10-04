@@ -137,7 +137,7 @@ export function PendingTreasuryTransactionsCard({ countryCode, partyId, onActed 
   return (
     <div className="rounded-xl border border-card-border bg-card p-6 space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold">Pending Transactions</h3>
+        <h3 className="text-sm font-semibold">Pending transactions</h3>
         <button
           onClick={fetchPending}
           className="text-xs text-muted hover:text-foreground"
@@ -173,9 +173,9 @@ export function PendingTreasuryTransactionsCard({ countryCode, partyId, onActed 
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
-            <thead className="text-muted uppercase tracking-wider">
+            <thead className="text-muted">
               <tr>
-                <th className="text-left py-2 pr-3">Proposed By</th>
+                <th className="text-left py-2 pr-3">Proposed by</th>
                 <th className="text-left py-2 pr-3">Type</th>
                 <th className="text-right py-2 pr-3">Amount</th>
                 <th className="text-left py-2 pr-3">Recipient</th>
@@ -196,11 +196,11 @@ export function PendingTreasuryTransactionsCard({ countryCode, partyId, onActed 
                     <td className="py-2 pr-3">
                       <div>{TYPE_LABEL[row.type]}</div>
                       {row.type === "request" && row.approvalMode === "single" && (
-                        <div className="text-muted text-[10px]">1-of-3 approval</div>
+                        <div className="text-muted text-body-sm">1-of-3 approval</div>
                       )}
                       {row.note && (
                         <div
-                          className="text-muted text-[10px] italic truncate max-w-[12rem]"
+                          className="text-muted text-body-sm italic truncate max-w-[12rem]"
                           title={row.note}
                         >
                           “{row.note}”

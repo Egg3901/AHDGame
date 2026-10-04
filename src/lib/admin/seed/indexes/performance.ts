@@ -6,6 +6,29 @@ import { ensureIndex } from "./helpers";
 export async function seedPerfIndexes(db: Db, log: (msg: string) => void) {
   log("Performance indexes:");
 
+  // Native Grand Assembly replacement journals are queried once per chamber.
+  await ensureIndex(
+    db,
+    "bg1991ListReplacements",
+    { parentReceiptId: 1, generation: 1, _id: 1 },
+    { name: "bg1991ListReplacements_parent_generation" },
+    log
+  );
+  await ensureIndex(
+    db,
+    "bgGrandConstituencyByElections",
+    { status: 1, parentReceiptId: 1 },
+    { name: "bgGrandConstituencyByElections_active_parent" },
+    log
+  );
+  await ensureIndex(
+    db,
+    "bgGrandConstituencyByElections",
+    { parentReceiptId: 1, status: 1, districtId: 1, completedAtTurn: -1, generation: -1 },
+    { name: "bgGrandConstituencyByElections_previous_holder" },
+    log
+  );
+
   // Clock repair filters successful logs within the current reset iteration.
   await ensureIndex(
     db,
@@ -497,6 +520,23 @@ export async function seedPerfIndexes(db: Db, log: (msg: string) => void) {
     "shareOrders",
     { corporationId: 1, type: 1, status: 1 },
     { name: "shareOrders_corp_type_status" },
+    log
+  );
+  // The index-fund quote refresh cancels every open provider quote, then each
+  // fund checks its own open bids. Neither predicate has a corporationId, so
+  // the order-book indexes above become collection scans as history grows.
+  await ensureIndex(
+    db,
+    "shareOrders",
+    { liquidityProvider: 1, status: 1 },
+    { name: "shareOrders_liquidityProvider_status" },
+    log
+  );
+  await ensureIndex(
+    db,
+    "shareOrders",
+    { placerFundId: 1, type: 1, status: 1 },
+    { name: "shareOrders_placerFund_type_status" },
     log
   );
   // Consolidated "My Orders" view scans every open order for one character

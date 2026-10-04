@@ -166,26 +166,26 @@ export function SelectedCaucus({
             <DiscordInviteButton inviteUrl={caucus.discordInviteUrl} entityName={caucus.name} />
             <div className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
               <div>
-                <div className="text-[10px] uppercase tracking-widest text-muted">Members</div>
+                <div className="text-body-sm text-muted">Members</div>
                 <div className="text-base font-bold tabular-nums">{caucus.memberCounts.total}</div>
-                <div className="text-[10px] text-muted">
+                <div className="text-body-sm text-muted">
                   {caucus.memberCounts.players}p | {caucus.memberCounts.npps}n
                 </div>
               </div>
               <div>
-                <div className="text-[10px] uppercase tracking-widest text-muted">Treasury</div>
+                <div className="text-body-sm text-muted">Treasury</div>
                 <div className="text-base font-bold tabular-nums">
                   ${caucus.treasury.toLocaleString("en-US")}
                 </div>
-                <div className="text-[10px] text-muted">Caucus funds</div>
+                <div className="text-body-sm text-muted">Caucus funds</div>
               </div>
               <div>
-                <div className="text-[10px] uppercase tracking-widest text-muted">Tax</div>
+                <div className="text-body-sm text-muted">Tax</div>
                 <div className="text-base font-bold tabular-nums">{caucus.taxRate}%</div>
-                <div className="text-[10px] text-muted">Campaign levy</div>
+                <div className="text-body-sm text-muted">Campaign levy</div>
               </div>
               <div>
-                <div className="text-[10px] uppercase tracking-widest text-muted">Positions</div>
+                <div className="text-body-sm text-muted">Positions</div>
                 <div className="text-base font-bold tabular-nums">{detail.positions.length}</div>
               </div>
             </div>

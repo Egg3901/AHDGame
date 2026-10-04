@@ -98,6 +98,18 @@ export default function CeoGovernancePanel({
   );
   const canPayCash = corporation.liquidCapital >= relocationCost;
   const destinationName = stateOptions.find((s) => s.id === relocateTarget)?.name ?? relocateTarget;
+  // A firm protected after a federation split chooses a new home for free.
+  const pendingHeadquartersId = corporation.federationPendingHeadquartersId ?? null;
+
+  useEffect(() => {
+    if (
+      pendingHeadquartersId &&
+      enabledCountries.length > 0 &&
+      !enabledCountries.includes(relocateCountry)
+    ) {
+      dispatch({ type: "SET_RELOCATE_COUNTRY", value: enabledCountries[0] });
+    }
+  }, [pendingHeadquartersId, enabledCountries, relocateCountry, dispatch]);
 
   // States for the selected destination country. Browsing the home country
   // leaves out the current HQ.
@@ -169,6 +181,29 @@ export default function CeoGovernancePanel({
     dispatch({ type: "SET_RELOCATE_ERROR", value: "" });
     dispatch({ type: "SET_RELOCATE_SUCCESS", value: "" });
     try {
+      if (pendingHeadquartersId) {
+        const { ok, data } = await postJson("/api/federation/relocation/headquarters", {
+          applicationId: pendingHeadquartersId,
+          corporationId: corpId,
+          targetStateId: relocateTarget,
+          targetCountryId: relocateCountry,
+        });
+        if (!ok) {
+          dispatch({
+            type: "SET_RELOCATE_ERROR",
+            value: (data.error as string) || "Could not choose headquarters",
+          });
+          return;
+        }
+        dispatch({
+          type: "SET_RELOCATE_SUCCESS",
+          value: "Headquarters choice saved. Your firm can operate from its new location.",
+        });
+        dispatch({ type: "SET_SHOW_RELOCATE_CONFIRM", value: false });
+        dispatch({ type: "SET_RELOCATE_TARGET", value: "" });
+        onRefresh();
+        return;
+      }
       const { ok, data } = corporation.isPrivate
         ? await postJson(`/api/corporations/${corpId}/relocate`, {
             targetStateId: relocateTarget,
@@ -448,8 +483,12 @@ export default function CeoGovernancePanel({
 
       <GovernanceRow
         label="Headquarters"
-        summary={`${corporation.headquartersStateName}. Moving costs ${(RELOCATION_COST_FRACTION * 100).toFixed(0)}% of market cap, doubled abroad.`}
-        actionLabel="Relocate"
+        summary={
+          pendingHeadquartersId
+            ? "Protected after a federation split. Choose a headquarters in a playable country to resume operations. This choice has no relocation fee."
+            : `${corporation.headquartersStateName}. Moving costs ${(RELOCATION_COST_FRACTION * 100).toFixed(0)}% of market cap, doubled abroad.`
+        }
+        actionLabel={pendingHeadquartersId ? "Choose headquarters" : "Relocate"}
       >
         <div className="space-y-1.5">
           <p className="text-xs text-warning">
@@ -488,7 +527,7 @@ export default function CeoGovernancePanel({
                 </option>
               ))}
             </select>
-            {corporation.isPrivate && (
+            {corporation.isPrivate && !pendingHeadquartersId && (
               <select
                 aria-label="Payment"
                 value={relocatePayment}
@@ -505,31 +544,41 @@ export default function CeoGovernancePanel({
               </select>
             )}
           </div>
-          <dl className="max-w-sm">
-            <KVRow
-              label={isCrossCountry ? "Cost (abroad, doubled)" : "Cost"}
-              value={money.fmt(relocationCost)}
-            />
-            <KVRow
-              label="Cash available"
-              value={formatFull(toInternalFrom(corporation.liquidCapital, corpCode), corpCode)}
-              hint={
-                corporation.isPrivate && relocatePayment === "cash" && !canPayCash ? (
-                  <span className="text-error">not enough</span>
-                ) : undefined
-              }
-            />
-          </dl>
+          {!pendingHeadquartersId && (
+            <dl className="max-w-sm">
+              <KVRow
+                label={isCrossCountry ? "Cost (abroad, doubled)" : "Cost"}
+                value={money.fmt(relocationCost)}
+              />
+              <KVRow
+                label="Cash available"
+                value={formatFull(toInternalFrom(corporation.liquidCapital, corpCode), corpCode)}
+                hint={
+                  corporation.isPrivate && relocatePayment === "cash" && !canPayCash ? (
+                    <span className="text-error">not enough</span>
+                  ) : undefined
+                }
+              />
+            </dl>
+          )}
           {relocateTarget &&
             (showRelocateConfirm ? (
               <div className="flex flex-wrap items-center gap-1.5 text-xs">
                 <span className="text-foreground">
-                  {corporation.isPrivate
-                    ? `Move headquarters to ${destinationName} for ${money.fmt(relocationCost)}?`
-                    : `Put a move to ${destinationName} to a shareholder vote?`}
+                  {pendingHeadquartersId
+                    ? `Choose ${destinationName} as headquarters?`
+                    : corporation.isPrivate
+                      ? `Move headquarters to ${destinationName} for ${money.fmt(relocationCost)}?`
+                      : `Put a move to ${destinationName} to a shareholder vote?`}
                 </span>
                 <SmallButton tone="primary" onClick={handleRelocate} disabled={relocating}>
-                  {relocating ? "Working" : corporation.isPrivate ? "Relocate" : "Open vote"}
+                  {relocating
+                    ? "Working"
+                    : pendingHeadquartersId
+                      ? "Choose"
+                      : corporation.isPrivate
+                        ? "Relocate"
+                        : "Open vote"}
                 </SmallButton>
                 <SmallButton
                   onClick={() => dispatch({ type: "SET_SHOW_RELOCATE_CONFIRM", value: false })}
@@ -541,7 +590,12 @@ export default function CeoGovernancePanel({
               <SmallButton
                 tone="primary"
                 onClick={() => dispatch({ type: "SET_SHOW_RELOCATE_CONFIRM", value: true })}
-                disabled={corporation.isPrivate && relocatePayment === "cash" && !canPayCash}
+                disabled={
+                  !pendingHeadquartersId &&
+                  corporation.isPrivate &&
+                  relocatePayment === "cash" &&
+                  !canPayCash
+                }
               >
                 {corporation.isPrivate
                   ? `Relocate to ${destinationName}`

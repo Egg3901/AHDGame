@@ -1,7 +1,7 @@
 import { ObjectId, type AnyBulkWriteOperation, type Db } from "mongodb";
 import type { Bond, CentralBank, Corporation, CorporateSector } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
+export { resolveBondCurrency } from "@/lib/bonds/resolveBondCurrency";
 import { computeBondShortfallEscrowCover } from "@/lib/corporations/escrowFunding";
 import {
   anchorToCorpCapital,
@@ -168,6 +168,7 @@ export async function filterInsolventCorps(
       bonds: ctx.activeBonds,
       plantsEnabled,
       currentYear: gameState?.currentYear,
+      currentTurn: gameState?.currentTurn,
       eraUnitScale,
     });
 
@@ -176,23 +177,6 @@ export async function filterInsolventCorps(
     }
   }
   return insolvent;
-}
-
-/**
- * Resolve a bond's denomination currency from `bond.currencyCode` first,
- * falling back to the bond's country-inferred currency for pre-migration
- * rows. **Never** derives from the issuer corp's current country — Task-18B
- * canonicalizes `bond.currencyCode` as the denomination of record, and
- * admin-initiated cross-country HQ moves would otherwise silently
- * re-denominate outstanding bonds (see docs/design/corporations.md §HQ
- * Relocation → Bond denomination).
- */
-export function resolveBondCurrency(bond: Bond): CurrencyCode {
-  if (bond.currencyCode) return bond.currencyCode as CurrencyCode;
-  if (bond.countryId && bond.countryId in COUNTRY_CURRENCY_MAP) {
-    return COUNTRY_CURRENCY_MAP[bond.countryId as keyof typeof COUNTRY_CURRENCY_MAP];
-  }
-  return "USD";
 }
 
 /**

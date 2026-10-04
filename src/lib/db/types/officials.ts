@@ -45,6 +45,22 @@ export interface ElectedOfficial {
    * Absent/undefined for legacy records; treat as "direct".
    */
   seatSource?: "direct" | "list";
+  /** Individual Hungarian mandate; NPC members retain their shared financial owner. */
+  hungarianAssemblyMandate?: {
+    receiptId: string;
+    personId: string;
+    tier: "constituency" | "territorial" | "national";
+    districtId: string;
+    rootCandidateId: string;
+  };
+
+  bulgarianFoundingMandate?: {
+    receiptId: string;
+    personId: string;
+    tier: "constituency" | "list";
+    districtId: string;
+    rootCandidateId: string;
+  };
   /**
    * Vice-president self-serve action pool (player suggestion #67). Present only
    * on the `vicePresident` office doc. Refilled to `VP_ACTION_CAP` once per

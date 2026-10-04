@@ -1,15 +1,11 @@
 import { loadCampaignPriceLevel } from "@/lib/campaigns/campaignCurrency";
 import type { Db } from "mongodb";
 import type { Character, ExchangeRate, GameConfig } from "@/lib/db/types";
-import {
-  COUNTRY_CURRENCY_MAP,
-  INITIAL_RATES,
-  getCountryIdForCurrency,
-  type CurrencyCode,
-} from "@/lib/constants/currencies";
-import type { CountryId } from "@/lib/constants/countries";
+import { getCountryIdForCurrency, type CurrencyCode } from "@/lib/constants/currencies";
+import { getHomeCurrency } from "@/lib/currency/characterFunds";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { emitTx } from "@/lib/financialTxLog/emit";
+import { onboardingRewardLocalAmount } from "./rules";
 
 /**
  * One-time payout for completing all seven onboarding checklist steps,
@@ -31,6 +27,10 @@ export interface OnboardingRewardResult {
   granted: boolean;
   /** Anchor-denominated (₳) amount paid (or that would have been paid). */
   amount: number;
+  /** Home-currency amount credited to `currencyBalances.campaign` (equals `amount` pre-forex). */
+  localAmount: number;
+  /** Actual home currency credited (preset-aware; era-blind map when preset is omitted). */
+  currencyCode: CurrencyCode;
 }
 
 /**
@@ -47,11 +47,17 @@ export interface OnboardingRewardResult {
  * system mint in the shadow ledger).
  *
  * The caller is responsible for verifying the checklist is complete first.
+ *
+ * `preset` is the world's reset-preset id (e.g. `gameState.preset`). When
+ * provided, the home currency resolves preset-aware so a 2027-default euro
+ * member credits EUR; when omitted the legacy era-blind map applies, so 1991
+ * and non-euro behavior is unchanged.
  */
 export async function grantOnboardingReward(
   db: Db,
   character: Pick<Character, "_id" | "name" | "countryId" | "sequentialId">,
-  turn: number
+  turn: number,
+  preset?: string
 ): Promise<OnboardingRewardResult> {
   const [gameConfig, forexEnabled] = await Promise.all([
     db
@@ -63,8 +69,7 @@ export async function grantOnboardingReward(
     onboardingRewardAmount(gameConfig?.startingFunds) * (await loadCampaignPriceLevel(db))
   );
 
-  const homeCurrency = (COUNTRY_CURRENCY_MAP[character.countryId as CountryId] ??
-    "USD") as CurrencyCode;
+  const homeCurrency = getHomeCurrency(character, preset);
   // Resolve the live rate via the currency's anchor country so shared
   // currencies (EUR: DE + IE) convert identically (see grantCashBuilder.ts).
   const anchorCountry = getCountryIdForCurrency(homeCurrency);
@@ -74,13 +79,13 @@ export async function grantOnboardingReward(
   // A zero/negative stored rate would credit ₳0 usable currency while the
   // funds mirror and anchorAmount still say full value; treat it like an
   // absent rate instead.
-  const storedRate = rateDoc?.rate;
-  const homeRate = forexEnabled
-    ? storedRate !== undefined && storedRate > 0
-      ? storedRate
-      : (INITIAL_RATES[anchorCountry as CountryId] ?? 1)
-    : 1;
-  const localAmount = Math.round(amount * homeRate);
+  const localAmount = onboardingRewardLocalAmount(
+    amount,
+    forexEnabled,
+    homeCurrency,
+    rateDoc?.rate,
+    preset
+  );
 
   const inc: Record<string, number> = { funds: amount };
   if (forexEnabled) {
@@ -101,7 +106,7 @@ export async function grantOnboardingReward(
   );
 
   if (result.matchedCount === 0) {
-    return { granted: false, amount };
+    return { granted: false, amount, localAmount, currencyCode: homeCurrency };
   }
 
   await emitTx(db, {
@@ -118,5 +123,5 @@ export async function grantOnboardingReward(
     meta: { source: "onboarding_checklist" },
   });
 
-  return { granted: true, amount };
+  return { granted: true, amount, localAmount, currencyCode: homeCurrency };
 }

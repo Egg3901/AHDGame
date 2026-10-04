@@ -23,7 +23,7 @@ export function RelevantLegislationPanel({
   const currency = COUNTRY_CURRENCY_MAP[countryId as CountryId];
   return (
     <div className="rounded-lg border border-card-border bg-card p-4 shadow-card">
-      <div className="mb-2.5 font-mono text-body-xs uppercase tracking-widest text-muted">
+      <div className="mb-2.5 font-mono text-body-sm uppercase tracking-widest text-muted">
         Relevant legislation
       </div>
       {!legislation || (!legislation.primary && legislation.secondaries.length === 0) ? (
@@ -37,7 +37,7 @@ export function RelevantLegislationPanel({
                   {legislation.primary.title}
                 </span>
                 <span
-                  className={`text-body-xs font-medium tabular-nums ${
+                  className={`text-body-sm font-medium tabular-nums ${
                     legislation.primary.annualNet >= 0 ? "text-success" : "text-error"
                   }`}
                 >
@@ -48,7 +48,7 @@ export function RelevantLegislationPanel({
                   /yr
                 </span>
               </div>
-              <div className="mt-0.5 text-body-xs text-muted">
+              <div className="mt-0.5 text-body-sm text-muted">
                 Enacted: {legislation.primary.levelName || `Level ${legislation.primary.level}`} ·{" "}
                 <Link
                   href={legislatureUrl(countryId)}
@@ -64,7 +64,7 @@ export function RelevantLegislationPanel({
               {legislation.secondaries.map((secondary) => (
                 <div
                   key={secondary.lawId}
-                  className="flex items-baseline justify-between gap-3 text-body-xs text-muted"
+                  className="flex items-baseline justify-between gap-3 text-body-sm text-muted"
                 >
                   <span>{secondary.title}</span>
                   <span className="shrink-0">

@@ -1,8 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { PositionLabel } from "@/components/PositionLabel";
 import { Avatar } from "@/components/Avatar";
+import { PlainPositionLabel } from "@/components/party/PlainPositionLabel";
+import {
+  PARTY_LABEL_CLASS,
+  PARTY_SECTION_HEADING_CLASS,
+  PARTY_SUBHEADING_CLASS,
+  PARTY_VALUE_CLASS,
+} from "@/components/party/partyPageStyles";
 import type { PartyData, PartyLeader } from "./types";
 import { POSITIONS, getPositionLabels, POSITION_DESC } from "./helpers";
 
@@ -22,34 +28,27 @@ export function PartyOverviewPanel({ party }: PartyOverviewPanelProps) {
       : 0;
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(18rem,1fr)]">
+    <div className="grid gap-x-12 gap-y-12 lg:grid-cols-[minmax(0,1.6fr)_minmax(18rem,1fr)]">
       <section aria-labelledby="leadership-title" className="min-w-0">
-        <div className="mb-3 flex items-end justify-between gap-4">
-          <div>
-            <p className="text-body-xs font-bold uppercase tracking-widest text-primary">
-              Who holds power
-            </p>
-            <h2 id="leadership-title" className="text-heading-lg font-extrabold tracking-tight">
-              National leadership
-            </h2>
-          </div>
-          <span className="font-mono text-body-sm text-muted">3 offices</span>
+        <div className="mb-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <h2 id="leadership-title" className={PARTY_SECTION_HEADING_CLASS}>
+            National leadership
+          </h2>
+          <p className={PARTY_LABEL_CLASS}>3 offices</p>
         </div>
 
-        <div className="overflow-hidden rounded-xl border border-card-border bg-card shadow-card">
+        <ul className="border-t border-card-border">
           {POSITIONS.map((pos) => {
             const leader = party[pos] as PartyLeader | null;
 
             return (
-              <div
+              <li
                 key={pos}
-                className="group grid gap-3 border-b border-card-border p-4 last:border-b-0 sm:grid-cols-[9rem_minmax(0,1fr)] sm:items-center sm:p-5"
+                className="grid gap-3 border-b border-card-border py-4 sm:grid-cols-[11rem_minmax(0,1fr)] sm:items-center sm:gap-6"
               >
                 <div>
-                  <p className="text-body-xs font-bold uppercase tracking-widest text-muted">
-                    {positionLabels[pos]}
-                  </p>
-                  <p className="mt-1 text-body-xs leading-relaxed text-muted">
+                  <p className="text-body font-semibold text-foreground">{positionLabels[pos]}</p>
+                  <p className="mt-0.5 text-body-sm leading-relaxed text-muted">
                     {POSITION_DESC[pos]}
                   </p>
                 </div>
@@ -60,91 +59,72 @@ export function PartyOverviewPanel({ party }: PartyOverviewPanelProps) {
                         url={leader.avatarUrl}
                         name={leader.name}
                         size="h-12 w-12"
-                        className="shrink-0 ring-2 ring-card-border"
+                        className="shrink-0"
                       />
                       <Link
                         href={`/character/${leader.sequentialId ?? leader.id}`}
-                        className="min-w-0 line-clamp-2 break-words text-heading-sm font-bold transition-colors group-hover:text-primary"
+                        className="min-w-0 line-clamp-2 break-words text-heading-sm font-semibold text-foreground hover:underline hover:underline-offset-4"
                       >
                         {leader.name}
                       </Link>
                     </>
                   ) : (
                     <>
-                      <div
-                        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-dashed border-muted bg-muted/10 text-muted"
+                      <span
+                        className="h-12 w-12 shrink-0 rounded-full border border-dashed border-card-border"
                         aria-hidden
-                      >
-                        —
-                      </div>
-                      <span className="text-heading-sm font-semibold italic text-muted">
-                        Vacant
-                      </span>
+                      />
+                      <span className="text-heading-sm text-muted">Vacant</span>
                     </>
                   )}
                 </div>
-              </div>
+              </li>
             );
           })}
-        </div>
+        </ul>
       </section>
 
       <section aria-labelledby="platform-title" className="min-w-0">
-        <div className="mb-3">
-          <p className="text-body-xs font-bold uppercase tracking-widest text-secondary">
-            Political identity
-          </p>
-          <h2 id="platform-title" className="text-heading-lg font-extrabold tracking-tight">
-            Party platform
-          </h2>
-        </div>
+        <h2 id="platform-title" className={`mb-4 ${PARTY_SECTION_HEADING_CLASS}`}>
+          Party platform
+        </h2>
 
-        <div className="overflow-hidden rounded-xl border border-card-border bg-card shadow-card">
-          <div className="border-b border-card-border bg-card-muted/60 p-4">
-            <div className="flex items-end justify-between gap-3">
-              <div>
-                <p className="text-body-xs font-bold uppercase tracking-widest text-muted">
-                  Strength capacity
-                </p>
-                <p className="mt-1 font-mono text-heading-lg font-extrabold tabular-nums">
-                  {strengthPercent.toFixed(0)}%
-                </p>
-              </div>
+        <div className="space-y-8">
+          <div>
+            <p className={PARTY_LABEL_CLASS}>Strength capacity</p>
+            <div className="mt-0.5 flex items-baseline justify-between gap-3">
+              <p className={PARTY_VALUE_CLASS}>{strengthPercent.toFixed(0)}%</p>
               <p className="text-right text-body-sm text-muted">
-                <span className="font-semibold text-foreground">
+                <span className="font-semibold tabular-nums text-foreground">
                   {(party.politicalStrength ?? 0).toFixed(1)}
                 </span>{" "}
                 of {party.effectivePsCap}
               </p>
             </div>
-            <div className="mt-3 h-2 overflow-hidden rounded-full bg-track">
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-card-border" aria-hidden>
               <div
-                className="h-full rounded-full bg-info transition-[width] duration-500"
+                className="h-full rounded-full bg-foreground/70 transition-[width] duration-500"
                 style={{ width: `${strengthPercent}%` }}
               />
             </div>
           </div>
 
-          <div className="divide-y divide-card-border">
-            <IdeologyAxis
-              label="Economic policy"
-              descriptor="Left to right"
-              value={party.economicPosition}
-              axis="economic"
-              start="Socialist"
-              end="Laissez-faire"
-              barClassName="bg-primary"
-            />
-            <IdeologyAxis
-              label="Social policy"
-              descriptor="Liberal to conservative"
-              value={party.socialPosition}
-              axis="social"
-              start="Progressive"
-              end="Traditional"
-              barClassName="bg-secondary"
-            />
-          </div>
+          <IdeologyAxis
+            label="Economic policy"
+            descriptor="Left to right"
+            value={party.economicPosition}
+            axis="economic"
+            start="Socialist"
+            end="Laissez-faire"
+          />
+          <IdeologyAxis
+            label="Social policy"
+            descriptor="Liberal to conservative"
+            value={party.socialPosition}
+            axis="social"
+            start="Progressive"
+            end="Traditional"
+          />
         </div>
       </section>
     </div>
@@ -158,7 +138,6 @@ function IdeologyAxis({
   axis,
   start,
   end,
-  barClassName,
 }: {
   label: string;
   descriptor: string;
@@ -166,26 +145,29 @@ function IdeologyAxis({
   axis: "economic" | "social";
   start: string;
   end: string;
-  barClassName: string;
 }) {
   const percent = Math.min(100, Math.max(0, ((value + 5) / 10) * 100));
 
   return (
-    <div className="p-4">
-      <div className="flex flex-wrap items-start justify-between gap-2">
+    <div>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <p className="text-body-xs font-bold uppercase tracking-widest text-muted">{label}</p>
-          <p className="mt-0.5 text-body-xs text-muted">{descriptor}</p>
+          <h3 className={PARTY_SUBHEADING_CLASS}>{label}</h3>
+          <p className="text-body-sm text-muted">{descriptor}</p>
         </div>
-        <PositionLabel value={value} axis={axis} className="font-bold" />
+        <PlainPositionLabel
+          value={value}
+          axis={axis}
+          className="text-body-lg font-semibold text-foreground"
+        />
       </div>
-      <div className="mt-4 h-2 overflow-hidden rounded-full bg-track">
+      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-card-border" aria-hidden>
         <div
-          className={`h-full rounded-full transition-[width] duration-500 ${barClassName}`}
+          className="h-full rounded-full bg-foreground/70 transition-[width] duration-500"
           style={{ width: `${percent}%` }}
         />
       </div>
-      <div className="mt-2 flex justify-between gap-3 text-body-xs text-muted">
+      <div className="mt-2 flex justify-between gap-3 text-body-sm text-muted">
         <span>{start}</span>
         <span className="text-right">{end}</span>
       </div>

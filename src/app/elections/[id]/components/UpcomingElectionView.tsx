@@ -55,7 +55,7 @@ export function UpcomingElectionView({
               electionId={electionId}
               isEnded={false}
               onRemoveSuccess={onRemoveSuccess}
-              isPresident={election.electionType === "president"}
+              isPresident={election.countryId !== "RU" && election.electionType === "president"}
               advancingCount={advancingCount}
             />
           ))}

@@ -91,22 +91,13 @@ describe("1991 GDP anchor", () => {
     }
   );
 
-  /**
-   * RU and NG are deliberately NOT on the reciprocal, and this locks that in so
-   * a later sweep does not "complete the set".
-   *
-   * RU carries a placeholder 1991 rate — `INITIAL_RATES_1991` says so in a
-   * comment, since RU is not player-enabled in this era — and its 1.35 anchor
-   * already lands near its real GDP; the reciprocal would cut it to a third.
-   *
-   * NG is worse: its bundle holds NGN 241 trillion against a real 1991 GDP of
-   * roughly NGN 270 billion, so the numbers are ~900x too large for the "NGN
-   * millions" its own header claims. The reciprocal would read Nigeria as a $24
-   * TRILLION economy. The bundle is the bug; the anchor is not the place to fix
-   * it.
-   */
-  it.each(["RU", "NG"] as CountryId[])("%s stays off the reciprocal, by decision", (countryId) => {
-    const rate = INITIAL_RATES_1991[countryId]!;
-    expect(getGdpAnchorRate(countryId, "1991-default")).not.toBeCloseTo(1 / rate, 4);
-  });
+  it.each(["RU", "NG"] as CountryId[])(
+    "%s normalizes its corrected original-currency seed basis",
+    (countryId) => {
+      expect(getGdpAnchorRate(countryId, "1991-default")).toBeCloseTo(
+        1 / INITIAL_RATES_1991[countryId]!,
+        10
+      );
+    }
+  );
 });

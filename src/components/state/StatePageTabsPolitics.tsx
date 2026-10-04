@@ -9,6 +9,7 @@ import {
 } from "@/lib/constants/countries";
 import { getStateLean } from "@/lib/utils/demographics";
 import { PositionLabel } from "@/components/PositionLabel";
+import { positionBucketHex, usesEuropeanLeanColours } from "@/lib/utils/politics";
 import {
   SenateSection,
   HouseSection,
@@ -44,6 +45,66 @@ interface PoliticsTabPartyBudget {
   suppressionTargetCategory?: string;
   suppressionTargetGroup?: string;
   orgBuildingPercent: number;
+}
+
+/**
+ * One axis of the region's lean: the bucket word (in its lean colour) and the
+ * exact score above, then the axis ramp with a marker at the score.
+ */
+function leanGradient(axis: "economic" | "social", european: boolean): string {
+  if (axis === "social") {
+    return "linear-gradient(to right, #0d9488 0%, #2dd4bf 30%, #71717a 50%, #f59e0b 70%, #d97706 100%)";
+  }
+  return european
+    ? "linear-gradient(to right, #b91c1c 0%, #ef4444 30%, #71717a 50%, #3b82f6 70%, #1d4ed8 100%)"
+    : "linear-gradient(to right, #1d4ed8 0%, #3b82f6 30%, #71717a 50%, #ef4444 70%, #b91c1c 100%)";
+}
+
+function LeanMeter({
+  label,
+  value,
+  axis,
+  countryId,
+  leftLabel,
+  rightLabel,
+}: {
+  label: string;
+  value: number;
+  axis: "economic" | "social";
+  countryId: string;
+  leftLabel: string;
+  rightLabel: string;
+}) {
+  const pct = ((value + 5) / 10) * 100;
+  const color = positionBucketHex(value, axis, usesEuropeanLeanColours(countryId));
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-body text-muted">{label}</span>
+        <span className="text-body font-semibold">
+          <PositionLabel value={value} axis={axis} countryId={countryId} />
+          <span className="ml-2 font-normal tabular-nums text-muted">
+            {value >= 0 ? `+${value.toFixed(2)}` : value.toFixed(2)}
+          </span>
+        </span>
+      </div>
+      <div
+        className="relative mt-3 h-2 rounded-full"
+        style={{ background: leanGradient(axis, usesEuropeanLeanColours(countryId)) }}
+        aria-hidden
+      >
+        <div className="absolute left-1/2 top-1/2 h-4 w-px -translate-y-1/2 bg-white/40" />
+        <div
+          className="absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-md"
+          style={{ left: `${pct}%`, backgroundColor: color }}
+        />
+      </div>
+      <div className="mt-1.5 flex justify-between text-body-sm text-muted">
+        <span>{leftLabel}</span>
+        <span>{rightLabel}</span>
+      </div>
+    </div>
+  );
 }
 
 export function PoliticsTab({
@@ -96,20 +157,6 @@ export function PoliticsTab({
   // would mislabel as +1.00 and disagree with the profile/map.
   const econ = Math.max(-5, Math.min(5, calculatedLeans?.economicLean ?? getStateLean(state) ?? 0));
   const soc = Math.max(-5, Math.min(5, calculatedLeans?.socialLean ?? getStateLean(state) ?? 0));
-  const leanToPercent = (v: number) => ((v + 5) / 10) * 100;
-  const europeanColors = state.countryId === "UK" || state.countryId === "DE";
-  const econThumbColor =
-    econ < -0.1
-      ? europeanColors
-        ? "#ef4444"
-        : "#3b82f6"
-      : econ > 0.1
-        ? europeanColors
-          ? "#3b82f6"
-          : "#ef4444"
-        : "#a1a1aa";
-  const socThumbColor = soc < -0.1 ? "#2dd4bf" : soc > 0.1 ? "#f59e0b" : "#a1a1aa";
-
   const upperChamberName = config.legislature?.upperChamber?.shortName ?? "Senate";
   const upperChamber = config.legislature?.upperChamber;
   const lowerChamberName = config.legislature?.lowerChamber?.shortName ?? "House";
@@ -145,96 +192,35 @@ export function PoliticsTab({
       : "Representative";
 
   const leanAndOrg = (
-    <div className="grid gap-6 lg:grid-cols-2">
-      <div className="rounded-xl border border-card-border bg-card p-5">
-        <h2 className="mb-4 text-sm font-semibold text-muted">Political lean</h2>
-        <div className="grid grid-cols-2 gap-5">
-          {/* Economic axis */}
-          <div className="space-y-3">
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted mb-1">
-                Economic
-              </p>
-              <PositionLabel
-                value={econ}
-                axis="economic"
-                countryId={state.countryId}
-                className="text-xs font-semibold"
-              />
-              <p className="text-[11px] font-mono text-muted">
-                {econ >= 0 ? `+${econ.toFixed(2)}` : econ.toFixed(2)}
-              </p>
-            </div>
-            <div>
-              <div
-                className="relative h-1.5 rounded-full overflow-hidden"
-                style={{
-                  background: europeanColors
-                    ? "linear-gradient(to right, #b91c1c 0%, #ef4444 30%, #71717a 50%, #3b82f6 70%, #1d4ed8 100%)"
-                    : "linear-gradient(to right, #1d4ed8 0%, #3b82f6 30%, #71717a 50%, #ef4444 70%, #b91c1c 100%)",
-                }}
-              >
-                <div className="absolute top-0 h-full w-px bg-white/20" style={{ left: "50%" }} />
-              </div>
-              <div className="relative h-3 -mt-0.5">
-                <div
-                  className="absolute h-3 w-3 -top-0.5 rounded-full border-2 border-white shadow-md"
-                  style={{
-                    left: `${leanToPercent(econ)}%`,
-                    transform: "translateX(-50%)",
-                    backgroundColor: econThumbColor,
-                  }}
-                />
-              </div>
-              <div className="flex justify-between text-[9px] text-muted mt-1">
-                <span>Left</span>
-                <span>Right</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Social axis */}
-          <div className="space-y-3">
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted mb-1">
-                Social
-              </p>
-              <PositionLabel value={soc} axis="social" className="text-xs font-semibold" />
-              <p className="text-[11px] font-mono text-muted">
-                {soc >= 0 ? `+${soc.toFixed(2)}` : soc.toFixed(2)}
-              </p>
-            </div>
-            <div>
-              <div
-                className="relative h-1.5 rounded-full overflow-hidden"
-                style={{
-                  background:
-                    "linear-gradient(to right, #0d9488 0%, #2dd4bf 30%, #71717a 50%, #f59e0b 70%, #d97706 100%)",
-                }}
-              >
-                <div className="absolute top-0 h-full w-px bg-white/20" style={{ left: "50%" }} />
-              </div>
-              <div className="relative h-3 -mt-0.5">
-                <div
-                  className="absolute h-3 w-3 -top-0.5 rounded-full border-2 border-white shadow-md"
-                  style={{
-                    left: `${leanToPercent(soc)}%`,
-                    transform: "translateX(-50%)",
-                    backgroundColor: socThumbColor,
-                  }}
-                />
-              </div>
-              <div className="flex justify-between text-[9px] text-muted mt-1">
-                <span>Liberal</span>
-                <span>Trad</span>
-              </div>
-            </div>
-          </div>
+    <section
+      aria-labelledby="politics-lean-title"
+      className="rounded-xl border border-card-border bg-card p-5 sm:p-6"
+    >
+      <h2 id="politics-lean-title" className="text-heading-lg font-semibold text-foreground">
+        Lean and organization
+      </h2>
+      <div className="mt-6 grid gap-x-12 gap-y-10 lg:grid-cols-2">
+        <div className="space-y-6">
+          <LeanMeter
+            label="Economic"
+            value={econ}
+            axis="economic"
+            countryId={state.countryId}
+            leftLabel="Left"
+            rightLabel="Right"
+          />
+          <LeanMeter
+            label="Social"
+            value={soc}
+            axis="social"
+            countryId={state.countryId}
+            leftLabel="Liberal"
+            rightLabel="Traditional"
+          />
         </div>
+        <PartyOrgSectorBreakdown partyOrg={partyOrg} />
       </div>
-
-      <PartyOrgSectorBreakdown partyOrg={partyOrg} />
-    </div>
+    </section>
   );
 
   // Party-id lookup helpers for the GovModifierChip enrichment.
@@ -345,71 +331,7 @@ export function PoliticsTab({
     ? officials.senators.filter((s) => (s as { chamberClass?: number }).chamberClass === 2)
     : [];
 
-  const officialsSections = (
-    <>
-      {upperIsMultiSeat ? (
-        <>
-          <div className="grid gap-8 lg:grid-cols-2">
-            <SenateSection
-              state={state}
-              senators={upperClass1}
-              label={`${upperChamberName} (I)`}
-              memberTitle={upperMemberTitle}
-              isMultiSeat
-            />
-            <SenateSection
-              state={state}
-              senators={upperClass2}
-              label={`${upperChamberName} (II)`}
-              memberTitle={upperMemberTitle}
-              isMultiSeat
-            />
-          </div>
-          <HouseSection
-            state={state}
-            houseReps={officials.houseReps}
-            label={lowerChamberName}
-            memberTitle={lowerMemberTitle}
-          />
-        </>
-      ) : (
-        <div className="grid gap-8 lg:grid-cols-2">
-          <SenateSection
-            state={state}
-            senators={officials.senators}
-            label={upperChamberName}
-            memberTitle={upperMemberTitle}
-            isMultiSeat={upperIsProportional}
-            isElected={upperChamber?.elected !== false}
-            configuredSeats={upperChamber?.seats ?? 2}
-            description={upperChamber?.description}
-          />
-          <HouseSection
-            state={state}
-            houseReps={officials.houseReps}
-            label={lowerChamberName}
-            memberTitle={lowerMemberTitle}
-          />
-        </div>
-      )}
-
-      <div className="grid gap-8 lg:grid-cols-2">
-        <GovernorSection
-          state={state}
-          governor={officials.governor}
-          label={regionalExecutiveLabel}
-          officeType={regionalExecutiveOfficeType}
-        />
-        <StateSenateSection
-          state={state}
-          stateSenators={officials.stateSenators}
-          label={subNationalName}
-        />
-      </div>
-    </>
-  );
-
-  // KPI counts for the summary strip
+  // Counts for the Officials summary line
   const totalOfficials =
     officials.senators.length +
     officials.houseReps.length +
@@ -417,43 +339,84 @@ export function PoliticsTab({
     (officials.governor ? 1 : 0);
   const activeParties = partyOrg.filter((p) => p.organization > 0).length;
 
-  return (
-    <div className="space-y-6">
-      {/* KPI strip */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-xl border border-card-border bg-card p-3.5">
-          <span className="text-[9px] font-medium uppercase tracking-widest text-muted">
-            Elected Officials
-          </span>
-          <span className="text-lg font-bold tabular-nums text-foreground">{totalOfficials}</span>
-        </div>
-        <div className="rounded-xl border border-card-border bg-card p-3.5">
-          <span className="text-[9px] font-medium uppercase tracking-widest text-muted">
-            Active Parties
-          </span>
-          <span className="text-lg font-bold tabular-nums text-primary">{activeParties}</span>
-        </div>
-        <div className="rounded-xl border border-card-border bg-card p-3.5">
-          <span className="text-[9px] font-medium uppercase tracking-widest text-muted">
-            Political Lean
-          </span>
-          <div className="mt-0.5">
-            <PositionLabel
-              value={econ}
-              axis="economic"
-              countryId={state.countryId}
-              className="text-xs font-semibold"
+  const officialsSections = (
+    <section aria-labelledby="politics-officials-title">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+        <h2 id="politics-officials-title" className="text-heading-lg font-semibold text-foreground">
+          Officials
+        </h2>
+        <p className="text-body-sm text-muted">
+          {totalOfficials} elected, {activeParties} active part{activeParties === 1 ? "y" : "ies"},{" "}
+          {players.length} player{players.length === 1 ? "" : "s"} based in this{" "}
+          {config.regionLabel.toLowerCase()}
+        </p>
+      </div>
+      <div className="mt-4 space-y-6">
+        {upperIsMultiSeat ? (
+          <>
+            <div className="grid gap-6 lg:grid-cols-2">
+              <SenateSection
+                state={state}
+                senators={upperClass1}
+                label={`${upperChamberName} (I)`}
+                memberTitle={upperMemberTitle}
+                isMultiSeat
+              />
+              <SenateSection
+                state={state}
+                senators={upperClass2}
+                label={`${upperChamberName} (II)`}
+                memberTitle={upperMemberTitle}
+                isMultiSeat
+              />
+            </div>
+            <HouseSection
+              state={state}
+              houseReps={officials.houseReps}
+              label={lowerChamberName}
+              memberTitle={lowerMemberTitle}
+            />
+          </>
+        ) : (
+          <div className="grid gap-6 lg:grid-cols-2">
+            <SenateSection
+              state={state}
+              senators={officials.senators}
+              label={upperChamberName}
+              memberTitle={upperMemberTitle}
+              isMultiSeat={upperIsProportional}
+              isElected={upperChamber?.elected !== false}
+              configuredSeats={upperChamber?.seats ?? 2}
+              description={upperChamber?.description}
+            />
+            <HouseSection
+              state={state}
+              houseReps={officials.houseReps}
+              label={lowerChamberName}
+              memberTitle={lowerMemberTitle}
             />
           </div>
-        </div>
-        <div className="rounded-xl border border-card-border bg-card p-3.5">
-          <span className="text-[9px] font-medium uppercase tracking-widest text-muted">
-            Players in {config.regionLabel}
-          </span>
-          <span className="text-lg font-bold tabular-nums text-foreground">{players.length}</span>
+        )}
+
+        <div className="grid gap-6 lg:grid-cols-2">
+          <GovernorSection
+            state={state}
+            governor={officials.governor}
+            label={regionalExecutiveLabel}
+            officeType={regionalExecutiveOfficeType}
+          />
+          <StateSenateSection
+            state={state}
+            stateSenators={officials.stateSenators}
+            label={subNationalName}
+          />
         </div>
       </div>
+    </section>
+  );
 
+  return (
+    <div className="space-y-10">
       {isAdmin && state.countryId === "US" ? (
         <AdminRedistrictPanel countryCode={state.countryId} stateId={state._id} />
       ) : null}
@@ -470,10 +433,18 @@ export function PoliticsTab({
         </>
       )}
 
-      {agendaBanner}
-      {newCardsRow}
-      {budgetCardsRow}
-      {quickActions}
+      <section aria-labelledby="politics-operations-title" className="space-y-4">
+        <h2
+          id="politics-operations-title"
+          className="text-heading-lg font-semibold text-foreground"
+        >
+          Party operations
+        </h2>
+        {agendaBanner}
+        {newCardsRow}
+        {budgetCardsRow}
+        {quickActions}
+      </section>
 
       {state.countryId === "US" ? (
         <StateDistrictsSection

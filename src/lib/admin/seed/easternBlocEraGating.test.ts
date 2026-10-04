@@ -221,21 +221,23 @@ describe("seedEasternBlocCountry party era gating", () => {
 
   it("1953-default upserts only MDP and prunes MSZMP", async () => {
     const { huParties } = await import("@/lib/seeds/hu/huParties");
+    const { PARTY_ROSTERS_2027 } = await import("@/lib/seeds/partyRosters2027");
     const { db, calls, politicalParties } = makePartyAwareDb();
     await seedEasternBlocCountry(db, false, vi.fn(), "1953-default", {
       ...cfg,
       parties: huParties,
     });
 
-    expect(politicalParties.deleteMany).toHaveBeenCalledWith({
-      $or: [
-        {
-          countryId: "HU",
-          name: "Magyar Szocialista Munkáspárt",
-          isDefault: true,
-        },
-      ],
-    });
+    const pruned1953 = vi.mocked(politicalParties.deleteMany).mock.calls[0]?.[0].$or;
+    expect(new Set(pruned1953.map((party: { name: string }) => party.name))).toEqual(
+      new Set([
+        ...(PARTY_ROSTERS_2027.HU ?? []).map((party) => party.name),
+        "Magyar Szocialista Munkáspárt",
+      ])
+    );
+    expect(pruned1953.every((party: Doc) => party.countryId === "HU" && party.isDefault)).toBe(
+      true
+    );
     const updates = calls.get("politicalParties.updateOne") ?? [];
     expect(updates).toHaveLength(1);
     expect((updates[0].update as { $set: Doc }).$set.abbreviation).toBe("MDP");
@@ -243,21 +245,23 @@ describe("seedEasternBlocCountry party era gating", () => {
 
   it("1979-default upserts only MSZMP and prunes MDP", async () => {
     const { huParties } = await import("@/lib/seeds/hu/huParties");
+    const { PARTY_ROSTERS_2027 } = await import("@/lib/seeds/partyRosters2027");
     const { db, calls, politicalParties } = makePartyAwareDb();
     await seedEasternBlocCountry(db, false, vi.fn(), "1979-default", {
       ...cfg,
       parties: huParties,
     });
 
-    expect(politicalParties.deleteMany).toHaveBeenCalledWith({
-      $or: [
-        {
-          countryId: "HU",
-          name: "Magyar Dolgozók Pártja",
-          isDefault: true,
-        },
-      ],
-    });
+    const pruned1979 = vi.mocked(politicalParties.deleteMany).mock.calls[0]?.[0].$or;
+    expect(new Set(pruned1979.map((party: { name: string }) => party.name))).toEqual(
+      new Set([
+        ...(PARTY_ROSTERS_2027.HU ?? []).map((party) => party.name),
+        "Magyar Dolgozók Pártja",
+      ])
+    );
+    expect(pruned1979.every((party: Doc) => party.countryId === "HU" && party.isDefault)).toBe(
+      true
+    );
     const updates = calls.get("politicalParties.updateOne") ?? [];
     expect(updates).toHaveLength(1);
     expect((updates[0].update as { $set: Doc }).$set.abbreviation).toBe("MSZMP");

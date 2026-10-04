@@ -1,5 +1,7 @@
 "use client";
 
+import { BgFoundingConstituencyPicker } from "./BgFoundingConstituencyPicker";
+import { Hu1991ConstituencyPicker } from "./Hu1991ConstituencyPicker";
 import React, { useState, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/contexts/ToastContext";
@@ -30,6 +32,7 @@ import { BlendScope } from "@/components/blend/BlendScope";
 import { buildWithdrawalConfirmMessage } from "@/lib/elections/withdrawalWarning";
 import { captureProductEvent } from "@/lib/analytics/capture";
 import { getStoredConsent } from "@/components/CookieConsent";
+import { huDistrictIds } from "@/lib/countries/hu/rules/constituencies2014";
 
 interface ElectionDetailClientProps {
   id: string;
@@ -254,12 +257,45 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
     };
   }, [fetchElection, fetchWire]);
 
+  const [huDistrictId, setHuDistrictId] = useState("");
   const handleEnter = async () => {
     if (!election) return;
+    let constituencyId: string | undefined;
+    if (
+      election.countryId === "HU" &&
+      election.electionType === "nationalAssembly" &&
+      election.hungarianModernAssembly?.ruleVersion === "mixed-2011-v1"
+    ) {
+      const districts = huDistrictIds(election.state);
+      const answer = window.prompt(`Choose your constituency number (1-${districts.length}).`);
+      if (answer === null) return;
+      const number = Number(answer.trim());
+      if (!Number.isInteger(number) || number < 1 || number > districts.length) {
+        showToast("Choose a valid constituency number in this region.", "error");
+        return;
+      }
+      constituencyId = districts[number - 1];
+    }
     if (!confirm("Enter this race? This will register your character as a candidate.")) return;
     setActionLoading(true);
     try {
-      const res = await fetch(`/api/elections/${id}/enter`, { method: "POST" });
+      const res = await fetch(`/api/elections/${id}/enter`, {
+        method: "POST",
+        ...(constituencyId
+          ? {
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ constituencyId }),
+            }
+          : (election.hungarianAssemblyRound?.round === 1 ||
+                election.bulgarianFoundingRound?.round === 1 ||
+                Boolean(election.bulgarianFoundingRound?.newNominationDistrictIds?.length)) &&
+              huDistrictId
+            ? {
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ constituencyId: huDistrictId }),
+              }
+            : {}),
+      });
       const data = await res.json();
       if (res.ok) {
         showToast(data.message ?? "Entered race", "success");
@@ -415,6 +451,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   // EV bar, a state tile board and persuasion drivers. Down-ballot races have
   // no college, so they keep the existing view.
   if (
+    election.countryId !== "RU" &&
     election.electionType === "president" &&
     isGeneralPhase &&
     !localIsEnded &&
@@ -438,6 +475,24 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
           title="Also on this race"
           lede="The full map, the trends, and your campaign operations."
         >
+          {canEnter &&
+            (election.bulgarianFoundingRound?.round === 1 ||
+              Boolean(election.bulgarianFoundingRound?.newNominationDistrictIds?.length)) && (
+              <BgFoundingConstituencyPicker
+                allowedDistrictIds={election.bulgarianFoundingRound?.newNominationDistrictIds}
+                regionId={election.state}
+                value={huDistrictId}
+                onChange={setHuDistrictId}
+              />
+            )}
+          {canEnter && election.hungarianAssemblyRound?.round === 1 && (
+            <Hu1991ConstituencyPicker
+              allowedDistrictIds={election.hungarianAssemblyRound?.vacancyDistrictIds}
+              regionId={election.state}
+              value={huDistrictId}
+              onChange={setHuDistrictId}
+            />
+          )}
           <ElectionHeader
             election={election}
             electionYear={electionYear}
@@ -496,7 +551,12 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   // Proposal D covers the presidential primary specifically: a delegate race
   // across party fields. Down-ballot races have no delegate model, so they keep
   // the existing view.
-  if (election.electionType === "president" && localInPrimary && !localIsUpcoming) {
+  if (
+    election.countryId !== "RU" &&
+    election.electionType === "president" &&
+    localInPrimary &&
+    !localIsUpcoming
+  ) {
     return (
       <div className="min-h-screen" style={{ background: BLEND.page, color: BLEND.ink }}>
         {blendNav}
@@ -506,6 +566,24 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
           title="Also on this race"
           lede="Filing, the state map, and your campaign operations."
         >
+          {canEnter &&
+            (election.bulgarianFoundingRound?.round === 1 ||
+              Boolean(election.bulgarianFoundingRound?.newNominationDistrictIds?.length)) && (
+              <BgFoundingConstituencyPicker
+                allowedDistrictIds={election.bulgarianFoundingRound?.newNominationDistrictIds}
+                regionId={election.state}
+                value={huDistrictId}
+                onChange={setHuDistrictId}
+              />
+            )}
+          {canEnter && election.hungarianAssemblyRound?.round === 1 && (
+            <Hu1991ConstituencyPicker
+              allowedDistrictIds={election.hungarianAssemblyRound?.vacancyDistrictIds}
+              regionId={election.state}
+              value={huDistrictId}
+              onChange={setHuDistrictId}
+            />
+          )}
           <ElectionHeader
             election={election}
             electionYear={electionYear}
@@ -566,6 +644,24 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
       <main className="mx-auto max-w-6xl overflow-x-hidden px-4 py-6 sm:px-6 sm:py-8">
         <ElectionNavigation election={election} />
 
+        {canEnter &&
+          (election.bulgarianFoundingRound?.round === 1 ||
+            Boolean(election.bulgarianFoundingRound?.newNominationDistrictIds?.length)) && (
+            <BgFoundingConstituencyPicker
+              allowedDistrictIds={election.bulgarianFoundingRound?.newNominationDistrictIds}
+              regionId={election.state}
+              value={huDistrictId}
+              onChange={setHuDistrictId}
+            />
+          )}
+        {canEnter && election.hungarianAssemblyRound?.round === 1 && (
+          <Hu1991ConstituencyPicker
+            allowedDistrictIds={election.hungarianAssemblyRound?.vacancyDistrictIds}
+            regionId={election.state}
+            value={huDistrictId}
+            onChange={setHuDistrictId}
+          />
+        )}
         <ElectionHeader
           election={election}
           electionYear={electionYear}

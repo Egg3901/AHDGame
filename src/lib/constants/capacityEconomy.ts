@@ -440,34 +440,37 @@ export function techOutputUnitsMultiplier(
  * across the spans monetaryEra already uses. FLAGGED PROVISIONAL: worldsim will
  * re-tune this column, and nothing in this phase depends on it being right.
  */
-const CAPACITY_ERA_PRICE_SPANS: ReadonlyArray<{ untilYear: number; priceIndex: number }> = [
-  // 1953 era — THE CALIBRATION ANCHOR. Exactly 1.0 by definition; do not
-  // "tune" this row without re-deriving identity B above.
-  { untilYear: 1971, priceIndex: 1.0 },
-  // 1971-78, post-Bretton-Woods. PROVISIONAL.
-  { untilYear: 1979, priceIndex: 1.4 },
-  // 1979-90, the great-inflation hangover. PROVISIONAL.
-  { untilYear: 1991, priceIndex: 2.6 },
-  // 1991-98. PROVISIONAL.
-  { untilYear: MODERN_ERA_START_YEAR, priceIndex: 3.6 },
+const CAPACITY_ERA_PRICE_ANCHORS: ReadonlyArray<{ year: number; priceIndex: number }> = [
+  { year: CAPACITY_ANCHOR_YEAR, priceIndex: 1.0 },
+  { year: 1971, priceIndex: 1.4 },
+  { year: 1979, priceIndex: 2.6 },
+  { year: 1991, priceIndex: 3.6 },
+  { year: MODERN_ERA_START_YEAR, priceIndex: 5.0 },
 ];
 
-/** Modern row (year ≥ MODERN_ERA_START_YEAR, or no year given). PROVISIONAL. */
+/** Modern calibration and missing-year fallback. PROVISIONAL. */
 const CAPACITY_ERA_MODERN_PRICE_INDEX = 5.0;
 
 /**
- * Price-column era multiplier. Lookup is the same shape as
- * `monetaryEra.resolveEraTable`: spans most-historical-first, first span whose
- * `untilYear` exceeds the year wins, anything later (or a missing/garbage
- * year) resolves the modern row. There is no era before 1953, so the 1953 row
- * also covers earlier years. PROVISIONAL beyond the 1953 anchor.
+ * Interpolate nominal price levels geometrically between authored calibration
+ * years. Equal year increments have equal proportional changes within a span,
+ * preserving the anchors without imposing a price shock at an era boundary.
+ * Outside the authored range, hold the nearest endpoint. Missing or invalid
+ * years retain the modern fallback.
  */
 export function capacityEraPriceIndex(year: number | null | undefined): number {
   if (typeof year !== "number" || !Number.isFinite(year)) {
     return CAPACITY_ERA_MODERN_PRICE_INDEX;
   }
-  for (const span of CAPACITY_ERA_PRICE_SPANS) {
-    if (year < span.untilYear) return span.priceIndex;
+  const first = CAPACITY_ERA_PRICE_ANCHORS[0];
+  if (year <= first.year) return first.priceIndex;
+  for (let i = 1; i < CAPACITY_ERA_PRICE_ANCHORS.length; i++) {
+    const upper = CAPACITY_ERA_PRICE_ANCHORS[i];
+    const lower = CAPACITY_ERA_PRICE_ANCHORS[i - 1];
+    if (year <= upper.year) {
+      const progress = (year - lower.year) / (upper.year - lower.year);
+      return lower.priceIndex * Math.pow(upper.priceIndex / lower.priceIndex, progress);
+    }
   }
   return CAPACITY_ERA_MODERN_PRICE_INDEX;
 }

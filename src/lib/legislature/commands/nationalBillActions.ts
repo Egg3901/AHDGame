@@ -1,8 +1,14 @@
+/**
+ * National deputies vote and act on bills through their active offices.
+ * performNationalBillAction preserves voting windows and costs while refusing
+ * legislative actions from a dissolved chamber.
+ */
+import { getVotingUpperChamberKey } from "@/lib/countries/rules/officeLayout";
 import { captureBillStatusChanged } from "@/lib/analytics/billStatusAnalytics";
 import type { AuthUser } from "@/lib/auth";
 import { recordAudit } from "@/lib/audit/recordAudit";
 import type { LegislatureCommandResult } from "@/lib/legislature/commands/types";
-import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
+import { type CountryId } from "@/lib/constants/countries";
 import { getOfficeTypeForChamber } from "@/lib/legislature/chamberOfficeType";
 import { resolveBillVoteField } from "@/lib/congress/billVoteField";
 import { getGovernmentFormationsCollection } from "@/lib/db/collections/governmentFormation";
@@ -17,6 +23,7 @@ import { clearWhippedFromVote } from "@/lib/congress/clearWhippedVote";
 import { buildEmbeddedVoteTallyUpdate } from "@/lib/votes/embeddedVoteTally";
 import { isVotingDeadlinePassed } from "@/lib/legislature/billVotingWindow";
 import { getGameState } from "@/lib/gameState";
+import { loadRuntimeCountryOffices } from "@/lib/countries/runtimeOffices";
 import type { Bill, Character, ElectedOfficial, PoliticalParty } from "@/lib/db/types";
 import { isBannedParty } from "@/lib/turn/onePartyConstraints";
 import { getCountryState } from "@/lib/countryState";
@@ -55,20 +62,28 @@ export async function performNationalBillAction(
   const gameState = await getGameState(db);
   const currentTurn = gameState?.currentTurn ?? 0;
   const preset = gameState?.preset;
-  const config = getCountryConfig(countryId, preset);
+  const { config } = await loadRuntimeCountryOffices(db, countryId, preset);
   const lowerKey = config.legislature.lowerChamber.key;
-  const upperKey = config.upperElectionSystem
-    ? (config.legislature.upperChamber?.key ?? null)
-    : null;
+  const upperKey = getVotingUpperChamberKey(config);
   const chamberKeys = upperKey ? [lowerKey, upperKey] : [lowerKey];
   // Office types seated members are stored under. Identical to the chamber keys
   // for every country except CN ("npc" chamber → "npcDelegate" office), so
   // querying electedOfficials by the raw chamber key matched no CN delegates and
   // blocked them from voting on / co-sponsoring their own bills.
   const chamberOfficeTypes = chamberKeys.map((key) =>
-    getOfficeTypeForChamber(countryId, key, preset)
+    getOfficeTypeForChamber(countryId, key, preset, config)
   );
   const action = input.action;
+  if (
+    (config.legislature.lowerChamber.elected === false ||
+      config.legislature.lowerChamber.seats < 1) &&
+    ["vote", "veto_override_vote", "cosponsor", "filibuster"].includes(action)
+  ) {
+    return {
+      status: 409,
+      body: { error: "This legislature is dissolved and cannot act on bills." },
+    };
+  }
 
   // One-party-state guard: banned parties cannot vote on or co-sponsor bills.
   // Placed before action branching so every interactive action surface is
@@ -201,9 +216,14 @@ export async function performNationalBillAction(
     //
     // The non-concurrent path keeps its exact single-value query shape, so no existing
     // path changes (and no single-element $in replaces an equality match).
-    const officeTypeFilter = isConcurrent
-      ? { $in: chamberOfficeTypes }
-      : getOfficeTypeForChamber(countryId, chamberType, preset);
+    const chamberOfficeType = getOfficeTypeForChamber(countryId, chamberType, preset, config);
+    if (!isConcurrent && !chamberOfficeTypes.includes(chamberOfficeType)) {
+      return {
+        status: 409,
+        body: { error: "This bill does not belong to an active voting chamber." },
+      };
+    }
+    const officeTypeFilter = isConcurrent ? { $in: chamberOfficeTypes } : chamberOfficeType;
     const official = await db.collection<ElectedOfficial>("electedOfficials").findOne({
       characterId: character._id,
       officeType: officeTypeFilter,

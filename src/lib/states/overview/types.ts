@@ -222,7 +222,7 @@ export interface OverviewViewModel extends StateOverviewResult {
    * not the leading party's `kpis.topPartyOrgPct`.
    */
   focusPartyOrgPct: number;
-  /** Narrative summary used by `PoliticalSummaryCard`. */
+  /** Narrative summary used by `BuildOrgControl`. */
   narrative: NarrativeSummary;
 }
 

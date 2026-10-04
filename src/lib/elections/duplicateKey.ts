@@ -50,7 +50,8 @@ export function isActiveElectionCandidateDuplicateKey(error: unknown): boolean {
   return (
     isDuplicateKeyError(error) &&
     (keyPatternIncludes(error, "characterId") ||
-      messageMentions(error, "unique_active_election_candidate_per_character"))
+      messageMentions(error, "unique_active_election_candidate_per_character") ||
+      messageMentions(error, "unique_active_player_or_unbounded_npc_candidate"))
   );
 }
 

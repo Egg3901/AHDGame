@@ -1,53 +1,29 @@
 "use client";
 
 import type { PMRegistryData } from "./registryTypes";
-// Safe in a client component: historyCadence has no imports of its own, so it
-// cannot drag the turn engine into the browser bundle.
-import { TURNS_PER_YEAR } from "@/lib/politicalMetrics/historyCadence";
 import { CategoryCard } from "./CategoryCard";
 import { GovernanceStyleCard } from "./GovernanceStyleCard";
+import {
+  EMPTY_SERIES,
+  deltaTextClass,
+  formatDelta,
+  movementSince,
+  overallAtSnapshot,
+  yearStepsBack,
+} from "./movement";
 import { scoreTone } from "./tones";
-
-/** Shown until a scope has two snapshots to compare. */
-const EMPTY_SERIES = "series begins this campaign";
-
-/**
- * The overall score as of `stepsBack` snapshots ago, or null when the series is
- * not that deep yet.
- *
- * Computed per category and then averaged, matching `overallScore` rather than
- * flat-averaging all 63 metrics. The two agree while every category holds seven
- * families, but the category mean is the definition, and a future category of a
- * different size should not silently reweight the history.
- */
-function overallAtSnapshot(data: PMRegistryData, stepsBack: number): number | null {
-  const categoryScores: number[] = [];
-  for (const category of data.categories) {
-    let sum = 0;
-    for (const metric of category.metrics) {
-      const index = metric.history.length - 1 - stepsBack;
-      if (index < 0) return null;
-      sum += metric.history[index].value;
-    }
-    if (category.metrics.length === 0) return null;
-    categoryScores.push(sum / category.metrics.length);
-  }
-  if (categoryScores.length === 0) return null;
-  return categoryScores.reduce((a, b) => a + b, 0) / categoryScores.length;
-}
 
 /** A movement tile's value and tone, or the honest empty state. */
 function movement(
   data: PMRegistryData,
   stepsBack: number
 ): { value: string; sub: string; toneText?: string } {
-  const past = overallAtSnapshot(data, stepsBack);
-  if (past === null) return { value: "—", sub: EMPTY_SERIES };
-  const delta = Math.round((data.overall - past) * 10) / 10;
+  const change = movementSince(data.overall, overallAtSnapshot(data, stepsBack));
+  if (!change) return { value: "n/a", sub: EMPTY_SERIES };
   return {
-    value: `${delta > 0 ? "+" : ""}${delta}`,
-    sub: `from ${Math.round(past)}`,
-    toneText: delta > 0 ? "text-success" : delta < 0 ? "text-error" : "text-muted",
+    value: formatDelta(change.delta),
+    sub: `from ${Math.round(change.from)}`,
+    toneText: deltaTextClass(change.delta),
   };
 }
 
@@ -64,11 +40,11 @@ function Tile({
 }) {
   return (
     <div className="border-l border-card-border px-4 py-3 first:border-l-0">
-      <div className="font-mono text-body-xs uppercase tracking-wider text-muted">{label}</div>
+      <div className="font-mono text-body-sm uppercase tracking-wider text-muted">{label}</div>
       <div className={`mt-0.5 text-body-lg font-bold tabular-nums ${toneText ?? "text-muted"}`}>
         {value}
       </div>
-      <div className="text-body-xs text-muted">{sub}</div>
+      <div className="text-body-sm text-muted">{sub}</div>
     </div>
   );
 }
@@ -135,13 +111,13 @@ export function OverviewView({
               </span>
             </span>
             <div>
-              <div className="font-mono text-body-xs uppercase tracking-widest text-muted">
+              <div className="font-mono text-body-sm uppercase tracking-widest text-muted">
                 Overall condition
               </div>
               <div className="mt-0.5 text-heading font-semibold text-foreground">
                 {data.overallStatus}
               </div>
-              <div className="text-body-xs text-muted">mean of nine category scores</div>
+              <div className="text-body-sm text-muted">mean of nine category scores</div>
             </div>
           </div>
           {/* Labelled by what the series actually holds. Snapshots land every
@@ -150,10 +126,7 @@ export function OverviewView({
           <Tile label={`Δ last ${data.historyCadenceTurns} turns`} {...movement(data, 0)} />
           <Tile
             label="Δ over past year"
-            {...movement(
-              data,
-              Math.max(1, Math.round(TURNS_PER_YEAR / data.historyCadenceTurns)) - 1
-            )}
+            {...movement(data, yearStepsBack(data.historyCadenceTurns))}
           />
           <Tile
             label="Critical metrics"
@@ -185,7 +158,7 @@ export function OverviewView({
         ))}
       </div>
 
-      <div className="flex flex-wrap gap-4 font-mono text-body-xs uppercase tracking-wider text-muted">
+      <div className="flex flex-wrap gap-4 font-mono text-body-sm uppercase tracking-wider text-muted">
         <span>Strip: position = political lean (L→R)</span>
         <span>Bar = objective score</span>
         <span>Lean describes association, not quality</span>

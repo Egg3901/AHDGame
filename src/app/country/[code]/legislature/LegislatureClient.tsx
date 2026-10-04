@@ -5,6 +5,11 @@ import dynamic from "next/dynamic";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 
 import { LegislatureSkeleton } from "./LegislatureSkeleton";
+import FederationDecisionPanel from "./FederationDecisionPanel";
+import RussianConstitutionalDecisionPanel from "./RussianConstitutionalDecisionPanel";
+import BulgarianConstitutionalDecisionPanel from "./BulgarianConstitutionalDecisionPanel";
+import RomanianElectoralDecisionPanel from "./RomanianElectoralDecisionPanel";
+import HungarianElectoralDecisionPanel from "./HungarianElectoralDecisionPanel";
 
 const LegislatureFallback = (_props: { name?: string }) => <LegislatureSkeleton />;
 
@@ -65,26 +70,60 @@ const LEGISLATURE_COMPONENTS: Partial<Record<CountryId, ComponentType<{ countryI
 
 interface Props {
   countryId: CountryId;
+  legislatureName?: string;
+  generic?: boolean;
+  hungarianElectoralDecisions?: boolean;
+  romanianElectoralDecision?: boolean;
+  bulgarianConstitutionalDecision?: boolean;
 }
 
-export default function LegislatureClient({ countryId }: Props) {
+export default function LegislatureClient({
+  countryId,
+  legislatureName,
+  generic,
+  hungarianElectoralDecisions,
+  romanianElectoralDecision,
+  bulgarianConstitutionalDecision,
+}: Props) {
   const config = COUNTRY_CONFIGS[countryId];
+  const displayedName = legislatureName ?? config.legislature.name;
   const PageComponent = LEGISLATURE_COMPONENTS[countryId];
 
-  if (PageComponent) {
+  if (PageComponent && !generic) {
     return (
-      <Suspense fallback={<LegislatureFallback name={config.legislature.name} />}>
+      <Suspense fallback={<LegislatureFallback name={displayedName} />}>
         <PageComponent countryId={countryId} />
       </Suspense>
     );
   }
 
+  if (countryId === "CS" || countryId === "YU" || (countryId === "RU" && generic)) {
+    return (
+      <>
+        {countryId === "RU" && <RussianConstitutionalDecisionPanel />}
+        <FederationDecisionPanel countryId={countryId} legislatureName={displayedName} />
+      </>
+    );
+  }
+
+  if (countryId === "BG" && bulgarianConstitutionalDecision)
+    return <BulgarianConstitutionalDecisionPanel />;
+
+  if (countryId === "RO" && romanianElectoralDecision) return <RomanianElectoralDecisionPanel />;
+
   // Countries without a dedicated legislature component
+  if (countryId === "HU" && hungarianElectoralDecisions)
+    return (
+      <div className="space-y-6">
+        <HungarianElectoralDecisionPanel />
+        <HungarianElectoralDecisionPanel kind="system2011" />
+      </div>
+    );
   return (
     <div className="min-h-screen bg-background flex items-center justify-center">
       <div className="text-center">
         <p data-coach="nav-legislature" className="text-2xl font-bold text-foreground">
-          {config.legislature.name}
+          {displayedName}
         </p>
         <p className="mt-2 text-muted">{config.name} legislature coming soon.</p>
       </div>

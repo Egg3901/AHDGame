@@ -1,5 +1,4 @@
 import { Slider } from "@/components/ui";
-import { contrastTextColor } from "@/lib/utils/colorContrast";
 import {
   DOLLARS_PER_TURNOUT_POINT,
   calculateAlignmentMultiplier,
@@ -78,11 +77,9 @@ export function TreasuryGotvControl({
             d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"
           />
         </svg>
-        <div className="text-xs font-semibold uppercase tracking-wide text-muted">
-          GOTV — Get Out the Vote
-        </div>
+        <div className="text-xs font-semibold text-muted">GOTV (get out the vote)</div>
       </div>
-      <p className="text-[11px] text-muted/60 mb-3 ml-6">
+      <p className="text-body-sm text-muted mb-3 ml-6">
         Nationwide voter mobilization. Spending is divided equally across all {regionCount}{" "}
         {regionWord}.
       </p>
@@ -138,8 +135,7 @@ export function TreasuryGotvControl({
           <button
             onClick={onSave}
             disabled={gotvForm.saving || gotvNeedsTarget}
-            className="rounded-lg px-4 py-1.5 text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
-            style={{ backgroundColor: party.color, color: contrastTextColor(party.color) }}
+            className="rounded-lg bg-primary px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-primary-dark disabled:opacity-50"
           >
             {gotvForm.saving ? "Saving…" : "Save"}
           </button>

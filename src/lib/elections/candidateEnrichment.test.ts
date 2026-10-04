@@ -669,5 +669,13 @@ describe("enrichElectionCandidates", () => {
     const [historical] = enrichElectionCandidates({ ...deps, preferBallotParty: true });
     expect(historical.party).toBe("1");
     expect(historical.partyName).toBe("Liberal Party");
+    const mate = { ...npp, _id: new ObjectId(), countryId: "RU" as const, name: "Vice nominee" };
+    const [russianTicket] = enrichElectionCandidates({
+      ...deps,
+      candidates: [{ ...candidate, countryId: "RU", russianRunningMateNppId: mate._id }],
+      npps: [{ ...npp, countryId: "RU" }, mate],
+    });
+    expect(russianTicket.runningMateName).toBe("Vice nominee");
+    expect(russianTicket.runningMateCharacterId).toBeNull();
   });
 });

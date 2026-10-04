@@ -35,17 +35,15 @@ export function InflationBreakdownTooltip({
 
   return (
     <div className="space-y-1">
-      <p className="text-[10px] font-semibold uppercase tracking-widest text-muted mb-2">
-        Inflation Drivers
-      </p>
+      <p className="mb-2 text-body-sm font-semibold text-foreground">Inflation drivers</p>
       {rows.map((row) => (
         <div key={row.label} className="flex items-baseline justify-between gap-2">
-          <span className="text-muted text-[11px]">
+          <span className="text-body-sm text-muted">
             {row.label}
             {row.note && <span className="text-muted/60"> ({row.note})</span>}
           </span>
           <span
-            className={`tabular-nums text-[11px] font-semibold shrink-0 ${
+            className={`shrink-0 text-body-sm font-semibold tabular-nums ${
               row.value > 0.005 ? "text-error" : row.value < -0.005 ? "text-success" : "text-muted"
             }`}
           >
@@ -55,8 +53,8 @@ export function InflationBreakdownTooltip({
         </div>
       ))}
       <div className="border-t border-card-border mt-1.5 pt-1.5 flex items-baseline justify-between">
-        <span className="text-[11px] font-semibold text-foreground">Total</span>
-        <span className="tabular-nums text-[11px] font-bold text-foreground">
+        <span className="text-body-sm font-semibold text-foreground">Total</span>
+        <span className="text-body-sm font-bold tabular-nums text-foreground">
           {total.toFixed(2)}%
         </span>
       </div>

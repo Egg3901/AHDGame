@@ -33,6 +33,7 @@ import { isLegislationTypeActive } from "@/lib/era/legislationCatalog";
 import { getNationalDocId } from "@/lib/constants/nationalScope";
 import type { StateMetrics } from "@/lib/db/types/stateMetrics";
 import { keepLatestActiveLawPerType } from "./keepLatestActiveLawPerType";
+import { nonLawSpendingAmount } from "./rules/nonLawSpending";
 
 // Re-exported so existing importers of `./spending` keep working.
 export { keepLatestActiveLawPerType } from "./keepLatestActiveLawPerType";
@@ -282,7 +283,8 @@ export async function calculateFederalSpending(
 
   // Fallback: if no enacted spending laws exist, use seeded baselines
   // (incompletely-seeded countries like CN, BR, IE).
-  if (Object.keys(byCategory).length === 0 && stateGrants === 0) {
+  const hasEnactedSpending = Object.keys(byCategory).length > 0 || stateGrants > 0;
+  if (!hasEnactedSpending) {
     if (budget.baselineSpendingByCategory) {
       for (const [category, amount] of Object.entries(budget.baselineSpendingByCategory)) {
         byCategory[category] = (byCategory[category] || 0) + amount;
@@ -290,6 +292,16 @@ export async function calculateFederalSpending(
     }
     if (budget.baselineStateGrants) {
       stateGrants = budget.baselineStateGrants;
+    }
+  }
+
+  // The 1991 Russian law catalog covers only a portion of the observed
+  // general-government envelope. Keep the calibrated non-law portion alongside
+  // enacted costs so later law changes still move total spending.
+  if (hasEnactedSpending) {
+    const nonLawSpending = nonLawSpendingAmount(budget.gdp, budget.nonLawSpendingGdpShareBaseline);
+    if (nonLawSpending > 0) {
+      byCategory.other = (byCategory.other ?? 0) + nonLawSpending;
     }
   }
 

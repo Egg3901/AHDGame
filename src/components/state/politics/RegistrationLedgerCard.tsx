@@ -11,8 +11,8 @@ import type { StateRegLedgerResult } from "@/lib/states/overview/getStateRegLedg
 export function RegistrationLedgerCard({ regLedger }: { regLedger: StateRegLedgerResult }) {
   if (!regLedger.seeded || !regLedger.headline) {
     return (
-      <div className="rounded-xl border border-card-border bg-card p-4 shadow-sm opacity-90">
-        <h3 className="text-sm font-semibold text-muted">Registration ledger</h3>
+      <div className="rounded-xl border border-card-border bg-card p-5 opacity-90">
+        <h3 className="text-body text-muted">Registration ledger</h3>
         <div className="mt-3 flex items-center gap-3">
           <div className="text-2xl font-bold tabular-nums opacity-50">—</div>
           <p className="text-xs leading-snug">
@@ -25,28 +25,29 @@ export function RegistrationLedgerCard({ regLedger }: { regLedger: StateRegLedge
 
   const { headline, movement } = regLedger;
   return (
-    <div className="rounded-xl border border-card-border bg-card p-4 shadow-sm">
-      <h3 className="text-sm font-semibold text-muted">Registration ledger</h3>
+    <div className="rounded-xl border border-card-border bg-card p-5">
+      <h3 className="text-body text-muted">Registration ledger</h3>
       <div className="mt-3 flex items-center gap-2">
         <span
-          className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold tracking-wide"
-          style={{
-            background: `color-mix(in srgb, ${headline.color} 16%, transparent)`,
-            border: `1px solid color-mix(in srgb, ${headline.color} 40%, transparent)`,
-            color: headline.color,
-          }}
+          className="inline-flex items-center gap-1.5 text-body font-semibold"
+          style={{ color: headline.color }}
         >
+          <span
+            className="h-2 w-2 rounded-full"
+            style={{ backgroundColor: headline.color }}
+            aria-hidden
+          />
           {headline.abbr}
         </span>
-        <span className="text-2xl font-bold tabular-nums">{headline.regPct.toFixed(1)}%</span>
-        <span className="text-[10px] uppercase tracking-wider text-muted">Registration</span>
+        <span className="text-heading-lg font-semibold tabular-nums">
+          {headline.regPct.toFixed(1)}%
+        </span>
+        <span className="text-body-sm text-muted">registration</span>
       </div>
       {movement.length >= 2 ? (
         <RegSparkline points={movement} color={headline.color} />
       ) : (
-        <p className="mt-2 text-[10px] italic opacity-60">
-          Recent movement appears here as turns pass.
-        </p>
+        <p className="mt-2 text-body-sm text-muted">Recent movement appears here as turns pass.</p>
       )}
     </div>
   );

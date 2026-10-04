@@ -4,6 +4,7 @@ import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import {
   COUNTRY_CURRENCY_MAP,
   FOREX_ACTIVE_COUNTRIES,
+  getSeedCurrencyCode,
   getCountryIdForCurrency,
   type CurrencyCode,
 } from "@/lib/constants/currencies";
@@ -30,6 +31,7 @@ import {
   spreadPercentPointsFromComposite,
 } from "@/lib/lineOfCredit/creditMath";
 import { getBankId } from "@/lib/centralBank/helpers";
+import { getGameState } from "@/lib/gameState";
 
 const DEFAULT_PRIME = 2.5;
 
@@ -72,7 +74,8 @@ async function computeSpreadForCharacter(
   db: Db,
   char: Character,
   rates: Partial<Record<CurrencyCode, number>>,
-  primeByCountryId: Map<string, number>
+  primeByCountryId: Map<string, number>,
+  preset?: string
 ) {
   const snapshot = await buildLocSnapshot(db, char);
   if (snapshot) return snapshot.spreadPercentPoints;
@@ -97,7 +100,7 @@ async function computeSpreadForCharacter(
       { projection: { creditCompositeSnapshot: 1 } }
     );
 
-  const homeCurrency = getHomeCurrency(char);
+  const homeCurrency = getHomeCurrency(char, preset);
   const primeHome =
     primeByCountryId.get(getBankId(getCountryIdForCurrency(homeCurrency))) ?? DEFAULT_PRIME;
   const composite = computeLocBorrowerComposite({
@@ -128,7 +131,10 @@ export async function loadAdminLoanTracker(params: { db: Db; countryId: CountryI
     return { ok: false as const, status: 404, error: "Line of credit system is not active." };
   }
 
-  const homeCurrency = COUNTRY_CURRENCY_MAP[countryId] as CurrencyCode;
+  const gameState = await getGameState(db);
+  const homeCurrency = gameState?.preset
+    ? getSeedCurrencyCode(countryId, gameState.preset)
+    : (COUNTRY_CURRENCY_MAP[countryId] as CurrencyCode);
   const rates = await loadExchangeRatesMap(db);
   const banks = await db
     .collection<CentralBank>("centralBanks")
@@ -169,7 +175,7 @@ export async function loadAdminLoanTracker(params: { db: Db; countryId: CountryI
 
     const creditSpreadPercentPoints =
       snapshot?.spreadPercentPoints ??
-      (await computeSpreadForCharacter(db, character, rates, primeByCountryId));
+      (await computeSpreadForCharacter(db, character, rates, primeByCountryId, gameState?.preset));
     const spreadPercentPoints =
       creditSpreadPercentPoints + (snapshot?.policySpreadAdjustmentPercentPoints ?? 0);
     const walletOk = walletCoversNextScheduledPay(

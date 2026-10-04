@@ -333,7 +333,10 @@ export function enrichElectionCandidates(deps: EnrichmentDependencies): Enriched
       runningMateChar?._id.toString() ?? c.runningMateId?.toString() ?? null;
     const runningMateId =
       runningMateChar?.sequentialId?.toString() ?? c.runningMateId?.toString() ?? null;
-    const runningMateName = runningMateChar?.name ?? null;
+    const runningMateNpp = c.russianRunningMateNppId
+      ? nppMap.get(c.russianRunningMateNppId.toString())
+      : null;
+    const runningMateName = runningMateChar?.name ?? runningMateNpp?.name ?? null;
 
     const campaignInfo = campaignByCandidate.get(c.characterId?.toString() ?? "");
 

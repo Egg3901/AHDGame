@@ -36,3 +36,4 @@ export { getMacroCountriesCollection } from "./macroCountries";
 export { getSphereFlowLedgerCollection } from "./sphereFlowLedger";
 export { getSphereMembershipsCollection } from "./sphereMemberships";
 export { getWikiReportsCollection } from "./wikiReports";
+export { getMoneyFlowReceiptsCollection } from "./moneyFlowReceipts";

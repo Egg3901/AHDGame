@@ -73,7 +73,7 @@ function ForceBalanceBar({ boostTotal, dragTotal }: { boostTotal: number; dragTo
 
   return (
     <div className="space-y-2" aria-hidden="true">
-      <div className="flex items-center justify-between gap-3 text-[10px] uppercase tracking-wider">
+      <div className="flex items-center justify-between gap-3 text-body-sm">
         <span className="font-semibold text-success">Tailwinds {signed(boostTotal)}</span>
         <span className="font-semibold text-error">Headwinds {signed(dragTotal)}</span>
       </div>
@@ -105,7 +105,7 @@ function ApprovalMeter({
     <div className="space-y-2">
       <div className="flex items-end justify-between gap-3">
         <div>
-          <div className="text-[10px] uppercase tracking-wider text-muted">Approval</div>
+          <div className="text-body-sm text-muted">Approval</div>
           <div
             className={`text-3xl font-bold tabular-nums leading-none ${approvalColor(approval)}`}
           >
@@ -115,14 +115,16 @@ function ApprovalMeter({
         <div className="text-right">
           {baseApproval != null && (
             <>
-              <div className="text-[10px] uppercase tracking-wider text-muted">Base</div>
+              <div className="text-body-sm text-muted">Base</div>
               <div className="text-sm font-semibold tabular-nums text-foreground">
                 {baseApproval.toFixed(1)}%
               </div>
             </>
           )}
           {delta != null && Math.abs(delta) >= 0.05 && (
-            <div className={`mt-0.5 text-xs font-medium tabular-nums ${toneClass(delta, "text")}`}>
+            <div
+              className={`mt-0.5 text-body-sm font-medium tabular-nums ${toneClass(delta, "text")}`}
+            >
               {signed(Number(delta.toFixed(1)))} from base
             </div>
           )}
@@ -174,7 +176,7 @@ function DriverRow({ modifier }: { modifier: ActiveModifier }) {
       <span className="flex shrink-0 flex-col items-end gap-0.5 text-right">
         <span
           className={
-            "text-xs font-semibold tabular-nums " + (positive ? "text-success" : "text-error")
+            "text-body-sm font-semibold tabular-nums " + (positive ? "text-success" : "text-error")
           }
         >
           {signed(modifier.effect)} appr.
@@ -182,7 +184,8 @@ function DriverRow({ modifier }: { modifier: ActiveModifier }) {
         {margin != null && margin !== 0 && (
           <span
             className={
-              "text-[10px] font-medium tabular-nums " + (margin > 0 ? "text-success" : "text-error")
+              "text-body-sm font-medium tabular-nums " +
+              (margin > 0 ? "text-success" : "text-error")
             }
           >
             {signed(margin)}pp margin
@@ -217,7 +220,7 @@ export function RegionalConditionsCard({
   const hasForces = modifiers.length > 0;
 
   return (
-    <section className="rounded-xl border border-card-border bg-card p-4 shadow-panel">
+    <section className="rounded-xl border border-card-border bg-card p-5 sm:p-6">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -227,20 +230,18 @@ export function RegionalConditionsCard({
       >
         <div className="flex items-start gap-2">
           <ChevronDown
-            className={`mt-0.5 h-3.5 w-3.5 shrink-0 text-muted transition-transform ${open ? "rotate-180" : ""}`}
+            className={`mt-1.5 h-4 w-4 shrink-0 text-muted transition-transform ${open ? "rotate-180" : ""}`}
             aria-hidden
           />
           <div>
-            <div className="text-[10px] uppercase tracking-wider text-muted">
-              Regional Conditions
-            </div>
+            <h2 className="text-heading-sm font-semibold text-foreground">Regional conditions</h2>
             {open ? (
-              <p className="mt-0.5 max-w-prose text-xs text-muted">
-                The political weather: forces lifting or dragging government approval.
+              <p className="mt-0.5 max-w-prose text-body text-muted">
+                Conditions lifting or dragging government approval.
               </p>
             ) : (
               hasForces && (
-                <p className="mt-0.5 text-xs">
+                <p className="mt-0.5 text-body">
                   <span className="font-semibold text-success">
                     Tailwinds {signed(forces.boostTotal)}
                   </span>
@@ -254,9 +255,9 @@ export function RegionalConditionsCard({
           </div>
         </div>
         {hasForces && (
-          <div className="flex gap-4 text-right text-xs">
+          <div className="flex gap-6 text-right text-body">
             <div>
-              <div className="text-[10px] uppercase tracking-wider text-muted">Net approval</div>
+              <div className="text-body-sm text-muted">Net approval</div>
               <div
                 className={`mt-0.5 font-semibold tabular-nums ${toneClass(netApproval, "text")}`}
               >
@@ -264,7 +265,7 @@ export function RegionalConditionsCard({
               </div>
             </div>
             <div>
-              <div className="text-[10px] uppercase tracking-wider text-muted">Net margin</div>
+              <div className="text-body-sm text-muted">Net margin</div>
               <div className={`mt-0.5 font-semibold tabular-nums ${toneClass(netMargin, "text")}`}>
                 {signed(netMargin, "pp")}
               </div>
@@ -282,7 +283,7 @@ export function RegionalConditionsCard({
           )}
 
           {!showScore && !hasForces && (
-            <p className="mt-3 text-xs text-muted">
+            <p className="mt-3 text-body text-muted">
               Named metric states that adjust government approval and in-state sector profit
               margins.
             </p>
@@ -293,12 +294,11 @@ export function RegionalConditionsCard({
               <ForceBalanceBar boostTotal={forces.boostTotal} dragTotal={forces.dragTotal} />
 
               <div>
-                <div className="mb-2 text-[10px] uppercase tracking-wider text-muted">
+                <div className="mb-2 text-body-sm text-muted">
                   Top drivers
                   {remainder.length > 0 && (
-                    <span className="normal-case tracking-normal text-muted">
-                      {" "}
-                      · showing {headline.length} of {modifiers.length}
+                    <span>
+                      , showing {headline.length} of {modifiers.length}
                     </span>
                   )}
                 </div>
@@ -310,19 +310,17 @@ export function RegionalConditionsCard({
               </div>
             </div>
           ) : (
-            showScore && (
-              <p className="mt-3 text-sm italic text-muted">No active regional conditions.</p>
-            )
+            showScore && <p className="mt-3 text-body text-muted">No active regional conditions.</p>
           )}
 
-          <div className="mt-4 border-t border-card-border/60 pt-3">
+          <div className="mt-4">
             <Link
               href={href}
-              className="text-xs font-medium text-primary hover:underline underline-offset-2"
+              className="text-body font-medium text-foreground underline decoration-card-border underline-offset-4 hover:decoration-foreground"
             >
               {remainder.length > 0
-                ? `View all ${modifiers.length} conditions & full breakdown →`
-                : "View full approval breakdown →"}
+                ? `All ${modifiers.length} conditions and the approval breakdown`
+                : "Approval breakdown"}
             </Link>
           </div>
         </div>

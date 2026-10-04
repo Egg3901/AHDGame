@@ -32,13 +32,13 @@ export function SuppressionCounterOpsCard({
   const hasBudget = budgetPercent != null && budgetPercent > 0;
 
   return (
-    <div className="rounded-xl border border-card-border bg-card p-4 shadow-sm">
-      <h3 className="text-sm font-semibold text-muted">Suppression counter-ops</h3>
+    <div className="rounded-xl border border-card-border bg-card p-5">
+      <h3 className="text-body text-muted">Suppression counter-ops</h3>
       <div className="mt-2 flex items-baseline gap-2">
-        <span className="text-2xl font-bold tabular-nums">
+        <span className="text-heading-lg font-semibold tabular-nums">
           {budgetPercent != null ? `${budgetPercent.toFixed(1)}%` : "—"}
         </span>
-        <span className="text-[10px] uppercase tracking-wider text-muted">of hourly revenue</span>
+        <span className="text-body-sm text-muted">of hourly revenue</span>
       </div>
       {hasBudget && targetCategory && (
         <p className="mt-1 text-xs">
@@ -49,7 +49,7 @@ export function SuppressionCounterOpsCard({
         </p>
       )}
       {!hasBudget && (
-        <p className="mt-1 text-xs italic opacity-70">No suppression budget set for this state.</p>
+        <p className="mt-1 text-body-sm text-muted">No suppression budget set for this state.</p>
       )}
       <Link
         href={url}

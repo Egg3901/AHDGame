@@ -1,0 +1,92 @@
+import { apportionSeats } from "@/lib/seeds/reference/rules/apportionSeats";
+import { BG_1991_ELECTORAL_DISTRICTS } from "../data/electoralDistricts1991";
+import { BG_1991_MACROREGION_POPULATION } from "../data/bgPopulation1991";
+
+/** The ordinary Assembly elected on 13 October 1991 first sat on 4 November. */
+export const BG_ORDINARY_ASSEMBLY_START_TURN = 41;
+export const BG_ORDINARY_ASSEMBLY_TOTAL_SEATS = 240;
+export const BG_LEGACY_ORDINARY_ASSEMBLY_SEATS = apportionSeats(
+  BG_ORDINARY_ASSEMBLY_TOTAL_SEATS,
+  BG_1991_MACROREGION_POPULATION
+);
+
+export const BG_ORDINARY_DISTRICT_SEATS = apportionSeats(
+  BG_ORDINARY_ASSEMBLY_TOTAL_SEATS,
+  Object.fromEntries(BG_1991_ELECTORAL_DISTRICTS.map((row) => [row.id, row.population]))
+);
+/** Macroregion campaigns sum the same 31 district capacities as the count. */
+export const BG_ORDINARY_ASSEMBLY_SEATS: Readonly<Record<string, number>> =
+  BG_1991_ELECTORAL_DISTRICTS.reduce<Record<string, number>>((seats, row) => {
+    seats[row.regionId] = (seats[row.regionId] ?? 0) + BG_ORDINARY_DISTRICT_SEATS[row.id];
+    return seats;
+  }, {});
+
+export function bgAssemblyName(
+  preset: string | undefined,
+  ordinaryAssemblySinceTurn: number | undefined,
+  transition?: {
+    bgConstitution1991SinceTurn?: number;
+    bgGrandAssemblyContinuationSinceTurn?: number;
+    bgGrandAssemblyDissolutionSinceTurn?: number;
+  }
+): string {
+  if (preset !== "1991-default" || ordinaryAssemblySinceTurn != null) return "National Assembly";
+  if (
+    transition?.bgGrandAssemblyContinuationSinceTurn != null &&
+    transition.bgGrandAssemblyDissolutionSinceTurn == null
+  )
+    return "Continued National Assembly";
+  if (transition?.bgConstitution1991SinceTurn != null) return "Caretaker National Assembly";
+  return "Grand National Assembly";
+}
+
+/** An adopted constitution authorizes ordinary240-seat campaigns after the founding vote. */
+export function bgElectionSeatsForPreset(
+  currentRegionSeats: Readonly<Record<string, number>>,
+  preset: string | undefined,
+  founding: boolean,
+  authorized: boolean = false
+): Readonly<Record<string, number>> {
+  return preset === "1991-default" && !founding && authorized
+    ? BG_ORDINARY_ASSEMBLY_SEATS
+    : currentRegionSeats;
+}
+
+export function canOpenBgOrdinaryAssembly(
+  calendarTurn: number,
+  resolvedRegionalSeats: Readonly<Record<string, number>>
+): boolean {
+  if (calendarTurn < BG_ORDINARY_ASSEMBLY_START_TURN) return false;
+  const expectedIds = Object.keys(BG_ORDINARY_ASSEMBLY_SEATS);
+  return (
+    Object.keys(resolvedRegionalSeats).length === expectedIds.length &&
+    [BG_ORDINARY_ASSEMBLY_SEATS, BG_LEGACY_ORDINARY_ASSEMBLY_SEATS].some((capacities) =>
+      expectedIds.every((id) => resolvedRegionalSeats[id] === capacities[id])
+    )
+  );
+}
+
+/** Frozen founding400-seat races must remain outside the native ordinary count. */
+export function isBgOrdinaryCapacity(state: string, totalSeats: number | undefined): boolean {
+  return (
+    totalSeats != null &&
+    [BG_ORDINARY_ASSEMBLY_SEATS, BG_LEGACY_ORDINARY_ASSEMBLY_SEATS].some(
+      (map) => map[state] != null && map[state] === totalSeats
+    )
+  );
+}
+
+/** Public chamber composition counts mandate weights and excludes executives. */
+export function bgAssemblyPartySeats(
+  officials: readonly { officeType: string; party?: string | null; seatsHeld?: number }[]
+): Record<string, number> {
+  const seats = new Map<string, number>();
+  for (const official of officials) {
+    if (official.officeType !== "assemblyDeputy") continue;
+    const held = official.seatsHeld ?? 1;
+    if (!Number.isSafeInteger(held) || held < 0)
+      throw new Error("Invalid Bulgarian mandate weight");
+    if (official.party && held) seats.set(official.party, (seats.get(official.party) ?? 0) + held);
+  }
+  return Object.fromEntries(seats);
+}

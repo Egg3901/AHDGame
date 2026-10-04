@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { partyApiUrl } from "@/lib/urls";
 import { getMessageStyle } from "@/lib/utils/formatters";
-import { contrastTextColor } from "@/lib/utils/colorContrast";
 import { adjacentStates } from "@/lib/constants/stateAdjacency";
 import { isClusterConnected } from "@/lib/parties/priorityRegion";
 import type { CountryId } from "@/lib/constants/countries";
@@ -168,7 +167,7 @@ export function PriorityRegionCard({ party, countryCode }: PriorityRegionCardPro
   return (
     <div className="rounded-xl border border-card-border bg-card p-6">
       <div className="mb-4 flex items-baseline justify-between gap-3">
-        <h2 className="text-lg font-semibold">Priority Region</h2>
+        <h2 className="text-lg font-semibold">Priority region</h2>
         <span className="text-xs text-muted">
           +25% effectiveness on national PS actions in cluster states
         </span>
@@ -187,7 +186,7 @@ export function PriorityRegionCard({ party, countryCode }: PriorityRegionCardPro
       {/* Current cluster (if any) */}
       {cluster && (
         <div className="mb-4 rounded-lg border border-primary/30 bg-primary/5 p-4">
-          <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-primary">
+          <div className="mb-2 text-xs font-semibold text-primary">
             Current cluster
             {isLocked && (
               <span className="ml-2 text-muted">
@@ -221,9 +220,9 @@ export function PriorityRegionCard({ party, countryCode }: PriorityRegionCardPro
       {/* Setter UI — visible only when slot is unlocked */}
       {!isLocked && (
         <div className="space-y-3">
-          <div className="text-xs font-semibold uppercase tracking-wider text-muted">
+          <div className="text-xs font-semibold text-muted">
             {cluster ? "Re-set cluster" : "Set initial cluster"}
-            <span className="ml-2 normal-case text-[10px] text-muted/70">
+            <span className="ml-2 normal-case text-body-sm text-muted/70">
               {picked.length} / {maxPicks} picked
               {hasAnchorOnPicks && (
                 <span className="ml-2 text-success">· governor anchor active (+1 slot)</span>
@@ -231,7 +230,7 @@ export function PriorityRegionCard({ party, countryCode }: PriorityRegionCardPro
             </span>
           </div>
           {picked.length >= 2 && !picksAreConnected && (
-            <div className="rounded-md border border-warning/40 bg-warning/10 p-2 text-[11px] text-warning">
+            <div className="rounded-md border border-warning/40 bg-warning/10 p-2 text-body-sm text-warning">
               Picked states aren&apos;t all connected. Add a bridging state or un-pick the orphan
               before submitting.
             </div>
@@ -266,7 +265,7 @@ export function PriorityRegionCard({ party, countryCode }: PriorityRegionCardPro
                   <span>{s.name}</span>
                   {isGovernor && (
                     <span
-                      className={`text-[9px] uppercase tracking-wide font-semibold px-1.5 py-0.5 rounded ${
+                      className={`text-body-sm font-semibold px-1.5 py-0.5 rounded ${
                         isPicked ? "bg-primary/20 text-primary" : "bg-success/15 text-success"
                       }`}
                     >
@@ -280,8 +279,7 @@ export function PriorityRegionCard({ party, countryCode }: PriorityRegionCardPro
           <button
             onClick={handleSubmit}
             disabled={submitting || picked.length < 2 || !picksAreConnected}
-            className="rounded-lg px-4 py-2 text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
-            style={{ backgroundColor: party.color, color: contrastTextColor(party.color) }}
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-dark disabled:opacity-50"
           >
             {submitting ? "Locking in…" : "Lock in Priority Region"}
           </button>

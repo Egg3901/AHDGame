@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Button, EmptyState } from "@/components/ui";
+import { Button } from "@/components/ui";
 import { PlayerSelector } from "@/components/PlayerSelector";
 import type { Nomination } from "./centralBankTypes";
+import { CentralBankSection } from "./CentralBankSection";
 
 export function NominationsPanel({
   nominations,
@@ -60,62 +61,38 @@ export function NominationsPanel({
   };
 
   return (
-    <div className="rounded-xl border border-card-border bg-card p-5">
-      <h2 className="mb-2 text-sm font-semibold text-muted">Executive nominations</h2>
-      <p className="mb-3 text-xs text-muted italic">
+    <CentralBankSection title="Executive nominations" level="aside">
+      <p className="text-body-sm text-muted">
         The {executiveLabel} may nominate up to three candidates during the final year of the
-        chair&apos;s term. Each nomination costs one action point.
-      </p>
-      <p className="mb-4 text-xs text-muted">
-        Candidates from this pool have a <span className="text-primary font-semibold">70%</span>{" "}
-        chance of being selected.
+        chair&apos;s term. Each nomination costs one action point. Candidates from this pool have a{" "}
+        <span className="font-semibold text-foreground">70%</span> chance of being selected.
       </p>
 
       {nominations.length > 0 ? (
-        <div className="space-y-2">
+        <ul className="mt-3 divide-y divide-card-border/60">
           {nominations.map((nom) => (
-            <div
-              key={nom.characterId}
-              className="flex items-center gap-3 rounded-lg border border-card-border/50 bg-card-muted p-3"
-            >
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-card-border bg-card-elevated text-xs font-bold text-muted">
-                {nom.characterName.charAt(0)}
-              </div>
-              <div className="min-w-0 flex-1">
-                <Link
-                  href={`/character/${nom.characterId}`}
-                  className="text-sm font-medium text-foreground hover:text-primary transition-colors truncate block"
-                >
-                  {nom.characterName}
-                </Link>
-                <p className="text-xs text-muted">Nominated by {nom.nominatedByName}</p>
-              </div>
-            </div>
+            <li key={nom.characterId} className="py-2">
+              <Link
+                href={`/character/${nom.characterId}`}
+                className="block truncate text-body font-medium text-foreground underline-offset-4 hover:underline"
+              >
+                {nom.characterName}
+              </Link>
+              <p className="text-body-sm text-muted">Nominated by {nom.nominatedByName}</p>
+            </li>
           ))}
-        </div>
+        </ul>
       ) : nominationWindowOpen ? (
-        <EmptyState
-          icon={
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-              />
-            </svg>
-          }
-          title="No nominations yet"
-          description={`The ${executiveLabel} has not yet put forward any nominations.`}
-        />
+        <p className="mt-3 text-body-sm text-muted">
+          <span className="font-medium text-foreground">No nominations yet.</span> The{" "}
+          {executiveLabel} has not yet put forward any nominations.
+        </p>
       ) : (
-        <div className="rounded-lg border border-card-border/50 bg-card-muted p-3 text-center">
-          <p className="text-xs text-muted italic">
-            {turnsUntilNominationWindowLabel
-              ? `Nominations open in ${turnsUntilNominationWindowLabel}, during the final year of the chair's term.`
-              : "Nominations open when the chair position is vacant."}
-          </p>
-        </div>
+        <p className="mt-3 text-body-sm text-muted">
+          {turnsUntilNominationWindowLabel
+            ? `Nominations open in ${turnsUntilNominationWindowLabel}, during the final year of the chair's term.`
+            : "Nominations open when the chair position is vacant."}
+        </p>
       )}
 
       {isExecutive && nominationWindowOpen && nominations.length < 3 && (
@@ -127,22 +104,22 @@ export function NominationsPanel({
                 onSelect={(char) => handleNominate(char.id)}
                 excludeIds={nominations.map((n) => n.characterId)}
               />
-              {loading && <p className="text-xs text-muted">Submitting nomination...</p>}
-              {error && <p className="text-xs text-error">{error}</p>}
+              {loading && <p className="text-body-sm text-muted">Submitting nomination...</p>}
+              {error && <p className="text-body-sm text-error">{error}</p>}
               <Button variant="ghost" onClick={() => setShowSelector(false)}>
                 Cancel
               </Button>
             </div>
           ) : (
             <Button variant="primary" onClick={() => setShowSelector(true)} disabled={loading}>
-              Nominate Candidate
+              Nominate candidate
             </Button>
           )}
         </div>
       )}
       {isExecutive && nominationWindowOpen && nominations.length >= 3 && (
-        <p className="mt-3 text-xs text-muted italic">Maximum nominations reached (3/3).</p>
+        <p className="mt-3 text-body-sm text-muted">Maximum nominations reached (3/3).</p>
       )}
-    </div>
+    </CentralBankSection>
   );
 }

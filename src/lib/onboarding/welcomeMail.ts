@@ -1,4 +1,5 @@
 import { regionNoun } from "@/lib/onboarding/checklist";
+import { CURRENCY_SYMBOLS, type CurrencyCode } from "@/lib/constants/currencies";
 
 /** Sender name shown on the welcome mail (system mail, no fromCharacterId). */
 export const WELCOME_MAIL_SENDER = "Game Guide";
@@ -7,14 +8,23 @@ export const WELCOME_MAIL_SUBJECT = "Your first moves";
 
 interface WelcomeMailParams {
   countryId: string;
-  /** Campaign funds the character actually started with (₳). */
+  /** Campaign funds the character actually started with (₳ anchor mirror). */
   startingFunds: number;
   /** Actions the character actually started with (referral bonus included). */
   startingActions: number;
-  /** Checklist completion reward (₳). */
+  /** Checklist completion reward (₳ anchor). */
   rewardAmount: number;
   /** World's actual turn cadence (gameConfig.turnLengthMinutes). */
   turnLengthMinutes: number;
+  /**
+   * Actual home currency credited (preset-aware, e.g. EUR for a 2027-default
+   * euro member). Omit to keep the legacy ₳ anchor labels byte-identical.
+   */
+  currencyCode?: CurrencyCode;
+  /** Local-credited campaign starting balance (home currency), shown when `currencyCode` is set. */
+  localStartingFunds?: number;
+  /** Local-credited checklist reward (home currency), shown when `currencyCode` is set. */
+  localRewardAmount?: number;
 }
 
 /** "every hour" / "every 30 minutes" / "every 2 hours", from the real config. */
@@ -35,10 +45,22 @@ function turnCadence(turnLengthMinutes: number): string {
  * tutorialPlan.ts).
  */
 export function buildWelcomeMailBody(params: WelcomeMailParams): string {
-  const { countryId, startingFunds, startingActions, rewardAmount, turnLengthMinutes } = params;
+  const {
+    countryId,
+    startingFunds,
+    startingActions,
+    rewardAmount,
+    turnLengthMinutes,
+    currencyCode,
+    localStartingFunds,
+    localRewardAmount,
+  } = params;
   const region = regionNoun(countryId);
-  const funds = `₳${startingFunds.toLocaleString()}`;
-  const reward = `₳${rewardAmount.toLocaleString()}`;
+  // With a home currency the mail names the local credited balances the
+  // wallet actually shows; otherwise the legacy ₳ anchor labels apply.
+  const symbol = currencyCode ? (CURRENCY_SYMBOLS[currencyCode] ?? currencyCode) : "₳";
+  const funds = `${symbol}${(currencyCode && localStartingFunds !== undefined ? localStartingFunds : startingFunds).toLocaleString()}`;
+  const reward = `${symbol}${(currencyCode && localRewardAmount !== undefined ? localRewardAmount : rewardAmount).toLocaleString()}`;
 
   return (
     `You have a character, a home ${region}, ${funds} in campaign funds, and ${startingActions} bonus actions. That is more than most politicians start with.\n\n` +

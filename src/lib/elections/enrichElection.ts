@@ -1,4 +1,12 @@
 /**
+ * Election details show registered candidates, primary results and counted votes.
+ * _enrichElection retains Russian national list nominees together and uses the
+ * same primary advance limit as the resolver.
+ */
+import { hu1991PrimaryAdvanceLimit } from "@/lib/countries/hu/rules/assemblyCampaign1991";
+import { russianAssemblyPrimaryAdvanceLimit } from "@/lib/countries/ru/assemblyPrimaryProgression";
+import { usesLegacyPresidentialCampaign } from "@/lib/countries/ru/rules/presidentialCampaign";
+/**
  * Low-level enrichment function that accepts pre-fetched dependencies.
  * Exported with underscore prefix to signal that it is an internal helper
  * intended for use by resolveElection() and resolveElections().
@@ -436,7 +444,7 @@ export async function _enrichElection(
 
   const electionOid = election._id;
   const countryId = election.countryId ?? "US";
-  const isPresident = election.electionType === "president";
+  const isPresident = usesLegacyPresidentialCampaign(election);
 
   // Live apportionment: census-updated `state.houseDistricts` (preset seed
   // fallback). Equals the seed until a decennial census reapportions (P1d-2).
@@ -616,10 +624,10 @@ export async function _enrichElection(
   // Primary-winner cap for this race: US=1, UK=3, JP=3; single-winner
   // governor/president races are always 1. Resolved once here and returned as
   // `primaryAdvanceCount` so client surfaces read it instead of recomputing it.
-  const primaryAdvanceCount = getPrimaryWinnersForElection(
-    countryId as CountryId,
-    election.electionType
-  );
+  const primaryAdvanceCount =
+    hu1991PrimaryAdvanceLimit(election, enrichedWithYou.length) ??
+    russianAssemblyPrimaryAdvanceLimit(election, enrichedWithYou.length) ??
+    getPrimaryWinnersForElection(countryId as CountryId, election.electionType);
 
   // Display candidates: post-primary dedup, keeping up to `primaryAdvanceCount`
   // per party. Safety net for the window between primaryEndTime and the next
@@ -734,15 +742,29 @@ export async function _enrichElection(
   // the districted branch's database round-trip is spared on a settled race.
   const seatedAllocation = resolvedSeatsEstimate(tally, null);
 
+  const isBgOrdinary =
+    gameState?.preset === "1991-default" &&
+    election.countryId === "BG" &&
+    election.electionType === "nationalAssembly" &&
+    (election.cycle >= 1 || election.bulgarianFoundingRound != null);
+  const isHu1991Pending =
+    election.countryId === "HU" &&
+    election.electionType === "nationalAssembly" &&
+    (election.hungarianAssemblyRound?.ruleVersion === "mixed-1989-v1" ||
+      election.hungarianModernByElection != null ||
+      election.hungarianModernAssembly != null);
   let seatsEstimate =
     seatedAllocation ??
-    computeSeatEstimates(
-      election.electionType,
-      election.totalSeats,
-      tally,
-      activeCandidateIdSet,
-      election.countryId ?? "US"
-    );
+    (isBgOrdinary || isHu1991Pending
+      ? null
+      : computeSeatEstimates(
+          election.electionType,
+          election.totalSeats,
+          tally,
+          activeCandidateIdSet,
+          election.countryId ?? "US",
+          election.allocationMethod
+        ));
 
   // US House with redistricting on: project seats district-by-district using the
   // SAME engine that decides the final result (districtedHouseResolution on the
@@ -1041,6 +1063,12 @@ export async function _enrichElection(
 
       const fullCandidateNames: Record<string, string> = {};
       const fullCandidateParties: Record<string, string> = {};
+      const candidateIsNPP = {
+        ...Object.fromEntries(
+          candidates.map((candidate) => [candidate._id.toString(), Boolean(candidate.isNPP)])
+        ),
+        ...resolvedTally.candidateIsNPP,
+      };
       // For an ended/finalized election, a candidate's live party can differ from
       // the party they ran under (they may have switched since). Prefer the tally
       // snapshot, then the candidacy-row (ballot) party — never the live
@@ -1078,16 +1106,20 @@ export async function _enrichElection(
               ? t.seatsEstimate
               : undefined;
           const seatsEstimateSnapshot =
-            persisted ??
-            seatEstimateForVoteTotals(
-              election.electionType,
-              election.state,
-              election.totalSeats,
-              t.cumulativeVotes,
-              houseSeats,
-              fullCandidateParties,
-              election.countryId ?? "US"
-            );
+            isBgOrdinary || isHu1991Pending
+              ? undefined
+              : (persisted ??
+                seatEstimateForVoteTotals(
+                  election.electionType,
+                  election.state,
+                  election.totalSeats,
+                  t.cumulativeVotes,
+                  houseSeats,
+                  fullCandidateParties,
+                  election.countryId ?? "US",
+                  election.allocationMethod,
+                  candidateIsNPP
+                ));
           return {
             turn: t.turn,
             recordedAt: t.recordedAt,
@@ -1097,6 +1129,9 @@ export async function _enrichElection(
           };
         }),
         ...electoralVotesResult,
+        ...(resolvedTally.russianPresidentialResult
+          ? { russianPresidentialResult: resolvedTally.russianPresidentialResult }
+          : {}),
         // Per-state EV totals for the active preset (president display surfaces
         // read this instead of the 2020-census constant directly).
         ...(isPresident ? { evByState } : {}),
@@ -1368,8 +1403,44 @@ export async function _enrichElection(
     id: election._id.toString(),
     seatId: election.seatId ?? null,
     electionType: election.electionType,
+    allocationMethod: election.allocationMethod,
     state: election.state,
     countryId,
+    ...(election.bulgarianFoundingRound
+      ? {
+          bulgarianFoundingRound: {
+            ruleVersion: election.bulgarianFoundingRound.ruleVersion,
+            round: election.bulgarianFoundingRound.round,
+            newNominationDistrictIds: election.bulgarianFoundingRound.newNominationDistrictIds,
+          },
+        }
+      : {}),
+    ...(election.hungarianAssemblyRound
+      ? {
+          hungarianAssemblyRound: {
+            ruleVersion: election.hungarianAssemblyRound.ruleVersion,
+            round: election.hungarianAssemblyRound.round,
+            ...(election.hungarianAssemblyRound.byElection
+              ? { vacancyDistrictIds: election.hungarianAssemblyRound.byElection.districtIds }
+              : {}),
+          },
+        }
+      : {}),
+    ...(election.hungarianModernAssembly
+      ? { hungarianModernAssembly: { ruleVersion: election.hungarianModernAssembly.ruleVersion } }
+      : {}),
+    ...(election.hungarianModernByElection
+      ? { hungarianModernByElection: { districtId: election.hungarianModernByElection.districtId } }
+      : {}),
+    ...(election.russianDumaRound
+      ? {
+          russianDumaRound: {
+            cohortId: election.russianDumaRound.cohortId.toHexString(),
+            mandateSinceTurn: election.russianDumaRound.mandateSinceTurn,
+            tier: election.russianDumaRound.tier,
+          },
+        }
+      : {}),
     senateClass: election.senateClass ?? null,
     chamberClass: election.chamberClass ?? null,
     cycle: election.cycle,
@@ -1487,7 +1558,16 @@ export async function fetchDepsForElection(
   const allCharIds = [
     ...new Set([...characterIds, ...runningMateIds].map((id) => id.toString())),
   ].map((s) => new ObjectId(s));
-  const nppIds = candidates.filter((c) => c.isNPP && c.nppId).map((c) => c.nppId!);
+  const nppIds = [
+    ...new Set(
+      candidates.flatMap((candidate) => [
+        ...(candidate.isNPP && candidate.nppId ? [candidate.nppId.toString()] : []),
+        ...(candidate.russianRunningMateNppId
+          ? [candidate.russianRunningMateNppId.toString()]
+          : []),
+      ])
+    ),
+  ].map((id) => new ObjectId(id));
 
   // Parallel fetches (core data always; endorsements/campaigns only for full view).
   // Summary views project the candidate-batch reads (#2168): NPPs drop the

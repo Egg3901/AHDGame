@@ -33,7 +33,10 @@ const SENTRY_RELEASE =
 process.env.SENTRY_RELEASE = SENTRY_RELEASE;
 process.env.NEXT_PUBLIC_SENTRY_RELEASE = SENTRY_RELEASE;
 process.env.NEXT_PUBLIC_SENTRY_ENVIRONMENT =
-  process.env.RAILWAY_ENVIRONMENT_NAME || process.env.NODE_ENV || "development";
+  process.env.SENTRY_ENVIRONMENT ||
+  process.env.RAILWAY_ENVIRONMENT_NAME ||
+  process.env.NODE_ENV ||
+  "development";
 
 // Short commit shown in the version badge — derived from the same SHA as the
 // release identifier so the badge and Sentry release can never disagree.

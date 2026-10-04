@@ -369,13 +369,13 @@ export const ERA_CONFIGS: Record<EraId, EraConfig> = {
     id: "1991",
     year: 1991,
     label: "Post-Cold War · 1991",
-    gameDate: "December 1991",
+    gameDate: "January 1991",
     wireframeColor: null,
     loginTagline:
       '"The end of the Cold War is a victory for mankind, not for any one country." · Mikhail Gorbachev',
     heroHeadline: "A political simulation set in 1991.",
     heroDek:
-      "The Soviet Union has dissolved into fifteen states. Germany is one country again, and the European Community has just agreed to build a single currency. Every real hour is a game week. Navigate the transition.",
+      "The Soviet Union still holds together, but its republics are pressing for independence. Germany has recently reunified, and Europe's leaders are debating a single currency. Every real hour is a game week. Navigate the transition.",
     primaryCta: "Start playing",
     secondaryCta: "Explore the map",
     eraChips: [

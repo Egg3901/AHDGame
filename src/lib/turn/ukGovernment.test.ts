@@ -49,9 +49,26 @@ vi.mock("@/lib/db/collections/ukGovernment", () => ({
   getUKCabinetCooldownsCollection: vi.fn().mockReturnValue(mockUkGovCabinetCooldowns),
 }));
 
-vi.mock("@/lib/constants/countries", () => ({
-  COUNTRY_CONFIGS: {
-    UK: {
+vi.mock("@/lib/constants/countries", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/constants/countries")>();
+  return {
+    ...actual,
+    COUNTRY_CONFIGS: {
+      UK: {
+        id: "UK",
+        name: "United Kingdom",
+        executiveTitle: "Prime Minister",
+        governmentType: "parliamentaryMonarchy",
+        coalitionThreshold: 326,
+        legislature: {
+          lowerChamber: { key: "commons", seats: 650 },
+        },
+        // chamberOfficeType helpers introspect this; falling back to the chamber
+        // key gives the legacy "commons" identifier these tests were written for.
+        officeTypes: [],
+      },
+    },
+    getCountryConfig: vi.fn().mockReturnValue({
       id: "UK",
       name: "United Kingdom",
       executiveTitle: "Prime Minister",
@@ -60,26 +77,18 @@ vi.mock("@/lib/constants/countries", () => ({
       legislature: {
         lowerChamber: { key: "commons", seats: 650 },
       },
-      // chamberOfficeType helpers introspect this; falling back to the chamber
-      // key gives the legacy "commons" identifier these tests were written for.
       officeTypes: [],
-    },
-  },
-  getCountryConfig: vi.fn().mockReturnValue({
-    id: "UK",
-    name: "United Kingdom",
-    executiveTitle: "Prime Minister",
-    governmentType: "parliamentaryMonarchy",
-    coalitionThreshold: 326,
-    legislature: {
-      lowerChamber: { key: "commons", seats: 650 },
-    },
-    officeTypes: [],
-  }),
-  getExecutiveOfficeKey: vi.fn().mockReturnValue("prime_minister"),
-}));
+    }),
+    getExecutiveOfficeKey: vi.fn().mockReturnValue("prime_minister"),
+    getHeadOfGovernmentOfficeKey: vi.fn().mockReturnValue("prime_minister"),
+  };
+});
 
 const NOW = new Date("2025-06-15T12:00:00Z");
+
+// Resolve the real country exports during module setup, before the first timed
+// test lazily imports government processing and asks the partial mock for them.
+await vi.importActual<typeof import("@/lib/constants/countries")>("@/lib/constants/countries");
 
 function makeCursor(docs: unknown[]) {
   return {

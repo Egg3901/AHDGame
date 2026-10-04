@@ -511,6 +511,8 @@ export interface FederalBudget {
    * the bond stock is untouched).
    */
   treasuryBalance: number;
+  /** Applied automatic disaster crisis IDs; keeps fiscal debits replay-safe. */
+  disasterFiscalReceipts?: string[];
   /**
    * Negotiated indemnity receipts already applied to this treasury.
    *
@@ -578,6 +580,13 @@ export interface FederalBudget {
    */
   baselineSpendingByCategory?: Record<string, number>;
   baselineStateGrants?: number;
+  /**
+   * 1991 Russian transition spending outside the enacted political law book,
+   * calibrated once to the World Bank general-government expenditure total.
+   * Stored as a GDP share so it follows nominal output without canceling later
+   * law changes. Other countries leave this field absent.
+   */
+  nonLawSpendingGdpShareBaseline?: number;
   /**
    * Fiscal-divergence guardrail (refs #fiscal-divergence-audit): each tax
    * base's share of national GDP at the turn this field was first populated

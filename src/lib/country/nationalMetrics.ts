@@ -131,8 +131,8 @@ export async function loadNationalMetrics(
       ] as MetricCategoryId[]);
 
   const response: NationalMetricsResponse = {
-    categories: {},
-    stateRankings: {},
+    categories: Object.create(null),
+    stateRankings: Object.create(null),
     totalPopulation,
     gdpMillions: 0,
     gdpPerCapita: 0,
@@ -146,8 +146,8 @@ export async function loadNationalMetrics(
   };
 
   for (const category of categories) {
-    response.categories[category] = {};
-    response.stateRankings[category] = {};
+    response.categories[category] = Object.create(null);
+    response.stateRankings[category] = Object.create(null);
 
     // Get all metric keys for this category from the first state that has them
     const sampleState = allMetrics.find((m) => m[category] != null);
@@ -156,6 +156,8 @@ export async function loadNationalMetrics(
     const metricKeys = Object.keys(sampleMetrics);
 
     for (const metricKey of metricKeys) {
+      if (metricKey === "__proto__" || metricKey === "constructor" || metricKey === "prototype")
+        continue;
       // Era existence gate (display): inactive metrics vanish from the national
       // page, rankings, and tick rates in one place. This is the PAGE HELPER —
       // the turn-phase writer (computeNationalMetrics) is deliberately ungated.
@@ -225,9 +227,9 @@ export async function loadNationalMetrics(
   }
 
   // Build national averages for approval calculation
-  const nationalAverages: Record<string, Record<string, number>> = {};
+  const nationalAverages: Record<string, Record<string, number>> = Object.create(null);
   for (const [catId, catSummary] of Object.entries(response.categories)) {
-    nationalAverages[catId] = {};
+    nationalAverages[catId] = Object.create(null);
     for (const [metricId, summary] of Object.entries(catSummary)) {
       nationalAverages[catId][metricId] = summary.populationWeightedAverage;
     }

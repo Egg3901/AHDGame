@@ -117,6 +117,8 @@ export const STALE_PROGRESS_GAME_STATE_UNSET: Readonly<Record<string, "">> = Obj
   lastBundestagReconciledCycle: "",
   // Cabinet year-crossing guard (seat unlock/retire/rename vs the live year).
   lastCabinetYearProcessed: "",
+  // A new 1991 world must reach the 2014 Assembly reform on its own timeline.
+  huAssemblyReformedAtYear: "",
   // Era-crossing state. `eraCrossing.ts` self-heals `currentEraId` on the next
   // turn, but `lastEraCrossedYear` is a `currentYear > lastEraCrossedYear` guard
   // like the census one, so a 2010 value silences decade-crossing news until 2011.
@@ -225,11 +227,24 @@ export async function resetGameWorld(
       );
     if (isSeasonRecapEnabled(gsForRecap)) {
       recapIteration = gsForRecap?.iteration;
-      const charsForRecap = await db.collection<Character>("characters").find({}).toArray();
-      seasonRecaps = await buildSeasonRecaps(db, charsForRecap, {
-        iteration: recapIteration,
-        currentTurn: gsForRecap?.currentTurn ?? 1,
-      });
+      // A recap is a keepsake, not a precondition: if the build fails the reset
+      // proceeds and characters retire without one.
+      try {
+        const charsForRecap = await db.collection<Character>("characters").find({}).toArray();
+        log(`building season recaps for ${charsForRecap.length} characters`);
+        seasonRecaps = await buildSeasonRecaps(
+          db,
+          charsForRecap,
+          { iteration: recapIteration, currentTurn: gsForRecap?.currentTurn ?? 1 },
+          { log, requireComplete: true }
+        );
+        log(`built ${seasonRecaps.size} season recaps`);
+      } catch (err) {
+        log(
+          `season recap capture failed; reset aborted: ${err instanceof Error ? err.message : String(err)}`
+        );
+        throw err;
+      }
     }
   }
 

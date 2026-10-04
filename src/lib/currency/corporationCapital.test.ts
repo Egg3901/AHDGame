@@ -7,6 +7,7 @@ import {
   corpLiquidCapitalToAnchor,
   fxRateForCorpFromMap,
   resolveCorpLiquidCurrencyCode,
+  resolveSectorHostCurrencyCode,
 } from "./corporationCapital";
 
 describe("anchorToCorpCapital", () => {
@@ -116,5 +117,45 @@ describe("anchorToCorpLiquidCapital / corpLiquidCapitalToAnchor", () => {
     const corp = { countryId: "JP" as const };
     expect(anchorToCorpLiquidCapital(1000, corp, 106)).toBe(106_000);
     expect(corpLiquidCapitalToAnchor(106_000, corp, 106)).toBeCloseTo(1000);
+  });
+});
+
+describe("resolveSectorHostCurrencyCode euro handling (#2291)", () => {
+  it("denominates a domestic sector in the corp's stamped EUR, not the legacy map code", () => {
+    expect(
+      resolveSectorHostCurrencyCode(
+        { countryId: "FR" },
+        { countryId: "FR", liquidCurrencyCode: "EUR" }
+      )
+    ).toBe("EUR");
+  });
+
+  it("uses the stamped EUR when the sector carries no explicit host", () => {
+    expect(resolveSectorHostCurrencyCode({}, { countryId: "FR", liquidCurrencyCode: "EUR" })).toBe(
+      "EUR"
+    );
+  });
+
+  it("passes an unstamped (1991) domestic corp through the legacy map untouched", () => {
+    expect(resolveSectorHostCurrencyCode({ countryId: "FR" }, { countryId: "FR" })).toBe("FRF");
+    expect(resolveSectorHostCurrencyCode({ countryId: "FR" }, null)).toBe("FRF");
+  });
+
+  it("ignores a blank stamp and falls back to the map", () => {
+    expect(
+      resolveSectorHostCurrencyCode(
+        { countryId: "FR" },
+        { countryId: "FR", liquidCurrencyCode: " " }
+      )
+    ).toBe("FRF");
+  });
+
+  it("resolves a cross-border sector through the map even for a stamped euro corp", () => {
+    expect(
+      resolveSectorHostCurrencyCode(
+        { countryId: "US" },
+        { countryId: "FR", liquidCurrencyCode: "EUR" }
+      )
+    ).toBe("USD");
   });
 });

@@ -1,3 +1,5 @@
+import { NG_1991_NOMINAL_GDP_NGN } from "@/lib/countries/ng/data/ngGdp1991";
+import { rebaseBudgetNominals } from "./rules/rebaseBudgetNominals";
 import { POPULATION_TOTALS_1991 } from "./populationTotals1991";
 import { ObjectId } from "mongodb";
 import { calculatePolicyOptionAnnualCost } from "@/lib/budget/costs";
@@ -30,10 +32,18 @@ import {
   UK_NATIONAL_DEFAULT_OPTION_INDEXES,
   UK_NATIONAL_DEFAULTS,
 } from "./basePolicies";
+import { getInitialRates } from "@/lib/constants/currencies";
+import {
+  TRANSITION_1991_BUDGET_COUNTRIES,
+  shouldUseFullAuthoredBudgetBaseline,
+} from "./rules/budgetBaselineMode";
+import { euroConversionFactor, isEuroAdopted } from "@/lib/currency/rules/euroAdoption";
 import { SEED_TAX_RATES_1953 } from "@/lib/politicalLegislation/seedTaxRates";
 import { COUNTRY_POLICY_CONFIGS_1953 } from "./basePolicies1953";
 import { COUNTRY_POLICY_CONFIGS_1979 } from "./basePolicies1979";
 import { COUNTRY_POLICY_CONFIGS_1991 } from "./basePolicies1991";
+import { SUCCESSOR_NATIONAL_BUDGETS_1991 } from "./successorBudgets1991";
+import { MODERN_NATIONAL_BUDGETS_2019 } from "./modernBudgets2019";
 import { COUNTRY_POLICY_CONFIGS_1999 } from "./basePolicies1999";
 import { COUNTRY_POLICY_CONFIGS_2007 } from "./basePolicies2007";
 import { COUNTRY_POLICY_CONFIGS_2023 } from "./basePolicies2023";
@@ -68,7 +78,7 @@ import { brRegionalBudgetInputs } from "@/lib/seeds/br/brBudgets";
 import { cnRegionalBudgetInputs } from "@/lib/seeds/cn/cnBudgets";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CurrencyCode as ActiveCurrencyCode } from "@/lib/constants/currencies";
-import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
+import { COUNTRY_CURRENCY_MAP, getSeedCurrencyCode } from "@/lib/constants/currencies";
 import type { LegalStructureId } from "@/lib/constants/legalStructures";
 import {
   DE_PUBLIC_CORPORATION_OID,
@@ -217,7 +227,7 @@ type SupportedBudgetCountryId =
   | "BAL";
 type SupportedNationalBudget = Omit<FederalBudget, "updatedAt">;
 
-interface NationalBudgetSeedConfig {
+export interface NationalBudgetSeedConfig {
   budgetId: string;
   countryId: SupportedBudgetCountryId;
   fiscalYear: number;
@@ -241,6 +251,10 @@ interface NationalBudgetSeedConfig {
     | "CNY"
     | "NGN"
     | "SUR"
+    | "RUB"
+    | "PLN"
+    | "RON"
+    | "BGN"
     | "FRF"
     | "ITL"
     | "ESP"
@@ -282,13 +296,15 @@ interface NationalBudgetSeedConfig {
   }>;
   policyDefaults: Record<string, { economic: number; social: number }>;
   policyOptionOverrides: Record<string, number>;
+  /** Use the forecast baseline without an obsolete era's statute catalog. */
+  skipLegacyLegislation?: boolean;
   /**
    * Political-legislation derivation switch (spec §4.2a): when set, the seeded
    * `federalBudget.taxRates` are written verbatim from this authored table
    * (SEED_TAX_RATES_1953[country]) and the legacy taxPolicyIds/option-index
-   * derivation is skipped entirely. Set ONLY on the 1953 US/UK/RU/DD blocks —
-   * their day-one rates come from the new tax-law catalog, whose baselineRate
-   * values are validated equal to this same table.
+   * derivation is skipped entirely. The 1953 US/UK/RU/DD blocks use this for
+   * their authored tax-law catalog. The 2027 BG forecast uses it while its
+   * obsolete Cold War statute catalog is explicitly excluded.
    */
   seedTaxRatesOverride?: Record<string, number>;
   taxPolicyIds: {
@@ -654,7 +670,14 @@ function isPoliticalLegislationCountry(countryId: string): boolean {
 }
 
 function preferFullAuthoredBaseline(config: NationalBudgetSeedConfig): boolean {
-  return config.fiscalYear === 1953 && isPoliticalLegislationCountry(config.countryId);
+  return (
+    config.skipLegacyLegislation === true ||
+    shouldUseFullAuthoredBudgetBaseline({
+      countryId: config.countryId,
+      fiscalYear: config.fiscalYear,
+      politicalLegislationCountry: isPoliticalLegislationCountry(config.countryId),
+    })
+  );
 }
 
 function preferCategoryBaselineOverrides(config: NationalBudgetSeedConfig): boolean {
@@ -999,6 +1022,7 @@ function deriveEnactedLaws(
    */
   vacuumYear: number = config.fiscalYear
 ): SeedEnactedLaw[] {
+  if (config.skipLegacyLegislation) return [];
   // Political-legislation v2 owns US/UK/RU/DD on the 1953 preset — seeding the
   // old modern-template catalogs here would leave orphan annualCostPerCapita
   // laws that calculateFederalSpending still prices alongside the v2 book.
@@ -2053,6 +2077,7 @@ const NATIONAL_BUDGET_SEED_CONFIGS: NationalBudgetSeedConfig[] = [
 // NBS (CN). Debt ceiling years pre-date 2011 ceiling-fight era; using the
 // fiscalYear itself as a stand-in. ───────────────────────────────────────
 const NATIONAL_BUDGET_SEED_CONFIGS_1991: NationalBudgetSeedConfig[] = [
+  ...SUCCESSOR_NATIONAL_BUDGETS_1991,
   {
     budgetId: "federal",
     countryId: "US",
@@ -2436,7 +2461,8 @@ const NATIONAL_BUDGET_SEED_CONFIGS_1991: NationalBudgetSeedConfig[] = [
   // ── Nigeria — Babangida-era SAP (1991 baseline) ────────────────────────────
   // 1991 Nigeria was under military rule (Babangida), mid-Structural Adjustment
   // Programme. Oil revenue dominant; naira devalued heavily post-1986 SAP. GDP
-  // ~₦1.8T at 1991 current prices; inflation ~20% (SAP-driven). Figures are
+  // The legacy ₦1.8T model is rebased to the observed national anchor in
+  // getNationalBudgetSeedConfigsForPreset, preserving its fiscal shares. Figures are
   // plausible game-units rather than precise fiscal records (federal budgets
   // under military rule were opaque and heavily revised).
   {
@@ -2863,6 +2889,136 @@ export const NATIONAL_BUDGET_SEED_CONFIGS_2027: NationalBudgetSeedConfig[] = [
       payrollTax: "us_federal_payroll_tax_rate",
       tariffs: "us_federal_tariff_rate",
       salesTax: "us_federal_sales_tax_rate",
+    },
+  },
+  // Explicit HU 2027 fallback. National population is KSH's 1 Jan 2026
+  // estimate; GDP and general-government revenue/expenditure/debt are the
+  // latest completed 2025 annual series, not observations of 2027. The
+  // functional spending split, tax bases/rates, interest and ceiling are
+  // authored game allocations. The operating split plus modeled debt interest
+  // reconciles to KSH's HUF 41,141 billion general-government expenditure.
+  // https://www.ksh.hu/stadat_files/nep/hu/nep0002.html
+  // https://www.ksh.hu/stadat_files/gdp/en/gdp0094.html
+  // https://www.ksh.hu/s/en/publications/notification-of-balance-and-debt-of-the-general-government-sector-first-edp-notification-in-2026/index.html
+  {
+    budgetId: "HU",
+    countryId: "HU",
+    fiscalYear: 2027,
+    sourceFiscalYear: 2025,
+    population: 9_488_000,
+    gdp: 87_045_554_000_000,
+    currencyCode: "HUF",
+    economicFactors: {
+      gdpGrowth: 0.5,
+      wageGrowth: 6,
+      inflationRate: 4.4,
+      tradeGrowth: 1,
+      lastUpdated: new Date(0),
+    },
+    taxBaseRatios: {
+      taxableIncome: 0.4,
+      corporateProfits: 0.2,
+      wagesAndSalaries: 0.4,
+      importValue: 0.15,
+      taxableSales: 0.7,
+    },
+    // At the authored effective tax bases/rates below, this residual makes
+    // the modeled opening revenue HUF 37,082 billion, KSH's 2025 figure.
+    otherRevenue: 7_399_466_086_000,
+    debt: {
+      principal: 64_912_000_000_000,
+      interestRate: 0.04,
+      ceiling: 81_140_000_000_000,
+      ceilingLastRaisedYear: 2027,
+    },
+    creditRating: "BBB",
+    baselineSpendingByCategory: {
+      healthcare: 7_000_000_000_000,
+      education: 3_000_000_000_000,
+      defense: 1_750_000_000_000,
+      socialSecurity: 12_000_000_000_000,
+      infrastructure: 3_000_000_000_000,
+      other: 9_794_520_000_000,
+    },
+    baselineStateGrants: 2_000_000_000_000,
+    // No 1979 one-party ideological policy stance is carried forward.
+    policyDefaults: {},
+    policyOptionOverrides: {},
+    taxPolicyIds: easternBlocPolicyConfig("hu").taxPolicyIds,
+    taxRateOverrides: {
+      incomeTax: 15,
+      domesticCorporateTax: 9,
+      foreignCorporateTax: 9,
+      payrollTax: 18.5,
+      tariffs: 0,
+      salesTax: 27,
+    },
+  },
+  // Bulgaria joined the euro on 1 January 2026. This is a 2027 forecast
+  // calibration, not an enacted 2027 budget. The Commission Spring 2026
+  // forecast gives 2.2% real growth, 2.6% HICP, -4.3% general-government
+  // balance and 35.5% debt/GDP. The 2025 Eurostat revenue ratio (38.1% of
+  // GDP) is held flat as a modeling assumption. The nominal GDP anchor is
+  // EUR 134.592B from the BACB March 2026 forecast. Spending categories are
+  // model allocations calibrated to the aggregate forecast, not official
+  // appropriations.
+  // https://economy-finance.ec.europa.eu/economic-surveillance-eu-member-states/country-pages-including-country-reports/bulgaria/economic-forecast-bulgaria_en
+  // https://ec.europa.eu/eurostat/databrowser/view/tec00021/default/table
+  // https://www.bacb.bg/en/files/archive/2026-03-31/88-interim-reports.pdf/7524
+  {
+    budgetId: "BG",
+    countryId: "BG",
+    fiscalYear: 2027,
+    population: 6_423_207,
+    gdp: 134_592_000_000,
+    currencyCode: "EUR",
+    economicFactors: {
+      gdpGrowth: 2.2,
+      wageGrowth: 4.3,
+      inflationRate: 2.6,
+      tradeGrowth: 2.2,
+      lastUpdated: new Date(0),
+    },
+    taxBaseRatios: {
+      taxableIncome: 0.55,
+      corporateProfits: 0.08,
+      wagesAndSalaries: 0.57,
+      importValue: 0.22,
+      taxableSales: 0.45,
+    },
+    otherRevenue: Math.round(134_592_000_000 * 0.0456),
+    debt: {
+      principal: Math.round(134_592_000_000 * 0.355),
+      interestRate: 0.028,
+      ceiling: Math.round(134_592_000_000 * 0.4),
+      ceilingLastRaisedYear: 2027,
+    },
+    creditRating: "BBB",
+    baselineSpendingByCategory: {
+      socialSecurity: Math.round(134_592_000_000 * 0.145),
+      healthcare: Math.round(134_592_000_000 * 0.05),
+      education: Math.round(134_592_000_000 * 0.045),
+      defense: Math.round(134_592_000_000 * 0.03),
+      infrastructure: Math.round(134_592_000_000 * 0.03),
+      other: Math.round(134_592_000_000 * 0.108),
+    },
+    baselineStateGrants: Math.round(134_592_000_000 * 0.006),
+    policyDefaults: {},
+    policyOptionOverrides: {},
+    skipLegacyLegislation: true,
+    seedTaxRatesOverride: {
+      incomeTax: 10,
+      domesticCorporateTax: 10,
+      foreignCorporateTax: 10,
+      payrollTax: 32,
+      tariffs: 0,
+      salesTax: 20,
+    },
+    taxPolicyIds: {
+      incomeTax: "bg_income_tax",
+      domesticCorporateTax: "bg_corporate_tax",
+      payrollTax: "bg_social_insurance",
+      salesTax: "bg_vat",
     },
   },
 ];
@@ -5481,7 +5637,9 @@ export function getNationalBudgetSeedConfigsForPreset(preset: string): NationalB
   if (preset === "1979-default") return NATIONAL_BUDGET_SEED_CONFIGS_1979;
   if (preset === "1991-default") {
     return overlayNationalBudgetConfigs(
-      NATIONAL_BUDGET_SEED_CONFIGS_1991,
+      NATIONAL_BUDGET_SEED_CONFIGS_1991.map((config) =>
+        config.countryId === "NG" ? rebaseBudgetNominals(config, NG_1991_NOMINAL_GDP_NGN) : config
+      ),
       NATIONAL_BUDGET_SEED_CONFIGS_1979.filter((config) =>
         (["AT", "FI", "GR"] as string[]).includes(config.countryId)
       ).map((config) => ({
@@ -5496,7 +5654,11 @@ export function getNationalBudgetSeedConfigsForPreset(preset: string): NationalB
   }
   if (preset === "1999-default") {
     return overlayNationalBudgetConfigs(
-      getNationalBudgetSeedConfigsForPreset("1991-default"),
+      // The seven transition republic budgets are scoped to the 1991 world.
+      // Later presets may reintroduce a country only with a later authored row.
+      getNationalBudgetSeedConfigsForPreset("1991-default").filter(
+        (config) => !TRANSITION_1991_BUDGET_COUNTRIES.includes(config.countryId)
+      ),
       NATIONAL_BUDGET_SEED_CONFIGS_1999,
       1999
     );
@@ -5511,25 +5673,77 @@ export function getNationalBudgetSeedConfigsForPreset(preset: string): NationalB
   if (preset === "2019-default") {
     return overlayNationalBudgetConfigs(
       getNationalBudgetSeedConfigsForPreset("2007-default"),
-      NATIONAL_BUDGET_SEED_CONFIGS,
+      [...NATIONAL_BUDGET_SEED_CONFIGS, ...MODERN_NATIONAL_BUDGETS_2019],
       2019
     );
   }
   if (preset === "2023-default") {
     return overlayNationalBudgetConfigs(
-      getNationalBudgetSeedConfigsForPreset("2019-default"),
+      // These five rows are authored for the 2019 reset only. A 2023 or
+      // 2027 world needs its own fiscal calibration before it can include them.
+      getNationalBudgetSeedConfigsForPreset("2019-default").filter(
+        (config) => !MODERN_NATIONAL_BUDGETS_2019.some((row) => row.countryId === config.countryId)
+      ),
       NATIONAL_BUDGET_SEED_CONFIGS_2023,
       2023
     );
   }
   if (preset === "2027-default") {
-    return overlayNationalBudgetConfigs(
-      getNationalBudgetSeedConfigsForPreset("2023-default"),
-      NATIONAL_BUDGET_SEED_CONFIGS_2027,
-      2027
+    return convertEuroMemberBudgetsFor2027(
+      overlayNationalBudgetConfigs(
+        getNationalBudgetSeedConfigsForPreset("2023-default"),
+        NATIONAL_BUDGET_SEED_CONFIGS_2027,
+        2027
+      )
     );
   }
   return NATIONAL_BUDGET_SEED_CONFIGS;
+}
+
+/**
+ * Euroize inherited euro-member rows for the 2027 preset. Every absolute-money
+ * field (gdp, otherRevenue, debt principal/ceiling, per-category baselines,
+ * state grants, per-capita policy revenues) scales by the authored cross rate
+ * `R_EUR / R_legacy` from the same table the FX seeder uses, so anchor value
+ * is conserved exactly. Ratios (taxBaseRatios, gdp multipliers, interest
+ * rates, ratings) pass through. Ireland converts at 1.0: code flips, amounts
+ * stay. Non-euro rows and DE (already EUR) are untouched.
+ */
+function convertEuroMemberBudgetsFor2027(
+  configs: NationalBudgetSeedConfig[]
+): NationalBudgetSeedConfig[] {
+  const preset = "2027-default";
+  const rates = getInitialRates(preset);
+  const eurAnchorRate = rates.DE;
+  if (eurAnchorRate == null || eurAnchorRate <= 0) return configs;
+  return configs.map((config) => {
+    if (config.currencyCode === "EUR") return config;
+    if (!isEuroAdopted(config.countryId, preset)) return config;
+    const factor = euroConversionFactor(rates[config.countryId] ?? NaN, eurAnchorRate);
+    const scaledSpending: Record<string, number> = {};
+    for (const [key, value] of Object.entries(config.baselineSpendingByCategory)) {
+      scaledSpending[key] = value * factor;
+    }
+    return {
+      ...config,
+      currencyCode: "EUR" as const,
+      gdp: config.gdp * factor,
+      otherRevenue: config.otherRevenue * factor,
+      debt: {
+        ...config.debt,
+        principal: config.debt.principal * factor,
+        ceiling: config.debt.ceiling * factor,
+      },
+      baselineSpendingByCategory: scaledSpending,
+      baselineStateGrants: config.baselineStateGrants * factor,
+      policyRevenueConfigs: config.policyRevenueConfigs?.map((revenueConfig) => ({
+        ...revenueConfig,
+        annualRevenuePerCapitaByOptionIndex: revenueConfig.annualRevenuePerCapitaByOptionIndex?.map(
+          (perCapita) => perCapita * factor
+        ),
+      })),
+    };
+  });
 }
 
 /** Preserve the last complete era roster while applying newer authored rows. */
@@ -6033,7 +6247,7 @@ function buildMarketStateEnterpriseCorpEntries(params: {
         userId: new ObjectId(spec.userOid),
         headquartersState: spec.headquartersState,
         liquidCapital: 0,
-        liquidCurrencyCode: COUNTRY_CURRENCY_MAP[spec.countryId] as ActiveCurrencyCode,
+        liquidCurrencyCode: getSeedCurrencyCode(spec.countryId, preset) as ActiveCurrencyCode,
         marketingBudget: 0,
         marketingStrength: 0,
         logisticsBudget: 0,
@@ -6425,7 +6639,7 @@ export function generateCountryOwnedSeedData(
   // (corporateSectors.revenue is liquidCurrencyCode-denominated — matching the
   // UK/CN NatCorp convention and what commodityPriceTurn expects).
   const ruStates = states.filter((state) => state.countryId === "RU" && state.gdp > 0);
-  if (ruStates.length > 0) {
+  if (ruStates.length > 0 && preset !== "2019-default") {
     // Preset-aware: the ₳→SUR rate is era-specific (1953 = 9 SUR/USD, the
     // Western GNP-estimate basis ruRegions1953 is calibrated on; the base
     // config carries the 1979 administered rate). Reading it era-blind divided
@@ -6566,6 +6780,37 @@ export function generateCountryOwnedSeedData(
     name: string;
     headquartersState: string;
   }> = [
+    ...(preset === "2019-default"
+      ? [
+          {
+            countryId: "RU" as const,
+            oid: RU_PUBLIC_CORPORATION_ID.toHexString(),
+            ceoOid: RU_PUBLIC_PLACEHOLDER_CHARACTER_ID.toHexString(),
+            userOid: RU_PUBLIC_PLACEHOLDER_USER_ID.toHexString(),
+            sequentialId: RU_PUBLIC_CORPORATION_SEQUENTIAL_ID,
+            name: "Russian Federation",
+            headquartersState: "CEN",
+          },
+        ]
+      : []),
+    ...(preset === "2019-default"
+      ? (
+          [
+            ["PL", "Poland", "PL_MAZ"],
+            ["HU", "Hungary", "HU_BUD"],
+            ["RO", "Romania", "RO_BUC"],
+            ["BG", "Bulgaria", "BG_SOF"],
+          ] as const
+        ).map(([countryId, name, headquartersState], index) => ({
+          countryId,
+          oid: `00000000000000000000b${(index * 3 + 1).toString(16).padStart(3, "0")}`,
+          ceoOid: `00000000000000000000b${(index * 3 + 2).toString(16).padStart(3, "0")}`,
+          userOid: `00000000000000000000b${(index * 3 + 3).toString(16).padStart(3, "0")}`,
+          sequentialId: 900_028 + index,
+          name,
+          headquartersState,
+        }))
+      : []),
     {
       countryId: "DE",
       oid: DE_PUBLIC_CORPORATION_OID,
@@ -6621,6 +6866,7 @@ export function generateCountryOwnedSeedData(
         ["GR", "Greece", "GR_ATT"],
         ["AT", "Austria", "AT_VIE"],
         ["FI", "Finland", "FI_UUS"],
+        ...(preset === "2027-default" ? ([["BG", "Bulgaria", "BG_SOF"]] as const) : []),
       ] as const
     ).map(([countryId, name, headquartersState], index) => ({
       countryId,
@@ -6629,7 +6875,7 @@ export function generateCountryOwnedSeedData(
       oid: `00000000000000000000a${(index * 3 + 1).toString(16).padStart(3, "0")}`,
       ceoOid: `00000000000000000000a${(index * 3 + 2).toString(16).padStart(3, "0")}`,
       userOid: `00000000000000000000a${(index * 3 + 3).toString(16).padStart(3, "0")}`,
-      // Own block (900_019-900_026), disjoint from the sovereign sequence
+      // Own block (900_019-900_027), disjoint from the sovereign sequence
       // US 900_001 through DD 900_010 AND from the 1953 market state-enterprise
       // block 900_011-900_018 below. The previous 900_009 base reused seven ids
       // across both blocks (issue #2028), which blocked unique-index creation.
@@ -6664,7 +6910,10 @@ export function generateCountryOwnedSeedData(
         userId: new ObjectId(spec.userOid),
         headquartersState: spec.headquartersState,
         liquidCapital: 0,
-        liquidCurrencyCode: COUNTRY_CURRENCY_MAP[spec.countryId] as ActiveCurrencyCode,
+        // Preset-aware: 2027 euro members seed as EUR (zero balance, so no
+        // conversion needed — value conservation holds trivially). Every other
+        // preset resolves through the era-blind map, unchanged.
+        liquidCurrencyCode: getSeedCurrencyCode(spec.countryId, preset) as ActiveCurrencyCode,
         marketingBudget: 0,
         marketingStrength: 0,
         logisticsBudget: 0,
