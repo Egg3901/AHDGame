@@ -16,6 +16,8 @@ describe("media editorial rules", () => {
   });
 
   it("reduces the actual available audience by at most 25 percent", () => {
+    expect(mediaAudienceFit(undefined, { economic: -5, social: 5 })).toBe(1);
+    expect(mediaAudienceFit({ economic: 0, social: 0 }, { economic: -5, social: 5 })).toBe(1);
     expect(mediaAudienceFit({ economic: 5, social: 5 }, { economic: 5, social: 5 })).toBe(1);
     expect(mediaAudienceFit({ economic: 5, social: 5 }, { economic: -5, social: -5 })).toBe(0.75);
   });
@@ -28,8 +30,11 @@ describe("media editorial rules", () => {
       editorialFavorabilityNudge({ economic: 5, social: 5 }, { economic: -5, social: -5 }, 1)
     ).toBe(0);
     expect(
-      editorialFavorabilityNudge({ economic: 0, social: 0 }, { economic: 0, social: 0 }, 0.2)
-    ).toBe(0.1);
+      editorialFavorabilityNudge({ economic: 0, social: 0 }, { economic: 0, social: 0 }, 1)
+    ).toBe(0);
+    expect(
+      editorialFavorabilityNudge({ economic: 0, social: 0 }, { economic: 3, social: 2 }, 1)
+    ).toBe(0);
   });
 
   it("reduces an aligned outlet's effect when another local outlet competes", () => {

@@ -17,6 +17,10 @@ function boundedAxis(value: unknown): number {
   return Math.max(-EDITORIAL_POSITION_LIMIT, Math.min(EDITORIAL_POSITION_LIMIT, value));
 }
 
+function isNeutralPosition(position: EditorialPosition): boolean {
+  return position.economic === 0 && position.social === 0;
+}
+
 export function normalizeEditorialPosition(
   value?: Partial<EditorialPosition> | null
 ): EditorialPosition {
@@ -32,6 +36,7 @@ export function mediaAudienceFit(
   audienceLean?: Partial<EditorialPosition> | null
 ): number {
   const position = normalizeEditorialPosition(stance);
+  if (isNeutralPosition(position)) return 1;
   const audience = normalizeEditorialPosition(audienceLean);
   const distance =
     Math.abs(position.economic - audience.economic) + Math.abs(position.social - audience.social);
@@ -45,6 +50,7 @@ export function editorialFavorabilityNudge(
   audienceShare = 0
 ): number {
   const position = normalizeEditorialPosition(stance);
+  if (isNeutralPosition(position)) return 0;
   const target = normalizeEditorialPosition(candidate);
   const distance =
     Math.abs(position.economic - target.economic) + Math.abs(position.social - target.social);

@@ -9,6 +9,7 @@ import {
   editorialFavorabilityNudge,
   mediaAudienceFit,
 } from "@/lib/mediaEditorial/rules";
+import { settlePoliticalAdMarket } from "@/lib/politicalMedia/market";
 
 const basePrices = Object.fromEntries(COMMODITY_TYPES.map((commodity) => [commodity, 1])) as Record<
   (typeof COMMODITY_TYPES)[number],
@@ -66,6 +67,64 @@ function clearScenario(divergentAvailability: number) {
   };
 }
 
+function clearWithStrongPoliticalDemand(editorialAvailability: number) {
+  const sector: SectorClearingInput = {
+    sectorId: "media",
+    revenue: 100,
+    supplyRates: { advertising: 1 },
+    posture: 0,
+    editorialAdvertisingAvailability: editorialAvailability,
+  };
+  const clearingBySectorId = computeClearingFactors({
+    sectors: [sector],
+    balances: new Map([["advertising", { supply: 200, demand: 100 }]]),
+    priceRatioByCommodity: new Map([["advertising", 1]]),
+    basePrices,
+    plantsEnabled: false,
+  });
+  const clearing = clearingBySectorId.get("media")!;
+  const commercialSoldUnits = 100 * (clearing.soldByCommodity?.advertising ?? 0);
+  const settlement = settlePoliticalAdMarket({
+    orders: [
+      {
+        orderId: "funded-order",
+        countryId: "US",
+        stateId: "CA",
+        createdTurn: 1,
+        budgetAnchor: 10_000,
+      },
+    ],
+    offers: [
+      {
+        input: sector,
+        clearing,
+        corporationId: "media-corp",
+        countryId: "US",
+        stateId: "CA",
+        basePrice: basePrices.advertising,
+        priceRatio: 1,
+        sellerCurrencyCode: "AHD",
+        sellerLocalPerAnchor: 1,
+        offeredUnits: 100,
+      },
+    ],
+    clearingBySectorId,
+    clearingEnabled: true,
+    qualityPremiumEnabled: false,
+    turn: 1,
+  });
+  const politicalSoldUnits = settlement.allocations[0]?.deliveredUnits ?? 0;
+  const availableUnits = 100 * editorialAvailability;
+  return {
+    availableUnits,
+    commercialSoldUnits,
+    politicalSoldUnits,
+    totalSoldUnits: commercialSoldUnits + politicalSoldUnits,
+    overflowUnits: Math.max(0, commercialSoldUnits + politicalSoldUnits - availableUnits),
+    finalSoldFraction: settlement.clearingBySectorId.get("media")?.soldByCommodity?.advertising,
+  };
+}
+
 async function main() {
   const neutralAudienceLean = { economic: 0, social: 0 };
   const divergentStance = { economic: 5, social: 5 };
@@ -78,7 +137,7 @@ async function main() {
   const report = {
     title: "Media editorial audience fill diagnostic",
     method:
-      "Uses computeClearingFactors and advertisingDeliveredValueByCorp with identical offers, market balances and prices. The only changed input is pre-clearing advertising availability.",
+      "Uses computeClearingFactors, advertisingDeliveredValueByCorp and settlePoliticalAdMarket with production offers, market balances, and prices. Scenarios vary only pre-clearing advertising availability.",
     assumptions: {
       rawOutputUnitsPerOutlet: 100,
       laggedSupplyUnits: 200,
@@ -90,6 +149,11 @@ async function main() {
       divergentStance,
     },
     derived: {
+      neutralUnsetStanceAvailabilityAtMaximumLean: mediaAudienceFit(undefined, {
+        economic: -5,
+        social: 5,
+      }),
+      neutralUnsetStanceCandidateNudge: editorialFavorabilityNudge(undefined, undefined, 1),
       maximumDivergenceAvailability: mediaAudienceFit(divergentStance, {
         economic: -5,
         social: -5,
@@ -108,10 +172,22 @@ async function main() {
       ),
     },
     scenarios,
+    strongFundedPoliticalDemand: {
+      balancedAvailability: clearWithStrongPoliticalDemand(1),
+      maximumDivergence: clearWithStrongPoliticalDemand(
+        mediaAudienceFit(divergentStance, { economic: -5, social: -5 })
+      ),
+    },
     accounting: {
       buyerValueIsComputedFromTheSameFilledUnitsAsSellerReceipt: true,
       reducedAvailabilityRemainsUnsoldOutput: true,
       buyerDemandIsNotExpanded: true,
+      combinedCommercialAndPoliticalFillsStayWithinAvailableUnits: [
+        clearWithStrongPoliticalDemand(1),
+        clearWithStrongPoliticalDemand(
+          mediaAudienceFit(divergentStance, { economic: -5, social: -5 })
+        ),
+      ].every((scenario) => scenario.overflowUnits === 0),
     },
   };
   const output = `${JSON.stringify(report, null, 2)}\n`;

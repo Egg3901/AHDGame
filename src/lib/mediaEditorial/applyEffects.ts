@@ -35,8 +35,6 @@ interface EditorialParty {
 
 interface EditorialPerson {
   _id: ObjectId;
-  favorability: number;
-  mediaEditorialLastAppliedTurn?: number;
 }
 
 interface EffectTarget {
@@ -156,39 +154,29 @@ async function applyToPeople(
 ): Promise<void> {
   if (targets.size === 0) return;
   const collection = db.collection<EditorialPerson>(collectionName);
-  const people = await collection
-    .find(
-      { _id: { $in: [...targets.values()].map((target) => target.id) } },
-      { projection: { _id: 1, favorability: 1, mediaEditorialLastAppliedTurn: 1 } }
-    )
-    .toArray();
-  const peopleById = new Map(people.map((person) => [String(person._id), person]));
-  const operations = [...targets].flatMap(([key, target]) => {
-    const person = peopleById.get(key);
-    if (
-      !person ||
-      (person.mediaEditorialLastAppliedTurn != null && person.mediaEditorialLastAppliedTurn >= turn)
-    ) {
-      return [];
-    }
-    const amount = Math.max(0, Math.min(target.amount, 100 - (person.favorability ?? 50)));
-    return [
-      {
-        updateOne: {
-          filter: {
-            _id: target.id,
-            $or: [
-              { mediaEditorialLastAppliedTurn: { $lt: turn } },
-              { mediaEditorialLastAppliedTurn: { $exists: false } },
-            ],
-          },
-          update: {
-            ...(amount > 0 ? { $inc: { favorability: amount } } : {}),
-            $set: { mediaEditorialLastAppliedTurn: turn },
+  const operations = [...targets.values()].map((target) => ({
+    updateOne: {
+      filter: {
+        _id: target.id,
+        $or: [
+          { mediaEditorialLastAppliedTurn: { $lt: turn } },
+          { mediaEditorialLastAppliedTurn: { $exists: false } },
+        ],
+      },
+      update: [
+        {
+          $set: {
+            favorability: {
+              $min: [
+                100,
+                { $add: [{ $ifNull: ["$favorability", 50] }, Math.max(0, target.amount)] },
+              ],
+            },
+            mediaEditorialLastAppliedTurn: turn,
           },
         },
-      },
-    ];
-  });
-  if (operations.length > 0) await collection.bulkWrite(operations);
+      ],
+    },
+  }));
+  await collection.bulkWrite(operations);
 }
