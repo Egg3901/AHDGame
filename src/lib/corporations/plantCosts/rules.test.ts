@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computePlantOverhead } from "./plantOverhead";
+import { computePlantOverhead } from "./rules";
 
 const base = {
   nominalDailyRevenue: 240_000,
