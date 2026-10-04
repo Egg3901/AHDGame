@@ -19,25 +19,32 @@ const order = (over: Partial<SectorBuildOrder> = {}): SectorBuildOrder => ({
 const midBuild = (over: Partial<SectorPlantFields> = {}): SectorPlantFields => ({
   capitalStock: 500,
   buildQueue: [order()],
-  constructionInProgressAnchor: 1_000_000,
   mothballed: false,
   plantsStartTurn: 5,
   ...over,
 });
 
 describe("mergeSectorPlantFields", () => {
-  it("sums capacity and CIP and concatenates the queue", () => {
+  it("seeds canonical count from merged stock instead of adding sub-quantum counts", () => {
+    const merged = mergeSectorPlantFields(
+      { sectorType: "energy", capitalStock: 100, plantCount: 1, plantUnitRemainder: 0 },
+      { sectorType: "energy", capitalStock: 100, plantCount: 1, plantUnitRemainder: 0 }
+    );
+    expect(merged.capitalStock).toBe(200);
+    expect(merged.plantCount).toBe(1);
+    expect(merged.plantUnitRemainder).toBe(0);
+  });
+  it("sums capacity and concatenates the queue", () => {
     const merged = mergeSectorPlantFields(
       midBuild(),
       midBuild({
         capitalStock: 250,
-        constructionInProgressAnchor: 400_000,
         buildQueue: [order({ costPaidAnchor: 400_000, onlineTurn: 15 })],
       })
     );
     expect(merged.capitalStock).toBe(750);
-    expect(merged.constructionInProgressAnchor).toBe(1_400_000);
     expect(merged.buildQueue).toHaveLength(2);
+    expect(merged).not.toHaveProperty("constructionInProgressAnchor");
   });
 
   it("orders the merged queue oldest-landing-first", () => {
@@ -52,22 +59,10 @@ describe("mergeSectorPlantFields", () => {
     // A JPY seller and a USD buyer: revenue is re-denominated by the caller,
     // these fields must not be.
     const merged = mergeSectorPlantFields(
-      { capitalStock: 0, buildQueue: [], constructionInProgressAnchor: 0 },
+      { capitalStock: 0, buildQueue: [] },
       midBuild({ buildQueue: [order({ costPaidAnchor: 7_654_321 })] })
     );
     expect(merged.buildQueue[0].costPaidAnchor).toBe(7_654_321);
-    expect(merged.constructionInProgressAnchor).toBe(1_000_000);
-  });
-
-  it("keeps the CIP total equal to the sum of the merged queue", () => {
-    const a = midBuild({ constructionInProgressAnchor: 1_000_000 });
-    const b = midBuild({
-      constructionInProgressAnchor: 250_000,
-      buildQueue: [order({ costPaidAnchor: 250_000 })],
-    });
-    const merged = mergeSectorPlantFields(a, b);
-    const queueSum = merged.buildQueue.reduce((s, o) => s + o.costPaidAnchor, 0);
-    expect(merged.constructionInProgressAnchor).toBe(queueSum);
   });
 
   it("mothballs only when BOTH sides are mothballed", () => {
@@ -111,7 +106,6 @@ describe("mergeSectorPlantFields", () => {
       plantUnitRemainder: 0,
       capacityBookAnchor: 0,
       buildQueue: [],
-      constructionInProgressAnchor: 0,
       mothballed: false,
       plantsStartTurn: null,
       legacyRevenueShadow: null,
@@ -119,56 +113,102 @@ describe("mergeSectorPlantFields", () => {
   });
 
   it("conserves a mid-build transfer: nothing is created or destroyed", () => {
-    const survivor = midBuild({ capitalStock: 500, constructionInProgressAnchor: 1_000_000 });
+    const survivor = midBuild({ capitalStock: 500 });
     const incoming = midBuild({
       capitalStock: 120,
-      constructionInProgressAnchor: 3_300_000,
       buildQueue: [order({ costPaidAnchor: 3_300_000, unitsOrdered: 42, onlineTurn: 25 })],
     });
     const merged = mergeSectorPlantFields(survivor, incoming);
     expect(merged.capitalStock).toBe(620);
-    expect(merged.constructionInProgressAnchor).toBe(4_300_000);
     expect(merged.buildQueue.reduce((s, o) => s + o.unitsOrdered, 0)).toBe(142);
+    expect(merged.buildQueue.reduce((s, o) => s + o.costPaidAnchor, 0)).toBe(4_300_000);
   });
 });
 
 describe("carveSectorPlantFields", () => {
-  it("splits capacity, CIP and both legs of each build order", () => {
+  it("requires a conserved facility split when the source has a sector type", () => {
+    expect(() =>
+      carveSectorPlantFields({ sectorType: "energy", capitalStock: 400 }, 0.5)
+    ).toThrow("A plant carve requires its conserved whole-facility count split");
+  });
+
+  it("allocates stock by whole facilities and conserves a sole small facility", () => {
+    const source = {
+      sectorType: "energy" as const,
+      capitalStock: 400,
+      plantCount: 1,
+      plantUnitRemainder: 0,
+      capacityBookAnchor: 40_000,
+    };
+    const carved = carveSectorPlantFields(source, 0.5, 1);
+    const kept = carveSectorPlantFields(source, 0.5, 0);
+    expect(carved.capitalStock).toBe(400);
+    expect(kept.capitalStock).toBe(0);
+    expect(carved.plantCount + kept.plantCount).toBe(1);
+    expect(carved.capacityBookAnchor + kept.capacityBookAnchor).toBe(40_000);
+  });
+
+  it("does not transfer a remainder without an owned facility or stock", () => {
+    const source = {
+      sectorType: "energy" as const,
+      capitalStock: 0,
+      plantCount: 0,
+      plantUnitRemainder: 200,
+    };
+    const carved = carveSectorPlantFields(source, 0.5, 0);
+    const kept = carveSectorPlantFields(source, 0.5, 0);
+    expect(carved.capitalStock + kept.capitalStock).toBe(0);
+    expect(carved.plantCount + kept.plantCount).toBe(0);
+    expect(carved.plantUnitRemainder + kept.plantUnitRemainder).toBe(0);
+  });
+
+  it("splits partial stock by whole-facility count and conserves its exact remainder", () => {
+    const source = {
+      sectorType: "energy" as const,
+      capitalStock: 1_150,
+      plantCount: 4,
+      plantUnitRemainder: 150,
+      capacityBookAnchor: 115_000,
+    };
+    const carved = carveSectorPlantFields(source, 0.25, 1);
+    const kept = carveSectorPlantFields(source, 0.75, 3);
+    expect(carved.capitalStock).toBe(287.5);
+    expect(kept.capitalStock).toBe(862.5);
+    expect(carved.capitalStock + kept.capitalStock).toBe(1_150);
+    expect(carved.plantCount).toBe(1);
+    expect(kept.plantCount).toBe(3);
+    expect(carved.plantUnitRemainder + kept.plantUnitRemainder).toBe(150);
+    expect(carved.capacityBookAnchor + kept.capacityBookAnchor).toBe(115_000);
+  });
+
+  it("splits capacity and both legs of each build order", () => {
     const carved = carveSectorPlantFields(midBuild(), 0.25);
     expect(carved.capitalStock).toBe(125);
-    expect(carved.constructionInProgressAnchor).toBe(250_000);
     expect(carved.buildQueue[0].unitsOrdered).toBe(25);
     expect(carved.buildQueue[0].costPaidAnchor).toBe(250_000);
   });
 
   it("conserves money and units across the split", () => {
-    const source = midBuild({ capitalStock: 800, constructionInProgressAnchor: 2_000_000 });
+    const source = midBuild({ capitalStock: 800 });
     const f = 0.3;
     const carved = carveSectorPlantFields(source, f);
     const kept = carveSectorPlantFields(source, 1 - f);
     expect(carved.capitalStock + kept.capitalStock).toBeCloseTo(800, 6);
-    expect(carved.constructionInProgressAnchor + kept.constructionInProgressAnchor).toBeCloseTo(
-      2_000_000,
-      6
-    );
     expect(carved.buildQueue[0].costPaidAnchor + kept.buildQueue[0].costPaidAnchor).toBeCloseTo(
       1_000_000,
       6
     );
   });
 
-  it("keeps CIP equal to the sum of the carved queue (no refund arbitrage)", () => {
+  it("does not persist CIP when carving the queue", () => {
     const carved = carveSectorPlantFields(
       midBuild({
-        constructionInProgressAnchor: 1_500_000,
         buildQueue: [order({ costPaidAnchor: 1_000_000 }), order({ costPaidAnchor: 500_000 })],
       }),
       0.4
     );
-    expect(carved.buildQueue.reduce((s, o) => s + o.costPaidAnchor, 0)).toBeCloseTo(
-      carved.constructionInProgressAnchor,
-      6
-    );
+    expect(carved.buildQueue.reduce((s, o) => s + o.costPaidAnchor, 0)).toBeCloseTo(600_000, 6);
+    expect(carved).not.toHaveProperty("constructionInProgressAnchor");
   });
 
   it("copies, not splits, plantsStartTurn and mothballed", () => {
@@ -187,7 +227,7 @@ describe("carveSectorPlantFields", () => {
 describe("hasPlantState", () => {
   it("is false for a pre-plants document and true once anything is stamped", () => {
     expect(hasPlantState({})).toBe(false);
-    expect(hasPlantState({ capitalStock: 0, constructionInProgressAnchor: 0 })).toBe(false);
+    expect(hasPlantState({ capitalStock: 0, buildQueue: [] })).toBe(false);
     expect(hasPlantState({ capitalStock: 1 })).toBe(true);
     expect(hasPlantState({ plantsStartTurn: 3 })).toBe(true);
     expect(hasPlantState({ buildQueue: [order()] })).toBe(true);
@@ -242,7 +282,6 @@ describe("identitySectorPlantFields", () => {
       plantUnitRemainder: 0,
       capacityBookAnchor: 0,
       buildQueue: survivor.buildQueue,
-      constructionInProgressAnchor: 1_000_000,
       mothballed: true,
       activeCapacityPercent: 100,
       plantsStartTurn: 5,

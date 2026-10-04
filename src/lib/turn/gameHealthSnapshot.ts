@@ -282,9 +282,10 @@ async function runIntegrityChecks(
         { $count: "count" },
       ])
       .toArray(),
-    // 5. Active elections with zero candidates (#2166): project to the join
-    // key after the status match so full election documents never cross the
-    // $lookup. The count is unchanged.
+    // 5. Elections nearing resolution with zero candidates. Long-dated elections
+    // are active for many turns before nominations open, so they are not gaps yet.
+    // (#2166): project to the join key after the status match so full election
+    // documents never cross the $lookup.
     db
       .collection("elections")
       .aggregate([

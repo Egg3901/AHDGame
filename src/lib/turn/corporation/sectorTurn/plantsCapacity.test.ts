@@ -149,6 +149,27 @@ describe("computePlantsCapacity — plants capacity advance + P5 basis (#588)", 
     expect(r.plantsOwnedCapacity).toBeGreaterThan(0);
   });
 
+  it("reconciles the plant count when depreciation crosses a facility quantum", () => {
+    const r = computePlantsCapacity(
+      input({
+        isFlipTurn: false,
+        sector: {
+          ...input().sector,
+          sectorType: "energy",
+          capitalStock: 500,
+          plantCount: 2,
+          plantUnitRemainder: 0,
+          plantsStartTurn: CURRENT_TURN - 10,
+        } as PlantsCapacityInput["sector"],
+      })
+    );
+    expect(r.plantsOwnedCapacity).toBeLessThan(500);
+    expect(r.plantLedger).toEqual({
+      plantCount: 1,
+      plantUnitRemainder: r.plantsOwnedCapacity - 250,
+    });
+  });
+
   it("marks a mothballed sector cold", () => {
     const r = computePlantsCapacity(
       input({

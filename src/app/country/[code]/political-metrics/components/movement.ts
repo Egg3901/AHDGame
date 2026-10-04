@@ -4,12 +4,15 @@
  * Every metric carries a series of snapshots taken every `historyCadenceTurns`
  * turns, oldest first, so `stepsBack = 0` is the most recent snapshot. A
  * change is always "now against a snapshot", which is why the views label it
- * by the cadence ("the last 24 turns") and never as "since last turn".
+ * by the cadence ("last 24 turns") and never as "since last turn".
  */
 
 // Safe in a client component: historyCadence has no imports of its own, so it
 // cannot drag the turn engine into the browser bundle.
 import { TURNS_PER_YEAR } from "@/lib/politicalMetrics/historyCadence";
+
+/** Shown until a scope has a snapshot to compare against. */
+export const EMPTY_SERIES = "series begins this campaign";
 
 interface Series {
   history: ReadonlyArray<{ turn: number; value: number }>;
@@ -85,12 +88,9 @@ export function formatDelta(delta: number): string {
   return `${delta > 0 ? "+" : ""}${delta}`;
 }
 
-/** Gains read green and losses red; no change stays neutral. */
+/** Gains read green and losses red; no change stays muted. */
 export function deltaTextClass(delta: number): string {
   if (delta > 0) return "text-success";
   if (delta < 0) return "text-error";
-  return "text-foreground";
+  return "text-muted";
 }
-
-/** Shown wherever a change needs a snapshot that does not exist yet. */
-export const NO_HISTORY_YET = "Not enough history yet";

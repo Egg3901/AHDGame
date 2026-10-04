@@ -365,6 +365,8 @@ export async function expandSector(request: Request, { params }: RouteParams) {
       // build window — the written `revenue` above is the legacy nameplate,
       // which plants restates every turn and which non-plants readers still need.
       newSector.capitalStock = 0;
+      newSector.plantCount = 0;
+      newSector.plantUnitRemainder = 0;
       // P5: zero owned capacity ⇒ zero paid basis. Stamped EXPLICITLY rather
       // than left absent so this row never takes the list-price fallback: the
       // founding build is charged at CAPACITY_FOUNDING_DISCOUNT (0.1×), and the
@@ -374,7 +376,6 @@ export async function expandSector(request: Request, { params }: RouteParams) {
       // basis.
       newSector.capacityBookAnchor = 0;
       newSector.buildQueue = [starterOrder];
-      newSector.constructionInProgressAnchor = Math.round(starterBuildAnchor);
       // Born under plants, so it never needs the flip-turn migration — stamping
       // this now keeps `sectorTurn`'s `isFlipTurn` (plantsStartTurn == null) from
       // treating a zero-capacity newborn as a legacy sector to convert.

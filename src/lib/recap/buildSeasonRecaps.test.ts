@@ -56,7 +56,8 @@ describe("buildSeasonRecaps", () => {
     expect(a.actions.total).toBe(100);
     expect(a.actions.topType).toBe("fundraise");
     expect(a.actions.rank).toEqual({ value: 100, rank: 1, total: 3 });
-    expect(a.influence.npi).toEqual({ value: 90, rank: 1, total: 3 });
+    expect(a.influence.npi).toMatchObject({ value: 90, rank: 1, total: 3 });
+    expect(a.influence.npi?.neighbors).toEqual({ above: null, below: { name: "P", value: 50 } });
     expect(a.party).toBe("Independent");
 
     const c = map.get(C.toString())!;
@@ -93,8 +94,39 @@ describe("buildSeasonRecaps", () => {
     });
 
     const map = await buildSeasonRecaps(db as unknown as Db, chars, { currentTurn: 100 });
-    expect(map.get(usA.toString())!.netWorth).toEqual({ value: 1000, rank: 1, total: 3 });
-    expect(map.get(uk.toString())!.netWorth).toEqual({ value: 400, rank: 2, total: 3 });
-    expect(map.get(usB.toString())!.netWorth).toEqual({ value: 500, rank: 3, total: 3 });
+    expect(map.get(usA.toString())!.netWorth).toMatchObject({ value: 1000, rank: 1, total: 3 });
+    expect(map.get(uk.toString())!.netWorth).toMatchObject({ value: 400, rank: 2, total: 3 });
+    expect(map.get(usB.toString())!.netWorth).toMatchObject({ value: 500, rank: 3, total: 3 });
+    // Neighbors are valued in the viewer's currency: the UK player (rate 0.5)
+    // sees usA's 1000 internal as £500.
+    expect(map.get(uk.toString())!.netWorth?.neighbors).toEqual({
+      above: { name: "P", value: 500 },
+      below: { name: "P", value: 250 },
+    });
+  });
+
+  it("counts savings and every currency through the latest portfolio snapshot", async () => {
+    const db = createMockDb();
+    const uk = new ObjectId();
+    const us = new ObjectId();
+    const chars = [
+      ch({ _id: uk, countryId: "UK", funds: 100, cashOnHand: 5 }),
+      ch({ _id: us, countryId: "US", funds: 10, cashOnHand: 0 }),
+    ];
+    db.collection("exchangeRates").find.mockReturnValue({
+      toArray: () =>
+        Promise.resolve([
+          { countryId: "US", rate: 1 },
+          { countryId: "UK", rate: 0.5 },
+        ]),
+    });
+    // 1000 anchor units of savings for the UK player; no snapshot for the US one.
+    aggReturns(db, "portfolioHistory", [{ _id: uk, v: 1000 }]);
+
+    const map = await buildSeasonRecaps(db as unknown as Db, chars, { currentTurn: 100 });
+    // £100 campaign + 1000 anchor x 0.5 = £600, not the cash sum £105.
+    expect(map.get(uk.toString())!.netWorth?.value).toBe(600);
+    // Fallback: campaign + cash.
+    expect(map.get(us.toString())!.netWorth?.value).toBe(10);
   });
 });

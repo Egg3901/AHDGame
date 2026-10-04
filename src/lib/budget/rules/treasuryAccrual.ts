@@ -39,6 +39,45 @@ export function treasuryAccrualReceipt(
   };
 }
 
+/**
+ * Reserve bank-held coupon cash from the aggregate debt-service receipt.
+ * The second, journaled transfer debits the reserved amount after this receipt
+ * lands, so the combined treasury movement remains the original gross slice.
+ */
+export function treasuryAccrualWithBankCouponReserve(
+  input: Omit<TreasuryAccrualReceipt, "cashDelta" | "components" | "bankCouponPlan"> & {
+    annualRevenue: number;
+    annualPrimarySpending: number;
+    debtService: number;
+    enforcement: number;
+  },
+  couponReserveLocal: number
+): TreasuryAccrualReceipt {
+  const gross = treasuryAccrualReceipt(input);
+  const reserve = Math.min(
+    Math.max(0, -gross.components.debtService),
+    Number.isFinite(couponReserveLocal) ? Math.max(0, couponReserveLocal) : 0
+  );
+  const components = {
+    ...gross.components,
+    debtService: gross.components.debtService + reserve,
+  };
+  const cashDelta = gross.cashDelta + reserve;
+  return {
+    ...gross,
+    cashDelta,
+    components: {
+      ...components,
+      rounding:
+        cashDelta -
+        components.revenue -
+        components.primarySpending -
+        components.debtService -
+        components.enforcement,
+    },
+  };
+}
+
 export function treasuryAccrualLegs(
   countryId: string,
   receipt: TreasuryAccrualReceipt

@@ -264,7 +264,7 @@ function buildCsv(
   const escape = (v: string) => {
     const needsQuotes = /[",\n\r]/.test(v);
     if (!needsQuotes) return v;
-    return `"${v.replace(/"/g, '"')}"`;
+    return `"${v.replace(/"/g, '""')}"`;
   };
 
   return [headers, ...rows].map((row) => row.map(escape).join(",")).join("\n");

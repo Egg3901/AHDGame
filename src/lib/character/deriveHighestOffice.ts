@@ -1,3 +1,4 @@
+import { COUNTRY_CONFIGS, COUNTRY_ORDER } from "@/lib/constants/countries";
 import type { Character } from "@/lib/db/types/character";
 
 /**
@@ -35,10 +36,58 @@ export const OFFICE_RANK: Readonly<Record<string, number>> = {
   commons: 3,
   senate: 4,
   governor: 5,
-  primeMinister: 6,
+  primeMinister: 8,
   vicePresident: 7,
   president: 8,
 };
+
+/** Cabinet office types: a seat in the national government below its head. */
+const CABINET_OFFICE_RANK = 6;
+const CABINET_OFFICE_TYPES = ["usCabinet", "ukCabinet", "parliamentaryCabinet", "deCabinet"];
+/** National upper-house keys; every other national legislative seat ranks as a lower house. */
+const UPPER_HOUSE_KEYS: ReadonlySet<string> = new Set([
+  "senate",
+  "senator",
+  "sangiin",
+  "nationalitiesDeputy",
+]);
+
+/**
+ * Ranks for every office key in every country's config, so a 1953 General
+ * Secretary or a Taoiseach outranks a backbench deputy instead of falling to 0.
+ * `OFFICE_RANK` stays authoritative for the keys it names; everything else is
+ * classified from its `OfficeTypeConfig`: the country's first national executive
+ * (head of government) 8, other national executives 7, cabinet and central bank
+ * 6, regional executives 5, upper houses 4, lower houses 3, regional
+ * legislatures 2, local councils 1. A key shared across countries takes its
+ * highest classification.
+ */
+const DERIVED_OFFICE_RANK: Readonly<Record<string, number>> = (() => {
+  const ranks: Record<string, number> = {};
+  const raise = (key: string, rank: number) => {
+    if ((ranks[key] ?? 0) < rank) ranks[key] = rank;
+  };
+  for (const type of CABINET_OFFICE_TYPES) raise(type, CABINET_OFFICE_RANK);
+  for (const id of COUNTRY_ORDER) {
+    const offices = COUNTRY_CONFIGS[id].officeTypes;
+    const headKey = offices.find((o) => o.isExecutive && !o.isSubNational)?.key;
+    for (const office of offices) {
+      let rank: number;
+      if (office.key === "centralBankChair") rank = CABINET_OFFICE_RANK;
+      else if (office.isExecutive && !office.isSubNational) rank = office.key === headKey ? 8 : 7;
+      else if (office.isExecutive) rank = 5;
+      else if (!office.isSubNational) rank = UPPER_HOUSE_KEYS.has(office.key) ? 4 : 3;
+      else rank = /council/i.test(office.key) ? 1 : 2;
+      raise(office.key, rank);
+    }
+  }
+  return ranks;
+})();
+
+/** Tier for one office key: the explicit ladder first, then the config-derived one. */
+export function officeRank(type: string): number {
+  return OFFICE_RANK[type] ?? DERIVED_OFFICE_RANK[type] ?? 0;
+}
 
 function findHighestOffice(
   character: OfficeHolderLike
@@ -49,7 +98,7 @@ function findHighestOffice(
     for (const event of character.careerHistory) {
       if (!event.office) continue;
       if (!HELD_OFFICE_EVENT_TYPES.has(event.type)) continue; // skip lost_election etc.
-      const rank = OFFICE_RANK[event.office.type] ?? 0;
+      const rank = officeRank(event.office.type);
       if (!highest || rank > highest.rank) {
         highest = { label: event.officeLabel, rank };
       }
@@ -57,7 +106,7 @@ function findHighestOffice(
   }
 
   if (character.currentOffice) {
-    const rank = OFFICE_RANK[character.currentOffice.type] ?? 0;
+    const rank = officeRank(character.currentOffice.type);
     if (!highest || rank > highest.rank) {
       const type = character.currentOffice.type;
       const state = "state" in character.currentOffice ? character.currentOffice.state : undefined;

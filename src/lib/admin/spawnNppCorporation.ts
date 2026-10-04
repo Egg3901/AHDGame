@@ -37,6 +37,7 @@ import { writeCorpEconomicLocal } from "@/lib/currency/corpEconomyFields";
 import { getNextSequentialId } from "@/lib/db/sequentialId";
 import { randomBrandColor } from "@/lib/corporations/brandColor";
 import { computeUnownedSeedRevenue } from "@/lib/admin/seed/seedUnownedSectors";
+import { seedPlantLedger } from "@/lib/corporations/plantLedger";
 import { createNPP } from "@/lib/npp/generator";
 import {
   generateTickerSymbol,
@@ -564,6 +565,7 @@ export async function spawnNppCorporation(
     ...(plantsEnabled
       ? {
           capitalStock: startingCapacityUnits,
+          ...seedPlantLedger(type, startingCapacityUnits),
           // Born under plants — never needs the flip-turn migration.
           plantsStartTurn: input.foundedAtTurn ?? 0,
         }

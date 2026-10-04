@@ -170,6 +170,17 @@ export interface Corporation {
    * at least one financial sector; one bank per corp. See src/lib/db/types/bank.ts.
    */
   bankCharter?: import("./bank").BankCharter;
+  /** Funded sovereign claims held outside the replaceable charter subdocument. */
+  bankSovereignEscrows?: Record<
+    string,
+    {
+      bankId: string;
+      charteredTurn: number;
+      currencyCode: CurrencyCode;
+      amountLocal: number;
+      claimKind: "coupon" | "maturity";
+    }
+  >;
   /** Monotonic generation for atomic proprietary book settlement. */
   bankPropBookRevision?: number;
   /**
@@ -1177,6 +1188,10 @@ export interface CorporateSector {
    * fallback.
    */
   plantsPnl?: {
+    /** Absent on older snapshots, which use the legacy residual. */
+    costModel?: "legacyResidual" | "explicit";
+    /** Positive plant services within otherOpex, never an additional bill. */
+    plantOverhead?: number;
     /**
      * Realized revenue the P&L was assembled against, inventory sell-down
      * included. Equals the persisted `realizedRevenue` exactly.

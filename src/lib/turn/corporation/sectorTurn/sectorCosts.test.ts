@@ -138,6 +138,25 @@ describe("computeGrowthAndRegulatory — realized-revenue growth + burden (#588)
 });
 
 describe("decomposePhysicalCosts — P3.5 calibration exactness (#588)", () => {
+  it("charges positive overhead rather than a stored negative margin residual", () => {
+    const r = decomposePhysicalCosts(
+      physicalInput({
+        explicitPlantCostsEnabled: true,
+        storedOtherOpexAnchor: -100,
+      })
+    );
+    expect(r.otherOpex).toBeCloseTo(320, 10);
+    expect(r.solvedOtherOpexPerUnit).toBeNull();
+    expect(r.physicalPnl?.profit).toBeCloseTo(7330, 10);
+  });
+
+  it("does not calibrate a new margin residual under explicit costs", () => {
+    const r = decomposePhysicalCosts(physicalInput({ explicitPlantCostsEnabled: true }));
+    expect(r.otherOpexCalibrated).toBe(false);
+    expect(r.solvedOtherOpexPerUnit).toBeNull();
+    expect(r.otherOpex).toBeCloseTo(320, 10);
+  });
+
   it("is inert when plants are off", () => {
     const r = decomposePhysicalCosts(physicalInput({ plantsEnabled: false }));
     expect(r.plantsPhysicalEnabled).toBe(false);

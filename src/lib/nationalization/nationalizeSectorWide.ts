@@ -142,7 +142,6 @@ export async function nationalizeSectorWide(
     plantUnitRemainder: 0,
     capacityBookAnchor: 0,
     buildQueue: [],
-    constructionInProgressAnchor: 0,
     mothballed: survivor ? identitySectorPlantFields(survivor).mothballed : false,
     ...(survivor?.activeCapacityPercent == null
       ? {}
@@ -186,16 +185,14 @@ export async function nationalizeSectorWide(
     // revenue IS the only quantity that moves, so `revenueAnchor <= 0` still
     // expresses that exactly and the behaviour is byte-identical. Under plants
     // the transferable substance is the plant state, so admit any donor carrying
-    // capacity, construction in progress, or queued build orders even at zero
+    // capacity or queued build orders even at zero
     // revenue. `mothballed` / `plantsStartTurn` alone are deliberately NOT
     // enough — they are history flags, not substance, and admitting on them
     // would create empty NatCorp rows.
     const plantHasSubstance =
       plantsEnabled &&
       incomingPlant != null &&
-      (incomingPlant.capitalStock > 0 ||
-        incomingPlant.constructionInProgressAnchor > 0 ||
-        incomingPlant.buildQueue.length > 0);
+      (incomingPlant.capitalStock > 0 || incomingPlant.buildQueue.length > 0);
     if (revenueAnchor <= 0 && !plantHasSubstance) return;
     // Transition revenue haircut: the state acquires a disrupted slice worth 15%
     // less than the carved value (compensation above is paid on the full value).
@@ -256,6 +253,10 @@ export async function nationalizeSectorWide(
             null,
             sweepEraUnitScale
           ),
+          ...seedPlantLedger(
+            params.sectorType,
+            computeSectorImpliedUnits(params.sectorType, haircutAnchor, null, sweepEraUnitScale)
+          ),
           // Capacity derived from an ₳ nameplate rather than transferred with a
           // recorded basis (the unowned pool, or a legacy row). Priced at LIST,
           // which is what that capacity cost under the legacy growth stack
@@ -286,8 +287,9 @@ export async function nationalizeSectorWide(
           $inc: { revenue: transferRevenue, workers, currentGrowthCost: transferGrowthCost },
           $set: {
             // MERGE shape: the slice is folded into a row the NatCorp already
-            // operates. `mergeSectorPlantFields` sums capacity and CIP,
-            // concatenates the build queues in landing order, ANDs `mothballed`
+            // operates. `mergeSectorPlantFields` sums capacity and concatenates
+            // build queues in landing order. CIP is derived from those queues.
+            // The helper ANDs `mothballed`
             // and keeps the EARLIER ramp anchor — without it the survivor's own
             // plant state would be untouched and the seized units lost.
             ...(plantIn ? mergeSectorPlantFields(readSectorPlantFields(existing), plantIn) : {}),
@@ -372,6 +374,7 @@ export async function nationalizeSectorWide(
         {
           plantsEnabled,
           currentYear: sweepCurrentYear,
+          currentTurn: params.consequence.turn,
           fraction: f,
           eraUnitScale: sweepEraUnitScale,
         }
@@ -425,15 +428,15 @@ export async function nationalizeSectorWide(
         resolveSectorHostCurrencyCode(sec, donor),
         fxRateForSectorHostFromMap(sec, donor, fxByCurrency)
       );
-      const openingPlantCount = Number.isInteger(sec.plantCount)
-        ? (sec.plantCount as number)
-        : seedPlantLedger(sec.sectorType, sec.capitalStock).plantCount;
+      const openingPlantCount = seedPlantLedger(sec.sectorType, sec.capitalStock).plantCount;
+      // Compute the whole-facility split once so donor and state counts are
+      // complementary, including a one-facility sub-quantum holding.
       const plantCountSplit = splitWholePlantCount(openingPlantCount, f);
       // PLANTS — the capacity leg of the carve. Below plants this is null and
       // both writes below are byte identical to the pre-P3b behaviour.
       //
       // `carveSectorPlantFields(sec, f)` is the same slicer the privatization
-      // spin-out uses: capacity, CIP and each build order scale by `f`, while
+      // spin-out uses: capacity and each build order scale by `f`, while
       // `mothballed` / `plantsStartTurn` are copied (they describe the plant's
       // history, which both halves inherit).
       //
@@ -464,6 +467,10 @@ export async function nationalizeSectorWide(
             return {
               ...sliced,
               capitalStock: sliced.capitalStock * (1 - NATIONALIZATION_REVENUE_HAIRCUT),
+              ...seedPlantLedger(
+                sec.sectorType,
+                sliced.capitalStock * (1 - NATIONALIZATION_REVENUE_HAIRCUT)
+              ),
               // P5: the paid basis takes the SAME haircut as the capacity it
               // prices, so the per-unit basis is invariant across the taking.
               capacityBookAnchor: sliced.capacityBookAnchor * (1 - NATIONALIZATION_REVENUE_HAIRCUT),
@@ -489,7 +496,7 @@ export async function nationalizeSectorWide(
           {
             $set: {
               // The donor keeps the COMPLEMENT of what was carved — `1 − f` of
-              // capacity, CIP and every build order — so total capacity is
+              // capacity and every build order, so total capacity is
               // conserved across the taking up to the single deliberate haircut
               // sink applied above. Without this the donor's `capitalStock` would
               // be untouched and the next tick would restate its revenue back to
@@ -633,6 +640,9 @@ export async function nationalizeSectorWide(
               ...(captureUnits > 0 ? { capitalStock: captureUnits } : {}),
             },
             $set: {
+              ...(captureUnits > 0
+                ? seedPlantLedger(params.sectorType, (ns.capitalStock ?? 0) + captureUnits)
+                : {}),
               nationalizedAtTurn: params.consequence.turn,
               nationalizationTransitionMultiplier: transitionMultiplier,
               sectorNationalizationScope: params.scope,

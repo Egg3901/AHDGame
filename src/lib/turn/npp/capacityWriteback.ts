@@ -136,8 +136,9 @@ export function buildNppFoundedSectorInserts(args: {
       ...(ns.starterOrder
         ? {
             capitalStock: 0,
+            plantCount: 0,
+            plantUnitRemainder: 0,
             buildQueue: [ns.starterOrder],
-            constructionInProgressAnchor: Math.round(ns.starterOrder.costPaidAnchor),
             plantsStartTurn: args.turn,
           }
         : {}),

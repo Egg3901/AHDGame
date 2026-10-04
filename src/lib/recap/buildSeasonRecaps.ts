@@ -10,13 +10,24 @@ import type {
   UserSubscription,
   NewsPost,
   InvestorRankingSnapshot,
+  GameState,
 } from "@/lib/db/types";
 import type { ActionType, GameIteration } from "@/lib/db/types/gameState";
 import { getHomeCurrency } from "@/lib/currency/characterFunds";
-import { fetchExchangeRateMap, getRateDoc, toInternalAmount } from "@/lib/world/forex";
+import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { getEraAwareCurrencySymbol } from "@/lib/constants/currencies";
+import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
+import { fetchExchangeRateMap, getRateDoc, rateFromDoc, toInternalAmount } from "@/lib/world/forex";
 import { buildCharacterRecap } from "./buildCharacterRecap";
 import type { PerCharacterRecapInput, RankPosition } from "./buildCharacterRecap";
-import type { CharacterRecap, RecapAchievementHighlight, RecapActionBreakdown } from "./types";
+import { loadStoryData } from "./loadStoryData";
+import { assignAwards, buildPersona } from "./awards";
+import type {
+  CharacterRecap,
+  RecapAchievementHighlight,
+  RecapActionBreakdown,
+  RecapRankedStat,
+} from "./types";
 
 /** Bill statuses that count as "passed" (enacted) for the recap. */
 const PASSED_BILL_STATUSES = ["signed", "enrolled", "veto_override", "override_shugiin"];
@@ -42,6 +53,10 @@ export interface BuildSeasonRecapsOptions {
    * target ⇒ no field-wide action counts ⇒ `actions.rank` is null).
    */
   rankActions?: boolean;
+  /** Fail instead of emitting an incomplete recap when any source read or build step fails. */
+  requireComplete?: boolean;
+  /** Progress/warning sink; a failed v2 section is reported here. */
+  log?: (msg: string) => void;
 }
 
 /** Rank a field descending by `valueOf`, within each country. */
@@ -59,7 +74,14 @@ function rankByCountry(
   for (const arr of byCountry.values()) {
     arr.sort((a, b) => b.value - a.value);
     const total = arr.length;
-    arr.forEach((e, i) => out.set(e.id, { rank: i + 1, total }));
+    arr.forEach((e, i) =>
+      out.set(e.id, {
+        rank: i + 1,
+        total,
+        aboveId: arr[i - 1]?.id ?? null,
+        belowId: arr[i + 1]?.id ?? null,
+      })
+    );
   }
   return out;
 }
@@ -74,7 +96,14 @@ function rankGlobal(
   entries.sort((a, b) => b.value - a.value);
   const total = entries.length;
   const out = new Map<string, RankPosition>();
-  entries.forEach((e, i) => out.set(e.id, { rank: i + 1, total }));
+  entries.forEach((e, i) =>
+    out.set(e.id, {
+      rank: i + 1,
+      total,
+      aboveId: entries[i - 1]?.id ?? null,
+      belowId: entries[i + 1]?.id ?? null,
+    })
+  );
   return out;
 }
 
@@ -84,6 +113,48 @@ function campaignFundsOf(c: Character): number {
 
 function cashOnHandOf(c: Character): number {
   return c.currencyBalances?.personal?.[getHomeCurrency(c)] ?? c.cashOnHand ?? 0;
+}
+
+/** Look-back for the latest portfolio snapshot; it is written every turn. */
+const PORTFOLIO_LOOKBACK_TURNS = 12;
+
+/**
+ * Each character's most recent net portfolio value (anchor units), from the
+ * last few turns of portfolioHistory. Best-effort callers fall back to cash.
+ */
+async function latestPortfolioNetValues(
+  db: Db,
+  field: Character[],
+  currentTurn: number,
+  requireComplete: boolean
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  try {
+    const rows = await db
+      .collection("portfolioHistory")
+      .aggregate<{ _id: ObjectId; v: number | null }>([
+        {
+          $match: {
+            characterId: { $in: field.map((c) => c._id) },
+            turn: { $gte: currentTurn - PORTFOLIO_LOOKBACK_TURNS },
+          },
+        },
+        { $sort: { turn: -1 } },
+        {
+          $group: {
+            _id: "$characterId",
+            v: { $first: { $ifNull: ["$netValue", "$totalValue"] } },
+          },
+        },
+      ])
+      .toArray();
+    for (const r of rows)
+      if (typeof r.v === "number" && Number.isFinite(r.v)) out.set(String(r._id), r.v);
+  } catch (err) {
+    if (requireComplete) throw err;
+    // fall back to the cash + stock sum
+  }
+  return out;
 }
 
 /**
@@ -105,6 +176,7 @@ export async function buildSeasonRecaps(
 
   const field = opts?.field ?? targets;
   const rankActions = opts?.rankActions ?? true;
+  const requireComplete = opts?.requireComplete ?? false;
   const canRank = field.length >= 2; // a one-character field cannot be meaningfully ranked
   const ids = targets.map((c) => c._id);
 
@@ -187,7 +259,19 @@ export async function buildSeasonRecaps(
   // Local values drive the displayed figure (in the player's own currency); the
   // forex-normalized internal values drive the GLOBAL wealth ranking so a £
   // fortune and a $ fortune compare fairly worldwide.
+  //
+  // Personal wealth comes from the character's latest portfolioHistory row: it
+  // is written every turn in anchor units and counts savings and every
+  // currency held. The older sum (home-currency cash + stock portfolio) missed
+  // both, so a saver with M 115mn in the bank read as worth M 5.8mn. That sum
+  // stays as the fallback for characters with no snapshot.
   const rateMap = await fetchExchangeRateMap(db);
+  const latestPortfolio = await latestPortfolioNetValues(
+    db,
+    field,
+    ctx.currentTurn,
+    requireComplete
+  );
   const netWorthByChar = new Map<string, number>(); // local (display)
   const fundsByChar = new Map<string, number>(); // local (display)
   const netWorthInternalByChar = new Map<string, number>(); // fx-normalized (rank)
@@ -195,12 +279,17 @@ export async function buildSeasonRecaps(
   for (const c of field) {
     const id = c._id.toString();
     const funds = campaignFundsOf(c);
-    const netWorth = funds + cashOnHandOf(c) + (portfolioValues[id] ?? 0);
-    fundsByChar.set(id, funds);
-    netWorthByChar.set(id, netWorth);
     const rateDoc = getRateDoc(rateMap, c.countryId);
-    fundsInternalByChar.set(id, toInternalAmount(funds, rateDoc));
-    netWorthInternalByChar.set(id, toInternalAmount(netWorth, rateDoc));
+    const fundsInternal = toInternalAmount(funds, rateDoc);
+    const personalInternal = latestPortfolio.get(id);
+    const netWorthInternal =
+      personalInternal != null
+        ? fundsInternal + personalInternal
+        : toInternalAmount(funds + cashOnHandOf(c) + (portfolioValues[id] ?? 0), rateDoc);
+    fundsByChar.set(id, funds);
+    fundsInternalByChar.set(id, fundsInternal);
+    netWorthInternalByChar.set(id, netWorthInternal);
+    netWorthByChar.set(id, netWorthInternal * rateFromDoc(rateDoc));
   }
 
   // ── Ranks: political standing per country; wealth GLOBAL + forex-normalized ─
@@ -238,6 +327,9 @@ export async function buildSeasonRecaps(
           .toArray()
       : [];
   const partyNameMap = new Map(partyDocs.map((p) => [`${p.countryId}:${p.sequentialId}`, p.name]));
+  const partyColorMap = new Map(
+    partyDocs.map((p) => [`${p.countryId}:${p.sequentialId}`, p.color ?? null])
+  );
   const partyNameFor = (c: Character): string =>
     c.party === "independent"
       ? "Independent"
@@ -264,6 +356,64 @@ export async function buildSeasonRecaps(
       .filter((a): a is Achievement => Boolean(a))
       .map((a) => ({ name: a.name, icon: a.icon ?? null }));
 
+  // ── v2 story sections (best-effort; never blocks the v1 core) ──────────────
+  const log = opts?.log ?? (() => {});
+  const story = await loadStoryData(db, targets, field, ctx, {
+    includeWorld: rankActions,
+    failOnError: requireComplete,
+    warn: (name, err) =>
+      log(
+        `season recap: ${name} ${requireComplete ? "section failed" : "section skipped"} (${err instanceof Error ? err.message : String(err)})`
+      ),
+  }).catch((err: unknown) => {
+    log(
+      `season recap: story data ${requireComplete ? "capture failed" : "skipped"} (${err instanceof Error ? err.message : String(err)})`
+    );
+    if (requireComplete) throw err;
+    return null;
+  });
+
+  // Neighbors on a board, by name, valued in the viewer's own terms.
+  const fieldById = new Map(field.map((c) => [c._id.toString(), c]));
+  const npiNeighbors = (pos: RankPosition | null | undefined): RecapRankedStat["neighbors"] => {
+    if (!pos) return undefined;
+    const pick = (id: string | null | undefined) => {
+      const n = id ? fieldById.get(id) : undefined;
+      return n ? { name: n.name, value: n.nationalInfluence ?? 0 } : null;
+    };
+    return { above: pick(pos.aboveId), below: pick(pos.belowId) };
+  };
+  const wealthNeighbors = (
+    viewer: Character,
+    pos: RankPosition | null | undefined
+  ): RecapRankedStat["neighbors"] => {
+    if (!pos) return undefined;
+    const rate = rateFromDoc(getRateDoc(rateMap, viewer.countryId));
+    const pick = (id: string | null | undefined) => {
+      const n = id ? fieldById.get(id) : undefined;
+      return n
+        ? { name: n.name, value: (netWorthInternalByChar.get(n._id.toString()) ?? 0) * rate }
+        : null;
+    };
+    return { above: pick(pos.aboveId), below: pick(pos.belowId) };
+  };
+
+  // Money symbols as this world's era showed them (1953 DM, not euros).
+  let era: Pick<GameState, "preset" | "eurozoneEnabled"> | null = null;
+  try {
+    era = await db
+      .collection<GameState>("gameState")
+      .findOne({ _id: "current" }, { projection: { preset: 1, eurozoneEnabled: 1 } });
+  } catch (err) {
+    if (requireComplete) throw err;
+  }
+  const symbolFor = (c: Character) =>
+    getEraAwareCurrencySymbol(
+      getHomeCurrency(c),
+      era?.preset ?? DEFAULT_SEED_PRESET,
+      era?.eurozoneEnabled === true
+    );
+
   // ── Assemble ───────────────────────────────────────────────────────────────
   for (const c of targets) {
     const id = c._id.toString();
@@ -288,7 +438,37 @@ export async function buildSeasonRecaps(
         actions: actionsRank?.get(id) ?? null,
       },
     };
-    result.set(id, buildCharacterRecap(c, input, ctx));
+    const core = buildCharacterRecap(c, input, ctx);
+    if (core.influence.npi) core.influence.npi.neighbors = npiNeighbors(npiRank?.get(id));
+    if (core.netWorth) core.netWorth.neighbors = wealthNeighbors(c, netWorthRank?.get(id));
+    const partyKey = `${c.countryId}:${c.party}`;
+    const recap: CharacterRecap = {
+      ...core,
+      schemaVersion: 2,
+      countryName: Object.hasOwn(COUNTRY_CONFIGS, c.countryId)
+        ? COUNTRY_CONFIGS[c.countryId as CountryId].name
+        : c.countryId,
+      currency: getHomeCurrency(c),
+      currencySymbol: symbolFor(c),
+      partyColor: partyColorMap.get(partyKey) ?? null,
+      ...(story?.perCharacter.get(id) ?? {}),
+      world: story?.world ?? null,
+    };
+    result.set(id, recap);
+  }
+
+  // Awards compare the whole cohort, so they only run on a season build.
+  const awards = rankActions && canRank ? assignAwards([...result.values()]) : null;
+  for (const [id, recap] of result) {
+    try {
+      recap.awards = awards?.get(id) ?? [];
+      recap.persona = buildPersona(recap);
+    } catch (err) {
+      log(
+        `season recap: persona ${requireComplete ? "build failed" : "skipped"} (${err instanceof Error ? err.message : String(err)})`
+      );
+      if (requireComplete) throw err;
+    }
   }
 
   return result;

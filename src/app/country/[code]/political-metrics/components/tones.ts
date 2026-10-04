@@ -1,49 +1,16 @@
 /**
- * Semantic-token tone maps for the political-metrics registry.
+ * Semantic-token tone maps for the political-metrics dashboard.
  *
- * The registry's own views spend colour only where it means something:
- * `statusTextClass` for a bad status word and `healthTone` for democratic
- * health in its penalty range. Everything else stays neutral.
- *
- * `scoreTone` and `leanTone` are the older per-band ramps. The region compare
- * view and `LeanChip` still use them, so they stay exported unchanged.
+ * Score tone = objective performance (status bands). Lean tone = political
+ * association only (left ↔ right), deliberately expressed through the game's
+ * secondary (blue) / primary (red) identity at graded opacity, never a
+ * good/bad ramp, per the catalog's "association, not quality" rule.
  */
-
-import { DEMOCRATIC_HEALTH_FALLOUT_THRESHOLD } from "@/lib/governanceStyle/rules/democraticConsequences";
 
 export interface Tone {
   text: string;
   bg: string;
   border: string;
-}
-
-/**
- * Text colour for a status word ("Stable", "Strained" and so on, from
- * STATUS_BANDS). Keyed by the word itself rather than the score, so the colour
- * can never disagree with the word printed beside it at a band edge. Only the
- * genuinely bad bands are coloured: amber (the warning tone) for Strained and
- * Weak, red for Critical. Stable, Strong and Exceptional stay neutral.
- */
-export function statusTextClass(status: string): string {
-  if (status === "Critical") return "text-error";
-  if (status === "Weak" || status === "Strained") return "text-warning";
-  return "text-foreground";
-}
-
-/** Below this, democratic health reads as a failed state (see democraticHealthLabel). */
-const FAILED_STATE_BELOW = 20;
-
-/**
- * Democratic health colour. Neutral while no penalty applies; amber once the
- * score is in the penalty range (below the fallout threshold of 60); red at
- * failed-state level.
- */
-export function healthTone(value: number): { text: string; marker: string } {
-  if (value < FAILED_STATE_BELOW) return { text: "text-error", marker: "bg-error" };
-  if (value < DEMOCRATIC_HEALTH_FALLOUT_THRESHOLD) {
-    return { text: "text-warning", marker: "bg-warning" };
-  }
-  return { text: "text-foreground", marker: "bg-foreground" };
 }
 
 /** Status-band tone (thresholds match STATUS_BANDS in the catalog). */
@@ -66,7 +33,7 @@ export function scoreTone(score: number): Tone {
   return { text: "text-error", bg: "bg-error", border: "border-error" };
 }
 
-/** Political-association tone: blue (left), muted (mixed), red (right). */
+/** Political-association tone: blue (left) ↔ muted (mixed) ↔ red (right). */
 export function leanTone(lean: number): Tone {
   if (lean <= -5)
     return { text: "text-secondary", bg: "bg-secondary/15", border: "border-secondary" };

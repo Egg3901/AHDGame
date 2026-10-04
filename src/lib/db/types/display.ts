@@ -45,6 +45,7 @@ export interface ElectionDisplay {
   };
   /** Frozen first-Duma binding, used to show national list filing. */
   russianDumaRound?: { cohortId: string; mandateSinceTurn: number; tier: "constituency" | "list" };
+  allocationMethod?: import("@/lib/constants/countries").ElectionMethod;
   senateClass?: number;
   chamberClass?: number;
   cycle: number;

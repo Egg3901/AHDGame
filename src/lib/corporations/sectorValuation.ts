@@ -71,6 +71,7 @@ export function computeSectorListingValuation(
   bookFloor?: {
     sector: SectorBookValueInput;
     currentYear: number | null | undefined;
+    currentTurn?: number | null;
     /** The world's era unit-basis scale (`getEraUnitScale(preset)`). */
     eraUnitScale: number;
   },
@@ -111,7 +112,12 @@ export function computeSectorListingValuation(
   const bookAnchor =
     plantsEnabled && bookFloor
       ? Math.round(
-          sectorBookValueAnchor(bookFloor.sector, bookFloor.currentYear, bookFloor.eraUnitScale)
+          sectorBookValueAnchor(
+            bookFloor.sector,
+            bookFloor.currentYear,
+            bookFloor.eraUnitScale,
+            bookFloor.currentTurn
+          )
         )
       : 0;
   const priceAnchor = Math.max(earningsPriceAnchor, bookAnchor);

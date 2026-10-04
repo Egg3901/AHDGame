@@ -1,6 +1,6 @@
 "use client";
 
-import { sentenceCase } from "./labels";
+import { scoreTone } from "./tones";
 
 export interface LeanStripMetric {
   id: string;
@@ -12,10 +12,9 @@ export interface LeanStripMetric {
 }
 
 /**
- * A category's seven metrics as bars in lean order, left to right. Bar
- * position is political association; bar height is the objective score. The
- * two are independent by design, and every bar is the same neutral colour so
- * the height alone carries the score. Each bar opens its metric.
+ * The dashboard's signature element: seven mini-bars in lean order (-5 → +5).
+ * Bar POSITION = political association; bar HEIGHT + COLOR = objective score.
+ * The two are independent by design.
  */
 export function LeanStrip({
   metrics,
@@ -26,16 +25,14 @@ export function LeanStrip({
   onOpenMetric: (metricId: string) => void;
   size?: "sm" | "lg";
 }) {
-  const trackH = size === "lg" ? 40 : 22;
-  const barW = size === "lg" ? "w-4" : "w-2";
-  // The large strip spans its column so the first, middle and last bars sit
-  // over the "Strong left", "Mixed" and "Strong right" labels beneath it.
-  const layout = size === "lg" ? "w-full justify-between" : "gap-1.5";
+  const trackH = size === "lg" ? 34 : 22;
+  const barW = size === "lg" ? "w-3" : "w-2";
   return (
-    <div className={`flex items-end ${layout}`} aria-label="Ideological range, left to right">
+    <div className="flex items-end gap-1.5" aria-label="Ideological range, left to right">
+      <span className="self-end font-mono text-body-sm leading-relaxed text-muted">L</span>
       {metrics.map((m) => {
-        const h = Math.max(2, Math.round((Math.max(0, Math.min(100, m.value)) / 100) * trackH));
-        const label = `${m.displayName}: score ${Math.round(m.value)}, ${m.status}, lean ${sentenceCase(m.leanLabel)}`;
+        const h = Math.max(2, Math.round((m.value / 100) * trackH));
+        const tone = scoreTone(m.value);
         return (
           <button
             key={m.id}
@@ -44,19 +41,20 @@ export function LeanStrip({
               e.stopPropagation();
               onOpenMetric(m.id);
             }}
-            title={label}
-            aria-label={label}
+            title={`${m.displayName}: score ${Math.round(m.value)} (${m.status}) · lean ${m.leanLabel}`}
+            aria-label={`${m.displayName}, score ${Math.round(m.value)}, ${m.status}, lean ${m.leanLabel}`}
             className="flex cursor-pointer items-end border-0 bg-transparent p-0"
           >
             <span
-              className={`flex items-end rounded-[1px] bg-card-border ${barW}`}
+              className={`flex items-end rounded-[1px] bg-track ${barW}`}
               style={{ height: trackH }}
             >
-              <span className="block w-full rounded-[1px] bg-foreground/60" style={{ height: h }} />
+              <span className={`block w-full rounded-[1px] ${tone.bg}`} style={{ height: h }} />
             </span>
           </button>
         );
       })}
+      <span className="self-end font-mono text-body-sm leading-relaxed text-muted">R</span>
     </div>
   );
 }

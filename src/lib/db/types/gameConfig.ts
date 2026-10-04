@@ -196,6 +196,8 @@ export interface GameConfig {
    * read-only freeze: pages render, no actions accepted, nothing unwinds.
    */
   privateBankingEnabled?: boolean;
+  /** Enable funded sovereign-bill holdings for private bank treasuries. Default off. */
+  bankTreasuryEnabled?: boolean;
   /**
    * Gate on player-chartered ADVANCED bank types. When absent/false, players may
    * only charter (or switch to) a RETAIL bank; investment and universal charters
@@ -474,6 +476,8 @@ export interface GameConfig {
    * See src/lib/market/clearing.ts (qualityPremiumMultiplier).
    */
   qualityPremiumPricingEnabled?: boolean;
+  /** Fresh-world explicit plant overhead. Default off preserves legacy residuals. */
+  explicitPlantCostsEnabled?: boolean;
   /**
    * Private supply agreements. When true, active bilateral supply contracts are
    * fulfilled in a contracted pre-pass before the loyal-slice and cheapest-first

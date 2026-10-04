@@ -15,6 +15,7 @@ import {
   mergeSectorPlantFields,
   readSectorPlantFields,
 } from "@/lib/corporations/sectorTransferCapex";
+import { seedPlantLedger } from "@/lib/corporations/plantLedger";
 
 const DEFAULT_PROFIT_MARGIN = 20;
 const DEFAULT_GROWTH_RATE = 1;
@@ -125,7 +126,12 @@ export async function incrementNatCorpSectorRevenue(
           revenue: revenueDeltaLocal,
           ...(capacityUnitsDelta > 0 ? { capitalStock: capacityUnitsDelta } : {}),
         },
-        $set: { updatedAt: now },
+        $set: {
+          ...(capacityUnitsDelta > 0
+            ? seedPlantLedger(params.sectorType, (existing.capitalStock ?? 0) + capacityUnitsDelta)
+            : {}),
+          updatedAt: now,
+        },
       }
     );
     return "inc";
@@ -139,6 +145,7 @@ export async function incrementNatCorpSectorRevenue(
     sectorType: params.sectorType,
     revenue: revenueDeltaLocal,
     ...(capacityUnitsDelta > 0 ? { capitalStock: capacityUnitsDelta } : {}),
+    ...(capacityUnitsDelta > 0 ? seedPlantLedger(params.sectorType, capacityUnitsDelta) : {}),
     workers: 0,
     profitMargin: DEFAULT_PROFIT_MARGIN,
     targetGrowthRate: DEFAULT_GROWTH_RATE,
@@ -230,7 +237,6 @@ export async function absorbOwnedSectorIntoNatCorp(
           projection: {
             capitalStock: 1,
             buildQueue: 1,
-            constructionInProgressAnchor: 1,
             mothballed: 1,
             activeCapacityPercent: 1,
             plantsStartTurn: 1,
@@ -245,8 +251,6 @@ export async function absorbOwnedSectorIntoNatCorp(
       const p = readSectorPlantFields(donorPlant);
       return (
         (typeof p.capitalStock === "number" && p.capitalStock > 0) ||
-        (typeof p.constructionInProgressAnchor === "number" &&
-          p.constructionInProgressAnchor > 0) ||
         (Array.isArray(p.buildQueue) && p.buildQueue.length > 0)
       );
     })();
@@ -273,9 +277,9 @@ export async function absorbOwnedSectorIntoNatCorp(
     // MERGE — the donor row is DELETED immediately below, so anything not
     // folded into the survivor here is destroyed. The revenue/worker/growth
     // legs were folded; the PLANT state was not, so under plants every merged
-    // heal silently burned the donor's capacity and the ₳ sitting in its CIP.
-    // `mergeSectorPlantFields` sums capacity and CIP, concatenates the queues in
-    // landing order, ANDs `mothballed` and keeps the EARLIER ramp anchor —
+    // heal silently burned the donor's capacity and queued build costs.
+    // `mergeSectorPlantFields` sums capacity, concatenates the queues in landing
+    // order, ANDs `mothballed` and keeps the EARLIER ramp anchor.
     // the same fold `ownershipTransition` and `repairDuplicateSectors` use.
     const merged =
       plantsEnabled && donorPlant
@@ -290,12 +294,7 @@ export async function absorbOwnedSectorIntoNatCorp(
           currentGrowthCost: sector.currentGrowthCost ?? 0,
         },
         $set: {
-          ...(merged
-            ? {
-                ...merged,
-                constructionInProgressAnchor: Math.round(merged.constructionInProgressAnchor),
-              }
-            : {}),
+          ...(merged ? { ...merged } : {}),
           updatedAt: now,
         },
       }

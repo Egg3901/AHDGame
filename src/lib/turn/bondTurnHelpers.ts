@@ -168,6 +168,7 @@ export async function filterInsolventCorps(
       bonds: ctx.activeBonds,
       plantsEnabled,
       currentYear: gameState?.currentYear,
+      currentTurn: gameState?.currentTurn,
       eraUnitScale,
     });
 

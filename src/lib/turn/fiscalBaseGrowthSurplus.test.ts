@@ -28,6 +28,7 @@ type Doc = Record<string, unknown>;
 function getPath(doc: Doc, path: string): unknown {
   let cur: unknown = doc;
   for (const part of path.split(".")) {
+    if (part === "__proto__" || part === "constructor" || part === "prototype") return undefined;
     if (cur == null || typeof cur !== "object") return undefined;
     cur = (cur as Doc)[part];
   }
@@ -36,13 +37,20 @@ function getPath(doc: Doc, path: string): unknown {
 
 function setPath(doc: Doc, path: string, value: unknown): void {
   const parts = path.split(".");
-  let cur: Doc = doc;
-  for (let i = 0; i < parts.length - 1; i++) {
-    const v = cur[parts[i]];
-    if (v == null || typeof v !== "object") cur[parts[i]] = {};
-    cur = cur[parts[i]] as Doc;
+  for (const part of parts) {
+    if (part === "__proto__" || part === "constructor" || part === "prototype") return;
   }
-  cur[parts[parts.length - 1]] = value;
+  let current = doc;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const key = parts[i];
+    if (key === "__proto__" || key === "constructor" || key === "prototype") return;
+    const existing = current[key];
+    if (existing === null || typeof existing !== "object") {
+      current[key] = /^(0|[1-9]\d*)$/.test(parts[i + 1]) ? [] : {};
+    }
+    current = current[key] as Record<string, unknown>;
+  }
+  current[parts[parts.length - 1]] = value;
 }
 
 function matchOp(value: unknown, op: string, operand: unknown): boolean {
@@ -126,6 +134,14 @@ function applyUpdate(doc: Doc, update: Doc): void {
   if (update.$unset) {
     for (const k of Object.keys(update.$unset as Doc)) {
       const parts = k.split(".");
+      let hasUnsafePart = false;
+      for (const part of parts) {
+        if (part === "__proto__" || part === "constructor" || part === "prototype") {
+          hasUnsafePart = true;
+          break;
+        }
+      }
+      if (hasUnsafePart) continue;
       let cur: unknown = doc;
       for (let i = 0; i < parts.length - 1; i++) cur = (cur as Doc)?.[parts[i]];
       if (cur != null && typeof cur === "object") delete (cur as Doc)[parts[parts.length - 1]];

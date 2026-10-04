@@ -1,6 +1,6 @@
 import type { ObjectId } from "mongodb";
 import type { SenateClass } from "./officials";
-import type { CountryId } from "../../constants/countries";
+import type { CountryId, ElectionMethod } from "../../constants/countries";
 
 /**
  * Known US election types. Still valid values for `Election.electionType`.
@@ -37,6 +37,8 @@ export interface Election {
     districtId: string;
     registeredVoters: number;
   };
+  /** Allocation rule fixed when the race opens, so reform only changes later races. */
+  allocationMethod?: ElectionMethod;
   /** Missing means legacy campaigning for this entire race. */
   campaignRulesVersion?: number;
   _id: ObjectId;
@@ -184,6 +186,8 @@ export interface ElectionCandidate {
   targetedAdsRevision?: number;
   _id: ObjectId;
   electionId: ObjectId;
+  /** Hungarian post-2014 National Assembly district selected at filing. */
+  constituencyId?: string;
   /** Denormalized from Election.countryId so party IDs are not ambiguous across countries. */
   countryId?: CountryId;
   characterId: ObjectId;

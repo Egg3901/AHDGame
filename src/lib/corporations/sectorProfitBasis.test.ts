@@ -160,6 +160,29 @@ describe("sectorBookValueAnchor (D11)", () => {
     expect(withCip - built).toBeCloseTo(1_000, 8);
   });
 
+  it("values the loaded queue instead of a stale CIP mirror", () => {
+    const value = sectorBookValueAnchor(
+      {
+        sectorType: "retail",
+        capitalStock: 0,
+        constructionInProgressAnchor: 9_000,
+        buildQueue: [
+          {
+            unitsOrdered: 10,
+            costPaidAnchor: 1_000,
+            startTurn: 10,
+            onlineTurn: 20,
+            smooth: true,
+          },
+        ],
+      },
+      CAPACITY_ANCHOR_YEAR,
+      1,
+      15
+    );
+    expect(value).toBe(500);
+  });
+
   it("is zero for a sector with no capacity and nothing in flight", () => {
     expect(sectorBookValueAnchor({ sectorType: "retail" }, CAPACITY_ANCHOR_YEAR, 1)).toBe(0);
     expect(

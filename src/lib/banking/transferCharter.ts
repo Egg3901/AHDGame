@@ -25,16 +25,19 @@ const NO_COUNTS = {
 } as const;
 
 /**
- * Player-facing reason a merge cannot proceed: the target operates a live bank
- * while the acquirer already holds a charter. A corporation carries a single
- * `bankCharter` sub-document, so there is nowhere to put the second bank.
- * Shared by the pre-money-move guards so every merge path reports the same
- * message. Returns null when there is no conflict.
+ * Player-facing reason a merge cannot proceed: funded sovereign cash is still
+ * unsettled, or the target operates a live bank while the acquirer already
+ * holds a charter. A corporation carries one `bankCharter` subdocument, so
+ * there is nowhere to put a second bank. Shared by pre-money-move guards so
+ * every merge path reports the same message. Returns null when clear.
  */
 export function bankTransferConflict(
-  target: Pick<Corporation, "name" | "bankCharter">,
+  target: Pick<Corporation, "name" | "bankCharter" | "bankSovereignEscrows">,
   acquirer: Pick<Corporation, "name" | "bankCharter">
 ): string | null {
+  if (hasFundedSovereignEscrow(target)) {
+    return `Cannot merge ${target.name} while funded sovereign bank payments remain unsettled.`;
+  }
   if (target.bankCharter?.status === "active" && acquirer.bankCharter) {
     return (
       `Cannot merge ${target.name}: ${acquirer.name} already operates a bank. ` +
@@ -42,6 +45,14 @@ export function bankTransferConflict(
     );
   }
   return null;
+}
+
+export function hasFundedSovereignEscrow(
+  corporation: Pick<Corporation, "bankSovereignEscrows">
+): boolean {
+  return Object.values(corporation.bankSovereignEscrows ?? {}).some(
+    (escrow) => !Number.isFinite(escrow.amountLocal) || escrow.amountLocal !== 0
+  );
 }
 
 function sameId(a: ObjectId, b: ObjectId): boolean {
@@ -314,7 +325,14 @@ export async function transferBankCharterToAcquirer(
   const [target, acquirer] = await Promise.all([
     corps.findOne(
       { _id: targetId },
-      { projection: { name: 1, bankCharter: 1, bankCharterTransfer: 1 } }
+      {
+        projection: {
+          name: 1,
+          bankCharter: 1,
+          bankSovereignEscrows: 1,
+          bankCharterTransfer: 1,
+        },
+      }
     ),
     corps.findOne(
       { _id: acquirerId },

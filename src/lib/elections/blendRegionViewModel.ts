@@ -334,12 +334,14 @@ export function isMultiSeatRace(
     return true;
   }
   const method =
+    election.allocationMethod ??
     getElectionMethod(
       election.countryId as CountryId | undefined,
       election.electionType,
       preset,
       election.cycle
-    ) ?? getElectionMethod(countryId, election.electionType, preset, election.cycle);
+    ) ??
+    getElectionMethod(countryId, election.electionType, preset, election.cycle);
   if (!method) return (election.totalSeats ?? 1) > 1;
   return isMultiSeatMethod(method);
 }
@@ -350,12 +352,14 @@ function methodOf(
   preset?: string
 ): ElectionMethod | undefined {
   return (
+    election.allocationMethod ??
     getElectionMethod(
       election.countryId as CountryId | undefined,
       election.electionType,
       preset,
       election.cycle
-    ) ?? getElectionMethod(countryId, election.electionType, preset, election.cycle)
+    ) ??
+    getElectionMethod(countryId, election.electionType, preset, election.cycle)
   );
 }
 
