@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { processTurn } from "@/lib/turnSystem";
 
 // POST /api/admin/turn/process — Manually triggers a single game turn and returns the result with timing.
@@ -18,7 +18,7 @@ export async function POST() {
 
     // Critical failure: turn didn't advance at all
     if (result.turn === 0) {
-      return NextResponse.json({ error: result.message }, { status: 500 });
+      return errorResponse(500, result.message);
     }
 
     // Turn processed (possibly with phase warnings)

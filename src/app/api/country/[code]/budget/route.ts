@@ -13,7 +13,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireHumanSessionWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -81,10 +81,10 @@ async function resolveFiscalYear(db: Awaited<ReturnType<typeof getDb>>): Promise
 async function resolveContext(request: Request, code: string) {
   const countryId = code.toUpperCase() as CountryId;
   if (!COUNTRY_CONFIGS[countryId]) {
-    return { error: NextResponse.json({ error: "Invalid country" }, { status: 400 }) };
+    return { error: errorResponse(400, "Invalid country") };
   }
   if (countryId !== "UK") {
-    return { error: NextResponse.json({ error: "The Budget is UK-only" }, { status: 400 }) };
+    return { error: errorResponse(400, "The Budget is UK-only") };
   }
   const auth = await requireHumanSessionWithCharacter(request);
   if (!auth.ok) return { error: auth.response };
@@ -204,12 +204,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     if (!rl.ok) return rateLimitResponse(rl.retryAfter);
 
     if (!ctx.isChancellor && !ctx.isActingChancellor) {
-      return NextResponse.json(
-        {
-          error:
-            "Only the Chancellor, or the Prime Minister while that office is vacant, can author the Budget",
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "Only the Chancellor, or the Prime Minister while that office is vacant, can author the Budget"
       );
     }
 
@@ -220,7 +217,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     const { taxRates, programLevels, action } = parsed.data;
 
     const valid = validateBudget({ taxRates, programLevels });
-    if (!valid.ok) return NextResponse.json({ error: valid.error }, { status: 400 });
+    if (!valid.ok) return errorResponse(400, valid.error);
 
     if (action === "preview") {
       const preview = await previewAnnualBudget(ctx.db, { taxRates, programLevels });
@@ -235,11 +232,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       programLevels,
       now,
     });
-    if (!draft.ok) return NextResponse.json({ error: draft.error }, { status: 409 });
+    if (!draft.ok) return errorResponse(409, draft.error);
 
     if (action === "table") {
       const compiled = await buildAnnualBudgetProvisions(ctx.db, { taxRates, programLevels });
-      if (!compiled.ok) return NextResponse.json({ error: compiled.error }, { status: 400 });
+      if (!compiled.ok) return errorResponse(400, compiled.error);
       const gameState = await getGameState(ctx.db);
       const tabled = await tableBudgetWithBill(ctx.db, {
         fiscalYear: ctx.fiscalYear,
@@ -250,7 +247,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
         now,
         provisions: compiled.provisions,
       });
-      if (!tabled.ok) return NextResponse.json({ error: tabled.error }, { status: 400 });
+      if (!tabled.ok) return errorResponse(400, tabled.error);
       // Hand the client the vote-vehicle bill id so the panel can link straight
       // to the Commons vote (ticket #1268).
       return NextResponse.json({

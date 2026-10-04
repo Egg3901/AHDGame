@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody, schemas } from "@/lib/api/validate";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
@@ -43,10 +43,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const corpGuard = await requireCorporationActionsEnabled(db);
     if (corpGuard) return corpGuard;
     if (!(await isSubsidiaryCorporationsEnabled())) {
-      return NextResponse.json(
-        { error: "Subsidiary corporations are not enabled." },
-        { status: 403 }
-      );
+      return errorResponse(403, "Subsidiary corporations are not enabled.");
     }
 
     const parsed = await parseJsonBody(request, bodySchema);
@@ -54,7 +51,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
 
     if (!(CORPORATION_TYPES as readonly string[]).includes(parsed.data.sectorType)) {
-      return NextResponse.json({ error: "Invalid sector type." }, { status: 400 });
+      return errorResponse(400, "Invalid sector type.");
     }
 
     const { id } = await params;

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import type { Character, Corporation, ShareOrder, User } from "@/lib/db/types";
 import type { ImperialCharacter } from "@/lib/db/types/imperialCharacter";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -34,7 +34,7 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
     const db = await getDb();
 
     if (!ObjectId.isValid(orderId)) {
-      return NextResponse.json({ error: "Invalid order ID" }, { status: 400 });
+      return errorResponse(400, "Invalid order ID");
     }
 
     const order = await db
@@ -42,11 +42,11 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
       .findOne({ _id: new ObjectId(orderId) });
 
     if (!order) {
-      return NextResponse.json({ error: "Order not found" }, { status: 404 });
+      return errorResponse(404, "Order not found");
     }
 
     if (order.status !== "open") {
-      return NextResponse.json({ error: "Order is not open" }, { status: 400 });
+      return errorResponse(400, "Order is not open");
     }
 
     // Resolve character (regular or imperial)
@@ -64,7 +64,7 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
         userId: new ObjectId(auth.user.userId),
       });
       if (!imperial) {
-        return NextResponse.json({ error: "Imperial character not found" }, { status: 404 });
+        return errorResponse(404, "Imperial character not found");
       }
       charId = imperial._id;
     } else {
@@ -73,7 +73,7 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
         : { userId: new ObjectId(auth.user.userId) };
       const character = await db.collection<Character>("characters").findOne(characterQuery);
       if (!character) {
-        return NextResponse.json({ error: "Character not found" }, { status: 404 });
+        return errorResponse(404, "Character not found");
       }
       charId = character._id;
     }
@@ -85,7 +85,7 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
         .findOne({ _id: order.placerCorporationId }, { projection: { ceoId: 1, ceoVacant: 1 } });
     }
     if (!actorMayCancelShareOrder(order, charId, placerCorp)) {
-      return NextResponse.json({ error: "Not your order" }, { status: 403 });
+      return errorResponse(403, "Not your order");
     }
 
     const result = await cancelShareOrderAndRefund(db, order);

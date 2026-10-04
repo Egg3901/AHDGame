@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody, schemas } from "@/lib/api/validate";
-import { handleRouteError, notFound, badRequest } from "@/lib/api/errors";
+import { handleRouteError, notFound, badRequest, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
@@ -75,7 +75,7 @@ export async function POST(request: Request) {
     );
 
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: 400 });
+      return errorResponse(400, result.error);
     }
 
     return NextResponse.json({

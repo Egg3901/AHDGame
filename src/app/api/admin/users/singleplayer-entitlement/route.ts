@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { getDb } from "@/lib/mongodb";
 import { createAdminLog } from "@/lib/adminLog";
@@ -22,7 +22,7 @@ export async function PATCH(request: Request) {
     const db = await getDb();
     const _id = new ObjectId(userId);
     const user = await db.collection("users").findOne({ _id }, { projection: { username: 1 } });
-    if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+    if (!user) return errorResponse(404, "User not found");
 
     await db.collection("users").updateOne(
       { _id },

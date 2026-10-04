@@ -10,7 +10,7 @@ import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { getAuthUser } from "@/lib/auth";
 import { resolveBillCountryId } from "@/lib/congress/resolveBillCountryId";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, CONGRESS_LIMITS, rateLimitResponse } from "@/lib/api/rateLimit";
 import { logRequest } from "@/lib/api/requestLog";
 import { billActionSchema } from "@/lib/api/schemas/congress";
@@ -25,13 +25,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   try {
     const { id } = await params;
     if (!ObjectId.isValid(id)) {
-      return NextResponse.json({ error: "Invalid bill ID" }, { status: 400 });
+      return errorResponse(400, "Invalid bill ID");
     }
 
     const [db, authUser] = await Promise.all([getDb(), getAuthUser().catch(() => null)]);
     const bill = await getNationalBillDetail(db, id, authUser);
     if (!bill) {
-      return NextResponse.json({ error: "Bill not found" }, { status: 404 });
+      return errorResponse(404, "Bill not found");
     }
 
     return NextResponse.json(bill);
@@ -50,7 +50,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const { id } = await params;
     if (!ObjectId.isValid(id)) {
       logRequest("POST", path, 400, Date.now() - start);
-      return NextResponse.json({ error: "Invalid bill ID" }, { status: 400 });
+      return errorResponse(400, "Invalid bill ID");
     }
 
     const auth = await requireBasicAuth();
@@ -75,13 +75,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       .findOne({ userId: new ObjectId(auth.user.userId) });
     if (!character) {
       logRequest("POST", path, 400, Date.now() - start);
-      return NextResponse.json({ error: "No character" }, { status: 400 });
+      return errorResponse(400, "No character");
     }
 
     const bill = await db.collection<Bill>("bills").findOne({ _id: new ObjectId(id) });
     if (!bill) {
       logRequest("POST", path, 404, Date.now() - start);
-      return NextResponse.json({ error: "Bill not found" }, { status: 404 });
+      return errorResponse(404, "Bill not found");
     }
 
     const parsed = await parseJsonBody(request, billActionSchema);

@@ -8,7 +8,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import type { CommodityPrice } from "@/lib/db/types";
 
 const schema = z.object({ price: z.number().positive() });
@@ -34,8 +34,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ typ
         },
       });
 
-    if (result.matchedCount === 0)
-      return NextResponse.json({ error: "Commodity not found" }, { status: 404 });
+    if (result.matchedCount === 0) return errorResponse(404, "Commodity not found");
 
     return NextResponse.json({ success: true, hardPeg: parsed.data.price });
   } catch (error) {
@@ -57,8 +56,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
         $set: { updatedAt: new Date() },
       });
 
-    if (result.matchedCount === 0)
-      return NextResponse.json({ error: "Commodity not found" }, { status: 404 });
+    if (result.matchedCount === 0) return errorResponse(404, "Commodity not found");
 
     return NextResponse.json({ success: true });
   } catch (error) {

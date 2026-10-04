@@ -5,7 +5,7 @@ import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
 import { parseJsonBody } from "@/lib/api/validate";
 import { sellBondSchema } from "@/lib/api/schemas/bonds";
-import { badRequest, handleRouteError, notFound } from "@/lib/api/errors";
+import { badRequest, handleRouteError, notFound, errorResponse } from "@/lib/api/errors";
 import type { Bond, Character, Corporation, ExchangeRate, User } from "@/lib/db/types";
 import type { ImperialCharacter } from "@/lib/db/types/imperialCharacter";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -401,11 +401,11 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const bond = await db.collection<Bond>("bonds").findOne({ _id: new ObjectId(bondId) });
     if (!bond) {
-      return NextResponse.json({ error: "Bond not found" }, { status: 404 });
+      return errorResponse(404, "Bond not found");
     }
 
     if (bond.defaulted) {
-      return NextResponse.json({ error: "Cannot sell a defaulted bond" }, { status: 400 });
+      return errorResponse(400, "Cannot sell a defaulted bond");
     }
 
     // Bond denomination — canonical key is `bond.currencyCode` (Task-18B); we
@@ -462,13 +462,10 @@ export async function POST(request: Request, { params }: RouteParams) {
         .collection<Corporation>("corporations")
         .findOne({ _id: new ObjectId(sellAsCorp) });
       if (!corp) {
-        return NextResponse.json({ error: "Corporation not found" }, { status: 404 });
+        return errorResponse(404, "Corporation not found");
       }
       if (corp.userId?.toString() !== user.userId) {
-        return NextResponse.json(
-          { error: "Only the CEO can sell bonds for a corporation" },
-          { status: 403 }
-        );
+        return errorResponse(403, "Only the CEO can sell bonds for a corporation");
       }
 
       const bondRateDoc = await db
@@ -604,7 +601,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         userId: new ObjectId(user.userId),
       });
       if (!imperial) {
-        return NextResponse.json({ error: "Imperial character not found" }, { status: 404 });
+        return errorResponse(404, "Imperial character not found");
       }
 
       const claimFilter = {
@@ -727,7 +724,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       : { userId: new ObjectId(user.userId) };
     const character = await db.collection<Character>("characters").findOne(characterQuery);
     if (!character) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
 
     const claimFilter = {

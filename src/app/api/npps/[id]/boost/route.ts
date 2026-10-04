@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
@@ -28,7 +28,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     const myCharacter = await getCharacterByUserId(db, user.userId);
 
     if (!myCharacter) {
-      return NextResponse.json({ error: "You need a character to boost NPPs" }, { status: 400 });
+      return errorResponse(400, "You need a character to boost NPPs");
     }
 
     const { info, error } = await getSimpleInfluenceInfo(
@@ -72,7 +72,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const myCharacter = await getCharacterByUserId(db, user.userId);
 
     if (!myCharacter) {
-      return NextResponse.json({ error: "You need a character to boost NPPs" }, { status: 400 });
+      return errorResponse(400, "You need a character to boost NPPs");
     }
 
     const { result, error } = await executeSimpleInfluence(

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
@@ -38,7 +38,7 @@ export async function PATCH(request: Request) {
       }
     );
     if (!userDoc) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return errorResponse(404, "User not found");
     }
 
     const update = { $set: { displayCurrencyPreference, updatedAt: new Date() } };
@@ -60,7 +60,7 @@ export async function PATCH(request: Request) {
     }
 
     if (matchedCount === 0) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
 
     return NextResponse.json({ success: true });

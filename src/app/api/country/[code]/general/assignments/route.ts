@@ -8,7 +8,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireCommandingGeneral } from "@/lib/api/requireCommandingGeneral";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getGameStateCollection } from "@/lib/db/collections/gameState";
@@ -39,7 +39,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
 
     const db = await getDb();
@@ -47,7 +47,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
       await getGameStateCollection(db)
     ).findOne({ _id: "current" }, { projection: { conflictsEnabled: 1 } });
     if (!gs?.conflictsEnabled) {
-      return NextResponse.json({ error: "Conflicts subsystem disabled" }, { status: 404 });
+      return errorResponse(404, "Conflicts subsystem disabled");
     }
 
     const characterId = auth.user.character?._id?.toString() ?? null;
@@ -63,10 +63,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
     // A CG commands their own Command, not the whole army.
     const ownGenerals = new Set(cg.command.commanderIds);
     if (submitted.some((a) => !ownGenerals.has(a.generalCharacterId))) {
-      return NextResponse.json(
-        { error: "You can post only the generals of your own command." },
-        { status: 400 }
-      );
+      return errorResponse(400, "You can post only the generals of your own command.");
     }
 
     // Every posting must name a live conflict (or homeland reserve) — conflicts are
@@ -74,18 +71,15 @@ export async function PUT(request: Request, { params }: RouteParams) {
     for (const a of submitted) {
       const verdict = await verifyPosting(db, countryId, a.theaterId);
       if (verdict === "unknown-theatre") {
-        return NextResponse.json(
-          { error: "That conflict is no longer live — a general cannot be posted to it." },
-          { status: 400 }
+        return errorResponse(
+          400,
+          "That conflict is no longer live — a general cannot be posted to it."
         );
       }
       if (verdict === "not-a-belligerent") {
-        return NextResponse.json(
-          {
-            error:
-              "Your nation is not a belligerent in that conflict. Entry is decided by a bloc resolution and a vote of your legislature.",
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          "Your nation is not a belligerent in that conflict. Entry is decided by a bloc resolution and a vote of your legislature."
         );
       }
     }

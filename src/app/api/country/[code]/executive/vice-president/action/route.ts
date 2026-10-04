@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { ElectedOfficial, Character } from "@/lib/db/types";
 import {
@@ -36,7 +36,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
 
     const parsed = await parseJsonBody(request, actionSchema);
@@ -54,10 +54,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       !!auth.user.character &&
       vpOfficial.characterId.toString() === auth.user.character._id.toString();
     if (!isSeatedVp) {
-      return NextResponse.json(
-        { error: "Only the sitting vice-president can take this action" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the sitting vice-president can take this action");
     }
 
     // Backfill missing action fields on legacy VP docs. Pre-#67 seatings lack
@@ -77,7 +74,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const actionsRemaining = vpOfficial!.vpActionsRemaining ?? 0;
     if (actionsRemaining < 1) {
-      return NextResponse.json({ error: "No vice-president actions remaining" }, { status: 400 });
+      return errorResponse(400, "No vice-president actions remaining");
     }
 
     const charactersCol = db.collection<Character>("characters");
@@ -88,17 +85,14 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (actionId === "surrogate_address") {
       const presidentOfficial = await officialsCol.findOne({ countryId, officeType: "president" });
       if (!presidentOfficial?.characterId) {
-        return NextResponse.json(
-          { error: "There is no sitting president to campaign for" },
-          { status: 400 }
-        );
+        return errorResponse(400, "There is no sitting president to campaign for");
       }
       targetCharId = presidentOfficial.characterId;
     }
 
     const targetChar = await charactersCol.findOne({ _id: targetCharId });
     if (!targetChar) {
-      return NextResponse.json({ error: "Target office holder not found" }, { status: 404 });
+      return errorResponse(404, "Target office holder not found");
     }
 
     // Spend one action atomically (guards against a double-submit race).
@@ -107,7 +101,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       { $inc: { vpActionsRemaining: -1 } }
     );
     if (spend.modifiedCount === 0) {
-      return NextResponse.json({ error: "No vice-president actions remaining" }, { status: 409 });
+      return errorResponse(409, "No vice-president actions remaining");
     }
 
     try {

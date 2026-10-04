@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireModerator } from "@/lib/api/requireModerator";
 import { getPlayerBannerAdsCollection } from "@/lib/db/collections/playerBannerAds";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { createModAuditLog } from "@/lib/modAuditLog";
 import { parseJsonBody } from "@/lib/api/validate";
 import { z } from "zod";
@@ -23,7 +23,7 @@ export async function DELETE(_request: Request, { params }: RouteContext) {
 
     const { id } = await params;
     if (!ObjectId.isValid(id)) {
-      return NextResponse.json({ error: "Invalid ad ID." }, { status: 400 });
+      return errorResponse(400, "Invalid ad ID.");
     }
 
     const ads = await getPlayerBannerAdsCollection();
@@ -32,7 +32,7 @@ export async function DELETE(_request: Request, { params }: RouteContext) {
       { projection: { imageUrl: 1, characterName: 1, userId: 1 } }
     );
     if (!ad) {
-      return NextResponse.json({ error: "Ad not found." }, { status: 404 });
+      return errorResponse(404, "Ad not found.");
     }
 
     await ads.deleteOne({ _id: new ObjectId(id) });
@@ -78,7 +78,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
 
     const { id } = await params;
     if (!ObjectId.isValid(id)) {
-      return NextResponse.json({ error: "Invalid ad ID." }, { status: 400 });
+      return errorResponse(400, "Invalid ad ID.");
     }
 
     const parsed = await parseJsonBody(request, patchSchema);
@@ -92,7 +92,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       { projection: { characterName: 1, userId: 1 } }
     );
     if (!ad) {
-      return NextResponse.json({ error: "Ad not found." }, { status: 404 });
+      return errorResponse(404, "Ad not found.");
     }
 
     await ads.updateOne({ _id: new ObjectId(id) }, { $set: { isActive: parsed.data.isActive } });

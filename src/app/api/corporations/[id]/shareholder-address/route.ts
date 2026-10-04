@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { rateLimitResponse } from "@/lib/api/rateLimit";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import { createNotification } from "@/lib/notifications";
@@ -35,10 +35,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     // Must be CEO
     if (!corporation.ceoId.equals(character._id)) {
-      return NextResponse.json(
-        { error: "Only the CEO can send a shareholder address" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the CEO can send a shareholder address");
     }
 
     // Cooldown check

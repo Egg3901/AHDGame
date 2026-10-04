@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireConfirmedSecretary } from "@/lib/api/requireConfirmedSecretary";
 import { getCabinetMechanics } from "@/lib/constants/cabinetMechanics";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -42,12 +42,12 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, positionId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
 
     const mechanics = getCabinetMechanics(countryId, positionId);
     if (!mechanics) {
-      return NextResponse.json({ error: "Unknown cabinet position" }, { status: 404 });
+      return errorResponse(404, "Unknown cabinet position");
     }
 
     const parsed = await parseJsonBody(request, settingSchema);
@@ -65,10 +65,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       member.characterId.toString() === auth.user.character._id.toString();
     const isAdmin = auth.user.isAdmin;
     if (!isHolder && !isAdmin) {
-      return NextResponse.json(
-        { error: "Only the cabinet holder or admin can change settings" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the cabinet holder or admin can change settings");
     }
 
     // A stance is the department's declared policy direction, which is the thing the
@@ -90,11 +87,9 @@ export async function POST(request: Request, { params }: RouteParams) {
       ? null
       : blockedSettingChange(existing, cooldownFields, currentTurn);
     if (blocked) {
-      return NextResponse.json(
-        {
-          error: `Settings can only be changed once per 24 turns. ${blocked.turnsRemaining} turns remaining.`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Settings can only be changed once per 24 turns. ${blocked.turnsRemaining} turns remaining.`
       );
     }
 
@@ -102,7 +97,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (parsed.data.tierSetting && mechanics.tierSetting) {
       const validTiers = mechanics.tierSetting.options.map((o) => o.id);
       if (!validTiers.includes(parsed.data.tierSetting)) {
-        return NextResponse.json({ error: "Invalid tier setting" }, { status: 400 });
+        return errorResponse(400, "Invalid tier setting");
       }
     }
 
@@ -111,13 +106,10 @@ export async function POST(request: Request, { params }: RouteParams) {
       for (const [key, value] of Object.entries(parsed.data.tierSettings)) {
         const cfg = mechanics.tierSettings?.find((t) => t.key === key);
         if (!cfg) {
-          return NextResponse.json({ error: `Unknown tier '${key}'` }, { status: 400 });
+          return errorResponse(400, `Unknown tier '${key}'`);
         }
         if (!cfg.options.some((o) => o.id === value)) {
-          return NextResponse.json(
-            { error: `Invalid selection for tier '${key}'` },
-            { status: 400 }
-          );
+          return errorResponse(400, `Invalid selection for tier '${key}'`);
         }
       }
     }
@@ -128,9 +120,9 @@ export async function POST(request: Request, { params }: RouteParams) {
         (enabledCountryId) => enabledCountryId !== countryId
       );
       if (!validTargetCountryIds.includes(parsed.data.targetCountryId as CountryId)) {
-        return NextResponse.json(
-          { error: "Target country must be player-enabled and different from the home country" },
-          { status: 400 }
+        return errorResponse(
+          400,
+          "Target country must be player-enabled and different from the home country"
         );
       }
     }

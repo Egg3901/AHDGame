@@ -5,7 +5,7 @@ import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { HEX_OBJECT_ID_REGEX } from "@/lib/utils/objectIdHex";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { ELECTION_LIMITS, checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { resolveElectionRouteParam } from "@/lib/elections/electionParamResolution";
 import { isPrimaryEnded } from "@/lib/elections/phases";
@@ -105,34 +105,28 @@ export async function POST(request: Request, { params }: RouteParams) {
       .findOne({ _id: "current" }, { projection: { preset: 1 } });
     const validStates = new Set(getElectoralVoteUnits(gameState?.preset).map((u) => u.stateId));
     if (!validStates.has(stateId)) {
-      return NextResponse.json({ error: "Invalid US state code" }, { status: 400 });
+      return errorResponse(400, "Invalid US state code");
     }
 
     const resolved = await resolveElectionRouteParam(db, electionParam);
     if (!resolved.ok) {
       return resolved.reason === "invalid_id"
-        ? NextResponse.json({ error: "Invalid election ID" }, { status: 400 })
-        : NextResponse.json({ error: "Election not found" }, { status: 404 });
+        ? errorResponse(400, "Invalid election ID")
+        : errorResponse(404, "Election not found");
     }
     const election = resolved.election;
 
     if (election.electionType !== "president" || election.countryId !== "US") {
-      return NextResponse.json(
-        { error: "State attacks are only available in US presidential primaries" },
-        { status: 400 }
-      );
+      return errorResponse(400, "State attacks are only available in US presidential primaries");
     }
     if (election.status !== "active") {
-      return NextResponse.json({ error: "Election is not active" }, { status: 400 });
+      return errorResponse(400, "Election is not active");
     }
 
     const gameTime = await getGameTime();
     const currentTurn = gameTime.currentTurn;
     if (isPrimaryEnded(election, currentTurn, gameTime)) {
-      return NextResponse.json(
-        { error: "State attacks are only available during the primary phase" },
-        { status: 400 }
-      );
+      return errorResponse(400, "State attacks are only available during the primary phase");
     }
 
     const character = auth.user.character;
@@ -143,13 +137,10 @@ export async function POST(request: Request, { params }: RouteParams) {
       status: "active",
     });
     if (!actor) {
-      return NextResponse.json(
-        { error: "You are not an active candidate in this election" },
-        { status: 403 }
-      );
+      return errorResponse(403, "You are not an active candidate in this election");
     }
     if (actor._id.toString() === targetCandidateId) {
-      return NextResponse.json({ error: "You cannot attack yourself" }, { status: 400 });
+      return errorResponse(400, "You cannot attack yourself");
     }
 
     const target = await db.collection<ElectionCandidate>("electionCandidates").findOne({
@@ -158,15 +149,12 @@ export async function POST(request: Request, { params }: RouteParams) {
       status: "active",
     });
     if (!target) {
-      return NextResponse.json({ error: "That candidate is not in this race" }, { status: 404 });
+      return errorResponse(404, "That candidate is not in this race");
     }
     // A primary is intra-party, and the projection an attack feeds is built per
     // party, so an attack across the party line has nowhere to land.
     if (target.party !== actor.party) {
-      return NextResponse.json(
-        { error: "You can only attack a rival in your own primary" },
-        { status: 400 }
-      );
+      return errorResponse(400, "You can only attack a rival in your own primary");
     }
 
     const already = await db.collection<PrimaryStateAction>("primaryStateActions").findOne({
@@ -177,17 +165,14 @@ export async function POST(request: Request, { params }: RouteParams) {
       kind,
     });
     if (already) {
-      return NextResponse.json(
-        { error: "You already have an attack running on them there" },
-        { status: 409 }
-      );
+      return errorResponse(409, "You already have an attack running on them there");
     }
 
     const campaign = await db
       .collection<Campaign>("campaigns")
       .findOne({ electionId: election._id, candidateId: character._id });
     if (!campaign) {
-      return NextResponse.json({ error: "You have no campaign in this race" }, { status: 403 });
+      return errorResponse(403, "You have no campaign in this race");
     }
     // The constant is anchor-denominated and the war chest is in the campaign's
     // own currency, so the price is converted before it is compared, exactly as
@@ -198,21 +183,16 @@ export async function POST(request: Request, { params }: RouteParams) {
       : { rate: 1 };
     const costFundsLocal = terms.costFunds * rate;
     if ((campaign.funds ?? 0) < costFundsLocal) {
-      return NextResponse.json(
-        {
-          error: `Not enough campaign funds. A local attack costs $${Math.round(costFundsLocal).toLocaleString("en-US")}.`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Not enough campaign funds. A local attack costs $${Math.round(costFundsLocal).toLocaleString("en-US")}.`
       );
     }
     const freshChar = await db
       .collection<Character>("characters")
       .findOne({ _id: character._id }, { projection: { actions: 1 } });
     if (!freshChar || freshChar.actions < terms.costActions) {
-      return NextResponse.json(
-        { error: `Not enough actions. That costs ${terms.costActions}.` },
-        { status: 400 }
-      );
+      return errorResponse(400, `Not enough actions. That costs ${terms.costActions}.`);
     }
 
     // The target's Rapid Response, stamped onto the row now so a later retune
@@ -255,7 +235,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     // without charging again.
     const headerKey = request.headers.get("Idempotency-Key");
     if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128)) {
-      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
+      return errorResponse(400, "Invalid Idempotency-Key header");
     }
     try {
       await applyStateAttackSpend(db, {
@@ -270,10 +250,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     } catch (error) {
       const message = (error as Error).message;
       if (message === "INSUFFICIENT_RESOURCES") {
-        return NextResponse.json(
-          { error: "Your actions or campaign funds changed. Please try again." },
-          { status: 409 }
-        );
+        return errorResponse(409, "Your actions or campaign funds changed. Please try again.");
       }
       throw error;
     }

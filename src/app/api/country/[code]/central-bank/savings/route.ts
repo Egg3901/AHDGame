@@ -6,7 +6,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import type { CentralBank, PortfolioHistory } from "@/lib/db/types";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { FOREX_ACTIVE_COUNTRIES, getSeedCurrencyCode } from "@/lib/constants/currencies";
@@ -37,13 +37,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Country not found" }, { status: 404 });
+      return errorResponse(404, "Country not found");
     }
     if (!FOREX_ACTIVE_COUNTRIES.includes(countryId)) {
-      return NextResponse.json(
-        { error: "High-yield savings are not available for this country." },
-        { status: 404 }
-      );
+      return errorResponse(404, "High-yield savings are not available for this country.");
     }
 
     const db = await getDb();
@@ -55,7 +52,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
     ]);
 
     if (!character) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
 
     // Preset-aware: 2027 euro members read EUR balances/ledgers; every other

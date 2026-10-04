@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdminOrApiKey } from "@/lib/api/requireAdminOrApiKey";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import {
   sendCountryGameEventMultiple,
@@ -92,16 +92,10 @@ export async function POST(request: Request) {
         (candidate) => candidate.countryId === requestedCountryId
       );
       if (!descriptor) {
-        return NextResponse.json(
-          { error: `Country ${requestedCountryId} is not enabled for players` },
-          { status: 400 }
-        );
+        return errorResponse(400, `Country ${requestedCountryId} is not enabled for players`);
       }
       if (!descriptor?.url && !config?.discordGameWebhookUrl) {
-        return NextResponse.json(
-          { error: `No ${requestedCountryId} game-events webhook is configured` },
-          { status: 400 }
-        );
+        return errorResponse(400, `No ${requestedCountryId} game-events webhook is configured`);
       }
       const [character, npp] = await Promise.all([
         db
@@ -136,10 +130,7 @@ export async function POST(request: Request) {
         (d) => d.countryId === requestedCountryId
       );
       if (!descriptor) {
-        return NextResponse.json(
-          { error: `Country ${requestedCountryId} is not enabled for players` },
-          { status: 400 }
-        );
+        return errorResponse(400, `Country ${requestedCountryId} is not enabled for players`);
       }
       url = descriptor.url || config?.discordGameWebhookUrl;
       label = `${descriptor.name} Game Events`;
@@ -159,7 +150,7 @@ export async function POST(request: Request) {
     }
 
     if (!url) {
-      return NextResponse.json({ error: `No ${label} webhook URL configured` }, { status: 400 });
+      return errorResponse(400, `No ${label} webhook URL configured`);
     }
 
     const description =

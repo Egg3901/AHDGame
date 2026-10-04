@@ -18,7 +18,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { checkWikiDisabled } from "@/lib/api/wikiGuard";
 import { checkWikiCreateCooldown, formatCooldownMessage } from "@/lib/wiki/createCooldown";
@@ -71,10 +71,7 @@ export async function POST(request: Request) {
     if (parsed.data.target === "player") {
       const character = user.character;
       if (typeof character.sequentialId !== "number") {
-        return NextResponse.json(
-          { error: "Your character is missing a public ID; contact an admin." },
-          { status: 409 }
-        );
+        return errorResponse(409, "Your character is missing a public ID; contact an admin.");
       }
       slug = playerWikiSlug(character.sequentialId);
       title = `${character.name} (Politician)`;
@@ -94,16 +91,10 @@ export async function POST(request: Request) {
           : {}),
       });
       if (!corp) {
-        return NextResponse.json(
-          { error: "You are not the CEO of any corporation" },
-          { status: 403 }
-        );
+        return errorResponse(403, "You are not the CEO of any corporation");
       }
       if (typeof corp.sequentialId !== "number") {
-        return NextResponse.json(
-          { error: "Your corporation is missing a public ID; contact an admin." },
-          { status: 409 }
-        );
+        return errorResponse(409, "Your corporation is missing a public ID; contact an admin.");
       }
       slug = corporationWikiSlug(corp.sequentialId);
       title = `${corp.name} (Corporation)`;
@@ -121,9 +112,9 @@ export async function POST(request: Request) {
         ],
       });
       if (!party) {
-        return NextResponse.json(
-          { error: "Only a party's chair, vice-chair, or treasurer can claim its page." },
-          { status: 403 }
+        return errorResponse(
+          403,
+          "Only a party's chair, vice-chair, or treasurer can claim its page."
         );
       }
       slug = partyWikiSlug(party.countryId, party.sequentialId);

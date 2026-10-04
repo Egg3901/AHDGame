@@ -9,7 +9,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody, schemas } from "@/lib/api/validate";
 import { z } from "zod";
 import { createNotification } from "@/lib/notifications";
@@ -45,10 +45,7 @@ export async function POST(request: Request) {
     const { seatNumber, nomineeCharacterId, nppLegalScholarParty } = parsed.data;
 
     if (!nomineeCharacterId && !nppLegalScholarParty) {
-      return NextResponse.json(
-        { error: "Must supply either nomineeCharacterId or nppLegalScholarParty" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Must supply either nomineeCharacterId or nppLegalScholarParty");
     }
 
     const db = await getDb();
@@ -57,17 +54,14 @@ export async function POST(request: Request) {
       .collection<ElectedOfficial>("electedOfficials")
       .findOne({ countryId: "US", officeType: "president", characterId: { $ne: null } });
     if (!presidentOfficial?.characterId) {
-      return NextResponse.json({ error: "No President in office" }, { status: 400 });
+      return errorResponse(400, "No President in office");
     }
 
     const myCharacter = await db.collection<Character>("characters").findOne({
       userId: new ObjectId(authUser.userId),
     });
     if (!myCharacter || !presidentOfficial.characterId.equals(myCharacter._id)) {
-      return NextResponse.json(
-        { error: "Only the President can nominate a Justice" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the President can nominate a Justice");
     }
 
     const result = await createJusticeNomination(db, {
@@ -81,7 +75,7 @@ export async function POST(request: Request) {
     });
 
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: 400 });
+      return errorResponse(400, result.error);
     }
 
     const senators = await db

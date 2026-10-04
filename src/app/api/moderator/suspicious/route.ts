@@ -5,7 +5,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireModerator } from "@/lib/api/requireModerator";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { isCountryEnabledForPlayers } from "@/lib/countryAccess";
 import type { SuspiciousCharacter } from "@/lib/db/types/activityLog";
@@ -40,11 +40,11 @@ export async function GET(request: Request) {
       severityParam &&
       !ALLOWED_SEVERITIES.includes(severityParam as (typeof ALLOWED_SEVERITIES)[number])
     ) {
-      return NextResponse.json({ error: "Invalid severity" }, { status: 400 });
+      return errorResponse(400, "Invalid severity");
     }
 
     if (cursorParam && !/^[0-9a-f]{24}$/i.test(cursorParam)) {
-      return NextResponse.json({ error: "Invalid cursor" }, { status: 400 });
+      return errorResponse(400, "Invalid cursor");
     }
 
     const db = await getDb();
@@ -53,10 +53,10 @@ export async function GET(request: Request) {
     if (countryParam) {
       const upper = countryParam.toUpperCase() as CountryId;
       if (!COUNTRY_CONFIGS[upper]) {
-        return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+        return errorResponse(400, "Invalid country");
       }
       if (!(await isCountryEnabledForPlayers(db, upper))) {
-        return NextResponse.json({ error: "Country not enabled for players" }, { status: 400 });
+        return errorResponse(400, "Country not enabled for players");
       }
       countryId = upper as SuspiciousCharacter["countryId"];
     }

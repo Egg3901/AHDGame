@@ -8,7 +8,7 @@ import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError, isUnexpectedError } from "@/lib/api/errors";
+import { handleRouteError, isUnexpectedError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { Corporation } from "@/lib/db/types";
@@ -39,11 +39,11 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, id } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const idQuery = corporationQueryFromParamId(id);
     if (!idQuery) {
-      return NextResponse.json({ error: "Invalid corporation ID" }, { status: 400 });
+      return errorResponse(400, "Invalid corporation ID");
     }
 
     const parsed = await parseJsonBody(request, executivePrivatizeSchema);
@@ -52,7 +52,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
     for (const sel of parsed.data.selections) {
       if (!ObjectId.isValid(sel.sectorId)) {
-        return NextResponse.json({ error: "Invalid sector ID" }, { status: 400 });
+        return errorResponse(400, "Invalid sector ID");
       }
     }
 
@@ -63,24 +63,18 @@ export async function POST(request: Request, { params }: RouteParams) {
     // office. privatizeAsset carries the authoritative guard; this is the clean
     // error for the one caller that has a player on the other end.
     if (await isPrivateEnterpriseBlocked(db, countryId)) {
-      return NextResponse.json(
-        {
-          error:
-            "Private corporations cannot be founded in a command economy. The state controls all enterprise.",
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "Private corporations cannot be founded in a command economy. The state controls all enterprise."
       );
     }
 
     // Authority: seated finance minister, or head of government if vacant.
     const authorized = await assertTreasuryAuthority(db, countryId, auth.user.character._id);
     if (!authorized) {
-      return NextResponse.json(
-        {
-          error:
-            "Only the Secretary of the Treasury (or equivalent), or the head of government if that seat is vacant, may privatize a National Corporation asset.",
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "Only the Secretary of the Treasury (or equivalent), or the head of government if that seat is vacant, may privatize a National Corporation asset."
       );
     }
 
@@ -88,10 +82,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       .collection<Corporation>("corporations")
       .findOne({ ...idQuery, countryOwnerId: countryId });
     if (!source || !isStateOwned(source)) {
-      return NextResponse.json(
-        { error: "National Corporation not found for this country." },
-        { status: 404 }
-      );
+      return errorResponse(404, "National Corporation not found for this country.");
     }
 
     const turn = await getCurrentTurn(db);
@@ -142,7 +133,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         });
       }
       if (err instanceof PrivateEnterpriseBlockedError) {
-        return NextResponse.json({ error: err.message }, { status: 403 });
+        return errorResponse(403, err.message);
       }
       return NextResponse.json(
         { error: err instanceof Error ? err.message : "Privatization failed" },

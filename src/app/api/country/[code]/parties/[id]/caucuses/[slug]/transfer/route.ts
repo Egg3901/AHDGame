@@ -3,7 +3,7 @@ import { ObjectId, type ClientSession, type MongoServerError, type UpdateFilter 
 import { getDb, getMongoClient } from "@/lib/mongodb";
 import { runTransactionWithSessionRetry } from "@/lib/db/transactionWithRetry";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { badRequest, handleRouteError } from "@/lib/api/errors";
+import { badRequest, handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { statePartyTransferSchema } from "@/lib/api/schemas/settings";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
@@ -28,7 +28,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, id: partyId, slug } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const authResult = await requireAuthWithCharacter();
@@ -50,38 +50,32 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const party = await findPartyBySequentialId(db, partyId, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
     const partyIdStr = String(party.sequentialId);
 
     const resolved = await findCaucusBySlug(db, countryId, partyIdStr, slug);
     if (!resolved) {
-      return NextResponse.json({ error: "Caucus not found" }, { status: 404 });
+      return errorResponse(404, "Caucus not found");
     }
     const { caucus } = resolved;
 
     const isAdmin = authUser.isAdmin;
     const isChair = caucus.chairId?.equals(authUser.character._id) ?? false;
     if (!isAdmin && !isChair) {
-      return NextResponse.json(
-        { error: "Only the Caucus Chair or an admin can transfer caucus funds" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the Caucus Chair or an admin can transfer caucus funds");
     }
     // Defense-in-depth: chair role retains across relocation, so refuse if the
     // actor's character is no longer in this country.
     if (!isAdmin && !isSameCountry(authUser.character, { countryId })) {
-      return NextResponse.json(
-        { error: "You must be a citizen of this country to transfer caucus funds" },
-        { status: 403 }
-      );
+      return errorResponse(403, "You must be a citizen of this country to transfer caucus funds");
     }
 
     const treasury = caucus.treasury ?? 0;
     if (amount > treasury) {
-      return NextResponse.json(
-        { error: `Insufficient caucus funds. Available: $${treasury.toLocaleString()}` },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Insufficient caucus funds. Available: $${treasury.toLocaleString()}`
       );
     }
 
@@ -115,9 +109,9 @@ export async function POST(request: Request, { params }: RouteParams) {
         .updateOne({ _id: caucus._id, treasury: { $gte: amount } }, caucusDebit);
 
       if (debitResult.matchedCount === 0) {
-        return NextResponse.json(
-          { error: `Insufficient caucus funds. Available: $${treasury.toLocaleString()}` },
-          { status: 400 }
+        return errorResponse(
+          400,
+          `Insufficient caucus funds. Available: $${treasury.toLocaleString()}`
         );
       }
 

@@ -4,7 +4,7 @@ import { cookies, headers } from "next/headers";
 import { z } from "zod";
 import { getTrackingCookieOptions, getAuthUser } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { ANALYTICS_PAGE_VIEW_LIMITS, checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { getClientIp } from "@/lib/utils/network";
 import { getSiteTrafficPageviewsCollection } from "@/lib/db/collections/siteTrafficPageviews";
@@ -55,7 +55,7 @@ export async function POST(request: Request) {
 
     const path = normalizeAnalyticsPath(parsed.data.path);
     if (!path) {
-      return NextResponse.json({ error: "Invalid path" }, { status: 400 });
+      return errorResponse(400, "Invalid path");
     }
 
     const cookieStore = await cookies();

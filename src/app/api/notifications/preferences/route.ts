@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { withNoStore } from "@/lib/api/withNoStore";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -22,7 +22,7 @@ export const GET = withNoStore(async () => {
     const db = await getDb();
     const userId = new ObjectId(user.userId);
     const dbUser = await db.collection<User>("users").findOne({ _id: userId });
-    if (!dbUser) return NextResponse.json({ error: "User not found" }, { status: 404 });
+    if (!dbUser) return errorResponse(404, "User not found");
 
     const prefs = dbUser.notificationPreferences ?? {};
     const now = new Date();
@@ -72,7 +72,7 @@ export async function PUT(request: Request) {
     const db = await getDb();
     const userId = new ObjectId(user.userId);
     const dbUser = await db.collection<User>("users").findOne({ _id: userId });
-    if (!dbUser) return NextResponse.json({ error: "User not found" }, { status: 404 });
+    if (!dbUser) return errorResponse(404, "User not found");
 
     const prefs = dbUser.notificationPreferences ?? {};
     if (parsed.data.action === "mail") {

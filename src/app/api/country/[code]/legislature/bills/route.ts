@@ -9,7 +9,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { getAuthUser } from "@/lib/auth"; // Optional auth — intentionally uses getAuthUser() in GET
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import { parseJsonBody } from "@/lib/api/validate";
 import { proposeBillSchema } from "@/lib/api/schemas/congress";
@@ -31,13 +31,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 404 });
+      return errorResponse(404, "Invalid country code");
     }
     const db = await getDb();
     const gameState = await getGameState(db);
     const { config } = await loadRuntimeCountryOffices(db, countryId, gameState?.preset);
     if (!config) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 404 });
+      return errorResponse(404, "Invalid country code");
     }
 
     const { searchParams } = new URL(request.url);
@@ -65,24 +65,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 404 });
+      return errorResponse(404, "Invalid country code");
     }
     const db = await getDb();
     const gameState = await getGameState(db);
     const preset = gameState?.preset;
     const { config } = await loadRuntimeCountryOffices(db, countryId, preset);
     if (!config) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 404 });
+      return errorResponse(404, "Invalid country code");
     }
 
     if (
       config.legislature.lowerChamber.elected === false ||
       config.legislature.lowerChamber.seats < 1
     ) {
-      return NextResponse.json(
-        { error: "This legislature is dissolved and cannot receive bills." },
-        { status: 409 }
-      );
+      return errorResponse(409, "This legislature is dissolved and cannot receive bills.");
     }
 
     const lowerKey = config.legislature.lowerChamber.key;
@@ -124,10 +121,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
     }
     if (!allowedOriginKeys.includes(parsed.data.chamber)) {
-      return NextResponse.json(
-        { error: `Invalid chamber for ${countryId} legislature.` },
-        { status: 400 }
-      );
+      return errorResponse(400, `Invalid chamber for ${countryId} legislature.`);
     }
 
     const result = await proposeNationalBill(db, countryId, auth.user, parsed.data);

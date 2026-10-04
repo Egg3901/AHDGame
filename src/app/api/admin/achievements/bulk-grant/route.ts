@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { z } from "zod";
 import type { Character } from "@/lib/db/types";
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
 
     const achievement = await db.collection("achievements").findOne({ slug: achievementSlug });
     if (!achievement) {
-      return NextResponse.json({ error: "Achievement not found" }, { status: 404 });
+      return errorResponse(404, "Achievement not found");
     }
 
     const characters = await db.collection<Character>("characters").find({}).toArray();

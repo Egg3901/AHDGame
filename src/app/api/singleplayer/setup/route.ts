@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireSingleplayer } from "@/lib/api/requireSingleplayer";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { resetAndBootstrapGameWorld } from "@/lib/admin/resetAndBootstrapGameWorld";
 import { isKnownPreset } from "@/lib/seeds/presetSelector";
@@ -59,7 +59,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
     const { preset, mode, difficulty, autonomyLevel, featureFlags, displayName } = parsed.data;
     if (!isKnownPreset(preset)) {
-      return NextResponse.json({ error: `Unknown preset "${preset}"` }, { status: 400 });
+      return errorResponse(400, `Unknown preset "${preset}"`);
     }
 
     const db = await getDb();

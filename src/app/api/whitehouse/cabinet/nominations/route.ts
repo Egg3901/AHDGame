@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody, schemas } from "@/lib/api/validate";
 import { z } from "zod";
 import { createNotification } from "@/lib/notifications";
@@ -56,11 +56,11 @@ export async function POST(request: Request) {
 
     const countryId = resolvePresidentialCountry(request);
     if (!countryId) {
-      return NextResponse.json({ error: "Unknown country" }, { status: 400 });
+      return errorResponse(400, "Unknown country");
     }
     const positionDef = getCabinetPositions(countryId).find((p) => p.id === positionId);
     if (!positionDef) {
-      return NextResponse.json({ error: "Invalid positionId" }, { status: 400 });
+      return errorResponse(400, "Invalid positionId");
     }
 
     const db = await getDb();
@@ -73,10 +73,7 @@ export async function POST(request: Request) {
     // already honours that. Without it the page offers a seat this route then
     // refuses.
     if (!isSeatActive(positionDef, await getLiveGameYear(db), await getManuallyEnabledSeats(db))) {
-      return NextResponse.json(
-        { error: "This cabinet position does not exist in the current era" },
-        { status: 400 }
-      );
+      return errorResponse(400, "This cabinet position does not exist in the current era");
     }
 
     // Must be President (player character only — no NPP)
@@ -84,17 +81,14 @@ export async function POST(request: Request) {
       .collection<ElectedOfficial>("electedOfficials")
       .findOne({ countryId, officeType: "president", characterId: { $ne: null } });
     if (!presidentOfficial?.characterId) {
-      return NextResponse.json({ error: "No President in office" }, { status: 400 });
+      return errorResponse(400, "No President in office");
     }
 
     const myCharacter = await db.collection<Character>("characters").findOne({
       userId: new ObjectId(authUser.userId),
     });
     if (!myCharacter || !presidentOfficial.characterId.equals(myCharacter._id)) {
-      return NextResponse.json(
-        { error: "Only the President can propose cabinet nominations" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the President can propose cabinet nominations");
     }
 
     // Nominee is either a player character (has userId) or an NPP of this
@@ -108,23 +102,17 @@ export async function POST(request: Request) {
       try {
         nomineeOid = new ObjectId(nomineeCharacterId);
       } catch {
-        return NextResponse.json({ error: "Invalid nomineeCharacterId" }, { status: 400 });
+        return errorResponse(400, "Invalid nomineeCharacterId");
       }
       const nominee = await db.collection<Character>("characters").findOne({ _id: nomineeOid });
       if (!nominee) {
-        return NextResponse.json({ error: "Nominee character not found" }, { status: 404 });
+        return errorResponse(404, "Nominee character not found");
       }
       if (!nominee.userId) {
-        return NextResponse.json(
-          { error: "Only player characters can be nominated" },
-          { status: 400 }
-        );
+        return errorResponse(400, "Only player characters can be nominated");
       }
       if (nominee.countryId !== countryId) {
-        return NextResponse.json(
-          { error: "Nominee must be a politician of this country" },
-          { status: 400 }
-        );
+        return errorResponse(400, "Nominee must be a politician of this country");
       }
       nomineeName = nominee.name;
       nomineeParty = nominee.party;
@@ -133,17 +121,14 @@ export async function POST(request: Request) {
       try {
         nomineeNppOid = new ObjectId(nomineeNppId);
       } catch {
-        return NextResponse.json({ error: "Invalid nomineeNppId" }, { status: 400 });
+        return errorResponse(400, "Invalid nomineeNppId");
       }
       const npp = await db.collection<NPP>("npps").findOne({ _id: nomineeNppOid });
       if (!npp) {
-        return NextResponse.json({ error: "Nominee NPP not found" }, { status: 404 });
+        return errorResponse(404, "Nominee NPP not found");
       }
       if (npp.countryId != null && npp.countryId !== countryId) {
-        return NextResponse.json(
-          { error: "Nominee must be a politician of this country" },
-          { status: 400 }
-        );
+        return errorResponse(400, "Nominee must be a politician of this country");
       }
       nomineeName = npp.name;
       nomineeParty = npp.party;
@@ -193,10 +178,7 @@ export async function POST(request: Request) {
         .insertOne(nomination as unknown as CabinetNomination);
     } catch (error) {
       if (isActiveCabinetNominationDuplicateKey(error)) {
-        return NextResponse.json(
-          { error: "An active nomination for this cabinet position already exists" },
-          { status: 409 }
-        );
+        return errorResponse(409, "An active nomination for this cabinet position already exists");
       }
       throw error;
     }

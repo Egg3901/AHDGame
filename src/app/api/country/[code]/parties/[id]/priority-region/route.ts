@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { setPriorityRegionSchema } from "@/lib/api/schemas/parties";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -61,14 +61,14 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const { code, id: partyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const authResult = await requireAuthWithCharacter();
     if (!authResult.ok) return authResult.response;
 
     const db = await getDb();
     const party = await findPartyBySequentialId(db, partyId, countryId);
-    if (!party) return NextResponse.json({ error: "Party not found" }, { status: 404 });
+    if (!party) return errorResponse(404, "Party not found");
 
     const { currentTurn } = await getGameTime();
     const cluster = party.priorityRegion ?? null;
@@ -112,12 +112,12 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, id: partyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const authResult = await requireAuthWithCharacter();
     if (!authResult.ok) return authResult.response;
     if (authResult.user.isBanned) {
-      return NextResponse.json({ error: "Account is banned" }, { status: 403 });
+      return errorResponse(403, "Account is banned");
     }
     const { user } = authResult;
 
@@ -133,15 +133,12 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const db = await getDb();
     const party = await findPartyBySequentialId(db, partyId, countryId);
-    if (!party) return NextResponse.json({ error: "Party not found" }, { status: 404 });
+    if (!party) return errorResponse(404, "Party not found");
 
     // Chair / VC-acting / admin only.
     const isAdmin = !!user.isAdmin;
     if (!isAdmin && !canActAsChair(party, user.character._id)) {
-      return NextResponse.json(
-        { error: "Only the chair or acting vice-chair can set the Priority Region." },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the chair or acting vice-chair can set the Priority Region.");
     }
 
     // Lockout check.
@@ -172,7 +169,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const validation = validatePriorityRegionCluster(countryId, upperStateIds, hasGovernorAnchor);
     if (!validation.ok) {
-      return NextResponse.json({ error: validation.reason }, { status: 400 });
+      return errorResponse(400, validation.reason);
     }
 
     // State-existence check against the actual states collection — every
@@ -185,10 +182,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const knownStateIds = new Set(stateDocs.map((s) => s._id));
     const unknown = upperStateIds.filter((id) => !knownStateIds.has(id));
     if (unknown.length > 0) {
-      return NextResponse.json(
-        { error: `Unknown state(s) in ${countryId}: ${unknown.join(", ")}` },
-        { status: 400 }
-      );
+      return errorResponse(400, `Unknown state(s) in ${countryId}: ${unknown.join(", ")}`);
     }
 
     // Atomic write — guards on the lockout one more time inside the
@@ -224,10 +218,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     );
     if (result.matchedCount === 0) {
       // Lost the race against another concurrent setter.
-      return NextResponse.json(
-        { error: "Priority Region was just set by another concurrent action." },
-        { status: 409 }
-      );
+      return errorResponse(409, "Priority Region was just set by another concurrent action.");
     }
 
     return NextResponse.json({

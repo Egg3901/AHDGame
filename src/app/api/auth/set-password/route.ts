@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { ObjectId } from "mongodb";
 import bcrypt from "bcryptjs";
 import { verifyAuth } from "@/lib/auth";
@@ -37,7 +37,7 @@ export async function POST(request: Request) {
 
     const user = await usersCollection.findOne({ _id: new ObjectId(userId) });
     if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return errorResponse(404, "User not found");
     }
 
     // Credential changes require the uncached account state read above.
@@ -50,10 +50,7 @@ export async function POST(request: Request) {
 
     // Only allow setting password if user doesn't have one (social-only accounts)
     if (user.password) {
-      return NextResponse.json(
-        { error: "Password already set. Use change password instead." },
-        { status: 400 }
-      );
+      return errorResponse(400, "Password already set. Use change password instead.");
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, 12);

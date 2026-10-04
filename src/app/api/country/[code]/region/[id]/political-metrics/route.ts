@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { canonicalRegionId } from "@/lib/constants/countries";
 import { loadRegionPoliticalMetrics } from "@/lib/politicalMetrics/queries/regionPoliticalMetrics";
 import {
@@ -23,15 +23,12 @@ export async function GET(
     const { code, id } = await params;
     const countryId = code.toUpperCase() as PoliticalMetricsCountryId;
     if (!POLITICAL_METRIC_COUNTRY_IDS.includes(countryId)) {
-      return NextResponse.json(
-        { error: "Political metrics not available for this country" },
-        { status: 404 }
-      );
+      return errorResponse(404, "Political metrics not available for this country");
     }
     const regionId = canonicalRegionId(countryId, id).toUpperCase();
     const response = await loadRegionPoliticalMetrics(countryId, regionId);
     if (!response) {
-      return NextResponse.json({ error: "No political metrics for this region" }, { status: 404 });
+      return errorResponse(404, "No political metrics for this region");
     }
     return NextResponse.json(response, { headers: { "Cache-Control": "no-store, no-transform" } });
   } catch (error) {

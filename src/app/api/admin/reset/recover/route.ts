@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import {
   BootstrapRecoveryConflict,
@@ -63,8 +63,7 @@ export async function POST(request: Request) {
       },
     });
   } catch (error) {
-    if (error instanceof BootstrapRecoveryConflict)
-      return NextResponse.json({ error: error.message }, { status: 409 });
+    if (error instanceof BootstrapRecoveryConflict) return errorResponse(409, error.message);
     return handleRouteError(error);
   }
 }

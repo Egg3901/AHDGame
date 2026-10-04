@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseJsonBody, schemas } from "@/lib/api/validate";
 import { requireUserApiKey } from "@/lib/api/userApiAuth";
@@ -73,7 +73,7 @@ export async function POST(request: Request) {
       .collection("users")
       .findOne({ _id: new ObjectId(apiAuth.ownerUserId) });
     if (!userDoc) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return errorResponse(404, "User not found");
     }
 
     const characterQuery = userDoc.activeCharacterId
@@ -81,10 +81,7 @@ export async function POST(request: Request) {
       : { userId: new ObjectId(apiAuth.ownerUserId) };
     const sender = await db.collection<Character>("characters").findOne(characterQuery);
     if (!sender) {
-      return NextResponse.json(
-        { error: "You need a character to transfer funds" },
-        { status: 400 }
-      );
+      return errorResponse(400, "You need a character to transfer funds");
     }
 
     const senderCurrency = getHomeCurrency(sender);
@@ -100,19 +97,16 @@ export async function POST(request: Request) {
     const transferAmountLocal = transferAmount;
 
     if (sender._id.equals(targetObjectId)) {
-      return NextResponse.json({ error: "You cannot transfer funds to yourself" }, { status: 400 });
+      return errorResponse(400, "You cannot transfer funds to yourself");
     }
 
     const target = await db.collection<Character>("characters").findOne({ _id: targetObjectId });
     if (!target) {
-      return NextResponse.json({ error: "Target character not found" }, { status: 404 });
+      return errorResponse(404, "Target character not found");
     }
 
     if (!isSameCountry(sender, target)) {
-      return NextResponse.json(
-        { error: "You cannot transfer funds to politicians from other countries" },
-        { status: 400 }
-      );
+      return errorResponse(400, "You cannot transfer funds to politicians from other countries");
     }
 
     // New characters cannot send money for their first 24 turns (anti-abuse).
@@ -225,13 +219,13 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     if (error instanceof Error && error.message === "INSUFFICIENT_FUNDS") {
-      return NextResponse.json({ error: "Insufficient funds" }, { status: 400 });
+      return errorResponse(400, "Insufficient funds");
     }
     if (error instanceof Error && error.message === "TARGET_NOT_FOUND") {
-      return NextResponse.json({ error: "Target character not found" }, { status: 404 });
+      return errorResponse(404, "Target character not found");
     }
     if (error instanceof MoneyFlowTerminalError || error instanceof MoneyFlowKeyConflictError) {
-      return NextResponse.json({ error: error.message }, { status: 409 });
+      return errorResponse(409, error.message);
     }
     return handleRouteError(error);
   }

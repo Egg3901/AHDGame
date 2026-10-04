@@ -6,7 +6,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
 import { getInfraProjectsCollection } from "@/lib/db/collections/infraProjects";
@@ -26,13 +26,13 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, positionId, projectId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
     if (!resolveInfraPosition(countryId, positionId)) {
-      return NextResponse.json({ error: "Not a transportation cabinet position" }, { status: 404 });
+      return errorResponse(404, "Not a transportation cabinet position");
     }
     if (!ObjectId.isValid(projectId)) {
-      return NextResponse.json({ error: "Invalid project id" }, { status: 400 });
+      return errorResponse(400, "Invalid project id");
     }
 
     const parsed = await parseJsonBody(request, fundingSchema);
@@ -50,10 +50,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       auth.user.character &&
       member.characterId.toString() === auth.user.character._id.toString();
     if (!isHolder && !auth.user.isAdmin) {
-      return NextResponse.json(
-        { error: "Only the transportation holder or admin can set build funding" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the transportation holder or admin can set build funding");
     }
 
     const project = await projectsCol.findOne({
@@ -62,13 +59,10 @@ export async function POST(request: Request, { params }: RouteParams) {
       positionId,
     });
     if (!project) {
-      return NextResponse.json({ error: "Project not found" }, { status: 404 });
+      return errorResponse(404, "Project not found");
     }
     if (project.status === "operational") {
-      return NextResponse.json(
-        { error: "Cannot change build funding on a completed project" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Cannot change build funding on a completed project");
     }
 
     await projectsCol.updateOne(

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { isTargetValidForCountry } from "@/lib/demographics/turnoutTargets";
 import { requireHumanSessionWithCharacter, requireAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { getDb } from "@/lib/mongodb";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -34,7 +34,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
 
     const auth = await requireHumanSessionWithCharacter(request);
@@ -69,17 +69,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
         .collection<{ _id: string; preset?: string }>("gameState")
         .findOne({ _id: "current" }, { projection: { preset: 1 } });
       if (!isTargetValidForCountry(targetId, countryId, gs?.preset ?? null)) {
-        return NextResponse.json({ error: "Unknown demographic target" }, { status: 400 });
+        return errorResponse(400, "Unknown demographic target");
       }
     }
     const isAdmin = auth.user.isAdmin === true;
     const adminOverride = parsed.data.adminOverride === true && isAdmin;
     const leader = await isSittingLeader(db, countryId, auth.user.character._id);
     if (!leader && !adminOverride) {
-      return NextResponse.json(
-        { error: "Only the sitting leader can deliver a national address" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the sitting leader can deliver a national address");
     }
 
     const result = await deliverAddress(db, {
@@ -106,7 +103,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
     const auth = await requireAuth();
     if (!auth.ok) return auth.response;

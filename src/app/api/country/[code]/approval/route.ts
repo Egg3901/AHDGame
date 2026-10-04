@@ -7,7 +7,7 @@
  * call it directly (no self-fetch); this route is a thin HTTP wrapper.
  */
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { loadNationalApproval } from "@/lib/country/nationalApproval";
 
@@ -16,7 +16,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const data = await loadNationalApproval(countryId);
     // cache policy: game-state — approval reflects the latest turn snapshot; no shared cache

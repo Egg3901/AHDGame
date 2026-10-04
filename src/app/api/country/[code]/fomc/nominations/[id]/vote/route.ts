@@ -13,7 +13,7 @@ import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseObjectId } from "@/lib/utils/objectId";
 import { clearWhippedFromVote } from "@/lib/congress/clearWhippedVote";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { z } from "zod";
 import { CONGRESS_LIMITS, checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -38,11 +38,11 @@ export async function POST(
     const { code, id } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const nominationOid = parseObjectId(id);
     if (!nominationOid) {
-      return NextResponse.json({ error: "Invalid nomination ID" }, { status: 400 });
+      return errorResponse(400, "Invalid nomination ID");
     }
 
     const auth = await requireBasicAuth();
@@ -72,7 +72,7 @@ export async function POST(
       status: "active",
     });
     if (!nomination) {
-      return NextResponse.json({ error: "Nomination not found or voting closed" }, { status: 404 });
+      return errorResponse(404, "Nomination not found or voting closed");
     }
     if (
       isVotingDeadlinePassed(
@@ -82,14 +82,14 @@ export async function POST(
         gameTime.currentTurn
       )
     ) {
-      return NextResponse.json({ error: "Voting has ended" }, { status: 409 });
+      return errorResponse(409, "Voting has ended");
     }
 
     const myCharacter = await db.collection<Character>("characters").findOne({
       userId: new ObjectId(authUser.userId),
     });
     if (!myCharacter) {
-      return NextResponse.json({ error: "No character" }, { status: 400 });
+      return errorResponse(400, "No character");
     }
 
     // Senate only. The senator must sit in the nomination's own country — a
@@ -100,10 +100,7 @@ export async function POST(
       countryId,
     });
     if (!senator) {
-      return NextResponse.json(
-        { error: "Only Senators of this country can vote on Fed nominations" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only Senators of this country can vote on Fed nominations");
     }
 
     const updateResult = await db.collection<FomcNomination>("fomcNominations").updateOne(
@@ -121,7 +118,7 @@ export async function POST(
       })
     );
     if (updateResult.matchedCount === 0) {
-      return NextResponse.json({ error: "Nomination not found or voting closed" }, { status: 404 });
+      return errorResponse(404, "Nomination not found or voting closed");
     }
 
     await clearWhippedFromVote(db, "fomcNominations", nominationOid, myCharacter._id);

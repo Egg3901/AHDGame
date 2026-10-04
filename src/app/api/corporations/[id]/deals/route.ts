@@ -6,7 +6,7 @@ import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
 import { requireCorpDealsEnabled } from "@/lib/api/requireCorpDeals";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import {
   corporationQueryFromParamId,
@@ -92,11 +92,9 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     if (body.action === "propose") {
       const targetQuery = corporationQueryFromParamId(body.targetCorporationId ?? "");
-      if (!targetQuery)
-        return NextResponse.json({ error: "Invalid target corporation" }, { status: 400 });
+      if (!targetQuery) return errorResponse(400, "Invalid target corporation");
       const target = await db.collection<Corporation>("corporations").findOne(targetQuery);
-      if (!target)
-        return NextResponse.json({ error: "Target corporation not found" }, { status: 404 });
+      if (!target) return errorResponse(404, "Target corporation not found");
 
       const result = await proposeAcquisitionOffer(db, {
         acquirer: myCorp,
@@ -122,18 +120,15 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     if (body.action === "accept" || body.action === "reject" || body.action === "withdraw") {
       if (!body.offerId || !ObjectId.isValid(body.offerId))
-        return NextResponse.json({ error: "Invalid offer id" }, { status: 400 });
+        return errorResponse(400, "Invalid offer id");
       const offer = await db
         .collection<AcquisitionOffer>("acquisitionOffers")
         .findOne({ _id: new ObjectId(body.offerId) });
-      if (!offer) return NextResponse.json({ error: "Offer not found" }, { status: 404 });
+      if (!offer) return errorResponse(404, "Offer not found");
 
       if (body.action === "withdraw") {
         if (!offer.acquirerCorporationId.equals(myCorp._id))
-          return NextResponse.json(
-            { error: "Only the offering corporation can withdraw" },
-            { status: 403 }
-          );
+          return errorResponse(403, "Only the offering corporation can withdraw");
         const r = await resolveAcquisitionOfferStatus(db, offer, "withdrawn", currentTurn);
         return r.ok
           ? NextResponse.json({ ok: true })
@@ -142,10 +137,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
       // accept / reject must be done by the TARGET's CEO
       if (!offer.targetCorporationId.equals(myCorp._id))
-        return NextResponse.json(
-          { error: "Only the target corporation can respond" },
-          { status: 403 }
-        );
+        return errorResponse(403, "Only the target corporation can respond");
 
       if (body.action === "reject") {
         const r = await resolveAcquisitionOfferStatus(db, offer, "rejected", currentTurn);
@@ -165,7 +157,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       });
     }
 
-    return NextResponse.json({ error: "Unknown deal action" }, { status: 400 });
+    return errorResponse(400, "Unknown deal action");
   } catch (error) {
     return handleRouteError(error);
   }

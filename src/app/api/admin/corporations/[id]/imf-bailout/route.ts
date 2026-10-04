@@ -10,7 +10,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError, notFound } from "@/lib/api/errors";
+import { handleRouteError, notFound, errorResponse } from "@/lib/api/errors";
 import type { Bond, Character, Corporation } from "@/lib/db/types";
 import { adminImfBailoutSchema } from "@/lib/api/schemas/adminImfBailout";
 import { getImfCorporation } from "@/lib/imf/resolveImfCorporation";
@@ -228,9 +228,9 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     if (!corp) throw notFound("Corporation not found");
 
     if (!corp.imfBailoutActive) {
-      return NextResponse.json(
-        { error: "Income capture can only be changed while an IMF bailout is active" },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "Income capture can only be changed while an IMF bailout is active"
       );
     }
 
@@ -275,27 +275,18 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (!corp) throw notFound("Corporation not found");
 
     if (corp.imfInstitution) {
-      return NextResponse.json(
-        { error: "Cannot apply IMF bailout to the IMF institution itself" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Cannot apply IMF bailout to the IMF institution itself");
     }
 
     if (corp.countryOwnerId) {
-      return NextResponse.json(
-        { error: "National corporations cannot enter IMF restructuring" },
-        { status: 400 }
-      );
+      return errorResponse(400, "National corporations cannot enter IMF restructuring");
     }
 
     const imfCorp = await getImfCorporation(db);
     if (!imfCorp) {
-      return NextResponse.json(
-        {
-          error:
-            "IMF institution corporation not found — seed it from Admin → Server Setup or Corporations (IMF form), or run scripts/seed/seed-imf-institution.ts",
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "IMF institution corporation not found — seed it from Admin → Server Setup or Corporations (IMF form), or run scripts/seed/seed-imf-institution.ts"
       );
     }
 
@@ -320,10 +311,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     if (corp.imfBailoutActive) {
-      return NextResponse.json(
-        { error: "IMF bailout is already active for this corporation" },
-        { status: 400 }
-      );
+      return errorResponse(400, "IMF bailout is already active for this corporation");
     }
 
     if (
@@ -331,12 +319,9 @@ export async function POST(request: Request, { params }: RouteParams) {
       body.annualRatePercent == null ||
       body.amortizationTurns == null
     ) {
-      return NextResponse.json(
-        {
-          error:
-            "targetOwnershipPercent, annualRatePercent, and amortizationTurns are required when activating",
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "targetOwnershipPercent, annualRatePercent, and amortizationTurns are required when activating"
       );
     }
 
@@ -362,10 +347,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     if (facilityPrincipal <= 0) {
-      return NextResponse.json(
-        { error: "IMF bailout requires outstanding bond principal" },
-        { status: 400 }
-      );
+      return errorResponse(400, "IMF bailout requires outstanding bond principal");
     }
 
     if (bonds.length > 0) {
@@ -409,10 +391,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const newShares = Math.max(0, targetImfShares - currentImfShares);
 
     if (newShares < 1 && currentImfShares === 0) {
-      return NextResponse.json(
-        { error: "Diluted share issuance rounds to zero — raise target %" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Diluted share issuance rounds to zero — raise target %");
     }
 
     if (imfIdx >= 0) {

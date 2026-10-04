@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { getPartyBudgetCollection } from "@/lib/db/collections";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
@@ -33,7 +33,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, id: partyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const auth = await requireAuthWithCharacter();
@@ -50,7 +50,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const db = await getDb();
     const party = await findPartyBySequentialId(db, partyId, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
 
     const actor = auth.user.character;
@@ -63,12 +63,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     const isViceChair = party.viceChairId?.equals(actor._id);
     const canActAsTreasurer = !party.treasurerId && (isChair || isViceChair);
     if (!isAdmin && !isTreasurer && !canActAsTreasurer) {
-      return NextResponse.json(
-        {
-          error:
-            "Only the party treasurer (or Chair/Vice-Chair when the seat is vacant) or an admin can set treasury targets",
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "Only the party treasurer (or Chair/Vice-Chair when the seat is vacant) or an admin can set treasury targets"
       );
     }
 

@@ -10,7 +10,7 @@ import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { schemas } from "@/lib/api/validate";
-import { handleRouteError, notFound } from "@/lib/api/errors";
+import { handleRouteError, notFound, errorResponse } from "@/lib/api/errors";
 import type { NPP } from "@/lib/db/types";
 
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -19,8 +19,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     if (!auth.ok) return auth.response;
 
     const { id } = await params;
-    if (!schemas.objectId.safeParse(id).success)
-      return NextResponse.json({ error: "Invalid NPP ID" }, { status: 400 });
+    if (!schemas.objectId.safeParse(id).success) return errorResponse(400, "Invalid NPP ID");
     const db = await getDb();
     const result = await db
       .collection<NPP>("npps")

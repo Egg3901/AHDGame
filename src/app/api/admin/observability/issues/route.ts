@@ -7,7 +7,7 @@
  */
 import { NextResponse } from "next/server";
 import { getAuthAdmin } from "@/lib/auth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { SENTRY_DEFAULT_ORG } from "@/lib/observability/sentryIngest";
 
 export const dynamic = "force-dynamic";
@@ -16,7 +16,7 @@ export async function GET() {
   try {
     const user = await getAuthAdmin();
     if (!user) {
-      return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+      return errorResponse(403, "Admin access required");
     }
 
     const baseUrl = process.env.SENTRY_API_URL?.replace(/\/+$/, "");

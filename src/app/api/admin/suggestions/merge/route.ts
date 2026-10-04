@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { adminSuggestionMergeSchema } from "@/lib/api/schemas/admin";
 import { createNotification } from "@/lib/notifications";
@@ -29,33 +29,24 @@ export async function POST(request: Request) {
 
     const target = await coll.findOne({ issueNumber: targetIssueNumber });
     if (!target) {
-      return NextResponse.json({ error: "Target suggestion not found" }, { status: 404 });
+      return errorResponse(404, "Target suggestion not found");
     }
 
     if (target.mergedInto) {
-      return NextResponse.json(
-        { error: "Target is already merged into another suggestion" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Target is already merged into another suggestion");
     }
 
     const sources: Suggestion[] = [];
     for (const num of sourceIssueNumbers) {
       const src = await coll.findOne({ issueNumber: num });
       if (!src) {
-        return NextResponse.json({ error: `Source S#${num} not found` }, { status: 404 });
+        return errorResponse(404, `Source S#${num} not found`);
       }
       if (src._id.equals(target._id)) {
-        return NextResponse.json(
-          { error: "Cannot merge a suggestion into itself" },
-          { status: 400 }
-        );
+        return errorResponse(400, "Cannot merge a suggestion into itself");
       }
       if (src.mergedInto) {
-        return NextResponse.json(
-          { error: `S#${num} is already merged into another suggestion` },
-          { status: 400 }
-        );
+        return errorResponse(400, `S#${num} is already merged into another suggestion`);
       }
       sources.push(src);
     }

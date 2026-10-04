@@ -12,7 +12,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import type { DefenceContract } from "@/lib/db/types/defenceContract";
 import type { CorporateSector } from "@/lib/db/types/corporation";
@@ -47,7 +47,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
 
     // Contract ids are ObjectIds; the corporation param is addressed by sequentialId.
     if (!ObjectId.isValid(contractId) || contractId.length !== 24) {
-      return NextResponse.json({ error: "Invalid id" }, { status: 400 });
+      return errorResponse(400, "Invalid id");
     }
     const contractObjectId = new ObjectId(contractId);
 
@@ -58,9 +58,9 @@ export async function PUT(request: Request, { params }: RouteParams) {
 
     const isCeo = corp.userId && corp.userId.toString() === auth.user.userId.toString();
     if (!isCeo && !auth.user.isAdmin) {
-      return NextResponse.json(
-        { error: "Only this corporation's CEO may assign production lines to a contract." },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "Only this corporation's CEO may assign production lines to a contract."
       );
     }
 
@@ -70,23 +70,17 @@ export async function PUT(request: Request, { params }: RouteParams) {
       .collection<DefenceContract>("defenceContracts")
       .findOne({ _id: contractObjectId, corporationId: corp._id });
     if (!contract) {
-      return NextResponse.json({ error: "No such contract" }, { status: 404 });
+      return errorResponse(404, "No such contract");
     }
     if (contract.status !== "pending" && contract.status !== "active") {
-      return NextResponse.json(
-        { error: "This order is closed, so its production lines cannot be changed." },
-        { status: 409 }
-      );
+      return errorResponse(409, "This order is closed, so its production lines cannot be changed.");
     }
 
     const sector = await db
       .collection<CorporateSector>("corporateSectors")
       .findOne({ _id: contract.sectorId });
     if (!sector) {
-      return NextResponse.json(
-        { error: "This contract's plant no longer exists." },
-        { status: 409 }
-      );
+      return errorResponse(409, "This contract's plant no longer exists.");
     }
 
     // The plant is the constraint, not the contract: total allocation across everything this
@@ -119,10 +113,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
 
     const changed = await setContractFactories(db, contractObjectId, parsed.data.assignedFactories);
     if (!changed) {
-      return NextResponse.json(
-        { error: "This order closed before the change could be saved." },
-        { status: 409 }
-      );
+      return errorResponse(409, "This order closed before the change could be saved.");
     }
 
     return NextResponse.json({

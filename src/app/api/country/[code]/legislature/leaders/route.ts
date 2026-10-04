@@ -6,7 +6,7 @@
  */
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, isParliamentarySystem, type CountryId } from "@/lib/constants/countries";
 import { getGovernmentFormationsCollection } from "@/lib/db/collections/governmentFormation";
 import type { Character, ParliamentaryGovernment, PoliticalParty } from "@/lib/db/types";
@@ -21,7 +21,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
     const countryId = code.toUpperCase() as CountryId;
     const config = COUNTRY_CONFIGS[countryId];
     if (!config) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 404 });
+      return errorResponse(404, "Invalid country code");
     }
 
     const db = await getDb();

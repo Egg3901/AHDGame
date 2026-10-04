@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireSingleplayer } from "@/lib/api/requireSingleplayer";
 import { parseJsonBody } from "@/lib/api/validate";
 import { getDb } from "@/lib/mongodb";
@@ -38,14 +38,14 @@ export async function PATCH(request: Request) {
   const denied = requireSingleplayer(request);
   if (denied) return denied;
   if (!canOperateSingleplayerWorld())
-    return NextResponse.json({ error: "Singleplayer operator is unavailable" }, { status: 403 });
+    return errorResponse(403, "Singleplayer operator is unavailable");
   try {
     const parsed = await parseJsonBody(request, schema);
     if (!parsed.success)
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
     const db = await getDb();
     const current = await getSingleplayerConfig(db);
-    if (!current) return NextResponse.json({ error: "No configured local world" }, { status: 409 });
+    if (!current) return errorResponse(409, "No configured local world");
     const config = await setSingleplayerConfig(db, {
       mode: current.mode,
       difficulty: parsed.data.difficulty ?? current.difficulty,

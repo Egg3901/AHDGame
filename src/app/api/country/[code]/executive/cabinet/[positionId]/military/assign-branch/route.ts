@@ -8,7 +8,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
 import { getGameStateCollection } from "@/lib/db/collections/gameState";
@@ -42,10 +42,10 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, positionId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
     if (DEFENSE_POSITION_BY_COUNTRY[countryId] !== positionId) {
-      return NextResponse.json({ error: "Not a defense cabinet position" }, { status: 404 });
+      return errorResponse(404, "Not a defense cabinet position");
     }
 
     const parsed = await parseJsonBody(request, assignBranchSchema);
@@ -56,7 +56,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const catalog = MILITARY_BRANCHES_BY_COUNTRY[countryId] ?? [];
     if (!catalog.some((b) => b.id === branchId)) {
-      return NextResponse.json({ error: "Unknown branch" }, { status: 400 });
+      return errorResponse(400, "Unknown branch");
     }
 
     const db = await getDb();
@@ -64,7 +64,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       await getGameStateCollection(db)
     ).findOne({ _id: "current" }, { projection: { conflictsEnabled: 1 } });
     if (!gs?.conflictsEnabled) {
-      return NextResponse.json({ error: "Conflicts subsystem disabled" }, { status: 404 });
+      return errorResponse(404, "Conflicts subsystem disabled");
     }
 
     const member = await getCabinetMembersCollection(db).findOne({ countryId, positionId });
@@ -73,20 +73,17 @@ export async function POST(request: Request, { params }: RouteParams) {
       auth.user.character &&
       member.characterId.toString() === auth.user.character._id.toString();
     if (!isHolder && !auth.user.isAdmin) {
-      return NextResponse.json(
-        { error: "Only the defence minister may assign units." },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the defence minister may assign units.");
     }
 
     if (assignedGeneralId) {
       const commission = await getCharacterCommission(db, assignedGeneralId);
       if (!commission.commissioned) {
-        return NextResponse.json({ error: "Not a commissioned general" }, { status: 400 });
+        return errorResponse(400, "Not a commissioned general");
       }
       const generals = await listCountryGenerals(db, countryId);
       if (!generals.some((g) => g.id === assignedGeneralId)) {
-        return NextResponse.json({ error: "General not in this country" }, { status: 400 });
+        return errorResponse(400, "General not in this country");
       }
     }
 

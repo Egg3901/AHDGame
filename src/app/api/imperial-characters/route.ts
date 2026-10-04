@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getNextSequentialId } from "@/lib/db/sequentialId";
 import { randomBrandColor } from "@/lib/corporations/brandColor";
 import {
@@ -59,10 +59,7 @@ export async function POST(request: Request) {
     // Validate country is eligible for imperial characters
     const eligibleCountries = getImperialEligibleCountries();
     if (!eligibleCountries.includes(countryId as CountryId)) {
-      return NextResponse.json(
-        { error: `${countryId} is not eligible for imperial characters` },
-        { status: 400 }
-      );
+      return errorResponse(400, `${countryId} is not eligible for imperial characters`);
     }
 
     // Check no imperial character already exists for this country
@@ -70,18 +67,12 @@ export async function POST(request: Request) {
       .collection<ImperialCharacter>("imperialCharacters")
       .findOne({ countryId: countryId as CountryId });
     if (existing) {
-      return NextResponse.json(
-        { error: `An imperial character already exists for ${countryId}` },
-        { status: 400 }
-      );
+      return errorResponse(400, `An imperial character already exists for ${countryId}`);
     }
 
     const imperialConfig = getImperialConfig(countryId as CountryId);
     if (!imperialConfig) {
-      return NextResponse.json(
-        { error: "Imperial configuration not found for this country" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Imperial configuration not found for this country");
     }
 
     const now = new Date();
@@ -181,7 +172,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const countryId = searchParams.get("countryId");
     if (!countryId) {
-      return NextResponse.json({ error: "countryId required" }, { status: 400 });
+      return errorResponse(400, "countryId required");
     }
 
     const db = await getDb();

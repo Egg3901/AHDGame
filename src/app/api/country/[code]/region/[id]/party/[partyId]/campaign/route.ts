@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getGameState } from "@/lib/gameState";
 import { isRedistrictingEnabled } from "@/lib/redistricting/flag";
 import { spendPoliticalStrength } from "@/lib/parties/commands/spendPoliticalStrength";
@@ -34,7 +34,7 @@ export async function POST(
     const countryId = code.toUpperCase();
     const stateId = id.toUpperCase();
     if (!(countryId in COUNTRY_CONFIGS)) {
-      return NextResponse.json({ error: "Unknown country" }, { status: 400 });
+      return errorResponse(400, "Unknown country");
     }
 
     const auth = await requireAuthWithCharacter();
@@ -43,15 +43,15 @@ export async function POST(
 
     const db = await getDb();
     if (!isRedistrictingEnabled(await getGameState(db))) {
-      return NextResponse.json({ error: "Redistricting is not enabled" }, { status: 404 });
+      return errorResponse(404, "Redistricting is not enabled");
     }
 
     const parsed = BodySchema.safeParse(await req.json());
-    if (!parsed.success) return NextResponse.json({ error: "Invalid body" }, { status: 400 });
+    if (!parsed.success) return errorResponse(400, "Invalid body");
     const districtIndex = parsed.data.districtIndex;
 
     const party = await findPartyBySequentialId(db, partyId, countryId as CountryId);
-    if (!party) return NextResponse.json({ error: "Party not found" }, { status: 404 });
+    if (!party) return errorResponse(404, "Party not found");
 
     const spo = await db
       .collection<StatePartyOrg>("statePartyOrg")
@@ -60,11 +60,9 @@ export async function POST(
       // Ticket #1167: the old message named neither the rule nor the way to
       // satisfy it, so a party member who had simply never been appointed read
       // it as a bug. Say who may act and what to ask for.
-      return NextResponse.json(
-        {
-          error: `Campaigning for ${party.name} draws on its party organisation, so it is limited to its officers. You need to be its chair, vice chair or campaigner in ${stateId}, or hold one of those roles nationally. A party leader can appoint you from the party's management page.`,
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        `Campaigning for ${party.name} draws on its party organisation, so it is limited to its officers. You need to be its chair, vice chair or campaigner in ${stateId}, or hold one of those roles nationally. A party leader can appoint you from the party's management page.`
       );
     }
 
@@ -76,7 +74,7 @@ export async function POST(
       status: { $in: ["active", "upcoming"] },
     });
     if (!election) {
-      return NextResponse.json({ error: "No active House race here" }, { status: 400 });
+      return errorResponse(400, "No active House race here");
     }
 
     // The target district must actually exist in this state's map.
@@ -84,7 +82,7 @@ export async function POST(
       .collection<CongressionalDistrict>("congressionalDistricts")
       .countDocuments({ countryId: countryId as CountryId, stateId });
     if (districtCount === 0 || districtIndex > districtCount) {
-      return NextResponse.json({ error: "District does not exist" }, { status: 400 });
+      return errorResponse(400, "District does not exist");
     }
 
     // Efficiency: is the actor an active candidate in this race?

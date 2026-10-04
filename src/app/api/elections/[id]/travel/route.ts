@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { ELECTION_LIMITS, checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { resolveElectionRouteParam } from "@/lib/elections/electionParamResolution";
 import { getElectoralVoteUnits, getTravelActionCost } from "@/lib/constants/states";
@@ -58,27 +58,24 @@ export async function POST(request: Request, { params }: RouteParams) {
       .findOne({ _id: "current" }, { projection: { preset: 1 } });
     const validStates = new Set(getElectoralVoteUnits(gameState?.preset).map((u) => u.stateId));
     if (!validStates.has(stateId)) {
-      return NextResponse.json({ error: "Invalid US state code" }, { status: 400 });
+      return errorResponse(400, "Invalid US state code");
     }
 
     const resolved = await resolveElectionRouteParam(db, electionId);
     if (!resolved.ok) {
       return resolved.reason === "invalid_id"
-        ? NextResponse.json({ error: "Invalid election ID" }, { status: 400 })
-        : NextResponse.json({ error: "Election not found" }, { status: 404 });
+        ? errorResponse(400, "Invalid election ID")
+        : errorResponse(404, "Election not found");
     }
 
     const election = resolved.election;
 
     if (election.electionType !== "president") {
-      return NextResponse.json(
-        { error: "Travel is only available in presidential races" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Travel is only available in presidential races");
     }
 
     if (election.status !== "active") {
-      return NextResponse.json({ error: "Election is not active" }, { status: 400 });
+      return errorResponse(400, "Election is not active");
     }
 
     const character = auth.user.character;
@@ -90,17 +87,11 @@ export async function POST(request: Request, { params }: RouteParams) {
     });
 
     if (!candidate) {
-      return NextResponse.json(
-        { error: "You are not an active candidate in this election" },
-        { status: 403 }
-      );
+      return errorResponse(403, "You are not an active candidate in this election");
     }
 
     if (candidate.campaignSuspended) {
-      return NextResponse.json(
-        { error: "Suspended campaigns cannot change travel focus" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Suspended campaigns cannot change travel focus");
     }
 
     // Cost scales with the target state's electoral-vote count — small states
@@ -120,7 +111,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     // move that never landed.
     const headerKey = request.headers.get("Idempotency-Key");
     if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128)) {
-      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
+      return errorResponse(400, "Invalid Idempotency-Key header");
     }
     const flowKey = headerKey ?? randomUUID();
     const fingerprint = `${character._id.toHexString()}:${candidate._id.toHexString()}:travel:${stateId}:${actionCost}`;
@@ -142,19 +133,16 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
     const recovering = previousReceipt?.status === "in_progress";
     if (!recovering && candidate.travelState === stateId) {
-      return NextResponse.json(
-        { error: "You are already campaigning in this state" },
-        { status: 400 }
-      );
+      return errorResponse(400, "You are already campaigning in this state");
     }
     if (!recovering) {
       const freshChar = await db
         .collection<Character>("characters")
         .findOne({ _id: character._id }, { projection: { actions: 1 } });
       if (!freshChar || freshChar.actions < actionCost) {
-        return NextResponse.json(
-          { error: `Not enough actions. Travel to ${stateId} costs ${actionCost} actions.` },
-          { status: 400 }
+        return errorResponse(
+          400,
+          `Not enough actions. Travel to ${stateId} costs ${actionCost} actions.`
         );
       }
     }
@@ -208,15 +196,15 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     } catch (error) {
       if ((error as Error).message === "INSUFFICIENT_ACTIONS") {
-        return NextResponse.json(
-          { error: `Not enough actions. Travel to ${stateId} costs ${actionCost} actions.` },
-          { status: 400 }
+        return errorResponse(
+          400,
+          `Not enough actions. Travel to ${stateId} costs ${actionCost} actions.`
         );
       }
       if ((error as Error).message === "TRAVEL_CONFLICT") {
-        return NextResponse.json(
-          { error: "Your campaign travel state changed. Please refresh and try again." },
-          { status: 409 }
+        return errorResponse(
+          409,
+          "Your campaign travel state changed. Please refresh and try again."
         );
       }
       throw error;

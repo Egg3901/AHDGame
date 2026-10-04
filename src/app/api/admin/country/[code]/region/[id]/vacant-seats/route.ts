@@ -16,7 +16,7 @@ import type { ElectedOfficial, State, SenateClass } from "@/lib/db/types";
 import { SENATE_CLASSES } from "@/lib/constants";
 import { subNationalChamberSeats } from "@/lib/constants/states";
 import { getGameStatePreset } from "@/lib/db/collections/gameState";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 
 /** A region seat group as rendered/validated by the admin seat appointer. */
 interface SeatGroup {
@@ -58,7 +58,7 @@ export async function GET(
     const { code, id } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 404 });
+      return errorResponse(404, "Invalid country code");
     }
 
     const stateId = id;
@@ -68,7 +68,7 @@ export async function GET(
     // Verify state exists
     const state = await db.collection<State>("states").findOne({ _id: stateId, countryId });
     if (!state) {
-      return NextResponse.json({ error: "State not found" }, { status: 404 });
+      return errorResponse(404, "State not found");
     }
 
     // Get all elected officials for this state

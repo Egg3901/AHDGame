@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { getEventDefinitionsCollection } from "@/lib/db/collections/eventDefinitions";
 import type { EventDefinition } from "@/lib/db/types/events";
@@ -76,7 +76,7 @@ export async function POST(request: Request) {
     const coll = getEventDefinitionsCollection(db);
     const existing = await coll.findOne({ kind: parsed.data.kind });
     if (existing) {
-      return NextResponse.json({ error: "Definition kind already exists" }, { status: 409 });
+      return errorResponse(409, "Definition kind already exists");
     }
 
     const now = new Date();

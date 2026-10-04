@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { getGameState } from "@/lib/gameState";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -70,19 +70,13 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     // Private corps only
     if (!corporation.isPrivate) {
-      return NextResponse.json(
-        {
-          error:
-            "Direct capital injection is only available for private corporations. Public corps raise capital through share issuance.",
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "Direct capital injection is only available for private corporations. Public corps raise capital through share issuance."
       );
     }
     if (corporation.countryOwnerId) {
-      return NextResponse.json(
-        { error: "Capital injection is not available for national corporations." },
-        { status: 400 }
-      );
+      return errorResponse(400, "Capital injection is not available for national corporations.");
     }
 
     const gameState = await getGameState();
@@ -93,7 +87,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       .collection<Character>("characters")
       .findOne({ userId: new ObjectId(auth.user.userId) });
     if (!character) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
 
     const forexEnabled = await isForexEnabled();
@@ -101,11 +95,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     const currentBalance = getPersonalBalance(character, homeCurrency, forexEnabled);
 
     if (currentBalance < amount) {
-      return NextResponse.json(
-        {
-          error: `Insufficient personal funds. You have ${homeCurrency} ${Math.floor(currentBalance).toLocaleString()} liquid; injection requires ${homeCurrency} ${amount.toLocaleString()}.`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Insufficient personal funds. You have ${homeCurrency} ${Math.floor(currentBalance).toLocaleString()} liquid; injection requires ${homeCurrency} ${amount.toLocaleString()}.`
       );
     }
 
@@ -133,10 +125,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       forexEnabled
     );
     if (!debitResult.ok) {
-      return NextResponse.json(
-        { error: "Insufficient personal funds (race condition). Please try again." },
-        { status: 400 }
-      );
+      return errorResponse(400, "Insufficient personal funds (race condition). Please try again.");
     }
 
     const now = new Date();

@@ -15,7 +15,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError, notFound } from "@/lib/api/errors";
+import { handleRouteError, notFound, errorResponse } from "@/lib/api/errors";
 import type { Corporation, CorporateSector } from "@/lib/db/types";
 import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
@@ -59,9 +59,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (!corp) throw notFound("Corporation not found");
 
     if (corp.primaryUnderwritingIncomingFunding || corp.bankUnderwritingFunding) {
-      return NextResponse.json(
-        { error: "Primary underwriting cash is settling; retry relocation after settlement" },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "Primary underwriting cash is settling; retry relocation after settlement"
       );
     }
 
@@ -70,9 +70,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       .find({ corporationId: corp._id })
       .toArray();
     if (hasProtectedConstructionPropertyIn(propertySectors)) {
-      return NextResponse.json(
-        { error: "Resolve secured construction before relocating corporate headquarters" },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "Resolve secured construction before relocating corporate headquarters"
       );
     }
 
@@ -114,9 +114,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           `headquarters:${corp._id.toHexString()}:${parsed.data.countryId}:${parsed.data.regionId}`
         );
     if (!needsCurrencyConversion && !hqTransitionKeys) {
-      return NextResponse.json(
-        { error: "A sector changed or acquired secured construction during relocation" },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "A sector changed or acquired secured construction during relocation"
       );
     }
     try {
@@ -136,9 +136,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         }
       );
       if (updateResult.matchedCount !== 1) {
-        return NextResponse.json(
-          { error: "Primary underwriting cash is settling; retry relocation after settlement" },
-          { status: 409 }
+        return errorResponse(
+          409,
+          "Primary underwriting cash is settling; retry relocation after settlement"
         );
       }
     } finally {

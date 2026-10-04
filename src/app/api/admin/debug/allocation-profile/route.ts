@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { badRequest, handleRouteError } from "@/lib/api/errors";
+import { badRequest, handleRouteError, errorResponse } from "@/lib/api/errors";
 import {
   startAllocationProfileInBackground,
   getLastAllocationProfileResult,
@@ -127,7 +127,7 @@ export async function POST(request: Request) {
       return NextResponse.json(response, { status: 202 });
     } catch (err) {
       if (err instanceof AllocationProfileBusyError) {
-        return NextResponse.json({ error: err.message }, { status: 409 });
+        return errorResponse(409, err.message);
       }
       throw err;
     }

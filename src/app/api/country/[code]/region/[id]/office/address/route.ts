@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { isTargetValidForCountry } from "@/lib/demographics/turnoutTargets";
 import { requireHumanSessionWithCharacter, requireAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { getDb } from "@/lib/mongodb";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -29,7 +29,7 @@ export async function POST(
     const { code, id } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
 
     const auth = await requireHumanSessionWithCharacter(request);
@@ -65,7 +65,7 @@ export async function POST(
         .collection<{ _id: string; preset?: string }>("gameState")
         .findOne({ _id: "current" }, { projection: { preset: 1 } });
       if (!isTargetValidForCountry(targetId, countryId, gs?.preset ?? null)) {
-        return NextResponse.json({ error: "Unknown demographic target" }, { status: 400 });
+        return errorResponse(400, "Unknown demographic target");
       }
     }
 
@@ -73,7 +73,7 @@ export async function POST(
     const adminOverride = parsed.data.adminOverride === true && isAdmin;
     if (!adminOverride) {
       const holder = await getOfficeHolderRow(db, countryId, stateId, auth.user.character._id);
-      if (!holder) return NextResponse.json({ error: "Not the office-holder" }, { status: 403 });
+      if (!holder) return errorResponse(403, "Not the office-holder");
     }
 
     const result = await deliverAddress(db, {
@@ -101,7 +101,7 @@ export async function GET(
     const { code, id } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
     const auth = await requireAuth();
     if (!auth.ok) return auth.response;

@@ -8,7 +8,7 @@ import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { requirePeaceNegotiator } from "@/lib/api/requirePeaceNegotiator";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getGameStateCollection } from "@/lib/db/collections/gameState";
 import { getConflict, getConflictsCollection } from "@/lib/db/collections/conflicts";
@@ -59,7 +59,7 @@ export async function POST(
     const { code, conflictId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const auth = await requireAuthWithCharacter();
@@ -71,7 +71,7 @@ export async function POST(
       await getGameStateCollection(db)
     ).findOne({ _id: "current" }, { projection: { conflictsEnabled: 1, currentTurn: 1 } });
     if (!gs?.conflictsEnabled) {
-      return NextResponse.json({ error: "Conflicts subsystem disabled" }, { status: 404 });
+      return errorResponse(404, "Conflicts subsystem disabled");
     }
     const currentTurn = gs.currentTurn ?? 0;
 
@@ -87,26 +87,23 @@ export async function POST(
 
     const conflict = await getConflict(db, conflictId);
     if (!conflict) {
-      return NextResponse.json({ error: "That war does not exist." }, { status: 404 });
+      return errorResponse(404, "That war does not exist.");
     }
     if (conflict.status !== "terms_pending" || !conflict.termsWindow) {
-      return NextResponse.json({ error: "That war is not awaiting terms." }, { status: 409 });
+      return errorResponse(409, "That war is not awaiting terms.");
     }
     // Refused here as well as by the sweeper. The sweep runs on a tick, so a window
     // can be past its closing turn for a while before anything acts on it, and a
     // victor must not be able to impose inside that gap.
     if (currentTurn >= conflict.termsWindow.closesTurn) {
-      return NextResponse.json(
-        { error: "The window to impose terms on that war has closed." },
-        { status: 409 }
-      );
+      return errorResponse(409, "The window to impose terms on that war has closed.");
     }
     // THE COUNTRY GATE, and the whole reason a coalition victory yields one term
     // rather than one per ally.
     if (conflict.termsWindow.imposer !== countryId) {
-      return NextResponse.json(
-        { error: "Only the country that led this war to victory can impose its terms." },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "Only the country that led this war to victory can impose its terms."
       );
     }
 
@@ -122,9 +119,9 @@ export async function POST(
         .findOne({ countryId: term.payer }, { projection: { gdp: 1 } });
       maxIndemnity = maxIndemnityForGdp(payerBudget?.gdp);
       if (maxIndemnity == null) {
-        return NextResponse.json(
-          { error: "The paying country has no GDP on record to size an indemnity against." },
-          { status: 400 }
+        return errorResponse(
+          400,
+          "The paying country has no GDP on record to size an indemnity against."
         );
       }
     }
@@ -150,7 +147,7 @@ export async function POST(
       targetPartyIds,
       settlement,
     });
-    if (!check.ok) return NextResponse.json({ error: check.error }, { status: 400 });
+    if (!check.ok) return errorResponse(400, check.error);
 
     // CLAIM THE WAR BEFORE APPLYING ANYTHING. Two simultaneous requests both pass
     // every check above; only one can move this document off `terms_pending`, and
@@ -173,7 +170,7 @@ export async function POST(
       }
     );
     if (claim.modifiedCount === 0) {
-      return NextResponse.json({ error: "That war is already settled." }, { status: 409 });
+      return errorResponse(409, "That war is already settled.");
     }
 
     await applyPeaceTerm(db, term, {

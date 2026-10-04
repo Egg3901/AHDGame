@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { withNoStore } from "@/lib/api/withNoStore";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -63,7 +63,7 @@ async function handleGET(request: Request) {
     if (countryRaw) {
       const cid = countryRaw.toUpperCase();
       if (!COUNTRY_CONFIGS[cid as CountryId]) {
-        return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+        return errorResponse(400, "Invalid country code");
       }
       filter.countryId = cid;
     }

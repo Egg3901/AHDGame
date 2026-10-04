@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { getDb } from "@/lib/mongodb";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { z } from "zod";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import type { PoliticalParty } from "@/lib/db/types";
@@ -28,7 +28,7 @@ export async function POST(
     const { code, id } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const parsed = await parseJsonBody(request, heroSchema);
     if (!parsed.success)
@@ -47,18 +47,15 @@ export async function POST(
     const party = await findPartyBySequentialId(db, id, countryId);
 
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
 
     const isAdmin = authData.isAdmin;
 
     if (!canActAsChair(party, authData.character._id) && !isAdmin) {
-      return NextResponse.json(
-        {
-          error:
-            "Only the party chair (or acting vice-chair when the chair seat is vacant) can update the hero image",
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "Only the party chair (or acting vice-chair when the chair seat is vacant) can update the hero image"
       );
     }
 

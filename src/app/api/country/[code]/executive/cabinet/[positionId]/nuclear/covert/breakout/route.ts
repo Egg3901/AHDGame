@@ -8,7 +8,7 @@
 // Auth: defence cabinet holder or admin. Errors: 400, 401, 403, 404, 409
 import { NextResponse } from "next/server";
 import type { Filter } from "mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import type { PoliticalMetricsDoc } from "@/lib/db/types/politicalMetrics";
 import { applyBoardDelta } from "@/lib/politicalLegislation/boardWrite";
@@ -40,13 +40,10 @@ export async function POST(request: Request, { params }: NuclearRouteParams) {
 
     const covert = await getCovertNuclearProgram(db, countryId);
     if (!covert.completed) {
-      return NextResponse.json({ error: "No device has been assembled." }, { status: 409 });
+      return errorResponse(409, "No device has been assembled.");
     }
     if (covert.brokenOutTurn != null) {
-      return NextResponse.json(
-        { error: "The breakout test has already been conducted." },
-        { status: 409 }
-      );
+      return errorResponse(409, "The breakout test has already been conducted.");
     }
 
     const turn = gs.currentTurn ?? 0;

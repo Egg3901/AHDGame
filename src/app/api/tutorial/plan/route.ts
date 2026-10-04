@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import type { Character } from "@/lib/db/types";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
 import {
@@ -93,10 +93,7 @@ export async function PUT(request: Request) {
       // Skipping is the one experience that legitimately carries no interests.
       const interests = body.experience === "skip" ? [] : normalizeInterests(body.interests);
       if (body.experience !== "skip" && interests.length === 0) {
-        return NextResponse.json(
-          { error: "Choose at least one thing you want to do" },
-          { status: 400 }
-        );
+        return errorResponse(400, "Choose at least one thing you want to do");
       }
       set["tutorial.experience"] = body.experience;
       set["tutorial.interests"] = interests;
@@ -120,7 +117,7 @@ export async function PUT(request: Request) {
       Object.keys(addToSet).length === 0 &&
       Object.keys(unset).length === 0
     ) {
-      return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
+      return errorResponse(400, "Nothing to update");
     }
 
     const db = await getDb();

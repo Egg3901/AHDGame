@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireModerator } from "@/lib/api/requireModerator";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { createModAuditLog } from "@/lib/modAuditLog";
 import { z } from "zod";
 import { MAX_REGION_ID_LENGTH } from "@/lib/constants/states";
@@ -45,21 +45,15 @@ export async function PATCH(request: Request) {
 
     const user = await db.collection("users").findOne({ username });
     if (!user) {
-      return NextResponse.json({ error: `User '${username}' not found` }, { status: 404 });
+      return errorResponse(404, `User '${username}' not found`);
     }
     if (user.role === "admin") {
-      return NextResponse.json(
-        { error: "Cannot perform actions on admin accounts" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Cannot perform actions on admin accounts");
     }
 
     const character = await db.collection<Character>("characters").findOne({ userId: user._id });
     if (!character) {
-      return NextResponse.json(
-        { error: `No character found for user '${username}'` },
-        { status: 404 }
-      );
+      return errorResponse(404, `No character found for user '${username}'`);
     }
 
     const oldState = character.homeState;
@@ -79,11 +73,9 @@ export async function PATCH(request: Request) {
     if (!targetState) {
       // Name the country searched — "not found" is far more often the wrong
       // country picked than a bad id. See the admin twin of this route.
-      return NextResponse.json(
-        {
-          error: `No region "${homeState}" in ${character.countryId} — ${character.name} is a ${character.countryId} character, and this move must stay inside their own country.`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `No region "${homeState}" in ${character.countryId} — ${character.name} is a ${character.countryId} character, and this move must stay inside their own country.`
       );
     }
 

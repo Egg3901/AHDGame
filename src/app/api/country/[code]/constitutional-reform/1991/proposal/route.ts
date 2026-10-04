@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { getGameState } from "@/lib/gameState";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
@@ -39,10 +39,7 @@ type Context = { params: Promise<{ code: string }> };
 export async function GET(_request: Request, { params }: Context) {
   try {
     if ((await params).code.toUpperCase() !== "BG")
-      return NextResponse.json(
-        { error: "No Bulgarian constitutional decision here" },
-        { status: 404 }
-      );
+      return errorResponse(404, "No Bulgarian constitutional decision here");
     const auth = await requireBasicAuth();
     if (!auth.ok) return auth.response;
     const db = await getDb();
@@ -67,10 +64,7 @@ export async function GET(_request: Request, { params }: Context) {
 export async function POST(request: Request, { params }: Context) {
   try {
     if ((await params).code.toUpperCase() !== "BG")
-      return NextResponse.json(
-        { error: "No Bulgarian constitutional decision here" },
-        { status: 404 }
-      );
+      return errorResponse(404, "No Bulgarian constitutional decision here");
     const auth = await requireBasicAuth();
     if (!auth.ok) return auth.response;
     const limit = checkRateLimit(`bg-constitutional-reform:${auth.user.userId}`, 5, 60_000);
@@ -81,7 +75,7 @@ export async function POST(request: Request, { params }: Context) {
     const db = await getDb();
     const game = await getGameState(db);
     if (game?.preset !== "1991-default")
-      return NextResponse.json({ error: "No electoral decision in this era" }, { status: 409 });
+      return errorResponse(409, "No electoral decision in this era");
     const character = await getCharacterByUserId(db, auth.user.userId);
     const official = character
       ? await db.collection("electedOfficials").findOne(
@@ -162,7 +156,7 @@ export async function POST(request: Request, { params }: Context) {
     );
   } catch (error) {
     if (error instanceof Bg1991ConstitutionalConflict || error instanceof Bg1991InitiativeConflict)
-      return NextResponse.json({ error: error.message }, { status: 409 });
+      return errorResponse(409, error.message);
     return handleRouteError(error);
   }
 }

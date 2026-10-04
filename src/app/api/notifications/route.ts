@@ -4,7 +4,7 @@ import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { withNoStore } from "@/lib/api/withNoStore";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -77,13 +77,13 @@ export const GET = withNoStore(async (request: Request) => {
 
     const ctx = await loadBundleContext(db, userId);
     if (!ctx) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return errorResponse(404, "User not found");
     }
 
     const { bundleUserIds, notificationAccounts } = ctx;
     const accountResolution = resolveAccountFilter(accountParam, bundleUserIds);
     if (!accountResolution.ok) {
-      return NextResponse.json({ error: "Invalid account filter" }, { status: 400 });
+      return errorResponse(400, "Invalid account filter");
     }
     const queryUserIds = accountResolution.userIds;
 
@@ -97,7 +97,7 @@ export const GET = withNoStore(async (request: Request) => {
     const allowedCharacterIds = new Set(profileScopeCharacters.map((c) => c._id.toString()));
     const profileResolution = resolveCharacterProfileFilter(profileParam, allowedCharacterIds);
     if (!profileResolution.ok) {
-      return NextResponse.json({ error: "Invalid profile filter" }, { status: 400 });
+      return errorResponse(400, "Invalid profile filter");
     }
 
     const visibility = notificationTypeFilter(ctx.preferences, new Date());
@@ -252,7 +252,7 @@ export async function PATCH(request: Request) {
         { projection: { _id: 1, notificationBundleUserIds: 1, notificationPreferences: 1 } }
       );
     if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return errorResponse(404, "User not found");
     }
     const bundleUserIds = getNotificationBundleUserIds(user);
     const bundleSet = new Set(bundleUserIds.map((x) => x.toString()));
@@ -260,7 +260,7 @@ export async function PATCH(request: Request) {
     if (id) {
       const notificationOid = parseObjectId(id);
       if (!notificationOid) {
-        return NextResponse.json({ error: "Invalid notification ID" }, { status: 400 });
+        return errorResponse(400, "Invalid notification ID");
       }
       const action = parsed.data.action ?? "read";
       const filter = { _id: notificationOid, userId: { $in: bundleUserIds } };
@@ -284,7 +284,7 @@ export async function PATCH(request: Request) {
       if (forUserId) {
         const scopeOid = parseObjectId(forUserId);
         if (!scopeOid || !bundleSet.has(scopeOid.toString())) {
-          return NextResponse.json({ error: "Invalid account scope" }, { status: 400 });
+          return errorResponse(400, "Invalid account scope");
         }
         scopeIds = [scopeOid];
       }
@@ -292,13 +292,13 @@ export async function PATCH(request: Request) {
       if (forCharacterId) {
         const charOid = parseObjectId(forCharacterId);
         if (!charOid) {
-          return NextResponse.json({ error: "Invalid character id" }, { status: 400 });
+          return errorResponse(400, "Invalid character id");
         }
         const owningChar = await db
           .collection<Character>("characters")
           .findOne({ _id: charOid, userId: { $in: scopeIds } }, { projection: { _id: 1 } });
         if (!owningChar) {
-          return NextResponse.json({ error: "Character not in scope" }, { status: 400 });
+          return errorResponse(400, "Character not in scope");
         }
         filter["metadata.recipientCharacterId"] = forCharacterId;
       }
@@ -340,7 +340,7 @@ export async function DELETE(request: Request) {
         { projection: { _id: 1, notificationBundleUserIds: 1, notificationPreferences: 1 } }
       );
     if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return errorResponse(404, "User not found");
     }
     const bundleUserIds = getNotificationBundleUserIds(user);
 
@@ -359,14 +359,14 @@ export async function DELETE(request: Request) {
     } else if (id) {
       const notificationOid = parseObjectId(id);
       if (!notificationOid) {
-        return NextResponse.json({ error: "Invalid notification ID" }, { status: 400 });
+        return errorResponse(400, "Invalid notification ID");
       }
       await db.collection<Notification>("notifications").deleteOne({
         _id: notificationOid,
         userId: { $in: bundleUserIds },
       });
     } else {
-      return NextResponse.json({ error: "No id, ids, or deleteAll specified" }, { status: 400 });
+      return errorResponse(400, "No id, ids, or deleteAll specified");
     }
 
     return NextResponse.json({ success: true });

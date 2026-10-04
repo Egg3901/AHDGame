@@ -6,7 +6,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError, badRequest } from "@/lib/api/errors";
+import { handleRouteError, badRequest, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse, SAVINGS_WALLET_LIMITS } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
 import { z } from "zod";
@@ -88,7 +88,7 @@ export async function POST(request: Request) {
       isLineOfCreditEnabled(),
     ]);
     if (!locEnabled || !forexEnabled) {
-      return NextResponse.json({ error: "Line of credit is not available" }, { status: 404 });
+      return errorResponse(404, "Line of credit is not available");
     }
 
     const character = await getCharacterByUserId(db, auth.user.userId);
@@ -123,7 +123,7 @@ export async function POST(request: Request) {
 
     const snapshot = await buildLocSnapshot(db, character);
     if (!snapshot) {
-      return NextResponse.json({ error: "Line of credit is not available" }, { status: 404 });
+      return errorResponse(404, "Line of credit is not available");
     }
 
     const rates = await loadExchangeRatesMap(db);
@@ -219,7 +219,7 @@ export async function POST(request: Request) {
 
       const freshSnapshot = await buildLocSnapshot(db, freshCharacter);
       if (!freshSnapshot) {
-        return NextResponse.json({ error: "Line of credit is not available" }, { status: 404 });
+        return errorResponse(404, "Line of credit is not available");
       }
       if (addInternal > freshSnapshot.perPlayerAvailableInternal + 1e-6) {
         return NextResponse.json(

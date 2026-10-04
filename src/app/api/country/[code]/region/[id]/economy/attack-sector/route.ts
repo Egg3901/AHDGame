@@ -6,7 +6,7 @@ import { ObjectId } from "mongodb";
 import { getDb, getMongoClient } from "@/lib/mongodb";
 import { requireHumanSession } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { regionUrl } from "@/lib/urls";
 import { runTransactionWithSessionRetry } from "@/lib/db/transactionWithRetry";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -83,23 +83,17 @@ export async function POST(request: Request, { params }: RouteParams) {
     const db = await getDb();
     const gameState = await db.collection<GameState>("gameState").findOne({ _id: "current" });
     if (gameState?.corporationActionsPaused) {
-      return NextResponse.json(
-        { error: "Corporation actions are currently paused" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Corporation actions are currently paused");
     }
 
     if (!marketAtLeast(await getMarketSystemModeForDb(db), "plants")) {
-      return NextResponse.json(
-        { error: "Sector splits require the plants economy." },
-        { status: 409 }
-      );
+      return errorResponse(409, "Sector splits require the plants economy.");
     }
 
     const { code, id: stateId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const parsed = await parseJsonBody(request, attackSectorSchema);
@@ -107,21 +101,18 @@ export async function POST(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
     }
     if (!ObjectId.isValid(parsed.data.sectorId)) {
-      return NextResponse.json({ error: "Invalid sector ID" }, { status: 400 });
+      return errorResponse(400, "Invalid sector ID");
     }
     const targetSectorId = new ObjectId(parsed.data.sectorId);
 
     const state = await db.collection<State>("states").findOne({ _id: stateId, countryId });
-    if (!state) return NextResponse.json({ error: "State not found" }, { status: 404 });
+    if (!state) return errorResponse(404, "State not found");
 
     const blockedCountries = await loadCommandEconomyBlockedCountries(db, [countryId]);
     if (blockedCountries.has(countryId)) {
-      return NextResponse.json(
-        {
-          error:
-            "This market is state-controlled under a command economy and cannot be privately attacked.",
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "This market is state-controlled under a command economy and cannot be privately attacked."
       );
     }
 
@@ -150,17 +141,17 @@ export async function POST(request: Request, { params }: RouteParams) {
       }
     }
     if (!attacker) {
-      return NextResponse.json({ error: "You don't own a corporation" }, { status: 400 });
+      return errorResponse(400, "You don't own a corporation");
     }
 
     const targetSector = await db
       .collection<CorporateSector>("corporateSectors")
       .findOne({ _id: targetSectorId, stateId });
     if (!targetSector) {
-      return NextResponse.json({ error: "Sector not found" }, { status: 404 });
+      return errorResponse(404, "Sector not found");
     }
     if (targetSector.corporationId.equals(attacker._id)) {
-      return NextResponse.json({ error: "Cannot attack your own sector" }, { status: 400 });
+      return errorResponse(400, "Cannot attack your own sector");
     }
 
     const defender = await db
@@ -168,24 +159,18 @@ export async function POST(request: Request, { params }: RouteParams) {
       .findOne({ _id: targetSector.corporationId });
     if (!defender) {
       await db.collection<CorporateSector>("corporateSectors").deleteOne({ _id: targetSector._id });
-      return NextResponse.json(
-        {
-          error:
-            "That corporation has been dissolved. Its sector record was removed; refresh this market.",
-        },
-        { status: 404 }
+      return errorResponse(
+        404,
+        "That corporation has been dissolved. Its sector record was removed; refresh this market."
       );
     }
     if (defender.countryOwnerId) {
-      return NextResponse.json(
-        { error: "Cannot attack state-owned corporations." },
-        { status: 400 }
-      );
+      return errorResponse(400, "Cannot attack state-owned corporations.");
     }
     if (defender.suspended) {
-      return NextResponse.json(
-        { error: "Cannot attack a corporation that is suspended pending privatization auction." },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "Cannot attack a corporation that is suspended pending privatization auction."
       );
     }
 
@@ -196,12 +181,9 @@ export async function POST(request: Request, { params }: RouteParams) {
       !Number.isFinite(targetSector.capacityBookAnchor) ||
       targetSector.capacityBookAnchor < 0
     ) {
-      return NextResponse.json(
-        {
-          error:
-            "This sector's whole-plant ledger is not ready yet. Try again after the next refresh.",
-        },
-        { status: 503 }
+      return errorResponse(
+        503,
+        "This sector's whole-plant ledger is not ready yet. Try again after the next refresh."
       );
     }
 
@@ -493,7 +475,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           .catch(() => {});
       }
       if (error instanceof SplitConflictError) {
-        return NextResponse.json({ error: error.message }, { status: 409 });
+        return errorResponse(409, error.message);
       }
       throw error;
     }
@@ -503,7 +485,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: rejected.error }, { status: rejected.status });
     }
     if (!resolution) {
-      return NextResponse.json({ error: "The split could not be resolved." }, { status: 409 });
+      return errorResponse(409, "The split could not be resolved.");
     }
 
     const result: SplitResolution = resolution;

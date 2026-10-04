@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { adminSuggestionBulkDeleteSchema } from "@/lib/api/schemas/admin";
 import { createNotification } from "@/lib/notifications";
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
 
     const suggestions = await coll.find({ issueNumber: { $in: issueNumbers } }).toArray();
     if (suggestions.length === 0) {
-      return NextResponse.json({ error: "No suggestions found" }, { status: 404 });
+      return errorResponse(404, "No suggestions found");
     }
 
     const ids = suggestions.map((s) => s._id);

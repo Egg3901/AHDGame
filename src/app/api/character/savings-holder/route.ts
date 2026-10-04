@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError, notFound } from "@/lib/api/errors";
+import { handleRouteError, notFound, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse, SAVINGS_WALLET_LIMITS } from "@/lib/api/rateLimit";
 import { ZOD_CURRENCY_ENUM } from "@/lib/constants/currencies";
 import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
@@ -48,7 +48,7 @@ export async function PUT(request: Request) {
     );
 
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: 400 });
+      return errorResponse(400, result.error);
     }
 
     return NextResponse.json({

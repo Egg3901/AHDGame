@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError, notFound } from "@/lib/api/errors";
+import { handleRouteError, notFound, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { rejectDuringTurn } from "@/lib/api/rejectDuringTurn";
@@ -68,7 +68,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (ceoCheck) return ceoCheck;
     const charter = corporation.bankCharter;
     if (charter?.status !== "active") {
-      return NextResponse.json({ error: "An active bank charter is required." }, { status: 400 });
+      return errorResponse(400, "An active bank charter is required.");
     }
 
     if (parsed.data.action === "toggleAutoSweep") {
@@ -86,10 +86,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         }
       );
       if (updated.matchedCount !== 1) {
-        return NextResponse.json(
-          { error: "The bank charter changed. Reload and try again." },
-          { status: 409 }
-        );
+        return errorResponse(409, "The bank charter changed. Reload and try again.");
       }
       return NextResponse.json({ success: true, autoSweep: parsed.data.enabled });
     }

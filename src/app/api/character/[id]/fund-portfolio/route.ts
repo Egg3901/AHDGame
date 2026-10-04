@@ -3,7 +3,7 @@ import { withNoStore } from "@/lib/api/withNoStore";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { getAuthUserWithCharacter } from "@/lib/auth";
-import { handleRouteError, notFound } from "@/lib/api/errors";
+import { handleRouteError, notFound, errorResponse } from "@/lib/api/errors";
 import { isIndexFundsEnabled } from "@/lib/indexFunds/featureFlag";
 import {
   listCharacterPositions,
@@ -17,11 +17,11 @@ import { INDEX_FUNDS_DISABLED_MESSAGE } from "@/lib/indexFunds/featureFlag";
 async function handleGET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const auth = await getAuthUserWithCharacter();
-    if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    if (!auth) return errorResponse(401, "Authentication required");
 
     const db = await getDb();
     if (!(await isIndexFundsEnabled())) {
-      return NextResponse.json({ error: INDEX_FUNDS_DISABLED_MESSAGE }, { status: 403 });
+      return errorResponse(403, INDEX_FUNDS_DISABLED_MESSAGE);
     }
 
     const { id } = await params;
@@ -34,7 +34,7 @@ async function handleGET(_request: Request, { params }: { params: Promise<{ id: 
 
     // Access check: only the character owner or admin can view portfolio.
     if (!auth.isAdmin && auth.character?._id?.toString() !== characterId.toString()) {
-      return NextResponse.json({ error: "Access denied" }, { status: 403 });
+      return errorResponse(403, "Access denied");
     }
 
     const positions = await listCharacterPositions(db, characterId);

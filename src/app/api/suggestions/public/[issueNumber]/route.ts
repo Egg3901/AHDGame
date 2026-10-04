@@ -3,7 +3,7 @@ import { withNoStore } from "@/lib/api/withNoStore";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { getAuthUser } from "@/lib/auth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import type { PoliticalParty, Suggestion, User } from "@/lib/db/types";
 import { getSuggestionsCollection } from "@/lib/db/collections/suggestions";
 import { getSuggestionReactionsCollection } from "@/lib/db/collections/suggestionReactions";
@@ -25,14 +25,14 @@ export const GET = withNoStore(async function GET(
     const { issueNumber: raw } = await params;
     const issueNum = parseInt(raw, 10);
     if (isNaN(issueNum) || issueNum < 1) {
-      return NextResponse.json({ error: "Invalid suggestion id" }, { status: 400 });
+      return errorResponse(400, "Invalid suggestion id");
     }
 
     const db = await getDb();
     const coll = getSuggestionsCollection(db);
     const s = await coll.findOne({ issueNumber: issueNum });
     if (!s) {
-      return NextResponse.json({ error: "Suggestion not found" }, { status: 404 });
+      return errorResponse(404, "Suggestion not found");
     }
 
     let reporterUsername: string | null = null;

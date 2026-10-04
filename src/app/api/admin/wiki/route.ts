@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireModerator } from "@/lib/api/requireModerator";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { createWikiPageSchema } from "@/lib/api/schemas/wiki";
 import type { WikiPage } from "@/lib/db/types";
 import { getGameStamp } from "@/lib/wiki/gameConfig";
@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     // Check slug uniqueness
     const existing = await wikiPages.findOne({ slug: parsed.data.slug });
     if (existing) {
-      return NextResponse.json({ error: "A page with this slug already exists" }, { status: 400 });
+      return errorResponse(400, "A page with this slug already exists");
     }
 
     const now = new Date();

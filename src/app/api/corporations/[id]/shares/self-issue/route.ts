@@ -6,7 +6,7 @@ import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationAc
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { selfIssueSharesSchema } from "@/lib/api/schemas/corporations";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { subsidiaryIssuanceBlockReason } from "@/lib/corporations/subsidiaries/issuanceGuard";
 import { CEO_SELF_ISSUANCE_PREMIUM, MAX_SELF_ISSUANCE_PERCENT } from "@/lib/constants/corporations";
@@ -110,27 +110,22 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (ceoCheck) return ceoCheck;
 
     const subBlock = await subsidiaryIssuanceBlockReason(corporation);
-    if (subBlock) return NextResponse.json({ error: subBlock }, { status: 403 });
+    if (subBlock) return errorResponse(403, subBlock);
 
     const openShareholderVote = await db
       .collection<CorporationVote>("corporationVotes")
       .findOne({ corporationId: corporation._id, status: "open" }, { projection: { _id: 1 } });
     if (openShareholderVote) {
-      return NextResponse.json(
-        { error: "Cannot issue shares while a shareholder vote is open" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Cannot issue shares while a shareholder vote is open");
     }
 
     // Cap self-issuance at MAX_SELF_ISSUANCE_PERCENT of outstanding shares
     const currentShares = corporation.totalShares ?? 10_000_000;
     const maxShares = Math.floor((MAX_SELF_ISSUANCE_PERCENT / 100) * currentShares);
     if (shares > maxShares) {
-      return NextResponse.json(
-        {
-          error: `Cannot self-issue more than ${MAX_SELF_ISSUANCE_PERCENT}% of outstanding shares (${maxShares.toLocaleString()} shares max)`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Cannot self-issue more than ${MAX_SELF_ISSUANCE_PERCENT}% of outstanding shares (${maxShares.toLocaleString()} shares max)`
       );
     }
 
@@ -165,7 +160,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         userId: new ObjectId(auth.user.userId),
       });
       if (!imperial) {
-        return NextResponse.json({ error: "Imperial character not found" }, { status: 404 });
+        return errorResponse(404, "Imperial character not found");
       }
       ceoCharId = imperial._id;
       ceoCharName = imperial.name;
@@ -179,7 +174,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         : { userId: new ObjectId(auth.user.userId) };
       const character = await db.collection<Character>("characters").findOne(characterQuery);
       if (!character) {
-        return NextResponse.json({ error: "Character not found" }, { status: 404 });
+        return errorResponse(404, "Character not found");
       }
       ceoCharId = character._id;
       ceoCharName = character.name;
@@ -194,10 +189,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (forexEnabled) {
       const fxResult = await loadCharacterFxRate(db, homeCurrency);
       if (!fxResult.ok) {
-        return NextResponse.json(
-          { error: "Exchange rate unavailable, try again shortly" },
-          { status: 503 }
-        );
+        return errorResponse(503, "Exchange rate unavailable, try again shortly");
       }
       charFxRate = fxResult.rate;
     }
@@ -217,13 +209,13 @@ export async function POST(request: Request, { params }: RouteParams) {
         collectionName,
       });
       if (!convertResult.success) {
-        return NextResponse.json({ error: convertResult.error }, { status: 400 });
+        return errorResponse(400, convertResult.error);
       }
       ceoDoc = await db.collection(collectionName).findOne({ _id: ceoCharId });
     }
 
     if (!ceoDoc) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
 
     const now = new Date();
@@ -258,11 +250,9 @@ export async function POST(request: Request, { params }: RouteParams) {
         ? Date.now() - new Date(corporation.lastShareIssuance).getTime()
         : 0;
       const remaining = Math.ceil((ISSUANCE_COOLDOWN_MS - elapsed) / 1000 / 60 / 60);
-      return NextResponse.json(
-        {
-          error: `Share issuance is limited to once per 24 hours. Try again in ${remaining}h.`,
-        },
-        { status: 429 }
+      return errorResponse(
+        429,
+        `Share issuance is limited to once per 24 hours. Try again in ${remaining}h.`
       );
     }
 
@@ -292,11 +282,9 @@ export async function POST(request: Request, { params }: RouteParams) {
       // doesn't lock the CEO out of self-issuance for 24h. If there was a
       // prior issuance timestamp, restore it; otherwise unset the field.
       await restoreIssuanceCooldown(db, corporation);
-      return NextResponse.json(
-        {
-          error: `Insufficient personal funds. Need ${totalCostInHome.toLocaleString(undefined, { minimumFractionDigits: 2 })} ${homeCurrency}.`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Insufficient personal funds. Need ${totalCostInHome.toLocaleString(undefined, { minimumFractionDigits: 2 })} ${homeCurrency}.`
       );
     }
 

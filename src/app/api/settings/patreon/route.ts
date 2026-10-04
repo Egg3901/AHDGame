@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { PATREON_BORDER_OPTIONS, type ProfileBorderKey, type User } from "@/lib/db/types";
 import { isPatreonActive, isPlusOrBetter } from "@/lib/db/types";
 
@@ -51,7 +51,7 @@ export async function PATCH(request: Request) {
       !isAdmin &&
       (!user || !isPatreonActive(user.patreonTier ?? null, user.patreonExpiresAt ?? null))
     ) {
-      return NextResponse.json({ error: "Active Patreon status required" }, { status: 403 });
+      return errorResponse(403, "Active Patreon status required");
     }
 
     if (
@@ -63,7 +63,7 @@ export async function PATCH(request: Request) {
       );
 
       if (!option) {
-        return NextResponse.json({ error: "Invalid Patreon border option" }, { status: 400 });
+        return errorResponse(400, "Invalid Patreon border option");
       }
 
       const allowedForTier =
@@ -72,10 +72,7 @@ export async function PATCH(request: Request) {
         (user.patreonTier === "supporter" && supporterBorderGroups.has(option.group));
 
       if (!allowedForTier) {
-        return NextResponse.json(
-          { error: "Supporter+ required for animated and frame borders" },
-          { status: 403 }
-        );
+        return errorResponse(403, "Supporter+ required for animated and frame borders");
       }
     }
 

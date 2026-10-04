@@ -9,7 +9,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
 import { getGameStateCollection } from "@/lib/db/collections/gameState";
@@ -36,10 +36,10 @@ export async function PUT(request: Request, { params }: RouteParams) {
     const { code, positionId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
     if (DEFENSE_POSITION_BY_COUNTRY[countryId] !== positionId) {
-      return NextResponse.json({ error: "Not a defense cabinet position" }, { status: 404 });
+      return errorResponse(404, "Not a defense cabinet position");
     }
 
     const parsed = await parseJsonBody(request, bodySchema);
@@ -51,7 +51,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
     const gsCol = await getGameStateCollection(db);
     const gs = await gsCol.findOne({ _id: "current" }, { projection: { conflictsEnabled: 1 } });
     if (!gs?.conflictsEnabled) {
-      return NextResponse.json({ error: "Conflicts subsystem disabled" }, { status: 404 });
+      return errorResponse(404, "Conflicts subsystem disabled");
     }
 
     const member = await getCabinetMembersCollection(db).findOne({ countryId, positionId });
@@ -60,10 +60,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
       auth.user.character &&
       member.characterId.toString() === auth.user.character._id.toString();
     if (!isHolder && !auth.user.isAdmin) {
-      return NextResponse.json(
-        { error: "Only the defence minister may commit forces." },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the defence minister may commit forces.");
     }
 
     // Normalize + validate the commitment map: live conflicts only, non-negative.
@@ -72,7 +69,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
     let sum = 0;
     for (const [id, v] of Object.entries(parsed.data.committed)) {
       if (!validTheaters.has(id)) {
-        return NextResponse.json({ error: "Invalid theater" }, { status: 400 });
+        return errorResponse(400, "Invalid theater");
       }
       const n = Math.max(0, Math.round(v));
       committed[id] = n;
@@ -82,10 +79,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
     // The pool is authoritative — recompute it from the country's live units.
     const units = await getMilitaryUnitsCollection(db).find({ countryId }).toArray();
     if (sum > theaterPool(units)) {
-      return NextResponse.json(
-        { error: "Commitment exceeds available combat power" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Commitment exceeds available combat power");
     }
 
     const cohesion = Math.max(40, Math.min(100, Math.round(parsed.data.cohesion)));

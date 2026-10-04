@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { createAdminLog } from "@/lib/adminLog";
 import { createNotification } from "@/lib/notifications";
 import { parseJsonBody } from "@/lib/api/validate";
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
       try {
         characterObjectId = new ObjectId(characterId);
       } catch {
-        return NextResponse.json({ error: "Invalid characterId format" }, { status: 400 });
+        return errorResponse(400, "Invalid characterId format");
       }
 
       const character = await db.collection<Character>("characters").findOne({
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
       });
 
       if (!character) {
-        return NextResponse.json({ error: "Character not found" }, { status: 404 });
+        return errorResponse(404, "Character not found");
       }
 
       // If character already holds an office, remove them from it
@@ -109,10 +109,7 @@ export async function POST(request: Request) {
 
     // Handle existing official positions (Senate, etc.)
     if (!officialId) {
-      return NextResponse.json(
-        { error: "officialId is required for non-House appointments" },
-        { status: 400 }
-      );
+      return errorResponse(400, "officialId is required for non-House appointments");
     }
 
     // Find the elected official position
@@ -120,7 +117,7 @@ export async function POST(request: Request) {
     try {
       officialObjectId = new ObjectId(officialId);
     } catch {
-      return NextResponse.json({ error: "Invalid officialId format" }, { status: 400 });
+      return errorResponse(400, "Invalid officialId format");
     }
 
     const official = await db.collection<ElectedOfficial>("electedOfficials").findOne({
@@ -128,7 +125,7 @@ export async function POST(request: Request) {
     });
 
     if (!official) {
-      return NextResponse.json({ error: "Elected official position not found" }, { status: 404 });
+      return errorResponse(404, "Elected official position not found");
     }
 
     // If there's a current office holder, remove their office
@@ -167,7 +164,7 @@ export async function POST(request: Request) {
       try {
         characterObjectId = new ObjectId(characterId);
       } catch {
-        return NextResponse.json({ error: "Invalid characterId format" }, { status: 400 });
+        return errorResponse(400, "Invalid characterId format");
       }
 
       // Find the character
@@ -176,7 +173,7 @@ export async function POST(request: Request) {
       });
 
       if (!character) {
-        return NextResponse.json({ error: "Character not found" }, { status: 404 });
+        return errorResponse(404, "Character not found");
       }
 
       // If character already holds an office, remove them from it
@@ -314,7 +311,7 @@ export async function POST(request: Request) {
           };
           break;
         default:
-          return NextResponse.json({ error: "Unknown office type" }, { status: 400 });
+          return errorResponse(400, "Unknown office type");
       }
 
       // Update the elected official position

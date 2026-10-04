@@ -12,7 +12,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { z } from "zod";
 import {
@@ -83,7 +83,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
     const allCountries = code.toLowerCase() === "all";
     const filterCountry = code.toUpperCase() as CountryId;
     if (!allCountries && !COUNTRY_CONFIGS[filterCountry]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const { searchParams } = new URL(request.url);
@@ -373,7 +373,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     const allCountries = code.toLowerCase() === "all";
     const filterCountry = code.toUpperCase() as CountryId;
     if (!allCountries && !COUNTRY_CONFIGS[filterCountry]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const scopeCountry = allCountries ? undefined : filterCountry;
 
@@ -605,10 +605,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       });
     }
 
-    return NextResponse.json(
-      { error: "action must be batch-resolve, batch-create, or batch-restart" },
-      { status: 400 }
-    );
+    return errorResponse(400, "action must be batch-resolve, batch-create, or batch-restart");
   } catch (error) {
     return handleRouteError(error);
   }

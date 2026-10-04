@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
@@ -46,7 +46,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
       config.qualityPremiumPricingEnabled !== true ||
       !marketAtLeast(await getMarketSystemMode(config), "clearing")
     ) {
-      return NextResponse.json({ error: "Media product slates are not enabled" }, { status: 409 });
+      return errorResponse(409, "Media product slates are not enabled");
     }
     const result = await db.collection<MediaProductProject>(MEDIA_PRODUCT_PROJECTS).updateOne(
       {
@@ -58,10 +58,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
       { $set: { stage: "retired" }, $unset: { activeDevelopmentCorporationId: "" } }
     );
     if (result.matchedCount === 0) {
-      return NextResponse.json(
-        { error: "Active media product project not found" },
-        { status: 404 }
-      );
+      return errorResponse(404, "Active media product project not found");
     }
     return NextResponse.json(
       { retired: true },

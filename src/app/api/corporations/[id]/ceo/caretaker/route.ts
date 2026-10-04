@@ -12,7 +12,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -36,37 +36,22 @@ const mandateSchema = z.object({ mandate: z.enum(["active", "passive"]) });
 function appointmentErrorResponse(error: CaretakerAppointmentError): NextResponse {
   switch (error) {
     case "corp-not-found":
-      return NextResponse.json({ error: "Corporation not found" }, { status: 404 });
+      return errorResponse(404, "Corporation not found");
     case "already-caretaker":
-      return NextResponse.json(
-        { error: "This corporation already has a caretaker CEO." },
-        { status: 400 }
-      );
+      return errorResponse(400, "This corporation already has a caretaker CEO.");
     case "ceo-vacant":
-      return NextResponse.json(
-        { error: "The CEO seat is vacant — appoint a CEO before a caretaker." },
-        { status: 400 }
-      );
+      return errorResponse(400, "The CEO seat is vacant — appoint a CEO before a caretaker.");
     case "ceo-not-character":
-      return NextResponse.json(
-        { error: "Only a sitting CEO can hand the corporation to a caretaker." },
-        { status: 400 }
-      );
+      return errorResponse(400, "Only a sitting CEO can hand the corporation to a caretaker.");
     case "reclaim-cooldown":
-      return NextResponse.json(
-        {
-          error:
-            "You recently reclaimed this corporation. Wait until the caretaker cooldown ends before handing it off again.",
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "You recently reclaimed this corporation. Wait until the caretaker cooldown ends before handing it off again."
       );
     case "no-eligible-npp":
-      return NextResponse.json(
-        { error: "No eligible caretaker is available in this country right now." },
-        { status: 400 }
-      );
+      return errorResponse(400, "No eligible caretaker is available in this country right now.");
     case "npp-not-eligible":
-      return NextResponse.json({ error: "That caretaker is not available." }, { status: 400 });
+      return errorResponse(400, "That caretaker is not available.");
   }
 }
 
@@ -94,10 +79,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     // Feature gate: NPP autonomy must be active for this corp's country.
     if (!(await nppAutonomyAtLeast(db, corporation.countryId, "v1"))) {
-      return NextResponse.json(
-        { error: "Caretaker CEOs are not enabled in this country." },
-        { status: 403 }
-      );
+      return errorResponse(403, "Caretaker CEOs are not enabled in this country.");
     }
 
     const turn = await getCurrentTurn(db);
@@ -138,15 +120,12 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
     const result = await dismissCaretakerCeo(db, { corp: corporation, turn, now: new Date() });
     if (!result.ok) {
       if (result.error === "one-person-rule") {
-        return NextResponse.json(
-          { error: "This player already operates another subsidiary of the same parent." },
-          { status: 403 }
+        return errorResponse(
+          403,
+          "This player already operates another subsidiary of the same parent."
         );
       }
-      return NextResponse.json(
-        { error: "This corporation does not have a caretaker CEO." },
-        { status: 400 }
-      );
+      return errorResponse(400, "This corporation does not have a caretaker CEO.");
     }
 
     return NextResponse.json({ success: true, restoredCharacterId: result.restoredCharacterId });
@@ -172,10 +151,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     const ceoCheck = requireCeo(corporation, auth.user.userId);
     if (ceoCheck) return ceoCheck;
     if (!corporation.caretakerCeo) {
-      return NextResponse.json(
-        { error: "This corporation does not have a caretaker CEO." },
-        { status: 400 }
-      );
+      return errorResponse(400, "This corporation does not have a caretaker CEO.");
     }
 
     const update = await db
@@ -185,10 +161,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
         { $set: { "caretakerCeo.mandate": parsed.data.mandate, updatedAt: new Date() } }
       );
     if (update.modifiedCount !== 1) {
-      return NextResponse.json(
-        { error: "Caretaker changed. Refresh and try again." },
-        { status: 409 }
-      );
+      return errorResponse(409, "Caretaker changed. Refresh and try again.");
     }
     return NextResponse.json({ success: true, mandate: parsed.data.mandate });
   } catch (error) {

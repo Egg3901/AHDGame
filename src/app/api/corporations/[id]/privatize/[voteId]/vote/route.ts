@@ -7,7 +7,7 @@ import { privatizationVoteSchema } from "@/lib/api/schemas/corporations";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import { castPrivatizationVote } from "@/lib/corporations/commands/privatization/castPrivatizationVote";
 import { resolvePrivatizationVote } from "@/lib/corporations/commands/privatization/resolvePrivatizationVote";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { getGameState } from "@/lib/gameState";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
@@ -38,7 +38,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     if (!ObjectId.isValid(voteId)) {
-      return NextResponse.json({ error: "Invalid vote id" }, { status: 400 });
+      return errorResponse(400, "Invalid vote id");
     }
 
     const db = await getDb();
@@ -50,14 +50,14 @@ export async function POST(request: Request, { params }: RouteParams) {
       .collection<CorporationPrivatizationVote>("corporationPrivatizationVotes")
       .findOne({ _id: new ObjectId(voteId), corporationId: corporation._id });
     if (!vote) {
-      return NextResponse.json({ error: "Vote not found" }, { status: 404 });
+      return errorResponse(404, "Vote not found");
     }
 
     const voterCharacter = await db
       .collection<Character>("characters")
       .findOne({ userId: new ObjectId(auth.user.userId) });
     if (!voterCharacter) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
 
     const gameState = await getGameState();

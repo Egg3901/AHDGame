@@ -8,7 +8,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
-import { handleRouteError, forbidden, notFound } from "@/lib/api/errors";
+import { handleRouteError, forbidden, notFound, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { CentralBank } from "@/lib/db/types/centralBank";
@@ -109,7 +109,7 @@ export async function POST(request: Request, context: RouteContext) {
     const { regime, capitalControls, pegTarget } = parsed.data;
 
     if (regime === "peg" && !(pegTarget && pegTarget > 0))
-      return NextResponse.json({ error: "A peg needs a target rate." }, { status: 400 });
+      return errorResponse(400, "A peg needs a target rate.");
 
     const fx = await db
       .collection<ExchangeRate>("exchangeRates")
@@ -123,11 +123,9 @@ export async function POST(request: Request, context: RouteContext) {
     const since = fx.fxRegimeSetAtTurn ?? -Infinity;
     if (turn - since < FX_REGIME_COOLDOWN_TURNS) {
       const wait = FX_REGIME_COOLDOWN_TURNS - (turn - since);
-      return NextResponse.json(
-        {
-          error: `A regime nobody believes is not a regime. ${Math.ceil(wait)} more turn(s) before it can be changed again.`,
-        },
-        { status: 409 }
+      return errorResponse(
+        409,
+        `A regime nobody believes is not a regime. ${Math.ceil(wait)} more turn(s) before it can be changed again.`
       );
     }
 

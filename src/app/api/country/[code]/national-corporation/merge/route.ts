@@ -10,7 +10,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { CORPORATION_TYPES, type CorporationType } from "@/lib/constants/corporations";
@@ -37,7 +37,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const parsed = await parseJsonBody(request, mergeSchema);
@@ -45,22 +45,19 @@ export async function POST(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
     }
     if (!CORPORATION_TYPES.includes(parsed.data.sectorType as CorporationType)) {
-      return NextResponse.json({ error: "Invalid sector type" }, { status: 400 });
+      return errorResponse(400, "Invalid sector type");
     }
     if (parsed.data.intoCorpId && !ObjectId.isValid(parsed.data.intoCorpId)) {
-      return NextResponse.json({ error: "Invalid target corporation ID" }, { status: 400 });
+      return errorResponse(400, "Invalid target corporation ID");
     }
 
     const db = await getDb();
 
     const authorized = await assertTreasuryAuthority(db, countryId, auth.user.character._id);
     if (!authorized) {
-      return NextResponse.json(
-        {
-          error:
-            "Only the Secretary of the Treasury (or equivalent), or the head of government if that seat is vacant, may reorganize National Corporations.",
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "Only the Secretary of the Treasury (or equivalent), or the head of government if that seat is vacant, may reorganize National Corporations."
       );
     }
 
@@ -78,13 +75,13 @@ export async function POST(request: Request, { params }: RouteParams) {
     });
   } catch (error) {
     if (error instanceof Error && /no split-off/i.test(error.message)) {
-      return NextResponse.json({ error: error.message }, { status: 404 });
+      return errorResponse(404, error.message);
     }
     if (error instanceof Error && /not found for this country/i.test(error.message)) {
-      return NextResponse.json({ error: error.message }, { status: 404 });
+      return errorResponse(404, error.message);
     }
     if (error instanceof Error && /into itself/i.test(error.message)) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return errorResponse(400, error.message);
     }
     return handleRouteError(error);
   }

@@ -6,7 +6,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
@@ -26,7 +26,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const auth = await requireBasicAuth();
     if (!auth.ok) return auth.response;
     if (!(await isLabourFullMode())) {
-      return NextResponse.json({ error: "Player-run unions are not enabled." }, { status: 403 });
+      return errorResponse(403, "Player-run unions are not enabled.");
     }
     const rateLimit = checkRateLimit(auth.user.userId, 20, 60_000);
     if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
@@ -37,7 +37,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { id, campaignId } = await params;
     const db = await getDb();
     const character = await getCharacterByUserId(db, auth.user.userId);
-    if (!character) return NextResponse.json({ error: "Character not found" }, { status: 404 });
+    if (!character) return errorResponse(404, "Character not found");
     const result = await castRatificationBallot(
       db,
       character,

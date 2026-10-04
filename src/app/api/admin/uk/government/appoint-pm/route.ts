@@ -10,7 +10,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { COUNTRY_CONFIGS, type CountryId, isParliamentarySystem } from "@/lib/constants/countries";
 import { adminAppointPrimeMinister } from "@/lib/government/commands/appointments";
@@ -32,13 +32,10 @@ export async function POST(request: Request) {
     const countryId = (parsed.data.countryId?.toUpperCase() ?? "UK") as CountryId;
     const countryConfig = COUNTRY_CONFIGS[countryId];
     if (!countryConfig) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     if (!isParliamentarySystem(countryConfig)) {
-      return NextResponse.json(
-        { error: "This country does not use parliamentary PM appointment" },
-        { status: 400 }
-      );
+      return errorResponse(400, "This country does not use parliamentary PM appointment");
     }
 
     const db = await getDb();

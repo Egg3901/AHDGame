@@ -19,7 +19,7 @@ import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { foundCorporationSchema } from "@/lib/api/schemas/corporations";
 import { randomBrandColor } from "@/lib/corporations/brandColor";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import type { Character, Corporation, CorporateSector, State, User } from "@/lib/db/types";
 import { INACTIVE_CEO_TURN_THRESHOLD } from "@/lib/turn/corporation/inactiveCeoSectorShed";
 import { getNextSequentialId } from "@/lib/db/sequentialId";
@@ -297,28 +297,22 @@ export async function POST(request: Request) {
     // Get character
     const character = auth.user.character;
     if (!character) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
 
     // Block founding in command-economy countries (USSR etc.). Reads the
     // marketization dial rather than a static config flag, so a country
     // converting in either direction is honoured without a code change.
     if (await isPrivateEnterpriseBlocked(db, character.countryId)) {
-      return NextResponse.json(
-        {
-          error:
-            "Private corporations cannot be founded in a command economy. The state controls all enterprise.",
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "Private corporations cannot be founded in a command economy. The state controls all enterprise."
       );
     }
 
     // Validate secondary type is distinct from primary
     if (secondaryType !== undefined && secondaryType === type) {
-      return NextResponse.json(
-        { error: "Secondary sector must be different from the primary sector" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Secondary sector must be different from the primary sector");
     }
 
     // Starting capital in anchor currency — defaults to baseline if not provided
@@ -337,20 +331,13 @@ export async function POST(request: Request) {
     // era, which the schema layer cannot see. Messages quote the era's own
     // numbers so a 1953 founder is never told to commit a modern amount.
     if (startingCapitalAnchor < eraBounds.min) {
-      return NextResponse.json(
-        {
-          error: `Starting capital must be at least ${eraBounds.min.toLocaleString()}`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Starting capital must be at least ${eraBounds.min.toLocaleString()}`
       );
     }
     if (startingCapitalAnchor > eraBounds.max) {
-      return NextResponse.json(
-        {
-          error: `Starting capital cannot exceed ${eraBounds.max.toLocaleString()}`,
-        },
-        { status: 400 }
-      );
+      return errorResponse(400, `Starting capital cannot exceed ${eraBounds.max.toLocaleString()}`);
     }
 
     // HQ defaults to character's home state
@@ -361,9 +348,9 @@ export async function POST(request: Request) {
       .collection<Corporation>("corporations")
       .findOne({ ceoId: character._id, ceoVacant: { $ne: true } });
     if (existing) {
-      return NextResponse.json(
-        { error: "You already own a corporation. Each player can own one corporation." },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "You already own a corporation. Each player can own one corporation."
       );
     }
 
@@ -383,10 +370,7 @@ export async function POST(request: Request) {
       currentTurnAtFounding
     );
     if (cooldownRemaining > 0) {
-      return NextResponse.json(
-        { error: `You can found another corporation in ${cooldownRemaining} turns.` },
-        { status: 400 }
-      );
+      return errorResponse(400, `You can found another corporation in ${cooldownRemaining} turns.`);
     }
 
     // Check cash on hand (founding costs personal cash, not campaign funds)
@@ -433,10 +417,7 @@ export async function POST(request: Request) {
         })()
       : null;
     if (ipo?.underwriterCorporationId && !foundingUnderwriterBank) {
-      return NextResponse.json(
-        { error: "The selected same-currency underwriter is unavailable" },
-        { status: 409 }
-      );
+      return errorResponse(409, "The selected same-currency underwriter is unavailable");
     }
     // Founder charge AND corp seed are both denominated in the corp's local
     // currency. Scaling only the seed (and leaving the charge in ₳) minted
@@ -490,10 +471,7 @@ export async function POST(request: Request) {
       name: { $regex: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") },
     });
     if (nameTaken) {
-      return NextResponse.json(
-        { error: "A corporation with that name already exists" },
-        { status: 400 }
-      );
+      return errorResponse(400, "A corporation with that name already exists");
     }
 
     // Check ticker uniqueness — schema already uppercased `tickerSymbol`, so an
@@ -501,7 +479,7 @@ export async function POST(request: Request) {
     // index closes the residual race between this read and the insert below.
     const tickerTaken = await db.collection<Corporation>("corporations").findOne({ tickerSymbol });
     if (tickerTaken) {
-      return NextResponse.json({ error: "That ticker symbol is already taken" }, { status: 400 });
+      return errorResponse(400, "That ticker symbol is already taken");
     }
 
     const now = new Date();
@@ -563,9 +541,9 @@ export async function POST(request: Request) {
           }
         : null;
     if (ipo?.underwriterCorporationId && !foundingOffer) {
-      return NextResponse.json(
-        { error: "The selected underwriter's native currency could not be frozen for this IPO" },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "The selected underwriter's native currency could not be frozen for this IPO"
       );
     }
     const plannedFoundingPlacement =
@@ -581,11 +559,9 @@ export async function POST(request: Request) {
       plannedFoundingPlacement &&
       (!plannedFoundingPlacement.poolActive || !plannedFoundingPlacement.placedShares)
     ) {
-      return NextResponse.json(
-        {
-          error: "The selected underwriter cannot fund an IPO fill from this market pool right now",
-        },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "The selected underwriter cannot fund an IPO fill from this market pool right now"
       );
     }
     const foundingPlacement: PreparedEquityPlacement | null = plannedFoundingPlacement
@@ -818,11 +794,9 @@ export async function POST(request: Request) {
         await refundPreparedEquityPlacement(db, foundingPlacement, now);
       }
       const sym = CURRENCY_SYMBOLS[homeCurrency] ?? "$";
-      return NextResponse.json(
-        {
-          error: `Insufficient personal funds. Founding this corporation costs ${sym}${totalPlayerCost.toLocaleString()}.`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Insufficient personal funds. Founding this corporation costs ${sym}${totalPlayerCost.toLocaleString()}.`
       );
     }
 
@@ -1092,7 +1066,7 @@ export async function POST(request: Request) {
       const code = (error as { code?: number }).code;
       const msg = error instanceof Error ? error.message : String(error);
       if (code === 11000 && msg.includes("tickerSymbol")) {
-        return NextResponse.json({ error: "That ticker symbol is already taken" }, { status: 400 });
+        return errorResponse(400, "That ticker symbol is already taken");
       }
       throw error;
     }

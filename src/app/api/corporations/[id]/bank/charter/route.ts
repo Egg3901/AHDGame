@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError, forbidden, notFound, badRequest } from "@/lib/api/errors";
+import { handleRouteError, forbidden, notFound, badRequest, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { ZOD_CURRENCY_ENUM } from "@/lib/constants/currencies";
@@ -200,7 +200,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
 
     const result = await revokeCharter(db, corporation._id, parsed.data.reason);
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: 400 });
+      return errorResponse(400, result.error);
     }
 
     return NextResponse.json({

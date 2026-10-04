@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireModerator } from "@/lib/api/requireModerator";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { createModAuditLog } from "@/lib/modAuditLog";
 import type { Character, State } from "@/lib/db/types";
@@ -34,34 +34,25 @@ export async function PATCH(request: Request) {
     const { username, countryId: rawCountryId, homeState } = parsed.data;
     const countryId = rawCountryId.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: `Unknown country: ${rawCountryId}` }, { status: 400 });
+      return errorResponse(400, `Unknown country: ${rawCountryId}`);
     }
 
     const db = await getDb();
     if (!(await isCountryEnabledForPlayers(db, countryId))) {
-      return NextResponse.json(
-        { error: `Country ${countryId} is not enabled for players` },
-        { status: 400 }
-      );
+      return errorResponse(400, `Country ${countryId} is not enabled for players`);
     }
 
     const user = await db.collection("users").findOne({ username });
     if (!user) {
-      return NextResponse.json({ error: `User '${username}' not found` }, { status: 404 });
+      return errorResponse(404, `User '${username}' not found`);
     }
     if (user.role === "admin") {
-      return NextResponse.json(
-        { error: "Cannot perform actions on admin accounts" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Cannot perform actions on admin accounts");
     }
 
     const character = await db.collection<Character>("characters").findOne({ userId: user._id });
     if (!character) {
-      return NextResponse.json(
-        { error: `No character found for user '${username}'` },
-        { status: 404 }
-      );
+      return errorResponse(404, `No character found for user '${username}'`);
     }
 
     const targetStateId = homeState ?? character.homeState;
@@ -69,10 +60,7 @@ export async function PATCH(request: Request) {
       .collection<State>("states")
       .findOne({ _id: targetStateId, countryId });
     if (!targetState) {
-      return NextResponse.json(
-        { error: `No state "${targetStateId}" in country "${countryId}"` },
-        { status: 400 }
-      );
+      return errorResponse(400, `No state "${targetStateId}" in country "${countryId}"`);
     }
 
     if (character.homeState === targetStateId && (character.countryId ?? "US") === countryId) {

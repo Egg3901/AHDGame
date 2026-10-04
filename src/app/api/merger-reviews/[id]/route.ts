@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import type { Character } from "@/lib/db/types";
 import type { MergerReview } from "@/lib/db/types/mergerReview";
@@ -39,8 +39,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
 
     const { id } = await params;
-    if (!ObjectId.isValid(id))
-      return NextResponse.json({ error: "Invalid review id" }, { status: 400 });
+    if (!ObjectId.isValid(id)) return errorResponse(400, "Invalid review id");
 
     const parsed = await parseJsonBody(request, decideSchema);
     if (!parsed.success)
@@ -50,7 +49,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const review = await db
       .collection<MergerReview>(MERGER_REVIEWS)
       .findOne({ _id: new ObjectId(id) });
-    if (!review) return NextResponse.json({ error: "Review not found" }, { status: 404 });
+    if (!review) return errorResponse(404, "Review not found");
 
     const gameState = await getGameState(db);
     const authority = await resolveMergerAuthority(
@@ -59,19 +58,16 @@ export async function POST(request: Request, { params }: RouteParams) {
       gameState?.currentYear ?? null
     );
     if (!authority?.holderCharacterId)
-      return NextResponse.json(
-        { error: "The reviewing seat is vacant; this referral will resolve on its deadline." },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "The reviewing seat is vacant; this referral will resolve on its deadline."
       );
 
     const character = await db
       .collection<Character>("characters")
       .findOne({ userId: new ObjectId(auth.user.userId) }, { projection: { _id: 1 } });
     if (!character || !authority.holderCharacterId.equals(character._id))
-      return NextResponse.json(
-        { error: `Only the ${authority.seatName} can decide this referral.` },
-        { status: 403 }
-      );
+      return errorResponse(403, `Only the ${authority.seatName} can decide this referral.`);
 
     const currentTurn = await getCurrentTurn(db);
     const result = await decideMergerReview(db, {

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { ALL_CRISIS_TEMPLATES, getTemplateDuration } from "@/lib/crises/templates";
 import type { Crisis } from "@/lib/db/types/crisis";
@@ -143,15 +143,12 @@ export async function POST(req: Request) {
       // Template-based creation — only available when crisis interactions are enabled
       const enabled = await isCrisisInteractionEnabled();
       if (!enabled) {
-        return NextResponse.json(
-          { error: "Crisis interaction templates are not enabled" },
-          { status: 403 }
-        );
+        return errorResponse(403, "Crisis interaction templates are not enabled");
       }
 
       const template = ALL_CRISIS_TEMPLATES[body.templateKey];
       if (!template) {
-        return NextResponse.json({ error: "Unknown template" }, { status: 400 });
+        return errorResponse(400, "Unknown template");
       }
 
       crisis = {

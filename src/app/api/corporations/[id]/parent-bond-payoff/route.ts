@@ -7,7 +7,7 @@ import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
 import { parseJsonBody } from "@/lib/api/validate";
 import { parentBondPayoffSchema } from "@/lib/api/schemas/corporations";
-import { handleRouteError, badRequest, internalError } from "@/lib/api/errors";
+import { handleRouteError, badRequest, internalError, errorResponse } from "@/lib/api/errors";
 import {
   corporationQueryFromParamId,
   resolveCorporation,
@@ -75,44 +75,39 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parentQuery = corporationQueryFromParamId(parsed.data.parentCorporationId);
     if (!parentQuery) {
-      return NextResponse.json({ error: "Invalid parent corporation ID" }, { status: 400 });
+      return errorResponse(400, "Invalid parent corporation ID");
     }
     const parent = await db.collection<Corporation>("corporations").findOne(parentQuery);
     if (!parent) {
-      return NextResponse.json({ error: "Parent corporation not found" }, { status: 404 });
+      return errorResponse(404, "Parent corporation not found");
     }
 
     const ceoCheck = requireCeo(parent, auth.user.userId);
     if (ceoCheck) return ceoCheck;
 
     if (parent._id.equals(target._id)) {
-      return NextResponse.json(
-        { error: "A corporation cannot pay off its own bonds via this route" },
-        { status: 400 }
-      );
+      return errorResponse(400, "A corporation cannot pay off its own bonds via this route");
     }
 
     if (target.countryOwnerId) {
-      return NextResponse.json(
-        { error: "National corporations cannot have bonds paid off by a parent corporation" },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "National corporations cannot have bonds paid off by a parent corporation"
       );
     }
 
     if (target.imfBailoutActive) {
-      return NextResponse.json(
-        { error: "Target is under IMF restructuring — bonds are managed by the IMF facility" },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "Target is under IMF restructuring — bonds are managed by the IMF facility"
       );
     }
 
     const pct = acquirerOwnershipPercent(parent._id, target);
     if (pct <= HOSTILE_TAKEOVER_OWNERSHIP_THRESHOLD_PERCENT) {
-      return NextResponse.json(
-        {
-          error: `Your corporation must hold more than ${HOSTILE_TAKEOVER_OWNERSHIP_THRESHOLD_PERCENT}% of outstanding shares to pay off bonds (${pct.toFixed(2)}% currently).`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Your corporation must hold more than ${HOSTILE_TAKEOVER_OWNERSHIP_THRESHOLD_PERCENT}% of outstanding shares to pay off bonds (${pct.toFixed(2)}% currently).`
       );
     }
 
@@ -122,10 +117,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const gameStateForCure = await getGameState();
     const cureTurn = gameStateForCure?.currentTurn ?? 0;
     if (cureTurn <= 0) {
-      return NextResponse.json(
-        { error: "Game state unavailable; parent-bond-payoff cannot be processed." },
-        { status: 503 }
-      );
+      return errorResponse(503, "Game state unavailable; parent-bond-payoff cannot be processed.");
     }
 
     const now = new Date();
@@ -141,7 +133,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           .toArray();
 
         if (outstandingBonds.length === 0) {
-          return NextResponse.json({ error: "No outstanding bonds to pay off" }, { status: 400 });
+          return errorResponse(400, "No outstanding bonds to pay off");
         }
 
         // Load FX rates once so the cost sum + per-bond face + holder payouts all
@@ -157,7 +149,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           _id: parent._id,
         });
         if (!refreshedParent) {
-          return NextResponse.json({ error: "Parent corporation not found" }, { status: 404 });
+          return errorResponse(404, "Parent corporation not found");
         }
 
         const parentFxRate = fxRateForCorpFromMap(refreshedParent, fxByCurrency);
@@ -517,10 +509,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           );
         } catch (err) {
           if (err instanceof Error && err.message === "RATE_UNAVAILABLE") {
-            return NextResponse.json(
-              { error: "Exchange rate unavailable, try again shortly" },
-              { status: 503 }
-            );
+            return errorResponse(503, "Exchange rate unavailable, try again shortly");
           }
           throw err;
         }
@@ -604,10 +593,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     );
 
     if (!result) {
-      return NextResponse.json(
-        { error: "Bond settlement is already in progress for this corporation" },
-        { status: 409 }
-      );
+      return errorResponse(409, "Bond settlement is already in progress for this corporation");
     }
 
     return result;

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { findPartyBySequentialId, getPartyIdString, parseCountryParam } from "@/lib/db/partyLookup";
 import { canActAsChair } from "@/lib/parties/actingChair";
@@ -40,26 +40,23 @@ export async function POST(request: Request) {
     const partyId = formData.get("partyId");
 
     if (!partyId || typeof partyId !== "string") {
-      return NextResponse.json({ error: "Party ID required" }, { status: 400 });
+      return errorResponse(400, "Party ID required");
     }
 
     const countryRaw = formData.get("country");
     const countryId = parseCountryParam(typeof countryRaw === "string" ? countryRaw : null);
     if (!countryId) {
-      return NextResponse.json({ error: "Country parameter required" }, { status: 400 });
+      return errorResponse(400, "Country parameter required");
     }
 
     if (!file || !(file instanceof Blob)) {
-      return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
+      return errorResponse(400, "No file uploaded");
     }
     if (!ALLOWED_TYPES.has(file.type)) {
-      return NextResponse.json(
-        { error: "Only JPEG, PNG, WebP, and GIF images are allowed." },
-        { status: 400 }
-      );
+      return errorResponse(400, "Only JPEG, PNG, WebP, and GIF images are allowed.");
     }
     if (file.size > MAX_SIZE) {
-      return NextResponse.json({ error: "File must be under 2 MB." }, { status: 400 });
+      return errorResponse(400, "File must be under 2 MB.");
     }
 
     const db = await getDb();
@@ -69,23 +66,20 @@ export async function POST(request: Request) {
       userId: new ObjectId(authUser.userId),
     });
     if (!character) {
-      return NextResponse.json({ error: "No character found" }, { status: 400 });
+      return errorResponse(400, "No character found");
     }
 
     const party = await findPartyBySequentialId(db, partyId, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
     const canonicalPartyId = getPartyIdString(party);
 
     // Chair authority — VC may act when the chair seat is vacant.
     if (!canActAsChair(party, character._id)) {
-      return NextResponse.json(
-        {
-          error:
-            "Only the party Chair (or acting Vice-Chair when the chair seat is vacant) can upload a logo",
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "Only the party Chair (or acting Vice-Chair when the chair seat is vacant) can upload a logo"
       );
     }
 

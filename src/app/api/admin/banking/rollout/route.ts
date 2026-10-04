@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { createAdminLog } from "@/lib/adminLog";
 import { getCurrentTurn } from "@/lib/currentTurn";
@@ -110,7 +110,7 @@ export async function POST(request: Request) {
       (change.kind === "add_read_currency" || change.kind === "remove_read_currency") &&
       !(FOREX_ACTIVE_CURRENCIES as string[]).includes(change.currency)
     ) {
-      return NextResponse.json({ error: "Unknown currency." }, { status: 400 });
+      return errorResponse(400, "Unknown currency.");
     }
 
     const db = await getDb();

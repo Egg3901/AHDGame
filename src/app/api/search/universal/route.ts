@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { withNoStore } from "@/lib/api/withNoStore";
 import { getDb } from "@/lib/mongodb";
 import { getGameStateCollection } from "@/lib/db/collections";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getAuthUser } from "@/lib/auth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { getClientIp } from "@/lib/utils/network";
@@ -128,7 +128,7 @@ async function handleGET(request: Request) {
 
     // BSON regex serialization rejects null bytes before MongoDB can run the query.
     if (query.includes("\u0000")) {
-      return NextResponse.json({ error: "Query contains an invalid character" }, { status: 400 });
+      return errorResponse(400, "Query contains an invalid character");
     }
 
     // Return empty results for empty or too-short queries. A 1-character query
@@ -140,9 +140,9 @@ async function handleGET(request: Request) {
     // Cap query length: an unbounded `q` becomes an unbounded regex scanned
     // across many large collections.
     if (query.length > MAX_UNIVERSAL_SEARCH_QUERY_LENGTH) {
-      return NextResponse.json(
-        { error: `Query too long (max ${MAX_UNIVERSAL_SEARCH_QUERY_LENGTH} characters)` },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Query too long (max ${MAX_UNIVERSAL_SEARCH_QUERY_LENGTH} characters)`
       );
     }
 

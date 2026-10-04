@@ -7,7 +7,7 @@ import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { updateWikiPageSchema } from "@/lib/api/schemas/wiki";
-import { handleRouteError, notFound } from "@/lib/api/errors";
+import { handleRouteError, notFound, errorResponse } from "@/lib/api/errors";
 import { checkWikiDisabled } from "@/lib/api/wikiGuard";
 import { notifyModeratorsOfWikiSubmission } from "@/lib/wiki/reviewNotifications";
 import type { User, WikiPage } from "@/lib/db/types";
@@ -104,7 +104,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     const userId = new ObjectId(user.userId);
     const isAuthor = !!page.submittedBy && page.submittedBy.equals(userId);
     if (!isAuthor) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return errorResponse(403, "Forbidden");
     }
 
     // Authors cannot set status/featured/private themselves.

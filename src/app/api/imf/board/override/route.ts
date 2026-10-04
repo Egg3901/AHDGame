@@ -4,6 +4,7 @@
 //         rateDelta?, captureDelta?, statement? }
 // Errors: 400 invalid body, 401, 403 not-board, 404 no-budget, 409 window expired or already actioned.
 
+import { errorResponse } from "@/lib/api/errors";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
@@ -49,14 +50,14 @@ export async function POST(req: Request) {
 
   const upper = body.countryCode.toUpperCase() as CountryId;
   if (!COUNTRY_CONFIGS[upper]) {
-    return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+    return errorResponse(400, "Invalid country code");
   }
   const action = body.action;
 
   const db = await getDb();
   const imfCorp = await getImfCorporation(db);
   if (!imfCorp) {
-    return NextResponse.json({ error: "IMF Corp not seeded" }, { status: 503 });
+    return errorResponse(503, "IMF Corp not seeded");
   }
 
   if (
@@ -65,20 +66,17 @@ export async function POST(req: Request) {
       characterId: auth.user.character._id,
     })
   ) {
-    return NextResponse.json({ error: "Only IMF Board members may act" }, { status: 403 });
+    return errorResponse(403, "Only IMF Board members may act");
   }
 
   const budgetId = getNationalBudgetId(upper);
   const budget = await db.collection<FederalBudget>("federalBudget").findOne({ _id: budgetId });
   if (!budget) {
-    return NextResponse.json({ error: "Country budget not found" }, { status: 404 });
+    return errorResponse(404, "Country budget not found");
   }
 
   if (budget.imfBoardOverrideAt) {
-    return NextResponse.json(
-      { error: "Override already actioned for this window" },
-      { status: 409 }
-    );
+    return errorResponse(409, "Override already actioned for this window");
   }
   const nowMs = Date.now();
   const currentTurn = await getCurrentTurn(db);
@@ -92,7 +90,7 @@ export async function POST(req: Request) {
       ? currentTurn >= windowEnd.turn
       : windowEnd.realtimeMs <= nowMs;
   if (windowExpired) {
-    return NextResponse.json({ error: "Override window has expired" }, { status: 409 });
+    return errorResponse(409, "Override window has expired");
   }
 
   const set: Partial<FederalBudget> = {
@@ -133,10 +131,7 @@ export async function POST(req: Request) {
     .collection<FederalBudget>("federalBudget")
     .updateOne({ _id: budgetId, imfBoardOverrideAt: null }, { $set: set });
   if (result.modifiedCount === 0) {
-    return NextResponse.json(
-      { error: "Override already actioned for this window" },
-      { status: 409 }
-    );
+    return errorResponse(409, "Override already actioned for this window");
   }
 
   if (trustDelta !== 0) {

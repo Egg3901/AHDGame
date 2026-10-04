@@ -9,7 +9,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { countryIdSchema } from "@/lib/api/schemas/country";
 import { NATIONAL_SCOPE_IDS } from "@/lib/constants/nationalScope";
 import type { CommodityPrice } from "@/lib/db/types";
@@ -40,8 +40,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ typ
 
     const stateIds = states.map((s) => String(s._id)).filter((id) => !NATIONAL_SCOPE_IDS.has(id));
 
-    if (stateIds.length === 0)
-      return NextResponse.json({ error: "No states found for country" }, { status: 404 });
+    if (stateIds.length === 0) return errorResponse(404, "No states found for country");
 
     const setFields: Record<string, unknown> = { updatedAt: new Date() };
     for (const stateId of stateIds) {
@@ -53,8 +52,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ typ
       .collection<CommodityPrice>("commodityPrices")
       .updateOne({ commodity: type } as Record<string, unknown>, { $set: setFields });
 
-    if (result.matchedCount === 0)
-      return NextResponse.json({ error: "Commodity not found" }, { status: 404 });
+    if (result.matchedCount === 0) return errorResponse(404, "Commodity not found");
 
     return NextResponse.json({ success: true, statesPegged: stateIds.length });
   } catch (error) {

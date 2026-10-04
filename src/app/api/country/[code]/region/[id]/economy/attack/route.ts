@@ -4,7 +4,7 @@ import { getDb } from "@/lib/mongodb";
 import { emitBuildCapexTx } from "@/lib/corporations/capexTxLog";
 import { requireHumanSession } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { regionUrl } from "@/lib/urls";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getGdpAnchorRate } from "@/lib/currency/gdpAnchorRate";
@@ -98,16 +98,13 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Block sector splits when corporation actions are paused by admin
     const gameState = await db.collection<GameState>("gameState").findOne({ _id: "current" });
     if (gameState?.corporationActionsPaused) {
-      return NextResponse.json(
-        { error: "Corporation actions are currently paused" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Corporation actions are currently paused");
     }
 
     const { code, id } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const stateId = id;
 
@@ -117,12 +114,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     // private corp in these countries.
     const blockedCountries = await loadCommandEconomyBlockedCountries(db, [countryId]);
     if (blockedCountries.has(countryId)) {
-      return NextResponse.json(
-        {
-          error:
-            "This market is state-controlled under a command economy and cannot be privately split.",
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "This market is state-controlled under a command economy and cannot be privately split."
       );
     }
 
@@ -133,11 +127,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     // the PVP); only the non-targeted split goes. The UI hides the control, and
     // this is the guard that actually enforces it.
     if (marketAtLeast(await getMarketSystemModeForDb(db), "plants")) {
-      return NextResponse.json(
-        {
-          error: "Market splitting has been retired. Build capacity to grow this sector instead.",
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "Market splitting has been retired. Build capacity to grow this sector instead."
       );
     }
 
@@ -151,7 +143,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Verify state exists
     const state = await db.collection<State>("states").findOne({ _id: stateId, countryId });
     if (!state) {
-      return NextResponse.json({ error: "State not found" }, { status: 404 });
+      return errorResponse(404, "State not found");
     }
 
     // Get player's corporation — supports both regular and imperial characters
@@ -181,7 +173,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     if (!corporation) {
-      return NextResponse.json({ error: "You don't own a corporation" }, { status: 400 });
+      return errorResponse(400, "You don't own a corporation");
     }
 
     // Calculate total market size for this sector type in this state. The GDP→₳
@@ -268,9 +260,9 @@ export async function POST(request: Request, { params }: RouteParams) {
         : (unownedDoc?.revenue ?? Math.max(0, totalMarketPerSector - totalOwned));
 
     if (unowned <= 0) {
-      return NextResponse.json(
-        { error: "This sector is fully owned. No market share available to capture." },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "This sector is fully owned. No market share available to capture."
       );
     }
 
@@ -343,7 +335,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       : legacySplitCostAnchor;
 
     if (splitCostInternal <= 0) {
-      return NextResponse.json({ error: "Unowned sector too small to split." }, { status: 400 });
+      return errorResponse(400, "Unowned sector too small to split.");
     }
 
     // Check sufficient capital (compare treasury in ₳ vs split cost in ₳)

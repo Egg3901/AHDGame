@@ -7,7 +7,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { Corporation } from "@/lib/db/types";
@@ -37,11 +37,11 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, id } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const idQuery = corporationQueryFromParamId(id);
     if (!idQuery) {
-      return NextResponse.json({ error: "Invalid corporation ID" }, { status: 400 });
+      return errorResponse(400, "Invalid corporation ID");
     }
 
     const parsed = await parseJsonBody(request, schema);
@@ -54,10 +54,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       .collection<Corporation>("corporations")
       .findOne({ ...idQuery, countryOwnerId: countryId });
     if (!target || !isStateOwned(target)) {
-      return NextResponse.json(
-        { error: "National Corporation not found for this country." },
-        { status: 404 }
-      );
+      return errorResponse(404, "National Corporation not found for this country.");
     }
     const ceoGate = requireSeatedCeo(target, auth.user.character._id);
     if (ceoGate) return ceoGate;
@@ -72,10 +69,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       sameTurn,
     });
     if (amount > allowance) {
-      return NextResponse.json(
-        { error: `Draw exceeds this turn's remaining allowance (${allowance}).` },
-        { status: 400 }
-      );
+      return errorResponse(400, `Draw exceeds this turn's remaining allowance (${allowance}).`);
     }
 
     const now = new Date();

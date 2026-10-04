@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
 import { characterInfluenceActionSchema } from "@/lib/api/schemas/influence";
@@ -29,10 +29,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     const myCharacter = await getCharacterByUserId(db, user.userId);
 
     if (!myCharacter) {
-      return NextResponse.json(
-        { error: "You need a character to influence others" },
-        { status: 400 }
-      );
+      return errorResponse(400, "You need a character to influence others");
     }
 
     const { info, error } = await getSimpleInfluenceInfo(
@@ -76,10 +73,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const myCharacter = await getCharacterByUserId(db, user.userId);
 
     if (!myCharacter) {
-      return NextResponse.json(
-        { error: "You need a character to influence others" },
-        { status: 400 }
-      );
+      return errorResponse(400, "You need a character to influence others");
     }
 
     const { result, error } = await executeSimpleInfluence(

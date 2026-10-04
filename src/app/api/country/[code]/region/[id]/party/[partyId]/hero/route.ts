@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { z } from "zod";
 import type { State, StatePartyOrg } from "@/lib/db/types";
 import { findPartyBySequentialId, getStatePartyOrgDocumentId } from "@/lib/db/partyLookup";
@@ -30,7 +30,7 @@ export async function POST(
     const { code, id, partyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const stateId = id;
     const parsed = await parseJsonBody(request, heroSchema);
@@ -48,12 +48,12 @@ export async function POST(
     const db = await getDb();
     const state = await db.collection<State>("states").findOne({ _id: stateId, countryId });
     if (!state) {
-      return NextResponse.json({ error: "State not found" }, { status: 404 });
+      return errorResponse(404, "State not found");
     }
 
     const party = await findPartyBySequentialId(db, partyId, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
 
     const orgId = getStatePartyOrgDocumentId(stateId, party);
@@ -64,17 +64,14 @@ export async function POST(
     if (!statePartyOrg) {
       // Create if doesn't exist? Usually it should exist if they are chair.
       // But maybe we should just return 404.
-      return NextResponse.json({ error: "State party not found" }, { status: 404 });
+      return errorResponse(404, "State party not found");
     }
 
     const isChair = statePartyOrg.chairId?.toString() === authData.character._id.toString();
     const isAdmin = authData.isAdmin;
 
     if (!isChair && !isAdmin) {
-      return NextResponse.json(
-        { error: "Only the state party chair can update the hero image" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the state party chair can update the hero image");
     }
 
     await db

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireBotToken } from "@/lib/api/requireBotToken";
 import type { GameConfig } from "@/lib/db/types";
 
@@ -11,7 +11,7 @@ import type { GameConfig } from "@/lib/db/types";
 export async function GET(request: Request) {
   try {
     if (!requireBotToken(request)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return errorResponse(401, "Unauthorized");
     }
 
     const db = await getDb();

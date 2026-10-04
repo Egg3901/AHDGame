@@ -5,7 +5,7 @@ import { getGameState } from "@/lib/gameState";
 import { getCountryConfig } from "@/lib/constants/countries";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import { getOfficeTypeForChamber } from "@/lib/legislature/chamberOfficeType";
@@ -39,8 +39,7 @@ function sourceForCode(code: string): DefaultFederationSource | null {
 export async function GET(_request: Request, { params }: { params: Promise<{ code: string }> }) {
   try {
     const sourceCountryId = sourceForCode((await params).code);
-    if (!sourceCountryId)
-      return NextResponse.json({ error: "No federation decision here" }, { status: 404 });
+    if (!sourceCountryId) return errorResponse(404, "No federation decision here");
     const db = await getDb();
     const state = await getGameState(db);
     const year = earliestFederationDecisionYear(state?.preset ?? "", sourceCountryId);
@@ -115,8 +114,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
 export async function POST(request: Request, { params }: { params: Promise<{ code: string }> }) {
   try {
     const sourceCountryId = sourceForCode((await params).code);
-    if (!sourceCountryId)
-      return NextResponse.json({ error: "No federation decision here" }, { status: 404 });
+    if (!sourceCountryId) return errorResponse(404, "No federation decision here");
     const auth = await requireBasicAuth();
     if (!auth.ok) return auth.response;
     const limit = checkRateLimit(`federation:${auth.user.userId}`, 5, 60_000);
@@ -129,10 +127,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     const year = earliestFederationDecisionYear(state?.preset ?? "", sourceCountryId);
     const currentYear = state?.currentYear;
     if (year === null || typeof currentYear !== "number" || currentYear < year)
-      return NextResponse.json(
-        { error: "The federation decision is not available yet." },
-        { status: 409 }
-      );
+      return errorResponse(409, "The federation decision is not available yet.");
     const character = await getCharacterByUserId(db, auth.user.userId);
     const legislature = getCountryConfig(sourceCountryId, "1991-default").legislature;
     const chamberKeys = [legislature.lowerChamber.key];
@@ -149,10 +144,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
         })
       : null;
     if (!official && auth.user.isAdmin !== true)
-      return NextResponse.json(
-        { error: "A seated federal legislator must open this decision." },
-        { status: 403 }
-      );
+      return errorResponse(403, "A seated federal legislator must open this decision.");
     const freeze = await checkLegislationFreeze(sourceCountryId);
     if (!freeze.ok) return freeze.response;
     const sharedAssets = (
@@ -169,18 +161,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
           Object.keys(shares).some((id) => !participants.has(id)) ||
           Object.values(shares).reduce((sum, share) => sum + share, 0) !== 10_000)
       )
-        return NextResponse.json(
-          { error: "Financial shares must name every successor and total 10,000 basis points." },
-          { status: 400 }
+        return errorResponse(
+          400,
+          "Financial shares must name every successor and total 10,000 basis points."
         );
     }
     if (
       Object.keys(assigned).length !== sharedAssets.length ||
       sharedAssets.some(({ assetId }) => !participants.has(assigned[assetId]))
     )
-      return NextResponse.json(
-        { error: "Choose a successor custodian for every shared or strategic asset." },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "Choose a successor custodian for every shared or strategic asset."
       );
     const proposal = await openDefaultFederationPoliticalProposal({
       db,
@@ -197,8 +189,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       { status: 201 }
     );
   } catch (error) {
-    if (error instanceof FederationProposalConflictError)
-      return NextResponse.json({ error: error.message }, { status: 409 });
+    if (error instanceof FederationProposalConflictError) return errorResponse(409, error.message);
     return handleRouteError(error);
   }
 }

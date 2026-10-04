@@ -6,7 +6,7 @@ import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseObjectId } from "@/lib/utils/objectId";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { CONGRESS_LIMITS, checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { executePresidentialBillAction } from "@/lib/presidentialBillAction";
 import { flushServerPosthog } from "@/lib/analytics/serverPosthog";
@@ -35,7 +35,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const { id } = await params;
     const billOid = parseObjectId(id);
     if (!billOid) {
-      return NextResponse.json({ error: "Invalid bill ID" }, { status: 400 });
+      return errorResponse(400, "Invalid bill ID");
     }
 
     const auth = await requireAuth();
@@ -62,7 +62,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       .collection<Bill>("bills")
       .findOne({ _id: billOid }, { projection: { countryId: 1 } });
     if (!bill) {
-      return NextResponse.json({ error: "Bill not found" }, { status: 404 });
+      return errorResponse(404, "Bill not found");
     }
     const billCountryId = bill.countryId ?? "US";
 
@@ -70,15 +70,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       .collection<ElectedOfficial>("electedOfficials")
       .findOne({ officeType: "president", countryId: billCountryId, characterId: { $ne: null } });
     if (!presidentOfficial?.characterId) {
-      return NextResponse.json({ error: "No President in office" }, { status: 400 });
+      return errorResponse(400, "No President in office");
     }
 
     const myCharacter = auth.user.character;
     if (!myCharacter || !presidentOfficial.characterId.equals(myCharacter._id)) {
-      return NextResponse.json(
-        { error: "Only the President can sign or veto bills" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the President can sign or veto bills");
     }
 
     const result = await executePresidentialBillAction(

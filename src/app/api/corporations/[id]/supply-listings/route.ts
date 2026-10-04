@@ -4,7 +4,7 @@ import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { requireCeo, resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import {
   supplyListingActionSchema,
@@ -31,7 +31,7 @@ async function access(context: Context) {
   if (!config?.supplyAgreementsEnabled)
     return {
       ok: false as const,
-      response: NextResponse.json({ error: "Supply agreements are not enabled." }, { status: 403 }),
+      response: errorResponse(403, "Supply agreements are not enabled."),
     };
   return { ok: true as const, db, corp: resolved.corporation, userId: auth.user.userId };
 }
@@ -46,8 +46,7 @@ export async function GET(request: Request, context: Context) {
       commodity: url.searchParams.get("commodity") ?? undefined,
       page: url.searchParams.get("page") ?? 0,
     });
-    if (!query.success)
-      return NextResponse.json({ error: "Invalid listing filter" }, { status: 400 });
+    if (!query.success) return errorResponse(400, "Invalid listing filter");
     const turn = await getCurrentTurn(a.db);
     const collection = a.db.collection<SupplyListing>("supplyListings");
     const [rows, own] = await Promise.all([
@@ -131,7 +130,7 @@ export async function POST(request: Request, context: Context) {
         .collection<State>("states")
         .findOne({ _id: stateId }, { projection: { _id: 1 } }))
     )
-      return NextResponse.json({ error: "Unknown fulfillment state" }, { status: 400 });
+      return errorResponse(400, "Unknown fulfillment state");
     const turn = await getCurrentTurn(a.db);
     const row: SupplyListing = {
       _id: id,
@@ -155,9 +154,9 @@ export async function POST(request: Request, context: Context) {
       );
     } catch (error) {
       if (error && typeof error === "object" && "code" in error && error.code === 11000) {
-        return NextResponse.json(
-          { error: "This offer slot is already occupied. Refresh the board before publishing." },
-          { status: 409 }
+        return errorResponse(
+          409,
+          "This offer slot is already occupied. Refresh the board before publishing."
         );
       }
       throw error;

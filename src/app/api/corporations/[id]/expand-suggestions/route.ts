@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import {
   SPLIT_BASE_CAPTURE_FRACTION,
@@ -103,7 +103,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     const pinStateId = (url.searchParams.get("state") ?? "").trim() || null;
 
     if (!sectorType || !(CORPORATION_TYPES as readonly string[]).includes(sectorType)) {
-      return NextResponse.json({ error: "Invalid or missing sectorType" }, { status: 400 });
+      return errorResponse(400, "Invalid or missing sectorType");
     }
 
     const { id } = await params;
@@ -145,11 +145,9 @@ export async function GET(request: Request, { params }: RouteParams) {
       const currentTurn = gameState?.currentTurn ?? 0;
       if (retailCapacityExpansionPaused(transition, currentTurn)) {
         const remaining = retailDemandTransitionTurnsRemaining(transition, currentTurn);
-        return NextResponse.json(
-          {
-            error: `New Retail sectors are paused while consumer demand is rebalanced (${remaining} turns remaining). Existing stores and plant transfers still operate normally.`,
-          },
-          { status: 409 }
+        return errorResponse(
+          409,
+          `New Retail sectors are paused while consumer demand is rebalanced (${remaining} turns remaining). Existing stores and plant transfers still operate normally.`
         );
       }
     }

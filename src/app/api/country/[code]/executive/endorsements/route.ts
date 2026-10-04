@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { ObjectId } from "mongodb";
 import { requireHumanSessionWithCharacter, requireAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { getDb } from "@/lib/mongodb";
 import {
@@ -39,7 +39,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
     const auth = await requireHumanSessionWithCharacter(request);
     if (!auth.ok) return auth.response;
@@ -47,10 +47,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     const db = await getDb();
     const leader = await isSittingLeader(db, countryId, auth.user.character._id);
     if (!leader) {
-      return NextResponse.json(
-        { error: "Only the sitting leader can endorse from this office" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the sitting leader can endorse from this office");
     }
 
     const parsed = await parseJsonBody(
@@ -64,7 +61,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
     }
     if (!ObjectId.isValid(parsed.data.electionId) || !ObjectId.isValid(parsed.data.candidateId)) {
-      return NextResponse.json({ error: "Invalid id" }, { status: 400 });
+      return errorResponse(400, "Invalid id");
     }
 
     const result = await createExecutiveEndorsement(db, {
@@ -88,19 +85,19 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
     const auth = await requireAuth();
     if (!auth.ok) return auth.response;
     const characterId = auth.user.character?._id;
     if (!characterId) {
-      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+      return errorResponse(401, "Authentication required");
     }
     const db = await getDb();
     const leader = await isSittingLeader(db, countryId, characterId);
     const isAdmin = auth.user.isAdmin === true;
     if (!leader && !isAdmin) {
-      return NextResponse.json({ error: "Not the sitting leader" }, { status: 403 });
+      return errorResponse(403, "Not the sitting leader");
     }
 
     const url = new URL(request.url);

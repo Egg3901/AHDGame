@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { getAuthUser } from "@/lib/auth";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError, badRequest, forbidden } from "@/lib/api/errors";
+import { handleRouteError, badRequest, forbidden, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { COUNTRY_CONFIGS, getCountryConfig, type CountryId } from "@/lib/constants/countries";
 import { getGovernmentFormationsCollection } from "@/lib/db/collections/governmentFormation";
@@ -70,7 +70,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const config = getCountryConfig(countryId);
@@ -345,7 +345,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const config = getCountryConfig(countryId);
@@ -414,12 +414,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
         status: { $nin: NATIONAL_TERMINAL_STATUSES as BillStatus[] },
       });
       if (existingActiveBill) {
-        return NextResponse.json(
-          {
-            error:
-              "You already have a bill in progress. Wait for it to pass, fail, or be signed before proposing another.",
-          },
-          { status: 403 }
+        return errorResponse(
+          403,
+          "You already have a bill in progress. Wait for it to pass, fail, or be signed before proposing another."
         );
       }
     }
@@ -525,19 +522,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
         const currentActions = freshChar?.actions ?? 0;
         const liveNational = freshChar?.nationalInfluence ?? 0;
         if (currentActions < actionCost) {
-          return NextResponse.json(
-            {
-              error: `Proposing a bill costs ${actionCost} action points (you have ${currentActions}).`,
-            },
-            { status: 400 }
+          return errorResponse(
+            400,
+            `Proposing a bill costs ${actionCost} action points (you have ${currentActions}).`
           );
         }
         if (npiCost > 0 && liveNational < npiCost) {
-          return NextResponse.json(
-            {
-              error: `This bill costs ${npiCost} national political influence (you have ${liveNational.toFixed(0)}).`,
-            },
-            { status: 400 }
+          return errorResponse(
+            400,
+            `This bill costs ${npiCost} national political influence (you have ${liveNational.toFixed(0)}).`
           );
         }
         const spendResult = await db.collection<Character>("characters").updateOne(
@@ -552,9 +545,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
           }
         );
         if (spendResult.modifiedCount === 0) {
-          return NextResponse.json(
-            { error: "Your actions or national influence changed. Please try again." },
-            { status: 409 }
+          return errorResponse(
+            409,
+            "Your actions or national influence changed. Please try again."
           );
         }
       }
@@ -627,7 +620,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       cabinetProvision
     );
     if (duplicateCheck) {
-      return NextResponse.json({ error: duplicateCheck.error }, { status: 409 });
+      return errorResponse(409, duplicateCheck.error);
     }
 
     // Constraint 3: no proposing a law at its current active level
@@ -638,7 +631,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       cabinetProvision
     );
     if (currentLevelCheck) {
-      return NextResponse.json({ error: currentLevelCheck.error }, { status: 409 });
+      return errorResponse(409, currentLevelCheck.error);
     }
 
     const now = new Date();
@@ -664,19 +657,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       const currentActions = freshChar?.actions ?? 0;
       const liveNational = freshChar?.nationalInfluence ?? 0;
       if (currentActions < actionCost) {
-        return NextResponse.json(
-          {
-            error: `Proposing a bill costs ${actionCost} action points (you have ${currentActions}).`,
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          `Proposing a bill costs ${actionCost} action points (you have ${currentActions}).`
         );
       }
       if (npiCost > 0 && liveNational < npiCost) {
-        return NextResponse.json(
-          {
-            error: `This bill costs ${npiCost} national political influence (you have ${liveNational.toFixed(0)}).`,
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          `This bill costs ${npiCost} national political influence (you have ${liveNational.toFixed(0)}).`
         );
       }
       const spendResult = await db.collection<Character>("characters").updateOne(
@@ -694,10 +683,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
         }
       );
       if (spendResult.modifiedCount === 0) {
-        return NextResponse.json(
-          { error: "Your actions or national influence changed. Please try again." },
-          { status: 409 }
-        );
+        return errorResponse(409, "Your actions or national influence changed. Please try again.");
       }
     }
 

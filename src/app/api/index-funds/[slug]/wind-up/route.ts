@@ -6,7 +6,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import type { Corporation } from "@/lib/db/types";
 import { resolveFundBySlugOrId } from "@/lib/indexFunds/fundQueries";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
@@ -27,22 +27,16 @@ export async function POST(_request: Request, { params }: RouteParams) {
     const { slug } = await params;
     const db = await getDb();
     const fund = await resolveFundBySlugOrId(db, slug);
-    if (!fund) return NextResponse.json({ error: "Fund not found" }, { status: 404 });
+    if (!fund) return errorResponse(404, "Fund not found");
 
     if (!fund.sponsorCorporationId)
-      return NextResponse.json(
-        { error: "This is a system fund. It has no sponsor and cannot be wound up." },
-        { status: 400 }
-      );
+      return errorResponse(400, "This is a system fund. It has no sponsor and cannot be wound up.");
 
     const sponsor = await db
       .collection<Corporation>("corporations")
       .findOne({ _id: fund.sponsorCorporationId });
     if (!sponsor || !sponsor.userId || sponsor.userId.toString() !== auth.user.userId)
-      return NextResponse.json(
-        { error: "Only the sponsoring corporation's CEO can wind up this fund." },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the sponsoring corporation's CEO can wind up this fund.");
 
     const result = await beginWindUp(db, fund, await getCurrentTurn(db));
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });

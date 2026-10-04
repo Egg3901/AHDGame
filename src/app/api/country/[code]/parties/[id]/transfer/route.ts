@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { partyTransferSchema } from "@/lib/api/schemas/settings";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
@@ -41,7 +41,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, id: partyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const authResult = await requireAuthWithCharacter();
@@ -62,7 +62,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const party = await findPartyBySequentialId(db, partyId, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
 
     const partyIdStr = String(party.sequentialId);
@@ -74,9 +74,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     const isTreasurer = party.treasurerId?.equals(authUser.character._id);
 
     if (!isAdmin && !isChair && !isViceChair && !isTreasurer) {
-      return NextResponse.json(
-        { error: "Only the party chair, vice chair, treasurer, or an admin can transfer funds" },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "Only the party chair, vice chair, treasurer, or an admin can transfer funds"
       );
     }
 
@@ -86,7 +86,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       countryId,
     });
     if (!state) {
-      return NextResponse.json({ error: "Region not found" }, { status: 404 });
+      return errorResponse(404, "Region not found");
     }
 
     const transferGuard = await requirePlayerTransfersEnabled(db);
@@ -97,15 +97,15 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (!isAdmin) {
       const { currentTurn: freezeTurn } = await getGameTime();
       if (await isLeadershipElectionFreezeActive(db, party, freezeTurn)) {
-        return NextResponse.json({ error: LEADERSHIP_FREEZE_MESSAGE }, { status: 400 });
+        return errorResponse(400, LEADERSHIP_FREEZE_MESSAGE);
       }
     }
 
     const treasury = party.treasury ?? 0;
     if (amount > treasury) {
-      return NextResponse.json(
-        { error: `Insufficient treasury balance. Available: $${treasury.toLocaleString()}` },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Insufficient treasury balance. Available: $${treasury.toLocaleString()}`
       );
     }
     const budgetCollection = await getPartyBudgetCollection();
@@ -130,11 +130,11 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (isPlayerAction && mode === "double") {
       const eligibility = canProposePendingTransaction(party);
       if (!eligibility.ok) {
-        return NextResponse.json({ error: eligibility.reason }, { status: 400 });
+        return errorResponse(400, eligibility.reason);
       }
       const slot = getProposerSlot(party, authUser.character._id);
       if (slot == null) {
-        return NextResponse.json({ error: "Not authorized" }, { status: 403 });
+        return errorResponse(403, "Not authorized");
       }
       const { currentTurn } = await getGameTime();
       const row = await createPendingTransaction(

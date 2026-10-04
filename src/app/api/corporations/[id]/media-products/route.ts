@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { getGameState } from "@/lib/gameState";
 import { getCurrentTurn } from "@/lib/currentTurn";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -176,10 +176,10 @@ export async function POST(request: Request, { params }: RouteParams) {
     const ceoError = requireCeo(corporation, auth.user.userId);
     if (ceoError) return ceoError;
     if (!(await slatesAvailable(db))) {
-      return NextResponse.json({ error: "Media product slates are not enabled" }, { status: 409 });
+      return errorResponse(409, "Media product slates are not enabled");
     }
     const kind = getMediaProductKind(parsed.data.kindId);
-    if (!kind) return NextResponse.json({ error: "Unknown media product kind" }, { status: 400 });
+    if (!kind) return errorResponse(400, "Unknown media product kind");
     const [sector, gameState, currentTurn] = await Promise.all([
       db.collection<CorporateSector>("corporateSectors").findOne({
         _id: new ObjectId(parsed.data.sectorId),
@@ -189,25 +189,19 @@ export async function POST(request: Request, { params }: RouteParams) {
       getCurrentTurn(db),
     ]);
     if (!sector || sector.sectorType !== "media" || sector.strategyId !== kind.modelId) {
-      return NextResponse.json(
-        { error: "Choose an owned active sector running this media model" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Choose an owned active sector running this media model");
     }
     if (
       (gameState?.currentYear ?? 0) <
       (getMediaOperatingModel(kind.modelId)?.availableFromYear ?? Number.MAX_SAFE_INTEGER)
     ) {
-      return NextResponse.json(
-        { error: "This product model is not available yet" },
-        { status: 400 }
-      );
+      return errorResponse(400, "This product model is not available yet");
     }
     const capacityBasisAnchor = sectorCapacityBookAnchor(sector, gameState?.currentYear, 1);
     if (capacityBasisAnchor <= 0) {
-      return NextResponse.json(
-        { error: "The selected sector needs owned capacity before developing a title" },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "The selected sector needs owned capacity before developing a title"
       );
     }
     const projectId = new ObjectId().toString();
@@ -235,10 +229,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       await db.collection<MediaProductProject>(MEDIA_PRODUCT_PROJECTS).insertOne(project);
     } catch (error) {
       if (typeof error === "object" && error !== null && "code" in error && error.code === 11000) {
-        return NextResponse.json(
-          { error: "This corporation already has a media product in development" },
-          { status: 409 }
-        );
+        return errorResponse(409, "This corporation already has a media product in development");
       }
       throw error;
     }

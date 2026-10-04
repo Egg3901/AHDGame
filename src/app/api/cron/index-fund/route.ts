@@ -3,7 +3,7 @@ import { getDb } from "@/lib/mongodb";
 import { getGameState } from "@/lib/gameState";
 import { logRequest } from "@/lib/api/requestLog";
 import { requireCron } from "@/lib/api/requireCron";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { runIndexFundCron } from "@/lib/indexFunds/fundCron";
 import { isIndexFundsEnabled } from "@/lib/indexFunds/featureFlag";
 
@@ -18,7 +18,7 @@ export async function GET(req: Request) {
   try {
     if (!requireCron(req)) {
       logRequest("GET", "/api/cron/index-fund", 401, Date.now() - start);
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return errorResponse(401, "Unauthorized");
     }
 
     if (!(await isIndexFundsEnabled())) {

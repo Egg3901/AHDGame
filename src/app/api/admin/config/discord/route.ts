@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { z } from "zod";
 import { getCountryWebhookDescriptors } from "@/lib/discord/countryWebhooks";
@@ -73,10 +73,7 @@ export async function PATCH(request: Request) {
       );
       for (const [countryId, value] of Object.entries(countryWebhooks)) {
         if (!enabled.has(countryId)) {
-          return NextResponse.json(
-            { error: `Country ${countryId} is not enabled for players` },
-            { status: 400 }
-          );
+          return errorResponse(400, `Country ${countryId} is not enabled for players`);
         }
         if (value) $set[`discordCountryGameWebhookUrls.${countryId}`] = value;
         else $unset[`discordCountryGameWebhookUrls.${countryId}`] = 1;

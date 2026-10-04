@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
 import { parseJsonBody } from "@/lib/api/validate";
@@ -38,9 +38,9 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     if (ceoCheck) return ceoCheck;
 
     if (!corporation.isPrivate) {
-      return NextResponse.json(
-        { error: "Public corporations must use a shareholder vote to change their ticker" },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "Public corporations must use a shareholder vote to change their ticker"
       );
     }
 
@@ -51,17 +51,14 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     const { newTicker } = parsed.data;
 
     if (newTicker === corporation.tickerSymbol) {
-      return NextResponse.json({ error: "That is already your ticker symbol" }, { status: 400 });
+      return errorResponse(400, "That is already your ticker symbol");
     }
 
     const conflict = await db
       .collection("corporations")
       .findOne({ tickerSymbol: newTicker, _id: { $ne: corporation._id } });
     if (conflict) {
-      return NextResponse.json(
-        { error: "That ticker is already in use by another corporation" },
-        { status: 409 }
-      );
+      return errorResponse(409, "That ticker is already in use by another corporation");
     }
 
     await db

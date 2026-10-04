@@ -26,7 +26,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireHumanSessionWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { getDb } from "@/lib/mongodb";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -62,10 +62,10 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
     if (!REFORM_ACTIONS.includes(action as ReformActionParam)) {
-      return NextResponse.json({ error: "Unknown reform action" }, { status: 400 });
+      return errorResponse(400, "Unknown reform action");
     }
     const reformAction = action as ReformActionParam;
 
@@ -76,10 +76,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const leader = await isSittingLeader(db, countryId, auth.user.character._id);
     if (!leader) {
-      return NextResponse.json(
-        { error: "Only the sitting leader can trigger reform actions" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the sitting leader can trigger reform actions");
     }
 
     const currentTurn = await getCurrentTurn(db);
@@ -118,7 +115,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       // is well-formed; the resource just isn't available right now).
       const msg = err instanceof Error ? err.message : String(err);
       if (/on cooldown|already used|is not banned/i.test(msg)) {
-        return NextResponse.json({ error: msg }, { status: 409 });
+        return errorResponse(409, msg);
       }
       throw err;
     }

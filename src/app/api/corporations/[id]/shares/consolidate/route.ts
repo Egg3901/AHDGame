@@ -6,7 +6,7 @@ import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationAc
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { consolidateSharesSchema } from "@/lib/api/schemas/corporations";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { hasOpenPrivatizationVote } from "@/lib/corporations/commands/privatization/openVoteGuard";
 import { getGameState } from "@/lib/gameState";
@@ -76,25 +76,19 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (ceoCheck) return ceoCheck;
 
     if (await hasOpenPrivatizationVote(db, corporation._id)) {
-      return NextResponse.json(
-        { error: "Cannot restructure shares while a privatization vote is open" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Cannot restructure shares while a privatization vote is open");
     }
 
     const openShareholderVote = await db
       .collection<CorporationVote>("corporationVotes")
       .findOne({ corporationId: corporation._id, status: "open" }, { projection: { _id: 1 } });
     if (openShareholderVote) {
-      return NextResponse.json(
-        { error: "Cannot restructure shares while a shareholder vote is open" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Cannot restructure shares while a shareholder vote is open");
     }
 
     const eligibility = corporationCanRestructureShares(corporation);
     if (!eligibility.ok) {
-      return NextResponse.json({ error: eligibility.reason }, { status: 400 });
+      return errorResponse(400, eligibility.reason);
     }
 
     const gameState = await getGameState(db);
@@ -102,20 +96,15 @@ export async function POST(request: Request, { params }: RouteParams) {
     const lastStructure = corporation.lastShareStructureTurn;
     if (lastStructure != null && currentTurn < lastStructure + SHARE_STRUCTURE_COOLDOWN_TURNS) {
       const wait = lastStructure + SHARE_STRUCTURE_COOLDOWN_TURNS - currentTurn;
-      return NextResponse.json(
-        {
-          error: `Share structure can only change once every ${SHARE_STRUCTURE_COOLDOWN_TURNS} turns. Next allowed in ${wait} turn(s).`,
-        },
-        { status: 429 }
+      return errorResponse(
+        429,
+        `Share structure can only change once every ${SHARE_STRUCTURE_COOLDOWN_TURNS} turns. Next allowed in ${wait} turn(s).`
       );
     }
 
     const oldTotal = corporation.totalShares ?? 0;
     if (targetTotalShares === oldTotal) {
-      return NextResponse.json(
-        { error: "Target must differ from current total shares." },
-        { status: 400 }
-      );
+      return errorResponse(400, "Target must differ from current total shares.");
     }
 
     const isReverse = targetTotalShares < oldTotal;
@@ -128,21 +117,17 @@ export async function POST(request: Request, { params }: RouteParams) {
         await getGameStatePresetOrDefault(db)
       );
       if (targetTotalShares < minTotalShares) {
-        return NextResponse.json(
-          {
-            error: `Cannot consolidate below ${minTotalShares.toLocaleString()} total shares.`,
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          `Cannot consolidate below ${minTotalShares.toLocaleString()} total shares.`
         );
       }
     } else {
       const maxTotal = Math.floor(oldTotal * MAX_FORWARD_SHARE_SPLIT_MULTIPLIER);
       if (targetTotalShares > maxTotal) {
-        return NextResponse.json(
-          {
-            error: `Forward split cannot exceed ${MAX_FORWARD_SHARE_SPLIT_MULTIPLIER}× current shares (${maxTotal.toLocaleString()} max).`,
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          `Forward split cannot exceed ${MAX_FORWARD_SHARE_SPLIT_MULTIPLIER}× current shares (${maxTotal.toLocaleString()} max).`
         );
       }
       // Prevent splits that would take the per-share price below MIN_SHARE_PRICE.
@@ -152,11 +137,9 @@ export async function POST(request: Request, { params }: RouteParams) {
       const projectedPrice = currentSharePrice * (oldTotal / targetTotalShares);
       if (projectedPrice < MIN_SHARE_PRICE) {
         const maxSplitShares = Math.floor(oldTotal * (currentSharePrice / MIN_SHARE_PRICE));
-        return NextResponse.json(
-          {
-            error: `Forward split would reduce share price below the €${MIN_SHARE_PRICE} minimum floor. At the current price of €${currentSharePrice}, the maximum split target is ${maxSplitShares.toLocaleString()} shares.`,
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          `Forward split would reduce share price below the €${MIN_SHARE_PRICE} minimum floor. At the current price of €${currentSharePrice}, the maximum split target is ${maxSplitShares.toLocaleString()} shares.`
         );
       }
     }
@@ -190,11 +173,9 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const accounted = sumAccountedOutstandingShares(freshCorporation);
     if (accounted !== oldTotal) {
-      return NextResponse.json(
-        {
-          error: "Share register does not match total outstanding (run admin share heal).",
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "Share register does not match total outstanding (run admin share heal)."
       );
     }
 
@@ -205,15 +186,15 @@ export async function POST(request: Request, { params }: RouteParams) {
       newPublicFloat = alloc.publicFloat;
       newShareholders = alloc.shareholders;
     } catch {
-      return NextResponse.json(
-        { error: "Unable to allocate new share totals — check shareholder and float data." },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "Unable to allocate new share totals — check shareholder and float data."
       );
     }
 
     const verifySum = newShareholders.reduce((s, h) => s + h.shares, 0) + newPublicFloat;
     if (verifySum !== targetTotalShares) {
-      return NextResponse.json({ error: "Internal allocation mismatch." }, { status: 500 });
+      return errorResponse(500, "Internal allocation mismatch.");
     }
 
     // Belt-and-suspenders: every pre-split owner (character, imperial, corp)
@@ -259,11 +240,9 @@ export async function POST(request: Request, { params }: RouteParams) {
         const key = `${d.kind}:${d.ownerId.toString()}`;
         return nameByKey.get(key) ?? key;
       });
-      return NextResponse.json(
-        {
-          error: `Share structure change would drop shareholders: ${labels.join(", ")}.`,
-        },
-        { status: 500 }
+      return errorResponse(
+        500,
+        `Share structure change would drop shareholders: ${labels.join(", ")}.`
       );
     }
 

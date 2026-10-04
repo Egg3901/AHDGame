@@ -7,7 +7,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { parseJsonBody, schemas } from "@/lib/api/validate";
 import { getImfCorporation } from "@/lib/imf/resolveImfCorporation";
@@ -71,7 +71,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, ...result });
   } catch (error) {
     if (error instanceof SeedImfInstitutionError) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return errorResponse(400, error.message);
     }
     return handleRouteError(error);
   }

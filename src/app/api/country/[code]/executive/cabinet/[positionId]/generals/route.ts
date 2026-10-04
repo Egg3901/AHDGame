@@ -10,7 +10,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireConfirmedSecretary } from "@/lib/api/requireConfirmedSecretary";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
@@ -40,10 +40,10 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, positionId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
     if (DEFENSE_POSITION_BY_COUNTRY[countryId] !== positionId) {
-      return NextResponse.json({ error: "Not a defense cabinet position" }, { status: 404 });
+      return errorResponse(404, "Not a defense cabinet position");
     }
 
     const db = await getDb();
@@ -51,7 +51,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       await getGameStateCollection(db)
     ).findOne({ _id: "current" }, { projection: { conflictsEnabled: 1, currentTurn: 1 } });
     if (!gs?.conflictsEnabled) {
-      return NextResponse.json({ error: "Conflicts subsystem disabled" }, { status: 404 });
+      return errorResponse(404, "Conflicts subsystem disabled");
     }
 
     const member = await getCabinetMembersCollection(db).findOne({ countryId, positionId });
@@ -60,10 +60,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       auth.user.character &&
       member.characterId.toString() === auth.user.character._id.toString();
     if (!isHolder && !auth.user.isAdmin) {
-      return NextResponse.json(
-        { error: "Only the defence minister may commission generals." },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the defence minister may commission generals.");
     }
 
     // A commission stands until revoked, long past this tenure.
@@ -77,21 +74,21 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { characterId } = parsed.data;
     // A malformed id is a bad request, not a crash — `new ObjectId` throws on one.
     if (!ObjectId.isValid(characterId)) {
-      return NextResponse.json({ error: "Invalid character ID" }, { status: 400 });
+      return errorResponse(400, "Invalid character ID");
     }
 
     const character = await db
       .collection<Character>("characters")
       .findOne({ _id: new ObjectId(characterId) as never });
-    if (!character) return NextResponse.json({ error: "Character not found" }, { status: 404 });
+    if (!character) return errorResponse(404, "Character not found");
     // A defense minister commissions their own country's officers.
     if (character.countryId !== countryId) {
-      return NextResponse.json({ error: "Character is not of this country" }, { status: 400 });
+      return errorResponse(400, "Character is not of this country");
     }
 
     const existing = await getCharacterGeneralsCollection(db).findOne({ characterId });
     if (existing && isCommissioned(existing)) {
-      return NextResponse.json({ error: "Already commissioned" }, { status: 400 });
+      return errorResponse(400, "Already commissioned");
     }
 
     // `general` is set on insert alone: a first commission gets a fresh level-1

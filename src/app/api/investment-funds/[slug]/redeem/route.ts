@@ -10,7 +10,7 @@ import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { getAuthUserWithCharacter } from "@/lib/auth";
-import { badRequest, handleRouteError, notFound } from "@/lib/api/errors";
+import { badRequest, handleRouteError, notFound, errorResponse } from "@/lib/api/errors";
 import { runTransactionWithSessionRetry } from "@/lib/db/transactionWithRetry";
 import { parseJsonBody } from "@/lib/api/validate";
 import {
@@ -56,14 +56,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   let claimedOperationId: string | undefined;
   try {
     const auth = await getAuthUserWithCharacter();
-    if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    if (!auth) return errorResponse(401, "Authentication required");
 
     const rateLimit = checkRateLimit(auth.userId, 10, 60000);
     if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
 
     const characterId = auth.character?._id;
     if (!characterId) {
-      return NextResponse.json({ error: "No active character" }, { status: 400 });
+      return errorResponse(400, "No active character");
     }
 
     const db = await getDb();
@@ -85,24 +85,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     if (command.response) return command.response;
     const execute = async () => {
       if (!(await isIndexFundsEnabled())) {
-        return NextResponse.json({ error: INDEX_FUNDS_DISABLED_MESSAGE }, { status: 403 });
+        return errorResponse(403, INDEX_FUNDS_DISABLED_MESSAGE);
       }
       if (!(await isIndexFundsFullMode())) {
-        return NextResponse.json({ error: INDEX_FUNDS_PARTIAL_MESSAGE }, { status: 403 });
+        return errorResponse(403, INDEX_FUNDS_PARTIAL_MESSAGE);
       }
 
       const turnGuard = await rejectDuringTurn(db);
       if (turnGuard) return turnGuard;
       if (fund.status === "delisted") {
-        return NextResponse.json({ error: "Fund is delisted" }, { status: 400 });
+        return errorResponse(400, "Fund is delisted");
       }
 
       const position = await getPosition(db, fund._id, "character", { characterId });
       if (!position || position.units < units) {
-        return NextResponse.json(
-          { error: `Insufficient units. You hold ${position?.units ?? 0} units.` },
-          { status: 400 }
-        );
+        return errorResponse(400, `Insufficient units. You hold ${position?.units ?? 0} units.`);
       }
 
       const character = auth.character!;
@@ -127,10 +124,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       if (forexEnabled) {
         const fxResult = await loadCharacterFxRate(db, fundCurrency);
         if (!fxResult.ok) {
-          return NextResponse.json(
-            { error: "Exchange rate unavailable, try again shortly" },
-            { status: 503 }
-          );
+          return errorResponse(503, "Exchange rate unavailable, try again shortly");
         }
         fundFxRate = fxResult.rate;
       }
@@ -556,19 +550,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
             }
           );
           if (lockBusy) {
-            return NextResponse.json(
-              { error: "Another redemption for this fund is still processing. Try again." },
-              { status: 409 }
+            return errorResponse(
+              409,
+              "Another redemption for this fund is still processing. Try again."
             );
           }
         } catch (err) {
           if (err instanceof Error && err.message === "FUND_CASH_RACE") {
             // Another redemption took the cash between the quote and the debit.
             // Nothing was written, so the caller can simply retry.
-            return NextResponse.json(
-              { error: "Another redemption drew this fund's cash first. Try again." },
-              { status: 409 }
-            );
+            return errorResponse(409, "Another redemption drew this fund's cash first. Try again.");
           } else {
             throw err;
           }

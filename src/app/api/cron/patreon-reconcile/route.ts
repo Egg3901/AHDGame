@@ -2,7 +2,7 @@ import * as Sentry from "@sentry/nextjs";
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireCron } from "@/lib/api/requireCron";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { logRequest } from "@/lib/api/requestLog";
 import { PatreonReconcileLockBusyError, runPatreonReconcile } from "@/lib/patreon/reconcile";
 
@@ -34,7 +34,7 @@ async function handle(req: Request): Promise<Response> {
   if (!requireCron(req)) {
     logRequest(req.method, path, 401, Date.now() - start);
     console.warn("[cron/patreon-reconcile] Unauthorized cron attempt");
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return errorResponse(401, "Unauthorized");
   }
 
   const apply = new URL(req.url).searchParams.get("apply") === "true";
@@ -60,10 +60,7 @@ async function handle(req: Request): Promise<Response> {
     }
     if (error instanceof PatreonReconcileLockBusyError) {
       logRequest(req.method, path, 409, Date.now() - start);
-      return NextResponse.json(
-        { error: "A Patreon reconciliation is already running." },
-        { status: 409 }
-      );
+      return errorResponse(409, "A Patreon reconciliation is already running.");
     }
     logRequest(req.method, path, 500, Date.now() - start);
     console.error("[cron/patreon-reconcile] Failed; see sanitized reconciliation audit record.");

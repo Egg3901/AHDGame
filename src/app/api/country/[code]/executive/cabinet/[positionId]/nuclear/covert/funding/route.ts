@@ -8,7 +8,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import {
   getCovertNuclearProgram,
   putCovertNuclearProgram,
@@ -37,10 +37,7 @@ export async function POST(request: Request, { params }: NuclearRouteParams) {
 
     const program = await getCovertNuclearProgram(db, countryId);
     if (program.completed) {
-      return NextResponse.json(
-        { error: "The device is assembled. There is nothing left to fund." },
-        { status: 409 }
-      );
+      return errorResponse(409, "The device is assembled. There is nothing left to fund.");
     }
 
     const funding = parsed.data.funding;

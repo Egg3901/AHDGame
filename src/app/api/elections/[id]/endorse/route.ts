@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody, schemas } from "@/lib/api/validate";
 import { z } from "zod";
 import { ObjectId } from "mongodb";
@@ -43,22 +43,19 @@ export async function POST(request: Request, { params }: RouteParams) {
     const resolved = await resolveElectionRouteParam(db, electionId);
     if (!resolved.ok) {
       if (resolved.reason === "invalid_id") {
-        return NextResponse.json({ error: "Invalid election ID" }, { status: 400 });
+        return errorResponse(400, "Invalid election ID");
       }
-      return NextResponse.json({ error: "Election not found" }, { status: 404 });
+      return errorResponse(404, "Election not found");
     }
 
     const election = resolved.election;
     const electionObjectId = election._id;
     const candidateObjectId = new ObjectId(candidateId);
     if (election.electionType !== "president") {
-      return NextResponse.json(
-        { error: "Endorsements are only available for presidential elections" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Endorsements are only available for presidential elections");
     }
     if (election.status === "completed" || election.status === "resolved") {
-      return NextResponse.json({ error: "This election has ended" }, { status: 400 });
+      return errorResponse(400, "This election has ended");
     }
     assertSameCountry(character, election, {
       message: "You cannot endorse candidates in elections from other countries",
@@ -71,12 +68,12 @@ export async function POST(request: Request, { params }: RouteParams) {
       status: "active",
     });
     if (!candidate) {
-      return NextResponse.json({ error: "Candidate not found in this election" }, { status: 404 });
+      return errorResponse(404, "Candidate not found in this election");
     }
 
     // Cannot endorse yourself
     if (candidate.characterId?.equals(character._id)) {
-      return NextResponse.json({ error: "You cannot endorse yourself" }, { status: 400 });
+      return errorResponse(400, "You cannot endorse yourself");
     }
 
     // Primaries are intra-party contests. The /president/primary/[partyId]
@@ -86,9 +83,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { effectiveNow, currentTurn } = await getGameTime();
     const inPrimary = isPrimaryPhaseOpen(election, { currentTurn, now: effectiveNow });
     if (inPrimary && candidate.party && candidate.party !== character.party) {
-      return NextResponse.json(
-        { error: "You can only endorse candidates in your own party while the primary is running" },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "You can only endorse candidates in your own party while the primary is running"
       );
     }
 
@@ -98,9 +95,9 @@ export async function POST(request: Request, { params }: RouteParams) {
       status: "active",
     });
     if (ownCandidacy?.campaignSuspended) {
-      return NextResponse.json(
-        { error: "Suspended presidential candidates cannot issue player endorsements" },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "Suspended presidential candidates cannot issue player endorsements"
       );
     }
 
@@ -110,10 +107,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       electionObjectId
     );
     if (!releaseEndorsementLock) {
-      return NextResponse.json(
-        { error: "Your endorsement is already being updated. Try again." },
-        { status: 409 }
-      );
+      return errorResponse(409, "Your endorsement is already being updated. Try again.");
     }
 
     try {
@@ -251,9 +245,9 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     const resolved = await resolveElectionRouteParam(db, electionId);
     if (!resolved.ok) {
       if (resolved.reason === "invalid_id") {
-        return NextResponse.json({ error: "Invalid election ID" }, { status: 400 });
+        return errorResponse(400, "Invalid election ID");
       }
-      return NextResponse.json({ error: "Election not found" }, { status: 404 });
+      return errorResponse(404, "Election not found");
     }
 
     const election = resolved.election;
@@ -265,10 +259,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       electionObjectId
     );
     if (!releaseEndorsementLock) {
-      return NextResponse.json(
-        { error: "Your endorsement is already being updated. Try again." },
-        { status: 409 }
-      );
+      return errorResponse(409, "Your endorsement is already being updated. Try again.");
     }
 
     try {

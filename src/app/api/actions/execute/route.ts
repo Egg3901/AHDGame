@@ -7,7 +7,7 @@ import { executeActionSchema } from "@/lib/api/schemas/actions";
 import { ACTIONS, BATCHABLE_ACTION_TYPES } from "@/lib/actions";
 import { executeCharacterAction } from "@/lib/actions/commands/executeAction";
 import type { ActionType, Character, User } from "@/lib/db/types";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 
 // POST /api/actions/execute — Executes a political action (optionally in batch) and applies its effects to the character
@@ -36,30 +36,24 @@ export async function POST(request: Request) {
 
     const action = ACTIONS[actionType];
     if (!action) {
-      return NextResponse.json({ error: "Invalid action type" }, { status: 400 });
+      return errorResponse(400, "Invalid action type");
     }
 
     if (count > 1) {
       if (!BATCHABLE_ACTION_TYPES.includes(actionType as ActionType)) {
-        return NextResponse.json(
-          { error: "Batch execution is not available for this action." },
-          { status: 400 }
-        );
+        return errorResponse(400, "Batch execution is not available for this action.");
       }
       if (actionType === "convertCash") {
-        return NextResponse.json(
-          { error: "Batch execution is not available for this action." },
-          { status: 400 }
-        );
+        return errorResponse(400, "Batch execution is not available for this action.");
       }
     }
 
     if (count > 1 && convertAmount != null) {
-      return NextResponse.json({ error: "Invalid request." }, { status: 400 });
+      return errorResponse(400, "Invalid request.");
     }
 
     if (action.requiresState && !targetState) {
-      return NextResponse.json({ error: "This action requires a target state" }, { status: 400 });
+      return errorResponse(400, "This action requires a target state");
     }
 
     const db = await getDb();
@@ -72,7 +66,7 @@ export async function POST(request: Request) {
     const character = await db.collection<Character>("characters").findOne(characterQuery);
 
     if (!character) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
 
     const result = await executeCharacterAction(db, {

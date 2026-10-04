@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
 import { rejectDuringTurn } from "@/lib/api/rejectDuringTurn";
@@ -43,8 +43,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
       return NextResponse.json({ enabled: false, selectedBankId: null, banks: [] });
     }
     const currencyCode = resolveCorpLiquidCurrencyCode(resolved.corporation);
-    if (!currencyCode)
-      return NextResponse.json({ error: "Corporation currency is unavailable" }, { status: 409 });
+    if (!currencyCode) return errorResponse(409, "Corporation currency is unavailable");
     const banks = await listPrimaryUnderwritingBanks(db, policy, currencyCode);
     return NextResponse.json({
       enabled: true,
@@ -75,7 +74,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
 
     const policy = await loadBankingPolicy(db);
     if (!policy.primaryUnderwriting) {
-      return NextResponse.json({ error: "Primary underwriting is unavailable" }, { status: 409 });
+      return errorResponse(409, "Primary underwriting is unavailable");
     }
     const corporationActionBlock = await requireCorporationActionsEnabled(db);
     if (corporationActionBlock) return corporationActionBlock;
@@ -126,21 +125,17 @@ export async function PUT(request: Request, { params }: RouteParams) {
         $inc: { primaryUnderwritingMandateRevision: 1 },
       });
       if (result.matchedCount !== 1) {
-        return NextResponse.json(
-          { error: "CEO, currency, or mandate changed; retry" },
-          { status: 409 }
-        );
+        return errorResponse(409, "CEO, currency, or mandate changed; retry");
       }
       return NextResponse.json({ ok: true, selectedBankId: null });
     }
 
     const bankId = new ObjectId(parsed.data.bankCorporationId);
     if (bankId.equals(corporation._id)) {
-      return NextResponse.json({ error: "Choose another corporation's bank" }, { status: 400 });
+      return errorResponse(400, "Choose another corporation's bank");
     }
     const currencyCode = resolveCorpLiquidCurrencyCode(corporation);
-    if (!currencyCode)
-      return NextResponse.json({ error: "Corporation currency is unavailable" }, { status: 409 });
+    if (!currencyCode) return errorResponse(409, "Corporation currency is unavailable");
     const bank = await db.collection<Corporation>("corporations").findOne(
       {
         _id: bankId,
@@ -160,10 +155,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
       !Number.isInteger(bank.bankCharter.charteredTurn) ||
       capturePrimaryUnderwritingCurrencySnapshot(bank)?.currencyCode !== currencyCode
     ) {
-      return NextResponse.json(
-        { error: "The selected bank is no longer eligible in this currency" },
-        { status: 409 }
-      );
+      return errorResponse(409, "The selected bank is no longer eligible in this currency");
     }
     const result = await db.collection<Corporation>("corporations").updateOne(CEO_FILTER, {
       $set: {
@@ -179,7 +171,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
       $inc: { primaryUnderwritingMandateRevision: 1 },
     });
     if (result.matchedCount !== 1) {
-      return NextResponse.json({ error: "Corporation currency changed; retry" }, { status: 409 });
+      return errorResponse(409, "Corporation currency changed; retry");
     }
     return NextResponse.json({ ok: true, selectedBankId: bank._id.toHexString() });
   } catch (error) {

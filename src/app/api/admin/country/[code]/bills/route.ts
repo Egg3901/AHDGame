@@ -8,7 +8,7 @@ import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { parseBoundedIntParam, parseJsonBody } from "@/lib/api/validate";
 import { adminBillsSchema } from "@/lib/api/schemas/admin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { onBillEnacted } from "@/lib/billEnactment";
 import { flushServerPosthog } from "@/lib/analytics/serverPosthog";
 import { applyLegislationEffect } from "@/lib/legislationEffects";
@@ -31,7 +31,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const { searchParams } = new URL(request.url);
@@ -129,7 +129,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
 
     const db = await getDb();
     const bill = await db.collection<Bill>("bills").findOne({ _id: new ObjectId(billId) });
-    if (!bill) return NextResponse.json({ error: "Bill not found." }, { status: 404 });
+    if (!bill) return errorResponse(404, "Bill not found.");
 
     const now = new Date();
 
@@ -204,10 +204,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       // Move from active → active_other regardless of votes
       const origin = bill.originChamber as "house" | "senate" | "joint";
       if (origin === "joint") {
-        return NextResponse.json(
-          { error: "Joint bills cannot be advanced this way." },
-          { status: 400 }
-        );
+        return errorResponse(400, "Joint bills cannot be advanced this way.");
       }
       const nextChamber = origin === "house" ? "senate" : "house";
       const otherEndsAt = new Date(now.getTime() + VOTING_DURATION_MS);
@@ -279,7 +276,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       return NextResponse.json({ message: `"${bill.title}" reset to active voting.` });
     }
 
-    return NextResponse.json({ error: "Invalid action." }, { status: 400 });
+    return errorResponse(400, "Invalid action.");
   } catch (error) {
     return handleRouteError(error);
   }

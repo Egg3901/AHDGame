@@ -4,7 +4,7 @@ import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { optimizeImage, IMAGE_PRESETS } from "@/lib/imageOptimize";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { getPersonalBalance, getHomeCurrency } from "@/lib/currency/characterFunds";
@@ -190,10 +190,7 @@ export async function POST(request: Request) {
     const balance = getPersonalBalance(character, homeCurrency, forexEnabled);
     const isFree = canUseFree;
     if (!isFree && balance < cost) {
-      return NextResponse.json(
-        { error: "Insufficient balance to purchase this ad." },
-        { status: 402 }
-      );
+      return errorResponse(402, "Insufficient balance to purchase this ad.");
     }
 
     // Parse multipart form
@@ -207,16 +204,13 @@ export async function POST(request: Request) {
     const altText = (formData.get("altText") as string | null)?.trim() || undefined;
 
     if (!file || !(file instanceof Blob)) {
-      return NextResponse.json({ error: "No image file uploaded." }, { status: 400 });
+      return errorResponse(400, "No image file uploaded.");
     }
     if (!ALLOWED_TYPES.has(file.type)) {
-      return NextResponse.json(
-        { error: "Only JPEG, PNG, WebP, and GIF images are allowed." },
-        { status: 400 }
-      );
+      return errorResponse(400, "Only JPEG, PNG, WebP, and GIF images are allowed.");
     }
     if (file.size > MAX_SIZE) {
-      return NextResponse.json({ error: "Image must be under 2 MB." }, { status: 400 });
+      return errorResponse(400, "Image must be under 2 MB.");
     }
 
     // Validate optional URL
@@ -224,10 +218,10 @@ export async function POST(request: Request) {
       try {
         const url = new URL(linkUrl);
         if (url.protocol !== "https:") {
-          return NextResponse.json({ error: "Link URL must use HTTPS." }, { status: 400 });
+          return errorResponse(400, "Link URL must use HTTPS.");
         }
       } catch {
-        return NextResponse.json({ error: "Invalid link URL." }, { status: 400 });
+        return errorResponse(400, "Invalid link URL.");
       }
     }
 
@@ -378,10 +372,7 @@ export async function POST(request: Request) {
       );
     }
     if (error instanceof Error && error.message === "PLAYER_AD_FUNDS_CHANGED") {
-      return NextResponse.json(
-        { error: "Your available personal funds changed before the ad completed." },
-        { status: 409 }
-      );
+      return errorResponse(409, "Your available personal funds changed before the ad completed.");
     }
     return handleRouteError(error);
   }

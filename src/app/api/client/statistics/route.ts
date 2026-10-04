@@ -1,3 +1,4 @@
+import { errorResponse } from "@/lib/api/errors";
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import {
@@ -72,33 +73,32 @@ function noStore(response: NextResponse): NextResponse {
 }
 
 export async function POST(request: Request) {
-  if (!acceptWithinGlobalBudget(Date.now()))
-    return noStore(NextResponse.json({ error: "Try again later" }, { status: 429 }));
+  if (!acceptWithinGlobalBudget(Date.now())) return noStore(errorResponse(429, "Try again later"));
   const contentType = request.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase();
   if (contentType !== "application/json") {
-    return noStore(NextResponse.json({ error: "Unsupported content type" }, { status: 415 }));
+    return noStore(errorResponse(415, "Unsupported content type"));
   }
 
   let text: string | null;
   try {
     text = await readCappedBody(request, MAX_BODY_BYTES);
   } catch {
-    return noStore(NextResponse.json({ error: "Invalid report" }, { status: 400 }));
+    return noStore(errorResponse(400, "Invalid report"));
   }
   if (text === null) {
-    return noStore(NextResponse.json({ error: "Request body too large" }, { status: 413 }));
+    return noStore(errorResponse(413, "Request body too large"));
   }
 
   let raw: unknown;
   try {
     raw = JSON.parse(text);
   } catch {
-    return noStore(NextResponse.json({ error: "Invalid report" }, { status: 400 }));
+    return noStore(errorResponse(400, "Invalid report"));
   }
 
   const parsed = clientStatisticsReportSchema.safeParse(raw);
   if (!parsed.success) {
-    return noStore(NextResponse.json({ error: "Invalid report" }, { status: 400 }));
+    return noStore(errorResponse(400, "Invalid report"));
   }
 
   try {
@@ -107,7 +107,7 @@ export async function POST(request: Request) {
       .collection<ClientSimulationStatisticsDoc>(COLLECTION_NAME)
       .insertOne(toStoredDocument(parsed.data, Date.now()));
   } catch {
-    return noStore(NextResponse.json({ error: "Unable to store report" }, { status: 500 }));
+    return noStore(errorResponse(500, "Unable to store report"));
   }
 
   return noStore(NextResponse.json({ ok: true }, { status: 202 }));

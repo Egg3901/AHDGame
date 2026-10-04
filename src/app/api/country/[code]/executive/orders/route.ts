@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireHumanSessionWithCharacter, requireAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { getDb } from "@/lib/mongodb";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -30,7 +30,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
 
     const auth = await requireHumanSessionWithCharacter(request);
@@ -54,10 +54,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     const adminOverride = parsed.data.adminOverride === true && isAdmin;
     const leader = await isSittingLeader(db, countryId, auth.user.character._id);
     if (!leader && !adminOverride) {
-      return NextResponse.json(
-        { error: "Only the sitting leader can issue national orders" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the sitting leader can issue national orders");
     }
 
     const stateId = getNationalStateId(countryId);
@@ -85,7 +82,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
 
     const auth = await requireAuth();
@@ -97,7 +94,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
       : false;
     const isAdmin = auth.user.isAdmin === true;
     if (!leader && !isAdmin) {
-      return NextResponse.json({ error: "Not the sitting leader" }, { status: 403 });
+      return errorResponse(403, "Not the sitting leader");
     }
 
     const stateId = getNationalStateId(countryId);

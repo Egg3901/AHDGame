@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { ObjectId } from "mongodb";
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { getDb } from "@/lib/mongodb";
@@ -34,14 +34,14 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const { petitionId } = await params;
     if (!ObjectId.isValid(petitionId)) {
-      return NextResponse.json({ error: "Invalid petition ID" }, { status: 400 });
+      return errorResponse(400, "Invalid petition ID");
     }
 
     const db = await getDb();
     const petition = await db
       .collection<IndexListingPetition>(INDEX_LISTING_PETITIONS)
       .findOne({ _id: new ObjectId(petitionId) });
-    if (!petition) return NextResponse.json({ error: "Petition not found" }, { status: 404 });
+    if (!petition) return errorResponse(404, "Petition not found");
 
     const gameState = await getGameState();
     const authority = await resolveMergerAuthority(
@@ -50,10 +50,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       gameState?.currentYear ?? null
     );
     if (!authority?.holderCharacterId?.equals(auth.user.character._id)) {
-      return NextResponse.json(
-        { error: "Only the seated officeholder can decide this petition" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the seated officeholder can decide this petition");
     }
 
     const parsed = await parseJsonBody(request, DecideSchema);

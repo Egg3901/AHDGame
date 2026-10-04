@@ -6,7 +6,7 @@ import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import type { Corporation, GameConfig } from "@/lib/db/types";
 
@@ -38,7 +38,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
       .collection<GameConfig>("gameConfig")
       .findOne({ _id: "default" }, { projection: { mediaEditorialEnabled: 1 } });
     if (config?.mediaEditorialEnabled !== true) {
-      return NextResponse.json({ error: "Editorial stance is unavailable" }, { status: 404 });
+      return errorResponse(404, "Editorial stance is unavailable");
     }
     const resolved = await resolveCorporation(db, id);
     if (!resolved.ok) return resolved.response;
@@ -50,10 +50,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
       .collection("corporateSectors")
       .findOne({ corporationId: corporation._id, sectorType: "media" }, { projection: { _id: 1 } });
     if (!mediaSector) {
-      return NextResponse.json(
-        { error: "Only a media publisher can set an editorial stance" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only a media publisher can set an editorial stance");
     }
 
     const stance = { economic: parsed.data.economic, social: parsed.data.social };
@@ -64,7 +61,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
         { $set: { editorialStance: stance } }
       );
     if (updated.modifiedCount !== 1 && updated.matchedCount !== 1) {
-      return NextResponse.json({ error: "Corporation ownership changed" }, { status: 409 });
+      return errorResponse(409, "Corporation ownership changed");
     }
     return NextResponse.json({ editorialStance: stance });
   } catch (error) {

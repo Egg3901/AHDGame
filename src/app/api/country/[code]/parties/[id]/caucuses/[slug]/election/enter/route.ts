@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { isInNewCharacterCooldown } from "@/lib/auth/newCharacterCooldown";
 import { getLeadershipEligibility } from "@/lib/parties/leadershipTenure";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
@@ -28,7 +28,7 @@ export async function POST(
     const { code, id, slug } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const auth = await requireAuthWithCharacter();
@@ -42,12 +42,12 @@ export async function POST(
     const db = await getDb();
     const party = await findPartyBySequentialId(db, id, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
     const partyId = String(party.sequentialId);
     const resolved = await findCaucusBySlug(db, countryId, partyId, slug);
     if (!resolved) {
-      return NextResponse.json({ error: "Caucus not found" }, { status: 404 });
+      return errorResponse(404, "Caucus not found");
     }
     const { caucus } = resolved;
 
@@ -58,10 +58,7 @@ export async function POST(
       status: "active",
     });
     if (!membership) {
-      return NextResponse.json(
-        { error: "Only active caucus members may run for chair." },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only active caucus members may run for chair.");
     }
 
     const userDoc = await db
@@ -74,12 +71,9 @@ export async function POST(
       includePartyJoinedAt: false,
     });
     if (cooldown.blocked) {
-      return NextResponse.json(
-        {
-          error:
-            "New characters can't run in caucus chair elections for 24 hours. Try again later.",
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "New characters can't run in caucus chair elections for 24 hours. Try again later."
       );
     }
 
@@ -88,10 +82,7 @@ export async function POST(
       status: "voting",
     });
     if (!election) {
-      return NextResponse.json(
-        { error: "No active caucus chair election found." },
-        { status: 404 }
-      );
+      return errorResponse(404, "No active caucus chair election found.");
     }
 
     // Minimum party tenure before standing for caucus chair (leadershipTenure.ts) —
@@ -119,10 +110,7 @@ export async function POST(
 
     if (parsed.data.withdraw) {
       if (!existing) {
-        return NextResponse.json(
-          { error: "You are not currently a candidate in this election." },
-          { status: 404 }
-        );
+        return errorResponse(404, "You are not currently a candidate in this election.");
       }
       await db
         .collection<CaucusChairCandidate>("caucusChairCandidates")
@@ -134,10 +122,7 @@ export async function POST(
     }
 
     if (existing) {
-      return NextResponse.json(
-        { error: "You are already a candidate in this election." },
-        { status: 409 }
-      );
+      return errorResponse(409, "You are already a candidate in this election.");
     }
 
     await db.collection<CaucusChairCandidate>("caucusChairCandidates").insertOne({

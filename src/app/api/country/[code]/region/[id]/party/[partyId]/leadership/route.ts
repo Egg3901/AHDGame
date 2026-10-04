@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
@@ -34,7 +34,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, id, partyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const stateId = id;
 
@@ -51,13 +51,13 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Verify state exists
     const state = await db.collection<State>("states").findOne({ _id: stateId, countryId });
     if (!state) {
-      return NextResponse.json({ error: "State not found" }, { status: 404 });
+      return errorResponse(404, "State not found");
     }
 
     // Verify party exists
     const party = await findPartyBySequentialId(db, partyId, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
 
     const parsed = await parseJsonBody(request, statePartyAppointmentSchema);
@@ -83,20 +83,15 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     // Vice chair and treasurer are elected positions — only admins can directly appoint them
     if (position !== "chair" && !isAdmin) {
-      return NextResponse.json(
-        { error: "Vice chair and treasurer positions are filled by election" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Vice chair and treasurer positions are filled by election");
     }
 
     // National chair can appoint state chair, but ONLY when vacant
     if (!isAdmin) {
       if (!isNationalChair) {
-        return NextResponse.json(
-          {
-            error: "Unauthorized - You must be the national party chair or an admin",
-          },
-          { status: 403 }
+        return errorResponse(
+          403,
+          "Unauthorized - You must be the national party chair or an admin"
         );
       }
       // Verify the existing chair is still valid — a stale chairId pointing
@@ -111,19 +106,13 @@ export async function POST(request: Request, { params }: RouteParams) {
         }
       }
       if (!chairPositionIsVacant) {
-        return NextResponse.json(
-          {
-            error:
-              "State chair position is not vacant - national chair cannot remove or replace an elected state chair",
-          },
-          { status: 403 }
+        return errorResponse(
+          403,
+          "State chair position is not vacant - national chair cannot remove or replace an elected state chair"
         );
       }
       if (!characterId) {
-        return NextResponse.json(
-          { error: "National party chair cannot vacate the state chair position" },
-          { status: 403 }
-        );
+        return errorResponse(403, "National party chair cannot vacate the state chair position");
       }
     }
 
@@ -134,7 +123,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       try {
         characterObjectId = new ObjectId(characterId);
       } catch {
-        return NextResponse.json({ error: "Invalid characterId format" }, { status: 400 });
+        return errorResponse(400, "Invalid characterId format");
       }
 
       // Find the character
@@ -143,26 +132,23 @@ export async function POST(request: Request, { params }: RouteParams) {
       });
 
       if (!appointedCharacter) {
-        return NextResponse.json({ error: "Character not found" }, { status: 404 });
+        return errorResponse(404, "Character not found");
       }
 
       // Validate character is in this party
       if (appointedCharacter.party !== partyKey) {
-        return NextResponse.json(
-          { error: "Character must be a member of this party" },
-          { status: 400 }
-        );
+        return errorResponse(400, "Character must be a member of this party");
       }
 
       // Validate character is in this state
       if (appointedCharacter.homeState !== stateId) {
-        return NextResponse.json({ error: "Character must be from this state" }, { status: 400 });
+        return errorResponse(400, "Character must be from this state");
       }
 
       // Check if character is banned
       const user = await db.collection<User>("users").findOne({ _id: appointedCharacter.userId });
       if (user?.isBanned) {
-        return NextResponse.json({ error: "Cannot appoint a banned user" }, { status: 400 });
+        return errorResponse(400, "Cannot appoint a banned user");
       }
 
       // Relocation-tenure gate: a character who relocated within the last

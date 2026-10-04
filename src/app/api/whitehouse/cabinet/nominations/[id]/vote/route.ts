@@ -7,7 +7,7 @@ import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseObjectId } from "@/lib/utils/objectId";
 import { clearWhippedFromVote } from "@/lib/congress/clearWhippedVote";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { z } from "zod";
 import { CONGRESS_LIMITS, checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -28,7 +28,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const { id } = await params;
     const nominationOid = parseObjectId(id);
     if (!nominationOid) {
-      return NextResponse.json({ error: "Invalid nomination ID" }, { status: 400 });
+      return errorResponse(400, "Invalid nomination ID");
     }
 
     const auth = await requireBasicAuth();
@@ -58,7 +58,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       status: "active",
     });
     if (!nomination) {
-      return NextResponse.json({ error: "Nomination not found or voting closed" }, { status: 404 });
+      return errorResponse(404, "Nomination not found or voting closed");
     }
     if (
       isVotingDeadlinePassed(
@@ -68,14 +68,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         gameTime.currentTurn
       )
     ) {
-      return NextResponse.json({ error: "Voting has ended" }, { status: 409 });
+      return errorResponse(409, "Voting has ended");
     }
 
     const myCharacter = await db.collection<Character>("characters").findOne({
       userId: new ObjectId(authUser.userId),
     });
     if (!myCharacter) {
-      return NextResponse.json({ error: "No character" }, { status: 400 });
+      return errorResponse(400, "No character");
     }
 
     const legislatorOfficial = await db.collection<ElectedOfficial>("electedOfficials").findOne({
@@ -83,10 +83,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       officeType: { $in: ["senate", "house"] },
     });
     if (!legislatorOfficial) {
-      return NextResponse.json(
-        { error: "Only members of Congress can vote on nominations" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only members of Congress can vote on nominations");
     }
 
     const isVpNomination = nomination.positionId === "vicePresident";
@@ -94,10 +91,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     // Cabinet nominations: Senate only. VP nominations: both chambers.
     if (!isVpNomination && isHouse) {
-      return NextResponse.json(
-        { error: "Only Senators can vote on cabinet nominations" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only Senators can vote on cabinet nominations");
     }
 
     const voteKey = myCharacter._id.toString();
@@ -118,7 +112,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       })
     );
     if (updateResult.matchedCount === 0) {
-      return NextResponse.json({ error: "Nomination not found or voting closed" }, { status: 404 });
+      return errorResponse(404, "Nomination not found or voting closed");
     }
 
     await clearWhippedFromVote(db, "cabinetNominations", nominationOid, myCharacter._id);

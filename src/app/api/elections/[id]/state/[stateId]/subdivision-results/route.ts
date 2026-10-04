@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { resolveElectionRouteParam } from "@/lib/elections/electionParamResolution";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getSubdivisionMode } from "@/lib/maps/subdivisionConfig";
 import { loadSubdivisionFile } from "@/lib/maps/subdivisionData";
 import {
@@ -27,44 +27,38 @@ export async function GET(
     const regionId = stateId.toUpperCase();
     // regionId feeds a filesystem path — reject anything but region-code shapes.
     if (!/^[A-Z]{2,3}$/.test(regionId)) {
-      return NextResponse.json({ error: "Invalid region ID" }, { status: 400 });
+      return errorResponse(400, "Invalid region ID");
     }
 
     const db = await getDb();
     const resolved = await resolveElectionRouteParam(db, id);
     if (!resolved.ok) {
       if (resolved.reason === "invalid_id") {
-        return NextResponse.json({ error: "Invalid election ID" }, { status: 400 });
+        return errorResponse(400, "Invalid election ID");
       }
-      return NextResponse.json({ error: "Election not found" }, { status: 404 });
+      return errorResponse(404, "Election not found");
     }
     const election = resolved.election;
 
     const modeEntry = getSubdivisionMode(election.countryId, String(election.electionType));
     if (!modeEntry) {
-      return NextResponse.json(
-        { error: "Subdivision map data is not available for this election" },
-        { status: 404 }
-      );
+      return errorResponse(404, "Subdivision map data is not available for this election");
     }
 
     const data = await loadSubdivisionFile(modeEntry.config.dataDir, regionId);
     if (!data) {
-      return NextResponse.json(
-        { error: "Subdivision data not available for this region" },
-        { status: 404 }
-      );
+      return errorResponse(404, "Subdivision data not available for this region");
     }
 
     const tally = await db
       .collection<ElectionVoteTally>("electionVoteTallies")
       .findOne({ electionId: election._id });
-    if (!tally) return NextResponse.json({ error: "No tally found" }, { status: 404 });
+    if (!tally) return errorResponse(404, "No tally found");
     // Presidential tallies span all regions (aggregated below); everything else
     // must be the requested region's own tally — legacy county-results behavior.
     const isPresident = String(election.electionType) === "president";
     if (!isPresident && tally.state !== regionId) {
-      return NextResponse.json({ error: "Tally state mismatch" }, { status: 400 });
+      return errorResponse(400, "Tally state mismatch");
     }
 
     const regionVotes = isPresident

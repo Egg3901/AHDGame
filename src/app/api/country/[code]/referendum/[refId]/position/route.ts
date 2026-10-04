@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireHumanSessionWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { getDb } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
@@ -24,10 +24,10 @@ export async function POST(
     const { code, refId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
     if (countryId !== "UK") {
-      return NextResponse.json({ error: "Referendums are UK-only." }, { status: 400 });
+      return errorResponse(400, "Referendums are UK-only.");
     }
 
     const auth = await requireHumanSessionWithCharacter(request);
@@ -44,16 +44,16 @@ export async function POST(
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
     }
     if (parsed.data.action === "declare" && !parsed.data.side) {
-      return NextResponse.json({ error: "Pick a side." }, { status: 400 });
+      return errorResponse(400, "Pick a side.");
     }
 
     const db = await getDb();
     const ref = await getReferendumCollection(db).findOne({ _id: new ObjectId(refId) });
-    if (!ref) return NextResponse.json({ error: "Referendum not found." }, { status: 404 });
+    if (!ref) return errorResponse(404, "Referendum not found.");
 
     const partyId = auth.user.character.party ?? null;
     if (!partyId) {
-      return NextResponse.json({ error: "You are not in a party." }, { status: 400 });
+      return errorResponse(400, "You are not in a party.");
     }
     const [partyDoc, stateParty] = await Promise.all([
       db
@@ -64,13 +64,10 @@ export async function POST(
         .findOne({ countryId, stateId: ref.regionId, partyId: String(partyId) }),
     ]);
     if (!partyDoc) {
-      return NextResponse.json({ error: "Party not found." }, { status: 400 });
+      return errorResponse(400, "Party not found.");
     }
     if (!canDeclarePartyPosition(partyDoc, stateParty, auth.user)) {
-      return NextResponse.json(
-        { error: "Only a party Chair or Vice-chair may declare a position." },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only a party Chair or Vice-chair may declare a position.");
     }
 
     const turn = await getCurrentTurn(db);

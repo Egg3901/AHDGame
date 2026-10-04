@@ -7,7 +7,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { z } from "zod";
 import type { Election, ElectionCandidate } from "@/lib/db/types";
@@ -33,7 +33,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     try {
       electionObjectId = new ObjectId(electionId);
     } catch {
-      return NextResponse.json({ error: "Invalid election ID" }, { status: 400 });
+      return errorResponse(400, "Invalid election ID");
     }
 
     const parsed = await parseJsonBody(request, removeCandidateSchema);
@@ -50,18 +50,18 @@ export async function POST(request: Request, { params }: RouteParams) {
     });
 
     if (!election) {
-      return NextResponse.json({ error: "Election not found" }, { status: 404 });
+      return errorResponse(404, "Election not found");
     }
 
     if (election.status !== "upcoming" && election.status !== "active") {
-      return NextResponse.json({ error: "Election is not open" }, { status: 400 });
+      return errorResponse(400, "Election is not open");
     }
 
     let candidateObjectId: ObjectId;
     try {
       candidateObjectId = new ObjectId(candidateId);
     } catch {
-      return NextResponse.json({ error: "Invalid candidate ID" }, { status: 400 });
+      return errorResponse(400, "Invalid candidate ID");
     }
 
     const candidate = await db.collection<ElectionCandidate>("electionCandidates").findOne({
@@ -71,10 +71,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     });
 
     if (!candidate) {
-      return NextResponse.json(
-        { error: "Candidate not found or already withdrawn" },
-        { status: 404 }
-      );
+      return errorResponse(404, "Candidate not found or already withdrawn");
     }
 
     await db

@@ -3,7 +3,7 @@ import { clearAuthCookie } from "@/lib/auth";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import type { BootstrapMode } from "@/lib/admin/bootstrapGameWorld";
 import { resetAndBootstrapGameWorld } from "@/lib/admin/resetAndBootstrapGameWorld";
@@ -78,11 +78,9 @@ export async function POST(request: Request) {
     const bootstrapFromQuery = searchParams.get("bootstrap") === "true";
 
     if (!isKnownPreset(preset)) {
-      return NextResponse.json(
-        {
-          error: `Unknown preset "${preset}". Valid presets: 1953-default, 1979-default, 1991-default, 1999-default, 2007-default, 2019-default, 2023-default, empty, 2019-no-parties`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Unknown preset "${preset}". Valid presets: 1953-default, 1979-default, 1991-default, 1999-default, 2007-default, 2019-default, 2023-default, empty, 2019-no-parties`
       );
     }
 
@@ -92,10 +90,7 @@ export async function POST(request: Request) {
     }
     const body = parsed.data;
     if (body.startingParties === "none" && preset !== "1991-default") {
-      return NextResponse.json(
-        { error: "No starting parties is available for the 1991 preset" },
-        { status: 400 }
-      );
+      return errorResponse(400, "No starting parties is available for the 1991 preset");
     }
     const bootstrap = body.bootstrap === true || bootstrapFromQuery;
     const mode: BootstrapMode = body.mode === "vacant" ? "vacant" : "historical";

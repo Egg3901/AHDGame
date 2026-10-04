@@ -3,7 +3,7 @@ import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { getDb } from "@/lib/mongodb";
 import { getAuthUser } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { checkWikiDisabled } from "@/lib/api/wikiGuard";
 import { createWikiPageSchema } from "@/lib/api/schemas/wiki";
@@ -90,12 +90,9 @@ export async function POST(request: Request) {
     const isMod = user.isAdmin === true || user.role === "moderator";
     if (!isMod) {
       if (!parsed.data.category || !isPlayerSubmittableCategory(parsed.data.category)) {
-        return NextResponse.json(
-          {
-            error:
-              "A category is required. Choose one of: Characters, Corporations, Party profiles, Events, or Reference.",
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          "A category is required. Choose one of: Characters, Corporations, Party profiles, Events, or Reference."
         );
       }
     }
@@ -108,7 +105,7 @@ export async function POST(request: Request) {
       tags: parsed.data.tags,
     });
     if (!screen.ok) {
-      return NextResponse.json({ error: screen.reason }, { status: 400 });
+      return errorResponse(400, screen.reason);
     }
 
     const db = await getDb();
@@ -127,7 +124,7 @@ export async function POST(request: Request) {
     // Check slug uniqueness
     const existing = await wikiPages.findOne({ slug: parsed.data.slug });
     if (existing) {
-      return NextResponse.json({ error: "A page with this slug already exists" }, { status: 400 });
+      return errorResponse(400, "A page with this slug already exists");
     }
 
     const now = new Date();

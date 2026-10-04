@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
@@ -41,12 +41,12 @@ export const POST = withNoStore(async (request: Request) => {
     // a banned target stays repairable, as with the admin password reset.
     const targetUser = await usersCollection.findOne({ _id: objectId });
     if (!targetUser) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return errorResponse(404, "User not found");
     }
     // Fenced accounts fail closed. Any present fence value, including null or
     // malformed shapes, denies (see isAuthMigrationFenced).
     if (isAuthMigrationFenced(targetUser)) {
-      return NextResponse.json({ error: fenceConflictMessage }, { status: 409 });
+      return errorResponse(409, fenceConflictMessage);
     }
 
     const discordId = targetUser.discordId;
@@ -79,12 +79,9 @@ export const POST = withNoStore(async (request: Request) => {
     const hasGoogle = typeof targetUser.googleId === "string" && targetUser.googleId.length > 0;
     const hasApple = typeof targetUser.appleId === "string" && targetUser.appleId.length > 0;
     if (!hasPassword && !hasGoogle && !hasApple) {
-      return NextResponse.json(
-        {
-          error:
-            "This account would have no remaining login method. Set another login method first.",
-        },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "This account would have no remaining login method. Set another login method first."
       );
     }
 
@@ -95,7 +92,7 @@ export const POST = withNoStore(async (request: Request) => {
       { projection: { _id: 1 } }
     );
     if (duplicate) {
-      return NextResponse.json({ error: fenceConflictMessage }, { status: 409 });
+      return errorResponse(409, fenceConflictMessage);
     }
 
     const now = new Date();
@@ -134,10 +131,7 @@ export const POST = withNoStore(async (request: Request) => {
         }
       );
     } catch {
-      return NextResponse.json(
-        { error: "Discord reset is temporarily unavailable. Please try again." },
-        { status: 503 }
-      );
+      return errorResponse(503, "Discord reset is temporarily unavailable. Please try again.");
     } finally {
       // A lost acknowledgment may still mean the write committed. Remove any
       // cached account again on every settled write, including failure.
@@ -145,14 +139,11 @@ export const POST = withNoStore(async (request: Request) => {
     }
 
     if (updated.acknowledged !== true) {
-      return NextResponse.json(
-        { error: "Discord reset is temporarily unavailable. Please try again." },
-        { status: 503 }
-      );
+      return errorResponse(503, "Discord reset is temporarily unavailable. Please try again.");
     }
 
     if (updated.matchedCount !== 1) {
-      return NextResponse.json({ error: fenceConflictMessage }, { status: 409 });
+      return errorResponse(409, fenceConflictMessage);
     }
 
     // Post-commit lookups and audit are best effort: the unlink already

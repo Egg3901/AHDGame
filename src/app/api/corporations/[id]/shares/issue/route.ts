@@ -5,7 +5,7 @@ import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationAc
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { issueSharesSchema } from "@/lib/api/schemas/corporations";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { subsidiaryIssuanceBlockReason } from "@/lib/corporations/subsidiaries/issuanceGuard";
 import { hasOpenPrivatizationVote } from "@/lib/corporations/commands/privatization/openVoteGuard";
@@ -66,38 +66,29 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (ceoCheck) return ceoCheck;
 
     const subBlock = await subsidiaryIssuanceBlockReason(corporation);
-    if (subBlock) return NextResponse.json({ error: subBlock }, { status: 403 });
+    if (subBlock) return errorResponse(403, subBlock);
 
     if (corporation.isPrivate) {
-      return NextResponse.json(
-        {
-          error:
-            "Private corporations cannot issue shares to the public float. Use the Go Public action to IPO first.",
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "Private corporations cannot issue shares to the public float. Use the Go Public action to IPO first."
       );
     }
 
     if (await hasOpenPrivatizationVote(db, corporation._id)) {
-      return NextResponse.json(
-        { error: "Cannot issue new shares while a privatization vote is open" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Cannot issue new shares while a privatization vote is open");
     }
 
     const openShareholderVote = await db
       .collection<CorporationVote>("corporationVotes")
       .findOne({ corporationId: corporation._id, status: "open" }, { projection: { _id: 1 } });
     if (openShareholderVote) {
-      return NextResponse.json(
-        { error: "Cannot issue shares while a shareholder vote is open" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Cannot issue shares while a shareholder vote is open");
     }
     if ((corporation.pendingShareIssuance?.remainingShares ?? 0) > 0) {
-      return NextResponse.json(
-        { error: "This corporation still has an approved share issue awaiting market placement" },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "This corporation still has an approved share issue awaiting market placement"
       );
     }
 
@@ -106,27 +97,21 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const dilutionFraction = currentShares > 0 ? newShares / currentShares : 0;
     if (dilutionFraction > 0.1) {
-      return NextResponse.json(
-        {
-          error:
-            "Share issuances causing >10% dilution require a shareholder vote. Use the Propose Share Issuance flow.",
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "Share issuances causing >10% dilution require a shareholder vote. Use the Propose Share Issuance flow."
       );
     }
 
     if (percent > MAX_PUBLIC_ISSUANCE_PERCENT) {
-      return NextResponse.json(
-        { error: `Cannot issue more than ${MAX_PUBLIC_ISSUANCE_PERCENT}% of outstanding shares` },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Cannot issue more than ${MAX_PUBLIC_ISSUANCE_PERCENT}% of outstanding shares`
       );
     }
 
     if (newShares < 1) {
-      return NextResponse.json(
-        { error: "Issuance too small (rounds to 0 shares)" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Issuance too small (rounds to 0 shares)");
     }
 
     const executionPrice = resolveShareExecutionPrice(corporation);
@@ -284,11 +269,9 @@ export async function POST(request: Request, { params }: RouteParams) {
         ? Date.now() - new Date(corporation.lastShareIssuance).getTime()
         : 0;
       const remaining = Math.ceil((ISSUANCE_COOLDOWN_MS - elapsed) / 1000 / 60 / 60);
-      return NextResponse.json(
-        {
-          error: `Share issuance is limited to once per 24 hours. Try again in ${remaining}h.`,
-        },
-        { status: 429 }
+      return errorResponse(
+        429,
+        `Share issuance is limited to once per 24 hours. Try again in ${remaining}h.`
       );
     }
 

@@ -4,7 +4,7 @@ import { getDb } from "@/lib/mongodb";
 import { parseJsonBody } from "@/lib/api/validate";
 import { ELECTION_LIMITS, checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { logRequest } from "@/lib/api/requestLog";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { statePartyVoteSchema } from "@/lib/api/schemas/elections";
 import { isStatePartyVoteDuplicateKey } from "@/lib/elections/duplicateKey";
 import { validateStatePartyElectionAccess } from "@/lib/utils/statePartyElectionValidation";
@@ -28,7 +28,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, id, partyId: routePartyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const resolvedStateId = id;
 
@@ -89,7 +89,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     if (!candidate) {
       logRequest("POST", path, 400, Date.now() - start);
-      return NextResponse.json({ error: "Candidate not found or has withdrawn" }, { status: 400 });
+      return errorResponse(400, "Candidate not found or has withdrawn");
     }
 
     const gameTime = await getGameTime();

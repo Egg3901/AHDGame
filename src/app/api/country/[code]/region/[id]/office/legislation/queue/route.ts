@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { requireHumanSessionWithCharacter, requireAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { getDb } from "@/lib/mongodb";
 import {
@@ -36,7 +36,7 @@ export async function POST(
     const { code, id } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
     const auth = await requireHumanSessionWithCharacter(request);
     if (!auth.ok) return auth.response;
@@ -44,8 +44,7 @@ export async function POST(
     const stateId = id.toUpperCase();
     const db = await getDb();
     const canManage = await canManageOffice(db, countryId, stateId, auth.user.character._id);
-    if (!canManage)
-      return NextResponse.json({ error: "Not authorized for this office" }, { status: 403 });
+    if (!canManage) return errorResponse(403, "Not authorized for this office");
 
     const parsed = await parseJsonBody(
       request,
@@ -92,7 +91,7 @@ export async function GET(
     const { code, id } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
     const auth = await requireAuth();
     if (!auth.ok) return auth.response;
@@ -107,7 +106,7 @@ export async function GET(
     );
     const isAdmin = auth.user.isAdmin === true;
     if (!access.canManage && !isAdmin) {
-      return NextResponse.json({ error: "Not authorized for this office" }, { status: 403 });
+      return errorResponse(403, "Not authorized for this office");
     }
 
     const pending = await db.collection<GovernorQueuedBill>("governorLegislationQueue").findOne({

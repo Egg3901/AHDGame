@@ -11,7 +11,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getCountryAccess } from "@/lib/countryAccess";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { GameState, CountryGameState } from "@/lib/db/types/gameState";
@@ -49,7 +49,7 @@ export async function GET(request: Request, { params }: RouteContext) {
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const db = await getDb();
@@ -106,7 +106,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const parsed = await parseJsonBody(request, settingsSchema);

@@ -7,7 +7,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireConfirmedSecretary } from "@/lib/api/requireConfirmedSecretary";
 import { getGameState } from "@/lib/gameState";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -38,10 +38,10 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, positionId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
     if (!resolveInfraPosition(countryId, positionId)) {
-      return NextResponse.json({ error: "Not a transportation cabinet position" }, { status: 404 });
+      return errorResponse(404, "Not a transportation cabinet position");
     }
 
     const parsed = await parseJsonBody(request, startSchema);
@@ -50,7 +50,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
     const arch = getInfraArchetype(parsed.data.archetypeId);
     if (!arch) {
-      return NextResponse.json({ error: "Invalid project type" }, { status: 400 });
+      return errorResponse(400, "Invalid project type");
     }
 
     const db = await getDb();
@@ -58,7 +58,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       .collection<{ _id: string; countryId: string }>("states")
       .findOne({ _id: parsed.data.regionId, countryId }, { projection: { _id: 1 } });
     if (!region) {
-      return NextResponse.json({ error: "Invalid region for this country" }, { status: 400 });
+      return errorResponse(400, "Invalid region for this country");
     }
 
     const membersCol = getCabinetMembersCollection(db);
@@ -69,10 +69,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       auth.user.character &&
       member.characterId.toString() === auth.user.character._id.toString();
     if (!isHolder && !auth.user.isAdmin) {
-      return NextResponse.json(
-        { error: "Only the transportation holder or admin can start projects" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the transportation holder or admin can start projects");
     }
 
     // Breaking ground commits the department's budget for the build's duration.
@@ -82,7 +79,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Shared UK pool: both offices of a dual holder spend one balance (issue #2049).
     const actions = await resolveMinisterialRemaining(db, countryId, member!);
     if (actions < 1) {
-      return NextResponse.json({ error: "No ministerial actions remaining" }, { status: 400 });
+      return errorResponse(400, "No ministerial actions remaining");
     }
 
     const gameState = await getGameState();
@@ -90,7 +87,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const spend = await spendMinisterialAction(db, countryId, member!);
     if (!spend.ok) {
-      return NextResponse.json({ error: "No ministerial actions remaining" }, { status: 409 });
+      return errorResponse(409, "No ministerial actions remaining");
     }
 
     try {

@@ -8,7 +8,7 @@ import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError, notFound } from "@/lib/api/errors";
+import { handleRouteError, notFound, errorResponse } from "@/lib/api/errors";
 import type { Corporation } from "@/lib/db/types";
 import { z } from "zod";
 import { executeCorporationBondDefaultDissolution } from "@/lib/bonds/executeCorporationBondDefaultDissolution";
@@ -41,10 +41,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (!corp) throw notFound("Corporation not found");
 
     if (corp.imfInstitution) {
-      return NextResponse.json(
-        { error: "Cannot force-liquidate the IMF institution" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Cannot force-liquidate the IMF institution");
     }
 
     const result = await withCorporationSettlementLock(
@@ -59,10 +56,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     );
 
     if (!result) {
-      return NextResponse.json(
-        { error: "Bond settlement is already in progress for this corporation" },
-        { status: 409 }
-      );
+      return errorResponse(409, "Bond settlement is already in progress for this corporation");
     }
 
     return NextResponse.json({

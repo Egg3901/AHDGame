@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import type { User } from "@/lib/db/types/user";
 
 const switchSchema = z.object({
@@ -34,10 +34,7 @@ export async function POST(request: Request) {
       // Verify the admin has an imperial character
       const user = await db.collection<User>("users").findOne({ _id: adminUserId });
       if (!user?.activeImperialCharacterId) {
-        return NextResponse.json(
-          { error: "No imperial character found for this account" },
-          { status: 400 }
-        );
+        return errorResponse(400, "No imperial character found for this account");
       }
     }
 

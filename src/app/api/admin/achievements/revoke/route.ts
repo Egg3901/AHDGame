@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { withAdminAuth } from "@/lib/api/withAdminAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { z } from "zod";
 import type { Character } from "@/lib/db/types";
@@ -30,21 +30,18 @@ export const POST = withAdminAuth(async (_auth, request: Request) => {
       .collection<Character>("characters")
       .findOne({ _id: new ObjectId(characterId) });
     if (!character) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
 
     const achievement = await db.collection("achievements").findOne({ slug: achievementSlug });
     if (!achievement) {
-      return NextResponse.json({ error: "Achievement not found" }, { status: 404 });
+      return errorResponse(404, "Achievement not found");
     }
 
     const revoked = await revokeAchievement(character.userId, achievementSlug);
 
     if (!revoked) {
-      return NextResponse.json(
-        { error: "Character does not have this achievement" },
-        { status: 404 }
-      );
+      return errorResponse(404, "Character does not have this achievement");
     }
 
     return NextResponse.json({

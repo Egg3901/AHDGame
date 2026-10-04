@@ -7,7 +7,7 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import {
   COUNTRY_CONFIGS,
   getCountryConfigForRuntime,
@@ -23,7 +23,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 404 });
+      return errorResponse(404, "Invalid country code");
     }
 
     const db = await getDb();

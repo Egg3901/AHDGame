@@ -7,7 +7,7 @@ import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError, isUnexpectedError } from "@/lib/api/errors";
+import { handleRouteError, isUnexpectedError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import type { NationalizationAuction } from "@/lib/db/types";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
@@ -28,14 +28,14 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const { id } = await params;
     if (!ObjectId.isValid(id)) {
-      return NextResponse.json({ error: "Invalid corporation ID" }, { status: 400 });
+      return errorResponse(400, "Invalid corporation ID");
     }
     const parsed = await parseJsonBody(request, auctionBidSchema);
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
     }
     if (parsed.data.asCorporationId && !ObjectId.isValid(parsed.data.asCorporationId)) {
-      return NextResponse.json({ error: "Invalid corporation ID" }, { status: 400 });
+      return errorResponse(400, "Invalid corporation ID");
     }
 
     const db = await getDb();
@@ -43,7 +43,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       .collection<NationalizationAuction>("nationalizationAuctions")
       .findOne({ corporationId: new ObjectId(id), status: "open" });
     if (!auction) {
-      return NextResponse.json({ error: "No open auction for this corporation." }, { status: 404 });
+      return errorResponse(404, "No open auction for this corporation.");
     }
 
     const turn = await getCurrentTurn(db);

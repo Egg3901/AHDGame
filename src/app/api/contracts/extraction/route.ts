@@ -9,7 +9,7 @@ import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { z } from "zod";
 import { EXTRACTABLE_RESOURCES } from "@/lib/constants/commodities";
 import { ZOD_COUNTRY_ENUM } from "@/lib/constants/countries";
@@ -43,10 +43,10 @@ export async function GET(request: Request) {
     const status = searchParams.get("status");
 
     if (corporationId && !ObjectId.isValid(corporationId)) {
-      return NextResponse.json({ error: "Invalid corporationId" }, { status: 400 });
+      return errorResponse(400, "Invalid corporationId");
     }
     if (status && status !== "offered" && status !== "all") {
-      return NextResponse.json({ error: "Invalid status filter" }, { status: 400 });
+      return errorResponse(400, "Invalid status filter");
     }
 
     const db = await getDb();

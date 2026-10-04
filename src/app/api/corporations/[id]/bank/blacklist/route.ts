@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError, notFound } from "@/lib/api/errors";
+import { handleRouteError, notFound, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
@@ -55,7 +55,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
     });
 
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: 400 });
+      return errorResponse(400, result.error);
     }
 
     return NextResponse.json({

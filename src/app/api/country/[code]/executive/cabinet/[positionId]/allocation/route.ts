@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getCabinetMechanics } from "@/lib/constants/cabinetMechanics";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
@@ -35,15 +35,12 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, positionId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
 
     const mechanics = getCabinetMechanics(countryId, positionId);
     if (!mechanics?.allocation) {
-      return NextResponse.json(
-        { error: "This position does not have allocation controls" },
-        { status: 404 }
-      );
+      return errorResponse(404, "This position does not have allocation controls");
     }
 
     const parsed = await parseJsonBody(request, allocationSchema);
@@ -56,9 +53,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Validate: percentages must sum to 100 (with 0.1% tolerance for floating point)
     const total = Object.values(allocations).reduce((sum, v) => sum + v, 0);
     if (Math.abs(total - 100) > 0.1) {
-      return NextResponse.json(
-        { error: `Allocations must sum to 100%. Current total: ${total.toFixed(1)}%` },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Allocations must sum to 100%. Current total: ${total.toFixed(1)}%`
       );
     }
 
@@ -71,10 +68,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       auth.user.character &&
       member.characterId.toString() === auth.user.character._id.toString();
     if (!isHolder && !auth.user.isAdmin) {
-      return NextResponse.json(
-        { error: "Only the cabinet holder or admin can set allocations" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the cabinet holder or admin can set allocations");
     }
 
     const gameState = await getGameState();
@@ -85,10 +79,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const existing = await settingsCol.findOne({ _id: `${countryId}_${positionId}` });
     const lastAllocationTurn = existing?.lastAllocationChangedTurn;
     if (lastAllocationTurn !== undefined && lastAllocationTurn >= currentTurn) {
-      return NextResponse.json(
-        { error: "Allocations can only be updated once per turn" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Allocations can only be updated once per turn");
     }
 
     await settingsCol.updateOne(

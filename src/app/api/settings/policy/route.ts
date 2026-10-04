@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
@@ -63,12 +63,9 @@ export async function POST(request: Request) {
         .findOne({ _id: user.character._id }, { projection: { actions: 1, policies: 1 } });
       const currentPolicy = freshCharacter?.policies?.[axisKey] ?? user.character.policies[axisKey];
       if (direction > 0 ? currentPolicy >= 5 : currentPolicy <= -5) {
-        return NextResponse.json({ error: "Policy cannot go beyond -5 or 5." }, { status: 400 });
+        return errorResponse(400, "Policy cannot go beyond -5 or 5.");
       }
-      return NextResponse.json(
-        { error: `Not enough actions. You need ${ACTION_COST} actions.` },
-        { status: 400 }
-      );
+      return errorResponse(400, `Not enough actions. You need ${ACTION_COST} actions.`);
     }
 
     try {

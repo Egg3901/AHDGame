@@ -1,3 +1,4 @@
+import { errorResponse } from "@/lib/api/errors";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { ObjectId } from "mongodb";
@@ -99,7 +100,7 @@ export async function POST(request: Request, { params }: RouteParams) {
   const { code, id: regionId, partyId } = await params;
   const countryId = code.toUpperCase() as CountryId;
   if (!COUNTRY_CONFIGS[countryId]) {
-    return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+    return errorResponse(400, "Invalid country code");
   }
 
   const authResult = await requireAuthWithCharacter();
@@ -117,7 +118,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
   const bodyResult = await parseOptionalPsPool(request);
   if (!bodyResult.ok) {
-    return NextResponse.json({ error: bodyResult.error }, { status: 400 });
+    return errorResponse(400, bodyResult.error);
   }
   const psPool = bodyResult.psPool;
 
@@ -130,7 +131,7 @@ export async function POST(request: Request, { params }: RouteParams) {
   // pact). Presence — not row-existence — is the real gate, so we don't bail
   // on a missing row here; we bootstrap it below once presence + auth pass.
   const spenderParty = await findPartyBySequentialId(db, partyId, countryId);
-  if (!spenderParty) return NextResponse.json({ error: "Party not found" }, { status: 404 });
+  if (!spenderParty) return errorResponse(404, "Party not found");
   // Resolve by the `{countryId, stateId, partyId}` triple with a compound-`_id`
   // fallback. A field-triple-only read here is what let Build Org poach a
   // drifted row's org from the WRONG party's balance (ticket #1256): the row
@@ -149,12 +150,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     String(spenderParty.sequentialId)
   );
   if (!hasPresence) {
-    return NextResponse.json(
-      {
-        error:
-          "Cannot build org without presence in this state. Establish a player or elected official here first.",
-      },
-      { status: 400 }
+    return errorResponse(
+      400,
+      "Cannot build org without presence in this state. Establish a player or elected official here first."
     );
   }
 
@@ -162,12 +160,7 @@ export async function POST(request: Request, { params }: RouteParams) {
   // reaching the SSOT chokepoint. DC is supported even though it elects no
   // congressional or state offices.
   if (isNonPartyOrganizationUsRegion(countryId, upperRegionId)) {
-    return NextResponse.json(
-      {
-        error: "This US region does not support a party organization.",
-      },
-      { status: 400 }
-    );
+    return errorResponse(400, "This US region does not support a party organization.");
   }
 
   // Auth: state chair / state vice / state campaigner / national chair /
@@ -176,11 +169,9 @@ export async function POST(request: Request, { params }: RouteParams) {
   // state-tier officers, so a missing-row state is authorized only for
   // national-tier roles (chair / vice / campaigner) or admin.
   if (!canSpendOnStateParty(spenderParty, spenderRow, authUser)) {
-    return NextResponse.json(
-      {
-        error: "Only the party chair, vice chair, an assigned campaigner, or admin can build org",
-      },
-      { status: 403 }
+    return errorResponse(
+      403,
+      "Only the party chair, vice chair, an assigned campaigner, or admin can build org"
     );
   }
 
@@ -257,12 +248,9 @@ export async function POST(request: Request, { params }: RouteParams) {
   });
 
   if (breakdown.totalGain <= 0) {
-    return NextResponse.json(
-      {
-        error:
-          "Nothing to build here — the unaffiliated pool is empty and no rival holds any Org to poach.",
-      },
-      { status: 400 }
+    return errorResponse(
+      400,
+      "Nothing to build here — the unaffiliated pool is empty and no rival holds any Org to poach."
     );
   }
 
@@ -277,21 +265,15 @@ export async function POST(request: Request, { params }: RouteParams) {
   // tampered / ineligible choice rather than silently charging the wrong pool.
   const eligibility = resolveSpenderScopeEligibility(spenderParty, spenderRow, authUser);
   if (psPool === "national" && !eligibility.national) {
-    return NextResponse.json(
-      {
-        error:
-          "Spending the national pool is limited to the party's national officers. You need to be its national chair, vice chair or campaigner. Switch to the state pool, or ask a party leader to appoint you.",
-      },
-      { status: 403 }
+    return errorResponse(
+      403,
+      "Spending the national pool is limited to the party's national officers. You need to be its national chair, vice chair or campaigner. Switch to the state pool, or ask a party leader to appoint you."
     );
   }
   if (psPool === "state" && !eligibility.state) {
-    return NextResponse.json(
-      {
-        error:
-          "Spending a state pool is limited to that state's party officers. You need to be its state chair, vice chair or campaigner. Ask a party leader to appoint you from the party's management page.",
-      },
-      { status: 403 }
+    return errorResponse(
+      403,
+      "Spending a state pool is limited to that state's party officers. You need to be its state chair, vice chair or campaigner. Ask a party leader to appoint you from the party's management page."
     );
   }
   const preferred =
@@ -345,14 +327,12 @@ export async function POST(request: Request, { params }: RouteParams) {
   );
   if (!spendResult.ok) {
     if (spendResult.reason === "insufficient-ps") {
-      return NextResponse.json(
-        {
-          error: `Insufficient PS: need ${spendResult.effectiveCost}, have ${spendResult.currentPoliticalStrength.toFixed(2)}`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Insufficient PS: need ${spendResult.effectiveCost}, have ${spendResult.currentPoliticalStrength.toFixed(2)}`
       );
     }
-    return NextResponse.json({ error: `Spend failed: ${spendResult.reason}` }, { status: 400 });
+    return errorResponse(400, `Spend failed: ${spendResult.reason}`);
   }
 
   // National PS activity recovery (2026-06-28, ticket #0762): refund a fraction

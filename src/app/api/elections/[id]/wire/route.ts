@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import {
   getRaceWireFeed,
@@ -40,7 +40,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       limit: url.searchParams.get("limit") ?? undefined,
     });
     if (!parsed.success) {
-      return NextResponse.json({ error: "Invalid query parameters" }, { status: 400 });
+      return errorResponse(400, "Invalid query parameters");
     }
 
     const db = await getDb();

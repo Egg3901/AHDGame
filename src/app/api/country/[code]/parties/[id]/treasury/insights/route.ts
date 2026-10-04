@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import { getDb } from "@/lib/mongodb";
@@ -18,7 +18,7 @@ export async function GET(
     const { code, id } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const auth = await requireAuthWithCharacter();
@@ -27,17 +27,14 @@ export async function GET(
     const db = await getDb();
     const party = await findPartyBySequentialId(db, id, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
     const modViewEnabled =
       !auth.user.isAdmin &&
       auth.user.isModerator === true &&
       new URL(request.url).searchParams.get("modView") === "1";
     if (!canViewNationalTreasuryInsights(party, auth.user, modViewEnabled)) {
-      return NextResponse.json(
-        { error: "Only party leadership can view treasury insights" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only party leadership can view treasury insights");
     }
 
     return NextResponse.json(

@@ -14,7 +14,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError, notFound } from "@/lib/api/errors";
+import { handleRouteError, notFound, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
@@ -94,9 +94,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (ceoCheck) return ceoCheck;
 
     if (!isLendingCharter(corporation.bankCharter)) {
-      return NextResponse.json(
-        { error: "Only an active retail or universal charter originates household loans." },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "Only an active retail or universal charter originates household loans."
       );
     }
 
@@ -109,7 +109,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         { $set: { "bankCharter.lendingProfile": profile, updatedAt: new Date() } }
       );
     if (updated.matchedCount !== 1) {
-      return NextResponse.json({ error: "Failed to set the lending profile." }, { status: 400 });
+      return errorResponse(400, "Failed to set the lending profile.");
     }
 
     // What this flip changes, in bands rather than adjectives: bands the new

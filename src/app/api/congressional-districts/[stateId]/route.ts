@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { readFile } from "fs/promises";
 import { join } from "path";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { getGameState } from "@/lib/gameState";
 import { isRedistrictingEnabled } from "@/lib/redistricting/flag";
@@ -23,7 +23,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ stateId
     const { stateId } = await params;
     const state = stateId.toUpperCase();
     if (!/^[A-Z]{2}$/.test(state)) {
-      return NextResponse.json({ error: "Invalid state id" }, { status: 400 });
+      return errorResponse(400, "Invalid state id");
     }
 
     const filePath = join(process.cwd(), "src", "data", "congressional-districts", `${state}.json`);
@@ -87,7 +87,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ stateId
         ...(redistricting ? { redistricting } : {}),
       });
     } catch {
-      return NextResponse.json({ error: `No CD data available for ${state}` }, { status: 404 });
+      return errorResponse(404, `No CD data available for ${state}`);
     }
   } catch (error) {
     return handleRouteError(error);

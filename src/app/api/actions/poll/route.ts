@@ -9,7 +9,7 @@ import { NextRequest } from "next/server";
 import { ObjectId } from "mongodb";
 import { eraForPreset } from "@/lib/seeds/presetSelector";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireBasicAuth, requireHumanSession } from "@/lib/api/requireAuth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
@@ -84,7 +84,7 @@ async function handleGET(request: NextRequest) {
       : { userId: new ObjectId(user.userId) };
     const character = await db.collection<Character>("characters").findOne(characterQuery);
     if (!character) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
 
     const [state, demographics, categories, statePartyOrgs, turnoutDoc, forexEnabled] =
@@ -107,7 +107,7 @@ async function handleGET(request: NextRequest) {
       ]);
 
     if (!demographics || !state) {
-      return NextResponse.json({ error: "State or demographics not found" }, { status: 404 });
+      return errorResponse(404, "State or demographics not found");
     }
 
     const userEP = character.policies.economic;
@@ -314,14 +314,14 @@ export async function POST(request: NextRequest) {
       isForexEnabled(),
     ]);
     if (!character) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
 
     // Price the debit from the same quote the effect and validation use. A
     // missing intellect rejects here before any state is read or charged.
     const quote = quotePollAction({ intellect: character.stats?.intellect }, tier, priceLevel);
     if (!quote.ok) {
-      return NextResponse.json({ error: quote.error }, { status: 400 });
+      return errorResponse(400, quote.error);
     }
     const fundCost = quote.fundCostAnchor;
     const actionCost = quote.apCost;
@@ -339,7 +339,7 @@ export async function POST(request: NextRequest) {
       priceLevel,
     });
     if (!validation.canPerform) {
-      return NextResponse.json({ error: validation.reason }, { status: 400 });
+      return errorResponse(400, validation.reason);
     }
 
     // Compute the poll results now so we can persist them
@@ -363,18 +363,12 @@ export async function POST(request: NextRequest) {
 
     // Validate before charging — never charge if we cannot produce poll data
     if (!state) {
-      return NextResponse.json(
-        { error: `State not found for ${character.homeState}. Contact support.` },
-        { status: 404 }
-      );
+      return errorResponse(404, `State not found for ${character.homeState}. Contact support.`);
     }
     if (!demographics) {
-      return NextResponse.json(
-        {
-          error:
-            "Demographic data not found for your state. Run Admin → Demographics → Reseed Demographics, then try again.",
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "Demographic data not found for your state. Run Admin → Demographics → Reseed Demographics, then try again."
       );
     }
     // No hard gate on a `voterGroups` archetype category existing: a poll runs
@@ -583,9 +577,9 @@ export async function POST(request: NextRequest) {
       },
     });
     if (spendResult.modifiedCount === 0) {
-      return NextResponse.json(
-        { error: "Your available actions or campaign funds changed. Please try again." },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "Your available actions or campaign funds changed. Please try again."
       );
     }
 

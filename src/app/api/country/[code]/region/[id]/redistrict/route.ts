@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth, requireHumanSessionWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getAuthAdmin } from "@/lib/auth";
 import { getGameState } from "@/lib/gameState";
 import { isRedistrictingEnabled } from "@/lib/redistricting/flag";
@@ -37,7 +37,7 @@ export async function POST(
     const countryId = code.toUpperCase();
     const stateId = id.toUpperCase();
     if (!(countryId in COUNTRY_CONFIGS)) {
-      return NextResponse.json({ error: "Unknown country" }, { status: 400 });
+      return errorResponse(400, "Unknown country");
     }
 
     const auth = await requireHumanSessionWithCharacter(req);
@@ -50,7 +50,7 @@ export async function POST(
 
     const gs = await getGameState();
     if (!isRedistrictingEnabled(gs)) {
-      return NextResponse.json({ error: "Redistricting is not enabled" }, { status: 404 });
+      return errorResponse(404, "Redistricting is not enabled");
     }
     // US-only by construction: only US states have congressionalDistricts docs, so
     // non-US countries fall through to the "No districts to redraw" 404 below.
@@ -61,26 +61,20 @@ export async function POST(
       // Governor authorization.
       const canManage = await canManageOffice(db, countryId as CountryId, stateId, character._id);
       if (!canManage) {
-        return NextResponse.json(
-          { error: "Only the governor may redraw the map" },
-          { status: 403 }
-        );
+        return errorResponse(403, "Only the governor may redraw the map");
       }
 
       // Census window: only in the census year, once per census.
       if (typeof gs?.lastCensusYear !== "number" || gs.lastCensusYear !== currentYear) {
-        return NextResponse.json(
-          { error: "Redistricting is only allowed in a census year" },
-          { status: 403 }
-        );
+        return errorResponse(403, "Redistricting is only allowed in a census year");
       }
 
       // Trifecta gate.
       const trifecta = await checkStateTrifecta(db, countryId, stateId);
       if (!trifecta.hasTrifecta) {
-        return NextResponse.json(
-          { error: "A redraw requires controlling the governorship and the state legislature" },
-          { status: 403 }
+        return errorResponse(
+          403,
+          "A redraw requires controlling the governorship and the state legislature"
         );
       }
       trifectaPartyId = trifecta.partyId ?? "";
@@ -93,23 +87,17 @@ export async function POST(
       .sort({ index: 1 })
       .toArray()) as CongressionalDistrict[];
     if (docs.length === 0) {
-      return NextResponse.json({ error: "No districts to redraw" }, { status: 404 });
+      return errorResponse(404, "No districts to redraw");
     }
     if (!isAdmin && docs.some((d) => d.lastRedrawnCensus === currentYear)) {
-      return NextResponse.json(
-        { error: "This map has already been redrawn this census" },
-        { status: 403 }
-      );
+      return errorResponse(403, "This map has already been redrawn this census");
     }
 
     const parsed = BodySchema.safeParse(await req.json());
-    if (!parsed.success) return NextResponse.json({ error: "Invalid map" }, { status: 400 });
+    if (!parsed.success) return errorResponse(400, "Invalid map");
     const proposed = parsed.data.districts;
     if (proposed.length !== docs.length) {
-      return NextResponse.json(
-        { error: `Expected ${docs.length} districts, got ${proposed.length}` },
-        { status: 400 }
-      );
+      return errorResponse(400, `Expected ${docs.length} districts, got ${proposed.length}`);
     }
 
     // Budget = the live map's conserved totals.
@@ -183,7 +171,7 @@ export async function GET(
     const countryId = code.toUpperCase();
     const stateId = id.toUpperCase();
     if (!(countryId in COUNTRY_CONFIGS)) {
-      return NextResponse.json({ error: "Unknown country" }, { status: 400 });
+      return errorResponse(400, "Unknown country");
     }
 
     const auth = await requireAuth();

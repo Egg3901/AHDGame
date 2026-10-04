@@ -10,6 +10,7 @@ import {
   isDuplicateKeyError,
   internalError,
   handleRouteError,
+  errorResponse,
 } from "./errors";
 
 // Mock NextResponse and Sentry
@@ -229,5 +230,21 @@ describe("handleRouteError", () => {
     expect(result.status).toBe(500);
     const body = (result as any).data;
     expect(body.error).toBe("Internal server error");
+  });
+});
+
+describe("errorResponse", () => {
+  it("wraps message in the shared envelope with a status-derived code and a ref", () => {
+    const res = errorResponse(404, "Missing");
+    expect(res.status).toBe(404);
+    expect((res as any).data).toMatchObject({ error: "Missing", code: "NOT_FOUND" });
+    expect(typeof (res as any).data.ref).toBe("string");
+  });
+
+  it("honors a custom code and falls back to catalog copy for empty messages", () => {
+    const custom = errorResponse(409, "Busy", { code: "TURN_IN_PROGRESS" });
+    expect((custom as any).data.code).toBe("TURN_IN_PROGRESS");
+    const empty = errorResponse(429, undefined);
+    expect((empty as any).data.error).toMatch(/too many requests/i);
   });
 });

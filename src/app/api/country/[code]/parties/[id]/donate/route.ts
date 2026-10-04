@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { partyDonateSchema } from "@/lib/api/schemas/settings";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
@@ -38,7 +38,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, id: partyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const authResult = await requireAuthWithCharacter();
@@ -61,7 +61,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Verify party exists
     const party = await findPartyBySequentialId(db, partyId, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
 
     // One-party-state guard: banned parties cannot accept donations.
@@ -69,10 +69,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     // lifts the restriction.
     const runtime = await getCountryState(db, countryId);
     if (isBannedParty({ governmentType: runtime.governmentType }, party)) {
-      return NextResponse.json(
-        { error: "Banned parties cannot accept donations." },
-        { status: 403 }
-      );
+      return errorResponse(403, "Banned parties cannot accept donations.");
     }
 
     // Check authorization: must be a member of this party
@@ -82,16 +79,13 @@ export async function POST(request: Request, { params }: RouteParams) {
     ]);
 
     if (!character) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
 
     // Must match both party AND country to avoid cross-country collisions
     const partyCountryId = party.countryId ?? "US";
     if (character.party !== partyId || (character.countryId ?? "US") !== partyCountryId) {
-      return NextResponse.json(
-        { error: "You must be a member of this party to donate" },
-        { status: 403 }
-      );
+      return errorResponse(403, "You must be a member of this party to donate");
     }
 
     // Post-Phase-6: `amount`, character campaign balance, and party treasury
@@ -106,7 +100,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     // `Idempotency-Key` returns the stored outcome without moving money again.
     const headerKey = request.headers.get("Idempotency-Key");
     if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128)) {
-      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
+      return errorResponse(400, "Invalid Idempotency-Key header");
     }
     const flowKey = headerKey ?? randomUUID();
     const fingerprint = `${authUser.character._id.toHexString()}:${party._id.toHexString()}:${amount}:${campaignFundsField}`;
@@ -127,10 +121,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
     const balanceLocal = localCampaignBalance(character, forexEnabled);
     if (previousReceipt?.status !== "in_progress" && amount > balanceLocal) {
-      return NextResponse.json(
-        { error: `Insufficient funds. Available: $${balanceLocal.toLocaleString()}` },
-        { status: 400 }
-      );
+      return errorResponse(400, `Insufficient funds. Available: $${balanceLocal.toLocaleString()}`);
     }
     const mapDonationError = (index: number, outcome: MoneyFlowLegOutcome): Error => {
       if (index === 0) return new Error("PARTY_DONATION_FUNDS_CHANGED");
@@ -202,15 +193,15 @@ export async function POST(request: Request, { params }: RouteParams) {
     });
   } catch (error) {
     if (error instanceof Error && error.message === "PARTY_DONATION_FUNDS_CHANGED") {
-      return NextResponse.json(
-        { error: "Your available campaign funds changed before the donation completed." },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "Your available campaign funds changed before the donation completed."
       );
     }
     if (error instanceof Error && error.message === "PARTY_DONATION_PARTY_MISSING") {
-      return NextResponse.json(
-        { error: "The party could not be credited because it changed during the donation." },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "The party could not be credited because it changed during the donation."
       );
     }
     return handleRouteError(error);

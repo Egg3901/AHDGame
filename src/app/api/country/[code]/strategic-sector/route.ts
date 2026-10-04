@@ -6,7 +6,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireHumanSession } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { CorporationType } from "@/lib/constants/corporations";
@@ -40,7 +40,7 @@ async function authorize(request: Request, code: string): Promise<Gate> {
   if (!COUNTRY_CONFIGS[countryId]) {
     return {
       ok: false,
-      response: NextResponse.json({ error: "Invalid country code" }, { status: 400 }),
+      response: errorResponse(400, "Invalid country code"),
     };
   }
 
@@ -49,10 +49,7 @@ async function authorize(request: Request, code: string): Promise<Gate> {
   if (!character || !(await isSittingLeader(db, countryId, character._id))) {
     return {
       ok: false,
-      response: NextResponse.json(
-        { error: "Only the head of government may designate strategic sectors." },
-        { status: 403 }
-      ),
+      response: errorResponse(403, "Only the head of government may designate strategic sectors."),
     };
   }
   return { ok: true, db, countryId };
@@ -71,11 +68,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     // already-strategic sector is idempotent and never trips the cap.
     const designated = await getDesignatedSectorTypes(gate.db, gate.countryId);
     if (!designated.has(sectorType) && designated.size >= MAX_STRATEGIC_SECTOR_DESIGNATIONS) {
-      return NextResponse.json(
-        {
-          error: `A country may designate at most ${MAX_STRATEGIC_SECTOR_DESIGNATIONS} strategic sectors. Remove one before adding another.`,
-        },
-        { status: 409 }
+      return errorResponse(
+        409,
+        `A country may designate at most ${MAX_STRATEGIC_SECTOR_DESIGNATIONS} strategic sectors. Remove one before adding another.`
       );
     }
     const turn = await getCurrentTurn(gate.db);

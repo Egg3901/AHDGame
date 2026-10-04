@@ -7,7 +7,7 @@ import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
 import { parseJsonBody } from "@/lib/api/validate";
 import { buyBondSchema } from "@/lib/api/schemas/bonds";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { refundOrCapture } from "@/lib/observability/context";
 import type { Bond, Character, Corporation, User } from "@/lib/db/types";
 import type { ImperialCharacter } from "@/lib/db/types/imperialCharacter";
@@ -79,7 +79,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const bond = await db.collection<Bond>("bonds").findOne({ _id: new ObjectId(bondId) });
     if (!bond) {
-      return NextResponse.json({ error: "Bond not found" }, { status: 404 });
+      return errorResponse(404, "Bond not found");
     }
 
     const turnDoc = await db
@@ -88,14 +88,11 @@ export async function POST(request: Request, { params }: RouteParams) {
     const currentTurn = turnDoc?.currentTurn ?? 0;
 
     if (bond.matured) {
-      return NextResponse.json({ error: "Bond has already matured" }, { status: 400 });
+      return errorResponse(400, "Bond has already matured");
     }
 
     if (bond.publicFloat < units) {
-      return NextResponse.json(
-        { error: `Only ${bond.publicFloat} units available` },
-        { status: 400 }
-      );
+      return errorResponse(400, `Only ${bond.publicFloat} units available`);
     }
 
     // Bond denomination — canonical key is `bond.currencyCode` (Task-18B); we
@@ -126,13 +123,10 @@ export async function POST(request: Request, { params }: RouteParams) {
         .collection<Corporation>("corporations")
         .findOne({ _id: new ObjectId(buyAsCorp) });
       if (!corp) {
-        return NextResponse.json({ error: "Corporation not found" }, { status: 404 });
+        return errorResponse(404, "Corporation not found");
       }
       if (corp.userId?.toString() !== user.userId) {
-        return NextResponse.json(
-          { error: "Only the CEO can buy bonds for a corporation" },
-          { status: 403 }
-        );
+        return errorResponse(403, "Only the CEO can buy bonds for a corporation");
       }
       // Bond cost originates in `bondCurrency` but corp liquidity is in
       // `corp.liquidCurrencyCode` — normalize both through ₳ so the compare
@@ -145,7 +139,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       const corpCurrency = resolveCorpLiquidCurrencyCode(corp) ?? null;
       // Cannot buy own bonds (sovereign bonds have no corporationId — skip check)
       if (bond.corporationId && corp._id.toString() === bond.corporationId.toString()) {
-        return NextResponse.json({ error: "Cannot buy your own bonds" }, { status: 400 });
+        return errorResponse(400, "Cannot buy your own bonds");
       }
 
       // Atomic balance-gated debit on the corp's liquidCapital. The pre-fix
@@ -163,10 +157,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         rates: fxRates,
       });
       if (!corpPurchaseEstimate) {
-        return NextResponse.json(
-          { error: "Exchange rate unavailable, try again shortly" },
-          { status: 503 }
-        );
+        return errorResponse(503, "Exchange rate unavailable, try again shortly");
       }
       const costInCorpCapital =
         corpCurrency && corpCurrency !== bondCurrency
@@ -174,7 +165,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           : anchorToCorpLiquidCapital(costAnchor, corp, fxRates[corpCurrency ?? bondCurrency] ?? 1);
       const corpCapErr = sovereignBondCapError(bond, "corporationId", corp._id, units);
       if (corpCapErr) {
-        return NextResponse.json({ error: corpCapErr }, { status: 400 });
+        return errorResponse(400, corpCapErr);
       }
       const corpDebit = await atomicallyDebitCorpLiquidCapital(db, corp._id, costInCorpCapital);
       if (!corpDebit.ok) {
@@ -189,11 +180,9 @@ export async function POST(request: Request, { params }: RouteParams) {
           corpCurrency && corpCurrency !== bondCurrency
             ? ` (~${corpSym}${corpNeed} ${corpCurrency} incl. FX, corp has ${corpSym}${corpHave} ${corpCurrency})`
             : "";
-        return NextResponse.json(
-          {
-            error: `Insufficient corporate funds. Need ${costLocal.toLocaleString(undefined, { minimumFractionDigits: 2 })} ${bondCurrency}${corpNote}`,
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          `Insufficient corporate funds. Need ${costLocal.toLocaleString(undefined, { minimumFractionDigits: 2 })} ${bondCurrency}${corpNote}`
         );
       }
 
@@ -210,10 +199,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           const latestBond = await db
             .collection<Bond>("bonds")
             .findOne({ _id: bond._id }, { projection: { publicFloat: 1 } });
-          return NextResponse.json(
-            { error: `Only ${latestBond?.publicFloat ?? 0} units available` },
-            { status: 409 }
-          );
+          return errorResponse(409, `Only ${latestBond?.publicFloat ?? 0} units available`);
         }
 
         // The float has a counterparty now: the units came out of the currency's
@@ -298,7 +284,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           userId: new ObjectId(user.userId),
         });
         if (!imperial) {
-          return NextResponse.json({ error: "Imperial character not found" }, { status: 404 });
+          return errorResponse(404, "Imperial character not found");
         }
 
         // Block imperial CEO / pending-CEO / recent-former-CEO from buying their
@@ -314,10 +300,7 @@ export async function POST(request: Request, { params }: RouteParams) {
             issuingCorp?.ceoId?.toString() === imperial._id.toString()) ||
           issuingCorp?.pendingCeoCharacterId?.toString() === imperial._id.toString()
         ) {
-          return NextResponse.json(
-            { error: "Cannot buy your own corporation's bonds" },
-            { status: 400 }
-          );
+          return errorResponse(400, "Cannot buy your own corporation's bonds");
         }
         if (
           issuingCorp &&
@@ -328,9 +311,9 @@ export async function POST(request: Request, { params }: RouteParams) {
             EX_CEO_BOND_PURCHASE_BLOCK_TURNS
           )
         ) {
-          return NextResponse.json(
-            { error: "Previous CEOs cannot buy bonds in this corporation at this time." },
-            { status: 400 }
+          return errorResponse(
+            400,
+            "Previous CEOs cannot buy bonds in this corporation at this time."
           );
         }
 
@@ -348,7 +331,7 @@ export async function POST(request: Request, { params }: RouteParams) {
               collectionName: "imperialCharacters",
             });
             if (!convertResult.success) {
-              return NextResponse.json({ error: convertResult.error }, { status: 400 });
+              return errorResponse(400, convertResult.error);
             }
           } else {
             const convertResult = await autoConvertForPurchase(db, {
@@ -360,7 +343,7 @@ export async function POST(request: Request, { params }: RouteParams) {
               collectionName: "imperialCharacters",
             });
             if (convertResult.needed && !convertResult.success) {
-              return NextResponse.json({ error: convertResult.error }, { status: 400 });
+              return errorResponse(400, convertResult.error);
             }
           }
         }
@@ -377,7 +360,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           units
         );
         if (imperialCapErr) {
-          return NextResponse.json({ error: imperialCapErr }, { status: 400 });
+          return errorResponse(400, imperialCapErr);
         }
         const debitResult = await atomicallyDebitImperialCash(
           db,
@@ -387,11 +370,9 @@ export async function POST(request: Request, { params }: RouteParams) {
           forexEnabled
         );
         if (!debitResult.ok) {
-          return NextResponse.json(
-            {
-              error: `Insufficient funds. Need ${costLocal.toLocaleString(undefined, { minimumFractionDigits: 2 })} ${bondCurrency}.`,
-            },
-            { status: 400 }
+          return errorResponse(
+            400,
+            `Insufficient funds. Need ${costLocal.toLocaleString(undefined, { minimumFractionDigits: 2 })} ${bondCurrency}.`
           );
         }
 
@@ -408,10 +389,7 @@ export async function POST(request: Request, { params }: RouteParams) {
             const latestBond = await db
               .collection<Bond>("bonds")
               .findOne({ _id: bond._id }, { projection: { publicFloat: 1 } });
-            return NextResponse.json(
-              { error: `Only ${latestBond?.publicFloat ?? 0} units available` },
-              { status: 409 }
-            );
+            return errorResponse(409, `Only ${latestBond?.publicFloat ?? 0} units available`);
           }
 
           // The float has a counterparty now: the units came out of the currency's
@@ -466,7 +444,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         : { userId: new ObjectId(user.userId) };
       const character = await db.collection<Character>("characters").findOne(characterQuery);
       if (!character) {
-        return NextResponse.json({ error: "Character not found" }, { status: 404 });
+        return errorResponse(404, "Character not found");
       }
 
       // Block CEO / pending-CEO / recent-former-CEO from buying their own corp's
@@ -482,18 +460,15 @@ export async function POST(request: Request, { params }: RouteParams) {
         issuingCorp?.ceoId?.toString() === character._id.toString() ||
         issuingCorp?.pendingCeoCharacterId?.toString() === character._id.toString()
       ) {
-        return NextResponse.json(
-          { error: "Cannot buy your own corporation's bonds" },
-          { status: 400 }
-        );
+        return errorResponse(400, "Cannot buy your own corporation's bonds");
       }
       if (
         issuingCorp &&
         wasCeoWithinTurns(issuingCorp, character._id, currentTurn, EX_CEO_BOND_PURCHASE_BLOCK_TURNS)
       ) {
-        return NextResponse.json(
-          { error: "Previous CEOs cannot buy bonds in this corporation at this time." },
-          { status: 400 }
+        return errorResponse(
+          400,
+          "Previous CEOs cannot buy bonds in this corporation at this time."
         );
       }
 
@@ -511,7 +486,7 @@ export async function POST(request: Request, { params }: RouteParams) {
             forexEnabled,
           });
           if (!convertResult.success) {
-            return NextResponse.json({ error: convertResult.error }, { status: 400 });
+            return errorResponse(400, convertResult.error);
           }
           playerSpreadCharged = convertResult.spreadCharged;
         } else {
@@ -523,7 +498,7 @@ export async function POST(request: Request, { params }: RouteParams) {
             forexEnabled,
           });
           if (convertResult.needed && !convertResult.success) {
-            return NextResponse.json({ error: convertResult.error }, { status: 400 });
+            return errorResponse(400, convertResult.error);
           }
           playerSpreadCharged = convertResult.spreadCharged;
         }
@@ -536,7 +511,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       // src/lib/financialTxLog/atomicCashGuard.ts for the full rationale.
       const charCapErr = sovereignBondCapError(bond, "characterId", character._id, units);
       if (charCapErr) {
-        return NextResponse.json({ error: charCapErr }, { status: 400 });
+        return errorResponse(400, charCapErr);
       }
       const debitResult = await atomicallyDebitCharacterCash(
         db,
@@ -546,11 +521,9 @@ export async function POST(request: Request, { params }: RouteParams) {
         forexEnabled
       );
       if (!debitResult.ok) {
-        return NextResponse.json(
-          {
-            error: `Insufficient funds. Need ${costLocal.toLocaleString(undefined, { minimumFractionDigits: 2 })} ${bondCurrency}.`,
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          `Insufficient funds. Need ${costLocal.toLocaleString(undefined, { minimumFractionDigits: 2 })} ${bondCurrency}.`
         );
       }
 
@@ -569,10 +542,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           const latestBond = await db
             .collection<Bond>("bonds")
             .findOne({ _id: bond._id }, { projection: { publicFloat: 1 } });
-          return NextResponse.json(
-            { error: `Only ${latestBond?.publicFloat ?? 0} units available` },
-            { status: 409 }
-          );
+          return errorResponse(409, `Only ${latestBond?.publicFloat ?? 0} units available`);
         }
 
         // The float has a counterparty now: the units came out of the currency's

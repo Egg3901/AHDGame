@@ -8,7 +8,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
@@ -66,7 +66,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
 
     if (!(await isPrivateBankingEnabled()))
-      return NextResponse.json({ error: "Private banking is not enabled" }, { status: 403 });
+      return errorResponse(403, "Private banking is not enabled");
 
     const { id } = await params;
     const db = await getDb();

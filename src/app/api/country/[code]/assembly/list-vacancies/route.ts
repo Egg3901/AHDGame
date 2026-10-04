@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { getGameState } from "@/lib/gameState";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
@@ -28,7 +28,7 @@ export async function GET(_request: Request, { params }: Context) {
     const auth = await requireBasicAuth();
     if (!auth.ok) return auth.response;
     if ((await params).code.toUpperCase() !== "HU")
-      return NextResponse.json({ error: "No Hungarian list mandate here" }, { status: 404 });
+      return errorResponse(404, "No Hungarian list mandate here");
     const db = await getDb();
     const game = await getGameState(db);
     return NextResponse.json(
@@ -51,7 +51,7 @@ export async function POST(request: Request, { params }: Context) {
     const auth = await requireBasicAuth();
     if (!auth.ok) return auth.response;
     if ((await params).code.toUpperCase() !== "HU")
-      return NextResponse.json({ error: "No Hungarian list mandate here" }, { status: 404 });
+      return errorResponse(404, "No Hungarian list mandate here");
     const limit = checkRateLimit(`hu-list-vacancy:${auth.user.userId}`, 5, 60_000);
     if (!limit.ok) return rateLimitResponse(limit.retryAfter);
     const parsed = await parseJsonBody(request, schema);
@@ -60,16 +60,10 @@ export async function POST(request: Request, { params }: Context) {
     const db = await getDb();
     const game = await getGameState(db);
     if (game?.preset !== "1991-default")
-      return NextResponse.json(
-        { error: "No original Hungarian party list in this world" },
-        { status: 409 }
-      );
+      return errorResponse(409, "No original Hungarian party list in this world");
     const character = await getCharacterByUserId(db, auth.user.userId);
     if (auth.user.isAdmin !== true && character?.countryId !== "HU")
-      return NextResponse.json(
-        { error: "A Hungarian party chair must designate its deputy" },
-        { status: 403 }
-      );
+      return errorResponse(403, "A Hungarian party chair must designate its deputy");
     const installed = await designateHu1991ListDeputy({
       db,
       turn: game.currentTurn,
@@ -82,8 +76,7 @@ export async function POST(request: Request, { params }: Context) {
       { status: installed ? 200 : 409, headers: { "Cache-Control": "private, no-store" } }
     );
   } catch (error) {
-    if (error instanceof Hu1991ListVacancyConflict)
-      return NextResponse.json({ error: error.message }, { status: 409 });
+    if (error instanceof Hu1991ListVacancyConflict) return errorResponse(409, error.message);
     return handleRouteError(error);
   }
 }

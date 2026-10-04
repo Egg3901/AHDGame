@@ -10,7 +10,7 @@ import { loadTermSettlement } from "@/lib/settlement/queries/termSettlement";
 import { principalOf } from "@/lib/military/principal";
 import { getSettlementCrisesCollection } from "@/lib/db/collections";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { z } from "zod";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getGameStateCollection } from "@/lib/db/collections/gameState";
@@ -84,7 +84,7 @@ const bodySchema = z.object({
 async function open(code: string) {
   const countryId = code.toUpperCase() as CountryId;
   if (!COUNTRY_CONFIGS[countryId]) {
-    return { bad: NextResponse.json({ error: "Invalid country code" }, { status: 400 }) };
+    return { bad: errorResponse(400, "Invalid country code") };
   }
   const auth = await requireAuthWithCharacter();
   if (!auth.ok) return { bad: auth.response };
@@ -94,7 +94,7 @@ async function open(code: string) {
     await getGameStateCollection(db)
   ).findOne({ _id: "current" }, { projection: { conflictsEnabled: 1, currentTurn: 1 } });
   if (!gs?.conflictsEnabled) {
-    return { bad: NextResponse.json({ error: "Conflicts subsystem disabled" }, { status: 404 }) };
+    return { bad: errorResponse(404, "Conflicts subsystem disabled") };
   }
 
   const { character } = auth.user;
@@ -317,7 +317,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
 
     const conflict = await getConflict(db, parsed.data.conflictId);
     if (!conflict) {
-      return NextResponse.json({ error: "That war does not exist." }, { status: 404 });
+      return errorResponse(404, "That war does not exist.");
     }
 
     // Cap the indemnity at a multiple of the PAYER's GDP. Without it, `amount` is
@@ -335,9 +335,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
         .findOne({ countryId: term.payer }, { projection: { gdp: 1 } });
       maxAmount = maxIndemnityForGdp(payerBudget?.gdp);
       if (maxAmount == null) {
-        return NextResponse.json(
-          { error: "The paying country has no GDP on record to size an indemnity against." },
-          { status: 400 }
+        return errorResponse(
+          400,
+          "The paying country has no GDP on record to size an indemnity against."
         );
       }
     }
@@ -374,16 +374,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       targetPartyIds,
       settlement
     );
-    if (!check.ok) return NextResponse.json({ error: check.error }, { status: 400 });
+    if (!check.ok) return errorResponse(400, check.error);
 
     // One live offer per (conflict, from, to). Re-offering means withdrawing first,
     // so a country cannot paper the recipient with variants. Directional on purpose:
     // the other side may hold its own open offer at the same time.
     const existing = await findLiveOffer(db, conflict._id, countryId, toCountry, currentTurn);
     if (existing) {
-      return NextResponse.json(
-        { error: "You already have an offer open with that country. Withdraw it first." },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "You already have an offer open with that country. Withdraw it first."
       );
     }
 

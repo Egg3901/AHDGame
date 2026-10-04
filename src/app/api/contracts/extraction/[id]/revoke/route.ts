@@ -6,7 +6,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
-import { handleRouteError, badRequest, notFound, forbidden } from "@/lib/api/errors";
+import { handleRouteError, badRequest, notFound, forbidden, errorResponse } from "@/lib/api/errors";
 import { schemas } from "@/lib/api/validate";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { getCurrentTurn } from "@/lib/currentTurn";
@@ -24,7 +24,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     if (!rate.ok) return rateLimitResponse(rate.retryAfter);
 
     if (!(await isContractIssuanceEnabled())) {
-      return NextResponse.json({ error: "Extraction contracts are not enabled." }, { status: 403 });
+      return errorResponse(403, "Extraction contracts are not enabled.");
     }
 
     const { id } = await params;

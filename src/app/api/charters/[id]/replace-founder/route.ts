@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
@@ -37,7 +37,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const { id } = await params;
     if (!ObjectId.isValid(id)) {
-      return NextResponse.json({ error: "Invalid charter ID" }, { status: 400 });
+      return errorResponse(400, "Invalid charter ID");
     }
 
     const parsed = await parseJsonBody(request, replaceFounderSchema);
@@ -57,7 +57,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       .collection<PartyCharter>("partyCharters")
       .findOne({ _id: charterObjectId });
     if (!charter) {
-      return NextResponse.json({ error: "Charter not found" }, { status: 404 });
+      return errorResponse(404, "Charter not found");
     }
     const callerCharacters = await db
       .collection<Character>("characters")
@@ -65,10 +65,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       .project<{ _id: ObjectId }>({ _id: 1 })
       .toArray();
     if (callerCharacters.length === 0) {
-      return NextResponse.json(
-        { error: "Only listed founders (or their owner) can replace a slot" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only listed founders (or their owner) can replace a slot");
     }
 
     const result = await replaceFounder(charterObjectId, outgoing, replacement, db);

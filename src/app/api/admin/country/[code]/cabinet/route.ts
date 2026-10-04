@@ -16,7 +16,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError, badRequest, forbidden, notFound } from "@/lib/api/errors";
+import { handleRouteError, badRequest, forbidden, notFound, errorResponse } from "@/lib/api/errors";
 import {
   COUNTRY_CONFIGS,
   type CountryId,
@@ -138,7 +138,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const parsed = await parseJsonBody(request, actionSchema);
@@ -220,14 +220,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     // there: any other held seat blocks the appointment (the pre-#2049
     // one-seat rule, with its same-seat refresh carve-out).
     if (targetSlot == null && heldRows.some((row) => row.positionId !== positionId)) {
-      return NextResponse.json(
-        { error: "This character already holds another cabinet position" },
-        { status: 409 }
-      );
+      return errorResponse(409, "This character already holds another cabinet position");
     }
     const holdCheck = canHoldAdditionalAppointment(countryId, heldSlots, targetSlot);
     if (!holdCheck.ok && heldRows.every((row) => row.positionId !== positionId)) {
-      return NextResponse.json({ error: holdCheck.reason }, { status: 409 });
+      return errorResponse(409, holdCheck.reason);
     }
 
     // Replace semantics: vacate the current holder (if any) first.

@@ -7,7 +7,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { fetchEnrichedCandidates } from "@/lib/electionEngine";
 import {
   calcPresidentPrimaryScore,
@@ -45,7 +45,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     try {
       electionObjectId = new ObjectId(electionId);
     } catch {
-      return NextResponse.json({ error: "Invalid election ID" }, { status: 400 });
+      return errorResponse(400, "Invalid election ID");
     }
 
     const db = await getDb();
@@ -58,21 +58,15 @@ export async function POST(request: Request, { params }: RouteParams) {
     });
 
     if (!election) {
-      return NextResponse.json({ error: "Election not found" }, { status: 404 });
+      return errorResponse(404, "Election not found");
     }
 
     if (election.electionType !== "president") {
-      return NextResponse.json(
-        { error: "Start general is only for presidential elections" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Start general is only for presidential elections");
     }
 
     if (election.status === "completed" || election.status === "cancelled") {
-      return NextResponse.json(
-        { error: "Cannot start general for completed or cancelled election" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Cannot start general for completed or cancelled election");
     }
 
     const candidates = await db

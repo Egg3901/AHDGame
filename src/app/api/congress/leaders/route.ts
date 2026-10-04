@@ -9,7 +9,7 @@ import { getPartyMap } from "@/lib/db/partyMap";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { getAuthUser } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { leadersAssignSchema } from "@/lib/api/schemas/congress";
 import { getHouseComposition } from "@/lib/congress/houseComposition";
@@ -154,7 +154,7 @@ export async function POST(request: Request) {
     const rateLimit = checkRateLimit(authUser.userId, 30, 60000);
     if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
 
-    if (!authUser.isAdmin) return NextResponse.json({ error: "Admin only" }, { status: 403 });
+    if (!authUser.isAdmin) return errorResponse(403, "Admin only");
 
     const parsed = await parseJsonBody(request, leadersAssignSchema);
     if (!parsed.success) {
@@ -184,14 +184,14 @@ export async function POST(request: Request) {
     }
 
     if (!ObjectId.isValid(characterId)) {
-      return NextResponse.json({ error: "Invalid character ID" }, { status: 400 });
+      return errorResponse(400, "Invalid character ID");
     }
     const char = await db
       .collection<Character>("characters")
       .findOne({ _id: new ObjectId(characterId) }, { projection: { name: 1, party: 1 } });
-    if (!char) return NextResponse.json({ error: "Character not found" }, { status: 404 });
+    if (!char) return errorResponse(404, "Character not found");
     if (!roleConfig) {
-      return NextResponse.json({ error: "Unknown leadership role" }, { status: 400 });
+      return errorResponse(400, "Unknown leadership role");
     }
 
     const holdsChamberSeat = await db.collection("electedOfficials").findOne({
@@ -199,11 +199,9 @@ export async function POST(request: Request) {
       officeType: roleConfig.chamber,
     });
     if (!holdsChamberSeat) {
-      return NextResponse.json(
-        {
-          error: `Only current ${roleConfig.chamber === "house" ? "House members" : "Senators"} may hold this role.`,
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        `Only current ${roleConfig.chamber === "house" ? "House members" : "Senators"} may hold this role.`
       );
     }
 
@@ -214,10 +212,7 @@ export async function POST(request: Request) {
           ? (await getHouseComposition(db, partyMap)).majorityParty
           : (await getSenateComposition(db, partyMap)).majorityParty;
       if (!majorityParty || char.party !== majorityParty) {
-        return NextResponse.json(
-          { error: "Only the chamber's current majority party may hold this role." },
-          { status: 403 }
-        );
+        return errorResponse(403, "Only the chamber's current majority party may hold this role.");
       }
     }
 

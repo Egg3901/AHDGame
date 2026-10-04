@@ -6,7 +6,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError, forbidden } from "@/lib/api/errors";
+import { handleRouteError, forbidden, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { getCurrentTurn } from "@/lib/currentTurn";
 import { isContractIssuanceEnabled } from "@/lib/extraction/featureFlag";
@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     if (!rate.ok) return rateLimitResponse(rate.retryAfter);
 
     if (!(await isContractIssuanceEnabled())) {
-      return NextResponse.json({ error: "Extraction contracts are not enabled." }, { status: 403 });
+      return errorResponse(403, "Extraction contracts are not enabled.");
     }
 
     const parsed = await parseJsonBody(request, issueContractOfferSchema);

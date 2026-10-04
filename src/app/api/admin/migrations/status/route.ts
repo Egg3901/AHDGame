@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 
 interface MigrationRecord {
   _id: string;
@@ -45,14 +45,14 @@ export async function DELETE(request: Request) {
     const id = searchParams.get("id");
 
     if (!id) {
-      return NextResponse.json({ error: "Migration ID required" }, { status: 400 });
+      return errorResponse(400, "Migration ID required");
     }
 
     const db = await getDb();
     const result = await db.collection<MigrationRecord>("migrations").deleteOne({ _id: id });
 
     if (result.deletedCount === 0) {
-      return NextResponse.json({ error: "Migration record not found" }, { status: 404 });
+      return errorResponse(404, "Migration record not found");
     }
 
     return NextResponse.json({ success: true, message: `Deleted migration record: ${id}` });

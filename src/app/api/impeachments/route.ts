@@ -6,7 +6,7 @@ import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { getAuthUser } from "@/lib/auth";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { Impeachment } from "@/lib/db/types/impeachment";
 import { fileArticlesOfImpeachment } from "@/lib/impeachment/fileArticles";
@@ -41,7 +41,7 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const countryId = url.searchParams.get("countryId");
     if (!countryId || !(countryId in COUNTRY_CONFIGS)) {
-      return NextResponse.json({ error: "Unknown or missing countryId" }, { status: 400 });
+      return errorResponse(400, "Unknown or missing countryId");
     }
     const targetCharacterId = url.searchParams.get("targetCharacterId");
     const query: Record<string, unknown> = { countryId };
@@ -130,13 +130,13 @@ export async function POST(request: Request) {
     }
     const { countryId, office, state, targetCharacterId } = parsed.data;
     if (!(countryId in COUNTRY_CONFIGS)) {
-      return NextResponse.json({ error: "Unknown countryId" }, { status: 400 });
+      return errorResponse(400, "Unknown countryId");
     }
 
     const db = await getDb();
     const character = await getCharacterByUserId(db, auth.user.userId);
     if (!character) {
-      return NextResponse.json({ error: "No character" }, { status: 400 });
+      return errorResponse(400, "No character");
     }
 
     const result = await fileArticlesOfImpeachment(

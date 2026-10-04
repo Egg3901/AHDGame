@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth, requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import {
   ensureSlate,
@@ -34,10 +34,10 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const { code, id, electionId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     if (!ObjectId.isValid(electionId)) {
-      return NextResponse.json({ error: "Invalid election id" }, { status: 400 });
+      return errorResponse(400, "Invalid election id");
     }
 
     const auth = await requireAuth();
@@ -46,13 +46,13 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const db = await getDb();
     const party = await findPartyBySequentialId(db, id, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
     const partyId = String(party.sequentialId);
     const electionObjId = new ObjectId(electionId);
     const election = await db.collection<Election>("elections").findOne({ _id: electionObjId });
     if (!election || election.countryId !== countryId) {
-      return NextResponse.json({ error: "Election not found" }, { status: 404 });
+      return errorResponse(404, "Election not found");
     }
     const resolvedElection = await resolveElection(db, election, {
       view: "summary",
@@ -61,7 +61,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
       activeCharacterId: auth.user.character?._id?.toString?.() ?? null,
     });
     if (!resolvedElection) {
-      return NextResponse.json({ error: "Election not found" }, { status: 404 });
+      return errorResponse(404, "Election not found");
     }
     const electionDisplay = mapElectionResponseToDisplay(resolvedElection);
 
@@ -200,10 +200,10 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     const { code, id, electionId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     if (!ObjectId.isValid(electionId)) {
-      return NextResponse.json({ error: "Invalid election id" }, { status: 400 });
+      return errorResponse(400, "Invalid election id");
     }
 
     const auth = await requireAuthWithCharacter();
@@ -216,13 +216,13 @@ export async function PATCH(request: Request, { params }: RouteParams) {
 
     const db = await getDb();
     const party = await findPartyBySequentialId(db, id, countryId);
-    if (!party) return NextResponse.json({ error: "Party not found" }, { status: 404 });
+    if (!party) return errorResponse(404, "Party not found");
     const partyId = String(party.sequentialId);
     const electionObjId = new ObjectId(electionId);
     const election = await db
       .collection<Election>("elections")
       .findOne({ _id: electionObjId, countryId });
-    if (!election) return NextResponse.json({ error: "Election not found" }, { status: 404 });
+    if (!election) return errorResponse(404, "Election not found");
     const authority = await resolveSlateAuthority({
       db,
       party,
@@ -231,12 +231,9 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       isAdmin: !!auth.user.isAdmin,
     });
     if (!authority.canManage) {
-      return NextResponse.json(
-        {
-          error:
-            "Only the national or state party chair / vice chair for this race can edit slates.",
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "Only the national or state party chair / vice chair for this race can edit slates."
       );
     }
 

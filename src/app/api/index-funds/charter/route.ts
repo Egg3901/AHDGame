@@ -8,7 +8,7 @@ import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { corporationQueryFromParamId, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import type { Corporation } from "@/lib/db/types";
@@ -42,8 +42,7 @@ export async function POST(request: Request) {
     const db = await getDb();
     const corpGuard = await requireCorporationActionsEnabled(db);
     if (corpGuard) return corpGuard;
-    if (!(await isIndexFundsEnabled()))
-      return NextResponse.json({ error: INDEX_FUNDS_DISABLED_MESSAGE }, { status: 403 });
+    if (!(await isIndexFundsEnabled())) return errorResponse(403, INDEX_FUNDS_DISABLED_MESSAGE);
 
     const parsed = await parseJsonBody(request, schema);
     if (!parsed.success)
@@ -51,14 +50,14 @@ export async function POST(request: Request) {
     const body = parsed.data;
 
     if (body.countryId && !COUNTRY_CONFIGS[body.countryId as never])
-      return NextResponse.json({ error: "Unknown country" }, { status: 400 });
+      return errorResponse(400, "Unknown country");
     if (body.sectorType && !CORPORATION_TYPES.includes(body.sectorType as never))
-      return NextResponse.json({ error: "Unknown industry" }, { status: 400 });
+      return errorResponse(400, "Unknown industry");
 
     const query = corporationQueryFromParamId(body.sponsorCorporationId);
-    if (!query) return NextResponse.json({ error: "Invalid corporation id" }, { status: 400 });
+    if (!query) return errorResponse(400, "Invalid corporation id");
     const sponsor = await db.collection<Corporation>("corporations").findOne(query);
-    if (!sponsor) return NextResponse.json({ error: "Corporation not found" }, { status: 404 });
+    if (!sponsor) return errorResponse(404, "Corporation not found");
 
     const ceoCheck = requireCeo(sponsor, auth.user.userId);
     if (ceoCheck) return ceoCheck;

@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { createAdminLog } from "@/lib/adminLog";
 import type { Character, PatreonTier, User } from "@/lib/db/types";
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
 
     const user = await db.collection<User>("users").findOne({ _id: objectId });
     if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return errorResponse(404, "User not found");
     }
 
     const expiresAtDate = tier === null ? new Date() : expiresAt ? new Date(expiresAt) : null;

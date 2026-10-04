@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { ObjectId } from "mongodb";
 import bcrypt from "bcryptjs";
 import { verifyAuth } from "@/lib/auth";
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
     const user = await usersCollection.findOne({ _id: new ObjectId(userId) });
 
     if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return errorResponse(404, "User not found");
     }
 
     // Credential changes require the uncached account state read above.
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
     const isValidPassword = await bcrypt.compare(currentPassword, user.password);
 
     if (!isValidPassword) {
-      return NextResponse.json({ error: "Current password is incorrect" }, { status: 401 });
+      return errorResponse(401, "Current password is incorrect");
     }
 
     // Hash new password

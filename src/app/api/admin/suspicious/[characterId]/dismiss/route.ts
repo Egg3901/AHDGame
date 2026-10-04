@@ -7,7 +7,7 @@ import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError, notFound } from "@/lib/api/errors";
+import { handleRouteError, notFound, errorResponse } from "@/lib/api/errors";
 import { z } from "zod";
 import type { SuspiciousCharacter, SuppressedFlag } from "@/lib/db/types/activityLog";
 
@@ -29,7 +29,7 @@ export async function POST(
 
     const { characterId } = await params;
     if (!/^[0-9a-f]{24}$/i.test(characterId)) {
-      return NextResponse.json({ error: "Invalid characterId" }, { status: 400 });
+      return errorResponse(400, "Invalid characterId");
     }
 
     const parsed = await parseJsonBody(request, schema);

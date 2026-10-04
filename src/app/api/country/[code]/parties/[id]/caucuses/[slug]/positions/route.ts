@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import { findCaucusBySlug, listCaucusPositions } from "@/lib/db/caucusLookup";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -29,7 +29,7 @@ export async function POST(
     const { code, id, slug } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const auth = await requireAuthWithCharacter();
@@ -43,26 +43,23 @@ export async function POST(
     const db = await getDb();
     const party = await findPartyBySequentialId(db, id, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
     const partyId = String(party.sequentialId);
 
     const resolved = await findCaucusBySlug(db, countryId, partyId, slug);
     if (!resolved) {
-      return NextResponse.json({ error: "Caucus not found" }, { status: 404 });
+      return errorResponse(404, "Caucus not found");
     }
     const { caucus } = resolved;
 
     if (!caucus.chairId || caucus.chairId.toString() !== auth.user.character._id.toString()) {
-      return NextResponse.json(
-        { error: "Only the caucus chair can add policy positions." },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the caucus chair can add policy positions.");
     }
     if (!isSameCountry(auth.user.character, { countryId })) {
-      return NextResponse.json(
-        { error: "You must be a citizen of this country to manage caucus policy positions." },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "You must be a citizen of this country to manage caucus policy positions."
       );
     }
 

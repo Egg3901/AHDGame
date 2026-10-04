@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { ObjectId } from "mongodb";
 import bcrypt from "bcryptjs";
 import { authRevocationSnapshotFilter } from "@/lib/auth/sessionIssue";
@@ -35,13 +35,13 @@ export const POST = withNoStore(async (request: Request) => {
     // Check if user exists
     const user = await usersCollection.findOne({ _id: objectId });
     if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return errorResponse(404, "User not found");
     }
     // Fenced accounts fail closed on admin reset. Existing 409 shape.
     if (isAuthMigrationFenced(user)) {
-      return NextResponse.json(
-        { error: "This account changed during this request. Please reload and try again." },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "This account changed during this request. Please reload and try again."
       );
     }
 
@@ -73,10 +73,7 @@ export const POST = withNoStore(async (request: Request) => {
         }
       );
     } catch {
-      return NextResponse.json(
-        { error: "Password reset is temporarily unavailable. Please try again." },
-        { status: 503 }
-      );
+      return errorResponse(503, "Password reset is temporarily unavailable. Please try again.");
     } finally {
       // A lost acknowledgment may still mean the write committed. Remove any
       // cached account again on every settled write, including failure.
@@ -84,16 +81,13 @@ export const POST = withNoStore(async (request: Request) => {
     }
 
     if (updated.acknowledged !== true) {
-      return NextResponse.json(
-        { error: "Password reset is temporarily unavailable. Please try again." },
-        { status: 503 }
-      );
+      return errorResponse(503, "Password reset is temporarily unavailable. Please try again.");
     }
 
     if (updated.matchedCount !== 1) {
-      return NextResponse.json(
-        { error: "This account changed during this request. Please reload and try again." },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "This account changed during this request. Please reload and try again."
       );
     }
 

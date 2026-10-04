@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { loadDemographicCategories } from "@/lib/demographics/categoryCatalog";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -19,7 +19,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const { code, id } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const stateId = id;
 
@@ -28,7 +28,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     // Verify state exists
     const state = await db.collection<State>("states").findOne({ _id: stateId, countryId });
     if (!state) {
-      return NextResponse.json({ error: "State not found" }, { status: 404 });
+      return errorResponse(404, "State not found");
     }
 
     const demographics = await db
@@ -36,7 +36,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
       .findOne({ _id: stateId });
 
     if (!demographics) {
-      return NextResponse.json({ error: "Demographics not found for this state" }, { status: 404 });
+      return errorResponse(404, "Demographics not found for this state");
     }
 
     const categoryFilter = REGION_DEMOGRAPHIC_CATEGORY_IDS[countryId];

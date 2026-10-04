@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError, badRequest, forbidden, notFound } from "@/lib/api/errors";
+import { handleRouteError, badRequest, forbidden, notFound, errorResponse } from "@/lib/api/errors";
 import { createNotification } from "@/lib/notifications";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import type { Character, PoliticalParty } from "@/lib/db/types";
@@ -33,7 +33,7 @@ export async function POST(
     const { code, id } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const authResult = await requireAuthWithCharacter();
@@ -125,7 +125,7 @@ export async function POST(
     // can never become eligible again.
     const frontierCheck = await canCharacterJoinParty(db, requester, party, countryId);
     if (!frontierCheck.ok) {
-      return NextResponse.json({ error: frontierCheck.error }, { status: 400 });
+      return errorResponse(400, frontierCheck.error);
     }
 
     const currentTurn = await getCurrentTurn(db);

@@ -19,7 +19,7 @@ import { localCampaignBalance } from "@/lib/currency/campaignBalance";
 import { campaignLocalRate } from "@/lib/campaigns/campaignCurrency";
 import { getStateDemographicTurnoutCollection } from "@/lib/db/collections";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import type { Campaign, Election } from "@/lib/db/types";
 import { ObjectId } from "mongodb";
 import { applyDiminishingReturns } from "@/lib/utils/diminishingReturns";
@@ -77,8 +77,7 @@ export async function GET(req: NextRequest) {
     const electionId = electionIdSchema.safeParse(
       req.nextUrl.searchParams.get("electionId") ?? undefined
     );
-    if (!electionId.success)
-      return NextResponse.json({ error: "Invalid election" }, { status: 400 });
+    if (!electionId.success) return errorResponse(400, "Invalid election");
     const nativeAllowed = await canUseNativeCanvassTargets(
       db,
       auth.user.character.countryId ?? "US",
@@ -88,8 +87,7 @@ export async function GET(req: NextRequest) {
     const turnoutData = await (
       await getStateDemographicTurnoutCollection()
     ).findOne({ _id: stateId });
-    if (!turnoutData)
-      return NextResponse.json({ error: "State turnout data not found" }, { status: 404 });
+    if (!turnoutData) return errorResponse(404, "State turnout data not found");
     const audience = await loadCampaignAudience(
       db,
       auth.user.character.countryId,
@@ -113,7 +111,7 @@ export async function GET(req: NextRequest) {
       target.bucket === "constructor" ||
       target.bucket === "prototype"
     ) {
-      return NextResponse.json({ error: "Invalid demographic group" }, { status: 400 });
+      return errorResponse(400, "Invalid demographic group");
     }
     const count = z.coerce
       .number()
@@ -121,8 +119,7 @@ export async function GET(req: NextRequest) {
       .min(1)
       .max(MAX_CANVASS_BATCH)
       .safeParse(req.nextUrl.searchParams.get("count") ?? 1);
-    if (!count.success)
-      return NextResponse.json({ error: "Invalid canvassing count" }, { status: 400 });
+    if (!count.success) return errorResponse(400, "Invalid canvassing count");
     const info = audience ? targetAudience(audience.cells, target) : null;
     let preview = null;
     if (nativeAllowed && audience && info) {
@@ -187,7 +184,7 @@ export async function POST(req: NextRequest) {
       group === "constructor" ||
       group === "prototype"
     ) {
-      return NextResponse.json({ error: "Invalid demographic group" }, { status: 400 });
+      return errorResponse(400, "Invalid demographic group");
     }
     const resolved = resolveCanvassGroup(user.character.countryId, category, group);
     const modifierCategoryKey = resolved?.categoryKey ?? category;
@@ -213,7 +210,7 @@ export async function POST(req: NextRequest) {
         { projection: { _id: 1 } }
       );
       if (!ticketCampaign) {
-        return NextResponse.json({ error: "Ticket campaign not found" }, { status: 404 });
+        return errorResponse(404, "Ticket campaign not found");
       }
       surrogateCampaignId = ticketCampaign._id;
     } else {
@@ -228,10 +225,7 @@ export async function POST(req: NextRequest) {
         );
       }
       if (eligibility.stateId !== stateId) {
-        return NextResponse.json(
-          { error: "You can only canvass in your active campaign state" },
-          { status: 403 }
-        );
+        return errorResponse(403, "You can only canvass in your active campaign state");
       }
     }
 
@@ -243,12 +237,9 @@ export async function POST(req: NextRequest) {
         (usingSurrogate && mateEligibility.ok ? mateEligibility.electionId.toString() : undefined)
     );
     if (!resolved && !nativeAllowed)
-      return NextResponse.json(
-        {
-          error:
-            "This race uses legacy canvassing groups. Choose one of its original demographic groups.",
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "This race uses legacy canvassing groups. Choose one of its original demographic groups."
       );
 
     const totalFundsCost = COST_FUNDS * count;
@@ -274,7 +265,7 @@ export async function POST(req: NextRequest) {
     // without charging again.
     const headerKey = req.headers.get("Idempotency-Key");
     if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128)) {
-      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
+      return errorResponse(400, "Invalid Idempotency-Key header");
     }
     const flowKey = headerKey ?? randomUUID();
     const fingerprint = `${user.character._id.toHexString()}:${stateId}:${modifierCategoryKey}:${group}:${count}`;
@@ -294,11 +285,11 @@ export async function POST(req: NextRequest) {
     // it left behind must not fail its own retry.
     if (!resuming) {
       if (balanceLocal < totalFundsCostLocal) {
-        return NextResponse.json({ error: "Insufficient funds" }, { status: 400 });
+        return errorResponse(400, "Insufficient funds");
       }
 
       if (user.character.actions < totalActionsCost) {
-        return NextResponse.json({ error: "Insufficient actions" }, { status: 400 });
+        return errorResponse(400, "Insufficient actions");
       }
     }
 
@@ -310,14 +301,13 @@ export async function POST(req: NextRequest) {
     const turnoutData = await turnoutCollection.findOne({ _id: stateId });
 
     if (!turnoutData) {
-      return NextResponse.json({ error: "State turnout data not found" }, { status: 404 });
+      return errorResponse(404, "State turnout data not found");
     }
 
     const audience = await loadCampaignAudience(db, user.character.countryId, stateId, turnoutData);
     const target = { dimension: category, bucket: group };
     const targetInfo = audience ? targetAudience(audience.cells, target) : null;
-    if (!resolved && !targetInfo)
-      return NextResponse.json({ error: "Invalid demographic group" }, { status: 400 });
+    if (!resolved && !targetInfo) return errorResponse(400, "Invalid demographic group");
     const charPosition = user.character.policies;
     const candidatePosition = {
       economicLean: charPosition.economic,
@@ -383,21 +373,15 @@ export async function POST(req: NextRequest) {
       }));
     } catch (error) {
       if ((error as Error).message === "SURROGATE_DEPLETED") {
-        return NextResponse.json(
-          { error: "No running-mate surrogate actions remaining today." },
-          { status: 409 }
-        );
+        return errorResponse(409, "No running-mate surrogate actions remaining today.");
       }
       if ((error as Error).message === "INSUFFICIENT_RESOURCES") {
-        return NextResponse.json(
-          { error: "Your available actions or funds changed. Please try again." },
-          { status: 409 }
-        );
+        return errorResponse(409, "Your available actions or funds changed. Please try again.");
       }
       if ((error as Error).message.startsWith("TURNOUT_CONFLICT")) {
-        return NextResponse.json(
-          { error: "State turnout changed while canvassing. Please refresh and try again." },
-          { status: 409 }
+        return errorResponse(
+          409,
+          "State turnout changed while canvassing. Please refresh and try again."
         );
       }
       throw error;

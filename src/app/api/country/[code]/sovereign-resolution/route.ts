@@ -9,6 +9,7 @@
 // 24h voting window. The orchestrator runs only after both chambers pass
 // (per-turn legislative processor handles dispatch).
 
+import { errorResponse } from "@/lib/api/errors";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
@@ -39,7 +40,7 @@ export async function POST(req: Request, { params }: RouteParams) {
   const { code } = await params;
   const upper = code.toUpperCase() as CountryId;
   if (!COUNTRY_CONFIGS[upper]) {
-    return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+    return errorResponse(400, "Invalid country code");
   }
 
   const parsed = await parseJsonBody(req, bodySchema);
@@ -57,10 +58,7 @@ export async function POST(req: Request, { params }: RouteParams) {
     character.countryId === upper && !!officeCfg?.isExecutive && !officeCfg?.isSubNational;
 
   if (!isAdmin && !isCountryExecutive) {
-    return NextResponse.json(
-      { error: "Only the country's executive may submit a sovereign resolution" },
-      { status: 403 }
-    );
+    return errorResponse(403, "Only the country's executive may submit a sovereign resolution");
   }
 
   const db = await getDb();
@@ -72,10 +70,7 @@ export async function POST(req: Request, { params }: RouteParams) {
     .toArray();
 
   if (decisions.length === 0) {
-    return NextResponse.json(
-      { error: "No open sovereign crisis decision for this country" },
-      { status: 409 }
-    );
+    return errorResponse(409, "No open sovereign crisis decision for this country");
   }
 
   // Phase 9b: gate monetize on inflation BEFORE opening voting windows so
@@ -88,9 +83,9 @@ export async function POST(req: Request, { params }: RouteParams) {
       .findOne({ _id: budgetId });
     const inflationFraction = (budgetCheck?.economicFactors?.inflationRate ?? 0) / 100;
     if (inflationFraction > MONETIZE_GATE_INFLATION) {
-      return NextResponse.json(
-        { error: "Monetize unavailable: inflation already above 8% — would cause hyperinflation" },
-        { status: 422 }
+      return errorResponse(
+        422,
+        "Monetize unavailable: inflation already above 8% — would cause hyperinflation"
       );
     }
   }
@@ -123,10 +118,7 @@ export async function POST(req: Request, { params }: RouteParams) {
     }
   );
   if (result.modifiedCount === 0) {
-    return NextResponse.json(
-      { error: "Decision is no longer open (already proposed or expired)" },
-      { status: 409 }
-    );
+    return errorResponse(409, "Decision is no longer open (already proposed or expired)");
   }
 
   await db

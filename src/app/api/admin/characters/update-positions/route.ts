@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { createModAuditLog } from "@/lib/modAuditLog";
 import { z } from "zod";
 import type { Character } from "@/lib/db/types";
@@ -32,10 +32,7 @@ export async function PATCH(request: Request) {
     const { characterId, economic, social } = parsed.data;
 
     if (economic === undefined && social === undefined) {
-      return NextResponse.json(
-        { error: "At least one of economic or social must be provided" },
-        { status: 400 }
-      );
+      return errorResponse(400, "At least one of economic or social must be provided");
     }
 
     const db = await getDb();
@@ -44,7 +41,7 @@ export async function PATCH(request: Request) {
       .collection<Character>("characters")
       .findOne({ _id: new ObjectId(characterId) });
     if (!character) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
 
     // Resolve the linked account for audit-log attribution (NPCs may have none).

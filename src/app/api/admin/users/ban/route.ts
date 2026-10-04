@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
 
     // Prevent banning yourself
     if (admin.userId === userId) {
-      return NextResponse.json({ error: "You cannot ban yourself" }, { status: 400 });
+      return errorResponse(400, "You cannot ban yourself");
     }
 
     const usersCollection = db.collection("users");
@@ -41,12 +41,12 @@ export async function POST(request: Request) {
     // Check if user exists
     const user = await usersCollection.findOne({ _id: objectId });
     if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return errorResponse(404, "User not found");
     }
 
     // Prevent banning other admins
     if (user.isAdmin) {
-      return NextResponse.json({ error: "Cannot ban admin users" }, { status: 400 });
+      return errorResponse(400, "Cannot ban admin users");
     }
 
     // Get character name for logging

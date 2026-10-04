@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody, schemas } from "@/lib/api/validate";
 import { isInNewCharacterCooldown } from "@/lib/auth/newCharacterCooldown";
 import { z } from "zod";
@@ -39,14 +39,14 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, id: partyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const db = await getDb();
 
     const authResult = await requireAuthWithCharacter();
     if (!authResult.ok) return authResult.response;
     if (authResult.user.isBanned) {
-      return NextResponse.json({ error: "Account is banned" }, { status: 403 });
+      return errorResponse(403, "Account is banned");
     }
 
     const rateLimit = checkRateLimit(authResult.user.userId, 20, 60000);
@@ -54,15 +54,12 @@ export async function POST(request: Request, { params }: RouteParams) {
     const authUser = authResult.user;
 
     const party = await findPartyBySequentialId(db, partyId, countryId);
-    if (!party) return NextResponse.json({ error: "Party not found" }, { status: 404 });
+    if (!party) return errorResponse(404, "Party not found");
 
     // Must match both party AND country to avoid cross-country collisions
     const partyCountryId = party.countryId ?? "US";
     if (authUser.character.party !== partyId || !isSameCountry(authUser.character, party)) {
-      return NextResponse.json(
-        { error: "You must be a member of this party to vote" },
-        { status: 403 }
-      );
+      return errorResponse(403, "You must be a member of this party to vote");
     }
 
     // 24h new-character cooldown on committee actions.
@@ -105,15 +102,12 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
 
     if (!election) {
-      return NextResponse.json({ error: "No active committee election" }, { status: 400 });
+      return errorResponse(400, "No active committee election");
     }
 
     const gameTime = await getGameTime();
     if (hasTurnBackedWindowClosed(election, gameTime.currentTurn, gameTime.effectiveNow)) {
-      return NextResponse.json(
-        { error: "Committee election voting has already closed" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Committee election voting has already closed");
     }
 
     const now = new Date(gameTime.effectiveNow);
@@ -125,7 +119,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       try {
         candidateObjectIds.push(new ObjectId(id));
       } catch {
-        return NextResponse.json({ error: `Invalid candidate ID: ${id}` }, { status: 400 });
+        return errorResponse(400, `Invalid candidate ID: ${id}`);
       }
     }
 

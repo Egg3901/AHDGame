@@ -4,7 +4,7 @@ import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError, badRequest, forbidden } from "@/lib/api/errors";
+import { handleRouteError, badRequest, forbidden, errorResponse } from "@/lib/api/errors";
 import { getNextSequentialId } from "@/lib/db/sequentialId";
 import { escapeRegex } from "@/lib/utils/escapeRegex";
 import { canActAsChair } from "@/lib/parties/actingChair";
@@ -43,7 +43,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     // Verify the character belongs to a party
@@ -205,7 +205,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
     const { code: getCode } = await params;
     const countryId = getCode.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const db = await getDb();

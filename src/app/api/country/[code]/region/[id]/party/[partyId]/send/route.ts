@@ -3,7 +3,7 @@ import { ObjectId, type ClientSession, type MongoServerError, type UpdateFilter 
 import { getDb, getMongoClient } from "@/lib/mongodb";
 import { runTransactionWithSessionRetry } from "@/lib/db/transactionWithRetry";
 import { requireAuth } from "@/lib/api/requireAuth";
-import { badRequest, handleRouteError, notFound } from "@/lib/api/errors";
+import { badRequest, handleRouteError, notFound, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseObjectId } from "@/lib/utils/objectId";
 import { parseJsonBody } from "@/lib/api/validate";
@@ -47,7 +47,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, id, partyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const stateId = id;
 
@@ -65,7 +65,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { characterId, amount: sendAmount } = parsed.data;
     const targetCharacterOid = parseObjectId(characterId);
     if (!targetCharacterOid) {
-      return NextResponse.json({ error: "Invalid character ID" }, { status: 400 });
+      return errorResponse(400, "Invalid character ID");
     }
 
     const db = await getDb();
@@ -75,7 +75,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Verify party exists
     const party = await findPartyBySequentialId(db, partyId, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
 
     const partyKey = getPartyIdString(party);
@@ -85,7 +85,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     });
 
     if (!statePartyOrg) {
-      return NextResponse.json({ error: "State party not found" }, { status: 404 });
+      return errorResponse(404, "State party not found");
     }
 
     // Check authorization: admin, national chair, state chair, vice chair, or state treasurer
@@ -102,16 +102,13 @@ export async function POST(request: Request, { params }: RouteParams) {
       statePartyOrg.treasurerId?.toString() === authUser.character._id.toString();
 
     if (!isAdmin && !isNationalChair && !isStateChair && !isStateViceChair && !isStateTreasurer) {
-      return NextResponse.json({ error: "Not authorized" }, { status: 403 });
+      return errorResponse(403, "Not authorized");
     }
 
     // Defense-in-depth: even with a matching role _id, refuse if the actor's
     // character belongs to another country (mismatched/inconsistent data).
     if (!isAdmin && authUser.character && !isSameCountry(authUser.character, { countryId })) {
-      return NextResponse.json(
-        { error: "You must be a citizen of this country to send state party funds" },
-        { status: 403 }
-      );
+      return errorResponse(403, "You must be a citizen of this country to send state party funds");
     }
 
     // Verify target character exists and is a member of this state party
@@ -120,7 +117,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     });
 
     if (!targetCharacter) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
 
     if (
@@ -128,10 +125,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       targetCharacter.homeState !== stateId ||
       !isSameCountry(targetCharacter, { countryId })
     ) {
-      return NextResponse.json(
-        { error: "Character is not a member of this state party" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Character is not a member of this state party");
     }
 
     // Check treasury balance
@@ -141,7 +135,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { currentTurn } = await getGameTime();
     if (!isAdmin) {
       if (await isLeadershipElectionFreezeActive(db, party, currentTurn)) {
-        return NextResponse.json({ error: LEADERSHIP_FREEZE_MESSAGE }, { status: 400 });
+        return errorResponse(400, LEADERSHIP_FREEZE_MESSAGE);
       }
       const cap = await checkPlayerPayoutCap(db, {
         characterId: targetCharacterOid,
@@ -157,13 +151,13 @@ export async function POST(request: Request, { params }: RouteParams) {
         ]),
       });
       if (!cap.ok) {
-        return NextResponse.json({ error: cap.reason }, { status: 400 });
+        return errorResponse(400, cap.reason);
       }
     }
 
     const treasury = statePartyOrg.treasury ?? 0;
     if (treasury < sendAmount) {
-      return NextResponse.json({ error: "Insufficient treasury funds" }, { status: 400 });
+      return errorResponse(400, "Insufficient treasury funds");
     }
     const budgetCollection = await getPartyBudgetCollection();
     const treasuryPlan = await findPartyBudgetForScope(budgetCollection, {
@@ -217,7 +211,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         .updateOne({ _id: statePartyKey, treasury: { $gte: sendAmount } }, statePartyDebit);
 
       if (debitResult.matchedCount === 0) {
-        return NextResponse.json({ error: "Insufficient treasury funds" }, { status: 400 });
+        return errorResponse(400, "Insufficient treasury funds");
       }
 
       // The debit has landed and there is no transaction to roll back, so
@@ -272,7 +266,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
       if (creditResult.matchedCount === 0) {
         await refundDebit("recipient not found");
-        return NextResponse.json({ error: "Character not found" }, { status: 404 });
+        return errorResponse(404, "Character not found");
       }
 
       return null;

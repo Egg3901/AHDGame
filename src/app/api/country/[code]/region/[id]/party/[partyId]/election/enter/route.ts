@@ -3,7 +3,7 @@ import { getDb } from "@/lib/mongodb";
 import { parseJsonBody } from "@/lib/api/validate";
 import { ELECTION_LIMITS, checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { logRequest } from "@/lib/api/requestLog";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { statePartyEnterSchema } from "@/lib/api/schemas/elections";
 import { validateStatePartyElectionAccess } from "@/lib/utils/statePartyElectionValidation";
 import { notifyCandidacyDeclared, POSITION_LABELS, ALL_POSITIONS } from "@/lib/statePartyElections";
@@ -34,7 +34,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, id, partyId: routePartyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const resolvedStateId = id;
 
@@ -132,10 +132,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (withdraw) {
       if (!existingCandidate || existingCandidate.status === "withdrawn") {
         logRequest("POST", path, 400, Date.now() - start);
-        return NextResponse.json(
-          { error: "You are not an active candidate in this election" },
-          { status: 400 }
-        );
+        return errorResponse(400, "You are not an active candidate in this election");
       }
       await db
         .collection<StatePartyCandidate>("statePartyCandidates")
@@ -168,9 +165,9 @@ export async function POST(request: Request, { params }: RouteParams) {
           .findOne({ electionId: otherElection._id, characterId: character._id, status: "active" });
         if (otherCand) {
           logRequest("POST", path, 400, Date.now() - start);
-          return NextResponse.json(
-            { error: `You are already running for ${POSITION_LABELS[otherPos]}. Withdraw first.` },
-            { status: 400 }
+          return errorResponse(
+            400,
+            `You are already running for ${POSITION_LABELS[otherPos]}. Withdraw first.`
           );
         }
       }
@@ -179,10 +176,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (existingCandidate) {
       if (existingCandidate.status === "active") {
         logRequest("POST", path, 400, Date.now() - start);
-        return NextResponse.json(
-          { error: "You are already a candidate in this election" },
-          { status: 400 }
-        );
+        return errorResponse(400, "You are already a candidate in this election");
       }
       // Re-enter
       await db
@@ -220,19 +214,14 @@ export async function POST(request: Request, { params }: RouteParams) {
 
         if (activeCandidate?.electionId.equals(election._id)) {
           logRequest("POST", path, 400, Date.now() - start);
-          return NextResponse.json(
-            { error: "You are already a candidate in this election" },
-            { status: 400 }
-          );
+          return errorResponse(400, "You are already a candidate in this election");
         }
 
         if (activeCandidate) {
           logRequest("POST", path, 400, Date.now() - start);
-          return NextResponse.json(
-            {
-              error: `You are already running for ${POSITION_LABELS[activeCandidate.position]}. Withdraw first.`,
-            },
-            { status: 400 }
+          return errorResponse(
+            400,
+            `You are already running for ${POSITION_LABELS[activeCandidate.position]}. Withdraw first.`
           );
         }
       }

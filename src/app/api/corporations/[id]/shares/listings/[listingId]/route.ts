@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
@@ -35,7 +35,7 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
     const forexEnabled = await isForexEnabled();
 
     if (!ObjectId.isValid(listingId)) {
-      return NextResponse.json({ error: "Invalid listing ID" }, { status: 400 });
+      return errorResponse(400, "Invalid listing ID");
     }
 
     const listing = await db
@@ -43,28 +43,28 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
       .findOne({ _id: new ObjectId(listingId) });
 
     if (!listing) {
-      return NextResponse.json({ error: "Listing not found" }, { status: 404 });
+      return errorResponse(404, "Listing not found");
     }
 
     if (listing.status !== "open") {
-      return NextResponse.json({ error: "Listing is not open" }, { status: 400 });
+      return errorResponse(400, "Listing is not open");
     }
 
     const character = await getCharacterByUserId(db, auth.user.userId);
     if (!character) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
 
     if (listing.sellerCharacterId.toString() !== character._id.toString()) {
-      return NextResponse.json({ error: "Not your listing" }, { status: 403 });
+      return errorResponse(403, "Not your listing");
     }
 
     const result = await cancelShareListingAndRefund(db, listing, new Date(), forexEnabled);
     if (!result.ok) {
       if (result.rateUnavailable) {
-        return NextResponse.json({ error: result.error }, { status: 503 });
+        return errorResponse(503, result.error);
       }
-      return NextResponse.json({ error: result.error }, { status: 400 });
+      return errorResponse(400, result.error);
     }
 
     return NextResponse.json({ success: true });

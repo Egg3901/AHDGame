@@ -14,7 +14,7 @@ import { setCharacterGateCookie } from "@/lib/auth/characterGateCookie";
 import { AUTH_COOKIE_NAME } from "@/lib/authCookieName";
 import type { Character, Notification, PoliticalParty, State, User } from "@/lib/db/types";
 import type { ImperialCharacter } from "@/lib/db/types/imperialCharacter";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { isPatreonActive } from "@/lib/db/types";
 import { getImperialTitle } from "@/lib/imperial";
 import { getTotalPersonalLiquidWealth, getHomeCurrency } from "@/lib/currency/characterFunds";
@@ -44,13 +44,13 @@ export const GET = withNoStore(async () => {
     const token = cookieStore.get(AUTH_COOKIE_NAME)?.value;
 
     if (!token) {
-      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+      return errorResponse(401, "Authentication required");
     }
 
     const payload = await verifyAuth();
     if (!payload) {
       await clearAuthCookie("auth_me:verify_returned_null");
-      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+      return errorResponse(401, "Authentication required");
     }
     const userId = payload.userId;
     const username = payload.username;
@@ -59,7 +59,7 @@ export const GET = withNoStore(async () => {
     let user = await db.collection<User>("users").findOne({ _id: new ObjectId(userId) });
     if (!user) {
       await clearAuthCookie("auth_me:user_not_found");
-      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+      return errorResponse(401, "Authentication required");
     }
     if (user.isBanned) {
       await clearAuthCookie("auth_me:user_banned");
@@ -70,11 +70,11 @@ export const GET = withNoStore(async () => {
     }
     if (isAuthMigrationFenced(user) && !(await unifiedSessionIsCurrent(db, payload))) {
       await clearAuthCookie("auth_me:source_fenced");
-      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+      return errorResponse(401, "Authentication required");
     }
     if (isTokenRevokedByCutoff(user.authRevokedAt, payload.iat)) {
       await clearAuthCookie("auth_me:auth_revoked");
-      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+      return errorResponse(401, "Authentication required");
     }
 
     // Staff flags come from the current DB account record only. Verified JWT

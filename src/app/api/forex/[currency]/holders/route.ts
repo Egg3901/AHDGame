@@ -4,7 +4,7 @@
 // for the pie + grand total.
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import {
   COUNTRY_CURRENCY_MAP,
@@ -17,12 +17,12 @@ type HolderType = "user" | "corp" | "reserve";
 export async function GET(req: Request, { params }: { params: Promise<{ currency: string }> }) {
   try {
     if (!(await isForexEnabled())) {
-      return NextResponse.json({ error: "Currency exchange is not yet enabled" }, { status: 403 });
+      return errorResponse(403, "Currency exchange is not yet enabled");
     }
     const { currency } = await params;
     const ccy = currency.toUpperCase() as CurrencyCode;
     if (!FOREX_ACTIVE_CURRENCIES.includes(ccy)) {
-      return NextResponse.json({ error: "Unknown currency" }, { status: 404 });
+      return errorResponse(404, "Unknown currency");
     }
 
     const url = new URL(req.url);

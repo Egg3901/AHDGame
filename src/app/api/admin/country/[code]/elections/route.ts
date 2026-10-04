@@ -10,7 +10,7 @@ import { withCampaignRules } from "@/lib/campaignTargeting/rules";
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { adminElectionsCreateSchema, adminElectionsPatchSchema } from "@/lib/api/schemas/admin";
 import type { Election, SenateClass, State, GameState } from "@/lib/db/types";
@@ -31,7 +31,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const { searchParams } = new URL(request.url);
@@ -115,18 +115,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     );
 
     if (states.length === 0) {
-      return NextResponse.json(
-        { error: "No states found. Please seed states first." },
-        { status: 400 }
-      );
+      return errorResponse(400, "No states found. Please seed states first.");
     }
 
     // Check if elections for this cycle already exist
     const existingCount = await db.collection("elections").countDocuments({ cycle });
     if (existingCount > 0) {
-      return NextResponse.json(
-        { error: `Elections for cycle ${cycle} already exist. Delete them first to recreate.` },
-        { status: 409 }
+      return errorResponse(
+        409,
+        `Elections for cycle ${cycle} already exist. Delete them first to recreate.`
       );
     }
 
@@ -245,7 +242,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ co
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const parsed = await parseJsonBody(request, adminElectionsPatchSchema);
@@ -276,7 +273,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ co
     const elections = await db.collection<Election>("elections").find(query).toArray();
 
     if (elections.length === 0) {
-      return NextResponse.json({ error: "No elections found matching criteria" }, { status: 404 });
+      return errorResponse(404, "No elections found matching criteria");
     }
 
     // Use game time (lastTurnProcessed) instead of real wall-clock time
@@ -381,7 +378,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ c
     const cycle = searchParams.get("cycle");
 
     if (!cycle) {
-      return NextResponse.json({ error: "Cycle parameter is required" }, { status: 400 });
+      return errorResponse(400, "Cycle parameter is required");
     }
 
     const db = await getDb();

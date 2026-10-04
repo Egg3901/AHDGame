@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { createAdminLog } from "@/lib/adminLog";
 import { getCurrentTurn } from "@/lib/currentTurn";
@@ -69,23 +69,23 @@ export async function PATCH(request: Request) {
     // availability. Throughput begins at clearing, so refuse a configuration
     // that would look live but have no economic effect.
     if (mode === "active" && !marketAtLeast(marketSystemMode, "clearing")) {
-      return NextResponse.json(
-        { error: "Freight settlement requires market system mode clearing or higher." },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "Freight settlement requires market system mode clearing or higher."
       );
     }
 
     const currentTurn = await getCurrentTurn(db);
     if (mode === "active") {
       if (!intervention) {
-        return NextResponse.json(
-          { error: "An economic intervention plan is required to activate freight settlement." },
-          { status: 400 }
+        return errorResponse(
+          400,
+          "An economic intervention plan is required to activate freight settlement."
         );
       }
       const activationError = validateInterventionActivation(intervention, currentTurn);
       if (activationError) {
-        return NextResponse.json({ error: activationError }, { status: 400 });
+        return errorResponse(400, activationError);
       }
     }
     const changedAt = new Date().toISOString();

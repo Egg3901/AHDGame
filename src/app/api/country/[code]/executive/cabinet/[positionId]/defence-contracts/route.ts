@@ -16,7 +16,7 @@ import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { requireConfirmedSecretary } from "@/lib/api/requireConfirmedSecretary";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
 import { DEFENSE_POSITION_BY_COUNTRY } from "@/lib/constants/military";
@@ -106,11 +106,11 @@ async function requireDefenceHolder(code: string, positionId: string) {
 
   const countryId = code.toUpperCase() as CountryId;
   if (!COUNTRY_CONFIGS[countryId]) {
-    return { error: NextResponse.json({ error: "Invalid country" }, { status: 400 }) } as const;
+    return { error: errorResponse(400, "Invalid country") } as const;
   }
   if (DEFENSE_POSITION_BY_COUNTRY[countryId] !== positionId) {
     return {
-      error: NextResponse.json({ error: "Not a defense cabinet position" }, { status: 404 }),
+      error: errorResponse(404, "Not a defense cabinet position"),
     } as const;
   }
 
@@ -122,10 +122,7 @@ async function requireDefenceHolder(code: string, positionId: string) {
     member.characterId.toString() === auth.user.character._id.toString();
   if (!isHolder && !auth.user.isAdmin) {
     return {
-      error: NextResponse.json(
-        { error: "Only the defence minister may manage procurement contracts." },
-        { status: 403 }
-      ),
+      error: errorResponse(403, "Only the defence minister may manage procurement contracts."),
     } as const;
   }
   // Procurement is the clearest case of a lever that outlives its holder: an awarded
@@ -154,7 +151,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const procurementGateState = await getGameState();
     const gate = await isProcurementBlocked(db, countryId, procurementGateState?.currentTurn ?? 0);
     if (gate.blocked) {
-      return NextResponse.json({ error: gate.reason }, { status: 409 });
+      return errorResponse(409, gate.reason);
     }
 
     const parsed = await parseJsonBody(request, awardSchema);
@@ -166,27 +163,24 @@ export async function POST(request: Request, { params }: RouteParams) {
     try {
       sectorObjectId = new ObjectId(parsed.data.sectorId);
     } catch {
-      return NextResponse.json({ error: "Invalid sector id" }, { status: 400 });
+      return errorResponse(400, "Invalid sector id");
     }
 
     const sector = await db
       .collection<CorporateSector>("corporateSectors")
       .findOne({ _id: sectorObjectId });
     if (!sector) {
-      return NextResponse.json({ error: "No such plant" }, { status: 404 });
+      return errorResponse(404, "No such plant");
     }
     if (sector.sectorType !== "defense") {
-      return NextResponse.json(
-        { error: "Only a defence plant can hold a procurement contract" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Only a defence plant can hold a procurement contract");
     }
 
     const corp = await db
       .collection<Corporation>("corporations")
       .findOne({ _id: sector.corporationId });
     if (!corp) {
-      return NextResponse.json({ error: "No such corporation" }, { status: 404 });
+      return errorResponse(404, "No such corporation");
     }
 
     const gameState = await getGameState();
@@ -196,9 +190,9 @@ export async function POST(request: Request, { params }: RouteParams) {
       gameState?.preset ?? DEFAULT_SEED_PRESET
     );
     if (!budget || budget.countryId !== countryId) {
-      return NextResponse.json(
-        { error: "This country has no usable national budget — procurement is unavailable" },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "This country has no usable national budget — procurement is unavailable"
       );
     }
 
@@ -259,9 +253,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     const anchor = militaryPriceAnchor(budget.gdp, budget.militaryPriceBaselineGdp);
     const anchorPrice = lotPrice(countryId, anchor);
     if (anchorPrice == null) {
-      return NextResponse.json(
-        { error: "This country has no usable GDP figure — procurement is unavailable" },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "This country has no usable GDP figure — procurement is unavailable"
       );
     }
 
@@ -281,13 +275,13 @@ export async function POST(request: Request, { params }: RouteParams) {
     // ends of the band are two views of the anchored figure and cannot drift apart.
     const productionCost = lotProductionCost(sector.strategyId, anchorPrice, priceRatios);
     if (productionCost == null) {
-      return NextResponse.json({ error: FILL_REASON_TEXT.no_materiel_line }, { status: 400 });
+      return errorResponse(400, FILL_REASON_TEXT.no_materiel_line);
     }
     const band = lotPriceBand({ anchorPrice, productionCost, grade: gradeCeiling });
     if (band == null) {
-      return NextResponse.json(
-        { error: "This plant cannot be priced right now - procurement is unavailable" },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "This plant cannot be priced right now - procurement is unavailable"
       );
     }
     // Suggestion #291. A minister may negotiate inside the band and nowhere else: below the
@@ -503,13 +497,13 @@ export async function DELETE(request: Request, { params }: RouteParams) {
 
     const contractId = new URL(request.url).searchParams.get("contractId");
     if (!contractId) {
-      return NextResponse.json({ error: "contractId is required" }, { status: 400 });
+      return errorResponse(400, "contractId is required");
     }
     let objectId: ObjectId;
     try {
       objectId = new ObjectId(contractId);
     } catch {
-      return NextResponse.json({ error: "Invalid contract id" }, { status: 400 });
+      return errorResponse(400, "Invalid contract id");
     }
 
     // Scoped to the caller's own country: without this a defence minister could cancel
@@ -518,7 +512,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       .collection<DefenceContract>("defenceContracts")
       .findOne({ _id: objectId, countryId });
     if (!contract) {
-      return NextResponse.json({ error: "No such contract" }, { status: 404 });
+      return errorResponse(404, "No such contract");
     }
 
     const basis = terminationBasis(contract);
@@ -607,9 +601,9 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       },
     });
     if (!cancelled) {
-      return NextResponse.json(
-        { error: "That contract is no longer open, or it changed while you were looking at it." },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "That contract is no longer open, or it changed while you were looking at it."
       );
     }
 

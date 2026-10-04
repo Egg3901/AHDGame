@@ -10,7 +10,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError, forbidden, notFound } from "@/lib/api/errors";
+import { handleRouteError, forbidden, notFound, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import { z } from "zod";
@@ -38,7 +38,7 @@ export async function PATCH(
     const { code, id: partyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const authResult = await requireAuth();
@@ -57,7 +57,7 @@ export async function PATCH(
 
     const character = authUser.character;
     if (!character) {
-      return NextResponse.json({ error: "No character found" }, { status: 400 });
+      return errorResponse(400, "No character found");
     }
 
     const party = await findPartyBySequentialId(db, partyId, countryId);
@@ -86,10 +86,7 @@ export async function PATCH(
       const submittedDiscordInviteUrl = parsed.data.discordInviteUrl?.trim() ?? "";
       const normalizedDiscordInviteUrl = normalizeDiscordInviteUrl(submittedDiscordInviteUrl);
       if (submittedDiscordInviteUrl && !normalizedDiscordInviteUrl) {
-        return NextResponse.json(
-          { error: "Discord link must be a valid Discord invite URL" },
-          { status: 400 }
-        );
+        return errorResponse(400, "Discord link must be a valid Discord invite URL");
       }
       updates.discordInviteUrl = normalizedDiscordInviteUrl;
     }
@@ -99,7 +96,7 @@ export async function PATCH(
     }
 
     if (Object.keys(updates).length <= 1) {
-      return NextResponse.json({ error: "No valid updates provided" }, { status: 400 });
+      return errorResponse(400, "No valid updates provided");
     }
 
     await db

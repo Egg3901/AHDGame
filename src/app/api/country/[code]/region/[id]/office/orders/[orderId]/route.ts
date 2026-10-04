@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { requireHumanSessionWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { canManageOffice } from "@/lib/governorOffice/access";
@@ -19,10 +19,10 @@ export async function DELETE(
     const { code, id, orderId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
     if (!ObjectId.isValid(orderId)) {
-      return NextResponse.json({ error: "Invalid orderId" }, { status: 400 });
+      return errorResponse(400, "Invalid orderId");
     }
 
     const auth = await requireHumanSessionWithCharacter(request);
@@ -31,8 +31,7 @@ export async function DELETE(
     const stateId = id.toUpperCase();
     const db = await getDb();
     const canManage = await canManageOffice(db, countryId, stateId, auth.user.character._id);
-    if (!canManage)
-      return NextResponse.json({ error: "Not authorized for this office" }, { status: 403 });
+    if (!canManage) return errorResponse(403, "Not authorized for this office");
 
     const result = await rescindOrder(db, {
       orderId: new ObjectId(orderId),

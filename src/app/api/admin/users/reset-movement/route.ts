@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
       .findOne({ userId: new ObjectId(parsed.data.userId) });
 
     if (!character) {
-      return NextResponse.json({ error: "No character found for this user" }, { status: 404 });
+      return errorResponse(404, "No character found for this user");
     }
 
     // Clear BOTH the legacy Date and the turn-first field; the relocation

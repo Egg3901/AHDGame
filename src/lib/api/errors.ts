@@ -5,7 +5,12 @@
 import * as Sentry from "@sentry/nextjs";
 import { NextResponse } from "next/server";
 import { alertOps } from "@/lib/observability/alertOps";
-import { errorCodeForStatus, newRequestRef, type ApiErrorBody } from "@/lib/errors/catalog";
+import {
+  defaultMessageFor,
+  errorCodeForStatus,
+  newRequestRef,
+  type ApiErrorBody,
+} from "@/lib/errors/catalog";
 
 export class ApiError extends Error {
   constructor(
@@ -38,10 +43,17 @@ export class ApiError extends Error {
  */
 export function errorResponse(
   status: number,
-  message: string,
+  message: unknown,
   options: { code?: string; details?: unknown; headers?: HeadersInit } = {}
 ): NextResponse {
-  const body = new ApiError(status, message, options.code, options.details).toJson();
+  // Call sites forward upstream validation results whose message can be
+  // missing; fall back to the catalog copy for the status rather than ship an
+  // empty error.
+  const text =
+    typeof message === "string" && message.length > 0
+      ? message
+      : defaultMessageFor(options.code ?? errorCodeForStatus(status));
+  const body = new ApiError(status, text, options.code, options.details).toJson();
   return NextResponse.json(body, { status, headers: options.headers });
 }
 

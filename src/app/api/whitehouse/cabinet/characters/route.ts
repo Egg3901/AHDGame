@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import type { Character, ElectedOfficial, NPP } from "@/lib/db/types";
 import { resolvePresidentialCountry } from "@/lib/executive/presidentialCountry";
 
@@ -20,7 +20,7 @@ export async function GET(request: Request) {
 
     const countryId = resolvePresidentialCountry(request);
     if (!countryId) {
-      return NextResponse.json({ error: "Unknown country" }, { status: 400 });
+      return errorResponse(400, "Unknown country");
     }
 
     const db = await getDb();
@@ -29,17 +29,14 @@ export async function GET(request: Request) {
       .collection<ElectedOfficial>("electedOfficials")
       .findOne({ countryId, officeType: "president", characterId: { $ne: null } });
     if (!presidentOfficial?.characterId) {
-      return NextResponse.json({ error: "No President in office" }, { status: 400 });
+      return errorResponse(400, "No President in office");
     }
 
     const myCharacter = await db.collection<Character>("characters").findOne({
       userId: new ObjectId(authUser.userId),
     });
     if (!myCharacter || !presidentOfficial.characterId.equals(myCharacter._id)) {
-      return NextResponse.json(
-        { error: "Only the President can nominate cabinet members" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the President can nominate cabinet members");
     }
 
     // Only same-country characters can be nominated to this cabinet.

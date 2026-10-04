@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { unstable_cache } from "next/cache";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireBotToken } from "@/lib/api/requireBotToken";
 import { checkRateLimit, rateLimitResponse, BOT_READ_LIMITS } from "@/lib/api/rateLimit";
 import type { Corporation, CorporateSector, State, StateMetrics, Bond } from "@/lib/db/types";
@@ -468,7 +468,7 @@ const getCachedCorpDetail = unstable_cache(buildCorpDetail, ["discord-bot:corp-d
 export async function GET(request: Request) {
   try {
     if (!requireBotToken(request)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return errorResponse(401, "Unauthorized");
     }
 
     const rateLimit = checkRateLimit(
@@ -488,7 +488,7 @@ export async function GET(request: Request) {
     }
 
     if (!name) {
-      return NextResponse.json({ error: "Must provide name or list=true" }, { status: 400 });
+      return errorResponse(400, "Must provide name or list=true");
     }
 
     const detail = await getCachedCorpDetail(name.toLowerCase());

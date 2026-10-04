@@ -34,7 +34,8 @@ vi.mock("@/lib/api/rateLimit", () => ({
 vi.mock("@/lib/api/rateLimit.mongo", () => ({
   durableRateLimit: async () => ({ ok: true }),
 }));
-vi.mock("@/lib/api/errors", () => ({
+vi.mock("@/lib/api/errors", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api/errors")>()),
   handleRouteError: () => new Response(null, { status: 500 }),
 }));
 

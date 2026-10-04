@@ -7,7 +7,7 @@ import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { requirePeaceNegotiator } from "@/lib/api/requirePeaceNegotiator";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { z } from "zod";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getGameStateCollection } from "@/lib/db/collections/gameState";
@@ -30,10 +30,10 @@ export async function POST(
     const { code, offerId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     if (!ObjectId.isValid(offerId)) {
-      return NextResponse.json({ error: "That offer does not exist." }, { status: 404 });
+      return errorResponse(404, "That offer does not exist.");
     }
 
     const auth = await requireAuthWithCharacter();
@@ -45,7 +45,7 @@ export async function POST(
       await getGameStateCollection(db)
     ).findOne({ _id: "current" }, { projection: { conflictsEnabled: 1, currentTurn: 1 } });
     if (!gs?.conflictsEnabled) {
-      return NextResponse.json({ error: "Conflicts subsystem disabled" }, { status: 404 });
+      return errorResponse(404, "Conflicts subsystem disabled");
     }
     const currentTurn = gs.currentTurn ?? 0;
 
@@ -60,7 +60,7 @@ export async function POST(
 
     const offer = await getPeaceOffersCollection(db).findOne({ _id: new ObjectId(offerId) });
     if (!offer) {
-      return NextResponse.json({ error: "That offer does not exist." }, { status: 404 });
+      return errorResponse(404, "That offer does not exist.");
     }
 
     const recognizedAcceptance =
@@ -76,7 +76,7 @@ export async function POST(
         { _id: offer._id, status: "pending" },
         { $set: { status: "expired" } }
       );
-      return NextResponse.json({ error: "That offer is no longer open." }, { status: 409 });
+      return errorResponse(409, "That offer is no longer open.");
     }
 
     // Withdrawing is the offerer's move; accepting and rejecting are the recipient's.
@@ -107,7 +107,7 @@ export async function POST(
         }
       );
       if (r.modifiedCount === 0) {
-        return NextResponse.json({ error: "That offer is no longer open." }, { status: 409 });
+        return errorResponse(409, "That offer is no longer open.");
       }
       return NextResponse.json({ success: true, status });
     }
@@ -126,7 +126,7 @@ export async function POST(
     // it, and applying a stale deal would move money over a war nobody is fighting.
     const conflict = await getConflict(db, offer.conflictId);
     if (!conflict) {
-      return NextResponse.json({ error: "That war no longer exists." }, { status: 409 });
+      return errorResponse(409, "That war no longer exists.");
     }
     if (!resumableAcceptance) {
       // Re-check the GDP cap at acceptance too: an offer stored before the cap
@@ -165,13 +165,13 @@ export async function POST(
         settlement
       );
       if (!still.ok) {
-        return NextResponse.json({ error: still.error }, { status: 409 });
+        return errorResponse(409, still.error);
       }
     }
 
     const applied = await acceptPeace(db, offer, conflict, currentTurn, character._id.toString());
     if (!applied.applied) {
-      return NextResponse.json({ error: "That offer is no longer open." }, { status: 409 });
+      return errorResponse(409, "That offer is no longer open.");
     }
     if (applied.resolved) await flushServerPosthog();
 

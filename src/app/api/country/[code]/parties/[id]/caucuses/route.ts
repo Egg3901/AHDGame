@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth, requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import {
   listCaucusesForParty,
@@ -29,7 +29,7 @@ export async function GET(
     const { code, id } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const auth = await requireAuth();
@@ -38,7 +38,7 @@ export async function GET(
     const db = await getDb();
     const party = await findPartyBySequentialId(db, id, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
 
     const character = auth.user.character;
@@ -47,10 +47,7 @@ export async function GET(
       character.party === String(party.sequentialId) &&
       character.countryId === countryId;
     if (!auth.user.isAdmin && !isPartyMember) {
-      return NextResponse.json(
-        { error: "Only party members may view caucus details." },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only party members may view caucus details.");
     }
 
     const partyId = String(party.sequentialId);
@@ -144,7 +141,7 @@ export async function POST(
     const { code, id } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const auth = await requireAuthWithCharacter();
@@ -158,17 +155,14 @@ export async function POST(
     const db = await getDb();
     const party = await findPartyBySequentialId(db, id, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
     const partyId = String(party.sequentialId);
 
     // Caucuses are a national-only structure. The character must already be a
     // member of this party — only party members can found a caucus inside it.
     if (auth.user.character.party !== partyId) {
-      return NextResponse.json(
-        { error: "Only party members can found a caucus inside their own party." },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only party members can found a caucus inside their own party.");
     }
 
     // Founder can't already chair another active caucus in this party (one
@@ -180,11 +174,9 @@ export async function POST(
       disbandedAt: null,
     });
     if (existingChair) {
-      return NextResponse.json(
-        {
-          error: `You already chair ${existingChair.name}. Step down before founding another caucus.`,
-        },
-        { status: 409 }
+      return errorResponse(
+        409,
+        `You already chair ${existingChair.name}. Step down before founding another caucus.`
       );
     }
 
@@ -205,12 +197,7 @@ export async function POST(
         pointedCaucus.countryId === countryId &&
         pointedCaucus.partyId === partyId;
       if (stillInThisParty) {
-        return NextResponse.json(
-          {
-            error: "Leave your current caucus before founding a new one.",
-          },
-          { status: 409 }
-        );
+        return errorResponse(409, "Leave your current caucus before founding a new one.");
       }
 
       await cleanupCaucusParticipationForCharacters(db, [auth.user.character._id], {
@@ -234,7 +221,7 @@ export async function POST(
       slug = normaliseCaucusSlug(parsed.data.name);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Invalid name";
-      return NextResponse.json({ error: msg }, { status: 400 });
+      return errorResponse(400, msg);
     }
 
     // Active-slug collision check.
@@ -245,11 +232,9 @@ export async function POST(
       disbandedAt: null,
     });
     if (slugCollision) {
-      return NextResponse.json(
-        {
-          error: `Slug "${slug}" is already in use by ${slugCollision.name}. Pick a different name.`,
-        },
-        { status: 409 }
+      return errorResponse(
+        409,
+        `Slug "${slug}" is already in use by ${slugCollision.name}. Pick a different name.`
       );
     }
 

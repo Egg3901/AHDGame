@@ -18,7 +18,7 @@ import { getPartyMap } from "@/lib/db/partyMap";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { getAuthUser } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { getNpcComposition } from "@/lib/congress/npcComposition";
 import { resolveCppccChairElection } from "@/lib/congress/cppccChair/resolveElection";
@@ -52,7 +52,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
     const { code } = await params;
     const countryId = code.toUpperCase();
     if (countryId !== "CN" || !COUNTRY_CONFIGS.CN) {
-      return NextResponse.json({ error: "CPPCC Chairman endpoint is CN-only" }, { status: 400 });
+      return errorResponse(400, "CPPCC Chairman endpoint is CN-only");
     }
     const db = await getDb();
     const partyMap = await getPartyMap(db, "CN");
@@ -162,7 +162,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     const { code } = await params;
     const countryId = code.toUpperCase();
     if (countryId !== "CN" || !COUNTRY_CONFIGS.CN) {
-      return NextResponse.json({ error: "CPPCC Chairman endpoint is CN-only" }, { status: 400 });
+      return errorResponse(400, "CPPCC Chairman endpoint is CN-only");
     }
 
     const auth = await requireBasicAuth();

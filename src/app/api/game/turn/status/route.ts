@@ -1,7 +1,7 @@
 import { isSingleplayer } from "@/lib/singleplayer";
 import { NextResponse } from "next/server";
 import { conditionalJson } from "@/lib/api/conditionalJson";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getTurnStatusSnapshot } from "@/lib/turn/turnStatusSnapshot";
 import { getProcessingLockState } from "@/lib/turn/processingLock";
 import { computeTurnProcessingProgress, formatTurnPhaseLabel } from "@/lib/turn/turnProgress";
@@ -15,7 +15,7 @@ export async function GET(request: Request) {
     const gameState = await getTurnStatusSnapshot();
 
     if (!gameState) {
-      return NextResponse.json({ error: "Game state not initialized" }, { status: 404 });
+      return errorResponse(404, "Game state not initialized");
     }
 
     // Compute when the next Vercel Cron fire is (UTC).

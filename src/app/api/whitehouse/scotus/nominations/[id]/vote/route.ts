@@ -10,7 +10,7 @@ import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseObjectId } from "@/lib/utils/objectId";
 import { clearWhippedFromVote } from "@/lib/congress/clearWhippedVote";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { z } from "zod";
 import { CONGRESS_LIMITS, checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -32,7 +32,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const { id } = await params;
     const nominationOid = parseObjectId(id);
     if (!nominationOid) {
-      return NextResponse.json({ error: "Invalid nomination ID" }, { status: 400 });
+      return errorResponse(400, "Invalid nomination ID");
     }
 
     const auth = await requireBasicAuth();
@@ -59,7 +59,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       .collection<ScotusNomination>("scotusNominations")
       .findOne({ _id: nominationOid, status: "active" });
     if (!nomination) {
-      return NextResponse.json({ error: "Nomination not found or voting closed" }, { status: 404 });
+      return errorResponse(404, "Nomination not found or voting closed");
     }
     if (
       isVotingDeadlinePassed(
@@ -69,14 +69,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         gameTime.currentTurn
       )
     ) {
-      return NextResponse.json({ error: "Voting has ended" }, { status: 409 });
+      return errorResponse(409, "Voting has ended");
     }
 
     const myCharacter = await db.collection<Character>("characters").findOne({
       userId: new ObjectId(authUser.userId),
     });
     if (!myCharacter) {
-      return NextResponse.json({ error: "No character" }, { status: 400 });
+      return errorResponse(400, "No character");
     }
 
     const senatorOfficial = await db.collection<ElectedOfficial>("electedOfficials").findOne({
@@ -84,10 +84,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       officeType: "senate",
     });
     if (!senatorOfficial) {
-      return NextResponse.json(
-        { error: "Only Senators can vote on Justice nominations" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only Senators can vote on Justice nominations");
     }
 
     const voteKey = myCharacter._id.toString();
@@ -102,7 +99,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       })
     );
     if (updateResult.matchedCount === 0) {
-      return NextResponse.json({ error: "Nomination not found or voting closed" }, { status: 404 });
+      return errorResponse(404, "Nomination not found or voting closed");
     }
 
     await clearWhippedFromVote(db, "scotusNominations", nominationOid, myCharacter._id);

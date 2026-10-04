@@ -1,3 +1,4 @@
+import { errorResponse } from "@/lib/api/errors";
 import { suppressTracing } from "@sentry/nextjs";
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
@@ -35,17 +36,16 @@ export const POST = withNoStore(async (request: Request) => {
   const limit = checkRateLimit(`native-push:${auth.user.userId}`, 30, 60_000);
   if (!limit.ok) return rateLimitResponse(limit.retryAfter);
   const parsed = await parseJsonBody(request, registration, { maxBytes: 8192 });
-  if (!parsed.success)
-    return NextResponse.json({ error: "Invalid device registration" }, { status: 400 });
+  if (!parsed.success) return errorResponse(400, "Invalid device registration");
   if (!providerConfigured(parsed.data.provider))
-    return NextResponse.json({ error: "Push is not configured yet" }, { status: 503 });
+    return errorResponse(503, "Push is not configured yet");
   try {
     const registered = await suppressTracing(async () =>
       registerDevice(await getDb(), new ObjectId(auth.user.userId), parsed.data)
     );
     return NextResponse.json({ registered }, { status: registered ? 200 : 409 });
   } catch {
-    return NextResponse.json({ error: "Could not register this device" }, { status: 503 });
+    return errorResponse(503, "Could not register this device");
   }
 });
 
@@ -57,11 +57,11 @@ export const DELETE = withNoStore(async (request: Request) => {
   const parsed = await parseJsonBody(request, z.object({ installation }).strict(), {
     maxBytes: 1024,
   });
-  if (!parsed.success) return NextResponse.json({ error: "Invalid installation" }, { status: 400 });
+  if (!parsed.success) return errorResponse(400, "Invalid installation");
   try {
     await suppressTracing(async () => revokeDevice(await getDb(), parsed.data.installation));
     return NextResponse.json({ registered: false });
   } catch {
-    return NextResponse.json({ error: "Could not revoke this device" }, { status: 503 });
+    return errorResponse(503, "Could not revoke this device");
   }
 });

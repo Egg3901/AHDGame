@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError, forbidden, badRequest } from "@/lib/api/errors";
+import { handleRouteError, forbidden, badRequest, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
 import { requireUserApiKey } from "@/lib/api/userApiAuth";
@@ -99,7 +99,7 @@ export async function POST(request: Request) {
         userId: new ObjectId(apiAuth.ownerUserId),
       });
       if (!imperial) {
-        return NextResponse.json({ error: "Imperial character not found" }, { status: 404 });
+        return errorResponse(404, "Imperial character not found");
       }
       characterId = imperial._id;
       countryId = imperial.countryId;
@@ -111,7 +111,7 @@ export async function POST(request: Request) {
         : { userId: new ObjectId(apiAuth.ownerUserId) };
       const character = await db.collection<Character>("characters").findOne(characterQuery);
       if (!character) {
-        return NextResponse.json({ error: "Character not found" }, { status: 404 });
+        return errorResponse(404, "Character not found");
       }
       characterId = character._id;
       countryId = character.countryId;
@@ -131,7 +131,7 @@ export async function POST(request: Request) {
     });
 
     if (!result.success) {
-      return NextResponse.json({ error: result.error }, { status: 400 });
+      return errorResponse(400, result.error);
     }
 
     void emitTx(db, {

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { withAdminAuth } from "@/lib/api/withAdminAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { parseJsonBody } from "@/lib/api/validate";
 import { getGameState } from "@/lib/gameState";
@@ -44,10 +44,7 @@ export const POST = withAdminAuth(async (_auth, request: Request) => {
     });
 
     if (!result) {
-      return NextResponse.json(
-        { error: "No sovereign issuance was created for the selected country." },
-        { status: 400 }
-      );
+      return errorResponse(400, "No sovereign issuance was created for the selected country.");
     }
 
     return NextResponse.json({

@@ -16,7 +16,7 @@ import { ObjectId, type MongoServerError } from "mongodb";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireModerator } from "@/lib/api/requireModerator";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import {
   getWatchlistCollection,
@@ -75,7 +75,7 @@ export async function POST(request: Request) {
 
     const userId = typeof body.userId === "string" ? body.userId : "";
     if (!OBJECT_ID_RE.test(userId)) {
-      return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
+      return errorResponse(400, "Invalid userId");
     }
 
     const reason =
@@ -90,13 +90,13 @@ export async function POST(request: Request) {
       { projection: { _id: 1 } }
     );
     if (!targetUser) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return errorResponse(404, "User not found");
     }
 
     const watchlistCol = await getWatchlistCollection(db);
     const existing = await watchlistCol.findOne({ userId: new ObjectId(userId) });
     if (existing) {
-      return NextResponse.json({ error: "User is already on the watchlist" }, { status: 409 });
+      return errorResponse(409, "User is already on the watchlist");
     }
 
     const entry: WatchlistEntry = {
@@ -113,7 +113,7 @@ export async function POST(request: Request) {
       // Race: the unique userId index catches a concurrent duplicate add
       // that slipped past the findOne check above.
       if ((error as MongoServerError)?.code === DUPLICATE_KEY_CODE) {
-        return NextResponse.json({ error: "User is already on the watchlist" }, { status: 409 });
+        return errorResponse(409, "User is already on the watchlist");
       }
       throw error;
     }

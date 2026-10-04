@@ -8,7 +8,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { authorizeBattleAction } from "@/lib/api/battleAuthz";
 import { getMilitaryUnitsCollection } from "@/lib/db/collections/militaryUnits";
 import { isMissionValidFor, missionNeedsTarget } from "@/lib/navair/missions";
@@ -52,7 +52,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const body = parsed.data;
 
     if (!ObjectId.isValid(body.unitId)) {
-      return NextResponse.json({ error: "Unknown formation." }, { status: 404 });
+      return errorResponse(404, "Unknown formation.");
     }
 
     // Scope the read to the acting country. A commander may only order their own
@@ -65,23 +65,20 @@ export async function POST(request: Request, { params }: RouteParams) {
       countryId: countryId as CountryId,
     });
     if (!unit) {
-      return NextResponse.json({ error: "Unknown formation." }, { status: 404 });
+      return errorResponse(404, "Unknown formation.");
     }
 
     if (unit.domain !== "naval" && unit.domain !== "air") {
-      return NextResponse.json(
-        { error: "Only naval and air formations take a mission." },
-        { status: 400 }
-      );
+      return errorResponse(400, "Only naval and air formations take a mission.");
     }
 
     if (body.mission !== undefined && !isMissionValidFor(unit.domain, body.mission)) {
       // Never inferred from the client: a naval formation on an air mission falls through
       // to the flying-weights fallback and quietly fights at half value forever, with
       // nothing in the interface to say why.
-      return NextResponse.json(
-        { error: `${body.mission} is not a mission a ${unit.domain} formation can fly.` },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `${body.mission} is not a mission a ${unit.domain} formation can fly.`
       );
     }
 
@@ -91,21 +88,15 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (body.station !== undefined) {
       const target = regionOf(body.station);
       if (!target) {
-        return NextResponse.json({ error: "Unknown region." }, { status: 400 });
+        return errorResponse(400, "Unknown region.");
       }
       // A fleet cannot be stationed on dry land. Air formations can operate from anywhere
       // with an airbase, which every region has to some degree, so only naval is gated.
       if (unit.domain === "naval" && !isWaterAccessible(body.station)) {
-        return NextResponse.json(
-          { error: `${target.name} is not water a fleet can operate in.` },
-          { status: 400 }
-        );
+        return errorResponse(400, `${target.name} is not water a fleet can operate in.`);
       }
       if (unit.domain === "naval" && !isNavigable(body.station)) {
-        return NextResponse.json(
-          { error: `${target.name} has no port a fleet can work out of.` },
-          { status: 400 }
-        );
+        return errorResponse(400, `${target.name} has no port a fleet can work out of.`);
       }
       update.station = body.station;
       // Flag it as a command decision. The turn pass re-derives every machine-assigned
@@ -119,10 +110,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (body.mission !== undefined) {
       if (missionNeedsTarget(body.mission)) {
         if (!body.missionTarget || !regionOf(body.missionTarget)) {
-          return NextResponse.json(
-            { error: "A strike mission needs a target region." },
-            { status: 400 }
-          );
+          return errorResponse(400, "A strike mission needs a target region.");
         }
         update.missionTarget = body.missionTarget;
       } else {

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { timingSafeCompare } from "@/lib/api/timingSafeCompare";
 import bcrypt from "bcryptjs";
 import { createHash, randomUUID } from "crypto";
@@ -60,9 +60,9 @@ export async function POST(request: Request) {
     // Block registration during maintenance mode (both "partial" and "full").
     const config = await db.collection<GameConfig>("gameConfig").findOne({ _id: "default" });
     if (normalizeMaintenanceMode(config?.maintenanceMode) !== "off") {
-      return NextResponse.json(
-        { error: "Registration is disabled during maintenance. Please try again later." },
-        { status: 503 }
+      return errorResponse(
+        503,
+        "Registration is disabled during maintenance. Please try again later."
       );
     }
 
@@ -113,10 +113,7 @@ export async function POST(request: Request) {
         outcome: "rejected",
         reason: "turnstile_failed",
       });
-      return NextResponse.json(
-        { error: "Verification failed. Please try again." },
-        { status: 400 }
-      );
+      return errorResponse(400, "Verification failed. Please try again.");
     }
 
     if (!ageConfirmed || !termsAccepted) {
@@ -131,15 +128,12 @@ export async function POST(request: Request) {
       });
     }
     if (!ageConfirmed) {
-      return NextResponse.json(
-        { error: "You must confirm that you are at least 13 years old to register." },
-        { status: 400 }
-      );
+      return errorResponse(400, "You must confirm that you are at least 13 years old to register.");
     }
     if (!termsAccepted) {
-      return NextResponse.json(
-        { error: "You must accept the Terms of Service and Privacy Policy to register." },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "You must accept the Terms of Service and Privacy Policy to register."
       );
     }
 
@@ -180,9 +174,9 @@ export async function POST(request: Request) {
           outcome: "rejected",
           reason: "invalid_test_secret",
         });
-        return NextResponse.json(
-          { error: "Registration requires a valid test secret. Contact an admin for access." },
-          { status: 403 }
+        return errorResponse(
+          403,
+          "Registration requires a valid test secret. Contact an admin for access."
         );
       }
     }
@@ -204,10 +198,7 @@ export async function POST(request: Request) {
         outcome: "rejected",
         reason: "duplicate_account",
       });
-      return NextResponse.json(
-        { error: "An account with this email or username already exists" },
-        { status: 409 }
-      );
+      return errorResponse(409, "An account with this email or username already exists");
     }
 
     // Validate referral code if provided
@@ -224,7 +215,7 @@ export async function POST(request: Request) {
           outcome: "rejected",
           reason: "invalid_referral_code",
         });
-        return NextResponse.json({ error: "Invalid referral code" }, { status: 400 });
+        return errorResponse(400, "Invalid referral code");
       }
       const referrer = await usersCollection.findOne({ _id: new ObjectId(normalizedReferralCode) });
       if (!referrer) {
@@ -237,7 +228,7 @@ export async function POST(request: Request) {
           outcome: "rejected",
           reason: "invalid_referral_code",
         });
-        return NextResponse.json({ error: "Invalid referral code" }, { status: 400 });
+        return errorResponse(400, "Invalid referral code");
       }
       // Prevent self-referral (can't happen at registration but guard anyway)
       referredByObjectId = referrer._id as ObjectId;
@@ -281,10 +272,7 @@ export async function POST(request: Request) {
           outcome: "rejected",
           reason: "admin_registration_disabled",
         });
-        return NextResponse.json(
-          { error: "Admin registration is currently disabled." },
-          { status: 403 }
-        );
+        return errorResponse(403, "Admin registration is currently disabled.");
       }
       const adminRegKey = process.env.ADMIN_REGISTRATION_KEY;
       if (adminRegKey && timingSafeCompare(adminKey ?? "", adminRegKey)) {
@@ -299,7 +287,7 @@ export async function POST(request: Request) {
           outcome: "rejected",
           reason: "invalid_admin_key",
         });
-        return NextResponse.json({ error: "Invalid admin key" }, { status: 403 });
+        return errorResponse(403, "Invalid admin key");
       }
     }
 

@@ -4,7 +4,7 @@ import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationAc
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { setDividendRateSchema } from "@/lib/api/schemas/corporations";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { hasOpenPrivatizationVote } from "@/lib/corporations/commands/privatization/openVoteGuard";
 import type { Corporation } from "@/lib/db/types";
@@ -48,17 +48,11 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (ceoCheck) return ceoCheck;
 
     if (await hasOpenPrivatizationVote(db, corporation._id)) {
-      return NextResponse.json(
-        { error: "Cannot change dividend rate while a privatization vote is open" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Cannot change dividend rate while a privatization vote is open");
     }
 
     if (corporation.imfBailoutActive && parsed.data.dividendRate > 0) {
-      return NextResponse.json(
-        { error: "Dividends are suspended while IMF restructuring is active." },
-        { status: 400 }
-      );
+      return errorResponse(400, "Dividends are suspended while IMF restructuring is active.");
     }
 
     // Enforce 24-hour cooldown
@@ -66,11 +60,9 @@ export async function POST(request: Request, { params }: RouteParams) {
       const elapsed = Date.now() - new Date(corporation.lastDividendChange).getTime();
       if (elapsed < DIVIDEND_COOLDOWN_MS) {
         const remaining = Math.ceil((DIVIDEND_COOLDOWN_MS - elapsed) / 1000 / 60 / 60);
-        return NextResponse.json(
-          {
-            error: `Dividend rate can only be changed once per 24 hours. Try again in ${remaining}h.`,
-          },
-          { status: 429 }
+        return errorResponse(
+          429,
+          `Dividend rate can only be changed once per 24 hours. Try again in ${remaining}h.`
         );
       }
     }
@@ -94,9 +86,9 @@ export async function POST(request: Request, { params }: RouteParams) {
       }
     );
     if (update.matchedCount === 0) {
-      return NextResponse.json(
-        { error: "Dividend rate was changed by another request. Try again after the cooldown." },
-        { status: 429 }
+      return errorResponse(
+        429,
+        "Dividend rate was changed by another request. Try again after the cooldown."
       );
     }
 

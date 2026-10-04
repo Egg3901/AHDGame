@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { getDb } from "@/lib/mongodb";
@@ -106,10 +106,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       (corporation.ceoType ?? "character") === "character" &&
       corporation.ceoId?.equals(auth.user.character._id);
     if (!isCeo) {
-      return NextResponse.json(
-        { error: "Only the CEO can petition the index committee" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the CEO can petition the index committee");
     }
 
     const parsed = await parseJsonBody(request, FileSchema);

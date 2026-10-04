@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireHumanSessionWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { getDb } from "@/lib/mongodb";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -20,7 +20,7 @@ export async function POST(
     const { code, id } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
 
     const auth = await requireHumanSessionWithCharacter(request);
@@ -45,7 +45,7 @@ export async function POST(
     const adminOverride = parsed.data.adminOverride === true && isAdmin;
     const canManage = await canManageOffice(db, countryId, stateId, auth.user.character._id);
     if (!canManage && !adminOverride) {
-      return NextResponse.json({ error: "Not authorized for this office" }, { status: 403 });
+      return errorResponse(403, "Not authorized for this office");
     }
 
     const result = await issueOrder(db, {
@@ -74,7 +74,7 @@ export async function GET(
     const { code, id } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
 
     const auth = await requireHumanSessionWithCharacter(_request);
@@ -85,7 +85,7 @@ export async function GET(
     const canManage = await canManageOffice(db, countryId, stateId, auth.user.character._id);
     const isAdmin = auth.user.isAdmin === true;
     if (!canManage && !isAdmin) {
-      return NextResponse.json({ error: "Not authorized for this office" }, { status: 403 });
+      return errorResponse(403, "Not authorized for this office");
     }
 
     const active = await db

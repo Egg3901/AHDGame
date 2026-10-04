@@ -4,7 +4,7 @@ import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { cancelPrivatizationVote } from "@/lib/corporations/commands/privatization/cancelPrivatizationVote";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { logWireEvent, wireHeadlineCorpPrivatizationVoteCancelled } from "@/lib/wireEvent";
 import { notifyVoteEventRaw } from "@/lib/corporations/votes/voteNotifications";
@@ -26,7 +26,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
 
     const { id, voteId } = await params;
     if (!ObjectId.isValid(voteId)) {
-      return NextResponse.json({ error: "Invalid vote id" }, { status: 400 });
+      return errorResponse(400, "Invalid vote id");
     }
     const db = await getDb();
     const resolved = await resolveCorporation(db, id);
@@ -37,7 +37,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
     const vote = await db
       .collection<CorporationPrivatizationVote>("corporationPrivatizationVotes")
       .findOne({ _id: new ObjectId(voteId), corporationId: corporation._id });
-    if (!vote) return NextResponse.json({ error: "Vote not found" }, { status: 404 });
+    if (!vote) return errorResponse(404, "Vote not found");
     const forex = await isForexEnabled();
     const result = await cancelPrivatizationVote({ db, vote, forexEnabled: forex });
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });

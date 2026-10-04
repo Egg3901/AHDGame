@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireBotToken } from "@/lib/api/requireBotToken";
 import { checkRateLimit, rateLimitResponse, BOT_FINANCIAL_LIMITS } from "@/lib/api/rateLimit";
 import type { DiscordBotFund } from "@/lib/db/types/discordBotFund";
@@ -11,7 +11,7 @@ import type { DiscordBotFund } from "@/lib/db/types/discordBotFund";
 export async function GET(request: Request) {
   try {
     if (!requireBotToken(request, false)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return errorResponse(401, "Unauthorized");
     }
 
     const rateLimit = checkRateLimit(

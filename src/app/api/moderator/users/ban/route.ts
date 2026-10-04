@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireModerator } from "@/lib/api/requireModerator";
@@ -33,20 +33,17 @@ export async function POST(request: Request) {
     const objectId = new ObjectId(userId);
 
     if (moderator.userId === userId) {
-      return NextResponse.json({ error: "You cannot ban yourself" }, { status: 400 });
+      return errorResponse(400, "You cannot ban yourself");
     }
 
     const targetUser = await db.collection<User>("users").findOne({ _id: objectId });
     if (!targetUser) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return errorResponse(404, "User not found");
     }
 
     // Moderators cannot affect admin accounts
     if (targetUser.role === "admin") {
-      return NextResponse.json(
-        { error: "Cannot perform actions on admin accounts" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Cannot perform actions on admin accounts");
     }
 
     if (ban) {

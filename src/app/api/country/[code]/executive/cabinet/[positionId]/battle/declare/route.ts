@@ -7,7 +7,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { authorizeBattleAction, canActAtTheater } from "@/lib/api/battleAuthz";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getMilitaryUnitsCollection } from "@/lib/db/collections/militaryUnits";
@@ -44,7 +44,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const conflict = await getConflict(db, theaterId);
     if (!conflict) {
-      return NextResponse.json({ error: "No such conflict" }, { status: 400 });
+      return errorResponse(400, "No such conflict");
     }
     const denied = await canActAtTheater(db, countryId, theaterId, {
       characterId,
@@ -58,7 +58,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     // now only the "is this a real thing at all" fallback; the roster check below is
     // the real gate, and it already refuses anything not in THIS war.
     if (!isFactionEntity(conflict, targetCountry) && !COUNTRY_CONFIGS[targetCountry as CountryId]) {
-      return NextResponse.json({ error: "Invalid target country" }, { status: 400 });
+      return errorResponse(400, "Invalid target country");
     }
 
     // Opposition is THIS conflict's rosters, never a global bloc table. The table this
@@ -74,30 +74,21 @@ export async function POST(request: Request, { params }: RouteParams) {
     // bloc member by backer — a second door into a war the design says is entered by
     // a bloc vote and a vote of your own legislature.
     if (!canEnterTheatre(countryId, conflict)) {
-      return NextResponse.json(
-        {
-          error:
-            "Your nation is not a belligerent in that conflict. Entry is decided by a bloc resolution and a vote of your legislature.",
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "Your nation is not a belligerent in that conflict. Entry is decided by a bloc resolution and a vote of your legislature."
       );
     }
     const ownSide = sideOf(conflict, countryId, await loadMilitaryBlocs(db));
     if (!ownSide) {
-      return NextResponse.json(
-        { error: "Your nation has no side in this conflict" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Your nation has no side in this conflict");
     }
     const targetSide = belligerentSideOf(conflict, targetCountry);
     if (!targetSide) {
-      return NextResponse.json(
-        { error: "Target is not a belligerent in this conflict" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Target is not a belligerent in this conflict");
     }
     if (targetSide === ownSide) {
-      return NextResponse.json({ error: "Target is on your own side" }, { status: 400 });
+      return errorResponse(400, "Target is on your own side");
     }
 
     const forceAtTheater = await getMilitaryUnitsCollection(db).countDocuments({
@@ -105,12 +96,12 @@ export async function POST(request: Request, { params }: RouteParams) {
       theaterId,
     });
     if (forceAtTheater === 0) {
-      return NextResponse.json({ error: "No forces committed at this theater" }, { status: 400 });
+      return errorResponse(400, "No forces committed at this theater");
     }
 
     const existing = await getPendingDeclaration(db, countryId, theaterId);
     if (existing) {
-      return NextResponse.json({ error: "An offensive is already pending here" }, { status: 409 });
+      return errorResponse(409, "An offensive is already pending here");
     }
 
     const doc = {
@@ -148,7 +139,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       status: "pending",
     });
     if (res.deletedCount === 0) {
-      return NextResponse.json({ error: "No pending offensive" }, { status: 404 });
+      return errorResponse(404, "No pending offensive");
     }
     return NextResponse.json({ ok: true });
   } catch (error) {

@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody, schemas } from "@/lib/api/validate";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
@@ -36,10 +36,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const corpGuard = await requireCorporationActionsEnabled(db);
     if (corpGuard) return corpGuard;
     if (!(await isSubsidiaryCorporationsEnabled())) {
-      return NextResponse.json(
-        { error: "Subsidiary corporations are not enabled." },
-        { status: 403 }
-      );
+      return errorResponse(403, "Subsidiary corporations are not enabled.");
     }
 
     const parsed = await parseJsonBody(request, bodySchema);
@@ -53,8 +50,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const parent = await db
       .collection<Corporation>("corporations")
       .findOne({ _id: new ObjectId(parsed.data.parentCorporationId) });
-    if (!parent)
-      return NextResponse.json({ error: "Parent corporation not found." }, { status: 404 });
+    if (!parent) return errorResponse(404, "Parent corporation not found.");
 
     const turn = await getCurrentTurn(db).catch(() => 0);
     const result = await formalizeSubsidiary(db, {

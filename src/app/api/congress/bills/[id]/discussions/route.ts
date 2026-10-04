@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { getAuthUserWithCharacter } from "@/lib/auth";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
 import { resolveBillCountryId } from "@/lib/congress/resolveBillCountryId";
@@ -34,7 +34,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const { id } = await params;
     const db = await getDb();
     const scope = await resolveScope(db, id);
-    if (!scope) return NextResponse.json({ error: "Bill not found" }, { status: 404 });
+    if (!scope) return errorResponse(404, "Bill not found");
 
     const page = Number(new URL(request.url).searchParams.get("page") ?? "1");
     const user = await getAuthUserWithCharacter().catch(() => null);
@@ -62,7 +62,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const { id } = await params;
     const db = await getDb();
     const scope = await resolveScope(db, id);
-    if (!scope) return NextResponse.json({ error: "Bill not found" }, { status: 404 });
+    if (!scope) return errorResponse(404, "Bill not found");
 
     return NextResponse.json(
       await createBillDiscussion(db, {

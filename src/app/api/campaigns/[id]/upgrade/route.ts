@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { ObjectId } from "mongodb";
 import { z } from "zod";
@@ -28,7 +28,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { id: campaignId } = await params;
 
     if (!ObjectId.isValid(campaignId)) {
-      return NextResponse.json({ error: "Invalid campaign ID" }, { status: 400 });
+      return errorResponse(400, "Invalid campaign ID");
     }
 
     const auth = await requireAuthWithCharacter();
@@ -45,7 +45,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { category, branch, targetId } = parsed.data;
 
     if (targetId && !ObjectId.isValid(targetId)) {
-      return NextResponse.json({ error: "Invalid target ID" }, { status: 400 });
+      return errorResponse(400, "Invalid target ID");
     }
 
     const db = await getDb();

@@ -11,7 +11,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { buildCountryReadinessReport } from "@/lib/admin/countryReadinessReport";
 
@@ -27,16 +27,13 @@ export async function GET(_req: Request, { params }: RouteParams) {
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
 
     const db = await getDb();
     const report = await buildCountryReadinessReport(db, countryId);
     if (!report) {
-      return NextResponse.json(
-        { error: `No readiness expectations registered for ${countryId}` },
-        { status: 404 }
-      );
+      return errorResponse(404, `No readiness expectations registered for ${countryId}`);
     }
 
     return NextResponse.json(report);

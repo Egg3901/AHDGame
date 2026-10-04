@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
 import { z } from "zod";
@@ -38,11 +38,11 @@ export async function POST(request: Request) {
 
     const countryId = resolvePresidentialCountry(request);
     if (!countryId) {
-      return NextResponse.json({ error: "Unknown country" }, { status: 400 });
+      return errorResponse(400, "Unknown country");
     }
     const positionDef = getCabinetPositions(countryId).find((p) => p.id === positionId);
     if (!positionDef) {
-      return NextResponse.json({ error: "Invalid positionId" }, { status: 400 });
+      return errorResponse(400, "Invalid positionId");
     }
 
     const db = await getDb();
@@ -51,17 +51,14 @@ export async function POST(request: Request) {
       .collection<ElectedOfficial>("electedOfficials")
       .findOne({ countryId, officeType: "president", characterId: { $ne: null } });
     if (!presidentOfficial?.characterId) {
-      return NextResponse.json({ error: "No President in office" }, { status: 400 });
+      return errorResponse(400, "No President in office");
     }
 
     const myCharacter = await db.collection<Character>("characters").findOne({
       userId: new ObjectId(authUser.userId),
     });
     if (!myCharacter || !presidentOfficial.characterId.equals(myCharacter._id)) {
-      return NextResponse.json(
-        { error: "Only the President can fire cabinet members" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the President can fire cabinet members");
     }
 
     const member = await db.collection<CabinetMember>("cabinetMembers").findOne({
@@ -69,7 +66,7 @@ export async function POST(request: Request) {
       positionId,
     });
     if (!member) {
-      return NextResponse.json({ error: "No cabinet member in that position" }, { status: 404 });
+      return errorResponse(404, "No cabinet member in that position");
     }
 
     await db.collection<CabinetMember>("cabinetMembers").deleteOne({ _id: member._id });

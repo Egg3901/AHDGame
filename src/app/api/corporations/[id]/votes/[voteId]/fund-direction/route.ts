@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { ObjectId } from "mongodb";
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { getDb } from "@/lib/mongodb";
@@ -46,7 +46,7 @@ async function loadContext(id: string, voteId: string) {
   if (!ObjectId.isValid(voteId)) {
     return {
       ok: false as const,
-      response: NextResponse.json({ error: "Invalid vote ID" }, { status: 400 }),
+      response: errorResponse(400, "Invalid vote ID"),
     };
   }
   const db = await getDb();
@@ -60,7 +60,7 @@ async function loadContext(id: string, voteId: string) {
   if (!vote) {
     return {
       ok: false as const,
-      response: NextResponse.json({ error: "Vote not found" }, { status: 404 }),
+      response: errorResponse(404, "Vote not found"),
     };
   }
   return { ok: true as const, db, corporation: resolved.corporation, vote };
@@ -106,7 +106,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { db, corporation, vote } = ctx;
 
     if (vote.status !== "open") {
-      return NextResponse.json({ error: "This vote is no longer open" }, { status: 409 });
+      return errorResponse(409, "This vote is no longer open");
     }
 
     const parsed = await parseJsonBody(request, DirectSchema);
@@ -114,7 +114,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
     }
     if (!ObjectId.isValid(parsed.data.fundId)) {
-      return NextResponse.json({ error: "Invalid fund ID" }, { status: 400 });
+      return errorResponse(400, "Invalid fund ID");
     }
     const fundId = new ObjectId(parsed.data.fundId);
 
@@ -122,10 +122,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     // two can never disagree about who controls a fund.
     const directable = await directableFundsFor(db, corporation, auth.user.character._id);
     if (!directable.some((f) => f.fundId.equals(fundId))) {
-      return NextResponse.json(
-        { error: "You do not control enough units of that fund to direct its vote" },
-        { status: 403 }
-      );
+      return errorResponse(403, "You do not control enough units of that fund to direct its vote");
     }
 
     const now = new Date();
@@ -173,7 +170,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     const { db, corporation, vote } = ctx;
 
     if (vote.status !== "open") {
-      return NextResponse.json({ error: "This vote is no longer open" }, { status: 409 });
+      return errorResponse(409, "This vote is no longer open");
     }
 
     const parsed = await parseJsonBody(request, WithdrawSchema);
@@ -181,7 +178,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
     }
     if (!ObjectId.isValid(parsed.data.fundId)) {
-      return NextResponse.json({ error: "Invalid fund ID" }, { status: 400 });
+      return errorResponse(400, "Invalid fund ID");
     }
     const fundId = new ObjectId(parsed.data.fundId);
 
@@ -198,7 +195,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       }
     );
     if (result.modifiedCount === 0) {
-      return NextResponse.json({ error: "No instruction of yours to withdraw" }, { status: 404 });
+      return errorResponse(404, "No instruction of yours to withdraw");
     }
 
     await resolveIfReady(db, vote._id, corporation);

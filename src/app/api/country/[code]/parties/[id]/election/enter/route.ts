@@ -5,7 +5,7 @@ import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { checkRateLimit, ELECTION_LIMITS, rateLimitResponse } from "@/lib/api/rateLimit";
 import { logRequest } from "@/lib/api/requestLog";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { isInNewCharacterCooldown } from "@/lib/auth/newCharacterCooldown";
 import { nationalPartyEnterSchema } from "@/lib/api/schemas/elections";
 import {
@@ -43,7 +43,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, id: partyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const authResult = await requireAuthWithCharacter();
@@ -53,7 +53,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
     if (authResult.user.isBanned) {
       logRequest("POST", path, 403, Date.now() - start);
-      return NextResponse.json({ error: "Account is banned" }, { status: 403 });
+      return errorResponse(403, "Account is banned");
     }
     const authUser = authResult.user;
 
@@ -80,17 +80,14 @@ export async function POST(request: Request, { params }: RouteParams) {
     const party = await findPartyBySequentialId(db, partyId, countryId);
     if (!party) {
       logRequest("POST", path, 404, Date.now() - start);
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
 
     // Verify membership: must match both party sequential ID AND country
     const partyCountryId = party.countryId ?? "US";
     if (authUser.character.party !== partyId || !isSameCountry(authUser.character, party)) {
       logRequest("POST", path, 403, Date.now() - start);
-      return NextResponse.json(
-        { error: "You must be a member of this party to participate" },
-        { status: 403 }
-      );
+      return errorResponse(403, "You must be a member of this party to participate");
     }
 
     // Filter by countryId to avoid cross-country sequential ID collisions
@@ -103,10 +100,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     if (!election) {
       logRequest("POST", path, 400, Date.now() - start);
-      return NextResponse.json(
-        { error: `No active ${position} election for this party` },
-        { status: 400 }
-      );
+      return errorResponse(400, `No active ${position} election for this party`);
     }
 
     const gameTime = await getGameTime();
@@ -181,10 +175,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (withdraw) {
       if (!existingCandidate || existingCandidate.status === "withdrawn") {
         logRequest("POST", path, 400, Date.now() - start);
-        return NextResponse.json(
-          { error: "You are not an active candidate in this election" },
-          { status: 400 }
-        );
+        return errorResponse(400, "You are not an active candidate in this election");
       }
       await db
         .collection<NationalPartyCandidate>("nationalPartyCandidates")
@@ -230,11 +221,9 @@ export async function POST(request: Request, { params }: RouteParams) {
         );
         const blockedPos = (blockingElection?.position ?? "chair") as NationalPartyElectionPosition;
         logRequest("POST", path, 400, Date.now() - start);
-        return NextResponse.json(
-          {
-            error: `You are already running for ${getPartyRoleLabel(partyCountryId, blockedPos)}. Withdraw first.`,
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          `You are already running for ${getPartyRoleLabel(partyCountryId, blockedPos)}. Withdraw first.`
         );
       }
     }
@@ -258,11 +247,9 @@ export async function POST(request: Request, { params }: RouteParams) {
         });
       if (committeeCandidate) {
         logRequest("POST", path, 400, Date.now() - start);
-        return NextResponse.json(
-          {
-            error: `You are already running for ${getPartyRoleLabel(partyCountryId, "committee")}. Withdraw first before entering a national leadership race.`,
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          `You are already running for ${getPartyRoleLabel(partyCountryId, "committee")}. Withdraw first before entering a national leadership race.`
         );
       }
     }
@@ -270,10 +257,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (existingCandidate) {
       if (existingCandidate.status === "active") {
         logRequest("POST", path, 400, Date.now() - start);
-        return NextResponse.json(
-          { error: "You are already a candidate in this election" },
-          { status: 400 }
-        );
+        return errorResponse(400, "You are already a candidate in this election");
       }
       await db
         .collection<NationalPartyCandidate>("nationalPartyCandidates")
@@ -309,19 +293,14 @@ export async function POST(request: Request, { params }: RouteParams) {
 
         if (activeCandidate?.electionId.equals(election._id)) {
           logRequest("POST", path, 400, Date.now() - start);
-          return NextResponse.json(
-            { error: "You are already a candidate in this election" },
-            { status: 400 }
-          );
+          return errorResponse(400, "You are already a candidate in this election");
         }
 
         if (activeCandidate) {
           logRequest("POST", path, 400, Date.now() - start);
-          return NextResponse.json(
-            {
-              error: `You are already running for ${getPartyRoleLabel(partyCountryId, activeCandidate.position)}. Withdraw first.`,
-            },
-            { status: 400 }
+          return errorResponse(
+            400,
+            `You are already running for ${getPartyRoleLabel(partyCountryId, activeCandidate.position)}. Withdraw first.`
           );
         }
       }

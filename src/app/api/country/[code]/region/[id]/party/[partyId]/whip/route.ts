@@ -1,6 +1,6 @@
 // src/app/api/state/[id]/party/[partyId]/whip/route.ts
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
@@ -74,7 +74,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, id, partyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const stateId = id;
 
@@ -90,7 +90,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const party = await findPartyBySequentialId(db, partyId, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
     const partyKey = getPartyIdString(party);
     const statePartyKey = getStatePartyOrgDocumentId(stateId, party);
@@ -100,7 +100,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       .findOne({ _id: statePartyKey });
 
     if (!statePartyOrg) {
-      return NextResponse.json({ error: "State party organization not found" }, { status: 404 });
+      return errorResponse(404, "State party organization not found");
     }
 
     // Check authorization - only Chair and Vice Chair can whip
@@ -110,9 +110,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     const isAdmin = authData.isAdmin;
 
     if (!isChair && !isViceChair && !isAdmin) {
-      return NextResponse.json(
-        { error: "Only the State Party Chair or Vice Chair can issue whip directives" },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "Only the State Party Chair or Vice Chair can issue whip directives"
       );
     }
 
@@ -124,7 +124,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       isAdmin,
     });
     if (!nppControl.ok) {
-      return NextResponse.json({ error: nppControl.error }, { status: 403 });
+      return errorResponse(403, nppControl.error);
     }
 
     const parsed = await parseJsonBody(request, whipSchema);
@@ -133,7 +133,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
     const { targetType, targetId, chamber, direction, mode } = parsed.data;
     if (!isWhippableChamber(countryId, chamber)) {
-      return NextResponse.json({ error: "Invalid chamber for this country" }, { status: 400 });
+      return errorResponse(400, "Invalid chamber for this country");
     }
     const cabinetChamber = getCabinetWhipChamber(countryId);
     const subNationalChamber = getSubNationalLegislatureKey(countryId);
@@ -160,7 +160,7 @@ export async function POST(request: Request, { params }: RouteParams) {
               ...federalBillCountryFilter,
             });
       if (!bill) {
-        return NextResponse.json({ error: "Bill not found or voting not open" }, { status: 404 });
+        return errorResponse(404, "Bill not found or voting not open");
       }
       if (chamber !== subNationalChamber) {
         whipWindowStart = getBillWhipWindowStart(bill as Bill);
@@ -171,21 +171,15 @@ export async function POST(request: Request, { params }: RouteParams) {
         status: "active",
       });
       if (!nomination) {
-        return NextResponse.json(
-          { error: "Cabinet nomination not found or not active" },
-          { status: 404 }
-        );
+        return errorResponse(404, "Cabinet nomination not found or not active");
       }
       if (!isCabinetNominationInCountry(nomination, countryId)) {
-        return NextResponse.json(
-          { error: "Cabinet nomination not found or not active" },
-          { status: 404 }
-        );
+        return errorResponse(404, "Cabinet nomination not found or not active");
       }
       if (chamber !== cabinetChamber) {
-        return NextResponse.json(
-          { error: `Cabinet nominations can only be whipped in the ${cabinetChamber}` },
-          { status: 400 }
+        return errorResponse(
+          400,
+          `Cabinet nominations can only be whipped in the ${cabinetChamber}`
         );
       }
     } else if (targetType === "impeachmentVote") {
@@ -193,24 +187,18 @@ export async function POST(request: Request, { params }: RouteParams) {
         .collection<Impeachment>("impeachments")
         .findOne({ _id: targetOid, countryId, stage: { $in: ["house", "senate"] } });
       if (!impeachment) {
-        return NextResponse.json(
-          { error: "Impeachment not found or no longer open for voting" },
-          { status: 404 }
-        );
+        return errorResponse(404, "Impeachment not found or no longer open for voting");
       }
       // A state party may only whip the trial of its OWN state's governor.
       // Presidential cases are the national party's surface.
       if (impeachment.targetOffice !== "governor" || impeachment.state !== stateId) {
-        return NextResponse.json(
-          { error: "Only this state's governor impeachment can be whipped here" },
-          { status: 400 }
-        );
+        return errorResponse(400, "Only this state's governor impeachment can be whipped here");
       }
       const stageChamber = impeachmentStageChamberKey(impeachment);
       if (!stageChamber || chamber !== stageChamber) {
-        return NextResponse.json(
-          { error: `This impeachment is being voted in the ${stageChamber ?? "no open"} chamber` },
-          { status: 400 }
+        return errorResponse(
+          400,
+          `This impeachment is being voted in the ${stageChamber ?? "no open"} chamber`
         );
       }
       const stageEndsOnTurn =
@@ -219,10 +207,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           : impeachment.senateVotingEndsOnTurn;
       const impeachTurn = (await getGameState(db))?.currentTurn ?? 0;
       if (stageEndsOnTurn != null && impeachTurn > stageEndsOnTurn) {
-        return NextResponse.json(
-          { error: "Voting for this impeachment stage has closed" },
-          { status: 404 }
-        );
+        return errorResponse(404, "Voting for this impeachment stage has closed");
       }
     }
 
@@ -240,10 +225,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       .toArray();
 
     if (existingWhips.length >= 2) {
-      return NextResponse.json(
-        { error: "Maximum 2 whip attempts per bill/chamber reached" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Maximum 2 whip attempts per bill/chamber reached");
     }
 
     const attemptNumber = (existingWhips.length + 1) as 1 | 2;
@@ -317,7 +299,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           .collection<StateBill>("stateBills")
           .findOne({ _id: targetOid, stateId });
         if (!bill) {
-          return NextResponse.json({ error: "Bill not found or voting not open" }, { status: 404 });
+          return errorResponse(404, "Bill not found or voting not open");
         }
         // Phase 4: whip application resolves NPP votes via cross-pressure
         // (see @/lib/turn/npp/crossPressure.ts). Load the bill's legislation
@@ -367,7 +349,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       } else {
         const bill = await db.collection<Bill>("bills").findOne({ _id: targetOid });
         if (!bill || (bill.countryId && bill.countryId !== countryId)) {
-          return NextResponse.json({ error: "Bill not found or voting not open" }, { status: 404 });
+          return errorResponse(404, "Bill not found or voting not open");
         }
         const [legislationType, stateDemographicsArr, gameStateDoc] = await Promise.all([
           bill.legislationTypeId

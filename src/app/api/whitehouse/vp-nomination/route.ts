@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody, schemas } from "@/lib/api/validate";
 import { z } from "zod";
 import { createNotification } from "@/lib/notifications";
@@ -50,17 +50,14 @@ export async function POST(request: Request) {
       .collection<ElectedOfficial>("electedOfficials")
       .findOne({ countryId: "US", officeType: "president", characterId: { $ne: null } });
     if (!presidentOfficial?.characterId) {
-      return NextResponse.json({ error: "No President in office" }, { status: 400 });
+      return errorResponse(400, "No President in office");
     }
 
     const myCharacter = await db.collection<Character>("characters").findOne({
       userId: new ObjectId(authUser.userId),
     });
     if (!myCharacter || !presidentOfficial.characterId.equals(myCharacter._id)) {
-      return NextResponse.json(
-        { error: "Only the President can nominate a Vice President" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the President can nominate a Vice President");
     }
 
     // VP seat must be vacant
@@ -69,7 +66,7 @@ export async function POST(request: Request) {
       .findOne({ countryId: "US", officeType: "vicePresident" });
     const vpVacant = !vpOfficial || (vpOfficial.characterId === null && !vpOfficial.nppId);
     if (!vpVacant) {
-      return NextResponse.json({ error: "Vice President seat is not vacant" }, { status: 400 });
+      return errorResponse(400, "Vice President seat is not vacant");
     }
 
     // No existing active VP nomination
@@ -77,40 +74,28 @@ export async function POST(request: Request) {
       .collection<CabinetNomination>("cabinetNominations")
       .findOne({ positionId: "vicePresident", status: { $in: ["active", "proposed"] } });
     if (existing) {
-      return NextResponse.json(
-        { error: "A VP nomination is already pending Senate confirmation" },
-        { status: 409 }
-      );
+      return errorResponse(409, "A VP nomination is already pending Senate confirmation");
     }
 
     let nomineeOid: ObjectId;
     try {
       nomineeOid = new ObjectId(nomineeCharacterId);
     } catch {
-      return NextResponse.json({ error: "Invalid nomineeCharacterId" }, { status: 400 });
+      return errorResponse(400, "Invalid nomineeCharacterId");
     }
 
     const nominee = await db.collection<Character>("characters").findOne({ _id: nomineeOid });
     if (!nominee) {
-      return NextResponse.json({ error: "Nominee character not found" }, { status: 404 });
+      return errorResponse(404, "Nominee character not found");
     }
     if (!nominee.userId) {
-      return NextResponse.json(
-        { error: "Only player characters can be nominated" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Only player characters can be nominated");
     }
     if (nominee.countryId !== "US") {
-      return NextResponse.json(
-        { error: "Only US politicians can be nominated as Vice President" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Only US politicians can be nominated as Vice President");
     }
     if (nomineeOid.equals(presidentOfficial.characterId)) {
-      return NextResponse.json(
-        { error: "The President cannot nominate themselves as Vice President" },
-        { status: 400 }
-      );
+      return errorResponse(400, "The President cannot nominate themselves as Vice President");
     }
 
     const gameTimeForVote = await getGameTime();

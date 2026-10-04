@@ -6,7 +6,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
 import { getMilitaryUnitsCollection } from "@/lib/db/collections/militaryUnits";
@@ -29,13 +29,13 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, positionId, unitId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
     if (DEFENSE_POSITION_BY_COUNTRY[countryId] !== positionId) {
-      return NextResponse.json({ error: "Not a defense cabinet position" }, { status: 404 });
+      return errorResponse(404, "Not a defense cabinet position");
     }
     if (!ObjectId.isValid(unitId)) {
-      return NextResponse.json({ error: "Invalid unit id" }, { status: 400 });
+      return errorResponse(400, "Invalid unit id");
     }
 
     const parsed = await parseJsonBody(request, postureSchema);
@@ -51,10 +51,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       auth.user.character &&
       member.characterId.toString() === auth.user.character._id.toString();
     if (!isHolder && !auth.user.isAdmin) {
-      return NextResponse.json(
-        { error: "Only the defence minister may set a unit’s posture." },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the defence minister may set a unit’s posture.");
     }
 
     const col = getMilitaryUnitsCollection(db);
@@ -63,14 +60,11 @@ export async function POST(request: Request, { params }: RouteParams) {
       { projection: { theaterId: 1 } }
     );
     if (!unit) {
-      return NextResponse.json({ error: "Unit not found" }, { status: 404 });
+      return errorResponse(404, "Unit not found");
     }
     // A unit deployed to a Conflict must hold at least Standard posture.
     if (parsed.data.posture === "garrison" && isAtConflict(unit.theaterId)) {
-      return NextResponse.json(
-        { error: "Units deployed to a conflict must hold at least Standard posture" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Units deployed to a conflict must hold at least Standard posture");
     }
 
     await col.updateOne(

@@ -5,7 +5,7 @@ import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationAc
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
 import { goPublicSchema } from "@/lib/api/schemas/corporations";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { subsidiaryIssuanceBlockReason } from "@/lib/corporations/subsidiaries/issuanceGuard";
 import { getGameState } from "@/lib/gameState";
@@ -52,7 +52,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (ceoCheck) return ceoCheck;
 
     const subBlock = await subsidiaryIssuanceBlockReason(corporation);
-    if (subBlock) return NextResponse.json({ error: subBlock }, { status: 403 });
+    if (subBlock) return errorResponse(403, subBlock);
 
     const gameState = await getGameState();
     const currentTurn = gameState?.currentTurn ?? 0;

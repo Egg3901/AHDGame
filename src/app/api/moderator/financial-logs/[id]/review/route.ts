@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireModerator } from "@/lib/api/requireModerator";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { createModAuditLog } from "@/lib/modAuditLog";
 import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
@@ -24,7 +24,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const { id } = await params;
     if (!/^[0-9a-f]{24}$/i.test(id)) {
-      return NextResponse.json({ error: "Invalid log entry id" }, { status: 400 });
+      return errorResponse(400, "Invalid log entry id");
     }
 
     const parsed = await parseJsonBody(request, reviewSchema);
@@ -40,12 +40,12 @@ export async function POST(request: Request, { params }: RouteParams) {
       .findOne({ _id: new ObjectId(id) });
 
     if (!entry) {
-      return NextResponse.json({ error: "Log entry not found" }, { status: 404 });
+      return errorResponse(404, "Log entry not found");
     }
 
     const flags = Array.isArray(entry.suspectFlags) ? entry.suspectFlags : [];
     if (flagIndex >= flags.length) {
-      return NextResponse.json({ error: "Flag index out of range" }, { status: 400 });
+      return errorResponse(400, "Flag index out of range");
     }
 
     const moderatorId = new ObjectId(auth.user.userId);

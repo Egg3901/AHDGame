@@ -8,7 +8,7 @@ import { resolveCampaignPriceLevel } from "@/lib/campaigns/rules/priceLevel";
 import { withNoStore } from "@/lib/api/withNoStore";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { setCharacterGateCookie } from "@/lib/auth/characterGateCookie";
 import { MongoServerError, ObjectId, type Db } from "mongodb";
 import { getDb } from "@/lib/mongodb";
@@ -117,7 +117,7 @@ export async function POST(request: Request) {
     if (rpgStatsEnabled && rawStats !== undefined) {
       const statValidation = validateStatAllocation(rawStats);
       if (!statValidation.ok) {
-        return NextResponse.json({ error: statValidation.error }, { status: 400 });
+        return errorResponse(400, statValidation.error);
       }
       allocatedStats = statValidation.stats;
     }
@@ -135,16 +135,16 @@ export async function POST(request: Request) {
     if (singleplayerConfig?.mode === "head-of-state") {
       const countryId = requestedCountryId.toUpperCase() as CountryId;
       if (!getSingleplayerHeadOfStateOfficeType(countryId, worldPreset)) {
-        return NextResponse.json(
-          { error: "Head of State mode requires a nation with a playable head-of-state office." },
-          { status: 400 }
+        return errorResponse(
+          400,
+          "Head of State mode requires a nation with a playable head-of-state office."
         );
       }
     }
     if (singleplayerConfig?.mode === "worldsim") {
-      return NextResponse.json(
-        { error: "Worldsim mode is playerless and does not allow character creation." },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "Worldsim mode is playerless and does not allow character creation."
       );
     }
 
@@ -154,7 +154,7 @@ export async function POST(request: Request) {
       countryId: requestedCountryId.toUpperCase() as import("@/lib/constants/countries").CountryId,
     });
     if (!stateDoc) {
-      return NextResponse.json({ error: "Invalid home state" }, { status: 400 });
+      return errorResponse(400, "Invalid home state");
     }
 
     // Alaska and Hawaii retain territorial politics before statehood: they are
@@ -162,10 +162,7 @@ export async function POST(request: Request) {
     if ((stateDoc.countryId ?? "US") === "US") {
       const { admittedIds, preset } = await loadUsPoliticalStateIds(db);
       if (!isUsResidentPoliticalRegion(stateDoc._id, preset, admittedIds)) {
-        return NextResponse.json(
-          { error: unplayableTerritoryHomeError(stateDoc.name) },
-          { status: 400 }
-        );
+        return errorResponse(400, unplayableTerritoryHomeError(stateDoc.name));
       }
     }
 
@@ -185,20 +182,17 @@ export async function POST(request: Request) {
 
     if (!isAdmin) {
       if (isTestMode && activeCount >= TEST_MODE_CHARACTER_LIMIT) {
-        return NextResponse.json(
-          { error: `Test server allows up to ${TEST_MODE_CHARACTER_LIMIT} characters per account` },
-          { status: 409 }
+        return errorResponse(
+          409,
+          `Test server allows up to ${TEST_MODE_CHARACTER_LIMIT} characters per account`
         );
       } else if (!isTestMode && activeCount >= 1) {
-        return NextResponse.json({ error: "You already have a character" }, { status: 409 });
+        return errorResponse(409, "You already have a character");
       }
     }
 
     if (!gameConfig) {
-      return NextResponse.json(
-        { error: "Game not configured. Please contact administrator." },
-        { status: 500 }
-      );
+      return errorResponse(500, "Game not configured. Please contact administrator.");
     }
 
     // Block character creation during maintenance — admins bypass so they can
@@ -217,9 +211,9 @@ export async function POST(request: Request) {
       !isAdmin &&
       normalizeMaintenanceMode(gameConfig.maintenanceMode) !== "off"
     ) {
-      return NextResponse.json(
-        { error: "Character creation is disabled during maintenance. Please try again later." },
-        { status: 503 }
+      return errorResponse(
+        503,
+        "Character creation is disabled during maintenance. Please try again later."
       );
     }
 
@@ -252,10 +246,7 @@ export async function POST(request: Request) {
 
     // Block character creation in disabled countries (admins bypass for testing)
     if (!isAdmin && !countryAccess.enabledForPlayers) {
-      return NextResponse.json(
-        { error: "This country is not currently available for new characters." },
-        { status: 403 }
-      );
+      return errorResponse(403, "This country is not currently available for new characters.");
     }
 
     const character: Omit<Character, "_id"> = {
@@ -388,12 +379,12 @@ export async function POST(request: Request) {
             // Retry succeeded after removing the stale unique userId index.
           } catch (retryErr) {
             if (isUserIdDuplicateKey(retryErr)) {
-              return NextResponse.json({ error: "You already have a character" }, { status: 409 });
+              return errorResponse(409, "You already have a character");
             }
             throw retryErr;
           }
         } else {
-          return NextResponse.json({ error: "You already have a character" }, { status: 409 });
+          return errorResponse(409, "You already have a character");
         }
       } else {
         throw err;
@@ -576,7 +567,7 @@ async function handleGET() {
     const character = await db.collection("characters").findOne(characterQuery);
 
     if (!character) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
 
     return NextResponse.json(character);

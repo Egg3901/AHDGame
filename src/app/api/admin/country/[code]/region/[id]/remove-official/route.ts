@@ -11,7 +11,7 @@ import { parseJsonBody } from "@/lib/api/validate";
 import { adminRemoveOfficialSchema } from "@/lib/api/schemas/admin";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { ElectedOfficial, Character, NPP } from "@/lib/db/types";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 
 export async function POST(
   request: Request,
@@ -24,7 +24,7 @@ export async function POST(
     const { code, id } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 404 });
+      return errorResponse(404, "Invalid country code");
     }
 
     const stateId = id;
@@ -45,7 +45,7 @@ export async function POST(
     });
 
     if (!official) {
-      return NextResponse.json({ error: "Official not found" }, { status: 404 });
+      return errorResponse(404, "Official not found");
     }
 
     const characterName = official.characterName ?? "Unknown";

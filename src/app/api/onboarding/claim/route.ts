@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { getGameState } from "@/lib/gameState";
 import { isOnboardingChecklistEnabled } from "@/lib/onboarding/featureFlag";
@@ -23,7 +23,7 @@ export async function POST() {
     const gameState = await getGameState();
     // Fail closed: with the gate off the reward cannot be claimed.
     if (!(await isOnboardingChecklistEnabled(gameState ?? {}))) {
-      return NextResponse.json({ error: "Onboarding checklist is not available" }, { status: 404 });
+      return errorResponse(404, "Onboarding checklist is not available");
     }
 
     if (character.onboarding?.rewardGrantedAt !== undefined) {
@@ -33,11 +33,9 @@ export async function POST() {
     const db = await getDb();
     const checklist = await loadOnboardingChecklist(db, character);
     if (!checklist.allComplete) {
-      return NextResponse.json(
-        {
-          error: `Checklist is not complete (${checklist.completedCount} of ${checklist.total} steps done)`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Checklist is not complete (${checklist.completedCount} of ${checklist.total} steps done)`
       );
     }
 

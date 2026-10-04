@@ -8,7 +8,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getGameStateCollection } from "@/lib/db/collections/gameState";
 import {
   getCharacterCommission,
@@ -32,7 +32,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const { id } = await params;
     const parsed = parseCharacterId(id);
-    if (!parsed) return NextResponse.json({ error: "Invalid character ID" }, { status: 400 });
+    if (!parsed) return errorResponse(400, "Invalid character ID");
 
     const body = await parseJsonBody(request, bodySchema);
     if (!body.success) return NextResponse.json({ error: body.error }, { status: body.status });
@@ -42,7 +42,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       await getGameStateCollection(db)
     ).findOne({ _id: "current" }, { projection: { conflictsEnabled: 1 } });
     if (!gs?.conflictsEnabled) {
-      return NextResponse.json({ error: "Conflicts subsystem disabled" }, { status: 404 });
+      return errorResponse(404, "Conflicts subsystem disabled");
     }
 
     const character = await db
@@ -52,19 +52,19 @@ export async function POST(request: Request, { params }: RouteParams) {
           ? { sequentialId: parsed.value }
           : { _id: new ObjectId(parsed.value) }
       );
-    if (!character) return NextResponse.json({ error: "Character not found" }, { status: 404 });
+    if (!character) return errorResponse(404, "Character not found");
 
     const charId = character._id.toString();
     const isSelf = auth.user.character && auth.user.character._id.toString() === charId;
     if (!isSelf && !auth.user.isAdmin) {
-      return NextResponse.json({ error: "Not your character" }, { status: 403 });
+      return errorResponse(403, "Not your character");
     }
 
     // Gate on the commission, not merely a profile: a dismissed general keeps their
     // retained record, but a dismissed officer may not go on training.
     const commission = await getCharacterCommission(db, charId);
     if (!commission.commissioned || !commission.general) {
-      return NextResponse.json({ error: "Not a commissioned general" }, { status: 403 });
+      return errorResponse(403, "Not a commissioned general");
     }
     const general = commission.general;
 

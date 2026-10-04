@@ -7,7 +7,7 @@ import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { markCongressLeadershipHeld } from "@/lib/wiki/markCongressLeadership";
 import { z } from "zod";
 import type {
@@ -242,11 +242,9 @@ export async function GET(request: Request) {
     const type = searchParams.get("type") as ElectionType | null;
 
     if (!type || !ELECTION_TYPES.includes(type)) {
-      return NextResponse.json(
-        {
-          error: `Missing or invalid "type" param. Must be one of: ${ELECTION_TYPES.join(", ")}`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Missing or invalid "type" param. Must be one of: ${ELECTION_TYPES.join(", ")}`
       );
     }
 
@@ -325,7 +323,7 @@ async function handleUSPass(
     .collection(nominationsCollection)
     .findOne({ _id: new ObjectId(winnerId), ...nominationRoleFilter });
   if (!winner) {
-    return NextResponse.json({ error: "Winner nomination not found" }, { status: 404 });
+    return errorResponse(404, "Winner nomination not found");
   }
 
   // Set winner to confirmed, others to failed
@@ -500,7 +498,7 @@ async function handleUKAction(
   );
 
   if (result.matchedCount === 0) {
-    return NextResponse.json({ error: "Vote not found" }, { status: 404 });
+    return errorResponse(404, "Vote not found");
   }
 
   // Clear activeVoteId on governmentFormations if this vote was the active one
@@ -572,10 +570,7 @@ export async function POST(request: Request) {
     if (isUSType) {
       if (action === "pass") {
         if (!winnerId) {
-          return NextResponse.json(
-            { error: "winnerId is required for pass action" },
-            { status: 400 }
-          );
+          return errorResponse(400, "winnerId is required for pass action");
         }
         return handleUSPass(db, type, electionId, winnerId, role);
       }

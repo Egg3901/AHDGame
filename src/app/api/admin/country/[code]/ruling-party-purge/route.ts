@@ -12,6 +12,7 @@
  * Country must have `governmentType: "onePartyState"`. Admin-only.
  */
 
+import { errorResponse } from "@/lib/api/errors";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { ObjectId } from "mongodb";
@@ -33,10 +34,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
   const countryId = code.toUpperCase() as CountryId;
   const config = COUNTRY_CONFIGS[countryId];
   if (!config) {
-    return NextResponse.json({ error: "Invalid country code" }, { status: 404 });
+    return errorResponse(404, "Invalid country code");
   }
   if (config.governmentType !== "onePartyState") {
-    return NextResponse.json({ error: "Country is not a one-party state" }, { status: 400 });
+    return errorResponse(400, "Country is not a one-party state");
   }
 
   const adminCheck = await requireAdmin();

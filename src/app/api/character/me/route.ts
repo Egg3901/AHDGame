@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter, requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
 import { z } from "zod";
@@ -44,7 +44,7 @@ export async function GET() {
     // Check for imperial mode first — requireAuthWithCharacter would 401
     const authUser = await getAuthUser();
     if (!authUser) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return errorResponse(401, "Unauthorized");
     }
 
     const userDoc = await db
@@ -278,13 +278,13 @@ export async function PATCH(request: Request) {
 
     const onboardingStep = parsed.data.onboardingStep;
     if (Object.keys(updates).length === 0 && onboardingStep === undefined) {
-      return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
+      return errorResponse(400, "No valid fields to update");
     }
 
     const db = await getDb();
     const activeCharacter = await getCharacterByUserId(db, user.userId);
     if (!activeCharacter) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
 
     const ownCharacterFilter = { _id: activeCharacter._id, userId: new ObjectId(user.userId) };

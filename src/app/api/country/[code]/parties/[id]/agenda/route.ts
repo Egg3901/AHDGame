@@ -1,3 +1,4 @@
+import { errorResponse } from "@/lib/api/errors";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
@@ -24,12 +25,12 @@ export async function GET(_request: Request, { params }: RouteParams) {
   const { code, id: partyId } = await params;
   const countryId = code.toUpperCase() as CountryId;
   if (!COUNTRY_CONFIGS[countryId]) {
-    return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+    return errorResponse(400, "Invalid country code");
   }
 
   const db = await getDb();
   const party = await findPartyBySequentialId(db, partyId, countryId);
-  if (!party) return NextResponse.json({ error: "Party not found" }, { status: 404 });
+  if (!party) return errorResponse(404, "Party not found");
 
   const gameState = await getGameState(db);
   const currentTurn = gameState?.currentTurn ?? 0;
@@ -54,7 +55,7 @@ export async function POST(request: Request, { params }: RouteParams) {
   const { code, id: partyId } = await params;
   const countryId = code.toUpperCase() as CountryId;
   if (!COUNTRY_CONFIGS[countryId]) {
-    return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+    return errorResponse(400, "Invalid country code");
   }
 
   const authResult = await requireAuthWithCharacter();
@@ -68,16 +69,13 @@ export async function POST(request: Request, { params }: RouteParams) {
 
   const db = await getDb();
   const party = await findPartyBySequentialId(db, partyId, countryId);
-  if (!party) return NextResponse.json({ error: "Party not found" }, { status: 404 });
+  if (!party) return errorResponse(404, "Party not found");
 
   const isAdmin = authUser.isAdmin;
   const isChair = party.chairId?.equals(authUser.character._id);
   const isViceChair = party.viceChairId?.equals(authUser.character._id);
   if (!isAdmin && !isChair && !isViceChair) {
-    return NextResponse.json(
-      { error: "Only the party chair, vice chair, or an admin can set the agenda" },
-      { status: 403 }
-    );
+    return errorResponse(403, "Only the party chair, vice chair, or an admin can set the agenda");
   }
 
   const gameState = await getGameState(db);
@@ -99,7 +97,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     db
   );
   if (!result.ok) {
-    return NextResponse.json({ error: result.reason }, { status: 400 });
+    return errorResponse(400, result.reason);
   }
 
   return NextResponse.json({ ok: true, agendaId: result.agendaId.toString() });

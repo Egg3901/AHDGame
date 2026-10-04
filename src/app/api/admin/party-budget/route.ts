@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { getPartyBudgetCollection } from "@/lib/db/collections";
 import { ObjectId } from "mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody, schemas } from "@/lib/api/validate";
 
 const postSchema = z.object({
@@ -78,16 +78,13 @@ export async function POST(req: NextRequest) {
         query.stateId = stateId;
       }
     } else {
-      return NextResponse.json(
-        { error: "Either budgetId or (partyId + scope) is required" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Either budgetId or (partyId + scope) is required");
     }
 
     const result = await collection.updateOne(query, { $set: updates });
 
     if (result.matchedCount === 0) {
-      return NextResponse.json({ error: "Budget not found" }, { status: 404 });
+      return errorResponse(404, "Budget not found");
     }
 
     return NextResponse.json({

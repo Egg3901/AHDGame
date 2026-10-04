@@ -75,7 +75,8 @@ vi.mock("@/lib/api/rateLimit", () => ({
   rateLimitResponse: vi.fn(),
   AUTH_LIMITS: { maxRequests: 10, windowMs: 60000 },
 }));
-vi.mock("@/lib/api/errors", () => ({
+vi.mock("@/lib/api/errors", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api/errors")>()),
   handleRouteError: () => new Response(null, { status: 500 }),
 }));
 

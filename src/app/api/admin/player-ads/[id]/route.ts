@@ -5,7 +5,7 @@ import { requireAdmin } from "@/lib/api/requireAdmin";
 import { isR2Enabled, deleteFileByUrl } from "@/lib/r2";
 import { parseJsonBody } from "@/lib/api/validate";
 import { getPlayerBannerAdsCollection } from "@/lib/db/collections/playerBannerAds";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -28,7 +28,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
 
     const { id } = await params;
     if (!ObjectId.isValid(id)) {
-      return NextResponse.json({ error: "Invalid ad ID." }, { status: 400 });
+      return errorResponse(400, "Invalid ad ID.");
     }
 
     const parsed = await parseJsonBody(request, toggleAdSchema);
@@ -49,7 +49,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     const result = await ads.updateOne({ _id: new ObjectId(id) }, { $set: updates });
 
     if (result.matchedCount === 0) {
-      return NextResponse.json({ error: "Ad not found." }, { status: 404 });
+      return errorResponse(404, "Ad not found.");
     }
 
     return NextResponse.json({ success: true });
@@ -68,13 +68,13 @@ export async function DELETE(_req: Request, { params }: RouteContext) {
 
     const { id } = await params;
     if (!ObjectId.isValid(id)) {
-      return NextResponse.json({ error: "Invalid ad ID." }, { status: 400 });
+      return errorResponse(400, "Invalid ad ID.");
     }
 
     const ads = await getPlayerBannerAdsCollection();
     const ad = await ads.findOne({ _id: new ObjectId(id) }, { projection: { imageUrl: 1 } });
     if (!ad) {
-      return NextResponse.json({ error: "Ad not found." }, { status: 404 });
+      return errorResponse(404, "Ad not found.");
     }
 
     await ads.deleteOne({ _id: new ObjectId(id) });

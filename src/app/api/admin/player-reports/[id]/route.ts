@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireModerator } from "@/lib/api/requireModerator";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import type { PlayerContentReport } from "@/lib/db/types";
 import { PLAYER_CONTENT_REPORTS } from "@/lib/safety/playerSafety";
 
@@ -25,7 +25,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     const { id } = await params;
     if (!ObjectId.isValid(id)) {
-      return NextResponse.json({ error: "Invalid report id" }, { status: 400 });
+      return errorResponse(400, "Invalid report id");
     }
     const parsed = await parseJsonBody(request, reviewSchema);
     if (!parsed.success)
@@ -48,7 +48,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         { returnDocument: "after" }
       );
     if (!updated) {
-      return NextResponse.json({ error: "Report not found" }, { status: 404 });
+      return errorResponse(404, "Report not found");
     }
 
     return NextResponse.json({ success: true, status: updated.status });
