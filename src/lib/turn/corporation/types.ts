@@ -14,6 +14,7 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { CrossCorpStockHolding } from "@/lib/corporations/portfolioAnchorValuation";
 import type { FtaCoverage } from "@/lib/tariffs/ftaOverrides";
 import type { ManufacturingProductProject } from "@/lib/products/manufacturingProject";
+import type { MediaProductProject } from "@/lib/products/mediaProduct";
 
 /**
  * All data pre-fetched from the DB and converted into lookup structures.
@@ -27,6 +28,13 @@ export interface CorporationLookups {
   productSectorQualityById?: Map<string, number>;
   /** Active v2 manufacturing projects, empty and unread while productLinesV2 is off. */
   manufacturingProductByCorpId?: Map<string, ManufacturingProductProject>;
+  /** Active media title projects, empty and unread while media product slates are off. */
+  mediaProductSlatesEnabled?: boolean;
+  mediaProductProjectsByCorpId?: Map<string, MediaProductProject[]>;
+  mediaProductProjectsBySectorId?: Map<string, MediaProductProject[]>;
+  mediaProductDevelopmentByCorpId?: Map<string, MediaProductProject>;
+  mediaProductQualityBySectorId?: Map<string, number>;
+  mediaProductLoyaltyBonusBySectorId?: Map<string, number>;
   corpById: Map<string, Corporation>;
   /** Two-axis electorate lean, projected only while mediaEditorialEnabled is true. */
   editorialAudienceLeanByState?: Map<string, { economic: number; social: number }>;

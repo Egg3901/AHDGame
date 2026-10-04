@@ -15,6 +15,7 @@ describe("manufacturing development cash settlement", () => {
       { updateOne: { filter: { _id: paidId }, update: { $inc: { liquidCapital: -250 } } } },
       { updateOne: { filter: { _id: refusedId }, update: { $inc: { liquidCapital: -250 } } } },
     ];
+    const advertisingReceiptOp = advertisingReceipt(paidId, "media-project-paid");
     const rows = [
       {
         _id: paidId,
@@ -44,7 +45,7 @@ describe("manufacturing development cash settlement", () => {
 
     const result = await applyOperatingCashThenDevelopmentCash({
       db,
-      operations: developmentOps,
+      operations: [...developmentOps, advertisingReceiptOp],
       turn: 5,
       corporations: [paidCorp, refusedCorp],
       snapshots,
@@ -62,7 +63,23 @@ describe("manufacturing development cash settlement", () => {
       "cash-and-receipt-read",
       "credit-snapshot",
     ]);
-    expect(bulkWrite).toHaveBeenNthCalledWith(1, developmentOps, { ordered: false });
+    expect(bulkWrite).toHaveBeenNthCalledWith(1, [...developmentOps, advertisingReceiptOp], {
+      ordered: false,
+    });
+    expect(advertisingReceiptOp).toMatchObject({
+      updateOne: {
+        filter: { _id: paidId, $expr: { $and: expect.any(Array) } },
+        update: {
+          $set: {
+            mediaProductAdvertisingReceiptV1: {
+              projectId: "media-project-paid",
+              turn: 5,
+              amountAnchor: 100,
+            },
+          },
+        },
+      },
+    });
     expect(result).toEqual({ paidReceipts: 1, paidAmountAnchor: 250 });
     expect(snapshots.map((item) => item.liquidCapital)).toEqual([750, 1_000]);
     expect(snapshots.map((item) => item.liquidCapitalAnchorAfterIncome)).toEqual([750, 1_000]);
@@ -86,14 +103,22 @@ describe("manufacturing development cash settlement", () => {
       ];
       try {
         await collection.insertMany([
-          { ...insufficientCorp, liquidCapital: 1_000 },
+          {
+            ...insufficientCorp,
+            liquidCapital: 1_000,
+            operatingCashArrearsByCurrency: { USD: 0 },
+          },
           { ...fundedCorp, liquidCapital: 1_000 },
         ]);
 
         const firstSnapshots = [snapshot(insufficientId, 1_000), snapshot(fundedId, 1_000)];
         const first = await applyOperatingCashThenDevelopmentCash({
           db,
-          operations,
+          operations: [
+            ...operations,
+            advertisingReceipt(insufficientId, "media-project-insufficient"),
+            advertisingReceipt(fundedId, "media-project-funded"),
+          ],
           turn: 5,
           corporations: [insufficientCorp, fundedCorp],
           snapshots: firstSnapshots,
@@ -101,18 +126,41 @@ describe("manufacturing development cash settlement", () => {
           bondsByCorpId: new Map(),
           sectorsByCorp: new Map(),
           applyOperatingCashWrites: async () => {
-            await collection.updateOne({ _id: insufficientId }, { $inc: { liquidCapital: -800 } });
+            await collection.updateOne(
+              { _id: insufficientId },
+              {
+                $set: {
+                  liquidCapital: -50,
+                  operatingCashArrearsByCurrency: { USD: 50 },
+                },
+              }
+            );
           },
         });
 
         expect(first).toEqual({ paidReceipts: 1, paidAmountAnchor: 250 });
-        expect(firstSnapshots.map((item) => item.liquidCapital)).toEqual([200, 750]);
+        expect(firstSnapshots.map((item) => item.liquidCapital)).toEqual([-50, 750]);
         expect(
           await collection.findOne({
             _id: insufficientId,
             manufacturingProductDevelopmentReceiptV2: { $exists: true },
           })
         ).toBeNull();
+        expect(
+          await collection.findOne({
+            _id: insufficientId,
+            mediaProductAdvertisingReceiptV1: { $exists: true },
+          })
+        ).toBeNull();
+        expect(
+          await collection.findOne({ _id: fundedId, "mediaProductAdvertisingReceiptV1.turn": 5 })
+        ).toMatchObject({
+          mediaProductAdvertisingReceiptV1: {
+            projectId: "media-project-funded",
+            turn: 5,
+            amountAnchor: 100,
+          },
+        });
 
         // Simulate a crash after the durable receipt was consumed. The per-turn
         // stamp still rejects a duplicate debit when the same request is retried.
@@ -120,7 +168,7 @@ describe("manufacturing development cash settlement", () => {
           { _id: fundedId },
           { $unset: { manufacturingProductDevelopmentReceiptV2: "" } }
         );
-        const retrySnapshots = [snapshot(insufficientId, 200), snapshot(fundedId, 750)];
+        const retrySnapshots = [snapshot(insufficientId, -50), snapshot(fundedId, 750)];
         const retry = await applyOperatingCashThenDevelopmentCash({
           db,
           operations: [operations[1]],
@@ -188,6 +236,53 @@ function developmentDebit(
         $set: {
           manufacturingProductDevelopmentPaidTurnV2: 5,
           manufacturingProductDevelopmentReceiptV2: { projectId, turn: 5, amountAnchor: amount },
+        },
+      },
+    },
+  };
+}
+
+function advertisingReceipt(
+  corporationId: ObjectId,
+  projectId: string
+): AnyBulkWriteOperation<Corporation> {
+  return {
+    updateOne: {
+      filter: {
+        _id: corporationId,
+        $or: [
+          { "mediaProductAdvertisingReceiptV1.turn": { $exists: false } },
+          { "mediaProductAdvertisingReceiptV1.turn": { $lt: 5 } },
+        ],
+        $expr: {
+          $and: [
+            { $gte: [{ $ifNull: ["$liquidCapital", 0] }, 0] },
+            {
+              $eq: [
+                {
+                  $size: {
+                    $filter: {
+                      input: {
+                        $objectToArray: { $ifNull: ["$operatingCashArrearsByCurrency", {}] },
+                      },
+                      as: "arrears",
+                      cond: { $gt: ["$$arrears.v", 0] },
+                    },
+                  },
+                },
+                0,
+              ],
+            },
+          ],
+        },
+      },
+      update: {
+        $set: {
+          mediaProductAdvertisingReceiptV1: {
+            projectId,
+            turn: 5,
+            amountAnchor: 100,
+          },
         },
       },
     },

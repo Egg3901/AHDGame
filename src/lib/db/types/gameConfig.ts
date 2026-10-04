@@ -4,6 +4,8 @@ export interface GameConfig {
   _id: string;
   /** Enables product-project reads and output adapters; absent remains off. */
   productLinesV2Enabled?: boolean;
+  /** Enables media product project reads and bounded quality/brand overlays; absent remains off. */
+  mediaProductSlatesEnabled?: boolean;
   /** Explicit fresh-reset marker for the 1991 automobile-to-vehicle-model seed. */
   fresh1991VehicleModelSeed?: {
     preset: "1991-default";

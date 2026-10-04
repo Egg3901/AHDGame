@@ -85,6 +85,10 @@ import {
   allocateManufacturingResearchSpend,
   capManufacturingDevelopmentSpendToCash,
 } from "@/lib/products/rules/manufacturingRules";
+import {
+  mediaProductAdvertisingReceiptAnchor,
+  settledMediaAdvertisingAnchor,
+} from "@/lib/products/rules/mediaProductRules";
 
 /** Primary commodities that proxy R&D conditions for each sector type. */
 const SECTOR_RD_COMMODITIES: Partial<Record<string, [string, string?]>> = {
@@ -501,11 +505,15 @@ export function processSectors(
     const activeManufacturingProject = lookups.productLinesV2Enabled
       ? lookups.manufacturingProductByCorpId?.get(corpId)
       : undefined;
+    const activeMediaProductProject = lookups.mediaProductSlatesEnabled
+      ? lookups.mediaProductDevelopmentByCorpId?.get(corpId)
+      : undefined;
+    const activePaidDevelopmentProject = activeManufacturingProject ?? activeMediaProductProject;
     const proposedResearchAllocation = allocateManufacturingResearchSpend({
       paidResearchAnchor: hourlyRd,
-      projectPaidAnchor: activeManufacturingProject?.developmentPaidAnchor ?? 0,
-      projectCostAnchor: activeManufacturingProject?.paidThresholdAnchor ?? 0,
-      stage: activeManufacturingProject?.stage,
+      projectPaidAnchor: activePaidDevelopmentProject?.developmentPaidAnchor ?? 0,
+      projectCostAnchor: activePaidDevelopmentProject?.paidThresholdAnchor ?? 0,
+      stage: activePaidDevelopmentProject?.stage,
     });
     const genericResearchSpend = proposedResearchAllocation.genericResearchAnchor;
 
@@ -536,13 +544,13 @@ export function processSectors(
           ((marketingOrderWeightByBuyerId.get(corpId) ?? 0) / totalMarketingOrderWeight)
         : 0;
     const hourlyMarketing = marketingSettlementEnabled
-      ? Math.min(
-          Math.max(0, requestedHourlyMarketing),
-          marketingCashAvailable,
-          totalAdvertisingDeliveredValueAnchor > 0
-            ? Math.max(0, deliveredValueShare)
-            : Math.max(0, requestedHourlyMarketing)
-        )
+      ? totalAdvertisingDeliveredValueAnchor > 0
+        ? settledMediaAdvertisingAnchor({
+            requestedAnchor: requestedHourlyMarketing,
+            availableCashAnchor: marketingCashAvailable,
+            deliveredValueAnchor: deliveredValueShare,
+          })
+        : Math.min(Math.max(0, requestedHourlyMarketing), marketingCashAvailable)
       : requestedHourlyMarketing;
     if (
       marketingSettlementEnabled &&
@@ -557,7 +565,9 @@ export function processSectors(
       corpCosts +
       hourlyMarketing +
       hourlyLogistics +
-      (lookups.productLinesV2Enabled ? genericResearchSpend : hourlyRd);
+      (lookups.productLinesV2Enabled || lookups.mediaProductSlatesEnabled
+        ? genericResearchSpend
+        : hourlyRd);
     const incomeBeforeCeo = corpRevenue - costsBeforeCeo;
     const corpCountryId = corp.countryId;
 
@@ -989,7 +999,8 @@ export function processSectors(
         : 0;
     const productDevelopmentSpendAnchor = capManufacturingDevelopmentSpendToCash({
       proposedDevelopmentAnchor:
-        corp.manufacturingProductDevelopmentPaidTurnV2 === currentTurn
+        corp.manufacturingProductDevelopmentPaidTurnV2 === currentTurn ||
+        corp.mediaProductDevelopmentPaidTurnV1 === currentTurn
           ? 0
           : proposedResearchAllocation.productDevelopmentAnchor,
       liquidCapitalAnchor,
@@ -1155,7 +1166,6 @@ export function processSectors(
     });
 
     if (
-      lookups.productLinesV2Enabled &&
       activeManufacturingProject &&
       productDevelopmentSpendAnchor > 0 &&
       corp.manufacturingProductDevelopmentPaidTurnV2 !== currentTurn
@@ -1183,6 +1193,44 @@ export function processSectors(
           },
         },
       } as AnyBulkWriteOperation<Corporation>);
+    } else if (
+      activeMediaProductProject &&
+      !activeManufacturingProject &&
+      lookups.mediaProductSlatesEnabled &&
+      corp.mediaProductDevelopmentPaidTurnV1 !== currentTurn
+    ) {
+      if (productDevelopmentSpendAnchor > 0) {
+        manufacturingDevelopmentCashOps.push({
+          updateOne: {
+            filter: {
+              _id: corp._id,
+              mediaProductDevelopmentPaidTurnV1: { $ne: currentTurn },
+              mediaProductDevelopmentReceiptV1: { $exists: false },
+              ...(productDevelopmentSpendLocal > 0
+                ? {
+                    $expr: {
+                      $gte: [{ $ifNull: ["$liquidCapital", 0] }, productDevelopmentSpendLocal],
+                    },
+                  }
+                : {}),
+            },
+            update: {
+              ...(productDevelopmentSpendLocal > 0
+                ? { $inc: { liquidCapital: -productDevelopmentSpendLocal } }
+                : {}),
+              $set: {
+                mediaProductDevelopmentPaidTurnV1: currentTurn,
+                mediaProductDevelopmentReceiptV1: {
+                  projectId: activeMediaProductProject._id,
+                  turn: currentTurn,
+                  amountAnchor: productDevelopmentSpendAnchor,
+                  deliveredAdvertisingAnchor: 0,
+                },
+              },
+            },
+          },
+        } as AnyBulkWriteOperation<Corporation>);
+      }
     }
 
     // Track CEO salary payment (uses capped amount, not requested)
@@ -1275,9 +1323,64 @@ export function processSectors(
       );
     }
     for (let i = 0; i < lookups.corporations.length; i++) {
-      const delta = marketingDeltasLocal.get(lookups.corporations[i]._id.toString()) ?? 0;
-      if (delta === 0) continue;
       const corp = lookups.corporations[i];
+      const corpId = corp._id.toString();
+      const activeMediaProject = lookups.mediaProductSlatesEnabled
+        ? lookups.mediaProductDevelopmentByCorpId?.get(corpId)
+        : undefined;
+      const mediaAdvertisingAnchor = activeMediaProject
+        ? mediaProductAdvertisingReceiptAnchor(
+            marketingSpendAnchorByBuyerId.get(corpId) ?? 0,
+            activeMediaProject.allocationShare
+          )
+        : 0;
+      if (activeMediaProject && mediaAdvertisingAnchor > 0 && Number.isSafeInteger(currentTurn)) {
+        manufacturingDevelopmentCashOps.push({
+          updateOne: {
+            filter: {
+              _id: corp._id,
+              $or: [
+                { "mediaProductAdvertisingReceiptV1.turn": { $exists: false } },
+                { "mediaProductAdvertisingReceiptV1.turn": { $lt: currentTurn } },
+              ],
+              $expr: {
+                $and: [
+                  { $gte: [{ $ifNull: ["$liquidCapital", 0] }, 0] },
+                  {
+                    $eq: [
+                      {
+                        $size: {
+                          $filter: {
+                            input: {
+                              $objectToArray: {
+                                $ifNull: ["$operatingCashArrearsByCurrency", {}],
+                              },
+                            },
+                            as: "arrears",
+                            cond: { $gt: ["$$arrears.v", 0] },
+                          },
+                        },
+                      },
+                      0,
+                    ],
+                  },
+                ],
+              },
+            },
+            update: {
+              $set: {
+                mediaProductAdvertisingReceiptV1: {
+                  projectId: activeMediaProject._id,
+                  turn: currentTurn,
+                  amountAnchor: mediaAdvertisingAnchor,
+                },
+              },
+            },
+          },
+        } as AnyBulkWriteOperation<Corporation>);
+      }
+      const delta = marketingDeltasLocal.get(corpId) ?? 0;
+      if (delta === 0) continue;
       const update = corpOps[i].updateOne.update;
       update.$inc.liquidCapital = (update.$inc.liquidCapital ?? 0) + delta;
 
