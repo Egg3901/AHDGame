@@ -8,10 +8,10 @@ import type { Db } from "mongodb";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { Corporation } from "@/lib/db/types";
 import type { BankingPolicySnapshot } from "./rules/policy";
+import type { PrimaryUnderwritingOffer } from "./underwritingTypes";
 import {
   DEFAULT_PRIMARY_UNDERWRITING_FEE_RATE,
   primaryUnderwritingCharterEligible,
-  type PrimaryUnderwritingOffer,
 } from "./rules/underwriting";
 
 export interface UnderwritingBankChoice {
@@ -23,7 +23,7 @@ export interface UnderwritingBankChoice {
 }
 
 export interface ResolvedPrimaryUnderwritingOffer {
-  offer: import("./rules/underwriting").PrimaryUnderwritingOffer;
+  offer: PrimaryUnderwritingOffer;
   bank: Pick<Corporation, "_id" | "name" | "bankCharter">;
 }
 
