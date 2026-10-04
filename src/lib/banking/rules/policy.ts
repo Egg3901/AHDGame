@@ -95,7 +95,10 @@ export function resolveBankingPolicy(
   return Object.freeze({
     privateBanking,
     failurePolitics: privateBanking && config?.bankFailurePoliticsEnabled === true,
-    constructionFinance: privateBanking && config?.bankConstructionFinanceEnabled === true,
+    constructionFinance:
+      privateBanking &&
+      config?.treasuryCashLedgerEnabled === true &&
+      config?.bankConstructionFinanceEnabled === true,
     propTrading: privateBanking && config?.bankPropTradingEnabled !== false,
     bankTreasury: privateBanking && config?.bankTreasuryEnabled === true,
     propForexFees:

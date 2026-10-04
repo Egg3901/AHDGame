@@ -1,3 +1,4 @@
+import { buyListedSector } from "./buyListedSector";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
@@ -112,7 +113,6 @@ describe("buyListedSector — transaction log types", () => {
     db.collectionMocks.corporateSectors.updateOne.mockResolvedValue({ matchedCount: 1 });
     db.collectionMocks.corporations.updateOne.mockResolvedValue({ matchedCount: 1 });
 
-    const { buyListedSector } = await import("./buyListedSector");
     const res = await buyListedSector(makeRequest(), { params });
     expect(res.status).toBe(200);
 
@@ -145,7 +145,6 @@ describe("buyListedSector — transaction log types", () => {
     db.collectionMocks.corporateSectors.deleteOne.mockResolvedValue({ deletedCount: 1 });
     db.collectionMocks.corporations.updateOne.mockResolvedValue({ matchedCount: 1 });
 
-    const { buyListedSector } = await import("./buyListedSector");
     const res = await buyListedSector(makeRequest(), { params });
     expect(res.status).toBe(200);
 
@@ -187,7 +186,6 @@ describe("buyListedSector — mid-build transfer moves the queue (P3b)", () => {
     db.collectionMocks.corporateSectors.updateOne.mockResolvedValue({ matchedCount: 1 });
     db.collectionMocks.corporations.updateOne.mockResolvedValue({ matchedCount: 1 });
 
-    const { buyListedSector } = await import("./buyListedSector");
     expect((await buyListedSector(makeRequest(), { params })).status).toBe(200);
 
     const transferUpdate = db.collectionMocks.corporateSectors.updateOne.mock.calls[0][1];
@@ -223,7 +221,6 @@ describe("buyListedSector — mid-build transfer moves the queue (P3b)", () => {
     db.collectionMocks.corporateSectors.deleteOne.mockResolvedValue({ deletedCount: 1 });
     db.collectionMocks.corporations.updateOne.mockResolvedValue({ matchedCount: 1 });
 
-    const { buyListedSector } = await import("./buyListedSector");
     expect((await buyListedSector(makeRequest(), { params })).status).toBe(200);
 
     // The merge update is the one that targets the surviving buyer sector.

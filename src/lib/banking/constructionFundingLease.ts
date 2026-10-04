@@ -5,6 +5,7 @@ import type { ConstructionBuildClaim } from "./rules/constructionBuild";
 import type { BankLoan } from "@/lib/db/types/bank";
 import type { CorporateSector } from "@/lib/db/types/corporation";
 import { oid } from "./rules/boundary";
+import { releaseConstructionAdmission } from "./constructionAdmission";
 import { MONEY_MOVE_COLLECTION } from "./moneyMove";
 import { resumeSettlement, settleTransition } from "./settlementJournal";
 
@@ -162,6 +163,7 @@ export async function abortUnfundedConstruction(
     },
     { $unset: { constructionSettlementOwner: "" } }
   );
+  await releaseConstructionAdmission(db, claim.admissionToken);
   return true;
 }
 
@@ -222,5 +224,6 @@ export async function releaseCompletedConstructionFunding(
     },
     { $set: { "constructionFinancing.fundingCleanupCompleted": true } }
   );
+  await releaseConstructionAdmission(db, claim.admissionToken);
   return true;
 }

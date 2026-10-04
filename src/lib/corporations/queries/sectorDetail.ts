@@ -155,6 +155,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
           mediaOperatingModelsEnabled: 1,
           privateBankingEnabled: 1,
           bankConstructionFinanceEnabled: 1,
+          treasuryCashLedgerEnabled: 1,
         },
       }
     );
@@ -1021,6 +1022,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       isCeo &&
       governorConfig?.privateBankingEnabled === true &&
       governorConfig.bankConstructionFinanceEnabled === true &&
+      governorConfig.treasuryCashLedgerEnabled === true &&
       Number.isFinite(corporationFxRate) &&
       corporationFxRate > 0
     ) {
@@ -1114,6 +1116,8 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         forSale: sector.forSale
           ? {
               listedAt: sector.forSale.listedAt,
+              foreclosed: sector.forSale.foreclosed,
+              pledged: sector.forSale.pledged,
               priceAnchor: sector.forSale.priceAnchor,
               npvAnchor: sector.forSale.npvAnchor,
             }

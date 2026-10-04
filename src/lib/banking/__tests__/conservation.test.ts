@@ -709,7 +709,10 @@ describe("construction admission and deposit-return conservation", () => {
     const db = memory as unknown as Db;
     await db
       .collection<{ _id: string }>("gameConfig")
-      .updateOne({ _id: "default" }, { $set: { bankConstructionFinanceEnabled: true } });
+      .updateOne(
+        { _id: "default" },
+        { $set: { bankConstructionFinanceEnabled: true, treasuryCashLedgerEnabled: true } }
+      );
     const before = totalMoney(memory);
     const fault = withInjectedCrash(memory, {
       collection: "corporations",
