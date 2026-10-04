@@ -55,6 +55,8 @@ export interface ElectionVoteTally {
   totalVotes: Record<string, number>;
   candidateNames: Record<string, string>;
   candidateParties: Record<string, string>;
+  /** Candidate kind at ballot time for bounded SNTV slate projections. */
+  candidateIsNPP?: Record<string, boolean>;
   turnSnapshots: VoteTurnSnapshot[];
   finalized: boolean;
   /** Native first-Duma valid against-all ballots and certification outcome. */

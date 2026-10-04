@@ -4,6 +4,96 @@
 import { describe, it, expect } from "vitest";
 import { allocateSeats, getMultiSeatMinShare, type RankedCandidate } from "./seatAllocation";
 import { HOUSE_SEATS_1991, UK_COMMONS_SEATS_1953 } from "@/lib/constants/states";
+import { getElectionMethod } from "@/lib/elections/electionMethod";
+
+describe("1991 Japan single non-transferable vote", () => {
+  it("uses SNTV only for the 1991 lower chamber", () => {
+    expect(getElectionMethod("JP", "shugiin", "1991-default")).toBe("sntv");
+    expect(getElectionMethod("JP", "snap_shugiin", "1991-default")).toBe("sntv");
+    expect(getElectionMethod("JP", "sangiin", "1991-default")).toBe("pr_hareQuota");
+    expect(getElectionMethod("JP", "shugiin", "2019-default")).toBe("pr_hareQuota");
+  });
+
+  it("awards one seat to each highest-voted candidate, even from the same party", () => {
+    const ranked: RankedCandidate[] = [
+      { id: "ldp-a", votes: 500, party: "LDP" },
+      { id: "ldp-b", votes: 400, party: "LDP" },
+      { id: "opposition", votes: 300, party: "JSP" },
+      { id: "ldp-c", votes: 100, party: "LDP" },
+    ];
+    const result = allocateSeats(
+      "shugiin",
+      "tokyo",
+      3,
+      ranked,
+      1300,
+      undefined,
+      undefined,
+      undefined,
+      "JP",
+      "sntv"
+    );
+    expect(result.seatsEstimate).toEqual({ "ldp-a": 1, "ldp-b": 1, opposition: 1, "ldp-c": 0 });
+    expect(result.winners).toHaveLength(3);
+  });
+
+  it("leaves unfilled seats vacant instead of awarding several to one candidate", () => {
+    const result = allocateSeats(
+      "shugiin",
+      "osaka",
+      4,
+      [{ id: "only", votes: 100 }],
+      100,
+      undefined,
+      undefined,
+      undefined,
+      "JP",
+      "sntv"
+    );
+    expect(result.seatsEstimate).toEqual({ only: 1 });
+  });
+
+  it("uses bounded NPP slates while a player candidate can win only one seat", () => {
+    const ranked: RankedCandidate[] = [
+      { id: "ldp-slate", votes: 600, isNPP: true },
+      { id: "jsp-slate", votes: 400, isNPP: true },
+      { id: "player", votes: 250, isNPP: false },
+    ];
+    const result = allocateSeats(
+      "shugiin",
+      "KAN",
+      4,
+      ranked,
+      1250,
+      undefined,
+      undefined,
+      undefined,
+      "JP",
+      "sntv"
+    );
+    expect(result.seatsEstimate).toEqual({ "ldp-slate": 2, "jsp-slate": 1, player: 1 });
+  });
+
+  it("fills a large 1991 region with finite virtual NPP candidates", () => {
+    const ranked: RankedCandidate[] = [45_000, 30_000, 15_000, 7_000, 3_000].map(
+      (votes, index) => ({ id: `slate-${index}`, votes, isNPP: true })
+    );
+    const result = allocateSeats(
+      "shugiin",
+      "KAN",
+      145,
+      ranked,
+      100_000,
+      undefined,
+      undefined,
+      undefined,
+      "JP",
+      "sntv"
+    );
+    expect(Object.values(result.seatsEstimate).reduce((sum, seats) => sum + seats, 0)).toBe(145);
+    expect(result.winners).toHaveLength(5);
+  });
+});
 
 describe("allocateSeats — preset-aware house seats", () => {
   const ranked: RankedCandidate[] = [

@@ -762,7 +762,8 @@ export async function _enrichElection(
           election.totalSeats,
           tally,
           activeCandidateIdSet,
-          election.countryId ?? "US"
+          election.countryId ?? "US",
+          election.allocationMethod
         ));
 
   // US House with redistricting on: project seats district-by-district using the
@@ -1062,6 +1063,12 @@ export async function _enrichElection(
 
       const fullCandidateNames: Record<string, string> = {};
       const fullCandidateParties: Record<string, string> = {};
+      const candidateIsNPP = {
+        ...Object.fromEntries(
+          candidates.map((candidate) => [candidate._id.toString(), Boolean(candidate.isNPP)])
+        ),
+        ...resolvedTally.candidateIsNPP,
+      };
       // For an ended/finalized election, a candidate's live party can differ from
       // the party they ran under (they may have switched since). Prefer the tally
       // snapshot, then the candidacy-row (ballot) party — never the live
@@ -1109,7 +1116,9 @@ export async function _enrichElection(
                   t.cumulativeVotes,
                   houseSeats,
                   fullCandidateParties,
-                  election.countryId ?? "US"
+                  election.countryId ?? "US",
+                  election.allocationMethod,
+                  candidateIsNPP
                 ));
           return {
             turn: t.turn,
@@ -1394,6 +1403,7 @@ export async function _enrichElection(
     id: election._id.toString(),
     seatId: election.seatId ?? null,
     electionType: election.electionType,
+    allocationMethod: election.allocationMethod,
     state: election.state,
     countryId,
     ...(election.bulgarianFoundingRound

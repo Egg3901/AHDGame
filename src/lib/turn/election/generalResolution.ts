@@ -526,7 +526,12 @@ export async function resolveOneGeneralElection(
       // `party` lets allocateSeats compute its minimum-share eligibility on the
       // PARTY aggregate share (same-party candidates pooled) instead of the
       // per-candidate share — see RankedCandidate.party.
-      .map((id) => ({ id, votes: effectiveVotes[id] ?? 0, party: candidateMap.get(id)?.party }))
+      .map((id) => ({
+        id,
+        votes: effectiveVotes[id] ?? 0,
+        party: candidateMap.get(id)?.party,
+        isNPP: candidateMap.get(id)?.isNPP,
+      }))
       .filter(({ id }) => candidateMap.has(id) && !ineligibleCandidateIds.has(id))
       .sort((a, b) => b.votes - a.votes);
 
@@ -554,6 +559,7 @@ export async function resolveOneGeneralElection(
     // it allocateSeats always used the modern UK_COMMONS_SEATS (ticket #1058).
     let houseSeats: Record<string, number> | undefined;
     let commonsSeats: Record<string, number> | undefined;
+    let allocationMethod = election.allocationMethod;
     let gsForHouse: {
       preset?: string;
       redistrictingEnabled?: boolean;
@@ -568,6 +574,17 @@ export async function resolveOneGeneralElection(
       // election's own `totalSeats` for Alaska and Hawaii (#1190).
       houseSeats = (await loadApportionment(db, gsForHouse?.preset, gsForHouse?.currentYear))
         .houseSeats;
+    }
+
+    // Older Japan races predate the per-race snapshot. Resolve them against
+    // their world's era rules; newly spawned races keep their frozen method.
+    if (
+      !allocationMethod &&
+      election.countryId === "JP" &&
+      (election.electionType === "shugiin" || election.electionType === "snap_shugiin")
+    ) {
+      const gameState = await (await getGameStateCollection(db)).findOne({ _id: "current" });
+      allocationMethod = getElectionMethod("JP", election.electionType, gameState?.preset);
     }
 
     if (
@@ -775,7 +792,8 @@ export async function resolveOneGeneralElection(
               // is byte-identical.
               runtimeBlocQuota?.shares,
               commonsSeats,
-              election.countryId ?? "US"
+              election.countryId ?? "US",
+              allocationMethod
             ),
           ranked,
           election.conversionTerms
