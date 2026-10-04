@@ -21,6 +21,7 @@ export async function settlePropBookChange(
     meta?: Record<string, string | number>;
     charter: BankCharter;
     revision?: number;
+    nppOnly?: boolean;
     operation: string;
     turn: number;
     cashDelta: number;
@@ -37,6 +38,7 @@ export async function settlePropBookChange(
     .update(
       JSON.stringify({
         operation: input.operation,
+        nppOnly: input.nppOnly,
         cashDelta: input.cashDelta,
         nextBook: input.nextBook,
         nextMark: input.nextMark,
@@ -49,6 +51,7 @@ export async function settlePropBookChange(
   const key = `bank.prop:${input.bankId.toHexString()}:${revision}:${digest}`;
   const identity = { _id: oid(input.bankId.toHexString()) };
   const guard = {
+    ...(input.nppOnly ? { ceoType: "npp" } : {}),
     bankCharter: input.charter,
     bankPropBookRevision: input.revision === undefined ? { $exists: false } : input.revision,
     ...(input.forexFee ? { bankPropForexFee: { $exists: false } } : {}),
