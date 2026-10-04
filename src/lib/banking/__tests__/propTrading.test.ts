@@ -153,17 +153,20 @@ describe("propTrading open/close/mark", () => {
       await openPosition(db as unknown as Db, corpId, { asset: "forex", ref: "EUR", units: 1 })
     ).toMatchObject({ ok: true });
   });
-  it("keeps NPP stock opening available in the advanced player cohort", async () => {
-    db.collection("gameConfig").docs[0].playerAdvancedBankChartersEnabled = true;
-    liveCorp.ceoType = "npp";
-    expect(
-      await openPosition(db as unknown as Db, corpId, {
-        asset: "equity",
-        ref: equityCorp._id.toHexString(),
-        units: 1,
-      })
-    ).toMatchObject({ ok: true });
-  });
+  it.each(["npp", "imperial"] as const)(
+    "keeps %s stock opening available in the advanced player cohort",
+    async (ceoType) => {
+      db.collection("gameConfig").docs[0].playerAdvancedBankChartersEnabled = true;
+      liveCorp.ceoType = ceoType;
+      expect(
+        await openPosition(db as unknown as Db, corpId, {
+          asset: "equity",
+          ref: equityCorp._id.toHexString(),
+          units: 1,
+        })
+      ).toMatchObject({ ok: true });
+    }
+  );
   it("refuses an NPP stock purchase when player control resumes before the cash write", async () => {
     db.collection("gameConfig").docs[0].playerAdvancedBankChartersEnabled = true;
     liveCorp.ceoType = "npp";

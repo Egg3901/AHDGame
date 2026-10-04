@@ -363,6 +363,11 @@ export async function openPosition(
       policy.propForexFees ? {} : { projection: { bankPropForexFee: 0, bankPropForexVolume: 0 } }
     );
   if (!corp) return { ok: false, error: "Corporation not found" };
+  if (!allowedPropOpeningAssets(policy.advancedCharters, corp.ceoType).includes(input.asset))
+    return {
+      ok: false,
+      error: "Player bank prop purchases are limited to bonds, index units and forex",
+    };
   const charter = corp.bankCharter;
   if (!isPropCharter(charter)) {
     return {
@@ -471,7 +476,9 @@ export async function openPosition(
     charter,
     revision: corp.bankPropBookRevision,
     operation: "buy",
-    ...(policy.advancedCharters && input.asset === "equity" ? { nppOnly: true } : {}),
+    ...(policy.advancedCharters && input.asset === "equity"
+      ? { requiredCeoType: corp.ceoType }
+      : {}),
     turn,
     cashDelta: -cost,
     nextBook,
