@@ -173,6 +173,17 @@ export interface Corporation {
   bankCharter?: import("./bank").BankCharter;
   /** Public media editorial position. Missing means neutral for legacy worlds. */
   editorialStance?: { economic: number; social: number };
+  /** Funded sale proceeds held here until delivered to the matching charter or insurer. */
+  bankTreasuryEscrows?: Record<
+    string,
+    {
+      bankId: string;
+      charteredTurn: number;
+      currencyCode: CurrencyCode;
+      amountLocal: number;
+      tradeId: string;
+    }
+  >;
   /** Funded sovereign claims held outside the replaceable charter subdocument. */
   bankSovereignEscrows?: Record<
     string,

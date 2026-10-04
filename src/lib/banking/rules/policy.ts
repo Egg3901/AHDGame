@@ -18,6 +18,7 @@ export type SavingsAccountsMode = "off" | "shadow" | "authoritative";
 export interface BankingPolicyConfig {
   privateBankingEnabled?: boolean;
   bankPropTradingEnabled?: boolean;
+  bankTreasuryEnabled?: boolean;
   bankContagionEnabled?: boolean;
   lineOfCreditEnabled?: boolean;
   playerAdvancedBankChartersEnabled?: boolean;
@@ -29,6 +30,7 @@ export interface BankingPolicyConfig {
 export const BANKING_POLICY_PROJECTION = Object.freeze({
   privateBankingEnabled: 1,
   bankPropTradingEnabled: 1,
+  bankTreasuryEnabled: 1,
   bankContagionEnabled: 1,
   lineOfCreditEnabled: 1,
   playerAdvancedBankChartersEnabled: 1,
@@ -41,6 +43,8 @@ export interface BankingPolicySnapshot {
   privateBanking: boolean;
   /** Prop desks, interbank market, margin line. Requires private banking. */
   propTrading: boolean;
+  /** Funded short-sovereign treasury holdings; disabled unless explicitly enabled. */
+  bankTreasury: boolean;
   /** Failure contagion between same-currency deposit takers. Requires private banking. */
   contagion: boolean;
   /** Player lines of credit at the central bank. */
@@ -76,6 +80,7 @@ export function resolveBankingPolicy(
   return Object.freeze({
     privateBanking,
     propTrading: privateBanking && config?.bankPropTradingEnabled !== false,
+    bankTreasury: privateBanking && config?.bankTreasuryEnabled === true,
     contagion: privateBanking && config?.bankContagionEnabled !== false,
     lineOfCredit: config?.lineOfCreditEnabled !== false,
     advancedCharters: privateBanking && config?.playerAdvancedBankChartersEnabled === true,

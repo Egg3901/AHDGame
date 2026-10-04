@@ -336,12 +336,18 @@ function resolvePositional(doc: Doc, update: Update, filter: Doc | undefined): U
       throw new Error(`inMemoryDb: positional "${arrayPath}" is not an array`);
     const prefix = `${arrayPath}.`;
     const conditions: Doc = {};
-    for (const [key, condition] of Object.entries(filter ?? {})) {
-      if (key.startsWith(prefix)) conditions[key.slice(prefix.length)] = condition;
-      else if (key === arrayPath && isPlainObject(condition) && "$elemMatch" in condition) {
-        Object.assign(conditions, (condition as { $elemMatch: Doc }).$elemMatch);
+    const collect = (row: Doc): void => {
+      for (const [key, condition] of Object.entries(row)) {
+        if (key === "$and" && Array.isArray(condition)) {
+          for (const branch of condition) if (isPlainObject(branch)) collect(branch);
+        } else if (key.startsWith(prefix)) {
+          conditions[key.slice(prefix.length)] = condition;
+        } else if (key === arrayPath && isPlainObject(condition) && "$elemMatch" in condition) {
+          Object.assign(conditions, (condition as { $elemMatch: Doc }).$elemMatch);
+        }
       }
-    }
+    };
+    collect(filter ?? {});
     if (Object.keys(conditions).length === 0) {
       throw new Error(`inMemoryDb: positional "${arrayPath}.$" needs a filter on that array`);
     }

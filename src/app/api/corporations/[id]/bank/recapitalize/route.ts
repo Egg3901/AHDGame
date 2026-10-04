@@ -90,6 +90,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     // pot.
     const position = assessCapital({
       cashReserves: injected.cashReserves,
+      sovereignTreasuryMarkValue: charter.sovereignTreasuryMarkValue ?? 0,
       totalLoans: charter.totalLoans ?? 0,
       borrowings: borrowingsFromCharter(charter),
       propBookMarkValue: charter.propBookMarkValue ?? 0,

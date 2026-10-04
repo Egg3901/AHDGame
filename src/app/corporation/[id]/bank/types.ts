@@ -2,6 +2,7 @@ import type { BankCharterType } from "@/lib/db/types/bank";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { CreditBandId, LendingProfileId } from "@/lib/banking/creditBands";
 import type { BankOutlook } from "@/lib/banking/outlook";
+import type { BankTreasuryOverview } from "@/lib/banking/bankTreasury";
 
 export type Corridor = { minOffset: number; maxOffset: number };
 
@@ -16,6 +17,8 @@ export type Party = {
 export type ConsolePayload = {
   privateBankingEnabled: boolean;
   bankPropTradingEnabled: boolean;
+  bankTreasuryEnabled?: boolean;
+  bankTreasury?: BankTreasuryOverview | null;
   visible: boolean;
   isCeo: boolean;
   isAdmin: boolean;
@@ -40,6 +43,7 @@ export type ConsolePayload = {
   capitalRequirementByType: Record<BankCharterType, number>;
   risk: {
     cashReserves: number;
+    sovereignTreasuryMarkValue?: number;
     requiredReserves: number;
     runFailureThreshold: number;
     reserveCoverRatio: number;

@@ -175,6 +175,8 @@ export interface BondHolder {
   bankId?: ObjectId;
   /** Charter epoch owning this position; rechartering cannot inherit holdings. */
   charteredTurn?: number;
+  /** In-flight bank treasury reservation. Excluded from coupons until cash settles. */
+  bankTreasuryTradeId?: string;
   /** Number of bond units held (each unit = $1,000 face value) */
   units: number;
   /**

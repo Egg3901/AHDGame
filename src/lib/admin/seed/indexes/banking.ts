@@ -37,6 +37,14 @@ export async function seedBankingIndexes(db: Db, log: (msg: string) => void) {
     await ensureIndex(db, MONEY_MOVE_COLLECTION, index.keys, index.options, log);
   }
 
+  await ensureIndex(
+    db,
+    "bankTreasuryTrades",
+    { status: 1, createdAt: 1, _id: 1 },
+    { name: "bankTreasuryTrades_status_createdAt_id", background: true },
+    log
+  );
+
   // Turn-scoped lookups: "what did this turn move", which is the first question
   // asked after a turn that produced a conservation warning.
   await ensureIndex(

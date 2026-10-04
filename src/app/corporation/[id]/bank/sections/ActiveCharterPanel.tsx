@@ -25,6 +25,7 @@ import { InterbankPanel } from "./InterbankPanel";
 import { RevokeCharterForm } from "./RevokeCharterForm";
 import { CharterSwitchForm } from "./CharterSwitchForm";
 import { CustomerBankPanel } from "./CustomerBankPanel";
+import { BankTreasuryPanel } from "./BankTreasuryPanel";
 
 /** CEO toggle for opt-in loan approval. When on, new loans queue as pending. */
 function LoanApprovalToggle({
@@ -277,6 +278,7 @@ export function ActiveCharterPanel({
   ).length;
   const capitalStanding = assessCapital({
     cashReserves: charter.cashReserves,
+    sovereignTreasuryMarkValue: charter.sovereignTreasuryMarkValue,
     totalLoans: charter.totalLoans,
     borrowings: borrowingsFromCharter(charter),
     propBookMarkValue: charter.propBookMarkValue,
@@ -511,10 +513,20 @@ export function ActiveCharterPanel({
 
       {tab === "treasury" && (
         <div className="space-y-6">
+          {data.bankTreasuryEnabled && data.bankTreasury && (
+            <BankTreasuryPanel
+              corporationId={data.corporation.id}
+              overview={data.bankTreasury}
+              canMutate={canMutate}
+              onChanged={onChanged}
+              showToast={showToast}
+            />
+          )}
           <RecapitalizePanel
             corporationId={data.corporation.id}
             currency={charter.currency}
             cashReserves={charter.cashReserves}
+            sovereignTreasuryMarkValue={charter.sovereignTreasuryMarkValue ?? 0}
             requiredReservesAmount={charter.requiredReserves}
             withdrawable={charter.upstreamCapacity}
             totalLoans={charter.totalLoans}
@@ -559,6 +571,7 @@ export function ActiveCharterPanel({
               currency={charter.currency}
               positions={charter.propBook}
               markValue={charter.propBookMarkValue}
+              sovereignTreasuryMarkValue={charter.sovereignTreasuryMarkValue ?? 0}
               cashReserves={charter.cashReserves}
               totalLoans={charter.totalLoans}
               borrowings={borrowingsFromCharter(charter)}

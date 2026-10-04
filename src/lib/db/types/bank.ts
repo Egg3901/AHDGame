@@ -23,6 +23,14 @@ export interface BankCharter {
   status: BankCharterStatus;
   currency: CurrencyCode;
   charteredTurn: number;
+  /** CEO may sweep vault cash above the funded-liquidity floor into short sovereign bills. */
+  sovereignTreasuryAutoSweep?: boolean;
+  /** Conservative executable-bid mark for this charter epoch's sovereign treasury book. */
+  sovereignTreasuryMarkValue?: number;
+  /** Turn the executable-bid treasury mark was last refreshed. */
+  lastTreasuryMarkTurn?: number;
+  /** Idempotency key for the automatic sweep at the end of a banking turn. */
+  lastTreasurySweepTurn?: number;
   /** Capital posted at charter; absorbs losses before depositors do. */
   postedCapital: number;
   /** Cumulative taxpayer capital delivered through funded financial-crisis rescues. */
@@ -224,6 +232,28 @@ export interface BankCharter {
   undercapitalizedSinceTurn?: number;
   /** Idempotency key for the supervisory pass. */
   lastSupervisionTurn?: number;
+}
+
+/** Frozen intent and replay identity for one funded bank treasury trade. */
+export interface BankTreasuryTradeReceipt {
+  _id: string;
+  bankId: ObjectId;
+  charteredTurn: number;
+  bondId: ObjectId;
+  currency: CurrencyCode;
+  side: "buy" | "sell";
+  /** Original whole-unit request before cash and pool-depth clamps. */
+  requestedUnits: number;
+  units: number;
+  pricePerUnitLocal: number;
+  amountLocal: number;
+  turn: number;
+  /** A failed-estate sale that must finish before depositor resolution closes. */
+  resolutionSale?: true;
+  status: "open" | "completed" | "rejected";
+  createdAt: Date;
+  updatedAt: Date;
+  error?: string;
 }
 
 /**
