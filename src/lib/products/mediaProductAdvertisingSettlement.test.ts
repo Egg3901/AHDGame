@@ -313,6 +313,9 @@ describe("media product advertising denomination recovery", () => {
     expect((await db.collection("corporations").findOne({ _id: sellerId }))?.liquidCapital).toBe(
       50
     );
+    const pendingMove = (await db.collection("bankMoneyMoves").find({}).toArray())[0] as
+      { retryCreditLegOnGuardFailure?: boolean } | undefined;
+    expect(pendingMove?.retryCreditLegOnGuardFailure).toBe(true);
 
     await db
       .collection("corporations")
