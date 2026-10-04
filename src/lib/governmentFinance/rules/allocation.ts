@@ -7,6 +7,13 @@ function allocationWeight(value: number, field: string): number {
   return value;
 }
 
+function allocationOrder(value: number, field: string): number {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new Error(`${field} must be a non-negative safe integer`);
+  }
+  return value;
+}
+
 function allocatePartialTier(
   authority: number,
   tier: Array<PriorityAllocation & { allocationWeight?: number }>
@@ -75,7 +82,10 @@ export function allocateByPriority(
   claims: PriorityClaim[]
 ): PriorityAllocation[] {
   let remaining = currencyAmount(authority, "authority");
-  const result = new Map<string, PriorityAllocation & { allocationWeight?: number }>();
+  const result = new Map<
+    string,
+    PriorityAllocation & { allocationOrder?: number; allocationWeight?: number }
+  >();
   for (const claim of claims) {
     if (!claim.id) throw new Error("priority claim id cannot be empty");
     if (result.has(claim.id)) throw new Error(`duplicate priority claim: ${claim.id}`);
@@ -87,6 +97,14 @@ export function allocateByPriority(
       priority: claim.priority,
       requested: currencyAmount(claim.requested, `claim.${claim.id}.requested`),
       allocated: 0,
+      ...(claim.allocationOrder !== undefined
+        ? {
+            allocationOrder: allocationOrder(
+              claim.allocationOrder,
+              `claim.${claim.id}.allocationOrder`
+            ),
+          }
+        : {}),
       ...(claim.allocationWeight !== undefined
         ? {
             allocationWeight: allocationWeight(
@@ -100,16 +118,23 @@ export function allocateByPriority(
 
   for (const priority of [1, 2, 3, 4, 5, 6, 7] as const) {
     const tier = [...result.values()].filter((claim) => claim.priority === priority);
-    const requested = tier.reduce((sum, claim) => sum + claim.requested, 0);
-    if (requested === 0 || remaining === 0) continue;
-    if (remaining >= requested) {
-      for (const claim of tier) claim.allocated = claim.requested;
-      remaining -= requested;
-      continue;
-    }
+    const orders = [...new Set(tier.map((claim) => claim.allocationOrder ?? 0))].sort(
+      (a, b) => a - b
+    );
+    for (const order of orders) {
+      if (remaining === 0) break;
+      const orderedTier = tier.filter((claim) => (claim.allocationOrder ?? 0) === order);
+      const requested = orderedTier.reduce((sum, claim) => sum + claim.requested, 0);
+      if (requested === 0) continue;
+      if (remaining >= requested) {
+        for (const claim of orderedTier) claim.allocated = claim.requested;
+        remaining -= requested;
+        continue;
+      }
 
-    allocatePartialTier(remaining, tier);
-    remaining = 0;
+      allocatePartialTier(remaining, orderedTier);
+      remaining = 0;
+    }
   }
 
   return claims.map((claim) => result.get(claim.id)!);

@@ -20,6 +20,9 @@ export interface OpeningDepartmentRun {
   specializedAuthority: number;
   grantReservation: number;
   continuityAuthority: number;
+  openingWorkingCapital: number;
+  closingWorkingCapital: number;
+  workingCapitalDrawn: number;
   unmetProgramDemand: number;
   newArrears: number;
   overdraft: number;
@@ -52,6 +55,11 @@ export function runOpeningDepartment240(
     specializedAuthority: 0,
     grantReservation: 0,
     continuityAuthority: 0,
+    openingWorkingCapital: accounts
+      .filter((account) => !account.externallySettled)
+      .reduce((sum, account) => sum + account.balance, 0),
+    closingWorkingCapital: 0,
+    workingCapitalDrawn: 0,
     unmetProgramDemand: 0,
     newArrears: 0,
     overdraft: 0,
@@ -105,6 +113,10 @@ export function runOpeningDepartment240(
       );
     }
   }
+  run.closingWorkingCapital = accounts
+    .filter((account) => !account.externallySettled)
+    .reduce((sum, account) => sum + account.balance, 0);
+  run.workingCapitalDrawn = run.openingWorkingCapital - run.closingWorkingCapital;
   return run;
 }
 

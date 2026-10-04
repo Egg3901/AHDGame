@@ -100,6 +100,7 @@ function fixture() {
     ["resetDepartmentAccounts", accounts],
     ["resetDepartmentContinuity", continuity],
     ["federalBudget", budgets],
+    ["resetLawPrograms", []],
   ] as const) {
     mock
       .collection(name)
@@ -215,13 +216,14 @@ describe("v2 treasury and paid Cabinet turn integration", () => {
     await expect(run()).rejects.toThrow("reconcile");
     expect(mock.collectionMocks.resetNationalTreasuries!.bulkWrite).not.toHaveBeenCalled();
   });
-  it("records an emergency bridge and zero authority after an unaffordable holder payout", async () => {
+  it("records a bond emergency while still paying enacted authority", async () => {
     const { accounts, treasuries, run } = fixture();
     await run({ bondFlows: { ...flow, sovereignCouponPaidByCountry: { US: 13 } } });
     expect(treasuries[0]!.emergencyAdvance).toBe(3);
     expect(treasuries[0]!.fiscalCrisis?.reason).toBe("emergency_advance");
-    expect(accounts[0]!.lastAuthorityPaid).toBe(0);
-    expect(accounts[0]!.unpaidAuthority).toBe(10);
+    expect(treasuries[0]!.lastAppropriationFinancing).toBe(10);
+    expect(accounts[0]!.lastAuthorityPaid).toBe(10);
+    expect(accounts[0]!.unpaidAuthority).toBe(0);
     expect(accounts[1]!.lastAuthorityPaid).toBe(10);
   });
 });

@@ -275,15 +275,12 @@ export async function collectResetMetricOwnerReadings(
               updates["02"] = {
                 ...board.observations["02"]!,
                 value: provisionalRealPurchasingPower({
-                  openingIndex: opening.openingIndex,
-                  openingGrossIncome: opening.medianIncome,
-                  openingBasketIndex: opening.basketIndex,
                   currentGrossIncome: income,
                   currentBasketIndex: basket,
                 }),
                 status: "proxy",
                 source: "game-calibrated gross household income and consumer basket",
-                note: "Relative to the 1991 opening index. Taxes and transfers are not yet included.",
+                note: "Annual real household income in local currency at constant 1991 prices. Taxes and transfers are not yet included.",
               };
             } catch {
               // The missing due reading is surfaced by the persistence shell.

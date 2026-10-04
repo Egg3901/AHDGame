@@ -22,21 +22,39 @@ const flows = {
 const claims = [{ id: "department", category: "existing" as const, amount: 10 }];
 
 describe("v2 cash authority", () => {
-  it("retains attributable unpaid authority and pays it on a later funded turn", () => {
+  it("pays enacted authority in full and records the operating deficit financing", () => {
     const first = settleResetCashTurn({ treasury: opening, turn: 2, claims, flows });
-    expect(first.lastPaidByClaim).toEqual({ department: 8 });
-    expect(first.claimArrears).toEqual({ department: 2 });
+    expect(first.lastPaidByClaim).toEqual({ department: 10 });
+    expect(first.claimArrears).toEqual({ department: 0 });
+    expect(first.lastAppropriationFinancing).toBe(2);
     const next = settleResetCashTurn({
       treasury: first,
       turn: 3,
       claims,
       flows: { ...flows, revenue: 12 },
     });
-    expect(next.lastPaidByClaim).toEqual({ department: 12 });
+    expect(next.lastPaidByClaim).toEqual({ department: 10 });
     expect(next.arrears.existing).toBe(0);
-    expect(next.cash).toBe(0);
+    expect(next.lastAppropriationFinancing).toBe(0);
+    expect(next.cash).toBe(2);
   });
-  it("records an emergency advance and crisis without inventing Cabinet funds", () => {
+  it("catches up authority left unpaid by the former cash gate", () => {
+    const next = settleResetCashTurn({
+      treasury: {
+        ...opening,
+        arrears: { ...opening.arrears, existing: 2 },
+        claimArrears: { department: 2 },
+      },
+      turn: 2,
+      claims,
+      flows: { ...flows, revenue: 0 },
+    });
+    expect(next.lastPaidByClaim).toEqual({ department: 12 });
+    expect(next.claimArrears).toEqual({ department: 0 });
+    expect(next.arrears.existing).toBe(0);
+    expect(next.lastAppropriationFinancing).toBe(12);
+  });
+  it("records a bond emergency without withholding enacted Cabinet authority", () => {
     const next = settleResetCashTurn({
       treasury: opening,
       turn: 2,
@@ -44,7 +62,8 @@ describe("v2 cash authority", () => {
       flows: { ...flows, bondCouponCashPaid: 11 },
     });
     expect(next.emergencyAdvance).toBe(3);
-    expect(next.lastPaidByClaim).toEqual({ department: 0 });
+    expect(next.lastPaidByClaim).toEqual({ department: 10 });
+    expect(next.lastAppropriationFinancing).toBe(10);
     expect(next.fiscalCrisis).toEqual({ sinceTurn: 2, reason: "emergency_advance" });
   });
   it("conserves fractional cash without fractional authority credits", () => {
@@ -54,15 +73,21 @@ describe("v2 cash authority", () => {
       claims,
       flows: { ...flows, revenue: 8.75 },
     });
-    expect(next.cash).toBe(0.75);
-    expect(next.claimArrears).toEqual({ department: 2 });
-    expect(next.arrears.existing).toBe(2);
+    expect(next.cash).toBe(0);
+    expect(next.lastAppropriationFinancing).toBe(1.25);
+    expect(next.claimArrears).toEqual({ department: 0 });
+    expect(next.arrears.existing).toBe(0);
   });
   it("rejects discarded claims, inconsistent category debt, and skipped turns", () => {
     const first = settleResetCashTurn({ treasury: opening, turn: 2, claims, flows });
-    expect(() => settleResetCashTurn({ treasury: first, turn: 3, claims: [], flows })).toThrow(
-      "discard"
-    );
+    expect(() =>
+      settleResetCashTurn({
+        treasury: { ...first, claimArrears: { department: 1 } },
+        turn: 3,
+        claims: [],
+        flows,
+      })
+    ).toThrow("discard");
     expect(() =>
       settleResetCashTurn({
         treasury: { ...opening, arrears: { ...opening.arrears, existing: 1 } },

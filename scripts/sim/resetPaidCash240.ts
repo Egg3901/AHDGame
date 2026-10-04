@@ -30,6 +30,9 @@ export function runPaidCash240(
   let maximumResidual = 0;
   let paidAuthority = 0;
   let departmentalOutlay = 0;
+  const openingDepartmentCash = accounts
+    .filter((account) => !account.externallySettled)
+    .reduce((sum, account) => sum + account.balance, 0);
   let lowestPaidRatio = 1;
   let firstCrisisTurn: number | null = null;
   for (let turn = 2; turn <= 241; turn++) {
@@ -72,7 +75,8 @@ export function runPaidCash240(
           revenue +
           issuance +
           treasury.lastEmergencyAdvanceDrawn! -
-          spent -
+          spent +
+          treasury.lastAppropriationFinancing! -
           treasury.cash
       )
     );
@@ -105,13 +109,14 @@ export function runPaidCash240(
     const accounted = accounts
       .filter((account) => !account.externallySettled)
       .reduce((sum, account) => sum + account.balance, 0);
-    if (paidAuthority - departmentalOutlay !== accounted)
+    if (openingDepartmentCash + paidAuthority - departmentalOutlay !== accounted)
       throw new Error("Department cash did not reconcile");
   }
   return {
     country,
     scenario,
     turns: 240,
+    openingDepartmentCash,
     paidAuthority,
     departmentalOutlay,
     unpaidAuthority: accounts

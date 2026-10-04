@@ -3,6 +3,7 @@ import { handleRouteError } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { primaryMetrics } from "@/lib/resetMetrics/catalog";
 import { readResetMetricBoard } from "@/lib/resetMetrics/readBoard";
+import { readNationalMetricRollup } from "@/lib/resetMetrics/readNationalRollup";
 import type { ResetCabinetActionState } from "@/lib/resetCabinet/rules/actionState";
 import {
   combineActiveActionEffects,
@@ -14,6 +15,15 @@ import { combineLawProgramEffects } from "@/lib/resetLegislation/rules/programEf
 import type { RegionalBudget } from "@/lib/db/types/regionalBudget";
 import type { StateBudget } from "@/lib/db/types/budget";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
+import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
+import { resetMetricConditionScore } from "@/lib/resetMetrics/conditionScore";
+import { readResetGovernanceStyle } from "@/lib/resetMetrics/readGovernanceStyle";
+import { resetLawFamilies, resetLawFamilyById } from "@/lib/resetLegislation/catalog";
+import { resetCabinetActions } from "@/lib/resetCabinet/catalog";
+import type { ResetLawOpeningBoard } from "@/lib/resetLegislation/rules/openingBoard";
+import { buildMetricLawStatuses } from "@/lib/resetLegislation/rules/metricPolicyStatus";
+
+const cabinetActionTitles = new Map(resetCabinetActions.map((action) => [action.id, action.title]));
 
 function actionApplies(scope: string, boardScope: "national" | "regional", regionId?: string) {
   if (scope === "Nat") return true;
@@ -49,7 +59,17 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
         { status: 503, headers: { "Cache-Control": "no-store" } }
       );
     }
-    const [actionState, programs, departmentAccounts, regionalBudget] = await Promise.all([
+    const [
+      observations,
+      actionState,
+      programs,
+      departmentAccounts,
+      regionalBudget,
+      openingLawBoard,
+    ] = await Promise.all([
+      board.board.scope === "national"
+        ? readNationalMetricRollup(db, board.board)
+        : Promise.resolve(board.board.observations),
       db
         .collection<ResetCabinetActionState>("resetCabinetActionStates")
         .findOne(
@@ -65,7 +85,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
             scope: board.board.scope,
             ...(board.board.regionId ? { regionId: board.board.regionId } : {}),
           },
-          { projection: { familyId: 1, primaryMetricEffects: 1, fundingAccountId: 1 } }
+          {
+            projection: {
+              familyId: 1,
+              choice: 1,
+              titleSnapshot: 1,
+              primaryMetricEffects: 1,
+              fundingAccountId: 1,
+            },
+          }
         )
         .toArray(),
       board.board.scope === "national"
@@ -92,7 +120,20 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
                 { projection: { programSettlements: 1 } }
               )
         : Promise.resolve(null),
+      db.collection<ResetLawOpeningBoard>("resetLawOpeningBoards").findOne(
+        {
+          _id: `${countryId}:${board.board.regionId ?? "national"}`,
+          worldId: board.board.worldId,
+        },
+        { projection: { references: 1 } }
+      ),
     ]);
+    if (!observations) {
+      return NextResponse.json(
+        { error: "V2 national metric rollup is unavailable", reason: "regional_rollup" },
+        { status: 503, headers: { "Cache-Control": "no-store" } }
+      );
+    }
     const temporaryEffects = new Map(
       mergeApplicableActionEffects(
         combineActiveActionEffects(actionState?.active ?? [], board.board.asOfTurn)
@@ -126,6 +167,62 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
     const legislativeEffects = new Map(
       combineLawProgramEffects(programs, delivery).map((effect) => [effect.metricId, effect])
     );
+    const standingLaws = openingLawBoard
+      ? buildMetricLawStatuses({
+          country: countryId,
+          scope: board.board.scope,
+          families: resetLawFamilies,
+          references: openingLawBoard.references,
+          programs,
+          delivery,
+        })
+      : {};
+    const currentYear = 1991 + Math.floor((board.board.asOfTurn - 1) / TURNS_PER_YEAR);
+    const metrics = primaryMetrics
+      .filter((metric) => board.board.scope === "national" || metric.aggregation !== "national")
+      .map((definition) => {
+        const temporary = temporaryEffects.get(definition.id);
+        const legislative = legislativeEffects.get(definition.id);
+        const observation = observations[definition.id];
+        return {
+          ...definition,
+          observation,
+          conditionScore: resetMetricConditionScore(
+            definition,
+            observation?.value ?? null,
+            countryId,
+            currentYear
+          ),
+          temporaryActionEffect: temporary
+            ? {
+                favorableNormalizedPoints: temporary.favorableNormalizedPoints,
+                contributingActions: temporary.contributingActions.map(
+                  (actionId) => cabinetActionTitles.get(actionId) ?? "Cabinet initiative"
+                ),
+              }
+            : null,
+          legislativeEffect: legislative
+            ? {
+                ...legislative,
+                contributingPrograms: legislative.contributingPrograms.map(
+                  (familyId) => resetLawFamilyById(familyId)?.title ?? "Legislative program"
+                ),
+              }
+            : null,
+          standingLaws: standingLaws[definition.id] ?? [],
+        };
+      });
+    const governanceStyle = await readResetGovernanceStyle({
+      db,
+      worldId: board.board.worldId,
+      countryId,
+      scope: board.board.scope,
+      regionId: board.board.regionId,
+      conditionScores: Object.fromEntries(
+        metrics.map((metric) => [metric.id, metric.conditionScore])
+      ),
+      programs,
+    });
     return NextResponse.json(
       {
         version: "v2",
@@ -133,27 +230,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
         scope: board.board.scope,
         regionId: board.board.regionId ?? null,
         asOfTurn: board.board.asOfTurn,
-        metrics: primaryMetrics
-          .filter((metric) =>
-            board.board.scope === "national"
-              ? metric.aggregation === "national"
-              : metric.aggregation !== "national"
-          )
-          .map((definition) => {
-            const temporary = temporaryEffects.get(definition.id);
-            const legislative = legislativeEffects.get(definition.id);
-            return {
-              ...definition,
-              observation: board.board.observations[definition.id],
-              temporaryActionEffect: temporary
-                ? {
-                    favorableNormalizedPoints: temporary.favorableNormalizedPoints,
-                    contributingActions: temporary.contributingActions,
-                  }
-                : null,
-              legislativeEffect: legislative ?? null,
-            };
-          }),
+        governanceStyle,
+        metrics,
       },
       { headers: { "Cache-Control": "no-store, no-transform" } }
     );

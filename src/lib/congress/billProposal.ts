@@ -172,6 +172,7 @@ export async function validateBillProvisions(
             projection: {
               resetWorldId: 1,
               startingYear: 1,
+              metricsSystemVersion: 1,
               legislationSystemVersion: 1,
               resetVersionSeeds: 1,
             },

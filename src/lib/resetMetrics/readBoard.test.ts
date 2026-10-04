@@ -3,11 +3,12 @@ import type { Db } from "mongodb";
 import { createMockDb } from "@/lib/test-utils/mockDb";
 import { buildOpeningMetricSnapshots1991 } from "./seedOpening1991";
 import { readResetMetricBoard } from "./readBoard";
+import { RESET_V2_SEED_REVISION } from "@/lib/resetVersions/rules";
 
 const ready = { metrics: true, legislation: false, cabinet: false };
 const seed = {
   worldId: "world-test",
-  revision: 1,
+  revision: RESET_V2_SEED_REVISION.metrics,
   sourceTurn: 1,
   completedAt: "2026-09-29T00:00:00.000Z",
   verificationHash: "verified",

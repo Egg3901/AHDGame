@@ -138,6 +138,26 @@ describe("reset treasury settlement", () => {
     expect(result.accountingResidual).toBe(0);
   });
 
+  it("uses the signed budget balance to finance enacted operating appropriations", () => {
+    const result = settleNationalTreasury(opening, {
+      revenue: 0,
+      bondProceeds: 0,
+      bondFaceIssued: 0,
+      bondMaturityCashPaid: 20,
+      bondFaceRetired: 10,
+      bondCouponCashPaid: 15,
+      annualInterestRate: 0,
+      periodsPerYear: 48,
+      operatingClaims: { mandatory: 0, grants: 0, existing: 5, new: 0 },
+      fundOperatingAppropriations: true,
+    });
+    expect(result.emergencyAdvanceDrawn).toBe(25);
+    expect(result.appropriationFinancing).toBe(5);
+    expect(result.paid).toMatchObject({ interest: 15, existing: 5 });
+    expect(result.closing.arrears.existing).toBe(0);
+    expect(result.accountingResidual).toBe(0);
+  });
+
   it("regional grants cancel once and shortfalls do not repeal the law", () => {
     const national = settleNationalTreasury(opening, {
       revenue: 50,

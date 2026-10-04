@@ -61,7 +61,9 @@ describe("v2 department opening persistence", () => {
     expect(treasuries.bulkWrite.mock.calls[0][0]).toHaveLength(3);
     expect(receipt.worldId).toBe("new-world");
     expect(actionStates.bulkWrite.mock.calls[0][0]).toHaveLength(3);
-    expect(receipt.revision).toBe(7);
+    // Value-only opening balance changes remain compatible with running v2
+    // worlds and must not invalidate their Cabinet seed receipt.
+    expect(receipt.revision).toBe(8);
     expect(receipt.verificationHash).toMatch(/^[0-9a-f]{64}$/);
   });
 

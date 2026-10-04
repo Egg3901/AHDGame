@@ -1,7 +1,8 @@
 /**
- * Sovereign cash pays lawful claims before departments deliver services.
- * Unpaid authority stays owed to its claimant; bondholder shortfalls become
- * explicit emergency advances, not cash available to Cabinet programs.
+ * Enacted authority is disbursed before departments deliver services. The
+ * signed national budget balance already records any operating deficit, so
+ * this ledger must not turn the same deficit into unpaid Cabinet authority.
+ * Bondholder cash shortfalls remain explicit emergency advances.
  */
 import { allocatePaidAuthority } from "./paidAuthority";
 import { NATIONAL_CLAIM_PRIORITY, settleNationalTreasury } from "./settlement";
@@ -54,7 +55,11 @@ export function settleResetCashTurn(input: {
     if (!Number.isSafeInteger(owed) || owed !== treasury.arrears[category])
       throw new Error("Claim arrears do not reconcile");
   }
-  const result = settleNationalTreasury(treasury, { ...flows, operatingClaims: categories });
+  const result = settleNationalTreasury(treasury, {
+    ...flows,
+    operatingClaims: categories,
+    fundOperatingAppropriations: true,
+  });
   const lastPaidByClaim: Record<string, number> = {};
   const claimArrears: Record<string, number> = {};
   // A claimant is credited whole local-currency units. Fractional cash stays
@@ -91,6 +96,7 @@ export function settleResetCashTurn(input: {
     settledThroughTurn: turn,
     lastPaid: result.paid,
     lastEmergencyAdvanceDrawn: result.emergencyAdvanceDrawn,
+    lastAppropriationFinancing: result.appropriationFinancing,
     lastPaidByClaim,
     claimArrears,
     ...(crisis

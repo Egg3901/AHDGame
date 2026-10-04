@@ -23,9 +23,11 @@ function Ratio({ label, value }: { label: string; value: number }) {
 export function DepartmentProgramPanel({
   program,
   currencySymbol,
+  embedded = false,
 }: {
   program: DepartmentProgramReadModel;
   currencySymbol: string;
+  embedded?: boolean;
 }) {
   if (!program.enabled) {
     return (
@@ -41,11 +43,8 @@ export function DepartmentProgramPanel({
     );
   }
 
-  return (
-    <section
-      className="rounded-lg border border-card-border bg-card p-5"
-      aria-labelledby="program-title"
-    >
+  const content = (
+    <>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs uppercase tracking-wide text-muted">{program.departmentName}</p>
@@ -152,6 +151,23 @@ export function DepartmentProgramPanel({
           this turn.
         </p>
       )}
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <div role="tabpanel" aria-label={program.programName} className="p-5">
+        {content}
+      </div>
+    );
+  }
+
+  return (
+    <section
+      className="rounded-lg border border-card-border bg-card p-5"
+      aria-labelledby="program-title"
+    >
+      {content}
     </section>
   );
 }

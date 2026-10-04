@@ -1,4 +1,4 @@
-import { resetLawFamilyById } from "@/lib/resetLegislation/catalog";
+import { resetLawFamilies } from "@/lib/resetLegislation/catalog";
 import { fundingNameForLaw1991, fundingSeatForLaw } from "@/lib/resetLegislation/fundingOwner";
 import { openingFiscalOwnership1991 } from "./openingOwnership1991";
 import { groupOpeningDepartmentClaims } from "./rules/departmentOpening";
@@ -18,19 +18,26 @@ export function openingDepartmentClaims1991() {
   return Object.fromEntries(
     (["US", "UK", "JP"] as const).map((country) => {
       const book = ownership[country];
-      const claims = Object.entries(book.familyTotals).flatMap(([familyId, annualAmount]) => {
-        if (annualAmount === 0) return [];
-        const family = resetLawFamilyById(familyId);
-        if (!family) throw new Error(`${country} has an unknown funded law family ${familyId}`);
-        return [
-          {
-            familyId,
-            seatId: fundingSeatForLaw(family, country, historicalSeats[country]),
-            agencyName: fundingNameForLaw1991(family, country, historicalSeats[country]),
-            annualAmount,
-          },
-        ];
-      });
+      const nationalFamilies = resetLawFamilies.filter((family) =>
+        family.availability.national.includes(country)
+      );
+      const knownFamilyIds = new Set(nationalFamilies.map((family) => family.id));
+      const unknownFundedFamily = Object.entries(book.familyTotals).find(
+        ([familyId, annualAmount]) => annualAmount !== 0 && !knownFamilyIds.has(familyId)
+      )?.[0];
+      if (unknownFundedFamily) {
+        throw new Error(`${country} has an unknown funded law family ${unknownFundedFamily}`);
+      }
+      // Every enactable national family needs a destination account even when
+      // its 1991 opening claim is zero. Later bills cannot fund a department
+      // that the opening partition omitted merely because the baseline law was
+      // regulatory rather than a separately booked appropriation.
+      const claims = nationalFamilies.map((family) => ({
+        familyId: family.id,
+        seatId: fundingSeatForLaw(family, country, historicalSeats[country]),
+        agencyName: fundingNameForLaw1991(family, country, historicalSeats[country]),
+        annualAmount: book.familyTotals[family.id] ?? 0,
+      }));
       return [country, groupOpeningDepartmentClaims(book.operating, claims, book.continuityOwned)];
     })
   ) as Record<"US" | "UK" | "JP", ReturnType<typeof groupOpeningDepartmentClaims>>;

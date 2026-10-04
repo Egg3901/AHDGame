@@ -17,6 +17,11 @@ import type {
   ResetDepartmentContinuitySnapshot,
 } from "./rules/liveDepartmentAccount";
 import { settleLiveDepartmentTurn } from "./rules/liveDepartmentTurn";
+import type { ResetLawProgramDocument } from "@/lib/resetLegislation/program";
+import {
+  activeDepartmentProgramFamilyIds,
+  activeDepartmentProgramFundingControl,
+} from "@/lib/resetCabinet/rules/programRoster";
 
 export async function settleResetTreasuryCashTurn(input: {
   db: Db;
@@ -41,7 +46,7 @@ export async function settleResetTreasuryCashTurn(input: {
     db.collection<ResetNationalTreasurySnapshot>("resetNationalTreasuries");
   const accountCollection =
     db.collection<ResetDepartmentAccountSnapshot>("resetDepartmentAccounts");
-  const [treasuries, accounts, continuity, budgets] = await Promise.all([
+  const [treasuries, accounts, continuity, budgets, currentPrograms] = await Promise.all([
     treasuryCollection.find(filter).toArray(),
     accountCollection.find(filter).toArray(),
     db
@@ -54,6 +59,21 @@ export async function settleResetTreasuryCashTurn(input: {
         { countryId: { $in: countries } },
         {
           projection: { countryId: 1, "revenue.total": 1, "debt.ceiling": 1 },
+        }
+      )
+      .toArray(),
+    db
+      .collection<ResetLawProgramDocument>("resetLawPrograms")
+      .find(
+        { worldId, country: { $in: countries }, scope: "national" },
+        {
+          projection: {
+            country: 1,
+            scope: 1,
+            familyId: 1,
+            choice: 1,
+            fundingAccountId: 1,
+          },
         }
       )
       .toArray(),
@@ -120,7 +140,20 @@ export async function settleResetTreasuryCashTurn(input: {
           throw new Error("Invalid account identity");
         const authorityPaid = next.lastPaidByClaim![account._id];
         if (authorityPaid === undefined) throw new Error("V2 cash receipt omitted a department");
-        const result = settleLiveDepartmentTurn({ account, turn, authorityPaid });
+        const fundingControls = Object.fromEntries(
+          Object.keys(account.familyAnnualDemand).map((familyId) => [
+            familyId,
+            activeDepartmentProgramFundingControl(account, familyId, currentPrograms),
+          ])
+        );
+        const activeFamilyIds = activeDepartmentProgramFamilyIds(account, currentPrograms);
+        const result = settleLiveDepartmentTurn({
+          account,
+          turn,
+          authorityPaid,
+          fundingControls,
+          activeFamilyIds,
+        });
         if ((result.next.unpaidAuthority ?? 0) !== next.claimArrears?.[account._id])
           throw new Error("Department unpaid authority does not reconcile to treasury");
         return { account, result };

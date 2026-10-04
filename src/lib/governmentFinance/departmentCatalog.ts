@@ -246,6 +246,16 @@ export const DEPARTMENT_DEFINITIONS: readonly DepartmentDefinition[] = [
     accountPolicyId: civil,
   },
   {
+    id: "uk_cabinet_office",
+    countryId: "UK",
+    kind: "executive_centre",
+    canonicalName: "Cabinet Office",
+    portfolioIds: ["interior_local_government"],
+    controllingPositionIds: ["first_secretary_of_state"],
+    activeFromYear: 1916,
+    accountPolicyId: civil,
+  },
+  {
     id: "uk_business_department",
     countryId: "UK",
     kind: "spending_department",

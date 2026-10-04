@@ -9,6 +9,11 @@ import type { ResetLawOpeningBoard } from "./rules/openingBoard";
 import { regionalLawLevel } from "./regionalCatalog";
 import profiles from "./provisionalBalanceProfiles.json";
 import { buildReviewedOptionCatalog, type ReviewedOptionCatalogEntry } from "./rules/reviewCatalog";
+import type { ResetLawProgramDocument } from "./program";
+import {
+  DEPARTMENT_DEFINITIONS,
+  resolveDepartmentDefinitionName,
+} from "@/lib/governmentFinance/departmentCatalog";
 
 export interface ReviewedLawFamilyCatalog {
   familyId: string;
@@ -21,6 +26,7 @@ export interface ReviewedLawFamilyCatalog {
   currentChoice: ReviewedOptionCatalogEntry["currentChoice"];
   overseeingSeatId: string | null;
   overseeingAgencyId: string;
+  overseeingAgencyName: string;
   options: ReviewedOptionCatalogEntry[];
 }
 
@@ -37,7 +43,7 @@ export async function loadReviewedLawCatalog(input: {
     throw new Error("Regional reviewed catalog needs exactly one region");
   }
   const boardId = scope === "national" ? `${country}:national` : `${country}:${regionId}`;
-  const [board, accounts, federalBudget, region] = await Promise.all([
+  const [board, accounts, federalBudget, region, currentPrograms] = await Promise.all([
     db.collection<ResetLawOpeningBoard>("resetLawOpeningBoards").findOne({ _id: boardId, worldId }),
     scope === "national"
       ? db
@@ -66,6 +72,29 @@ export async function loadReviewedLawCatalog(input: {
           .collection<State>("states")
           .findOne({ _id: regionId!, countryId: country }, { projection: { gdp: 1 } })
       : Promise.resolve(null),
+    db
+      .collection<ResetLawProgramDocument>("resetLawPrograms")
+      .find(
+        {
+          worldId,
+          country,
+          scope,
+          ...(scope === "regional" ? { regionId } : {}),
+        },
+        {
+          projection: {
+            familyId: 1,
+            country: 1,
+            scope: 1,
+            choice: 1,
+            annualAgencyAllocation: 1,
+            supersededSourceIds: 1,
+            titleSnapshot: 1,
+            descriptionSnapshot: 1,
+          },
+        }
+      )
+      .toArray(),
   ]);
   if (!board) throw new Error("The v2 current-law board is unavailable");
   const resolvedJurisdictionGdp =
@@ -75,6 +104,7 @@ export async function loadReviewedLawCatalog(input: {
   }
   const jurisdictionGdp = resolvedJurisdictionGdp as number;
   const profileByFamily = new Map(profiles.map((profile) => [profile.familyId, profile]));
+  const currentByFamily = new Map(currentPrograms.map((program) => [program.familyId, program]));
   return resetLawFamilies
     .filter((family) => family.availability[scope].includes(country))
     .map((family): ReviewedLawFamilyCatalog => {
@@ -87,6 +117,15 @@ export async function loadReviewedLawCatalog(input: {
         : null;
       if (scope === "national" && !account) {
         throw new Error(`Missing v2 funding account for ${country}:${family.id}`);
+      }
+      const departmentDefinition = account
+        ? DEPARTMENT_DEFINITIONS.find(
+            (definition) =>
+              definition.countryId === country && definition.id === account.departmentId
+          )
+        : undefined;
+      if (account && !departmentDefinition) {
+        throw new Error(`Unknown v2 funding department ${country}:${account.departmentId}`);
       }
       const levelText =
         scope === "regional"
@@ -109,6 +148,7 @@ export async function loadReviewedLawCatalog(input: {
         fundingAccountId: account?._id ?? "regional_budget",
         legalAuthorityId: `${country}:${scope}:${family.id}`,
         serviceDelivererId: account?.departmentId ?? `${country}:${regionId}:regional_services`,
+        current: currentByFamily.get(family.id) ?? null,
         ...(levelText ? { levelText } : {}),
       });
       return {
@@ -117,11 +157,15 @@ export async function loadReviewedLawCatalog(input: {
         domain: family.domain,
         ownerCode: family.ownerCode,
         primaryMetricIds: family.primaryMetricIds,
-        currentLaw: reference.currentLaw,
-        currentLawDescription: reference.legalNote,
+        currentLaw: currentByFamily.get(family.id)?.titleSnapshot ?? reference.currentLaw,
+        currentLawDescription:
+          currentByFamily.get(family.id)?.descriptionSnapshot ?? reference.legalNote,
         currentChoice: options[0]!.currentChoice,
         overseeingSeatId: seatId,
         overseeingAgencyId: account?.departmentId ?? "regional_budget",
+        overseeingAgencyName: departmentDefinition
+          ? resolveDepartmentDefinitionName(departmentDefinition, year)
+          : "Regional government",
         options,
       };
     });

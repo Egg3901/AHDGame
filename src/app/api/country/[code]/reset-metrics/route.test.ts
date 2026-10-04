@@ -10,6 +10,12 @@ vi.mock("@/lib/mongodb", () => ({
   }),
 }));
 vi.mock("@/lib/resetMetrics/readBoard", () => ({ readResetMetricBoard: vi.fn() }));
+vi.mock("@/lib/resetMetrics/readNationalRollup", () => ({
+  readNationalMetricRollup: vi.fn(),
+}));
+vi.mock("@/lib/resetMetrics/readGovernanceStyle", () => ({
+  readResetGovernanceStyle: vi.fn().mockResolvedValue(null),
+}));
 
 describe("v2 metrics API", () => {
   it("does not expose a staged or unavailable board as live data", async () => {
@@ -25,10 +31,17 @@ describe("v2 metrics API", () => {
     expect((await stale.json()).reason).toBe("stale");
   });
 
-  it("returns the five national primaries with descriptions and source labels", async () => {
+  it("returns all 58 national primaries with descriptions and source labels", async () => {
     const { readResetMetricBoard } = await import("@/lib/resetMetrics/readBoard");
-    const board = buildOpeningMetricSnapshots1991("world-test", 1)[0]!;
+    const { readNationalMetricRollup } = await import("@/lib/resetMetrics/readNationalRollup");
+    const boards = buildOpeningMetricSnapshots1991("world-test", 1);
+    const board = boards.find((row) => row._id === "US:national")!;
+    const regional = boards.find((row) => row.countryId === "US" && row.scope === "regional")!;
     vi.mocked(readResetMetricBoard).mockResolvedValue({ status: "ready", board });
+    vi.mocked(readNationalMetricRollup).mockResolvedValue({
+      ...regional.observations,
+      ...board.observations,
+    });
     const { GET } = await import("./route");
     const response = await GET(new Request("http://localhost/api/country/us/reset-metrics"), {
       params: Promise.resolve({ code: "us" }),
@@ -36,10 +49,28 @@ describe("v2 metrics API", () => {
     const payload = await response.json();
     expect(response.status).toBe(200);
     expect(response.headers.get("Cache-Control")).toContain("no-store");
-    expect(payload.metrics).toHaveLength(5);
+    expect(payload.metrics).toHaveLength(58);
+    expect(payload).toHaveProperty("governanceStyle", null);
     expect(payload.metrics[0]).toMatchObject({
       description: expect.any(String),
       observation: { source: expect.any(String), owner: expect.any(String) },
+      conditionScore: expect.any(Number),
     });
+  });
+
+  it("fails closed when the regional national rollup is incomplete", async () => {
+    const { readResetMetricBoard } = await import("@/lib/resetMetrics/readBoard");
+    const { readNationalMetricRollup } = await import("@/lib/resetMetrics/readNationalRollup");
+    const board = buildOpeningMetricSnapshots1991("world-test", 1).find(
+      (row) => row._id === "US:national"
+    )!;
+    vi.mocked(readResetMetricBoard).mockResolvedValue({ status: "ready", board });
+    vi.mocked(readNationalMetricRollup).mockResolvedValue(null);
+    const { GET } = await import("./route");
+    const response = await GET(new Request("http://localhost/api/country/us/reset-metrics"), {
+      params: Promise.resolve({ code: "us" }),
+    });
+    expect(response.status).toBe(503);
+    expect((await response.json()).reason).toBe("regional_rollup");
   });
 });

@@ -39,6 +39,12 @@ export interface NationalTurnInput {
   bondFaceRetired: number;
   /** Actual coupon paid by the bond shell. Omit only for forecast runs. */
   bondCouponCashPaid?: number;
+  /**
+   * Enacted operating appropriations are backed by the signed national budget
+   * balance. When true, a cash shortfall is deficit financing there rather
+   * than an unpaid Cabinet obligation in this disbursement ledger.
+   */
+  fundOperatingAppropriations?: boolean;
 }
 
 export interface NationalTurnSettlement {
@@ -48,6 +54,7 @@ export interface NationalTurnSettlement {
   interestDue: number;
   maturityOutlay: number;
   emergencyAdvanceDrawn: number;
+  appropriationFinancing: number;
   externalOutlay: number;
   grantTransfer: number;
   totalPaid: number;
@@ -135,7 +142,15 @@ export function settleNationalTreasury(
   let available = liquidAfterIssuance + emergencyAdvanceDrawn - prepaidBonds;
   const paid = emptyClaims();
   const arrears = emptyClaims();
+  let appropriationFinancing = 0;
   for (const category of NATIONAL_CLAIM_PRIORITY) {
+    if (category === "mandatory" && input.fundOperatingAppropriations) {
+      const operatingDue = NATIONAL_CLAIM_PRIORITY.filter(
+        (claimCategory) => claimCategory !== "interest"
+      ).reduce((sum, claimCategory) => sum + due[claimCategory], 0);
+      appropriationFinancing = Math.max(0, operatingDue - available);
+      available += appropriationFinancing;
+    }
     const prepaid = category === "interest" ? prepaidCoupon : 0;
     paid[category] = prepaid + Math.min(due[category] - prepaid, available);
     arrears[category] = due[category] - paid[category];
@@ -156,6 +171,7 @@ export function settleNationalTreasury(
     interestDue,
     maturityOutlay: input.bondMaturityCashPaid,
     emergencyAdvanceDrawn,
+    appropriationFinancing,
     externalOutlay: totalPaid - paid.grants + input.bondMaturityCashPaid,
     grantTransfer: paid.grants,
     totalPaid,
@@ -168,7 +184,8 @@ export function settleNationalTreasury(
       liquidBeforeBonds +
       input.bondProceeds +
       emergencyAdvanceDrawn -
-      input.bondMaturityCashPaid -
+      input.bondMaturityCashPaid +
+      appropriationFinancing -
       totalPaid -
       closing.cash,
   };

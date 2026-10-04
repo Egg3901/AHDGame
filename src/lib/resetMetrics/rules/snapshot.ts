@@ -1,5 +1,6 @@
 import { primaryMetrics } from "../catalog";
 import type { OpeningMetricObservation } from "./openingObservation";
+import { openingMetricHistory, validateMetricHistory, type ResetMetricHistory } from "./history";
 
 export interface ResetMetricSnapshot {
   _id: string;
@@ -10,6 +11,7 @@ export interface ResetMetricSnapshot {
   sourceTurn: number;
   asOfTurn: number;
   observations: Record<string, OpeningMetricObservation>;
+  history?: ResetMetricHistory;
 }
 
 /** Validate an entire scoped opening board before any v2 writer can consume it. */
@@ -19,6 +21,7 @@ export function buildResetMetricSnapshot(input: {
   regionId?: string;
   sourceTurn: number;
   observations: Record<string, OpeningMetricObservation>;
+  history?: ResetMetricHistory;
 }): ResetMetricSnapshot {
   if (!input.worldId || !Number.isSafeInteger(input.sourceTurn) || input.sourceTurn < 1) {
     throw new Error("Reset metric snapshot needs a world id and positive source turn");
@@ -50,6 +53,11 @@ export function buildResetMetricSnapshot(input: {
       );
     }
   }
+  const observations = Object.fromEntries(
+    expected.map((metric) => [metric.id, input.observations[metric.id]])
+  );
+  const history = input.history ?? openingMetricHistory(observations, input.sourceTurn);
+  validateMetricHistory(history, observations, input.sourceTurn);
   return {
     _id: `${input.countryId}:${input.regionId ?? "national"}`,
     worldId: input.worldId,
@@ -58,9 +66,8 @@ export function buildResetMetricSnapshot(input: {
     ...(input.regionId === undefined ? {} : { regionId: input.regionId }),
     sourceTurn: input.sourceTurn,
     asOfTurn: input.sourceTurn,
-    observations: Object.fromEntries(
-      expected.map((metric) => [metric.id, input.observations[metric.id]])
-    ),
+    observations,
+    history,
   };
 }
 
@@ -89,6 +96,9 @@ export function resetMetricSnapshotPayload(rows: readonly ResetMetricSnapshot[])
             observation.owner,
             observation.note,
           ]),
+        Object.entries(row.history ?? {})
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([id, series]) => [id, series.map((point) => [point.turn, point.value])]),
       ])
   );
 }

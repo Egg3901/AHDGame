@@ -13,6 +13,8 @@ export interface ResetNationalTreasurySnapshot extends NationalTreasuryState {
   departmentAccountIds?: string[];
   lastPaid?: NationalClaims;
   lastEmergencyAdvanceDrawn?: number;
+  /** Operating shortfall already represented by the signed national budget balance. */
+  lastAppropriationFinancing?: number;
   /** Individually owed authority; category totals must match treasury arrears. */
   claimArrears?: Record<string, number>;
   lastPaidByClaim?: Record<string, number>;
@@ -80,6 +82,7 @@ export function openingNationalTreasuryPayload(
           Object.values(row.arrears).some((value) => value !== 0) ||
           row.lastPaid !== undefined ||
           row.lastEmergencyAdvanceDrawn !== undefined ||
+          row.lastAppropriationFinancing !== undefined ||
           row.claimArrears !== undefined ||
           row.lastPaidByClaim !== undefined ||
           row.fiscalCrisis !== undefined

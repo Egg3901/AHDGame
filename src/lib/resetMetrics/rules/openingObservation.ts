@@ -23,9 +23,8 @@ export interface OpeningMetricInputs {
   /** Recomputed by the named fiscal, cohort, or perception owner. */
   ownerValue?: number | null;
   afterTaxMedianResources?: number | null;
-  consumerBasketCost?: number | null;
-  /** Population-weighted 1991 country median-resource to basket-cost ratio. */
-  consumerResourcesReferenceRatio?: number | null;
+  /** Consumer-price index where 100 represents the constant-price base. */
+  consumerBasketIndex?: number | null;
   annualCpiChange?: number | null;
   cpiVolatility48?: number | null;
   testedCohortScore?: number | null;
@@ -113,23 +112,15 @@ export function buildOpeningMetricObservation(
   }
   switch (metricId) {
     case "02":
-      return positive(input.afterTaxMedianResources) &&
-        positive(input.consumerBasketCost) &&
-        positive(input.consumerResourcesReferenceRatio)
+      return positive(input.afterTaxMedianResources) && positive(input.consumerBasketIndex)
         ? observation(
             metric,
-            (input.afterTaxMedianResources /
-              input.consumerBasketCost /
-              input.consumerResourcesReferenceRatio) *
-              100,
+            (input.afterTaxMedianResources * 100) / input.consumerBasketIndex,
             "derived",
             "household disposable resources and consumer basket",
-            "1991 ratio relative to the country's population-weighted opening ratio."
+            "Annual real household income in local currency at constant 1991 prices."
           )
-        : unavailable(
-            metric,
-            "After-tax median resources, basket, or country reference is missing."
-          );
+        : unavailable(metric, "After-tax median resources or consumer-price index is missing.");
     case "07":
       return finite(input.annualCpiChange) && finite(input.cpiVolatility48)
         ? observation(

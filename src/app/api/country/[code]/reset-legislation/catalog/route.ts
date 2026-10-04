@@ -10,6 +10,8 @@ import type { ResetCountry } from "@/lib/resetLegislation/fundingOwner";
 import { loadReviewedLawCatalog } from "@/lib/resetLegislation/loadReviewedCatalog";
 import { resetTaxesFor } from "@/lib/resetLegislation/taxCatalog";
 import { eraYearContextFromGameState } from "@/lib/era/context";
+import { primaryMetrics } from "@/lib/resetMetrics/catalog";
+import { playerMetricDescription } from "@/lib/resetMetrics/presentation";
 
 const querySchema = z
   .object({
@@ -47,6 +49,7 @@ export async function GET(request: Request, context: { params: Promise<{ code: s
           currentTurn: 1,
           startingYear: 1,
           eraSystemEnabled: 1,
+          metricsSystemVersion: 1,
           legislationSystemVersion: 1,
           resetVersionSeeds: 1,
         },
@@ -68,13 +71,22 @@ export async function GET(request: Request, context: { params: Promise<{ code: s
       year,
       ...(parsed.data.regionId ? { regionId: parsed.data.regionId } : {}),
     });
+    const usedMetricIds = new Set(families.flatMap((family) => family.primaryMetricIds));
     return NextResponse.json({
       country,
       scope,
+      year,
       regionId: parsed.data.regionId ?? null,
       balanceNotice:
         "Game-calibrated provisional estimates are used where reviewed historical values are unavailable.",
       families,
+      metrics: primaryMetrics
+        .filter((metric) => usedMetricIds.has(metric.id))
+        .map((metric) => ({
+          id: metric.id,
+          name: metric.name,
+          description: playerMetricDescription(metric),
+        })),
       taxes: resetTaxesFor(country as ResetCountry, scope),
     });
   } catch (error) {

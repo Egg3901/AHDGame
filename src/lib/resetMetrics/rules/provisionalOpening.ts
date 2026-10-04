@@ -149,9 +149,9 @@ export function provisionalRegionalOpening(
       const observations: Record<string, OpeningMetricObservation> = {
         "02": proxy(
           "02",
-          purchase !== null && purchaseMean !== null ? (100 * purchase) / purchaseMean : null,
+          purchase !== null ? 100 * purchase : null,
           "gross median income / relative cost-of-living index",
-          "Country-normalized purchasing-power index. Taxes, transfers, and basket detail are not yet included."
+          "Annual real household income in local currency at constant 1991 prices. Taxes, transfers, and basket detail are not yet included."
         ),
         "15": proxy(
           "15",

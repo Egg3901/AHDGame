@@ -6,19 +6,15 @@ import type {
   DepartmentProgramClaimInput,
 } from "@/lib/governmentFinance/rules/types";
 import type { ResetDepartmentAccountSnapshot } from "./liveDepartmentAccount";
+import {
+  openingLawFundingControl,
+  type LawFundingControl,
+} from "@/lib/resetLegislation/rules/fundingControl";
+import { annualProgramFundingRequest } from "./programRequest";
 
 function integerAmount(value: number, label: string): number {
   if (!Number.isSafeInteger(value) || value < 0) throw new Error(`Invalid ${label}`);
   return value;
-}
-
-function annualRequest(base: number, percent: number): number {
-  integerAmount(base, "family annual demand");
-  if (!Number.isSafeInteger(percent) || percent < 0 || percent > 200) {
-    throw new Error("Cabinet allocation must be an integer percent from 0 to 200");
-  }
-  const result = Number((BigInt(base) * BigInt(percent) + BigInt(50)) / BigInt(100));
-  return integerAmount(result, "authored annual request");
 }
 
 export interface LiveDepartmentTurnResult {
@@ -37,6 +33,8 @@ export function settleLiveDepartmentTurn(input: {
   account: ResetDepartmentAccountSnapshot;
   turn: number;
   authorityPaid: number;
+  fundingControls?: Readonly<Record<string, LawFundingControl>>;
+  activeFamilyIds?: readonly string[];
 }): LiveDepartmentTurnResult {
   const { account, turn } = input;
   if (!Number.isSafeInteger(turn) || turn <= account.sourceTurn) {
@@ -71,9 +69,27 @@ export function settleLiveDepartmentTurn(input: {
   if (account.accruedThroughTurn === turn && authorityPaid !== account.lastAuthorityPaid) {
     throw new Error("Cabinet replay differs from paid authority");
   }
-  const familyEntries = Object.entries(account.familyAnnualDemand).sort(([a], [b]) =>
-    a.localeCompare(b)
+  const activeFamilyIds = input.activeFamilyIds
+    ? new Set(input.activeFamilyIds)
+    : new Set(Object.keys(account.familyAnnualDemand));
+  if (activeFamilyIds.size !== (input.activeFamilyIds?.length ?? activeFamilyIds.size)) {
+    throw new Error("Cabinet active family roster contains duplicates");
+  }
+  const unknownActiveFamily = [...activeFamilyIds].find(
+    (familyId) => account.familyAnnualDemand[familyId] === undefined
   );
+  if (unknownActiveFamily) {
+    throw new Error(`Unknown active Cabinet family ${unknownActiveFamily}`);
+  }
+  const inactiveAuthority = Object.entries(account.familyAnnualDemand).find(
+    ([familyId, amount]) => !activeFamilyIds.has(familyId) && amount !== 0
+  );
+  if (inactiveAuthority) {
+    throw new Error(`Inactive Cabinet family retains authority ${inactiveAuthority[0]}`);
+  }
+  const familyEntries = Object.entries(account.familyAnnualDemand)
+    .filter(([familyId]) => activeFamilyIds.has(familyId))
+    .sort(([a], [b]) => a.localeCompare(b));
   if (
     familyEntries.reduce((sum, [, amount]) => sum + integerAmount(amount, "family demand"), 0) !==
     account.annualAuthority
@@ -85,8 +101,16 @@ export function settleLiveDepartmentTurn(input: {
   );
   if (unknownAllocation) throw new Error(`Unknown Cabinet family allocation ${unknownAllocation}`);
   const programs: DepartmentProgramClaimInput[] = familyEntries.map(([familyId, baseAnnual]) => {
-    const percent = account.programAllocationPercents[familyId] ?? 100;
-    const requestedAnnual = annualRequest(baseAnnual, percent);
+    const fundingControl =
+      input.fundingControls?.[familyId] ??
+      openingLawFundingControl({
+        country: account.countryId,
+        familyId,
+        annualAllocation: baseAnnual,
+      });
+    const percent =
+      fundingControl === "adjustable" ? (account.programAllocationPercents[familyId] ?? 100) : 100;
+    const requestedAnnual = annualProgramFundingRequest(baseAnnual, percent);
     const basePeriod = includedAuthorityPerTurn(baseAnnual, turn);
     const requestedPeriod = includedAuthorityPerTurn(requestedAnnual, turn);
     return {
@@ -95,6 +119,10 @@ export function settleLiveDepartmentTurn(input: {
       policyOptionId: "1991-opening-service",
       status: "operating",
       priority: 5,
+      // Required programs settle first. Adjustable programs then settle from
+      // the lowest authored percentage to the highest, with equal percentages
+      // sharing the same order group.
+      allocationOrder: fundingControl === "required" ? 0 : percent + 1,
       annualDemand: requestedAnnual,
       periodDemand: requestedPeriod,
       requestedOutlay: requestedPeriod,

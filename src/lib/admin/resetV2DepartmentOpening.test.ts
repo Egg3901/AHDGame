@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { RESET_V2_SEED_REVISION } from "@/lib/resetVersions/rules";
 
 vi.mock("@/lib/admin/resetGameWorld", () => ({ resetGameWorld: vi.fn() }));
 vi.mock("@/lib/admin/bootstrapGameWorld", () => ({ bootstrapGameWorld: vi.fn() }));
@@ -16,14 +17,14 @@ vi.mock("@/lib/resetFinance/seedOpeningDepartments1991", () => ({
 
 const metricsReceipt = {
   worldId: "new-world",
-  revision: 1,
+  revision: RESET_V2_SEED_REVISION.metrics,
   sourceTurn: 1,
   completedAt: "2026-09-29T00:00:00.000Z",
   verificationHash: "metric-hash",
 };
 const departmentReceipt = {
   ...metricsReceipt,
-  revision: 7,
+  revision: RESET_V2_SEED_REVISION.cabinet,
   verificationHash: "department-hash",
 };
 

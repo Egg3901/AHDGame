@@ -178,6 +178,7 @@ export async function proposeStateBill(
           resetWorldId: 1,
           startingYear: 1,
           currentYear: 1,
+          metricsSystemVersion: 1,
           legislationSystemVersion: 1,
           resetVersionSeeds: 1,
         },

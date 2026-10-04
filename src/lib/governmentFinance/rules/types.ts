@@ -33,6 +33,11 @@ export interface PriorityClaim {
   priority: ObligationPriority;
   requested: number;
   /**
+   * Optional order inside a legal priority tier. Lower values settle first;
+   * claims with the same value continue to share a partial tier pro rata.
+   */
+  allocationOrder?: number;
+  /**
    * Optional player-authored share inside this legal priority tier. This never
    * moves a claim ahead of arrears or existing commitments.
    */
@@ -44,6 +49,7 @@ export interface PriorityAllocation {
   priority: ObligationPriority;
   requested: number;
   allocated: number;
+  allocationOrder?: number;
 }
 
 export interface ImplementationFactors {
@@ -121,6 +127,8 @@ export interface DepartmentProgramClaimInput {
   coverageRatio: number;
   rampFactor: number;
   createsArrearsOnShortfall: boolean;
+  /** Optional settlement order inside the program's legal priority tier. */
+  allocationOrder?: number;
   /** Optional Cabinet emphasis within the program's legal priority tier. */
   allocationWeight?: number;
   jurisdictionMode?: import("@/lib/db/types/legislation").JurisdictionMode;

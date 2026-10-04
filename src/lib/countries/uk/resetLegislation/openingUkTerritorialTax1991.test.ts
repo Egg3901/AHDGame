@@ -11,6 +11,10 @@ describe("1991 UK local-tax legal fixture", () => {
     expect(openings.every((row) => row.business === "non_domestic_rates")).toBe(true);
     expect(openings.every((row) => !row.domesticRateKnown && !row.businessRateKnown)).toBe(true);
     expect(openings.every((row) => row.sourceOwnRevenueProxy > 0)).toBe(true);
+    expect(openings.reduce((sum, row) => sum + row.sourceOwnRevenueProxy, 0)).toBeCloseTo(
+      29_280_000_000,
+      2
+    );
   });
 
   it("preserves the combined seed own-revenue proxy without relabeling it as tax receipts", () => {

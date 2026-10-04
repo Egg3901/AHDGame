@@ -9,6 +9,7 @@ import { resetSystemVersionsForCountry, type ResetSystem } from "@/lib/resetVers
 import type { OpeningMetricObservation } from "./rules/openingObservation";
 import { refreshResetMetricBoard } from "./rules/refresh";
 import type { ResetMetricSnapshot } from "./rules/snapshot";
+import { appendMetricHistory, metricHistoryDue } from "./rules/history";
 
 const REGION_IDS = {
   US: states1991.map((region) => region._id),
@@ -56,6 +57,11 @@ export async function refreshResetMetricSnapshotsTurn(input: {
     ...REGION_IDS[country].map((regionId) => `${country}:${regionId}`),
   ]);
   const idSet = new Set(ids);
+  const sourceTurn = gameState.resetVersionSeeds?.metrics?.sourceTurn;
+  if (!Number.isSafeInteger(sourceTurn)) {
+    throw new Error("Reset metric turn lacks its verified opening turn");
+  }
+  const recordHistory = metricHistoryDue(sourceTurn!, turn);
   const collection = db.collection<ResetMetricSnapshot>("resetMetricSnapshots");
   const current = await collection
     .find(
@@ -70,6 +76,7 @@ export async function refreshResetMetricSnapshotsTurn(input: {
           sourceTurn: 1,
           asOfTurn: 1,
           observations: 1,
+          ...(recordHistory ? { history: 1 } : {}),
         },
       }
     )
@@ -114,16 +121,27 @@ export async function refreshResetMetricSnapshotsTurn(input: {
   const pending = next.filter((result) => !result.replayed);
   if (pending.length > 0) {
     const written = await collection.bulkWrite(
-      pending.map(({ board }) => ({
-        updateOne: {
-          filter: {
-            _id: board._id,
-            worldId: board.worldId,
-            asOfTurn: turn - 1,
+      pending.map(({ board }) => {
+        const history = recordHistory
+          ? appendMetricHistory(board.history ?? {}, board.observations, turn)
+          : undefined;
+        return {
+          updateOne: {
+            filter: {
+              _id: board._id,
+              worldId: board.worldId,
+              asOfTurn: turn - 1,
+            },
+            update: {
+              $set: {
+                asOfTurn: turn,
+                observations: board.observations,
+                ...(history ? { history } : {}),
+              },
+            },
           },
-          update: { $set: { asOfTurn: turn, observations: board.observations } },
-        },
-      })),
+        };
+      }),
       { ordered: true }
     );
     if (written.matchedCount !== pending.length) {

@@ -3,6 +3,7 @@ import type { DeliveryMultiplierResolution } from "./deliveryMultiplier";
 import { PUBLIC_HEALTH_CAPACITY_TYPE, US_PUBLIC_HEALTH_PROGRAM_ID } from "./departments";
 import type { LegislationType } from "@/lib/db/types/legislation";
 import type { DepartmentDefinition } from "./departmentCatalog";
+import type { LawFundingControl } from "@/lib/resetLegislation/rules/fundingControl";
 
 export interface DepartmentProgramReadModel {
   enabled: boolean;
@@ -19,6 +20,7 @@ export interface DepartmentProgramReadModel {
   lastSettledTurn?: number;
   arrears?: number;
   allocationPercent?: number;
+  fundingControl?: LawFundingControl;
   ratios?: {
     funding: number;
     capacity: number;

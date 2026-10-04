@@ -30,14 +30,12 @@ describe("1991 reset metric observation contract", () => {
     expect(
       buildOpeningMetricObservation("02", {
         afterTaxMedianResources: 30_000,
-        consumerBasketCost: 12_000,
-        consumerResourcesReferenceRatio: 2,
+        consumerBasketIndex: 120,
       })
-    ).toMatchObject({ value: 125, status: "derived" });
+    ).toMatchObject({ value: 25_000, status: "derived" });
     expect(
       buildOpeningMetricObservation("02", {
         afterTaxMedianResources: 30_000,
-        consumerBasketCost: 12_000,
       }).value
     ).toBeNull();
     expect(

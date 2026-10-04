@@ -40,6 +40,15 @@ export interface ReviewedOptionCatalogEntry {
   balanceBasis: "game-calibrated-provisional";
 }
 
+export interface CurrentReviewedLawProgram {
+  country: ResetCountry;
+  scope: LawScope;
+  familyId: string;
+  choice: LawChoice;
+  annualAgencyAllocation: number;
+  supersededSourceIds: readonly string[];
+}
+
 /**
  * The old catalog is not an ideological source of truth. This conservative
  * bridge confines every 1991 starting point to one of the three middle rungs.
@@ -86,6 +95,7 @@ export function buildReviewedOptionCatalog(input: {
   fundingAccountId: string;
   legalAuthorityId: string;
   serviceDelivererId: string;
+  current?: CurrentReviewedLawProgram | null;
   levelText?: Readonly<
     Partial<Record<LegislativePosition, { title: string; description: string }>>
   >;
@@ -111,15 +121,40 @@ export function buildReviewedOptionCatalog(input: {
   ) {
     throw new Error(`Invalid reviewed option catalog inputs for ${country}:${scope}:${family.id}`);
   }
-  const currentChoice = openingChoice1991(reference);
+  const current = input.current ?? null;
+  if (
+    current &&
+    (current.country !== country ||
+      current.scope !== scope ||
+      current.familyId !== family.id ||
+      !Number.isSafeInteger(current.annualAgencyAllocation) ||
+      current.annualAgencyAllocation < 0 ||
+      new Set(current.supersededSourceIds).size !== current.supersededSourceIds.length ||
+      current.supersededSourceIds.some(
+        (sourceId) => !reference.sourceComponents.some((source) => source.sourceId === sourceId)
+      ) ||
+      (current.choice !== "leave_to_states" &&
+        !family.levels.some((level) => level.position === current.choice)))
+  ) {
+    throw new Error(`Invalid current reviewed law for ${country}:${scope}:${family.id}`);
+  }
+  const currentChoice = current?.choice ?? openingChoice1991(reference);
   const prices = provisionalPriceVector({
     gdp: jurisdictionGdp,
     sourceAnnual: sourceAnnual(reference),
     profile,
   });
-  const currentAnnualAllocation =
-    prices.fiveAnnualAllocations[POSITIONS.indexOf(currentChoice)] ?? 0;
   const supersedesSourceIds = replaceableOwnedSources(reference);
+  const alreadySuperseded = new Set(current?.supersededSourceIds ?? []);
+  const newlySupersededAnnual = reference.sourceComponents.reduce(
+    (sum, source) =>
+      sum +
+      (supersedesSourceIds.includes(source.sourceId) && !alreadySuperseded.has(source.sourceId)
+        ? source.annualBooked
+        : 0),
+    0
+  );
+  const currentAnnualAllocation = (current?.annualAgencyAllocation ?? 0) + newlySupersededAnnual;
   const entries = POSITIONS.map((choice, index): ReviewedOptionCatalogEntry => {
     const authored =
       input.levelText?.[choice] ?? family.levels.find((level) => level.position === choice);

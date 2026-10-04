@@ -50,6 +50,7 @@ export async function applyResetLawBillEnactment(
           resetWorldId: 1,
           currentYear: 1,
           startingYear: 1,
+          metricsSystemVersion: 1,
           legislationSystemVersion: 1,
           resetVersionSeeds: 1,
         },
@@ -205,18 +206,21 @@ export async function applyResetLawBillEnactment(
         throw new Error("V2 department authority changed concurrently");
       if (account.externallySettled && familyDeltas.has("L48")) defenseAnnualDelta += accountDelta;
     }
-    if (defenseAnnualDelta !== 0) {
+    if (enactment.annualAllocationDelta !== 0 || defenseAnnualDelta !== 0) {
+      const spendingIncrement: Record<string, number> = {
+        "spending.total": enactment.annualAllocationDelta,
+      };
+      if (defenseAnnualDelta !== 0) {
+        spendingIncrement["spending.byCategory.defense"] = defenseAnnualDelta;
+      }
       const written = await db.collection<FederalBudget>("federalBudget").updateOne(
         { countryId: country },
         {
-          $inc: {
-            "spending.byCategory.defense": defenseAnnualDelta,
-            "spending.total": defenseAnnualDelta,
-          },
+          $inc: spendingIncrement,
         },
         { session }
       );
-      if (written.matchedCount !== 1) throw new Error("V2 defense line is unavailable");
+      if (written.matchedCount !== 1) throw new Error("V2 national budget is unavailable");
     }
     const programIds = frozen.map(
       (provision) => `${worldId}:${country}:national:${provision.familyId}`
@@ -268,6 +272,7 @@ async function applyRegionalResetLawBillEnactment(
           resetWorldId: 1,
           currentYear: 1,
           startingYear: 1,
+          metricsSystemVersion: 1,
           legislationSystemVersion: 1,
           resetVersionSeeds: 1,
         },

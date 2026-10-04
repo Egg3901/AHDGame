@@ -17,8 +17,21 @@ vi.mock("@/components/bills/BillAutoFailWarning", () => ({
 }));
 
 const catalog = {
+  year: 1991,
   balanceNotice: "Game-calibrated provisional estimates for the 1991 reset.",
   taxes: [],
+  metrics: [
+    {
+      id: "11",
+      name: "Secondary completion",
+      description: "Completion of secondary education by cohort age.",
+    },
+    {
+      id: "16",
+      name: "Effective health coverage",
+      description: "Enrollment, service reach, and practical access to care.",
+    },
+  ],
   families: [
     {
       familyId: "L19",
@@ -29,7 +42,8 @@ const catalog = {
       currentLawDescription: "The existing national coverage framework.",
       currentChoice: "center",
       overseeingSeatId: "secretary_of_health",
-      overseeingAgencyId: "Health and Human Services",
+      overseeingAgencyId: "us_health_department",
+      overseeingAgencyName: "U.S. Department of Health and Human Services",
       options: [
         {
           option: { choice: "center", annualAllocation: 100 },
@@ -62,7 +76,8 @@ const catalog = {
       currentLawDescription: "The existing school access framework.",
       currentChoice: "center_right",
       overseeingSeatId: "secretary_of_education",
-      overseeingAgencyId: "Department of Education",
+      overseeingAgencyId: "us_education_department",
+      overseeingAgencyName: "U.S. Department of Education",
       options: [
         {
           option: { choice: "center_right", annualAllocation: 70 },
@@ -89,13 +104,28 @@ const catalog = {
   ],
 } as const;
 
-function stubCatalog() {
+const metricBoard = {
+  metrics: [
+    { id: "11", observation: { value: 82 } },
+    { id: "16", observation: { value: 86 } },
+  ],
+};
+
+function stubCatalog(response: unknown = catalog) {
   vi.stubGlobal(
     "fetch",
-    vi.fn(async (input: RequestInfo | URL) => ({
-      ok: true,
-      json: async () => (String(input).includes("reset-legislation") ? catalog : []),
-    }))
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      return {
+        ok: true,
+        json: async () =>
+          url.includes("reset-legislation")
+            ? response
+            : url.includes("reset-metrics")
+              ? metricBoard
+              : [],
+      };
+    })
   );
 }
 
@@ -117,7 +147,9 @@ function renderModal(onSuccess = vi.fn()) {
 }
 
 async function addProvision(domain: string, family: string, option: string) {
-  fireEvent.click(await screen.findByRole("button", { name: domain }));
+  fireEvent.change(await screen.findByLabelText("Policy domain"), {
+    target: { value: domain },
+  });
   fireEvent.click(screen.getByText(family).closest("button")!);
   fireEvent.click(screen.getByText(option).closest("button")!);
   fireEvent.click(screen.getByRole("button", { name: "Add to draft bill" }));
@@ -131,6 +163,53 @@ afterEach(() => {
 });
 
 describe("GuidedLegislationModal", () => {
+  it("populates metric names when the server response omits its metric definitions", async () => {
+    const { metrics: _metrics, ...olderCatalogResponse } = catalog;
+    stubCatalog(olderCatalogResponse);
+    renderModal();
+
+    fireEvent.click(await screen.findByRole("button", { name: "By metric" }));
+
+    expect(screen.getByRole("option", { name: "Secondary completion" })).toBeTruthy();
+    const coverageOption = screen.getByRole("option", { name: "Effective health coverage" });
+    expect(coverageOption).toBeTruthy();
+    expect(coverageOption.getAttribute("title")).toContain("enrolled in health coverage");
+
+    fireEvent.change(screen.getByLabelText("Metric to affect"), { target: { value: "16" } });
+    fireEvent.click(screen.getByText("Primary care access").closest("button")!);
+    expect(screen.getByText("At equilibrium")).toBeTruthy();
+    expect(screen.getByText("▲").className).toContain("text-sm");
+    expect(screen.queryByText(/Effective health coverage: \+0\.24$/)).toBeNull();
+    expect(screen.getByText("Allocation +125/yr")).toBeTruthy();
+    expect(screen.getByText("Budget change +25/yr")).toBeTruthy();
+    expect(screen.queryByText(/Metric 16/)).toBeNull();
+    expect(screen.queryByText("v2")).toBeNull();
+    expect(screen.getByText(/Overseeing agency:/).textContent).toContain(
+      "U.S. Department of Health and Human Services"
+    );
+    expect(screen.queryByText(/us_health_department/)).toBeNull();
+  });
+
+  it("uses player-facing metric names for the metric path and review", async () => {
+    stubCatalog();
+    renderModal();
+
+    fireEvent.click(await screen.findByRole("button", { name: "By metric" }));
+    const metricSelect = screen.getByLabelText("Metric to affect");
+    expect(screen.getByRole("option", { name: "Effective health coverage" })).toBeTruthy();
+    fireEvent.change(metricSelect, { target: { value: "16" } });
+    expect(screen.queryByText(/L19/)).toBeNull();
+    fireEvent.click(screen.getByText("Primary care access").closest("button")!);
+    expect(screen.getByRole("heading", { name: "Primary care access" })).toBeTruthy();
+    expect(screen.queryByText(/L19/)).toBeNull();
+    fireEvent.click(screen.getByText("Community clinic expansion").closest("button")!);
+
+    expect(screen.getByText("▲").className).toContain("text-sm");
+    expect(
+      screen.getByText("Expected metric direction from current law at full implementation")
+    ).toBeTruthy();
+  });
+
   it("locks current law and returns to the overview while composing a multi-provision bill", async () => {
     stubCatalog();
     mocks.postBill.mockResolvedValue({
@@ -140,7 +219,9 @@ describe("GuidedLegislationModal", () => {
     });
     const { onSuccess } = renderModal();
 
-    fireEvent.click(await screen.findByRole("button", { name: "Health and care" }));
+    fireEvent.change(await screen.findByLabelText("Policy domain"), {
+      target: { value: "Health and care" },
+    });
     fireEvent.click(screen.getByText("Primary care access").closest("button")!);
     expect(screen.getByText("Baseline coverage").closest("button")?.hasAttribute("disabled")).toBe(
       true

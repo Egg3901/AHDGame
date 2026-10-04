@@ -4,6 +4,7 @@ import type { GameState } from "@/lib/db/types/gameState";
 import { createMockDb } from "@/lib/test-utils/mockDb";
 import { buildOpeningMetricSnapshots1991 } from "./seedOpening1991";
 import { refreshResetMetricBoard } from "./rules/refresh";
+import { RESET_V2_SEED_REVISION } from "@/lib/resetVersions/rules";
 import {
   refreshResetMetricSnapshotsTurn,
   type MetricOwnerTurnReadingsByBoard,
@@ -18,7 +19,7 @@ const state = {
   resetVersionSeeds: {
     metrics: {
       worldId,
-      revision: 1,
+      revision: RESET_V2_SEED_REVISION.metrics,
       sourceTurn: 1,
       completedAt: "2026-09-30T00:00:00.000Z",
       verificationHash: "test-hash",
@@ -27,12 +28,15 @@ const state = {
 } as GameState;
 const ready = { metrics: true, legislation: false, cabinet: false };
 
-function ownerReadings(): MetricOwnerTurnReadingsByBoard {
+function ownerReadings(
+  sourceBoards: readonly (typeof boards)[number][] = boards,
+  turn = 2
+): MetricOwnerTurnReadingsByBoard {
   return Object.fromEntries(
-    boards.map((board) => {
+    sourceBoards.map((board) => {
       const dueIds = refreshResetMetricBoard({
         board,
-        turn: 2,
+        turn,
         updates: {},
         cohortDue: false,
         electionDue: false,
@@ -145,5 +149,26 @@ describe("v2 metric turn persistence shell", () => {
       })
     ).toEqual({ boards: 74, advanced: 64, replayed: 10 });
     expect(db.collectionMocks.resetMetricSnapshots!.bulkWrite.mock.calls[0]![0]).toHaveLength(64);
+  });
+
+  it("samples history in the existing bulk write on the annual cadence", async () => {
+    const db = createMockDb();
+    const annualBoards = boards.map((board) => ({ ...board, asOfTurn: 12 }));
+    db.collection("resetMetricSnapshots").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue(annualBoards),
+    });
+    db.collection("resetMetricSnapshots").bulkWrite.mockResolvedValue({ matchedCount: 74 });
+    await refreshResetMetricSnapshotsTurn({
+      db: db as unknown as Db,
+      gameState: { ...state, currentTurn: 12 },
+      turn: 13,
+      ownerReadings: ownerReadings(annualBoards, 13),
+      ready,
+    });
+    const findOptions = db.collectionMocks.resetMetricSnapshots!.find.mock.calls[0]![1];
+    expect(findOptions.projection.history).toBe(1);
+    const operations = db.collectionMocks.resetMetricSnapshots!.bulkWrite.mock.calls[0]![0];
+    expect(operations[0].updateOne.update.$set.history["07"]).toHaveLength(2);
+    expect(operations[0].updateOne.update.$set.history["07"][1].turn).toBe(13);
   });
 });

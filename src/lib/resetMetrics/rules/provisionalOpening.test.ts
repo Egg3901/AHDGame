@@ -34,6 +34,7 @@ describe("provisional 1991 regional openings", () => {
     expect(values["20"].value).toBe(opening1991Anchors.US.lifeYears);
     expect(values["54"].value).toBe(opening1991Anchors.US.growthPercent);
     expect(values["16"].value).toBe(85);
+    expect(values["02"].value).toBe(20_000);
     expect(values["58"]).toBeUndefined();
   });
 

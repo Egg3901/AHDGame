@@ -93,6 +93,40 @@ describe("department account settlement", () => {
     ]);
   });
 
+  it("settles lower allocation-order groups before higher groups within a legal tier", () => {
+    const result = settleDepartmentAccount(
+      fixture({
+        authority: 175,
+        programs: [
+          program("required", 5, 100, { allocationOrder: 0 }),
+          program("lower_percent", 5, 75, { allocationOrder: 76 }),
+          program("higher_percent", 5, 150, { allocationOrder: 151 }),
+        ],
+      })
+    );
+    expect(result.programs.map(({ programId, allocated }) => ({ programId, allocated }))).toEqual([
+      { programId: "required", allocated: 100 },
+      { programId: "lower_percent", allocated: 75 },
+      { programId: "higher_percent", allocated: 0 },
+    ]);
+  });
+
+  it("continues to share shortfalls within an equal allocation-order group", () => {
+    const result = settleDepartmentAccount(
+      fixture({
+        authority: 5,
+        programs: [
+          program("alpha", 5, 4, { allocationOrder: 101 }),
+          program("beta", 5, 4, { allocationOrder: 101 }),
+        ],
+      })
+    );
+    expect(result.programs.map(({ programId, allocated }) => ({ programId, allocated }))).toEqual([
+      { programId: "alpha", allocated: 3 },
+      { programId: "beta", allocated: 2 },
+    ]);
+  });
+
   it("applies Cabinet weights only within the same legal priority tier", () => {
     const result = settleDepartmentAccount(
       fixture({

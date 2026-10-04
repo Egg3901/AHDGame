@@ -3,6 +3,7 @@ import type { Db } from "mongodb";
 import { createMockDb } from "@/lib/test-utils/mockDb";
 import { primaryMetrics } from "./catalog";
 import { buildOpeningMetricSnapshots1991, seedOpeningMetrics1991 } from "./seedOpening1991";
+import { RESET_V2_SEED_REVISION } from "@/lib/resetVersions/rules";
 import { buildResetMetricSnapshot } from "./rules/snapshot";
 import {
   openingFertilityPolicyInputs1991,
@@ -97,7 +98,7 @@ describe("1991 reset metric opening", () => {
     const receipt = await seedOpeningMetrics1991(db as unknown as Db, "world-test", 1);
     expect(receipt).toMatchObject({
       worldId: "world-test",
-      revision: 1,
+      revision: RESET_V2_SEED_REVISION.metrics,
       sourceTurn: 1,
       verificationHash: expect.stringMatching(/^[a-f0-9]{64}$/),
     });

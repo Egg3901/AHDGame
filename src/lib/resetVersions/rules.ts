@@ -12,9 +12,12 @@ export const RESET_V2_COUNTRIES = ["US", "UK", "JP"] as const;
 
 /** Bump a revision when the verified opening representation changes incompatibly. */
 export const RESET_V2_SEED_REVISION: Readonly<Record<ResetSystem, number>> = {
-  metrics: 1,
+  metrics: 3,
   legislation: 6,
-  cabinet: 7,
+  // Opening working capital changes values on the next reset but does not
+  // change the persisted Cabinet account shape. Keep revision 8 so running v2
+  // worlds do not lose their department accounts when this code is deployed.
+  cabinet: 8,
 };
 
 /** Written only after a fresh world's v2 opening seed and validation complete. */

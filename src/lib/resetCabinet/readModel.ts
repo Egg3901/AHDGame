@@ -3,13 +3,19 @@ import type { DepartmentDefinition } from "@/lib/governmentFinance/departmentCat
 import type { DepartmentFinanceReadModel } from "@/lib/governmentFinance/readModel";
 import type { ResetDepartmentAccountSnapshot } from "@/lib/resetFinance/rules/liveDepartmentAccount";
 import { resetLawFamilyById } from "@/lib/resetLegislation/catalog";
+import {
+  activeDepartmentProgramFamilyIds,
+  activeDepartmentProgramFundingControl,
+  type CurrentNationalLawProgram,
+} from "./rules/programRoster";
 
 export function buildResetDepartmentFinanceReadModel(input: {
   definition: DepartmentDefinition;
   departmentName: string;
   account?: ResetDepartmentAccountSnapshot;
+  currentPrograms?: readonly CurrentNationalLawProgram[];
 }): DepartmentFinanceReadModel {
-  const { definition, departmentName, account } = input;
+  const { definition, departmentName, account, currentPrograms = [] } = input;
   if (!account) {
     return {
       enabled: true,
@@ -24,26 +30,38 @@ export function buildResetDepartmentFinanceReadModel(input: {
   }
   const programs = account.externallySettled
     ? []
-    : Object.entries(account.familyAnnualDemand)
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([familyId, annualDemand]) => {
-          const family = resetLawFamilyById(familyId);
-          const delivery = account.lastProgramDelivery?.[familyId];
-          return {
-            enabled: true,
-            departmentName,
-            programId: familyId,
-            programName: family?.title ?? familyId,
-            explanation:
-              "Existing 1991 service claim. The Cabinet request can shift delivery priority, but does not change enacted law or add treasury authority.",
-            status: "operating" as const,
-            annualDemand,
-            allocationPercent: account.programAllocationPercents[familyId] ?? 100,
-            ...(delivery
-              ? { outlaid: delivery.outlaid, lastSettledTurn: account.accruedThroughTurn }
-              : {}),
-          };
-        });
+    : activeDepartmentProgramFamilyIds(account, currentPrograms).map((familyId) => {
+        const annualDemand = account.familyAnnualDemand[familyId] ?? 0;
+        const family = resetLawFamilyById(familyId);
+        const delivery = account.lastProgramDelivery?.[familyId];
+        const fundingControl = activeDepartmentProgramFundingControl(
+          account,
+          familyId,
+          currentPrograms
+        );
+        return {
+          enabled: true,
+          departmentName,
+          programId: familyId,
+          programName: family?.title ?? familyId,
+          explanation:
+            fundingControl === "required"
+              ? "Current law requires this program's full enacted funding request. Treasury payment and operating capacity still limit delivery."
+              : fundingControl === "no_separate_allocation"
+                ? "Current law has no separate discretionary Cabinet allocation."
+                : "The Cabinet request can shift delivery priority, but does not change enacted law or add treasury authority.",
+          status: "operating" as const,
+          annualDemand,
+          allocationPercent:
+            fundingControl === "adjustable"
+              ? (account.programAllocationPercents[familyId] ?? 100)
+              : 100,
+          fundingControl,
+          ...(delivery
+            ? { outlaid: delivery.outlaid, lastSettledTurn: account.accruedThroughTurn }
+            : {}),
+        };
+      });
   return {
     enabled: true,
     allocationMode: "demand",

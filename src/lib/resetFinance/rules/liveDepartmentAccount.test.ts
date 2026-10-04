@@ -35,7 +35,11 @@ describe("1991 v2 live Cabinet account opening", () => {
         countryAccounts.reduce((sum, row) => sum + row.grantReservation, 0) +
           countryContinuity.grantReservation
       ).toBe(grants[board.countryId]);
-      expect(countryAccounts.every((row) => row.balance === 0)).toBe(true);
+      expect(
+        countryAccounts.every(
+          (row) => row.balance === (row.externallySettled ? 0 : row.annualAuthority)
+        )
+      ).toBe(true);
       expect(countryAccounts.every((row) => row.accruedThroughTurn === 1)).toBe(true);
     }
     expect(accounts.find((row) => row.departmentId === "us_education_department")).toBeDefined();
@@ -48,6 +52,9 @@ describe("1991 v2 live Cabinet account opening", () => {
     expect(
       accounts.find((row) => row.departmentId === "us_health_department")?.externallySettled
     ).toBe(false);
+    expect(accounts.find((row) => row.departmentId === "us_health_department")?.balance).toBe(
+      accounts.find((row) => row.departmentId === "us_health_department")?.annualAuthority
+    );
     const jpGrantOwner = accounts.find(
       (row) => row.countryId === "JP" && row.familyGrantReservation.L08
     );

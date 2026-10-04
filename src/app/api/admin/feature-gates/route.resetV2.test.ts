@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { RESET_V2_SEED_REVISION } from "@/lib/resetVersions/rules";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/api/requireAdmin", () => ({ requireAdmin: vi.fn() }));
@@ -23,21 +24,21 @@ describe("reset system version dependency and concurrent admin changes", () => {
     resetVersionSeeds: {
       metrics: {
         worldId: "world-a",
-        revision: 1,
+        revision: RESET_V2_SEED_REVISION.metrics,
         sourceTurn: 42,
         completedAt: "2026-09-29T00:00:00.000Z",
         verificationHash: "verified-metrics",
       },
       legislation: {
         worldId: "world-a",
-        revision: 1,
+        revision: RESET_V2_SEED_REVISION.legislation,
         sourceTurn: 42,
         completedAt: "2026-09-29T00:00:00.000Z",
         verificationHash: "verified-legislation",
       },
       cabinet: {
         worldId: "world-a",
-        revision: 1,
+        revision: RESET_V2_SEED_REVISION.cabinet,
         sourceTurn: 42,
         completedAt: "2026-09-29T00:00:00.000Z",
         verificationHash: "verified-cabinet",

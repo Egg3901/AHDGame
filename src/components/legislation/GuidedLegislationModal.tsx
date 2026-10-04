@@ -11,6 +11,10 @@ import {
   MAX_PROVISIONS,
 } from "@shared/constants/legislation";
 import type { BillCategory } from "@shared/constants/legislation";
+import { primaryMetricById, primaryMetrics } from "@/lib/resetMetrics/catalog";
+import { playerMetricDescription } from "@/lib/resetMetrics/presentation";
+import { estimateObservedMetricChange } from "@/lib/resetMetrics/rules/effectForecast";
+import type { ResetMetricScoreCountry } from "@/lib/resetMetrics/conditionScore";
 
 interface CatalogOption {
   option: { choice: LawChoice; annualAllocation: number };
@@ -33,6 +37,7 @@ interface CatalogFamily {
   currentChoice: LawChoice;
   overseeingSeatId: string | null;
   overseeingAgencyId: string;
+  overseeingAgencyName?: string;
   options: CatalogOption[];
 }
 
@@ -42,10 +47,22 @@ interface CatalogTax {
   existingLegislationTypeId: string;
 }
 
+interface CatalogMetric {
+  id: string;
+  name: string;
+  description: string;
+}
+
 interface CatalogResponse {
   balanceNotice: string;
+  year?: number;
   families: CatalogFamily[];
+  metrics?: CatalogMetric[];
   taxes: CatalogTax[];
+}
+
+interface MetricBoardResponse {
+  metrics?: Array<{ id: string; observation: { value: number | null } }>;
 }
 
 interface LegacyTaxType {
@@ -94,6 +111,20 @@ function changeClass(value: number, lowerIsGood: boolean): string {
   if (Math.abs(value) < 0.0001) return "text-muted";
   const good = lowerIsGood ? value < 0 : value > 0;
   return good ? "text-success" : "text-error";
+}
+
+function resetMetricCountry(countryId: CountryId): ResetMetricScoreCountry | null {
+  const normalized = countryId.toUpperCase();
+  return normalized === "US" || normalized === "UK" || normalized === "JP" ? normalized : null;
+}
+
+function observedDirection(delta: number): string {
+  if (Math.abs(delta) < 0.000001) return "At equilibrium";
+  return delta > 0 ? "▲" : "▼";
+}
+
+function metricDirectionClass(indicator: string): string {
+  return indicator === "▲" || indicator === "▼" ? "inline-block text-sm leading-none" : "";
 }
 
 function categoryForDomain(domain: string): BillCategory {
@@ -149,6 +180,7 @@ export function GuidedLegislationModal({
   const { showToast } = useToast();
   const [catalog, setCatalog] = useState<CatalogResponse | null>(null);
   const [legacyTaxes, setLegacyTaxes] = useState<LegacyTaxType[]>([]);
+  const [metricValues, setMetricValues] = useState<Record<string, number | null>>({});
   const [loadError, setLoadError] = useState("");
   const [step, setStep] = useState<Step>("starting");
   const [path, setPath] = useState<"domain" | "metric">("domain");
@@ -184,11 +216,23 @@ export function GuidedLegislationModal({
         if (!response.ok) throw new Error("The tax catalog is unavailable");
         return (await response.json()) as LegacyTaxType[];
       }),
+      fetch(
+        `/api/country/${countryId}/reset-metrics${regionId ? `?region=${encodeURIComponent(regionId)}` : ""}`,
+        { cache: "no-store" }
+      ).then(async (response) => {
+        if (!response.ok) return {} as MetricBoardResponse;
+        return (await response.json()) as MetricBoardResponse;
+      }),
     ])
-      .then(([nextCatalog, types]) => {
+      .then(([nextCatalog, types, metricBoard]) => {
         if (cancelled) return;
         setCatalog(nextCatalog);
         setLegacyTaxes(types);
+        setMetricValues(
+          Object.fromEntries(
+            (metricBoard.metrics ?? []).map((row) => [row.id, row.observation.value])
+          )
+        );
       })
       .catch((error: unknown) => {
         if (!cancelled)
@@ -211,13 +255,73 @@ export function GuidedLegislationModal({
     () => [...new Set(catalog?.families.map((family) => family.domain) ?? [])].sort(),
     [catalog]
   );
-  const metrics = useMemo(
-    () =>
-      [...new Set(catalog?.families.flatMap((family) => family.primaryMetricIds) ?? [])].sort(
-        (a, b) => a.localeCompare(b)
-      ),
-    [catalog]
+  const metrics = useMemo(() => {
+    const usedIds = new Set(catalog?.families.flatMap((family) => family.primaryMetricIds) ?? []);
+    const returned = new Map(
+      (catalog?.metrics ?? []).map((candidate) => [candidate.id, candidate])
+    );
+    return [...usedIds]
+      .map((id) => {
+        const fallback = primaryMetrics.find((candidate) => candidate.id === id);
+        return (
+          returned.get(id) ?? {
+            id,
+            name: fallback?.name ?? `Metric ${id}`,
+            description: fallback
+              ? playerMetricDescription(fallback)
+              : "No metric description is available.",
+          }
+        );
+      })
+      .sort((a, b) => a.id.localeCompare(b.id));
+  }, [catalog]);
+  const metricById = useMemo(
+    () => new Map(metrics.map((candidate) => [candidate.id, candidate])),
+    [metrics]
   );
+  const metricName = (id: string) => metricById.get(id)?.name ?? `Metric ${id}`;
+  const normalizedEffectChange = (
+    candidateFamily: CatalogFamily,
+    candidateOption: CatalogOption,
+    metricId: string
+  ) => {
+    const currentOption = candidateFamily.options.find(
+      (entry) => entry.option.choice === candidateFamily.currentChoice
+    );
+    const currentPoints =
+      currentOption?.primaryMetricEffects.find((effect) => effect.metricId === metricId)
+        ?.favorableNormalizedPoints ?? 0;
+    const proposedPoints =
+      candidateOption.primaryMetricEffects.find((effect) => effect.metricId === metricId)
+        ?.favorableNormalizedPoints ?? 0;
+    return Number((proposedPoints - currentPoints).toFixed(4));
+  };
+  const metricEffectIndicator = (
+    candidateFamily: CatalogFamily,
+    candidateOption: CatalogOption,
+    metricId: string
+  ) => {
+    const normalizedChange = normalizedEffectChange(candidateFamily, candidateOption, metricId);
+    if (Math.abs(normalizedChange) < 0.0001) return "At equilibrium";
+    const definition = primaryMetricById(metricId);
+    const country = resetMetricCountry(countryId);
+    if (!definition || !country) return "Direction unavailable";
+    const forecast = estimateObservedMetricChange({
+      metric: definition,
+      currentValue: metricValues[metricId] ?? null,
+      favorableNormalizedPoints: normalizedChange,
+      countryId: country,
+      year: catalog?.year ?? 1991,
+    });
+    return forecast ? observedDirection(forecast.delta) : "Direction unavailable";
+  };
+  const agencyName = (candidate: CatalogFamily) =>
+    candidate.overseeingAgencyName ??
+    candidate.overseeingAgencyId
+      .replace(/^(us|uk|jp)_/, "")
+      .split("_")
+      .map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`)
+      .join(" ");
   const matchingFamilies = useMemo(() => {
     if (!catalog) return [];
     if (path === "domain") {
@@ -233,6 +337,8 @@ export function GuidedLegislationModal({
 
   function beginAnother() {
     setStep("starting");
+    setDomain("");
+    setMetric("");
     setSelectedFamilyId("");
     setSelectedChoice("");
     setSelectedTaxId("");
@@ -339,12 +445,7 @@ export function GuidedLegislationModal({
       <div className="my-auto w-full max-w-5xl rounded-2xl border border-card-border bg-card shadow-modal">
         <header className="flex items-start justify-between border-b border-card-border p-5">
           <div>
-            <div className="flex items-center gap-2">
-              <h2 className="font-display text-lg font-semibold">Guided legislative proposal</h2>
-              <span className="rounded bg-primary/15 px-2 py-0.5 text-[10px] font-semibold text-primary">
-                v2
-              </span>
-            </div>
+            <h2 className="font-display text-lg font-semibold">Guided legislative proposal</h2>
             <p className="mt-1 text-xs text-muted">
               Build up to {MAX_PROVISIONS} reviewed provisions. Costs {BILL_PROPOSE_ACTION_COST}{" "}
               action points and {getProvisionCostTotal(draft.length)} national influence at the
@@ -396,7 +497,11 @@ export function GuidedLegislationModal({
                       <button
                         key={value}
                         type="button"
-                        onClick={() => setPath(value)}
+                        onClick={() => {
+                          setPath(value);
+                          setDomain("");
+                          setMetric("");
+                        }}
                         className={`rounded-lg border px-4 py-2 text-sm ${path === value ? "border-primary bg-primary/15 text-primary" : "border-card-border"}`}
                       >
                         By {value}
@@ -404,43 +509,57 @@ export function GuidedLegislationModal({
                     ))}
                   </div>
                   {path === "domain" ? (
-                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                      {[...domains, "Taxes"].map((value) => (
-                        <button
-                          key={value}
-                          type="button"
-                          onClick={() => {
-                            setDomain(value);
-                            setSelectedFamilyId("");
-                            setSelectedChoice("");
-                            setSelectedTaxId("");
-                            setStep("family");
-                          }}
-                          className="rounded-xl border border-card-border bg-background/40 p-4 text-left hover:border-primary"
-                        >
-                          <span className="font-medium">{value}</span>
-                        </button>
-                      ))}
-                    </div>
+                    <label className="block max-w-xl text-sm text-muted">
+                      Policy domain
+                      <select
+                        value={domain}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          setDomain(value);
+                          if (!value) return;
+                          setSelectedFamilyId("");
+                          setSelectedChoice("");
+                          setSelectedTaxId("");
+                          setStep("family");
+                        }}
+                        className="mt-2 w-full rounded-lg border border-card-border bg-background px-3 py-2.5 text-sm text-foreground"
+                      >
+                        <option value="">Select a policy domain</option>
+                        {[...domains, "Taxes"].map((value) => (
+                          <option key={value} value={value}>
+                            {value}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                   ) : (
-                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                      {metrics.map((value) => (
-                        <button
-                          key={value}
-                          type="button"
-                          onClick={() => {
-                            setMetric(value);
-                            setSelectedFamilyId("");
-                            setSelectedChoice("");
-                            setSelectedTaxId("");
-                            setStep("family");
-                          }}
-                          className="rounded-xl border border-card-border bg-background/40 p-4 text-left hover:border-primary"
-                        >
-                          <span className="font-medium">Metric {value}</span>
-                        </button>
-                      ))}
-                    </div>
+                    <label className="block max-w-xl text-sm text-muted">
+                      Metric to affect
+                      <select
+                        value={metric}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          setMetric(value);
+                          if (!value) return;
+                          setSelectedFamilyId("");
+                          setSelectedChoice("");
+                          setSelectedTaxId("");
+                          setStep("family");
+                        }}
+                        className="mt-2 w-full rounded-lg border border-card-border bg-background px-3 py-2.5 text-sm text-foreground"
+                      >
+                        <option value="">Select a metric</option>
+                        {metrics.map((candidate) => (
+                          <option
+                            key={candidate.id}
+                            value={candidate.id}
+                            title={candidate.description}
+                          >
+                            {candidate.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                   )}
                 </section>
               ) : null}
@@ -485,7 +604,7 @@ export function GuidedLegislationModal({
                           className="rounded-xl border border-card-border bg-background/40 p-4 text-left hover:border-primary"
                         >
                           <span className="text-[10px] font-semibold text-primary">
-                            {candidate.familyId} · {candidate.domain}
+                            {candidate.domain}
                           </span>
                           <span className="mt-1 block font-medium">{candidate.title}</span>
                           <span className="mt-2 block text-xs text-muted">
@@ -508,15 +627,19 @@ export function GuidedLegislationModal({
               {step === "level" && family ? (
                 <section className="space-y-4">
                   <div>
-                    <h3 className="font-semibold">
-                      {family.familyId} · {family.title}
-                    </h3>
+                    <h3 className="font-semibold">{family.title}</h3>
                     <p className="mt-1 text-sm text-muted" title={family.currentLawDescription}>
                       Current law: {family.currentLaw}. The matching level is shown but cannot be
                       proposed.
                     </p>
                     <p className="mt-2 text-xs text-muted">
-                      Overseeing agency: {family.overseeingAgencyId}
+                      Overseeing agency: {agencyName(family)}
+                    </p>
+                    <p
+                      className="mt-1 text-xs text-muted"
+                      title="These provisional forecasts compare each option with current law at full implementation and show whether each observed metric is expected to rise or fall. Color indicates whether that movement is favorable or unfavorable."
+                    >
+                      Expected metric direction from current law at full implementation
                     </p>
                   </div>
                   <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -542,23 +665,34 @@ export function GuidedLegislationModal({
                             {candidate.description}
                           </span>
                           <span className="mt-3 block border-t border-card-border pt-2 text-xs">
-                            Allocation {money(candidate.option.annualAllocation)}
+                            Allocation{" "}
+                            {money(
+                              current
+                                ? candidate.currentAnnualAllocation
+                                : candidate.option.annualAllocation
+                            )}
                           </span>
                           <span
                             className={`block text-xs font-medium ${changeClass(candidate.annualAllocationDelta, true)}`}
                           >
                             Budget change {money(candidate.annualAllocationDelta)}
                           </span>
-                          {candidate.primaryMetricEffects.map((effect) => (
-                            <span
-                              key={effect.metricId}
-                              className={`block text-xs font-medium ${changeClass(effect.favorableNormalizedPoints, false)}`}
-                            >
-                              Metric {effect.metricId} estimated{" "}
-                              {effect.favorableNormalizedPoints >= 0 ? "+" : ""}
-                              {effect.favorableNormalizedPoints.toFixed(2)} favorable points
-                            </span>
-                          ))}
+                          {candidate.primaryMetricEffects.map((effect) => {
+                            const indicator = metricEffectIndicator(
+                              family,
+                              candidate,
+                              effect.metricId
+                            );
+                            return (
+                              <span
+                                key={effect.metricId}
+                                className={`block text-xs font-medium ${changeClass(normalizedEffectChange(family, candidate, effect.metricId), false)}`}
+                              >
+                                {metricName(effect.metricId)}:{" "}
+                                <span className={metricDirectionClass(indicator)}>{indicator}</span>
+                              </span>
+                            );
+                          })}
                         </button>
                       );
                     })}
@@ -642,7 +776,7 @@ export function GuidedLegislationModal({
                       <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
                         <div>
                           <dt className="text-muted">Agency</dt>
-                          <dd>{family.overseeingAgencyId}</dd>
+                          <dd>{agencyName(family)}</dd>
                         </div>
                         <div>
                           <dt className="text-muted">Fixed annual allocation</dt>
@@ -660,16 +794,27 @@ export function GuidedLegislationModal({
                         </div>
                       </dl>
                       <div className="mt-4 space-y-1">
-                        {option.primaryMetricEffects.map((effect) => (
-                          <p
-                            key={effect.metricId}
-                            className={changeClass(effect.favorableNormalizedPoints, false)}
-                          >
-                            Metric {effect.metricId}: estimated{" "}
-                            {effect.favorableNormalizedPoints >= 0 ? "+" : ""}
-                            {effect.favorableNormalizedPoints.toFixed(2)} favorable points
-                          </p>
-                        ))}
+                        <p
+                          className="text-xs text-muted"
+                          title="These provisional forecasts compare the selected option with current law at full implementation and show whether each observed metric is expected to rise or fall. Color indicates whether that movement is favorable or unfavorable."
+                        >
+                          Expected metric direction from current law at full implementation
+                        </p>
+                        {option.primaryMetricEffects.map((effect) => {
+                          const indicator = metricEffectIndicator(family, option, effect.metricId);
+                          return (
+                            <p
+                              key={effect.metricId}
+                              className={changeClass(
+                                normalizedEffectChange(family, option, effect.metricId),
+                                false
+                              )}
+                            >
+                              {metricName(effect.metricId)}:{" "}
+                              <span className={metricDirectionClass(indicator)}>{indicator}</span>
+                            </p>
+                          );
+                        })}
                       </div>
                     </div>
                   ) : tax && taxType?.taxSliderEstimate ? (
@@ -738,7 +883,7 @@ export function GuidedLegislationModal({
                             </p>
                             <p className="mt-1 text-xs text-muted">
                               {provision.kind === "law"
-                                ? `${provision.family.overseeingAgencyId} · ${money(provision.option.option.annualAllocation)} · Metric ${provision.family.primaryMetricIds.join(", ")}`
+                                ? `${agencyName(provision.family)} · ${money(provision.option.option.annualAllocation)} · ${provision.family.primaryMetricIds.map(metricName).join(", ")}`
                                 : `Current ${provision.currentRate}%`}
                             </p>
                           </div>

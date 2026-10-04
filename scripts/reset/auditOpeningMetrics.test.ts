@@ -89,7 +89,6 @@ describe("1991 opening metric source audit", () => {
 
   it("keeps provisional 1991 metric ranges finite and within broad game guardrails", () => {
     const bounds: Record<string, [number, number]> = {
-      "02": [50, 150],
       "15": [20, 220],
       "16": [60, 100],
       "18": [1, 80],
@@ -98,7 +97,21 @@ describe("1991 opening metric source audit", () => {
       "49": [0, 100],
       "54": [-3, 4],
     };
+    const purchasingPowerBounds: Record<"US" | "UK" | "JP", [number, number]> = {
+      US: [1_000, 500_000],
+      UK: [1_000, 500_000],
+      JP: [100_000, 100_000_000],
+    };
     for (const row of auditOpeningMetricSources()) {
+      const purchasingPower = row.openingValues["02"];
+      const [purchasingPowerMinimum, purchasingPowerMaximum] = purchasingPowerBounds[row.country];
+      expect(purchasingPower, `${row.country}/${row.regionId}/02`).not.toBeNull();
+      expect(purchasingPower!, `${row.country}/${row.regionId}/02`).toBeGreaterThanOrEqual(
+        purchasingPowerMinimum
+      );
+      expect(purchasingPower!, `${row.country}/${row.regionId}/02`).toBeLessThanOrEqual(
+        purchasingPowerMaximum
+      );
       for (const [id, [minimum, maximum]] of Object.entries(bounds)) {
         const value = row.openingValues[id];
         expect(value, `${row.country}/${row.regionId}/${id}`).not.toBeNull();

@@ -150,6 +150,9 @@ export function settleDepartmentAccount(
       id: program.programId,
       priority: program.priority,
       requested,
+      ...(program.allocationOrder !== undefined
+        ? { allocationOrder: program.allocationOrder }
+        : {}),
       ...(program.allocationWeight !== undefined
         ? { allocationWeight: program.allocationWeight }
         : {}),

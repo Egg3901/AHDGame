@@ -280,7 +280,14 @@ export default function CabinetOfficePage() {
                   />
                 </div>
               ) : hasMonetary && data.monetary ? (
-                <CabinetMonetaryStrip m={data.monetary} />
+                <div className="divide-y divide-card-border">
+                  <CabinetStatStrip
+                    metrics={mechanics.nationalMetrics}
+                    values={data.nationalMetrics}
+                    currencySymbol={currencySymbol}
+                  />
+                  <CabinetMonetaryStrip m={data.monetary} />
+                </div>
               ) : (
                 <CabinetStatStrip
                   metrics={mechanics.nationalMetrics}

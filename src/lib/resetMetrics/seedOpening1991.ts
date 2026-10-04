@@ -86,6 +86,7 @@ export async function seedOpeningMetrics1991(
           sourceTurn: 1,
           asOfTurn: 1,
           observations: 1,
+          history: 1,
         },
       }
     )

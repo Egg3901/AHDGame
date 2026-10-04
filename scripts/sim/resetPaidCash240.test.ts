@@ -8,11 +8,12 @@ describe("paid sovereign and departmental 240-turn stress", () => {
         const result = runPaidCash240(country, scenario);
         expect(result.turns).toBe(240);
         expect(result.maximumResidual).toBe(0);
-        expect(result.paidAuthority).toBeGreaterThanOrEqual(result.departmentalOutlay);
-        expect(result.unpaidAuthority).toBeGreaterThanOrEqual(0);
+        expect(result.openingDepartmentCash + result.paidAuthority).toBeGreaterThanOrEqual(
+          result.departmentalOutlay
+        );
+        expect(result.unpaidAuthority).toBe(0);
         expect(result.emergencyAdvance).toBeGreaterThanOrEqual(0);
-        expect(result.lowestPaidRatio).toBeGreaterThanOrEqual(0);
-        expect(result.lowestPaidRatio).toBeLessThanOrEqual(1);
+        expect(result.lowestPaidRatio).toBe(1);
       });
     }
   }

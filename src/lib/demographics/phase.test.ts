@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { RESET_V2_SEED_REVISION } from "@/lib/resetVersions/rules";
 
 function vec(pop: number) {
   // simple vector summing to `pop`: spread across working ages 20-59 (40 ages),
@@ -76,7 +77,7 @@ describe("runDemographicFlows", () => {
       resetVersionSeeds: {
         metrics: {
           worldId: "test-reset-world",
-          revision: 1,
+          revision: RESET_V2_SEED_REVISION.metrics,
           sourceTurn: 1,
           completedAt: "2026-09-30T00:00:00.000Z",
           verificationHash: "verified",
@@ -139,7 +140,7 @@ describe("runDemographicFlows", () => {
       resetVersionSeeds: {
         metrics: {
           worldId: "test-reset-world",
-          revision: 1,
+          revision: RESET_V2_SEED_REVISION.metrics,
           sourceTurn: 1,
           completedAt: "2026-09-30T00:00:00.000Z",
           verificationHash: "verified",

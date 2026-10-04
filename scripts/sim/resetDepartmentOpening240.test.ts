@@ -21,10 +21,13 @@ describe("1991 opening department authority stress", () => {
     expect(run.newArrears).toBe(0);
     expect(run.overdraft).toBe(0);
     expect(run.largestAccountingResidual).toBe(0);
+    expect(run.openingWorkingCapital).toBeGreaterThan(0);
+    expect(run.closingWorkingCapital).toBe(run.openingWorkingCapital);
+    expect(run.workingCapitalDrawn).toBe(0);
   });
 
   it.each(["US", "UK", "JP"] as const)(
-    "reduces %s delivery under a cut without minting cash",
+    "lets %s draw its opening buffer under a five-year authority cut",
     (country) => {
       const run = runOpeningDepartment240(country, "authority_cut_20");
       expect(
@@ -33,7 +36,10 @@ describe("1991 opening department authority stress", () => {
           run.grantReservation +
           run.continuityAuthority
       ).toBeLessThan(run.sourceAuthority);
-      expect(run.departmentOutlay).toBe(run.departmentAuthority);
+      expect(run.departmentOutlay).toBe(run.departmentAuthority + run.workingCapitalDrawn);
+      expect(run.workingCapitalDrawn).toBeGreaterThan(0);
+      expect(run.workingCapitalDrawn).toBeLessThanOrEqual(run.openingWorkingCapital);
+      expect(run.closingWorkingCapital).toBeLessThan(100);
       expect(run.unmetProgramDemand).toBeGreaterThan(0);
       expect(run.newArrears).toBe(0);
       expect(run.overdraft).toBe(0);

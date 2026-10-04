@@ -142,6 +142,7 @@ import { buildResetDepartmentFinanceReadModel } from "@/lib/resetCabinet/readMod
 import { resetActionsForSeat } from "@/lib/resetCabinet/catalog";
 import { actionOperatingCost, rechargeActionCharges } from "@/lib/resetCabinet/rules/actions";
 import type { ResetCabinetActionState } from "@/lib/resetCabinet/rules/actionState";
+import type { ResetLawProgramDocument } from "@/lib/resetLegislation/program";
 
 interface RouteParams {
   params: Promise<{ code: string; positionId: string }>;
@@ -769,21 +770,29 @@ export async function GET(_request: Request, { params }: RouteParams) {
             new Set(gameState?.manuallyEnabledSeats ?? [])
           ).filter((definition) => definition.controllingPositionIds.includes(positionId))
         : [];
-    const resetAccounts = cabinetV2
-      ? await db
-          .collection<ResetDepartmentAccountSnapshot>("resetDepartmentAccounts")
-          .find({
-            worldId: gameState?.resetWorldId,
-            countryId: countryId as "US" | "UK" | "JP",
-            controllingSeatId: positionId,
-          })
-          .toArray()
-      : [];
-    const resetActionState = cabinetV2
-      ? await db
-          .collection<ResetCabinetActionState>("resetCabinetActionStates")
-          .findOne({ _id: countryId as "US" | "UK" | "JP", worldId: gameState?.resetWorldId })
-      : null;
+    const [resetAccounts, resetActionState, currentResetLawPrograms] = cabinetV2
+      ? await Promise.all([
+          db
+            .collection<ResetDepartmentAccountSnapshot>("resetDepartmentAccounts")
+            .find({
+              worldId: gameState?.resetWorldId,
+              countryId: countryId as "US" | "UK" | "JP",
+              controllingSeatId: positionId,
+            })
+            .toArray(),
+          db
+            .collection<ResetCabinetActionState>("resetCabinetActionStates")
+            .findOne({ _id: countryId as "US" | "UK" | "JP", worldId: gameState?.resetWorldId }),
+          db
+            .collection<ResetLawProgramDocument>("resetLawPrograms")
+            .find({
+              worldId: gameState?.resetWorldId,
+              country: countryId as "US" | "UK" | "JP",
+              scope: "national",
+            })
+            .toArray(),
+        ])
+      : [[], null, []];
     const resetAccountById = new Map(
       resetAccounts.map((account) => [account.departmentId, account])
     );
@@ -813,6 +822,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
             definition,
             departmentName,
             account: resetAccountById.get(definition.id),
+            currentPrograms: currentResetLawPrograms,
           })
         : buildDepartmentFinanceReadModel({
             enabled: true,

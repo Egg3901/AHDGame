@@ -1,6 +1,7 @@
 /**
- * Portable opening account identity for v2 Cabinet finance. The 1991 claim
- * book is partitioned once; an account is not a second treasury expense.
+ * Department working capital (v2 Cabinet finance). The 1991 claim book is
+ * partitioned once, and each ordinary account opens with one year of net
+ * authority as working capital without creating a second Treasury expense.
  */
 import type { DepartmentDefinition } from "@/lib/governmentFinance/departmentCatalog";
 import type { ResetDepartmentOpeningBoard } from "./departmentBoard";
@@ -191,6 +192,13 @@ export function buildOpeningDepartmentFundingPartition(
     if (Math.abs(owned + netContinuity + grantEnvelope[board.countryId] - board.operating) > 0.01) {
       throw new Error(`Live 1991 accounts do not reconcile ${board.countryId}`);
     }
+    // Ordinary departments open with one year of working capital. This is a
+    // pre-reset historical transfer already represented by the country's
+    // seeded debt stock, not a second reset-turn Treasury expense. Specialized
+    // defense and intelligence accounts remain on their established ledgers.
+    for (const account of countryAccounts) {
+      account.balance = account.externallySettled ? 0 : account.annualAuthority;
+    }
   }
   return { accounts: result, continuity };
 }
@@ -250,7 +258,7 @@ export function openingDepartmentAccountsPayload(
           !Number.isFinite(account.annualAuthority) ||
           account.annualAuthority < 0 ||
           account.grossAnnualClaim !== account.annualAuthority + account.grantReservation ||
-          account.balance !== 0 ||
+          account.balance !== (account.externallySettled ? 0 : account.annualAuthority) ||
           account.encumbered !== 0 ||
           account.arrears !== 0 ||
           Object.keys(account.lastProgramDelivery).length !== 0 ||
