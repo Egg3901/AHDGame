@@ -14,6 +14,7 @@ import { PriorityRegionCard } from "./PriorityRegionCard";
 import { PartyCampaignersCard } from "./PartyCampaignersCard";
 import { MembershipModeCard } from "./MembershipModeCard";
 import { BulkStateOrgControl } from "./BulkStateOrgControl";
+import { HuListVacanciesCard } from "./HuListVacanciesCard";
 
 interface ChairOfficeTabProps {
   party: PartyData;
@@ -225,8 +226,11 @@ export function ChairOfficeTab({ party, countryId, characterId, onUpdate }: Chai
   return (
     <>
       <div className="space-y-6">
+        {countryId.toUpperCase() === "HU" && (
+          <HuListVacanciesCard partyId={party.id} onUpdate={onUpdate} />
+        )}
         <div className="rounded-xl border border-card-border bg-card p-6">
-          <h2 className="text-lg font-semibold mb-4">Chair Office</h2>
+          <h2 className="text-lg font-semibold mb-4">Chair office</h2>
           <p className="text-sm text-muted mb-6">
             {`As ${getPartyRoleLabel(countryId, "chair")}, you can customize your party's appearance. Changes will be reflected across the site.`}
           </p>
@@ -420,14 +424,12 @@ export function ChairOfficeTab({ party, countryId, characterId, onUpdate }: Chai
           }}
         >
           <div className="w-full max-w-md rounded-xl border border-card-border bg-card p-6 shadow-xl">
-            <h2 className="text-lg font-bold mb-1">Purge Party Member</h2>
+            <h2 className="text-lg font-bold mb-1">Purge party member</h2>
             <p className="text-sm text-muted mb-5">
               Choose a member to expel. This action cannot be undone and imposes a 6-turn cooldown.
             </p>
 
-            <label className="block text-xs font-semibold text-muted uppercase tracking-wider mb-1">
-              Select Member
-            </label>
+            <label className="block text-xs font-semibold text-muted mb-1">Select member</label>
             <select
               value={selectedMemberId}
               onChange={(e) => setSelectedMemberId(e.target.value)}

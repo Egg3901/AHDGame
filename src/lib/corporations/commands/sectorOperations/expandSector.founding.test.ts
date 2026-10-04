@@ -322,7 +322,7 @@ describe("expandSector — founding build (plants)", () => {
     const doc = insertedSector();
     expect(doc.capitalStock).toBe(0);
     expect(doc.plantsStartTurn).toBe(CURRENT_TURN);
-    expect(doc.constructionInProgressAnchor).toBe(Math.round(STARTER_BUILD_ANCHOR));
+    expect(doc.constructionInProgressAnchor).toBeUndefined();
 
     const queue = doc.buildQueue as Array<Record<string, number>>;
     expect(queue).toHaveLength(1);

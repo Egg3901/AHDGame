@@ -76,8 +76,10 @@ export const DEFAULT_DURATIONS: Record<
   // Eastern bloc Tier-1 unicameral assemblies (DD pattern, 48h window).
   sejm: { durationHours: 48, primaryDurationHours: 24, generalDurationHours: 24 },
   chamberOfThePeople: { durationHours: 48, primaryDurationHours: 24, generalDurationHours: 24 },
+  chamberOfNations: { durationHours: 48, primaryDurationHours: 24, generalDurationHours: 24 },
   nationalAssembly: { durationHours: 48, primaryDurationHours: 24, generalDurationHours: 24 },
   grandNationalAssembly: { durationHours: 48, primaryDurationHours: 24, generalDurationHours: 24 },
+  chamberOfDeputies: { durationHours: 48, primaryDurationHours: 24, generalDurationHours: 24 },
   federalAssembly: { durationHours: 48, primaryDurationHours: 24, generalDurationHours: 24 },
   // UKR/BLR/BAL republican Supreme Soviets — same 48h window as every other
   // single-list chamber. The electionType is distinct from RU's

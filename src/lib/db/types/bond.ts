@@ -171,6 +171,10 @@ export interface BondHolder {
   fundId?: ObjectId;
   /** Autonomous (V3) NPP holding the bond. Gated by nppAutonomyLevel v3. */
   nppId?: ObjectId;
+  /** Private-bank treasury holder. Always paired with the charter epoch below. */
+  bankId?: ObjectId;
+  /** Charter epoch owning this position; rechartering cannot inherit holdings. */
+  charteredTurn?: number;
   /** Number of bond units held (each unit = $1,000 face value) */
   units: number;
   /**

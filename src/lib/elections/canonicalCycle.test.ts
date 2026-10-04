@@ -1,7 +1,40 @@
 import { describe, it, expect } from "vitest";
 import { canonicalTurnsForCycle, pickNextCanonicalCycle, turnToWallClock } from "./canonicalCycle";
+import { electionToLarpYear } from "@/lib/utils/formatters";
 
 describe("canonicalTurnsForCycle", () => {
+  it("schedules the Bulgarian ordinary Assembly election in October 1991", () => {
+    const ctx = { preset: "1991-default", startingYear: 1991 };
+    expect(
+      canonicalTurnsForCycle({ countryId: "BG", electionType: "nationalAssembly", cycle: 1, ctx })
+    ).toEqual({ startTurn: 1, primaryEndTurn: 14, endTurn: 38 });
+    expect(
+      pickNextCanonicalCycle({
+        countryId: "BG",
+        electionType: "nationalAssembly",
+        prevCycle: 0,
+        currentTurn: 1,
+        minPrimaryHours: 12,
+        ctx,
+      })?.endTurn
+    ).toBe(38);
+    expect(
+      canonicalTurnsForCycle({ countryId: "BG", electionType: "nationalAssembly", cycle: 2, ctx })
+        ?.endTurn
+    ).toBe(230);
+    expect(
+      canonicalTurnsForCycle({ countryId: "BG", electionType: "nationalAssembly", cycle: 3, ctx })
+        ?.endTurn
+    ).toBe(422);
+    expect(
+      canonicalTurnsForCycle({
+        countryId: "BG",
+        electionType: "nationalAssembly",
+        cycle: 1,
+        ctx: { ...ctx, preIterationTurns: 48 },
+      })?.endTurn
+    ).toBe(86);
+  });
   describe("house", () => {
     it("cycle 1 ends at end of LARP year 2022 (bootstrap)", () => {
       expect(canonicalTurnsForCycle({ electionType: "house", cycle: 1 })).toEqual({
@@ -92,6 +125,51 @@ describe("canonicalTurnsForCycle", () => {
         })?.endTurn
       ).toBe(288);
     });
+  });
+
+  it("cycles modeled BR macroregion governors with Brazil's general election", () => {
+    for (const [preset, startingYear] of [
+      ["1991-default", 1991],
+      ["2019-default", 2019],
+      ["2027-default", 2027],
+    ] as const) {
+      const ctx = { preset, startingYear };
+      const governor = canonicalTurnsForCycle({
+        electionType: "governor",
+        countryId: "BR",
+        cycle: 1,
+        ctx,
+      });
+      const chamber = canonicalTurnsForCycle({
+        electionType: "chamber",
+        countryId: "BR",
+        cycle: 1,
+        ctx,
+      });
+      expect(governor?.endTurn).toBe(chamber?.endTurn);
+      expect(governor?.endTurn).toBe(192);
+      expect(
+        canonicalTurnsForCycle({ electionType: "governor", countryId: "BR", cycle: 2, ctx })
+          ?.endTurn
+      ).toBe(384);
+    }
+    // Other regional executive cycles retain their own shared anchor.
+    expect(
+      canonicalTurnsForCycle({ electionType: "governor", countryId: "IE", cycle: 1 })?.endTurn
+    ).toBe(288);
+    for (const [preset, startingYear] of [
+      ["1953-default", 1953],
+      ["1979-default", 1979],
+    ] as const) {
+      expect(
+        canonicalTurnsForCycle({
+          electionType: "governor",
+          countryId: "BR",
+          cycle: 1,
+          ctx: { preset, startingYear },
+        })
+      ).toBeNull();
+    }
   });
 
   describe("sangiin", () => {
@@ -447,6 +525,138 @@ describe("NG concurrent general election (1991-default)", () => {
     expect(canonicalTurnsForCycle({ electionType: "president", cycle: 1, ctx })?.endTurn).toBe(
       (1992 - 1991 + 1) * 48
     ); // 96 — unchanged
+  });
+});
+
+describe("1991 successor parliamentary cycles", () => {
+  const ctx1991 = { startingYear: 1991, preset: "1991-default" };
+
+  it("runs the Polish Sejm in 1991, 1993, then the four-year 1997 cycle", () => {
+    expect(
+      canonicalTurnsForCycle({ electionType: "sejm", countryId: "PL", cycle: 1, ctx: ctx1991 })
+        ?.endTurn
+    ).toBe(49);
+    expect(
+      canonicalTurnsForCycle({ electionType: "sejm", countryId: "PL", cycle: 2, ctx: ctx1991 })
+        ?.endTurn
+    ).toBe(144);
+    expect(
+      canonicalTurnsForCycle({ electionType: "sejm", countryId: "PL", cycle: 3, ctx: ctx1991 })
+        ?.endTurn
+    ).toBe(336);
+    expect(
+      pickNextCanonicalCycle({
+        electionType: "sejm",
+        countryId: "PL",
+        prevCycle: 0,
+        currentTurn: 1,
+        ctx: ctx1991,
+      })?.cycle
+    ).toBe(1);
+    expect(
+      [1, 2, 3].map((cycle) =>
+        electionToLarpYear("sejm", cycle, undefined, undefined, ctx1991, "PL")
+      )
+    ).toEqual([1991, 1993, 1997]);
+  });
+
+  it("elects the Polish Senate with the Sejm in 1991, 1993, and 1997", () => {
+    for (const cycle of [1, 2, 3]) {
+      expect(
+        canonicalTurnsForCycle({ electionType: "senat", countryId: "PL", cycle, ctx: ctx1991 })
+      ).toEqual(
+        canonicalTurnsForCycle({ electionType: "sejm", countryId: "PL", cycle, ctx: ctx1991 })
+      );
+      expect(electionToLarpYear("senat", cycle, undefined, undefined, ctx1991, "PL")).toBe(
+        [1991, 1993, 1997][cycle - 1]
+      );
+    }
+    expect(
+      pickNextCanonicalCycle({
+        electionType: "senat",
+        countryId: "PL",
+        prevCycle: 0,
+        currentTurn: 1,
+        ctx: ctx1991,
+      })?.cycle
+    ).toBe(1);
+  });
+
+  it("keeps the Cold War Polish Sejm on the Volkskammer calendar", () => {
+    expect(
+      canonicalTurnsForCycle({
+        electionType: "sejm",
+        countryId: "PL",
+        cycle: 1,
+        ctx: { startingYear: 1979, preset: "1979-default" },
+      })?.endTurn
+    ).toBe(144);
+    expect(
+      canonicalTurnsForCycle({
+        electionType: "senat",
+        countryId: "PL",
+        cycle: 1,
+        ctx: { startingYear: 1979, preset: "1979-default" },
+      })
+    ).toBeNull();
+  });
+
+  it("elects both Czechoslovak federal chambers together in 1992 on two-year terms", () => {
+    for (const electionType of ["chamberOfThePeople", "chamberOfNations"]) {
+      expect(
+        canonicalTurnsForCycle({ electionType, countryId: "CS", cycle: 1, ctx: ctx1991 })?.endTurn
+      ).toBe(96);
+      expect(
+        canonicalTurnsForCycle({ electionType, countryId: "CS", cycle: 2, ctx: ctx1991 })?.endTurn
+      ).toBe(192);
+    }
+  });
+
+  it("elects the Hungarian National Assembly in 1994 on a four-year term", () => {
+    expect(
+      canonicalTurnsForCycle({
+        electionType: "nationalAssembly",
+        countryId: "HU",
+        cycle: 1,
+        ctx: ctx1991,
+      })?.endTurn
+    ).toBe(192);
+    expect(
+      canonicalTurnsForCycle({
+        electionType: "nationalAssembly",
+        countryId: "HU",
+        cycle: 2,
+        ctx: ctx1991,
+      })?.endTurn
+    ).toBe(384);
+  });
+
+  it("keeps Cold War lower chambers on the Volkskammer calendar and does not elect Nations", () => {
+    const ctx1979 = { startingYear: 1979, preset: "1979-default" };
+    expect(
+      canonicalTurnsForCycle({
+        electionType: "chamberOfThePeople",
+        countryId: "CS",
+        cycle: 1,
+        ctx: ctx1979,
+      })?.endTurn
+    ).toBe(144);
+    expect(
+      canonicalTurnsForCycle({
+        electionType: "nationalAssembly",
+        countryId: "HU",
+        cycle: 1,
+        ctx: ctx1979,
+      })?.endTurn
+    ).toBe(144);
+    expect(
+      canonicalTurnsForCycle({
+        electionType: "chamberOfNations",
+        countryId: "CS",
+        cycle: 1,
+        ctx: ctx1979,
+      })
+    ).toBeNull();
   });
 });
 

@@ -49,7 +49,7 @@ describe("PrimeRateCard governance contract", () => {
       screen.getByText("A seated committee decides: vote in the committee room.")
     ).toBeTruthy();
     expect((screen.getByText("+") as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByText("Confirm Rate Change") as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByText("Confirm rate change") as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText(/Next deadline: turn 132/)).toBeTruthy();
   });
 
@@ -58,21 +58,21 @@ describe("PrimeRateCard governance contract", () => {
 
     fireEvent.click(screen.getByText("+"));
 
-    expect((screen.getByText("Confirm Rate Change") as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByText("Confirm rate change") as HTMLButtonElement).disabled).toBe(false);
     expect(screen.getByText(/Next deadline: turn 116/)).toBeTruthy();
   });
 
   it("falls back to props when no governance is present", () => {
     render(<PrimeRateCard {...baseProps()} />);
 
-    expect(screen.getByText("Adjust Rate")).toBeTruthy();
+    expect(screen.getByText("Adjust rate")).toBeTruthy();
     fireEvent.click(screen.getByText("+"));
-    expect((screen.getByText("Confirm Rate Change") as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByText("Confirm rate change") as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("hides the adjust section for an unauthorized viewer without governance", () => {
     render(<PrimeRateCard {...baseProps({ isChair: false })} />);
 
-    expect(screen.queryByText("Adjust Rate")).toBeNull();
+    expect(screen.queryByText("Adjust rate")).toBeNull();
   });
 });

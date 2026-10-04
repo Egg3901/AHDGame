@@ -155,7 +155,11 @@
         "takeProfits": "Earnings stay in the bank until moved. Withdraw cash under Treasury, limited by withdrawable reserves."
       },
       "capitalAttention": "Capital needs attention",
-      "reservesAttention": "Reserves low"
+      "reservesAttention": "Reserves low",
+      "originationFees": "Origination fees",
+      "originationFeesDetail": "Household fees in this pass; all loans since charter {lifetime}",
+      "originationFeesTooltip": "Fees are withheld from newly funded principal. Repayment carries no new origination fee.",
+      "feeBottomLine": "Net interest plus household fees minus insurance and write-offs"
     },
     "bulkWages": {
       "label": "Wage multiplier",
@@ -201,6 +205,18 @@
       "respond": "Review and negotiate",
       "previous": "Previous",
       "next": "Next"
+    },
+    "costPlusPricing": {
+      "marketMode": "Market price",
+      "costPlusMode": "Cost-plus",
+      "notReady": "Available after a producing turn records operating costs",
+      "explanation": "Prices use recorded operating costs plus your markup. Material costs follow input prices. Cheaper competitors still sell first; unsold output can cause a loss.",
+      "saved": "Operating-cost price set with {markup} markup."
+    },
+    "loanFees": {
+      "fee": "Origination fee (1%)",
+      "proceeds": "Cash you receive",
+      "explanation": "The fee is withheld when funded. You repay the full principal."
     }
   }
 }

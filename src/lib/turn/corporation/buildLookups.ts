@@ -17,6 +17,7 @@ import type {
 } from "@/lib/db/types";
 import type { Crisis } from "@/lib/db/types/crisis";
 import { buildDisasterEffectsByState } from "@/lib/crises/disasterMarginPenalty";
+import { excludePendingFederationFirms } from "@/lib/world/succession/rules/pendingFirmActivity";
 import type { CommodityPrice } from "@/lib/db/types";
 import type { TradeFlowSnapshot } from "@/lib/db/types/tradeFlowSnapshot";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -119,6 +120,7 @@ export async function buildCorporationLookups(
      * keeps the legacy revenue-based share exactly.
      */
     plantsEnabled?: boolean;
+    explicitPlantCostsEnabled?: boolean;
     /** Target turn for production and the blended recipe; stored turn for read-only callers. */
     productionTurn?: number;
     /**
@@ -177,8 +179,8 @@ export async function buildCorporationLookups(
   }
 
   const [
-    corporations,
-    allSectors,
+    loadedCorporations,
+    loadedSectors,
     allStateMetrics,
     commodityPrices,
     centralBanks,
@@ -209,6 +211,9 @@ export async function buildCorporationLookups(
         {
           projection: {
             plantsPnl: 0,
+            ...(options?.explicitPlantCostsEnabled === true
+              ? {}
+              : { pricingMode: 0, costPlusCostBasis: 0 }),
             ...(options?.omitBuildQueue ? { buildQueue: 0 } : {}),
           },
         }
@@ -338,6 +343,14 @@ export async function buildCorporationLookups(
       .toArray(),
     loadWorldPreset(db),
   ]);
+
+  // A split can preserve a player's corporation while its owner chooses a new
+  // playable headquarters. Its retained facilities pause with the company;
+  // background facilities have already moved to compensated claims.
+  const { firms: corporations, facilities: allSectors } = excludePendingFederationFirms(
+    loadedCorporations,
+    loadedSectors
+  );
 
   // Backfill countryId on corporations and sectors missing it (pre-migration data)
   const stateCountryMap = new Map(states.map((s) => [s._id, s.countryId]));
@@ -619,8 +632,10 @@ export async function buildCorporationLookups(
   // PRIOR commodity-price pass, so reading them here is the one-turn lag that
   // breaks the price->revenue->supply->price circularity.
   const priceRatioByCommodity = new Map<CommodityType, number>();
+  const initializedLaggedBooks = new Set<CommodityType>();
   const reachablePriceRatioByCountry = new Map<string, Map<CommodityType, number>>();
   for (const cp of commodityPrices) {
+    if (cp.turn > 0) initializedLaggedBooks.add(cp.commodity);
     globalCommodityBalances.set(cp.commodity, {
       supply: cp.globalSupply,
       demand: cp.globalDemand,
@@ -1222,6 +1237,7 @@ export async function buildCorporationLookups(
     carbonEmissionsByState,
     costOfLivingByState,
     globalCommodityBalances,
+    initializedLaggedBooks,
     stateInputAvailabilityByState,
     statePlacementRatioByState,
     stateDeliveryLimitedRatioByState,

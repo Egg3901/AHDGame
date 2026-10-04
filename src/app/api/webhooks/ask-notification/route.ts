@@ -45,6 +45,17 @@ const eventSchema = z
 
 const schema = z.object({ events: z.array(eventSchema).min(1).max(20) });
 
+function askNotificationHref(value: string | undefined): string {
+  if (!value) return ASK_ORIGIN;
+  try {
+    const url = new URL(value);
+    if (url.origin === ASK_ORIGIN && !url.username && !url.password) return url.href;
+  } catch {
+    // Malformed links fall back to the Ask homepage.
+  }
+  return ASK_ORIGIN;
+}
+
 export async function POST(request: Request) {
   try {
     if (!requireAskToken(request)) {
@@ -76,7 +87,7 @@ export async function POST(request: Request) {
         continue;
       }
       // Only the Ask site may be linked from these notifications.
-      const href = event.url && event.url.startsWith(ASK_ORIGIN) ? event.url : ASK_ORIGIN;
+      const href = askNotificationHref(event.url);
       notifications.push({
         userId: user._id,
         type: event.kind,

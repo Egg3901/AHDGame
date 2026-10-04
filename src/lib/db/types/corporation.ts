@@ -67,6 +67,13 @@ export interface ShareOrder {
    */
   escrowAnchor?: number;
   status: "open" | "filled" | "cancelled";
+  /**
+   * Idempotency key of the latest fill attempt stamped atomically by the
+   * order-claim write (issue #1672). Lets the next fill on this order resume
+   * a crashed attempt's audit rows instead of leaving them missing. Restored
+   * alongside the claim snapshot when a live attempt compensates.
+   */
+  lastShareFillKey?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -163,6 +170,17 @@ export interface Corporation {
    * at least one financial sector; one bank per corp. See src/lib/db/types/bank.ts.
    */
   bankCharter?: import("./bank").BankCharter;
+  /** Funded sovereign claims held outside the replaceable charter subdocument. */
+  bankSovereignEscrows?: Record<
+    string,
+    {
+      bankId: string;
+      charteredTurn: number;
+      currencyCode: CurrencyCode;
+      amountLocal: number;
+      claimKind: "coupon" | "maturity";
+    }
+  >;
   /** Monotonic generation for atomic proprietary book settlement. */
   bankPropBookRevision?: number;
   /**
@@ -387,6 +405,8 @@ export interface Corporation {
   suspended?: boolean;
   /** Turn after which suspension ends (informational, admin must manually resume) */
   suspendedUntilTurn?: number;
+  /** Protected until the owner chooses a playable headquarters after a federation split. */
+  federationPendingHeadquartersId?: string;
   /** Character being offered the CEO position (pending acceptance) */
   pendingCeoCharacterId?: ObjectId;
   /**
@@ -982,6 +1002,14 @@ export interface CorporateSector {
    * anchors the fade-in ramp.
    */
   pricingPosture?: number | null;
+  /** Optional industrial input-indexed pricing; ignored while explicit plant costs are off. */
+  pricingMode?: "market" | "costPlus";
+  /** Last producing turn's actual operating costs per nominal output value. */
+  costPlusCostBasis?: {
+    inputCostShare: number;
+    fixedCostShare: number;
+    turn: number;
+  };
   clearingFactor?: number;
   soldFraction?: number;
   /**
@@ -1168,6 +1196,10 @@ export interface CorporateSector {
    * fallback.
    */
   plantsPnl?: {
+    /** Absent on older snapshots, which use the legacy residual. */
+    costModel?: "legacyResidual" | "explicit";
+    /** Positive plant services within otherOpex, never an additional bill. */
+    plantOverhead?: number;
     /**
      * Realized revenue the P&L was assembled against, inventory sell-down
      * included. Equals the persisted `realizedRevenue` exactly.

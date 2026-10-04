@@ -79,7 +79,7 @@ export function CategoryCard({
           metrics={category.metrics}
           onOpenMetric={(metricId) => onOpenMetric(category.id, metricId)}
         />
-        <span className="whitespace-nowrap text-body-xs text-muted">open →</span>
+        <span className="whitespace-nowrap text-body-sm text-muted">open →</span>
       </div>
     </div>
   );

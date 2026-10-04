@@ -127,6 +127,28 @@ describe("nppBuyShares", () => {
     expect(applyFloatBuyCredit).not.toHaveBeenCalled();
   });
 
+  it("accepts EUR equity for a 2027 French NPP", async () => {
+    corpFindOne.mockResolvedValue({
+      _id: corpId,
+      sharePrice: SHARE_PRICE,
+      totalShares: 100_000,
+      publicFloat: 5_000,
+      liquidCurrencyCode: "EUR",
+    });
+    vi.mocked(creditSharesToNpp).mockResolvedValue(true);
+    const result = await nppBuyShares(
+      db,
+      { _id: nppId, countryId: "FR" },
+      corpId,
+      SHARES,
+      0.92,
+      undefined,
+      "2027-default"
+    );
+    expect(result.ok).toBe(true);
+    expect(corpFindOne).toHaveBeenCalledTimes(1);
+  });
+
   it("uses a sweep snapshot and refunds if the guarded credit sees changed quote inputs", async () => {
     vi.mocked(creditSharesToNpp).mockResolvedValue(false);
     const snapshot = {
@@ -331,6 +353,25 @@ describe("nppSellShares", () => {
       { pools: expect.any(Map) }
     );
     expect(reverseFloatSellDebit).not.toHaveBeenCalled();
+  });
+
+  it("sells EUR equity for a 2027 French NPP at the preloaded EUR rate", async () => {
+    corpFindOne.mockResolvedValue(baseCorp({ countryId: "FR", liquidCurrencyCode: "EUR" }));
+    const result = await nppSellShares(
+      db,
+      { _id: nppId, countryId: "FR" },
+      corpId,
+      SHARES,
+      CURRENT_TURN,
+      0.92,
+      undefined,
+      "2027-default"
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      proceedsAnchor: Math.round((EXPECTED_PROCEEDS / 0.92) * 100) / 100,
+    });
+    expect(corpFindOne).toHaveBeenCalledTimes(1);
   });
 
   it("vacates the CEO seat when the selling NPP is the CEO selling their entire stake", async () => {

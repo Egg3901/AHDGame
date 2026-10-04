@@ -1,6 +1,6 @@
 import type { ObjectId } from "mongodb";
 import type { SenateClass } from "./officials";
-import type { CountryId } from "../../constants/countries";
+import type { CountryId, ElectionMethod } from "../../constants/countries";
 
 /**
  * Known US election types. Still valid values for `Election.electionType`.
@@ -30,6 +30,15 @@ export type UKElectionType =
 export type ElectionStatus = "upcoming" | "active" | "completed" | "resolved" | "cancelled";
 
 export interface Election {
+  /** A modern Hungarian vacancy ballot freezes one existing district and electorate. */
+  hungarianModernByElection?: {
+    receiptId: string;
+    parentReceiptId: string;
+    districtId: string;
+    registeredVoters: number;
+  };
+  /** Allocation rule fixed when the race opens, so reform only changes later races. */
+  allocationMethod?: ElectionMethod;
   /** Missing means legacy campaigning for this entire race. */
   campaignRulesVersion?: number;
   _id: ObjectId;
@@ -77,6 +86,50 @@ export interface Election {
    * which resolve to v1.
    */
   rulesetVersion?: number;
+  /** A Russian direct ballot freezes its mandate, electorate and round. */
+  russianPresidentialRound?: {
+    round: 1 | 2;
+    mandateSinceTurn: number;
+    registeredVoters: number;
+    predecessorElectionId?: ObjectId;
+  };
+  /** Bound first-Duma ballots share one mandate and frozen registration cohort. */
+  russianDumaRound?: {
+    /** Missing preserves the first decree for existing saves and repeat families. */
+    electoralLaw?: "decree1993" | "law1995";
+    cohortId: ObjectId;
+    /** Absent on the original generation; repeats retain their original mandate identity. */
+    rootCohortId?: ObjectId;
+    generation?: number;
+    predecessorElectionId?: ObjectId;
+    mandateSinceTurn: number;
+    tier: "constituency" | "list";
+    registeredVoters: number;
+    regionalDistrictCount?: number;
+  };
+  /** The first Council freezes one two-seat ballot per federal subject. */
+  russianCouncilRound?: {
+    cohortId: ObjectId;
+    /** Repeats retain the original mandate and immutable predecessor ballot. */
+    rootCohortId?: ObjectId;
+    generation?: number;
+    predecessorElectionId?: ObjectId;
+    mandateSinceTurn: number;
+    registeredVoters: number;
+    districtNumber: number;
+  };
+  /** Native 1991 Hungarian campaigns freeze a whole-country count and round. */
+  hungarianAssemblyRound?: import("../../countries/hu/rules/assemblyCampaign1991").Hu1991CampaignBinding;
+  /** Founding Bulgarian two-ballot campaigns retain their whole-country receipt. */
+  bulgarianFoundingRound?: import("../../countries/bg/rules/foundingCampaign1990").BgFoundingCampaignBinding;
+  /** The authorized modern law freezes before general ballots exist. */
+  hungarianModernAssembly?: {
+    /** Frozen regional register; absent only on earlier native saves. */
+    registeredVoters?: number;
+    ruleVersion: "mixed-2011-v1";
+    authorizedOnTurn?: number;
+    reason: "parliamentary_decision" | "legacy_settlement";
+  };
   /** Campaign Here boosts: districtIndex → partySeqId → active boost % (0..7.5). */
   districtCampaignBoosts?: Record<string, Record<string, number>>;
   /**
@@ -133,6 +186,8 @@ export interface ElectionCandidate {
   targetedAdsRevision?: number;
   _id: ObjectId;
   electionId: ObjectId;
+  /** Hungarian post-2014 National Assembly district selected at filing. */
+  constituencyId?: string;
   /** Denormalized from Election.countryId so party IDs are not ambiguous across countries. */
   countryId?: CountryId;
   characterId: ObjectId;
@@ -140,6 +195,23 @@ export interface ElectionCandidate {
   party: string;
   status: CandidateStatus;
   seatsRequested?: number;
+  /** Frozen first-Duma nomination order and bounded NPC list capacity. */
+  russianDumaNomination?: {
+    registrationOrder: number;
+    nominationOrder: number;
+    capacity: number;
+  };
+  /** One chosen 1991 Hungarian constituency; renewed rounds retain the root campaign actor. */
+  hungarianAssemblyNomination?: { constituencyId?: string; rootCandidateId?: string };
+  bulgarianFoundingNomination?: {
+    constituencyId?: string;
+    listDistrictId?: string;
+    rootCandidateId?: string;
+  };
+  /** Frozen individual Council nomination order. */
+  russianCouncilNomination?: { registrationOrder: number };
+  /** Server-created nominee identity for an NPC profile representing a bounded slate. */
+  boundedNpcNomineeId?: ObjectId;
   isNPP?: boolean;
   nppId?: ObjectId;
   enteredAt: Date;
@@ -163,6 +235,10 @@ export interface ElectionCandidate {
   withdrawnAt?: Date;
   /** For president: running mate character ID. Cannot be current President. */
   runningMateId?: ObjectId;
+  /** Bound Russian tickets can pair a player or NPC nominee with an NPC vice-president. */
+  russianRunningMateNppId?: ObjectId;
+  /** Native Russian paired ballot is immutable once counting starts. */
+  russianTicketLocked?: boolean;
   /** 2-char US state abbreviation (e.g. "CA", "TX") — for presidential travel system */
   travelState?: string | null;
   /** When the travel was last set */

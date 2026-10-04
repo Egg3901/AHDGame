@@ -1,7 +1,13 @@
 import type { ObjectId, Db } from "mongodb";
 import { getGovernmentFormationsCollection } from "@/lib/db/collections/governmentFormation";
 import type { CountryId } from "@/lib/constants/countries";
-import { COUNTRY_ORDER } from "@/lib/constants/countries";
+import {
+  COUNTRY_ORDER,
+  getCountryConfig,
+  getExecutiveOfficeKey,
+  getHeadOfGovernmentOfficeKey,
+} from "@/lib/constants/countries";
+import { getGameStatePreset } from "@/lib/db/collections/gameState";
 import { getCountryState } from "@/lib/countryState";
 import type { ElectedOfficial } from "@/lib/db/types/officials";
 import type { ParliamentaryGovernment } from "@/lib/db/types/parliamentaryGovernment";
@@ -11,6 +17,8 @@ import type { ParliamentaryGovernment } from "@/lib/db/types/parliamentaryGovern
  *
  * Presidential countries (US): the head of government lives in the
  * `electedOfficials` collection with `officeType === "president"`.
+ * Romania's 2027 semi-presidential configuration has a separate parliamentary
+ * prime minister, so its head of government uses the formation record.
  *
  * Parliamentary countries (UK, JP, DE): the canonical PM lives at
  * `governmentFormations.pmCharacterId`. We fall back to the legacy
@@ -29,6 +37,15 @@ export async function getHeadOfGovernmentCharacterId(
   // up the new head-of-government resolution path.
   const runtime = await getCountryState(db, countryId);
   if (runtime.governmentType === "presidential") {
+    const preset = await getGameStatePreset(db);
+    const config = getCountryConfig(countryId, preset);
+    if (
+      config.electionSystems.headOfGovernment === "parliamentary" &&
+      getHeadOfGovernmentOfficeKey(countryId, preset) !== getExecutiveOfficeKey(countryId, preset)
+    ) {
+      const formation = await getGovernmentFormationsCollection(db).findOne({ _id: countryId });
+      return formation?.pmCharacterId ?? null;
+    }
     const row = await db.collection<ElectedOfficial>("electedOfficials").findOne({
       countryId,
       officeType: "president",

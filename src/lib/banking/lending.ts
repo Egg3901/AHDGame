@@ -22,6 +22,7 @@ import {
   resolveCorpLiquidCurrencyCode,
 } from "@/lib/currency/corporationCapital";
 import { getHomeCurrency } from "@/lib/currency/characterFunds";
+import { getGameState } from "@/lib/gameState";
 import { estimatePerTurnCurrencyIncomeHomeFace } from "@/lib/lineOfCredit/currencyIncomeEstimate";
 import { emitTx } from "@/lib/financialTxLog/emit";
 import { isNamedLendingCharter } from "./charterKinds";
@@ -31,6 +32,7 @@ import { loadBankingSnapshot } from "@/lib/banking/snapshot";
 import { decideBankCommand } from "@/lib/banking/rules/decide";
 import type { BorrowerSnapshot } from "@/lib/banking/rules/boundary";
 import { reviveObjectIds, settleTransition } from "@/lib/banking/settlementJournal";
+import { quoteLoanOrigination } from "@/lib/banking/rules/loanFees";
 
 export { CHARACTER_LOAN_SPREAD_PP };
 
@@ -79,6 +81,7 @@ export type BorrowerFacingLoan = {
   borrowerName: string;
   creditedTo: LoanCreditDestination;
   principal: number;
+  originationFee?: number;
   outstanding: number;
   ratePercent: number;
   originatedTurn: number;
@@ -183,11 +186,17 @@ export async function characterIncomeInLoanCurrency(
   character: Character,
   loanCurrency: CurrencyCode
 ): Promise<number> {
+  const gameState = await getGameState(db);
   const rates = await loadFxRatesByCurrency(db);
   const rateMap: Partial<Record<CurrencyCode, number>> = {};
   for (const [code, rate] of rates) rateMap[code] = rate;
-  const homeFace = await estimatePerTurnCurrencyIncomeHomeFace(db, character, rateMap);
-  const home = getHomeCurrency(character);
+  const homeFace = await estimatePerTurnCurrencyIncomeHomeFace(
+    db,
+    character,
+    rateMap,
+    gameState ?? undefined
+  );
+  const home = getHomeCurrency(character, gameState?.preset);
   return convertFaceBetweenCurrencies(
     homeFace,
     home,
@@ -378,13 +387,15 @@ export async function originateLoan(
             subjectId: borrower.id,
             subjectName: loadedBorrower.name,
           }),
-      amount: principal,
+      amount: quoteLoanOrigination(principal, currency, loan.originationFee ?? 0).proceeds,
       currencyCode: currency,
       counterpartyType: "corporation",
       counterpartyId: bankCorporationId,
       counterpartyName: bankCorp.name,
       meta: {
         loanId: loanId.toString(),
+        principal,
+        originationFee: loan.originationFee ?? 0,
         bankCorporationId: bankCorporationId.toString(),
         ratePercent: loan.ratePercent,
         termTurns: loan.termTurns,
@@ -473,6 +484,7 @@ export async function listBorrowerFacingLoans(
         : (corpNameById.get(loan.borrowerId?.toString() ?? "") ?? "Corporation"),
       creditedTo: isCharacter ? "personalCash" : "corporationLiquidCapital",
       principal: loan.principal,
+      ...(loan.originationFee === undefined ? {} : { originationFee: loan.originationFee }),
       outstanding: loan.outstanding,
       ratePercent: loan.ratePercent,
       originatedTurn: loan.originatedTurn,

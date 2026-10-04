@@ -2,6 +2,8 @@ import type { CountryGeography } from "../contract";
 import { plRegionCensusData1953 } from "./data/plRegionCensusData1953";
 import { plRegions } from "./data/plRegions";
 import { plRegions1953 } from "./data/plRegions1953";
+import { plRegions1991 } from "./data/plRegions1991";
+import { plRegions2027 } from "./data/plRegions2027";
 import {
   PL_ADJACENCY_MAP,
   PL_CONTINENT,
@@ -25,8 +27,9 @@ import {
  * early revision of Japan's geography generated copies from the snapshot; deep
  * equality passed and Japan had two sources for every region.
  *
- * ⚠ THE PRESET KEYS COME FROM THE SNAPSHOT. Poland authors 1 census
- * eras, 0 metric eras, 0 anchor eras and 3 region eras. The gaps are real:
+ * ⚠ THE PRESET KEYS COME FROM THE SNAPSHOT, plus the authored 2027
+ * bundle. Poland authors 1 census eras, 0 metric eras, 0 anchor eras and
+ * 4 region eras (1953, 1979, 2019, 2027). The gaps are real:
  * an unauthored era inherits, and inventing a key for it would turn a fallback
  * into an authored value.
  */
@@ -46,7 +49,9 @@ const populationAnchors = {};
 const regionBundles = {
   "1953-default": plRegions1953,
   "1979-default": plRegions,
+  "1991-default": plRegions1991,
   "2019-default": plRegions,
+  "2027-default": plRegions2027,
 };
 
 export const PL_GEOGRAPHY: CountryGeography = {

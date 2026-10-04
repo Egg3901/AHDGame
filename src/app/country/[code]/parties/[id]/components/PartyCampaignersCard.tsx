@@ -30,7 +30,7 @@ export function PartyCampaignersCard({ party, countryCode, onUpdate }: PartyCamp
   return (
     <div className="rounded-xl border border-card-border bg-card p-6">
       <div className="mb-4 flex items-baseline justify-between gap-3">
-        <h2 className="text-lg font-semibold">Party Campaigners</h2>
+        <h2 className="text-lg font-semibold">Party campaigners</h2>
         <span className="text-xs text-muted">
           Up to {MAX_NATIONAL_CAMPAIGNERS}, confirmed by the National Committee
         </span>

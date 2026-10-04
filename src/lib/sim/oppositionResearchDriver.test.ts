@@ -39,18 +39,32 @@ import {
 type Doc = Record<string, unknown>;
 
 function getPath(doc: Doc, path: string): unknown {
-  return path.split(".").reduce<unknown>((val, key) => (val as Doc)?.[key], doc);
+  const parts = path.split(".");
+  let current: unknown = doc;
+  for (const part of parts) {
+    if (part === "__proto__" || part === "constructor" || part === "prototype") return undefined;
+    if (current == null || typeof current !== "object") return undefined;
+    current = (current as Doc)[part];
+  }
+  return current;
 }
 
 function setPath(doc: Doc, path: string, value: unknown): void {
-  const keys = path.split(".");
-  let node = doc;
-  for (let i = 0; i < keys.length - 1; i += 1) {
-    const next = node[keys[i] as string];
-    if (typeof next !== "object" || next === null) node[keys[i] as string] = {};
-    node = node[keys[i] as string] as Doc;
+  const parts = path.split(".");
+  for (const part of parts) {
+    if (part === "__proto__" || part === "constructor" || part === "prototype") return;
   }
-  node[keys[keys.length - 1] as string] = value;
+  let current = doc;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const key = parts[i];
+    if (key === "__proto__" || key === "constructor" || key === "prototype") return;
+    const existing = current[key];
+    if (existing === null || typeof existing !== "object") {
+      current[key] = /^(0|[1-9]\d*)$/.test(parts[i + 1]) ? [] : {};
+    }
+    current = current[key] as Record<string, unknown>;
+  }
+  current[parts[parts.length - 1]] = value;
 }
 
 function valuesEqual(a: unknown, b: unknown): boolean {

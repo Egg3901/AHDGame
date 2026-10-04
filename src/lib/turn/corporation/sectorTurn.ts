@@ -39,7 +39,6 @@ import { computePlantsCapacity } from "./sectorTurn/plantsCapacity";
 import { accumulateMarginModifiers } from "./sectorTurn/marginStack";
 import { resolvePlantsRevenue } from "./sectorTurn/plantsRevenue";
 import { computeGrowthAndRegulatory, decomposePhysicalCosts } from "./sectorTurn/sectorCosts";
-import { costReleasedThisTurn } from "@/lib/corporations/buildDelivery";
 import { resolveBuildQueueTurn } from "./sectorBuildQueueTurn";
 import { resolveSectorGrowthPolicy } from "./sectorGrowthPolicy";
 import {
@@ -62,6 +61,12 @@ import {
   sectorRevenueBoostMultiplier,
 } from "@/lib/corporations/rules/marketBoost";
 import { isStateScopedCommodity } from "@/lib/market/commodityMarketScope";
+import {
+  inputBasketCostIndex,
+  recordCostPlusBasis,
+  supportsCostPlusPricing,
+  validCostPlusBasis,
+} from "@/lib/market/costPlusPricing/rules";
 
 /** Process one sector and append its persisted update to the turn collectors. */
 export function processSector(
@@ -113,6 +118,7 @@ export function processSector(
     ) ?? false;
   const useTradeExposureEmbargo = lookups.embargoTradeExposureEnabled === true;
   const plantsEnabled = market.plantsEnabled;
+  const explicitPlantCostsEnabled = plantsEnabled && market.explicitPlantCostsEnabled === true;
   const {
     brakedTargetRate,
     newCurrentGrowthRate,
@@ -305,26 +311,18 @@ export function processSector(
     sectorFxRate,
     eraUnitScale: lookups.eraUnitScale,
   });
-  // ─── C4: the turn's queue write is a DELTA, never a whole-array $set ───────
-  // `nextBuildQueue` is a snapshot; `$set`-ing it would erase any order a CEO
+  // C4: the turn's queue write is a delta, never a whole-array $set.
+  // `nextBuildQueue` is a snapshot; `$set`-ing it would erase an order a CEO
   // placed during this phase. Write only what the turn owns: `$pull` orders
-  // that landed (`onlineTurn <= currentTurn`). A freshly placed order always
-  // has `onlineTurn > currentTurn`, so it cannot match. CIP `$inc`s the same
-  // delta so a concurrent order's contribution survives; rounded values keep
-  // the stored integer exact, and the command restates CIP absolutely so drift
-  // self-heals. Flip-turn credit is a `$push` in a second bulkWrite op - Mongo
-  // rejects `$pull` and `$push` on the same path in one update. bulkWrite is
+  // that landed (`onlineTurn <= currentTurn`). CIP has one writer: this turn
+  // derives its absolute value from the outstanding queue, including smooth
+  // delivery, and clamps it at zero. Other queue writers never adjust CIP.
+  // Flip-turn credit is a `$push` in a second bulkWrite op. Mongo rejects
+  // `$pull` and `$push` on the same path in one update. bulkWrite is
   // ordered, so the pull always precedes the push.
   const landedOrderCount = plantsEnabled
     ? existingQueue.reduce((n, o) => (o.onlineTurn <= currentTurn ? n + 1 : n), 0)
     : 0;
-  // Cost leaving CIP this turn: the sum of what each order released (a landed
-  // legacy order releases its whole cost; a smooth order releases this turn's
-  // slice). `$inc`-ing CIP down by this delta — rather than restating it — is
-  // what keeps a concurrently-placed order's contribution intact (C4).
-  const cipAnchorDelta = Math.round(
-    existingQueue.reduce((sum, o) => sum + costReleasedThisTurn(o, currentTurn), 0)
-  );
   // ─── Plants capacity advance + P5 paid basis ──────────────────────────────
   // Pure computation in `sectorTurn/plantsCapacity.ts`; the orchestrator only
   // threads its inputs and consumes the legs. Names are unchanged, so every
@@ -428,6 +426,12 @@ export function processSector(
     strategySupply: strategyRates.supply,
     techEffects,
     plantsEnabled,
+    costPlusPricingEnabled:
+      market.clearingEnabled &&
+      explicitPlantCostsEnabled &&
+      supportsCostPlusPricing(sector.sectorType) &&
+      sector.pricingMode === "costPlus" &&
+      validCostPlusBasis(sector.costPlusCostBasis),
     mothballed,
     nameplateUnits,
     activeFraction,
@@ -540,13 +544,19 @@ export function processSector(
     newStrikeStartedAtTurn,
     newStrikeCooldownUntilTurn,
   } = resolveSectorLabourEconomics({
-    labour,
+    labour: explicitPlantCostsEnabled ? { ...labour, wagesEnabled: true } : labour,
     sector,
     sectorCountryId,
     currentTurn,
     currentYear,
-    hourlyRevenue,
-    grossMaintenance: payrollBasis,
+    hourlyRevenue: explicitPlantCostsEnabled
+      ? (plantsNameplateRevenue * activeFraction) / TURNS_PER_DAY
+      : hourlyRevenue,
+    // Staff are paid for active capacity even when its output cannot sell.
+    // This neutral basis also removes the legacy margin cap on payroll.
+    grossMaintenance: explicitPlantCostsEnabled
+      ? (plantsNameplateRevenue * activeFraction) / TURNS_PER_DAY
+      : payrollBasis,
     computedWorkers,
     techLaborCostMultiplier: techEffects.laborCostMultiplier,
     costOfLivingIndex: sectorMetrics?.economic?.costOfLiving?.value,
@@ -651,6 +661,7 @@ export function processSector(
     capitalBookAnchor,
   } = decomposePhysicalCosts({
     plantsEnabled,
+    explicitPlantCostsEnabled,
     embargoLegacyMothball,
     profitMargin: sector.profitMargin,
     totalMarginMod,
@@ -845,9 +856,8 @@ export function processSector(
     if (plantsUpkeepMarginBasisAnchor == null) {
       sectorUpdate.plantsUpkeepMarginBasisAnchor = plantsUpkeepMarginBasisLive;
     }
-    // P3a/C4: `buildQueue` and `constructionInProgressAnchor` are deliberately
-    // NOT in this `$set`. They are written as a `$pull`/`$inc` delta on the
-    // bulkWrite op below — see the C4 note at `cipAnchorDelta`.
+    // P3a/C4: the queue is updated by a `$pull` below. CIP is derived by this
+    // turn from the post-delivery queue.
     // Keep an independent capital-mode counterfactual so a plants rollback
     // restores the old compounding series instead of a plants-derived value.
     Object.assign(
@@ -922,7 +932,7 @@ export function processSector(
   // Labour telemetry: persist the per-turn labor cost on a daily basis (like
   // `revenue`), in the sector's host-state currency. Display/analytics only;
   // never read back into the economy. Only written when the labour system is on.
-  if (labour.wagesEnabled) {
+  if (labour.wagesEnabled || explicitPlantCostsEnabled) {
     // Per-turn labor cost (daily basis, host currency) — display/analytics
     // only, never read back into the economy.
     sectorUpdate.laborCost = writeCorpEconomicLocal(
@@ -946,6 +956,9 @@ export function processSector(
     const daily = (anchorPerTurn: number) =>
       writeCorpEconomicLocal(anchorPerTurn * TURNS_PER_DAY, sectorCurrencyCode, sectorFxRate);
     sectorUpdate.plantsPnl = {
+      ...(explicitPlantCostsEnabled
+        ? { costModel: "explicit" as const, plantOverhead: daily(physicalPnl.otherOpex) }
+        : {}),
       // Inventory sell-down earns beside operating revenue and its carry lands
       // in costs (see the `costs` leg of this function's return), so both are
       // in the revenue and profit reported here. That makes `revenue` equal
@@ -987,13 +1000,34 @@ export function processSector(
   if (solvedOtherOpexPerUnit != null) {
     sectorUpdate.otherOpexPerUnitAnchor = solvedOtherOpexPerUnit;
     sectorUpdate.otherOpexAnchorMarginBasis = plantsPolicyNeutralBasis;
-  } else if (healedOpex?.otherOpexPerUnitAnchor != null) {
+  } else if (!explicitPlantCostsEnabled && healedOpex?.otherOpexPerUnitAnchor != null) {
     // Persist the rebasing this turn's P&L already used. Skip when this is
     // also the first calibration (branch above): that sector had no leftover
     // residual to rebase.
     sectorUpdate.otherOpexPerUnitAnchor = healedOpex.otherOpexPerUnitAnchor;
   }
-  if (healedOpex) {
+  if (explicitPlantCostsEnabled && physicalPnl && supportsCostPlusPricing(sector.sectorType)) {
+    const basis = recordCostPlusBasis({
+      inputsCost: physicalPnl.inputsCost,
+      fixedCost:
+        physicalPnl.laborCost +
+        physicalPnl.otherOpex +
+        physicalPnl.upkeep +
+        physicalPnl.complianceCost,
+      nominalProducedRevenue:
+        plantsCapacity > 0
+          ? ((plantsNameplateRevenue / TURNS_PER_DAY) * producedUnits) / plantsCapacity
+          : 0,
+      inputCostIndex: inputBasketCostIndex(
+        effectiveDemand ?? {},
+        lookups.reachableInputPriceRatiosByCountry?.get(sectorCountryId) ??
+          lookups.priceRatioByCommodity
+      ),
+      turn: currentTurn,
+    });
+    if (basis) sectorUpdate.costPlusCostBasis = basis;
+  }
+  if (!explicitPlantCostsEnabled && healedOpex) {
     sectorUpdate.retoolRescaleApplied = true;
   }
 
@@ -1036,21 +1070,19 @@ export function processSector(
     }
   }
 
-  // C4: the queue delta rides along with the `$set` — a `$pull` of the orders
-  // that landed and an `$inc` of the CIP they were holding. Paths are disjoint
-  // from `sectorUpdate` (which no longer carries `buildQueue` /
-  // `constructionInProgressAnchor`), so Mongo accepts the combined update.
+  // C4: CIP is written absolutely from the queue result each turn, repairing
+  // stale and negative stored values without a sequence of rounded increments.
   const sectorUpdateDoc: SectorUpdateOp["updateOne"]["update"] = { $set: sectorUpdate };
   if (plantsEnabled) {
     // A smooth order releases CIP every turn it delivers, not only on the turn
-    // it fully lands, so the `$inc` is gated on the delta, not on a full
-    // landing. The `$pull` still only fires when an order actually came due.
+    // it fully lands. The `$pull` still only fires when an order actually came due.
     if (landedOrderCount > 0) {
       sectorUpdateDoc.$pull = { buildQueue: { onlineTurn: { $lte: currentTurn } } };
     }
-    if (cipAnchorDelta !== 0) {
-      sectorUpdateDoc.$inc = { constructionInProgressAnchor: -cipAnchorDelta };
-    }
+    sectorUpdateDoc.$set = {
+      ...sectorUpdateDoc.$set,
+      constructionInProgressAnchor: Math.max(0, Math.round(constructionInProgressAnchor)),
+    };
   }
   sectorOps.push({
     updateOne: {

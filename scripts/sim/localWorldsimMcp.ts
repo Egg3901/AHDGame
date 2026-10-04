@@ -61,7 +61,7 @@ import { SIM_ACTOR_MODES } from "@/lib/sim/syntheticActors";
 import { parseActorsField } from "./simJobArgs";
 import { assertSimSourceShape } from "./simSource";
 import { pickSovereignDemandExperimentFlags } from "./sovereignDemandExperimentFlags";
-import { readExperimentReport } from "./experimentReportStorage";
+import { readExperimentReportSummary } from "./experimentReportStorage";
 
 const SIM_CONTROL_URI = process.env.SIM_CONTROL_URI || "mongodb://127.0.0.1:27018";
 const SIM_CONTROL_DB = process.env.SIM_CONTROL_DB || "sim_control";
@@ -82,7 +82,7 @@ const MAX_SIM_TURNS = 1000;
 // advertised in the tool schema nor accepted). Pure constant module: no Mongo,
 // no env, safe to import eagerly.
 const MARKET_MODES = MARKET_MODE_ORDER;
-const AUTONOMY_LEVELS = ["off", "v0", "v1", "v2", "v3", "v4"] as const;
+const AUTONOMY_LEVELS = ["v3", "v4", "v5"] as const;
 
 // ---------------------------------------------------------------------------
 // Tool definitions. Hand-written JSON Schema rather than zod-to-json-schema:
@@ -587,7 +587,7 @@ const TOOLS: ToolDef[] = [
     ),
     handler: async (a, db) => {
       const max = Number(a.maxPoints ?? 500);
-      const report = await readExperimentReport(db, String(a.runId));
+      const report = await readExperimentReportSummary(db, String(a.runId), max);
       if (!report) {
         const job = await db.collection(SIM_JOBS).findOne({ _id: String(a.runId) as never });
         return {

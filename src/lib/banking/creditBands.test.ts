@@ -41,6 +41,17 @@ describe("credit bands", () => {
 });
 
 describe("lending profiles", () => {
+  it("keeps the same credit demand at the same spread over different prime rates", () => {
+    const targets = (primeRatePercent: number) =>
+      bandOriginationTargets({
+        fundingCapacity: 1_000_000,
+        primeRatePercent,
+        lendingRatePercent: primeRatePercent + 3,
+        profile: "balanced",
+      }).map((entry) => ({ band: entry.band, target: entry.target }));
+    expect(targets(12)).toEqual(targets(3));
+  });
+
   it("opens strictly more of the book as the stance loosens", () => {
     const shares = LENDING_PROFILES.map((p) => demandShareForProfile(p.id));
     expect(shares).toEqual([...shares].sort((a, b) => a - b));

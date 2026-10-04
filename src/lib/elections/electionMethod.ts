@@ -29,8 +29,10 @@ export const POSITION_BY_ELECTION_TYPE: Readonly<Record<string, ElectionPosition
   // Eastern bloc Tier-1 unicameral assemblies (DD pattern).
   sejm: "lowerChamber",
   chamberOfThePeople: "lowerChamber",
+  chamberOfNations: "upperChamber",
   nationalAssembly: "lowerChamber",
   grandNationalAssembly: "lowerChamber",
+  chamberOfDeputies: "lowerChamber",
   federalAssembly: "lowerChamber",
   dail: "lowerChamber",
   // Beta-country parliamentary lower chambers (FR/IT/ES/SE/TR): resolve with
@@ -42,6 +44,7 @@ export const POSITION_BY_ELECTION_TYPE: Readonly<Record<string, ElectionPosition
   milletMeclisi: "lowerChamber",
   // upper chambers
   senate: "upperChamber",
+  senat: "upperChamber",
   sangiin: "upperChamber",
   seanad: "upperChamber",
   nationalitiesDeputy: "upperChamber",
@@ -70,7 +73,13 @@ export function positionForElectionType(electionType: string): ElectionPosition 
 
 /** Methods that allocate multiple seats across a multi-member constituency. */
 export function isMultiSeatMethod(m: ElectionMethod): boolean {
-  return m === "pr_hareQuota" || m === "pr_sainteLague" || m === "ams";
+  return (
+    m === "pr_dhondt" ||
+    m === "pr_hareQuota" ||
+    m === "pr_sainteLague" ||
+    m === "ams" ||
+    m === "sntv"
+  );
 }
 
 /** Methods that carry a separate party-list tier NOT captured by region
@@ -81,8 +90,8 @@ export function isListTierMethod(m: ElectionMethod | undefined): boolean {
 
 /**
  * The configured election method for a (country, electionType). Returns the
- * static config default today; a future in-game layer can consult per-game
- * state here before falling back to config. Returns undefined when the country
+ * preset config when supplied, or the base country config when omitted.
+ * A future in-game layer can consult per-game state. Returns undefined when the country
  * does not configure that position (caller decides the fallback).
  *
  * `countryId` is intentionally widened to accept `null | undefined`: legacy US
@@ -94,10 +103,26 @@ export function isListTierMethod(m: ElectionMethod | undefined): boolean {
  */
 export function getElectionMethod(
   countryId: CountryId | null | undefined,
-  electionType: string
+  electionType: string,
+  preset?: string,
+  cycle?: number
 ): ElectionMethod | undefined {
   if (!countryId) return undefined;
   const position = positionForElectionType(electionType);
   if (!position) return undefined;
-  return getCountryConfig(countryId).electionSystems[position];
+  // Both post-communist Romanian eras use regional proportional elections for
+  // these chamber keys. The Cold War chamber has a different key, so this
+  // country/type route is safe for callers that lack a preset argument.
+  if (countryId === "RO" && (electionType === "chamberOfDeputies" || electionType === "senat")) {
+    return "pr_hareQuota";
+  }
+  if (
+    countryId === "BG" &&
+    preset === "1991-default" &&
+    electionType === "nationalAssembly" &&
+    cycle != null &&
+    cycle >= 1
+  )
+    return "pr_dhondt";
+  return getCountryConfig(countryId, preset).electionSystems[position];
 }

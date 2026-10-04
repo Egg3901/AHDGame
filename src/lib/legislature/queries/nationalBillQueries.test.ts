@@ -14,6 +14,7 @@ import {
   nationalBillListTallies,
 } from "./nationalBillQueries";
 import type { Bill } from "@/lib/db/types";
+import { getCountryConfigForRuntime } from "@/lib/constants/countries";
 import type { ScopedVoteOfficial } from "@/lib/congress/billVoting";
 
 describe("getNationalBillDetail — frozen snapshot for concluded bills (#0982)", () => {
@@ -459,6 +460,45 @@ describe("voteShiftPreview — what Aye and Nay would do to the viewer", () => {
       current: { economic: 0.75, social: 0.25 },
       aye: { economic: 0, social: 0 },
       nay: { economic: 0.5, social: -0.5 },
+    });
+  });
+});
+
+describe("Russian runtime bill tallies", () => {
+  it.each([
+    [{}, "unionCongress", "unionCongressDeputy"],
+    [{ ruSovietSuccessionSinceTurn: 4 }, "congressOfPeoplesDeputies", "congressDeputy"],
+    [{ ruFederalAssemblySinceTurn: 4 }, "stateDuma", "dumaDeputy"],
+  ] as const)("counts active Russian office mandates for %j", (markers, chamber, officeType) => {
+    const active = new ObjectId();
+    const stale = new ObjectId();
+    const foreign = new ObjectId();
+    const bill = {
+      countryId: "RU",
+      status: "active",
+      originChamber: chamber,
+      currentChamber: officeType,
+      votes: { [`npp_${active}`]: "for", [`npp_${stale}`]: "for", [`npp_${foreign}`]: "for" },
+      votesFor: 900,
+      votesAgainst: 0,
+      votesAbstain: 0,
+    } as unknown as Bill;
+    const officials: ScopedVoteOfficial[] = [
+      { countryId: "RU", officeType, nppId: active, characterId: null, seatsHeld: 3 },
+      {
+        countryId: "RU",
+        officeType: "obsoleteDeputy",
+        nppId: stale,
+        characterId: null,
+        seatsHeld: 100,
+      },
+      { countryId: "CS", officeType, nppId: foreign, characterId: null, seatsHeld: 100 },
+    ];
+    const config = getCountryConfigForRuntime("RU", "1991-default", markers);
+    expect(nationalBillListTallies(bill, officials, "RU", chamber, null, config).origin).toEqual({
+      for: 3,
+      against: 0,
+      abstain: 0,
     });
   });
 });

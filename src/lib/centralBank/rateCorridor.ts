@@ -1,6 +1,6 @@
 /**
  * Rate-corridor verdict (locked composite signature): one glance answers
- * "is the bank ahead of inflation?" — computed, not editorial.
+ * "is the bank ahead of inflation?", computed rather than editorial.
  */
 
 export interface CorridorVerdict {
@@ -15,18 +15,21 @@ export function corridorVerdict(primeRate: number, inflation: number): CorridorV
   const delta = primeRate - inflation;
   const stance =
     delta > NEUTRAL_BAND ? "restrictive" : delta < -NEUTRAL_BAND ? "accommodative" : "neutral";
-  const signed = `${delta >= 0 ? "+" : ""}${delta.toFixed(2)}`;
   const wording =
     stance === "restrictive"
-      ? "restrictive stance"
+      ? "a restrictive stance"
       : stance === "accommodative"
-        ? "accommodative stance"
-        : "broadly neutral stance";
-  const direction = delta >= 0 ? "above" : "below";
+        ? "an accommodative stance"
+        : "a broadly neutral stance";
+  const gap = Math.abs(delta).toFixed(2);
+  const position =
+    gap === "0.00"
+      ? "matches inflation"
+      : `is ${gap} points ${delta >= 0 ? "above" : "below"} inflation`;
   return {
     delta,
     stance,
-    copy: `Rate sits ${signed} ${direction} inflation — ${wording}.`,
+    copy: `The prime rate ${position}, ${wording}.`,
   };
 }
 

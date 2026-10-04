@@ -7,16 +7,24 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { getMessageStyle } from "@/lib/utils/formatters";
 import { MAJOR_DEMOTION_GRACE_TURNS } from "@/lib/parties/partyTier";
-import { CardSkeleton, HeroStatsStrip, Skeleton } from "@/components/ui";
+import { Button, CardSkeleton, Skeleton } from "@/components/ui";
 import { PartyLogo } from "@/components/PartyLogo";
-import { PartyRegimeBadge } from "@/components/parties/PartyRegimeBadge";
 import { RegimeOffersInbox } from "@/components/parties/RegimeOffersInbox";
 import { AgendaBannerWithEdit } from "@/components/party-hub/AgendaBannerWithEdit";
 import { COUNTRY_CONFIGS, CountryId } from "@/lib/constants/countries";
 import { parseCountryParam } from "@/lib/db/partyLookup";
 import { partyApiUrl, partyUrl, regionPartyApiUrl, regionPartyUrl, regionUrl } from "@/lib/urls";
-import { PositionLabel } from "@/components/PositionLabel";
-import { contrastTextColor } from "@/lib/utils/colorContrast";
+import { PlainPositionLabel } from "@/components/party/PlainPositionLabel";
+import {
+  PARTY_PAGE_TITLE_CLASS,
+  PARTY_SECTION_HEADING_CLASS,
+  PARTY_VALUE_CLASS,
+  PartyStat,
+  PartyStatsRow,
+  PartySwatch,
+  partyTabClass,
+  regimeStatusLabel,
+} from "@/components/party/partyPageStyles";
 import { getStateLeanLabel } from "@/lib/utils/politics";
 import type { PartyAnalyticsPayload } from "@/lib/partyAnalytics/types";
 import { UK_REGIONS } from "@/lib/constants/uk";
@@ -241,11 +249,12 @@ function ScopeSwitcher({ scope, countryCode, partyId, regionId, regionLabel }: S
   const isNational = scope.kind === "national";
 
   return (
-    <div className="mt-3 inline-flex rounded-lg border border-card-border bg-background/60 p-1">
+    <div className="mt-4 inline-flex rounded-lg border border-card-border p-1">
       <Link
         href={nationalHref}
-        className={`rounded-md px-3 py-1.5 text-body-xs font-semibold transition-colors ${
-          isNational ? "bg-primary/15 text-primary" : "text-muted hover:text-foreground"
+        aria-current={isNational ? "page" : undefined}
+        className={`rounded-md px-3 py-1.5 text-body-sm font-medium transition-colors ${
+          isNational ? "bg-card-elevated text-foreground" : "text-muted hover:text-foreground"
         }`}
       >
         National
@@ -253,14 +262,15 @@ function ScopeSwitcher({ scope, countryCode, partyId, regionId, regionLabel }: S
       {regionHref ? (
         <Link
           href={regionHref}
-          className={`rounded-md px-3 py-1.5 text-body-xs font-semibold transition-colors ${
-            !isNational ? "bg-primary/15 text-primary" : "text-muted hover:text-foreground"
+          aria-current={!isNational ? "page" : undefined}
+          className={`rounded-md px-3 py-1.5 text-body-sm font-medium transition-colors ${
+            !isNational ? "bg-card-elevated text-foreground" : "text-muted hover:text-foreground"
           }`}
         >
           {regionLabel}
         </Link>
       ) : (
-        <span className="rounded-md px-3 py-1.5 text-body-xs font-semibold text-muted/50 cursor-not-allowed">
+        <span className="cursor-not-allowed rounded-md px-3 py-1.5 text-body-sm font-medium text-muted/50">
           {regionLabel}
         </span>
       )}
@@ -276,7 +286,8 @@ interface PartyHubChromeProps {
   switcherRegionLabel: string;
   breadcrumb?: ReactNode;
   backLink?: ReactNode;
-  headerEyebrow: string;
+  /** Plain words after the abbreviation, naming which office this hub is. */
+  headerContext: string;
   title: string;
   partyColor: string;
   partyAbbreviation: string;
@@ -284,7 +295,8 @@ interface PartyHubChromeProps {
   logoUrl?: string | null;
   countryId: CountryId | string;
   regimeStatus?: "ruling" | "approved" | "banned" | null;
-  tierBadge?: ReactNode;
+  /** Extra plain words for the identity line, such as the party tier. */
+  tierLabel?: string | null;
   headerExtra?: ReactNode;
   headerActions?: ReactNode;
   modViewBanner?: ReactNode;
@@ -292,7 +304,7 @@ interface PartyHubChromeProps {
   msg: string;
   defunctBanner?: ReactNode;
   agendaBanner: ReactNode;
-  tabs: { id: string; label: string; className?: string }[];
+  tabs: { id: string; label: string }[];
   activeTab: string;
   onTabChange: (id: string) => void;
   children: ReactNode;
@@ -306,7 +318,7 @@ function PartyHubChrome({
   switcherRegionLabel,
   breadcrumb,
   backLink,
-  headerEyebrow,
+  headerContext,
   title,
   partyColor,
   partyAbbreviation,
@@ -314,7 +326,7 @@ function PartyHubChrome({
   logoUrl,
   countryId,
   regimeStatus,
-  tierBadge,
+  tierLabel,
   headerExtra,
   headerActions,
   modViewBanner,
@@ -327,41 +339,49 @@ function PartyHubChrome({
   onTabChange,
   children,
 }: PartyHubChromeProps) {
+  const regimeLabel = regimeStatusLabel(regimeStatus);
+
   return (
     <div className="min-h-screen bg-background pb-16">
       <main className="mx-auto max-w-7xl overflow-x-hidden px-4 py-6 sm:px-6 sm:py-8">
         {breadcrumb}
         {backLink}
 
-        <header className="mb-6 overflow-hidden rounded-xl border border-card-border bg-card shadow-panel">
-          <div
-            className="relative border-b-4 px-4 py-6 sm:px-7 sm:py-8"
-            style={{
-              backgroundColor: `${partyColor}18`,
-              borderBottomColor: partyColor,
-            }}
-          >
-            <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex min-w-0 items-center gap-4">
+        <header className="mb-10 overflow-hidden rounded-xl border border-card-border bg-card">
+          <div className="px-4 py-6 sm:px-7 sm:py-8">
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex min-w-0 items-start gap-4">
                 <PartyLogo
                   partyId={logoPartyId}
                   partyColor={partyColor}
                   logoUrl={logoUrl}
                   size="h-16 w-16"
+                  className="shrink-0"
                   countryId={countryId as CountryId}
                 />
                 <div className="min-w-0">
-                  <p className="text-body-xs font-bold uppercase tracking-widest text-muted">
-                    {headerEyebrow}
+                  <h1 className={PARTY_PAGE_TITLE_CLASS}>{title}</h1>
+                  <p className="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-body text-muted">
+                    <PartySwatch color={partyColor} />
+                    <span className="font-medium text-foreground">{partyAbbreviation}</span>
+                    <span aria-hidden>·</span>
+                    <span>{headerContext}</span>
+                    {regimeLabel ? (
+                      <>
+                        <span aria-hidden>·</span>
+                        <span>
+                          <span className="sr-only">Regime status: </span>
+                          {regimeLabel}
+                        </span>
+                      </>
+                    ) : null}
+                    {tierLabel ? (
+                      <>
+                        <span aria-hidden>·</span>
+                        <span>{tierLabel}</span>
+                      </>
+                    ) : null}
                   </p>
-                  <h1 className="mt-1 text-display font-extrabold tracking-tight">{title}</h1>
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <span className="text-body-sm font-bold" style={{ color: partyColor }}>
-                      {partyAbbreviation}
-                    </span>
-                    <PartyRegimeBadge regimeStatus={regimeStatus} />
-                    {tierBadge}
-                  </div>
                   <ScopeSwitcher
                     scope={scope}
                     countryCode={countryCode}
@@ -376,38 +396,34 @@ function PartyHubChrome({
                 <div className="flex shrink-0 items-center gap-3">{headerActions}</div>
               ) : null}
             </div>
-            {modViewBanner}
           </div>
+          {modViewBanner}
           {statsStrip}
+          {/* Scrolls sideways when the tabs outrun the width; the faded right
+              edge and the trailing space show there is more past the edge. */}
+          <nav
+            aria-label="Party sections"
+            className="flex gap-6 overflow-x-auto border-t border-card-border px-4 scrollbar-hide [mask-image:linear-gradient(to_right,black_calc(100%_-_2.5rem),transparent)] after:block after:w-6 after:shrink-0 after:content-[''] sm:px-7"
+          >
+            {tabs.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => onTabChange(t.id)}
+                aria-pressed={activeTab === t.id}
+                className={partyTabClass(activeTab === t.id)}
+              >
+                {t.label}
+              </button>
+            ))}
+          </nav>
         </header>
 
         {msg ? (
           <div className={`mb-4 rounded-lg p-3 text-sm ${getMessageStyle(msg)}`}>{msg}</div>
         ) : null}
         {defunctBanner}
-        <div className="mb-4">{agendaBanner}</div>
-
-        <div className="mb-6 rounded-xl border border-card-border bg-card p-2 shadow-card">
-          <nav aria-label="Party sections" className="flex gap-1 overflow-x-auto scrollbar-hide">
-            {tabs.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => onTabChange(t.id)}
-                aria-pressed={activeTab === t.id}
-                className={`shrink-0 whitespace-nowrap rounded-lg border px-3 py-2 text-center text-body-sm font-semibold transition-colors ${
-                  activeTab === t.id
-                    ? t.id === "admin"
-                      ? "border-error/40 bg-error/10 text-error"
-                      : "border-primary/40 bg-primary/10 text-primary"
-                    : (t.className ??
-                      "border-transparent text-muted hover:border-card-border hover:bg-card-elevated hover:text-foreground")
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
-          </nav>
-        </div>
+        <div className="mb-8 empty:hidden">{agendaBanner}</div>
 
         {children}
       </main>
@@ -774,42 +790,39 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
   const sortedMembers = [...party.members].sort((a, b) => a.name.localeCompare(b.name));
   const candidatePositions = POSITIONS.filter((p) => electionData?.isCandidate[p]);
 
-  const MAIN_TABS: { id: NationalMainTab; label: string; className?: string }[] =
-    canViewExtendedTabs
-      ? [
-          { id: "overview", label: "Overview" },
-          { id: "analytics", label: "Analytics" },
-          { id: "committee", label: "Committee" },
-          { id: "caucuses", label: "Caucuses" },
-          { id: "whip-room", label: "Whip Room" },
-          { id: "slate", label: "Slate" },
-          ...(canManageNpps ? [{ id: "actions" as NationalMainTab, label: "NPPs" }] : []),
-          { id: "elections", label: "Elections" },
-          { id: "treasury", label: "Treasury" },
-          { id: "members", label: `Members (${party.memberCount})` },
-          { id: "discussion", label: "Discussion" },
-          ...(canActAsChair
-            ? [
-                {
-                  id: "chair-office" as NationalMainTab,
-                  label: isActingChair ? "Chair Office (acting)" : "Chair Office",
-                },
-              ]
-            : []),
-          ...(party.countryId === "UK"
-            ? [{ id: "leadership" as NationalMainTab, label: "Leadership" }]
-            : []),
-          ...(party.countryId === "UK"
-            ? [{ id: "conference" as NationalMainTab, label: "Conference" }]
-            : []),
-          ...(user?.isAdmin
-            ? [{ id: "admin" as NationalMainTab, label: "Admin", className: "text-error" }]
-            : []),
-        ]
-      : [
-          { id: "overview", label: "Overview" },
-          { id: "members", label: `Members (${party.memberCount})` },
-        ];
+  const MAIN_TABS: { id: NationalMainTab; label: string }[] = canViewExtendedTabs
+    ? [
+        { id: "overview", label: "Overview" },
+        { id: "analytics", label: "Analytics" },
+        { id: "committee", label: "Committee" },
+        { id: "caucuses", label: "Caucuses" },
+        { id: "whip-room", label: "Whip room" },
+        { id: "slate", label: "Slate" },
+        ...(canManageNpps ? [{ id: "actions" as NationalMainTab, label: "NPPs" }] : []),
+        { id: "elections", label: "Elections" },
+        { id: "treasury", label: "Treasury" },
+        { id: "members", label: `Members (${party.memberCount})` },
+        { id: "discussion", label: "Discussion" },
+        ...(canActAsChair
+          ? [
+              {
+                id: "chair-office" as NationalMainTab,
+                label: isActingChair ? "Chair office (acting)" : "Chair office",
+              },
+            ]
+          : []),
+        ...(party.countryId === "UK"
+          ? [{ id: "leadership" as NationalMainTab, label: "Leadership" }]
+          : []),
+        ...(party.countryId === "UK"
+          ? [{ id: "conference" as NationalMainTab, label: "Conference" }]
+          : []),
+        ...(user?.isAdmin ? [{ id: "admin" as NationalMainTab, label: "Admin" }] : []),
+      ]
+    : [
+        { id: "overview", label: "Overview" },
+        { id: "members", label: `Members (${party.memberCount})` },
+      ];
 
   return (
     <PartyHubChrome
@@ -821,7 +834,7 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
       backLink={
         <Link
           href={partiesListHref}
-          className="mb-4 inline-flex items-center gap-2 text-body-sm font-semibold text-muted transition-colors hover:text-foreground"
+          className="mb-4 inline-flex items-center gap-2 text-body font-medium text-muted transition-colors hover:text-foreground"
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path
@@ -831,10 +844,10 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
               d="M15 19l-7-7 7-7"
             />
           </svg>
-          All Parties
+          All parties
         </Link>
       }
-      headerEyebrow="National headquarters"
+      headerContext="National headquarters"
       title={party.name}
       partyColor={party.color}
       partyAbbreviation={party.abbreviation}
@@ -842,44 +855,40 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
       logoUrl={party.logoUrl}
       countryId={party.countryId}
       regimeStatus={party.regimeStatus}
-      tierBadge={
-        (party.tier ?? (party.isDefault ? "major" : "minor")) === "major" ? (
-          <span className="rounded-full border border-card-border bg-background/60 px-2 py-0.5 text-body-xs capitalize text-muted">
-            Major Party
-          </span>
-        ) : (
-          <span className="rounded-full border border-card-border bg-background/60 px-2 py-0.5 text-body-xs capitalize text-muted">
-            Minor Party
-          </span>
-        )
+      tierLabel={
+        (party.tier ?? (party.isDefault ? "major" : "minor")) === "major"
+          ? "Major party"
+          : "Minor party"
       }
       headerExtra={
         party.majorDemotionWarning ? (
-          <div className="mt-3 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-body-sm text-warning">
-            <span className="font-semibold">Major Party status at risk.</span> Org has fallen below
-            10% in two-thirds of regions. Regain 20% Org in at least a third of regions within{" "}
-            <span className="font-semibold tabular-nums">
+          <p className="mt-3 max-w-xl text-body-sm text-muted">
+            <span className="font-semibold text-warning">Major party status at risk.</span> Org has
+            fallen below 10% in two-thirds of regions. Regain 20% Org in at least a third of regions
+            within{" "}
+            <span className="font-semibold tabular-nums text-foreground">
               {Math.max(
                 0,
                 party.majorDemotionWarning.startedTurn + MAJOR_DEMOTION_GRACE_TURNS - currentTurn
               )}
             </span>{" "}
             turns or this party will be demoted to Minor.
-          </div>
+          </p>
         ) : null
       }
       headerActions={
         user?.hasCharacter ? (
           isInParty ? (
             <button
+              type="button"
               onClick={handleLeave}
               disabled={leaving}
-              className="rounded-lg border border-error/40 bg-error/10 px-4 py-2 text-body-sm font-semibold text-error transition-colors hover:bg-error/20 disabled:opacity-50"
+              className="h-9 rounded-lg border border-error/40 px-3.5 text-body font-medium text-error transition-colors hover:bg-error/10 disabled:opacity-50"
             >
-              {leaving ? "Leaving…" : "Leave Party"}
+              {leaving ? "Leaving…" : "Leave party"}
             </button>
           ) : (
-            <button
+            <Button
               onClick={handleJoin}
               disabled={joining || !canJoinFromHomeRegion}
               title={
@@ -887,105 +896,70 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
                   ? undefined
                   : `${party.name} is not established in or next to your home region.`
               }
-              className="rounded-lg px-4 py-2 text-body-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
-              style={{
-                backgroundColor: party.color,
-                color: contrastTextColor(party.color),
-              }}
             >
-              {joining ? "Joining…" : "Join Party"}
-            </button>
+              {joining ? "Joining…" : "Join party"}
+            </Button>
           )
         ) : null
       }
       modViewBanner={
         !user?.isAdmin && user?.isModerator && !isInParty ? (
-          <div className="mt-5 rounded-lg border border-info/30 bg-info/10 p-4 text-body-sm">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="font-semibold text-foreground">Moderator View</p>
-                <p className="text-muted">
-                  Unlock member-only party tabs in read-only mode. Each unlock is written to the
-                  moderator audit log.
-                </p>
-              </div>
-              {modViewEnabled ? (
-                <span className="w-fit rounded-full border border-info/40 bg-info/15 px-3 py-1 text-body-xs font-semibold uppercase tracking-wide text-info">
-                  Mod View Active
-                </span>
-              ) : (
-                <button
-                  type="button"
-                  onClick={enableModView}
-                  disabled={modViewLoading}
-                  className="w-fit rounded-lg border border-info/40 bg-info/15 px-4 py-2 font-semibold text-info transition-colors hover:bg-info/20 disabled:opacity-50"
-                >
-                  {modViewLoading ? "Enabling..." : "Mod View"}
-                </button>
-              )}
+          <div className="flex flex-col gap-3 border-t border-card-border px-4 py-4 text-body sm:flex-row sm:items-center sm:justify-between sm:px-7">
+            <div>
+              <p className="font-semibold text-foreground">Moderator view</p>
+              <p className="text-muted">
+                Unlock member-only party tabs in read-only mode. Each unlock is written to the
+                moderator audit log.
+              </p>
             </div>
+            {modViewEnabled ? (
+              <span className="shrink-0 font-medium text-foreground">Mod view active</span>
+            ) : (
+              <Button
+                variant="secondary"
+                onClick={enableModView}
+                disabled={modViewLoading}
+                className="w-fit shrink-0"
+              >
+                {modViewLoading ? "Enabling..." : "Mod view"}
+              </Button>
+            )}
           </div>
         ) : null
       }
       statsStrip={
-        <HeroStatsStrip layout="grid">
-          <div className="min-w-0 p-4">
-            <span className="text-body-xs font-bold uppercase tracking-widest text-muted">
-              Political Strength
-            </span>
-            <span className="text-heading font-bold text-info tabular-nums">
-              {(party.politicalStrength ?? 0).toFixed(1)}
-              <span className="ml-0.5 text-body-xs font-normal text-muted">
-                /{party.effectivePsCap}
-              </span>
-            </span>
-          </div>
-          <div className="min-w-0 p-4">
-            <span className="text-body-xs font-bold uppercase tracking-widest text-muted">
-              Members
-            </span>
-            <span className="text-heading font-bold text-foreground tabular-nums">
-              {party.memberCount}
-            </span>
-          </div>
-          <div className="min-w-0 p-4">
-            <span className="text-body-xs font-bold uppercase tracking-widest text-muted">
-              Treasury
-            </span>
-            <span className="block truncate text-heading font-bold text-warning tabular-nums">
+        <PartyStatsRow>
+          <PartyStat label="Political strength">
+            <span className={PARTY_VALUE_CLASS}>{(party.politicalStrength ?? 0).toFixed(1)}</span>
+            <span className="ml-1 text-body-sm text-muted">of {party.effectivePsCap}</span>
+          </PartyStat>
+          <PartyStat label="Members">
+            <span className={PARTY_VALUE_CLASS}>{party.memberCount}</span>
+          </PartyStat>
+          <PartyStat label="Treasury">
+            <span className={`block truncate ${PARTY_VALUE_CLASS}`}>
               {nationalFmt(party.treasury, party.countryId)}
             </span>
-          </div>
-          <div className="min-w-0 p-4">
-            <span className="text-body-xs font-bold uppercase tracking-widest text-muted">
-              Economic
-            </span>
-            <PositionLabel
+          </PartyStat>
+          <PartyStat label="Economic">
+            <PlainPositionLabel
               value={party.economicPosition}
               axis="economic"
-              className="text-body-sm font-bold"
+              className="text-body-lg font-semibold text-foreground"
             />
-          </div>
-          <div className="min-w-0 p-4">
-            <span className="text-body-xs font-bold uppercase tracking-widest text-muted">
-              Social
-            </span>
-            <PositionLabel
+          </PartyStat>
+          <PartyStat label="Social">
+            <PlainPositionLabel
               value={party.socialPosition}
               axis="social"
-              className="text-body-sm font-bold"
+              className="text-body-lg font-semibold text-foreground"
             />
-          </div>
-          <div className="min-w-0 p-4">
-            <span className="text-body-xs font-bold uppercase tracking-widest text-muted">
-              Bonus Actions
-            </span>
-            <span className="text-heading font-bold text-primary tabular-nums">
-              +{party.totalBonusActions}
-              <span className="ml-1 text-body-xs font-normal text-muted">/turn</span>
-            </span>
-          </div>
-        </HeroStatsStrip>
+          </PartyStat>
+          <PartyStat label="Bonus actions">
+            <span className={PARTY_VALUE_CLASS}>+{party.totalBonusActions}</span>
+            <span className="ml-1 text-body-sm text-muted">per turn</span>
+          </PartyStat>
+        </PartyStatsRow>
       }
       msg={msg}
       defunctBanner={
@@ -1010,11 +984,11 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
       onTabChange={(tabId) => setActiveTab(tabId as NationalMainTab)}
     >
       {activeTab === "overview" && (
-        <div className="space-y-6">
+        <div className="space-y-12">
           <PartyOverviewPanel party={party} />
           <RegimeOffersInbox countryCode={backCountry} partySequentialId={String(party.id)} />
           {canViewExtendedTabs && (
-            <div className="grid gap-6 md:grid-cols-2">
+            <div className="grid gap-x-12 gap-y-12 md:grid-cols-2">
               <DisciplineWatchCard countryCode={backCountry} partyId={String(party.id)} />
               <RecentActivityCard countryCode={backCountry} partyId={String(party.id)} />
             </div>
@@ -1066,59 +1040,43 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
       )}
 
       {activeTab === "committee" && (
-        <div className="space-y-6">
-          <div className="rounded-xl border border-card-border bg-card p-6">
-            <h2 className="text-lg font-semibold mb-4">
+        <div className="space-y-12">
+          <section aria-labelledby="committee-title">
+            <h2 id="committee-title" className={PARTY_SECTION_HEADING_CLASS}>
               {getPartyRoleLabel(party.countryId, "committee")}
             </h2>
-            <p className="text-sm text-muted mb-4">
+            <p className="mt-1 max-w-2xl text-body text-muted">
               {`The ${getPartyRoleLabel(party.countryId, "committee")} consists of up to 6 elected members who help guide party policy and strategy.`}
             </p>
-            {committeeData?.committeeMembers && committeeData.committeeMembers.length > 0 ? (
-              <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
-                {committeeData.committeeMembers.map((member, idx) => (
-                  <div
-                    key={member.id}
-                    className="rounded-lg border border-card-border bg-background p-4"
+            <ol className="mt-4 grid border-t border-card-border sm:grid-cols-2 sm:gap-x-12 md:grid-cols-3">
+              {Array.from({
+                length: Math.max(
+                  committeeData?.committeeSize || 6,
+                  committeeData?.committeeMembers?.length ?? 0
+                ),
+              }).map((_, idx) => {
+                const member = committeeData?.committeeMembers?.[idx];
+                return (
+                  <li
+                    key={member ? member.id : `empty-${idx}`}
+                    className="flex items-baseline justify-between gap-3 border-b border-card-border py-3"
                   >
-                    <div className="text-xs text-muted mb-1">Seat {idx + 1}</div>
-                    <Link
-                      href={`/character/${member.sequentialId ?? member.id}`}
-                      className="font-medium text-primary hover:underline text-sm"
-                    >
-                      {member.name}
-                    </Link>
-                  </div>
-                ))}
-                {Array.from({
-                  length:
-                    (committeeData?.committeeSize || 6) - committeeData.committeeMembers.length,
-                }).map((_, idx) => (
-                  <div
-                    key={`empty-${idx}`}
-                    className="rounded-lg border border-card-border bg-background p-4"
-                  >
-                    <div className="text-xs text-muted mb-1">
-                      Seat {committeeData.committeeMembers.length + idx + 1}
-                    </div>
-                    <span className="text-muted italic text-sm">Vacant</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
-                {Array.from({ length: committeeData?.committeeSize || 6 }).map((_, idx) => (
-                  <div
-                    key={`empty-${idx}`}
-                    className="rounded-lg border border-card-border bg-background p-4"
-                  >
-                    <div className="text-xs text-muted mb-1">Seat {idx + 1}</div>
-                    <span className="text-muted italic text-sm">Vacant</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+                    <span className="text-body-sm tabular-nums text-muted">Seat {idx + 1}</span>
+                    {member ? (
+                      <Link
+                        href={`/character/${member.sequentialId ?? member.id}`}
+                        className="min-w-0 truncate text-body font-medium text-foreground hover:underline"
+                      >
+                        {member.name}
+                      </Link>
+                    ) : (
+                      <span className="text-body text-muted">Vacant</span>
+                    )}
+                  </li>
+                );
+              })}
+            </ol>
+          </section>
           <CommitteeProposalsSection
             country={backCountry}
             countryCode={countryCode}
@@ -1130,47 +1088,48 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
       )}
 
       {activeTab === "actions" && (
-        <div className="space-y-6">
-          <div className="rounded-xl border border-card-border bg-card p-6">
-            <h2 className="text-sm font-semibold text-muted mb-4">Party resources</h2>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted">Treasury</span>
-                <span className="text-lg font-bold text-warning">
+        <div className="space-y-8">
+          <section aria-labelledby="party-resources-title">
+            <h2 id="party-resources-title" className={PARTY_SECTION_HEADING_CLASS}>
+              Party resources
+            </h2>
+            <dl className="mt-4 grid max-w-2xl gap-6 sm:grid-cols-2">
+              <div>
+                <dt className="text-body-sm text-muted">Treasury</dt>
+                <dd className={PARTY_VALUE_CLASS}>
                   {nationalFmt(party.treasury, party.countryId)}
-                </span>
+                </dd>
               </div>
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm text-muted">Action Points</span>
-                  <span className="text-lg font-bold tabular-nums text-primary">
-                    {party.nppActionPoints} / {party.nppActionPointCap}
-                  </span>
-                </div>
-                <div className="relative h-2.5 overflow-hidden rounded-full bg-background">
+                <dt className="text-body-sm text-muted">Action points</dt>
+                <dd className={PARTY_VALUE_CLASS}>
+                  {party.nppActionPoints} / {party.nppActionPointCap}
+                </dd>
+                <dd className="mt-2 h-1.5 overflow-hidden rounded-full bg-card-border" aria-hidden>
                   <div
-                    className="h-full rounded-full bg-primary transition-all duration-300"
+                    className="h-full rounded-full bg-foreground/70 transition-all duration-300"
                     style={{
                       width: `${party.nppActionPointCap > 0 ? Math.min(100, (party.nppActionPoints / party.nppActionPointCap) * 100) : 0}%`,
                     }}
                   />
-                </div>
-                <div className="mt-1.5 text-xs text-muted">
-                  +{party.nppActionPointRegen}/turn · spent on NPP recruitment &amp; management
-                </div>
+                </dd>
+                <dd className="mt-1.5 text-body-sm text-muted">
+                  +{party.nppActionPointRegen} per turn, spent on NPP recruitment and management
+                </dd>
               </div>
-            </div>
-          </div>
-          <div className="flex gap-1 rounded-lg border border-card-border bg-background p-1 w-fit overflow-x-auto max-w-full">
+            </dl>
+          </section>
+          <div className="flex w-fit max-w-full gap-1 overflow-x-auto rounded-lg border border-card-border p-1">
             {(
               (canUsePartyInfluence ? ["recruitment", "management"] : ["management"]) as NppSubTab[]
             ).map((sub) => (
               <button
                 key={sub}
+                type="button"
                 onClick={() => setNppSubTab(sub)}
-                className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors whitespace-nowrap ${
+                className={`whitespace-nowrap rounded-md px-4 py-1.5 text-body font-medium transition-colors ${
                   effectiveNppSubTab === sub
-                    ? "bg-card text-foreground shadow-sm"
+                    ? "bg-card-elevated text-foreground"
                     : "text-muted hover:text-foreground"
                 }`}
               >
@@ -1192,34 +1151,35 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
       )}
 
       {activeTab === "elections" && (
-        <div className="space-y-5">
-          <div className="flex gap-1 p-1 rounded-lg bg-background border border-card-border w-fit overflow-x-auto max-w-full">
+        <div className="space-y-6">
+          <div className="flex w-fit max-w-full gap-1 overflow-x-auto rounded-lg border border-card-border p-1">
             {(["national", "committee", "state"] as ElectionSubTab[]).map((sub) => (
               <button
                 key={sub}
+                type="button"
                 onClick={() => setElectionSubTab(sub)}
-                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
+                className={`whitespace-nowrap rounded-md px-4 py-1.5 text-body font-medium transition-colors ${
                   electionSubTab === sub
-                    ? "bg-card text-foreground shadow-sm"
+                    ? "bg-card-elevated text-foreground"
                     : "text-muted hover:text-foreground"
                 }`}
               >
                 {sub === "national"
-                  ? "National Leadership"
+                  ? "National leadership"
                   : sub === "committee"
                     ? getPartyRoleLabel(party?.countryId ?? "US", "committee")
-                    : `${COUNTRY_CONFIGS[(party?.countryId ?? "US") as CountryId]?.regionLabelPlural ?? "State Parties"}`}
+                    : `${COUNTRY_CONFIGS[(party?.countryId ?? "US") as CountryId]?.regionLabelPlural ?? "State parties"}`}
               </button>
             ))}
           </div>
           {electionSubTab === "national" && (
             <>
-              <p className="text-xs text-muted/70 italic">
+              <p className="text-body-sm text-muted">
                 Each election runs 96 turns. Members may vote and change their vote anytime before
                 it closes. Ties broken by earliest declaration.
               </p>
               {!electionData ? (
-                <div className="text-muted text-sm">Loading elections…</div>
+                <div className="text-body text-muted">Loading elections…</div>
               ) : (
                 <div className="grid gap-4 md:grid-cols-3">
                   {POSITIONS.map((pos) => (
@@ -1319,8 +1279,8 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
       {activeTab === "chair-office" && canActAsChair && (
         <>
           {isActingChair && (
-            <div className="mb-4 rounded-md border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning">
-              <strong>Acting Chair.</strong> The chair seat is vacant; you have inherited chair
+            <div className="mb-6 rounded-md border border-warning/40 bg-warning/10 px-4 py-3 text-body text-warning">
+              <strong>Acting chair.</strong> The chair seat is vacant; you have inherited chair
               authority as Vice-Chair. This access reverts once a new chair is elected or
               admin-appointed.
             </div>
@@ -1563,20 +1523,18 @@ function StatePartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "state
   const orgLabel = getOrgLabel(stateParty.organization);
   const leanLabel = getStateLeanLabel(stateParty.politicalLean);
 
-  const MAIN_TABS: { id: StateMainTab; label: string; className?: string }[] = canViewExtendedTabs
+  const MAIN_TABS: { id: StateMainTab; label: string }[] = canViewExtendedTabs
     ? [
         { id: "overview", label: "Overview" },
         { id: "analytics", label: "Analytics" },
-        ...(canInfluence ? [{ id: "whip-room" as StateMainTab, label: "Whip Room" }] : []),
+        ...(canInfluence ? [{ id: "whip-room" as StateMainTab, label: "Whip room" }] : []),
         { id: "slate", label: "Slate" },
         ...(canInfluence ? [{ id: "actions" as StateMainTab, label: "NPPs" }] : []),
         { id: "elections", label: "Elections" },
         { id: "treasury", label: "Treasury" },
         { id: "members", label: `Members (${stateParty.memberCount})` },
         { id: "discussion", label: "Discussion" },
-        ...(user?.isAdmin
-          ? [{ id: "admin" as StateMainTab, label: "Admin", className: "text-error" }]
-          : []),
+        ...(user?.isAdmin ? [{ id: "admin" as StateMainTab, label: "Admin" }] : []),
       ]
     : [
         { id: "overview", label: "Overview" },
@@ -1591,7 +1549,7 @@ function StatePartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "state
       switcherRegionId={switcherRegionId}
       switcherRegionLabel={regionLabel}
       breadcrumb={
-        <div className="mb-6 flex items-center gap-2 text-sm text-muted">
+        <div className="mb-6 flex flex-wrap items-center gap-2 text-body text-muted">
           <Link href={regionUrl(countryCode, regionId)} className="hover:text-foreground">
             {stateParty.stateName}
           </Link>
@@ -1612,7 +1570,7 @@ function StatePartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "state
           </span>
         </div>
       }
-      headerEyebrow={`${regionAdjective} party`}
+      headerContext={`${regionAdjective} party`}
       title={`${regionAdjective} ${stateParty.partyName}`}
       partyColor={stateParty.partyColor}
       partyAbbreviation={stateParty.partyAbbreviation}
@@ -1620,80 +1578,46 @@ function StatePartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "state
       logoUrl={stateParty.partyLogoUrl}
       countryId={stateParty.countryId}
       regimeStatus={stateParty.regimeStatus}
-      tierBadge={
-        isMember ? (
-          <span className="rounded-full border border-success/40 bg-success/10 px-2 py-0.5 text-body-xs text-success">
-            Member
-          </span>
-        ) : null
-      }
+      tierLabel={isMember ? "Member" : null}
       headerExtra={
-        <span className="mt-2 inline-block text-body-sm text-muted">
+        <p className="mt-3 text-body text-muted">
           {stateParty.stateName} electorate:{" "}
-          <span className={`font-semibold ${leanLabel.color}`}>{leanLabel.label}</span>
-        </span>
+          <span className="font-medium text-foreground">{leanLabel.label}</span>
+        </p>
       }
       statsStrip={
-        /* Every label is `block`. Without it the label and its value ran
-           together on one line ("ORGANIZATION29.1%"); Treasury was the only
-           cell that read correctly because it was the only one whose value
-           carried `block`. */
-        <HeroStatsStrip layout="grid">
-          <div className="min-w-0 p-4">
-            <span className="block text-body-xs font-bold uppercase tracking-widest text-muted">
-              Organization
-            </span>
-            <span className={`block text-heading font-bold tabular-nums ${orgLabel.color}`}>
-              {stateParty.organization.toFixed(1)}%
-            </span>
-            <span className={`block text-body-xs ${orgLabel.color}`}>{orgLabel.label}</span>
-          </div>
-          <div className="min-w-0 p-4">
-            <span className="block text-body-xs font-bold uppercase tracking-widest text-muted">
-              Treasury
-            </span>
-            <span className="block truncate text-heading font-bold text-warning tabular-nums">
+        <PartyStatsRow>
+          <PartyStat label="Organization" detail={orgLabel.label}>
+            <span className={PARTY_VALUE_CLASS}>{stateParty.organization.toFixed(1)}%</span>
+          </PartyStat>
+          <PartyStat label="Treasury">
+            <span className={`block truncate ${PARTY_VALUE_CLASS}`}>
               {stateFmt(stateParty.treasury, stateParty.countryId)}
             </span>
-          </div>
-          <div className="min-w-0 p-4">
-            <span className="block text-body-xs font-bold uppercase tracking-widest text-muted">
-              Political Strength
+          </PartyStat>
+          <PartyStat
+            label="Political strength"
+            detail={
+              stateParty.politicalStrength < (stateParty.effectivePsCap ?? STATE_PS_CAP_DEFAULT)
+                ? `~+${STATE_PASSIVE_PS_PER_TURN} per turn`
+                : "at cap"
+            }
+          >
+            <span className={PARTY_VALUE_CLASS}>{stateParty.politicalStrength.toFixed(1)}</span>
+            <span className="ml-1 text-body-sm text-muted">
+              of {stateParty.effectivePsCap ?? STATE_PS_CAP_DEFAULT}
             </span>
-            <span className="block text-heading font-bold text-info tabular-nums">
-              {stateParty.politicalStrength.toFixed(1)}
-              <span className="ml-0.5 text-body-xs font-normal text-muted">
-                /{stateParty.effectivePsCap ?? STATE_PS_CAP_DEFAULT}
-              </span>
-            </span>
-            {stateParty.politicalStrength < (stateParty.effectivePsCap ?? STATE_PS_CAP_DEFAULT) ? (
-              <span className="block text-body-xs text-muted">
-                ~+{STATE_PASSIVE_PS_PER_TURN}/turn
-              </span>
-            ) : (
-              <span className="block text-body-xs text-muted">at cap</span>
-            )}
-          </div>
-          <div className="min-w-0 p-4">
-            <span className="block text-body-xs font-bold uppercase tracking-widest text-muted">
-              Members
-            </span>
-            <span className="block text-heading font-bold text-foreground tabular-nums">
-              {stateParty.memberCount}
-            </span>
-          </div>
+          </PartyStat>
+          <PartyStat label="Members">
+            <span className={PARTY_VALUE_CLASS}>{stateParty.memberCount}</span>
+          </PartyStat>
           {/* This is the ELECTORATE's partisan lean, not the party's. Labelled
               "Lean" on a party page it read as "this party leans Republican",
               which on a Democratic party page is exactly backwards. */}
-          <div className="min-w-0 p-4">
-            <span className="block text-body-xs font-bold uppercase tracking-widest text-muted">
-              {stateParty.stateName} electorate
-            </span>
-            <span className={`block text-body-sm font-bold ${leanLabel.color}`}>
-              {leanLabel.label}
-            </span>
-          </div>
-        </HeroStatsStrip>
+          <PartyStat label={`${stateParty.stateName} electorate`}>
+            <span className="text-body-lg font-semibold text-foreground">{leanLabel.label}</span>
+          </PartyStat>
+        </PartyStatsRow>
       }
       msg={msg}
       agendaBanner={

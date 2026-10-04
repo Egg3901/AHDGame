@@ -19,6 +19,7 @@ import { sumCorporateSectorConstructionInProgress } from "@/lib/bonds/corporateC
 import type { CorpSnapshot, SoeBackingSnapshot } from "@/lib/turn/corporation/types";
 import type { ActionAuditInput } from "@/lib/db/types/actionAuditLog";
 import { isStateOwned } from "./nationalCorporation";
+import { plantCapacityDeltaPipeline } from "@/lib/corporations/plantLedger";
 import { findMergedRegionMetricsMany } from "@/lib/macroMetrics/merge";
 import { isMacroMetricPath } from "@/lib/macroMetrics/paths";
 import { boardDeltaForLegacyEffect } from "@/lib/politicalLegislation/legacyEffectBridge";
@@ -29,7 +30,7 @@ import {
   type MandateContribution,
 } from "./soeMandates";
 import * as Sentry from "@sentry/nextjs";
-import { coverSoeOperatingLoss, debitTreasurySoeCapex } from "./treasury";
+import { coverSoeOperatingLoss, debitTreasurySoeCapex, loadTreasuryCurrency } from "./treasury";
 import {
   resolveTreasuryCashOptions,
   witnessTreasuryCash,
@@ -411,6 +412,19 @@ export async function processSoeOperations(
   const soeCorps = corps.filter((c) => isStateOwned(c));
   if (soeCorps.length === 0) return { soeCorps: 0, backing: [] };
 
+  // One budget denomination read per owning country, not per SOE. A 2027
+  // euro treasury can back many firms in the same turn.
+  const ownerCountryIds = Array.from(
+    new Set(soeCorps.map((c) => (c.countryOwnerId ?? c.countryId) as CountryId))
+  );
+  const treasuryCurrencyByCountry = new Map(
+    await Promise.all(
+      ownerCountryIds.map(
+        async (countryId) => [countryId, await loadTreasuryCurrency(db, countryId)] as const
+      )
+    )
+  );
+
   const corpIds = soeCorps.map((c) => c._id);
   const sectors = await db
     .collection<CorporateSector>("corporateSectors")
@@ -537,6 +551,7 @@ export async function processSoeOperations(
       soeCorps,
       sectorsByCorpId,
       fxByCurrency,
+      treasuryCurrencyByCountry,
       currentYear,
       now,
       treasuryLedger
@@ -627,7 +642,8 @@ export async function processSoeOperations(
       b.coveredAnchor,
       fxByCurrency,
       now,
-      await treasuryLedger()
+      await treasuryLedger(),
+      treasuryCurrencyByCountry.get(b.countryId)
     );
     // Credit only what the treasury actually paid. Below plants that is the
     // whole hole (liquidCapital → 0, as before); under plants an over-built SOE
@@ -801,6 +817,8 @@ function computeSoeShareOfStateSector(
 /** One sector's share of a state capex grant. */
 export interface SoeCapexSectorBuy {
   sectorId: CorporateSector["_id"];
+  sectorType: CorporateSector["sectorType"];
+  capitalStock: number;
   /** Capacity units bought back — exactly this turn's depreciation. */
   unitsAdded: number;
   /** ₳ paid for them at the standing list price. */
@@ -858,6 +876,8 @@ export function buildSoeCapexGrant(
         : stock * unitPrice;
     buys.push({
       sectorId: sector._id,
+      sectorType: sector.sectorType,
+      capitalStock: stock,
       unitsAdded,
       costAnchor,
       nextBookAnchor: priorBook + costAnchor,
@@ -881,6 +901,7 @@ async function applyStateCapexGrants(
   soeCorps: readonly Corporation[],
   sectorsByCorpId: ReadonlyMap<string, CorporateSector[]>,
   fxByCurrency: ReadonlyMap<CurrencyCode, number>,
+  treasuryCurrencyByCountry: ReadonlyMap<CountryId, CurrencyCode>,
   currentYear: number | null | undefined,
   now: Date,
   treasuryLedger: () => Promise<TreasuryCashOptions>
@@ -902,10 +923,10 @@ async function applyStateCapexGrants(
       ops.push({
         updateOne: {
           filter: { _id: buy.sectorId },
-          update: {
-            $inc: { capitalStock: buy.unitsAdded },
-            $set: { capacityBookAnchor: buy.nextBookAnchor, updatedAt: now },
-          },
+          update: plantCapacityDeltaPipeline(buy.sectorType, buy.unitsAdded, {
+            capacityBookAnchor: buy.nextBookAnchor,
+            updatedAt: now,
+          }),
         },
       });
     }
@@ -920,7 +941,8 @@ async function applyStateCapexGrants(
       grantAnchor,
       fxByCurrency,
       now,
-      await treasuryLedger()
+      await treasuryLedger(),
+      treasuryCurrencyByCountry.get(countryId)
     );
   }
 }

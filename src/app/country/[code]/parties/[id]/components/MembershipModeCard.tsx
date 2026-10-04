@@ -84,7 +84,7 @@ export function MembershipModeCard({ party, countryCode, onUpdate }: MembershipM
   return (
     <div className="rounded-xl border border-card-border bg-card p-6">
       <div className="mb-4 flex items-baseline justify-between gap-3">
-        <h2 className="text-lg font-semibold">Party Membership</h2>
+        <h2 className="text-lg font-semibold">Party membership</h2>
         <span className="text-xs text-muted">Control who can join your party</span>
       </div>
 

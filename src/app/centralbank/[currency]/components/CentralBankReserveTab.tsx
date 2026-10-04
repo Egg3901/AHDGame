@@ -7,6 +7,7 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 // From `reserveBounds`, NOT `reserves`: the latter reaches mongodb and the
 // turn engine, and importing it here put `sharp` in the browser bundle.
 import { RESERVE_REQUIREMENT_MAX, RESERVE_REQUIREMENT_MIN } from "@/lib/banking/reserveBounds";
+import { CentralBankSection } from "./CentralBankSection";
 
 type CurrencyPayload = {
   privateBankingEnabled: boolean;
@@ -96,44 +97,44 @@ export function CentralBankReserveTab({ currency }: Props) {
   }
 
   return (
-    <div className="space-y-6 max-w-xl">
-      <div>
-        <h2 className="text-lg font-semibold text-foreground">Reserve requirement</h2>
-        <p className="mt-1 text-sm text-muted">
-          Fraction of private-bank deposits that must be held as liquid reserves in {currency}.
-          Applies to retail and universal charters.
-        </p>
-      </div>
-      <div className="rounded-xl border border-card-border bg-card p-5 space-y-4">
-        <p className="text-3xl font-bold tabular-nums text-foreground">
-          {(data.reserveRatio * 100).toFixed(1)}%
-        </p>
-        <p className="text-xs text-muted font-mono">
-          Allowed range {data.reserveMin * 100}% to {data.reserveMax * 100}%
-        </p>
-        {data.canEditReserve ? (
-          <div className="flex flex-wrap items-end gap-3">
-            <label className="block space-y-1 text-xs text-muted">
-              New ratio (%)
-              <Input
-                value={ratioStr}
-                onChange={(e) => setRatioStr(e.target.value)}
-                inputMode="decimal"
-                aria-label="Reserve requirement percent"
-              />
-            </label>
-            <Button type="button" onClick={() => void save()} disabled={busy}>
-              {busy ? "Saving..." : "Save"}
-            </Button>
+    <div className="max-w-xl">
+      <CentralBankSection
+        title="Reserve requirement"
+        meta={`Fraction of private-bank deposits that must be held as liquid reserves in ${currency}. Applies to retail and universal charters.`}
+      >
+        <div className="space-y-4">
+          <div>
+            <p className="text-display font-semibold tabular-nums text-foreground">
+              {(data.reserveRatio * 100).toFixed(1)}%
+            </p>
+            <p className="text-body-sm text-muted">
+              Allowed range {data.reserveMin * 100}% to {data.reserveMax * 100}%
+            </p>
           </div>
-        ) : (
-          <p className="text-sm text-muted">
-            {data.privateBankingEnabled
-              ? "Only the chair of this central bank (or an admin) can change the reserve requirement."
-              : "Private banking is frozen. The reserve requirement is read-only."}
-          </p>
-        )}
-      </div>
+          {data.canEditReserve ? (
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="block space-y-1 text-body-sm text-muted">
+                New ratio (%)
+                <Input
+                  value={ratioStr}
+                  onChange={(e) => setRatioStr(e.target.value)}
+                  inputMode="decimal"
+                  aria-label="Reserve requirement percent"
+                />
+              </label>
+              <Button type="button" onClick={() => void save()} disabled={busy}>
+                {busy ? "Saving..." : "Save"}
+              </Button>
+            </div>
+          ) : (
+            <p className="text-body text-muted">
+              {data.privateBankingEnabled
+                ? "Only the chair of this central bank (or an admin) can change the reserve requirement."
+                : "Private banking is frozen. The reserve requirement is read-only."}
+            </p>
+          )}
+        </div>
+      </CentralBankSection>
     </div>
   );
 }

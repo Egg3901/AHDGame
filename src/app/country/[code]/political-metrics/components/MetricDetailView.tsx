@@ -3,9 +3,17 @@
 import { Button } from "@/components/ui/Button";
 import type { PMRegistryData } from "./registryTypes";
 import type { PMCategory } from "./CategoryCard";
+import { evidenceTrendClass } from "./evidenceTrend";
 import { HistorySparkline } from "./HistorySparkline";
 import { LeanChip } from "./LeanChip";
 import { ModifiersPanel } from "./ModifiersPanel";
+import {
+  EMPTY_SERIES,
+  deltaTextClass,
+  formatDelta,
+  metricAtSnapshot,
+  movementSince,
+} from "./movement";
 import { RegionBreakdown } from "./RegionBreakdown";
 import { RelevantLegislationPanel } from "./RelevantLegislationPanel";
 import { StatusBadge } from "./StatusBadge";
@@ -43,6 +51,7 @@ export function MetricDetailView({
 }) {
   const tone = scoreTone(metric.value);
   const related = category.metrics.filter((m) => m.id !== metric.id);
+  const movement = movementSince(metric.value, metricAtSnapshot(metric, 0));
   return (
     <section className="mt-4 flex flex-col gap-4">
       <div>
@@ -54,7 +63,7 @@ export function MetricDetailView({
       <div className="rounded-lg border border-card-border bg-card p-4 shadow-card">
         <div className="flex flex-wrap items-start gap-4">
           <div className="min-w-[260px] flex-1">
-            <div className="font-mono text-body-xs uppercase tracking-widest text-muted">
+            <div className="font-mono text-body-sm uppercase tracking-widest text-muted">
               {category.displayName} · {data.countryDisplayName}
             </div>
             <h2 className="mt-1.5 text-heading-lg font-bold leading-tight text-foreground">
@@ -65,7 +74,7 @@ export function MetricDetailView({
             </p>
             <div className="mt-2.5 flex flex-wrap items-center gap-2">
               <LeanChip lean={metric.lean} label={metric.leanLabel} />
-              <span className="text-body-xs text-muted">association, not a quality judgment</span>
+              <span className="text-body-sm text-muted">association, not a quality judgment</span>
             </div>
           </div>
           <div className="flex items-center gap-5">
@@ -79,7 +88,17 @@ export function MetricDetailView({
             </div>
             <div className="flex flex-col gap-1 text-body-sm text-muted">
               <div>
-                Trend <span className="italic">series begins this campaign</span>
+                Trend{" "}
+                {movement ? (
+                  <>
+                    <strong className={`tabular-nums ${deltaTextClass(movement.delta)}`}>
+                      {formatDelta(movement.delta)}
+                    </strong>{" "}
+                    from {Math.round(movement.from)} over {data.historyCadenceTurns} turns
+                  </>
+                ) : (
+                  <span className="italic">{EMPTY_SERIES}</span>
+                )}
               </div>
               <div>
                 Updated turn{" "}
@@ -88,7 +107,7 @@ export function MetricDetailView({
                 </strong>
               </div>
               <div>
-                Scale <strong className="text-foreground">0–100 objective</strong>
+                Scale <strong className="text-foreground">0 to 100 objective</strong>
               </div>
             </div>
           </div>
@@ -96,7 +115,7 @@ export function MetricDetailView({
       </div>
 
       <div className="rounded-lg border border-card-border bg-card p-4 shadow-card">
-        <div className="mb-2 font-mono text-body-xs uppercase tracking-widest text-muted">
+        <div className="mb-2 font-mono text-body-sm uppercase tracking-widest text-muted">
           Historical series
         </div>
         {metric.history.length >= 2 ? (
@@ -110,19 +129,19 @@ export function MetricDetailView({
 
       <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
         <div className="rounded-lg border border-card-border bg-card p-4 shadow-card">
-          <div className="mb-3 font-mono text-body-xs uppercase tracking-widest text-muted">
+          <div className="mb-3 font-mono text-body-sm uppercase tracking-widest text-muted">
             Metric drivers
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <div className="mb-2 text-body-xs font-bold uppercase tracking-wide text-success">
+              <div className="mb-2 text-body-sm font-bold uppercase tracking-wide text-success">
                 Positive contributors
               </div>
               <div className="flex flex-col gap-2">
                 {metric.pos.map((d) => (
                   <div key={d}>
                     <div className="text-body-sm font-semibold text-foreground">{d}</div>
-                    <div className="mt-0.5 text-body-xs text-muted">
+                    <div className="mt-0.5 text-body-sm text-muted">
                       Structural condition · ongoing
                     </div>
                   </div>
@@ -130,14 +149,14 @@ export function MetricDetailView({
               </div>
             </div>
             <div>
-              <div className="mb-2 text-body-xs font-bold uppercase tracking-wide text-error">
+              <div className="mb-2 text-body-sm font-bold uppercase tracking-wide text-error">
                 Negative contributors
               </div>
               <div className="flex flex-col gap-2">
                 {metric.neg.map((d) => (
                   <div key={d}>
                     <div className="text-body-sm font-semibold text-foreground">{d}</div>
-                    <div className="mt-0.5 text-body-xs text-muted">
+                    <div className="mt-0.5 text-body-sm text-muted">
                       Structural condition · ongoing
                     </div>
                   </div>
@@ -148,7 +167,7 @@ export function MetricDetailView({
         </div>
 
         <div className="rounded-lg border border-card-border bg-card p-4 shadow-card">
-          <div className="mb-3 font-mono text-body-xs uppercase tracking-widest text-muted">
+          <div className="mb-3 font-mono text-body-sm uppercase tracking-widest text-muted">
             Component indicators
           </div>
           <div className="flex flex-col gap-1.5">
@@ -171,7 +190,7 @@ export function MetricDetailView({
 
       {metric.evidence.length > 0 && (
         <div className="rounded-lg border border-card-border bg-card p-4 shadow-card">
-          <div className="mb-2.5 font-mono text-body-xs uppercase tracking-widest text-muted">
+          <div className="mb-2.5 font-mono text-body-sm uppercase tracking-widest text-muted">
             Underlying statistics
           </div>
           <div className="flex flex-col gap-1.5">
@@ -184,7 +203,7 @@ export function MetricDetailView({
                       whole country. Saying so beats letting a player read a
                       national figure as their region's. */}
                   {data.scope === "region" && row.scope === "national" && (
-                    <span className="ml-1.5 rounded border border-card-border px-1 py-0.5 font-mono text-[10px] uppercase tracking-wider text-muted/70">
+                    <span className="ml-1.5 rounded border border-card-border px-1 py-0.5 font-mono text-body-sm uppercase tracking-wider text-muted/70">
                       national
                     </span>
                   )}
@@ -193,7 +212,7 @@ export function MetricDetailView({
                   {formatEvidenceValue(row, data.countryId)}
                   {row.trend != null && Math.abs(row.trend) >= 0.05 && (
                     <span
-                      className={`ml-1.5 text-body-xs ${row.trend > 0 ? "text-success" : "text-error"}`}
+                      className={`ml-1.5 text-body-sm ${evidenceTrendClass(row.id, row.trend)}`}
                     >
                       {row.trend > 0 ? "▲" : "▼"} {Math.abs(row.trend).toFixed(1)}
                     </span>
@@ -211,7 +230,7 @@ export function MetricDetailView({
       <RelevantLegislationPanel countryId={data.countryId} legislation={metric.legislation} />
 
       <div className="flex flex-wrap items-center gap-2.5 rounded-lg border border-card-border bg-card p-4 shadow-card">
-        <span className="font-mono text-body-xs uppercase tracking-widest text-muted">
+        <span className="font-mono text-body-sm uppercase tracking-widest text-muted">
           Related metrics
         </span>
         {related.map((m) => {
@@ -221,7 +240,7 @@ export function MetricDetailView({
               key={m.id}
               type="button"
               onClick={() => onOpenMetric(m.id)}
-              className="cursor-pointer rounded-full border border-card-border bg-card-muted px-3 py-1 text-body-xs text-foreground transition-colors hover:border-muted"
+              className="cursor-pointer rounded-full border border-card-border bg-card-muted px-3 py-1 text-body-sm text-foreground transition-colors hover:border-muted"
             >
               {m.displayName} ·{" "}
               <strong className={`tabular-nums ${rTone.text}`}>{Math.round(m.value)}</strong>

@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import type { ElectionDisplay, CharacterBasic } from "@/lib/db/types";
 import { useFeedback } from "@/contexts/FeedbackContext";
 import { useToast } from "@/contexts/ToastContext";
@@ -30,6 +31,7 @@ export function useElectionActions({
   elections,
   onSuccess,
 }: UseElectionActionsProps): UseElectionActionsReturn {
+  const router = useRouter();
   const { recordAction } = useFeedback();
   const { showToast } = useToast();
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -65,6 +67,10 @@ export function useElectionActions({
       }
 
       const targetRace = elections.find((e) => e.id === electionId);
+      if (targetRace?.hungarianAssemblyRound?.round === 1) {
+        router.push(`/elections/${electionId}`);
+        return;
+      }
       const raceName = targetRace
         ? `${targetRace.electionType} race in ${targetRace.state}`
         : "this race";
@@ -96,7 +102,7 @@ export function useElectionActions({
         setActionLoading(null);
       }
     },
-    [character, elections, isInAnyRace, onSuccess, recordAction, showToast]
+    [character, elections, isInAnyRace, onSuccess, recordAction, showToast, router]
   );
 
   const handleWithdraw = useCallback(

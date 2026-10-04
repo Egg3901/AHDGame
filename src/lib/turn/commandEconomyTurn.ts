@@ -46,6 +46,7 @@ import {
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { getRegisteredCountryIds } from "@/lib/country/registeredCountries";
 import { capacityPricePerUnit, CAPACITY_ANCHOR_YEAR } from "@/lib/constants/capacityEconomy";
+import { plantCapacityDeltaPipeline } from "@/lib/corporations/plantLedger";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 import {
   loadFxRatesByCurrency,
@@ -848,10 +849,9 @@ async function buildCapacityFromDirectedCredit(
       ops.push({
         updateOne: {
           filter: { _id: sector._id },
-          update: {
-            $inc: { capitalStock: unitsAdded },
-            $set: { capacityBookAnchor: priorBook + unitsAdded * unitPrice },
-          },
+          update: plantCapacityDeltaPipeline(sector.sectorType, unitsAdded, {
+            capacityBookAnchor: priorBook + unitsAdded * unitPrice,
+          }),
         },
       });
       // mixPrice (corp-local) = revenue / capitalStock under plants; a sector

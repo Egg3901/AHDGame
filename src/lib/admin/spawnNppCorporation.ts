@@ -26,7 +26,7 @@ import {
   DEFAULT_SECTOR_STARTING_REVENUE,
   DEFAULT_SECTOR_STARTING_WORKERS,
 } from "@/lib/constants/corporations";
-import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
+import { COUNTRY_CURRENCY_MAP, getSeedCurrencyCode } from "@/lib/constants/currencies";
 import {
   anchorToCorpCapital,
   getCurrencyFxRate,
@@ -37,6 +37,7 @@ import { writeCorpEconomicLocal } from "@/lib/currency/corpEconomyFields";
 import { getNextSequentialId } from "@/lib/db/sequentialId";
 import { randomBrandColor } from "@/lib/corporations/brandColor";
 import { computeUnownedSeedRevenue } from "@/lib/admin/seed/seedUnownedSectors";
+import { seedPlantLedger } from "@/lib/corporations/plantLedger";
 import { createNPP } from "@/lib/npp/generator";
 import {
   generateTickerSymbol,
@@ -324,8 +325,10 @@ export async function spawnNppCorporation(
     );
   }
 
-  // Get currency for the country
-  const currencyCode = COUNTRY_CURRENCY_MAP[countryId];
+  // Get currency for the country (preset-aware: 2027 euro members spawn EUR corps)
+  const spawnPreset = await loadWorldPreset(db);
+  const currencyCode =
+    getSeedCurrencyCode(countryId, spawnPreset) ?? COUNTRY_CURRENCY_MAP[countryId];
   if (!currencyCode) {
     throw new Error(`No currency configured for country "${countryId}"`);
   }
@@ -367,7 +370,7 @@ export async function spawnNppCorporation(
   //     cash than several 1953 regional sector markets put together. Deflating
   //     by the era's nominal scale keeps the founding book the same share of
   //     the economy it is in a 2019 world. No-op for every modern preset.
-  const preset = await loadWorldPreset(db);
+  const preset = spawnPreset;
   const techGameState = await db.collection<GameState>("gameState").findOne(
     { _id: "current" },
     {
@@ -562,6 +565,7 @@ export async function spawnNppCorporation(
     ...(plantsEnabled
       ? {
           capitalStock: startingCapacityUnits,
+          ...seedPlantLedger(type, startingCapacityUnits),
           // Born under plants — never needs the flip-turn migration.
           plantsStartTurn: input.foundedAtTurn ?? 0,
         }

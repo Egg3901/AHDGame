@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * SP2 §5 — the metric-detail Historical series chart: a dependency-free inline
+ * SP2 §5, the metric-detail Historical series chart: a dependency-free inline
  * SVG line over the national trend snapshots. Deliberately minimal: the value
  * band auto-scales with headroom, endpoints are labeled, and the series color
  * rides the semantic primary token so all themes work.
@@ -53,7 +53,7 @@ export function HistorySparkline({ points }: { points: Array<{ turn: number; val
         />
         <circle cx={x(points.length - 1)} cy={y(last.value)} r="3" fill="var(--primary)" />
       </svg>
-      <div className="mt-1 flex justify-between text-body-xs tabular-nums text-muted">
+      <div className="mt-1 flex justify-between text-body-sm tabular-nums text-muted">
         <span>
           Turn {first.turn.toLocaleString("en-US")} · {first.value}
         </span>

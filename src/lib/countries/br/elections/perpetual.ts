@@ -1,5 +1,6 @@
 import {
   ensureRegionalDelegateElections,
+  ensureRegionalGovernorElections,
   seatsFromRegionField,
 } from "@/lib/turn/perpetualElections/shared";
 
@@ -51,6 +52,16 @@ export async function ensureBRSenateElections(now: Date, inFlightTurn?: number):
     now,
     inFlightTurn
   );
+}
+
+/**
+ * The five modeled BR macroregions each have one synthetic executive office.
+ * Keep its election cycle live through the same canonical governor spawner as
+ * the other regional executives. These are game aggregate offices, not the
+ * governorships of Brazil's real federal states.
+ */
+export async function ensureBRGovernorElections(now: Date, inFlightTurn?: number): Promise<void> {
+  await ensureRegionalGovernorElections("BR", now, undefined, inFlightTurn);
 }
 
 // ─── Soviet Union: Supreme Soviet + republic soviets + First Secretaries ─────

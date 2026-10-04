@@ -5,11 +5,6 @@ import { MonetaryAuthorityNotice } from "./components/MonetaryAuthorityNotice";
 import { useState, useEffect, useCallback } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { InfoTooltip } from "@/components/InfoTooltip";
-import {
-  InstitutionMasthead,
-  MastheadChip,
-  MastheadStat,
-} from "@/components/national/InstitutionMasthead";
 import { getBankIdentity } from "@/lib/constants/institutionIdentity";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { useCurrency } from "@/contexts/CurrencyContext";
@@ -41,12 +36,13 @@ import { CurrencyRegimePanel } from "./components/CurrencyRegimePanel";
 import { PrimeRateCard } from "./components/PrimeRateCard";
 import { NominationsPanel } from "./components/NominationsPanel";
 import { LobbyingPanel } from "./components/LobbyingPanel";
-import { ratingColor } from "./components/centralBankUtils";
 import { CentralBankMembersTab, type CentralBankMember } from "./components/CentralBankMembersTab";
 import { FomcCommitteeTab } from "./components/FomcCommitteeTab";
 import { CentralBankReserveTab } from "./components/CentralBankReserveTab";
 import { CentralBankInsuranceTab } from "./components/CentralBankInsuranceTab";
 import type { BankData } from "./components/centralBankTypes";
+import { CentralBankHeader } from "./components/CentralBankHeader";
+import { CB_TH, CentralBankFigure, CentralBankSection } from "./components/CentralBankSection";
 
 export type { CentralBankMember };
 
@@ -79,6 +75,25 @@ const VALID_TABS: CentralBankTab[] = [
 
 function isValidTab(s: string | null): s is CentralBankTab {
   return s !== null && (VALID_TABS as string[]).includes(s);
+}
+
+function InfoIcon() {
+  return (
+    <svg
+      className="h-3.5 w-3.5 text-muted"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      aria-hidden
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+      />
+    </svg>
+  );
 }
 
 function TabButton({
@@ -236,7 +251,7 @@ export default function CentralBankClient({ countryId, apiBasePath, members }: P
     return (
       <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6">
         <div className="rounded-xl border border-error/30 bg-error/10 p-6 text-center">
-          <p className="text-sm text-error">{error || "Failed to load data"}</p>
+          <p className="text-body text-error">{error || "Failed to load data"}</p>
         </div>
       </div>
     );
@@ -268,6 +283,8 @@ export default function CentralBankClient({ countryId, apiBasePath, members }: P
     : "-";
 
   const executiveLabel = config.officeTypes.find((o) => o.isExecutive)?.label ?? "executive";
+  const inflation = data.currentInflation ?? 0;
+  const savingsFlow = data.currentSavingsPressure ?? 0;
 
   return (
     <div className="pb-16">
@@ -277,12 +294,9 @@ export default function CentralBankClient({ countryId, apiBasePath, members }: P
           fallbackHref={`/country/${countryId.toLowerCase()}`}
         />
 
-        {/* Bank-keyed identity masthead (locked composite): hero photo →
-            gradient → identity band → fused tile strip; DE/IE share the ECB
-            record via getBankId. */}
-        <div className="mt-3 mb-8">
-          <InstitutionMasthead
-            countryId={countryId}
+        {/* Bank-keyed identity (DE/IE share the ECB record via getBankId). */}
+        <div className="mb-8 mt-3">
+          <CentralBankHeader
             identity={getBankIdentity(getBankId(countryId))}
             heroImage={
               config.centralBank.heroImage
@@ -292,147 +306,105 @@ export default function CentralBankClient({ countryId, apiBasePath, members }: P
                   }
                 : null
             }
-            chips={
+            details={
               <>
-                <MastheadChip>
-                  {data.chairTitle}:{" "}
+                <span>
+                  <span className="text-muted">{data.chairTitle}:</span>{" "}
                   {data.chair ? (
-                    data.chair.name
+                    <span className="font-medium">{data.chair.name}</span>
                   ) : (
-                    <span className="italic text-white/60">Vacant</span>
+                    <span className="text-muted">Vacant</span>
                   )}
-                </MastheadChip>
+                </span>
                 {data.chairTermExpiresAtTurn != null && data.chair && (
-                  <MastheadChip tone="mono">term to T {data.chairTermExpiresAtTurn}</MastheadChip>
+                  <span className="text-muted">
+                    · Term ends on turn {data.chairTermExpiresAtTurn}
+                  </span>
                 )}
                 {data.intervention && FOREX_ACTIVE_COUNTRIES.includes(countryId) && (
-                  <MastheadChip tone="warning">FOREX intervention active</MastheadChip>
+                  <span className="text-muted">· FX intervention active</span>
                 )}
               </>
             }
-            rightSlot={
-              <MastheadStat
-                label="Prime Rate"
-                value={`${(data.primeRate ?? 0).toFixed(2)}%`}
-                accentSoft={getBankIdentity(getBankId(countryId)).accentSoft}
-              />
-            }
-            strip={
-              <div className="grid grid-cols-2 gap-px border-t border-card-border bg-card-border sm:grid-cols-3">
-                <div className="bg-card px-4 py-3">
-                  <InfoTooltip
-                    trigger={
-                      <span className="flex cursor-help items-center gap-1 text-[9px] font-semibold uppercase tracking-widest text-muted">
-                        Inflation
-                        <svg
-                          className="h-3 w-3 text-muted/60"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                          />
-                        </svg>
-                      </span>
-                    }
-                    width={280}
-                  >
-                    <InflationBreakdownTooltip
-                      breakdown={data.inflationBreakdown}
-                      total={data.inflationBreakdownTotal ?? data.currentInflation ?? 0}
-                      effectiveRate={data.effectiveRate}
-                    />
-                  </InfoTooltip>
-                  <span
-                    className={`mt-1 block font-mono text-base font-bold tabular-nums ${
-                      (data.currentInflation ?? 0) > 4
-                        ? "text-error"
-                        : (data.currentInflation ?? 0) > 3
-                          ? "text-warning"
-                          : "text-success"
-                    }`}
-                  >
-                    {(data.currentInflation ?? 0).toFixed(2)}%
-                  </span>
+            primeRate={`${(data.primeRate ?? 0).toFixed(2)}%`}
+            figures={
+              <>
+                <CentralBankFigure
+                  label={
+                    <InfoTooltip
+                      trigger={
+                        <span className="inline-flex cursor-help items-center gap-1">
+                          Inflation
+                          <InfoIcon />
+                        </span>
+                      }
+                      width={280}
+                    >
+                      <InflationBreakdownTooltip
+                        breakdown={data.inflationBreakdown}
+                        total={data.inflationBreakdownTotal ?? data.currentInflation ?? 0}
+                        effectiveRate={data.effectiveRate}
+                      />
+                    </InfoTooltip>
+                  }
+                  value={`${inflation.toFixed(2)}%`}
+                  valueClassName={
+                    inflation > 4
+                      ? "text-error"
+                      : inflation > 3
+                        ? "text-warning"
+                        : "text-foreground"
+                  }
+                />
+                <CentralBankFigure
+                  label={
+                    <InfoTooltip
+                      trigger={
+                        <span className="inline-flex cursor-help items-center gap-1">
+                          Savings flow
+                          <InfoIcon />
+                        </span>
+                      }
+                      width={280}
+                    >
+                      <div className="space-y-2">
+                        <p className="font-semibold text-foreground">What is savings flow?</p>
+                        <p className="leading-relaxed text-muted">
+                          Tracks whether households are spending their savings or putting more away,
+                          as net flows over recent turns against total savings. It is not the same
+                          as a national &quot;savings rate&quot; (% of GDP). It is one input to
+                          inflation.
+                        </p>
+                        <ul className="space-y-1 text-muted">
+                          <li>
+                            <span className="font-semibold text-foreground">Positive (+):</span>{" "}
+                            people are pulling money out of savings to spend. Extra demand pushes
+                            prices up.
+                          </li>
+                          <li>
+                            <span className="font-semibold text-foreground">Negative (-):</span>{" "}
+                            people are saving more than they spend. Less demand eases prices
+                            slightly.
+                          </li>
+                          <li>
+                            <span className="font-semibold text-foreground">Near zero:</span>{" "}
+                            spending and saving are roughly balanced.
+                          </li>
+                        </ul>
+                        <p className="leading-relaxed text-muted">
+                          Higher interest rates encourage saving; lower rates encourage spending.
+                          Chairs move the prime rate to nudge this number.
+                        </p>
+                      </div>
+                    </InfoTooltip>
+                  }
+                  value={`${savingsFlow >= 0 ? "+" : ""}${savingsFlow.toFixed(2)}%`}
+                  valueClassName={savingsFlow > 0.5 ? "text-error" : "text-foreground"}
+                />
+                <div className="col-span-2 sm:col-span-1">
+                  <CentralBankFigure label="Reserves" value={reserveHeadline} />
                 </div>
-                <div className="bg-card px-4 py-3">
-                  <InfoTooltip
-                    trigger={
-                      <span className="flex cursor-help items-center gap-1 text-[9px] font-semibold uppercase tracking-widest text-muted">
-                        Savings Flow
-                        <svg
-                          className="h-3 w-3 text-muted/60"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                          />
-                        </svg>
-                      </span>
-                    }
-                    width={280}
-                  >
-                    <div className="space-y-2">
-                      <p className="font-semibold text-foreground">What is Savings Flow?</p>
-                      <p className="text-muted leading-relaxed">
-                        Tracks whether households are spending their savings or stashing more away,
-                        as net flows over recent turns versus total savings stock - not the same as
-                        a national accounting &quot;savings rate&quot; (% of GDP). It&apos;s one
-                        input to inflation.
-                      </p>
-                      <ul className="space-y-1 text-muted">
-                        <li>
-                          <span className="text-error font-semibold">Positive (+)</span> - people
-                          are pulling money out of savings to spend. Extra demand pushes prices up
-                          (inflationary).
-                        </li>
-                        <li>
-                          <span className="text-success font-semibold">Negative (−)</span> - people
-                          are saving more than spending. Less demand eases prices (slightly
-                          deflationary).
-                        </li>
-                        <li>
-                          <span className="font-semibold">Near zero</span> - spending and saving are
-                          roughly balanced.
-                        </li>
-                      </ul>
-                      <p className="text-muted leading-relaxed">
-                        Higher interest rates encourage saving; lower rates encourage spending.
-                        Chairs move the prime rate to nudge this number.
-                      </p>
-                    </div>
-                  </InfoTooltip>
-                  <span
-                    className={`mt-1 block font-mono text-base font-bold tabular-nums ${
-                      data.currentSavingsPressure > 0.5
-                        ? "text-error"
-                        : data.currentSavingsPressure < -0.5
-                          ? "text-success"
-                          : "text-foreground"
-                    }`}
-                  >
-                    {(data.currentSavingsPressure ?? 0) >= 0 ? "+" : ""}
-                    {(data.currentSavingsPressure ?? 0).toFixed(2)}%
-                  </span>
-                </div>
-                <div className="col-span-2 bg-card px-4 py-3 sm:col-span-1">
-                  <span className="text-[9px] font-semibold uppercase tracking-widest text-muted">
-                    Reserves
-                  </span>
-                  <span className="mt-1 block font-mono text-base font-bold tabular-nums">
-                    {reserveHeadline}
-                  </span>
-                </div>
-              </div>
+              </>
             }
           />
           {data.isChair && data.chairMode !== "npp" && (
@@ -440,7 +412,7 @@ export default function CentralBankClient({ countryId, apiBasePath, members }: P
               <button
                 onClick={handleResign}
                 disabled={resignLoading}
-                className="rounded-lg border border-error/40 bg-error/10 px-3 py-1.5 text-xs font-semibold text-error hover:bg-error/20 transition-colors disabled:opacity-50"
+                className="rounded-md border border-error/40 px-3 py-1.5 text-body-sm font-semibold text-error transition-colors hover:bg-error/10 disabled:opacity-50"
               >
                 {resignLoading ? "Resigning..." : `Resign as ${data.chairTitle}`}
               </button>
@@ -450,7 +422,7 @@ export default function CentralBankClient({ countryId, apiBasePath, members }: P
       </div>
 
       <div className="mx-auto max-w-7xl px-4 sm:px-6">
-        <div className="flex flex-wrap items-center gap-x-1 gap-y-0 border-b border-card-border mb-6">
+        <div className="mb-8 flex flex-wrap items-center gap-x-1 gap-y-0 border-b border-card-border">
           <TabButton
             active={activeTab === "overview"}
             onClick={() => setActiveTab("overview")}
@@ -479,28 +451,28 @@ export default function CentralBankClient({ countryId, apiBasePath, members }: P
             <TabButton
               active={activeTab === "loc"}
               onClick={() => setActiveTab("loc")}
-              label="Line of Credit"
+              label="Line of credit"
             />
           )}
           {data.balanceSheet && (
             <TabButton
               active={activeTab === "balance-sheet"}
               onClick={() => setActiveTab("balance-sheet")}
-              label="Bank Financials"
+              label="Bank financials"
             />
           )}
           {data.moneySupply && (
             <TabButton
               active={activeTab === "money-supply"}
               onClick={() => setActiveTab("money-supply")}
-              label="Money Supply"
+              label="Money supply"
             />
           )}
           {FOREX_ACTIVE_COUNTRIES.includes(countryId) && data.intervention && (
             <TabButton
               active={activeTab === "intervention"}
               onClick={() => setActiveTab("intervention")}
-              label="FX Intervention"
+              label="FX intervention"
             />
           )}
           <TabButton
@@ -572,7 +544,7 @@ export default function CentralBankClient({ countryId, apiBasePath, members }: P
         </div>
       )}
       {activeTab === "intervention" && data.intervention && (
-        <div className="mx-auto max-w-7xl space-y-6 px-4 sm:px-6">
+        <div className="mx-auto max-w-7xl space-y-12 px-4 sm:px-6">
           <CurrencyRegimePanel
             bankApiBasePath={bankApiBasePath}
             isChair={(data.isPolicyChair ?? data.isChair) === true}
@@ -614,17 +586,17 @@ export default function CentralBankClient({ countryId, apiBasePath, members }: P
               chairMode npp on the caretaker, which hid this banner on every
               live Fed/BoE/etc. offer (ticket #1144). */}
           {data.pendingChairRequiresMyResponse && (
-            <div className="mb-6 rounded-xl border border-primary/35 bg-primary/10 px-4 py-4 sm:px-5">
-              <p className="text-sm font-semibold text-foreground">
+            <div className="mb-10 rounded-xl border border-primary/35 bg-primary/10 px-4 py-4 sm:px-5">
+              <p className="text-body font-semibold text-foreground">
                 You have been selected as the next {data.chairTitle}
               </p>
-              <p className="mt-1 text-xs text-muted">
+              <p className="mt-1 text-body-sm text-muted">
                 {data.chairSelectionPending?.pool === "economic"
                   ? "You were drawn from the market candidates pool. Accept to take office, or decline to pass to the next wealthiest eligible candidate."
                   : "You were drawn from the executive nominations pool. Accept to take office, or decline to allow another candidate to be proposed."}
               </p>
               {chairDecisionError && (
-                <p className="mt-2 text-xs text-error">{chairDecisionError}</p>
+                <p className="mt-2 text-body-sm text-error">{chairDecisionError}</p>
               )}
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button
@@ -645,8 +617,10 @@ export default function CentralBankClient({ countryId, apiBasePath, members }: P
             </div>
           )}
 
-          <div className="grid min-w-0 gap-6 lg:grid-cols-3">
-            <div className="min-w-0 space-y-6 lg:col-span-1">
+          <div className="grid min-w-0 gap-x-12 gap-y-12 lg:grid-cols-3">
+            {/* Aside: who runs the bank, the rate and its controls, and the
+                nominations for the next chair. */}
+            <div className="min-w-0 space-y-10 lg:col-span-1">
               <ChairCard
                 chairTitle={data.chairTitle}
                 chair={data.chair}
@@ -707,9 +681,9 @@ export default function CentralBankClient({ countryId, apiBasePath, members }: P
               />
             </div>
 
-            <div className="min-w-0 space-y-6 lg:col-span-2">
-              {/* Rate corridor (locked composite signature) - replaces the
-                  standalone inflation card; breakdown stays on the strip tile. */}
+            {/* Main column: the rate against inflation, the longer trends,
+                what each credit rating pays, and the race for the next chair. */}
+            <div className="min-w-0 space-y-12 lg:col-span-2">
               <RateCorridor
                 interestRateHistory={data.interestRateHistory}
                 inflationHistory={data.inflationHistory}
@@ -717,47 +691,42 @@ export default function CentralBankClient({ countryId, apiBasePath, members }: P
                 currentInflation={data.currentInflation ?? 0}
               />
 
-              <div className="rounded-xl border border-card-border bg-card p-5">
-                <h2 className="mb-4 text-sm font-semibold text-muted">Economic trends</h2>
+              <CentralBankSection title="Economic trends">
                 <EconomicTrendsChart
                   interestRateHistory={data.interestRateHistory}
                   inflationHistory={data.inflationHistory}
                   gdpGrowthHistory={data.gdpGrowthHistory}
                   savingsFlowHistory={data.savingsFlowHistory}
                 />
-              </div>
+              </CentralBankSection>
 
-              <div className="rounded-xl border border-card-border bg-card p-5">
-                <h2 className="mb-4 text-sm font-semibold text-muted">Credit rating scale</h2>
+              <CentralBankSection
+                title="Credit rating scale"
+                meta="What a borrower with each rating pays over the prime rate."
+              >
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table className="w-full text-body">
                     <thead>
-                      <tr className="border-b border-card-border text-left">
-                        <th className="pb-2 pr-4 text-xs font-semibold uppercase tracking-wider text-muted">
+                      <tr>
+                        <th scope="col" className={CB_TH}>
                           Rating
                         </th>
-                        <th className="pb-2 pr-4 text-xs font-semibold uppercase tracking-wider text-muted">
+                        <th scope="col" className={`${CB_TH} text-right`}>
                           Spread
                         </th>
-                        <th className="pb-2 text-xs font-semibold uppercase tracking-wider text-muted">
-                          Effective Rate
+                        <th scope="col" className={`${CB_TH} text-right`}>
+                          Effective rate
                         </th>
                       </tr>
                     </thead>
                     <tbody>
                       {CREDIT_RATINGS.map((rating) => (
-                        <tr key={rating} className="border-b border-card-border/50 last:border-0">
-                          <td className="py-2.5 pr-4">
-                            <span
-                              className={`inline-block rounded px-2 py-0.5 text-xs font-bold ${ratingColor(rating)}`}
-                            >
-                              {rating}
-                            </span>
-                          </td>
-                          <td className="py-2.5 pr-4 text-muted">
+                        <tr key={rating} className="border-b border-card-border/60 last:border-0">
+                          <td className="py-2.5 pr-4 font-semibold text-foreground">{rating}</td>
+                          <td className="py-2.5 pr-4 text-right font-mono tabular-nums text-muted">
                             +{((data.rateScale[rating] ?? 0) - (data.primeRate ?? 0)).toFixed(2)}%
                           </td>
-                          <td className="py-2.5 font-semibold text-foreground">
+                          <td className="py-2.5 pr-4 text-right font-mono font-semibold tabular-nums text-foreground">
                             {(data.rateScale[rating] ?? 0).toFixed(2)}%
                           </td>
                         </tr>
@@ -765,21 +734,21 @@ export default function CentralBankClient({ countryId, apiBasePath, members }: P
                     </tbody>
                   </table>
                 </div>
-              </div>
+              </CentralBankSection>
+
+              <LobbyingPanel
+                lobbyingTotals={data.lobbyingTotals}
+                nominations={data.nominations}
+                nationalCurrency={data.nationalCurrency ?? "USD"}
+                userLobbyLiquid={data.userLobbyLiquid ?? 0}
+                userHomeCurrency={data.userHomeCurrency ?? "USD"}
+                userHomeLiquid={data.userHomeLiquid ?? 0}
+                countryId={countryId}
+                bankApiBasePath={bankApiBasePath}
+                onChanged={fetchData}
+              />
             </div>
           </div>
-
-          <LobbyingPanel
-            lobbyingTotals={data.lobbyingTotals}
-            nominations={data.nominations}
-            nationalCurrency={data.nationalCurrency ?? "USD"}
-            userLobbyLiquid={data.userLobbyLiquid ?? 0}
-            userHomeCurrency={data.userHomeCurrency ?? "USD"}
-            userHomeLiquid={data.userHomeLiquid ?? 0}
-            countryId={countryId}
-            bankApiBasePath={bankApiBasePath}
-            onChanged={fetchData}
-          />
         </div>
       )}
     </div>

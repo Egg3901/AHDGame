@@ -118,6 +118,17 @@ export async function register() {
       }
     }
 
+    if (hostedBackgroundEnabled) {
+      try {
+        const { getDb } = await import("@/lib/mongodb");
+        const { checkPersistedSectorTypes } =
+          await import("@/lib/corporations/checkPersistedSectorTypes");
+        await checkPersistedSectorTypes(await getDb());
+      } catch (err) {
+        console.error("[sector-types] startup check failed:", err);
+      }
+    }
+
     // Standalone singleplayer MongoDB does not support transactions. Avoid two
     // server-selection waits before the first status response by keeping this
     // hosted deployment check out of local startup entirely.

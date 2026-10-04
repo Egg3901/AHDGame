@@ -6,6 +6,10 @@ import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ getAuthUser: vi.fn() }));
 
+// Resolve the route module graph before timed requests; each request still runs
+// against the fresh database and authentication fixtures below.
+await import("./route");
+
 const nppId = new ObjectId();
 const presidentOfficial = {
   _id: new ObjectId(),
@@ -237,5 +241,43 @@ describe("GET /api/country/UK/executive — pmCharacterId shape", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.primeMinister).toBeNull();
+  });
+});
+
+describe("GET /api/country/RU/executive uses the effective chamber", () => {
+  it.each([
+    [{}, "unionCongressDeputy"],
+    [{ ruSovietSuccessionSinceTurn: 24, ruProvisionalCongressSeats: 10 }, "congressDeputy"],
+    [{ ruSovietSuccessionSinceTurn: 24, ruFederalAssemblySinceTurn: 30 }, "dumaDeputy"],
+  ])("reports current Russian party seats for %j", async (markers, activeOffice) => {
+    db.collection("gameState").findOne.mockResolvedValue({
+      _id: "current",
+      preset: "1991-default",
+      currentTurn: 40,
+    });
+    db.collection("countryGameStates").findOne.mockResolvedValue({ _id: "RU", ...markers });
+    db.collection("governmentFormations").findOne.mockResolvedValue({
+      _id: "RU",
+      status: "pending",
+      seatsByParty: { "1": 100 },
+      totalSeats: 10,
+      majorityThreshold: 6,
+    });
+    db.collection("electedOfficials").findOne.mockResolvedValue(null);
+    db.collection("electedOfficials").find.mockImplementation((query: Record<string, unknown>) => ({
+      toArray: async () =>
+        query.officeType === activeOffice && query.countryId === "RU"
+          ? [{ countryId: "RU", officeType: activeOffice, party: "1", seatsHeld: 4 }]
+          : [],
+    }));
+    const { getAuthUser } = await import("@/lib/auth");
+    vi.mocked(getAuthUser).mockResolvedValue(null);
+    const { GET } = await import("./route");
+    const response = await GET(new Request("http://t/api/country/RU/executive"), {
+      params: Promise.resolve({ code: "ru" }),
+    });
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.government.seatsByParty).toEqual({ "1": 4 });
   });
 });

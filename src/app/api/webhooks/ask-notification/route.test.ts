@@ -101,6 +101,63 @@ describe("POST /api/webhooks/ask-notification", () => {
     expect(inputs[0].metadata).toMatchObject({ href: "https://ask.lakesidegames.net" });
   });
 
+  it.each([
+    "https://ask.lakesidegames.net.evil.example/phish",
+    "https://ask.lakesidegames.net@evil.example/phish",
+    "https://ask.lakesidegames.net:444/phish",
+    "http://ask.lakesidegames.net/phish",
+    "https://evil.example/?next=https://ask.lakesidegames.net",
+    "https://user:password@ask.lakesidegames.net/question",
+    "//ask.lakesidegames.net/question",
+    "not a URL",
+  ])("falls back for an untrusted notification URL: %s", async (url) => {
+    const userId = new ObjectId();
+    db.collection("users").findOne.mockResolvedValue({ _id: userId });
+    const { POST } = await import("./route");
+    const response = await POST(
+      makeRequest({
+        events: [
+          {
+            userId: userId.toHexString(),
+            kind: "ask_watch",
+            title: "t",
+            body: "b",
+            url,
+          },
+        ],
+      })
+    );
+    expect(response.status).toBe(200);
+    const { createNotifications } = await import("@/lib/notifications");
+    expect(vi.mocked(createNotifications).mock.calls[0][0][0].metadata).toMatchObject({
+      href: "https://ask.lakesidegames.net",
+    });
+  });
+
+  it("preserves trusted paths, query strings and fragments", async () => {
+    const userId = new ObjectId();
+    db.collection("users").findOne.mockResolvedValue({ _id: userId });
+    const { POST } = await import("./route");
+    const url = "https://ask.lakesidegames.net/question/123?watch=1#answer";
+    await POST(
+      makeRequest({
+        events: [
+          {
+            userId: userId.toHexString(),
+            kind: "ask_watch",
+            title: "t",
+            body: "b",
+            url,
+          },
+        ],
+      })
+    );
+    const { createNotifications } = await import("@/lib/notifications");
+    expect(vi.mocked(createNotifications).mock.calls[0][0][0].metadata).toMatchObject({
+      href: url,
+    });
+  });
+
   it("401s without the token and 400s malformed bodies", async () => {
     const { requireAskToken } = await import("@/lib/api/requireAskToken");
     vi.mocked(requireAskToken).mockReturnValueOnce(false);

@@ -6,7 +6,6 @@ import { COUNTRY_CURRENCY_MAP, CURRENCY_SYMBOLS } from "@/lib/constants/currenci
 import { parseMoneyAmountInput } from "@/lib/utils/parseMoneyAmountInput";
 import { partyApiUrl } from "@/lib/urls";
 import { getMessageStyle } from "@/lib/utils/formatters";
-import { contrastTextColor } from "@/lib/utils/colorContrast";
 import type { PartyData } from "./types";
 import type { CountryId } from "@/lib/constants/countries";
 import {
@@ -129,11 +128,9 @@ export function RequestFundsCard({
           >
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
           </svg>
-          <div className="text-xs font-semibold uppercase tracking-wide text-muted">
-            Request Funds
-          </div>
+          <div className="text-xs font-semibold text-muted">Request funds</div>
         </div>
-        <p className="text-[11px] text-muted/60 mb-3">
+        <p className="text-body-sm text-muted mb-3">
           Request campaign funds from the party treasury. Your request goes to Pending Transactions
           and waits for approval by an officer other than yourself: any of the Treasurer, Chair or
           Vice-Chair. You can receive up to {partySymbol}
@@ -144,7 +141,7 @@ export function RequestFundsCard({
             ? `That ceiling is ${PAYOUT_CAP_MULTI_OFFICER_MULTIPLIER} times the base one, because this party has two or more officers seated to sign payments off.`
             : `Seating a second officer would raise it to ${partySymbol}${(cap * PAYOUT_CAP_MULTI_OFFICER_MULTIPLIER).toLocaleString()}.`}
         </p>
-        <p className="text-[11px] mb-3 text-muted">
+        <p className="text-body-sm mb-3 text-muted">
           {remaining == null ? (
             <>Checking how much you can still receive this turn...</>
           ) : remaining === 0 ? (
@@ -183,8 +180,7 @@ export function RequestFundsCard({
           <button
             onClick={handleSubmit}
             disabled={submitting}
-            className="rounded-lg px-4 py-2 text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
-            style={{ backgroundColor: party.color, color: contrastTextColor(party.color) }}
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-dark disabled:opacity-50"
           >
             {submitting ? "Requesting…" : "Request"}
           </button>

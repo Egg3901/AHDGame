@@ -7,7 +7,7 @@ import { ObjectId } from "mongodb";
 import { NextResponse } from "next/server";
 import type { AuthWithCharacterResult } from "@/lib/api/requireAuth";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
-import { FOREX_ACTIVE_COUNTRIES, COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
+import { FOREX_ACTIVE_COUNTRIES, getSeedCurrencyCode } from "@/lib/constants/currencies";
 import type { Character } from "@/lib/db/types";
 
 vi.mock("@/lib/mongodb", () => ({
@@ -177,7 +177,7 @@ describe("GET /api/forex/monetary-policy", () => {
     const json = await res.json();
     expect(json.countries).toHaveLength(FOREX_ACTIVE_COUNTRIES.length);
     expect(json.countries.map((c: { currencyCode: string }) => c.currencyCode)).toEqual(
-      FOREX_ACTIVE_COUNTRIES.map((c) => COUNTRY_CURRENCY_MAP[c])
+      FOREX_ACTIVE_COUNTRIES.map((c) => getSeedCurrencyCode(c, "2019-default"))
     );
     expect(json.countries[0].inflationHistory[0]).toEqual({ turn: 10, value: 3.1 });
   });

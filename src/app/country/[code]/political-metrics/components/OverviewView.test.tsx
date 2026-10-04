@@ -2,7 +2,7 @@
  * @vitest-environment happy-dom
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { OverviewView } from "./OverviewView";
 import type { PMCategory, PMRegistryData } from "./registryTypes";
 
@@ -67,12 +67,15 @@ function makeData(history: number[], overall: number): PMRegistryData {
   };
 }
 
-function renderOverview(data: PMRegistryData) {
-  render(
+function renderOverview(
+  data: PMRegistryData,
+  handlers: { onOpenCategory?: () => void; onOpenMetric?: () => void } = {}
+) {
+  return render(
     <OverviewView
       data={data}
-      onOpenCategory={vi.fn()}
-      onOpenMetric={vi.fn()}
+      onOpenCategory={handlers.onOpenCategory ?? vi.fn()}
+      onOpenMetric={handlers.onOpenMetric ?? vi.fn()}
       showGovernanceStyle={false}
     />
   );
@@ -114,5 +117,46 @@ describe("OverviewView movement tiles", () => {
   it("signs a fall negative", () => {
     renderOverview(makeData([70], 68));
     expect(screen.getByText("-2")).toBeTruthy();
+  });
+
+  it("prints n/a, not a dash, while a tile has nothing to compare", () => {
+    renderOverview(makeData([], 68));
+    expect(screen.getAllByText("n/a")).toHaveLength(2);
+  });
+});
+
+describe("OverviewView category cards", () => {
+  it("opens a category from its card by click or keyboard", () => {
+    const onOpenCategory = vi.fn();
+    renderOverview(makeData([], 68), { onOpenCategory });
+    const card = screen.getByRole("button", { name: /Economy & Labor, score 68, Stable/ });
+    fireEvent.click(card);
+    expect(onOpenCategory).toHaveBeenLastCalledWith("economy");
+    fireEvent.keyDown(card, { key: "Enter" });
+    expect(onOpenCategory).toHaveBeenCalledTimes(2);
+  });
+
+  it("opens a metric from its mini bar without opening the category", () => {
+    const onOpenCategory = vi.fn();
+    const onOpenMetric = vi.fn();
+    renderOverview(makeData([], 68), { onOpenCategory, onOpenMetric });
+    fireEvent.click(screen.getByRole("button", { name: /^Worker Security, score 68/ }));
+    expect(onOpenMetric).toHaveBeenCalledWith("economy", "economy.workerSecurity");
+    expect(onOpenCategory).not.toHaveBeenCalled();
+  });
+
+  it("keeps the toned score and status pill on each card", () => {
+    renderOverview(makeData([], 68));
+    const card = screen.getByRole("button", { name: /Economy & Labor, score 68/ });
+    const score = Array.from(card.querySelectorAll("span")).find((el) => el.textContent === "68");
+    expect(score?.className).toContain("text-success-muted");
+    expect(
+      Array.from(card.querySelectorAll("span")).some((el) => el.textContent === "Stable")
+    ).toBe(true);
+  });
+
+  it("sets nothing under 12px", () => {
+    const { container } = renderOverview(makeData([60], 68));
+    expect(container.innerHTML).not.toMatch(/text-body-xs|text-\[(?:[0-9]|1[01])px\]/);
   });
 });

@@ -55,7 +55,7 @@ export function FoundCaucusForm({
   return (
     <form className="mt-4 space-y-3" onSubmit={submit}>
       <div className="grid gap-3 sm:grid-cols-2">
-        <label className="text-[11px] uppercase tracking-widest text-muted">
+        <label className="text-body-sm text-muted">
           Name
           <input
             value={name}
@@ -67,7 +67,7 @@ export function FoundCaucusForm({
             placeholder="e.g. Main Street Republicans"
           />
         </label>
-        <label className="text-[11px] uppercase tracking-widest text-muted">
+        <label className="text-body-sm text-muted">
           Color
           <div className="mt-1 flex items-center gap-2">
             <input
@@ -81,7 +81,7 @@ export function FoundCaucusForm({
         </label>
       </div>
 
-      <label className="block text-[11px] uppercase tracking-widest text-muted">
+      <label className="block text-body-sm text-muted">
         Description
         <textarea
           value={description}
@@ -93,8 +93,8 @@ export function FoundCaucusForm({
         />
       </label>
 
-      <label className="block text-[11px] uppercase tracking-widest text-muted">
-        Caucus Tax | {taxRate}%
+      <label className="block text-body-sm text-muted">
+        Caucus tax | {taxRate}%
         <div className="mt-3 w-full sm:w-1/2">
           <Slider
             min={0}

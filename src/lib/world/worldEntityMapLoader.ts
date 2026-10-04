@@ -1,13 +1,17 @@
 import type { Db } from "mongodb";
 import { getMacroCountriesCollection } from "@/lib/db/collections/macroCountries";
 import { getWorldEntityMapSnapshot, type WorldEntityMapSnapshot } from "./worldEntityMap";
+import { loadRuntimeWorldEntities } from "./succession/runtimeEntities";
 
 /** Attach only active aggregate data from the same world preset. */
 export async function loadWorldEntityMapSnapshot(
   db: Db,
   presetId: string
 ): Promise<WorldEntityMapSnapshot> {
-  const snapshot = getWorldEntityMapSnapshot(presetId);
+  const snapshot = getWorldEntityMapSnapshot(
+    presetId,
+    await loadRuntimeWorldEntities(db, presetId)
+  );
   const collection = await getMacroCountriesCollection(db);
   const rows = await collection
     .find({ presetId, simulationTier: "background-macro", retiredAt: null })

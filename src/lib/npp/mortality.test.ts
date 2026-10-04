@@ -192,6 +192,48 @@ describe("processNppMortality", () => {
     );
   });
 
+  it.each(["BG", "HU"] as const)(
+    "preserves%s native slate owners without rolling or minting",
+    async (countryId) => {
+      vi.mocked(nppAutonomyAtLeast).mockResolvedValue(true);
+      const owner = npp({ countryId, birthYear: 1900 });
+      seedNpps([owner]);
+      db.collection("electedOfficials");
+      db.collectionMocks["electedOfficials"].distinct.mockResolvedValue([owner._id]);
+      const rng = vi.fn(() => 0),
+        mint = vi.fn(mintStub);
+      expect(
+        await processNppMortality(db as unknown as Db, {
+          now: new Date("1991-01-01"),
+          year: 1991,
+          rng,
+          mintReplacement: mint,
+        })
+      ).toEqual({ deaths: 0, replacements: 0 });
+      expect(rng).not.toHaveBeenCalled();
+      expect(mint).not.toHaveBeenCalled();
+      expect(db.collectionMocks["npps"].insertOne).not.toHaveBeenCalled();
+      expect(db.collectionMocks["npps"].updateOne).not.toHaveBeenCalled();
+      expect(db.collectionMocks["electedOfficials"].updateMany).not.toHaveBeenCalled();
+      expect(db.collectionMocks["electedOfficials"].distinct).toHaveBeenCalledTimes(1);
+      expect(db.collectionMocks["electedOfficials"].distinct).toHaveBeenCalledWith(
+        "nppId",
+        expect.objectContaining({ seatsHeld: 1 })
+      );
+    }
+  );
+  it("retains ordinary Bulgarian mortality for unmarked offices", async () => {
+    vi.mocked(nppAutonomyAtLeast).mockResolvedValue(true);
+    seedNpps([npp({ countryId: "BG", birthYear: 1900 })]);
+    expect(
+      await processNppMortality(db as unknown as Db, {
+        now: new Date("1991-01-01"),
+        year: 1991,
+        rng: () => 0,
+        mintReplacement: mintStub,
+      })
+    ).toEqual({ deaths: 1, replacements: 1 });
+  });
   it("leaves the young alive", async () => {
     vi.mocked(nppAutonomyAtLeast).mockResolvedValue(true);
     seedNpps([npp({ birthYear: 1980 })]);

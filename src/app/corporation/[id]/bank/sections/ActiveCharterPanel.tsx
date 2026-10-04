@@ -110,6 +110,7 @@ function EarningsBreakdown({ data, onTreasury }: { data: ConsolePayload; onTreas
   const charter = data.charter!;
   const depositInterest = charter.lastBankingDepositInterest ?? 0;
   const loanInterest = charter.lastBankingLoanInterest ?? 0;
+  const fees = charter.lastBankingLoanOriginationFees ?? 0;
   const ibPaid = charter.lastBankingInterbankInterestPaid ?? 0;
   const ibReceived = charter.lastBankingInterbankInterestReceived ?? 0;
   const facility = charter.lastBankingFacilityInterest ?? 0;
@@ -176,8 +177,17 @@ function EarningsBreakdown({ data, onTreasury }: { data: ConsolePayload; onTreas
             aboutLabel={t("about", { label: "Insurance and write-offs" })}
           />
           <EarningsRow
+            label={t("originationFees")}
+            detail={t("originationFeesDetail", {
+              lifetime: formatBankMoney(charter.loanOriginationFeesLifetime ?? 0, currency),
+            })}
+            value={formatBankMoney(fees, currency)}
+            tooltip={t("originationFeesTooltip")}
+            aboutLabel={t("about", { label: t("originationFees") })}
+          />
+          <EarningsRow
             label="Bottom line"
-            detail="net interest minus insurance and write-offs"
+            detail={t("feeBottomLine")}
             value={formatBankMoney(charter.lastBankingIncome, currency)}
             tone={charter.lastBankingIncome < 0 ? "text-error" : "text-success"}
             tooltip={t("tooltips.otherCharges")}

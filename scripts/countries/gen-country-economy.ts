@@ -20,6 +20,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { POPULATION_TOTALS_1991 } from "../../src/lib/seeds/reference/populationTotals1991";
 
+import { NG_1991_NOMINAL_GDP_NGN } from "../../src/lib/countries/ng/data/ngGdp1991";
+
 interface Entry {
   readonly shape: string;
   readonly value: unknown;
@@ -133,7 +135,18 @@ const populationAnchor =
 const costScaleAnchorsValue =
   historicalCostScaleAnchors && populationAnchor
     ? JSON.stringify(
-        { ...JSON.parse(historicalCostScaleAnchors), popLow: populationAnchor.population },
+        {
+          ...JSON.parse(historicalCostScaleAnchors),
+          popLow: populationAnchor.population,
+          ...(COUNTRY === "NG"
+            ? {
+                gdpLow: NG_1991_NOMINAL_GDP_NGN,
+                scaleLow:
+                  (JSON.parse(historicalCostScaleAnchors).scaleLow * NG_1991_NOMINAL_GDP_NGN) /
+                  JSON.parse(historicalCostScaleAnchors).gdpLow,
+              }
+            : {}),
+        },
         null,
         2
       )

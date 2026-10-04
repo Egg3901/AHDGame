@@ -2,6 +2,8 @@ import type { CountryGeography } from "../contract";
 import { roRegionCensusData1953 } from "@/lib/seeds/ro/roRegionCensusData1953";
 import { roRegions } from "./data/roRegions";
 import { roRegions1953 } from "./data/roRegions1953";
+import { roRegions1991 } from "./data/roRegions1991";
+import { roRegions2027 } from "./data/roRegions2027";
 import {
   RO_ADJACENCY_MAP,
   RO_CONTINENT,
@@ -25,8 +27,9 @@ import {
  * early revision of Japan's geography generated copies from the snapshot; deep
  * equality passed and Japan had two sources for every region.
  *
- * ⚠ THE PRESET KEYS COME FROM THE SNAPSHOT. Romania authors 1 census
- * eras, 0 metric eras, 0 anchor eras and 3 region eras. The gaps are real:
+ * ⚠ THE PRESET KEYS COME FROM THE SNAPSHOT, plus the authored 2027
+ * democratic substrate. Romania authors 1 census
+ * eras, 0 metric eras, 0 anchor eras and 4 region eras. The gaps are real:
  * an unauthored era inherits, and inventing a key for it would turn a fallback
  * into an authored value.
  */
@@ -46,7 +49,9 @@ const populationAnchors = {};
 const regionBundles = {
   "1953-default": roRegions1953,
   "1979-default": roRegions,
+  "1991-default": roRegions1991,
   "2019-default": roRegions,
+  "2027-default": roRegions2027,
 };
 
 export const RO_GEOGRAPHY: CountryGeography = {

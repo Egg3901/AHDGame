@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui";
+import { CentralBankSection } from "./CentralBankSection";
 
 /**
  * B6 currency regimes, from the chair's seat.
@@ -136,13 +137,11 @@ export function CurrencyRegimePanel({
   }
 
   return (
-    <section className="rounded-lg border border-gray-700 bg-gray-900/50 p-4">
-      <h3 className="mb-2 text-lg font-semibold">Currency Regime</h3>
-
-      {loadError && <p className="text-sm text-red-400">{loadError}</p>}
+    <CentralBankSection title="Currency regime">
+      {loadError && <p className="text-body text-error">{loadError}</p>}
 
       {data && (
-        <div className="mb-3 text-sm">
+        <div className="mb-4 max-w-3xl text-body">
           <p>
             Declared regime: <span className="font-semibold">{REGIME_LABELS[data.regime]}</span>
             {data.regime === "peg" && data.pegTarget != null && (
@@ -154,8 +153,8 @@ export function CurrencyRegimePanel({
             with the capital account{" "}
             <span className="font-semibold">{data.capitalControls ? "closed" : "open"}</span>
           </p>
-          <p className="mt-1 text-gray-400">{data.summary}</p>
-          <div className="mt-2 grid grid-cols-1 gap-1 sm:grid-cols-3">
+          <p className="mt-1 text-muted">{data.summary}</p>
+          <div className="mt-3 grid grid-cols-1 gap-1 sm:grid-cols-3">
             <TrinityCorner label="Stable exchange rate" held={data.trinity.exchangeRateStability} />
             <TrinityCorner label="Free capital movement" held={data.trinity.capitalMobility} />
             <TrinityCorner
@@ -164,12 +163,12 @@ export function CurrencyRegimePanel({
             />
           </div>
           {data.trinity.wasteful && (
-            <p className="mt-2 text-yellow-400">
+            <p className="mt-2 text-warning">
               This configuration gives up more than the trinity requires.
             </p>
           )}
           {cooldownRemaining > 0 && (
-            <p className="mt-2 text-yellow-400">
+            <p className="mt-2 text-warning">
               Cooldown: {cooldownRemaining} turn{cooldownRemaining === 1 ? "" : "s"} before the
               regime can be changed again.
             </p>
@@ -178,15 +177,15 @@ export function CurrencyRegimePanel({
       )}
 
       {isChair && data && (
-        <div className="space-y-3 border-t border-gray-800 pt-3">
+        <div className="space-y-3 border-t border-card-border pt-4">
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             {(Object.keys(REGIME_LABELS) as FxRegime[]).map((r) => (
               <label
                 key={r}
-                className={`flex cursor-pointer flex-col rounded border px-3 py-2 text-sm ${
+                className={`flex cursor-pointer flex-col rounded-md border px-3 py-2 text-body ${
                   regime === r
-                    ? "border-blue-500 bg-blue-500/10"
-                    : "border-gray-700 hover:border-gray-500"
+                    ? "border-foreground/60 bg-card-elevated"
+                    : "border-card-border hover:border-foreground/40"
                 }`}
               >
                 <span className="flex items-center gap-2 font-semibold">
@@ -199,13 +198,13 @@ export function CurrencyRegimePanel({
                   />
                   {REGIME_LABELS[r]}
                 </span>
-                <span className="mt-1 text-xs text-gray-400">{REGIME_BLURBS[r]}</span>
+                <span className="mt-1 text-body-sm text-muted">{REGIME_BLURBS[r]}</span>
               </label>
             ))}
           </div>
 
           {regime === "peg" && (
-            <label className="flex max-w-xs flex-col text-sm">
+            <label className="flex max-w-xs flex-col gap-1 text-body-sm text-muted">
               Peg target (rate per internal unit)
               <input
                 type="number"
@@ -213,13 +212,13 @@ export function CurrencyRegimePanel({
                 min={0}
                 value={pegTarget}
                 onChange={(e) => setPegTarget(e.target.value)}
-                className="rounded border border-gray-600 bg-gray-800 px-2 py-1 font-mono"
+                className="rounded-md border border-card-border bg-background px-2 py-1 font-mono text-body text-foreground"
                 disabled={submitting}
               />
             </label>
           )}
 
-          <label className="flex items-center gap-2 text-sm">
+          <label className="flex items-center gap-2 text-body">
             <input
               type="checkbox"
               checked={capitalControls}
@@ -230,7 +229,7 @@ export function CurrencyRegimePanel({
           </label>
 
           {regime === "float" && (
-            <p className="text-xs text-gray-500">
+            <p className="text-body-sm text-muted">
               Declaring a float cancels any standing intervention band. They are contradictory
               promises and cannot stand together.
             </p>
@@ -265,22 +264,22 @@ export function CurrencyRegimePanel({
               Declare regime
             </Button>
           )}
-          <p className="text-xs text-gray-500">
+          <p className="text-body-sm text-muted">
             A declaration is public and locked in for 48 turns. A regime nobody believes is not a
             regime.
           </p>
         </div>
       )}
 
-      {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
-      {success && <p className="mt-2 text-sm text-green-400">{success}</p>}
-    </section>
+      {error && <p className="mt-2 text-body text-error">{error}</p>}
+      {success && <p className="mt-2 text-body text-success">{success}</p>}
+    </CentralBankSection>
   );
 }
 
 function TrinityCorner({ label, held }: { label: string; held: boolean }) {
   return (
-    <span className={`text-xs ${held ? "text-green-400" : "text-gray-500 line-through"}`}>
+    <span className={`text-body-sm ${held ? "text-foreground" : "text-muted line-through"}`}>
       {held ? "Held: " : "Given up: "}
       {label}
     </span>

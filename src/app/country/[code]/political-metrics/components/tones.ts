@@ -3,7 +3,7 @@
  *
  * Score tone = objective performance (status bands). Lean tone = political
  * association only (left ↔ right), deliberately expressed through the game's
- * secondary (blue) / primary (red) identity at graded opacity — never a
+ * secondary (blue) / primary (red) identity at graded opacity, never a
  * good/bad ramp, per the catalog's "association, not quality" rule.
  */
 

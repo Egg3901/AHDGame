@@ -51,4 +51,68 @@ describe("background country expansion", () => {
     });
     expect(p1953.find((entry) => entry.entityId === "GH")).toMatchObject({ status: "emergent" });
   });
+
+  it("keeps Soviet republics under the union in the opening 1991 manifest", () => {
+    const opening = getWorldEntityPresetManifest("1991-default").entries;
+    for (const entityId of ["UKR", "BLR", "BAL"]) {
+      expect(opening.find((entry) => entry.entityId === entityId)).toMatchObject({
+        status: "dependent",
+        parentEntityId: "RU",
+      });
+    }
+    for (const entityId of [
+      "AM",
+      "AZ",
+      "EE",
+      "GE",
+      "KZ",
+      "KG",
+      "LV",
+      "LT",
+      "MD",
+      "TJ",
+      "TM",
+      "UZ",
+    ]) {
+      expect(opening.find((entry) => entry.entityId === entityId)).toMatchObject({
+        status: "emergent",
+        parentEntityId: "RU",
+        simulationTier: "background-macro",
+      });
+    }
+    const later = getWorldEntityPresetManifest("1999-default").entries;
+    const laterEstonia = later.find((entry) => entry.entityId === "EE");
+    expect(laterEstonia?.status).toBe("sovereign");
+    expect(laterEstonia?.parentEntityId).toBeUndefined();
+  });
+
+  it("does not aggregate countries that already receive detailed 1991 regions", () => {
+    const opening = getWorldEntityPresetManifest("1991-default").entries;
+    for (const entityId of ["RU", "PL", "CS", "HU", "RO", "BG", "YU"]) {
+      expect(opening.find((entry) => entry.entityId === entityId)).toMatchObject({
+        status: "sovereign",
+        simulationTier: "full-autonomous",
+        legacyAccess: "economy-preview",
+      });
+    }
+  });
+
+  it("holds Czechoslovak and Yugoslav successors as proposed identities", () => {
+    const opening = getWorldEntityPresetManifest("1991-default").entries;
+    for (const [entityId, parentEntityId] of [
+      ["CZ2", "CS"],
+      ["SK", "CS"],
+      ["SI", "YU"],
+      ["HR", "YU"],
+      ["BA", "YU"],
+      ["MK", "YU"],
+      ["YF", "YU"],
+    ]) {
+      expect(opening.find((entry) => entry.entityId === entityId)).toMatchObject({
+        status: "emergent",
+        parentEntityId,
+        simulationTier: "background-macro",
+      });
+    }
+  });
 });

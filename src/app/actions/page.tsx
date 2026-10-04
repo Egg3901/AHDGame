@@ -22,7 +22,8 @@ import { notifyCharacterStatsUpdated } from "@/lib/characterStatsSync";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import { Skeleton } from "@/components/ui";
 import { CARDS } from "./actionsConstants";
-import type { ActionsViewMode } from "./actionsTypes";
+import type { ActionProjection, ActionsViewMode } from "./actionsTypes";
+import { formatCurrencyFaceAmount } from "@/lib/currency/formatCurrencyFaceAmount";
 import ActionCard from "./components/ActionCard";
 import ActionCardCompact from "./components/ActionCardCompact";
 import ActionsHero from "./components/ActionsHero";
@@ -32,7 +33,7 @@ import CrisisActionCard from "./components/CrisisActionCard";
 import EndorsePresidentCard from "./components/EndorsePresidentCard";
 import CategoryFilter from "./components/CategoryFilter";
 import ViewToggle from "./components/ViewToggle";
-import DonorNetworkStats from "./components/DonorNetworkStats";
+import CategoryHeading from "./components/CategoryHeading";
 import { useToast } from "@/contexts/ToastContext";
 import { useGameEvents } from "@/hooks/useGameEvents";
 import { useWorldFlags } from "@/hooks/useWorldFlags";
@@ -240,9 +241,6 @@ export default function ActionsPage() {
       }
     } finally {
       setExecuting(null);
-      if (viewMode !== "compact") {
-        setTimeout(() => setFlash(null), 4000);
-      }
     }
   };
 
@@ -304,9 +302,6 @@ export default function ActionsPage() {
       setFlipflopStep(null);
       setFlipflopAxis(null);
       setFlipflopDir(null);
-      if (viewMode !== "compact") {
-        setTimeout(() => setFlash(null), 4000);
-      }
     }
   };
 
@@ -355,9 +350,6 @@ export default function ActionsPage() {
       setExecuting(null);
       setConvertCashOpen(false);
       setConvertCashAmount("");
-      if (viewMode !== "compact") {
-        setTimeout(() => setFlash(null), 4000);
-      }
     }
   };
 
@@ -408,7 +400,8 @@ export default function ActionsPage() {
       character,
       !!character.currencyBalances,
       campaignRates,
-      worldFlags.campaignPriceLevel
+      worldFlags.campaignPriceLevel,
+      worldFlags.preset
     );
     // Same rules quote the server executes: level-scaled AP cost, GDP-scaled
     // fund cost with the fundraising discount, and the +1 level gain. When
@@ -485,11 +478,13 @@ export default function ActionsPage() {
       ? campaignQuote.apCost
       : getCampaignActionCost(influence);
     const campaignFundCost = campaignQuote.ok ? campaignQuote.fundCostAnchor : 0;
+    const campaignInfluenceGain = campaignQuote.ok ? campaignQuote.influenceGain : null;
     const campaignMaxed = !isCampaignEligible(influence);
     const advertiseActionCost = advertiseQuote.ok
       ? advertiseQuote.apCost
       : getAdvertiseActionCost(character?.favorability ?? 0);
     const advertiseFundCost = advertiseQuote.ok ? advertiseQuote.fundCostAnchor : 0;
+    const advertiseFavorabilityGain = advertiseQuote.ok ? advertiseQuote.favorabilityGain : null;
     const fundraiseActionCost = getDonorActionCost(character?.donorBaseLevel ?? 0, "fundraise");
     const buildDonorBaseActionCost = buildDonorBaseQuote.ok
       ? buildDonorBaseQuote.apCost
@@ -505,6 +500,8 @@ export default function ActionsPage() {
       fundraiseActionCost,
       buildDonorBaseActionCost,
       buildDonorBaseFundCost,
+      campaignInfluenceGain,
+      advertiseFavorabilityGain,
     };
   }, [
     character,
@@ -532,23 +529,61 @@ export default function ActionsPage() {
     : 0;
   const blockGdpScaledCosts = homeState === null;
 
+  // One-use outcome previews, from the same quotes the server executes. Shown
+  // on the cards as "Influence 12.0% to 13.0%" so a player sees what a click
+  // buys before spending it.
+  const pct = (v: number) => `${Math.min(100, Math.max(0, v)).toFixed(1)}%`;
+  const projections: Partial<Record<string, ActionProjection>> = {};
+  if (character && actionCosts) {
+    if (actionCosts.campaignInfluenceGain !== null) {
+      projections.campaign = {
+        label: "Influence",
+        from: pct(influence),
+        to: pct(influence + actionCosts.campaignInfluenceGain),
+      };
+    }
+    if (actionCosts.advertiseFavorabilityGain !== null) {
+      const favorability = character.favorability ?? 50;
+      projections.advertise = {
+        label: "Favorability",
+        from: pct(favorability),
+        to: pct(favorability + actionCosts.advertiseFavorabilityGain),
+      };
+    }
+    const campaignCurrency = getHomeCurrency(character);
+    projections.fundraise = {
+      label: "Campaign funds",
+      from: formatCurrencyFaceAmount(displayCampaignFundsStored, campaignCurrency),
+      to: formatCurrencyFaceAmount(
+        displayCampaignFundsStored + actionCosts.fundraiseAmount,
+        campaignCurrency
+      ),
+    };
+    const donorLevel = character.donorBaseLevel ?? 0;
+    projections.buildDonorBase = {
+      label: "Donor level",
+      from: String(donorLevel),
+      to: String(donorLevel + 1),
+    };
+  }
+
   // Wait on world flags too: resolving art before the era is known would paint
   // the 2019 fallback set for a frame and then swap it for the 1953 set.
   if (loading || !worldFlags.loaded || !character || !actionCosts) {
     return (
       <div className="min-h-screen bg-background pb-12">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 py-8 space-y-8">
-          {/* Hero skeleton — image area + stats strip */}
-          <div className="relative overflow-hidden rounded-2xl border border-card-border bg-card shadow-lg">
-            <Skeleton className="h-[175px] sm:h-[220px] w-full rounded-none rounded-t-2xl" />
-            <div className="flex flex-wrap border-t border-card-border">
+          {/* Hero skeleton: image area and figures */}
+          <div className="relative overflow-hidden rounded-xl border border-card-border bg-card">
+            <Skeleton className="h-[175px] sm:h-[220px] w-full rounded-none" />
+            <div className="flex flex-wrap gap-x-10 gap-y-4 border-t border-card-border px-5 py-4 sm:px-8">
               {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="flex-1 min-w-[80px] p-4 space-y-1.5">
-                  <Skeleton className="h-2.5 w-14" />
-                  <Skeleton className="h-5 w-20" />
+                <div key={i} className="min-w-[80px] space-y-1.5">
+                  <Skeleton className="h-3 w-14" />
+                  <Skeleton className="h-6 w-20" />
                 </div>
               ))}
-              <div className="flex-1 min-w-[160px] p-4 space-y-3">
+              <div className="flex-1 min-w-[160px] space-y-3">
                 <div className="space-y-1.5">
                   <div className="flex justify-between">
                     <Skeleton className="h-2.5 w-16" />
@@ -577,7 +612,11 @@ export default function ActionsPage() {
             <Skeleton className="h-8 w-20 rounded-lg" />
           </div>
 
-          {/* 9 action cards */}
+          {/* First category heading and its cards */}
+          <div className="space-y-2 border-b border-card-border pb-4">
+            <Skeleton className="h-7 w-40" />
+            <Skeleton className="h-4 w-80 max-w-full" />
+          </div>
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 9 }).map((_, i) => (
               <div key={i} className="rounded-xl border border-card-border bg-card overflow-hidden">
@@ -594,23 +633,76 @@ export default function ActionsPage() {
               </div>
             ))}
           </div>
-
-          {/* Donor Network Stats */}
-          <div className="rounded-xl border border-card-border bg-card p-5 space-y-3">
-            <Skeleton className="h-4 w-40" />
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="space-y-1">
-                  <Skeleton className="h-2.5 w-16" />
-                  <Skeleton className="h-6 w-24" />
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       </div>
     );
   }
+
+  const CardComponent = viewMode === "cards" ? ActionCard : ActionCardCompact;
+  const listClass =
+    viewMode === "cards"
+      ? "mt-5 grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
+      : "mt-4 divide-y divide-card-border overflow-hidden rounded-xl border border-card-border bg-card";
+  const donorSummary = {
+    level: character.donorBaseLevel ?? 0,
+    fundraiseYield: actionCosts.fundraiseAmount,
+    currency: getHomeCurrency(character),
+    upgradeCost: actionCosts.donorUpgradeCost,
+  };
+  const renderCard = (card: (typeof CARDS)[number], index: number) => (
+    <CardComponent
+      key={card.type}
+      card={
+        card.type === "targetedAds"
+          ? {
+              ...card,
+              label: adText("title"),
+              tagline: adText("actionTagline"),
+              flavor: adText("actionFlavor"),
+              fundLabel: () => adText("actionCost"),
+              effect: adText("actionEffect"),
+              imageAlt: adText("actionImageAlt"),
+            }
+          : card
+      }
+      imageUrl={cardImages[card.type]}
+      index={index}
+      viewMode={viewMode}
+      character={character}
+      homeState={homeState}
+      executing={executing}
+      flash={flash}
+      flipflopStep={flipflopStep}
+      flipflopAxis={flipflopAxis}
+      flipflopDir={flipflopDir}
+      onOpenCampaignAction={setCampaignAction}
+      onExecute={execute}
+      onFlipflop={executeFlipflop}
+      onFlipflopStepChange={setFlipflopStep}
+      onFlipflopAxisChange={setFlipflopAxis}
+      onFlipflopDirChange={setFlipflopDir}
+      campaignActionCost={actionCosts.campaignActionCost}
+      campaignFundCost={actionCosts.campaignFundCost}
+      campaignMaxed={actionCosts.campaignMaxed}
+      advertiseActionCost={actionCosts.advertiseActionCost}
+      advertiseFundCost={actionCosts.advertiseFundCost}
+      fundraiseActionCost={actionCosts.fundraiseActionCost}
+      buildDonorBaseActionCost={actionCosts.buildDonorBaseActionCost}
+      buildDonorBaseFundCost={actionCosts.buildDonorBaseFundCost}
+      fundraiseYield={actionCosts.fundraiseAmount}
+      campaignCurrency={getHomeCurrency(character)}
+      displayCampaignFunds={displayCampaignFunds}
+      displayPersonalWealth={displayPersonalWealth}
+      blockGdpScaledCosts={blockGdpScaledCosts}
+      forexEnabled={forexEnabled}
+      convertCashOpen={convertCashOpen}
+      convertCashAmount={convertCashAmount}
+      onConvertCashOpenChange={setConvertCashOpen}
+      onConvertCashAmountChange={setConvertCashAmount}
+      onConvertCashExecute={executeConvertCash}
+      projection={projections[card.type]}
+    />
+  );
 
   return (
     <div className="min-h-screen bg-background pb-12">
@@ -652,78 +744,33 @@ export default function ActionsPage() {
           <ViewToggle viewMode={viewMode} onViewModeChange={handleViewModeChange} />
         </div>
 
-        {/* Action Cards */}
-        <div
-          className={
-            viewMode === "cards"
-              ? "grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
-              : "flex flex-col gap-2"
-          }
-        >
-          {visible.map((card, index) => {
-            const CardComponent = viewMode === "cards" ? ActionCard : ActionCardCompact;
-            return (
-              <CardComponent
-                key={card.type}
-                card={
-                  card.type === "targetedAds"
-                    ? {
-                        ...card,
-                        label: adText("title"),
-                        tagline: adText("actionTagline"),
-                        flavor: adText("actionFlavor"),
-                        fundLabel: () => adText("actionCost"),
-                        effect: adText("actionEffect"),
-                        imageAlt: adText("actionImageAlt"),
-                      }
-                    : card
-                }
-                imageUrl={cardImages[card.type]}
-                index={index}
-                viewMode={viewMode}
-                character={character}
-                homeState={homeState}
-                executing={executing}
-                flash={flash}
-                flipflopStep={flipflopStep}
-                flipflopAxis={flipflopAxis}
-                flipflopDir={flipflopDir}
-                onOpenCampaignAction={setCampaignAction}
-                onExecute={execute}
-                onFlipflop={executeFlipflop}
-                onFlipflopStepChange={setFlipflopStep}
-                onFlipflopAxisChange={setFlipflopAxis}
-                onFlipflopDirChange={setFlipflopDir}
-                campaignActionCost={actionCosts.campaignActionCost}
-                campaignFundCost={actionCosts.campaignFundCost}
-                campaignMaxed={actionCosts.campaignMaxed}
-                advertiseActionCost={actionCosts.advertiseActionCost}
-                advertiseFundCost={actionCosts.advertiseFundCost}
-                fundraiseActionCost={actionCosts.fundraiseActionCost}
-                buildDonorBaseActionCost={actionCosts.buildDonorBaseActionCost}
-                buildDonorBaseFundCost={actionCosts.buildDonorBaseFundCost}
-                fundraiseYield={actionCosts.fundraiseAmount}
-                campaignCurrency={getHomeCurrency(character)}
-                displayCampaignFunds={displayCampaignFunds}
-                displayPersonalWealth={displayPersonalWealth}
-                blockGdpScaledCosts={blockGdpScaledCosts}
-                forexEnabled={forexEnabled}
-                convertCashOpen={convertCashOpen}
-                convertCashAmount={convertCashAmount}
-                onConvertCashOpenChange={setConvertCashOpen}
-                onConvertCashAmountChange={setConvertCashAmount}
-                onConvertCashExecute={executeConvertCash}
-              />
-            );
-          })}
-        </div>
-
-        {/* Donor Network Stats */}
-        <DonorNetworkStats
-          fundraiseAmount={actionCosts.fundraiseAmount}
-          fundraiseCurrency={getHomeCurrency(character)}
-          donorUpgradeCost={actionCosts.donorUpgradeCost}
-        />
+        {/* Action cards: grouped under category headings on "All operations" */}
+        {activeCategory === "all" ? (
+          <div className="space-y-12">
+            {CATEGORIES.filter((c) => c !== "all").map((category) => {
+              const cards = CARDS.filter((c) => c.category === category);
+              return (
+                <section key={category} aria-labelledby={`actions-${category}-title`}>
+                  <CategoryHeading
+                    category={category}
+                    count={cards.length}
+                    donor={category === "money" ? donorSummary : null}
+                  />
+                  <div className={listClass}>{cards.map(renderCard)}</div>
+                </section>
+              );
+            })}
+          </div>
+        ) : (
+          <section aria-labelledby={`actions-${activeCategory}-title`}>
+            <CategoryHeading
+              category={activeCategory}
+              count={visible.length}
+              donor={activeCategory === "money" ? donorSummary : null}
+            />
+            <div className={listClass}>{visible.map(renderCard)}</div>
+          </section>
+        )}
       </main>
       <CampaignActionModal
         action={campaignAction}

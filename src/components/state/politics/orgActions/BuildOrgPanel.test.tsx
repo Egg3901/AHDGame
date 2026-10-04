@@ -317,6 +317,84 @@ describe("BuildOrgPanel", () => {
     expect(screen.getByText(/Larger state: 2\.00× the national average/)).toBeTruthy();
   });
 
+  // ── Pressure-ladder PS gate (2026-09-24, issue #2348) ───────────────────
+  // The buttons must gate on the preview's NEXT-click cost (base + pressure
+  // ladder), not the base cost alone: after repeated spends the ladder can
+  // price the next click above the remaining reserve.
+
+  function stubLadderGate({
+    effectiveCost,
+    statePoolPS,
+    nationalPoolPS,
+  }: {
+    effectiveCost: number;
+    statePoolPS: number;
+    nationalPoolPS: number;
+  }) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string) => {
+        if (input.includes("/ps-spend-scope")) {
+          return {
+            json: async () => ({
+              ok: true,
+              eligibleScopes: { state: true, national: true },
+              statePoolPS,
+              nationalPoolPS,
+            }),
+          };
+        }
+        return {
+          json: async () => ({
+            ok: true,
+            effectiveCost,
+            pressureValue: effectiveCost - 1,
+            projectedGain: 0.5,
+            factors: { base: 2, headroom: 0.5, ownDiminishing: 0.5, psLeverage: 1, catchup: 1 },
+            scope: "state",
+          }),
+        };
+      })
+    );
+  }
+
+  it("disables the state button when the ladder cost exceeds the state pool", async () => {
+    stubLadderGate({ effectiveCost: 8, statePoolPS: 5, nationalPoolPS: 150 });
+    renderPanel({ ps: 5 });
+
+    const stateButton = (await screen.findByRole("button", {
+      name: /State PS/,
+    })) as HTMLButtonElement;
+    expect(stateButton.disabled).toBe(true);
+    expect(stateButton.getAttribute("title")).toMatch(/Need 8 PS.*state pool has 5/);
+    // The national pool still covers it, so that button stays live.
+    const nationalButton = screen.getByRole("button", { name: /Nat'l PS/ });
+    expect((nationalButton as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("disables both pool buttons when neither reserve covers the ladder cost", async () => {
+    stubLadderGate({ effectiveCost: 6, statePoolPS: 2, nationalPoolPS: 2 });
+    renderPanel({ ps: 2 });
+
+    const stateButton = (await screen.findByRole("button", {
+      name: /State PS/,
+    })) as HTMLButtonElement;
+    const nationalButton = screen.getByRole("button", { name: /Nat'l PS/ });
+    expect(stateButton.disabled).toBe(true);
+    expect((nationalButton as HTMLButtonElement).disabled).toBe(true);
+    expect(nationalButton.getAttribute("title")).toMatch(/Need 6 PS.*national pool has 2/);
+  });
+
+  it("keeps the buttons live when the reserve covers the ladder cost", async () => {
+    stubLadderGate({ effectiveCost: 3, statePoolPS: 5, nationalPoolPS: 150 });
+    renderPanel({ ps: 5 });
+
+    const stateButton = (await screen.findByRole("button", {
+      name: /State PS/,
+    })) as HTMLButtonElement;
+    expect(stateButton.disabled).toBe(false);
+  });
+
   it("surfaces the treasury refusal message from the preview", async () => {
     vi.stubGlobal(
       "fetch",

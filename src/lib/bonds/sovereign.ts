@@ -261,7 +261,6 @@ export function applySovereignDebtAdjustment(
 
 function buildSovereignBondDoc(params: {
   countryId: CountryId;
-  currencyCode: CurrencyCode | undefined;
   turn: number;
   now: Date;
   issueAmount: number;
@@ -272,6 +271,11 @@ function buildSovereignBondDoc(params: {
   credibilitySpreadPp?: number;
   /** Democratic backsliding premium in percentage points. */
   democraticSpreadPp?: number;
+  /**
+   * Explicit home currency (usually the budget's `currencyCode`). Preferred
+   * over the era-blind map fallback, so 2027 euro members issue in EUR.
+   */
+  currencyCode?: CurrencyCode | string | null;
 }): { bondDoc: Omit<Bond, "_id">; annualCouponCost: number } {
   const { countryId, turn, now, issueAmount, maturityTurns, primeRate, countryCorporation } =
     params;
@@ -307,8 +311,10 @@ function buildSovereignBondDoc(params: {
     restructureExtendedMaturityTurn: null,
     originalMaturityTurn: null,
     originalTotalIssued: null,
-    // Sovereign bonds denominate in the issuing country's currency.
-    currencyCode: params.currencyCode,
+    // Sovereign bonds denominate in the issuing country's currency: the
+    // caller's explicit code (the budget row) wins, the era-blind map is
+    // only the fallback for callers without a budget in hand.
+    currencyCode: resolveCountryCurrencyCode({ countryId, currencyCode: params.currencyCode }),
     createdAt: now,
     updatedAt: now,
   };
@@ -326,6 +332,7 @@ async function issueSovereignBondSeries(
     issueAmount: number;
     maturityTurns?: BondMaturityTurns;
     issuanceKey: string;
+    poolOnly?: boolean;
   }
 ): Promise<SovereignBondIssueResult | null> {
   const { countryId, turn, now, issueAmount } = params;
@@ -361,13 +368,13 @@ async function issueSovereignBondSeries(
 
   const { bondDoc } = buildSovereignBondDoc({
     countryId,
-    currencyCode: resolveCountryCurrencyCode(budget),
     turn,
     now,
     issueAmount: normalizedIssueAmount,
     maturityTurns,
     primeRate,
     countryCorporation,
+    currencyCode: budget.currencyCode,
     // B4: a discredited central bank makes its government borrow dearer. No
     // bank document means no scrutiny to read, so the spread is 0, not a guess.
     credibilitySpreadPp: centralBank ? sovereignCredibilitySpread(centralBank.chairInfamy ?? 0) : 0,
@@ -382,7 +389,7 @@ async function issueSovereignBondSeries(
     turn,
     now,
     budget,
-    centralBank,
+    centralBank: params.poolOnly ? null : centralBank,
     bondDocs: [bondDoc],
     accounting,
   });
@@ -402,6 +409,35 @@ async function issueSovereignBondSeries(
     newDebtInterest: updatedBudget.spending.debtInterest,
     newSurplus: updatedBudget.surplus,
   };
+}
+
+/**
+ * Issue a sovereign bond solely against the currency bond pool for a deposit
+ * insurance backstop. Unsold units remain unissued until the normal primary
+ * placement pass finds pool cash; this path never uses central bank money.
+ */
+export async function issueDepositInsuranceBackstopBond(
+  db: Db,
+  args: {
+    countryId: CountryId;
+    turn: number;
+    now: Date;
+    amount: number;
+    issuanceKey: string;
+  }
+): Promise<SovereignBondIssueResult | null> {
+  if (!Number.isFinite(args.amount) || args.amount <= 0) return null;
+  const units = Math.ceil(args.amount / BOND_UNIT_FACE_VALUE);
+  if (!Number.isSafeInteger(units)) return null;
+  const rounded = units * BOND_UNIT_FACE_VALUE;
+  return issueSovereignBondSeries(db, {
+    countryId: args.countryId,
+    turn: args.turn,
+    now: args.now,
+    issueAmount: rounded,
+    issuanceKey: args.issuanceKey,
+    poolOnly: true,
+  });
 }
 
 export async function issueAdminSovereignBondSeries(
@@ -605,7 +641,9 @@ export async function issueScheduledSovereignBondSeries(
     // the cash it has and the appetite the demand model gives this issuer.
     // Without a funded pool, units remain unplaced unless monetary financing supplies cash.
     const poolCurrency: CurrencyCode =
-      resolveCountryCurrencyCode(budgetDoc) ?? COUNTRY_CURRENCY_MAP[countryId] ?? "USD";
+      resolveCountryCurrencyCode({ countryId, currencyCode: budgetDoc.currencyCode }) ??
+      COUNTRY_CURRENCY_MAP[countryId] ??
+      "USD";
     // Plan the ladder first so the gated consolidation (#1001) reshapes rungs
     // before pool underwriting sees them. Gate off: the same rungs, same order.
     const tranchePlans = consolidateSovereignTranches(
@@ -753,7 +791,10 @@ export async function reconcileSovereignDebt(
   if (gap >= BOND_UNIT_FACE_VALUE) {
     const corporationId = countryCorporation?._id ?? new ObjectId();
     const issuerName = countryCorporation?.name ?? getSovereignIssuerName(countryId);
-    const currencyCode = resolveCountryCurrencyCode(budget);
+    const currencyCode = resolveCountryCurrencyCode({
+      countryId,
+      currencyCode: budget.currencyCode,
+    });
 
     for (const [maturityStr, fraction] of Object.entries(distribution)) {
       if (!fraction || fraction <= 0) continue;
@@ -875,7 +916,8 @@ export async function settleSovereignBondMaturity(
     Bond,
     "countryId" | "couponRate" | "totalIssued" | "restructureHaircutPercent" | "currencyCode"
   >,
-  repaymentLocal = bond.totalIssued
+  repaymentLocal = bond.totalIssued,
+  bankRepaymentLocal = 0
 ): Promise<{ amountLocal: number; currencyCode: CurrencyCode } | null> {
   if (!bond.countryId) return null;
   const budgetId = getNationalBudgetId(bond.countryId);
@@ -887,6 +929,13 @@ export async function settleSovereignBondMaturity(
   }
   if (!Number.isFinite(repaymentLocal) || repaymentLocal < 0) {
     throw new Error("Sovereign maturity requires a finite nonnegative repayment");
+  }
+  if (
+    !Number.isFinite(bankRepaymentLocal) ||
+    bankRepaymentLocal < 0 ||
+    bankRepaymentLocal > repaymentLocal
+  ) {
+    throw new Error("Bank sovereign maturity share must be within the total repayment");
   }
 
   // Net exactly this bond's outstanding contribution (face minus any restructure
@@ -908,7 +957,9 @@ export async function settleSovereignBondMaturity(
     {
       // Rollover issuance credits this same treasury. Redemption must pay its
       // holders from cash as well as retiring the bond-owned debt stock.
-      $inc: { treasuryBalance: -repaymentLocal },
+      // Bank holders receive their exact share through the guarded settlement
+      // journal. This legacy debit remains responsible for every other holder.
+      $inc: { treasuryBalance: -(repaymentLocal - bankRepaymentLocal) },
       $set: {
         debt: budgetUpdate.debt,
         spending: budgetUpdate.spending,

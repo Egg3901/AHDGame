@@ -33,7 +33,7 @@ describe("emitTx preloaded turn cadence", () => {
         currencyCode: "USD",
       },
       DEFAULT_TX_THRESHOLDS,
-      30
+      { turnLengthMinutes: 30 }
     );
 
     expect(db.collectionMocks.gameConfig.findOne).not.toHaveBeenCalled();

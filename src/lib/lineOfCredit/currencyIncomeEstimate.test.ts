@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { getHomeCurrency } from "@/lib/currency/characterFunds";
 
 vi.mock("@/lib/currency/characterFunds", () => ({
   getHomeCurrency: vi.fn().mockReturnValue("USD"),
@@ -112,5 +113,30 @@ describe("estimatePerTurnCurrencyIncomeHomeFace", () => {
     );
 
     expect(result).toBe(1);
+  });
+
+  it("values a 2027 French borrower's recurring income in EUR", async () => {
+    vi.mocked(getHomeCurrency).mockReturnValueOnce("EUR");
+    db.collectionMocks["gameState"]!.findOne.mockResolvedValue({
+      _id: "current",
+      currentTurn: 1,
+      preset: "2027-default",
+    });
+    installFinancialTxFindMock(db, [
+      { type: "corp_salary", turn: 1, amount: 120, currencyCode: "EUR", anchorAmount: 100 },
+    ]);
+
+    const { estimatePerTurnCurrencyIncomeHomeFace } = await import("./currencyIncomeEstimate");
+    const result = await estimatePerTurnCurrencyIncomeHomeFace(
+      db as unknown as Db,
+      { _id: new ObjectId(), countryId: "FR" } as never,
+      { EUR: 1.2 }
+    );
+
+    expect(getHomeCurrency).toHaveBeenCalledWith(
+      expect.objectContaining({ countryId: "FR" }),
+      "2027-default"
+    );
+    expect(result).toBeCloseTo(120);
   });
 });

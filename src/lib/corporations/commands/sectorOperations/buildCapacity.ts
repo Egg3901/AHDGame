@@ -139,13 +139,8 @@ const MAX_OUTSTANDING_BUILD_ORDERS = 20;
  * array we read makes both of those writes fail instead of clobbering, and
  * `modifiedCount` tells us which happened.
  *
- * C4 — the OTHER direction (a command racing the TURN) is not fixed here and
- * cannot be: when the turn wrote the queue unconditionally at the end of its
- * bulkWrite, it clobbered a command that had already committed, so no
- * precondition on the command could save the order. That is fixed on the turn
- * side, which now writes only its own delta (`$pull` of landed orders + `$inc`
- * of the CIP they released) instead of a whole-array `$set` — see the C4 note
- * in `sectorTurn.ts`.
+ * C4: a command racing the turn is guarded by comparing the exact queue it read.
+ * The turn pulls delivered orders and is the only writer of stored CIP.
  *
  * The CAS is still exactly right for the command-vs-command races, and it is
  * also what makes a command that overlaps a landing turn fail SAFELY: the pull
@@ -163,10 +158,8 @@ function queueCasFilter(sector: CorporateSector): Record<string, unknown> {
 
 /**
  * The sector's CIP total: paid cost still UNDER construction as of `currentTurn`.
- * For a smooth order this falls a slice per turn as capacity is delivered, so
- * the command must restate it against the current turn — otherwise it would
- * re-inflate CIP back to the full order cost the turn processor has been
- * draining. Kept identical to `sectorTurn`'s `constructionInProgressAnchor`.
+ * For a smooth order this falls as capacity is delivered. The command uses this
+ * for its response; sectorTurn is the only writer of the stored field.
  */
 function cipTotal(queue: SectorBuildOrder[], currentTurn: number): number {
   return queueUndeliveredCost(queue, currentTurn);
@@ -401,7 +394,6 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
         {
           $set: {
             buildQueue: nextQueue,
-            constructionInProgressAnchor: Math.round(cipTotal(nextQueue, currentTurn)),
             updatedAt: now,
           },
         }
@@ -687,7 +679,6 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
       {
         $set: {
           buildQueue: nextQueue,
-          constructionInProgressAnchor: Math.round(cipTotal(nextQueue, currentTurn)),
           updatedAt: now,
         },
       }

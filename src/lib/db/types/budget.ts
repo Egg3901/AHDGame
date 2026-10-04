@@ -435,10 +435,40 @@ export interface TreasuryAccrualReceipt {
     enforcement: number;
     rounding: number;
   };
+  /**
+   * Bank-held sovereign coupons frozen from the opening bond snapshot. The
+   * treasury cash receipt reserves this amount from aggregate debt service;
+   * a separate journaled transfer then delivers it to the same charter epoch.
+   */
+  bankCouponPlan?: Array<{
+    bankId: string;
+    charteredTurn: number;
+    amountLocal: number;
+    bondIds: string[];
+  }>;
+}
+
+/** Unpaid bank-held sovereign coupon or maturity claims remain on the issuer budget. */
+export interface BankSovereignClaim {
+  id: string;
+  kind: "coupon" | "maturity";
+  bankId: string;
+  charteredTurn: number;
+  bondId?: string;
+  bondIds?: string[];
+  countryId: string;
+  currencyCode: import("@/lib/constants/currencies").CurrencyCode;
+  amountLocal: number;
+  turn: number;
+  /** Frozen ledger timestamp so a retry recreates an identical funded witness. */
+  ledgerCreatedAt?: Date;
+  anchorRate?: number;
+  ledgerShadow?: boolean;
 }
 
 export interface FederalBudget {
   treasuryAccrual?: TreasuryAccrualReceipt;
+  bankSovereignClaims?: BankSovereignClaim[];
   _id: BudgetDocumentId;
   countryId: string;
   fiscalYear: number;
@@ -511,6 +541,8 @@ export interface FederalBudget {
    * the bond stock is untouched).
    */
   treasuryBalance: number;
+  /** Applied automatic disaster crisis IDs; keeps fiscal debits replay-safe. */
+  disasterFiscalReceipts?: string[];
   /**
    * Negotiated indemnity receipts already applied to this treasury.
    *
@@ -578,6 +610,13 @@ export interface FederalBudget {
    */
   baselineSpendingByCategory?: Record<string, number>;
   baselineStateGrants?: number;
+  /**
+   * 1991 Russian transition spending outside the enacted political law book,
+   * calibrated once to the World Bank general-government expenditure total.
+   * Stored as a GDP share so it follows nominal output without canceling later
+   * law changes. Other countries leave this field absent.
+   */
+  nonLawSpendingGdpShareBaseline?: number;
   /**
    * Fiscal-divergence guardrail (refs #fiscal-divergence-audit): each tax
    * base's share of national GDP at the turn this field was first populated

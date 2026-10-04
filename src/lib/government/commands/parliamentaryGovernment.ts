@@ -16,11 +16,7 @@ import {
   getPMAppointmentVotesCollection,
 } from "@/lib/db/collections/governmentFormation";
 import { getParliamentaryCountryConfig } from "@/lib/government/parliamentaryCountry";
-import {
-  getLowerChamberOfficeType,
-  getJointSittingOfficeTypes,
-} from "@/lib/legislature/chamberOfficeType";
-import { getCountryConfig } from "@/lib/constants/countries";
+import { loadRuntimeCountryOffices } from "@/lib/countries/runtimeOffices";
 import { canTriggerNoConfidence } from "@/lib/turn/onePartyConstraints";
 import { getCountryState } from "@/lib/countryState";
 import { ObjectId, type Db } from "mongodb";
@@ -33,7 +29,9 @@ export async function proposePmAppointment(
   nominator: Pick<Character, "_id" | "name">,
   nomineeCharacterId: string
 ): Promise<{ success: true; voteId: string }> {
-  const countryConfig = getParliamentaryCountryConfig(countryId);
+  getParliamentaryCountryConfig(countryId);
+  const offices = await loadRuntimeCountryOffices(db, countryId);
+  const countryConfig = offices.config;
   const gameTime = await getGameTime();
   const govFormationExists = await getGovernmentFormationsCollection(db).findOne(
     { _id: countryId },
@@ -128,7 +126,7 @@ export async function proposePmAppointment(
       throw notFound("Nominee not found or is not a player character");
     }
 
-    const lowerChamberKey = getLowerChamberOfficeType(countryId);
+    const lowerChamberKey = offices.lowerOfficeType;
     const nomineeOfficial = await db.collection<ElectedOfficial>("electedOfficials").findOne({
       characterId: nomineeId,
       countryId,
@@ -206,7 +204,8 @@ export async function proposeHosAppointment(
   nomineeNppId?: string
 ): Promise<{ success: true; voteId: string }> {
   getParliamentaryCountryConfig(countryId);
-  const config = getCountryConfig(countryId);
+  const offices = await loadRuntimeCountryOffices(db, countryId);
+  const config = offices.config;
   if (config.headOfStateSelection !== "legislatureAppointment") {
     throw badRequest("This country's head of state is not appointed by the legislature");
   }
@@ -255,7 +254,7 @@ export async function proposeHosAppointment(
 
   // Nominee is either a player character or an NPP holding a joint-sitting
   // seat. Follows the cabinet/SCOTUS nomineeMode pattern.
-  const jointOffices = getJointSittingOfficeTypes(countryId);
+  const jointOffices = offices.jointSittingOfficeTypes;
   let nomineeId: ObjectId | null = null;
   let nomineeNppOid: ObjectId | null = null;
   let nomineeName: string;
@@ -346,7 +345,9 @@ export async function castPmAppointmentVote(
   voteIdParam: string,
   vote: "aye" | "nay"
 ): Promise<{ success: true; votesFor: number; votesAgainst: number }> {
-  const countryConfig = getParliamentaryCountryConfig(countryId);
+  getParliamentaryCountryConfig(countryId);
+  const offices = await loadRuntimeCountryOffices(db, countryId);
+  const countryConfig = offices.config;
   if (!ObjectId.isValid(voteIdParam)) {
     throw badRequest("Invalid vote ID format");
   }
@@ -359,6 +360,14 @@ export async function castPmAppointmentVote(
   if (voteDoc.status !== "active") {
     throw badRequest("This vote has already closed");
   }
+  if (
+    voteDoc.office === "headOfState" &&
+    countryConfig.headOfStateSelection !== "legislatureAppointment"
+  ) {
+    throw badRequest(
+      "The current constitution does not allow legislative head-of-state appointment"
+    );
+  }
   // closesAt is anchored to the game clock at write time, so the window check
   // must compare against gameTime.effectiveNow to stay consistent under drift.
   const appointmentGameTime = await getGameTime();
@@ -368,9 +377,7 @@ export async function castPmAppointmentVote(
 
   // Head-of-state votes are a JOINT sitting — members of either chamber vote.
   const voterOfficeTypes =
-    voteDoc.office === "headOfState"
-      ? getJointSittingOfficeTypes(countryId)
-      : [getLowerChamberOfficeType(countryId)];
+    voteDoc.office === "headOfState" ? offices.jointSittingOfficeTypes : [offices.lowerOfficeType];
   const voterOfficial = await db.collection<ElectedOfficial>("electedOfficials").findOne({
     characterId: character._id,
     countryId,
@@ -415,7 +422,9 @@ export async function proposeNoConfidence(
   proposerUserId: string,
   proposer: Pick<Character, "_id" | "name">
 ): Promise<{ success: true; voteId: string }> {
-  const countryConfig = getParliamentaryCountryConfig(countryId);
+  getParliamentaryCountryConfig(countryId);
+  const offices = await loadRuntimeCountryOffices(db, countryId);
+  const countryConfig = offices.config;
   const gameTime = await getGameTime();
 
   const govFormation = await getGovernmentFormationsCollection(db).findOne({ _id: countryId });
@@ -432,7 +441,7 @@ export async function proposeNoConfidence(
   const proposerOfficial = await db.collection<ElectedOfficial>("electedOfficials").findOne({
     characterId: proposer._id,
     countryId,
-    officeType: getLowerChamberOfficeType(countryId),
+    officeType: offices.lowerOfficeType,
   });
   if (!proposerOfficial) {
     throw forbidden(
@@ -519,7 +528,7 @@ export async function proposeNoConfidence(
     proposer.name,
     govFormation.pmCharacterId,
     targetPmName,
-    getLowerChamberOfficeType(countryId),
+    offices.lowerOfficeType,
     countryConfig.legislature.lowerChamber.shortName,
     countryConfig.executiveTitle
   );
@@ -534,7 +543,9 @@ export async function castNoConfidenceVote(
   voteIdParam: string,
   vote: "aye" | "nay"
 ): Promise<{ success: true; votesFor: number; votesAgainst: number }> {
-  const countryConfig = getParliamentaryCountryConfig(countryId);
+  getParliamentaryCountryConfig(countryId);
+  const offices = await loadRuntimeCountryOffices(db, countryId);
+  const countryConfig = offices.config;
   if (!ObjectId.isValid(voteIdParam)) {
     throw badRequest("Invalid vote ID format");
   }
@@ -557,7 +568,7 @@ export async function castNoConfidenceVote(
   const voterOfficial = await db.collection<ElectedOfficial>("electedOfficials").findOne({
     characterId: character._id,
     countryId,
-    officeType: getLowerChamberOfficeType(countryId),
+    officeType: offices.lowerOfficeType,
   });
   if (!voterOfficial) {
     throw forbidden(

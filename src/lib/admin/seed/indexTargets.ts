@@ -204,6 +204,12 @@ export const INDEX_TARGETS = [
     description:
       "UNIQUE series coordinates on approvalTelemetry (world, country, region, turn) and macroTelemetry (world, country, region, metric, turn): the series read path and the cron-retry duplicate guard.",
   },
+  {
+    id: "indexesMoneyFlow",
+    label: "Indexes — Money Flow",
+    description:
+      "TTL + status indexes on nonAtomicMoneyFlowReceipts, the idempotency receipts behind crash-safe money flows. Without the TTL every keyed transfer leaves a receipt document behind forever.",
+  },
 ] as const satisfies readonly IndexTargetMeta[];
 
 export type IndexTargetId = (typeof INDEX_TARGETS)[number]["id"];

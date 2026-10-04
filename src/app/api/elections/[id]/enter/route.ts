@@ -1,3 +1,14 @@
+import { z } from "zod";
+import { isBgFoundingCampaign } from "@/lib/countries/bg/rules/foundingCampaign1990";
+import {
+  registerBgFoundingPlayerFiling,
+  bgFoundingFilingMessages,
+} from "@/lib/countries/bg/foundingPlayerFiling1990";
+import { isHu1991AssemblyCampaign } from "@/lib/countries/hu/rules/assemblyCampaign1991";
+import {
+  registerHu1991PlayerFiling,
+  hu1991FilingMessages,
+} from "@/lib/countries/hu/playerFiling1991";
 import { NextResponse } from "next/server";
 import { handleRouteError } from "@/lib/api/errors";
 import { ObjectId } from "mongodb";
@@ -26,6 +37,27 @@ import {
   isNationwideDirectExecutiveElection,
 } from "@/lib/elections/nationwideExecutive";
 import { isActiveElectionCandidateDuplicateKey } from "@/lib/elections/duplicateKey";
+import { isHuDistrictInRegion } from "@/lib/countries/hu/rules/constituencies2014";
+import { validateRussianDumaPlayerFiling } from "@/lib/countries/ru/dumaPlayerFiling";
+import {
+  validateRussianCouncilPlayerFiling,
+  registerRussianCouncilPlayerCandidate,
+} from "@/lib/countries/ru/councilPlayerFiling";
+
+const hu1991EntryBody = z.object({ constituencyId: z.string().min(1).max(80).optional() }).strict();
+const councilFilingErrors = {
+  "already-filed": "You are already entered in this Council race.",
+  "association-full": "Your association already has two player nominees in this subject.",
+  "unbound-mandate": "This Council election no longer matches its ratified constitutional mandate.",
+  "invalid-ballot": "This Council ballot has an invalid subject or filing schedule.",
+  "filing-closed": "The Council candidate filing period has ended.",
+  "invalid-residence":
+    "You must live in this subject's Russian macroregion to contest this Council ballot.",
+  "unregistered-association": "Join an existing unbanned Russian party or file as an independent.",
+  "other-chamber-mandate": "You already hold a Duma mandate and cannot contest a Council seat.",
+  "council-mandate": "You already hold a Council mandate.",
+  "other-candidacy": "Withdraw your other active candidacy before entering this Council race.",
+};
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -46,6 +78,13 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const { user } = auth;
     const character = user.character;
+    if (character.federationPendingResidenceId !== undefined) {
+      logRequest("POST", path, 403, Date.now() - start);
+      return NextResponse.json(
+        { error: "Choose a playable residence before entering an election." },
+        { status: 403 }
+      );
+    }
 
     const limit = checkRateLimit(
       `election:${user.userId}`,
@@ -74,6 +113,53 @@ export async function POST(request: Request, { params }: RouteParams) {
     const election = resolved.election;
     const electionObjectId = election._id;
 
+    const hu1991 = isHu1991AssemblyCampaign(election) || election.hungarianModernByElection != null;
+    const hu2014 =
+      election.countryId === "HU" &&
+      election.electionType === "nationalAssembly" &&
+      election.hungarianModernAssembly?.ruleVersion === "mixed-2011-v1";
+    const bgFounding = isBgFoundingCampaign(election);
+    let huDistrictId: string | undefined;
+    if (hu1991 || bgFounding || hu2014) {
+      if (
+        bgFounding &&
+        election.bulgarianFoundingRound?.round !== 1 &&
+        !election.bulgarianFoundingRound?.newNominationDistrictIds?.length
+      )
+        return NextResponse.json(
+          { error: bgFoundingFilingMessages["filing-closed"] },
+          { status: 403 }
+        );
+      if (
+        hu1991 &&
+        !election.hungarianModernByElection &&
+        election.hungarianAssemblyRound?.round !== 1
+      )
+        return NextResponse.json({ error: hu1991FilingMessages["filing-closed"] }, { status: 403 });
+      const text = await request.text();
+      let body: unknown = {};
+      try {
+        if (text.trim()) body = JSON.parse(text);
+      } catch {
+        return NextResponse.json(
+          { error: "Invalid constituency filing request." },
+          { status: 400 }
+        );
+      }
+      const parsed = hu1991EntryBody.safeParse(body);
+      if (!parsed.success)
+        return NextResponse.json(
+          { error: "Invalid constituency filing request." },
+          { status: 400 }
+        );
+      huDistrictId = parsed.data.constituencyId;
+      if (hu2014 && (!huDistrictId || !isHuDistrictInRegion(huDistrictId, election.state))) {
+        return NextResponse.json(
+          { error: "Choose a valid Hungarian constituency in this region." },
+          { status: 400 }
+        );
+      }
+    }
     // Check if election is open for entry
     if (election.status !== "upcoming" && election.status !== "active") {
       logRequest("POST", path, 400, Date.now() - start);
@@ -151,6 +237,52 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Runtime governmentType so a post-Stage-4 conversion immediately
     // changes which gates apply to candidate entry.
     const electionRuntime = await getCountryState(db, electionCountry);
+    const councilFiling = election.russianCouncilRound
+      ? await validateRussianCouncilPlayerFiling({
+          db,
+          election,
+          character,
+          turn: currentTurn,
+          registrationOrder: now.getTime(),
+        })
+      : null;
+    if (councilFiling && !councilFiling.allowed) {
+      logRequest("POST", path, 403, Date.now() - start);
+      return NextResponse.json(
+        { error: councilFilingErrors[councilFiling.reason] },
+        { status: 403 }
+      );
+    }
+    const dumaFiling = election.russianDumaRound
+      ? await validateRussianDumaPlayerFiling({
+          db,
+          election,
+          character,
+          turn: currentTurn,
+          registrationOrder: now.getTime(),
+        })
+      : null;
+    if (dumaFiling && !dumaFiling.allowed) {
+      const errors = {
+        "incompatible-office": "Your current office is incompatible with an ordinary Duma mandate.",
+        "council-mandate":
+          "You already hold a seated or certified Council mandate and cannot contest a Duma ballot.",
+        "constituency-mandate":
+          "You already hold a certified Duma constituency mandate and cannot contest another constituency.",
+        "unbound-mandate":
+          "This Duma election no longer matches its ratified constitutional mandate.",
+        "invalid-ballot": "This Duma ballot has an invalid district or filing schedule.",
+        "filing-closed": "The Duma candidate filing period has ended.",
+        "invalid-residence":
+          "You must live in an eligible Russian region to contest this Duma ballot.",
+        "independent-list":
+          "Independent candidates may contest a Duma constituency, but cannot join the national party list.",
+        "unregistered-list":
+          "Join an existing unbanned Russian party before contesting the national list.",
+      };
+      logRequest("POST", path, 403, Date.now() - start);
+      return NextResponse.json({ error: errors[dumaFiling.reason] }, { status: 403 });
+    }
     const electionRuntimeConfig = { governmentType: electionRuntime.governmentType };
     if (electionRuntime.governmentType === "onePartyState") {
       const characterPartySeqId = Number.parseInt(character.party ?? "0", 10);
@@ -208,7 +340,12 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Enforce home-state restriction — players can only run in their own state.
     // Nationwide executive races (president, uachtaran) use the country code
     // as state and are exempt from this check.
-    if (!isNationwideExecutive && election.state && character.homeState !== election.state) {
+    if (
+      !isNationwideExecutive &&
+      !(dumaFiling?.allowed && dumaFiling.nationalList) &&
+      election.state &&
+      character.homeState !== election.state
+    ) {
       logRequest("POST", path, 403, Date.now() - start);
       return NextResponse.json(
         {
@@ -268,9 +405,18 @@ export async function POST(request: Request, { params }: RouteParams) {
       status: "active",
     });
 
+    if (
+      (hu1991 || bgFounding) &&
+      existingCandidate?.party !== undefined &&
+      existingCandidate.party !== character.party
+    )
+      return NextResponse.json(
+        { error: (bgFounding ? bgFoundingFilingMessages : hu1991FilingMessages)["party-changed"] },
+        { status: 403 }
+      );
     if (existingCandidate) {
       // If they have an active candidacy under a different party, withdraw it first
-      if (existingCandidate.party !== character.party) {
+      if (existingCandidate.party !== character.party && !councilFiling) {
         await db
           .collection("electionCandidates")
           .updateOne(
@@ -293,7 +439,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           },
           { $set: { party: character.party, updatedAt: new Date() } }
         );
-      } else {
+      } else if (existingCandidate.party === character.party) {
         logRequest("POST", path, 400, Date.now() - start);
         return NextResponse.json(
           { error: "You are already entered in this race" },
@@ -343,6 +489,9 @@ export async function POST(request: Request, { params }: RouteParams) {
       status: "active",
       support: DEFAULT_CANDIDATE_SUPPORT,
       enteredAt: now,
+      ...(dumaFiling?.allowed ? { russianDumaNomination: dumaFiling.nomination } : {}),
+      ...(councilFiling?.allowed ? { russianCouncilNomination: councilFiling.nomination } : {}),
+      ...(hu2014 && huDistrictId ? { constituencyId: huDistrictId } : {}),
       ...(priorCandidacy?.lastRallyTurn !== undefined
         ? { lastRallyTurn: priorCandidacy.lastRallyTurn }
         : {}),
@@ -356,7 +505,75 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     let result: { insertedId: ObjectId };
     try {
-      result = await db.collection("electionCandidates").insertOne(candidateDoc);
+      if (councilFiling) {
+        const filed = await registerRussianCouncilPlayerCandidate({
+          db,
+          electionId: electionObjectId,
+          candidate: candidateDoc,
+          turn: currentTurn,
+          now,
+        });
+        if (!filed.allowed) {
+          logRequest("POST", path, 403, Date.now() - start);
+          return NextResponse.json({ error: councilFilingErrors[filed.reason] }, { status: 403 });
+        }
+        result = { insertedId: filed.insertedId };
+      } else if (bgFounding) {
+        const filed = await registerBgFoundingPlayerFiling({
+          db,
+          electionId: electionObjectId,
+          candidate: candidateDoc,
+          requestedDistrictId: huDistrictId,
+          turn: currentTurn,
+          now,
+        });
+        if (!filed.allowed)
+          return NextResponse.json(
+            { error: bgFoundingFilingMessages[filed.reason] },
+            { status: 403 }
+          );
+        result = { insertedId: filed.insertedId };
+      } else if (hu1991) {
+        const filed = await registerHu1991PlayerFiling({
+          db,
+          electionId: electionObjectId,
+          candidate: candidateDoc,
+          requestedDistrictId: huDistrictId,
+          turn: currentTurn,
+          now,
+        });
+        if (!filed.allowed)
+          return NextResponse.json(
+            {
+              error:
+                election.hungarianModernByElection && filed.reason === "filing-closed"
+                  ? "Filing has closed for this constituency by-election."
+                  : hu1991FilingMessages[filed.reason],
+            },
+            { status: 403 }
+          );
+        result = { insertedId: filed.insertedId };
+      } else if (hu2014) {
+        const existingNominee = await db
+          .collection<ElectionCandidate>("electionCandidates")
+          .findOne({
+            electionId: electionObjectId,
+            countryId: "HU",
+            party: character.party,
+            constituencyId: huDistrictId,
+            status: "active",
+          });
+        if (existingNominee) {
+          logRequest("POST", path, 409, Date.now() - start);
+          return NextResponse.json(
+            { error: "Your party already has a candidate in this constituency." },
+            { status: 409 }
+          );
+        }
+        result = await db.collection("electionCandidates").insertOne(candidateDoc);
+      } else {
+        result = await db.collection("electionCandidates").insertOne(candidateDoc);
+      }
     } catch (error) {
       if (isActiveElectionCandidateDuplicateKey(error)) {
         const activeCandidate = await db

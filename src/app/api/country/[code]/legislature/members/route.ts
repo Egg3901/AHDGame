@@ -8,7 +8,12 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { handleRouteError } from "@/lib/api/errors";
-import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import {
+  COUNTRY_CONFIGS,
+  getCountryConfigForRuntime,
+  type CountryId,
+} from "@/lib/constants/countries";
+import { getGameStatePreset } from "@/lib/db/collections/gameState";
 import { getOfficeTypeForChamber } from "@/lib/legislature/chamberOfficeType";
 import { getLiveLowerChamberSeats, getLiveUpperChamberSeats } from "@/lib/turn/lowerChamberSeats";
 import type { PoliticalParty, ElectedOfficial, State, Character, NPP } from "@/lib/db/types";
@@ -17,12 +22,27 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
   try {
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
-    const config = COUNTRY_CONFIGS[countryId];
-    if (!config) {
+    if (!COUNTRY_CONFIGS[countryId]) {
       return NextResponse.json({ error: "Invalid country code" }, { status: 404 });
     }
 
     const db = await getDb();
+    const [preset, countryState] = await Promise.all([
+      getGameStatePreset(db),
+      countryId === "RU"
+        ? db
+            .collection<{
+              _id: string;
+              ruSovietSuccessionSinceTurn?: number;
+              ruProvisionalCongressSeats?: number;
+              ruPresidencySinceTurn?: number;
+              ruCongressDissolvedSinceTurn?: number;
+              ruFederalAssemblySinceTurn?: number;
+            }>("countryGameStates")
+            .findOne({ _id: "RU" })
+        : Promise.resolve(null),
+    ]);
+    const config = getCountryConfigForRuntime(countryId, preset, countryState);
     const { searchParams } = new URL(request.url);
 
     const lowerKey = config.legislature.lowerChamber.key;
@@ -53,7 +73,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
 
     // Query elected officials for the requested chamber — resolve chamber key to office type
     // (e.g. CN "npc" → "npcDelegate")
-    const resolvedOfficeType = getOfficeTypeForChamber(countryId, chamber);
+    const resolvedOfficeType =
+      config.officeTypes.find((office) => office.chamberKey === chamber)?.key ??
+      getOfficeTypeForChamber(countryId, chamber);
     const officialFilter: Record<string, unknown> = { officeType: resolvedOfficeType, countryId };
 
     const allOfficials = await db

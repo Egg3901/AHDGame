@@ -10,15 +10,22 @@
  * Reported as `max(config base, region sum)`: the chamber never under-reports its
  * config base (so a region's seat-data discrepancy can't shrink an untransferred
  * chamber — e.g. UK regions summing to 648 still report the 650-seat Commons), and
- * grows above the base when a region is added (NI joining → 160 + 71). For every
- * untransferred parliamentary config the result equals `configSeats`, so
+ * grows above the base when a region is added (NI joining → 160 + 71). Bulgaria's
+ * dated 1991 chamber replacement explicitly lowers this floor to 240 after the
+ * ordinary Assembly opens. For other untransferred parliamentary configs the
+ * result equals `configSeats`, so
  * `coalitionThreshold === floor(configSeats / 2) + 1` still holds.
  */
 import type { Db } from "mongodb";
-import type { State } from "@/lib/db/types";
+import type { CountryGameState, State } from "@/lib/db/types";
 import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
 import { isListTierMethod } from "@/lib/elections/electionMethod";
 import { getGameStatePreset } from "@/lib/db/collections/gameState";
+import { BG_ORDINARY_ASSEMBLY_TOTAL_SEATS } from "@/lib/countries/bg/rules/assemblyTransition";
+import {
+  RO_1992_DEPUTY_SEATS,
+  RO_1992_SENATE_SEATS,
+} from "@/lib/countries/ro/rules/parliament1992";
 
 /** Active world preset, when present — drives era-conditional chamber sizes. */
 async function readActivePreset(db: Db): Promise<string | undefined> {
@@ -33,7 +40,72 @@ async function readActivePreset(db: Db): Promise<string | undefined> {
  * their region sum is authoritative — and grows/shrinks when a region transfers.
  */
 export async function getLiveLowerChamberSeats(db: Db, countryId: CountryId): Promise<number> {
-  const config = getCountryConfig(countryId, await readActivePreset(db));
+  const preset = await readActivePreset(db);
+  const config = getCountryConfig(countryId, preset);
+  // Hungary's 1991-world config is deliberately frozen at its 386-seat start.
+  // Once the 2014 reform stamps the world, the re-apportioned region documents
+  // carry the live 199-seat chamber and override that initial config size.
+  if (countryId === "HU") {
+    const reform = await db
+      .collection<{ _id: string; huAssemblyReformedAtYear?: number }>("gameState")
+      .findOne({ _id: "current" }, { projection: { huAssemblyReformedAtYear: 1 } });
+    if (reform?.huAssemblyReformedAtYear) {
+      const regions = await db
+        .collection<State>("states")
+        .find({ countryId }, { projection: { houseDistricts: 1 } })
+        .toArray();
+      const seats = regions.reduce((sum, region) => sum + (region.houseDistricts ?? 0), 0);
+      if (seats > 0) return seats;
+    }
+  }
+  if (countryId === "BG" && preset === "1991-default") {
+    const countryState = await db
+      .collection<CountryGameState>("countryGameStates")
+      .findOne({ _id: "BG" }, { projection: { bgOrdinaryAssemblySinceTurn: 1 } });
+    if (countryState?.bgOrdinaryAssemblySinceTurn != null) {
+      return BG_ORDINARY_ASSEMBLY_TOTAL_SEATS;
+    }
+  }
+  if (countryId === "RO" && preset === "1991-default") {
+    const countryState = await db
+      .collection<CountryGameState>("countryGameStates")
+      .findOne({ _id: "RO" }, { projection: { roParliament1992SinceTurn: 1 } });
+    if (countryState?.roParliament1992SinceTurn != null) {
+      const regions = await db
+        .collection<State>("states")
+        .find({ countryId })
+        .project<{ houseDistricts?: number }>({ houseDistricts: 1 })
+        .toArray();
+      const seats = regions.reduce((sum, region) => sum + (region.houseDistricts ?? 0), 0);
+      return seats > 0 ? seats : RO_1992_DEPUTY_SEATS;
+    }
+  }
+  if (countryId === "RU" && preset === "1991-default") {
+    const countryState = await db.collection<CountryGameState>("countryGameStates").findOne(
+      { _id: "RU" },
+      {
+        projection: {
+          ruSovietSuccessionSinceTurn: 1,
+          ruProvisionalCongressSeats: 1,
+          ruCongressDissolvedSinceTurn: 1,
+          ruFederalAssemblySinceTurn: 1,
+        },
+      }
+    );
+    if (countryState?.ruFederalAssemblySinceTurn != null) return 450;
+    if (countryState?.ruCongressDissolvedSinceTurn != null) return 0;
+    if (
+      countryState?.ruSovietSuccessionSinceTurn != null &&
+      countryState.ruProvisionalCongressSeats != null
+    ) {
+      if (
+        !Number.isSafeInteger(countryState.ruProvisionalCongressSeats) ||
+        countryState.ruProvisionalCongressSeats < 1
+      )
+        throw new Error("Provisional Russian Congress capacity must be a positive integer");
+      return countryState.ruProvisionalCongressSeats;
+    }
+  }
   if (isListTierMethod(config.electionSystems.lowerChamber)) {
     return config.legislature.lowerChamber.seats;
   }
@@ -81,6 +153,26 @@ function isUpperChamberRegionApportioned(countryId: CountryId, preset?: string):
  */
 export async function getLiveUpperChamberSeats(db: Db, countryId: CountryId): Promise<number> {
   const preset = await readActivePreset(db);
+  if (countryId === "RO" && preset === "1991-default") {
+    const countryState = await db
+      .collection<CountryGameState>("countryGameStates")
+      .findOne({ _id: "RO" }, { projection: { roParliament1992SinceTurn: 1 } });
+    if (countryState?.roParliament1992SinceTurn != null) {
+      const regions = await db
+        .collection<State>("states")
+        .find({ countryId })
+        .project<{ stateSenateSeats?: number }>({ stateSenateSeats: 1 })
+        .toArray();
+      const seats = regions.reduce((sum, region) => sum + (region.stateSenateSeats ?? 0), 0);
+      return seats > 0 ? seats : RO_1992_SENATE_SEATS;
+    }
+  }
+  if (countryId === "RU" && preset === "1991-default") {
+    const countryState = await db
+      .collection<CountryGameState>("countryGameStates")
+      .findOne({ _id: "RU" }, { projection: { ruFederalAssemblySinceTurn: 1 } });
+    return countryState?.ruFederalAssemblySinceTurn != null ? 178 : 0;
+  }
   const config = getCountryConfig(countryId, preset);
   const upper = config.legislature.upperChamber;
   if (!upper) return 0;

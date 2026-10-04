@@ -155,6 +155,43 @@ const INPUT_COMMODITY = (Object.keys(DEMAND) as CommodityType[]).find(
 const profitOf = (r: ReturnType<typeof run>) => r.result.hourlyRevenue - r.result.costs;
 
 describe("P3.5 — calibration identity", () => {
+  it("uses explicit overhead without changing legacy calibration fields", () => {
+    const r = run(
+      "plants",
+      makeSector({ capitalStock: STOCK, otherOpexPerUnitAnchor: -100 }),
+      1000,
+      (env) => {
+        env.market.explicitPlantCostsEnabled = true;
+      }
+    );
+    const pnl = r.update.plantsPnl as NonNullable<CorporateSector["plantsPnl"]>;
+    expect(pnl.costModel).toBe("explicit");
+    expect(pnl.plantOverhead).toBeGreaterThan(0);
+    expect(pnl.labour).toBeGreaterThan(0);
+    expect(pnl.otherOpex).toBe(pnl.plantOverhead);
+    expect(pnl.profit).toBeCloseTo(pnl.revenue - pnl.totalCost, 8);
+    expect(r.update).not.toHaveProperty("otherOpexPerUnitAnchor");
+    expect(r.update).not.toHaveProperty("otherOpexAnchorMarginBasis");
+  });
+
+  it("pays the same active workforce when selling prices fall", () => {
+    const sector = makeSector({ capitalStock: STOCK, plantsStartTurn: 800 });
+    const base = run("plants", sector, 1000, (env) => {
+      env.market.explicitPlantCostsEnabled = true;
+    });
+    const lowerPrices = run("plants", sector, 1000, (env) => {
+      env.market.explicitPlantCostsEnabled = true;
+      for (const commodity of Object.keys(SUPPLY) as CommodityType[]) {
+        env.lookups.priceRatioByCommodity.set(commodity, 0.49);
+      }
+    });
+    const a = base.update.plantsPnl as NonNullable<CorporateSector["plantsPnl"]>;
+    const b = lowerPrices.update.plantsPnl as NonNullable<CorporateSector["plantsPnl"]>;
+    expect(b.revenue).toBeLessThan(a.revenue);
+    expect(b.labour).toBe(a.labour);
+    expect(b.profit).toBeLessThan(a.profit);
+  });
+
   it("is EXACT on the flip turn: physical lines reproduce the margin formula", () => {
     const capital = run("capital", makeSector({ capitalStock: STOCK }));
     const plants = run("plants", makeSector({ capitalStock: STOCK }));

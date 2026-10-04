@@ -2,12 +2,15 @@ import { HOUSE_SEATS, UK_COMMONS_SEATS, UK_REGIONAL_COUNCIL_SEATS } from "@/lib/
 import { allocateBlocListSeats } from "./blocListAllocation";
 import { MULTI_SEAT_TYPES } from "@/lib/utils/electionLabels";
 import { getMultiSeatMinShare } from "./rules/seatEligibility";
+import type { ElectionMethod } from "@/lib/constants/countries";
 
 export { getMultiSeatMinShare } from "./rules/seatEligibility";
 
 export interface RankedCandidate {
   id: string;
   votes: number;
+  /** NPP entries represent bounded slates; player entries represent one person. */
+  isNPP?: boolean;
   /**
    * Party identifier (optional). When present, the minimum-share eligibility
    * gate is computed on the PARTY's aggregate share — all same-party
@@ -17,6 +20,48 @@ export interface RankedCandidate {
    * per-candidate behavior for callers that don't pass a party.
    */
   party?: string;
+}
+
+/** Rank individual ballots, expanding each NPP entry into a bounded virtual slate. */
+export function sntvSeats(
+  candidates: ReadonlyArray<Pick<RankedCandidate, "id" | "votes" | "isNPP">>,
+  totalSeats: number
+): Record<string, number> {
+  const seats: Record<string, number> = {};
+  for (const { id } of candidates) seats[id] = 0;
+  if (totalSeats <= 0) return seats;
+
+  const nppVotes = candidates.reduce((sum, c) => sum + (c.isNPP ? Math.max(0, c.votes) : 0), 0);
+  const virtualBallot: Array<{ id: string; slot: number; votes: number }> = [];
+  for (const candidate of candidates) {
+    if (candidate.votes <= 0) continue;
+    if (!candidate.isNPP) {
+      virtualBallot.push({ id: candidate.id, slot: 0, votes: candidate.votes });
+      continue;
+    }
+    // Each NPP is a slate representative, not a single MP. Nomination count
+    // follows its share of the NPP vote with 25% overcapacity so the chamber
+    // can fill while players can displace individual virtual candidates.
+    const slateSize = Math.min(
+      totalSeats,
+      Math.max(1, Math.ceil((1.25 * totalSeats * candidate.votes) / nppVotes))
+    );
+    for (let slot = 0; slot < slateSize; slot++) {
+      // A deterministic range of individual candidate strengths conserves
+      // the slate's aggregate vote and permits interleaving between parties.
+      const weight = slateSize === 1 ? 1 : 1.5 - slot / (slateSize - 1);
+      virtualBallot.push({
+        id: candidate.id,
+        slot,
+        votes: (candidate.votes * weight) / slateSize,
+      });
+    }
+  }
+  virtualBallot.sort((a, b) => b.votes - a.votes || a.id.localeCompare(b.id) || a.slot - b.slot);
+  for (const { id } of virtualBallot.slice(0, totalSeats)) {
+    seats[id]++;
+  }
+  return seats;
 }
 
 /**
@@ -171,7 +216,8 @@ export function allocateSeats(
    */
   commonsSeats: Record<string, number> = UK_COMMONS_SEATS,
   /** Country scope for rules shared by election types in multiple countries. */
-  countryId?: string
+  countryId?: string,
+  allocationMethod?: ElectionMethod
 ): SeatAllocationResult {
   // "senate" is single-seat for the US (one seat per class per state, always
   // totalSeats=1). Nigeria's Senate is a multi-seat-per-zone body (18-21 seats),
@@ -197,7 +243,11 @@ export function allocateSeats(
 
   const seatsEstimate: Record<string, number> = {};
 
-  if (isMultiSeat && blocListShares) {
+  if (isMultiSeat && allocationMethod === "sntv") {
+    // Player candidates win at most one seat; NPP entries represent finite
+    // slates of virtual individuals. There is no proportional seat quota.
+    Object.assign(seatsEstimate, sntvSeats(ranked, authoritativeSeats));
+  } else if (isMultiSeat && blocListShares) {
     // Bloc-list chamber: the quota decides the party split outright, so none of
     // the eligibility and threshold machinery below applies. There
     // is no cross-party contest to threshold.

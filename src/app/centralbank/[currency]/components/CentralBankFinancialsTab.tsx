@@ -13,6 +13,7 @@ import { formatCompactNumber } from "@/lib/utils/formatters";
 import { RESERVE_POOL_TRANSFER_MAX_FRACTION } from "@/lib/centralBank/reservePoolTransfer";
 import type { BalanceSheet, BankFinancials } from "./centralBankTypes";
 import { formatNativeCurrency } from "./centralBankUtils";
+import { CB_TH, CentralBankFigure, CentralBankSection } from "./CentralBankSection";
 
 function Row({
   label,
@@ -28,13 +29,13 @@ function Row({
   fmt: (n: number) => string;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 py-3 border-b border-card-border/50 last:border-0">
+    <div className="flex items-center justify-between gap-4 border-b border-card-border/60 py-3 last:border-0">
       <div>
-        <p className="text-sm font-medium text-foreground">{label}</p>
-        {note && <p className="text-xs text-muted">{note}</p>}
+        <p className="text-body font-medium text-foreground">{label}</p>
+        {note && <p className="text-body-sm text-muted">{note}</p>}
       </div>
       <span
-        className={`tabular-nums text-sm font-semibold ${
+        className={`text-body font-semibold tabular-nums ${
           highlight === "success"
             ? "text-success"
             : highlight === "warning"
@@ -64,13 +65,13 @@ function IncomeRow({
   fmt: (n: number) => string;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 py-3 border-b border-card-border/50 last:border-0">
+    <div className="flex items-center justify-between gap-4 border-b border-card-border/60 py-3 last:border-0">
       <div>
-        <p className="text-sm font-medium text-foreground">{label}</p>
-        {note && <p className="text-xs text-muted">{note}</p>}
+        <p className="text-body font-medium text-foreground">{label}</p>
+        {note && <p className="text-body-sm text-muted">{note}</p>}
       </div>
       <span
-        className={`tabular-nums text-sm font-semibold ${
+        className={`text-body font-semibold tabular-nums ${
           tone === "expense" ? "text-error" : tone === "income" ? "text-success" : "text-foreground"
         }`}
       >
@@ -242,41 +243,34 @@ function ReservePortfolioPanel({
   }
 
   return (
-    <div className="rounded-xl border border-card-border bg-card p-5">
-      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h2 className="text-sm font-semibold text-muted">Bank reserves</h2>
-          <p className="mt-1 max-w-md text-xs text-muted">
-            Two separate pools. <span className="font-medium text-foreground/70">FX reserves</span>{" "}
-            (spread fees collected from trades) are exchangeable below. The{" "}
-            <span className="font-medium text-foreground/70">lending reserve</span> is home cash
-            that backs line of credit lending. You cannot exchange it.
-          </p>
-        </div>
-        <div className="flex gap-6 text-left sm:text-right">
-          <div>
-            <p className="font-mono text-xl font-bold tabular-nums text-foreground">
-              {valueForDisplay(totalValue)}
-            </p>
-            <p className="text-[10px] uppercase tracking-widest text-muted">FX reserves</p>
-          </div>
-          <div>
-            <p className="font-mono text-xl font-bold tabular-nums text-foreground/70">
-              {valueForDisplay(lendingReserve)}
-            </p>
-            <p className="text-[10px] uppercase tracking-widest text-muted">Lending reserve</p>
-          </div>
-        </div>
+    <CentralBankSection
+      title="Bank reserves"
+      meta={
+        <span className="block max-w-2xl">
+          Two separate pools. <span className="font-medium text-foreground">FX reserves</span>{" "}
+          (spread fees collected from trades) are exchangeable below. The{" "}
+          <span className="font-medium text-foreground">lending reserve</span> is home cash that
+          backs line of credit lending. You cannot exchange it.
+        </span>
+      }
+    >
+      <div className="mb-6 flex flex-wrap gap-x-10 gap-y-4">
+        <CentralBankFigure label="FX reserves" value={valueForDisplay(totalValue)} size="lg" />
+        <CentralBankFigure
+          label="Lending reserve"
+          value={valueForDisplay(lendingReserve)}
+          size="lg"
+        />
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[220px_1fr]">
-        <div className="flex flex-col items-center justify-center rounded-lg border border-card-border bg-card-elevated/30 p-4">
+      <div className="grid gap-8 lg:grid-cols-[200px_1fr]">
+        <div className="flex flex-col items-center justify-center">
           <div
-            className="h-36 w-36 rounded-full border border-card-border shadow-inner"
+            className="h-36 w-36 rounded-full border border-card-border"
             style={{ background: buildPieGradient(allEntries) }}
             aria-label="Reserve currency mix"
           />
-          <p className="mt-3 text-center text-xs text-muted">
+          <p className="mt-3 text-center text-body-sm text-muted">
             {allEntries.length > 0
               ? `Total reserves: ${formatNativeCurrency(totalValue, homeCurrency)}`
               : "No reserves yet."}
@@ -284,19 +278,19 @@ function ReservePortfolioPanel({
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-body">
             <thead>
-              <tr className="border-b border-card-border text-left">
-                <th className="pb-2 pr-4 text-xs font-semibold uppercase tracking-wider text-muted">
+              <tr>
+                <th scope="col" className={CB_TH}>
                   Currency
                 </th>
-                <th className="pb-2 pr-4 text-xs font-semibold uppercase tracking-wider text-muted">
+                <th scope="col" className={CB_TH}>
                   Balance
                 </th>
-                <th className="pb-2 pr-4 text-xs font-semibold uppercase tracking-wider text-muted">
+                <th scope="col" className={CB_TH}>
                   {valueColumnLabel}
                 </th>
-                <th className="pb-2 text-xs font-semibold uppercase tracking-wider text-muted">
+                <th scope="col" className={CB_TH}>
                   Mix
                 </th>
               </tr>
@@ -312,7 +306,7 @@ function ReservePortfolioPanel({
                 allEntries.map((entry, index) => (
                   <tr
                     key={entry.currencyCode}
-                    className="border-b border-card-border/50 last:border-0"
+                    className="border-b border-card-border/60 last:border-0"
                   >
                     <td className="py-2.5 pr-4 font-semibold text-foreground">
                       <span
@@ -341,13 +335,12 @@ function ReservePortfolioPanel({
       </div>
 
       {canExchange && fromOptions.length > 0 && (
-        <form
-          onSubmit={submitExchange}
-          className="mt-5 rounded-lg border border-card-border bg-background/30 p-4"
-        >
-          <h3 className="mb-3 text-sm font-semibold text-muted">Exchange reserve balances</h3>
+        <form onSubmit={submitExchange} className="mt-8 border-t border-card-border pt-5">
+          <h3 className="mb-3 text-body-lg font-semibold text-foreground">
+            Exchange reserve balances
+          </h3>
           <div className="grid gap-3 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end">
-            <label className="text-xs font-medium text-muted">
+            <label className="text-body-sm text-muted">
               Sell
               <select
                 value={effectiveFromCurrency}
@@ -361,7 +354,7 @@ function ReservePortfolioPanel({
                   </option>
                 ))}
               </select>
-              <span className="mt-1 block font-mono text-[10px] tabular-nums text-muted">
+              <span className="mt-1 block text-body-sm tabular-nums text-muted">
                 Available:{" "}
                 {formatNativeCurrency(
                   fromOptions.find((entry) => entry.currencyCode === effectiveFromCurrency)
@@ -370,7 +363,7 @@ function ReservePortfolioPanel({
                 )}
               </span>
             </label>
-            <label className="text-xs font-medium text-muted">
+            <label className="text-body-sm text-muted">
               Buy
               <select
                 value={effectiveToCurrency}
@@ -387,7 +380,7 @@ function ReservePortfolioPanel({
                 ))}
               </select>
             </label>
-            <label className="text-xs font-medium text-muted">
+            <label className="text-body-sm text-muted">
               Amount
               <input
                 type="number"
@@ -403,11 +396,11 @@ function ReservePortfolioPanel({
               {submitting ? "Exchanging..." : "Exchange"}
             </Button>
           </div>
-          {message && <p className="mt-2 text-xs text-success">{message}</p>}
-          {error && <p className="mt-2 text-xs text-error">{error}</p>}
+          {message && <p className="mt-2 text-body-sm text-success">{message}</p>}
+          {error && <p className="mt-2 text-body-sm text-error">{error}</p>}
         </form>
       )}
-    </div>
+    </CentralBankSection>
   );
 }
 
@@ -506,17 +499,18 @@ export function CentralBankFinancialsTab({
   }
 
   return (
-    <div className="space-y-6 pb-16">
+    <div className="space-y-12 pb-16">
       {bankFinancials && (
-        <div className="rounded-xl border border-card-border bg-card p-5">
-          <h2 className="mb-1 text-sm font-semibold text-muted">
-            Income statement ({homeCurrency}) · all time
-          </h2>
-          <p className="mb-4 text-xs text-muted">
-            These are amounts earned and owed, not cash that has moved. Interest charged on lines of
-            credit is what the bank earns. Interest paid to savers is what it costs. The difference
-            is the bank&apos;s profit on lending.
-          </p>
+        <CentralBankSection
+          title={`Income statement (${homeCurrency}) · all time`}
+          meta={
+            <span className="block max-w-3xl">
+              These are amounts earned and owed, not cash that has moved. Interest charged on lines
+              of credit is what the bank earns. Interest paid to savers is what it costs. The
+              difference is the bank&apos;s profit on lending.
+            </span>
+          }
+        >
           <IncomeRow
             label="Line of credit interest charged (income)"
             amount={bankFinancials.locInterestAccruedLifetime}
@@ -531,10 +525,12 @@ export function CentralBankFinancialsTab({
             tone="expense"
             fmt={fmt}
           />
-          <div className="flex items-center justify-between gap-4 pt-2 border-t border-card-border">
-            <p className="text-sm font-semibold text-foreground">Net interest income (lifetime)</p>
+          <div className="flex items-center justify-between gap-4 border-t border-card-border py-3">
+            <p className="text-body font-semibold text-foreground">
+              Net interest income (lifetime)
+            </p>
             <span
-              className={`tabular-nums text-sm font-bold ${
+              className={`text-body font-bold tabular-nums ${
                 bankFinancials.netInterestIncomeLifetime >= 0 ? "text-success" : "text-error"
               }`}
             >
@@ -549,7 +545,7 @@ export function CentralBankFinancialsTab({
             tone="neutral"
             fmt={fmt}
           />
-        </div>
+        </CentralBankSection>
       )}
 
       <ReservePortfolioPanel
@@ -559,15 +555,10 @@ export function CentralBankFinancialsTab({
         onChanged={onChanged}
       />
 
-      <div className="rounded-xl border border-card-border bg-card p-5">
-        <h2 className="mb-1 text-sm font-semibold text-muted">
-          Balance sheet · lending capacity ({homeCurrency})
-        </h2>
-        <p className="mb-4 text-xs text-muted">
-          The exchange can lend up to 70% of total deposits + reserves. Outstanding loans and
-          remaining capacity are shown below.
-        </p>
-
+      <CentralBankSection
+        title={`Balance sheet · lending capacity (${homeCurrency})`}
+        meta="The exchange can lend up to 70% of total deposits plus reserves. Outstanding loans and remaining capacity are shown below."
+      >
         <Row
           label="Total deposits (savings)"
           amount={totalDeposits}
@@ -578,14 +569,12 @@ export function CentralBankFinancialsTab({
           label="Lending reserves"
           amount={bankReserves}
           note="Home-currency reserves that back lending. Spread-fee reserves are tracked above"
-          highlight={bankReserves > 0 ? "success" : undefined}
           fmt={fmt}
         />
         <Row
           label="Forex spread revenue"
           amount={forexRevenue}
           note="Cumulative 40% of spread fees collected by this central bank"
-          highlight={forexRevenue > 0 ? "success" : undefined}
           fmt={fmt}
         />
         <Row
@@ -595,14 +584,16 @@ export function CentralBankFinancialsTab({
           fmt={fmt}
         />
 
-        <div className="py-3 border-b border-card-border/50">
-          <div className="flex items-center justify-between gap-4 mb-2">
+        <div className="border-b border-card-border/60 py-3">
+          <div className="mb-2 flex items-center justify-between gap-4">
             <div>
-              <p className="text-sm font-medium text-foreground">Loans outstanding</p>
-              <p className="text-xs text-muted">Total principal + arrears across all borrowers</p>
+              <p className="text-body font-medium text-foreground">Loans outstanding</p>
+              <p className="text-body-sm text-muted">
+                Total principal plus arrears across all borrowers
+              </p>
             </div>
             <span
-              className={`tabular-nums text-sm font-semibold ${
+              className={`text-body font-semibold tabular-nums ${
                 utilization > 0.85
                   ? "text-error"
                   : utilization > 0.6
@@ -613,15 +604,19 @@ export function CentralBankFinancialsTab({
               {fmt(totalLoansOutstanding)}
             </span>
           </div>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-background">
+          <div className="h-2 w-full overflow-hidden rounded-full bg-track">
             <div
-              className={`h-full rounded-full transition-all duration-500 ${
-                utilization > 0.85 ? "bg-error" : utilization > 0.6 ? "bg-warning" : "bg-primary"
+              className={`h-full rounded-full ${
+                utilization > 0.85
+                  ? "bg-error"
+                  : utilization > 0.6
+                    ? "bg-warning"
+                    : "bg-foreground/50"
               }`}
               style={{ width: `${Math.round(utilization * 100)}%` }}
             />
           </div>
-          <p className="mt-1 text-[10px] text-muted text-right">
+          <p className="mt-1 text-right text-body-sm text-muted">
             {Math.round(utilization * 100)}% of pool utilized
           </p>
         </div>
@@ -630,23 +625,22 @@ export function CentralBankFinancialsTab({
           label="Available capacity"
           amount={availableCapacity}
           note="What is left for new borrowing"
-          highlight={availableCapacity > 0 ? "success" : "error"}
+          highlight={availableCapacity > 0 ? undefined : "error"}
           fmt={fmt}
         />
 
         {canTransferPools && (
-          <form
-            onSubmit={submitPoolTransfer}
-            className="mt-5 rounded-lg border border-card-border bg-background/30 p-4"
-          >
-            <h3 className="mb-1 text-sm font-semibold text-muted">Reallocate reserve pools</h3>
-            <p className="mb-3 text-xs text-muted">
+          <form onSubmit={submitPoolTransfer} className="mt-8 border-t border-card-border pt-5">
+            <h3 className="mb-1 text-body-lg font-semibold text-foreground">
+              Reallocate reserve pools
+            </h3>
+            <p className="mb-3 max-w-3xl text-body-sm text-muted">
               Once per day, move up to {maxFractionPct}% of forex spread revenue into lending
               reserves, which lets the bank lend more, or move it the other way. You cannot push the
               lending pool below the loans already out.
             </p>
             <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-              <label className="text-xs font-medium text-muted">
+              <label className="text-body-sm text-muted">
                 Direction
                 <select
                   value={transferDirection}
@@ -664,7 +658,7 @@ export function CentralBankFinancialsTab({
                   </option>
                 </select>
               </label>
-              <label className="text-xs font-medium text-muted">
+              <label className="text-body-sm text-muted">
                 Amount ({homeCurrency})
                 <input
                   type="number"
@@ -676,7 +670,7 @@ export function CentralBankFinancialsTab({
                   className="mt-1 w-full rounded-md border border-card-border bg-card px-2 py-2 text-sm text-foreground"
                   disabled={transferSubmitting || !transferReady || transferCap <= 0}
                 />
-                <span className="mt-1 block font-mono text-[10px] tabular-nums text-muted">
+                <span className="mt-1 block text-body-sm tabular-nums text-muted">
                   Available this action: {fmt(transferCap)}
                 </span>
               </label>
@@ -690,16 +684,16 @@ export function CentralBankFinancialsTab({
               </Button>
             </div>
             {!transferReady && (
-              <p className="mt-2 text-xs text-warning">
+              <p className="mt-2 text-body-sm text-warning">
                 Next transfer available in {reservePoolTransferCooldownRemaining} turn
                 {reservePoolTransferCooldownRemaining === 1 ? "" : "s"}.
               </p>
             )}
-            {transferMessage && <p className="mt-2 text-xs text-success">{transferMessage}</p>}
-            {transferError && <p className="mt-2 text-xs text-error">{transferError}</p>}
+            {transferMessage && <p className="mt-2 text-body-sm text-success">{transferMessage}</p>}
+            {transferError && <p className="mt-2 text-body-sm text-error">{transferError}</p>}
           </form>
         )}
-      </div>
+      </CentralBankSection>
     </div>
   );
 }

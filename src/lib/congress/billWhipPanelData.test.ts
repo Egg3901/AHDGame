@@ -403,3 +403,58 @@ describe("buildBillWhipPanelData", () => {
     expect(panel!.chambers.map((c) => c.chamberKey)).toEqual(["house", "senate"]);
   });
 });
+
+describe("appointed Council whip panel", () => {
+  it.each(["regionalHeads", "regionalDelegates"] as const)(
+    "shows concurrent %s chamber members",
+    async (mode) => {
+      const db = createMockDb();
+      const chairId = new ObjectId();
+      db.collection("gameState").findOne.mockResolvedValue({
+        _id: "current",
+        preset: "1991-default",
+      });
+      db.collection("countryGameStates").findOne.mockResolvedValue({
+        _id: "RU",
+        ruFederalAssemblySinceTurn: 145,
+        ruCouncilComposition: { mode },
+      });
+      db.collection("politicalParties").findOne.mockResolvedValue({
+        _id: new ObjectId(),
+        sequentialId: 1,
+        countryId: "RU",
+        name: "Test party",
+        chairId,
+      });
+      db.collection("electedOfficials").find.mockReturnValue({
+        project: () => ({
+          toArray: async () => [
+            { officeType: "dumaDeputy" },
+            { officeType: "federationCouncilMember" },
+          ],
+        }),
+      });
+      const panel = await buildBillWhipPanelData(
+        db as never,
+        {
+          _id: new ObjectId(),
+          countryId: "RU",
+          status: "active_both",
+          currentChamber: "stateDuma",
+        } as Bill,
+        "RU",
+        { characterId: chairId, partyId: "1", viewerCountryId: "RU", isAdmin: false }
+      );
+      expect(panel?.chambers.map((chamber) => chamber.chamberKey)).toEqual([
+        "stateDuma",
+        "federationCouncil",
+      ]);
+      expect(db.collectionMocks.electedOfficials!.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          countryId: "RU",
+          officeType: { $in: ["dumaDeputy", "federationCouncilMember"] },
+        })
+      );
+    }
+  );
+});

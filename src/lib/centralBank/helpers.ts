@@ -1,3 +1,4 @@
+import { getOpeningPolicyRate } from "./rules/openingPolicyRate";
 import { loadEuroMonetaryUnion } from "@/lib/currency/euro/service";
 import { euroPolicyBankId } from "@/lib/currency/euro/rules";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -118,7 +119,11 @@ export async function getIntorgBankForOrg(db: Db, orgId: string): Promise<Centra
   return db.collection<CentralBank>("centralBanks").findOne({ intorgId: orgId });
 }
 
-function getDefaultBank(countryId: CountryId, now: Date): Omit<CentralBank, "_id"> {
+function getDefaultBank(
+  countryId: CountryId,
+  now: Date,
+  startingYear?: number
+): Omit<CentralBank, "_id"> {
   const config = COUNTRY_CONFIGS[countryId];
   return {
     countryId,
@@ -126,7 +131,7 @@ function getDefaultBank(countryId: CountryId, now: Date): Omit<CentralBank, "_id
     chairCharacterName: null,
     chairAppointedAt: null,
     chairAppointedBy: null,
-    primeRate: config.centralBank.defaultPrimeRate,
+    primeRate: getOpeningPolicyRate(countryId, startingYear, config.centralBank.defaultPrimeRate),
     rateHistory: [],
     chairInfamy: 0,
     chairTermExpiresAtTurn: null,
@@ -144,10 +149,11 @@ export function buildCentralBankBootstrapUpdate(
   countryId: CountryId,
   bankId: string,
   intorgId?: string,
-  now: Date = new Date()
+  now: Date = new Date(),
+  startingYear?: number
 ) {
   return {
-    $setOnInsert: { _id: bankId, ...getDefaultBank(countryId, now) },
+    $setOnInsert: { _id: bankId, ...getDefaultBank(countryId, now, startingYear) },
     ...(intorgId ? { $set: { intorgId } } : {}),
   };
 }

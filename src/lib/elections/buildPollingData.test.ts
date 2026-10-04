@@ -259,6 +259,60 @@ describe("buildPollingData — primary phase", () => {
 // shapes that used to diverge.
 
 describe("computeSeatEstimates — parity with allocateSeats (ticket #1032)", () => {
+  it("withholds a generic seat projection while the founding parallel count is pending", () => {
+    const tally = {
+      totalVotes: { candidate: 1000 },
+      candidateParties: { candidate: "1" },
+      bulgarianFoundingBallot: true,
+    } as never;
+    expect(
+      computeSeatEstimates("nationalAssembly", 80, tally, new Set(["candidate"]), "BG")
+    ).toBeNull();
+  });
+  it("projects 1991 Japan SNTV by candidate rather than party vote share", () => {
+    const votes = { a: 500, b: 400, c: 300, d: 100 };
+    const tally = {
+      totalVotes: votes,
+      candidateParties: { a: "LDP", b: "LDP", c: "JSP", d: "LDP" },
+    } as never;
+    expect(
+      computeSeatEstimates("shugiin", 3, tally, new Set(Object.keys(votes)), "JP", "sntv")
+    ).toEqual({ a: 1, b: 1, c: 1, d: 0 });
+  });
+  it("projects bounded NPP slates with the same seats as final resolution", () => {
+    const votes = { ldp: 600, jsp: 400, player: 250 };
+    const tally = {
+      totalVotes: votes,
+      candidateParties: { ldp: "LDP", jsp: "JSP", player: "LDP" },
+      candidateIsNPP: { ldp: true, jsp: true, player: false },
+    } as never;
+    const projection = computeSeatEstimates(
+      "shugiin",
+      4,
+      tally,
+      new Set(Object.keys(votes)),
+      "JP",
+      "sntv"
+    );
+    const resolution = allocateSeats(
+      "shugiin",
+      "KAN",
+      4,
+      [
+        { id: "ldp", votes: 600, isNPP: true },
+        { id: "jsp", votes: 400, isNPP: true },
+        { id: "player", votes: 250, isNPP: false },
+      ],
+      1250,
+      undefined,
+      undefined,
+      undefined,
+      "JP",
+      "sntv"
+    ).seatsEstimate;
+    expect(projection).toEqual(resolution);
+    expect(projection).toEqual({ ldp: 2, jsp: 1, player: 1 });
+  });
   it("uses totalSeats for the House delegation-aware threshold (#2466)", () => {
     const tally = {
       totalVotes: { major: 830, minor: 170 },

@@ -369,7 +369,7 @@ function render() {
   // Hero row: the five numbers that decide whether the run is trustworthy.
   const firmDelta = f.firms > 0 ? (100*(l.firms-f.firms))/f.firms : 0;
   h += '<div class="hero">';
-  h += hero(e.errors===0?"good":"bad", e.errors, "engine errors", l.turn+" turns");
+  h += hero(e.health.qualification==="passing"?"good":e.health.qualification==="unverified"?"warn":"bad", e.errors, "health errors", l.turn+" turns");
   h += hero(firmDelta<-25?"bad":firmDelta<-5?"warn":"good", l.firms, "firms at end", f.firms+" at start ("+firmDelta.toFixed(0)+"%)");
   h += hero(l.avgLiquid>f.avgLiquid?"good":"warn", (l.avgLiquid/1e6).toFixed(2)+"M", "avg liquid capital", "insolvency keys on this");
   h += hero(e.guardTrips===0?"good":"warn", e.guardTrips, "guard trips", e.guardArmed?"armed throughout":"disarmed");

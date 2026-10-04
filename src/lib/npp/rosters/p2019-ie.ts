@@ -1,6 +1,13 @@
 import type { RosterMap } from "../historicalRosters";
 
 export const ROSTER_2019_IE: RosterMap = {
+  // Second term began 11 Nov 2018. https://president.ie/en/the-president/michaeldhiggins/
+  "IE|uachtaran|IE|ie_ind|0": {
+    name: "Michael D. Higgins",
+    birthYear: 1941,
+    gender: "male",
+    ethnicity: "white",
+  },
   "IE|dail|COR|ie_ff|0": {
     name: "Micheál Martin",
     birthYear: 1960,

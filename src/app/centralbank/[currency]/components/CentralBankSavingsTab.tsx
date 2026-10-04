@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/Input";
 import { EmptyState, Skeleton } from "@/components/ui";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { useToast } from "@/contexts/ToastContext";
+import { CB_TH, CentralBankFigure, CentralBankSection } from "./CentralBankSection";
 
 interface LedgerRow {
   type: string;
@@ -160,101 +161,87 @@ export function CentralBankSavingsTab({ countryId }: Props) {
   const depositBonusInProgress = (data.centralBankPricingProgress ?? 0) < 1;
 
   return (
-    <div className="space-y-6">
-      {/* Stat strip */}
-      <div className="rounded-xl border border-card-border bg-card shadow-sm overflow-hidden">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 divide-y divide-card-border sm:divide-y-0 sm:divide-x">
-          <StatCell
-            label="APY"
-            value={`${data.apyPercent.toFixed(2)}%`}
-            sub={`half of real ${data.primeRate.toFixed(2)}% prime${(data.centralBankDepositBonusPercentPoints ?? 0) > 0 ? ` + ${(data.centralBankDepositBonusPercentPoints ?? 0).toFixed(2)}% CB bonus` : ""}`}
-            tone="primary"
-          />
-          <StatCell
-            label="Your Balance"
-            value={formatNative(data.savingsBalance, homeCurrency)}
-            sub={data.accountOpened ? "savings account" : "not yet opened"}
-          />
-          <StatCell
-            label="Lifetime Interest"
-            value={formatNative(data.lifetimeInterestEarned, homeCurrency)}
-            sub="credited to balance every 12 turns"
-            tone={data.lifetimeInterestEarned > 0 ? "success" : "default"}
-          />
-          <StatCell
-            label="Accrued (uncredited)"
-            value={formatNative(data.pendingInterest, homeCurrency)}
-            sub="earned; adds to balance at next credit"
-            tone={data.pendingInterest > 0 ? "success" : "default"}
-          />
-          <StatCell
-            label="This Turn (est.)"
-            value={
-              data.estimatedAccrualThisTurn > 0
-                ? formatNative(data.estimatedAccrualThisTurn, homeCurrency)
-                : "-"
-            }
-            sub={
-              data.turnsUntilCredit === 1
-                ? "next balance credit this turn"
-                : `next credit in ${data.turnsUntilCredit} turns`
-            }
-          />
-          <StatCell
-            label="System Deposits"
-            value={formatNative(data.totalNationalSavings, homeCurrency)}
-            sub={`${data.currencyCode} system-wide`}
-          />
-        </div>
+    <div className="space-y-12 pb-16">
+      {/* Figures */}
+      <div className="grid grid-cols-2 gap-x-8 gap-y-5 sm:grid-cols-3 lg:grid-cols-6">
+        <CentralBankFigure
+          label="APY"
+          value={`${data.apyPercent.toFixed(2)}%`}
+          hint={`Half of real ${data.primeRate.toFixed(2)}% prime${(data.centralBankDepositBonusPercentPoints ?? 0) > 0 ? ` + ${(data.centralBankDepositBonusPercentPoints ?? 0).toFixed(2)}% CB bonus` : ""}`}
+          size="lg"
+        />
+        <CentralBankFigure
+          label="Your balance"
+          value={formatNative(data.savingsBalance, homeCurrency)}
+          hint={data.accountOpened ? "Savings account" : "Not yet opened"}
+          size="lg"
+        />
+        <CentralBankFigure
+          label="Lifetime interest"
+          value={formatNative(data.lifetimeInterestEarned, homeCurrency)}
+          hint="Credited to balance every 12 turns"
+          size="lg"
+        />
+        <CentralBankFigure
+          label="Accrued (uncredited)"
+          value={formatNative(data.pendingInterest, homeCurrency)}
+          hint="Earned; adds to balance at next credit"
+          size="lg"
+        />
+        <CentralBankFigure
+          label="This turn (est.)"
+          value={
+            data.estimatedAccrualThisTurn > 0
+              ? formatNative(data.estimatedAccrualThisTurn, homeCurrency)
+              : "-"
+          }
+          hint={
+            data.turnsUntilCredit === 1
+              ? "Next balance credit this turn"
+              : `Next credit in ${data.turnsUntilCredit} turns`
+          }
+          size="lg"
+        />
+        <CentralBankFigure
+          label="System deposits"
+          value={formatNative(data.totalNationalSavings, homeCurrency)}
+          hint={`${data.currencyCode} system-wide`}
+          size="lg"
+        />
       </div>
 
       {data.centralBankPricingActive && (
-        <div className="rounded-xl border border-success/30 bg-success/10 p-4">
-          <p className="text-sm font-semibold text-success">Central-bank deposit bonus</p>
-          <p className="mt-1 text-xs leading-relaxed text-muted">
-            Central-bank deposits currently receive an extra +
-            {(data.centralBankDepositBonusPercentPoints ?? 0).toFixed(2)} percentage points.{" "}
-            {depositBonusInProgress ? "The bonus will reach" : "The bonus has reached"} +0.25 points
-            {depositBonusInProgress && (data.centralBankPricingTurnsRemaining ?? 0) > 0
-              ? ` over the next ${data.centralBankPricingTurnsRemaining} turns.`
-              : "."}
-          </p>
-        </div>
+        <p className="-mt-6 max-w-3xl text-body-sm leading-relaxed text-muted">
+          <span className="font-semibold text-foreground">Central-bank deposit bonus.</span>{" "}
+          Central-bank deposits currently receive an extra +
+          {(data.centralBankDepositBonusPercentPoints ?? 0).toFixed(2)} percentage points.{" "}
+          {depositBonusInProgress ? "The bonus will reach" : "The bonus has reached"} +0.25 points
+          {depositBonusInProgress && (data.centralBankPricingTurnsRemaining ?? 0) > 0
+            ? ` over the next ${data.centralBankPricingTurnsRemaining} turns.`
+            : "."}
+        </p>
       )}
 
       {/* Manage account + chart */}
-      <div className="grid gap-4 lg:grid-cols-3">
-        <div className="rounded-xl border border-card-border bg-card p-5 shadow-sm space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-foreground">Your account</h3>
-            <span
-              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                data.accountOpened
-                  ? "bg-success/10 text-success border border-success/30"
-                  : "bg-card-elevated text-muted border border-card-border"
-              }`}
-            >
+      <div className="grid gap-x-12 gap-y-12 lg:grid-cols-3">
+        {/* The account is the one interactive object on the tab, so it keeps a card. */}
+        <div className="space-y-4 self-start rounded-xl border border-card-border bg-card p-5">
+          <div className="flex items-baseline justify-between gap-3">
+            <h2 className="text-body-lg font-semibold text-foreground">Your account</h2>
+            <span className="text-body-sm text-muted">
               {data.accountOpened ? "Open" : "Not opened"}
             </span>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <p className="text-[10px] uppercase tracking-wider text-muted font-medium">
-                Cash (liquid)
-              </p>
-              <p className="mt-0.5 text-base font-bold tabular-nums text-foreground">
-                {formatNative(data.liquidBalance, homeCurrency)}
-              </p>
-            </div>
-            <div>
-              <p className="text-[10px] uppercase tracking-wider text-muted font-medium">
-                In savings
-              </p>
-              <p className="mt-0.5 text-base font-bold tabular-nums text-foreground">
-                {formatNative(data.savingsBalance, homeCurrency)}
-              </p>
-            </div>
+            <CentralBankFigure
+              label="Cash (liquid)"
+              value={formatNative(data.liquidBalance, homeCurrency)}
+            />
+            <CentralBankFigure
+              label="In savings"
+              value={formatNative(data.savingsBalance, homeCurrency)}
+            />
           </div>
 
           {!data.accountOpened ? (
@@ -267,8 +254,8 @@ export function CentralBankSavingsTab({ countryId }: Props) {
               Open savings account
             </Button>
           ) : panel ? (
-            <div className="space-y-3 rounded-lg border border-card-border bg-card-elevated p-3">
-              <label className="text-[10px] uppercase tracking-wider text-muted font-medium block">
+            <div className="space-y-3 border-t border-card-border pt-3">
+              <label className="block text-body-sm text-muted">
                 {panel === "deposit" ? "Deposit amount" : "Withdraw amount"} ({sym})
               </label>
               <Input
@@ -320,59 +307,64 @@ export function CentralBankSavingsTab({ countryId }: Props) {
             </div>
           )}
 
-          <p className="text-[10px] text-muted">
+          <p className="text-body-sm text-muted">
             Yield is credited each game turn. Funds stay in your wallet ledger until you withdraw.
           </p>
         </div>
 
-        {/* Chart */}
-        <div className="rounded-xl border border-card-border bg-card p-5 shadow-sm lg:col-span-2">
-          <h3 className="text-sm font-semibold text-foreground">Balance over time</h3>
-          <p className="mb-3 text-xs text-muted">
-            Shown in the same money units as the cash history on your portfolio.
-          </p>
+        <CentralBankSection
+          title="Balance over time"
+          meta="Shown in the same money units as the cash history on your portfolio."
+          className="lg:col-span-2"
+        >
           {chartHistory.length >= 2 ? (
             <PortfolioChart history={chartHistory} view="savings" />
           ) : (
-            <div className="flex h-40 items-center justify-center rounded-lg bg-card-elevated/30 text-xs text-muted">
+            <p className="py-10 text-center text-body text-muted">
               Not enough history yet. The chart appears after a few turns of activity.
-            </div>
+            </p>
           )}
-        </div>
+        </CentralBankSection>
       </div>
 
-      {/* Ledger */}
-      <div className="rounded-xl border border-card-border bg-card overflow-hidden shadow-sm">
-        <div className="border-b border-card-border bg-card-elevated px-4 py-3">
-          <h3 className="text-sm font-semibold text-foreground">Transaction ledger</h3>
-          <p className="text-xs text-muted">Most recent {data.ledger.length} entries</p>
-        </div>
+      <CentralBankSection
+        title="Transaction ledger"
+        meta={`Most recent ${data.ledger.length} entries`}
+      >
         {data.ledger.length === 0 ? (
-          <p className="px-4 py-8 text-center text-sm text-muted">No transactions yet.</p>
+          <p className="py-6 text-body text-muted">No transactions yet.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-card-elevated/40 text-[10px] font-semibold uppercase tracking-wider text-muted">
+            <table className="w-full text-left text-body">
+              <thead>
                 <tr>
-                  <th className="px-4 py-2">Type</th>
-                  <th className="px-4 py-2 text-right">Amount</th>
-                  <th className="px-4 py-2 text-right">Balance after</th>
-                  <th className="px-4 py-2 text-right hidden sm:table-cell">Turn</th>
+                  <th scope="col" className={CB_TH}>
+                    Type
+                  </th>
+                  <th scope="col" className={`${CB_TH} text-right`}>
+                    Amount
+                  </th>
+                  <th scope="col" className={`${CB_TH} text-right`}>
+                    Balance after
+                  </th>
+                  <th scope="col" className={`${CB_TH} hidden text-right sm:table-cell`}>
+                    Turn
+                  </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-card-border/50">
+              <tbody>
                 {data.ledger.map((row, i) => (
-                  <tr key={`${row.createdAt}-${i}`} className="hover:bg-card-elevated/30">
-                    <td className="px-4 py-2">{formatLedgerType(row.type)}</td>
-                    <td className="px-4 py-2 text-right tabular-nums">
-                      {row.type === "withdraw" ? "−" : "+"}
+                  <tr key={`${row.createdAt}-${i}`} className="border-b border-card-border/60">
+                    <td className="py-2 pr-4">{formatLedgerType(row.type)}</td>
+                    <td className="py-2 pr-4 text-right font-mono tabular-nums">
+                      {row.type === "withdraw" ? "-" : "+"}
                       {formatNative(row.amount, homeCurrency)}
                     </td>
-                    <td className="px-4 py-2 text-right tabular-nums text-muted">
+                    <td className="py-2 pr-4 text-right font-mono tabular-nums text-muted">
                       {formatNative(row.balanceAfter, homeCurrency)}
                     </td>
-                    <td className="px-4 py-2 text-right text-muted hidden sm:table-cell">
-                      {row.turn != null ? `T${row.turn}` : "-"}
+                    <td className="hidden py-2 pr-4 text-right font-mono tabular-nums text-muted sm:table-cell">
+                      {row.turn != null ? row.turn : "-"}
                     </td>
                   </tr>
                 ))}
@@ -380,37 +372,18 @@ export function CentralBankSavingsTab({ countryId }: Props) {
             </table>
           </div>
         )}
-      </div>
+      </CentralBankSection>
 
-      <p className="text-center text-xs text-muted">
-        <Link href="/portfolio?section=cash" className="text-primary hover:underline">
-          Currency wallet in portfolio →
+      <p className="text-body-sm text-muted">
+        <Link
+          href="/portfolio?section=cash"
+          className="font-medium text-foreground underline decoration-card-border underline-offset-4 hover:decoration-foreground"
+        >
+          Currency wallet in portfolio
         </Link>
         {" · "}
-        <span className="text-muted/60">{formatAmount(data.savingsBalance)} in display units</span>
+        <span>{formatAmount(data.savingsBalance)} in display units</span>
       </p>
-    </div>
-  );
-}
-
-function StatCell({
-  label,
-  value,
-  sub,
-  tone = "default",
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  tone?: "default" | "primary" | "success";
-}) {
-  const valueClass =
-    tone === "primary" ? "text-primary" : tone === "success" ? "text-success" : "text-foreground";
-  return (
-    <div className="px-5 py-4">
-      <p className="text-[10px] uppercase tracking-widest text-muted font-semibold">{label}</p>
-      <p className={`mt-1 text-xl font-bold tabular-nums ${valueClass}`}>{value}</p>
-      {sub && <p className="mt-0.5 text-[11px] text-muted">{sub}</p>}
     </div>
   );
 }

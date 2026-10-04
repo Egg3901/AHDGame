@@ -32,9 +32,9 @@ export function resolvePrimaryVoteChamberKey(
  * a display default while the upper house votes into the second map, so it has to be
  * named outright.
  *
- * `upperKey` must already be gated on `upperElectionSystem` rather than `bicameral`,
- * for the reason the concurrent stage is: DE 1953 declares itself bicameral over an
- * appointed Bundesrat that has no voters at all.
+ * `upperKey` must come from the active configuration's voting authority.
+ * Elected chambers and expressly enabled appointed chambers participate;
+ * unimplemented appointed chambers have no voting roster and stay excluded.
  */
 export function resolveOtherVoteChamberKey(
   bill: ScopedBill,

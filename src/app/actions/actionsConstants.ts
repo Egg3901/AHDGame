@@ -204,26 +204,18 @@ export const CATEGORY_LABELS: Record<string, string> = {
   research: "Intelligence",
 };
 
+/** One line under each category heading on the grouped "All operations" view. */
+export const CATEGORY_DESCRIPTIONS: Record<string, string> = {
+  influence: "Build influence and favorability, reach voter groups, or change your position.",
+  money: "Fill the campaign treasury and grow the donor network that pays into it.",
+  research: "Polls that show where you stand, and preparation for debates.",
+};
+
 /**
  * One shared photo scrim for every card.
  *
- * Replaces the old per-card `gradientOverlay`, which tinted each photograph a
- * different colour at 80–90% opacity — enough to bury the artwork. Neutral
- * black, bottom-weighted: the period photo reads at the top of the card and the
- * title stays legible over the dark foot. Category colour is spent on the chip,
- * rule and hover border instead, where a little of it goes further.
+ * Neutral black, bottom-weighted: the period photo reads at the top of the card
+ * and the title stays legible over the dark foot. Categories carry no color;
+ * the category name sits in plain text beside the tagline and in the filter tabs.
  */
 export const CARD_PHOTO_SCRIM = "from-black/95 via-black/40 to-black/5";
-
-/**
- * Per-category accent, in semantic tokens so all themes resolve it.
- *
- * `row` is the compact view's photo-less background: the category colour bleeds
- * in from the left over a near-black base, which keeps the white row text at
- * the contrast the previous per-card gradients gave it.
- */
-export const CATEGORY_ACCENTS: Record<string, { row: string }> = {
-  influence: { row: "from-primary/40 via-black/80 to-black/85" },
-  money: { row: "from-success/40 via-black/80 to-black/85" },
-  research: { row: "from-info/40 via-black/80 to-black/85" },
-};

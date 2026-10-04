@@ -24,6 +24,40 @@ const COLLECTIONS_DIR = join(process.cwd(), "src/lib/db/collections");
  * module declares must carry a manifest classification.
  */
 describe("seed manifest classification coverage", () => {
+  it("resets the federation publication and protected-choice journals", () => {
+    for (const name of [
+      "russianConstitutionalProposals",
+      "russianPresidentialElectionResults",
+      "russianPresidentialOfficeArchives",
+      "russianDumaElectionResults",
+      "russianDumaRepeatOpenings",
+      "russianCouncilElectionOpenings",
+      "russianCouncilElectionResults",
+      "russianAssemblySeatings",
+      "russianDumaConvocations",
+      "russianCouncilFormationProposals",
+      "russianRegionalAuthorities",
+      "russianCouncilCompositionSeatings",
+      "russianAssemblyOfficeArchives",
+      "federationRelocations",
+      "federationPublicationPreparations",
+      "federationPreparedEffects",
+      "federationArchivedRegionRows",
+      "federationArchivedPoliticalRows",
+      "federationCustodyRecords",
+      "federationArchivedPublicCorporations",
+      "federationPublicCorporationRebases",
+      "federationPrivateFirmHolds",
+      "federationResidentHolds",
+      "federationFiscalAccounts",
+      "federationLegacyServiceTurns",
+      "federationContinuingServiceTurns",
+      "federationFacilityClaims",
+      "federationFacilityPaymentTurns",
+    ]) {
+      expect(getCollectionCategory(name)).toBe("runtime");
+    }
+  });
   const declared = readdirSync(COLLECTIONS_DIR)
     .filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts"))
     .flatMap((f) => {
@@ -62,6 +96,8 @@ describe("runtime lifecycle category determines reset selection", () => {
     "collectiveAgreements",
     "landeslisten",
     "fundFloatSettlements",
+    "bg1991ListReplacements",
+    "bgGrandConstituencyByElections",
   ])("wipes %s instead of treating it as reference data", (name) => {
     expect(getCollectionCategory(name)).toBe("runtime");
     expect(getRuntimeCollectionNames()).toContain(name);

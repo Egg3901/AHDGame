@@ -157,11 +157,19 @@ export function BuildOrgPanel({
   };
 
   const paysFromNationalPool = preview?.ok === true && preview.scope === "national-targeted";
-  const insufficientPs = !paysFromNationalPool && ps < BUILD_ORG_BASE_PS_COST;
+  // Gate on the NEXT click's cost (base + pressure ladder) from the preview,
+  // not the base cost: after repeated spends the ladder can price the next
+  // click above the remaining reserve while the base check still passes.
+  // Before the preview resolves, fall back to the base cost so the buttons
+  // do not all disable on a slow network.
+  const nextPsCost = preview?.ok === true ? preview.effectiveCost : BUILD_ORG_BASE_PS_COST;
+  const insufficientPs = !paysFromNationalPool && ps < nextPsCost;
   const noPresence = !hasPresence;
 
-  const statePoolInsufficient = (poolPS?.statePoolPS ?? ps) < BUILD_ORG_BASE_PS_COST;
-  const nationalPoolInsufficient = (poolPS?.nationalPoolPS ?? 0) < BUILD_ORG_BASE_PS_COST;
+  const statePoolPs = poolPS?.statePoolPS ?? ps;
+  const nationalPoolPs = poolPS?.nationalPoolPS ?? 0;
+  const statePoolInsufficient = statePoolPs < nextPsCost;
+  const nationalPoolInsufficient = nationalPoolPs < nextPsCost;
 
   // Header reserve must match the pool the preview will debit — national chairs
   // were shown state PS (often near cap) while Strength Capacity drained (ticket #1059).
@@ -219,11 +227,27 @@ export function BuildOrgPanel({
           : noPresence
             ? "Establish a player or elected official in this state first"
             : insufficientPs
-              ? `Need ${BUILD_ORG_BASE_PS_COST} PS minimum`
+              ? `Need ${nextPsCost.toFixed(0)} PS for the next build, have ${ps.toFixed(0)}`
               : "Spend PS to grow Org in this state"
       }
-      stateTitle={`Spend from state pool${poolPS ? ` (${poolPS.statePoolPS.toFixed(0)} PS)` : ""}${priceFor("state")}`}
-      nationalTitle={`Spend from national pool${poolPS ? ` (${poolPS.nationalPoolPS.toFixed(0)} PS)` : ""}${priceFor("national-targeted")}`}
+      stateTitle={
+        !canBuildOrg
+          ? "Only the party chair, vice chair, or admin can build org"
+          : noPresence
+            ? "Establish a player or elected official in this state first"
+            : statePoolInsufficient
+              ? `Need ${nextPsCost.toFixed(0)} PS for the next build, state pool has ${statePoolPs.toFixed(0)}`
+              : `Spend from state pool${poolPS ? ` (${poolPS.statePoolPS.toFixed(0)} PS)` : ""}${priceFor("state")}`
+      }
+      nationalTitle={
+        !canBuildOrg
+          ? "Only the party chair, vice chair, or admin can build org"
+          : noPresence
+            ? "Establish a player or elected official in this state first"
+            : nationalPoolInsufficient
+              ? `Need ${nextPsCost.toFixed(0)} PS for the next build, national pool has ${nationalPoolPs.toFixed(0)}`
+              : `Spend from national pool${poolPS ? ` (${poolPS.nationalPoolPS.toFixed(0)} PS)` : ""}${priceFor("national-targeted")}`
+      }
       buttonAnim={buttonAnim}
       onSpend={handleClick}
     />

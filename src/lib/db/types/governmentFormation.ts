@@ -13,6 +13,8 @@ export type GovernmentFormationStatus = "pending" | "formed" | "collapsed";
 export type GovernmentFormationType = "majority" | "coalition" | "minority" | "admin";
 
 export interface GovernmentFormation {
+  /** Serializes native Hungarian mandate changes with a new chamber handover. */
+  hu1991MandateGeneration?: number;
   _id: string; // "UK"
   countryId: CountryId;
   cycle: number;

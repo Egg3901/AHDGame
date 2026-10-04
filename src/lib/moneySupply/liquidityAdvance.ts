@@ -91,7 +91,10 @@ export async function executeLiquidityAdvance(
     const config = await db
       .collection<GameConfig>("gameConfig")
       .findOne({ _id: "default" }, { projection: { privateBankingEnabled: 1 } });
-    const currency = COUNTRY_CURRENCY_MAP[input.countryId];
+    const currencyQuote = await db
+      .collection<{ _id: string; currencyCode?: CurrencyCode }>("exchangeRates")
+      .findOne({ _id: input.countryId }, { projection: { currencyCode: 1 } });
+    const currency = currencyQuote?.currencyCode ?? COUNTRY_CURRENCY_MAP[input.countryId];
     const banks = (await isPrivateBankingEnabled(config))
       ? await db
           .collection<Corporation>("corporations")

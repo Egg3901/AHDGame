@@ -5,6 +5,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import { Button } from "@/components/ui";
 import { CURRENCY_SYMBOLS, type CurrencyCode } from "@/lib/constants/currencies";
 import { ForexSpreadStrengthControl } from "@/components/forex/ForexSpreadStrengthControl";
+import { CB_TH, CentralBankSection } from "./CentralBankSection";
 
 interface InterventionRecord {
   turn: number;
@@ -159,7 +160,7 @@ export function CentralBankInterventionTab({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-12">
       {data.forexSpread && (
         <ForexSpreadStrengthControl
           countryId={countryId}
@@ -168,48 +169,47 @@ export function CentralBankInterventionTab({
           onChanged={onChanged}
         />
       )}
-      <section className="rounded-lg border border-gray-700 bg-gray-900/50 p-4">
-        <h3 className="mb-2 text-lg font-semibold">FX Intervention Band</h3>
+      <CentralBankSection title="FX intervention band">
         {data.currentRate != null && (
-          <p className="mb-2 text-sm text-gray-300">
+          <p className="mb-2 text-body text-muted">
             Current rate:{" "}
-            <span className="font-mono">
+            <span className="font-mono text-foreground">
               {data.currentRate.toFixed(4)} {data.currencyCode} per internal unit
             </span>
           </p>
         )}
         {data.policy ? (
-          <div className="mb-3 text-sm">
+          <div className="mb-4 space-y-0.5 text-body">
             <p>
               Active band:{" "}
               <span className="font-mono">
                 [{data.policy.floor.toFixed(4)}, {data.policy.ceiling.toFixed(4)}]
               </span>
             </p>
-            <p className="text-gray-400">
+            <p className="text-muted">
               Status:{" "}
               {inBand === null ? (
                 "-"
               ) : inBand ? (
-                <span className="text-green-400">In band</span>
+                <span className="text-foreground">In band</span>
               ) : (
-                <span className="text-red-400">Defending (outside band)</span>
+                <span className="font-medium text-error">Defending (outside band)</span>
               )}
             </p>
-            <p className="text-gray-400">
+            <p className="text-muted">
               Set by {data.policy.setByCharacterName} on turn {data.policy.setAtTurn}
               {data.policy.lastAdjustedAtTurn !== data.policy.setAtTurn &&
-                ` • last adjusted turn ${data.policy.lastAdjustedAtTurn}`}
+                ` · last adjusted turn ${data.policy.lastAdjustedAtTurn}`}
             </p>
             {cooldownRemaining > 0 && (
-              <p className="text-yellow-400">
+              <p className="text-warning">
                 Cooldown: {cooldownRemaining} turn{cooldownRemaining === 1 ? "" : "s"} remaining
                 before narrow/cancel
               </p>
             )}
           </div>
         ) : (
-          <p className="mb-3 text-sm text-gray-400">No active band.</p>
+          <p className="mb-4 text-body text-muted">No active band.</p>
         )}
 
         {canEdit && (
@@ -220,8 +220,8 @@ export function CentralBankInterventionTab({
               submit(data.policy ? "PATCH" : "POST");
             }}
           >
-            <div className="grid grid-cols-2 gap-3">
-              <label className="flex flex-col text-sm">
+            <div className="grid max-w-md grid-cols-2 gap-3">
+              <label className="flex flex-col gap-1 text-body-sm text-muted">
                 Floor
                 <input
                   type="number"
@@ -229,11 +229,11 @@ export function CentralBankInterventionTab({
                   min={0}
                   value={floor}
                   onChange={(e) => setFloor(e.target.value)}
-                  className="rounded border border-gray-600 bg-gray-800 px-2 py-1 font-mono"
+                  className="rounded-md border border-card-border bg-background px-2 py-1 font-mono text-body text-foreground"
                   disabled={submitting}
                 />
               </label>
-              <label className="flex flex-col text-sm">
+              <label className="flex flex-col gap-1 text-body-sm text-muted">
                 Ceiling
                 <input
                   type="number"
@@ -241,7 +241,7 @@ export function CentralBankInterventionTab({
                   min={0}
                   value={ceiling}
                   onChange={(e) => setCeiling(e.target.value)}
-                  className="rounded border border-gray-600 bg-gray-800 px-2 py-1 font-mono"
+                  className="rounded-md border border-card-border bg-background px-2 py-1 font-mono text-body text-foreground"
                   disabled={submitting}
                 />
               </label>
@@ -259,69 +259,81 @@ export function CentralBankInterventionTab({
           </form>
         )}
 
-        {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
-        {success && <p className="mt-2 text-sm text-green-400">{success}</p>}
-      </section>
+        {error && <p className="mt-2 text-body text-error">{error}</p>}
+        {success && <p className="mt-2 text-body text-success">{success}</p>}
+      </CentralBankSection>
 
       {(isChair || isAdmin) && data.forexRevenue != null && data.reserveBalance != null && (
-        <section className="rounded-lg border border-gray-700 bg-gray-900/50 p-4">
-          <h3 className="mb-2 text-lg font-semibold">FX Reserves (Chair view)</h3>
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-            <dt className="text-gray-400">Forex revenue pool</dt>
+        <CentralBankSection title="FX reserves" meta="Chair view">
+          <dl className="grid max-w-md grid-cols-2 gap-x-4 gap-y-1 text-body">
+            <dt className="text-muted">Forex revenue pool</dt>
             <dd className="text-right font-mono">
               {currencySym}
               {Math.round(data.forexRevenue).toLocaleString("en-US")}
             </dd>
-            <dt className="text-gray-400">Reserve balance</dt>
+            <dt className="text-muted">Reserve balance</dt>
             <dd className="text-right font-mono">
               {currencySym}
               {Math.round(data.reserveBalance).toLocaleString("en-US")}
             </dd>
-            <dt className="text-gray-400 font-semibold">Total available</dt>
+            <dt className="font-semibold text-foreground">Total available</dt>
             <dd className="text-right font-mono font-semibold">
               {currencySym}
               {Math.round(totalReserves).toLocaleString("en-US")}
             </dd>
           </dl>
-          <p className="mt-2 text-xs text-gray-500">
+          <p className="mt-3 max-w-3xl text-body-sm text-muted">
             Intervention spends the forex revenue pool first, then the reserve balance. The reserve
             balance also backs the line of credit limit, so spending it on currency leaves less for
             lending.
           </p>
-        </section>
+        </CentralBankSection>
       )}
 
       {data.policy && (isChair || isAdmin) && data.policy.recentInterventions.length > 0 && (
-        <section className="rounded-lg border border-gray-700 bg-gray-900/50 p-4">
-          <h3 className="mb-2 text-lg font-semibold">Recent interventions</h3>
-          <table className="w-full text-sm">
-            <thead className="text-left text-gray-400">
-              <tr>
-                <th className="px-2 py-1">Turn</th>
-                <th className="px-2 py-1">Direction</th>
-                <th className="px-2 py-1">Reserves spent</th>
-                <th className="px-2 py-1">Source</th>
-                <th className="px-2 py-1">Resulting rate</th>
-              </tr>
-            </thead>
-            <tbody>
-              {[...data.policy.recentInterventions].reverse().map((r) => (
-                <tr key={r.turn} className="border-t border-gray-800">
-                  <td className="px-2 py-1 font-mono">{r.turn}</td>
-                  <td className="px-2 py-1">{r.direction}</td>
-                  <td className="px-2 py-1 font-mono">
-                    {currencySym}
-                    {Math.round(r.reservesSpent).toLocaleString("en-US")}
-                  </td>
-                  <td className="px-2 py-1 text-gray-400">
-                    {FUNDING_SOURCE_LABELS[r.fundingSource] ?? r.fundingSource}
-                  </td>
-                  <td className="px-2 py-1 font-mono">{r.resultingRate.toFixed(4)}</td>
+        <CentralBankSection title="Recent interventions">
+          <div className="overflow-x-auto">
+            <table className="w-full text-body">
+              <thead>
+                <tr>
+                  <th scope="col" className={CB_TH}>
+                    Turn
+                  </th>
+                  <th scope="col" className={CB_TH}>
+                    Direction
+                  </th>
+                  <th scope="col" className={CB_TH}>
+                    Reserves spent
+                  </th>
+                  <th scope="col" className={CB_TH}>
+                    Source
+                  </th>
+                  <th scope="col" className={CB_TH}>
+                    Resulting rate
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
+              </thead>
+              <tbody>
+                {[...data.policy.recentInterventions].reverse().map((r) => (
+                  <tr key={r.turn} className="border-b border-card-border/60">
+                    <td className="py-2 pr-4 font-mono tabular-nums">{r.turn}</td>
+                    <td className="py-2 pr-4">{r.direction}</td>
+                    <td className="py-2 pr-4 font-mono tabular-nums">
+                      {currencySym}
+                      {Math.round(r.reservesSpent).toLocaleString("en-US")}
+                    </td>
+                    <td className="py-2 pr-4 text-muted">
+                      {FUNDING_SOURCE_LABELS[r.fundingSource] ?? r.fundingSource}
+                    </td>
+                    <td className="py-2 pr-4 font-mono tabular-nums">
+                      {r.resultingRate.toFixed(4)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CentralBankSection>
       )}
     </div>
   );

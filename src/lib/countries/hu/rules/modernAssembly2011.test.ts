@@ -1,0 +1,145 @@
+import { describe, expect, it } from "vitest";
+import { huRegions1991 } from "../data/huRegions1991";
+import { buildHuMixedPlan } from "./mixedElectionPlan";
+import {
+  buildHuModernAssembly,
+  settleHuModernAssembly,
+  type HuModernCandidate,
+} from "./modernAssembly2011";
+function fixture(player = false) {
+  const candidates: HuModernCandidate[] = huRegions1991.flatMap((region, index) => [
+    {
+      id: `${region._id}:a`,
+      ownerId: `${region._id}:owner-a`,
+      partyId: "a",
+      regionId: String(region._id),
+      isNpc: true,
+      votes: 100000,
+    },
+    {
+      id: `${region._id}:b`,
+      ownerId: `${region._id}:owner-b`,
+      partyId: "b",
+      regionId: String(region._id),
+      isNpc: true,
+      votes: 50000,
+    },
+    ...(player && index === 0
+      ? [
+          {
+            id: "player",
+            ownerId: "player-owner",
+            partyId: "a",
+            regionId: String(region._id),
+            isNpc: false,
+            votes: 999999,
+          },
+        ]
+      : []),
+  ]);
+  const plan = buildHuMixedPlan(
+    huRegions1991.map((row) => ({ id: String(row._id), population: row.population })),
+    huRegions1991.map((region) => ({
+      electionId: String(region._id),
+      regionId: String(region._id),
+      candidates: candidates
+        .filter((row) => row.regionId === String(region._id))
+        .map((row) => ({ candidateId: row.id, partyId: row.partyId, votes: row.votes })),
+    }))
+  );
+  return { candidates, plan };
+}
+describe("Modern Hungarian whole-Assembly person plan", () => {
+  it("installs106 constituency and93 national mandates from twelve existing owners", () => {
+    const { candidates, plan } = fixture();
+    const result = buildHuModernAssembly(plan, candidates)!;
+    expect(result.installed.mandates).toHaveLength(199);
+    expect(result.installed.mandates.filter((row) => row.tier === "constituency")).toHaveLength(
+      106
+    );
+    expect(result.installed.mandates.filter((row) => row.tier === "national")).toHaveLength(93);
+    expect(new Set(result.people.map((row) => row.ownerId)).size).toBe(12);
+    expect(new Set(result.people.map((row) => row.id)).size).toBe(result.people.length);
+    expect(result.people.length).toBeLessThanOrEqual(558);
+  });
+  it("keeps a heavily voted player at one seat without changing party quotas", () => {
+    const { candidates, plan } = fixture(true);
+    const result = buildHuModernAssembly(plan, candidates)!;
+    expect(result.installed.mandates.filter((row) => !row.isNpc)).toHaveLength(1);
+    expect(result.installed.candidateSeats.player).toBe(1);
+    expect(result.installed.mandates).toHaveLength(199);
+    expect(result.installed.partySeats).toEqual(plan.result.totalSeats);
+  });
+  it.each([1, 106])(
+    "installs valid awards while retaining %i tied seats for fresh ballots",
+    (count) => {
+      const { candidates, plan } = fixture();
+      const failed = Object.entries(plan.result.constituencyWinners).slice(0, count);
+      for (const [district, winner] of failed) {
+        const region = district.split(":")[0];
+        const owner = candidates.find((row) => row.partyId === winner && row.regionId === region)!;
+        plan.result.constituencyWinners[district] = null;
+        plan.result.constituencySeats[winner!]--;
+        plan.result.totalSeats[winner!]--;
+        plan.candidateSeatsByElection[region][owner.id]--;
+      }
+      const result = buildHuModernAssembly(plan, candidates)!;
+      expect(result.installed.mandates).toHaveLength(199 - count);
+      expect(result.installed.mandates.filter((row) => row.tier === "national")).toHaveLength(93);
+      expect(result.installed.vacancies).toEqual(
+        failed.map(([districtId]) => ({ tier: "constituency", districtId, partyId: null }))
+      );
+      expect(result.installed.partySeats).toEqual(
+        Object.fromEntries(Object.entries(plan.result.totalSeats).filter(([, seats]) => seats > 0))
+      );
+      expect(settleHuModernAssembly(result.installed, result.people, new Set()).vacancies).toEqual(
+        result.installed.vacancies
+      );
+      expect(Object.values(result.installed.regionCapacity).reduce((a, b) => a + b, 0)).toBe(199);
+    }
+  );
+  it("permits regional NPC slates sharing two unchanged financial owners", () => {
+    const { candidates, plan } = fixture(true);
+    for (const row of candidates) if (row.isNpc) row.ownerId = `owner-${row.partyId}`;
+    const result = buildHuModernAssembly(plan, candidates)!;
+    expect(result.installed.mandates).toHaveLength(199);
+    expect(new Set(result.people.filter((row) => row.isNpc).map((row) => row.ownerId)).size).toBe(
+      2
+    );
+    expect(new Set(result.people.map((row) => row.id)).size).toBe(result.people.length);
+    expect(result.installed.candidateSeats.player).toBe(1);
+    expect(result.installed.partySeats).toEqual(plan.result.totalSeats);
+  });
+  it("rejects a player filing across regions", () => {
+    const { candidates, plan } = fixture(true);
+    const player = candidates.find((row) => !row.isNpc)!;
+    candidates[0] = { ...candidates[0], isNpc: false, ownerId: player.ownerId };
+    expect(() => buildHuModernAssembly(plan, candidates)).toThrow();
+  });
+  it("rejects duplicate owners within one regional filing", () => {
+    const { candidates, plan } = fixture(true);
+    candidates[0].ownerId = candidates[1].ownerId;
+    expect(() => buildHuModernAssembly(plan, candidates)).toThrow();
+  });
+  it("keeps a withdrawn direct winner vacant while replacing national seats from the original slate", () => {
+    const { candidates, plan } = fixture();
+    const result = buildHuModernAssembly(plan, candidates)!;
+    const direct = result.installed.mandates.find((row) => row.tier === "constituency")!;
+    const national = result.installed.mandates.find((row) => row.tier === "national")!;
+    const final = settleHuModernAssembly(
+      result.installed,
+      result.people,
+      new Set([direct.personId, national.personId])
+    );
+    expect(final.mandates).toHaveLength(198);
+    expect(final.vacancies).toEqual([
+      { tier: "constituency", districtId: direct.districtId, partyId: direct.partyId },
+    ]);
+    expect(
+      final.mandates.some(
+        (row) => row.personId === direct.personId || row.personId === national.personId
+      )
+    ).toBe(false);
+    expect(new Set(final.mandates.map((row) => row.personId)).size).toBe(198);
+  });
+});

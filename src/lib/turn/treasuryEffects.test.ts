@@ -12,9 +12,20 @@ function makeDb(opDocs: any[], budgetDocs: any[]) {
   };
   function setPath(obj: any, path: string, val: any) {
     const parts = path.split(".");
-    let cur = obj;
-    for (let i = 0; i < parts.length - 1; i++) cur = cur[parts[i]] ??= {};
-    cur[parts[parts.length - 1]] = val;
+    for (const part of parts) {
+      if (part === "__proto__" || part === "constructor" || part === "prototype") return;
+    }
+    let current = obj;
+    for (let i = 0; i < parts.length - 1; i++) {
+      const key = parts[i];
+      if (key === "__proto__" || key === "constructor" || key === "prototype") return;
+      const existing = current[key];
+      if (existing === null || typeof existing !== "object") {
+        current[key] = /^(0|[1-9]\d*)$/.test(parts[i + 1]) ? [] : {};
+      }
+      current = current[key] as Record<string, unknown>;
+    }
+    current[parts[parts.length - 1]] = val;
   }
   function col(name: string) {
     const arr = cols[name];

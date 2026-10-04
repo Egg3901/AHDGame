@@ -27,6 +27,25 @@ describe("bypassNextImageOptimization", () => {
     );
   });
 
+  it.each([
+    "https://evil.example/path/.public.blob.vercel-storage.com/x.png",
+    "https://evil.example/?url=https://abc.public.blob.vercel-storage.com/x.png",
+    "https://abc.public.blob.vercel-storage.com.evil.example/x.png",
+    "https://abc.public.blob.vercel-storage.com@evil.example/x.png",
+    "https://evil.example/path/.r2.dev/x.png",
+    "https://bucket.r2.dev.evil.example/x.png",
+    "https://cdn.ahousedividedgame.com.evil.example/x.png",
+    "data:image/png;base64,AAAA",
+    "javascript:alert(1)",
+    "http://[invalid",
+  ])("does not trust a lookalike or unsupported image URL: %s", (src) => {
+    expect(bypassNextImageOptimization(src)).toBe(false);
+  });
+
+  it("bypasses R2 URLs by hostname", () => {
+    expect(bypassNextImageOptimization("https://bucket.r2.dev/x.png?width=100")).toBe(true);
+  });
+
   it("does not bypass arbitrary remote images or empty input", () => {
     expect(bypassNextImageOptimization("")).toBe(false);
     expect(bypassNextImageOptimization("https://images.unsplash.com/x.jpg")).toBe(false);

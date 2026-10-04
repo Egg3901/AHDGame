@@ -109,7 +109,7 @@ describe("ModifiersPanel cabinet attribution (ticket #1142)", () => {
   });
 });
 
-describe("ModifiersPanel — region-scope channels", () => {
+describe("ModifiersPanel region-scope channels", () => {
   const BASE = {
     laws: [],
     regionalLaws: [],

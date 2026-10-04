@@ -182,6 +182,11 @@ export interface PresetElectionYears {
    * the cycle table's periodHours (DD config termYears:5).
    */
   ddVolkskammer: number | null;
+  /** First free Polish Sejm election after the Contract Sejm. */
+  plSejm?: number | null;
+  /** Successor parliamentary elections. Null outside the 1991 preset. */
+  csFederalAssembly?: number | null;
+  huNationalAssembly?: number | null;
 }
 
 /**
@@ -310,6 +315,9 @@ export const CANONICAL_REAL_ELECTION_YEARS_BY_PRESET: Record<string, PresetElect
     ruSupremeSoviet: null,
     ruRepublicSoviet: null,
     ddVolkskammer: null, // GDR reunified into DE in 1990 — no elections
+    csFederalAssembly: 1992, // both chambers elected together after the 1990 vote
+    huNationalAssembly: 1994, // next election after the 1990 multiparty vote
+    plSejm: 1991, // 27 October 1991; 1993 was an early follow-up election
   },
   "1953-default": {
     house: 1954,
@@ -579,6 +587,9 @@ export interface CycleAnchors {
   ruRepublicSoviet: number | null;
   /** `null` = no DD election cycle in this era (2019/1991/2023 — no GDR). */
   ddVolkskammer: number | null;
+  plSejm: number | null;
+  csFederalAssembly: number | null;
+  huNationalAssembly: number | null;
 }
 
 /** End-of-LARP-year-Y anchor: `(Y − startingYear + 1) × TURNS_PER_YEAR (+ offset)`. */
@@ -641,6 +652,11 @@ export function getCycleAnchors(ctx: CycleAnchorContext): CycleAnchors {
     ruRepublicSoviet:
       years.ruRepublicSoviet == null ? null : endOfYear(years.ruRepublicSoviet, sy, off),
     ddVolkskammer: years.ddVolkskammer == null ? null : endOfYear(years.ddVolkskammer, sy, off),
+    plSejm: years.plSejm == null ? null : endOfYear(years.plSejm, sy, off),
+    csFederalAssembly:
+      years.csFederalAssembly == null ? null : endOfYear(years.csFederalAssembly, sy, off),
+    huNationalAssembly:
+      years.huNationalAssembly == null ? null : endOfYear(years.huNationalAssembly, sy, off),
   };
 }
 

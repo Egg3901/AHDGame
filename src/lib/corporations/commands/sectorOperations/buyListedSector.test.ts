@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { queueUndeliveredCost } from "@/lib/corporations/buildDelivery";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/api/requireAuth", () => ({ requireBasicAuth: vi.fn() }));
@@ -197,7 +198,7 @@ describe("buyListedSector — mid-build transfer moves the queue (P3b)", () => {
     expect(transferUpdate.$set).not.toHaveProperty("constructionInProgressAnchor");
   });
 
-  it("merge path: capacity, build queue and CIP are folded into the survivor, not destroyed", async () => {
+  it("merge path: capacity and build queue are folded into the survivor", async () => {
     await wireCommonMocks();
 
     const existingBuyerSector = {
@@ -240,11 +241,15 @@ describe("buyListedSector — mid-build transfer moves the queue (P3b)", () => {
     expect((merged.buildQueue as { onlineTurn: number }[]).map((o) => o.onlineTurn)).toEqual([
       30, 34,
     ]);
-    // ₳ CIP summed, NOT re-denominated through either corp's currency.
-    expect(merged.constructionInProgressAnchor).toBe(5_000_000);
+    // CIP has one writer: it is derived from the preserved queue, not stored by
+    // the ownership-transfer command.
+    expect(merged).not.toHaveProperty("constructionInProgressAnchor");
     expect(
       (merged.buildQueue as { costPaidAnchor: number }[]).map((o) => o.costPaidAnchor)
     ).toEqual([4_000_000, 1_000_000]);
+    expect(
+      queueUndeliveredCost(merged.buildQueue as Parameters<typeof queueUndeliveredCost>[0], 5)
+    ).toBe(5_000_000);
     // Ramp anchor keeps the earlier turn so the governor does not restart.
     expect(merged.plantsStartTurn).toBe(12);
     // And the purchased doc is the one deleted.

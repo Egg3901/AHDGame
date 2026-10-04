@@ -139,6 +139,10 @@ export interface BankCharter {
   lastBankingDepositInterest?: number;
   /** Loan interest collected from the named + household books (income). */
   lastBankingLoanInterest?: number;
+  /** Fees earned on new household principal in this banking pass. */
+  lastBankingLoanOriginationFees?: number;
+  /** Named and household origination fees earned by this charter epoch. */
+  loanOriginationFeesLifetime?: number;
   /** Interbank interest paid as borrower (expense). Landed after the main pass. */
   lastBankingInterbankInterestPaid?: number;
   /** Interbank interest received as lender (income). Landed after the main pass. */
@@ -238,6 +242,8 @@ export interface BankCharterHistoryEntry {
 export interface BankLoan {
   _id: ObjectId;
   bankCorporationId: ObjectId;
+  /** Charter epoch that originated this loan. Legacy values use originatedTurn until backfilled. */
+  charteredTurn?: number;
   currency: CurrencyCode;
   borrowerType: "corporation" | "character" | "npcBulk";
   borrowerId?: ObjectId;
@@ -252,6 +258,8 @@ export interface BankLoan {
    */
   creditBand?: import("@/lib/banking/creditBands").CreditBandId;
   principal: number;
+  /** Quoted fee withheld from named-loan proceeds. Absent legacy requests pay no fee. */
+  originationFee?: number;
   outstanding: number;
   ratePercent: number;
   originatedTurn: number;

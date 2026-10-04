@@ -75,15 +75,13 @@ export function CaucusMembershipShareCard({
     <div className="rounded-lg border border-card-border bg-card p-4">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="text-heading-sm font-semibold text-foreground">Caucus Membership Share</h3>
+          <h3 className="text-heading-sm font-semibold text-foreground">Caucus membership share</h3>
           <p className="mt-1 text-sm text-muted">
             Share of all caucus-aligned members across the party&apos;s active caucuses.
           </p>
         </div>
         <div className="rounded-md border border-card-border bg-card-muted px-2.5 py-1.5 text-right">
-          <div className="text-body-xs font-semibold uppercase tracking-widest text-muted">
-            Caucused Members
-          </div>
+          <div className="text-body-sm font-semibold text-muted">Caucused members</div>
           <div className="mt-0.5 text-base font-bold tabular-nums text-foreground">
             {totalMembers}
           </div>
@@ -162,7 +160,7 @@ export function CaucusMembershipShareCard({
                     <div className="text-sm font-bold tabular-nums text-foreground">
                       {slice.percentage}
                     </div>
-                    <div className="text-body-xs text-muted">
+                    <div className="text-body-sm text-muted">
                       {slice.count}/{totalMembers}
                     </div>
                   </div>

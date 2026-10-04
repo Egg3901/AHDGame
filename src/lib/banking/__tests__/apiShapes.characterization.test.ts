@@ -317,9 +317,11 @@ describe("GET /api/banking/corporation/[id]", () => {
         "lastBankingInterbankInterestPaid",
         "lastBankingInterbankInterestReceived",
         "lastBankingLoanInterest",
+        "lastBankingLoanOriginationFees",
         "lastBankingWriteoffs",
         "lendingOffset",
         "lendingProfile",
+        "loanOriginationFeesLifetime",
         "npcDeposits",
         "panicTurns",
         "playerDeposits",
@@ -506,14 +508,17 @@ describe("POST /api/banking/loans", () => {
       "bankCorporationId",
       "borrowerId",
       "borrowerType",
+      "charteredTurn",
       "currency",
       "originatedTurn",
+      "originationFee",
       "outstanding",
       "principal",
       "ratePercent",
       "status",
       "termTurns",
     ]);
+    expect(body.loan.charteredTurn).toBe(retailCharter().charteredTurn);
   });
 });
 

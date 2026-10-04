@@ -148,10 +148,10 @@ describe("resolveDefenseFloor", () => {
 });
 
 describe("isUnmannedDefault", () => {
-  it("returns false when party is not a default", () => {
+  it("returns false when party is not a default", async () => {
     const np = makeParty({ isDefault: false });
     const result = isUnmannedDefault(np, async () => true);
-    expect(result).resolves.toBe(false);
+    await expect(result).resolves.toBe(false);
   });
 
   it("returns true when chair seat is not an active human", async () => {

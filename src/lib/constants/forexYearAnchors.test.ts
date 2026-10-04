@@ -12,6 +12,7 @@ import {
   INITIAL_RATES_1953,
   INITIAL_RATES_1979,
   INITIAL_RATES_1991,
+  INITIAL_RATES_2019_TRANSITION,
   getInitialRates,
   getInitialRatesForYear,
 } from "./currencies";
@@ -29,7 +30,7 @@ describe("forex year anchors", () => {
     expect(getInitialRates("1953-default")).toBe(INITIAL_RATES_1953);
     expect(getInitialRates("1979-default")).toBe(INITIAL_RATES_1979);
     expect(getInitialRates("1991-default")).toBe(INITIAL_RATES_1991);
-    expect(getInitialRates("2019-default")).toBe(INITIAL_RATES);
+    expect(getInitialRates("2019-default")).toBe(INITIAL_RATES_2019_TRANSITION);
     // Unknown and alias presets still resolve to the modern table.
     expect(getInitialRates("empty")).toBe(INITIAL_RATES);
     expect(getInitialRates("2019-no-parties")).toBe(INITIAL_RATES);
