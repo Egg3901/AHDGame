@@ -5,12 +5,8 @@ import { withInjectedCrash } from "@/lib/test-utils/faultyDb";
 import type { Bond } from "@/lib/db/types/bond";
 import type { BankSovereignClaim, FederalBudget } from "@/lib/db/types/budget";
 import { treasuryAccrualWithBankCouponReserve } from "@/lib/budget/rules/treasuryAccrual";
-import {
-  addBankMaturityClaims,
-  bankCouponClaim,
-  bankCouponPlanForCountry,
-  settleBankSovereignClaims,
-} from "./bankSovereignClaims";
+import { addBankMaturityClaims, settleBankSovereignClaims } from "./bankSovereignClaims";
+import { bankCouponClaim, bankCouponPlanForCountry } from "./rules/sovereignClaims";
 import { settleSovereignBondMaturity } from "@/lib/bonds/sovereign";
 
 const bankId = new ObjectId("650000000000000000000001");
@@ -63,6 +59,40 @@ function vault(db: InMemoryDb): number {
     .cashReserves;
 }
 
+function failEscrowCredit(memory: InMemoryDb): Db {
+  return {
+    collection(name: string) {
+      const collection = memory.collection(name);
+      if (name !== "corporations") return collection;
+      return new Proxy(collection, {
+        get(target, property, receiver) {
+          if (property === "updateOne") {
+            return async (filter: unknown, update: unknown, options?: unknown) => {
+              const inc = (update as { $inc?: Record<string, number> }).$inc ?? {};
+              if (
+                Object.entries(inc).some(
+                  ([path, amount]) => path.startsWith("bankSovereignEscrows.") && amount > 0
+                )
+              ) {
+                return {
+                  acknowledged: true,
+                  matchedCount: 0,
+                  modifiedCount: 0,
+                  upsertedCount: 0,
+                  upsertedId: null,
+                };
+              }
+              return target.updateOne(filter as never, update as never, options as never);
+            };
+          }
+          const value = Reflect.get(target, property, receiver);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+    },
+  } as unknown as Db;
+}
+
 describe("bank sovereign claims", () => {
   it("freezes only same-country, same-currency, accruing sovereign coupons by charter epoch", () => {
     const bond = {
@@ -90,12 +120,34 @@ describe("bank sovereign claims", () => {
       },
     ]);
     expect(
-      bankCouponClaim({ countryId: "US", currencyCode: "USD", turn: 12, plan: plan[0] })
+      bankCouponClaim({
+        countryId: "US",
+        currencyCode: "USD",
+        turn: 12,
+        plan: plan[0],
+        ledgerCreatedAt: new Date("2026-10-04T00:00:00.000Z"),
+      })
     ).toMatchObject({
       id: "bank-sovereign-coupon:US:12:650000000000000000000001:4",
       kind: "coupon",
       amountLocal: 100,
     });
+  });
+
+  it("rounds coupon plans to the currency minor unit", () => {
+    const bond = {
+      _id: new ObjectId("650000000000000000000003"),
+      issuerType: "sovereign",
+      countryId: "JP",
+      currencyCode: "JPY",
+      couponRate: 3,
+      defaulted: false,
+      holders: [{ bankId, charteredTurn: 4, units: 1 }],
+    } as unknown as Bond;
+    expect(bankCouponPlanForCountry([bond], "JP", "JPY")[0].amountLocal).toBe(1);
+    expect(
+      bankCouponPlanForCountry([{ ...bond, currencyCode: "USD" }], "JP", "USD")[0].amountLocal
+    ).toBe(0.63);
   });
 
   it("reserves no more than planned service and preserves the gross rounded cash flow", () => {
@@ -122,7 +174,7 @@ describe("bank sovereign claims", () => {
   });
 
   it("settles the guarded transfer once and resumes a crash after the bank credit", async () => {
-    const claim = couponClaim();
+    const claim = { ...couponClaim(), ledgerShadow: true };
     const memory = world(claim);
     const crash = withInjectedCrash(memory, {
       collection: "corporations",
@@ -143,6 +195,7 @@ describe("bank sovereign claims", () => {
     expect(budget(memory).treasuryBalance).toBe(90);
     expect(budget(memory).bankSovereignClaims).toEqual([]);
     expect(memory.collection("depositInsuranceFunds").docs).toEqual([]);
+    expect(memory.collection("ledgerEntries").docs).toHaveLength(1);
     expect(memory.collection("bankMoneyMoves").docs).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ _id: `${claim.id}:funding:13`, status: "applied" }),
@@ -170,6 +223,25 @@ describe("bank sovereign claims", () => {
     expect(budget(memory).treasuryBalance).toBe(90);
     expect(vault(memory)).toBe(15);
     expect(budget(memory).bankSovereignClaims).toEqual([]);
+  });
+
+  it("does not start a second funding attempt while a prior credit leg stays partial", async () => {
+    const claim = couponClaim();
+    const memory = world(claim);
+    const failing = failEscrowCredit(memory);
+    await settleBankSovereignClaims(failing, budget(memory), 13);
+    expect(budget(memory).treasuryBalance).toBe(90);
+    expect(memory.collection("bankMoneyMoves").docs).toEqual([
+      expect.objectContaining({ _id: `${claim.id}:funding:13`, status: "partial" }),
+    ]);
+
+    await settleBankSovereignClaims(failing, budget(memory), 14);
+    expect(budget(memory).treasuryBalance).toBe(90);
+    expect(memory.collection("bankMoneyMoves").docs).toHaveLength(1);
+    expect(memory.collection("bankMoneyMoves").docs[0]).toMatchObject({
+      _id: `${claim.id}:funding:13`,
+      status: "partial",
+    });
   });
 
   it("keeps an unfunded claim intact and retries it on a later turn", async () => {

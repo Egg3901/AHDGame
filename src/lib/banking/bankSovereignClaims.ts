@@ -4,12 +4,8 @@ import type { BankSovereignClaim, FederalBudget } from "@/lib/db/types/budget";
 import type { Bond } from "@/lib/db/types/bond";
 import type { Corporation } from "@/lib/db/types/corporation";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
-import {
-  BOND_UNIT_FACE_VALUE,
-  bondAccruesCoupon,
-  perTurnCouponPayment,
-} from "@/lib/constants/bonds";
+import { BOND_UNIT_FACE_VALUE } from "@/lib/constants/bonds";
+import { roundSavingsAmount } from "@/lib/currency/savingsInterest";
 import { ensureFund } from "@/lib/banking/insurance";
 import {
   resumeSettlement,
@@ -18,83 +14,6 @@ import {
 } from "@/lib/banking/settlementJournal";
 import { settleAtomicDocumentTransition } from "@/lib/banking/atomicDocumentSettlement";
 import { oid, type BankingTransition } from "@/lib/banking/rules/boundary";
-
-export interface BankCouponPlan {
-  bankId: string;
-  charteredTurn: number;
-  amountLocal: number;
-  bondIds: string[];
-}
-
-function roundCurrency(value: number): number {
-  return Math.round((value + Number.EPSILON) * 100) / 100;
-}
-
-/** Freeze the eligible bank coupon slice from the opening sovereign bond snapshot. */
-export function bankCouponPlanForCountry(
-  bonds: readonly Bond[],
-  countryId: string,
-  currencyCode: CurrencyCode
-): BankCouponPlan[] {
-  const byEpoch = new Map<string, BankCouponPlan>();
-  for (const bond of bonds) {
-    if (bond.issuerType !== "sovereign" || bond.countryId !== countryId || !bondAccruesCoupon(bond))
-      continue;
-    const bondCurrency =
-      bond.currencyCode ??
-      COUNTRY_CURRENCY_MAP[bond.countryId as keyof typeof COUNTRY_CURRENCY_MAP];
-    for (const holder of bond.holders ?? []) {
-      if (!holder.bankId) continue;
-      if (!Number.isSafeInteger(holder.charteredTurn) || (holder.charteredTurn ?? 0) < 0) continue;
-      if (bondCurrency !== currencyCode) continue;
-      const bankId = holder.bankId.toHexString();
-      const charteredTurn = holder.charteredTurn!;
-      const key = `${bankId}:${charteredTurn}`;
-      const plan = byEpoch.get(key) ?? {
-        bankId,
-        charteredTurn,
-        amountLocal: 0,
-        bondIds: [],
-      };
-      plan.amountLocal +=
-        perTurnCouponPayment(bond.couponRate, BOND_UNIT_FACE_VALUE) * holder.units;
-      plan.bondIds.push(bond._id.toHexString());
-      byEpoch.set(key, plan);
-    }
-  }
-  return [...byEpoch.values()]
-    .map((plan) => ({
-      ...plan,
-      amountLocal: roundCurrency(plan.amountLocal),
-      bondIds: [...new Set(plan.bondIds)].sort(),
-    }))
-    .filter((plan) => plan.amountLocal > 0)
-    .sort((a, b) => a.bankId.localeCompare(b.bankId) || a.charteredTurn - b.charteredTurn);
-}
-
-export function bankCouponClaim(input: {
-  countryId: string;
-  currencyCode: CurrencyCode;
-  turn: number;
-  plan: BankCouponPlan;
-  anchorRate?: number;
-  ledgerShadow?: boolean;
-}): BankSovereignClaim {
-  const { countryId, currencyCode, turn, plan } = input;
-  return {
-    id: `bank-sovereign-coupon:${countryId}:${turn}:${plan.bankId}:${plan.charteredTurn}`,
-    kind: "coupon",
-    bankId: plan.bankId,
-    charteredTurn: plan.charteredTurn,
-    countryId,
-    currencyCode,
-    amountLocal: plan.amountLocal,
-    turn,
-    bondIds: plan.bondIds,
-    ...(input.anchorRate !== undefined ? { anchorRate: input.anchorRate } : {}),
-    ...(input.ledgerShadow ? { ledgerShadow: true } : {}),
-  };
-}
 
 /** Add a stable principal claim before the legacy holder payout loop can run. */
 export async function addBankMaturityClaims(
@@ -112,7 +31,7 @@ export async function addBankMaturityClaims(
   const claims: BankSovereignClaim[] = [];
   for (const holder of input.bond.holders ?? []) {
     if (!holder.bankId || !Number.isSafeInteger(holder.charteredTurn)) continue;
-    const amountLocal = roundCurrency(holder.units * BOND_UNIT_FACE_VALUE);
+    const amountLocal = roundSavingsAmount(holder.units * BOND_UNIT_FACE_VALUE, input.currencyCode);
     if (amountLocal <= 0) continue;
     const claim: BankSovereignClaim = {
       id: `bank-sovereign-maturity:${input.bond._id.toHexString()}:${holder.bankId.toHexString()}:${holder.charteredTurn}`,
@@ -124,6 +43,7 @@ export async function addBankMaturityClaims(
       currencyCode: input.currencyCode,
       amountLocal,
       turn: input.turn,
+      ledgerCreatedAt: new Date(),
       ...(input.anchorRate !== undefined ? { anchorRate: input.anchorRate } : {}),
       ...(input.ledgerShadow ? { ledgerShadow: true } : {}),
     };
@@ -281,7 +201,7 @@ function ledgerProjection(
     insert: {
       _id: ledgerId,
       turn,
-      createdAt: new Date(),
+      createdAt: claim.ledgerCreatedAt ?? new Date(Date.UTC(1970, 0, 1) + claim.turn * 1000),
       txType: claim.kind === "coupon" ? "gov_coupon_payment" : "gov_bond_maturity_payment",
       legs: [
         {
@@ -307,6 +227,34 @@ function ledgerProjection(
     },
     note: "Exact funded sovereign claim transfer ledger witness",
   };
+}
+
+async function ensureLedgerWitness(
+  db: Db,
+  claim: BankSovereignClaim,
+  key: string,
+  turn: number,
+  destination: "bank" | "insurance"
+): Promise<void> {
+  const expected = ledgerProjection(claim, key, turn, destination).insert!;
+  const rows = db.collection("ledgerEntries");
+  await rows.updateOne({ _id: expected._id }, { $setOnInsert: expected }, { upsert: true });
+  const stored = await rows.findOne({ _id: expected._id });
+  const economicIdentity = (row: typeof expected) => ({
+    turn: row.turn,
+    createdAt: row.createdAt,
+    txType: row.txType,
+    legs: row.legs,
+    balanced: row.balanced,
+    emitSite: row.emitSite,
+  });
+  if (
+    !stored ||
+    JSON.stringify(economicIdentity(stored as typeof expected)) !==
+      JSON.stringify(economicIdentity(expected))
+  ) {
+    throw new Error(`Bank sovereign ledger witness ${claim.id} conflicts with its receipt`);
+  }
 }
 
 function bankPayoutTransition(claim: BankSovereignClaim, attemptTurn: number): BankingTransition {
@@ -388,7 +336,19 @@ async function fundClaimEscrow(
       status: "partial",
     })
     .toArray();
-  for (const row of pending) await resumeSettlement(db, row._id);
+  for (const row of pending) {
+    const resumed = await resumeSettlement(db, row._id);
+    if (resumed.status !== "applied" && (resumed.status !== "replayed" || resumed.error)) {
+      // A prior treasury debit may already have landed. Never open a new
+      // attempt while that receipt still owns an unfinished credit leg.
+      return false;
+    }
+  }
+  const unresolved = await db.collection<{ _id: string }>("bankMoneyMoves").findOne({
+    _id: { $regex: `^${claim.id}:funding:` },
+    status: "partial",
+  });
+  if (unresolved) return false;
 
   let corporation = await corps.findOne(
     { _id: new ObjectId(claim.bankId) },
@@ -437,12 +397,7 @@ async function payFromEscrow(
       settled = await resumeSettlement(db, transition.key);
     if (settled.status === "applied" || (settled.status === "replayed" && !settled.error)) {
       if (claim.ledgerShadow) {
-        const ledger = ledgerProjection(claim, transition.key, attemptTurn).insert!;
-        const rows = db.collection("ledgerEntries");
-        await rows.updateOne({ _id: ledger._id }, { $setOnInsert: ledger }, { upsert: true });
-        const stored = await rows.findOne({ _id: ledger._id });
-        if (!stored || JSON.stringify(stored) !== JSON.stringify(ledger))
-          throw new Error(`Bank sovereign ledger witness ${claim.id} conflicts with its receipt`);
+        await ensureLedgerWitness(db, claim, transition.key, attemptTurn, "bank");
       }
       await db
         .collection<FederalBudget>("federalBudget")
@@ -486,9 +441,9 @@ async function recoverCompletedClaim(
     const settled = await resumeSettlement(db, record._id);
     if (settled.status !== "applied" && (settled.status !== "replayed" || settled.error)) continue;
     if (record._id.includes(":bank:") && claim.ledgerShadow) {
-      const ledger = ledgerProjection(claim, record._id, record.turn ?? claim.turn).insert!;
-      const rows = db.collection("ledgerEntries");
-      await rows.updateOne({ _id: ledger._id }, { $setOnInsert: ledger }, { upsert: true });
+      await ensureLedgerWitness(db, claim, record._id, record.turn ?? claim.turn, "bank");
+    } else if (record._id.includes(":insurance:") && claim.ledgerShadow) {
+      await ensureLedgerWitness(db, claim, record._id, record.turn ?? claim.turn, "insurance");
     }
     await db
       .collection<FederalBudget>("federalBudget")

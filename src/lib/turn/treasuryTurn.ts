@@ -20,11 +20,8 @@ import { getCentralBankScope } from "@/lib/centralBank/helpers";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import { getRegisteredCountryIdSet } from "@/lib/country/registeredCountries";
 import { enforcementTreasuryCostPerTurn } from "@/lib/unions/enforcementCosts";
-import {
-  bankCouponClaim,
-  bankCouponPlanForCountry,
-  settleBankSovereignClaims,
-} from "@/lib/banking/bankSovereignClaims";
+import { settleBankSovereignClaims } from "@/lib/banking/bankSovereignClaims";
+import { bankCouponClaim, bankCouponPlanForCountry } from "@/lib/banking/rules/sovereignClaims";
 
 /**
  * Per-turn fiscal accrual (spec §4). For each country's federalBudget, move a
@@ -217,6 +214,7 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
           plan,
           anchorRate: valuation.anchorRate ?? undefined,
           ledgerShadow,
+          ledgerCreatedAt: new Date(),
         });
         claimById.set(claim.id, claim);
       }

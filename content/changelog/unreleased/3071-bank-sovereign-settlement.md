@@ -23,3 +23,6 @@ areas: [backend, engine]
   a closed or rechartered bank epoch go to the currency insurance fund.
 - Acquisitions and takeovers wait until funded sovereign claims are settled so
   an absorbed corporation cannot delete their escrow.
+- Retries keep one partial treasury-funding receipt until its credit leg lands,
+  and shadow-ledger witnesses retain a frozen timestamp and verified economic
+  identity across replay. Coupon plans use currency-specific minor-unit rounding.

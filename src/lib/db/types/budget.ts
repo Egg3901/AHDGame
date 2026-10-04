@@ -460,6 +460,8 @@ export interface BankSovereignClaim {
   currencyCode: import("@/lib/constants/currencies").CurrencyCode;
   amountLocal: number;
   turn: number;
+  /** Frozen ledger timestamp so a retry recreates an identical funded witness. */
+  ledgerCreatedAt?: Date;
   anchorRate?: number;
   ledgerShadow?: boolean;
 }
