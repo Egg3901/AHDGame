@@ -501,4 +501,35 @@ describe("bank sovereign claims", () => {
     expect(vault(memory)).toBe(1_205);
     expect(budget(memory).bankSovereignClaims).toEqual([]);
   });
+
+  it("funds enabled bank claims only from actual funded Treasury cash", async () => {
+    const claim = { ...couponClaim(10), treasuryCashLedgerEnabled: true };
+    const memory = world(claim, 1_000);
+    await memory
+      .collection("federalBudget")
+      .updateOne({ _id: "federal" }, { $set: { treasuryCashLocal: 20 } });
+
+    await settleBankSovereignClaims(memory as unknown as Db, budget(memory), 13);
+
+    expect(budget(memory)).toMatchObject({ treasuryBalance: 990, treasuryCashLocal: 10 });
+    expect(budget(memory).bankSovereignClaims).toEqual([]);
+    expect(vault(memory)).toBe(15);
+    await settleBankSovereignClaims(memory as unknown as Db, budget(memory), 14);
+    expect(budget(memory)).toMatchObject({ treasuryBalance: 990, treasuryCashLocal: 10 });
+    expect(vault(memory)).toBe(15);
+  });
+
+  it("leaves an enabled bank claim due when funded Treasury cash is short", async () => {
+    const claim = { ...couponClaim(10), treasuryCashLedgerEnabled: true };
+    const memory = world(claim, 1_000);
+    await memory
+      .collection("federalBudget")
+      .updateOne({ _id: "federal" }, { $set: { treasuryCashLocal: 5 } });
+
+    await settleBankSovereignClaims(memory as unknown as Db, budget(memory), 13);
+
+    expect(budget(memory)).toMatchObject({ treasuryBalance: 1_000, treasuryCashLocal: 5 });
+    expect(budget(memory).bankSovereignClaims).toHaveLength(1);
+    expect(vault(memory)).toBe(5);
+  });
 });

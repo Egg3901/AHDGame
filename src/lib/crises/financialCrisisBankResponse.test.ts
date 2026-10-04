@@ -12,7 +12,11 @@ import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 
-function world(response: "recapitalize" | "guarantee" | "resolve", treasury = 1000) {
+function world(
+  response: "recapitalize" | "guarantee" | "resolve",
+  treasury = 1000,
+  treasuryCashLocal = 0
+) {
   const db = createInMemoryDb();
   const id = new ObjectId();
   db.seed("corporations", [
@@ -38,6 +42,7 @@ function world(response: "recapitalize" | "guarantee" | "resolve", treasury = 10
       currencyCode: "USD",
       gdp: 10_000,
       treasuryBalance: treasury,
+      treasuryCashLocal,
     },
   ]);
   const ctx = {
@@ -73,6 +78,16 @@ describe("funded financial crisis interventions", () => {
     await expect(prepareFinancialCrisisBankResponse(ctx.db, "US", ctx.option)).rejects.toThrow(
       "funded treasury"
     );
+  });
+  it("uses funded Treasury cash and keeps signed fiscal position separate", async () => {
+    const { ctx, id } = world("recapitalize", 4_000, 300);
+    ctx.treasuryCashLedgerEnabled = true;
+    await applyFinancialCrisisBankResponse(ctx, "recapitalize");
+    const bank = await ctx.db.collection("corporations").findOne({ _id: id });
+    const budget = await ctx.db.collection("federalBudget").findOne({ countryId: "US" });
+    expect(budget?.treasuryCashLocal).toBe(100);
+    expect(budget?.treasuryBalance).toBe(3_800);
+    expect(bank?.bankCharter.cashReserves).toBe(250);
   });
   it("pays a real failed-bank cash shortfall and refunds unused escrow once", async () => {
     const { db, ctx, id } = world("guarantee");

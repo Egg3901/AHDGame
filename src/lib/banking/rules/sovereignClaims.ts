@@ -66,6 +66,7 @@ export function bankCouponClaim(input: {
   plan: BankCouponPlan;
   anchorRate?: number;
   ledgerShadow?: boolean;
+  treasuryCashLedgerEnabled?: boolean;
   ledgerCreatedAt: Date;
 }): BankSovereignClaim {
   const { countryId, currencyCode, turn, plan } = input;
@@ -82,5 +83,6 @@ export function bankCouponClaim(input: {
     ledgerCreatedAt: input.ledgerCreatedAt,
     ...(input.anchorRate !== undefined ? { anchorRate: input.anchorRate } : {}),
     ...(input.ledgerShadow ? { ledgerShadow: true } : {}),
+    ...(input.treasuryCashLedgerEnabled ? { treasuryCashLedgerEnabled: true } : {}),
   };
 }

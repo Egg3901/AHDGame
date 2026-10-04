@@ -163,6 +163,9 @@ export const gameConfig: GameConfig = {
   // Observe-only by construction — it never changes a balance. See the
   // shadow-ledger plan.
   ledgerShadow: true,
+  // Funded Treasury cash is a separate, opt-in stock. Fiscal aggregates are
+  // analytical and cannot be treated as cash receipts or obligations.
+  treasuryCashLedgerEnabled: false,
 
   // NPP corporations can be targeted by corporate attacks, per the same
   // flags-default-on rule; admins can still dial it down per world.
