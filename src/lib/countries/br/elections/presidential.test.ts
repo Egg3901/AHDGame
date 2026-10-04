@@ -2,10 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { type Db, ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
-const { live, autonomy, context } = vi.hoisted(() => ({
+const { live, autonomy } = vi.hoisted(() => ({
   live: vi.fn(),
   autonomy: vi.fn(),
-  context: vi.fn(),
 }));
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/turn/perpetualElections/shared", () => ({
@@ -17,8 +16,9 @@ vi.mock("@/lib/turn/perpetualElections/shared", () => ({
 vi.mock("@/lib/nppAutonomy/featureFlag", () => ({ isNppAutonomyActive: autonomy }));
 vi.mock("@/lib/turn/perpetualElections/engine", async (importActual) => ({
   ...(await importActual<typeof import("@/lib/turn/perpetualElections/engine")>()),
-  getCurrentTurnAndCtx: context,
+  getCurrentTurnAndCtx: vi.fn(),
 }));
+import { getCurrentTurnAndCtx } from "@/lib/turn/perpetualElections/engine";
 import { ensureBRPresidentialElection } from "./perpetual";
 
 let mock: MockDb;
@@ -30,8 +30,9 @@ beforeEach(async () => {
   vi.mocked(getDb).mockResolvedValue(mock as unknown as Db);
   live.mockResolvedValue(false);
   autonomy.mockResolvedValue(true);
-  context.mockResolvedValue({
+  vi.mocked(getCurrentTurnAndCtx).mockResolvedValue({
     currentTurn: 1,
+    currentYear: 1991,
     ctx: { preset: "1991-default", startingYear: 1991 },
   });
 });
@@ -70,8 +71,9 @@ describe("Brazil ordinary presidential spawning", () => {
     expect(mock.collection("elections").updateOne).not.toHaveBeenCalled();
   });
   it("pins the 1979 congressional selection independently of the US calendar", async () => {
-    context.mockResolvedValue({
+    vi.mocked(getCurrentTurnAndCtx).mockResolvedValue({
       currentTurn: 1,
+      currentYear: 1979,
       ctx: { preset: "1979-default", startingYear: 1979 },
     });
     await ensureBRPresidentialElection(now, 1);
@@ -83,7 +85,7 @@ describe("Brazil ordinary presidential spawning", () => {
   it("leaves a non-enabled country without autonomy inactive", async () => {
     autonomy.mockResolvedValue(false);
     await ensureBRPresidentialElection(now, 1);
-    expect(context).not.toHaveBeenCalled();
+    expect(getCurrentTurnAndCtx).not.toHaveBeenCalled();
     expect(mock.collection("elections").updateOne).not.toHaveBeenCalled();
   });
 });
