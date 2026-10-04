@@ -966,10 +966,7 @@ describe("computeRawSupplyDemand — plants tier (real production, P3b)", () => 
     const unchangedInputs = plants([inputs]).byState.get("S1")!;
 
     expect(state.get("steel")!.supply).toBeCloseTo(20 * NATCORP_COMMODITY_MULTIPLIER * 0.75, 6);
-    expect(state.get("vehicles")!.supply).toBeCloseTo(
-      3 * NATCORP_COMMODITY_MULTIPLIER * 0.75,
-      6
-    );
+    expect(state.get("vehicles")!.supply).toBeCloseTo(3 * NATCORP_COMMODITY_MULTIPLIER * 0.75, 6);
     expect(state.get("building_materials")!.supply).toBe(0);
     for (const [commodity, balance] of state) {
       expect(balance.demand).toBeCloseTo(unchangedInputs.get(commodity)!.demand, 6);

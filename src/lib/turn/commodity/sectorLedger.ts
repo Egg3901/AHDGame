@@ -312,11 +312,11 @@ export function accumulatePlantsUnits(
       embargoSupplyFactor: sector.embargoSupplyFactor,
     };
     if (sector.outputUnitsByCommodity) {
-      const productScale =
-        plantsSupplyScaledUnits({ ...scaleArgs, producedUnits: 1 }) ?? 1;
-      for (const [commodity, rawProduced] of Object.entries(
-        sector.outputUnitsByCommodity
-      ) as [CommodityType, number][]) {
+      const productScale = plantsSupplyScaledUnits({ ...scaleArgs, producedUnits: 1 }) ?? 1;
+      for (const [commodity, rawProduced] of Object.entries(sector.outputUnitsByCommodity) as [
+        CommodityType,
+        number,
+      ][]) {
         if (!Number.isFinite(rawProduced) || rawProduced <= 0) continue;
         const producedExact = rawProduced * productScale;
         const soldFraction = sector.soldByCommodity?.[commodity];
