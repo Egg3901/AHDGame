@@ -15,6 +15,7 @@
  */
 
 import type { BankCharter } from "@/lib/db/types/bank";
+import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { BankingPolicySnapshot } from "@/lib/banking/rules/policy";
 import type { CapabilityDenial, CapabilityKey } from "@/lib/banking/rules/capabilities";
 import type { ValueLegKind } from "@/lib/banking/rules/invariants";
@@ -60,7 +61,7 @@ export interface BankingSnapshot {
   policy: BankingPolicySnapshot;
   /** Bank corporation id, hex. */
   bankId: string;
-  currency: string;
+  currency: CurrencyCode;
   charter: BankCharterSnapshot | null;
   /** The holding company's own treasury, outside the ring fence. */
   corporationLiquidCapital: number;
