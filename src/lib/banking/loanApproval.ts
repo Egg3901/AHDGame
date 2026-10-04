@@ -18,6 +18,8 @@ import { getCurrentTurn } from "@/lib/currentTurn";
 import { sendSystemMail } from "@/lib/mail/systemMail";
 import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
 import { approveConstructionFinance, rejectConstructionFinance } from "./constructionFinance";
+import { loadBankingPolicy } from "./policy";
+import { MONEY_MOVE_COLLECTION } from "./moneyMove";
 
 export type LoanDecisionResult = { ok: true; loan: BankLoan } | { ok: false; error: string };
 
@@ -134,8 +136,19 @@ async function acceptLoanInner(
     bankCorporationId,
   });
   if (!loan) return { ok: false, error: "Loan not found" };
-  // Persisted claims must remain recoverable after new financing is disabled.
   if (loan.constructionCollateral) {
+    const policy = await loadBankingPolicy(db);
+    if (!policy.constructionFinance && loan.status === "pending") {
+      // Disable new disbursements while allowing the original claimed cash
+      // operation to recover. A noncash request alone authorizes no payment.
+      const funding = await db
+        .collection<{ _id: string }>(MONEY_MOVE_COLLECTION)
+        .findOne(
+          { _id: `named_loan_disbursement:${bankCorporationId}:${loanId}` },
+          { projection: { _id: 1 } }
+        );
+      if (!funding) return { ok: false, error: "New construction funding is disabled" };
+    }
     const result = await approveConstructionFinance(db, bankCorporationId, loanId, true);
     if (!result.ok) return result;
     const delivered = await db
