@@ -204,6 +204,14 @@ const ALLOWED_WRITERS: Record<string, WriterEntry> = {
   },
 
   // ─── Reviewed by the concurrent plants sweeps (already plants-aware) ─────
+  "src/lib/banking/constructionBuildEffects.ts": {
+    writeSites: 1,
+    status: "plants-gated",
+    reason:
+      "GREP FALSE POSITIVE: the zero-revenue insert initializes unownedSectors, " +
+      "whose construction draw uses headroomUnits. The corporateSectors writes " +
+      "debit construction escrow and mark effectsPaid; neither writes sector revenue.",
+  },
   "src/lib/turn/unownedSectorGrowth.ts": {
     writeSites: 2,
     status: "plants-gated",
