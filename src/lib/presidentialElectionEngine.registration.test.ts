@@ -17,6 +17,9 @@ import { ObjectId } from "mongodb";
 import { demographicCategories } from "@/lib/seeds/demographicCategories";
 import { stateDemographics } from "@/lib/seeds/stateDemographics";
 import { ELECTORAL_VOTE_UNITS } from "@/lib/constants/states";
+import { MONETARY_BASELINES } from "@/lib/constants/currencies";
+import { getEraMonetaryBaseline } from "@/lib/constants/monetaryEra";
+import { INFLATION_BAND_PCT } from "@/lib/electionEngine/rules/economicReferendum";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/elections/referendumInputs", () => ({ loadReferendumInputs: vi.fn() }));
@@ -339,36 +342,68 @@ describe("presidential engine — registration entrenchment", () => {
     expect(a).toBe(b);
   });
 
-  it("applies the 1979 target-relative inflation penalty in the presidential tally pipeline", async () => {
-    const { getEraMonetaryBaseline } = await import("@/lib/constants/monetaryEra");
-    const target = getEraMonetaryBaseline("US", 1979)!.targetInflation;
-    const demId = new ObjectId().toString();
-    const result = await runPresidentDryRun({
-      electionId: new ObjectId(),
-      demId,
-      repId: new ObjectId().toString(),
-      startTime: new Date("1979-11-01T00:00:00Z"),
-      endTime: new Date("1979-11-05T00:00:00Z"),
-      preset: "1979-default",
-      incumbentParty: "democrat",
-      referendumInputs: {
-        unemploymentRate: 6,
-        povertyRate: 20,
-        inflationRate: target + 2,
-        realIncomeTrendPct: 0,
-      },
-    });
+  it.each([1953, 1979, 1991, 1999, 2007, 2019, 2023, 2027])(
+    "applies target-relative inflation through the %i presidential tally pipeline",
+    async (year) => {
+      const target =
+        getEraMonetaryBaseline("US", year)?.targetInflation ??
+        (year >= 1999
+          ? MONETARY_BASELINES.US.targetInflation
+          : (INFLATION_BAND_PCT[0] + INFLATION_BAND_PCT[1]) / 2);
+      const demId = new ObjectId().toString();
+      const base = {
+        demId,
+        repId: new ObjectId().toString(),
+        startTime: new Date(`${year}-11-01T00:00:00Z`),
+        endTime: new Date(`${year}-11-05T00:00:00Z`),
+        preset: `${year}-default`,
+        incumbentParty: "democrat",
+      };
+      const onTarget = await runPresidentDryRun({
+        ...base,
+        electionId: new ObjectId(),
+        referendumInputs: {
+          unemploymentRate: 6,
+          povertyRate: 20,
+          inflationRate: target,
+          realIncomeTrendPct: 0,
+        },
+      });
+      const result = await runPresidentDryRun({
+        ...base,
+        electionId: new ObjectId(),
+        referendumInputs: {
+          unemploymentRate: 6,
+          povertyRate: 20,
+          inflationRate: target + 2,
+          realIncomeTrendPct: 0,
+        },
+      });
 
-    expect(result).toBeDefined();
-    expect(result!.referendum?.sharePts).toBeCloseTo(-0.2, 6);
-    expect(
-      Object.values(result!.totalVotes).reduce((sum, votes) => sum + votes, 0)
-    ).toBeGreaterThan(0);
-    const incumbent = result!.factorLedger?.byCandidateNational.find(
-      (candidate) => candidate.candidateId === demId
-    );
-    expect(
-      incumbent?.factors.find((factor) => factor.key === "nationalEnvironment")?.voteDelta
-    ).toBeLessThan(0);
-  }, 30_000);
+      expect(onTarget).toBeDefined();
+      expect(onTarget!.referendum?.sharePts).toBe(0);
+      expect(result).toBeDefined();
+      expect(result!.referendum?.sharePts).toBeCloseTo(-0.2, 6);
+      const totalVotes = Object.values(result!.totalVotes).reduce((sum, votes) => sum + votes, 0);
+      expect(totalVotes).toBeGreaterThan(0);
+      expect(result!.totalVotes[demId]).toBeLessThan(onTarget!.totalVotes[demId]);
+      // The referendum conserves its float vote pool. Subsequent lean bonuses
+      // and integer rounding can change the final tally's total independently.
+      const referendumDelta = result!.factorLedger!.byCandidateNational.reduce(
+        (sum, candidate) =>
+          sum +
+          (candidate.factors.find((factor) => factor.key === "nationalEnvironment")?.voteDelta ??
+            0),
+        0
+      );
+      expect(referendumDelta).toBeCloseTo(0, 6);
+      const incumbent = result!.factorLedger?.byCandidateNational.find(
+        (candidate) => candidate.candidateId === demId
+      );
+      expect(
+        incumbent?.factors.find((factor) => factor.key === "nationalEnvironment")?.voteDelta
+      ).toBeLessThan(0);
+    },
+    30_000
+  );
 });
