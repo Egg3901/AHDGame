@@ -103,7 +103,12 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
       ? await db
           .collection<Bond>("bonds")
           .find(
-            { issuerType: "sovereign", defaulted: { $ne: true }, matured: { $ne: true } },
+            {
+              issuerType: "sovereign",
+              defaulted: { $ne: true },
+              matured: { $ne: true },
+              maturityTurn: { $gte: _turn },
+            },
             {
               projection: {
                 _id: 1,
