@@ -530,6 +530,42 @@ describe("processCentralBankChairTurn", () => {
     expect(charMock.bulkWrite).toHaveBeenCalledTimes(0);
   });
 
+  it.each([
+    { alignment: "hawk", primeRate: 8.25 },
+    { alignment: "dove", primeRate: 4.5 },
+  ] as const)(
+    "recovers credibility at the stored $alignment chair target through the projected read",
+    async ({ alignment, primeRate }) => {
+      const bank = {
+        _id: "US",
+        countryId: "US",
+        chairCharacterId: null,
+        chairMode: "npp",
+        chairAlignment: alignment,
+        primeRate,
+        chairInfamy: 20,
+        resolveStreak: 2,
+      };
+      testBudgetInflation = 5;
+      getCollectionMock("centralBanks").find.mockReturnValue({
+        project: (projection: Record<string, unknown>) => ({
+          toArray: async () => [
+            Object.fromEntries(Object.entries(bank).filter(([key]) => projection[key])),
+          ],
+        }),
+      });
+
+      await processCentralBankChairTurn(mockDb as never, 100);
+
+      const [operations] = getCollectionMock("centralBanks").bulkWrite.mock.calls[0];
+      expect(operations[0].updateOne.update.$set).toMatchObject({
+        resolveStreak: 0,
+        chairInfamy: expect.closeTo(14.5, 2),
+      });
+      expect(getCollectionMock("characters").bulkWrite).not.toHaveBeenCalled();
+    }
+  );
+
   it("does not invoke the NPP auto-rate for character-mode chairs", async () => {
     testBanks = [
       {

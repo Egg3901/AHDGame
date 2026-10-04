@@ -4,7 +4,7 @@
  * pseudonymous retry history through `runPatreonReconcile`.
  */
 import { createHmac, randomUUID } from "node:crypto";
-import type { Db, Document } from "mongodb";
+import type { AnyBulkWriteOperation, Db, Document } from "mongodb";
 import type { PatreonTier, User } from "@/lib/db/types";
 import { listPatreonMembers, type PatreonMemberRecord } from "@/lib/patreon/members";
 import {
@@ -349,7 +349,7 @@ async function persistUnmatchedAudit(
       { kind, state: "open", _id: { $nin: currentIds } },
       { $set: { state: "resolved", resolvedAt: now } }
     );
-    const operations = keys
+    const operations: AnyBulkWriteOperation<UnmatchedAudit>[] = keys
       .filter((key) => key.kind === kind)
       .map((key) => ({
         updateOne: {
@@ -358,7 +358,7 @@ async function persistUnmatchedAudit(
             $set: {
               kind,
               fingerprint: key.fingerprint,
-              state: "open",
+              state: "open" as const,
               lastSeenAt: now,
               lastRunId: runId,
             },

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
+import type { PatreonTier } from "@/lib/db/types";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
 vi.mock("@/lib/patreon/members", () => ({ listPatreonMembers: vi.fn() }));
@@ -106,11 +107,19 @@ describe("runPatreonReconcile audit and retry history", () => {
   it("keeps Stripe ownership when a higher Patreon tier upgrades benefits, then protects it on lapse", async () => {
     const { listPatreonMembers } = await import("@/lib/patreon/members");
     const service = await import("@/lib/patreon/service");
-    const user = {
+    const user: {
+      _id: { toString: () => string };
+      username: string;
+      email: string;
+      patreonTier: PatreonTier;
+      supporterProvider: string | null;
+      patreonUserId: string;
+      patreonExpiresAt: Date | null | undefined;
+    } = {
       _id: { toString: () => "stripe-user" },
       username: "player",
       email: "player@example.com",
-      patreonTier: "supporter" as const,
+      patreonTier: "supporter",
       supporterProvider: "stripe",
       patreonUserId: "patron-1",
       patreonExpiresAt: new Date(Date.now() + 60_000),
@@ -121,6 +130,7 @@ describe("runPatreonReconcile audit and retry history", () => {
       user.patreonTier = input.tier;
       user.supporterProvider = input.provider ?? "patreon";
       user.patreonExpiresAt = input.expiresAt;
+      return { supporterPlusAwarded: false };
     });
     const users = db.collection("users");
     vi.mocked(users.find).mockReturnValue({ toArray: vi.fn().mockResolvedValue([user]) } as never);

@@ -19,6 +19,18 @@ import type {
   SeatState,
 } from "./types";
 
+function readResolvedMeeting(
+  value: unknown
+): { result: "passed" | "failed"; resolvedAtTurn: number } | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  if (!("result" in value) || !("resolvedAtTurn" in value)) return undefined;
+  const { result, resolvedAtTurn } = value;
+  if ((result !== "passed" && result !== "failed") || typeof resolvedAtTurn !== "number") {
+    return undefined;
+  }
+  return { result, resolvedAtTurn };
+}
+
 const NOW = 1_700_000_000_000;
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -170,8 +182,9 @@ describe("vote window and deadlines", () => {
     expect(decision.allowed).toBe(true);
     if (!decision.allowed) return;
     expect(decision.next.activeMeeting).toBeNull();
-    expect(decision.transition.set.meetingHistoryAppend?.result).toBe("passed");
-    expect(decision.transition.set.meetingHistoryAppend?.resolvedAtTurn).toBe(109);
+    const resolved = readResolvedMeeting(decision.transition.set.meetingHistoryAppend);
+    expect(resolved?.result).toBe("passed");
+    expect(resolved?.resolvedAtTurn).toBe(109);
     expect(decision.next.primeRate).toBe(5.5);
     expect(decision.next.rateChangesThisTerm).toBe(1);
   });
@@ -186,7 +199,8 @@ describe("vote window and deadlines", () => {
     expect(decision.allowed).toBe(true);
     if (!decision.allowed) return;
     expect(decision.next.activeMeeting).toBeNull();
-    expect(decision.transition.set.meetingHistoryAppend?.result).toBe("failed");
+    const resolved = readResolvedMeeting(decision.transition.set.meetingHistoryAppend);
+    expect(resolved?.result).toBe("failed");
     expect(decision.transition.set.primeRate).toBeUndefined();
     expect(decision.next.rateChangesThisTerm).toBe(0);
   });
@@ -207,7 +221,8 @@ describe("vote window and deadlines", () => {
     expect(deadline.allowed).toBe(true);
     if (!deadline.allowed) return;
     expect(deadline.next.activeMeeting).toBeNull();
-    expect(deadline.transition.set.meetingHistoryAppend?.result).toBe("failed");
+    const resolved = readResolvedMeeting(deadline.transition.set.meetingHistoryAppend);
+    expect(resolved?.result).toBe("failed");
     expect(deadline.transition.set.primeRate).toBeUndefined();
   });
 

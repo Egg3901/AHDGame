@@ -133,6 +133,7 @@ export async function processCentralBankChairTurn(
         | "fomcBoard"
         | "governmentControlled"
         | "chairNppId"
+        | "chairAlignment"
         | "monetaryAuthorityId"
       >
     >({
@@ -153,6 +154,8 @@ export async function processCentralBankChairTurn(
       // history; unprojected it reads as undefined and every automated move
       // would be recorded against the anonymous system actor instead.
       chairNppId: 1,
+      // The NPP chair's alignment is a scoring input for its resolve stance.
+      chairAlignment: 1,
       monetaryAuthorityId: 1,
     })
     .toArray();

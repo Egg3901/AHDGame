@@ -567,7 +567,7 @@ export async function processExtractionAutoStrategy(
       const headroomOf = headroomForState(s.stateId);
       let contributionContext: StrategyContributionContext | undefined;
       if (marketMode !== "off") {
-        contributionContext = {
+        const context: StrategyContributionContext = {
           mode: marketMode,
           priceRatios: {},
           inputPriceRatios: {},
@@ -577,8 +577,8 @@ export async function processExtractionAutoStrategy(
             EXTRACTABLE_RESOURCES.map((resource) => [resource, headroomOf(resource)])
           ),
           currentTurn,
-          clearingStartTurn: s.clearingStartTurn,
-          throughputStartTurn: s.throughputStartTurn,
+          clearingStartTurn: s.clearingStartTurn ?? undefined,
+          throughputStartTurn: s.throughputStartTurn ?? undefined,
           governorCap: config?.marketGovernorCap,
           localInputAvailability: localInputsEnabled ? {} : undefined,
         };
@@ -593,26 +593,25 @@ export async function processExtractionAutoStrategy(
             Number.isFinite(reachablePrice / price.basePrice)
               ? reachablePrice / price.basePrice
               : null;
-          contributionContext.priceRatios[key] = clearingEnabled
-            ? (reachableRatio ?? worldRatio)
-            : worldRatio;
-          contributionContext.inputPriceRatios![key] =
+          context.priceRatios[key] = clearingEnabled ? (reachableRatio ?? worldRatio) : worldRatio;
+          context.inputPriceRatios![key] =
             reachableRatio !== null
               ? capInputPriceRatioAtWorld(worldRatio ?? undefined, reachableRatio)
               : worldRatio;
           const globalBalance = { supply: price.globalSupply, demand: price.globalDemand };
-          contributionContext.balances[key] = globalBalance;
+          context.balances[key] = globalBalance;
           const book = countryId ? bookFor(reachableBooks, countryId, key) : undefined;
-          contributionContext.sellableShares[key] = expectedSellableShare(
+          context.sellableShares[key] = expectedSellableShare(
             book ? { supply: book.supply, demand: reachableSellableDemand(book) } : globalBalance
           );
-          if (contributionContext.localInputAvailability) {
+          if (context.localInputAvailability) {
             const availability = price.stateInputAvailability?.[s.stateId];
             if (typeof availability === "number" && Number.isFinite(availability)) {
-              contributionContext.localInputAvailability[key] = availability;
+              context.localInputAvailability[key] = availability;
             }
           }
         }
+        contributionContext = context;
       }
       const forecastContext = contributionContext;
       const decision = decideExtractionStrategySwitch({

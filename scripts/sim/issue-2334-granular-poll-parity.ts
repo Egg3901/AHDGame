@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import { buildGranularPollPayloadForState } from "@/lib/actions/granularPollPayload";
 import { buildGranularElectorateSubstrate } from "@/lib/demographics/granularElectorate";
 import { targetedAdBonuses } from "@/lib/campaignTargeting/rules";
-import type { EnrichedCandidate } from "@/lib/electionEngine/types";
+import type { DistributeVotesOptions, EnrichedCandidate } from "@/lib/electionEngine/types";
 import { distributeVotesBySwingFlow } from "@/lib/electionEngine/voteDistributionSwingFlow";
 import { personalStatTenureRetentionForCandidate } from "@/lib/electionEngine/rules/tenureRetention";
 import type { DemographicCategory, StateDemographics } from "@/lib/db/types";
@@ -114,7 +114,6 @@ function makeCandidate(
     nationalInfluence: 50,
     support: 50,
     archetypeApprovals,
-    nationalInfluence: 50,
     infamy: 0,
   };
 }
@@ -244,7 +243,7 @@ for (const office of offices) {
         });
         const pollResult = aggregatePollPlayerShare(poll);
 
-        const voteOptions = {
+        const voteOptions: DistributeVotesOptions = {
           isGeneralElection: true,
           hasPlayerInRace: true,
           countryId,

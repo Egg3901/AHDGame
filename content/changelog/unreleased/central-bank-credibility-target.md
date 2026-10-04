@@ -19,3 +19,4 @@ areas: [fullstack]
 - Share the autonomous chair policy target with credibility scoring, including the shared-currency inputs.
 - Explain the difference between the displayed prime-minus-inflation spread and credibility scoring.
 - Preserve credibility and recovery progress when a shared currency lacks complete member-country indicators.
+- Load the NPP chair's stored hawk or dove stance when scoring its policy choices.

@@ -18,6 +18,28 @@ const MACRO: MacroInputs = {
   gdpGrowth: 2,
 };
 type Machine = typeof decideGovernance;
+type ResolvedMeeting = {
+  openedAtTurn: number;
+  resolvedAtTurn: number;
+  result: string;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function readResolvedMeeting(value: unknown): ResolvedMeeting | undefined {
+  if (!isRecord(value)) return undefined;
+  const { openedAtTurn, resolvedAtTurn, result } = value;
+  if (
+    typeof openedAtTurn !== "number" ||
+    typeof resolvedAtTurn !== "number" ||
+    typeof result !== "string"
+  ) {
+    return undefined;
+  }
+  return { openedAtTurn, resolvedAtTurn, result };
+}
 
 function initialState(players: number, doves: number): JurisdictionState {
   const board: SeatState[] = Array.from({ length: 7 }, (_, index) => ({
@@ -59,14 +81,17 @@ function simulate(machine: Machine, players: number, doves: number, chairVotes: 
   let rateChanges = 0;
   const record: (decision: ReturnType<Machine>) => void = (decision) => {
     assert(decision.allowed, "Fixture governance command must succeed");
-    if (decision.transition.set.lastFomcMeetingTurn !== undefined)
-      openings.push(decision.transition.set.lastFomcMeetingTurn);
-    const resolved = decision.transition.set.meetingHistoryAppend;
+    const openedAtTurn = decision.transition.set.lastFomcMeetingTurn;
+    if (openedAtTurn !== undefined) {
+      assert(typeof openedAtTurn === "number", "Meeting opening must carry a numeric turn");
+      openings.push(openedAtTurn);
+    }
+    const resolved = readResolvedMeeting(decision.transition.set.meetingHistoryAppend);
     if (resolved) {
-      assert(resolved.resolvedAtTurn! > resolved.openedAtTurn);
+      assert(resolved.resolvedAtTurn > resolved.openedAtTurn);
       resolutions.push({
-        latency: resolved.resolvedAtTurn! - resolved.openedAtTurn,
-        result: resolved.result!,
+        latency: resolved.resolvedAtTurn - resolved.openedAtTurn,
+        result: resolved.result,
       });
     }
     if (decision.transition.set.rateHistoryAppend) rateChanges++;
