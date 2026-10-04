@@ -98,12 +98,21 @@ export const migration: Migration = {
         (gov.pmCharacterId
           ? characters.find((c) => c._id.equals(gov.pmCharacterId!))?.party
           : npps.find((n) => gov.pmNppId && n._id.equals(gov.pmNppId))?.party);
-      if (party && party !== gov.governingPartyId) {
+      const repair: { governingPartyId?: string; formationType?: null } = {};
+      if (party && party !== gov.governingPartyId) repair.governingPartyId = party;
+      if (
+        runtime?.governmentType === "presidential" &&
+        getCountryConfig(gov.countryId, game?.preset).electionSystems.headOfGovernment !==
+          "parliamentary" &&
+        gov.formationType != null
+      )
+        repair.formationType = null;
+      if (Object.keys(repair).length) {
         repaired++;
         if (!dryRun)
           await db
             .collection<GovernmentFormation>("governmentFormations")
-            .updateOne({ _id: gov._id, status: "formed" }, { $set: { governingPartyId: party } });
+            .updateOne({ _id: gov._id, status: "formed" }, { $set: repair });
       }
       if (gov.pmNppId && runtime?.hasLeaderConfidenceModel) {
         const reference = { kind: "npp" as const, id: gov.pmNppId };

@@ -384,6 +384,7 @@ export async function seatPresidentialExecutive(
           presidentName: winnerCandidate.characterName,
           ...(!separatePrimeMinister
             ? {
+                formationType: null,
                 pmName: winnerCandidate.characterName,
                 pmCharacterId: winnerCandidate.isNPP ? null : winnerCandidate.characterId,
                 pmNppId: winnerCandidate.isNPP ? winnerCandidate.nppId : null,

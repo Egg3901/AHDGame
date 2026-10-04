@@ -35,6 +35,40 @@ beforeEach(() => {
   db.collection("gameState").findOne.mockResolvedValue({ currentTurn: 100 });
 });
 describe("government accountability migration", () => {
+  it("clears a presidential legislative-majority label without resetting its mandate", async () => {
+    db.collection("governmentFormations")
+      .find()
+      .toArray.mockResolvedValue([
+        {
+          _id: "US",
+          countryId: "US",
+          status: "formed",
+          governingPartyId: "1",
+          formationType: "majority",
+          pmNppId: leader,
+          formedTurn: 3,
+        },
+      ]);
+    db.collection("electedOfficials")
+      .find()
+      .toArray.mockResolvedValue([
+        { countryId: "US", officeType: "president", nppId: leader, party: "1" },
+      ]);
+    db.collection("countryState")
+      .find()
+      .toArray.mockResolvedValue([
+        { _id: "US", governmentType: "presidential", hasLeaderConfidenceModel: false },
+      ]);
+    const preview = await migration.execute(db as unknown as Db, { dryRun: true });
+    expect(preview.documentsUpdated).toBe(1);
+    expect(db.collection("governmentFormations").updateOne).not.toHaveBeenCalled();
+    await migration.execute(db as unknown as Db, { dryRun: false });
+    expect(db.collection("governmentFormations").updateOne).toHaveBeenCalledExactlyOnceWith(
+      { _id: "US", status: "formed" },
+      { $set: { formationType: null } }
+    );
+    expect(installNewLeader).not.toHaveBeenCalled();
+  });
   it("previews identity repairs and new leader states without writing", async () => {
     const result = await migration.execute(db as unknown as Db, { dryRun: true });
     expect(result.documentsUpdated).toBe(1);

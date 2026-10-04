@@ -51,6 +51,7 @@ export async function observeGovernmentAccountability(db: Db): Promise<Map<strin
               pmCharacterId: 1,
               pmNppId: 1,
               governingPartyId: 1,
+              formationType: 1,
               coalitionPartyIds: 1,
               coalitionId: 1,
             },
@@ -121,7 +122,10 @@ export async function observeGovernmentAccountability(db: Db): Promise<Map<strin
     party === "independent" || !party ? (identity ? `@${identity}` : null) : party;
   const drains = new Map<string, number>();
   const observations: GovernmentAccountability[] = [];
-  const attributionRepairs: { countryId: CountryId; party: string }[] = [];
+  const attributionRepairs: {
+    countryId: CountryId;
+    fields: { governingPartyId?: string; formationType?: null };
+  }[] = [];
   const observe = (
     countryId: CountryId,
     stateId: string | null,
@@ -165,8 +169,13 @@ export async function observeGovernmentAccountability(db: Db): Promise<Map<strin
       : ((president?.characterId
           ? characterParty.get(String(president.characterId))
           : nppParty.get(String(president?.nppId))) ?? president?.party);
-    if (formation && executiveParty && formation.governingPartyId !== executiveParty)
-      attributionRepairs.push({ countryId, party: executiveParty });
+    if (formation) {
+      const fields: { governingPartyId?: string; formationType?: null } = {};
+      if (executiveParty && formation.governingPartyId !== executiveParty)
+        fields.governingPartyId = executiveParty;
+      if (!parliamentary && formation.formationType != null) fields.formationType = null;
+      if (Object.keys(fields).length) attributionRepairs.push({ countryId, fields });
+    }
     const executiveIdentity = parliamentary
       ? formation?.pmCharacterId
         ? `character:${formation.pmCharacterId}`
@@ -275,10 +284,10 @@ export async function observeGovernmentAccountability(db: Db): Promise<Map<strin
     );
   if (attributionRepairs.length)
     await db.collection<GovernmentFormation>("governmentFormations").bulkWrite(
-      attributionRepairs.map(({ countryId, party }) => ({
+      attributionRepairs.map(({ countryId, fields }) => ({
         updateOne: {
           filter: { _id: countryId, status: "formed" },
-          update: { $set: { governingPartyId: party } },
+          update: { $set: fields },
         },
       }))
     );

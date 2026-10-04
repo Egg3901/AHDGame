@@ -116,6 +116,17 @@ describe("seatPresidentialExecutive", () => {
           $set: expect.objectContaining({ currentOffice: { type: "president" } }),
         })
       );
+      expect(db.collection("governmentFormations").updateOne).toHaveBeenCalledWith(
+        { _id: "US" },
+        {
+          $set: expect.objectContaining({
+            governingPartyId: "2",
+            formationType: null,
+            pmCharacterId: winnerIsNpp ? null : winnerId,
+            pmNppId: winnerIsNpp ? winnerId : null,
+          }),
+        }
+      );
     }
   );
 
