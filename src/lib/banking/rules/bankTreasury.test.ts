@@ -3,6 +3,7 @@ import type { Bond } from "@/lib/db/types/bond";
 import {
   computeBankTreasuryCashFloor,
   computeBankTreasuryDueInterest,
+  computeBankTreasuryFundingRatePercent,
   bankTreasuryHolderUnits,
   allocateBankTreasuryHolderLots,
   planBankTreasurySweep,
@@ -157,8 +158,61 @@ describe("bank treasury rules", () => {
     ).toBe(false);
   });
 
-  it("sweeps only above the cash floor, nearest maturity first, bounded by float", () => {
-    const quote = (bondId: string, remainingTurns: number, ask: number, float: number) => ({
+  it("rejects a one-turn 7 percent bill quoted at 1010 as negative carry", () => {
+    const bond = {
+      _id: { toHexString: () => "bond-loss" },
+      issuerType: "sovereign",
+      countryId: "US",
+      currencyCode: "USD",
+      marketPrice: 1,
+      couponRate: 7,
+      maturityTurn: 101,
+      matured: false,
+      defaulted: false,
+      publicFloat: 20,
+    } as unknown as Bond;
+    const quote = quoteBankTreasuryBond({
+      bond,
+      currency: "USD",
+      currentTurn: 100,
+      poolCashLocal: 100_000,
+      poolTargetCashLocal: 100_000,
+    });
+    expect(quote.askPerUnitLocal).toBe(1_010);
+    expect(quote.annualizedContractYieldPercent).toBeLessThan(0);
+    expect(planBankTreasurySweep([quote], 2_000, 0, 0)).toEqual([]);
+    const malformed = quoteBankTreasuryBond({
+      bond: { ...bond, couponRate: Number.POSITIVE_INFINITY },
+      currency: "USD",
+      currentTurn: 100,
+      poolCashLocal: 100_000,
+      poolTargetCashLocal: 100_000,
+    });
+    expect(malformed.annualizedContractYieldPercent).toBe(Number.NEGATIVE_INFINITY);
+  });
+
+  it("uses zero hurdle without liabilities and ranks positive carry by annual yield", () => {
+    const noLiabilities = {
+      currency: "USD" as const,
+      primeRate: 4,
+      inflationRate: 0,
+      depositOffset: 0,
+      npcDeposits: 0,
+      totalDeposits: 0,
+      playerDeposits: 0,
+      playerDepositsAreLiabilities: true,
+      discountWindowDebt: 0,
+      cbMarginDebt: 0,
+      interbankLoans: [],
+    };
+    expect(computeBankTreasuryFundingRatePercent(noLiabilities)).toBe(0);
+    const quote = (
+      bondId: string,
+      remainingTurns: number,
+      ask: number,
+      float: number,
+      annualizedContractYieldPercent: number
+    ) => ({
       bondId,
       currency: "USD" as const,
       remainingTurns,
@@ -166,19 +220,62 @@ describe("bank treasury rules", () => {
       publicFloatUnits: float,
       bidPerUnitLocal: ask - 1,
       askPerUnitLocal: ask,
+      annualizedContractYieldPercent,
       poolCashLocal: 100_000,
       depthUnitsAtBid: 100,
       eligible: true,
     });
     expect(
       planBankTreasurySweep(
-        [quote("later", 48, 1_000, 50), quote("first", 12, 1_000, 2)],
+        [
+          quote("later", 48, 1_000, 50, 3),
+          quote("first", 12, 1_000, 2, 6),
+          quote("negative", 1, 1_000, 2, 2),
+        ],
         5_500,
-        2_500
+        2_500,
+        2.5
       )
     ).toEqual([
       { bondId: "first", units: 2, askPerUnitLocal: 1_000, costLocal: 2_000 },
       { bondId: "later", units: 1, askPerUnitLocal: 1_000, costLocal: 1_000 },
     ]);
+    expect(
+      planBankTreasurySweep(
+        [quote("expensive-high-yield", 48, 1_100, 1, 9), quote("affordable", 48, 1_000, 1, 5)],
+        1_000,
+        0,
+        4
+      )
+    ).toEqual([{ bondId: "affordable", units: 1, askPerUnitLocal: 1_000, costLocal: 1_000 }]);
+  });
+
+  it("uses the same interest-bearing deposit balances as the liability hurdle", () => {
+    const input = {
+      currency: "USD" as const,
+      primeRate: 4,
+      inflationRate: 0,
+      depositOffset: 0,
+      npcDeposits: 100,
+      totalDeposits: 999_999,
+      playerDeposits: 100,
+      playerDepositsAreLiabilities: true,
+      discountWindowDebt: 0,
+      cbMarginDebt: 0,
+      interbankLoans: [],
+    };
+    const expected = (computeBankTreasuryDueInterest(input) / 200) * 48 * 100;
+    expect(computeBankTreasuryFundingRatePercent(input)).toBe(expected);
+    const legacyBalances = {
+      ...input,
+      totalDeposits: 1_000,
+      playerDeposits: 500,
+      playerDepositsAreLiabilities: false,
+    };
+    const legacyExpected = (computeBankTreasuryDueInterest(legacyBalances) / 1_000) * 48 * 100;
+    expect(computeBankTreasuryFundingRatePercent(legacyBalances)).toBe(legacyExpected);
+    expect(computeBankTreasuryFundingRatePercent({ ...input, primeRate: Number.NaN })).toBe(
+      Number.POSITIVE_INFINITY
+    );
   });
 });
