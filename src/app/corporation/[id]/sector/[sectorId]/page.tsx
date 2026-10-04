@@ -32,6 +32,7 @@ import RetoolHintBanner from "./sections/RetoolHintBanner";
 import InventoryPanel from "./sections/InventoryPanel";
 import UnionBustingPanel from "./sections/UnionBustingPanel";
 import { OrganizeSectorAction } from "@/components/unions/OrganizeSectorAction";
+import { EditorialStancePanel } from "@/components/corporation/EditorialStancePanel";
 import ManagementPanel from "./sections/ManagementPanel";
 import AbandonPanel from "./sections/AbandonPanel";
 import ForSalePanel from "./sections/ForSalePanel";
@@ -686,6 +687,13 @@ export default function SectorDetailPage() {
           corpHref={corpHref}
           stateHref={stateHref}
         />
+        {corporation?.mediaEditorialEnabled === true && sector?.sectorType === "media" && (
+          <EditorialStancePanel
+            corporationId={corpId}
+            stance={corporation.editorialStance}
+            isCeo={false}
+          />
+        )}
 
         <div className="sticky top-0 z-20 mb-6 -mx-4 border-y border-card-border bg-background/95 px-4 py-2 shadow-sm backdrop-blur sm:mx-0 sm:rounded-xl sm:border sm:bg-card/95">
           <div className="flex gap-1 overflow-x-auto" role="tablist" aria-label="Sector workspace">

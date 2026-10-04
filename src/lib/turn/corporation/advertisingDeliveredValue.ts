@@ -55,6 +55,8 @@ export interface AdvertisingDeliveredValueArgs {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   commodityMixWeight: (rates: any, basePrices: any, commodity: "advertising") => number;
   qualityPremiumPricingEnabled: boolean;
+  /** Optional output for turn consumers that need local outlet audience shares. */
+  deliveredUnitsBySectorOut?: Map<string, number>;
 }
 
 export function advertisingDeliveredValueByCorp(
@@ -135,6 +137,7 @@ export function advertisingDeliveredValueByCorp(
     const filledUnits = normalizedUnits * soldFraction;
     const corpId = sectorCorpId.get(offer.input.sectorId);
     if (!corpId || !(filledUnits > 0)) continue;
+    args.deliveredUnitsBySectorOut?.set(offer.input.sectorId, filledUnits);
     const priceRatio =
       (offer.group
         ? reachablePriceRatioByCountry?.get(offer.group)?.get("advertising")

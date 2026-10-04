@@ -65,6 +65,8 @@ export interface SectorData {
 }
 
 export interface CorporationRef {
+  mediaEditorialEnabled?: boolean;
+  editorialStance?: { economic: number; social: number };
   _id: string;
   sequentialId?: number;
   name: string;

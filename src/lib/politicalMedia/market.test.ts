@@ -37,6 +37,57 @@ const offer: PoliticalAdClearingOffer = {
 };
 
 describe("settlePoliticalAdMarket", () => {
+  it("caps commercial plus funded political fills at editorially available output", () => {
+    const mediaInput: SectorClearingInput = {
+      sectorId: "sector-1",
+      revenue: 100,
+      supplyRates: { advertising: 1 },
+      posture: 0,
+      editorialAdvertisingAvailability: 0.75,
+    };
+    const realClearing = computeClearingFactors({
+      sectors: [mediaInput],
+      balances: new Map([["advertising", { supply: 200, demand: 100 }]]),
+      priceRatioByCommodity: new Map([["advertising", 1]]),
+      basePrices: { advertising: 240 } as Record<CommodityType, number>,
+    });
+    const commercialSold = realClearing.get("sector-1")!.soldByCommodity!.advertising! * 100;
+    const result = settlePoliticalAdMarket({
+      orders: [
+        {
+          orderId: "strong-funded-order",
+          countryId: "US",
+          stateId: "CA",
+          createdTurn: 12,
+          budgetAnchor: 10_000,
+        },
+      ],
+      offers: [
+        {
+          ...offer,
+          input: mediaInput,
+          clearing: realClearing.get("sector-1"),
+          basePrice: 240,
+          offeredUnits: 100,
+        },
+      ],
+      clearingBySectorId: realClearing,
+      clearingEnabled: true,
+      qualityPremiumEnabled: false,
+      turn: 12,
+    });
+    const politicalSold = result.allocations[0]?.deliveredUnits ?? 0;
+    const totalSold = commercialSold + politicalSold;
+
+    expect(commercialSold).toBeCloseTo(37.5);
+    expect(politicalSold).toBeCloseTo(37.5);
+    expect(totalSold).toBeCloseTo(75);
+    expect(totalSold).toBeLessThanOrEqual(100 * mediaInput.editorialAdvertisingAvailability!);
+    expect(result.clearingBySectorId.get("sector-1")?.soldByCommodity?.advertising).toBeCloseTo(
+      0.75
+    );
+  });
+
   it("sells only commercial residuals and updates the sector factor and paid local value", () => {
     const result = settlePoliticalAdMarket({
       orders: [

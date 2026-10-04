@@ -39,7 +39,11 @@ export async function resolveCorporation(
       response: NextResponse.json({ error: "Invalid corporation ID" }, { status: 400 }),
     };
   }
-  const corporation = await db.collection<Corporation>("corporations").findOne(query);
+  // Editorial position is intentionally excluded from the common resolver.
+  // Feature-aware public views opt in with a separate projected read.
+  const corporation = await db
+    .collection<Corporation>("corporations")
+    .findOne(query, { projection: { editorialStance: 0 } });
   if (!corporation) {
     return {
       ok: false,

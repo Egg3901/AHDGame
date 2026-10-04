@@ -23,6 +23,8 @@ export interface CorporationLookups {
   corporations: Corporation[];
   sectorsByCorp: Map<string, CorporateSector[]>;
   corpById: Map<string, Corporation>;
+  /** Two-axis electorate lean, projected only while mediaEditorialEnabled is true. */
+  editorialAudienceLeanByState?: Map<string, { economic: number; social: number }>;
   /**
    * Corporate-presence suppression from TOTAL embargoes. A full "all commodities,
    * block" embargo by country S against country T means T-national corporations
