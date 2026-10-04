@@ -51,6 +51,7 @@ import { getDb } from "@/lib/mongodb";
 import { recordEnactedLaw } from "@/lib/budget/enactedLaws";
 import { calculateShiftImpacts } from "@/lib/archetypeAffinities";
 import { sendCountryGameEvent } from "@/lib/discordWebhooks";
+import { generateDiscordEventCard } from "@/lib/discord/eventCard";
 
 describe("onBillEnacted", () => {
   let db: MockDb;
@@ -521,6 +522,106 @@ describe("onBillEnacted", () => {
     expect(sendCountryGameEvent).toHaveBeenCalledWith(
       "US",
       expect.objectContaining({ title: "Regional bill enacted: Regional Test Act" })
+    );
+  });
+
+  it.each([
+    {
+      name: "ordinary national enactment",
+      stateId: "federal",
+      scope: "national",
+      presidentAction: undefined,
+      originChamber: "house",
+      currentChamber: "senate",
+      expected: [
+        { label: "House", seats: 435, votesFor: 232, votesAgainst: 198, votesAbstain: 5 },
+        { label: "Senate", seats: 100, votesFor: 62, votesAgainst: 35, votesAbstain: 3 },
+      ],
+    },
+    {
+      name: "ordinary regional enactment",
+      stateId: "US-CA",
+      scope: "regional",
+      presidentAction: undefined,
+      originChamber: "senate",
+      currentChamber: undefined,
+      expected: [{ label: "State Senate", votesFor: 30, votesAgainst: 12, votesAbstain: 2 }],
+    },
+    {
+      name: "national veto override",
+      stateId: "federal",
+      scope: "national",
+      presidentAction: "override",
+      originChamber: "house",
+      currentChamber: "senate",
+      expected: [
+        { label: "House", seats: 435, votesFor: 300, votesAgainst: 135, votesAbstain: 0 },
+        { label: "Senate", seats: 100, votesFor: 70, votesAgainst: 30, votesAbstain: 0 },
+      ],
+    },
+  ] as const)("renders the exact stable branded vote card for $name", async (scenario) => {
+    const billId = new ObjectId("507f1f77bcf86cd799439011");
+    const bill: Parameters<typeof onBillEnacted>[1] = {
+      _id: billId,
+      title: "Synthetic Test Act",
+      legislationTypeId: undefined,
+      effectDirection: undefined,
+      stateId: scenario.stateId,
+      countryId: "US",
+      originChamber: scenario.originChamber,
+      currentChamber: scenario.currentChamber,
+      presidentAction: scenario.presidentAction,
+      provisions: [{ type: "tariff", scopeType: "economy_wide", rate: 5 }],
+      voteSnapshot: {
+        votes: {},
+        weights: {},
+        totals:
+          scenario.scope === "regional"
+            ? { for: 30, against: 12, abstain: 2 }
+            : { for: 232, against: 198, abstain: 5 },
+        resolvedAtTurn: 10,
+      },
+      otherChamberVoteSnapshot:
+        scenario.scope === "national"
+          ? {
+              votes: {},
+              weights: {},
+              totals: { for: 62, against: 35, abstain: 3 },
+              resolvedAtTurn: 11,
+            }
+          : undefined,
+      overrideDisplaySnapshot:
+        scenario.presidentAction === "override"
+          ? {
+              house: { for: 300, against: 135, seats: 435 },
+              senate: { for: 70, against: 30, seats: 100 },
+            }
+          : undefined,
+    };
+    setupCollection("gameState", [{ _id: "current", currentYear: 2026 }]);
+
+    await onBillEnacted(db as unknown as Db, bill, 10);
+
+    expect(generateDiscordEventCard).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Synthetic Test Act",
+        summary: "Signed into law",
+        voteSplit: scenario.expected,
+        tone: "positive",
+      }),
+      `bill-enacted-${billId.toString()}`
+    );
+    expect(sendCountryGameEvent).toHaveBeenCalledWith(
+      "US",
+      expect.objectContaining({
+        title: `${scenario.scope === "national" ? "Federal" : "Regional"} bill enacted: Synthetic Test Act`,
+        image: { url: "https://cdn.test/event.png" },
+        fields: undefined,
+      })
+    );
+    expect(sendCountryGameEvent).not.toHaveBeenCalledWith(
+      "US",
+      expect.objectContaining({ cardVoteSplit: expect.anything() })
     );
   });
 

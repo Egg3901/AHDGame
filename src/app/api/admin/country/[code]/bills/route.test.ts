@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
@@ -8,6 +8,10 @@ vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/api/requireAdmin", () => ({ requireAdmin: vi.fn() }));
 vi.mock("@/lib/legislationEffects", () => ({ applyLegislationEffect: vi.fn() }));
 vi.mock("@/lib/billEnactment", () => ({ onBillEnacted: vi.fn() }));
+
+beforeAll(async () => {
+  await import("./route");
+}, 30_000);
 
 describe("POST /api/admin/country/[code]/bills", () => {
   let db: MockDb;
@@ -55,10 +59,19 @@ describe("POST /api/admin/country/[code]/bills", () => {
         },
       ],
       countryId: "US",
+      voteSnapshot: {
+        votes: {},
+        weights: {},
+        totals: { for: 232, against: 198, abstain: 5 },
+        resolvedAtTurn: 12,
+      },
     };
 
     db.collectionMocks.bills.findOne.mockResolvedValue(bill);
     db.collectionMocks.gameState.findOne.mockResolvedValue({ _id: "current", currentTurn: 117 });
+    db.collectionMocks.bills.updateOne
+      .mockResolvedValueOnce({ acknowledged: true, matchedCount: 1, modifiedCount: 1 })
+      .mockResolvedValueOnce({ acknowledged: true, matchedCount: 0, modifiedCount: 0 });
 
     const { POST } = await import("./route");
     const response = await POST(
@@ -77,6 +90,18 @@ describe("POST /api/admin/country/[code]/bills", () => {
 
     expect(applyLegislationEffect).toHaveBeenCalledWith(db, bill);
     expect(onBillEnacted).toHaveBeenCalledWith(db, bill, 117);
+
+    const retryResponse = await POST(
+      new Request("http://localhost/api/admin/country/us/bills", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "force_sign", billId: billId.toString() }),
+      }),
+      { params: Promise.resolve({ code: "us" }) }
+    );
+    expect(retryResponse.status).toBe(200);
+    expect(onBillEnacted).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.bills.updateOne).toHaveBeenCalledTimes(2);
   });
 });
 
