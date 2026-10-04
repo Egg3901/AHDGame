@@ -4,7 +4,8 @@
  * refund uses that original order record and a stable movement key.
  */
 
-import { ObjectId, type Db } from "mongodb";
+import { isDeepStrictEqual } from "node:util";
+import { ObjectId, type Db, type Document } from "mongodb";
 import {
   applyMoneyMove,
   MONEY_MOVE_COLLECTION,
@@ -74,7 +75,75 @@ export interface PoliticalMediaOrderIdentity {
     actionCost: number;
     currentActions: number | null;
   };
+
   details: Record<string, unknown>;
+}
+
+interface PoliticalMediaTargetDocument extends Document {
+  _id: ObjectId | string;
+  targetedAds?: TargetedAd[];
+  targetedAdsRevision?: number;
+}
+
+function parsePoliticalMediaOrderEffect(raw: unknown): PoliticalMediaOrderEffect | null {
+  if (typeof raw !== "object" || raw === null || !("kind" in raw)) return null;
+  if (raw.kind === "none") return { kind: "none" };
+  if (
+    !("targetCollection" in raw) ||
+    (raw.targetCollection !== "characters" &&
+      raw.targetCollection !== "npps" &&
+      raw.targetCollection !== "electionCandidates") ||
+    !("targetDocumentId" in raw) ||
+    typeof raw.targetDocumentId !== "string" ||
+    raw.targetDocumentId.length === 0 ||
+    !("targetDocumentIdIsObjectId" in raw) ||
+    typeof raw.targetDocumentIdIsObjectId !== "boolean"
+  )
+    return null;
+
+  const target: Pick<
+    Extract<PoliticalMediaOrderEffect, { kind: "favorability" }>,
+    "targetCollection" | "targetDocumentId" | "targetDocumentIdIsObjectId"
+  > = {
+    targetCollection: raw.targetCollection,
+    targetDocumentId: raw.targetDocumentId,
+    targetDocumentIdIsObjectId: raw.targetDocumentIdIsObjectId,
+  };
+  if (raw.kind === "favorability") {
+    return "amount" in raw && typeof raw.amount === "number" && Number.isFinite(raw.amount)
+      ? { kind: "favorability", ...target, amount: raw.amount }
+      : null;
+  }
+  if (raw.kind !== "targeted_ad" || !("ad" in raw)) return null;
+  const ad = raw.ad;
+  if (
+    typeof ad !== "object" ||
+    ad === null ||
+    !("stateId" in ad) ||
+    typeof ad.stateId !== "string" ||
+    !("dimension" in ad) ||
+    typeof ad.dimension !== "string" ||
+    !("bucket" in ad) ||
+    typeof ad.bucket !== "string" ||
+    !("bonus" in ad) ||
+    typeof ad.bonus !== "number" ||
+    !Number.isFinite(ad.bonus) ||
+    !("lastPurchaseTurn" in ad) ||
+    typeof ad.lastPurchaseTurn !== "number" ||
+    !Number.isSafeInteger(ad.lastPurchaseTurn)
+  )
+    return null;
+  return {
+    kind: "targeted_ad",
+    ...target,
+    ad: {
+      stateId: ad.stateId,
+      dimension: ad.dimension,
+      bucket: ad.bucket,
+      bonus: ad.bonus,
+      lastPurchaseTurn: ad.lastPurchaseTurn,
+    },
+  };
 }
 
 export interface PoliticalMediaSellerReceiptPlan {
@@ -560,33 +629,19 @@ export async function applyPoliticalMediaOrderEffect(db: Db, orderId: string): P
   if (order.effectApplied) return true;
 
   const rawEffect = order.identity.details.effect;
-  if (
-    rawEffect === undefined ||
-    (typeof rawEffect === "object" &&
-      rawEffect !== null &&
-      "kind" in rawEffect &&
-      rawEffect.kind === "none")
-  ) {
+  const effect =
+    rawEffect === undefined ? { kind: "none" as const } : parsePoliticalMediaOrderEffect(rawEffect);
+  if (effect?.kind === "none") {
     await orders.updateOne(
       { _id: key, kind: POLITICAL_MEDIA_ORDER_KIND, "politicalMediaOrder.status": "settled" },
       { $set: { "politicalMediaOrder.effectApplied": true } }
     );
     return true;
   }
-  if (typeof rawEffect !== "object" || rawEffect === null) return false;
-  const effect = rawEffect as Partial<PoliticalMediaOrderEffect>;
-  if (
-    (effect.targetCollection !== "characters" &&
-      effect.targetCollection !== "npps" &&
-      effect.targetCollection !== "electionCandidates") ||
-    typeof effect.targetDocumentId !== "string" ||
-    effect.targetDocumentId.length === 0 ||
-    typeof effect.targetDocumentIdIsObjectId !== "boolean"
-  )
-    return false;
+  if (!effect) return false;
 
   const targetId = persistedId(effect.targetDocumentId, effect.targetDocumentIdIsObjectId);
-  const targets = db.collection<Record<string, unknown>>(effect.targetCollection);
+  const targets = db.collection<PoliticalMediaTargetDocument>(effect.targetCollection);
   const effectReceiptPath = `politicalMediaAppliedOrders.${orderId}`;
   const fillRatio = politicalMediaFillRatio(
     order.settlementPlan.deliveredAnchor,
@@ -647,9 +702,7 @@ export async function applyPoliticalMediaOrderEffect(db: Db, orderId: string): P
           { projection: { targetedAds: 1, targetedAdsRevision: 1 } }
         );
         if (!existing) return false;
-        const ads = Array.isArray(existing.targetedAds)
-          ? (existing.targetedAds as TargetedAd[])
-          : [];
+        const ads = Array.isArray(existing.targetedAds) ? existing.targetedAds : [];
         const sameTarget = (previous: TargetedAd) =>
           previous.stateId === ad.stateId &&
           previous.dimension === ad.dimension &&

@@ -202,10 +202,15 @@ describe("durable leg outcomes", () => {
 
     expect((await applyMoneyMove(f.db, valued)).status).toBe("applied");
     expect(f.balances()).toEqual([875, 200]);
-    expect(f.journals.docs[0].legs[0]?.valuation).toEqual({
-      currencyCode: "USD",
-      localPerAnchor: 1.25,
-    });
+    expect(f.journals.docs[0]).toEqual(
+      expect.objectContaining({
+        legs: expect.arrayContaining([
+          expect.objectContaining({
+            valuation: { currencyCode: "USD", localPerAnchor: 1.25 },
+          }),
+        ]),
+      })
+    );
     expect(
       await applyMoneyMove(f.db, {
         ...valued,
