@@ -255,6 +255,20 @@ export interface BankTreasuryTradeReceipt {
   bondId: ObjectId;
   currency: CurrencyCode;
   side: "buy" | "sell";
+  /** Primary offers reserve unissued units and pay the government directly. */
+  primary?: {
+    countryId: import("@/lib/constants/countries").CountryId;
+    budgetId: string;
+    annualCoupon: number;
+    markPerUnitLocal: number;
+    maxCostLocal: number;
+    localPerAnchor: number;
+    ledgerShadow: boolean;
+    ledgerTurn: number;
+    /** Financial quote guards, preserved with the actual accepted primary intent. */
+    balanceGuard: Record<string, unknown>;
+    cashReservesAtQuote: number;
+  };
   /** Original whole-unit request before cash and pool-depth clamps. */
   requestedUnits: number;
   /** Frozen source lots reserved by a multi-lot sale. */

@@ -34,10 +34,17 @@ const NO_COUNTS = {
 export function bankTransferConflict(
   target: Pick<
     Corporation,
-    "name" | "bankCharter" | "bankSovereignEscrows" | "bankPropForexFee" | "bankConstructionFunding"
+    | "name"
+    | "bankCharter"
+    | "bankSovereignEscrows"
+    | "bankPropForexFee"
+    | "bankConstructionFunding"
+    | "bankPrimaryFunding"
   >,
   acquirer: Pick<Corporation, "name" | "bankCharter">
 ): string | null {
+  if (target.bankPrimaryFunding)
+    return `Cannot merge ${target.name} while sovereign primary funding is settling.`;
   if (target.bankConstructionFunding)
     return `Cannot merge ${target.name} while construction funding or deposit return is settling.`;
   if (target.bankPropForexFee) return `Cannot merge ${target.name} while a forex fee is settling.`;
@@ -338,6 +345,7 @@ export async function transferBankCharterToAcquirer(
           bankSovereignEscrows: 1,
           bankPropForexFee: 1,
           bankConstructionFunding: 1,
+          bankPrimaryFunding: 1,
           bankCharterTransfer: 1,
         },
       }
@@ -348,6 +356,11 @@ export async function transferBankCharterToAcquirer(
     ),
   ]);
   if (!target) return { ok: false, error: "Target corporation no longer exists" };
+  if (target.bankPrimaryFunding)
+    return {
+      ok: false,
+      error: "Sovereign primary funding must settle before transferring the charter",
+    };
   if (target.bankConstructionFunding)
     return {
       ok: false,
@@ -473,6 +486,7 @@ export async function transferBankCharterToAcquirer(
       _id: targetId,
       bankCharterTransfer: { $exists: false },
       bankConstructionFunding: { $exists: false },
+      bankPrimaryFunding: { $exists: false },
     },
     { $set: { bankCharterTransfer: stampPlan, updatedAt: now } }
   );
@@ -565,6 +579,7 @@ export async function transferBankCharterToAcquirer(
           _id: targetId,
           bankCharterTransfer: { $exists: false },
           bankConstructionFunding: { $exists: false },
+          bankPrimaryFunding: { $exists: false },
         },
         { $set: { bankCharterTransfer: stampPlan, updatedAt: now } }
       );

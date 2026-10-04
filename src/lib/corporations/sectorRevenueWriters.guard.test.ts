@@ -154,14 +154,6 @@ interface WriterEntry {
 }
 
 const ALLOWED_WRITERS: Record<string, WriterEntry> = {
-  "src/lib/banking/constructionBuildEffects.ts": {
-    writeSites: 1,
-    status: "plants-gated",
-    reason:
-      "The detected revenue=0 belongs only to a new unownedSectors market bucket. " +
-      "The corporateSectors projection marks construction effects paid and does not write revenue; " +
-      "funded construction consumes authoritative headroom through the existing pool pipeline.",
-  },
   "scripts/sim/bankingParameterSetup.ts": {
     writeSites: 1,
     status: "plants-gated",
@@ -212,6 +204,14 @@ const ALLOWED_WRITERS: Record<string, WriterEntry> = {
   },
 
   // ─── Reviewed by the concurrent plants sweeps (already plants-aware) ─────
+  "src/lib/banking/constructionBuildEffects.ts": {
+    writeSites: 1,
+    status: "plants-gated",
+    reason:
+      "GREP FALSE POSITIVE: the zero-revenue insert initializes unownedSectors, " +
+      "whose construction draw uses headroomUnits. The corporateSectors writes " +
+      "debit construction escrow and mark effectsPaid; neither writes sector revenue.",
+  },
   "src/lib/turn/unownedSectorGrowth.ts": {
     writeSites: 2,
     status: "plants-gated",

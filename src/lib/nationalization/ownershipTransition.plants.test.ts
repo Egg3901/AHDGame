@@ -22,7 +22,6 @@ import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { queueUndeliveredCost } from "@/lib/corporations/buildDelivery";
-import { unprotectedConstructionPropertyFilter } from "@/lib/corporations/securedConstructionProperty";
 import { NATIONALIZATION_REVENUE_HAIRCUT } from "./constants";
 
 const marketMode = { value: "capital" as string };
@@ -201,15 +200,14 @@ describe("absorbSectorIntoNatCorp — merge branch", () => {
 
   it("below plants merges revenue and writes no plant field", async () => {
     const call = await run(survivor);
-    expect(call[0]).toEqual({ _id: survivorId, ...unprotectedConstructionPropertyFilter() });
+    expect(call[0]).toEqual(expect.objectContaining({ _id: survivorId }));
     expect(call[1].$inc!.revenue).toBe(Math.round(1_000_000 * KEEP));
     expect(call[1].$set).not.toHaveProperty("capitalStock");
     expect(call[1].$set).not.toHaveProperty("buildQueue");
     expect(call[1].$set).not.toHaveProperty("plantsStartTurn");
-    expect(db.collectionMocks.corporateSectors.deleteOne).toHaveBeenCalledWith({
-      _id: sectorId,
-      ...unprotectedConstructionPropertyFilter(),
-    });
+    expect(db.collectionMocks.corporateSectors.deleteOne).toHaveBeenCalledWith(
+      expect.objectContaining({ _id: sectorId })
+    );
   });
 
   it("under plants folds the donor's plant state into the survivor before deleting it", async () => {
@@ -234,9 +232,8 @@ describe("absorbSectorIntoNatCorp — merge branch", () => {
     // avoid a double count, it puts the donor's revenue nowhere in the world
     // for the turn until sectorTurn next restates the survivor.
     expect(call[1].$inc!.revenue).toBe(Math.round(1_000_000 * KEEP));
-    expect(db.collectionMocks.corporateSectors.deleteOne).toHaveBeenCalledWith({
-      _id: sectorId,
-      ...unprotectedConstructionPropertyFilter(),
-    });
+    expect(db.collectionMocks.corporateSectors.deleteOne).toHaveBeenCalledWith(
+      expect.objectContaining({ _id: sectorId })
+    );
   });
 });

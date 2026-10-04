@@ -223,6 +223,8 @@ export interface GameConfig {
   bankConstructionAdmissionClosingToken?: string;
   /** Enable funded sovereign-bill holdings for private bank treasuries. Default off. */
   bankTreasuryEnabled?: boolean;
+  /** Fund unplaced sovereign units from investment-bank vault cash. Default off. */
+  bankSovereignPrimaryEnabled?: boolean;
   /** Experimental funded spendable government-cash ledger. Absent means off. */
   treasuryCashLedgerEnabled?: boolean;
   /**

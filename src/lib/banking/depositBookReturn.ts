@@ -249,13 +249,25 @@ export async function returnDepositBook(
   const corporations = db.collection<Corporation>("corporations");
   let corp = await corporations.findOne(
     { _id: corporationId },
-    { projection: { bankCharter: 1, liquidCapital: 1, bankConstructionFunding: 1 } }
+    {
+      projection: {
+        bankCharter: 1,
+        liquidCapital: 1,
+        bankConstructionFunding: 1,
+        bankPrimaryFunding: 1,
+      },
+    }
   );
   if (!corp?.bankCharter) return EMPTY;
+  if (corp.bankPrimaryFunding)
+    return {
+      ...EMPTY,
+      error: "Sovereign primary funding must settle before returning bank deposits",
+    };
   if (corp.bankConstructionFunding && corp.bankConstructionFunding.kind !== "returning")
     return { ...EMPTY, error: "Construction funding must settle before returning bank deposits" };
   const policy = await loadBankingPolicy(db);
-  if (!policy.constructionFinance && !corp.bankConstructionFunding)
+  if (!policy.constructionFinance && !policy.sovereignPrimary && !corp.bankConstructionFunding)
     return returnDepositBookInner(db, corporationId, options, corp, policy);
 
   // The original return owns its quote across later turns. Admission and
@@ -274,6 +286,7 @@ export async function returnDepositBook(
         _id: corporationId,
         "bankCharter.charteredTurn": corp.bankCharter.charteredTurn,
         bankConstructionFunding: { $exists: false },
+        bankPrimaryFunding: { $exists: false },
         bankCharterTransfer: { $exists: false },
       },
       {

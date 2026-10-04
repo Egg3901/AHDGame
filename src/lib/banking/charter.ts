@@ -382,6 +382,7 @@ async function issueCharterInner(
       guard: {
         bankCharter: prior === undefined ? { $exists: false } : prior,
         bankConstructionFunding: { $exists: false },
+        bankPrimaryFunding: { $exists: false },
       },
       expectedSettledKeys,
     }
@@ -493,6 +494,7 @@ async function revokeCharterInner(
       "bankCharter.status": "active",
       "bankCharter.resolutionClaimedTurn": { $exists: false },
       bankConstructionFunding: { $exists: false },
+      bankPrimaryFunding: { $exists: false },
     },
     {
       $set: {
@@ -822,6 +824,7 @@ async function switchCharterTypeInner(
       "bankCharter.status": "active",
       "bankCharter.type": charter.type,
       bankConstructionFunding: { $exists: false },
+      bankPrimaryFunding: { $exists: false },
     },
     {
       $set: {
