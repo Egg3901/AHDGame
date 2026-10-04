@@ -15,6 +15,12 @@ interface FundedGuarantee {
   countryId: string;
   currency: string;
   bankIds: ObjectId[];
+  /** Missing epochs identify an older promise that cannot safely pay a new charter. */
+  bankEpochs?: { bankId: ObjectId; charteredTurn: number; currency: string }[];
+  treasuryId?: FederalBudget["_id"];
+  treasuryCurrencyCodePresent?: boolean;
+  treasuryCurrencyCode?: string | null;
+  treasuryCashLedgerEnabled?: boolean;
   escrowBalance: number;
   expiresTurn: number;
   status: "pending" | "active" | "expired";
@@ -83,18 +89,26 @@ export async function processFinancialCrisisGuarantees(
   const refundBudgetIds = new Map(refundBudgets.map((budget) => [budget.countryId, budget._id]));
   for (const guarantee of guarantees) {
     let available = guarantee.escrowBalance;
-    const banks = await db
-      .collection<Corporation>("corporations")
-      .find({
-        _id: { $in: guarantee.bankIds },
-        "bankCharter.status": "failed",
-        "bankCharter.currency": guarantee.currency,
-        "bankCharter.failedTurn": { $lte: guarantee.expiresTurn },
-        "bankCharter.resolutionClaimedTurn": { $exists: false },
-        "bankCharter.depositorsResolvedTurn": { $exists: false },
-      })
-      .sort({ _id: 1 })
-      .toArray();
+    // Epochless legacy promises cannot pay a later charter, but any remaining
+    // funded escrow can still be returned after its original expiry.
+    const banks = guarantee.bankEpochs?.length
+      ? await db
+          .collection<Corporation>("corporations")
+          .find({
+            $or: guarantee.bankEpochs.map((epoch) => ({
+              _id: epoch.bankId,
+              countryId: guarantee.countryId as Corporation["countryId"],
+              "bankCharter.charteredTurn": epoch.charteredTurn,
+              "bankCharter.status": "failed",
+              "bankCharter.currency": epoch.currency,
+              "bankCharter.failedTurn": { $lte: guarantee.expiresTurn },
+              "bankCharter.resolutionClaimedTurn": { $exists: false },
+              "bankCharter.depositorsResolvedTurn": { $exists: false },
+            })),
+          })
+          .sort({ _id: 1 })
+          .toArray()
+      : [];
     for (const bank of banks) {
       const key = `${guarantee._id}:claim:${bank._id.toHexString()}`;
       const prior = await db.collection<{ _id: string }>("bankMoneyMoves").findOne({ _id: key });
@@ -125,7 +139,16 @@ export async function processFinancialCrisisGuarantees(
             kind: "credit",
             amount,
             collection: "corporations",
-            filter: { _id: oid(bank._id.toHexString()) },
+            filter: {
+              _id: oid(bank._id.toHexString()),
+              countryId: guarantee.countryId as Corporation["countryId"],
+              "bankCharter.charteredTurn": bank.bankCharter!.charteredTurn,
+              "bankCharter.status": "failed",
+              "bankCharter.currency": guarantee.currency,
+              "bankCharter.failedTurn": { $lte: guarantee.expiresTurn },
+              "bankCharter.resolutionClaimedTurn": { $exists: false },
+              "bankCharter.depositorsResolvedTurn": { $exists: false },
+            },
             path: "bankCharter.cashReserves",
             note: "Fund the existing secured-creditor and depositor waterfall",
           },
@@ -145,8 +168,20 @@ export async function processFinancialCrisisGuarantees(
       summary.paid += amount;
     }
     if (turn <= guarantee.expiresTurn || !(available > 0)) continue;
-    const treasuryId = refundBudgetIds.get(guarantee.countryId);
+    const treasuryId = guarantee.treasuryId ?? refundBudgetIds.get(guarantee.countryId);
     if (!treasuryId) throw new Error("Guarantee refund treasury is unavailable");
+    const treasuryFilter = {
+      _id: treasuryId,
+      countryId: guarantee.countryId,
+      ...(guarantee.treasuryCurrencyCodePresent === undefined
+        ? {}
+        : {
+            currencyCode: guarantee.treasuryCurrencyCodePresent
+              ? { $exists: true, $eq: guarantee.treasuryCurrencyCode }
+              : { $exists: false },
+          }),
+    };
+    const cashLedger = guarantee.treasuryCashLedgerEnabled ?? policy.treasuryCashLedger;
     const result = await settleTransition(db, {
       key: `${guarantee._id}:expiry`,
       kind: "financial_crisis_guarantee_refund",
@@ -165,17 +200,17 @@ export async function processFinancialCrisisGuarantees(
           kind: "credit",
           amount: available,
           collection: "federalBudget",
-          filter: { _id: treasuryId, countryId: guarantee.countryId },
-          path: policy.treasuryCashLedger ? "treasuryCashLocal" : "treasuryBalance",
+          filter: treasuryFilter,
+          path: cashLedger ? "treasuryCashLocal" : "treasuryBalance",
           note: "Return unused coverage to its funding treasury",
         },
       ],
       projections: [
-        ...(policy.treasuryCashLedger
+        ...(cashLedger
           ? [
               {
                 collection: "federalBudget",
-                filter: { _id: treasuryId, countryId: guarantee.countryId },
+                filter: treasuryFilter,
                 update: { $inc: { treasuryBalance: available } },
                 note: "Keep the signed fiscal position aligned with refunded escrow",
               },

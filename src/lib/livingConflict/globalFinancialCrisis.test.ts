@@ -33,6 +33,10 @@ describe("global financial crisis living conflict", () => {
     expect(GLOBAL_FINANCIAL_CRISIS_DEF.minimumOpeningPressure).toBe(60);
     const exposedOptions =
       GLOBAL_FINANCIAL_CRISIS_DEF.phases[0].events[0].response?.decisionTrees.belligerent?.options;
+    expect(
+      GLOBAL_FINANCIAL_CRISIS_DEF.phases[0].events[0].response?.decisionTrees.belligerent
+        ?.requiredRoles
+    ).toEqual(["headOfState", "financeMinister", "centralBankChair"]);
     expect(exposedOptions?.map((option) => option.action)).toEqual(
       expect.arrayContaining([
         { kind: "financialCrisisResponse", response: "recapitalize" },

@@ -212,6 +212,9 @@ function trees(key: string): RoleDecisionTrees {
       ]
     ),
   };
+  // Bank-failure policy is a national financial decision shared by the
+  // executive, finance minister, and seated monetary authority chair.
+  result.belligerent!.requiredRoles = ["headOfState", "financeMinister", "centralBankChair"];
   // Every charged option names a real funded recipient. Diplomatic consent
   // remains a public policy position and never burns an unallocated payment.
   const responses = {
