@@ -168,24 +168,23 @@ export async function requestConstructionFinance(input: {
       (!Number.isFinite(input.maximumRatePercent) || input.maximumRatePercent < quote.ratePercent)
     )
       return { ok: false, error: "The lender's rate exceeds the reviewed quote" };
-    const prepared =
-      input.buildContext && input.buildContext.growthUnits > 0
-        ? await prepareConstructionBuildEffects({
-            db,
-            enabled: true,
-            sector,
-            claimId,
-            borrowerId: String(corporation._id),
-            loanId: String(loanId),
-            turn: bankSnapshot.turn,
-            currency: bankSnapshot.currency,
-            feeLocal: input.constructionCostLocal - input.collateralCostLocal,
-            destinationCurrency: input.buildContext.destinationCurrency,
-            bucket: input.buildContext.bucket,
-            units: input.buildContext.growthUnits,
-            eraUnitScale: input.buildContext.eraUnitScale,
-          })
-        : null;
+    const prepared = input.buildContext
+      ? await prepareConstructionBuildEffects({
+          db,
+          enabled: true,
+          sector,
+          claimId,
+          borrowerId: String(corporation._id),
+          loanId: String(loanId),
+          turn: bankSnapshot.turn,
+          currency: bankSnapshot.currency,
+          feeLocal: input.constructionCostLocal - input.collateralCostLocal,
+          destinationCurrency: input.buildContext.destinationCurrency,
+          bucket: input.buildContext.bucket,
+          units: input.buildContext.growthUnits,
+          eraUnitScale: input.buildContext.eraUnitScale,
+        })
+      : null;
     if (prepared && !prepared.ok) return { ok: false, error: prepared.error };
     claim = {
       claimId,

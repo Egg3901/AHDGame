@@ -38,3 +38,5 @@ while admitted cash work, site pledges or lender recovery leases remain.
 Borrowers can withdraw an unfunded approval request. Pending approval and funding
 status appear in the build dialog without another lender lookup. Capacity changes
 check ownership, listing and reservation again at the atomic queue write.
+
+Replacement-only financed builds retain their actual FX fee receipts while drawing no new market capacity.

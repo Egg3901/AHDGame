@@ -5,7 +5,7 @@ import { CAPACITY_BUILD_CANCEL_REFUND } from "@/lib/constants/capacityEconomy";
 export interface ConstructionBuildEffects {
   transition: BankingTransition;
   feeLocal: number;
-  pool: {
+  pool?: {
     id: string;
     bucket: import("@/lib/market/unownedPoolDraw").UnownedPoolBucket;
     eraUnitScale: number;

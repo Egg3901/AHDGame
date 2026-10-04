@@ -557,9 +557,12 @@ describe("construction request lifecycle", () => {
     }
   });
 
-  it.each(["none", "fee", "pool", "queue"])(
-    "settles native FX recipients and market headroom once after a %s interruption",
-    async (point) => {
+  it.each([
+    ...["none", "fee", "pool", "queue"].map((point) => ({ point, growthUnits: 100 })),
+    ...["none", "fee", "queue"].map((point) => ({ point, growthUnits: 0 })),
+  ])(
+    "settles native FX recipients and $growthUnits market units after a $point interruption",
+    async ({ point, growthUnits }) => {
       const { request, memory } = world();
       request.sector.stateId = "GB_TEST";
       request.sector.countryId = "UK";
@@ -590,7 +593,7 @@ describe("construction request lifecycle", () => {
           destinationCurrency: "GBP" as const,
           bucket: { stateId: "GB_TEST", countryId: "UK", sectorType: "manufacturing" as const },
           eraUnitScale: 1,
-          growthUnits: 100,
+          growthUnits,
         },
       };
       if (point !== "none") {
@@ -631,7 +634,7 @@ describe("construction request lifecycle", () => {
         { forexRevenue: 125 },
         { spreadFeeReserveBalances: { USD: 250 } },
       ]);
-      expect(memory.collection("unownedSectors").docs[0].headroomUnits).toBe(150);
+      expect(memory.collection("unownedSectors").docs[0].headroomUnits).toBe(250 - growthUnits);
       const sector = memory.collection("corporateSectors").docs[0];
       expect(sector.buildQueue).toHaveLength(1);
       expect(sector.constructionFinancing).toMatchObject({

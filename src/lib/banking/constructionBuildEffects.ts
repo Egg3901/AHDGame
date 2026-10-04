@@ -47,8 +47,14 @@ export async function prepareConstructionBuildEffects(input: {
   if (!Number.isFinite(feeLocal) || feeLocal < 0 || !ObjectId.isValid(input.borrowerId))
     return { ok: false, error: "Construction fees are invalid" };
   const now = new Date();
-  const pipeline = unownedPoolDrawdown(input.bucket, input.units, now, input.eraUnitScale);
-  if (!pipeline) return { ok: false, error: "Construction market units are invalid" };
+  if (!Number.isSafeInteger(input.units) || input.units < 0)
+    return { ok: false, error: "Construction market units are invalid" };
+  const pipeline =
+    input.units > 0
+      ? unownedPoolDrawdown(input.bucket, input.units, now, input.eraUnitScale)
+      : null;
+  if (input.units > 0 && !pipeline)
+    return { ok: false, error: "Construction market units are invalid" };
   const legs: TransitionLeg[] = [];
   if (feeLocal > 0) {
     const sourceCountry = CURRENCY_ANCHOR_COUNTRY[input.currency];
@@ -111,28 +117,30 @@ export async function prepareConstructionBuildEffects(input: {
         note: "Destroy the remaining construction FX fee",
       });
   }
-  const pool = await db.collection<UnownedSector>("unownedSectors").findOneAndUpdate(
-    {
-      stateId: input.bucket.stateId,
-      sectorType: input.bucket.sectorType,
-      industryModel,
-      mediaDiscriminator,
-    },
-    {
-      $setOnInsert: {
-        ...input.bucket,
-        countryId,
-        industryModel,
-        mediaDiscriminator,
-        headroomUnits: 0,
-        revenue: 0,
-        createdAt: now,
-        updatedAt: now,
-      },
-    },
-    { upsert: true, returnDocument: "after" }
-  );
-  if (!pool) return { ok: false, error: "Construction market bucket is unavailable" };
+  const pool = pipeline
+    ? await db.collection<UnownedSector>("unownedSectors").findOneAndUpdate(
+        {
+          stateId: input.bucket.stateId,
+          sectorType: input.bucket.sectorType,
+          industryModel,
+          mediaDiscriminator,
+        },
+        {
+          $setOnInsert: {
+            ...input.bucket,
+            countryId,
+            industryModel,
+            mediaDiscriminator,
+            headroomUnits: 0,
+            revenue: 0,
+            createdAt: now,
+            updatedAt: now,
+          },
+        },
+        { upsert: true, returnDocument: "after" }
+      )
+    : null;
+  if (pipeline && !pool) return { ok: false, error: "Construction market bucket is unavailable" };
   const transition: BankingTransition = {
     key: `construction:${claimId}:build-effects`,
     kind: "construction_build_effects",
@@ -140,12 +148,16 @@ export async function prepareConstructionBuildEffects(input: {
     currency: input.currency,
     legs,
     projections: [
-      {
-        collection: "unownedSectors",
-        filter: { _id: oid(String(pool._id)) },
-        pipelineUpdate: pipeline as Document[],
-        note: "Claim this build's market headroom once",
-      },
+      ...(pool && pipeline
+        ? [
+            {
+              collection: "unownedSectors",
+              filter: { _id: oid(String(pool._id)) },
+              pipelineUpdate: pipeline as Document[],
+              note: "Claim this build's market headroom once",
+            },
+          ]
+        : []),
       {
         collection: "corporateSectors",
         filter: { _id: oid(String(sector._id)), "constructionFinancing.claimId": claimId },
@@ -160,12 +172,16 @@ export async function prepareConstructionBuildEffects(input: {
     value: {
       transition,
       feeLocal,
-      pool: {
-        id: String(pool._id),
-        bucket: input.bucket,
-        eraUnitScale: input.eraUnitScale,
-        units: input.units,
-      },
+      ...(pool
+        ? {
+            pool: {
+              id: String(pool._id),
+              bucket: input.bucket,
+              eraUnitScale: input.eraUnitScale,
+              units: input.units,
+            },
+          }
+        : {}),
       quotedAt: now,
     },
   };
