@@ -5,16 +5,14 @@ import type {
   CaucusChairElection,
   CaucusChairVote,
   CaucusMembership,
+  BillWhip,
   Character,
   NPP,
   NPPRelationship,
 } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import { CAUCUS_NPP_RETENTION_MIN_RELATIONSHIP } from "@/lib/constants/partyOrg";
-import {
-  buildWhipDefianceSnapshot,
-  type WhipDefianceSnapshot,
-} from "@/lib/partyWhips/whipDefiance";
+import { buildWhipDefianceSnapshots } from "@/lib/partyWhips/whipDefiance";
 
 const CAUCUS_RECENT_WINDOW_TURNS = 12;
 const CAUCUS_WARNING_BUFFER = 10;
@@ -214,7 +212,7 @@ export async function buildPartyCaucusHealthSnapshot(
     .filter((chairId): chairId is ObjectId => chairId instanceof ObjectId);
   const recentWindowStart = new Date(Date.now() - CAUCUS_RECENT_WINDOW_TURNS * 60 * 60 * 1000);
 
-  const [memberships, elections, chairs, defianceEntries] = await Promise.all([
+  const [memberships, elections, chairs, rawWhips] = await Promise.all([
     db
       .collection<CaucusMembership>("caucusMemberships")
       .find({
@@ -235,19 +233,12 @@ export async function buildPartyCaucusHealthSnapshot(
           .collection<Character>("characters")
           .find({ _id: { $in: chairIds } })
           .toArray(),
-    Promise.all(
-      caucuses.map(async (caucus): Promise<readonly [string, WhipDefianceSnapshot]> => [
-        caucus._id.toString(),
-        await buildWhipDefianceSnapshot(db, {
-          countryId,
-          partyId,
-          issuedBy: "caucus",
-          caucusId: caucus._id,
-        }),
-      ])
-    ),
+    db
+      .collection<BillWhip>("billWhips")
+      .find({ countryId, partyId, issuedBy: "caucus", caucusId: { $in: caucusIds } })
+      .sort({ createdAt: -1 })
+      .toArray(),
   ]);
-
   const activeNppMemberships = memberships.filter(
     (membership) => membership.status === "active" && membership.memberType === "npp"
   );
@@ -317,6 +308,20 @@ export async function buildPartyCaucusHealthSnapshot(
           .toArray(),
   ]);
 
+  const defianceByCaucusId = await buildWhipDefianceSnapshots(
+    db,
+    caucuses.map((caucus) => ({
+      countryId,
+      partyId,
+      issuedBy: "caucus" as const,
+      caucusId: caucus._id,
+    })),
+    25,
+    rawWhips,
+    memberships,
+    { characters, npps }
+  );
+
   const membershipsByCaucus = new Map<string, CaucusMembership[]>();
   for (const membership of memberships) {
     const key = membership.caucusId.toString();
@@ -355,8 +360,6 @@ export async function buildPartyCaucusHealthSnapshot(
       relationship.relationshipScore,
     ])
   );
-  const defianceByCaucusId = new Map<string, WhipDefianceSnapshot>(defianceEntries);
-
   const caucusHealthItems: CaucusHealthItem[] = caucuses.map((caucus) => {
     const caucusId = caucus._id.toString();
     const caucusMemberships = membershipsByCaucus.get(caucusId) ?? [];

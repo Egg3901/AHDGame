@@ -123,8 +123,12 @@ function autoPostureFromBalance(demandUnits: number, supplyUnits: number): numbe
 export interface ClearingSeller {
   /** Sector id (or synthetic id for aggregate pools). */
   id: string;
-  /** Units offered this turn. */
+  /** Units offered this turn after any pre-market audience availability limit. */
   units: number;
+  /** Physical output before any audience availability limit. */
+  physicalUnits?: number;
+  /** Editorially available fraction of advertising output. */
+  editorialAvailability?: number;
   /** Posted price relative to market, −0.2 … 0.2. */
   posture: number;
   /** Internally resolved quote relative to this book's price; CEO input is still bounded. */
@@ -300,6 +304,8 @@ export interface SectorClearingInput {
    * the legacy revenue-derived offer.
    */
   producedUnits?: number | null;
+  /** Share of advertising output available to its audience, default 1. */
+  editorialAdvertisingAvailability?: number;
 }
 
 /**
@@ -612,13 +618,20 @@ export function computeClearingFactors(args: {
         args.plantsEnabled && typeof s.producedUnits === "number" && s.producedUnits >= 0
           ? s.producedUnits * mixWeight(s.supplyRates, basePrices, commodity)
           : null;
-      const units = plantsUnits ?? (base > 0 ? (s.revenue * rate) / base : 0);
+      const physicalUnits = plantsUnits ?? (base > 0 ? (s.revenue * rate) / base : 0);
+      const availability =
+        commodity === "advertising" && Number.isFinite(s.editorialAdvertisingAvailability)
+          ? Math.max(0, Math.min(1, s.editorialAdvertisingAvailability!))
+          : 1;
+      const units = physicalUnits * availability;
       if (units <= 0) continue;
       sellersByCommodity.set(commodity, [
         ...(sellersByCommodity.get(commodity) ?? []),
         {
           id: s.sectorId,
           units,
+          physicalUnits,
+          editorialAvailability: availability,
           posture,
           realUnits: plantsUnits != null,
           ...(s.inputCostIndex !== undefined
@@ -804,9 +817,16 @@ export function computeClearingFactors(args: {
     if (args.producedUnitsOut && args.sectorCorpId) {
       for (const s of sellers) {
         const corpId = args.sectorCorpId.get(s.id);
-        if (!corpId || !(s.units > 0)) continue;
+        const available = s.editorialAvailability ?? 1;
+        const productionUnits =
+          s.realUnits === true
+            ? (s.physicalUnits ?? s.units)
+            : available < 1
+              ? s.units / available
+              : s.units;
+        if (!corpId || !(productionUnits > 0)) continue;
         const byCommodity = args.producedUnitsOut.get(corpId) ?? new Map<CommodityType, number>();
-        byCommodity.set(commodity, (byCommodity.get(commodity) ?? 0) + s.units);
+        byCommodity.set(commodity, (byCommodity.get(commodity) ?? 0) + productionUnits);
         args.producedUnitsOut.set(corpId, byCommodity);
       }
     }
@@ -860,7 +880,12 @@ export function computeClearingFactors(args: {
     for (const commodity of Object.keys(s.supplyRates) as CommodityType[]) {
       const rate = s.supplyRates[commodity] ?? 0;
       if (rate <= 0) continue;
-      const sold = soldByCommodityBySector.get(commodity)?.get(s.sectorId) ?? 1;
+      const offeredSold = soldByCommodityBySector.get(commodity)?.get(s.sectorId) ?? 1;
+      const availability =
+        commodity === "advertising" && Number.isFinite(s.editorialAdvertisingAvailability)
+          ? Math.max(0, Math.min(1, s.editorialAdvertisingAvailability!))
+          : 1;
+      const sold = offeredSold * availability;
       // State-scoped legs realize their own state's price. Clearing volume
       // locally while realizing price nationally would leave a seller who
       // relieved a local shortage paid at the glutted national level.

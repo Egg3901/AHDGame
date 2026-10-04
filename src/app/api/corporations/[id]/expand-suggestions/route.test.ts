@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
@@ -27,6 +27,12 @@ vi.mock("@/lib/corporations/marketShare", () => ({
 }));
 
 let db: MockDb;
+let GET: typeof import("./route").GET;
+
+// Compile the dependency graph before measuring requests and changing DB fixtures.
+beforeAll(async () => {
+  ({ GET } = await import("./route"));
+}, 60_000);
 
 function makeRequest(query: string) {
   return new Request(`http://localhost/api/corporations/1/expand-suggestions?${query}`);
@@ -93,7 +99,6 @@ describe("GET /api/corporations/[id]/expand-suggestions (mode=unowned)", () => {
       currentTurn: 148,
     });
 
-    const { GET } = await import("./route");
     const response = await GET(makeRequest("sectorType=retail&mode=unowned"), ctx());
     const data = await response.json();
 
@@ -176,7 +181,6 @@ describe("GET /api/corporations/[id]/expand-suggestions (mode=unowned)", () => {
       ]),
     });
 
-    const { GET } = await import("./route");
     const response = await GET(makeRequest("sectorType=logistics&mode=unowned"), ctx());
     const data = await response.json();
     const byState = new Map(
@@ -237,7 +241,6 @@ describe("GET /api/corporations/[id]/expand-suggestions (mode=unowned)", () => {
       toArray: vi.fn().mockResolvedValue([]),
     });
 
-    const { GET } = await import("./route");
     const response = await GET(makeRequest("sectorType=real_estate&mode=unowned"), ctx());
     const data = await response.json();
 
@@ -289,7 +292,6 @@ describe("GET /api/corporations/[id]/expand-suggestions (mode=unowned)", () => {
       toArray: vi.fn().mockResolvedValue([]),
     });
 
-    const { GET } = await import("./route");
     const response = await GET(makeRequest("sectorType=retail&mode=unowned"), ctx());
 
     expect(response.status).toBe(200);
@@ -326,7 +328,6 @@ describe("GET /api/corporations/[id]/expand-suggestions (mode=unowned)", () => {
       toArray: vi.fn().mockResolvedValue([]),
     });
 
-    const { GET } = await import("./route");
     const response = await GET(makeRequest("sectorType=energy&mode=unowned"), ctx());
     const data = await response.json();
 
@@ -360,7 +361,6 @@ describe("GET /api/corporations/[id]/expand-suggestions (mode=unowned)", () => {
       toArray: vi.fn().mockResolvedValue([]),
     });
 
-    const { GET } = await import("./route");
     const response = await GET(makeRequest("sectorType=energy&mode=unowned"), ctx());
     const data = await response.json();
 
@@ -384,7 +384,6 @@ describe("GET /api/corporations/[id]/expand-suggestions (mode=unowned)", () => {
       toArray: vi.fn().mockResolvedValue([]),
     });
 
-    const { GET } = await import("./route");
     const response = await GET(makeRequest("sectorType=energy&mode=unowned"), ctx());
     const data = await response.json();
 
@@ -420,7 +419,6 @@ describe("GET /api/corporations/[id]/expand-suggestions (mode=unowned)", () => {
       toArray: vi.fn().mockResolvedValue([]),
     });
 
-    const { GET } = await import("./route");
     const response = await GET(makeRequest("sectorType=defense&mode=unowned&state=MD"), ctx());
     const data = await response.json();
 
@@ -468,7 +466,6 @@ describe("GET /api/corporations/[id]/expand-suggestions (mode=playerCorp)", () =
       toArray: vi.fn().mockResolvedValue([{ _id: natCorpId, name: "USSR State Energy Trust" }]),
     });
 
-    const { GET } = await import("./route");
     const response = await GET(makeRequest("sectorType=energy&mode=playerCorp"), ctx());
     const data = await response.json();
 

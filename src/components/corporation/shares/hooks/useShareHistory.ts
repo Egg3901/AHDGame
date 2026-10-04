@@ -45,8 +45,8 @@ export interface ShareHistoryEntry {
   turn: number;
   createdAt: string;
   shares: number;
-  pricePerShareAnchor: number;
-  totalAnchor: number;
+  pricePerShareAnchor: number | null;
+  totalAnchor: number | null;
   corpCurrencyCode?: string;
   from: ShareHistoryParty | null;
   to: ShareHistoryParty | null;

@@ -118,6 +118,9 @@ export const gameConfig: GameConfig = {
   // it on for a fresh world; without it every planned economy silently fell
   // through to the market path and its state enterprises were never simulated.
   commandEconomyEnabled: true,
+  // Editorial stance reads state political leans and changes media ad availability.
+  // It stays dark on fresh worlds until its rollout is explicitly approved.
+  mediaEditorialEnabled: false,
 
   // Sovereignty transitions (decolonization). Safe as a default because the
   // phase carries its own era ceiling — a modern-preset world is a no-op even

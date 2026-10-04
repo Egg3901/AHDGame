@@ -99,6 +99,7 @@ import {
   settlePoliticalMediaOrder,
   type PoliticalMediaOrderForClearing,
 } from "@/lib/politicalMedia/journal";
+import { applyMediaEditorialEffects } from "@/lib/mediaEditorial/applyEffects";
 
 export type { CorporationTurnResult } from "./corporationTurnRuntime";
 
@@ -162,6 +163,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           interstateMoneyWiringEnabled: 1,
           freightSettlementMode: 1,
           canonicalFreightBillingEnabled: 1,
+          mediaEditorialEnabled: 1,
         },
       }
     ),
@@ -198,6 +200,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   const canonicalFreightBillingEnabled =
     (marketGovernorConfig as { canonicalFreightBillingEnabled?: boolean } | null)
       ?.canonicalFreightBillingEnabled === true;
+  const mediaEditorialEnabled = marketGovernorConfig?.mediaEditorialEnabled === true;
   const lookups = await buildCorporationLookups(db, {
     plantsEnabled: plantsEnabledForMarketShare,
     explicitPlantCostsEnabled:
@@ -206,6 +209,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     freightSettlementActive,
     moneyWiringEnabled: interstateMoneyWiringEnabled,
     canonicalFreightBillingEnabled,
+    mediaEditorialEnabled,
   });
   const politicalMediaMarketEnabled = marketGovernorConfig?.politicalMediaMarketEnabled === true;
   const politicalMediaOrders: PoliticalMediaOrderForClearing[] = politicalMediaMarketEnabled
@@ -375,6 +379,13 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     await savePoliticalMediaSettlementPlan(db, orderId, plan);
   }
   contractedByCorpCommodity = clearingContractedByCorpCommodity;
+  if (mediaEditorialEnabled && market.editorialOutletsByState) {
+    await applyMediaEditorialEffects({
+      db,
+      turn: turn ?? gameState?.currentTurn ?? 0,
+      outletsByState: market.editorialOutletsByState,
+    });
+  }
   mark("marketContext");
 
   // Output quality (four pillars): compute per-sector quality → corp
