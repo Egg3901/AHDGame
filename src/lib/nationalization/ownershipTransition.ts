@@ -665,9 +665,6 @@ export async function nationalizeSector(
 
   const sector = await sectors.findOne({ _id: params.sectorId });
   if (!sector) throw new Error("Sector not found");
-  if (hasProtectedConstructionProperty(sector) && !sector.pendingFundedNationalization) {
-    throw badRequest("Resolve secured construction before nationalizing this sector");
-  }
 
   const donor = await corps.findOne({ _id: sector.corporationId });
   if (!donor) throw new Error("Donor corporation not found");
@@ -722,11 +719,24 @@ export async function nationalizeSector(
   // the taking. Seizure (0 payout) moves nothing.
   const compensationKey = `nationalize-sector:${params.countryId}:${sector._id.toString()}:${gameState?.currentTurn ?? 0}`;
   const compensationLedger = await resolveTreasuryCashOptions(db);
+  const ownsFundedReservation =
+    sector.constructionPropertyTransition?.key === compensationKey &&
+    sector.constructionPropertyTransition.kind === "nationalization";
+  if (
+    hasProtectedConstructionProperty(sector) &&
+    !sector.pendingFundedNationalization &&
+    !ownsFundedReservation
+  ) {
+    throw badRequest("Resolve secured construction before nationalizing this sector");
+  }
   if (
     sector.pendingFundedNationalization &&
     (sector.pendingFundedNationalization.operationKey !== compensationKey ||
       !compensationLedger?.context?.treasuryCashLedgerEnabled)
   ) {
+    throw new Error("Funded nationalization retry requires its original Treasury cash mode");
+  }
+  if (ownsFundedReservation && !compensationLedger?.context?.treasuryCashLedgerEnabled) {
     throw new Error("Funded nationalization retry requires its original Treasury cash mode");
   }
   if (compensationLedger?.context?.treasuryCashLedgerEnabled) {
