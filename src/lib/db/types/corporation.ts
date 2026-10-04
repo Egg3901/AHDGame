@@ -13,7 +13,6 @@ import type {
   ManufacturingIndustryModel,
   MediaDiscriminator,
 } from "../../constants/corporations";
-import type { ProductAdvertisingDenominationWitness } from "@/lib/products/rules/productAdvertising";
 import type { CountryId } from "../../constants/countries";
 import type { CurrencyCode } from "../../constants/currencies";
 import type { ExtractableResource } from "../../constants/commodities";

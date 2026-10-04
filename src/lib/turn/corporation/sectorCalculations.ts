@@ -82,10 +82,7 @@ import {
 } from "@/lib/bonds/corpBondCashflows";
 import { addCorpToCorpSettlement, type SettleCorpInfo } from "./settleSupplyAgreements";
 import { capManufacturingDevelopmentSpendToCash } from "@/lib/products/rules/manufacturingRules";
-import {
-  mediaProductAdvertisingReceiptAnchor,
-  settledMediaAdvertisingAnchor,
-} from "@/lib/products/rules/mediaProductRules";
+import { settledMediaAdvertisingAnchor } from "@/lib/products/rules/mediaProductRules";
 import {
   allocateProductDevelopmentBudget,
   allocateProductAdvertisingBudget,
