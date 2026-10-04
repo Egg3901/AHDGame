@@ -104,8 +104,8 @@ export const PLANTS_HOUSEHOLD_SUPPLY_CAP = 1.5;
  * goods + consumer services + the abstract `retail` bucket for general
  * merchandise). Raw extractables and pure-B2B inputs (ordnance, fertilizers) are
  * excluded, including advertising inventory, which is a business input rather
- * than a household purchase. Weights are relative — they are renormalised per
- * state after the wealth-tier (Engel) shift — so they need not sum to exactly 1.
+ * than a household purchase. Weights are relative and are renormalised per
+ * state after the wealth-tier (Engel) shift, so they need not sum to exactly 1.
  */
 export const HOUSEHOLD_CONSUMER_BASKET: Partial<Record<CommodityType, number>> = {
   food: 0.2,
