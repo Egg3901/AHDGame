@@ -11,4 +11,4 @@ areas: [backend]
 ## What changed
 
 - Add a deterministic viability model and calibration report using current loan, deposit, fee, insurance, and bond quote rules.
-- Count only pool-funded public float and treasury-funded coupon or maturity cash; retain unpaid claims as non-cash obligations.
+- Count bank coupon and maturity cash only when actual Treasury funding pays the claim; retain unpaid claims as non-cash obligations. Public-float coupon and fiscal-outflow limits remain explicit in the report.
