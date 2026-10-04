@@ -50,11 +50,12 @@ export {
 } from "@/lib/turn/npp/strategyRetooling";
 import type { NPP } from "@/lib/db/types/npp";
 import type { UnownedSector } from "@/lib/db/types/unownedSector";
+import { ceoArchetypeModifiers } from "@/lib/turn/ceoArchetype";
 import {
-  deriveCeoArchetype,
-  ceoArchetypeModifiers,
-  type CeoArchetype,
-} from "@/lib/turn/ceoArchetype";
+  buildNppCorporationDecisionIndexes,
+  indexOpenUnownedSectors,
+  nppDecisionCohortIds,
+} from "@/lib/turn/npp/decisionSnapshotIndexes";
 import type { CorporationType } from "@/lib/constants/corporations";
 import { partitionOpenMarkets } from "@/lib/economy/queries/privateEnterpriseGate";
 import type { CommodityPrice } from "@/lib/db/types/commodityPrice";
@@ -251,10 +252,7 @@ export async function processNppCorporationDecisions(
       manufacturingProductProjects: [],
     };
 
-  const corpIds = nppCorps.map((c) => c._id);
-  // Resolve each corp's CEO NPP so its personality can shape the corp's behavior.
-  // ceoId holds the NPP _id when ceoType === "npp".
-  const ceoNppIds = nppCorps.filter((c) => c.ceoType === "npp" && c.ceoId).map((c) => c.ceoId);
+  const { corporationIds: corpIds, ceoNppIds } = nppDecisionCohortIds(nppCorps);
   // All four reads depend only on the NPP cohort. Start them together rather
   // than making the decision phase wait for each collection in sequence.
   const [allSectors, ceoNpps, commodityPriceDocs, unownedSectors] = await Promise.all([
@@ -272,29 +270,11 @@ export async function processNppCorporationDecisions(
     db.collection<CommodityPrice>("commodityPrices").find({}).toArray(),
     db.collection<UnownedSector>("unownedSectors").find({}).toArray(),
   ]);
-  const archetypeByNppId = new Map<string, CeoArchetype>();
-  for (const npp of ceoNpps) {
-    if (npp.personality) {
-      archetypeByNppId.set(npp._id.toString(), deriveCeoArchetype(npp.personality));
-    }
-  }
-
-  const sectorsByCorp = new Map<string, CorporateSector[]>();
-  for (const sector of allSectors) {
-    const cid = sector.corporationId.toString();
-    if (!sectorsByCorp.has(cid)) sectorsByCorp.set(cid, []);
-    sectorsByCorp.get(cid)!.push(sector);
-  }
-
-  // Commodity price snapshot for macro-aware production policy (SP5). One doc
-  // per commodity; keep the latest turn if duplicates exist.
-  const priceByCommodity = new Map<string, CommodityPrice>();
-  for (const doc of commodityPriceDocs) {
-    const existing = priceByCommodity.get(doc.commodity);
-    if (!existing || (doc.turn ?? 0) >= (existing.turn ?? 0)) {
-      priceByCommodity.set(doc.commodity, doc);
-    }
-  }
+  const { archetypeByNppId, sectorsByCorp, priceByCommodity } = buildNppCorporationDecisionIndexes(
+    ceoNpps,
+    allSectors,
+    commodityPriceDocs
+  );
   const { priceRatioOf, statePriceRatioOf, stateDemandOf } = buildNppPriceSignals(priceByCommodity);
 
   const placementSignals = await loadNppPlacementSignals(db, turn, allSectors, statePriceRatioOf);
@@ -302,17 +282,7 @@ export async function processNppCorporationDecisions(
 
   const { open: openUnowned, blocked } = await partitionOpenMarkets(db, unownedSectors);
 
-  // Index unowned sectors by countryId for fast lookup
-  const unownedByCountry = new Map<string, UnownedSector[]>();
-  for (const us of openUnowned) {
-    if (!unownedByCountry.has(us.countryId)) unownedByCountry.set(us.countryId, []);
-    unownedByCountry.get(us.countryId)!.push(us);
-  }
-  // Shared object references let each founding deplete later candidates in this pass.
-  const unownedIndex = new Map<string, UnownedSector>();
-  for (const us of openUnowned) {
-    unownedIndex.set(bucketKey(us.stateId, us.sectorType), us);
-  }
+  const { unownedByCountry, unownedIndex } = indexOpenUnownedSectors(openUnowned);
 
   // NPPs cannot auto-expand into state-controlled buckets; players still may.
   const [nationalCorpIds, globalSectors] = await Promise.all([
