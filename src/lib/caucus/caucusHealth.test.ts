@@ -13,6 +13,32 @@ import type {
 import { buildPartyCaucusHealthSnapshot } from "./caucusHealth";
 
 describe("buildPartyCaucusHealthSnapshot", () => {
+  it("loads defiance whips for every caucus in one query", async () => {
+    const db = createMockDb();
+    db.collection("caucuses");
+    db.collection("caucusMemberships");
+    db.collection("caucusChairElections");
+    db.collection("characters");
+    db.collection("billWhips");
+    db.collectionMocks.caucuses!.find.mockReturnValue({
+      toArray: async () =>
+        ["a", "b", "c"].map((slug) => ({
+          _id: new ObjectId(),
+          slug,
+          countryId: "US",
+          partyId: "1",
+          name: slug,
+          disbandedAt: null,
+        })),
+    });
+
+    const snapshot = await buildPartyCaucusHealthSnapshot(db as never, "US", "1");
+
+    expect(snapshot.caucuses).toHaveLength(3);
+    expect(db.collectionMocks.billWhips!.find).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.billWhips!.find.mock.calls[0][0].caucusId.$in).toHaveLength(3);
+  });
+
   it("summarizes caucus churn, election status, and at-risk NPP retention", async () => {
     const db = createMockDb();
     const caucusId = new ObjectId();

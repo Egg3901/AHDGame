@@ -222,6 +222,60 @@ export async function computeCabinetNominationTally(
   };
 }
 
+/** Compute many cabinet tallies after one seat-map load per chamber. */
+export async function computeCabinetNominationTallies(
+  db: Db,
+  countryId: CountryId,
+  nominations: readonly {
+    _id: ObjectId;
+    votes?: Record<string, "for" | "against" | "abstain">;
+    houseVotes?: Record<string, "for" | "against" | "abstain">;
+  }[]
+): Promise<Map<string, CabinetNominationTally>> {
+  const senateKeys = [...new Set(nominations.flatMap((n) => Object.keys(n.votes ?? {})))];
+  const houseKeys = [...new Set(nominations.flatMap((n) => Object.keys(n.houseVotes ?? {})))];
+  const [senate, house] = await Promise.all([
+    buildVoterPartyAndWeightMaps(db, countryId, "senate", senateKeys),
+    buildVoterPartyAndWeightMaps(db, countryId, "house", houseKeys),
+  ]);
+
+  const tallyVotes = (
+    votes: Record<string, "for" | "against" | "abstain"> | undefined,
+    weightMap: ReadonlyMap<string, number>
+  ) => {
+    const tally = { votesFor: 0, votesAgainst: 0, votesAbstain: 0 };
+    for (const [voterId, vote] of Object.entries(votes ?? {})) {
+      const weight = weightMap.get(voterId);
+      if (weight == null) continue;
+      if (vote === "for") tally.votesFor += weight;
+      else if (vote === "against") tally.votesAgainst += weight;
+      else tally.votesAbstain += weight;
+    }
+    return tally;
+  };
+
+  return new Map(
+    nominations.map((nomination) => {
+      const tally = tallyVotes(nomination.votes, senate.weightMap);
+      const houseTally = tallyVotes(nomination.houseVotes, house.weightMap);
+      const hasHouseVotes = Object.keys(nomination.houseVotes ?? {}).length > 0;
+      return [
+        nomination._id.toString(),
+        {
+          ...tally,
+          ...(hasHouseVotes
+            ? {
+                houseVotesFor: houseTally.votesFor,
+                houseVotesAgainst: houseTally.votesAgainst,
+                houseVotesAbstain: houseTally.votesAbstain,
+              }
+            : {}),
+        },
+      ];
+    })
+  );
+}
+
 /**
  * Single source of truth for a US House / Senate leadership election tally
  * (Speaker, Majority/Minority Leader, etc.). Tallies are **seat-weighted** via

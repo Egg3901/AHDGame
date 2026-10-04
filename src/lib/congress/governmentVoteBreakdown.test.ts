@@ -13,6 +13,7 @@ import { createMockDb, type MockDb, type MockCollection } from "@/lib/test-utils
 import {
   computeParliamentaryGovernmentTally,
   computeCabinetNominationTally,
+  computeCabinetNominationTallies,
   computeCongressLeadershipTally,
 } from "./governmentVoteBreakdown";
 
@@ -125,6 +126,33 @@ describe("computeCabinetNominationTally", () => {
     const filter = calls[0]![0] as Record<string, unknown>;
     expect(filter.countryId).toBe("US");
     expect(filter.officeType).toBe("senate");
+  });
+
+  it("loads voter seat maps once for multiple active nominations", async () => {
+    stubFind(db.collection("characters") as unknown as MockCollection, [
+      { _id: senatorId, party: "1" },
+    ]);
+    stubFind(db.collection("npps") as unknown as MockCollection, []);
+    stubFind(db.collection("electedOfficials") as unknown as MockCollection, [
+      { characterId: senatorId, countryId: "US", officeType: "senate", seatsHeld: 1 },
+    ]);
+    const nominations = [new ObjectId(), new ObjectId(), new ObjectId()].map((_id) => ({
+      _id,
+      votes: { [senatorId.toString()]: "for" as const },
+    }));
+
+    const tallies = await computeCabinetNominationTallies(db as unknown as Db, "US", nominations);
+
+    expect(tallies.size).toBe(3);
+    expect([...tallies.values()]).toEqual([
+      { votesFor: 1, votesAgainst: 0, votesAbstain: 0 },
+      { votesFor: 1, votesAgainst: 0, votesAbstain: 0 },
+      { votesFor: 1, votesAgainst: 0, votesAbstain: 0 },
+    ]);
+    expect(db.collectionMocks.characters!.find).toHaveBeenCalledTimes(1);
+    // No NPP voters are present, so the shared seat-map helper skips that read.
+    expect(db.collectionMocks.npps!.find).not.toHaveBeenCalled();
+    expect(db.collectionMocks.electedOfficials!.find).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -11,6 +11,7 @@ import type {
   StatePartyOrg,
   ElectionVoteTally,
 } from "@/lib/db/types";
+import type { Apportionment } from "./apportionment";
 import type { CountryId } from "@/lib/constants/countries";
 import type {
   ContingentElectionDisplay,
@@ -393,6 +394,10 @@ export interface ElectionDeps {
   latestPrimarySnapshot: PrimarySnapshot | null;
   /** Current officeholder for single-seat races. Null for multi-seat or no holder. */
   incumbent: { name: string; partyId: string } | null;
+  /** Shared list-view data; undefined preserves the single-election loader. */
+  apportionment?: Apportionment;
+  /** Preloaded local region for list enrichment; null means it was not found. */
+  localRegionState?: State | null;
 }
 
 // ---------------------------------------------------------------------------

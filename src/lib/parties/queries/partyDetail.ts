@@ -34,38 +34,79 @@ import { isUserActive } from "@/lib/players/playerActivity";
 import { DEFAULT_LEGACY_COUNTRY_ID } from "@/lib/constants/countries";
 import { countDistinctOfficers } from "@/lib/treasury/payoutCapValues";
 
-async function resolveLeader(
+export async function loadPartyLeaders(
   db: Db,
-  leaderId: ObjectId | null | undefined
-): Promise<PartyLeader | null> {
-  if (!leaderId) return null;
+  leaderIds: readonly (ObjectId | null | undefined)[]
+): Promise<Map<string, PartyLeader>> {
+  const ids = [
+    ...new Map(
+      leaderIds
+        .filter((id): id is ObjectId => id instanceof ObjectId)
+        .map((id) => [id.toString(), id])
+    ).values(),
+  ];
+  if (ids.length === 0) return new Map();
 
-  const character = await db.collection<Character>("characters").findOne({ _id: leaderId });
-  if (!character) return null;
-
-  const user = await db
-    .collection<User>("users")
-    .findOne({ _id: character.userId }, { projection: { _id: 1, isBanned: 1 } });
-  if (user?.isBanned) return null;
-
-  return {
-    id: character._id.toString(),
-    sequentialId: character.sequentialId,
-    name: character.name,
-    avatarUrl: character.avatarUrl,
-  };
+  const characters = await db
+    .collection<Character>("characters")
+    .find(
+      { _id: { $in: ids } },
+      { projection: { _id: 1, userId: 1, sequentialId: 1, name: 1, avatarUrl: 1 } }
+    )
+    .toArray();
+  const users = characters.length
+    ? await db
+        .collection<User>("users")
+        .find(
+          {
+            _id: {
+              $in: [
+                ...new Map(
+                  characters.map((character) => [character.userId.toString(), character.userId])
+                ).values(),
+              ],
+            },
+          },
+          { projection: { _id: 1, isBanned: 1 } }
+        )
+        .toArray()
+    : [];
+  const bannedUserIds = new Set(
+    users.filter((user) => user.isBanned === true).map((user) => user._id.toString())
+  );
+  return new Map(
+    characters
+      .filter((character) => !bannedUserIds.has(character.userId.toString()))
+      .map((character) => [
+        character._id.toString(),
+        {
+          id: character._id.toString(),
+          sequentialId: character.sequentialId,
+          name: character.name,
+          avatarUrl: character.avatarUrl,
+        },
+      ])
+  );
 }
 
 export async function getPartyDetail(db: Db, party: PoliticalParty): Promise<PartyData> {
+  const leaderById = await loadPartyLeaders(db, [
+    party.chairId,
+    party.viceChairId,
+    party.treasurerId,
+    ...(party.campaignerIds ?? []),
+  ]);
+  const leader = (id: ObjectId | null | undefined) =>
+    id ? (leaderById.get(id.toString()) ?? null) : null;
   const [chair, viceChair, treasurer, currentTurn] = await Promise.all([
-    resolveLeader(db, party.chairId),
-    resolveLeader(db, party.viceChairId),
-    resolveLeader(db, party.treasurerId),
+    Promise.resolve(leader(party.chairId)),
+    Promise.resolve(leader(party.viceChairId)),
+    Promise.resolve(leader(party.treasurerId)),
     getCurrentTurn(db),
   ]);
-  const campaigners = (
-    await Promise.all((party.campaignerIds ?? []).map((id) => resolveLeader(db, id)))
-  ).filter((c): c is NonNullable<typeof c> => c !== null);
+  const campaigners = (party.campaignerIds ?? [])
+    .map((id) => leader(id))
+    .filter((c): c is NonNullable<typeof c> => c !== null);
 
   const partyCountry = party.countryId ?? "US";
   const allMembers = await db

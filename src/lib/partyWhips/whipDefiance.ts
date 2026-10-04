@@ -345,11 +345,12 @@ async function loadGovernmentTarget(db: Db, whip: BillWhip): Promise<TargetConte
   };
 }
 
-async function loadCabinetTarget(db: Db, whip: BillWhip): Promise<TargetContext | null> {
+function loadCabinetTarget(
+  whip: BillWhip,
+  nominationsById: ReadonlyMap<string, CabinetNomination>
+): TargetContext | null {
   if (!(whip.targetId instanceof ObjectId)) return null;
-  const nomination = await db
-    .collection<CabinetNomination>("cabinetNominations")
-    .findOne({ _id: whip.targetId, status: "active" });
+  const nomination = nominationsById.get(whip.targetId.toString());
   if (!nomination) return null;
   return {
     label: nomination.nomineeCharacterName
@@ -472,7 +473,8 @@ async function loadLeadershipTarget(db: Db, whip: BillWhip): Promise<TargetConte
 async function loadTargetContext(
   db: Db,
   whip: BillWhip,
-  billsById: ReadonlyMap<string, Bill>
+  billsById: ReadonlyMap<string, Bill>,
+  cabinetNominationsById: ReadonlyMap<string, CabinetNomination>
 ): Promise<TargetContext | null> {
   switch (whip.targetType) {
     case "bill":
@@ -484,7 +486,7 @@ async function loadTargetContext(
     case "noConfidenceVote":
       return loadGovernmentTarget(db, whip);
     case "cabinetNomination":
-      return loadCabinetTarget(db, whip);
+      return loadCabinetTarget(whip, cabinetNominationsById);
     case "speakerVacateMotion":
       return loadVacateTarget(db, whip);
     case "impeachmentVote":
@@ -501,19 +503,29 @@ function compareByUpdated(a: WhipDefianceItem, b: WhipDefianceItem): number {
 export async function buildWhipDefianceSnapshot(
   db: Db,
   scope: WhipDefianceScope,
-  limit: number = 25
+  limit: number = 25,
+  preloadedWhips?: readonly BillWhip[]
 ): Promise<WhipDefianceSnapshot> {
-  const rawWhips = await db
-    .collection<BillWhip>("billWhips")
-    .find({
-      issuedBy: scope.issuedBy,
-      countryId: scope.countryId,
-      partyId: scope.partyId,
-      ...(scope.stateId ? { stateId: scope.stateId } : {}),
-      ...(scope.caucusId ? { caucusId: scope.caucusId } : {}),
-    })
-    .sort({ createdAt: -1 })
-    .toArray();
+  const rawWhips = preloadedWhips
+    ? preloadedWhips.filter(
+        (whip) =>
+          whip.issuedBy === scope.issuedBy &&
+          whip.countryId === scope.countryId &&
+          whip.partyId === scope.partyId &&
+          (!scope.stateId || whip.stateId === scope.stateId) &&
+          (!scope.caucusId || whip.caucusId?.toString() === scope.caucusId.toString())
+      )
+    : await db
+        .collection<BillWhip>("billWhips")
+        .find({
+          issuedBy: scope.issuedBy,
+          countryId: scope.countryId,
+          partyId: scope.partyId,
+          ...(scope.stateId ? { stateId: scope.stateId } : {}),
+          ...(scope.caucusId ? { caucusId: scope.caucusId } : {}),
+        })
+        .sort({ createdAt: -1 })
+        .toArray();
   const whips: BillWhip[] = [];
   const seen = new Set<string>();
   for (const whip of rawWhips) {
@@ -545,11 +557,30 @@ export async function buildWhipDefianceSnapshot(
     : [];
   const billsById = new Map(bills.map((bill) => [bill._id.toString(), bill]));
 
+  const cabinetNominationIds = [
+    ...new Map(
+      whips
+        .filter(
+          (whip) => whip.targetType === "cabinetNomination" && whip.targetId instanceof ObjectId
+        )
+        .map((whip) => [whip.targetId.toString(), whip.targetId as ObjectId])
+    ).values(),
+  ];
+  const cabinetNominations = cabinetNominationIds.length
+    ? await db
+        .collection<CabinetNomination>("cabinetNominations")
+        .find({ _id: { $in: cabinetNominationIds }, status: "active" })
+        .toArray()
+    : [];
+  const cabinetNominationsById = new Map(
+    cabinetNominations.map((nomination) => [nomination._id.toString(), nomination])
+  );
+
   const players: WhipDefianceItem[] = [];
   const npps: WhipDefianceItem[] = [];
 
   for (const whip of whips) {
-    const target = await loadTargetContext(db, whip, billsById);
+    const target = await loadTargetContext(db, whip, billsById, cabinetNominationsById);
     if (!target) continue;
 
     const voterIds = parseVoterKeys(

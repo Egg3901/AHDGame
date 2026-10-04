@@ -183,6 +183,19 @@ describe("issue #2168 summary projections", () => {
     expect(bytes).toBeGreaterThan(20_000);
   });
 
+  it("shares apportionment and local-region reads across list elections", async () => {
+    const { db, election } = setupSummaryWorld();
+    const elections = [
+      { ...election, seatId: "US-senate-CA-1" },
+      { ...election, _id: new ObjectId(), state: "NY", seatId: "US-senate-NY-2" },
+    ];
+
+    await resolveElections(db as unknown as Db, elections, { view: "summary", userId: null });
+
+    expect(db.collectionMocks.states!.find).toHaveBeenCalledTimes(2); // apportionment + batched race regions
+    expect(db.collectionMocks.states!.findOne).not.toHaveBeenCalled();
+  });
+
   it("resolveElections summary omits policies.domainPositions from every NPP read", async () => {
     const { db, election } = setupSummaryWorld();
     await resolveElections(db as unknown as Db, [election], {

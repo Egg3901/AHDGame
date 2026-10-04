@@ -5,6 +5,7 @@ import type {
   CaucusChairElection,
   CaucusChairVote,
   CaucusMembership,
+  BillWhip,
   Character,
   NPP,
   NPPRelationship,
@@ -214,7 +215,7 @@ export async function buildPartyCaucusHealthSnapshot(
     .filter((chairId): chairId is ObjectId => chairId instanceof ObjectId);
   const recentWindowStart = new Date(Date.now() - CAUCUS_RECENT_WINDOW_TURNS * 60 * 60 * 1000);
 
-  const [memberships, elections, chairs, defianceEntries] = await Promise.all([
+  const [memberships, elections, chairs, rawWhips] = await Promise.all([
     db
       .collection<CaucusMembership>("caucusMemberships")
       .find({
@@ -235,18 +236,23 @@ export async function buildPartyCaucusHealthSnapshot(
           .collection<Character>("characters")
           .find({ _id: { $in: chairIds } })
           .toArray(),
-    Promise.all(
-      caucuses.map(async (caucus): Promise<readonly [string, WhipDefianceSnapshot]> => [
-        caucus._id.toString(),
-        await buildWhipDefianceSnapshot(db, {
-          countryId,
-          partyId,
-          issuedBy: "caucus",
-          caucusId: caucus._id,
-        }),
-      ])
-    ),
+    db
+      .collection<BillWhip>("billWhips")
+      .find({ countryId, partyId, issuedBy: "caucus", caucusId: { $in: caucusIds } })
+      .sort({ createdAt: -1 })
+      .toArray(),
   ]);
+  const defianceEntries = await Promise.all(
+    caucuses.map(async (caucus): Promise<readonly [string, WhipDefianceSnapshot]> => [
+      caucus._id.toString(),
+      await buildWhipDefianceSnapshot(
+        db,
+        { countryId, partyId, issuedBy: "caucus", caucusId: caucus._id },
+        25,
+        rawWhips
+      ),
+    ])
+  );
 
   const activeNppMemberships = memberships.filter(
     (membership) => membership.status === "active" && membership.memberType === "npp"
