@@ -400,9 +400,7 @@ function RegistryMasthead({
           {glyph}
         </div>
         <div className="min-w-[220px] flex-1">
-          <h1 className="font-display text-display font-bold leading-tight text-foreground">
-            {displayName}
-          </h1>
+          <h1 className="text-display font-bold leading-tight text-foreground">{displayName}</h1>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <span className="inline-block rounded border border-success bg-card-muted px-2 py-0.5 font-mono text-body-xs font-bold tracking-wider text-success">
               {board.metrics.length} PRIMARY METRICS
@@ -490,7 +488,7 @@ function RegistrySummary({
             <div className="font-mono text-body-xs uppercase tracking-widest text-muted">
               Primary observations
             </div>
-            <div className="mt-0.5 font-display text-heading font-semibold text-foreground">
+            <div className="mt-0.5 text-heading font-semibold text-foreground">
               {categories.length} outcome domains
             </div>
             <div className="text-body-xs text-muted">current world registry</div>
@@ -747,9 +745,7 @@ function CategoryDetail({
           <CategoryIcon icon={CATEGORY_ICONS[category.id] ?? "library"} className="h-6 w-6" />
         </span>
         <div className="min-w-[200px] flex-1">
-          <h2 className="font-display text-heading-lg font-bold text-foreground">
-            {category.name}
-          </h2>
+          <h2 className="text-heading-lg font-bold text-foreground">{category.name}</h2>
           <div className="mt-0.5 text-body-sm text-muted">
             {displayName} · {category.metrics.length} primary observations in real-world units
           </div>
@@ -938,9 +934,7 @@ function MetricDetail({
             <div className="font-mono text-body-xs uppercase tracking-widest text-muted">
               {displayName} · {readableCategory(metric.path.split(".")[0] ?? "conditions")}
             </div>
-            <h2 className="mt-1 font-display text-heading-lg font-bold text-foreground">
-              {metric.name}
-            </h2>
+            <h2 className="mt-1 text-heading-lg font-bold text-foreground">{metric.name}</h2>
             <p className="mt-2 text-body leading-relaxed text-muted">
               {playerMetricDescription(metric)}
             </p>

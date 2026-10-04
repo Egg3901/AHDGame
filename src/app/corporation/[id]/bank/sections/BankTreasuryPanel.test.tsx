@@ -18,6 +18,7 @@ const overview: BankTreasuryOverview = {
   spendableCash: 10_000,
   markValueLocal: 0,
   autoSweep: false,
+  fundingRatePercent: 0,
   positions: [],
 };
 const offer = {

@@ -143,6 +143,8 @@ export interface LoanServiceTransitionInput extends LoanServiceInput {
     >;
   /** Where the payment lands: a live bank's vault, or the estate / insurer. */
   creditTarget: LoanServiceTarget;
+  /** Count this payment only when its closed-estate claim is in the measured cohort. */
+  trackInsuranceRecovery?: boolean;
   bankId: string;
   decision?: LoanServiceDecision;
 }
@@ -220,6 +222,20 @@ export function loanServiceTransition(input: LoanServiceTransitionInput): {
       },
       update: { $inc: { "bankCharter.totalLoans": decision.totalLoansDelta } },
       note: "Advance the named loan book under the original servicing receipt",
+    });
+  }
+
+  if (
+    input.trackInsuranceRecovery === true &&
+    decision.payment > 0 &&
+    input.creditTarget.collection === "depositInsuranceFunds" &&
+    input.creditTarget.path === "balance"
+  ) {
+    projections.push({
+      collection: "depositInsuranceFunds",
+      filter: input.creditTarget.filter,
+      update: { $inc: { measuredRecoveriesSincePricingStart: decision.payment } },
+      note: "Record borrower cash recovered for a measured resolved insurance claim",
     });
   }
 

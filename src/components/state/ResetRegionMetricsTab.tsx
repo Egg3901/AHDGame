@@ -86,9 +86,7 @@ export function ResetRegionMetricsTab({
         <span className="inline-block rounded border border-error px-2.5 py-0.5 font-mono text-body-xs uppercase tracking-widest text-error">
           Metric registry unavailable
         </span>
-        <h2 className="mt-4 font-display text-heading-lg text-foreground">
-          Metrics could not be loaded
-        </h2>
+        <h2 className="mt-4 text-heading-lg text-foreground">Metrics could not be loaded</h2>
         <p className="mt-2 text-body text-muted">
           The {regionName} metric board could not be verified. Legacy metrics are not substituted
           while this world is using the updated metric system.

@@ -445,7 +445,7 @@ export function GuidedLegislationModal({
       <div className="my-auto w-full max-w-5xl rounded-2xl border border-card-border bg-card shadow-modal">
         <header className="flex items-start justify-between border-b border-card-border p-5">
           <div>
-            <h2 className="font-display text-lg font-semibold">Guided legislative proposal</h2>
+            <h2 className="text-lg font-semibold">Guided legislative proposal</h2>
             <p className="mt-1 text-xs text-muted">
               Build up to {MAX_PROVISIONS} reviewed provisions. Costs {BILL_PROPOSE_ACTION_COST}{" "}
               action points and {getProvisionCostTotal(draft.length)} national influence at the
