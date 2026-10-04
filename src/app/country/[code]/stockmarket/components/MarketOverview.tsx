@@ -74,10 +74,32 @@ interface CandlesResponse {
 
 type CompareKey = { kind: "venue"; api: string } | { kind: "sector"; sector: CorporationType };
 
+function canvasColor(color: string): string {
+  const match = color.match(
+    /^color\(srgb\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+))?\)$/i
+  );
+  if (!match) return color;
+  const channels = match.slice(1, 4).map((channel) => Math.round(Number(channel) * 255));
+  const alpha = match[4] === undefined ? 1 : Number(match[4]);
+  return `rgba(${channels.join(", ")}, ${alpha})`;
+}
+
 function cssVar(name: string, fallback: string): string {
   if (typeof document === "undefined") return fallback;
   const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-  return v || fallback;
+  if (!v) return fallback;
+
+  // lightweight-charts parses canvas colors itself and does not understand
+  // CSS expressions such as color-mix(), even when the browser does.
+  const probe = document.createElement("span");
+  probe.style.color = v;
+  if (!probe.style.color) return fallback;
+  document.documentElement.appendChild(probe);
+  try {
+    return canvasColor(getComputedStyle(probe).color.trim()) || fallback;
+  } finally {
+    probe.remove();
+  }
 }
 
 function ma(values: number[], window: number): (number | null)[] {

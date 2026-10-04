@@ -1,7 +1,7 @@
 import type { Db } from "mongodb";
-import { findMergedRegionMetrics } from "@/lib/macroMetrics/merge";
+import { findMergedRegionMetrics, mergeRegionMetrics } from "@/lib/macroMetrics/merge";
 import { isMacroMetricPath } from "@/lib/macroMetrics/paths";
-import type { State, LegislationType, CorporateSector } from "@/lib/db/types";
+import type { State, StateMetrics, LegislationType, CorporateSector } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import type { MetricCategoryId, StateMetricValue } from "@/lib/db/types/stateMetrics";
 import type { StatePolicy } from "@/lib/db/types/statePolicy";
@@ -20,6 +20,7 @@ import { getMetricDefinition } from "@/lib/constants/metricDefinitions";
 import { optionIntensity, type IntensityOption } from "@/lib/legislature/optionIntensity";
 import { computeIndependenceDesireDriftForRegion } from "@/lib/turn/independenceDesireDrift";
 import type { PoliticalMetricsDoc } from "@/lib/db/types/politicalMetrics";
+import type { MacroMetricsDoc } from "@/lib/db/types/macroMetrics";
 import type { PoliticalMetricId } from "@/lib/politicalMetrics/types";
 import { politicalValueForLegacyMetric } from "@/lib/politicalLegislation/marginAdapter";
 import { legacyValueFromPoliticalScore } from "@/lib/politicalMetrics/derive/legacyInversion";
@@ -99,7 +100,14 @@ function boardReferenceValue(
 export async function computeStateTickRates(
   db: Db,
   stateId: string,
-  countryId: CountryId
+  countryId: CountryId,
+  preloaded?: {
+    politicalDoc: PoliticalMetricsDoc | null;
+    allPolicyDocs: StatePolicy[];
+    stateDoc: State | null;
+    stateMetricsDoc: StateMetrics | null;
+    legTypeMap: ReadonlyMap<string, LegislationType>;
+  }
 ): Promise<Record<string, Record<string, number>>> {
   try {
     const nationalScopeIds = Object.keys(NATIONAL_SCOPE);
@@ -108,18 +116,25 @@ export async function computeStateTickRates(
     // a region with no board). Without this the reference falls back to
     // minValue, which for the currency-scaled metrics yields a ~0 rate and
     // silently blanks the projection.
-    const politicalDoc = await db
-      .collection<PoliticalMetricsDoc>("politicalMetrics")
-      .findOne({ _id: stateId });
-    const [allPolicyDocs, stateDoc, stateMetricsDoc] = await Promise.all([
-      db
-        .collection<StatePolicy>("statePolicies")
-        .find({ stateId: { $in: [stateId, ...nationalScopeIds] } })
-        .toArray(),
-      db.collection<State>("states").findOne({ _id: stateId, countryId }),
-      // Current metric values give the operating scale for large-range metrics (#0962).
-      findMergedRegionMetrics(db, { _id: stateId }),
-    ]);
+    let politicalDoc: PoliticalMetricsDoc | null;
+    let allPolicyDocs: StatePolicy[];
+    let stateDoc: State | null;
+    let stateMetricsDoc: StateMetrics | null;
+    if (preloaded) {
+      ({ politicalDoc, allPolicyDocs, stateDoc, stateMetricsDoc } = preloaded);
+    } else {
+      const result = await Promise.all([
+        db.collection<PoliticalMetricsDoc>("politicalMetrics").findOne({ _id: stateId }),
+        db
+          .collection<StatePolicy>("statePolicies")
+          .find({ stateId: { $in: [stateId, ...nationalScopeIds] } })
+          .toArray(),
+        db.collection<State>("states").findOne({ _id: stateId, countryId }),
+        // Current metric values give the operating scale for large-range metrics (#0962).
+        findMergedRegionMetrics(db, { _id: stateId }),
+      ]);
+      [politicalDoc, allPolicyDocs, stateDoc, stateMetricsDoc] = result;
+    }
 
     const statePolicies = allPolicyDocs.filter((p) => p.stateId === stateId);
     const nationalScopeId = stateDoc ? getNationalDocId(stateDoc.countryId) : undefined;
@@ -142,13 +157,18 @@ export async function computeStateTickRates(
     const uniqueLegTypeIds = [
       ...new Set(activePolicies.map((p: StatePolicy) => p.legislationTypeId)),
     ];
-    const legTypes = await db
-      .collection<LegislationType>("legislationTypes")
-      .find({ _id: { $in: uniqueLegTypeIds } })
-      .toArray();
-    const legTypeMap = new Map<string, LegislationType>(
-      legTypes.map((lt) => [lt._id, lt] as [string, LegislationType])
-    );
+    let legTypeMap: Map<string, LegislationType>;
+    if (preloaded) {
+      legTypeMap = new Map(preloaded.legTypeMap);
+    } else {
+      const legTypes = uniqueLegTypeIds.length
+        ? await db
+            .collection<LegislationType>("legislationTypes")
+            .find({ _id: { $in: uniqueLegTypeIds } })
+            .toArray()
+        : [];
+      legTypeMap = new Map(legTypes.map((lt) => [lt._id, lt] as [string, LegislationType]));
+    }
 
     // Primary: admin-defined metricEffects
     const rates = computeTickRates(activePolicies, legTypeMap);
@@ -308,14 +328,70 @@ export async function computeAllNationalMetricTickRates(
   ]);
   if (countryStates.length === 0) return {};
 
+  const stateIds = countryStates.map((state) => state._id);
+  const nationalScopeId = getNationalDocId(countryId);
+  const policyScopeIds = [...stateIds, ...(nationalScopeId ? [nationalScopeId] : [])];
+  const [politicalDocs, policyDocs, macroDocs] = await Promise.all([
+    db
+      .collection<PoliticalMetricsDoc>("politicalMetrics")
+      .find({ _id: { $in: stateIds } })
+      .toArray(),
+    db
+      .collection<StatePolicy>("statePolicies")
+      .find({ stateId: { $in: policyScopeIds } })
+      .toArray(),
+    db
+      .collection<MacroMetricsDoc>("macroMetrics")
+      .find({ _id: { $in: stateIds } })
+      .toArray(),
+  ]);
+  const legislationTypeIds = [...new Set(policyDocs.map((policy) => policy.legislationTypeId))];
+  const legislationTypes = legislationTypeIds.length
+    ? await db
+        .collection<LegislationType>("legislationTypes")
+        .find({ _id: { $in: legislationTypeIds } })
+        .toArray()
+    : [];
+  const legTypeMap = new Map(legislationTypes.map((type) => [type._id, type]));
+  const politicalByState = new Map(politicalDocs.map((doc) => [doc._id, doc]));
+  const metricsByState = new Map(
+    macroDocs
+      .map((doc) => mergeRegionMetrics(doc))
+      .filter((doc): doc is StateMetrics => doc !== null)
+      .map((doc) => [doc._id, doc])
+  );
+  const policiesByScope = new Map<string, StatePolicy[]>();
+  for (const policy of policyDocs) {
+    const list = policiesByScope.get(policy.stateId) ?? [];
+    list.push(policy);
+    policiesByScope.set(policy.stateId, list);
+  }
+
   const statesWithSectors = new Set(sectorDocs.map((s) => s.stateId));
   const entries = await Promise.all(
-    countryStates.map(async (state): Promise<StateTickRateEntry> => ({
-      population: state.population ?? 0,
-      gdp: state.gdp ?? 0,
-      hasSectors: statesWithSectors.has(state._id),
-      tickRates: await computeStateTickRates(db, state._id, state.countryId),
-    }))
+    countryStates.map(async (state): Promise<StateTickRateEntry> => {
+      const localPolicies = policiesByScope.get(state._id) ?? [];
+      const nationalPolicies = nationalScopeId ? (policiesByScope.get(nationalScopeId) ?? []) : [];
+      const activePolicies = [...localPolicies, ...nationalPolicies];
+      const stateLegTypeMap = new Map(
+        activePolicies.flatMap((policy) => {
+          const type = legTypeMap.get(policy.legislationTypeId);
+          return type ? [[type._id, type] as const] : [];
+        })
+      );
+      return {
+        population: state.population ?? 0,
+        gdp: state.gdp ?? 0,
+        hasSectors: statesWithSectors.has(state._id),
+        tickRates: await computeStateTickRates(db, state._id, countryId, {
+          politicalDoc: politicalByState.get(state._id) ?? null,
+          allPolicyDocs: activePolicies,
+          stateDoc: state,
+          stateMetricsDoc: metricsByState.get(state._id) ?? null,
+          legTypeMap: stateLegTypeMap,
+        }),
+      };
+    })
   );
 
   return aggregateNationalTickRates(entries);

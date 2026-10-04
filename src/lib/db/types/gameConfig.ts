@@ -2,6 +2,8 @@ import type { EconomicInterventionPlan } from "@/lib/economy/interventionGoverna
 
 export interface GameConfig {
   _id: string;
+  /** Enables product-project reads and output adapters; absent remains off. */
+  productLinesV2Enabled?: boolean;
   /** Shared nominal commodity price level. Scarcity remains in price/base ratios. */
   commodityNominalPriceIndex?: number;
   /** Last commodity turn included in commodityNominalPriceIndex. */

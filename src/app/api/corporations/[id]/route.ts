@@ -36,6 +36,7 @@ import type { GameConfig } from "@/lib/db/types/gameConfig";
 import { FINANCIAL_DISTRESS_GRACE_TURNS } from "@/lib/nationalization/constants";
 import { isContractIssuanceEnabled } from "@/lib/extraction/featureFlag";
 import { buildCorpNationalizationThreat } from "@/lib/nationalization/corpNationalizationThreat";
+import { marketAtLeast, getMarketSystemMode } from "@/lib/market/featureFlag";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -65,6 +66,8 @@ export async function GET(request: Request, { params }: RouteParams) {
             supplyAgreementsEnabled: 1,
             contractIssuanceEnabled: 1,
             mediaEditorialEnabled: 1,
+            marketSystemMode: 1,
+            productLinesV2Enabled: 1,
           },
         }
       ),
@@ -79,6 +82,9 @@ export async function GET(request: Request, { params }: RouteParams) {
     // Extraction-contract gate — surfaced on the corp payload so the Contracts
     // tab (offers / active contracts) can show/hide without an extra round-trip.
     const contractIssuanceEnabled = await isContractIssuanceEnabled(config);
+    const productLinesV2Enabled =
+      config?.productLinesV2Enabled === true &&
+      marketAtLeast(await getMarketSystemMode(config), "plants");
 
     if (!resolved.ok) return resolved.response;
     const { corporation } = resolved;
@@ -167,6 +173,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       (detail.corporation as Record<string, unknown>).editorialStance =
         corporation.editorialStance ?? { economic: 0, social: 0 };
     }
+    (detail.corporation as Record<string, unknown>).productLinesV2Enabled = productLinesV2Enabled;
 
     let redact = shouldRedactCorporation(
       corporation,

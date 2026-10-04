@@ -155,6 +155,23 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   // those bonds age out — the 1-year window keeps demand stable across countries with
   // infrequent sovereign issuance (JP, CA, DE).
   const debtIssuanceWindowStart = Math.max(0, turn - 48);
+  const ledgerConfig = await db.collection<GameConfig>("gameConfig").findOne(
+    { _id: "default" },
+    {
+      projection: {
+        marketSystemMode: 1,
+        productLinesV2Enabled: 1,
+        commandEconomyEnabled: 1,
+        retailDemandTransitionStartTurn: 1,
+        retailDemandTransitionTurns: 1,
+        commodityNominalPriceIndex: 1,
+        commodityNominalPriceIndexTurn: 1,
+      },
+    }
+  );
+  const marketSystemMode = await getMarketSystemMode(ledgerConfig);
+  const plantsLedgerEnabled = marketAtLeast(marketSystemMode, "plants");
+  const productsEnabled = ledgerConfig?.productLinesV2Enabled === true && plantsLedgerEnabled;
 
   // Fetch all owned sectors, GDP growth data, corporations, central banks, states, and budgets in parallel
   const [
@@ -195,6 +212,13 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
             embargoExportExposure: 1,
             militaryDivertedFraction: 1,
             militaryDivertedTurn: 1,
+            ...(productsEnabled
+              ? {
+                  outputUnitsByCommodity: 1,
+                  outputAnchorByCommodity: 1,
+                  productQualityByCommodity: 1,
+                }
+              : {}),
           },
         }
       )
@@ -361,18 +385,6 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   // produces state information rather than sold advertising. Safe to add: every
   // positional cursor the turn tests stub is already consumed by the parallel
   // block above, so reads from here on fall through to the catch-all.
-  const ledgerConfig = await db.collection<GameConfig>("gameConfig").findOne(
-    { _id: "default" },
-    {
-      projection: {
-        commandEconomyEnabled: 1,
-        retailDemandTransitionStartTurn: 1,
-        retailDemandTransitionTurns: 1,
-        commodityNominalPriceIndex: 1,
-        commodityNominalPriceIndexTurn: 1,
-      },
-    }
-  );
   const nominalIndices = resolveCommodityNominalIndices({
     index: ledgerConfig?.commodityNominalPriceIndex,
     lastTurn: ledgerConfig?.commodityNominalPriceIndexTurn,
@@ -414,8 +426,6 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
 
   // Plants tier: the world ledger reads real production instead of the revenue
   // nameplate. Resolved once and reused by the flow-ledger block below.
-  const marketSystemMode = await getMarketSystemMode();
-  const plantsLedgerEnabled = marketAtLeast(marketSystemMode, "plants");
   const ledgerEraUnitScale = await loadWorldEraUnitScale(db);
   // The WHOLE ledger runs on the era base-price table: unit conversions scale,
   // mix-weight ratios cancel, and computed price LEVELS land on the same era

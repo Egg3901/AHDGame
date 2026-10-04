@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { aggregateNationalTickRates } from "./stateTickRates";
+import { aggregateNationalTickRates, computeAllNationalMetricTickRates } from "./stateTickRates";
+import { createMockDb } from "@/lib/test-utils/mockDb";
 
 describe("aggregateNationalTickRates", () => {
   it("population-weights non-GDP metrics", () => {
@@ -49,5 +50,33 @@ describe("aggregateNationalTickRates", () => {
 
   it("returns an empty object for no states", () => {
     expect(aggregateNationalTickRates([])).toEqual({});
+  });
+});
+
+describe("computeAllNationalMetricTickRates query budget", () => {
+  it("loads country policies and metric documents once for all states", async () => {
+    const db = createMockDb();
+    db.collection("states");
+    db.collection("corporateSectors");
+    db.collection("politicalMetrics");
+    db.collection("statePolicies");
+    db.collection("macroMetrics");
+    db.collection("legislationTypes");
+    db.collectionMocks.states!.find.mockReturnValue({
+      toArray: async () =>
+        ["CA", "NY", "TX"].map((_id) => ({
+          _id,
+          countryId: "US",
+          population: 100,
+          gdp: 100,
+        })),
+    });
+
+    await computeAllNationalMetricTickRates(db as never, "federal");
+
+    expect(db.collectionMocks.statePolicies!.find).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.politicalMetrics!.find).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.macroMetrics!.find).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.states!.findOne).not.toHaveBeenCalled();
   });
 });

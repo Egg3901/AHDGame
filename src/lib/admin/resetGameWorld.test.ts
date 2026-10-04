@@ -367,6 +367,17 @@ describe("resetGameWorld", () => {
     }
   });
 
+  it("wipes product projects and their corporation-embedded paid receipts on reset", async () => {
+    await resetGameWorld(db as never, {
+      deleteProfiles: true,
+      preset: "1991-default",
+      seedHistorical: false,
+    });
+
+    expect(db.collectionMocks.manufacturingProductProjectsV2.drop).toHaveBeenCalled();
+    expect(db.collectionMocks.corporations.drop).toHaveBeenCalled();
+  });
+
   it("allows missing runtime collections on clean and repeat resets", async () => {
     db.collection("conflicts");
     db.collectionMocks.conflicts.drop.mockRejectedValue(

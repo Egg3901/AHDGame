@@ -11,12 +11,24 @@ describe("computeQualityUpdates", () => {
         corpId: "auto",
         techScore: 90,
         operationsStrength: 60,
-        sectors: [{ revenueWeight: 100, wageLevel: 1.2, outputs: ["vehicles"], inputs: ["steel"] }],
+        sectors: [
+          {
+            sectorId: "auto-sector",
+            revenueWeight: 100,
+            wageLevel: 1.2,
+            outputs: ["vehicles"],
+            inputs: ["steel"],
+          },
+        ],
       },
     ];
-    const { corpQuality, commodityQuality } = computeQualityUpdates(corps, laggedNeutral);
+    const { corpQuality, commodityQuality, sectorQualityBySectorId } = computeQualityUpdates(
+      corps,
+      laggedNeutral
+    );
     expect(corpQuality.get("auto")).toBeGreaterThan(0);
     expect(commodityQuality.get("vehicles")).toBeCloseTo(corpQuality.get("auto")!, 5);
+    expect(sectorQualityBySectorId.get("auto-sector")).toBeCloseTo(corpQuality.get("auto")!, 5);
   });
 
   it("propagates: good input commodity quality lifts the consumer's quality", () => {

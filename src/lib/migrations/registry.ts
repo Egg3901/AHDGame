@@ -101,6 +101,7 @@ import { migration as financialTxLogCounterpartyIndex } from "./entries/2026-09-
 import { migration as appleProviderIdentityIndex } from "./entries/2026-09-30-apple-provider-identity-index";
 import { migration as reconcileSeedIndexes } from "./entries/2026-10-01-reconcile-seed-indexes";
 import { migration as bankLoanCharterEpoch } from "./entries/2026-10-04-bank-loan-charter-epoch";
+import { migration as manufacturingProductProjectsV2Index } from "./entries/2026-10-04-manufacturing-product-projects-v2-index";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -325,6 +326,8 @@ export const MIGRATIONS: Migration[] = [
   bankLoanCharterEpoch,
   governmentAccountability,
   politicalMediaOrderIndexes,
+  // v2 product lines use a separate collection and one active slot per corporation.
+  manufacturingProductProjectsV2Index,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.
