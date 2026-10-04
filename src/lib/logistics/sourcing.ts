@@ -285,6 +285,12 @@ export interface SourcingPairAggregate {
 export interface SourcingDestinationAggregate {
   commodity: CommodityType;
   country: string;
+  /** Sum of the country's state-level demand for the commodity this turn. */
+  demandUnits: number;
+  /** Sum of the country's state-level supply for the commodity this turn. */
+  supplyUnits: number;
+  /** National spare offered to foreign buyers (supply minus demand, floored at 0). */
+  foreignOfferUnits: number;
   localUnits: number;
   interStateUnits: number;
   importUnits: number;
@@ -638,6 +644,9 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
         row = {
           commodity,
           country,
+          demandUnits: 0,
+          supplyUnits: 0,
+          foreignOfferUnits: 0,
           localUnits: 0,
           interStateUnits: 0,
           importUnits: 0,
@@ -670,12 +679,17 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
       }
       return row;
     };
-    for (const { stateId } of sortedStates) {
+    for (const { stateId, countryId } of sortedStates) {
       const bal = byState.get(stateId)?.get(commodity);
       const supply = bal?.supply ?? 0;
       const demand = bal?.demand ?? 0;
       const useShares = purchaseUseShares(demand, demandUsesByState?.get(stateId)?.get(commodity));
       useSharesByState.set(stateId, useShares);
+      if (supply > 0 || demand > 0) {
+        const row = destinationFor(countryId);
+        row.supplyUnits += supply;
+        row.demandUnits += demand;
+      }
       // Intra-state fill is free by design; only the residual trades interstate.
       const local = Math.min(supply, demand);
       localFillByState.set(stateId, local);
@@ -696,7 +710,9 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
     const spareByCountry = new Map<CountryId, number>();
     for (const cid of countryIds) {
       const bal = byCountry.get(cid)?.get(commodity);
-      spareByCountry.set(cid, Math.max(0, (bal?.supply ?? 0) - (bal?.demand ?? 0)));
+      const spare = Math.max(0, (bal?.supply ?? 0) - (bal?.demand ?? 0));
+      spareByCountry.set(cid, spare);
+      if (spare > 0) destinationFor(cid).foreignOfferUnits = spare;
     }
 
     const buyerTerms = (buyer: { stateId: string; countryId: CountryId }) => {

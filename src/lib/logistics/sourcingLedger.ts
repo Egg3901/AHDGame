@@ -160,6 +160,9 @@ export function buildSourcingDocs(
     const list = destinationsByCommodity.get(commodity) ?? [];
     list.push({
       country: row.country,
+      demandUnits: round4(row.demandUnits),
+      supplyUnits: round4(row.supplyUnits),
+      foreignOfferUnits: round4(row.foreignOfferUnits),
       localUnits: round4(row.localUnits),
       interStateUnits: round4(row.interStateUnits),
       importUnits: round4(row.importUnits),

@@ -369,6 +369,60 @@ describe("runSourcingPass", () => {
     expect(coal.tariffPaid).toBeCloseTo(600);
   });
 
+  it("aggregates exact country-pair trade and destination outcomes (#2333)", () => {
+    const r = runSourcingPass(
+      makeInputs({
+        freightPrice: 100,
+        nationalPricesFor: () => ({ US: 95, UK: 60 }),
+        tariffRatePct: () => 10,
+      })
+    );
+    const flow = coalFlow(r)[0];
+    const pairs = r.pairAggregates.filter((p) => p.commodity === "coal");
+    expect(pairs).toHaveLength(1);
+    const pair = pairs[0];
+    expect(pair.exporter).toBe("UK");
+    expect(pair.importer).toBe("US");
+    expect(pair.deliveredUnits).toBeCloseTo(flow.units);
+    expect(pair.tariffPaid).toBeCloseTo(flow.tariffPaid);
+    expect(pair.tariffRateUnits / pair.deliveredUnits).toBeCloseTo(10);
+    expect(pair.landedValue / pair.deliveredUnits).toBeCloseTo(flow.landedPrice);
+    expect(pair.legs).toBe(1);
+
+    const us = r.destinationAggregates.find((d) => d.commodity === "coal" && d.country === "US")!;
+    expect(us.demandUnits).toBe(100);
+    expect(us.supplyUnits).toBe(200);
+    expect(us.importUnits).toBeCloseTo(100);
+    expect(us.interStateUnits).toBe(0);
+    expect(us.unmetUnits).toBe(0);
+    const uk = r.destinationAggregates.find((d) => d.commodity === "coal" && d.country === "UK")!;
+    expect(uk.foreignOfferUnits).toBe(500);
+
+    // Every delivered unit is attributed once: local + interstate + imports
+    // across destinations equals the commodity summary.
+    const coal = r.summaries.find((s) => s.commodity === "coal")!;
+    const dests = r.destinationAggregates.filter((d) => d.commodity === "coal");
+    const sum = (f: (d: (typeof dests)[number]) => number) => dests.reduce((t, d) => t + f(d), 0);
+    expect(sum((d) => d.localUnits)).toBeCloseTo(coal.intraStateUnits);
+    expect(sum((d) => d.interStateUnits)).toBeCloseTo(coal.interStateUnits);
+    expect(sum((d) => d.importUnits)).toBeCloseTo(coal.importUnits);
+    expect(sum((d) => d.unmetUnits)).toBeCloseTo(coal.unmetUnits);
+  });
+
+  it("splits unmet demand by reason per destination (#2333)", () => {
+    const r = runSourcingPass(
+      makeInputs({
+        statePricesFor: () => ({ A1: 100, A2: 100 * (1 + BUYER_TOLERANCE_SLACK) + 50 }),
+        nationalPricesFor: () => ({ UK: 100 * (1 + BUYER_TOLERANCE_SLACK) + 50 }),
+      })
+    );
+    expect(r.pairAggregates.filter((p) => p.commodity === "coal")).toHaveLength(0);
+    const us = r.destinationAggregates.find((d) => d.commodity === "coal" && d.country === "US")!;
+    expect(us.unmetUnits).toBeCloseTo(100);
+    expect(us.toleranceBoundUnits).toBeCloseTo(100);
+    expect(us.capacityBoundUnits).toBe(0);
+  });
+
   it("excludes embargoed exporters entirely", () => {
     const r = runSourcingPass(
       makeInputs({ isBlocked: (_c, exporter) => exporter === ("UK" as CountryId) })
