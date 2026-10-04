@@ -281,6 +281,7 @@ describe("GET /api/banking/corporation/[id]", () => {
         "lifecycle",
         "loans",
         "outlook",
+        "primaryUnderwritingEnabled",
         "primeRate",
         "privateBankingEnabled",
         "rates",
@@ -292,6 +293,7 @@ describe("GET /api/banking/corporation/[id]", () => {
         bankPropForexFeesEnabled: false,
         bankTreasury: null,
         bankTreasuryEnabled: false,
+        primaryUnderwritingEnabled: false,
       });
       expect(sortedKeys(body.charter)).toEqual([
         "appliedStressLossFraction",
@@ -403,6 +405,7 @@ describe("GET /api/banking/corporation/[id]", () => {
         "legalCharterTypes",
         "loans",
         "outlook",
+        "primaryUnderwritingEnabled",
         "primeRate",
         "privateBankingEnabled",
         "rates",
@@ -413,6 +416,7 @@ describe("GET /api/banking/corporation/[id]", () => {
         bankPropForexFeesEnabled: false,
         bankTreasury: null,
         bankTreasuryEnabled: false,
+        primaryUnderwritingEnabled: false,
       });
     },
     CONSOLE_TEST_TIMEOUT_MS
