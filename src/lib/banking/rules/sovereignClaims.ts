@@ -34,6 +34,7 @@ export function bankCouponPlanForCountry(
     for (const holder of bond.holders ?? []) {
       if (
         !holder.bankId ||
+        holder.bankTreasuryTradeId ||
         !Number.isSafeInteger(holder.charteredTurn) ||
         (holder.charteredTurn ?? 0) < 0
       )

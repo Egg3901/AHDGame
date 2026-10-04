@@ -37,6 +37,30 @@ import { emitTx } from "@/lib/financialTxLog/emit";
 describe("executeAgreedAcquisition", () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it.each([0, 50])(
+    "keeps a funded fee claim on the target even when escrow remaining is %s",
+    async (amountLocal) => {
+      const w = buildAcquisitionWorld();
+      await w.memory.collection("corporations").updateOne(
+        { _id: w.tgt },
+        {
+          $set: { bankPropForexFee: { key: "pending-fee", amountLocal } },
+        }
+      );
+      const result = await executeAgreedAcquisition({
+        db: w.db,
+        offer: w.offer as never,
+        currentTurn: 200,
+      });
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error).toMatch(/forex fee is settling/);
+      const balances = await readBalances(w);
+      expect(balances.targetGone).toBe(false);
+      expect(balances.acquirer).toBe(ACQUIRER_CASH);
+      expect(balances.charA).toBe(0);
+    }
+  );
+
   it("blocks acquiring a target with outstanding bonds", async () => {
     const w = buildAcquisitionWorld();
     w.memory.seed("bonds", [{ _id: new ObjectId(), corporationId: w.tgt, matured: false }]);

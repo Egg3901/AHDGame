@@ -36,6 +36,7 @@ import { bankBalanceSheet, explainBankCaps } from "@/lib/banking/balanceSheet";
 import { buildBankOutlook } from "@/lib/banking/outlook";
 import { isDepositTakingCharter } from "@/lib/banking/charterKinds";
 import { getCurrentTurn } from "@/lib/currentTurn";
+import { getBankTreasuryOverview } from "@/lib/banking/bankTreasury";
 import {
   CREDIT_BANDS,
   DEFAULT_LENDING_PROFILE,
@@ -149,7 +150,10 @@ async function handleGET(_request: Request, { params }: RouteParams) {
 
     const { id } = await params;
     const db = await getDb();
-    const resolved = await resolveCorporation(db, id);
+    const resolved = await resolveCorporation(db, id, {
+      bankPropForexFee: 0,
+      bankPropForexVolume: 0,
+    });
     if (!resolved.ok) return resolved.response;
     const { corporation } = resolved;
 
@@ -172,6 +176,9 @@ async function handleGET(_request: Request, { params }: RouteParams) {
       return NextResponse.json({
         privateBankingEnabled: privateEnabled,
         bankPropTradingEnabled: propTradingEnabled,
+        bankTreasuryEnabled: policy.bankTreasury,
+        bankTreasury: null,
+        bankPropForexFeesEnabled: policy.propForexFees,
         visible: false,
         isCeo: false,
         isAdmin: auth.user.isAdmin === true,
@@ -207,6 +214,10 @@ async function handleGET(_request: Request, { params }: RouteParams) {
     const currency = (charter?.currency ??
       resolveCorpLiquidCurrencyCode(corporation) ??
       "USD") as CurrencyCode;
+    const bankTreasury =
+      policy.bankTreasury && hasActiveCharter && charter
+        ? await getBankTreasuryOverview(db, corporation._id, policy, currentTurn)
+        : null;
     const countryId = getCountryIdForCurrency(currency);
     const legalTypes = await getLegalCharterTypes(db, countryId);
     // Per type: an investment charter posts a fraction of the retail bar,
@@ -455,6 +466,9 @@ async function handleGET(_request: Request, { params }: RouteParams) {
     return NextResponse.json({
       privateBankingEnabled: privateEnabled,
       bankPropTradingEnabled: propTradingEnabled,
+      bankTreasuryEnabled: policy.bankTreasury,
+      bankTreasury,
+      bankPropForexFeesEnabled: policy.propForexFees,
       visible: true,
       isCeo,
       isAdmin,
@@ -519,6 +533,7 @@ async function handleGET(_request: Request, { params }: RouteParams) {
               bookEquity: sheet ? sheet.bookEquity : null,
               fundingCapacity: householdTargetInputs?.fundingCapacity ?? null,
               cashReserves: getCashReserves(charter),
+              sovereignTreasuryMarkValue: charter.sovereignTreasuryMarkValue ?? 0,
               lastBankingIncome: charter.lastBankingIncome ?? 0,
               lastBankingIncomeTurn: charter.lastBankingIncomeTurn ?? null,
               // Per-turn split behind the net: magnitudes in charter currency,

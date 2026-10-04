@@ -47,6 +47,7 @@ export const STARTING_POLITICAL_COLLECTIONS = [
   "nationalPartyLeadership",
   "ukPartyLeadership",
   "governmentFormations",
+  "governmentAccountability",
   "governmentFormationVotes",
   "cabinetMembers",
   "cabinetNominations",

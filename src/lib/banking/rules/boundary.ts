@@ -43,6 +43,7 @@ export type BankCharterSnapshot = Pick<
   | "cbMarginArrears"
   | "interbankDebt"
   | "propBookMarkValue"
+  | "sovereignTreasuryMarkValue"
   | "capitalStanding"
   | "warningBand"
   | "undercapitalizedSinceTurn"

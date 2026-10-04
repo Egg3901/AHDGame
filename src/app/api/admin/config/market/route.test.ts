@@ -99,6 +99,43 @@ describe("GET/PATCH /api/admin/config/market — extractionOutputScaleEnabled", 
     expect(setArg).not.toHaveProperty("extractionOutputScaleEnabled");
   });
 
+  it("exposes the v2 product flag and keeps it false when absent", async () => {
+    db.collectionMocks.gameConfig!.findOne.mockResolvedValue({
+      _id: "default",
+      marketSystemMode: "plants",
+      productLinesV2Enabled: true,
+    });
+    const { GET } = await import("./route");
+    const enabled = (await (await GET()).json()) as { productLinesV2Enabled: boolean };
+    expect(enabled.productLinesV2Enabled).toBe(true);
+
+    db.collectionMocks.gameConfig!.findOne.mockResolvedValue({
+      _id: "default",
+      marketSystemMode: "plants",
+    });
+    const absent = (await (await GET()).json()) as { productLinesV2Enabled: boolean };
+    expect(absent.productLinesV2Enabled).toBe(false);
+  });
+
+  it("allows the product flag only at the plants tier or above", async () => {
+    const { PATCH } = await import("./route");
+    const rejected = await PATCH(
+      makePatchRequest({ mode: "capital", productLinesV2Enabled: true })
+    );
+    expect(rejected.status).toBe(400);
+    expect(db.collectionMocks.gameConfig!.updateOne).not.toHaveBeenCalled();
+
+    const accepted = await PATCH(
+      makePatchRequest({ mode: "plants", allowNonLive: true, productLinesV2Enabled: true })
+    );
+    expect(accepted.status).toBe(200);
+    expect(db.collectionMocks.gameConfig!.updateOne).toHaveBeenCalledWith(
+      { _id: "default" },
+      { $set: expect.objectContaining({ productLinesV2Enabled: true }) },
+      { upsert: true }
+    );
+  });
+
   it("GET reflects shortage-responsive sourcing and defaults it off", async () => {
     db.collectionMocks.gameConfig!.findOne.mockResolvedValue({
       _id: "default",

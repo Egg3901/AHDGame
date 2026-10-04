@@ -16,7 +16,7 @@ vi.mock("@/lib/market/featureFlag", async (importOriginal) => {
     // the ledger path is covered by flowLedger.test.ts. Every featureFlag reader
     // that hits gameConfig must be stubbed here or processCommodityPriceTurn
     // throws "db.collection(...).findOne is not a function".
-    getMarketSystemMode: vi.fn().mockResolvedValue("off"),
+    getMarketSystemMode: vi.fn((config) => Promise.resolve(config?.marketSystemMode ?? "off")),
     getDemographicsDemandEnabled: vi.fn().mockResolvedValue(false),
     getExtractionOutputScaleEnabled: vi.fn().mockResolvedValue(false),
   };
@@ -76,8 +76,16 @@ describe("commodityPriceTurn", () => {
       nudges?: any[];
       existingPrices?: any[];
       stateBudgets?: any[];
+      productsEnabled?: boolean;
     } = {}
   ) {
+    // Product maps are projected only after the existing gameConfig flag read.
+    mockCollection.mockReturnValueOnce({
+      findOne: vi.fn().mockResolvedValue({
+        marketSystemMode: overrides.productsEnabled === true ? "plants" : "off",
+        productLinesV2Enabled: overrides.productsEnabled === true,
+      }),
+    });
     mockCollection.mockReturnValueOnce(createChainableCursor(overrides.sectors ?? [])); // 1. sectors
     mockCollection.mockReturnValueOnce(createChainableCursor(overrides.stateMetrics ?? [])); // 2. stateMetrics
     mockCollection.mockReturnValueOnce(createChainableCursor(overrides.corporations ?? [])); // 3. corporations
@@ -99,8 +107,8 @@ describe("commodityPriceTurn", () => {
       // the tradeFlowSnapshots {turn:-1} index for the reachable-book read runs
       // on every turn, so the stub has to answer it.
       createIndex: vi.fn().mockResolvedValue(""),
-      // Config-flag reads (e.g. commodityScarcityDrift/stockCoverCap at the tail
-      // of the turn) hit gameConfig.findOne; default to null so every flag reads
+      // Config-flag reads (the product projection pre-read and later tail flags)
+      // hit gameConfig.findOne; default to null so every flag reads
       // as off, matching getMarketSystemMode("off") above.
       findOne: vi.fn().mockResolvedValue(null),
       // Phase 6 influence-lever reads (FTA legislation, org memberships,
@@ -122,6 +130,7 @@ describe("commodityPriceTurn", () => {
       expect(result.commoditiesUpdated).toBe(COMMODITY_TYPES.length);
       expect(result.statesWithActivity).toBe(0);
       expect(mockBulkWrite).toHaveBeenCalledTimes(2);
+      expect(mockFind.mock.calls[0]?.[1]?.projection).not.toHaveProperty("outputUnitsByCommodity");
     });
 
     it("projects the defense-diversion fields consumed by the supply ledger", async () => {
@@ -132,6 +141,18 @@ describe("commodityPriceTurn", () => {
       expect(mockFind.mock.calls[0]?.[1]?.projection).toMatchObject({
         militaryDivertedFraction: 1,
         militaryDivertedTurn: 1,
+      });
+    });
+
+    it("projects exact product output only when the corporation product flag is on", async () => {
+      setupMocks({ productsEnabled: true });
+
+      await processCommodityPriceTurn(100);
+
+      expect(mockFind.mock.calls[0]?.[1]?.projection).toMatchObject({
+        outputUnitsByCommodity: 1,
+        outputAnchorByCommodity: 1,
+        productQualityByCommodity: 1,
       });
     });
 

@@ -282,6 +282,8 @@ export interface CorporationDetail {
   supplyAgreementsEnabled?: boolean;
   /** Global feature gate — when true, the Contracts tab (offers/active extraction contracts) is shown. */
   contractIssuanceEnabled?: boolean;
+  /** Global plants-tier feature gate for the manufacturing Product Studio. */
+  productLinesV2Enabled?: boolean;
   /** ID of an open privatization vote, if any. Used to mount the vote panel. */
   openPrivatizationVoteId?: string | null;
   /**

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ObjectId } from "mongodb";
 
 const mockGetDb = vi.fn();
+const mockFormationFindOne = vi.fn();
 const mockRequireAdmin = vi.fn();
 const mockGetCurrentTurn = vi.fn();
 const mockGetCountryState = vi.fn();
@@ -12,6 +13,9 @@ const mockAdjustConfidence = vi.fn();
 const mockAdjustPopular = vi.fn();
 
 vi.mock("@/lib/mongodb", () => ({ getDb: () => mockGetDb() }));
+vi.mock("@/lib/db/collections/governmentFormation", () => ({
+  getGovernmentFormationsCollection: () => ({ findOne: mockFormationFindOne }),
+}));
 vi.mock("@/lib/api/requireAdmin", () => ({
   requireAdmin: (...args: unknown[]) => mockRequireAdmin(...args),
 }));
@@ -49,6 +53,7 @@ describe("POST /api/admin/country/[code]/regime/set-scalar", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockFormationFindOne.mockResolvedValue(null);
     mockGetDb.mockResolvedValue({});
     mockRequireAdmin.mockResolvedValue({
       ok: true,

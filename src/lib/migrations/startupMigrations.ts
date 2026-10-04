@@ -1,4 +1,5 @@
 import type { Db } from "mongodb";
+import { migration as bankPropForexFeeIndex } from "./entries/2026-10-04-bank-prop-forex-fee-index";
 import { migration as repairOrphanIndexFundState } from "./entries/2026-09-03-repair-orphan-index-fund-state";
 import { migration as equityMarketPools } from "./entries/2026-09-03-equity-market-pools";
 import { migration as providerIdentityIndexes } from "./entries/2026-09-10-provider-identity-indexes";
@@ -7,6 +8,7 @@ import { migration as longHorizonTelemetryIndexes } from "./entries/2026-09-30-l
 import { migration as appleProviderIdentityIndex } from "./entries/2026-09-30-apple-provider-identity-index";
 import { migration as ukDualMinistryRoleSlot } from "./entries/2026-09-17-uk-dual-ministry-role-slot";
 import { migration as politicalMediaOrderIndexes } from "./entries/2026-10-04-political-media-order-indexes";
+import { migration as bankTreasuryTradeIndexes } from "./entries/2026-10-04-bank-treasury-trade-indexes";
 import { runMigrations, type RunSummary } from "./runner";
 import type { Migration } from "./types";
 
@@ -37,6 +39,8 @@ export const REQUIRED_STARTUP_MIGRATIONS: readonly Migration[] = [
   ukDualMinistryRoleSlot,
   // Existing saves need the political journal indexes before current-turn replay reads.
   politicalMediaOrderIndexes,
+  bankTreasuryTradeIndexes,
+  bankPropForexFeeIndex,
 ];
 
 export async function runRequiredStartupMigrations(db: Db): Promise<RunSummary> {

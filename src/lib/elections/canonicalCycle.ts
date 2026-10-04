@@ -14,6 +14,7 @@
  * Snap elections shift the LARP clock: commons / shugiin
  * accept a `priorEndTurn` override that replaces the bootstrap anchor.
  */
+import { brazilPresidentialRules } from "@/lib/countries/br/rules/presidential";
 
 import {
   UK_COMMONS_CYCLE_PERIOD_HOURS,
@@ -464,9 +465,12 @@ export function canonicalTurnsForCycle(params: CanonicalCycleParams): CanonicalC
       // Presidential cycle = 192 turns (4 game-years), not dur.durationHours
       // (which is also 192 but this keeps the semantic explicit if anyone
       // retunes president durations).
-      const PRESIDENT_CYCLE_TURNS = 192;
-      const endTurn =
-        cycle === 1 ? anchors.president : anchors.president + (cycle - 1) * PRESIDENT_CYCLE_TURNS;
+      const brRules = countryId === "BR" ? brazilPresidentialRules(ctx.preset) : null;
+      const PRESIDENT_CYCLE_TURNS = brRules?.termTurns ?? 192;
+      const anchor = brRules
+        ? (brRules.firstYear - ctx.startingYear + 1) * 48 + (ctx.preIterationTurns ?? 0)
+        : anchors.president;
+      const endTurn = cycle === 1 ? anchor : anchor + (cycle - 1) * PRESIDENT_CYCLE_TURNS;
       return {
         endTurn,
         primaryEndTurn: endTurn - dur.generalDurationHours,

@@ -77,10 +77,11 @@
     "api:mcp": "tsx scripts/publicApiMcp.ts",
     "sim:takeover-evidence": "npx tsx scripts/sim/takeoverBankNavEvidence.ts",
     "audit:sector-viability": "npx tsx scripts/sim/sectorStrategyViability.ts",
+    "sim:manufacturing-products-v2-balance": "npx tsx scripts/sim/manufacturingProductLinesV2Balance.ts",
     "ops:corporation-balance": "npx tsx scripts/ops/corporationBalanceAudit.ts --pretty",
     "architecture:audit": "node scripts/architecture-audit.mjs",
     "verify:build": "next build",
-    "postinstall": "node scripts/install/patch-mongodb-transaction-cursors.mjs"
+    "postinstall": "node scripts/install/patch-mongodb-transaction-cursors.mjs && node scripts/install/patch-braces-depth.mjs"
   },
   "lint-staged": {
     "*.{ts,tsx,mts}": [

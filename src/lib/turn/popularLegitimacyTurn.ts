@@ -10,7 +10,8 @@
  * doc — lives in {@link processPopularLegitimacyTurn}, which is called
  * once per turn from `onePartyBillLifecycle.ts`.
  */
-import type { Db, ObjectId } from "mongodb";
+import { leaderStateIdentity, type LeaderReference } from "@/lib/government/leaderReference";
+import type { Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import type { PopularMoodAxisProfile } from "@/lib/constants/popularMoodProfiles";
@@ -110,7 +111,7 @@ export function computePopularTurnDrift(inputs: PopularTurnInputs): PopularTurnD
 export interface PopularTurnContext {
   db: Db;
   countryId: CountryId;
-  leaderCharacterId: ObjectId;
+  leaderCharacterId: LeaderReference;
   currentTurn: number;
   economic: EconomicSignals;
   purges: PurgeEventInput[];
@@ -143,7 +144,7 @@ export async function processPopularLegitimacyTurn(
   const leaderColl = getCountryLeaderStatesCollection(ctx.db);
   const leaderState = await leaderColl.findOne({
     countryId: ctx.countryId,
-    leaderCharacterId: ctx.leaderCharacterId,
+    ...leaderStateIdentity(ctx.leaderCharacterId),
   });
   if (!leaderState) return null;
 

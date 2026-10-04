@@ -196,7 +196,7 @@ describe("named loan lifecycle through the banking turn", () => {
     expect(theLoan(db).status).toBe("defaulted");
     expect(corp(db, bankId).bankCharter!.totalLoans).toBeCloseTo(0, 6);
     // A write-off destroys the asset, not cash: the world's money is unchanged
-    // and the bank simply never gets its principal back.
+    // and the bank retains its fee but never recovers its principal.
     expect(money(db)).toBe(before);
     expect(corp(db, bankId).bankCharter!.cashReserves).toBe(
       1_000_000 - PRINCIPAL + ORIGINATION_FEE
