@@ -597,6 +597,12 @@ const RUNTIME: CollectionEntry[] = [
       "Active product development projects, including paid progress and plant allocations. Reset with corporations and sectors; per-turn development receipts are embedded on corporations and are wiped with those rows.",
   },
   {
+    name: "mediaProductProjectsV1",
+    category: "runtime",
+    notes:
+      "Media product slates and their paid development state belong to the current world. Reset with their corporations and sectors.",
+  },
+  {
     name: "pendingNationalizations",
     category: "runtime",
     notes: "Legislative takings in their notice window; resolved/cleared in the corp turn.",
