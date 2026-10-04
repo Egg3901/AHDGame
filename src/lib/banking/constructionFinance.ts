@@ -15,12 +15,24 @@ import { settleReservedConstruction } from "./constructionSettlement";
 import { prepareConstructionBuildEffects } from "./constructionBuildEffects";
 import type { UnownedPoolBucket } from "@/lib/market/unownedPoolDraw";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import type { BankingSnapshot, BorrowerSnapshot } from "./rules/boundary";
+import type { BankingPolicySnapshot } from "./rules/policy";
+import {
+  validatePreloadedConstructionFundingContext,
+  type PreloadedConstructionFundingContext,
+} from "./constructionFundingContext";
+import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
 import { releaseCompletedConstructionFunding } from "./constructionFundingLease";
 import {
   acquireConstructionAdmission,
   releaseConstructionAdmission,
 } from "./constructionAdmission";
 import { unprotectedConstructionPropertyFilter } from "./rules/constructionProperty";
+
+export type {
+  ConstructionFundingBankCorporation,
+  PreloadedConstructionFundingContext,
+} from "./constructionFundingContext";
 
 export type ConstructionFinanceResult =
   { ok: true; pending: boolean; loanId: string; claimId: string } | { ok: false; error: string };
@@ -40,6 +52,8 @@ export async function requestConstructionFinance(input: {
   maximumCostLocal: number;
   maximumRatePercent?: number;
   order: SectorBuildOrder;
+  /** A selected pair from the NPP turn's batched lender and borrower reads. */
+  preloadedFundingContext?: PreloadedConstructionFundingContext;
   buildContext?: {
     destinationCurrency: CurrencyCode | null;
     bucket: UnownedPoolBucket;
@@ -84,21 +98,52 @@ export async function requestConstructionFinance(input: {
       };
     if ((sector.buildQueue?.length ?? 0) >= 20)
       return { ok: false, error: "The construction queue is full" };
-    const loaded = await loadBankingSnapshot(db, input.bankId);
-    if (!loaded?.snapshot.charter || !loaded.corporation.bankCharter)
-      return { ok: false, error: "An active lending bank is required" };
-    const borrower = await loadBorrowerSnapshot(
-      db,
-      loaded.corporation.bankCharter,
-      loaded.snapshot.currency,
-      { type: "corporation", id: corporation._id },
-      loaded.snapshot.turn
-    );
-    if ("error" in borrower) return { ok: false, error: borrower.error };
+    let bankSnapshot: BankingSnapshot;
+    let bankCorporation: Pick<Corporation, "_id" | "bankCharter">;
+    let borrowerSnapshot: BorrowerSnapshot;
+    let fundingPolicy: BankingPolicySnapshot;
+    if (input.preloadedFundingContext) {
+      const context = input.preloadedFundingContext;
+      const error = validatePreloadedConstructionFundingContext(context, {
+        bankId: input.bankId,
+        borrowerId: corporation._id,
+        borrowerCurrency: resolveCorpLiquidCurrencyCode(corporation),
+      });
+      if (error) return { ok: false, error };
+      if (context.turn !== input.order.startTurn)
+        return { ok: false, error: "Construction order turn does not match the funding snapshot" };
+      bankSnapshot = context.bankSnapshot;
+      bankCorporation = context.bankCorporation;
+      borrowerSnapshot = context.borrowerSnapshot;
+      fundingPolicy = context.policy;
+    } else {
+      const loaded = await loadBankingSnapshot(db, input.bankId);
+      if (!loaded?.snapshot.charter || !loaded.corporation.bankCharter)
+        return { ok: false, error: "An active lending bank is required" };
+      const borrower = await loadBorrowerSnapshot(
+        db,
+        loaded.corporation.bankCharter,
+        loaded.snapshot.currency,
+        { type: "corporation", id: corporation._id },
+        loaded.snapshot.turn
+      );
+      if ("error" in borrower) return { ok: false, error: borrower.error };
+      bankSnapshot = loaded.snapshot;
+      bankCorporation = loaded.corporation;
+      borrowerSnapshot = borrower.snapshot;
+      fundingPolicy = loaded.snapshot.policy;
+    }
+    if (
+      bankCorporation.bankCharter?.status !== "active" ||
+      !fundingPolicy.privateBanking ||
+      !fundingPolicy.treasuryCashLedger ||
+      !fundingPolicy.constructionFinance
+    )
+      return { ok: false, error: "Construction funding prerequisites are not enabled" };
     const quote = quoteConstructionFinance({
       enabled: true,
-      bank: { ...loaded.snapshot, charter: { ...loaded.snapshot.charter, requireApproval: true } },
-      borrower: borrower.snapshot,
+      bank: { ...bankSnapshot, charter: { ...bankSnapshot.charter!, requireApproval: true } },
+      borrower: borrowerSnapshot,
       loanId: loanId.toHexString(),
       claimId,
       sectorId: sector._id.toHexString(),
@@ -122,8 +167,8 @@ export async function requestConstructionFinance(input: {
           claimId,
           borrowerId: String(corporation._id),
           loanId: String(loanId),
-          turn: loaded.snapshot.turn,
-          currency: loaded.snapshot.currency,
+          turn: bankSnapshot.turn,
+          currency: bankSnapshot.currency,
           feeLocal: input.constructionCostLocal - input.collateralCostLocal,
           destinationCurrency: input.buildContext.destinationCurrency,
           bucket: input.buildContext.bucket,
@@ -136,9 +181,9 @@ export async function requestConstructionFinance(input: {
       claimId,
       loanId: loanId.toHexString(),
       bankId: input.bankId.toHexString(),
-      charteredTurn: loaded.snapshot.charter.charteredTurn,
+      charteredTurn: bankSnapshot.charter!.charteredTurn,
       borrowerId: corporation._id.toHexString(),
-      currency: loaded.snapshot.currency,
+      currency: bankSnapshot.currency,
       constructionCostLocal: input.constructionCostLocal,
       collateralCostLocal: input.collateralCostLocal,
       borrowerContributionLocal: quote.borrowerContribution,
@@ -148,7 +193,7 @@ export async function requestConstructionFinance(input: {
       ratePercent: quote.ratePercent,
       order: input.order,
       ...(prepared?.ok ? { effects: prepared.value } : {}),
-      approvalRequired: loaded.snapshot.charter.requireApproval === true,
+      approvalRequired: bankCorporation.bankCharter.requireApproval === true,
       requestTransition: quote.transition,
       status: "awaiting_approval",
       escrowLocal: 0,
@@ -160,7 +205,7 @@ export async function requestConstructionFinance(input: {
       !(await acquireConstructionAdmission(db, {
         token: claim.admissionToken!,
         loanId: claim.loanId,
-        turn: loaded.snapshot.turn,
+        turn: bankSnapshot.turn,
       }))
     )
       return { ok: false, error: "Construction admission is disabled or closing" };
@@ -230,7 +275,8 @@ export async function requestConstructionFinance(input: {
     db,
     new ObjectId(claim.bankId),
     new ObjectId(claim.loanId),
-    true
+    true,
+    input.preloadedFundingContext
   );
 }
 
@@ -239,7 +285,8 @@ export async function approveConstructionFinance(
   db: Db,
   bankId: ObjectId,
   loanId: ObjectId,
-  enabled: boolean
+  enabled: boolean,
+  preloadedFundingContext?: PreloadedConstructionFundingContext
 ): Promise<ConstructionFinanceResult> {
   if (!enabled) return { ok: false, error: "Construction finance is not enabled" };
   const loans = db.collection<BankLoan>("bankLoans");
@@ -263,20 +310,37 @@ export async function approveConstructionFinance(
       return { ok: false, error: "Construction funding is incomplete" };
     return { ok: true, pending: false, loanId: claim.loanId, claimId: claim.claimId };
   }
-  const loaded = await loadBankingSnapshot(db, bankId);
+  const loaded = preloadedFundingContext
+    ? {
+        snapshot: preloadedFundingContext.bankSnapshot,
+        corporation: preloadedFundingContext.bankCorporation,
+      }
+    : await loadBankingSnapshot(db, bankId);
   if (
     !loaded?.corporation.bankCharter ||
     loaded.snapshot.charter?.charteredTurn !== claim.charteredTurn
   )
     return { ok: false, error: "The lender charter changed before construction approval" };
-  const borrower = await loadBorrowerSnapshot(
-    db,
-    loaded.corporation.bankCharter,
-    loaded.snapshot.currency,
-    { type: "corporation", id: new ObjectId(claim.borrowerId) },
-    loaded.snapshot.turn
-  );
-  if ("error" in borrower) return { ok: false, error: borrower.error };
+  let borrowerSnapshot: BorrowerSnapshot;
+  if (preloadedFundingContext) {
+    const error = validatePreloadedConstructionFundingContext(preloadedFundingContext, {
+      bankId,
+      borrowerId: new ObjectId(claim.borrowerId),
+      borrowerCurrency: claim.currency,
+    });
+    if (error) return { ok: false, error };
+    borrowerSnapshot = preloadedFundingContext.borrowerSnapshot;
+  } else {
+    const borrower = await loadBorrowerSnapshot(
+      db,
+      loaded.corporation.bankCharter,
+      loaded.snapshot.currency,
+      { type: "corporation", id: new ObjectId(claim.borrowerId) },
+      loaded.snapshot.turn
+    );
+    if ("error" in borrower) return { ok: false, error: borrower.error };
+    borrowerSnapshot = borrower.snapshot;
+  }
   if (!loan.constructionDecision) {
     const claimed = await loans.updateOne(
       { _id: loanId, status: "pending", constructionDecision: { $exists: false } },
@@ -298,7 +362,7 @@ export async function approveConstructionFinance(
     enabled: true,
     sectorId: sector._id,
     bank: loaded.snapshot,
-    borrower: borrower.snapshot,
+    borrower: borrowerSnapshot,
   });
   return result.ok
     ? { ok: true, pending: false, loanId: claim.loanId, claimId: claim.claimId }

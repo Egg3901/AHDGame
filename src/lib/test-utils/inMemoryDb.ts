@@ -247,6 +247,34 @@ function evalExpr(expr: unknown, doc: Doc, variables: Doc = {}): unknown {
     const variable = typeof rawArgs.as === "string" ? rawArgs.as : "this";
     return rows.map((row) => evalExpr(rawArgs.in, doc, { ...variables, [variable]: row }));
   }
+  if (op === "$filter" && isPlainObject(rawArgs)) {
+    const rows = evalExpr(rawArgs.input, doc, variables);
+    if (!Array.isArray(rows)) throw new Error("inMemoryDb: expected array for $filter");
+    const variable = typeof rawArgs.as === "string" ? rawArgs.as : "this";
+    return rows.filter((row) =>
+      Boolean(evalExpr(rawArgs.cond, doc, { ...variables, [variable]: row }))
+    );
+  }
+  if (op === "$let" && isPlainObject(rawArgs)) {
+    const vars = isPlainObject(rawArgs.vars) ? rawArgs.vars : {};
+    const scoped = { ...variables };
+    for (const [name, expression] of Object.entries(vars)) {
+      scoped[name] = evalExpr(expression, doc, variables);
+    }
+    return evalExpr(rawArgs.in, doc, scoped);
+  }
+  if (op === "$mergeObjects") {
+    const parts = Array.isArray(rawArgs) ? rawArgs : [rawArgs];
+    return parts.reduce<Doc>(
+      (merged, value) => ({ ...merged, ...(evalExpr(value, doc, variables) as Doc) }),
+      {}
+    );
+  }
+  if (!op.startsWith("$")) {
+    return Object.fromEntries(
+      Object.entries(expr).map(([key, value]) => [key, evalExpr(value, doc, variables)])
+    );
+  }
   if (op === "$unsetField" && isPlainObject(rawArgs)) {
     const value = evalExpr(rawArgs.input, doc, variables);
     const field = evalExpr(rawArgs.field, doc, variables);
@@ -290,6 +318,8 @@ function evalExpr(expr: unknown, doc: Doc, variables: Doc = {}): unknown {
       return (args[0] as number) < (args[1] as number);
     case "$eq":
       return sameValue(args[0], args[1]);
+    case "$in":
+      return Array.isArray(args[1]) && args[1].some((value) => sameValue(value, args[0]));
     case "$add":
       return args.reduce((sum: number, a) => sum + ((a as number) ?? 0), 0);
     case "$subtract":
