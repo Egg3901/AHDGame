@@ -68,7 +68,8 @@ function payoutTransition(
           _id: new ObjectId(holder.id),
           ...(holder.payeeCurrencyFieldPresent
             ? { liquidCurrencyCode: holder.payeeCurrencyFieldValue ?? null }
-            : { liquidCurrencyCode: { $exists: false }, countryId: holder.payeeCountryId }),
+            : { liquidCurrencyCode: { $exists: false } }),
+          ...(holder.payeeCurrencyUsesCountryFallback ? { countryId: holder.payeeCountryId } : {}),
         },
         path: "liquidCapital",
         note: "Pay frozen sovereign coupon to corporate cash",
@@ -238,6 +239,7 @@ export async function settleFundedSovereignCoupons(
         )
         .toArray()
     : [];
+  const targetReadyClaimIds = await loadCouponTargetReadiness(db, claims);
   for (const claim of claims) {
     const attempt = Math.max(input.turn, claim.dueTurn);
     const prior =
@@ -247,7 +249,7 @@ export async function settleFundedSovereignCoupons(
       priorMoves.find(
         (move) => move._id.startsWith(`${claim.id}:attempt:`) && move.status === "applied"
       );
-    if (!prior && !(await couponTargetsExist(db, claim))) continue;
+    if (!prior && !targetReadyClaimIds.has(claim.id)) continue;
     const result = prior
       ? await resumeSettlement(db, prior._id)
       : await settleTransition(db, payoutTransition(claim, String(budget._id), attempt));
@@ -256,38 +258,39 @@ export async function settleFundedSovereignCoupons(
   }
 }
 
-async function couponTargetsExist(db: Db, claim: FundedSovereignCouponClaim): Promise<boolean> {
-  const pools = claim.holders.filter((holder) => holder.kind === "publicFloat");
-  if (pools.length > 0) {
-    await db
-      .collection<{ _id: string }>("bondMarketPools")
-      .updateOne(
-        { _id: claim.currencyCode },
-        { $setOnInsert: { targetCashLocal: 0, createdAt: new Date() } },
-        { upsert: true }
-      );
-  }
+async function loadCouponTargetReadiness(
+  db: Db,
+  claims: FundedSovereignCouponClaim[]
+): Promise<Set<string>> {
+  const poolCurrencies = new Set(
+    claims.flatMap((claim) =>
+      claim.holders.some((holder) => holder.kind === "publicFloat") ? [claim.currencyCode] : []
+    )
+  );
+  await Promise.all(
+    [...poolCurrencies].map((currencyCode) =>
+      db
+        .collection<{ _id: string }>("bondMarketPools")
+        .updateOne(
+          { _id: currencyCode },
+          { $setOnInsert: { targetCashLocal: 0, createdAt: new Date() } },
+          { upsert: true }
+        )
+    )
+  );
   const collections = new Map<string, Set<string>>();
-  const corporationHolders = claim.holders.filter((holder) => holder.kind === "corporation");
-  for (const holder of claim.holders) {
-    if (!holder.id) continue;
-    const collection =
-      holder.kind === "character"
-        ? "characters"
-        : holder.kind === "imperial"
-          ? "imperialCharacters"
-          : holder.kind === "corporation"
-            ? "corporations"
-            : holder.kind === "fund"
-              ? "indexFunds"
-              : holder.kind === "npp"
-                ? "npps"
-                : null;
-    if (!collection) continue;
-    const ids = collections.get(collection) ?? new Set<string>();
-    ids.add(holder.id);
-    collections.set(collection, ids);
+  for (const claim of claims) {
+    for (const holder of claim.holders) {
+      if (!holder.id) continue;
+      const collection = targetCollection(holder.kind);
+      if (!collection) continue;
+      const ids = collections.get(collection) ?? new Set<string>();
+      ids.add(holder.id);
+      collections.set(collection, ids);
+    }
   }
+  const foundIds = new Map<string, Set<string>>();
+  const corporationsById = new Map<string, Corporation>();
   for (const [collection, ids] of collections) {
     const found =
       collection === "corporations"
@@ -305,14 +308,42 @@ async function couponTargetsExist(db: Db, claim: FundedSovereignCouponClaim): Pr
               { projection: { _id: 1 } }
             )
             .toArray();
-    if (new Set(found.map((row) => row._id.toHexString())).size !== ids.size) return false;
+    foundIds.set(collection, new Set(found.map((row) => row._id.toHexString())));
     if (collection === "corporations") {
-      const byId = new Map((found as Corporation[]).map((corp) => [corp._id.toHexString(), corp]));
-      for (const holder of corporationHolders) {
-        const corp = holder.id ? byId.get(holder.id) : undefined;
-        if (!corp || resolveCorpLiquidCurrencyCode(corp) !== holder.payeeCurrencyCode) return false;
-      }
+      for (const corp of found as Corporation[]) corporationsById.set(corp._id.toHexString(), corp);
     }
   }
-  return true;
+  const ready = new Set<string>();
+  for (const claim of claims) {
+    const hasAllTargets = claim.holders.every((holder) => {
+      if (holder.kind === "publicFloat") return poolCurrencies.has(claim.currencyCode);
+      if (!holder.id) return false;
+      const collection = targetCollection(holder.kind);
+      if (!collection || !foundIds.get(collection)?.has(holder.id)) return false;
+      if (holder.kind !== "corporation") return true;
+      const corp = corporationsById.get(holder.id);
+      return (
+        !!corp &&
+        resolveCorpLiquidCurrencyCode(corp) === holder.payeeCurrencyCode &&
+        (holder.payeeCurrencyFieldPresent
+          ? corp.liquidCurrencyCode === holder.payeeCurrencyFieldValue
+          : corp.liquidCurrencyCode === undefined) &&
+        (!holder.payeeCurrencyUsesCountryFallback ||
+          String(corp.countryId ?? "") === holder.payeeCountryId)
+      );
+    });
+    if (hasAllTargets) ready.add(claim.id);
+  }
+  return ready;
+}
+
+function targetCollection(
+  kind: FundedSovereignCouponClaim["holders"][number]["kind"]
+): string | null {
+  if (kind === "character") return "characters";
+  if (kind === "imperial") return "imperialCharacters";
+  if (kind === "corporation") return "corporations";
+  if (kind === "fund") return "indexFunds";
+  if (kind === "npp") return "npps";
+  return null;
 }

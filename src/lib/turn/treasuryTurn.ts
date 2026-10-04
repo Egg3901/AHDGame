@@ -153,6 +153,8 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
         localPerAnchor,
         currencyFieldPresent: corp.liquidCurrencyCode !== undefined,
         currencyFieldValue: corp.liquidCurrencyCode ?? null,
+        currencyUsesCountryFallback:
+          corp.liquidCurrencyCode == null || String(corp.liquidCurrencyCode).trim() === "",
       });
     }
   }

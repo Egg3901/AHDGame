@@ -10,6 +10,7 @@ export interface SovereignCouponCorporationQuote {
   localPerAnchor: number;
   currencyFieldPresent: boolean;
   currencyFieldValue?: string | null;
+  currencyUsesCountryFallback: boolean;
 }
 
 export interface SovereignCouponBondSnapshot {
@@ -66,6 +67,7 @@ export function freezeSovereignCouponClaim(input: {
         payeeCountryId: quote.countryId,
         payeeCurrencyFieldPresent: quote.currencyFieldPresent,
         payeeCurrencyFieldValue: quote.currencyFieldValue,
+        payeeCurrencyUsesCountryFallback: quote.currencyUsesCountryFallback,
       });
     } else if (holder.kind === "character" || holder.kind === "imperial") {
       holders.push({

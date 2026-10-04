@@ -234,4 +234,70 @@ describe("funded sovereign coupon claims", () => {
     );
     expect(savedBudget(db).sovereignCouponClaims).toEqual([]);
   });
+
+  it("guards country-derived corporate currency and batches recipient lookups across claims", async () => {
+    const corpId = new ObjectId("650000000000000000000013");
+    const secondCharacterId = new ObjectId("650000000000000000000014");
+    const db = world();
+    db.seed("corporations", [
+      { _id: corpId, countryId: "US", liquidCurrencyCode: null, liquidCapital: 0 },
+    ]);
+    db.seed("characters", [
+      { _id: characterId, cashOnHand: 0 },
+      { _id: secondCharacterId, cashOnHand: 0 },
+    ]);
+    const characterFind = vi.spyOn(db.collection("characters"), "find");
+    const corporateBond = {
+      ...bond(),
+      holders: [{ corporationId: corpId, units: 2 }],
+    } as unknown as Bond;
+    const secondBond = {
+      ...bond(),
+      _id: new ObjectId("650000000000000000000015"),
+      publicFloat: 0,
+      holders: [{ characterId: secondCharacterId, units: 1 }],
+    } as unknown as Bond;
+    const corporateQuotes = new Map([
+      [
+        corpId.toHexString(),
+        {
+          id: corpId.toHexString(),
+          countryId: "US",
+          currencyCode: "USD" as CurrencyCode,
+          localPerAnchor: 1,
+          currencyFieldPresent: true,
+          currencyFieldValue: null,
+          currencyUsesCountryFallback: true,
+        },
+      ],
+    ]);
+    const args = {
+      turn: 12,
+      bonds: [corporateBond, secondBond],
+      anchorRate: 1,
+      forexEnabled: false,
+      corporateQuotes,
+    };
+    db.collection("federalBudget").docs[0].treasuryCashLocal = 0;
+    await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), args);
+    expect(characterFind).toHaveBeenCalledTimes(1);
+    const claims = savedBudget(db).sovereignCouponClaims ?? [];
+    expect(claims).toHaveLength(2);
+    db.collection("corporations").docs[0].countryId = "FR";
+    savedBudget(db).treasuryCashLocal = 100;
+    await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), {
+      ...args,
+      bonds: [],
+      turn: 13,
+    });
+    expect(savedBudget(db).treasuryCashLocal).toBe(100 - claims[1]!.amountLocal);
+    expect((db.collection("corporations").docs[0] as { liquidCapital: number }).liquidCapital).toBe(
+      0
+    );
+    expect(savedBudget(db).sovereignCouponClaims).toEqual([claims[0]]);
+    const secondCharacter = db
+      .collection("characters")
+      .docs.find((doc) => (doc._id as ObjectId).equals(secondCharacterId));
+    expect((secondCharacter as { cashOnHand: number }).cashOnHand).toBeGreaterThan(0);
+  });
 });

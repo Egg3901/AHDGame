@@ -787,6 +787,7 @@ export interface FundedSovereignCouponClaim {
     payeeCountryId?: string;
     payeeCurrencyFieldPresent?: boolean;
     payeeCurrencyFieldValue?: string | null;
+    payeeCurrencyUsesCountryFallback?: boolean;
     personalBalancePath?: string;
   }>;
 }
