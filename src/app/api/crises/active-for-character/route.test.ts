@@ -189,7 +189,7 @@ describe("GET /api/crises/active-for-character — option availability", () => {
   });
 });
 
-describe("GET /api/crises/active-for-character — domestic bank response", () => {
+describe("GET /api/crises/active-for-character: domestic bank response", () => {
   it("shows the bank response choices to the seated finance minister in the affected country", async () => {
     const responseNode = {
       nodeId: "response",
