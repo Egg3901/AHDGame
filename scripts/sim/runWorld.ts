@@ -114,6 +114,13 @@ interface SimRunDoc {
   nppForeignPolicyStage?: NppForeignPolicyStage;
   /** Simulation actor mode (#1993): pure NPP autonomy vs synthetic actors. */
   actorMode?: SimActorMode;
+  /** Durable seven-family 1991-to-2027 telemetry interval for qualification runs. */
+  crisisHorizonTelemetry?: {
+    schemaVersion: number;
+    expectedFirstTurn: number;
+    expectedLastTurn: number;
+    families: number;
+  };
   /** Effective-run actor-coverage manifest evaluated from live sandbox counts. */
   actorCoverage?: ActorCoverageManifest;
   preservePlayerRail?: boolean;
@@ -1231,6 +1238,36 @@ async function main() {
       await import("./sectorInvestmentSnapshot");
     if (investmentSnapshots) await snapshotSectorInvestment(db, investmentSnapshots, startTurn);
     const targetTurn = startTurn + turns;
+    // Retain complete crisis snapshots only for long, full, source-pinned 1991
+    // sandbox runs. The collector itself also enforces the sandbox database.
+    const crisisHorizonTelemetry =
+      preset === "1991-default" &&
+      turns >= 1700 &&
+      (simTurnPhaseMode ?? "full") === "full" &&
+      !cloneMode;
+    let captureCrisisHorizonTurn:
+      (typeof import("./crisisHorizonTelemetry"))["captureCrisisHorizonTurn"] | undefined;
+    if (crisisHorizonTelemetry) {
+      if (!source.executedCommit) throw new Error("Crisis horizon requires a source-pinned run");
+      ({ captureCrisisHorizonTurn } = await import("./crisisHorizonTelemetry"));
+      await db
+        .collection("simCrisisHorizon")
+        .createIndex({ runId: 1, turn: 1, defKey: 1 }, { unique: true });
+      await simRuns.updateOne(
+        { _id: runId },
+        {
+          $set: {
+            crisisHorizonTelemetry: {
+              schemaVersion: 1,
+              expectedFirstTurn:
+                existing?.crisisHorizonTelemetry?.expectedFirstTurn ?? startTurn + 1,
+              expectedLastTurn: existing?.crisisHorizonTelemetry?.expectedLastTurn ?? targetTurn,
+              families: 7,
+            },
+          },
+        }
+      );
+    }
     log(`Advancing from turn ${startTurn} to turn ${targetTurn} (${turns} turns)`);
 
     let lastTurn = startTurn;
@@ -1280,8 +1317,13 @@ async function main() {
       }
       skippedSinceMs = null;
       lastTurn = result.turn;
-      if (investmentSnapshots) {
-        if (isCrashRecovery) throw new Error("Crashed turn invalidates the balance comparison");
+      if (investmentSnapshots || captureCrisisHorizonTurn) {
+        if (isCrashRecovery)
+          throw new Error(
+            investmentSnapshots
+              ? "Crashed turn invalidates the balance comparison"
+              : "Crashed turn invalidates crisis horizon telemetry"
+          );
         const [checkedState, completedLog] = await Promise.all([
           db
             .collection<GameState>("gameState")
@@ -1294,7 +1336,7 @@ async function main() {
             ),
         ]);
         assertInvestmentTurnComplete(lastTurn, checkedState?.currentTurn, completedLog);
-        await snapshotSectorInvestment(db, investmentSnapshots, lastTurn);
+        if (investmentSnapshots) await snapshotSectorInvestment(db, investmentSnapshots, lastTurn);
       }
 
       // Sim-harness-only snapshots (seats, corporations-by-country) for the
@@ -1312,6 +1354,14 @@ async function main() {
       if (actorMode === "synthetic") {
         const { driveSyntheticActors } = await import("@/lib/sim/driveSyntheticActors");
         await driveSyntheticActors(db, { seed, turn: lastTurn, now: new Date() });
+      }
+      if (captureCrisisHorizonTurn) {
+        await captureCrisisHorizonTurn(db, {
+          runId,
+          turn: lastTurn,
+          seed,
+          codeVersion: source.executedCommit!,
+        });
       }
 
       if (iterations % checkpointEvery === 0 || lastTurn >= targetTurn) {
