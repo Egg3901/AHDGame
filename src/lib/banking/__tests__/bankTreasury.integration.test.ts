@@ -273,15 +273,10 @@ describe("funded bank treasury settlement", () => {
       }),
     ]);
 
-    expect([saleA.status, saleB.status].sort()).toEqual(["completed", "rejected"]);
+    expect([saleA.status, saleB.status].sort()).toEqual(["completed", "pending"]);
     const winner = saleA.status === "completed" ? saleA : saleB;
-    const loser = saleA.status === "rejected" ? saleA : saleB;
+    const pendingSale = saleA.status === "pending" ? saleA : saleB;
     expect(winner.units).toBe(saleA.status === "completed" ? 6 : 5);
-    expect(
-      db
-        .collection("bankMoneyMoves")
-        .docs.find((row) => row._id === `bank-treasury:${loser.tradeId}:reserve`)
-    ).toMatchObject({ status: "rejected" });
     const remaining = balance(db).bond.holders.filter((holder) => holder.charteredTurn === 20);
     expect(
       remaining.reduce((sum, holder) => sum + holder.units, 0),
@@ -289,6 +284,75 @@ describe("funded bank treasury settlement", () => {
     ).toBe(7 - winner.units);
     expect(remaining.every((holder) => !holder.bankTreasuryTradeId)).toBe(true);
     expect(balance(db).bond.publicFloat).toBe(100 - (7 - winner.units));
+
+    const recovery = await recoverBankTreasuryTrades(db as unknown as Db, POLICY);
+    expect(recovery).toMatchObject({ completed: 0, pending: 0, rejected: 1 });
+    expect(
+      db.collection("bankTreasuryTrades").docs.find((row) => row._id === pendingSale.tradeId)
+    ).toMatchObject({ status: "rejected" });
+    expect(
+      db
+        .collection("bankMoneyMoves")
+        .docs.find((row) => row._id === `bank-treasury:${pendingSale.tradeId}:reserve`)
+    ).toMatchObject({ status: "rejected" });
+  });
+
+  it("makes stale reservation refusal atomic across concurrent resumers of one receipt", async () => {
+    const db = world();
+    for (const [tradeId, units] of [
+      ["treasury-stale-lot-a", 3],
+      ["treasury-stale-lot-b", 4],
+    ] as const) {
+      await tradeBankTreasuryBill(db as unknown as Db, {
+        bankId: BANK,
+        bondId: BOND,
+        side: "buy",
+        units,
+        turn: TURN,
+        policy: POLICY,
+        tradeId,
+      });
+    }
+
+    const crash = withInjectedCrash(db, {
+      collection: "bonds",
+      op: "updateOne",
+      onCall: 1,
+    });
+    await expect(
+      tradeBankTreasuryBill(crash.db, {
+        bankId: BANK,
+        bondId: BOND,
+        side: "sell",
+        units: 6,
+        turn: TURN,
+        policy: POLICY,
+        tradeId: "treasury-stale-sale-1",
+      })
+    ).rejects.toBeInstanceOf(InjectedCrash);
+    crash.disarm();
+
+    const bond = db.collection("bonds").docs[0] as Bond;
+    const holders = structuredClone(bond.holders ?? []);
+    holders[0] = { ...holders[0]!, units: holders[0]!.units - 1 };
+    await db.collection("bonds").updateOne({ _id: BOND }, { $set: { holders } });
+
+    await Promise.all([
+      recoverBankTreasuryTrades(db as unknown as Db, POLICY),
+      recoverBankTreasuryTrades(db as unknown as Db, POLICY),
+    ]);
+    await recoverBankTreasuryTrades(db as unknown as Db, POLICY);
+
+    const receipt = db
+      .collection("bankTreasuryTrades")
+      .docs.find((row) => row._id === "treasury-stale-sale-1");
+    const refusal = db
+      .collection("bankMoneyMoves")
+      .docs.find((row) => row._id === `bank-treasury:${receipt?._id}:reserve`);
+    expect(receipt).toMatchObject({ status: "rejected" });
+    expect(refusal).toMatchObject({ status: "rejected" });
+    expect(balance(db).bond.holders.reduce((sum, holder) => sum + holder.units, 0)).toBe(6);
+    expect(balance(db).bond.holders.every((holder) => !holder.bankTreasuryTradeId)).toBe(true);
   });
 
   it("recovers a crash after the bank debit without charging twice", async () => {

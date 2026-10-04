@@ -1,5 +1,18 @@
 import type { ObjectId } from "mongodb";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import type { BondHolder } from "@/lib/db/types/bond";
+
+export type BankTreasuryHolderSnapshot = Omit<
+  BondHolder,
+  "characterId" | "imperialCharacterId" | "corporationId" | "fundId" | "nppId" | "bankId"
+> & {
+  characterId?: string;
+  imperialCharacterId?: string;
+  corporationId?: string;
+  fundId?: string;
+  nppId?: string;
+  bankId?: string;
+};
 
 /**
  * Private banking (1.1). A corporation owning at least one `financial` sector
@@ -246,6 +259,8 @@ export interface BankTreasuryTradeReceipt {
   requestedUnits: number;
   /** Frozen source lots reserved by a multi-lot sale. */
   allocations?: Array<{ lotId: string; units: number }>;
+  /** Exact holder array observed when sale pricing and source lots were frozen. */
+  holderSnapshot?: BankTreasuryHolderSnapshot[];
   units: number;
   pricePerUnitLocal: number;
   amountLocal: number;

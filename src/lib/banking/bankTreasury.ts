@@ -1,7 +1,11 @@
 import { ObjectId, type Db } from "mongodb";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { Bond, BondHolder } from "@/lib/db/types/bond";
-import type { BankCharter, BankTreasuryTradeReceipt } from "@/lib/db/types/bank";
+import type {
+  BankCharter,
+  BankTreasuryHolderSnapshot,
+  BankTreasuryTradeReceipt,
+} from "@/lib/db/types/bank";
 import type { Corporation } from "@/lib/db/types/corporation";
 import type { BankingPolicySnapshot } from "@/lib/banking/rules/policy";
 import { savingsReadsAuthoritative } from "@/lib/banking/rules/policy";
@@ -33,7 +37,6 @@ import {
   settleTransition,
   type SettlementResult,
 } from "@/lib/banking/settlementJournal";
-import { MONEY_MOVE_COLLECTION } from "@/lib/banking/moneyMove";
 import { settleAtomicDocumentTransition } from "@/lib/banking/atomicDocumentSettlement";
 import { oid, type BankingTransition } from "@/lib/banking/rules/boundary";
 
@@ -104,6 +107,41 @@ function holderLotInputs(holders: readonly BondHolder[]) {
     tradeId: holder.bankTreasuryTradeId,
     units: holder.units,
   }));
+}
+
+const HOLDER_OBJECT_ID_FIELDS = [
+  "characterId",
+  "imperialCharacterId",
+  "corporationId",
+  "fundId",
+  "nppId",
+  "bankId",
+] as const;
+
+function freezeHolderSnapshot(holders: readonly BondHolder[]): BankTreasuryHolderSnapshot[] {
+  return holders.map((holder) => {
+    const frozen = { ...holder } as Record<string, unknown>;
+    for (const field of HOLDER_OBJECT_ID_FIELDS) {
+      const id = holder[field];
+      if (id instanceof ObjectId) frozen[field] = id.toHexString();
+    }
+    return frozen as BankTreasuryHolderSnapshot;
+  });
+}
+
+function thawHolderSnapshot(
+  snapshot: BankTreasuryTradeReceipt["holderSnapshot"],
+  fallback: readonly BondHolder[]
+): BondHolder[] {
+  if (!snapshot) return [...fallback];
+  return snapshot.map((holder) => {
+    const thawed = { ...holder } as Record<string, unknown>;
+    for (const field of HOLDER_OBJECT_ID_FIELDS) {
+      const id = holder[field];
+      if (typeof id === "string" && /^[0-9a-f]{24}$/i.test(id)) thawed[field] = new ObjectId(id);
+    }
+    return thawed as unknown as BondHolder;
+  });
 }
 
 function activeHolderUnits(
@@ -324,10 +362,27 @@ function reserveTransition(receipt: BankTreasuryTradeReceipt, bond: Bond): Banki
           note: "Reserve sovereign float units for the bank purchase before cash moves",
         }
       : (() => {
+          const holderSnapshot = thawHolderSnapshot(receipt.holderSnapshot, bond.holders ?? []);
           const allocations = new Map(
             (receipt.allocations ?? []).map((allocation) => [allocation.lotId, allocation.units])
           );
-          const reservedHolders = (bond.holders ?? []).map((holder) => {
+          const availableByLot = new Map(
+            holderSnapshot
+              .filter(
+                (holder) =>
+                  holder.bankId?.equals(receipt.bankId) &&
+                  holder.charteredTurn === receipt.charteredTurn &&
+                  !holder.bankTreasuryTradeId &&
+                  typeof holder.bankTreasuryLotId === "string"
+              )
+              .map((holder) => [holder.bankTreasuryLotId!, holder.units])
+          );
+          const completeAllocation = [...allocations].every(
+            ([lotId, units]) => (availableByLot.get(lotId) ?? 0) >= units
+          );
+          if (!completeAllocation)
+            throw new Error("Frozen treasury sale allocation exceeds its holder snapshot");
+          const reservedHolders = holderSnapshot.map((holder) => {
             const lotId = holder.bankTreasuryLotId;
             const allocation =
               holder.bankId?.equals(receipt.bankId) &&
@@ -350,10 +405,7 @@ function reserveTransition(receipt: BankTreasuryTradeReceipt, bond: Bond): Banki
             // The whole observed holder array is the reservation guard. One
             // sale either reserves every source lot or none of them, so a
             // concurrent sale cannot strand a partially reserved receipt.
-            filter: {
-              _id: oid(receipt.bondId.toHexString()),
-              holders: bond.holders ?? [],
-            },
+            filter: { _id: oid(receipt.bondId.toHexString()) },
             update: {
               $set: { holders: reservedHolders, updatedAt: receipt.createdAt },
             },
@@ -627,32 +679,6 @@ async function finishTransition(db: Db, transition: BankingTransition): Promise<
     result = await resumeSettlement(db, transition.key);
   }
   return result;
-}
-
-/** Terminally reject a stale all-or-nothing inventory reservation. */
-async function rejectUnreservedTransition(
-  db: Db,
-  receipt: BankTreasuryTradeReceipt,
-  error: string
-): Promise<boolean> {
-  const bond = await db
-    .collection<Bond>("bonds")
-    .findOne({ _id: receipt.bondId }, { projection: { holders: 1 } });
-  const reservationLanded = (bond?.holders ?? []).some(
-    (holder) => holder.bankTreasuryTradeId === receipt._id
-  );
-  if (reservationLanded) return false;
-
-  const journal = db.collection<{ _id: string; status: string; legs?: unknown[] }>(
-    MONEY_MOVE_COLLECTION
-  );
-  const record = await journal.findOne({ _id: `bank-treasury:${receipt._id}:reserve` });
-  if (record?.status !== "partial" || (record.legs?.length ?? 0) !== 0) return false;
-  const rejected = await journal.updateOne(
-    { _id: record._id, status: "partial" },
-    { $set: { status: "rejected", error, completedAt: new Date() } }
-  );
-  return rejected.modifiedCount > 0;
 }
 
 async function paySaleEscrow(db: Db, receipt: BankTreasuryTradeReceipt): Promise<SettlementResult> {
@@ -961,12 +987,14 @@ async function runReceipt(
   }
 
   const reserve = reserveTransition(receipt, bond);
-  let reserved = await finishTransition(db, reserve);
-  if (reserved.status === "partial") {
-    const error = "Bond inventory changed before the complete reservation landed";
-    if (await rejectUnreservedTransition(db, receipt, error))
-      reserved = { ...reserved, status: "rejected", error };
-  }
+  const reserved =
+    receipt.side === "sell"
+      ? await settleAtomicDocumentTransition(db, reserve, {
+          identity: { _id: oid(receipt.bondId.toHexString()) },
+          guard: { holders: thawHolderSnapshot(receipt.holderSnapshot, bond.holders ?? []) },
+          nonCashMode: "bank_treasury_inventory",
+        })
+      : await finishTransition(db, reserve);
   if (reserved.status === "rejected") {
     await updateReceipt(db, receipt, "rejected", reserved.error);
     return {
@@ -1250,6 +1278,7 @@ export async function tradeBankTreasuryBill(
     requestedUnits: units,
     units: fillUnits,
     ...(allocations ? { allocations } : {}),
+    ...(allocations ? { holderSnapshot: freezeHolderSnapshot(bond.holders ?? []) } : {}),
     pricePerUnitLocal,
     amountLocal,
     turn: input.turn,
