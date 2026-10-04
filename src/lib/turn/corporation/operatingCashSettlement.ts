@@ -31,8 +31,15 @@ function readOperatingCashQuote(
   meta: Record<string, unknown> | undefined
 ): OperatingCashQuote | null {
   const value = meta?.operatingCashQuote;
-  if (!value || typeof value !== "object") return null;
-  const quote = value as Partial<OperatingCashQuote>;
+  if (typeof value !== "string") return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object") return null;
+  const quote = parsed as Partial<OperatingCashQuote>;
   if (
     !Number.isFinite(quote.netLocal) ||
     !Number.isFinite(quote.grossLocal) ||
@@ -240,7 +247,7 @@ export async function settleCorporateOperatingCash(
             grossOperatingCashLocal: grossLocal,
             sourceCurrency,
             sourceLocalPerAnchor: sourceRate,
-            operatingCashQuote: quote,
+            operatingCashQuote: JSON.stringify(quote),
           },
         },
       };
@@ -331,7 +338,7 @@ export async function settleCorporateOperatingCash(
             shortfallLocal: shortfall,
             sourceCurrency,
             sourceLocalPerAnchor: sourceRate,
-            operatingCashQuote: quote,
+            operatingCashQuote: JSON.stringify(quote),
           },
         },
       };
@@ -391,7 +398,7 @@ export async function settleCorporateOperatingCash(
           meta: {
             federalTaxArrearsAnchor: taxAnchor,
             sourceCurrency,
-            operatingCashQuote: quote,
+            operatingCashQuote: JSON.stringify(quote),
           },
         },
       };
@@ -468,7 +475,7 @@ export async function settleCorporateOperatingCash(
           federalTaxAnchor: taxAnchor,
           sourceCurrency,
           sourceLocalPerAnchor: sourceRate,
-          operatingCashQuote: quote,
+          operatingCashQuote: JSON.stringify(quote),
         },
       },
     };

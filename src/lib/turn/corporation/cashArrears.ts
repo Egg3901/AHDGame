@@ -114,7 +114,7 @@ export async function settlePriorCorporateCashArrears(input: CashArrearsInput): 
         },
       };
       const settled = await settleTransition(db, transition);
-      if (settled.status === "rejected") return;
+      if (settled.status === "rejected") return cash;
       if (settled.status !== "applied" && settled.status !== "replayed") {
         throw new Error(settled.error ?? `Operating arrears receipt ${operatingKey} is incomplete`);
       }
