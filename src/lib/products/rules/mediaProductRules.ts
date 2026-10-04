@@ -353,7 +353,7 @@ export function aggregateMediaProductSectorEffects(input: {
       project.stage === "decline"
         ? tailDemandFactor(project.stage, kind.tail)
         : (STAGE_QUALITY_FACTOR[project.stage] ?? 0);
-    qualityDelta += nonNegative(project.qualityBonus) * stageFactor * share;
+    qualityDelta += nonNegative(project.qualityBonus) * stageFactor * share * kind.coverage;
     loyaltyBonus +=
       mediaProductBrandBonus(project.productBrand ?? 0, kind.coverage) * stageFactor * share;
   }

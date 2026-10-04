@@ -206,7 +206,7 @@ describe("media product lifecycle rules", () => {
       ],
     });
     expect(result.allocatedShare).toBe(1);
-    expect(result.quality).toBe(68.4);
+    expect(result.quality).toBe(66.7);
     expect(result.loyaltyBonus).toBe(3.4);
   });
 
