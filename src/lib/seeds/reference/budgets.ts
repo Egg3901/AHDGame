@@ -1,3 +1,5 @@
+import { NG_1991_NOMINAL_GDP_NGN } from "@/lib/countries/ng/data/ngGdp1991";
+import { rebaseBudgetNominals } from "./rules/rebaseBudgetNominals";
 import { POPULATION_TOTALS_1991 } from "./populationTotals1991";
 import { ObjectId } from "mongodb";
 import { calculatePolicyOptionAnnualCost } from "@/lib/budget/costs";
@@ -2459,7 +2461,8 @@ const NATIONAL_BUDGET_SEED_CONFIGS_1991: NationalBudgetSeedConfig[] = [
   // ── Nigeria — Babangida-era SAP (1991 baseline) ────────────────────────────
   // 1991 Nigeria was under military rule (Babangida), mid-Structural Adjustment
   // Programme. Oil revenue dominant; naira devalued heavily post-1986 SAP. GDP
-  // ~₦1.8T at 1991 current prices; inflation ~20% (SAP-driven). Figures are
+  // The legacy ₦1.8T model is rebased to the observed national anchor in
+  // getNationalBudgetSeedConfigsForPreset, preserving its fiscal shares. Figures are
   // plausible game-units rather than precise fiscal records (federal budgets
   // under military rule were opaque and heavily revised).
   {
@@ -5634,7 +5637,9 @@ export function getNationalBudgetSeedConfigsForPreset(preset: string): NationalB
   if (preset === "1979-default") return NATIONAL_BUDGET_SEED_CONFIGS_1979;
   if (preset === "1991-default") {
     return overlayNationalBudgetConfigs(
-      NATIONAL_BUDGET_SEED_CONFIGS_1991,
+      NATIONAL_BUDGET_SEED_CONFIGS_1991.map((config) =>
+        config.countryId === "NG" ? rebaseBudgetNominals(config, NG_1991_NOMINAL_GDP_NGN) : config
+      ),
       NATIONAL_BUDGET_SEED_CONFIGS_1979.filter((config) =>
         (["AT", "FI", "GR"] as string[]).includes(config.countryId)
       ).map((config) => ({

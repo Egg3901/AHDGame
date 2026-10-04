@@ -42,9 +42,17 @@ and checks retained Russian output in the same unit. This models territorial
 removal for the GDP consumer; it does not claim a new full dissolution journey.
 Existing 1953 and other-era tests protect their independent denominations.
 
-Forty-seven cases pass across seven suites, including eight new catalog cases
+Sixty-five cases pass across nine suites, including eight new catalog cases
 and one real Mongo consumer journey. The original six passing suites contribute
 46 cases; the unavailable fixture in the first Mongo attempt is not counted.
 The repaired fixture journey passes separately with two commands and 3,343
 reply bytes despite 100 KB unused payload per stored region. Scoped strict
 TypeScript, lint, formatting and blocking architecture checks also pass.
+
+The reset's real GDP reconciliation also qualifies against the national-budget
+resolver. Its legacy Nigerian 1.8-trillion model is rebased to the same observed
+GDP. Revenue, debt and expenditure nominals scale together to retain the model's
+existing fiscal shares; these are bounded fiscal estimates, not audited 1991
+fiscal observations. The real reset reconciler leaves the already-correct
+Nigerian and Soviet regional sums untouched. This closes the overwrite path
+that would otherwise restore the old Nigerian national estimate.
