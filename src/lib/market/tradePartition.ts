@@ -1,3 +1,7 @@
+/**
+ * Corporate market access depends on domestic demand and feasible foreign trade.
+ * buildCountryClearingBooks applies the shared supply, tariff-budget and embargo rules.
+ */
 import type { CountryId } from "@/lib/constants/countries";
 import type { CommodityType } from "@/lib/constants/commodities";
 import { COMMODITY_TYPES } from "@/lib/constants/commodities";
@@ -62,8 +66,13 @@ export function buildCountryClearingBooks(args: {
     exporter: CountryId,
     importer: CountryId
   ) => number | undefined;
+  importCostMultiplierFor?: (
+    commodity: CommodityType,
+    exporter: CountryId,
+    importer: CountryId
+  ) => number | undefined;
 }): CountryClearingBooks {
-  const { countries, nationalBalances, affinityFor, capUnitsFor } = args;
+  const { countries, nationalBalances, affinityFor, capUnitsFor, importCostMultiplierFor } = args;
 
   const books: CountryClearingBooks = new Map();
   for (const c of countries) {
@@ -88,6 +97,9 @@ export function buildCountryClearingBooks(args: {
       demand,
       affinity: (e, i) => affinityFor(commodity, e, i),
       capUnits: capUnitsFor ? (e, i) => capUnitsFor(commodity, e, i) : undefined,
+      importCostMultiplier: importCostMultiplierFor
+        ? (e, i) => importCostMultiplierFor(commodity, e, i)
+        : undefined,
     });
 
     for (const c of countries) {

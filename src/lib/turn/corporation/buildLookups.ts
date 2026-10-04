@@ -976,7 +976,7 @@ export async function buildCorporationLookups(
     const curtainedCountries = new Set<string>(
       COUNTRY_ORDER.filter((c) => isCurtained(c, curtainYear, curtainEnabled))
     );
-    const { affinityFor, capUnitsFor } = buildTradeAffinity({
+    const { affinityFor, capUnitsFor, importCostMultiplierFor } = buildTradeAffinity({
       ftaPairs: activeFtaPairs,
       blocsByCountry,
       tariffs: allTariffs,
@@ -988,6 +988,7 @@ export async function buildCorporationLookups(
       nationalBalances: nationalCommodityBalancesByCountry,
       affinityFor,
       capUnitsFor,
+      importCostMultiplierFor,
     });
   }
   const marketShareBySectorId = buildMarketShareBySectorId({

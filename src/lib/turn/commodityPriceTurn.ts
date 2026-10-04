@@ -717,7 +717,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   // blockading anybody, which is the common case.
   const blockadeClosure = await loadBlockadeClosure(db);
 
-  const { affinityFor, capUnitsFor } = buildTradeAffinity({
+  const { affinityFor, capUnitsFor, importCostMultiplierFor } = buildTradeAffinity({
     ftaPairs,
     blocsByCountry,
     tariffs: tariffDocs,
@@ -755,7 +755,13 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       byCountry
     );
 
-  const tradeClearing = clearAllCommodities(COUNTRY_ORDER, byCountry, affinityFor, capUnitsFor);
+  const tradeClearing = clearAllCommodities(
+    COUNTRY_ORDER,
+    byCountry,
+    affinityFor,
+    capUnitsFor,
+    importCostMultiplierFor
+  );
   // Reachable books, built from the SAME pre-convergence balances the clearing
   // ran on. `applyTradeConvergence` mutates `byCountry` in place on the next
   // line, so this cannot move below it: post-convergence an importer's demand

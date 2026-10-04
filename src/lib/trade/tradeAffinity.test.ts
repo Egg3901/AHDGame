@@ -51,6 +51,30 @@ describe("buildTradeAffinity", () => {
     );
   });
 
+  it("shares the FTA-neutral tariff evaluation with import cost", () => {
+    const tariffs = [{ countryId: "CN", scopeType: "economy_wide", rate: 20 } as Tariff];
+    const plain = buildTradeAffinity(ctx({ tariffs }));
+    expect(plain.importCostMultiplierFor("steel", "US", "CN")).toBeCloseTo(1.2);
+    const ftaPairs = new Set([ftaPairKey("US", "CN")]) as FtaPairSet;
+    const fta = buildTradeAffinity(ctx({ tariffs, ftaPairs }));
+    expect(fta.importCostMultiplierFor("steel", "US", "CN")).toBe(1);
+  });
+
+  it("scans tariff rows once when affinity and cost both inspect one route", () => {
+    const rows = [{ countryId: "CN", scopeType: "economy_wide", rate: 20 } as Tariff];
+    let scans = 0;
+    const tariffs = new Proxy(rows, {
+      get(target, property, receiver) {
+        if (property === Symbol.iterator) scans++;
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const policy = buildTradeAffinity(ctx({ tariffs }));
+    policy.affinityFor("steel", "US", "CN");
+    expect(policy.importCostMultiplierFor("steel", "US", "CN")).toBeCloseTo(1.2);
+    expect(scans).toBe(1);
+  });
+
   it("drags affinity down with an importer tariff", () => {
     // CN (importer) economy-wide tariff 20% on steel from US.
     const tariffs = [{ countryId: "CN", scopeType: "economy_wide", rate: 20 } as Tariff];

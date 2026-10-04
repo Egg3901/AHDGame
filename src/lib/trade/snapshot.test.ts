@@ -39,6 +39,27 @@ const baseInput = (
 });
 
 describe("buildTradeFlowSnapshot", () => {
+  it("forwards route import costs through both snapshot clearing APIs", () => {
+    const balances = byCountryOf([
+      ["US", { steel: [100, 0] }],
+      ["CN", { steel: [0, 100] }],
+    ]);
+    const snapshot = buildTradeFlowSnapshot({
+      ...baseInput(balances, new Map([["steel", { US: 2 }]]), new Map(), ["US", "CN"]),
+      importCostMultiplierFor: () => 1.25,
+    });
+    expect(snapshot.commodities.steel.flow.US.CN).toBeCloseTo(160);
+    const clearing = clearAllCommodities(
+      ["US", "CN"],
+      balances,
+      () => 1,
+      undefined,
+      () => 1.25
+    );
+    expect(clearing.get("steel")!.flow.US.CN).toBeCloseTo(80);
+    expect(clearing.get("steel")!.perCountry.CN.uncleared).toBeCloseTo(-20);
+  });
+
   it.each([
     "freight",
     "construction_services",
@@ -52,14 +73,26 @@ describe("buildTradeFlowSnapshot", () => {
         ["US", { [commodity]: [100, 0] }],
         ["CN", { [commodity]: [0, 100] }],
       ]);
-      const clearing = clearAllCommodities(["US", "CN"], balances, () => 1);
+      let costPolicyCalls = 0;
+      const clearing = clearAllCommodities(
+        ["US", "CN"],
+        balances,
+        () => 1,
+        undefined,
+        () => {
+          costPolicyCalls++;
+          return 1.5;
+        }
+      );
+      expect(costPolicyCalls).toBe(0);
       const result = clearing.get(commodity)!;
       expect(result.clearedVolume).toBe(0);
       expect(result.perCountry.US).toEqual({ exports: 0, imports: 0, net: 0, uncleared: 100 });
       expect(result.perCountry.CN).toEqual({ exports: 0, imports: 0, net: 0, uncleared: -100 });
-      const snapshot = buildTradeFlowSnapshot(
-        baseInput(balances, new Map(), new Map([[commodity, 10]]), ["US", "CN"])
-      );
+      const snapshot = buildTradeFlowSnapshot({
+        ...baseInput(balances, new Map(), new Map([[commodity, 10]]), ["US", "CN"]),
+        importCostMultiplierFor: () => 1.5,
+      });
       expect(snapshot.commodities[commodity]).toBeUndefined();
       expect(snapshot.world.clearedVolume).toBe(0);
     }

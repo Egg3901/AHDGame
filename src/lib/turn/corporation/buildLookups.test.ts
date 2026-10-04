@@ -8,6 +8,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { Bond, Corporation } from "@/lib/db/types";
+import { buildCorporationLookups } from "./buildLookups";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 
@@ -124,7 +125,6 @@ describe("buildCorporationLookups — bond holdings", () => {
   });
 
   it("includes sovereign bond holdings in bondsHeldByCorpId", async () => {
-    const { buildCorporationLookups } = await import("./buildLookups");
     const lookups = await buildCorporationLookups(db as unknown as Db);
 
     const positions = lookups.bondsHeldByCorpId.get(holderCorp._id.toString());
@@ -135,7 +135,6 @@ describe("buildCorporationLookups — bond holdings", () => {
   });
 
   it("excludes product output maps from sector reads while the product gate is off", async () => {
-    const { buildCorporationLookups } = await import("./buildLookups");
     await buildCorporationLookups(db as unknown as Db);
 
     const sectorFind = db.collectionMocks.corporateSectors.find;
@@ -152,7 +151,6 @@ describe("buildCorporationLookups — bond holdings", () => {
   });
 
   it("projects product output maps only when explicitly enabled", async () => {
-    const { buildCorporationLookups } = await import("./buildLookups");
     await buildCorporationLookups(db as unknown as Db, { productLinesV2Enabled: true });
 
     const sectorFind = db.collectionMocks.corporateSectors.find;
@@ -167,14 +165,12 @@ describe("buildCorporationLookups — bond holdings", () => {
   });
 
   it("does not query the v2 product project collection while the gate is off", async () => {
-    const { buildCorporationLookups } = await import("./buildLookups");
     await buildCorporationLookups(db as unknown as Db);
 
     expect(db.collectionMocks.manufacturingProductProjectsV2.find).not.toHaveBeenCalled();
   });
 
   it("reads active v2 projects only when explicitly enabled", async () => {
-    const { buildCorporationLookups } = await import("./buildLookups");
     await buildCorporationLookups(db as unknown as Db, { productLinesV2Enabled: true });
 
     expect(db.collectionMocks.manufacturingProductProjectsV2.find).toHaveBeenCalledWith(
@@ -184,7 +180,6 @@ describe("buildCorporationLookups — bond holdings", () => {
   });
 
   it("sovereign bond holdings contribute to bondAndImfPortfolioAnchorByCorpId", async () => {
-    const { buildCorporationLookups } = await import("./buildLookups");
     const lookups = await buildCorporationLookups(db as unknown as Db);
 
     // 50_000 units * $1000 face * 1.0 marketPrice (corporate)
@@ -196,7 +191,6 @@ describe("buildCorporationLookups — bond holdings", () => {
   });
 
   it("issuer-side bondsByCorpId still excludes sovereign bonds (credit rating uses corporate only)", async () => {
-    const { buildCorporationLookups } = await import("./buildLookups");
     const lookups = await buildCorporationLookups(db as unknown as Db);
 
     // Sovereign bond's synthetic issuer must NOT appear in bondsByCorpId — the
@@ -207,7 +201,6 @@ describe("buildCorporationLookups — bond holdings", () => {
   });
 
   it("issuedBondDebtByCorpId sums totalIssued for active corporate bonds", async () => {
-    const { buildCorporationLookups } = await import("./buildLookups");
     const lookups = await buildCorporationLookups(db as unknown as Db);
 
     // issuerCorp has one active corporate bond with totalIssued = 50_000_000
@@ -219,7 +212,6 @@ describe("buildCorporationLookups — bond holdings", () => {
     const natcorpIssuer = { ...issuerCorp, countryOwnerId: "US" };
     db.collectionMocks.corporations.find.mockReturnValue(makeCursor([holderCorp, natcorpIssuer]));
 
-    const { buildCorporationLookups } = await import("./buildLookups");
     const lookups = await buildCorporationLookups(db as unknown as Db);
 
     // Natcorp's bond debt must NOT contribute — government backstops principal.
@@ -239,7 +231,6 @@ describe("buildCorporationLookups — bond holdings", () => {
       makeCursor([corporateBond, sovereignBond, defaultedCorpBond])
     );
 
-    const { buildCorporationLookups } = await import("./buildLookups");
     const lookups = await buildCorporationLookups(db as unknown as Db);
 
     // Only the active 50M bond counts; the 30M defaulted bond is excluded.
@@ -260,7 +251,6 @@ describe("buildCorporationLookups — bond holdings", () => {
       preset: "1953-default",
     });
 
-    const { buildCorporationLookups } = await import("./buildLookups");
     const lookups = await buildCorporationLookups(db as unknown as Db);
 
     expect(lookups.exchangeRatesByCurrency.get("PLZ")).toBe(24);
@@ -297,7 +287,6 @@ describe("buildCorporationLookups — bond holdings", () => {
       ])
     );
 
-    const { buildCorporationLookups } = await import("./buildLookups");
     const lookups = await buildCorporationLookups(db as unknown as Db);
 
     expect(lookups.domesticCorpTaxRateByCountry.get("US")).toBe(20);
@@ -388,8 +377,9 @@ describe("buildCorporationLookups — sovereign default contagion FX normalizati
     }));
 
     vi.resetModules();
-    const { buildCorporationLookups } = await import("./buildLookups");
-    await buildCorporationLookups(db as unknown as Db);
+    const { buildCorporationLookups: buildLookupsWithContagionSpy } =
+      await import("./buildLookups");
+    await buildLookupsWithContagionSpy(db as unknown as Db);
 
     expect(captureSpy).toHaveBeenCalledTimes(1);
     const args = captureSpy.mock.calls[0][0] as {
