@@ -296,6 +296,12 @@ describe("runResearchExport", () => {
     expect(out.nextCursor).toBe("7:BB");
     expect(out.observedTurns).toEqual({ first: 7, last: 7, count: 1 });
     expect(out.units.missing).toContain("null");
+    expect(out.provenance).toMatchObject({
+      runId: "run-9",
+      seed: "seed-9",
+      codeVersion: "deadbeef",
+    });
+    expect(out.retention).toContain("world-raw-full");
     const filter = db.collectionMocks.countryTurnTelemetry.find.mock.calls.at(-1)?.[0];
     expect(filter.worldId).toBe("1991:iteration-1");
   });

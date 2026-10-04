@@ -38,6 +38,16 @@ export interface ResearchExport {
   schemaVersion: number;
   panel: ResearchQuery["panel"];
   worldId: string | null;
+  /** Run identity and effective feature manifest of the exporting database, when known. */
+  provenance: {
+    sourceClass: string | null;
+    runId: string | null;
+    seed: string | null;
+    codeVersion: string | null;
+    effectiveManifest: unknown;
+  };
+  /** Retention of the underlying rows; trade is bounded by the sourcing ledger window. */
+  retention: string;
   turnRange: { from: number; to: number };
   /** Retained turns actually present in the window; absence is not zero. */
   observedTurns: { first: number | null; last: number | null; count: number };
@@ -57,8 +67,16 @@ const CALC_VERSIONS = {
   securities: SECURITY_PANEL_CALC_VERSION,
 } as const;
 
+const RETENTION = {
+  "country-turn": "every turn retained for the life of the world (world-raw-full)",
+  "annual-fiscal": "derived from retained country-turn rows",
+  trade: "sourcing ledger window of the most recent SOURCING_FLOW_RETENTION_TURNS turns",
+  securities: "every turn retained for the life of the world (world-raw-full)",
+} as const;
+
 function envelope(
   query: ResearchQuery,
+  ctx: LongHorizonContext | null,
   worldId: string | null,
   turns: number[],
   rows: unknown[],
@@ -70,6 +88,14 @@ function envelope(
     schemaVersion: RESEARCH_TELEMETRY_SCHEMA_VERSION,
     panel: query.panel,
     worldId,
+    provenance: {
+      sourceClass: ctx?.sourceClass ?? null,
+      runId: ctx?.runId ?? null,
+      seed: ctx?.seed ?? null,
+      codeVersion: ctx?.codeVersion ?? null,
+      effectiveManifest: ctx?.effectiveManifest ?? null,
+    },
+    retention: RETENTION[query.panel],
     turnRange: { from: query.fromTurn, to: query.toTurn },
     observedTurns: {
       first: sorted[0] ?? null,
@@ -113,6 +139,7 @@ export async function runResearchExport(
         .toArray();
       return envelope(
         query,
+        ctx,
         worldId,
         turns.map((t) => t.turn),
         buildAnnualFiscalPanel(turns),
@@ -128,6 +155,7 @@ export async function runResearchExport(
     const last = page[page.length - 1];
     return envelope(
       query,
+      ctx,
       worldId,
       page.map((r) => r.turn),
       page,
@@ -148,6 +176,7 @@ export async function runResearchExport(
     const last = page[page.length - 1];
     return envelope(
       query,
+      ctx,
       worldId,
       page.map((r) => r.turn),
       page,
@@ -203,6 +232,7 @@ export async function runResearchExport(
   const last = page[page.length - 1];
   return envelope(
     query,
+    ctx,
     worldId,
     tradeRows.map((r) => r.turn),
     tradeRows.flatMap((row) => expandTradePanel(row)),
