@@ -81,6 +81,8 @@ interface BudgetData {
   currentYear?: number | null;
   /** GameConfig.commandEconomyEnabled. */
   commandEconomyEnabled?: boolean;
+  /** Live opt-in funded-cash view; legacy signed position stays separate. */
+  treasuryCashLedgerEnabled?: boolean;
 }
 
 const REVENUE_TO_TAX_BASE: Record<string, string> = {
@@ -1036,6 +1038,12 @@ export function NationalBudgetClient() {
               debtToGdp={budget.debtToGdpRatio}
               rating={budget.creditRating}
               treasuryReserve={treasuryBalance}
+              treasuryCashLedgerEnabled={isLive && data.treasuryCashLedgerEnabled === true}
+              treasuryCashLocal={budget.treasuryCashLocal ?? 0}
+              bankClaimsDueLocal={(budget.bankSovereignClaims ?? []).reduce(
+                (sum, claim) => sum + claim.amountLocal,
+                0
+              )}
               compare={compare}
               prev={prevFyPoint}
               toUsd={
