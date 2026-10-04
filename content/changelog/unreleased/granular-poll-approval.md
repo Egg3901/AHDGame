@@ -19,3 +19,4 @@ areas: [fullstack]
 - Project candidate approval through the election engine's demographic buckets and apply the same approval and NPP modifiers.
 - Explain that the uncertainty bands are illustrative because the projection does not sample respondents.
 - Use the translation catalog for the new uncertainty explanation.
+- Match incumbent tenure and presidential national influence to election tallies when projecting candidate support.

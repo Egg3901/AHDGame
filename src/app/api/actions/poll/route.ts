@@ -49,6 +49,13 @@ import { getElectionOpponents } from "@/lib/actions/electionOpponents";
 import { buildLiveTurnouts } from "@/lib/electionEngine/resolvedTurnout";
 import { getAllVoterArchetypeIds } from "@/lib/demographics/countryDemographics";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
+import type { CountryId } from "@/lib/constants/countries";
+import type { PersonalStatTenureContext } from "@/lib/electionEngine/rules/tenureRetention";
+import {
+  isHeadOfGovernmentRace,
+  resolvePresidentApproval,
+} from "@/lib/electionEngine/presidentialCoattail";
+import { getPresidentialConsecutiveTerms } from "@/lib/turn/election/presidentialTenureLedger";
 
 // Poll pricing lives in the shared rules module: quotePollAction is the single
 // source of truth the effect, validation and this route's debit all call.
@@ -480,6 +487,32 @@ export async function POST(request: NextRequest) {
     if (pollSnapshot && isGranularPollEnabled(gameState)) {
       try {
         const countryId = state.countryId ?? "US";
+        const isPresidentialGeneral =
+          electionContext != null &&
+          !electionContext.inPrimary &&
+          isHeadOfGovernmentRace(electionContext.electionType, countryId as CountryId);
+        const presidentialIncumbent = isPresidentialGeneral
+          ? await resolvePresidentApproval(db, countryId as CountryId)
+          : null;
+        const executiveConsecutiveTerms = isPresidentialGeneral
+          ? getPresidentialConsecutiveTerms(
+              gameState,
+              countryId as CountryId,
+              presidentialIncumbent?.partyId
+            )
+          : 0;
+        const incumbency: PersonalStatTenureContext | undefined =
+          electionContext?.incumbency || presidentialIncumbent
+            ? {
+                ...electionContext?.incumbency,
+                ...(presidentialIncumbent
+                  ? {
+                      executivePartyId: presidentialIncumbent.partyId,
+                      executiveConsecutiveTerms,
+                    }
+                  : {}),
+              }
+            : undefined;
         const preset = gameState?.preset ?? DEFAULT_SEED_PRESET;
         const era = eraForPreset(preset);
         // Live era clock — the poll must describe the SAME electorate the vote
@@ -497,23 +530,30 @@ export async function POST(request: NextRequest) {
             year: pollEraYear.year,
             startingYear: pollEraYear.startingYear,
             character: {
+              candidateId: electionContext?.candidateId,
+              party: character.party,
               economicPosition: character.policies.economic,
               socialPosition: character.policies.social,
               favorability: character.favorability,
               archetypeApprovals: character.archetypeApprovals,
               politicalInfluence: character.politicalInfluence ?? 0,
+              nationalInfluence: character.nationalInfluence,
             },
             opponents:
               electionContext?.opponents?.map((o) => ({
                 candidateId: o.candidateId,
                 name: o.name ?? o.candidateId,
+                party: o.party,
                 economicPosition: o.economicPosition,
                 socialPosition: o.socialPosition,
                 favorability: o.favorability,
                 archetypeApprovals: o.archetypeApprovals,
                 isNPP: o.isNPP,
                 politicalInfluence: o.politicalInfluence,
+                nationalInfluence: o.nationalInfluence,
               })) ?? [],
+            incumbency,
+            useNationalInfluenceForReach: isPresidentialGeneral,
           });
           pollSnapshot.granular = granularPayload;
         }

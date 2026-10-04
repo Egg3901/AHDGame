@@ -12,6 +12,7 @@ import { buildGranularElectorateSubstrate } from "@/lib/demographics/granularEle
 import { targetedAdBonuses } from "@/lib/campaignTargeting/rules";
 import type { EnrichedCandidate } from "@/lib/electionEngine/types";
 import { distributeVotesBySwingFlow } from "@/lib/electionEngine/voteDistributionSwingFlow";
+import { personalStatTenureRetentionForCandidate } from "@/lib/electionEngine/rules/tenureRetention";
 import type { DemographicCategory, StateDemographics } from "@/lib/db/types";
 
 const SOURCE_REVISION = "98ffb6ded3a4110e94598e98ce582ad2c0ba9eeb";
@@ -42,16 +43,41 @@ const legacyDemographics = {
 } as unknown as StateDemographics;
 
 const offices = [
-  { label: "governor", options: { votingSystem: "fptp" as const } },
-  { label: "house", options: { votingSystem: "fptp" as const } },
+  { label: "governor", options: { votingSystem: "fptp" as const }, incumbency: undefined },
+  {
+    label: "house",
+    options: {
+      votingSystem: "fptp" as const,
+      houseIncumbentTenureTermsByCandidateId: new Map([["player", 6]]),
+    },
+    incumbency: { houseTenureTermsByCandidateId: new Map([["player", 6]]) },
+  },
+  {
+    label: "senate",
+    options: {
+      votingSystem: "fptp" as const,
+      legislativeIncumbentPartyId: "party-player",
+      legislativeIncumbentTenureTerms: 7,
+    },
+    incumbency: {
+      legislativePartyId: "party-player",
+      legislativeTenureTermsSought: 7,
+    },
+  },
   {
     label: "president",
     options: {
-      votingSystem: "rcv" as const,
+      votingSystem: "fptp" as const,
       useAveragedPositions: true,
       partyPositionWeight: 1 / 3,
       useNationalInfluenceForReach: true,
+      incumbentPartyId: "party-player",
+      // Zeroes the separate approval shield/drag so this fixture isolates
+      // personal-stat tenure retention, the subject of #2334 parity.
+      incumbentApproval: 46,
+      incumbentConsecutiveTerms: 6,
     },
+    incumbency: { executivePartyId: "party-player", executiveConsecutiveTerms: 6 },
   },
 ] as const;
 const actorMixes = ["human-human", "human-npp"] as const;
@@ -88,6 +114,7 @@ function makeCandidate(
     nationalInfluence: 50,
     support: 50,
     archetypeApprovals,
+    nationalInfluence: 50,
     infamy: 0,
   };
 }
@@ -113,6 +140,8 @@ const rows: string[] = [
   "source_revision,office,actor_mix,favorability_case,campaign_phase,poll_pct,vote_pct,delta_pp,undecided_pct",
 ];
 let maxAbsDelta = 0;
+let tenureComparisonCount = 0;
+let maxTenureRetentionDelta = 0;
 for (const office of offices) {
   for (const actorMix of actorMixes) {
     for (const favorability of favorabilityCases) {
@@ -187,27 +216,86 @@ for (const office of offices) {
           stateId,
           preset: "2019-default",
           character: {
+            candidateId: player.candidateId,
+            party: player.party,
             economicPosition: player.charEP,
             socialPosition: player.charSP,
             favorability: player.favorability,
             archetypeApprovals: player.archetypeApprovals,
             politicalInfluence: player.politicalInfluence,
+            nationalInfluence: player.nationalInfluence,
           },
           opponents: [
             {
               candidateId: opponent.candidateId,
               name: opponent.characterName,
+              party: opponent.party,
               economicPosition: opponent.charEP,
               socialPosition: opponent.charSP,
               favorability: opponent.favorability,
               archetypeApprovals: opponent.archetypeApprovals,
               politicalInfluence: opponent.politicalInfluence,
+              nationalInfluence: opponent.nationalInfluence,
               isNPP: opponent.isNPP,
             },
           ],
+          incumbency: office.incumbency,
+          useNationalInfluenceForReach: office.label === "president",
         });
         const pollResult = aggregatePollPlayerShare(poll);
 
+        const voteOptions = {
+          isGeneralElection: true,
+          hasPlayerInRace: true,
+          countryId,
+          currentStateId: stateId,
+          ...office.options,
+        };
+        const pollIncumbency = office.incumbency;
+        const voteIncumbency = {
+          executivePartyId:
+            "incumbentPartyId" in voteOptions ? voteOptions.incumbentPartyId : undefined,
+          executiveConsecutiveTerms:
+            "incumbentConsecutiveTerms" in voteOptions
+              ? voteOptions.incumbentConsecutiveTerms
+              : undefined,
+          legislativePartyId:
+            "legislativeIncumbentPartyId" in voteOptions
+              ? voteOptions.legislativeIncumbentPartyId
+              : undefined,
+          legislativeTenureTermsSought:
+            "legislativeIncumbentTenureTerms" in voteOptions
+              ? voteOptions.legislativeIncumbentTenureTerms
+              : undefined,
+          houseTenureTermsByCandidateId:
+            "houseIncumbentTenureTermsByCandidateId" in voteOptions
+              ? voteOptions.houseIncumbentTenureTermsByCandidateId
+              : undefined,
+        };
+        for (const candidate of [player, opponent]) {
+          const candidateIdentity = {
+            candidateId: candidate.candidateId,
+            partyId: candidate.party,
+          };
+          const pollRetention = personalStatTenureRetentionForCandidate(
+            candidateIdentity,
+            pollIncumbency
+          );
+          const voteRetention = personalStatTenureRetentionForCandidate(
+            candidateIdentity,
+            voteIncumbency
+          );
+          tenureComparisonCount += 1;
+          maxTenureRetentionDelta = Math.max(
+            maxTenureRetentionDelta,
+            Math.abs(pollRetention - voteRetention)
+          );
+          assert.equal(
+            pollRetention,
+            voteRetention,
+            `${office.label}/${candidate.candidateId}: poll and vote tenure retention disagree`
+          );
+        }
         const voteResult = distributeVotesBySwingFlow(
           tallySubstrate.enriched,
           tallySubstrate.totalPool,
@@ -216,13 +304,7 @@ for (const office of offices) {
           tallySubstrate.demographics,
           tallySubstrate.categories,
           new Map(),
-          {
-            isGeneralElection: true,
-            hasPlayerInRace: true,
-            countryId,
-            currentStateId: stateId,
-            ...office.options,
-          }
+          voteOptions
         );
         const votePct = voteResult.sharesPct.player;
         const delta = pollResult.playerPct - votePct;
@@ -237,7 +319,17 @@ for (const office of offices) {
 
 console.log(rows.join("\n"));
 console.log(`max_abs_delta_pp,${maxAbsDelta.toFixed(3)}`);
-assert.ok(
-  maxAbsDelta <= 0.5,
-  `maximum poll/vote difference ${maxAbsDelta.toFixed(3)}pp exceeds 0.5pp`
+console.log(`personal_stat_tenure_comparisons,${tenureComparisonCount}`);
+console.log(`personal_stat_tenure_max_delta,${maxTenureRetentionDelta.toFixed(3)}`);
+const originalCasesMaxAbsDelta = Number(
+  rows
+    .slice(1)
+    .filter((row) => row.includes(",governor,"))
+    .map((row) => Math.abs(Number(row.split(",")[7])))
+    .reduce((max, delta) => Math.max(max, delta), 0)
 );
+assert.ok(
+  originalCasesMaxAbsDelta <= 0.5,
+  `original non-incumbent cases differ by ${originalCasesMaxAbsDelta.toFixed(3)}pp, above 0.5pp`
+);
+assert.equal(maxTenureRetentionDelta, 0, "poll/vote personal-stat retention inputs must match");

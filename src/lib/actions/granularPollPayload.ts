@@ -15,7 +15,11 @@ import { eraIdForYear } from "@/lib/seeds/eraInterpolation";
 import { calcAppeal } from "@/lib/utils/demographicAppeal";
 import { NPP_GENERAL_WEIGHT_MULTIPLIER } from "@/lib/electionEngine/constants";
 import {
-  applyCandidateApprovalWeight,
+  personalStatTenureRetentionForCandidate,
+  type PersonalStatTenureContext,
+} from "@/lib/electionEngine/rules/tenureRetention";
+import {
+  applyCandidatePersonalVoteWeight,
   projectCandidateApprovalBuckets,
 } from "./granularPollPayload/rules";
 import {
@@ -54,6 +58,7 @@ export interface GranularPollPayload {
 /** Candidate inputs needed to compute per-cell appeal. */
 export interface GranularPollCandidate {
   candidateId: string;
+  party?: string;
   name: string;
   economicPosition: number;
   socialPosition: number;
@@ -62,6 +67,7 @@ export interface GranularPollCandidate {
   /** Vote-engine NPC general-election penalty; granular polls always include a player. */
   isNPP?: boolean;
   politicalInfluence: number;
+  nationalInfluence?: number;
 }
 
 /** Player + opponent inputs for {@link buildGranularPollPayload}. */
@@ -74,14 +80,22 @@ export interface GranularPollBuilderInput {
   stateId?: string;
   /** Player candidate data. */
   character: {
+    /** Active electionCandidates._id, needed for multi-seat House tenure. */
+    candidateId?: string;
+    party?: string;
     economicPosition: number;
     socialPosition: number;
     favorability?: number;
     archetypeApprovals?: Record<string, number>;
     politicalInfluence: number;
+    nationalInfluence?: number;
   };
   /** Opponent candidates (empty when no active race). */
   opponents: GranularPollCandidate[];
+  /** Same officeholder tenure inputs consumed by the vote engine. */
+  incumbency?: PersonalStatTenureContext;
+  /** Presidential general tallies use national rather than state influence for reach. */
+  useNationalInfluenceForReach?: boolean;
   /** Baseline Layer-1 turnout rates by dimension. */
   turnoutRates: Record<GranularDim, Record<string, number>>;
   /**
@@ -115,14 +129,22 @@ export interface GranularPollForStateInput {
   startingYear?: number | null;
   /** Player candidate data. */
   character: {
+    /** Active electionCandidates._id, needed for multi-seat House tenure. */
+    candidateId?: string;
+    party?: string;
     economicPosition: number;
     socialPosition: number;
     favorability?: number;
     archetypeApprovals?: Record<string, number>;
     politicalInfluence: number;
+    nationalInfluence?: number;
   };
   /** Opponent candidates (empty when no active race). */
   opponents: GranularPollCandidate[];
+  /** Same officeholder tenure inputs consumed by the vote engine. */
+  incumbency?: PersonalStatTenureContext;
+  /** Presidential general tallies use national rather than state influence for reach. */
+  useNationalInfluenceForReach?: boolean;
 }
 
 /**
@@ -169,7 +191,9 @@ function computeCandidateShares(
   character: GranularPollBuilderInput["character"],
   opponents: GranularPollCandidate[],
   campaign?: CampaignPollProjection,
-  countryId = "US"
+  countryId = "US",
+  incumbency?: PersonalStatTenureContext,
+  useNationalInfluenceForReach = false
 ): Record<string, GranularCandidateShare> {
   const candidateShares: Record<string, GranularCandidateShare> = {};
   const characterApprovalBuckets = projectCandidateApprovalBuckets(
@@ -184,39 +208,51 @@ function computeCandidateShares(
   );
 
   for (const cell of cells) {
+    const characterTenureRetention = personalStatTenureRetentionForCandidate(
+      { candidateId: character.candidateId ?? "poll-player", partyId: character.party },
+      incumbency
+    );
     const rawYouAppeal = calcAppeal(
       cell.economicLean,
       cell.socialLean,
       character.economicPosition,
       character.socialPosition,
-      character.politicalInfluence ?? 0,
+      0,
       false
     );
     const youAppeal =
-      applyCandidateApprovalWeight(
+      applyCandidatePersonalVoteWeight(
         rawYouAppeal,
         character.favorability,
+        useNationalInfluenceForReach ? character.nationalInfluence : character.politicalInfluence,
+        characterTenureRetention,
         characterApprovalBuckets,
         cell.buckets
       ) *
       (1 + (campaign?.bonusesByCandidate[campaign.myCandidateId]?.[cell.id] ?? 0));
 
     const opponentEntries = opponents.map((opp) => {
+      const opponentTenureRetention = personalStatTenureRetentionForCandidate(
+        { candidateId: opp.candidateId, partyId: opp.party },
+        incumbency
+      );
       const rawAppeal = calcAppeal(
         cell.economicLean,
         cell.socialLean,
         opp.economicPosition,
         opp.socialPosition,
-        opp.politicalInfluence ?? 0,
+        0,
         false
       );
       return {
         id: opp.candidateId,
         name: opp.name,
         appeal:
-          applyCandidateApprovalWeight(
+          applyCandidatePersonalVoteWeight(
             rawAppeal,
             opp.favorability,
+            useNationalInfluenceForReach ? opp.nationalInfluence : opp.politicalInfluence,
+            opponentTenureRetention,
             opponentApprovalBuckets.get(opp.candidateId) ?? {},
             cell.buckets
           ) *
@@ -262,6 +298,8 @@ export function buildGranularPollPayload({
   stateId,
   character,
   opponents,
+  incumbency,
+  useNationalInfluenceForReach,
   turnoutRates,
   positionsOverride,
 }: GranularPollBuilderInput): GranularPollPayload {
@@ -284,7 +322,15 @@ export function buildGranularPollPayload({
 
   const dims = [...GRANULAR_DIMENSIONS];
   const dimLabels = Object.fromEntries(dims.map((d) => [d, prettifyDimName(d)]));
-  const candidateShares = computeCandidateShares(cells, character, opponents, undefined, "US");
+  const candidateShares = computeCandidateShares(
+    cells,
+    character,
+    opponents,
+    undefined,
+    "US",
+    incumbency,
+    useNationalInfluenceForReach
+  );
 
   return { dims, dimLabels, cells, candidateShares };
 }
@@ -306,6 +352,8 @@ export function buildGranularPollPayloadForState({
   character,
   opponents,
   campaign,
+  incumbency,
+  useNationalInfluenceForReach,
 }: GranularPollForStateInput): GranularPollPayload {
   if (campaign) {
     const dims = [...new Set(campaign.cells.flatMap((cell) => Object.keys(cell.buckets)))];
@@ -318,7 +366,9 @@ export function buildGranularPollPayloadForState({
         character,
         opponents,
         campaign,
-        countryId
+        countryId,
+        incumbency,
+        useNationalInfluenceForReach
       ),
     };
   }
@@ -344,6 +394,8 @@ export function buildGranularPollPayloadForState({
       stateId,
       character,
       opponents,
+      incumbency,
+      useNationalInfluenceForReach,
       turnoutRates:
         year != null
           ? getUsTurnoutRatesForYear(stateId, year, { startingYear: startingYear ?? null })
@@ -380,7 +432,15 @@ export function buildGranularPollPayloadForState({
   });
 
   const dimLabels = Object.fromEntries(dimNames.map((d) => [d, prettifyDimName(d)]));
-  const candidateShares = computeCandidateShares(cells, character, opponents, undefined, countryId);
+  const candidateShares = computeCandidateShares(
+    cells,
+    character,
+    opponents,
+    undefined,
+    countryId,
+    incumbency,
+    useNationalInfluenceForReach
+  );
 
   return { dims: [...dimNames], dimLabels, cells, candidateShares };
 }

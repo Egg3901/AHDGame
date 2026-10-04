@@ -215,6 +215,45 @@ describe("buildGranularPollPayload", () => {
 });
 
 describe("buildGranularPollPayloadForState", () => {
+  it("applies the same personal-stat tenure retention to incumbent poll shares", () => {
+    const common = {
+      countryId: "US",
+      stateId: "CT",
+      preset: "2019-default",
+      character: {
+        candidateId: "candidate-incumbent",
+        party: "party-a",
+        economicPosition: 0,
+        socialPosition: 0,
+        favorability: 80,
+        politicalInfluence: 80,
+      },
+      opponents: [
+        makeOpponent({
+          candidateId: "candidate-challenger",
+          party: "party-b",
+          economicPosition: 0,
+          socialPosition: 0,
+          favorability: 50,
+          politicalInfluence: 80,
+        }),
+      ],
+    };
+    const baseline = buildGranularPollPayloadForState(common);
+    const tenured = buildGranularPollPayloadForState({
+      ...common,
+      incumbency: {
+        executivePartyId: "party-a",
+        executiveConsecutiveTerms: 6,
+      },
+    });
+
+    const baselineShare = baseline.candidateShares[baseline.cells[0].id].you;
+    const tenuredShare = tenured.candidateShares[tenured.cells[0].id].you;
+    expect(tenuredShare).toBeLessThan(baselineShare);
+    expect(tenuredShare).toBeGreaterThan(0);
+  });
+
   it("derives cells and candidate shares for a US state via preset", () => {
     const payload = buildGranularPollPayloadForState({
       countryId: "US",

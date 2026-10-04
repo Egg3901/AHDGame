@@ -10,6 +10,8 @@ import { getElectionOpponents } from "@/lib/actions/electionOpponents";
 import { projectCampaignPoll } from "@/lib/campaignTargeting/poll";
 import { isGranularPollEnabled } from "@/lib/demographics/granularPollFlag";
 import { buildGranularPollPayloadForState } from "@/lib/actions/granularPollPayload";
+import { getGameState } from "@/lib/gameState";
+import { resolvePresidentApproval } from "@/lib/electionEngine/presidentialCoattail";
 import { POST } from "./route";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
@@ -22,7 +24,12 @@ vi.mock("@/lib/api/rateLimit", () => ({
   rateLimitResponse: vi.fn(),
 }));
 vi.mock("@/lib/currency/featureFlag", () => ({ isForexEnabled: async () => false }));
-vi.mock("@/lib/gameState", () => ({ getGameState: async () => ({ currentTurn: 10 }) }));
+vi.mock("@/lib/gameState", () => ({ getGameState: vi.fn(async () => ({ currentTurn: 10 })) }));
+vi.mock("@/lib/electionEngine/presidentialCoattail", () => ({
+  isHeadOfGovernmentRace: (type: string, countryId: string) =>
+    type === "president" && countryId === "US",
+  resolvePresidentApproval: vi.fn(async () => null),
+}));
 vi.mock("@/lib/demographics/granularPollFlag", () => ({
   isGranularPollEnabled: vi.fn(async () => false),
 }));
@@ -85,6 +92,7 @@ describe("commissioning a campaign-aware poll", () => {
       electionId: new ObjectId().toString(),
       electionType: "senate",
       state: "CA",
+      candidateId: "mine-candidate",
       campaignRulesVersion: 1,
       inPrimary: false,
       opponents: [],
@@ -125,6 +133,11 @@ describe("commissioning a campaign-aware poll", () => {
       electionId: new ObjectId().toString(),
       electionType: "senate",
       state: "CA",
+      candidateId: "mine-candidate",
+      incumbency: {
+        legislativePartyId: "9",
+        legislativeTenureTermsSought: 6,
+      },
       campaignRulesVersion: 1,
       inPrimary: false,
       opponents: [
@@ -151,17 +164,67 @@ describe("commissioning a campaign-aware poll", () => {
     expect(buildGranularPollPayloadForState).toHaveBeenCalledWith(
       expect.objectContaining({
         character: expect.objectContaining({
+          candidateId: "mine-candidate",
           favorability: character.favorability,
+          party: character.party,
           archetypeApprovals: character.archetypeApprovals,
         }),
         opponents: [
           expect.objectContaining({
             candidateId: "npp-1",
+            party: "9",
             favorability: 34,
             archetypeApprovals: { retirees: -16, "age:senior": 6 },
             isNPP: true,
           }),
         ],
+        incumbency: {
+          legislativePartyId: "9",
+          legislativeTenureTermsSought: 6,
+        },
+      })
+    );
+  });
+
+  it("forwards the authoritative presidential tenure ledger to granular polls", async () => {
+    const character = makeCharacter({
+      funds: 100_000,
+      actions: 10,
+      party: "1",
+      nationalInfluence: 72,
+      stats: { intellect: 5.5 } as Character["stats"],
+    });
+    db.collection("characters").findOne.mockResolvedValue(character);
+    vi.mocked(getGameState).mockResolvedValue({
+      currentTurn: 10,
+      presidentialTenureByCountry: { US: { party: "1", consecutiveTerms: 6 } },
+    } as never);
+    vi.mocked(resolvePresidentApproval).mockResolvedValue({ partyId: "1", approval: 50 });
+    vi.mocked(isGranularPollEnabled).mockResolvedValue(true);
+    vi.mocked(getElectionOpponents).mockResolvedValue({
+      electionId: new ObjectId().toString(),
+      electionType: "president",
+      state: "US",
+      candidateId: "presidential-candidate",
+      inPrimary: false,
+      opponents: [],
+    });
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(200);
+    expect(buildGranularPollPayloadForState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        character: expect.objectContaining({
+          candidateId: "presidential-candidate",
+          party: "1",
+          nationalInfluence: 72,
+        }),
+        incumbency: {
+          executivePartyId: "1",
+          executiveConsecutiveTerms: 6,
+        },
+        useNationalInfluenceForReach: true,
       })
     );
   });
