@@ -657,6 +657,49 @@ describe("resetGameWorld", () => {
     expect(Object.keys(set).filter((k) => k in (unset ?? {}))).toEqual([]);
   });
 
+  it("clears the previous world's European institutions and euro settlement", async () => {
+    // Outgoing world: a progressed save with its own European settlement. A
+    // fresh 1991 world must start as the Community with no euro area.
+    db.collection("gameState");
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      _id: "current",
+      currentTurn: 1262,
+      startingYear: 1953,
+      europeanIntegration: {
+        stage: "union",
+        source: "legacy-settlement",
+        establishedTurn: 1262,
+        ratifications: {},
+      },
+      eurozoneEnabled: true,
+      euroAdoptedCountries: ["DE", "IE"],
+      euroAdoptionAuthorizations: { DE: { billId: "b1", turn: 900 } },
+      euroMonetaryUnion: { authorityId: "ECB", revision: 1, members: {} },
+    });
+
+    await resetGameWorld(db as never, {
+      deleteProfiles: true,
+      preset: "1991-default",
+      seedHistorical: false,
+    });
+
+    const currentUpdate = db.collectionMocks.gameState.updateOne.mock.calls.find(
+      (c) => (c[0] as { _id?: string })?._id === "current"
+    );
+    const unset = (currentUpdate![1] as { $unset?: Record<string, string> }).$unset;
+    for (const key of [
+      "europeanIntegration",
+      "eurozoneEnabled",
+      "euroAdoptedCountries",
+      "euroAdoptionAuthorizations",
+      "euroMonetaryUnion",
+    ]) {
+      expect(unset?.[key], `gameState.${key} must be unset by the reset`).toBe("");
+    }
+    const set = (currentUpdate![1] as { $set?: Record<string, unknown> }).$set ?? {};
+    expect(Object.keys(set).filter((k) => k in (unset ?? {}))).toEqual([]);
+  });
+
   it("removes squatter documents from gameState without touching `current`", async () => {
     await resetGameWorld(db as never, {
       deleteProfiles: true,

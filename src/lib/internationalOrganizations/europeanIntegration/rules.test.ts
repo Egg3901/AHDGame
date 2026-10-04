@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   decideBackgroundMaastricht,
+  isCarriedOverEuropeanIntegration,
   canRatifyMaastricht,
   COMMUNITY_MEMBERS_1991,
   recordEuropeanRatification,
@@ -116,6 +117,17 @@ describe("European treaty decisions", () => {
         members: COMMUNITY_MEMBERS_1991.filter((id) => id !== "UK"),
       }).stage
     ).toBe("union");
+  });
+});
+
+describe("carried-over European records", () => {
+  it("flags only a record established after the world's current turn", () => {
+    expect(isCarriedOverEuropeanIntegration({ ...initial, establishedTurn: 1262 }, 1)).toBe(true);
+    expect(isCarriedOverEuropeanIntegration({ ...initial, establishedTurn: 1 }, 1)).toBe(false);
+    expect(isCarriedOverEuropeanIntegration({ ...initial, establishedTurn: 0 }, 400)).toBe(false);
+    expect(isCarriedOverEuropeanIntegration({ ...initial, establishedTurn: 5 }, Number.NaN)).toBe(
+      false
+    );
   });
 });
 

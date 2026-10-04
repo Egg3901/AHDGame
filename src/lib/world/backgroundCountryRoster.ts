@@ -1,4 +1,4 @@
-import { ALIGNMENT_ROSTER, existsAt, statusAt } from "@/lib/constants/alignmentRoster";
+import { ALIGNMENT_ROSTER, existsAt, nameAt, statusAt } from "@/lib/constants/alignmentRoster";
 import { getStartingYearForPreset } from "@/lib/constants/turnTime";
 import type {
   WorldEntityManifestEntry,
@@ -52,7 +52,7 @@ const SUCCESSOR_POLITIES = [
   ["HR", "Croatia", 1992, "europe", ["191"]],
   ["YF", "Federal Republic of Yugoslavia", 1992, "europe", ["688", "499"]],
   ["BA", "Bosnia and Herzegovina", 1993, "europe", ["070"]],
-  ["MK", "North Macedonia", 1993, "europe", ["807"]],
+  ["MK", "Macedonia", 1993, "europe", ["807"]],
   ["CZ2", "Czechia", 1993, "europe", ["203"]],
   ["SK", "Slovakia", 1993, "europe", ["703"]],
   ["ER", "Eritrea", 1994, "africa", ["232"]],
@@ -294,7 +294,7 @@ export function expandManifestWithBackgroundCountries(
       backgroundEntry({
         presetId: manifest.presetId,
         entityId: row.key,
-        displayName: row.name,
+        displayName: nameAt(row.key, year, row.name),
         region: regionFor(row.key),
         mapFeatureIds: row.iso,
       })
@@ -318,7 +318,7 @@ export function expandManifestWithBackgroundCountries(
     const entry = backgroundEntry({
       presetId: manifest.presetId,
       entityId,
-      displayName,
+      displayName: nameAt(entityId, year, displayName),
       region,
       mapFeatureIds,
     });

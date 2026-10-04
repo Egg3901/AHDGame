@@ -140,6 +140,16 @@ export const STALE_PROGRESS_GAME_STATE_UNSET: Readonly<Record<string, "">> = Obj
   // Counts terms served per country; the previous world's counts would term-limit
   // brand-new presidents in the new one.
   presidentialTenureByCountry: "",
+  // European institutional stage and monetary settlement belong to the world
+  // that made them. Carrying them forward gave a fresh 1991 world the previous
+  // world's settlement (no European Community roster) or a pre-1999 euro area.
+  // The seeders re-derive each from the new preset: seedInternationalOrganizations
+  // initializes europeanIntegration and seedForex sets the era's euro posture.
+  europeanIntegration: "",
+  eurozoneEnabled: "",
+  euroAdoptedCountries: "",
+  euroAdoptionAuthorizations: "",
+  euroMonetaryUnion: "",
 });
 
 interface ResetGameWorldOptions {
