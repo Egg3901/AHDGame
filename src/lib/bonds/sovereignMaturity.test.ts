@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { Db } from "mongodb";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
-import { settleFundedSovereignBondMaturity, settleSovereignBondMaturity } from "./sovereign";
+import {
+  freezeFundedSovereignBondMaturityQuote,
+  settleFundedSovereignBondMaturity,
+  settleSovereignBondMaturity,
+} from "./sovereign";
 import { ObjectId } from "mongodb";
 import type { Bond } from "@/lib/db/types/bond";
 
@@ -24,6 +28,101 @@ function setup(treasuryBalance = 100000, principal = 3000) {
 const bond = { countryId: "US", currencyCode: "USD", totalIssued: 3000, couponRate: 0 } as const;
 
 describe("sovereign maturity cash and debt", () => {
+  it("applies concurrent bond debt deltas without losing either maturity", async () => {
+    const memory = setup(100000, 2000);
+    const budgetRow = memory.collection("federalBudget").docs[0] as {
+      treasuryCashLocal: number;
+      spending: { debtInterest: number };
+    };
+    budgetRow.treasuryCashLocal = 2000;
+    budgetRow.spending.debtInterest = 100;
+    const firstHolder = new ObjectId();
+    const secondHolder = new ObjectId();
+    const firstBond = {
+      _id: new ObjectId(),
+      ...bond,
+      issuerType: "sovereign",
+      totalIssued: 1000,
+      couponRate: 5,
+      maturityTurn: 10,
+      matured: false,
+      defaulted: false,
+      holders: [{ characterId: firstHolder, units: 1 }],
+      publicFloat: 0,
+    } as unknown as Bond;
+    const secondBond = {
+      ...firstBond,
+      _id: new ObjectId(),
+      holders: [{ characterId: secondHolder, units: 1 }],
+    } as unknown as Bond;
+    memory.seed("bonds", [firstBond, secondBond] as unknown as Record<string, unknown>[]);
+    memory.seed("characters", [
+      { _id: firstHolder, cashOnHand: 0 },
+      { _id: secondHolder, cashOnHand: 0 },
+    ]);
+    await Promise.all(
+      [firstBond, secondBond].map((maturingBond) =>
+        freezeFundedSovereignBondMaturityQuote(memory as unknown as Db, {
+          bond: maturingBond,
+          dueTurn: 10,
+          currencyCode: "USD",
+          treasuryLocalPerAnchor: 1,
+          nonBankRepaymentLocal: 1000,
+          holderLegs: [
+            {
+              collection: "characters",
+              filter: { _id: maturingBond.holders[0]!.characterId },
+              path: "cashOnHand",
+              amount: 1000,
+              currencyCode: "USD",
+              localPerAnchor: 1,
+              note: "Concurrent bond holder payout",
+            },
+          ],
+          now: new Date("2026-10-04T00:00:00Z"),
+        })
+      )
+    );
+    const settle = (maturingBond: Bond) =>
+      settleFundedSovereignBondMaturity(memory as unknown as Db, {
+        bond: maturingBond,
+        turn: 10,
+        dueTurn: 10,
+        currencyCode: "USD",
+        treasuryLocalPerAnchor: 1,
+        nonBankRepaymentLocal: 1000,
+        holderLegs: [
+          {
+            collection: "characters",
+            filter: { _id: maturingBond.holders[0]!.characterId },
+            path: "cashOnHand",
+            amount: 1000,
+            currencyCode: "USD",
+            localPerAnchor: 1,
+            note: "Concurrent bond holder payout",
+          },
+        ],
+        now: new Date("2026-10-04T00:00:00Z"),
+      });
+
+    const results = await Promise.all([settle(firstBond), settle(secondBond)]);
+    expect(
+      results.map((result) => ({ status: result?.status, error: result?.error, key: result?.key }))
+    ).toEqual([
+      { status: "applied", error: undefined, key: expect.any(String) },
+      { status: "applied", error: undefined, key: expect.any(String) },
+    ]);
+
+    expect(memory.collection("federalBudget").docs[0]).toMatchObject({
+      treasuryCashLocal: 0,
+      debt: { principal: 0 },
+      spending: { debtInterest: 0, total: 0 },
+      surplus: 100,
+    });
+    expect(memory.collection("bonds").docs).toHaveLength(2);
+    expect(memory.collection("bonds").docs.every((row) => row.matured === true)).toBe(true);
+  });
+
   it("pays principal from cash and retires the independent debt stock", async () => {
     const memory = setup();
     expect(await settleSovereignBondMaturity(memory as unknown as Db, bond)).toEqual({
@@ -302,8 +401,9 @@ describe("funded sovereign maturity receipt", () => {
     });
     expect(memory.collection("bankMoneyMoves").docs).toHaveLength(3);
     expect(
-      memory.collection("bankMoneyMoves").docs
-        .filter((row) => String(row._id).includes(":fund:"))
+      memory
+        .collection("bankMoneyMoves")
+        .docs.filter((row) => String(row._id).includes(":fund:"))
         .map((row) => row.status)
     ).toEqual(["rejected", "applied"]);
   });

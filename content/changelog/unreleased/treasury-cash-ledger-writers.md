@@ -21,5 +21,6 @@ areas: [backend, engine]
   organization funds, peace indemnities, selected budget spending, and crisis
   guarantee refunds. Cross-currency transfers use frozen settlement valuations.
 - Due sovereign bonds keep one immutable due-turn holder quote. Guarded cash
-  funding retries after shortfalls, payout uses the frozen native holder legs,
-  and the bond retires only after cash and holder updates complete.
+  funding retries after shortfalls, bank epoch payouts keep a due-claim witness,
+  payout resumes its exact receipt and uses the frozen native holder legs, and
+  the bond retires only after cash and holder updates complete.

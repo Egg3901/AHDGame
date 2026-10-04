@@ -33,6 +33,7 @@ import {
   getBondCountryId,
   isCorporateBond,
   issueScheduledSovereignBondSeries,
+  freezeFundedSovereignBondMaturityQuote,
   settleFundedSovereignBondMaturity,
   settleSovereignBondMaturity,
 } from "@/lib/bonds/sovereign";
@@ -1086,42 +1087,6 @@ export async function processBondTurn(
       const totalRepaymentLocal = totalUnits * BOND_UNIT_FACE_VALUE;
       const nonBankRepaymentLocal = Math.max(0, totalRepaymentLocal - bankAmountLocal);
 
-      const newClaims = await addBankMaturityClaims(db, {
-        budgetId,
-        countryId: bond.countryId,
-        currencyCode: bondCcy,
-        turn,
-        bond,
-        anchorRate: treasuryValuation.anchorRate,
-        treasuryCashLedgerEnabled: true,
-      });
-      let budgetWithClaims = await db
-        .collection<FederalBudget>("federalBudget")
-        .findOne({ _id: budgetId }, { projection: { _id: 1, countryId: 1, bankSovereignClaims: 1 } });
-      if (budgetWithClaims?.bankSovereignClaims?.length) {
-        const dueClaims = budgetWithClaims.bankSovereignClaims.filter(
-          (claim) => claim.kind === "maturity" && claim.bondId === bond._id.toHexString()
-        );
-        if (dueClaims.length > 0) {
-          await settleBankSovereignClaims(db, budgetWithClaims, turn);
-          budgetWithClaims = await db
-            .collection<FederalBudget>("federalBudget")
-            .findOne(
-              { _id: budgetId },
-              { projection: { _id: 1, countryId: 1, bankSovereignClaims: 1 } }
-            );
-          if (
-            budgetWithClaims?.bankSovereignClaims?.some(
-              (claim) => claim.kind === "maturity" && claim.bondId === bond._id.toHexString()
-            )
-          )
-            continue;
-        }
-      }
-      // Claims returned by this attempt or removed by an earlier completed
-      // receipt both represent bank lots already paid from funded Treasury cash.
-      void newClaims;
-
       const holderLegs: Array<{
         collection: string;
         filter: Record<string, unknown>;
@@ -1155,11 +1120,10 @@ export async function processBondTurn(
       const bondFxRate = fxByCurrency.get(bondCcy) ?? 1;
       for (const holder of bond.holders ?? []) {
         if (!(holder.units > 0) || holder.bankId) continue;
-        const faceAnchor = holder.units * corpCapitalToAnchor(BOND_UNIT_FACE_VALUE, bondCcy, bondFxRate);
+        const faceAnchor =
+          holder.units * corpCapitalToAnchor(BOND_UNIT_FACE_VALUE, bondCcy, bondFxRate);
         if (holder.characterId) {
-          const personalPath = Object.keys(
-            buildPersonalBalanceInc(1, bondCcy, forexEnabled)
-          )[0]!;
+          const personalPath = Object.keys(buildPersonalBalanceInc(1, bondCcy, forexEnabled))[0]!;
           addHolderLeg(
             "characters",
             holder.characterId,
@@ -1178,12 +1142,14 @@ export async function processBondTurn(
             charId: holder.characterId.toHexString(),
             amount: holder.units * BOND_UNIT_FACE_VALUE,
             currencyCode: bondCcy,
-            meta: { bondId: bond._id.toHexString(), units: holder.units, couponRate: bond.couponRate },
+            meta: {
+              bondId: bond._id.toHexString(),
+              units: holder.units,
+              couponRate: bond.couponRate,
+            },
           });
         } else if (holder.imperialCharacterId) {
-          const personalPath = Object.keys(
-            buildPersonalBalanceInc(1, bondCcy, forexEnabled)
-          )[0]!;
+          const personalPath = Object.keys(buildPersonalBalanceInc(1, bondCcy, forexEnabled))[0]!;
           addHolderLeg(
             "imperialCharacters",
             holder.imperialCharacterId,
@@ -1212,14 +1178,10 @@ export async function processBondTurn(
           });
         } else if (holder.corporationId) {
           const holderCorp = corpMap.get(holder.corporationId.toHexString());
-          const holderCurrency =
-            (resolveCorpLiquidCurrencyCode(holderCorp) ?? "USD") as CurrencyCode;
+          const holderCurrency = (resolveCorpLiquidCurrencyCode(holderCorp) ??
+            "USD") as CurrencyCode;
           const holderFxRate = fxRateForCorpFromMap(holderCorp, fxByCurrency);
-          const localAmount = anchorToCorpCapital(
-            faceAnchor,
-            holderCurrency,
-            holderFxRate
-          );
+          const localAmount = anchorToCorpCapital(faceAnchor, holderCurrency, holderFxRate);
           addHolderLeg(
             "corporations",
             holder.corporationId,
@@ -1237,7 +1199,11 @@ export async function processBondTurn(
             subjectId: holder.corporationId,
             amount: localAmount,
             currencyCode: holderCurrency,
-            meta: { bondId: bond._id.toHexString(), units: holder.units, couponRate: bond.couponRate },
+            meta: {
+              bondId: bond._id.toHexString(),
+              units: holder.units,
+              couponRate: bond.couponRate,
+            },
           });
         } else if (holder.fundId) {
           addHolderLeg(
@@ -1258,7 +1224,11 @@ export async function processBondTurn(
             amount: faceAnchor,
             anchorAmount: faceAnchor,
             currencyCode: fundLedgerCurrency(holder.fundId.toHexString()) ?? "USD",
-            meta: { bondId: bond._id.toHexString(), units: holder.units, couponRate: bond.couponRate },
+            meta: {
+              bondId: bond._id.toHexString(),
+              units: holder.units,
+              couponRate: bond.couponRate,
+            },
           });
         } else if (holder.nppId) {
           addHolderLeg(
@@ -1295,6 +1265,58 @@ export async function processBondTurn(
         );
       }
 
+      // Lock the bond-owned due quote before creating or paying bank claims.
+      // A short Treasury can leave those claims pending across turns, so the
+      // holder snapshot must already be immutable during that interval.
+      await freezeFundedSovereignBondMaturityQuote(db, {
+        bond,
+        dueTurn: bond.maturityTurn,
+        currencyCode: bondCcy,
+        treasuryLocalPerAnchor: treasuryValuation.anchorRate,
+        nonBankRepaymentLocal,
+        holderLegs,
+        now,
+      });
+
+      const newClaims = await addBankMaturityClaims(db, {
+        budgetId,
+        countryId: bond.countryId,
+        currencyCode: bondCcy,
+        turn,
+        bond,
+        anchorRate: treasuryValuation.anchorRate,
+        treasuryCashLedgerEnabled: true,
+      });
+      let budgetWithClaims = await db
+        .collection<FederalBudget>("federalBudget")
+        .findOne(
+          { _id: budgetId },
+          { projection: { _id: 1, countryId: 1, bankSovereignClaims: 1 } }
+        );
+      if (budgetWithClaims?.bankSovereignClaims?.length) {
+        const dueClaims = budgetWithClaims.bankSovereignClaims.filter(
+          (claim) => claim.kind === "maturity" && claim.bondId === bond._id.toHexString()
+        );
+        if (dueClaims.length > 0) {
+          await settleBankSovereignClaims(db, budgetWithClaims, turn);
+          budgetWithClaims = await db
+            .collection<FederalBudget>("federalBudget")
+            .findOne(
+              { _id: budgetId },
+              { projection: { _id: 1, countryId: 1, bankSovereignClaims: 1 } }
+            );
+          if (
+            budgetWithClaims?.bankSovereignClaims?.some(
+              (claim) => claim.kind === "maturity" && claim.bondId === bond._id.toHexString()
+            )
+          )
+            continue;
+        }
+      }
+      // Claims returned by this attempt or removed by an earlier completed
+      // receipt both represent bank lots already paid from funded Treasury cash.
+      void newClaims;
+
       let fundedSettlement = await settleFundedSovereignBondMaturity(db, {
         bond,
         turn,
@@ -1305,12 +1327,11 @@ export async function processBondTurn(
         holderLegs,
         now,
       });
-      const maturityKey = `sovereign-maturity:${bond._id.toHexString()}:${bond.maturityTurn}`;
       if (
         fundedSettlement?.status === "partial" ||
         (fundedSettlement?.status === "replayed" && fundedSettlement.error)
       )
-        fundedSettlement = await resumeSettlement(db, maturityKey);
+        fundedSettlement = await resumeSettlement(db, fundedSettlement.key);
       if (
         !fundedSettlement ||
         (fundedSettlement.status !== "applied" &&

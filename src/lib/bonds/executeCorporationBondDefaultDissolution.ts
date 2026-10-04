@@ -124,7 +124,7 @@ export async function executeCorporationBondDefaultDissolution(
       // totalIssued/face). Pre-fix the $pull dropped the holder without
       // restoring float, orphaning the units on the surviving issuer.
       await db.collection<Bond>("bonds").updateOne(
-        { _id: bond._id },
+        { _id: bond._id, sovereignMaturityClaim: { $exists: false } },
         {
           $pull: { holders: { corporationId: corporation._id } },
           $inc: { publicFloat: h.units },

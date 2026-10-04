@@ -123,6 +123,8 @@ export interface Bond {
     escrowLocal: number;
     fundingAttemptTurn?: number;
     paid?: boolean;
+    /** Bank epoch claims already paid or routed to insurance for this due quote. */
+    paidBankClaimIds?: string[];
     sourceHolders: BondHolder[];
     sourcePublicFloat: number;
     sourceCentralBankHoldings?: number;
