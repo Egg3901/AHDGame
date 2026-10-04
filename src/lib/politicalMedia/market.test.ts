@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { SectorClearingInput, SectorClearingResult } from "@/lib/market/clearing";
+import {
+  computeClearingFactors,
+  type SectorClearingInput,
+  type SectorClearingResult,
+} from "@/lib/market/clearing";
+import type { CommodityType } from "@/lib/constants/commodities";
 import { costPlusPriceFactor } from "@/lib/market/costPlusPricing/rules";
 import { TURNS_PER_DAY } from "@/lib/constants/corporations";
 import { settlePoliticalAdMarket, type PoliticalAdClearingOffer } from "./market";
@@ -145,22 +150,33 @@ describe("settlePoliticalAdMarket", () => {
     expect(result.sellerPayoutLocalByCorpId.get("corp-1")).toBe(125);
   });
 
-  it("uses the ordinary cost-plus quote and honors the quality pricing gate", () => {
+  it("uses the exact per-commodity quote from real cost-plus clearing", () => {
     const costPlusInput: SectorClearingInput = {
       ...input,
+      revenue: 2_400,
+      supplyRates: { advertising: 1 },
       inputCostIndex: 1.2,
       inputCostShare: 0.8,
       fixedCostShare: 0.2,
       outputQuality: 100,
       posture: 0.1,
     };
+    const realClearing = computeClearingFactors({
+      sectors: [costPlusInput],
+      balances: new Map([["advertising", { supply: 10, demand: 5 }]]),
+      priceRatioByCommodity: new Map([["advertising", 1.5]]),
+      basePrices: { advertising: 240 } as Record<CommodityType, number>,
+    });
+    const realResult = realClearing.get("sector-1")!;
+    const expectedOfferFactor = costPlusPriceFactor(1.2, 0.1, 0.8, 0.2);
+    const expected = (240 * expectedOfferFactor) / TURNS_PER_DAY;
     const pricedOffer = {
       ...offer,
       input: costPlusInput,
-      clearing: { ...clearing, effectivePosture: 0.1 },
+      clearing: realResult,
       basePrice: 240,
+      offeredUnits: 10,
     };
-    const expected = (240 * costPlusPriceFactor(1.2, 0.1, 0.8, 0.2)) / TURNS_PER_DAY;
     const result = settlePoliticalAdMarket({
       orders: [
         {
@@ -168,17 +184,19 @@ describe("settlePoliticalAdMarket", () => {
           countryId: "US",
           stateId: "CA",
           createdTurn: 12,
-          budgetAnchor: expected * 2,
+          budgetAnchor: 100,
         },
       ],
       offers: [pricedOffer],
-      clearingBySectorId: new Map([["sector-1", { ...clearing, effectivePosture: 0.1 }]]),
+      clearingBySectorId: realClearing,
       clearingEnabled: true,
       qualityPremiumEnabled: false,
       turn: 12,
     });
 
-    expect(result.allocations[0]?.deliveredUnits).toBeCloseTo(2, 10);
-    expect(result.allocations[0]?.deliveredAnchor).toBeCloseTo(expected * 2, 10);
+    expect(realResult.effectivePosture).not.toBeCloseTo(0.1, 4);
+    expect(realResult.offerFactorByCommodity?.advertising).toBeCloseTo(expectedOfferFactor, 10);
+    expect(result.allocations[0]?.deliveredUnits).toBeCloseTo(5, 10);
+    expect(result.allocations[0]?.sellers[0]?.amountAnchor).toBeCloseTo(expected * 5, 10);
   });
 });
