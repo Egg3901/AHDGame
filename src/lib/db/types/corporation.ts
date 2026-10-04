@@ -577,6 +577,8 @@ export interface Corporation {
   ownershipState?: "private" | "stateOwned";
   /** Turn this corp was last nationalized. Powers the re-nationalization cooldown (P4+). */
   nationalizedAtTurn?: number;
+  /** Stable mode marker for an interrupted funded whole-corporation taking. */
+  pendingFundedNationalization?: { operationKey: string };
   /**
    * Turn this corp was spun out of a National Corporation (privatization). Powers
    * the re-nationalization cooldown (spec §13.4). Distinct from `lastPrivatizationTurn`
@@ -1255,6 +1257,8 @@ export interface CorporateSector {
   constructionFinancing?: import("@/lib/banking/rules/constructionBuild").ConstructionBuildClaim;
   /** A durable owner mutation excludes new construction claims until completion. */
   constructionPropertyTransition?: { key: string; kind: string };
+  /** Stable mode marker for an interrupted funded single-sector nationalization. */
+  pendingFundedNationalization?: { operationKey: string };
   /**
    * Plants tier (P3a): construction in progress, in ₳ (anchor), the sum of
    * `costPaidAnchor` across the outstanding `buildQueue` orders (D10).

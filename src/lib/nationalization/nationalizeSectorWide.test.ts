@@ -83,7 +83,13 @@ describe("nationalizeSectorWide", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     db = createMockDb();
-    for (const n of ["corporateSectors", "corporations", "unownedSectors", "centralBanks"])
+    for (const n of [
+      "corporateSectors",
+      "corporations",
+      "unownedSectors",
+      "centralBanks",
+      "bankMoneyMoves",
+    ])
       db.collection(n);
     db.collectionMocks.centralBanks.find.mockReturnValue(cursor([]));
     db.collectionMocks.corporations.findOne.mockImplementation((q: { _id: ObjectId }) => {
@@ -173,6 +179,24 @@ describe("nationalizeSectorWide", () => {
     const inserted = db.collectionMocks.corporateSectors.insertOne.mock.calls[0][0];
     expect(inserted.revenue).toBe(85);
     expect(inserted.nationalizedAtTurn).toBe(5);
+  });
+
+  it("does not read funded receipts for a zero-value sweep while Treasury cash is off", async () => {
+    seedCorpSectors();
+    const { computeSectorNpvSum } = await import("@/lib/bonds/corporateBondDefault");
+    vi.mocked(computeSectorNpvSum).mockReturnValue(0);
+
+    const { nationalizeSectorWide } = await import("./nationalizeSectorWide");
+    await nationalizeSectorWide(db as unknown as Db, {
+      countryId: "CN",
+      sectorType: "technology",
+      carveFraction: 1,
+      scope: "corporations",
+      tier: "fair",
+      consequence,
+    });
+
+    expect(db.collectionMocks.bankMoneyMoves.findOne).not.toHaveBeenCalled();
   });
 
   it("carves a foreign-owned UK sector (stored in host GBP) into the GBP NatCorp (regression: t839/t841)", async () => {
