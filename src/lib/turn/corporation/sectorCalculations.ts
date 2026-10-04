@@ -1116,7 +1116,11 @@ export function processSectors(
   // already capped above, so unfilled budget remains in treasury. Pair legs
   // stay unrounded until every corporation's transfers have been aggregated,
   // preventing small buyers from losing every sub-unit seller allocation.
-  if (marketingSpendAnchorByBuyerId.size > 0 && totalAdvertisingDeliveredValueAnchor > 0) {
+  const politicalSellerPayouts = market.politicalAdSellerPayoutLocalByCorpId ?? new Map();
+  if (
+    (marketingSpendAnchorByBuyerId.size > 0 && totalAdvertisingDeliveredValueAnchor > 0) ||
+    politicalSellerPayouts.size > 0
+  ) {
     const marketingDeltasLocal = new Map<string, number>();
     const corpInfo = (corpId: string): SettleCorpInfo | undefined => {
       const corp = lookups.corpById.get(corpId);
@@ -1128,27 +1132,29 @@ export function processSectors(
         fxRate: fxRateForCorpFromMap(corp, lookups.exchangeRatesByCurrency),
       };
     };
-    for (const [buyerId, spendAnchor] of marketingSpendAnchorByBuyerId) {
-      const buyer = corpInfo(buyerId);
-      if (!buyer) continue;
-      let allocatedAnchor = 0;
-      for (let i = 0; i < advertisingSellerDeliveredValues.length; i++) {
-        const [sellerId, deliveredValueAnchor] = advertisingSellerDeliveredValues[i];
-        const seller = corpInfo(sellerId);
-        if (!seller) continue;
-        const amountAnchor =
-          i === advertisingSellerDeliveredValues.length - 1
-            ? spendAnchor - allocatedAnchor
-            : spendAnchor * (deliveredValueAnchor / totalAdvertisingDeliveredValueAnchor);
-        allocatedAnchor += amountAnchor;
-        addCorpToCorpSettlement(
-          marketingDeltasLocal,
-          buyerId,
-          buyer,
-          sellerId,
-          seller,
-          amountAnchor
-        );
+    if (totalAdvertisingDeliveredValueAnchor > 0) {
+      for (const [buyerId, spendAnchor] of marketingSpendAnchorByBuyerId) {
+        const buyer = corpInfo(buyerId);
+        if (!buyer) continue;
+        let allocatedAnchor = 0;
+        for (let i = 0; i < advertisingSellerDeliveredValues.length; i++) {
+          const [sellerId, deliveredValueAnchor] = advertisingSellerDeliveredValues[i];
+          const seller = corpInfo(sellerId);
+          if (!seller) continue;
+          const amountAnchor =
+            i === advertisingSellerDeliveredValues.length - 1
+              ? spendAnchor - allocatedAnchor
+              : spendAnchor * (deliveredValueAnchor / totalAdvertisingDeliveredValueAnchor);
+          allocatedAnchor += amountAnchor;
+          addCorpToCorpSettlement(
+            marketingDeltasLocal,
+            buyerId,
+            buyer,
+            sellerId,
+            seller,
+            amountAnchor
+          );
+        }
       }
     }
     // Net the settled advertising out of each seller's CASH leg. The seller
@@ -1162,11 +1168,20 @@ export function processSectors(
     // the delivered book the receipt equals the delivered value and the two
     // cancel (money conserved); a funding shortfall (delivered > funded) leaves
     // the unpaid remainder as bad debt on the seller, never minted cash.
-    for (const [sellerId, deliveredValueAnchor] of advertisingSellerDeliveredValues) {
-      const seller = corpInfo(sellerId);
-      if (!seller) continue;
-      const deliveredLocal = anchorToCorpCapital(deliveredValueAnchor, seller.ccy, seller.fxRate);
-      if (!Number.isFinite(deliveredLocal)) continue;
+    if (totalAdvertisingDeliveredValueAnchor > 0) {
+      for (const [sellerId, deliveredValueAnchor] of advertisingSellerDeliveredValues) {
+        const seller = corpInfo(sellerId);
+        if (!seller) continue;
+        const deliveredLocal = anchorToCorpCapital(deliveredValueAnchor, seller.ccy, seller.fxRate);
+        if (!Number.isFinite(deliveredLocal)) continue;
+        marketingDeltasLocal.set(
+          sellerId,
+          (marketingDeltasLocal.get(sellerId) ?? 0) - deliveredLocal
+        );
+      }
+    }
+    for (const [sellerId, deliveredLocal] of politicalSellerPayouts) {
+      if (!Number.isFinite(deliveredLocal) || deliveredLocal <= 0) continue;
       marketingDeltasLocal.set(
         sellerId,
         (marketingDeltasLocal.get(sellerId) ?? 0) - deliveredLocal

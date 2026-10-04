@@ -6,8 +6,8 @@ import type { RetoolHint } from "@/lib/corporations/retoolHint";
 interface RetoolHintBannerProps {
   hint: RetoolHint;
   isCeo: boolean;
-  /** Opens the tab that holds the strategy picker. */
-  onOpenStrategy: () => void;
+  /** Opens the suggested strategy confirmation without submitting a change. */
+  onOpenStrategy: (strategyId: string) => void;
 }
 
 const pct = (share: number) => `${Math.round(share * 100)}%`;
@@ -47,10 +47,10 @@ export default function RetoolHintBanner({ hint, isCeo, onOpenStrategy }: Retool
       {isCeo && (
         <button
           type="button"
-          onClick={onOpenStrategy}
+          onClick={() => onOpenStrategy(hint.suggestedStrategyId)}
           className="mt-2 rounded-lg border border-info/40 px-3 py-1.5 text-xs font-medium text-foreground hover:bg-info/15"
         >
-          Review strategy
+          Review {hint.suggestedStrategyName} retool
         </button>
       )}
     </div>

@@ -3,14 +3,17 @@
  * Purchases need no candidacy; one character revision serializes all buyers and
  * their bonuses persist across races while decaying through the shared rules.
  */
-import type { Db, ClientSession } from "mongodb";
-import type { Character } from "@/lib/db/types";
+import { ObjectId, type Db, type ClientSession } from "mongodb";
+import type { Character, GameConfig } from "@/lib/db/types";
+import { randomUUID } from "node:crypto";
 import { badRequest, conflict, forbidden, notFound } from "@/lib/api/errors";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
 import { getGameTime } from "@/lib/time/gameTime";
+import { getCampaignCurrency } from "@/lib/campaigns/campaignCurrency";
+import { fundPoliticalMediaOrder } from "@/lib/politicalMedia/journal";
 import { assertStandingAdRegion } from "./regions";
 import { quoteAdAudience } from "./adQuote";
-import { AD_ACTION_COST, planAdPurchase, type CampaignTarget } from "./rules";
+import { AD_ACTION_COST, AD_BOOST_PER_ACTION, planAdPurchase, type CampaignTarget } from "./rules";
 
 export type StandingAdRequest = CampaignTarget & {
   stateId: string;
@@ -68,6 +71,51 @@ export async function purchaseStandingAds(
     throw conflict("The ad quote changed. Refresh before buying.");
   const actions = AD_ACTION_COST * request.count;
   const fundsField = quote.forex ? "currencyBalances.campaign" : "funds";
+  const config = await db
+    .collection<GameConfig>("gameConfig")
+    .findOne({ _id: "default" }, { projection: { politicalMediaMarketEnabled: 1 } });
+  if (config?.politicalMediaMarketEnabled === true) {
+    const orderId = randomUUID();
+    const funding = await fundPoliticalMediaOrder(db, {
+      orderId,
+      source: "targeted_ad",
+      createdTurn: quote.currentTurn,
+      countryId: current.countryId ?? "US",
+      targetStateId: request.stateId,
+      payer: {
+        collection: "characters",
+        documentId: payer._id,
+        path: fundsField,
+        currencyCode: quote.forex ? getCampaignCurrency(current.countryId ?? "US") : "AHD",
+        localPerAnchor: quote.rate,
+        amountLocal: funds,
+        currentActions: payer.actions ?? 0,
+        actionCost: actions,
+      },
+      details: {
+        effect: {
+          kind: "targeted_ad",
+          targetCollection: "characters",
+          targetDocumentId: current._id.toString(),
+          targetDocumentIdIsObjectId: current._id instanceof ObjectId,
+          ad: {
+            stateId: request.stateId,
+            dimension: request.dimension,
+            bucket: request.bucket,
+            bonus: AD_BOOST_PER_ACTION * request.count,
+            lastPurchaseTurn: quote.currentTurn,
+          },
+        },
+        targetDimension: request.dimension,
+        targetBucket: request.bucket,
+        requestedCount: request.count,
+        candidateId: current._id.toString(),
+      },
+    });
+    if (funding.status !== "applied")
+      throw conflict("Resources changed before the funded ad order could be placed");
+    return { success: true, pending: true, orderId, cost: funds, actions };
+  }
   const ownerFilter = {
     _id: current._id,
     targetedAdsRevision: current.targetedAdsRevision ?? { $exists: false },

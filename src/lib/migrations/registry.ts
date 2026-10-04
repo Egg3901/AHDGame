@@ -13,6 +13,7 @@
 // scripts/migrations/incidents/ and DO NOT belong in this registry.
 
 import { migration as locRecoveryOwnerIndex } from "./entries/2026-09-30-loc-recovery-owner-index";
+import { migration as politicalMediaOrderIndexes } from "./entries/2026-10-04-political-media-order-indexes";
 import { migration as supplyListingIndexes } from "./entries/2026-09-17-supply-listing-indexes";
 import { migration as ukDualMinistryRoleSlot } from "./entries/2026-09-17-uk-dual-ministry-role-slot";
 import { migration as electionResultSnapshots } from "./entries/2026-09-20-election-result-snapshots";
@@ -321,6 +322,7 @@ export const MIGRATIONS: Migration[] = [
   // Metadata only. Deploy this backfill before relying on charter epoch reads;
   // the runtime also dual-reads untagged legacy rows during rollout.
   bankLoanCharterEpoch,
+  politicalMediaOrderIndexes,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.

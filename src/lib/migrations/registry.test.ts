@@ -8,6 +8,7 @@ describe("MIGRATIONS", () => {
     expect(ids).toContain("2026-06-01-index-fund-foundation");
     expect(ids).toContain("2026-06-01-index-fund-seed");
     expect(ids).toContain("2026-06-02-index-fund-real-bonds");
+    expect(ids).toContain("2026-10-04-political-media-order-indexes");
     expect(ids).toContain("2026-06-06-route-performance-indexes");
     expect(ids.indexOf("2026-06-02-index-fund-real-bonds")).toBeGreaterThan(
       ids.indexOf("2026-06-01-index-fund-seed")

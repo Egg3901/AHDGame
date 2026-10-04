@@ -855,6 +855,7 @@ export interface ActionLog {
     infamyChange?: number;
     donorBaseLevelChange?: number;
     cashOnHandChange?: number;
+    politicalMediaOrderId?: string;
     message: string;
   };
   turn: number;
