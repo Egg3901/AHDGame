@@ -45,6 +45,8 @@ export interface MarketContext {
    * actually delivered at their reachable clearing price.
    */
   advertisingSellerDeliveredValueAnchorByCorpId?: ReadonlyMap<string, number>;
+  /** Exact native-currency amounts reserved for funded political ad sellers. */
+  politicalAdSellerPayoutLocalByCorpId?: ReadonlyMap<string, number>;
   /**
    * Freight seam: per sector id, the share of its clearing offer (0..1) that
    * last turn's freight network could not place out of its host state, so the

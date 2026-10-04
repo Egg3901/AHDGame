@@ -35,7 +35,12 @@
 
 import { isDeepStrictEqual } from "node:util";
 import { ObjectId, type Db, type Filter } from "mongodb";
-import { NET_TOLERANCE, legsNet, type ValueLegKind } from "@/lib/banking/rules/invariants";
+import {
+  NET_TOLERANCE,
+  legsNet,
+  moneyMoveValuationError,
+  type ValueLegKind,
+} from "@/lib/banking/rules/invariants";
 import { validEquityCustodyMutation } from "./rules/equityCustody";
 import { countBankingEvent } from "@/lib/banking/telemetry";
 
@@ -55,6 +60,8 @@ export interface MoneyMoveLeg {
   kind: MoneyMoveLegKind;
   /** Positive magnitude. The sign is the leg kind's job, not the caller's. */
   amount: number;
+  /** Frozen native-currency valuation for cross-currency transfers. */
+  valuation?: { currencyCode: string; localPerAnchor: number };
   /** Collection the balance lives in. Omit for `mint` / `burn`. */
   collection?: string;
   /**
@@ -94,6 +101,8 @@ export interface MoneyMove {
   /** What kind of flow this is, for the repair queue. */
   kind: string;
   turn?: number;
+  /** Stable terms that distinguish a valued replay from a changed quote. */
+  quoteIdentity?: unknown;
   legs: MoneyMoveLeg[];
   /**
    * Extra fields stored on the claim record in the same insert as the claim.
@@ -116,6 +125,7 @@ export interface MoneyMoveResult {
 export interface MoneyMoveRecordLeg {
   kind: MoneyMoveLegKind;
   amount: number;
+  valuation?: { currencyCode: string; localPerAnchor: number };
   note: string;
   applied: boolean;
   refusal?: string;
@@ -137,6 +147,8 @@ interface MoneyMoveRecord {
   legacyInterestBatch?: unknown;
   locSettlement?: unknown;
   treasuryReserveTransfer?: unknown;
+  politicalMediaOrder?: unknown;
+  quoteIdentity?: unknown;
   _id: string;
   kind: string;
   turn?: number;
@@ -157,6 +169,41 @@ export type MoneyMoveClaim =
   | { status: "replayed" }
   | { status: "rejected"; error: string };
 
+function valuedQuoteConflict(
+  existing: MoneyMoveRecord | null,
+  legs: readonly MoneyMoveLeg[],
+  quoteIdentity: unknown
+): boolean {
+  if (!existing) return false;
+  const hasValuation =
+    existing.legs.some((leg) => leg.valuation) || legs.some((leg) => leg.valuation);
+  if (!hasValuation) return false;
+  const sameLegs =
+    existing.legs.length === legs.length &&
+    existing.legs.every((leg, index) => {
+      const proposed = legs[index];
+      return (
+        proposed !== undefined &&
+        leg.kind === proposed.kind &&
+        leg.amount === proposed.amount &&
+        isDeepStrictEqual(leg.valuation ?? null, proposed.valuation ?? null) &&
+        leg.collection === proposed.collection &&
+        leg.path === proposed.path &&
+        isDeepStrictEqual(leg.filter ?? null, proposed.filter ?? null) &&
+        isDeepStrictEqual(leg.set ?? null, proposed.set ?? null)
+      );
+    });
+  return !sameLegs || !isDeepStrictEqual(existing.quoteIdentity ?? null, quoteIdentity ?? null);
+}
+
+function valuedQuoteConflictResult(key: string): MoneyMoveResult {
+  return {
+    status: "rejected",
+    applied: [],
+    error: `Money move ${key} already owns a different valued settlement quote.`,
+  };
+}
+
 /**
  * Claim the key WITHOUT moving anything.
  *
@@ -175,6 +222,10 @@ export type MoneyMoveClaim =
  * correct place for a flow that stopped half way.
  */
 export async function claimMoneyMove(db: Db, move: MoneyMove): Promise<MoneyMoveClaim> {
+  if (move.legs.some((leg) => !Number.isFinite(leg.amount) || leg.amount < 0))
+    return { status: "rejected", error: "Cash leg amount must be finite and nonnegative." };
+  const valuationError = moneyMoveValuationError(move.legs);
+  if (valuationError) return { status: "rejected", error: valuationError };
   if (move.legs.some((leg) => leg.kind === "asset" && !validEquityCustodyMutation(leg)))
     return {
       status: "rejected",
@@ -195,6 +246,7 @@ export async function claimMoneyMove(db: Db, move: MoneyMove): Promise<MoneyMove
 
   const record: MoneyMoveRecord = {
     ...(move.record ?? {}),
+    ...(move.quoteIdentity !== undefined ? { quoteIdentity: move.quoteIdentity } : {}),
     _id: move.key,
     kind: move.kind,
     turn: move.turn,
@@ -202,6 +254,7 @@ export async function claimMoneyMove(db: Db, move: MoneyMove): Promise<MoneyMove
     legs: legs.map((leg) => ({
       kind: leg.kind,
       amount: Math.max(0, leg.amount),
+      ...(leg.valuation ? { valuation: leg.valuation } : {}),
       note: leg.note,
       applied: false,
       ...(leg.collection ? { collection: leg.collection } : {}),
@@ -271,6 +324,7 @@ export async function completeMoneyMove(
  * which is what makes every caller safe to retry.
  */
 export async function applyMoneyMove(db: Db, move: MoneyMove): Promise<MoneyMoveResult> {
+  const valuationError = moneyMoveValuationError(move.legs);
   const invalid = move.legs.find((leg) => {
     if (!Number.isFinite(leg.amount) || leg.amount < 0) return true;
     if (leg.kind === "asset") return !validEquityCustodyMutation(leg);
@@ -282,6 +336,7 @@ export async function applyMoneyMove(db: Db, move: MoneyMove): Promise<MoneyMove
       [leg.path, ...Object.keys(leg.set ?? {})].some(reservedLegPath)
     );
   });
+  if (valuationError) return { status: "rejected", applied: [], error: valuationError };
   if (invalid)
     return {
       status: "rejected",
@@ -305,10 +360,15 @@ export async function applyMoneyMove(db: Db, move: MoneyMove): Promise<MoneyMove
     // Preserve selectors such as countryId in the public API, but freeze the
     // selected document before claiming cash. Replays use the original binding
     // even if a previous write changed the caller's selector fields.
-    const prior = await db
-      .collection<MoneyMoveRecord>(MONEY_MOVE_COLLECTION)
-      .findOne({ _id: move.key }, { projection: { _id: 1 } });
+    const prior = await db.collection<MoneyMoveRecord>(MONEY_MOVE_COLLECTION).findOne(
+      {
+        _id: move.key,
+      },
+      { projection: { _id: 1, legs: 1, quoteIdentity: 1 } }
+    );
     if (prior) {
+      if (valuedQuoteConflict(prior, prepared, move.quoteIdentity))
+        return valuedQuoteConflictResult(move.key);
       if (move.turn !== undefined) countBankingEvent(db, move.turn, "replayedSettlements");
       return { status: "replayed", applied: [] };
     }
@@ -333,10 +393,20 @@ export async function applyMoneyMove(db: Db, move: MoneyMove): Promise<MoneyMove
     },
   });
   if (claim.status === "replayed") {
+    const existing = await db
+      .collection<MoneyMoveRecord>(MONEY_MOVE_COLLECTION)
+      .findOne({ _id: move.key }, { projection: { legs: 1, quoteIdentity: 1 } });
+    if (valuedQuoteConflict(existing, prepared, move.quoteIdentity))
+      return valuedQuoteConflictResult(move.key);
     if (move.turn !== undefined) countBankingEvent(db, move.turn, "replayedSettlements");
     return { status: "replayed", applied: [] };
   }
   if (claim.status === "rejected") {
+    const existing = await db
+      .collection<MoneyMoveRecord>(MONEY_MOVE_COLLECTION)
+      .findOne({ _id: move.key }, { projection: { legs: 1, quoteIdentity: 1 } });
+    if (valuedQuoteConflict(existing, prepared, move.quoteIdentity))
+      return valuedQuoteConflictResult(move.key);
     if (move.turn !== undefined) countBankingEvent(db, move.turn, "rejectedSettlements");
     return { status: "rejected", applied: [], error: claim.error };
   }
