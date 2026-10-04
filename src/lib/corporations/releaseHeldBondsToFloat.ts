@@ -55,6 +55,7 @@ export async function releaseCorporationHeldBondsToFloat(
     const res = await bonds.updateOne(
       {
         _id: bond._id,
+        sovereignMaturityClaim: { $exists: false },
         holders: { $elemMatch: { corporationId: holderCorporationId, units } },
       },
       {

@@ -1,11 +1,15 @@
 import {
   organizationCashContext,
+  organizationLocalPerAnchor,
+  organizationTreasuryLocalPerAnchor,
+  settleOrganizationFundedCashMove,
   withOrganizationCashBatch,
   witnessOrganizationCash,
   type OrganizationCashOptions,
 } from "./cashLedger";
 import { ObjectId, type Db } from "mongodb";
 import { type CountryId } from "@/lib/constants/countries";
+import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { getGdpAnchorRate, loadWorldPreset } from "@/lib/currency/gdpAnchorRate";
 import {
   DEFAULT_ORG_DUES_RATE_ANNUAL,
@@ -132,6 +136,7 @@ export async function chargeOrganizationDues(
     const now = new Date();
     const budget = db.collection<FederalBudget>("federalBudget");
     let totalFund = 0;
+    const fundedCash = batch?.treasuryCashLedgerEnabled === true;
     for (const m of memberGdpUsd) {
       const dueUsd = memberDueUsd(m.gdpUsd, duesRateAnnual);
       if (dueUsd <= 0) continue;
@@ -148,25 +153,87 @@ export async function chargeOrganizationDues(
       // Tribute takes the other branch for the same case and counts it as an
       // explicit `minted` figure. Dues have no such accounting, so an unmodelled
       // member simply does not contribute rather than contributing from nowhere.
-      const debit = await budget.updateOne(
-        { countryId: m.countryId },
-        { $inc: { treasuryBalance: -dueLocal }, $set: { updatedAt: now } }
-      );
-      if (debit.matchedCount !== 1) continue;
-      await witnessOrganizationCash(db, batch, {
-        kind: "government",
-        ref: m.countryId,
-        countryId: m.countryId,
-        amount: -dueLocal,
-        site: "dues_treasury",
-        now,
-      });
       // Credit the fund in its (founding) currency.
-      const fundRate = getGdpAnchorRate(currencyCountryId, preset);
-      totalFund += dueUsd / fundRate;
+      if (fundedCash && batch) {
+        const treasuryRate = organizationTreasuryLocalPerAnchor(batch, m.countryId);
+        const fundRate = organizationLocalPerAnchor(batch, currencyCountryId);
+        const fundAmount = (dueLocal / treasuryRate) * fundRate;
+        const fundCollection = await getOrganizationFundsCollection(db);
+        await fundCollection.updateOne(
+          { organizationId },
+          {
+            $setOnInsert: {
+              _id: new ObjectId(),
+              organizationId,
+              balanceLocal: 0,
+              duesRateAnnual,
+              currencyCountryId,
+            },
+          },
+          { upsert: true }
+        );
+        const result = await settleOrganizationFundedCashMove(db, batch, {
+          key: `organization-dues:${batch.turn}:${organizationId}:${m.countryId}`,
+          kind: "organization_dues",
+          source: {
+            collection: "federalBudget",
+            filter: { countryId: m.countryId, treasuryCashLocal: { $gte: dueLocal } },
+            path: "treasuryCashLocal",
+            amount: dueLocal,
+            currencyCode:
+              batch.budgetCurrencies.get(m.countryId) ?? COUNTRY_CURRENCY_MAP[m.countryId] ?? "USD",
+            localPerAnchor: treasuryRate,
+          },
+          destination: {
+            collection: "organizationFunds",
+            filter: { organizationId },
+            path: "balanceLocal",
+            amount: fundAmount,
+            currencyCode: COUNTRY_CURRENCY_MAP[currencyCountryId] ?? "USD",
+            localPerAnchor: fundRate,
+          },
+          sourceTreasuryCountry: m.countryId,
+          command: "organization.dues.collect",
+        });
+        if (result.status === "applied") {
+          totalFund += fundAmount;
+          await witnessOrganizationCash(db, batch, {
+            kind: "government",
+            ref: m.countryId,
+            countryId: m.countryId,
+            amount: -dueLocal,
+            site: "dues_treasury",
+            now,
+          });
+          await witnessOrganizationCash(db, batch, {
+            kind: "org",
+            ref: organizationId,
+            countryId: currencyCountryId,
+            amount: fundAmount,
+            site: "dues_fund",
+            now,
+          });
+        }
+      } else {
+        const debit = await budget.updateOne(
+          { countryId: m.countryId },
+          { $inc: { treasuryBalance: -dueLocal }, $set: { updatedAt: now } }
+        );
+        if (debit.matchedCount !== 1) continue;
+        await witnessOrganizationCash(db, batch, {
+          kind: "government",
+          ref: m.countryId,
+          countryId: m.countryId,
+          amount: -dueLocal,
+          site: "dues_treasury",
+          now,
+        });
+        const fundRate = getGdpAnchorRate(currencyCountryId, preset);
+        totalFund += dueUsd / fundRate;
+      }
     }
     const totalFundRounded = Math.round(totalFund);
-    if (totalFundRounded > 0) {
+    if (!fundedCash && totalFundRounded > 0) {
       const col = await getOrganizationFundsCollection(db);
       const credit = await col.updateOne(
         { organizationId },

@@ -56,6 +56,7 @@ export async function addBankMaturityClaims(
       bankId: holder.bankId.toHexString(),
       charteredTurn: holder.charteredTurn,
       bondId: input.bond._id.toHexString(),
+      ...(input.treasuryCashLedgerEnabled === true ? { dueTurn: input.bond.maturityTurn } : {}),
       countryId: input.countryId,
       currencyCode: input.currencyCode,
       amountLocal,
@@ -65,15 +66,31 @@ export async function addBankMaturityClaims(
       ...(input.ledgerShadow ? { ledgerShadow: true } : {}),
       ...(input.treasuryCashLedgerEnabled ? { treasuryCashLedgerEnabled: true } : {}),
     };
-    // BondTurn can replay after the settlement projection removed this claim.
-    // Do not recreate it if the same-turn funding witness already completed.
-    const settled = await db
-      .collection<{ _id: string; status: string }>("bankMoneyMoves")
-      .findOne(
-        { _id: `${claim.id}:funding:${input.turn}`, status: "applied" },
-        { projection: { _id: 1 } }
-      );
-    if (settled) continue;
+    // A paid bank leg belongs to the immutable due claim, not its funding turn.
+    // BondTurn can replay in a later turn while non-bank holders still await
+    // cash, so recover the terminal witness before deciding whether to push.
+    const paidClaim =
+      input.treasuryCashLedgerEnabled === true
+        ? await db.collection<{ _id: string }>("bankMoneyMoves").findOne(
+            {
+              _id: { $regex: `^${claim.id}:(bank|insurance):` },
+              status: "applied",
+            },
+            { projection: { _id: 1 } }
+          )
+        : await db
+            .collection<{ _id: string; status: string }>("bankMoneyMoves")
+            .findOne(
+              { _id: `${claim.id}:funding:${input.turn}`, status: "applied" },
+              { projection: { _id: 1 } }
+            );
+    const frozenPaid =
+      input.treasuryCashLedgerEnabled === true &&
+      input.bond.sovereignMaturityClaim?.paidBankClaimIds?.includes(claim.id);
+    if (paidClaim || frozenPaid) {
+      if (input.treasuryCashLedgerEnabled && paidClaim) await recordMaturityBankPayment(db, claim);
+      continue;
+    }
     const result = await db
       .collection<FederalBudget>("federalBudget")
       .updateOne(
@@ -95,12 +112,42 @@ export async function addBankMaturityClaims(
       !saved ||
       saved.amountLocal !== claim.amountLocal ||
       saved.charteredTurn !== claim.charteredTurn ||
-      saved.treasuryCashLedgerEnabled !== claim.treasuryCashLedgerEnabled
+      saved.treasuryCashLedgerEnabled !== claim.treasuryCashLedgerEnabled ||
+      (saved.dueTurn !== undefined && saved.dueTurn !== claim.dueTurn)
     )
       throw new Error(`Bank maturity claim ${claim.id} changed after it was frozen`);
     claims.push(saved);
   }
   return claims;
+}
+
+async function recordMaturityBankPayment(db: Db, claim: BankSovereignClaim): Promise<void> {
+  if (
+    claim.kind !== "maturity" ||
+    !claim.bondId ||
+    !Number.isSafeInteger(claim.dueTurn) ||
+    !ObjectId.isValid(claim.bondId)
+  )
+    return;
+  const bondId = new ObjectId(claim.bondId);
+  const quoteId = `sovereign-maturity:${claim.bondId}:${claim.dueTurn}`;
+  const result = await db.collection<Bond>("bonds").updateOne(
+    {
+      _id: bondId,
+      issuerType: "sovereign",
+      maturityTurn: claim.dueTurn,
+      "sovereignMaturityClaim.id": quoteId,
+      "sovereignMaturityClaim.paidBankClaimIds": { $ne: claim.id },
+    },
+    { $push: { "sovereignMaturityClaim.paidBankClaimIds": claim.id } }
+  );
+  if (result.matchedCount === 0) {
+    const bond = await db
+      .collection<Bond>("bonds")
+      .findOne({ _id: bondId }, { projection: { sovereignMaturityClaim: 1, matured: 1 } });
+    if (!bond?.matured && bond?.sovereignMaturityClaim?.id !== quoteId)
+      throw new Error(`Paid bank maturity claim ${claim.id} lost its due-turn quote`);
+  }
 }
 
 type CorporationCharterState = Pick<Corporation, "_id" | "bankCharter" | "bankSovereignEscrows">;
@@ -551,6 +598,7 @@ export async function settleBankSovereignClaims(
     if (!ObjectId.isValid(claim.bankId)) continue;
     const budgetId = String(budget._id);
     if (await recoverCompletedClaim(db, claim, budgetId)) {
+      if (claim.treasuryCashLedgerEnabled) await recordMaturityBankPayment(db, claim);
       paidClaimIds.push(claim.id);
       continue;
     }
@@ -563,6 +611,7 @@ export async function settleBankSovereignClaims(
       );
     const settled = await payFromEscrow(db, claim, budgetId, attemptTurn, corp?.bankCharter);
     if (settled?.status === "applied" || (settled?.status === "replayed" && !settled.error)) {
+      if (claim.treasuryCashLedgerEnabled) await recordMaturityBankPayment(db, claim);
       paidClaimIds.push(claim.id);
     }
   }

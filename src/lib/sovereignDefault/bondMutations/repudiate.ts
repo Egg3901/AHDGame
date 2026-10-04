@@ -23,6 +23,7 @@ export async function markCountryBondsRepudiated(
       countryId: countryCode,
       matured: false,
       defaulted: false,
+      sovereignMaturityClaim: { $exists: false },
     },
     {
       $set: {

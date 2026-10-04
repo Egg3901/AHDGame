@@ -328,6 +328,7 @@ export async function settleBondPurchasesInTransaction(
             filter: {
               _id: plan.bond._id,
               publicFloat: { $gte: plan.units },
+              sovereignMaturityClaim: { $exists: false },
               "holders.fundId": fund._id,
             },
             update: {
@@ -341,6 +342,7 @@ export async function settleBondPurchasesInTransaction(
             filter: {
               _id: plan.bond._id,
               publicFloat: { $gte: plan.units },
+              sovereignMaturityClaim: { $exists: false },
               holders: { $not: { $elemMatch: { fundId: fund._id } } },
             },
             update: {

@@ -124,6 +124,30 @@ describe("funded financial crisis interventions", () => {
     expect(budget?.treasuryBalance).toBe(850);
     expect(bank?.bankCharter.cashReserves + budget?.treasuryBalance).toBe(1050);
   });
+  it("returns expired funded guarantee escrow to cash, keeping fiscal position noncash", async () => {
+    const { db, ctx, id } = world("guarantee", 4_000, 1_000);
+    ctx.treasuryCashLedgerEnabled = true;
+    await applyFinancialCrisisBankResponse(ctx, "guarantee");
+    await ctx.db
+      .collection("corporations")
+      .updateOne(
+        { _id: id },
+        { $set: { "bankCharter.status": "failed", "bankCharter.failedTurn": 51 } }
+      );
+    const cashPolicy = resolveBankingPolicy({
+      privateBankingEnabled: true,
+      treasuryCashLedgerEnabled: true,
+    });
+    expect(
+      await processFinancialCrisisGuarantees(db as unknown as Db, 51 + TURNS_PER_YEAR, cashPolicy)
+    ).toEqual({ paid: 150, refunded: 50 });
+    const budget = await ctx.db.collection("federalBudget").findOne({ countryId: "US" });
+    expect(budget?.treasuryCashLocal).toBe(850);
+    expect(budget?.treasuryBalance).toBe(3_850);
+    expect(
+      await processFinancialCrisisGuarantees(db as unknown as Db, 52 + TURNS_PER_YEAR, cashPolicy)
+    ).toEqual({ paid: 0, refunded: 0 });
+  });
   it("cannot pay an unfunded legacy guarantee", async () => {
     const { db, id } = world("resolve");
     db.seed("bankGuarantees", [

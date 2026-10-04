@@ -128,6 +128,7 @@ function toMoneyLeg(leg: TransitionLeg): MoneyMoveLeg {
   return {
     kind: leg.kind,
     amount: leg.amount,
+    ...(leg.valuation ? { valuation: leg.valuation } : {}),
     ...(leg.collection ? { collection: leg.collection } : {}),
     ...(leg.filter ? { filter: reviveObjectIds(leg.filter) } : {}),
     ...(leg.path ? { path: leg.path } : {}),
