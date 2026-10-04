@@ -80,7 +80,7 @@ import { processNppSupplyAgreements } from "@/lib/turn/npp/nppSupplyAgreements";
 import { processNppProspecting } from "@/lib/turn/npp/nppProspecting";
 import { processNppCorpTreasury } from "@/lib/turn/npp/nppCorpTreasury";
 import { createNotifications } from "@/lib/notifications";
-import { COMMODITY_LABELS } from "@/lib/constants/commodities";
+import { COMMODITY_LABELS, eraScaledBasePrices } from "@/lib/constants/commodities";
 import { trackFinancialDistress } from "./financialDistressTracking";
 import {
   persistLabourIndices,
@@ -116,6 +116,13 @@ import {
   processMediaProductProjectsV1,
   startNppMediaProductsV1,
 } from "@/lib/products/mediaProductPersistence";
+import {
+  attributeMediaProductSales,
+  paidPoliticalMediaSellerReceipts,
+  persistMediaProductSales,
+  reconcileMediaProductDelivery,
+  type PaidPoliticalMediaSellerAmount,
+} from "@/lib/products/mediaProductSales";
 import { getMediaProductKind } from "@/lib/products/mediaProductCatalog";
 import { aggregateMediaProductSectorEffects } from "@/lib/products/rules/mediaProductRules";
 
@@ -940,6 +947,21 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   mark("sector+corp bulkWrites");
 
   const settledPoliticalMediaOrders = [];
+  const currentTurnNumber = turn ?? gameState?.currentTurn ?? 0;
+  const plannedPoliticalUnitsBySectorId = new Map<string, number>();
+  if (mediaProductSlatesEnabled) {
+    for (const order of politicalMediaOrders) {
+      const plan = order.settlementPlan ?? plannedPoliticalMediaOrders.get(order.orderId);
+      if (plan?.plannedTurn !== currentTurnNumber) continue;
+      for (const seller of plan.sellers) {
+        plannedPoliticalUnitsBySectorId.set(
+          seller.sectorId,
+          (plannedPoliticalUnitsBySectorId.get(seller.sectorId) ?? 0) + seller.units
+        );
+      }
+    }
+  }
+  const paidPoliticalSellerBySectorId = new Map<string, PaidPoliticalMediaSellerAmount>();
   if (politicalMediaMarketEnabled) {
     for (const order of politicalMediaOrders) {
       // New plans were already durably saved before sector P&L writes. The
@@ -948,6 +970,22 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       if (!order.settlementPlan && !plannedPoliticalMediaOrders.has(order.orderId)) continue;
       const results = await settlePoliticalMediaOrder(db, order.orderId, turn ?? 0);
       const plan = order.settlementPlan ?? plannedPoliticalMediaOrders.get(order.orderId);
+      if (mediaProductSlatesEnabled && plan?.plannedTurn === currentTurnNumber) {
+        for (const seller of paidPoliticalMediaSellerReceipts({
+          sellers: plan.sellers,
+          results,
+          orderAlreadySettled: order.status === "settled",
+        })) {
+          const prior = paidPoliticalSellerBySectorId.get(seller.sectorId) ?? {
+            units: 0,
+            amountAnchor: 0,
+          };
+          paidPoliticalSellerBySectorId.set(seller.sectorId, {
+            units: prior.units + seller.units,
+            amountAnchor: prior.amountAnchor + seller.amountAnchor,
+          });
+        }
+      }
       const settled =
         order.status === "settled" ||
         (results.length > 0 &&
@@ -962,6 +1000,34 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       }
       await applyPoliticalMediaOrderEffect(db, order.orderId);
     }
+  }
+
+  if (mediaProductSlatesEnabled && lookups.mediaProductProjectsBySectorId) {
+    const basePrices = eraScaledBasePrices(lookups.eraUnitScale);
+    const attributions: ReturnType<typeof attributeMediaProductSales> = [];
+    for (const [sectorId, projects] of lookups.mediaProductProjectsBySectorId) {
+      const clearing = market.clearingBySectorId?.get(sectorId);
+      if (!clearing?.deliveredUnitsByCommodity) continue;
+      const reconciled = reconcileMediaProductDelivery({
+        clearing,
+        plannedPoliticalUnits: plannedPoliticalUnitsBySectorId.get(sectorId) ?? 0,
+        paidPoliticalSeller: paidPoliticalSellerBySectorId.get(sectorId) ?? {
+          units: 0,
+          amountAnchor: 0,
+        },
+      });
+      attributions.push(
+        ...attributeMediaProductSales({
+          projects,
+          clearing: reconciled.clearing,
+          basePrices,
+          turn: currentTurnNumber,
+          paidPoliticalUnitsByCommodity: reconciled.paidPoliticalUnitsByCommodity,
+          paidPoliticalRevenueAnchorByCommodity: reconciled.paidPoliticalRevenueAnchorByCommodity,
+        })
+      );
+    }
+    await persistMediaProductSales(db, attributions);
   }
 
   if (mediaEditorialEnabled && mediaOperatingModelsEnabled && market.editorialOutletsByState) {

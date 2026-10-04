@@ -4,7 +4,9 @@ import type { MediaProductProject } from "./mediaProduct";
 import {
   attributeMediaProductSales,
   mediaProductOfferAvailability,
+  paidPoliticalMediaSellerReceipts,
   persistMediaProductSales,
+  reconcileMediaProductDelivery,
 } from "./mediaProductSales";
 import type { SectorClearingResult } from "@/lib/market/clearing";
 
@@ -30,6 +32,26 @@ function project(overrides: Partial<MediaProductProject> = {}): MediaProductProj
 }
 
 describe("media product sales attribution", () => {
+  it("counts only applied or replayed political seller receipts", () => {
+    const sellers = [
+      { sectorId: "sector-a", units: 5, amountAnchor: 50 },
+      { sectorId: "sector-b", units: 7, amountAnchor: 70 },
+    ];
+    expect(
+      paidPoliticalMediaSellerReceipts({
+        sellers,
+        results: [{ status: "applied" }, { status: "rejected" }],
+      })
+    ).toEqual([sellers[0]]);
+    expect(
+      paidPoliticalMediaSellerReceipts({
+        sellers,
+        results: [],
+        orderAlreadySettled: true,
+      })
+    ).toEqual(sellers);
+  });
+
   it("caps titles inside existing output and removes retired titles from the offer", () => {
     const projects = [
       project(),
@@ -103,6 +125,37 @@ describe("media product sales attribution", () => {
       0
     );
     expect(titleUnits).toBeLessThanOrEqual(clearing.deliveredUnitsByCommodity?.advertising ?? 0);
+  });
+
+  it("removes unpaid political plans and credits only applied seller receipts", () => {
+    const projectRow = project();
+    const plannedClearing: SectorClearingResult = {
+      factor: 1,
+      soldFraction: 0.415,
+      effectivePosture: 0,
+      soldByCommodity: { advertising: 0.415 },
+      deliveredUnitsByCommodity: { advertising: 41.5 },
+      offerFactorByCommodity: { advertising: 1 },
+    };
+    const reconciled = reconcileMediaProductDelivery({
+      clearing: plannedClearing,
+      plannedPoliticalUnits: 15,
+      paidPoliticalSeller: { units: 9, amountAnchor: 900 },
+    });
+    const [attribution] = attributeMediaProductSales({
+      projects: [projectRow],
+      clearing: reconciled.clearing,
+      basePrices: { advertising: 100 },
+      turn: 12,
+      paidPoliticalUnitsByCommodity: reconciled.paidPoliticalUnitsByCommodity,
+      paidPoliticalRevenueAnchorByCommodity: reconciled.paidPoliticalRevenueAnchorByCommodity,
+    });
+
+    expect(reconciled.clearing.deliveredUnitsByCommodity?.advertising).toBeCloseTo(35.5);
+    expect(reconciled.paidPoliticalUnitsByCommodity.advertising).toBe(9);
+    expect(reconciled.paidPoliticalRevenueAnchorByCommodity.advertising).toBe(900);
+    expect(attribution?.deliveredUnitsByCommodity.advertising).toBeCloseTo(4.63);
+    expect(attribution?.deliveredRevenueAnchorByCommodity.advertising).toBeCloseTo(463.04);
   });
 
   it("freezes per-turn attribution with an idempotent project-turn write", async () => {

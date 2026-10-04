@@ -1,91 +1,65 @@
 import { ObjectId, type Db } from "mongodb";
 import type { Corporation, MediaProductAdvertisingObligationV1 } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import { anchorToCorpCapital } from "@/lib/currency/corporationCapital";
 import type { BankingTransition } from "@/lib/banking/rules/boundary";
 import { oid } from "@/lib/banking/rules/boundary";
 import { MONEY_MOVE_COLLECTION } from "@/lib/banking/moneyMove";
 import { resumeSettlement, settleTransition } from "@/lib/banking/settlementJournal";
+import {
+  quoteFundedProductAdvertising,
+  type ProductAdvertisingSellerQuote,
+} from "@/lib/products/rules/productAdvertising";
 
 const JOURNAL_PREFIX = "media-product-advertising";
 
-export interface MediaAdvertisingSellerQuote {
-  corporationId: string;
-  deliveredValueAnchor: number;
-  currencyCode: CurrencyCode;
-  localPerAnchor: number;
+function denominationConditions(
+  witness: MediaProductAdvertisingObligationV1["buyerDenomination"]
+): Record<string, unknown>[] {
+  const check = (
+    field: "liquidCurrencyCode" | "countryId",
+    present: boolean,
+    value: string | null
+  ) => {
+    if (!present) return [{ [field]: { $exists: false } }];
+    if (value === null) return [{ [field]: null }, { [field]: { $exists: true } }];
+    return [{ [field]: value }];
+  };
+  return [
+    ...check("liquidCurrencyCode", witness.liquidCurrencyCodePresent, witness.liquidCurrencyCode),
+    ...check("countryId", witness.countryIdPresent, witness.countryId),
+  ];
 }
 
+export type MediaAdvertisingSellerQuote = ProductAdvertisingSellerQuote;
+
 export function createMediaProductAdvertisingObligation(input: {
+  buyerCorporationId: string;
   projectId: string;
   turn: number;
   amountAnchor: number;
   buyerCurrencyCode: CurrencyCode;
   buyerLocalPerAnchor: number;
+  buyerDenomination: MediaProductAdvertisingObligationV1["buyerDenomination"];
   sellers: readonly MediaAdvertisingSellerQuote[];
 }): MediaProductAdvertisingObligationV1 | null {
-  const sellers = input.sellers.filter(
-    (seller) =>
-      Number.isFinite(seller.deliveredValueAnchor) &&
-      seller.deliveredValueAnchor > 0 &&
-      Number.isFinite(seller.localPerAnchor) &&
-      seller.localPerAnchor > 0
-  );
-  const totalSellerValue = sellers.reduce((sum, seller) => sum + seller.deliveredValueAnchor, 0);
-  if (
-    !Number.isSafeInteger(input.turn) ||
-    !input.projectId ||
-    !Number.isFinite(input.amountAnchor) ||
-    input.amountAnchor <= 0 ||
-    !Number.isFinite(input.buyerLocalPerAnchor) ||
-    input.buyerLocalPerAnchor <= 0 ||
-    totalSellerValue <= 0 ||
-    sellers.length === 0
-  ) {
+  if (!Number.isSafeInteger(input.turn) || !input.projectId || !input.buyerCorporationId) {
     return null;
   }
-
-  const buyerAmountLocal = anchorToCorpCapital(
-    input.amountAnchor,
-    input.buyerCurrencyCode,
-    input.buyerLocalPerAnchor
-  );
-  const buyerAnchor = buyerAmountLocal / input.buyerLocalPerAnchor;
-  let allocatedAnchor = 0;
-  const sellerAllocations = sellers.map((seller, index) => {
-    const amountAnchor =
-      index === sellers.length - 1
-        ? buyerAnchor - allocatedAnchor
-        : buyerAnchor * (seller.deliveredValueAnchor / totalSellerValue);
-    const amountLocal = anchorToCorpCapital(
-      amountAnchor,
-      seller.currencyCode,
-      seller.localPerAnchor
-    );
-    allocatedAnchor += amountLocal / seller.localPerAnchor;
-    return {
-      corporationId: seller.corporationId,
-      amountLocal,
-      currencyCode: seller.currencyCode,
-      localPerAnchor: seller.localPerAnchor,
-    };
+  const quote = quoteFundedProductAdvertising({
+    amountAnchor: input.amountAnchor,
+    buyer: {
+      corporationId: input.buyerCorporationId,
+      currencyCode: input.buyerCurrencyCode,
+      localPerAnchor: input.buyerLocalPerAnchor,
+      ...input.buyerDenomination,
+    },
+    sellers: input.sellers,
   });
-  if (
-    !(Number.isFinite(buyerAmountLocal) && buyerAmountLocal > 0) ||
-    sellerAllocations.some(
-      (seller) => !(Number.isFinite(seller.amountLocal) && seller.amountLocal > 0)
-    )
-  ) {
-    return null;
-  }
+  if (!quote) return null;
   return {
     projectId: input.projectId,
     turn: input.turn,
-    amountAnchor: buyerAnchor,
-    buyerAmountLocal,
-    buyerCurrencyCode: input.buyerCurrencyCode,
-    buyerLocalPerAnchor: input.buyerLocalPerAnchor,
-    sellerAllocations,
+    ...quote,
   };
 }
 
@@ -114,7 +88,10 @@ export function mediaProductAdvertisingTransition(
         localPerAnchor: seller.localPerAnchor,
       },
       collection: "corporations",
-      filter: { _id: oid(seller.corporationId) },
+      filter: {
+        _id: oid(seller.corporationId),
+        $and: denominationConditions(seller.denomination),
+      },
       path: "liquidCapital",
       note: `Fund title advertising allocation ${index + 1}`,
     };
@@ -161,6 +138,7 @@ export function mediaProductAdvertisingTransition(
               0,
             ],
           },
+          $and: denominationConditions(obligation.buyerDenomination),
         },
         path: "liquidCapital",
         note: "Pay the frozen title advertising order from funded cash",
@@ -244,7 +222,7 @@ export async function settleMediaProductAdvertisingObligations(
         : await settleTransition(db, transition);
       if (result.status === "applied" || (result.status === "replayed" && !result.error)) {
         touched.set(row._id.toHexString(), row._id);
-      } else if (result.status === "rejected") {
+      } else if (result.status === "rejected" && result.appliedLegs.length === 0) {
         await db.collection<Corporation>("corporations").updateOne(
           { _id: row._id },
           {

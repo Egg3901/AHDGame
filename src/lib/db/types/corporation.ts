@@ -12,6 +12,7 @@ import type {
 import type { CountryId } from "../../constants/countries";
 import type { CurrencyCode } from "../../constants/currencies";
 import type { ExtractableResource } from "../../constants/commodities";
+import type { ProductAdvertisingDenominationWitness } from "@/lib/products/rules/productAdvertising";
 
 export interface Shareholder {
   /** Character holder, present for character-owned positions */
@@ -42,11 +43,13 @@ export interface MediaProductAdvertisingObligationV1 {
   buyerAmountLocal: number;
   buyerCurrencyCode: CurrencyCode;
   buyerLocalPerAnchor: number;
+  buyerDenomination: ProductAdvertisingDenominationWitness;
   sellerAllocations: Array<{
     corporationId: string;
     amountLocal: number;
     currencyCode: CurrencyCode;
     localPerAnchor: number;
+    denomination: ProductAdvertisingDenominationWitness;
   }>;
 }
 

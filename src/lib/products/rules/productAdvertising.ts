@@ -40,9 +40,9 @@ export function productAdvertisingDenominationWitness(input: {
   countryId?: string | null;
 }): ProductAdvertisingDenominationWitness {
   return {
-    liquidCurrencyCodePresent: Object.hasOwn(input, "liquidCurrencyCode"),
+    liquidCurrencyCodePresent: input.liquidCurrencyCode !== undefined,
     liquidCurrencyCode: input.liquidCurrencyCode ?? null,
-    countryIdPresent: Object.hasOwn(input, "countryId"),
+    countryIdPresent: input.countryId !== undefined,
     countryId: input.countryId ?? null,
   };
 }
@@ -64,6 +64,7 @@ export function quoteFundedProductAdvertising(input: {
   if (
     !Number.isFinite(input.amountAnchor) ||
     input.amountAnchor <= 0 ||
+    !Number.isFinite(totalSellerValue) ||
     !Number.isFinite(input.buyer.localPerAnchor) ||
     input.buyer.localPerAnchor <= 0 ||
     !input.buyer.corporationId ||

@@ -12,6 +12,63 @@ export interface MediaProductDeliveryAttribution {
   deliveredRevenueAnchorByCommodity: Partial<Record<CommodityType, number>>;
 }
 
+export interface PaidPoliticalMediaSellerAmount {
+  units: number;
+  amountAnchor: number;
+}
+
+export function paidPoliticalMediaSellerReceipts(input: {
+  sellers: readonly (PaidPoliticalMediaSellerAmount & { sectorId: string })[];
+  results: readonly { status: string }[];
+  orderAlreadySettled?: boolean;
+}): Array<PaidPoliticalMediaSellerAmount & { sectorId: string }> {
+  return input.sellers.filter((seller, index) => {
+    if (
+      !seller.sectorId ||
+      !Number.isFinite(seller.units) ||
+      seller.units <= 0 ||
+      !Number.isFinite(seller.amountAnchor) ||
+      seller.amountAnchor <= 0
+    ) {
+      return false;
+    }
+    const status = input.results[index]?.status;
+    return input.orderAlreadySettled === true || status === "applied" || status === "replayed";
+  });
+}
+
+/** Remove planned political fills and restore only seller receipts that applied. */
+export function reconcileMediaProductDelivery(input: {
+  clearing: SectorClearingResult;
+  plannedPoliticalUnits: number;
+  paidPoliticalSeller: PaidPoliticalMediaSellerAmount;
+}): {
+  clearing: SectorClearingResult;
+  paidPoliticalUnitsByCommodity: Partial<Record<CommodityType, number>>;
+  paidPoliticalRevenueAnchorByCommodity: Partial<Record<CommodityType, number>>;
+} {
+  const deliveredUnitsByCommodity = { ...input.clearing.deliveredUnitsByCommodity };
+  const commercialAndPaidUnits = deliveredUnitsByCommodity.advertising ?? 0;
+  const plannedPoliticalUnits = Number.isFinite(input.plannedPoliticalUnits)
+    ? Math.max(0, input.plannedPoliticalUnits)
+    : 0;
+  const paidPoliticalUnits = Number.isFinite(input.paidPoliticalSeller.units)
+    ? Math.max(0, input.paidPoliticalSeller.units)
+    : 0;
+  const paidPoliticalRevenue = Number.isFinite(input.paidPoliticalSeller.amountAnchor)
+    ? Math.max(0, input.paidPoliticalSeller.amountAnchor)
+    : 0;
+  deliveredUnitsByCommodity.advertising = Math.max(
+    0,
+    commercialAndPaidUnits - plannedPoliticalUnits + paidPoliticalUnits
+  );
+  return {
+    clearing: { ...input.clearing, deliveredUnitsByCommodity },
+    paidPoliticalUnitsByCommodity: { advertising: paidPoliticalUnits },
+    paidPoliticalRevenueAnchorByCommodity: { advertising: paidPoliticalRevenue },
+  };
+}
+
 interface MediaProductOfferPlan {
   availabilityByCommodity: Partial<Record<CommodityType, number>>;
   titleShareByProjectId: Map<string, Partial<Record<CommodityType, number>>>;
@@ -72,6 +129,8 @@ export function attributeMediaProductSales(input: {
   clearing: SectorClearingResult | undefined;
   basePrices: Partial<Record<CommodityType, number>>;
   turn: number;
+  paidPoliticalUnitsByCommodity?: Partial<Record<CommodityType, number>>;
+  paidPoliticalRevenueAnchorByCommodity?: Partial<Record<CommodityType, number>>;
 }): MediaProductDeliveryAttribution[] {
   if (!Number.isSafeInteger(input.turn) || input.turn < 0 || !input.clearing) return [];
   const offerPlan = buildMediaProductOfferPlan(input.projects);
@@ -85,19 +144,30 @@ export function attributeMediaProductSales(input: {
     if (!kind) continue;
     for (const commodity of kind.outputCommodities) {
       const totalDelivered = input.clearing.deliveredUnitsByCommodity?.[commodity] ?? 0;
+      const paidPoliticalUnits = Math.min(
+        Math.max(0, totalDelivered),
+        Math.max(0, input.paidPoliticalUnitsByCommodity?.[commodity] ?? 0)
+      );
       const totalAvailability = offerPlan.availabilityByCommodity[commodity] ?? 1;
       const titleShare = titleShares[commodity] ?? 0;
-      const units =
-        totalAvailability > 0 ? Math.max(0, totalDelivered) * (titleShare / totalAvailability) : 0;
+      const titleRevenueShare = totalAvailability > 0 ? titleShare / totalAvailability : 0;
+      const units = totalAvailability > 0 ? Math.max(0, totalDelivered) * titleRevenueShare : 0;
       const unitPriceFactor = input.clearing.offerFactorByCommodity?.[commodity] ?? 0;
       const basePrice = input.basePrices[commodity] ?? 0;
-      const revenue =
+      const commercialRevenue =
         Number.isFinite(unitPriceFactor) &&
         unitPriceFactor > 0 &&
         Number.isFinite(basePrice) &&
         basePrice > 0
-          ? units * basePrice * unitPriceFactor
+          ? Math.max(0, units - paidPoliticalUnits * titleRevenueShare) *
+            basePrice *
+            unitPriceFactor
           : 0;
+      const paidPoliticalRevenue = Math.max(
+        0,
+        input.paidPoliticalRevenueAnchorByCommodity?.[commodity] ?? 0
+      );
+      const revenue = commercialRevenue + paidPoliticalRevenue * titleRevenueShare;
       deliveredUnitsByCommodity[commodity] = units;
       deliveredRevenueAnchorByCommodity[commodity] = Number.isFinite(revenue) ? revenue : 0;
     }
