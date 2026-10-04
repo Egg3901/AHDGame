@@ -995,8 +995,7 @@ export function processSectors(
 
     // Share price is finalized after all corps are processed (iterative cross-holding quotes).
     const totalShares = corp.totalShares ?? 10_000_000;
-    const endLiquidAnchor =
-      liquidCapitalAnchor + cashIncomeBeforeMarketingSettlement - productDevelopmentSpendAnchor;
+    const endLiquidAnchor = liquidCapitalAnchor + cashIncomeBeforeMarketingSettlement;
     /** Placeholder until cross-holding iteration writes the real price into corpOps. */
     const placeholderSharePrice = Number.isFinite(corp.sharePrice) ? corp.sharePrice : 0.1;
 
@@ -1062,8 +1061,7 @@ export function processSectors(
       dividendRate: payoutDividendRate,
       // Snapshot mirrors the DB field: home currency post-migration, ₳ pre-migration.
       // Escrow funding leaves the treasury this turn, so reflect it in the snapshot.
-      liquidCapital:
-        corp.liquidCapital + incomeForBalance - escrowFundingMove - productDevelopmentSpendLocal,
+      liquidCapital: corp.liquidCapital + incomeForBalance - escrowFundingMove,
       escrowFundingMove,
       escrowBalanceAfter: (corp.shareEscrowBalance ?? 0) + escrowFundingMove,
       actualSharePrice: placeholderSharePrice,
@@ -1139,8 +1137,7 @@ export function processSectors(
     if (
       lookups.productLinesV2Enabled &&
       activeManufacturingProject &&
-      hourlyRd > 0 &&
-      endLiquidAnchor >= 0 &&
+      productDevelopmentSpendAnchor > 0 &&
       corp.manufacturingProductDevelopmentPaidTurnV2 !== currentTurn
     ) {
       manufacturingDevelopmentCashOps.push({

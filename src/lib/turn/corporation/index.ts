@@ -105,6 +105,7 @@ import {
   type PoliticalMediaOrderForClearing,
 } from "@/lib/politicalMedia/journal";
 import { applyMediaEditorialEffects } from "@/lib/mediaEditorial/applyEffects";
+import { applyOperatingCashThenDevelopmentCash } from "./manufacturingDevelopmentCashSettlement";
 
 export type { CorporationTurnResult } from "./corporationTurnRuntime";
 
@@ -658,12 +659,6 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     });
   }
 
-  // Product-development cash is a separately capitalized spend. Apply its
-  // live-balance/idempotence guard after the rest of the turn's corporation
-  // cash writes so same-turn salaries, settlements, and NPP decisions are
-  // included in the available balance check.
-  corpOps.push(...manufacturingDevelopmentCashOps);
-
   // Merge NPP sector growth-rate updates into sectorOps
   for (const nppSectorUpdate of nppSectorUpdates) {
     sectorOps.push({
@@ -707,15 +702,30 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await partitionedBulkWrite(db.collection("corporateSectors"), sectorOps as any[]);
   }
-  if (corpOps.length > 0) {
-    // bulkWrite op array type doesn't satisfy AnyBulkWriteOperation narrowing, runtime shape is valid
-    await applyCorporationCashWrites(
+  if (corpOps.length > 0 || manufacturingDevelopmentCashOps.length > 0) {
+    // Product development is capitalized separately, after operating P&L. The
+    // explicit sequence keeps its live cash guard from racing unordered corpOps.
+    await applyOperatingCashThenDevelopmentCash({
       db,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      corpOps as any[],
-      foundingCashWitnesses,
-      reinvestmentCashWitnesses
-    );
+      operations: manufacturingDevelopmentCashOps,
+      turn: typeof turn === "number" ? turn : 1,
+      corporations: lookups.corporations,
+      snapshots: corpSnapshots,
+      exchangeRatesByCurrency: lookups.exchangeRatesByCurrency,
+      bondsByCorpId: lookups.bondsByCorpId,
+      sectorsByCorp: lookups.sectorsByCorp,
+      applyOperatingCashWrites: async () => {
+        if (corpOps.length === 0) return;
+        // bulkWrite op array type does not satisfy AnyBulkWriteOperation narrowing, runtime shape is valid.
+        await applyCorporationCashWrites(
+          db,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          corpOps as any[],
+          foundingCashWitnesses,
+          reinvestmentCashWitnesses
+        );
+      },
+    });
   }
   // Emit only for NPP unlocks proven applied above; the flush dedupes and
   // refunds any debit whose ledger row cannot be persisted (ticket #1998).

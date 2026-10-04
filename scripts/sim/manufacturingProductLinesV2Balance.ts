@@ -196,7 +196,7 @@ const lines = [
   `- Development threshold: ${money(projectCost)} anchor units (5% of allocated capital). Elapsed threshold: ${MANUFACTURING_DEVELOPMENT_ELAPSED_TURNS} receipts.`,
   `- Funded at 500 anchor units of paid R&D per turn: ${money(funded.paidDevelopment)} goes to development, ${money(funded.genericResearch)} continues to generic research, and launch occurs on receipt ${funded.launchTurn}.`,
   `- Unfunded for ${MANUFACTURING_DEVELOPMENT_ELAPSED_TURNS} turns: ${money(unfunded.paidDevelopment)} development spend and stage remains ${unfunded.project.stage}.`,
-  "- The 5,000 cost is charged once as paid R&D is redirected. It does not add a second capex debit.",
+  "- Development is a separate capitalized cash investment, limited to available cash and paid once per turn. The matching paid-R&D allocation funds development first; any remainder continues to generic research.",
   "",
   "## One representative operating day by stage",
   "",

@@ -313,6 +313,16 @@ describe("funded manufacturing project development cash", () => {
       },
     });
 
+    const normalCashWrite = result.corpOps[0] as {
+      updateOne: { update: { $inc: { liquidCapital: number } } };
+    };
+    expect(result.corpSnapshots[0].liquidCapital).toBe(
+      corp.liquidCapital + normalCashWrite.updateOne.update.$inc.liquidCapital
+    );
+    expect(result.corpSnapshots[0].liquidCapitalAnchorAfterIncome).toBe(
+      result.corpSnapshots[0].liquidCapital
+    );
+
     // A concurrent spend to 499 makes the actual Mongo predicate false. If a
     // crash occurs after receipt consumption, retaining this turn stamp makes
     // a retried turn's otherwise-empty-slot predicate false as well.
