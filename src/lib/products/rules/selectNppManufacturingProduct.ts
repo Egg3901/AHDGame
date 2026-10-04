@@ -23,7 +23,7 @@ export function selectNppManufacturingProduct(input: {
   techTreesEnabled: boolean;
   unlockedTechNodeIds?: readonly string[];
   eraUnitScale: number;
-  priceRatioOf: (commodity: CommodityType) => number;
+  priceRatioOf: (commodity: CommodityType, countryId: string) => number | null;
 }): NppManufacturingProductCandidate | undefined {
   const plants: ManufacturingPlant[] = input.sectors.map((sector) => ({
     sectorId: sector._id.toString(),
@@ -39,7 +39,7 @@ export function selectNppManufacturingProduct(input: {
     techTreesEnabled: input.techTreesEnabled,
     unlockedTechNodeIds: input.unlockedTechNodeIds,
   });
-  const profits = analyzeSectorProfitability(input.sectors, true);
+  const profits = analyzeSectorProfitability([...input.sectors], true);
   const sectorById = new Map(input.sectors.map((sector) => [sector._id.toString(), sector]));
   const marginBySectorId = new Map(
     profits.map((profit) => [profit.sector._id.toString(), profit.margin])
@@ -51,6 +51,7 @@ export function selectNppManufacturingProduct(input: {
     );
     const capacityStock = compatiblePlants.reduce((sum, plant) => sum + plant.capitalStock, 0);
     if (capacityStock <= 0) return [];
+    const countryId = sectorById.get(compatiblePlants[0]?.sectorId ?? "")?.countryId ?? "";
     const marginWeighted = compatiblePlants.reduce(
       (sum, plant) => sum + plant.capitalStock * (marginBySectorId.get(plant.sectorId) ?? 0),
       0
@@ -80,10 +81,10 @@ export function selectNppManufacturingProduct(input: {
         })),
         capacityStock,
         capacityWeightedMarginPct: marginWeighted / capacityStock,
-        scarcityPriceRatio: input.priceRatioOf(kind.outputCommodity),
+        scarcityPriceRatio: input.priceRatioOf(kind.outputCommodity, countryId) ?? 0,
         supplyMixWeight: mixWeight / capacityStock,
       },
     ];
   });
-  return chooseNppManufacturingProduct(candidates);
+  return chooseNppManufacturingProduct(candidates) ?? undefined;
 }

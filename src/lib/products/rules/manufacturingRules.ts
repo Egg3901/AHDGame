@@ -287,7 +287,12 @@ export function allocateManufacturedOutput(
     Object.fromEntries(
       outputRates.map(([commodity]) => [
         commodity,
-        outputAnchor * commodityMixWeight(input.supplyRates, input.basePrices, commodity),
+        outputAnchor *
+          commodityMixWeight(
+            input.supplyRates,
+            input.basePrices as Record<CommodityType, number>,
+            commodity
+          ),
       ])
     );
   const totalBaselineAnchor = Object.values(baseOutputAnchorByCommodity).reduce(
@@ -353,7 +358,11 @@ export function buildManufacturedSectorOutput(input: {
       Object.keys(input.supplyRates).map((commodity) => [
         commodity,
         finiteNonNegative(input.outputAnchor) *
-          commodityMixWeight(input.supplyRates, input.basePrices, commodity as CommodityType),
+          commodityMixWeight(
+            input.supplyRates,
+            input.basePrices as Record<CommodityType, number>,
+            commodity as CommodityType
+          ),
       ])
     );
   for (const [commodity, baseAnchor] of Object.entries(baseline) as Array<

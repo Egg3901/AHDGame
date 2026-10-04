@@ -58,6 +58,7 @@ import {
 import type { CorporationType } from "@/lib/constants/corporations";
 import { partitionOpenMarkets } from "@/lib/economy/queries/privateEnterpriseGate";
 import type { CommodityPrice } from "@/lib/db/types/commodityPrice";
+import type { ManufacturingProductProject } from "@/lib/products/manufacturingProject";
 import {
   STRANDED_DIVEST_TURNS,
   STRANDED_DIVEST_MAX_PER_TURN,
@@ -373,16 +374,6 @@ export async function processNppCorporationDecisions(
       nationalShareOf,
     };
   }
-  const manufacturingProductProjects = buildNppProductProjectsV2({
-    state: manufacturingProductProjectState,
-    nppCorporations: nppCorps,
-    sectorsByCorp,
-    turn,
-    techCurrentYear,
-    techTreesEnabled,
-    plants,
-    priceRatioOf,
-  });
   const unownedDraws: NonNullable<NppCorpDecision["unownedDraws"]> = [];
   // Capacity-decision observations, aggregated in memory and flushed once for
   // the whole cohort below: no per-row turn queries, no new reads.
@@ -404,6 +395,17 @@ export async function processNppCorporationDecisions(
       gs?.currentYear ??
       startingYear + Math.floor(((gs?.currentTurn ?? turn) - 1) / TURNS_PER_YEAR);
   }
+
+  const manufacturingProductProjects = buildNppProductProjectsV2({
+    state: manufacturingProductProjectState,
+    nppCorporations: nppCorps,
+    sectorsByCorp,
+    turn,
+    techCurrentYear,
+    techTreesEnabled,
+    plants,
+    priceRatioOf,
+  });
 
   // Local-per-₳ rates for every live currency, loaded once. NPP money constants
   // are all ₳; `liquidCapital` is not. See `NppCorpDecisionContext.fxRate`.

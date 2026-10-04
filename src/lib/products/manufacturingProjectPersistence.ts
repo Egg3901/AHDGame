@@ -2,7 +2,7 @@
  * Persistence for the v2 manufacturing product project slot. The unique partial index protects
  * one active project per corporation on standalone Mongo without a transaction.
  */
-import type { Db } from "mongodb";
+import type { AnyBulkWriteOperation, Db } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
 import { advanceManufacturingProject } from "./rules/manufacturingRules";
 import {
@@ -55,7 +55,7 @@ export async function consumeManufacturingDevelopmentReceiptsV2(input: {
     string,
     { corporation: Corporation; receipt: ManufacturingDevelopmentCashReceiptV2 }
   >();
-  const projectOps = [];
+  const projectOps: AnyBulkWriteOperation<ManufacturingProductProject>[] = [];
   const projectedProgress = new Map<string, ReturnType<typeof advanceManufacturingProject>>();
   const staleReceipts = new Set<string>();
 
@@ -93,7 +93,7 @@ export async function consumeManufacturingDevelopmentReceiptsV2(input: {
             developmentPaidAnchor: progress.developmentPaidAnchor,
             elapsedDevelopmentTurns: progress.elapsedDevelopmentTurns,
           },
-          ...(progress.active ? {} : { $unset: { activeCorporationId: "" } }),
+          ...(progress.active ? {} : { $unset: { activeCorporationId: 1 } }),
         },
       },
     });
@@ -107,12 +107,12 @@ export async function consumeManufacturingDevelopmentReceiptsV2(input: {
     if (result.matchedCount !== projectOps.length) {
       const currentProjects = await input.db
         .collection<ManufacturingProductProject>(MANUFACTURING_PRODUCT_PROJECTS_V2)
-        .find({
+        .find<ManufacturingProductProject>({
           _id: {
             $in: [...receiptByCorporationId.values()].map(({ receipt }) => receipt.projectId),
           },
         })
-        .project(activeManufacturingProductProjectProjection())
+        .project<ManufacturingProductProject>(activeManufacturingProductProjectProjection())
         .toArray();
       const currentById = new Map(currentProjects.map((project) => [project._id, project]));
       landedCorporations = new Set();

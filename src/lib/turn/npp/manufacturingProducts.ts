@@ -1,5 +1,4 @@
 import { ObjectId, type Db } from "mongodb";
-import type { CommodityType } from "@/lib/constants/commodities";
 import { marketAtLeast, getMarketSystemMode } from "@/lib/market/featureFlag";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
 import type { Corporation, CorporateSector, StateMetrics } from "@/lib/db/types";
@@ -8,6 +7,7 @@ import {
   type ManufacturingProductProject,
 } from "@/lib/products/manufacturingProject";
 import { selectNppManufacturingProduct } from "@/lib/products/rules/selectNppManufacturingProduct";
+import type { CommodityPriceRatioFn } from "@/lib/turn/npp/marketSignals";
 import {
   MANUFACTURING_DEVELOPMENT_ELAPSED_TURNS,
   manufacturingDevelopmentThresholdAnchor,
@@ -30,8 +30,10 @@ export async function loadNppProductProjectsV2(
   if (productLinesEnabled) {
     const activeProjects = await db
       .collection<ManufacturingProductProject>(MANUFACTURING_PRODUCT_PROJECTS_V2)
-      .find({ activeCorporationId: { $in: nppCorporations.map((corp) => corp._id.toString()) } })
-      .project({
+      .find<ManufacturingProductProject>({
+        activeCorporationId: { $in: nppCorporations.map((corp) => corp._id.toString()) },
+      })
+      .project<ManufacturingProductProject>({
         _id: 1,
         corporationId: 1,
         activeCorporationId: 1,
@@ -77,7 +79,7 @@ export function createNppManufacturingProductProjectV2(input: {
   techTreesEnabled: boolean;
   unlockedTechNodeIds?: readonly string[];
   eraUnitScale: number;
-  priceRatioOf: (commodity: CommodityType) => number;
+  priceRatioOf: CommodityPriceRatioFn;
 }): ManufacturingProductProject | undefined {
   const selectedProduct = selectNppManufacturingProduct(input);
   if (!selectedProduct) return undefined;
@@ -105,9 +107,10 @@ export function buildNppProductProjectsV2(input: {
   techCurrentYear: number;
   techTreesEnabled: boolean;
   plants?: { enabled: boolean; eraUnitScale: number };
-  priceRatioOf: (commodity: CommodityType) => number;
+  priceRatioOf: CommodityPriceRatioFn;
 }): ManufacturingProductProject[] {
-  if (!input.state.productLinesEnabled || !input.plants?.enabled) return [];
+  const plants = input.plants;
+  if (!input.state.productLinesEnabled || !plants?.enabled) return [];
   return input.nppCorporations.flatMap((corporation) => {
     const corporationId = corporation._id.toString();
     if (input.state.activeProjectByCorporationId.has(corporationId)) return [];
@@ -118,7 +121,7 @@ export function buildNppProductProjectsV2(input: {
       currentYear: input.techCurrentYear > 0 ? input.techCurrentYear : undefined,
       techTreesEnabled: input.techTreesEnabled,
       unlockedTechNodeIds: corporation.unlockedTechNodeIds,
-      eraUnitScale: input.plants.eraUnitScale,
+      eraUnitScale: plants.eraUnitScale,
       priceRatioOf: input.priceRatioOf,
     });
     return project ? [project] : [];
