@@ -68,6 +68,8 @@ export async function loadUSMediaOutletDelivery(
           soldFraction: 1,
           soldByCommodity: 1,
           soldByCommodityTurn: 1,
+          soldUnitsByCommodity: 1,
+          soldUnitsByCommodityTurn: 1,
           embargoSuspended: 1,
           embargoExportExposure: 1,
         },
@@ -231,9 +233,9 @@ export async function loadUSMediaOutletDelivery(
     const deliveredUnits =
       context.includeSettledPolitical === true
         ? currentTurnDeliveredAdvertisingUnits({
-            snapshotTurn: sector.soldByCommodityTurn,
+            snapshotTurn: sector.soldUnitsByCommodityTurn,
             currentTurn: context.currentTurn,
-            physicalSoldUnits: physicalDelivered,
+            physicalSoldUnits: sector.soldUnitsByCommodity?.advertising,
             plannedPoliticalUnits: plannedUnits,
             settledPoliticalUnits: paidUnits,
           })

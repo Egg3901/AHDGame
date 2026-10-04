@@ -93,7 +93,17 @@ export function marketTelemetry(input: {
         .filter((entry): entry is [string, number] => Number.isFinite(entry[1]))
         .map(([commodity, sold]) => [commodity, Math.round(sold * 1000) / 1000])
     );
-    if (Number.isSafeInteger(currentTurn)) update.soldByCommodityTurn = currentTurn;
+    if (Number.isSafeInteger(currentTurn)) {
+      update.soldByCommodityTurn = currentTurn;
+      if (clearing.deliveredUnitsByCommodity) {
+        update.soldUnitsByCommodityTurn = currentTurn;
+        update.soldUnitsByCommodity = Object.fromEntries(
+          Object.entries(clearing.deliveredUnitsByCommodity).filter(
+            (entry): entry is [string, number] => Number.isFinite(entry[1]) && entry[1]! >= 0
+          )
+        );
+      }
+    }
     update.effectivePosture = Math.round(clearing.effectivePosture * 1000) / 1000;
     update.clearingStartTurn = clearingStartTurn ?? null;
   }

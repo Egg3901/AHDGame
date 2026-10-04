@@ -1099,6 +1099,9 @@ export interface CorporateSector {
   soldByCommodity?: Partial<Record<string, number>>;
   /** Turn whose clearing pass produced soldFraction and soldByCommodity. */
   soldByCommodityTurn?: number;
+  /** Exact units from that clearing pass; absent for legacy or recording-off turns. */
+  soldUnitsByCommodity?: Partial<Record<string, number>>;
+  soldUnitsByCommodityTurn?: number;
   effectivePosture?: number;
   clearingStartTurn?: number | null;
   /**

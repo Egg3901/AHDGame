@@ -1,3 +1,7 @@
+import {
+  mediaPoliticalResidualLimit,
+  type MediaOwnershipMarket,
+} from "@/lib/mediaRegulation/rules";
 import { TURNS_PER_DAY } from "@/lib/constants/corporations";
 import { commodityMixWeight, type CommodityType } from "@/lib/constants/commodities";
 import type { SectorClearingInput, SectorClearingResult } from "@/lib/market/clearing";
@@ -42,6 +46,7 @@ export interface PoliticalAdMarketSettlement {
  */
 export function settlePoliticalAdMarket(args: {
   orders: readonly PoliticalAdOrderDemand[];
+  mediaOwnership?: MediaOwnershipMarket;
   persistedPlans?: readonly { orderId: string; plan: PoliticalMediaSettlementPlan }[];
   offers: readonly PoliticalAdClearingOffer[];
   clearingBySectorId: ReadonlyMap<string, SectorClearingResult>;
@@ -147,6 +152,51 @@ export function settlePoliticalAdMarket(args: {
     });
   }
 
+  if (args.mediaOwnership) {
+    const law = args.mediaOwnership;
+    const commercialByOwner = new Map<string, number>();
+    const commercialByState = new Map<string, number>();
+    const residualByOwner = new Map<string, number>();
+    const reservedByOwner = new Map<string, number>();
+    const ownerKey = (sectorId: string) => {
+      const stateId = law.stateBySector.get(sectorId);
+      const owner = law.corporationBySector.get(sectorId);
+      return stateId && owner ? { stateId, key: `${stateId}:${owner}` } : undefined;
+    };
+    for (const offer of args.offers) {
+      const owner = ownerKey(offer.input.sectorId);
+      if (!owner) continue;
+      const units =
+        offer.offeredUnits *
+        Math.max(0, Math.min(1, offer.clearing?.soldByCommodity?.advertising ?? 0));
+      commercialByOwner.set(owner.key, (commercialByOwner.get(owner.key) ?? 0) + units);
+      commercialByState.set(owner.stateId, (commercialByState.get(owner.stateId) ?? 0) + units);
+      reservedByOwner.set(
+        owner.key,
+        (reservedByOwner.get(owner.key) ?? 0) +
+          (persistedUnitsBySectorId.get(offer.input.sectorId) ?? 0)
+      );
+    }
+    for (const seller of sellers) {
+      const owner = ownerKey(seller.sectorId);
+      if (owner)
+        residualByOwner.set(owner.key, (residualByOwner.get(owner.key) ?? 0) + seller.unsoldUnits);
+    }
+    for (const seller of sellers) {
+      const owner = ownerKey(seller.sectorId);
+      if (!owner) continue;
+      const maximum = Math.max(
+        0,
+        mediaPoliticalResidualLimit(
+          commercialByOwner.get(owner.key) ?? 0,
+          commercialByState.get(owner.stateId) ?? 0,
+          law.shareCap
+        ) - (reservedByOwner.get(owner.key) ?? 0)
+      );
+      const residual = residualByOwner.get(owner.key) ?? 0;
+      seller.unsoldUnits *= residual > 0 ? Math.min(1, maximum / residual) : 0;
+    }
+  }
   const allocations = allocatePoliticalAdOrders(args.orders, sellers);
   const settlementPlans = allocations.map((allocation) => ({
     orderId: allocation.orderId,
@@ -238,6 +288,16 @@ export function settlePoliticalAdMarket(args: {
       factor,
       soldFraction: Math.min(1, soldFraction),
       soldByCommodity: nextSoldByCommodity as Partial<Record<CommodityType, number>>,
+      ...(before.deliveredUnitsByCommodity
+        ? {
+            deliveredUnitsByCommodity: {
+              ...before.deliveredUnitsByCommodity,
+              advertising:
+                (before.deliveredUnitsByCommodity.advertising ?? 0) +
+                Math.min(politicalUnits, fractionIncrease * offer.offeredUnits),
+            },
+          }
+        : {}),
     });
   }
 
