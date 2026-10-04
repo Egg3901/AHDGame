@@ -82,8 +82,8 @@ describe("underground resistance in ban-strike responses", () => {
       resyncDerived: true,
       witness: {
         flow: "crisis_response",
+        key: `union-ban-negotiation:${crisisId.toString()}:${characterId.toString()}:42`,
         site: "crises/unionBanStrike",
-        key: `union-ban-negotiation:${crisisId}:${characterId}:42`,
       },
     });
   });

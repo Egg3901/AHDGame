@@ -1,3 +1,8 @@
+/**
+ * Corporation share prices combine fundamental value, market sentiment and order flow.
+ * Regional sentiment follows the corporation's operating sector model and geography:
+ * see applyPriceMultipliers.
+ */
 import type { Db, AnyBulkWriteOperation } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import type { Corporation, CorporateSector } from "@/lib/db/types";
@@ -101,15 +106,16 @@ export async function applyPriceMultipliers(db?: Db): Promise<ApplyPriceMultipli
   const operatingSectorTypesByCorpId = new Map<string, Set<string>>();
   for (const sector of sectors) {
     const corpId = sector.corporationId.toString();
-    const sectorKeys = operatingSectorKeysByCorpId.get(corpId) ?? new Set<string>();
-    sectorKeys.add(
-      `${sector.countryId}:${sector.sectorType}:${sector.industryModel ?? ""}:${sector.mediaDiscriminator ?? ""}`
+    const operatingType = getOperatingSectorType(
+      sector.sectorType,
+      sector.industryModel,
+      sector.mediaDiscriminator
     );
+    const sectorKeys = operatingSectorKeysByCorpId.get(corpId) ?? new Set<string>();
+    sectorKeys.add(`${sector.countryId}:${operatingType}`);
     operatingSectorKeysByCorpId.set(corpId, sectorKeys);
     const sectorTypes = operatingSectorTypesByCorpId.get(corpId) ?? new Set<string>();
-    sectorTypes.add(
-      getOperatingSectorType(sector.sectorType, sector.industryModel, sector.mediaDiscriminator)
-    );
+    sectorTypes.add(operatingType);
     operatingSectorTypesByCorpId.set(corpId, sectorTypes);
   }
 

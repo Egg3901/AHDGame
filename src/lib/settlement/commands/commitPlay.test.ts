@@ -174,8 +174,8 @@ describe("commitSettlementPlay", () => {
     expect(vi.mocked(spendFromTreasury)).toHaveBeenCalledWith(expect.anything(), "DD", 45_000_000, {
       witness: {
         flow: "settlement_play",
-        site: "settlement/commitPlay",
         key: "settlement-play:aid:DD",
+        site: "settlement/commitPlay",
       },
     });
     expect(prime(db, "settlementCrises").updateOne).toHaveBeenCalled();
@@ -560,8 +560,8 @@ describe("commitSettlementPlay", () => {
         {
           witness: {
             flow: "settlement_play",
-            site: "settlement/commitPlay",
             key: "settlement-play:aid:DD",
+            site: "settlement/commitPlay",
           },
         }
       );

@@ -6,7 +6,6 @@ import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/api/requireAuth", () => ({ requireBasicAuth: vi.fn() }));
 vi.mock("@/lib/extraction/featureFlag", () => ({ loadContractIssuanceSettings: vi.fn() }));
-vi.mock("@/lib/audit/recordAudit", () => ({ recordAudit: vi.fn() }));
 vi.mock("@/lib/currentTurn", () => ({ getCurrentTurn: vi.fn().mockResolvedValue(100) }));
 vi.mock("@/lib/api/corporations/resolveQuery", () => ({
   resolveCorporation: vi.fn(),
@@ -104,5 +103,13 @@ describe("POST /api/contracts/extraction/[id]/accept", () => {
     const json = await res.json();
     expect(json.success).toBe(true);
     expect(json.expiresTurn).toBe(148);
+    expect(acceptContractOffer).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({ _id: CONTRACT_ID }),
+      expect.objectContaining({ _id: expect.any(ObjectId) }),
+      100,
+      expect.any(Date),
+      false
+    );
   });
 });

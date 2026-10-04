@@ -161,77 +161,115 @@ describe("applyPriceMultipliers — FTA threading", () => {
     expect(ops[0].updateOne.update.$set.sharePrice).toBeCloseTo(fundamentalPrice);
   });
 
-  it("still applies foreign-side pulses to non-FTA-partner corps", async () => {
-    // Same scenario, but the corp is HQ'd in CN (not in the UK FTA). The
-    // sentiment cap should peg the multiplier at 0.75, producing a sharePrice
-    // of 75 from a fundamental of 100.
-    const cnCorpId = new ObjectId();
-    const fundamentalPrice = 100;
+  it.each([
+    { type: "energy", industryModel: null, mediaDiscriminator: null, pulseSector: "energy" },
+    {
+      type: "manufacturing",
+      industryModel: "vehicles",
+      mediaDiscriminator: null,
+      pulseSector: "automobiles",
+    },
+    {
+      type: "media",
+      industryModel: null,
+      mediaDiscriminator: "entertainment",
+      pulseSector: "entertainment",
+    },
+  ])(
+    "still applies foreign-side $pulseSector pulses to non-FTA-partner corps",
+    async ({ type, industryModel, mediaDiscriminator, pulseSector }) => {
+      // Same scenario, but the corp is HQ'd in CN (not in the UK FTA). The
+      // sentiment cap should peg the multiplier at 0.75, producing a sharePrice
+      // of 75 from a fundamental of 100.
+      const cnCorpId = new ObjectId();
+      const fundamentalPrice = 100;
 
-    db.collection("corporations");
-    db.collection("corporateSectors");
-    db.collection("sentimentPulses");
-    db.collection("organizationLegislation");
+      db.collection("corporations");
+      db.collection("corporateSectors");
+      db.collection("sentimentPulses");
+      db.collection("organizationLegislation");
 
-    db.collectionMocks["corporations"]!.find.mockReturnValue({
-      toArray: vi.fn().mockResolvedValue([
-        {
-          _id: cnCorpId,
-          countryId: "CN",
-          type: "energy",
-          fundamentalSharePrice: fundamentalPrice,
-          sharePrice: fundamentalPrice,
-          publicFloat: 0,
-          totalShares: 10_000_000,
-          orderFlowMultiplier: 1.0,
-          orderFlowWindowBuyValue: 0,
-          orderFlowWindowSellValue: 0,
-        },
-      ]),
-    });
+      db.collectionMocks["corporations"]!.find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([
+          {
+            _id: cnCorpId,
+            countryId: "CN",
+            type,
+            industryModel,
+            mediaDiscriminator,
+            fundamentalSharePrice: fundamentalPrice,
+            sharePrice: fundamentalPrice,
+            publicFloat: 0,
+            totalShares: 10_000_000,
+            orderFlowMultiplier: 1.0,
+            orderFlowWindowBuyValue: 0,
+            orderFlowWindowSellValue: 0,
+          },
+        ]),
+      });
 
-    db.collectionMocks["corporateSectors"]!.find.mockReturnValue({
-      toArray: vi
-        .fn()
-        .mockResolvedValue([{ corporationId: cnCorpId, countryId: "UK", sectorType: "energy" }]),
-    });
+      db.collectionMocks["corporateSectors"]!.find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([
+          {
+            corporationId: cnCorpId,
+            countryId: "UK",
+            sectorType: type,
+            industryModel,
+            mediaDiscriminator,
+          },
+        ]),
+      });
 
-    db.collectionMocks["sentimentPulses"]!.find.mockReturnValue({
-      toArray: vi.fn().mockResolvedValue(
-        Array.from({ length: 4 }, () => ({
-          _id: new ObjectId(),
-          scope: "sector",
-          countryId: "UK",
-          sectorType: "energy",
-          hqRelation: "foreign",
-          initialImpact: -0.07,
-          decayRate: 1.0,
-          createdAt: new Date(0),
-          eventType: "tariff_passed",
-        }))
-      ),
-    });
+      db.collectionMocks["sentimentPulses"]!.find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue(
+          Array.from({ length: 4 }, () => ({
+            _id: new ObjectId(),
+            scope: "sector",
+            countryId: "UK",
+            sectorType: pulseSector,
+            hqRelation: "foreign",
+            initialImpact: -0.07,
+            decayRate: 1.0,
+            createdAt: new Date(0),
+            eventType: "tariff_passed",
+          }))
+        ),
+      });
 
-    // Same UK-US FTA, but this corp is in CN — still exposed to the penalty.
-    db.collectionMocks["organizationLegislation"]!.find.mockReturnValue({
-      toArray: vi.fn().mockResolvedValue([
-        {
-          _id: new ObjectId(),
-          type: "free_trade_agreement",
-          status: "active",
-          parties: ["UK", "US"],
-        },
-      ]),
-    });
+      // Same UK-US FTA, but this corp is in CN — still exposed to the penalty.
+      db.collectionMocks["organizationLegislation"]!.find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([
+          {
+            _id: new ObjectId(),
+            type: "free_trade_agreement",
+            status: "active",
+            parties: ["UK", "US"],
+          },
+        ]),
+      });
 
-    const { applyPriceMultipliers } = await import("./applyPriceMultipliers");
-    await applyPriceMultipliers();
+      const { applyPriceMultipliers } = await import("./applyPriceMultipliers");
+      await applyPriceMultipliers();
 
-    const corpsMock = db.collectionMocks["corporations"]!;
-    const ops = corpsMock.bulkWrite.mock.calls[0]![0] as Array<{
-      updateOne: { update: { $set: { sharePrice: number } } };
-    }>;
-    // 4 × −0.07 = −0.28 raw, clamped to −SENTIMENT_CAP=−0.25 → 0.75× multiplier.
-    expect(ops[0].updateOne.update.$set.sharePrice).toBeCloseTo(fundamentalPrice * 0.75);
-  });
+      expect(db.collectionMocks.corporateSectors.find).toHaveBeenCalledWith(
+        {},
+        expect.objectContaining({
+          projection: expect.objectContaining({ industryModel: 1, mediaDiscriminator: 1 }),
+        })
+      );
+      expect(db.collectionMocks.corporations.find).toHaveBeenCalledWith(
+        { fundamentalSharePrice: { $exists: true } },
+        expect.objectContaining({
+          projection: expect.objectContaining({ industryModel: 1, mediaDiscriminator: 1 }),
+        })
+      );
+
+      const corpsMock = db.collectionMocks["corporations"]!;
+      const ops = corpsMock.bulkWrite.mock.calls[0]![0] as Array<{
+        updateOne: { update: { $set: { sharePrice: number } } };
+      }>;
+      // 4 × −0.07 = −0.28 raw, clamped to −SENTIMENT_CAP=−0.25 → 0.75× multiplier.
+      expect(ops[0].updateOne.update.$set.sharePrice).toBeCloseTo(fundamentalPrice * 0.75);
+    }
+  );
 });

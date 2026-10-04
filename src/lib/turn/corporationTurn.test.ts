@@ -20,16 +20,19 @@ vi.mock("@/lib/wireEvent", () => ({
   logWireEvent: vi.fn().mockResolvedValue(undefined),
   wireHeadlineCorpCreditRating: vi.fn().mockReturnValue("Test headline"),
 }));
-vi.mock("@/lib/bonds/corporateCredit", () => ({
-  corporateCashArrearsAnchor: vi.fn().mockReturnValue(0),
-  sumCorporateSectorConstructionInProgress: vi.fn().mockReturnValue(0),
-  computeCorporateCreditAtTurn: vi.fn().mockReturnValue({
-    creditRating: { rating: "BBB", compositeScore: 50 },
-    totalDebt: 0,
-    totalEquity: 1000000,
-  }),
-  isCorporateIssuerBond: vi.fn().mockReturnValue(false),
-}));
+vi.mock("@/lib/bonds/corporateCredit", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/bonds/corporateCredit")>();
+  return {
+    ...actual,
+    sumCorporateSectorConstructionInProgress: vi.fn().mockReturnValue(0),
+    computeCorporateCreditAtTurn: vi.fn().mockReturnValue({
+      creditRating: { rating: "BBB", compositeScore: 50 },
+      totalDebt: 0,
+      totalEquity: 1000000,
+    }),
+    isCorporateIssuerBond: vi.fn().mockReturnValue(false),
+  };
+});
 vi.mock(
   "@/lib/budget/revenue",
   // Partial mock: keep the real `computeTaxBaseGdpShareBaseline` so
