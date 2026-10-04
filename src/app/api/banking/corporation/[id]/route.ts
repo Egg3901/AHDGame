@@ -150,7 +150,10 @@ async function handleGET(_request: Request, { params }: RouteParams) {
 
     const { id } = await params;
     const db = await getDb();
-    const resolved = await resolveCorporation(db, id);
+    const resolved = await resolveCorporation(db, id, {
+      bankPropForexFee: 0,
+      bankPropForexVolume: 0,
+    });
     if (!resolved.ok) return resolved.response;
     const { corporation } = resolved;
 

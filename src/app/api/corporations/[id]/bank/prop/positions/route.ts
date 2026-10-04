@@ -46,7 +46,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     const db = await getDb();
-    const resolved = await resolveCorporation(db, id);
+    const resolved = await resolveCorporation(db, id, { userId: 1, ceoVacant: 1 });
     if (!resolved.ok) return resolved.response;
     const { corporation } = resolved;
 
@@ -98,7 +98,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     }
 
     const db = await getDb();
-    const resolved = await resolveCorporation(db, id);
+    const resolved = await resolveCorporation(db, id, { userId: 1, ceoVacant: 1 });
     if (!resolved.ok) return resolved.response;
     const { corporation } = resolved;
 
