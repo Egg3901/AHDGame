@@ -8,7 +8,14 @@ import { ObjectId, type Db, type ClientSession } from "mongodb";
 import { randomUUID } from "node:crypto";
 import { COUNTRIES_WITH_BESPOKE_PRESIDENTIAL_ELECTIONS } from "@/lib/constants/countries";
 import type { AuthUserWithCharacter } from "@/lib/auth";
-import type { Campaign, Character, Election, ElectionCandidate, GameConfig, NPP } from "@/lib/db/types";
+import type {
+  Campaign,
+  Character,
+  Election,
+  ElectionCandidate,
+  GameConfig,
+  NPP,
+} from "@/lib/db/types";
 import { badRequest, conflict, forbidden, notFound } from "@/lib/api/errors";
 import { isCampaignManagerUser, isCampaignNomineeUser } from "@/lib/campaigns/access";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
