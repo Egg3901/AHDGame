@@ -173,6 +173,10 @@ describe("resetGameWorld", () => {
       expect(update.$set ?? {}).not.toHaveProperty("createdAt");
       expect(update.$unset ?? {}).not.toHaveProperty("createdAt");
     }
+    expect(db.collectionMocks.gameConfig.updateOne).toHaveBeenCalledWith(
+      { _id: "default" },
+      { $unset: { fresh1991VehicleModelSeed: "" } }
+    );
   });
 
   it.each(["none", "default"] as const)(

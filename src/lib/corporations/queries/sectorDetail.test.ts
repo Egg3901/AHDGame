@@ -19,6 +19,42 @@ beforeEach(async () => {
 });
 
 describe("getCorporationSectorDetail", () => {
+  it("returns the vehicle industry model on the public sector row", async () => {
+    const corporationId = new ObjectId();
+    const sectorId = new ObjectId();
+    db.collectionMocks.corporations.findOne.mockResolvedValue({
+      _id: corporationId,
+      sequentialId: 6,
+      name: "Vehicle Corp",
+      type: "manufacturing",
+      industryModel: "vehicles",
+      countryId: "US",
+      liquidCurrencyCode: "USD",
+    });
+    db.collectionMocks.corporateSectors.findOne.mockResolvedValue({
+      _id: sectorId,
+      corporationId,
+      stateId: "MI",
+      countryId: "US",
+      sectorType: "manufacturing",
+      industryModel: "vehicles",
+      strategyId: "standard",
+      revenue: 1_000_000,
+    });
+
+    const response = await getCorporationSectorDetail(
+      new Request(`http://localhost/api/corporations/6/sectors/${sectorId.toHexString()}`),
+      { params: Promise.resolve({ id: "6", sectorId: sectorId.toHexString() }) }
+    );
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.sector).toMatchObject({
+      sectorType: "manufacturing",
+      industryModel: "vehicles",
+    });
+  });
+
   it("redacts financial details for private corps from public viewers but keeps attack info accessible", async () => {
     const corporationId = new ObjectId();
     const ownerUserId = new ObjectId();

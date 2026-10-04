@@ -17,6 +17,7 @@ import { migration as bankFailurePoliticsIndex } from "./entries/2026-10-04-bank
 import { migration as locRecoveryOwnerIndex } from "./entries/2026-09-30-loc-recovery-owner-index";
 import { migration as politicalMediaOrderIndexes } from "./entries/2026-10-04-political-media-order-indexes";
 import { migration as bankPropForexFeeIndex } from "./entries/2026-10-04-bank-prop-forex-fee-index";
+import { migration as industryModelMarketIndexes } from "./entries/2026-10-04-industry-model-market-indexes";
 import { migration as supplyListingIndexes } from "./entries/2026-09-17-supply-listing-indexes";
 import { migration as ukDualMinistryRoleSlot } from "./entries/2026-09-17-uk-dual-ministry-role-slot";
 import { migration as electionResultSnapshots } from "./entries/2026-09-20-election-result-snapshots";
@@ -330,6 +331,7 @@ export const MIGRATIONS: Migration[] = [
   bankLoanCharterEpoch,
   governmentAccountability,
   politicalMediaOrderIndexes,
+  industryModelMarketIndexes,
   // v2 product lines use a separate collection and one active slot per corporation.
   manufacturingProductProjectsV2Index,
   bankTreasuryTradeIndexes,

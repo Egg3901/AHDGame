@@ -119,6 +119,47 @@ describe("loadCorporationDetailView", () => {
     expect(result.balanceSheet.assets.cashOnHand).toBe(corporation.liquidCapital);
   });
 
+  it("labels a modelled vehicle corporation while preserving its manufacturing identity", async () => {
+    const ceo = makeCharacter({
+      _id: new ObjectId(),
+      userId: new ObjectId(),
+      name: "Vehicle CEO",
+      sequentialId: 44,
+    });
+    const corporation = makeCorporation({
+      _id: new ObjectId(),
+      ceoId: ceo._id,
+      userId: ceo.userId,
+      type: "manufacturing",
+      industryModel: "vehicles",
+      countryId: "US",
+      headquartersState: "CA",
+      liquidCurrencyCode: "USD",
+      shareholders: [],
+      publicFloat: 0,
+    });
+    db.collectionMocks["characters"]!.findOne.mockResolvedValue(ceo);
+    db.collectionMocks["corporateSectors"]!.find.mockReturnValue({
+      toArray: () => Promise.resolve([]),
+    } as never);
+    db.collectionMocks["bonds"]!.find.mockReturnValue({
+      toArray: () => Promise.resolve([]),
+    } as never);
+    db.collectionMocks["corporationHistory"]!.findOne.mockResolvedValue({ income: 0 });
+
+    const { loadCorporationDetailView } = await import("./corporationDetail");
+    const result = await loadCorporationDetailView({
+      db: db as unknown as Db,
+      corporation,
+      currentTurn: 10,
+      viewerUserId: null,
+    });
+
+    expect(result.corporation.type).toBe("manufacturing");
+    expect(result.corporation.industryModel).toBe("vehicles");
+    expect(result.corporation.typeLabel).toBe("Vehicle manufacturing");
+  });
+
   it("includes active bank equity in the balance sheet", async () => {
     const ceo = makeCharacter({
       _id: new ObjectId(),

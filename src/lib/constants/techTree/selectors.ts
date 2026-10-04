@@ -11,6 +11,8 @@
  */
 
 import type { CorporationType } from "../corporations";
+import type { ManufacturingIndustryModel } from "../corporations";
+import { getOperatingSectorType } from "../sectorStrategies";
 import { TECH_TREE, type TechLane, type TechTreeNode } from "./nodes";
 import {
   aggregateTechEffects,
@@ -31,6 +33,7 @@ import {
 /** Minimal corp shape the selectors need. */
 export interface TechCorpView {
   type: CorporationType;
+  industryModel?: ManufacturingIndustryModel | null;
   unlockedTechNodeIds?: string[];
   /** Committed lane per decade id; absent decade ⇒ uncommitted. */
   techDecadeLane?: Record<string, TechLane>;
@@ -60,7 +63,9 @@ export function getUnlockedNodes(corp: TechCorpView): TechTreeNode[] {
   const ids = corp.unlockedTechNodeIds ?? [];
   if (ids.length === 0) return [];
   const idSet = new Set(ids);
-  return getTreeForType(corp.type).filter((n) => idSet.has(n.id));
+  return getTreeForType(
+    getOperatingSectorType(corp.type, corp.industryModel) as CorporationType
+  ).filter((n) => idSet.has(n.id));
 }
 
 /** Flat list of effects from every unlocked node. */
@@ -81,9 +86,11 @@ export function getAggregatedTechEffects(corp: TechCorpView): AggregatedTechEffe
  */
 export function getSectorTechEffects(
   corp: TechCorpView,
-  sectorType: CorporationType
+  sectorType: CorporationType,
+  industryModel?: ManufacturingIndustryModel | null
 ): AggregatedTechEffects {
-  const isPrimary = sectorType === corp.type;
+  const isPrimary =
+    sectorType === corp.type && (industryModel ?? null) === (corp.industryModel ?? null);
   const effects = getUnlockedNodes(corp).flatMap((node) => {
     if (node.lane === "generic")
       return node.effects.map((e) => scaleEffect(e, CORP_LANE_EFFECT_SCALE));
@@ -212,7 +219,8 @@ export function canUnlock(
   currentYear: number,
   funds: CanUnlockFunds
 ): CanUnlockResult {
-  const node = getNodeById(corp.type, nodeId);
+  const techType = getOperatingSectorType(corp.type, corp.industryModel) as CorporationType;
+  const node = getNodeById(techType, nodeId);
   if (!node) return { ok: false, reason: "unknown-node" };
   if (!isDecadeReached(node.decadeId, currentYear)) {
     return { ok: false, reason: "decade-locked", node };
@@ -231,7 +239,7 @@ export function canUnlock(
     return { ok: false, reason: "prereq-missing", node };
   }
   // v3 specializations: owning a rival in the exclusive group locks this one.
-  const rivals = getExclusiveRivalIds(corp.type, node);
+  const rivals = getExclusiveRivalIds(techType, node);
   if (rivals.some((id) => owned.includes(id))) {
     return { ok: false, reason: "path-locked", node };
   }
@@ -294,14 +302,16 @@ export function decadeLabel(decadeId: string): string {
 export function getSectorTechEffectsForYear(
   corp: TechCorpView,
   sectorType: CorporationType,
-  currentYear: number
+  currentYear: number,
+  industryModel?: ManufacturingIndustryModel | null
 ): AggregatedTechEffects {
   const currentDecade = getDecadeForYear(currentYear);
   const currentIdx = TECH_DECADES.findIndex((d) => d.id === currentDecade.id);
   const prevDecade = currentIdx > 0 ? TECH_DECADES[currentIdx - 1] : null;
   const allowedIds = new Set([currentDecade.id, ...(prevDecade ? [prevDecade.id] : [])]);
 
-  const isPrimary = sectorType === corp.type;
+  const isPrimary =
+    sectorType === corp.type && (industryModel ?? null) === (corp.industryModel ?? null);
   const effects = getUnlockedNodes(corp).flatMap((node) => {
     if (!allowedIds.has(node.decadeId)) return [];
     if (node.lane === "generic")

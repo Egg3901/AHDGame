@@ -129,6 +129,26 @@ describe("construction in progress", () => {
 });
 
 describe("sectorBookValueAnchor (D11)", () => {
+  it("keeps the legacy automobile list basis for manufacturing vehicle rows", () => {
+    const legacy = sectorBookValueAnchor(
+      { sectorType: "automobiles", capitalStock: 250_000, strategyId: "standard" },
+      1991,
+      1
+    );
+    const modelled = sectorBookValueAnchor(
+      {
+        sectorType: "manufacturing",
+        industryModel: "vehicles",
+        capitalStock: 250_000,
+        strategyId: "standard",
+      },
+      1991,
+      1
+    );
+
+    expect(modelled).toBe(legacy);
+  });
+
   const CAPACITY = 250;
 
   it("prices a flip-identity sector at 3.0 × RPU × capacity at the anchor year", () => {

@@ -31,7 +31,11 @@
 
 import type { CorporationType } from "./corporations";
 import type { CountryId } from "./countries";
-import { getEffectiveStrategyRates, applyPlannedEconomyOutputMix } from "./sectorStrategies";
+import {
+  getEffectiveStrategyRatesForOperatingModel,
+  getOperatingSectorType,
+  applyPlannedEconomyOutputMix,
+} from "./sectorStrategies";
 import { getOutputMultiplier, getInputMultiplier } from "@/lib/utils/productionPolicy";
 import { TRADE_EMBARGO_EXPORT_LOSS_SHARE } from "@/lib/trade/constants";
 
@@ -1958,6 +1962,7 @@ export interface GdpGrowthData {
 export function computeRawSupplyDemand(
   sectors: {
     sectorType: string;
+    industryModel?: string | null;
     revenue: number;
     stateId: string;
     /** Optional owner used to attribute this sector's realized ledger supply. */
@@ -2205,7 +2210,7 @@ export function computeRawSupplyDemand(
   }
 
   for (const sector of sectors) {
-    const st = sector.sectorType as CorporationType;
+    const st = getOperatingSectorType(sector.sectorType, sector.industryModel) as CorporationType;
 
     // Ensure state map exists (no base stabilizer — state level is fully dynamic)
     if (!byState.has(sector.stateId)) {
@@ -2228,12 +2233,13 @@ export function computeRawSupplyDemand(
     const hasStrategy = sector.strategyId && sector.strategyId !== "standard";
     const strategyRates =
       hasStrategy || sector.transitionFromStrategyId
-        ? getEffectiveStrategyRates(
+        ? getEffectiveStrategyRatesForOperatingModel(
             st,
             sector.strategyId ?? "standard",
             sector.transitionFromStrategyId,
             sector.transitionStartTurn,
-            currentTurn ?? 0
+            currentTurn ?? 0,
+            sector.industryModel
           )
         : null;
 

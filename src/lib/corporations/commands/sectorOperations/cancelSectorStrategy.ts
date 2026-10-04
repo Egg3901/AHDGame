@@ -204,7 +204,7 @@ export async function cancelSectorStrategy(request: Request, { params }: RoutePa
             isReversing: true,
             ...(rescaledCapitalStock != null ? { capitalStock: rescaledCapitalStock } : {}),
             ...(rescaledCapitalStock != null
-              ? seedPlantLedger(sector.sectorType, rescaledCapitalStock)
+              ? seedPlantLedger(sector.sectorType, rescaledCapitalStock, sector.industryModel)
               : {}),
             ...(rescaledBuildQueue != null ? { buildQueue: rescaledBuildQueue } : {}),
             ...(rescaledCancelOtherOpexAnchor != null

@@ -12,7 +12,7 @@ import {
   type LoyaltySectorInput,
 } from "./brandLoyaltyTurn";
 import {
-  getEffectiveStrategyRates,
+  getEffectiveStrategyRatesForOperatingModel,
   applyPlannedEconomyOutputMix,
   plannedEconomyMediaSupplyFactor,
 } from "@/lib/constants/sectorStrategies";
@@ -229,12 +229,13 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
     for (const [corpId, sectors] of lookups.sectorsByCorp) {
       const corp = lookups.corpById.get(corpId);
       for (const sector of sectors) {
-        const baseRates = getEffectiveStrategyRates(
+        const baseRates = getEffectiveStrategyRatesForOperatingModel(
           sector.sectorType,
           sector.strategyId ?? "standard",
           sector.transitionFromStrategyId,
           sector.transitionStartTurn,
-          turn ?? 0
+          turn ?? 0,
+          sector.industryModel
         );
         // Same remap the world ledger applies (computeRawSupplyDemand): bloc
         // media offers state broadcasting, not advertising. If the offer and

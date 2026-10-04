@@ -50,6 +50,7 @@ export { SECTOR_SCOPE_LABELS, type SectorScope };
 export interface NationalizeSectorWideParams {
   countryId: CountryId;
   sectorType: CorporationType;
+  industryModel?: Corporation["industryModel"];
   /** Fraction carved from each in-scope holder, 0 < f ≤ 1. */
   carveFraction: number;
   scope: SectorScope;
@@ -91,7 +92,12 @@ export async function nationalizeSectorWide(
 
   const sectors = db.collection<CorporateSector>("corporateSectors");
   const corps = db.collection<Corporation>("corporations");
-  const dest = await resolveNationalCorporationForSector(db, params.countryId, params.sectorType);
+  const dest = await resolveNationalCorporationForSector(
+    db,
+    params.countryId,
+    params.sectorType,
+    params.industryModel
+  );
   // Snapshot the SOCI escalation multiplier at taking time so the transition
   // shock is fixed to today's concentration, not retroactively deepened later.
   const transitionMultiplier = sociMultiplier(

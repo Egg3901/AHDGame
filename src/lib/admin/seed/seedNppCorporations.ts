@@ -141,7 +141,8 @@ export async function seedNppCorporations(
   db: Db,
   preset: string,
   startingYear: number,
-  log: (msg: string) => void = () => {}
+  log: (msg: string) => void = () => {},
+  vehicleModelSeed = false
 ): Promise<SeedNppCorporationsResult> {
   const plan = nppCorpSpawnPlan(preset, startingYear);
   const byCountry: Record<string, number> = {};
@@ -157,14 +158,23 @@ export async function seedNppCorporations(
     }
 
     try {
+      const sectorMarkets = vehicleModelSeed
+        ? [
+            ...CORPORATION_TYPES.filter((type) => type !== "automobiles").map((type) => ({
+              type,
+            })),
+            { type: "manufacturing" as const, industryModel: "vehicles" as const },
+          ]
+        : undefined;
       const spawned = await batchSpawnNppCorporations(db, countryId, {
         perSectorCount,
+        ...(sectorMarkets ? { sectorMarkets } : {}),
       });
       byCountry[countryId] = spawned.length;
       totalSpawned += spawned.length;
       log(
         `[seedNppCorporations] ${countryId}: spawned ${spawned.length} NPP corps ` +
-          `(${perSectorCount}/sector × ${CORPORATION_TYPES.length} sectors)`
+          `(${perSectorCount}/sector × ${sectorMarkets?.length ?? CORPORATION_TYPES.length} markets)`
       );
     } catch (err) {
       log(

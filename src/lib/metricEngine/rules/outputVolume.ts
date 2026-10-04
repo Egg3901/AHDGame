@@ -1,7 +1,7 @@
 import { REVENUE_TREND_MIN_SPAN, REVENUE_TREND_TARGET_SPAN } from "@/lib/turn/gdpGrowth";
 import type { CorporationType } from "@/lib/constants/corporations";
 import { unitYieldForSupply } from "@/lib/constants/capacityEconomy";
-import { getEffectiveStrategyRates } from "@/lib/constants/sectorStrategies";
+import { getEffectiveStrategyRatesForOperatingModel } from "@/lib/constants/sectorStrategies";
 
 export interface OutputVolumeSector {
   sectorType: CorporationType;
@@ -9,6 +9,7 @@ export interface OutputVolumeSector {
   strategyId?: string;
   transitionFromStrategyId?: string | null;
   transitionStartTurn?: number | null;
+  industryModel?: string | null;
 }
 
 /**
@@ -19,12 +20,13 @@ export interface OutputVolumeSector {
 export function constantPriceOutput(sector: OutputVolumeSector, turn: number): number | null {
   const units = sector.producedUnits;
   if (typeof units !== "number" || !Number.isFinite(units) || units < 0) return null;
-  const rates = getEffectiveStrategyRates(
+  const rates = getEffectiveStrategyRatesForOperatingModel(
     sector.sectorType,
     sector.strategyId ?? "standard",
     sector.transitionFromStrategyId,
     sector.transitionStartTurn,
-    turn
+    turn,
+    sector.industryModel
   );
   const unitYield = unitYieldForSupply(rates.supply, 1);
   if (!Number.isFinite(unitYield) || unitYield <= 0) return null;

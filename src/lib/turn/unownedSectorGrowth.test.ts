@@ -22,24 +22,36 @@ describe("processUnownedSectorGrowth", () => {
     });
   }
 
-  function makeUnowned(stateId: string, sectorType: string, revenue: number): UnownedSector {
+  function makeUnowned(
+    stateId: string,
+    sectorType: string,
+    revenue: number,
+    industryModel?: CorporateSector["industryModel"]
+  ): UnownedSector {
     return {
       _id: new ObjectId(),
       stateId,
       countryId: "US",
       sectorType: sectorType as UnownedSector["sectorType"],
+      ...(industryModel ? { industryModel } : {}),
       revenue,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
   }
 
-  function makeSector(stateId: string, sectorType: string, growthRate: number): CorporateSector {
+  function makeSector(
+    stateId: string,
+    sectorType: string,
+    growthRate: number,
+    industryModel?: CorporateSector["industryModel"]
+  ): CorporateSector {
     return {
       _id: new ObjectId(),
       corporationId: new ObjectId(),
       stateId,
       sectorType: sectorType as CorporateSector["sectorType"],
+      ...(industryModel ? { industryModel } : {}),
       targetGrowthRate: growthRate,
       currentGrowthRate: growthRate,
       revenue: 1_000_000,
@@ -167,5 +179,31 @@ describe("processUnownedSectorGrowth", () => {
     const caExpected = Math.round(50_000 * (1 + 2.5 / 48 / 100));
     const txExpected = Math.round(50_000 * (1 + 0.5 / 48 / 100));
     expect(revenues).toEqual([txExpected, caExpected]);
+  });
+
+  it("keeps generic manufacturing and vehicle-model growth buckets separate", async () => {
+    const unownedRows = [
+      makeUnowned("MI", "manufacturing", 100_000),
+      makeUnowned("MI", "manufacturing", 100_000, "vehicles"),
+    ];
+    setupCollection("unownedSectors", unownedRows);
+    setupCollection("corporateSectors", [
+      makeSector("MI", "manufacturing", 8),
+      makeSector("MI", "manufacturing", 2, "vehicles"),
+    ]);
+
+    const bulkWriteMock = vi.fn().mockResolvedValue({ modifiedCount: 2 });
+    db.collectionMocks["unownedSectors"]!.bulkWrite = bulkWriteMock;
+
+    await processUnownedSectorGrowth(db as unknown as Db);
+
+    const ops = bulkWriteMock.mock.calls[0][0] as {
+      updateOne: { filter: { _id: ObjectId }; update: { $set: { revenue: number } } };
+    }[];
+    const byId = new Map(
+      ops.map((op) => [op.updateOne.filter._id, op.updateOne.update.$set.revenue])
+    );
+    expect(byId.get(unownedRows[0]!._id)).toBe(Math.round(100_000 * (1 + 4 / 48 / 100)));
+    expect(byId.get(unownedRows[1]!._id)).toBe(Math.round(100_000 * (1 + 1 / 48 / 100)));
   });
 });

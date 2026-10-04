@@ -23,6 +23,16 @@ describe("constant-price production", () => {
     expect(constantPriceOutput({ ...base, producedUnits: 0 }, 48)).toBe(0);
   });
 
+  it("keeps constant-price output invariant for legacy automobile and vehicle-model rows", () => {
+    const legacy = { sectorType: "automobiles", producedUnits: 100, strategyId: "ev" } as const;
+    const modeled = {
+      ...legacy,
+      sectorType: "manufacturing",
+      industryModel: "vehicles",
+    } as const;
+    expect(constantPriceOutput(modeled, 48)).toBe(constantPriceOutput(legacy, 48));
+  });
+
   it.each([undefined, NaN, Infinity, -1])("rejects missing or invalid production %s", (units) => {
     expect(
       constantPriceOutput({ sectorType: "manufacturing", producedUnits: units }, 48)

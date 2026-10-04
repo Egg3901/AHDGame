@@ -1,6 +1,6 @@
 import type { ObjectId } from "mongodb";
 import type { ManufacturingDevelopmentCashReceiptV2 } from "@/lib/products/manufacturingProject";
-import type { CorporationType } from "../../constants/corporations";
+import type { CorporationType, ManufacturingIndustryModel } from "../../constants/corporations";
 import type { CountryId } from "../../constants/countries";
 import type { CurrencyCode } from "../../constants/currencies";
 import type { ExtractableResource } from "../../constants/commodities";
@@ -160,6 +160,8 @@ export interface Corporation {
   tickerSymbol?: string;
   description?: string;
   type: CorporationType;
+  /** Specialized model identity when the primary type is manufacturing. */
+  industryModel?: ManufacturingIndustryModel | null;
   /** Optional secondary sector focus, halves sector match bonus, doubles base sprawl threshold */
   secondaryType?: CorporationType | null;
   /** Turn when primary/secondary type was last switched (for penalty duration) */
@@ -773,6 +775,8 @@ export interface CorporateSector {
   countryId: CountryId;
   stateId: string;
   sectorType: CorporationType;
+  /** Optional production model for a specialized manufacturing industry. */
+  industryModel?: ManufacturingIndustryModel | null;
   /** Optional CEO-defined display name for this specific sector instance */
   displayName?: string;
   /** Player-set target growth rate (% per game year, 48 turns, e.g. 1.5) */

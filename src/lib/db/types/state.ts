@@ -144,6 +144,7 @@ export interface State {
   topSectorsCache?: {
     sectors: Array<{
       sectorType: CorporationType;
+      industryModel?: string | null;
       revenue: number;
       /**
        * `"primary"` when this sector matches `sectorSpecializations.primary`

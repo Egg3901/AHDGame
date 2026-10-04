@@ -10,6 +10,7 @@ import type { StateResourceCapacity } from "@/lib/db/types/stateResourceCapacity
 import type { CorporationType } from "@/lib/constants/corporations";
 import {
   SECTOR_STRATEGIES,
+  getOperatingSectorType,
   STRATEGY_RETOOL_COST_FRACTION,
   STRATEGY_TRANSITION_TURNS,
   STRATEGY_COOLDOWN_TURNS,
@@ -94,7 +95,10 @@ export async function setSectorStrategy(request: Request, { params }: RouteParam
     }
 
     // Validate strategy exists for this sector type
-    const sectorType = sector.sectorType as CorporationType;
+    const sectorType = getOperatingSectorType(
+      sector.sectorType,
+      sector.industryModel
+    ) as CorporationType;
     const strategies = SECTOR_STRATEGIES[sectorType];
     if (!strategies) {
       return NextResponse.json(
@@ -164,6 +168,7 @@ export async function setSectorStrategy(request: Request, { params }: RouteParam
     const availability = getStrategyAvailability(
       {
         type: corporation.type,
+        industryModel: corporation.industryModel,
         unlockedTechNodeIds: corporation.unlockedTechNodeIds,
         techDecadeLane: corporation.techDecadeLane,
       },
@@ -290,6 +295,7 @@ export async function setSectorStrategy(request: Request, { params }: RouteParam
     const plantsEnabled = marketAtLeast(marketMode, "plants");
     const rescale = retoolRescaleFields({
       sectorType,
+      industryModel: sector.industryModel,
       fromStrategyId: currentStrategyId,
       toStrategyId: strategyId,
       plantsEnabled,

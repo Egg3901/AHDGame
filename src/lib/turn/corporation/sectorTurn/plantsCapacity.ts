@@ -11,7 +11,7 @@
  * under depreciation. No reads or writes here, only the turn inputs.
  */
 import { activeCapacityFraction } from "@/lib/corporations/investment/rules";
-import { getStrategy } from "@/lib/constants/sectorStrategies";
+import { getStrategyForOperatingModel } from "@/lib/constants/sectorStrategies";
 import { seedCapitalStock } from "@/lib/market/capital";
 import { unitYieldForSupply } from "@/lib/constants/capacityEconomy";
 import type { CorporationType } from "@/lib/constants/corporations";
@@ -37,6 +37,7 @@ export interface PlantsCapacityInput {
     | "transitionFromStrategyId"
     | "strategyId"
     | "sectorType"
+    | "industryModel"
     | "transitionStartTurn"
     | "retoolRescaleApplied"
     | "operatingCapacityTurn"
@@ -125,6 +126,7 @@ export function computePlantsCapacity(input: PlantsCapacityInput): PlantsCapacit
     plantsEnabled: plantsEnabled && !embargoLegacyMothball,
     isAutoRetool: corp.ceoType === "npp" || sector.autoStrategyAdoptedAtTurn != null,
     sectorType: sector.sectorType as CorporationType,
+    industryModel: sector.industryModel,
     strategyId: sector.strategyId,
     transitionFromStrategyId: sector.transitionFromStrategyId,
     transitionStartTurn: sector.transitionStartTurn,
@@ -146,6 +148,7 @@ export function computePlantsCapacity(input: PlantsCapacityInput): PlantsCapacit
     healedOpex?.capitalStock != null ? Math.max(0, healedOpex.capitalStock) : storedCapacity;
   const retoolBasis = {
     sectorType: sector.sectorType,
+    industryModel: sector.industryModel,
     strategyId: sector.strategyId,
     transitionFromStrategyId: sector.transitionFromStrategyId,
     transitionStartTurn: sector.transitionStartTurn,
@@ -163,7 +166,11 @@ export function computePlantsCapacity(input: PlantsCapacityInput): PlantsCapacit
   // the destination recipe, so this is a no-op there.
   const flipSeedSupply =
     isFlipTurn && retoolCapacityRatio !== 1 && sector.transitionFromStrategyId
-      ? (getStrategy(sector.sectorType, sector.strategyId ?? "standard").supply ?? strategySupply)
+      ? (getStrategyForOperatingModel(
+          sector.sectorType,
+          sector.strategyId ?? "standard",
+          sector.industryModel
+        ).supply ?? strategySupply)
       : strategySupply;
 
   // D12: a mothballed sector's plants are cold — they produce nothing, offer
@@ -221,7 +228,7 @@ export function computePlantsCapacity(input: PlantsCapacityInput): PlantsCapacit
       })
     : 0;
   const plantLedger = plantsEnabled
-    ? seedPlantLedger(sector.sectorType, plantsOwnedCapacity)
+    ? seedPlantLedger(sector.sectorType, plantsOwnedCapacity, sector.industryModel)
     : null;
   // ─── P5: the PAID BASIS of that capacity ──────────────────────────────────
   //

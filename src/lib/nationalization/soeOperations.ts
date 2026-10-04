@@ -818,6 +818,7 @@ function computeSoeShareOfStateSector(
 export interface SoeCapexSectorBuy {
   sectorId: CorporateSector["_id"];
   sectorType: CorporateSector["sectorType"];
+  industryModel?: CorporateSector["industryModel"];
   capitalStock: number;
   /** Capacity units bought back — exactly this turn's depreciation. */
   unitsAdded: number;
@@ -858,7 +859,8 @@ export function buildSoeCapexGrant(
       sector.sectorType,
       priceYear,
       unitScale,
-      sector.strategyId ?? null
+      sector.strategyId ?? null,
+      sector.industryModel
     );
     if (!Number.isFinite(unitPrice) || unitPrice <= 0) continue;
     const unitsAdded = stock * CAPITAL_DEPRECIATION_PER_TURN;
@@ -877,6 +879,7 @@ export function buildSoeCapexGrant(
     buys.push({
       sectorId: sector._id,
       sectorType: sector.sectorType,
+      industryModel: sector.industryModel,
       capitalStock: stock,
       unitsAdded,
       costAnchor,
@@ -923,10 +926,12 @@ async function applyStateCapexGrants(
       ops.push({
         updateOne: {
           filter: { _id: buy.sectorId },
-          update: plantCapacityDeltaPipeline(buy.sectorType, buy.unitsAdded, {
-            capacityBookAnchor: buy.nextBookAnchor,
-            updatedAt: now,
-          }),
+          update: plantCapacityDeltaPipeline(
+            buy.sectorType,
+            buy.unitsAdded,
+            { capacityBookAnchor: buy.nextBookAnchor, updatedAt: now },
+            buy.industryModel
+          ),
         },
       });
     }

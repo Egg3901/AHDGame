@@ -80,6 +80,7 @@ export function resolveWorldYear(
 export function attackCapacityBasisAnchor(
   sector: {
     sectorType: CorporationType;
+    industryModel?: string | null;
     capitalStock?: number | null;
     strategyId?: string | null;
   },
@@ -93,7 +94,13 @@ export function attackCapacityBasisAnchor(
       : 0;
   if (!(stock > 0)) return null;
   const anchor =
-    stock * revenuePerCapacityUnitForStrategy(sector.sectorType, sector.strategyId, unitScale);
+    stock *
+    revenuePerCapacityUnitForStrategy(
+      sector.sectorType,
+      sector.strategyId,
+      unitScale,
+      sector.industryModel
+    );
   return Number.isFinite(anchor) && anchor > 0 ? anchor : null;
 }
 
@@ -174,6 +181,7 @@ export function capacityCaptureBookTransfer(args: {
 export function capacityCaptureBookUpdates(args: {
   defender: {
     sectorType: CorporationType;
+    industryModel?: string | null;
     /**
      * Priced at this strategy when no recorded basis exists (identity B).
      * REQUIRED but nullable so the compiler enumerates every caller: capacity
@@ -188,6 +196,7 @@ export function capacityCaptureBookUpdates(args: {
   /** Attacker's receiving sector; null when a brand-new sector is being created. */
   attacker: {
     sectorType: CorporationType;
+    industryModel?: string | null;
     strategyId: string | null;
     capitalStock?: number | null;
     capacityBookAnchor?: number | null;
@@ -216,7 +225,8 @@ export function capacityCaptureBookUpdates(args: {
             defender.sectorType,
             year,
             eraUnitScale,
-            defender.strategyId ?? null
+            defender.strategyId ?? null,
+            defender.industryModel
           ),
     sourceStock: defenderStock,
     unitsTaken,
@@ -244,7 +254,8 @@ export function capacityCaptureBookUpdates(args: {
           // Falls back to the defender's strategy alongside its sectorType, so
           // the pair is always read from the same sector rather than mixing an
           // attacker type with a defender strategy.
-          (attacker ? attacker.strategyId : defender.strategyId) ?? null
+          (attacker ? attacker.strategyId : defender.strategyId) ?? null,
+          attacker?.industryModel ?? defender.industryModel
         );
   return {
     defenderSet:
@@ -280,11 +291,12 @@ export function capacityCaptureUnits(
   capturedAnchor: number,
   sectorType: CorporationType,
   strategyId: string | null | undefined,
-  unitScale: number
+  unitScale: number,
+  industryModel?: string | null
 ): CapacityCaptureResult {
   const unitsTaken =
     Number.isFinite(capturedAnchor) && capturedAnchor > 0
-      ? computeSectorImpliedUnits(sectorType, capturedAnchor, strategyId, unitScale)
+      ? computeSectorImpliedUnits(sectorType, capturedAnchor, strategyId, unitScale, industryModel)
       : 0;
   return {
     unitsTaken,
@@ -310,6 +322,7 @@ export function attackCostAnchorUnderPlants(args: {
   legacyCostAnchor: number;
   unitsReceived: number;
   sectorType: CorporationType;
+  industryModel?: string | null;
   /**
    * Strategy of the sector being seized — the floor prices the capacity it
    * actually produces. REQUIRED but nullable (pass `null` for an unowned-pool
@@ -320,12 +333,20 @@ export function attackCostAnchorUnderPlants(args: {
   year: number;
   eraUnitScale: number;
 }): number {
-  const { legacyCostAnchor, unitsReceived, sectorType, strategyId, year, eraUnitScale } = args;
+  const {
+    legacyCostAnchor,
+    unitsReceived,
+    sectorType,
+    industryModel,
+    strategyId,
+    year,
+    eraUnitScale,
+  } = args;
   const legacy = Number.isFinite(legacyCostAnchor) ? Math.max(0, legacyCostAnchor) : 0;
   if (!(Number.isFinite(unitsReceived) && unitsReceived > 0)) return legacy;
   const capacityFloor =
     unitsReceived *
-    capacityPricePerUnit(sectorType, year, eraUnitScale, strategyId ?? null) *
+    capacityPricePerUnit(sectorType, year, eraUnitScale, strategyId ?? null, industryModel) *
     ATTACK_BUILD_PRICE_PREMIUM;
   return Math.round(Math.max(legacy, capacityFloor));
 }

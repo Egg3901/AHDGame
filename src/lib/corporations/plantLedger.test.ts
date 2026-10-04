@@ -21,6 +21,27 @@ describe("seedPlantLedger", () => {
       plantUnitRemainder: 0,
     });
   });
+
+  it("keeps the legacy one-unit vehicle facility quantum on a manufacturing model", () => {
+    const ledger = seedPlantLedger("manufacturing", 3.7, "vehicles");
+    expect(ledger.plantCount).toBe(3);
+    expect(ledger.plantUnitRemainder).toBeCloseTo(0.7);
+    expect(plantCapacityDeltaPipeline("manufacturing", 1, {}, "vehicles")[1]?.$set).toMatchObject({
+      plantCount: {
+        $cond: [
+          { $lte: ["$capitalStock", 0] },
+          0,
+          {
+            $cond: [
+              { $lt: ["$capitalStock", 1] },
+              1,
+              { $floor: { $divide: ["$capitalStock", 1] } },
+            ],
+          },
+        ],
+      },
+    });
+  });
 });
 
 describe("advancePlantLedger", () => {

@@ -18,6 +18,7 @@
 import type { Db } from "mongodb";
 import { findMergedRegionMetrics } from "@/lib/macroMetrics/merge";
 import type { CountryId } from "@/lib/constants/countries";
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import type {
   Election,
   ElectionCandidate,
@@ -236,7 +237,7 @@ function buildTopSectors(
   const cache = stateDoc?.topSectorsCache;
   if (cache && cache.sectors.length > 0) {
     return cache.sectors.map((s) => ({
-      id: s.sectorType,
+      id: getOperatingSectorType(s.sectorType, s.industryModel),
       share: 0,
       specializationBonus: s.specializationBonus,
     }));

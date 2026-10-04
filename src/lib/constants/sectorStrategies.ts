@@ -19,7 +19,7 @@
  */
 
 import * as Sentry from "@sentry/nextjs";
-import type { CorporationType } from "./corporations";
+import type { CorporationType, ManufacturingIndustryModel } from "./corporations";
 import type { CommodityType } from "./commodities";
 import { COMMODITY_BASE_PRICES } from "./commodities";
 import {
@@ -1300,6 +1300,28 @@ export function getSectorStrategies(
     : strategies;
 }
 
+/** Resolve the legacy economic profile represented by a persisted sector. */
+export function getOperatingSectorType(
+  sectorType: string,
+  industryModel?: ManufacturingIndustryModel | string | null
+): string {
+  return sectorType === "manufacturing" && industryModel === "vehicles"
+    ? "automobiles"
+    : sectorType;
+}
+
+/**
+ * Resolve a strategy for a persisted sector and its optional manufacturing
+ * production model. Vehicle models reuse the unchanged automobile recipes.
+ */
+export function getStrategyForOperatingModel(
+  sectorType: string,
+  strategyId: string,
+  industryModel?: string | null
+): SectorStrategy {
+  return getStrategy(getOperatingSectorType(sectorType, industryModel), strategyId);
+}
+
 /**
  * Compute effective supply/demand rates for a sector, handling transitions.
  *
@@ -1343,6 +1365,24 @@ export function getEffectiveStrategyRates(
   const demand = blendRates(source.demand, target.demand, progress);
 
   return { supply, demand, isTransitioning: true };
+}
+
+/** Resolve a strategy transition through the sector's optional production model. */
+export function getEffectiveStrategyRatesForOperatingModel(
+  sectorType: string,
+  strategyId: string,
+  transitionFromStrategyId: string | undefined | null,
+  transitionStartTurn: number | undefined | null,
+  currentTurn: number,
+  industryModel?: string | null
+): EffectiveStrategyRates {
+  return getEffectiveStrategyRates(
+    getOperatingSectorType(sectorType, industryModel),
+    strategyId,
+    transitionFromStrategyId,
+    transitionStartTurn,
+    currentTurn
+  );
 }
 
 /** Linearly blend two rate maps. Commodities in either map are included. */

@@ -10,7 +10,7 @@ import {
 } from "@/lib/constants/commodities";
 import {
   applyPlannedEconomyOutputMix,
-  getEffectiveStrategyRates,
+  getEffectiveStrategyRatesForOperatingModel,
   plannedEconomyMediaSupplyFactor,
 } from "@/lib/constants/sectorStrategies";
 import { retoolOperatingCapacityRatio } from "@/lib/corporations/retooling/rules";
@@ -22,6 +22,7 @@ import { isPlannedEconomy } from "@/lib/constants/commandEconomy";
  */
 export type SupplyAgreementCapacitySector = {
   sectorType: CorporationType;
+  industryModel?: string | null;
   capitalStock?: number | null;
   strategyId?: string | null;
   transitionFromStrategyId?: string | null;
@@ -91,12 +92,13 @@ export function computeSupplierCommodityCapacityUnits(args: {
       retoolOperatingCapacityRatio({ ...s, currentTurn: args.turn }) *
       activeCapacityFraction({ activeCapacityPercent: s.activeCapacityPercent });
     if (!(capacity > 0)) continue;
-    const rates = getEffectiveStrategyRates(
+    const rates = getEffectiveStrategyRatesForOperatingModel(
       s.sectorType,
       s.strategyId ?? "standard",
       s.transitionFromStrategyId,
       s.transitionStartTurn,
-      args.turn
+      args.turn,
+      s.industryModel
     );
     const plannedEconomy = isPlannedEconomy(
       s.countryId,
@@ -143,12 +145,13 @@ export function computeSupplierCommodityAchievableUnits(args: {
 }): number | null {
   let units = 0;
   for (const sector of supplyAgreementSectorsInScope(args.sectors, args.stateId)) {
-    const rates = getEffectiveStrategyRates(
+    const rates = getEffectiveStrategyRatesForOperatingModel(
       sector.sectorType,
       sector.strategyId ?? "standard",
       sector.transitionFromStrategyId,
       sector.transitionStartTurn,
-      args.turn
+      args.turn,
+      sector.industryModel
     );
     const plannedEconomy = isPlannedEconomy(
       sector.countryId,
