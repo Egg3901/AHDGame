@@ -7,6 +7,8 @@ import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import { softCapEffectiveMargin } from "@/lib/constants/corporations";
+import { makeCorporation } from "@/lib/test-utils/factories";
+import { MANUFACTURING_PRODUCT_PROJECTS_V2 } from "@/lib/products/manufacturingProject";
 import { processCorporationTurn } from "./corporationTurn";
 // profitMargin:100 (a "zero maintenance" shortcut in these fixtures) now realizes
 // at the soft-capped ~95.2%, so income/tax expectations scale by this factor.
@@ -120,6 +122,65 @@ describe("processCorporationTurn", () => {
     expect(result.sectorsProcessed).toBe(0);
     expect(result.totalRevenueGenerated).toBe(0);
     expect(result.totalIncomeGenerated).toBe(0);
+  });
+
+  it("advances a fully funded manufacturing project from the prior completed turn without new R&D", async () => {
+    const corporation = makeCorporation({ liquidCapital: 1000, rdBudget: 0 });
+    db.collectionMocks.corporations.find.mockReturnValue(makeCursor([corporation]));
+    db.collection("gameConfig");
+    db.collectionMocks.gameConfig.findOne.mockResolvedValue({
+      _id: "default",
+      marketSystemMode: "plants",
+      productLinesV2Enabled: true,
+    });
+    db.collection("gameState");
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      _id: "current",
+      currentTurn: 12,
+      currentYear: 1991,
+      preset: "1991-default",
+    });
+    db.collection(MANUFACTURING_PRODUCT_PROJECTS_V2);
+    db.collectionMocks[MANUFACTURING_PRODUCT_PROJECTS_V2].find.mockReturnValue(
+      makeCursor([
+        {
+          _id: "funded-product",
+          corporationId: corporation._id.toString(),
+          activeCorporationId: corporation._id.toString(),
+          kindId: "passenger_car",
+          allocations: [{ sectorId: "plant", share: 1 }],
+          stage: "development",
+          stageStartedTurn: 1,
+          startedTurn: 1,
+          lastProcessedTurn: 11,
+          developmentPaidAnchor: 1000,
+          paidThresholdAnchor: 1000,
+          elapsedDevelopmentTurns: 11,
+          elapsedThresholdTurns: 12,
+        },
+      ])
+    );
+    db.collectionMocks[MANUFACTURING_PRODUCT_PROJECTS_V2].bulkWrite.mockResolvedValue({
+      matchedCount: 1,
+    } as never);
+    await processCorporationTurn(13);
+    expect(db.collectionMocks[MANUFACTURING_PRODUCT_PROJECTS_V2].bulkWrite).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          updateOne: expect.objectContaining({
+            update: expect.objectContaining({
+              $set: expect.objectContaining({
+                stage: "launch",
+                lastProcessedTurn: 12,
+                elapsedDevelopmentTurns: 12,
+                developmentPaidAnchor: 1000,
+              }),
+            }),
+          }),
+        }),
+      ],
+      { ordered: false }
+    );
   });
 
   it("runs the SOE operations phase", async () => {

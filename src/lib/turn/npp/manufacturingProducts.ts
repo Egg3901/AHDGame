@@ -46,6 +46,7 @@ export async function loadNppProductProjectsV2(
         allocations: 1,
         startedTurn: 1,
         lastProcessedTurn: 1,
+        lastDevelopmentReceiptTurn: 1,
         developmentPaidAnchor: 1,
         paidThresholdAnchor: 1,
         elapsedDevelopmentTurns: 1,
