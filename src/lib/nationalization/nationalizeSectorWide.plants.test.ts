@@ -18,6 +18,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { queueUndeliveredCost } from "@/lib/corporations/buildDelivery";
 import { NATIONALIZATION_REVENUE_HAIRCUT } from "./constants";
 
 const marketMode = { value: "capital" as string };
@@ -194,15 +195,28 @@ describe("nationalizeSectorWide — plants capacity conservation", () => {
     expect(gained + kept + sink).toBeCloseTo(400, 6);
 
     // Buildings in flight transfer at the carve fraction and at FULL ₳ value —
-    // the haircut never touches money already charged to a corp.
-    expect(ins.constructionInProgressAnchor).toBeCloseTo(45, 6);
-    expect(donorSet().constructionInProgressAnchor).toBeCloseTo(45, 6);
+    // the haircut never touches paid costs. Their resulting queues are the
+    // canonical source from which sectorTurn derives the CIP snapshot.
+    expect(ins).not.toHaveProperty("constructionInProgressAnchor");
+    expect(donorSet()).not.toHaveProperty("constructionInProgressAnchor");
     expect((ins.buildQueue as { unitsOrdered: number; costPaidAnchor: number }[])[0]).toMatchObject(
       {
         unitsOrdered: 20,
         costPaidAnchor: 45,
       }
     );
+    expect(
+      queueUndeliveredCost(
+        ins.buildQueue as Parameters<typeof queueUndeliveredCost>[0],
+        consequence.turn
+      )
+    ).toBe(45);
+    expect(
+      queueUndeliveredCost(
+        donorSet().buildQueue as Parameters<typeof queueUndeliveredCost>[0],
+        consequence.turn
+      )
+    ).toBe(45);
     // The ramp anchor is inherited, not reset: this capacity has already ramped.
     expect(ins.plantsStartTurn).toBe(2);
   });
@@ -211,7 +225,13 @@ describe("nationalizeSectorWide — plants capacity conservation", () => {
     marketMode.value = "plants";
     await run(1);
     expect(inserted().capitalStock).toBeCloseTo(400 * (1 - NATIONALIZATION_REVENUE_HAIRCUT), 6);
-    expect(inserted().constructionInProgressAnchor).toBeCloseTo(90, 6);
+    expect(inserted()).not.toHaveProperty("constructionInProgressAnchor");
+    expect(
+      queueUndeliveredCost(
+        inserted().buildQueue as Parameters<typeof queueUndeliveredCost>[0],
+        consequence.turn
+      )
+    ).toBe(90);
     expect(db.collectionMocks.corporateSectors.deleteOne).toHaveBeenCalledWith({
       _id: donorSectorId,
     });
@@ -368,6 +388,12 @@ describe("nationalizeSectorWide — mothballed survivor absorbing unowned headro
     expect(merged.capitalStock as number).toBeGreaterThan(100);
     // Every other field is the survivor's own, i.e. a true merge identity.
     expect(merged.plantsStartTurn).toBe(7);
-    expect(merged.constructionInProgressAnchor).toBe(0);
+    expect(merged).not.toHaveProperty("constructionInProgressAnchor");
+    expect(
+      queueUndeliveredCost(
+        merged.buildQueue as Parameters<typeof queueUndeliveredCost>[0],
+        consequence.turn
+      )
+    ).toBe(0);
   });
 });
