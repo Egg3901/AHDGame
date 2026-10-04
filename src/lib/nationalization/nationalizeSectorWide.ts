@@ -30,7 +30,7 @@ import {
 import { computeSectorImpliedUnits } from "@/lib/market/unownedHeadroom";
 import { CAPACITY_ANCHOR_YEAR, capacityPricePerUnit } from "@/lib/constants/capacityEconomy";
 import { getGameState } from "@/lib/gameState";
-import { debitTreasuryCompensation } from "./treasury";
+import { debitTreasuryCompensation, settleFundedTreasuryCompensation } from "./treasury";
 import { resolveTreasuryCashOptions, witnessTreasuryCash } from "./treasuryLedger";
 import { snapshotCorporationCurrency } from "@/lib/ledger/balanceSnapshot";
 import { applyNationalizationConsequences } from "./consequences/apply";
@@ -412,20 +412,69 @@ export async function nationalizeSectorWide(
         }
       );
       const payoutAnchor = applyTier(valuationAnchor, params.tier, { plantsEnabled });
-      const compensationLedger =
-        payoutAnchor > 0 ? await resolveTreasuryCashOptions(db) : undefined;
-      await debitTreasuryCompensation(db, params.countryId, payoutAnchor, fxByCurrency, now, {
-        flow: "nationalization_compensation",
-        key: `nationalize-sector-wide:${params.countryId}:${sec._id.toString()}:${params.consequence.turn}`,
-        ledger: compensationLedger,
-      });
-      if (payoutAnchor > 0) {
-        const compLocal = Math.round(anchorToCorpLiquidCapital(payoutAnchor, donor, donorRate));
-        const credited = await corps.updateOne(
-          { _id: donor._id },
-          { $inc: { liquidCapital: compLocal }, $set: { updatedAt: now } }
+      const compensationKey = `nationalize-sector-wide:${params.countryId}:${sec._id.toString()}:${params.consequence.turn}`;
+      let compensationLedger = payoutAnchor > 0 ? await resolveTreasuryCashOptions(db) : undefined;
+      const priorFundedCompensation =
+        payoutAnchor <= 0 &&
+        Boolean(
+          await db
+            .collection<{ _id: string }>("bankMoneyMoves")
+            .findOne({ _id: `treasury-nationalization-compensation:${compensationKey}` })
         );
-        if ((credited?.matchedCount ?? 0) > 0) {
+      if (priorFundedCompensation) compensationLedger = await resolveTreasuryCashOptions(db);
+      let fundedCompensationLocal: number | undefined;
+      let fundedCompensationNewlySettled = false;
+      let fundedTreasuryAmountLocal = 0;
+      if (priorFundedCompensation || compensationLedger?.context?.treasuryCashLedgerEnabled) {
+        const settled = await settleFundedTreasuryCompensation(db, {
+          countryId: params.countryId,
+          donor,
+          payoutAnchor,
+          fxByCurrency,
+          now,
+          key: compensationKey,
+          ledger: compensationLedger!,
+        });
+        fundedCompensationLocal = settled.donorAmountLocal;
+        fundedCompensationNewlySettled = settled.newlySettled;
+        fundedTreasuryAmountLocal = settled.treasuryAmountLocal;
+      } else {
+        await debitTreasuryCompensation(db, params.countryId, payoutAnchor, fxByCurrency, now, {
+          flow: "nationalization_compensation",
+          key: compensationKey,
+          ledger: compensationLedger,
+        });
+      }
+      if (payoutAnchor > 0) {
+        const compLocal =
+          fundedCompensationLocal ??
+          Math.round(anchorToCorpLiquidCapital(payoutAnchor, donor, donorRate));
+        if (fundedCompensationLocal === undefined) {
+          const credited = await corps.updateOne(
+            { _id: donor._id },
+            { $inc: { liquidCapital: compLocal }, $set: { updatedAt: now } }
+          );
+          if ((credited?.matchedCount ?? 0) > 0) {
+            await witnessTreasuryCash(db, compensationLedger, {
+              flow: "nationalization_compensation",
+              account: {
+                kind: "corporation",
+                corpId: donor._id.toString(),
+                currency: snapshotCorporationCurrency(donor),
+              },
+              amount: compLocal,
+              now,
+              site: "nationalizeSectorWide:compensation",
+            });
+          }
+        } else if (fundedCompensationNewlySettled) {
+          await witnessTreasuryCash(db, compensationLedger, {
+            flow: "nationalization_compensation",
+            account: { kind: "government", countryId: params.countryId },
+            amount: -fundedTreasuryAmountLocal,
+            now,
+            site: "nationalizeSectorWide:compensation",
+          });
           await witnessTreasuryCash(db, compensationLedger, {
             flow: "nationalization_compensation",
             account: {

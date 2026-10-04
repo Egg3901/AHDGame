@@ -8,7 +8,9 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { MongoClient, ObjectId, type Db } from "mongodb";
+import { withInjectedCrash, InjectedCrash } from "@/lib/test-utils/faultyDb";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
+import type { InMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { getDb } from "@/lib/mongodb";
 import { resetLedgerShadowFlagCache } from "@/lib/ledger/featureFlag";
 import { writeBalanceSnapshot, writePreForexBalanceCheckpoint } from "@/lib/ledger/balanceSnapshot";
@@ -71,7 +73,7 @@ beforeEach(() => {
   resetCorpFxRateCacheForTests();
 });
 
-async function world(native: boolean, shadow = true) {
+async function world(native: boolean, shadow = true, treasuryCashLedger = false) {
   let db: Db;
   if (native) {
     const uri = new URL(
@@ -91,8 +93,14 @@ async function world(native: boolean, shadow = true) {
     db = client.db(`ahd_sim_fixture_natcash_${randomUUID().replaceAll("-", "").slice(0, 24)}`);
   } else db = createInMemoryDb() as unknown as Db;
   await db
-    .collection<{ _id: string; ledgerShadow: boolean }>("gameConfig")
-    .insertOne({ _id: "default", ledgerShadow: shadow });
+    .collection<{ _id: string; ledgerShadow: boolean; treasuryCashLedgerEnabled?: boolean }>(
+      "gameConfig"
+    )
+    .insertOne({
+      _id: "default",
+      ledgerShadow: shadow,
+      treasuryCashLedgerEnabled: treasuryCashLedger,
+    });
   await db
     .collection<{ _id: string; currentTurn: number; preset: string }>("gameState")
     .insertOne({ _id: "current", currentTurn: 1, preset: "2019-default" });
@@ -101,8 +109,18 @@ async function world(native: boolean, shadow = true) {
     { currencyCode: "USD", rate: 1 },
   ]);
   await db.collection("federalBudget").insertMany([
-    { countryId: "UK", currencyCode: "GBP", treasuryBalance: 1_000_000 },
-    { countryId: "US", currencyCode: "USD", treasuryBalance: 1_000_000 },
+    {
+      countryId: "UK",
+      currencyCode: "GBP",
+      treasuryBalance: 1_000_000,
+      treasuryCashLocal: 1_000_000,
+    },
+    {
+      countryId: "US",
+      currencyCode: "USD",
+      treasuryBalance: 1_000_000,
+      treasuryCashLocal: 1_000_000,
+    },
   ]);
   const natCorpId = new ObjectId();
   await db.collection("corporations").insertOne({
@@ -309,6 +327,68 @@ for (const native of [false, true]) {
           { corporationId: natCorpId, shares: 50, avgCostPerShare: 8 },
         ]);
       });
+
+      it.skipIf(native)(
+        "retries a funded whole-corp taking with its original property reservation and frozen holder cohort",
+        async () => {
+          const { db, natCorpId } = await world(false, true, true);
+          const ids = await seizable(db);
+          const sectorId = new ObjectId();
+          await db.collection("corporateSectors").insertOne({
+            _id: sectorId,
+            corporationId: ids.target,
+            countryId: "UK",
+            stateId: "LON",
+            sectorType: "energy",
+            revenue: 10_000,
+            profitMargin: 0.2,
+            workers: 10,
+            currentGrowthCost: 0,
+          });
+          const params = {
+            countryId: "UK" as const,
+            corporationId: ids.target,
+            tier: "discounted" as const,
+            consequence: { method: "executive" as const, triggers: [] as [], turn: 2 },
+          };
+          const budget = db.collection("federalBudget");
+          const before = await budget.findOne({ countryId: "UK" });
+          const crashing = withInjectedCrash(db as unknown as InMemoryDb, {
+            collection: "corporateSectors",
+            op: "updateOne",
+            onCall: 2,
+          });
+
+          await expect(nationalizeWholeCorp(crashing.db, params)).rejects.toBeInstanceOf(
+            InjectedCrash
+          );
+          const afterFirstAttempt = await budget.findOne({ countryId: "UK" });
+          expect(afterFirstAttempt?.treasuryCashLocal).not.toBe(before?.treasuryCashLocal);
+          expect(await db.collection("corporations").countDocuments({ _id: ids.target })).toBe(1);
+          const heldSector = await db
+            .collection("corporateSectors")
+            .findOne({ corporationId: ids.target });
+          expect(heldSector?.constructionPropertyTransition?.key).toContain(
+            `nationalize:UK:${ids.target.toHexString()}:2:`
+          );
+
+          await nationalizeWholeCorp(db, params);
+          const afterRetry = await budget.findOne({ countryId: "UK" });
+          expect(afterRetry?.treasuryCashLocal).toBe(afterFirstAttempt?.treasuryCashLocal);
+          expect(await db.collection("corporations").countDocuments({ _id: ids.target })).toBe(0);
+          expect(
+            await db
+              .collection("corporateSectors")
+              .countDocuments({ corporationId: natCorpId, nationalizedAtTurn: 2 })
+          ).toBe(1);
+          const buyout = await db
+            .collection<{ _id: string; status?: string }>("bankMoneyMoves")
+            .findOne({
+              _id: `treasury-nationalization-buyout:nationalize-corporation:UK:${ids.target.toHexString()}:2`,
+            });
+          expect(buyout?.status).toBe("applied");
+        }
+      );
 
       it("names the IPO float proceeds as a mint", async () => {
         const { db, natCorpId } = await world(native);
