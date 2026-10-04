@@ -73,7 +73,9 @@ describe("manufacturing product project persistence v2", () => {
     expect(projectWrite.updateOne.filter).toMatchObject({
       _id: "project-1",
       activeCorporationId: corporationId,
-      $or: [{ lastProcessedTurn: { $exists: false } }, { lastProcessedTurn: { $lt: 6 } }],
+      lastProcessedTurn: 5,
+      lastDevelopmentReceiptTurn: { $exists: false },
+      developmentPaidAnchor: 900,
     });
     expect(projectWrite.updateOne.update.$set).toMatchObject({
       stage: "launch",

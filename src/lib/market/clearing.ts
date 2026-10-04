@@ -130,6 +130,10 @@ export interface ClearingSeller {
   physicalUnits?: number;
   /** Editorially available fraction of advertising output. */
   editorialAvailability?: number;
+  /** Product-reachable fraction of this physical offer. */
+  productAvailability?: number;
+  /** Combined editorial and title reach applied to this offer before clearing. */
+  availability?: number;
   /** Posted price relative to market, −0.2 … 0.2. */
   posture: number;
   /** Internally resolved quote relative to this book's price; CEO input is still bounded. */
@@ -269,6 +273,8 @@ export interface SectorClearingInput {
   supplyRates: Partial<Record<CommodityType, number>>;
   /** Exact per-commodity physical offers from a product line, when enabled. */
   outputUnitsByCommodity?: Partial<Record<CommodityType, number>>;
+  /** Fraction of each physical offer reachable by current media product titles. */
+  offerAvailabilityByCommodity?: Partial<Record<CommodityType, number>>;
   /** Conserved nominal output value by commodity, used to weight sector realization. */
   outputAnchorByCommodity?: Partial<Record<CommodityType, number>>;
   /** Product quality by output commodity, overriding the legacy corp average for that output. */
@@ -654,19 +660,25 @@ export function computeClearingFactors(args: {
             ? s.producedUnits * mixWeight(s.supplyRates, basePrices, commodity)
             : null;
       const physicalUnits = plantsUnits ?? (base > 0 ? (s.revenue * rate) / base : 0);
-      const availability =
+      const editorialAvailability =
         commodity === "advertising" && Number.isFinite(s.editorialAdvertisingAvailability)
           ? Math.max(0, Math.min(1, s.editorialAdvertisingAvailability!))
           : 1;
+      const productAvailability = Number.isFinite(s.offerAvailabilityByCommodity?.[commodity])
+        ? Math.max(0, Math.min(1, s.offerAvailabilityByCommodity?.[commodity] ?? 1))
+        : 1;
+      const availability = editorialAvailability * productAvailability;
       const units = physicalUnits * availability;
-      if (units <= 0) continue;
+      if (units <= 0 && !Number.isFinite(s.offerAvailabilityByCommodity?.[commodity])) continue;
       sellersByCommodity.set(commodity, [
         ...(sellersByCommodity.get(commodity) ?? []),
         {
           id: s.sectorId,
           units,
           physicalUnits,
-          editorialAvailability: availability,
+          editorialAvailability,
+          productAvailability,
+          availability,
           posture,
           realUnits: plantsUnits != null,
           ...(s.inputCostIndex !== undefined
@@ -879,7 +891,7 @@ export function computeClearingFactors(args: {
     if (args.producedUnitsOut && args.sectorCorpId) {
       for (const s of sellers) {
         const corpId = args.sectorCorpId.get(s.id);
-        const available = s.editorialAvailability ?? 1;
+        const available = s.availability ?? s.editorialAvailability ?? 1;
         const productionUnits =
           s.realUnits === true
             ? (s.physicalUnits ?? s.units)
@@ -947,10 +959,14 @@ export function computeClearingFactors(args: {
       const weight = typeof outputAnchor === "number" ? Math.max(0, outputAnchor) : rate;
       if (weight <= 0) continue;
       const offeredSold = soldByCommodityBySector.get(commodity)?.get(s.sectorId) ?? 1;
-      const availability =
+      const editorialAvailability =
         commodity === "advertising" && Number.isFinite(s.editorialAdvertisingAvailability)
           ? Math.max(0, Math.min(1, s.editorialAdvertisingAvailability!))
           : 1;
+      const productAvailability = Number.isFinite(s.offerAvailabilityByCommodity?.[commodity])
+        ? Math.max(0, Math.min(1, s.offerAvailabilityByCommodity?.[commodity] ?? 1))
+        : 1;
+      const availability = editorialAvailability * productAvailability;
       const sold = offeredSold * availability;
       // State-scoped legs realize their own state's price. Clearing volume
       // locally while realizing price nationally would leave a seller who

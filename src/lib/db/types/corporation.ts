@@ -1,6 +1,10 @@
 import type { ObjectId } from "mongodb";
 import type { ManufacturingDevelopmentCashReceiptV2 } from "@/lib/products/manufacturingProject";
 import type {
+  MediaProductAdvertisingReceipt,
+  MediaProductDevelopmentReceipt,
+} from "@/lib/products/mediaProduct";
+import type {
   CorporationType,
   ManufacturingIndustryModel,
   MediaDiscriminator,
@@ -8,6 +12,7 @@ import type {
 import type { CountryId } from "../../constants/countries";
 import type { CurrencyCode } from "../../constants/currencies";
 import type { ExtractableResource } from "../../constants/commodities";
+import type { ProductAdvertisingDenominationWitness } from "@/lib/products/rules/productAdvertising";
 
 export interface Shareholder {
   /** Character holder, present for character-owned positions */
@@ -29,6 +34,25 @@ export interface Shareholder {
    * votable amount is `min(superShares, shares)`, see lib/corporations/superShares.
    */
   superShares?: number;
+}
+
+export interface MediaProductAdvertisingObligationV1 {
+  projectId: string;
+  turn: number;
+  amountAnchor: number;
+  buyerAmountLocal: number;
+  buyerCurrencyCode: CurrencyCode;
+  buyerLocalPerAnchor: number;
+  /** Absent on obligations persisted before raw-denomination guards were added. */
+  buyerDenomination?: ProductAdvertisingDenominationWitness;
+  sellerAllocations: Array<{
+    corporationId: string;
+    amountLocal: number;
+    currencyCode: CurrencyCode;
+    localPerAnchor: number;
+    /** Absent on obligations persisted before raw-denomination guards were added. */
+    denomination?: ProductAdvertisingDenominationWitness;
+  }>;
 }
 
 export interface ShareOrder {
@@ -196,10 +220,10 @@ export interface Corporation {
     };
   };
   /** Issuer-selected primary-market underwriter for future issues. */
-  primaryUnderwritingMandate?: import("@/lib/banking/rules/underwriting").PrimaryUnderwritingMandate;
+  primaryUnderwritingMandate?: import("@/lib/banking/underwritingTypes").PrimaryUnderwritingMandate;
   /** Frozen unpaid founding IPO plan. The corporation remains private until its journal publishes it. */
   foundingIpoUnderwritingPending?: {
-    offer: import("@/lib/banking/rules/underwriting").PrimaryUnderwritingOffer & {
+    offer: import("@/lib/banking/underwritingTypes").PrimaryUnderwritingOffer & {
       instrumentId: ObjectId;
     };
     grossPlacedLocal: number;
@@ -213,7 +237,7 @@ export interface Corporation {
     instrumentType: "equity" | "corporate_bond";
     instrumentId?: ObjectId;
     charteredTurn: number;
-    offer: import("@/lib/banking/rules/underwriting").PrimaryUnderwritingOffer;
+    offer: import("@/lib/banking/underwritingTypes").PrimaryUnderwritingOffer;
     currencyCode: CurrencyCode;
     grossLocal: number;
     feeLocal: number;
@@ -445,7 +469,7 @@ export interface Corporation {
     issuedUpfront?: boolean;
     createdAtTurn: number;
     initialPriceLocal: number;
-    underwriting?: import("@/lib/banking/rules/underwriting").PrimaryUnderwritingOffer;
+    underwriting?: import("@/lib/banking/underwritingTypes").PrimaryUnderwritingOffer;
   };
   /** Dividend payout rate (0, 100%). Income × this % is distributed to shareholders each turn. */
   dividendRate?: number;
@@ -558,6 +582,8 @@ export interface Corporation {
   ownershipState?: "private" | "stateOwned";
   /** Turn this corp was last nationalized. Powers the re-nationalization cooldown (P4+). */
   nationalizedAtTurn?: number;
+  /** Stable mode marker for an interrupted funded whole-corporation taking. */
+  pendingFundedNationalization?: { operationKey: string };
   /**
    * Turn this corp was spun out of a National Corporation (privatization). Powers
    * the re-nationalization cooldown (spec §13.4). Distinct from `lastPrivatizationTurn`
@@ -659,6 +685,13 @@ export interface Corporation {
   averageQuality?: number;
   /** Project-bound cash receipt written beside the R&D cash debit while product lines v2 is on. */
   manufacturingProductDevelopmentReceiptV2?: ManufacturingDevelopmentCashReceiptV2;
+  mediaProductDevelopmentReceiptV1?: MediaProductDevelopmentReceipt;
+  mediaProductAdvertisingReceiptV1?: MediaProductAdvertisingReceipt;
+  /** Frozen original buyer quote, including seller allocations, until durable settlement completes. */
+  mediaProductAdvertisingObligationsV1?: MediaProductAdvertisingObligationV1[];
+  /** Idempotency stamp for a corporation participating in a media ad-market cash write. */
+  advertisingMarketSettledTurnV1?: number;
+  mediaProductDevelopmentPaidTurnV1?: number;
   /** Idempotency stamp retained after its project-bound cash receipt is consumed. */
   manufacturingProductDevelopmentPaidTurnV2?: number;
   creditRatingComponents?: {
@@ -1229,6 +1262,8 @@ export interface CorporateSector {
   constructionFinancing?: import("@/lib/banking/rules/constructionBuild").ConstructionBuildClaim;
   /** A durable owner mutation excludes new construction claims until completion. */
   constructionPropertyTransition?: { key: string; kind: string };
+  /** Stable mode marker for an interrupted funded single-sector nationalization. */
+  pendingFundedNationalization?: { operationKey: string };
   /**
    * Plants tier (P3a): construction in progress, in ₳ (anchor), the sum of
    * `costPaidAnchor` across the outstanding `buildQueue` orders (D10).

@@ -16,13 +16,16 @@ const INDEXES = [
       unique: true,
       background: true,
     },
-    legacyName: "corporateSectors_corporationId_stateId_sectorType_industryModel",
+    legacyNames: [
+      "corporateSectors_corporationId_stateId_sectorType_industryModel",
+      "corporateSectors_corporationId_stateId_sectorType",
+    ],
   },
   {
     collection: "unownedSectors",
     keys: { stateId: 1, sectorType: 1, industryModel: 1, mediaDiscriminator: 1 },
     options: { name: "unowned_state_type_models_unique", unique: true, background: true },
-    legacyName: "unowned_state_type_model_unique",
+    legacyNames: ["unowned_state_type_model_unique", "stateId_1_sectorType_1"],
   },
   {
     collection: "unions",
@@ -33,7 +36,11 @@ const INDEXES = [
       background: true,
       partialFilterExpression: { foundedByCharacterId: { $type: "null" } },
     },
-    legacyName: "unions_country_type_model_seeded_unique",
+    legacyNames: [
+      "unions_country_type_model_seeded_unique",
+      "unions_country_sectorType_seeded_unique",
+      "unions_country_sectorType_unique",
+    ],
   },
 ] as const;
 
@@ -54,20 +61,22 @@ async function run(db: Db, dryRun: boolean): Promise<MigrationResult> {
     }
   }
   for (const plan of INDEXES) {
-    const label = `${plan.collection}.${plan.legacyName}`;
-    if (dryRun) {
-      notes.push(`would drop ${label} if present`);
-      continue;
-    }
-    try {
-      await db.collection(plan.collection).dropIndex(plan.legacyName);
-      notes.push(`dropped ${label}`);
-    } catch (error) {
-      const code = error as { code?: unknown; codeName?: unknown };
-      if (code.code === 27 || code.codeName === "IndexNotFound") {
-        notes.push(`${label} not present`);
-      } else {
-        throw error;
+    for (const legacyName of plan.legacyNames) {
+      const label = `${plan.collection}.${legacyName}`;
+      if (dryRun) {
+        notes.push(`would drop ${label} if present`);
+        continue;
+      }
+      try {
+        await db.collection(plan.collection).dropIndex(legacyName);
+        notes.push(`dropped ${label}`);
+      } catch (error) {
+        const code = error as { code?: unknown; codeName?: unknown };
+        if (code.code === 27 || code.codeName === "IndexNotFound") {
+          notes.push(`${label} not present`);
+        } else {
+          throw error;
+        }
       }
     }
   }

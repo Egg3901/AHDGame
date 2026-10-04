@@ -1,6 +1,3 @@
-import type { ObjectId } from "mongodb";
-import type { CurrencyCode } from "@/lib/constants/currencies";
-
 export interface PrimaryUnderwritingCharter {
   status?: string;
   type?: string;
@@ -12,25 +9,6 @@ export interface PrimaryUnderwritingFeeQuote {
   grossPlacedLocal: number;
   feeLocal: number;
   issuerNetLocal: number;
-}
-
-export interface PrimaryUnderwritingMandate {
-  bankCorporationId: ObjectId;
-  charteredTurn: number;
-  currencyCode: CurrencyCode;
-  feeRate: number;
-  selectedAtTurn: number;
-}
-
-export interface PrimaryUnderwritingOffer {
-  bankCorporationId: ObjectId;
-  issuerCorporationId: ObjectId;
-  charteredTurn: number;
-  currencyCode: CurrencyCode;
-  feeRate: number;
-  instrumentType: "equity" | "corporate_bond";
-  instrumentId?: ObjectId;
-  originalQuoteTurn: number;
 }
 
 /** 1.5% modest placement fee; rounded to the game's cent-denominated cash unit. */

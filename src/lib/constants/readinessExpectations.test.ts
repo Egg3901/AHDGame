@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { expectedRegionCount } from "@/lib/admin/seedDiagnostic/regionBundles";
+import { expectedRegionCount, regionBundleFor } from "@/lib/admin/seedDiagnostic/regionBundles";
 import { SHIPPING_PRESETS } from "@/lib/world/eraRoster";
 import type { CountryId } from "./countries";
 import { COUNTRY_READINESS_EXPECTATIONS } from "./countryReadinessExpectations";
@@ -79,7 +79,14 @@ describe("getReadinessExpectations", () => {
           de1991 ? 70 : de2027 ? 96 : authored.statePartyOrgMin
         );
         expect(derived.legislationTypesMin, where).toBe(authored.legislationTypesMin);
-        expect(derived.stateMetricsFilter, where).toEqual(authored.stateMetricsFilter);
+        expect(derived.stateMetricsFilter, where).toEqual(
+          ru1991
+            ? {
+                countryId: id,
+                _id: { $in: regionBundleFor(id, preset)!.map((region) => region._id) },
+              }
+            : authored.stateMetricsFilter
+        );
       }
     }
   });
