@@ -91,7 +91,7 @@ describe("resetAndBootstrapGameWorld — failure handling", () => {
   const closeUpdate = () =>
     db.collectionMocks.adminLogs!.updateOne.mock.calls[0]![1] as { $set: Record<string, unknown> };
 
-  it("threads explicit 1991 none through every phase and disables founding", async () => {
+  it("threads explicit 1991 none through every phase and starts partyless founding", async () => {
     const { resetAndBootstrapGameWorld } = await import("./resetAndBootstrapGameWorld");
     const { resetGameWorld } = await import("./resetGameWorld");
     const { bootstrapGameWorld } = await import("./bootstrapGameWorld");
@@ -107,14 +107,14 @@ describe("resetAndBootstrapGameWorld — failure handling", () => {
       expect.objectContaining({
         preset: "1991-default",
         startingParties: "none",
-        preIteration: false,
+        preIteration: true,
       })
     );
     expect(bootstrapGameWorld).toHaveBeenCalledWith(
       expect.objectContaining({
         preset: "1991-default",
         startingParties: "none",
-        preIteration: false,
+        preIteration: true,
       })
     );
     expect(finalizeResetGameWorld).toHaveBeenCalledWith(

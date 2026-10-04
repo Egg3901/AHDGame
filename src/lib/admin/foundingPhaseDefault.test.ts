@@ -20,6 +20,13 @@ vi.mock("@/lib/admin/resetGameWorld", () => ({
   })),
 }));
 vi.mock("@/lib/admin/bootstrapGameWorld", () => ({ bootstrapGameWorld: vi.fn(async () => ({})) }));
+vi.mock("@/lib/admin/startingParties", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/admin/startingParties")>()),
+  clearStartingPolitics: vi.fn(async () => {}),
+}));
+vi.mock("@/lib/npp/seedPartylessFoundingCandidates", () => ({
+  seedPartylessFoundingCandidates: vi.fn(async () => ({ nppsCreated: 0, byCountry: {} })),
+}));
 vi.mock("@/lib/npp/seedHistorical", () => ({
   seedHistoricalOfficials: vi.fn(async () => ({ officialsCreated: 0, nppsCreated: 0 })),
 }));
@@ -81,6 +88,7 @@ describe("presetDefaultsToFoundingPhase", () => {
     ]) {
       expect(presetDefaultsToFoundingPhase(preset)).toBe(false);
     }
+    expect(presetDefaultsToFoundingPhase("1991-default", "none")).toBe(true);
   });
 });
 
@@ -110,6 +118,16 @@ describe("resetAndBootstrapGameWorld — founding phase resolution", () => {
         bootstrap: false,
       });
     }
+  });
+
+  it("starts the 1991 no-party world in the founding phase by default", async () => {
+    expect(
+      await resolvedPreIteration({
+        preset: "1991-default",
+        startingParties: "none",
+        mode: "historical",
+      })
+    ).toEqual({ reset: true, bootstrap: true });
   });
 
   it("lets an explicit false opt a 1953 reset out", async () => {
