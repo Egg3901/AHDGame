@@ -51,7 +51,7 @@ export async function addBankMaturityClaims(
     // BondTurn can replay after the settlement projection removed this claim.
     // Do not recreate it if the same-turn funding witness already completed.
     const settled = await db
-      .collection<{ _id: string; status?: string }>("bankMoneyMoves")
+      .collection<{ _id: string; status: string }>("bankMoneyMoves")
       .findOne(
         { _id: `${claim.id}:funding:${input.turn}`, status: "applied" },
         { projection: { _id: 1 } }
@@ -238,6 +238,7 @@ async function ensureLedgerWitness(
   destination: "bank" | "insurance"
 ): Promise<void> {
   const expected = ledgerProjection(claim, key, turn, destination).insert;
+  if (!(expected._id instanceof ObjectId)) throw new Error("Ledger witness id must be an ObjectId");
   const rows = db.collection<LedgerEntry>("ledgerEntries");
   await rows.updateOne({ _id: expected._id }, { $setOnInsert: expected }, { upsert: true });
   const stored = await rows.findOne({ _id: expected._id });

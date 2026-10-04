@@ -108,6 +108,8 @@ interface JournalExtension {
   error?: string;
   legs?: { applied: boolean }[];
   transitionKind?: string;
+  /** Original economic quote, frozen atomically with the cash and projection claim. */
+  event?: BankingTransition["event"];
   currency?: string;
   projections?: JournalProjectionRecord[];
   projectionsCompletedAt?: Date;
@@ -248,6 +250,7 @@ export async function settleTransition(
     transitionKind: transition.kind,
     currency: transition.currency,
     projections: records,
+    event: transition.event,
   };
 
   const move = await applyMoneyMove(db, {

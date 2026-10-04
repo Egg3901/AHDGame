@@ -10,6 +10,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createInMemoryDb, type InMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import type { BankCharter, BankCharterType, BankLoan } from "@/lib/db/types/bank";
+import { withInjectedCrash } from "@/lib/test-utils/faultyDb";
+import { resumeSettlement } from "@/lib/banking/settlementJournal";
 import { acceptLoan, rejectLoan } from "@/lib/banking/loanApproval";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
@@ -146,6 +148,36 @@ describe("acceptLoan", () => {
     expect(corp(memory, BANK).bankCharter.cashReserves).toBe(703_000);
     expect(corp(memory, BANK).bankCharter.loanOriginationFeesLifetime).toBe(3_000);
   });
+
+  it.each([false, true])(
+    "recovers a quoted-fee advance after a vault write interruption (after=%s)",
+    async (afterWrite) => {
+      loan(memory).originationFee = 3_000;
+      const faulty = withInjectedCrash(memory, {
+        collection: "corporations",
+        op: "updateOne",
+        onCall: 1,
+        afterWrite,
+        matches: (args) =>
+          ((args[1] as { $inc?: Record<string, number> }).$inc?.["bankCharter.cashReserves"] ?? 0) <
+          0,
+      });
+      await acceptLoan(faulty.db, BANK, LOAN).catch(() => undefined);
+      faulty.disarm();
+      const receipt = memory
+        .collection("bankMoneyMoves")
+        .docs.find((row) => row.kind === "named_loan_disbursement");
+      expect(receipt).toBeDefined();
+      const recovered = await resumeSettlement(memory as unknown as Db, String(receipt!._id));
+      expect(["applied", "replayed"]).toContain(recovered.status);
+      await resumeSettlement(memory as unknown as Db, String(receipt!._id));
+      expect(corp(memory, BANK).bankCharter.cashReserves).toBe(703_000);
+      expect(corp(memory, BANK).bankCharter.totalLoans).toBe(300_000);
+      expect(corp(memory, BANK).bankCharter.loanOriginationFeesLifetime).toBe(3_000);
+      expect(corp(memory, BORROWER).liquidCapital).toBe(397_000);
+      expect(loan(memory).outstanding).toBe(300_000);
+    }
+  );
 
   it("starts the repayment term when the pending loan is funded", async () => {
     loan(memory).originatedTurn = TURN - 100;

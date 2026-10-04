@@ -11,7 +11,6 @@
  */
 
 import type { BankCharterType } from "@/lib/db/types/bank";
-import type { CurrencyCode } from "@/lib/constants/currencies";
 import { quoteLoanOrigination } from "./loanFees";
 import {
   bankBalanceSheet,
@@ -617,7 +616,7 @@ export function decideBankCommand(
         );
       }
 
-      const quote = quoteLoanOrigination(principal, snapshot.currency as CurrencyCode);
+      const quote = quoteLoanOrigination(principal, snapshot.currency);
       const pending = active!.requireApproval === true;
       const loanDoc = {
         _id: oid(command.loanId),
@@ -767,11 +766,7 @@ export function decideBankCommand(
           `Principal exceeds borrower income limit (max ${Math.floor(incomeCap)})`
         );
       }
-      const quote = quoteLoanOrigination(
-        principal,
-        snapshot.currency as CurrencyCode,
-        command.originationFee ?? 0
-      );
+      const quote = quoteLoanOrigination(principal, snapshot.currency, command.originationFee ?? 0);
       const proceeds: TransitionLeg =
         command.borrower.type === "character"
           ? {
