@@ -72,7 +72,8 @@ export function advanceProductLifecycle(input: {
     !safeNonNegativeInteger(product.startedTurn) ||
     !safeNonNegativeInteger(product.stageStartedTurn) ||
     product.stageStartedTurn < product.startedTurn ||
-    !safeNonNegativeInteger(product.developmentPaidAnchor) ||
+    !Number.isFinite(product.developmentPaidAnchor) ||
+    product.developmentPaidAnchor < 0 ||
     !Number.isFinite(product.paidThresholdAnchor) ||
     product.paidThresholdAnchor <= 0 ||
     !safeNonNegativeInteger(product.elapsedDevelopmentTurns) ||

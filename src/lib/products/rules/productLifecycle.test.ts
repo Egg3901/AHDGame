@@ -54,6 +54,19 @@ describe("shared product lifecycle", () => {
     });
   });
 
+  it("accepts fractional realized cash when it completes the paid development threshold", () => {
+    const progress = advanceProductLifecycle({
+      product: { ...product, developmentPaidAnchor: 40.5 },
+      receipt: receipt({ paidDevelopmentAnchor: 59.5 }),
+    });
+
+    expect(progress).toMatchObject({
+      stage: "launch",
+      developmentPaidAnchor: 100,
+      elapsedDevelopmentTurns: 3,
+    });
+  });
+
   it("rejects another product and duplicate or earlier turn receipts", () => {
     expect(
       advanceProductLifecycle({ product, receipt: receipt({ productId: "product-2" }) })
