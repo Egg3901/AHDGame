@@ -14,6 +14,7 @@ vi.mock("@/contexts/CurrencyContext", () => ({
     toInternalFrom: (n: number) => n,
   }),
 }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock("next/link", () => ({
   default: ({ children, href }: { children: React.ReactNode; href: string }) => (
     <a href={href}>{children}</a>
