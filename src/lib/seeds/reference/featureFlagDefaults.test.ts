@@ -90,8 +90,7 @@ describe("fresh-world flag policy", () => {
 
   it("fails when a new gameConfig flag is neither on for fresh worlds nor recorded as non-gameplay", () => {
     const unclassified = flagFieldsOf("gameConfig.ts", "GameConfig").filter(
-      (key) =>
-        !(key in FRESH_WORLD_GAME_CONFIG_FLAGS) && !(key in NON_GAMEPLAY_GAME_CONFIG_FIELDS)
+      (key) => !(key in FRESH_WORLD_GAME_CONFIG_FLAGS) && !(key in NON_GAMEPLAY_GAME_CONFIG_FIELDS)
     );
     expect(unclassified).toEqual([]);
   });

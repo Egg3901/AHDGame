@@ -31,10 +31,6 @@ export async function seedGameConfig(
     : {};
   await db
     .collection<GameConfig>("gameConfig")
-    .updateOne(
-      { _id },
-      { $set: { ...settings, ...extra }, $setOnInsert: flags },
-      { upsert: true }
-    );
+    .updateOne({ _id }, { $set: { ...settings, ...extra }, $setOnInsert: flags }, { upsert: true });
   log("Seeded game config");
 }
