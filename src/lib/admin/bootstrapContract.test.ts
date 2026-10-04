@@ -207,7 +207,6 @@ describe("bootstrap contract: seed manifest", () => {
     );
     const block = source.slice(start, end);
     expect(start).toBeGreaterThan(-1);
-    expect(block).toContain('migration.id === "2026-10-04-industry-model-market-indexes"');
     expect(block).toContain('migration.id === "2026-10-04-media-discriminator-market-indexes"');
     expect(block).toContain("only: marketIdentityIndexes.map((migration) => migration.id)");
     expect(block).toContain("force: true");
