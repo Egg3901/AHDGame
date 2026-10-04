@@ -5,17 +5,12 @@ vi.mock("@/lib/auth/providerIdentityIndexes", () => ({
   ensureProviderIdentityIndexes: vi.fn().mockResolvedValue([]),
 }));
 
-const { ensureIndexMock, normalizeAndMergeCorporateSectorsMock } = vi.hoisted(() => ({
+const { ensureIndexMock } = vi.hoisted(() => ({
   ensureIndexMock: vi.fn(),
-  normalizeAndMergeCorporateSectorsMock: vi.fn(),
 }));
 
 vi.mock("./helpers", () => ({
   ensureIndex: ensureIndexMock,
-}));
-
-vi.mock("@/lib/corporations/repairDuplicateSectors", () => ({
-  normalizeAndMergeCorporateSectors: normalizeAndMergeCorporateSectorsMock,
 }));
 
 import { seedCoreIndexes } from "./core";
@@ -23,45 +18,18 @@ import { seedCoreIndexes } from "./core";
 describe("seedCoreIndexes", () => {
   beforeEach(() => {
     ensureIndexMock.mockReset();
-    normalizeAndMergeCorporateSectorsMock.mockReset();
-    normalizeAndMergeCorporateSectorsMock.mockResolvedValue({
-      normalizedSectors: [],
-      mergedGroups: [],
-    });
   });
 
-  it("heals duplicate corporate sectors before creating the unique identity index", async () => {
-    const indexes = vi.fn().mockResolvedValue([{ key: { _id: 1 }, name: "_id_" }]);
-    const db = {
-      collection: vi.fn(() => ({
-        indexes,
-        find: vi.fn(() => ({ toArray: vi.fn().mockResolvedValue([]) })),
-        createIndex: vi.fn().mockResolvedValue("corporations_sequentialId"),
-      })),
-    } as unknown as Db;
-
-    await seedCoreIndexes(db, vi.fn());
-
-    expect(normalizeAndMergeCorporateSectorsMock).toHaveBeenCalledWith(db, expect.any(Date));
-    const repairOrder = normalizeAndMergeCorporateSectorsMock.mock.invocationCallOrder[0];
-    const uniqueIndexOrder = ensureIndexMock.mock.calls.find(
-      (call) =>
-        call[1] === "corporateSectors" &&
-        call[3]?.name === "corporateSectors_corporationId_stateId_sectorType_industryModel"
-    );
-    expect(uniqueIndexOrder).toBeDefined();
-    expect(repairOrder).toBeLessThan(
-      ensureIndexMock.mock.invocationCallOrder[
-        ensureIndexMock.mock.calls.indexOf(uniqueIndexOrder!)
-      ]
-    );
-  });
-
-  it("skips the heal when the corporate sector identity index already exists", async () => {
+  it("requires the registered model-aware index and never heals existing sector documents", async () => {
     const indexes = vi.fn().mockResolvedValue([
       {
-        key: { corporationId: 1, stateId: 1, sectorType: 1, industryModel: 1 },
-        name: "corp_sector_identity_v2",
+        key: {
+          corporationId: 1,
+          stateId: 1,
+          sectorType: 1,
+          industryModel: 1,
+          mediaDiscriminator: 1,
+        },
         unique: true,
       },
     ]);
@@ -75,6 +43,27 @@ describe("seedCoreIndexes", () => {
 
     await seedCoreIndexes(db, vi.fn());
 
-    expect(normalizeAndMergeCorporateSectorsMock).not.toHaveBeenCalled();
+    expect(indexes).toHaveBeenCalledOnce();
+    const uniqueIndexOrder = ensureIndexMock.mock.calls.find(
+      (call) =>
+        call[1] === "corporateSectors" &&
+        call[3]?.name === "corporateSectors_corporation_state_type_models_unique"
+    );
+    expect(uniqueIndexOrder).toBeDefined();
+  });
+
+  it("rejects bootstrap when registered identity migration did not install the new index", async () => {
+    const indexes = vi.fn().mockResolvedValue([{ key: { _id: 1 }, name: "_id_" }]);
+    const db = {
+      collection: vi.fn(() => ({
+        indexes,
+        find: vi.fn(() => ({ toArray: vi.fn().mockResolvedValue([]) })),
+        createIndex: vi.fn().mockResolvedValue("corporations_sequentialId"),
+      })),
+    } as unknown as Db;
+
+    await expect(seedCoreIndexes(db, vi.fn())).rejects.toThrow(
+      "Required corporate sector identity index"
+    );
   });
 });
