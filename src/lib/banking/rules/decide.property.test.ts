@@ -39,6 +39,7 @@ function randomCharter(random: SeededRandom): BankCharterSnapshot | null {
     type,
     status,
     currency: "USD",
+    charteredTurn: random.int(0, 1_000),
     postedCapital: random.money(0, 2_000_000),
     cashReserves: random.money(0, 3_000_000),
     npcDeposits: type === "investment" ? 0 : random.money(0, 10_000_000),
