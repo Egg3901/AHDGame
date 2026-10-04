@@ -2260,7 +2260,12 @@ export function computeRawSupplyDemand(
       ? strategyRates.supply
       : Object.fromEntries((SECTOR_SUPPLY[st] ?? []).map((f) => [f.commodity, f.rate]));
     const strategySupplyEntries = Object.entries(
-      applyPlannedEconomyOutputMix(st, rawSupplyMix, sector.plannedEconomy === true)
+      applyPlannedEconomyOutputMix(
+        st,
+        rawSupplyMix,
+        sector.plannedEconomy === true,
+        sector.mediaDiscriminator
+      )
     ) as [CommodityType, number][];
     const supplyEntries = [...strategySupplyEntries];
     if (plantsEnabled && sector.outputUnitsByCommodity) {

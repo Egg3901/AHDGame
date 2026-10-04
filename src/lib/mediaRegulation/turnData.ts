@@ -211,7 +211,8 @@ export async function loadUSMediaOutletDelivery(
                     sector.countryId ?? "US",
                     context.currentYear,
                     context.commandEconomyEnabled
-                  )
+                  ),
+                  sector.mediaDiscriminator
                 ),
             }) ?? 0) * commodityMixWeight(rates, COMMODITY_BASE_PRICES, "advertising")
           : null;
