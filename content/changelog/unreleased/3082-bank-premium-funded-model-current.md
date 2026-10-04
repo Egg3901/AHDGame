@@ -23,6 +23,3 @@ areas: [backend, engine]
 - The original bank-turn premium quote is frozen in its settlement receipt.
   Retries finish that quote even if cash, deposit exposure, or fund evidence
   has changed, without debiting the bank twice.
-- The accompanying 1991 calibration records current funded-cash and bond-pool
-  constraints. Its neutral and aggressive cases still fail before acceptance;
-  the report does not claim bank viability.

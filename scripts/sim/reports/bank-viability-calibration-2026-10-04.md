@@ -1,81 +1,47 @@
-# Bank viability calibration, 2026-10-04
+# Bank viability and funded bill calibration, 2026-10-04
 
-This deterministic local model uses the 1991 US budget, rate, savings APY,
-capital, branch ceiling, loan, fee, premium, sovereign issuance, pool quote,
-funded Treasury claims, confidence, deposit flight, and failure rules. It uses a
-representative bank with $5 million opening capital, 250 units of
-financial-sector capacity, a 50% branch share, and a $150 million deposit
-ceiling. It does not read or mutate a world database.
+## Finding
 
-The model opens the pool at the production migration value of 5% of 1991 M2
-($201.5B), then applies production pool inflow and finite funded primary issuance.
-Spendable Treasury cash starts at zero and grows only from actual pool-funded
-bond proceeds. Public-float and bank-holder coupons and maturities use one
-frozen per-bond claim. The claim pays both holder groups from the same Treasury
-cash debit and remains due until fully paid. The signed fiscal position stays
-an analytics track. Treasury accrual revenue and spending are not settled into
-the new spendable cash ledger, so that ledger is not a complete national
-budget cash model.
+The seed's sovereign inventory is real and material. Bootstrap instruments cover the opening US debt principal with 48-, 96-, and 240-turn tranches. From the 1991 US `$3.665T` principal, the short 48-turn tranche is about `$916.25B` face. It is public float, subject to finite pool cash and the normal executable bid/ask. The earlier report's zero-opening-bond assumption was wrong and its viability results are superseded.
 
-| Scenario                                                                                                   | Annualized ROE at failure | Equity at failure | Outcome                                  |
-| ---------------------------------------------------------------------------------------------------------- | ------------------------: | ----------------: | ---------------------------------------- |
-| 1991 seed, balanced profile, current rates, pool seeded at 5% of M2                                        |                     1.54% |           $30.66M | Deposit run at turn 55                   |
-| 1991 midpoint rates, balanced profile                                                                      |                    -2.21% |           $28.30M | Deposit run at turn 55                   |
-| 1991 aggressive legal maximum deposit and minimum lending rates, 5-point prime shock scheduled at turn 240 |                    -4.61% |           $16.70M | Deposit run at turn 54, before the shock |
-| 1991 balanced profile with a 10.67% premium sensitivity                                                    |                     3.61% |           $18.78M | Deposit run at turn 54                   |
+Using actual 1991 prime (3%), inflation (4.2%), opening bank capital formula (`$5M`), branch deposit ceiling (`$150M`), deposit/loan/fee/premium rules, seed bonds, sovereign quotes, funded issuance, and pool funding rules, the corrected ten-year model returns 8.26% annualized last-turn ROE for the 1991 starting-rate case and 11.92% at the neutral 8.5% prime deposit midpoint. At neutral prime, the legal minimum deposit rate produces 13.28% ROE; the legal maximum produces 1.02%. These figures land inside the 8-15% neutral target at the midpoint and minimum. They are conditional local-model results, not full viability acceptance, because the new spendable Treasury stock is not reduced by all modeled macro fiscal expenses and non-bank sovereign coupon funding is not yet fully cash-conserved.
 
-These are not viability passes. The first seeded 1991 reconciliation tranche
-places 25% of $3.665T opening sovereign principal into a bond due at turn 48.
-That $916.25B public-float claim remains unpaid. The modeled pool follows the
-production two-percent inflow toward target, and quarterly underwriting cannot
-exceed actual pool cash. By the balanced case's failure, Treasury cash is
-$336.87B and pool cash is $62.34B, against the original $916.25B due claim.
-The model correctly retains the bond and claim instead of erasing the debt or
-counting unpaid proceeds as bank income. The aggressive case fails before its
-turn-240 recession shock, so it does not establish the requested recession
-failure behavior. The earlier model result that reached turn 240 had removed
-unpaid matured obligations and was invalid.
+The first twelve turns produce bank coupon claims but no funded Treasury cash and no coupon payments in either zero-opening-pool or 5%-of-M2 seeded-pool cases. The first scheduled issue occurs at turn 12 after that turn's Treasury phase. A bank coupon first paid after funded issuance is therefore not an opening cash yield. The zero-pool case reaches about `$69B` pool cash by turn 12 from the current pool upkeep and public-float coupon rules; the 5%-M2 sensitivity starts at `$201.5B`. The regular bootstrap's explicit migration list omits `2026-09-03-bond-market-pools`, and the required startup migration list omits it too. The 5%-M2 pool seed therefore requires a separate invocation of that migration; the normal bootstrap model begins with no pool document and treats the 5%-M2 value as a sensitivity.
 
-The funding gap corresponds to a production boundary: `treasuryTurn` records
-macro revenue, spending, and debt service in the signed fiscal accrual, while
-the funded Treasury cash ledger currently receives cash from funded sovereign
-issuance and explicit funded receipts. It does not receive the modeled annual
-tax revenue as cash. Treating the signed balance or revenue field as spendable
-cash would double-count analytics or create cash without a payer debit. Until a
-cash-conserving tax and budget flow exists, the model cannot claim sovereign
-rollover, bank liquidity, rescue, or whole-system viability. No seed debt,
-opening cash, pool capacity, or coupon yield was fabricated to make the
-scenario pass.
+## Reproduction and inputs
 
-The provisional insurance premium remains 0.4% annualized before the existing
-reserve risk weight. This change adds a separate measured cohort: annual
-insured-deposit exposure turns, actual gross insurance shortfalls, paid claim
-count, and recoveries attributable to resolutions opened after evidence
-measurement began. Pre-measurement estates do not supply recovery credit.
-Pricing continues at 0.4% until ten measured years and three paid claims are
-available. After that, it uses same-cohort net claims per insured deposit-year
-plus a bounded reserve refill: at most one year of observed net claims, refilled
-over five years. The existing risk weight remains in place. Premium collection
-is still limited by actual bank cash, and the existing shortfall path records
-any unpaid premium.
+Run `npx --no-install tsx scripts/sim/bankViabilityCalibration.ts` from the AHDGame checkout. It reads seed/rule code only, not live or restored documents, and queues no world simulation. It uses production loan demand, effective bank rates, NPC deposit share, origination fee, deposit ceiling, insurance premium, sovereign coupon, quarterly issuance ladder, bond bid/ask, pool underwriting, pool inflow/sweep, and stress-loss rules.
 
-The archived 1991 audit reports USD lifetime deposit-insurance payouts of
-$10.46B against $0.16B in premiums, with $10.30B covered by Treasury. These
-historical aggregates predate the measured cohort and do not include a matching
-insured deposit-year denominator or recovery cohort, so they cannot set an
-annual actuarial rate. The 10.67% sensitivity is a single-event stress
-calculation, not an expected annual loss or a proposed rate. No premium
-calibration or neutral 8 to 15% ROE acceptance is claimed from this evidence.
+The seed market has `$6.2T` GDP, `$4.03T` external broad money, 3% default prime, 4.2% inflation, `$3.665T` sovereign principal, and `$274.875B` displayed debt interest. Live debt-service terms resolve to 2% at opening. The seed's opening signed fiscal position is `-$3.665T`; the model treats it as analytics, not cash. The first scheduled quarterly issue is about `$50.718B` before the finite pool's 90% primary commitment cap. Once a pool document is initialized, its target starts from 5% of the conservative external broad-money seed (`$201.5B`) and rises to cover near-term rollover face. The normal bootstrap omits the pool seeding migration, so zero opening cash and zero initial target are the primary model inputs; a 5%-M2 opening balance is shown as a separate sensitivity.
 
-## Remaining acceptance work
+The model's bank is a representative small institution, not an estimate of player or NPC counts. It starts with `$5M` capital, 250 financial-sector capacity units, 50% branch share, a `$150M` branch deposit ceiling, and 20% reserves. The 480-turn fixture holds the seed budget and macro inputs static. Modelled sovereign pool coupon receipts and the existing 2% target inflow are applied because those are current pool rules. They are not a claim that the issuer-to-pool leg is already represented by the new Treasury cash ledger.
 
-- Implement and qualify an actual payer-backed source for Treasury cash,
-  including tax collection, with exact-once receipt recovery and no double
-  counting against signed fiscal analytics.
-- Re-run the seeded maturity waterfall, neutral bank case, aggressive recession
-  case, and funded rescue after cash collection and rollover behavior are
-  complete.
-- Collect a credible post-start insurance exposure and resolution cohort before
-  replacing the provisional premium rate.
-- Qualify the 1991 minister or central-bank rescue choice against funded
-  Treasury cash and the original bank charter epoch.
+## Results
+
+| Scenario                                                           | Last-turn annualized ROE | Ending equity | Deposit rate in corridor | Stress standing | Bank bill coupon cash received |
+| ------------------------------------------------------------------ | -----------------------: | ------------: | ------------------------ | --------------- | -----------------------------: |
+| 1991 seed, balanced, 1.25% deposit rate, zero opening pool         |                    8.26% |      `$80.7M` | yes                      | adequate        |                       `$25.3M` |
+| 1991 seed, balanced, APY + 2 pp rate, zero opening pool            |                    7.27% |      `$59.8M` | yes                      | adequate        |                       `$22.2M` |
+| 1991 seed, balanced, starting rate, 5%-M2 opening pool sensitivity |                    8.45% |      `$77.3M` | yes                      | adequate        |                       `$24.2M` |
+| Neutral 8.5% prime, midpoint deposit rate 6.75%                    |                   11.92% |      `$76.8M` | yes                      | adequate        |                       `$60.4M` |
+| Neutral 8.5% prime, legal minimum deposit rate 4.5%                |                   13.28% |     `$140.2M` | yes                      | adequate        |                       `$81.8M` |
+| Neutral 8.5% prime, legal maximum deposit rate 9.0%                |                    1.02% |      `$18.6M` | yes                      | adequate        |                       `$35.6M` |
+| Neutral, minimum deposit rate, maximum lending rate                |                   13.23% |     `$174.8M` | yes                      | adequate        |                      `$110.2M` |
+| Aggressive book, 5 pp prime increase at turn 240                   |                   -1.86% |      `$27.0M` | yes                      | adequate        |                       `$37.2M` |
+| First year, aggressive book, 5 pp prime increase at turn 24        |                  -60.37% |       `$3.7M` | yes                      | adequate        |                        `$0.6M` |
+
+The aggressive cases fail the last-turn earnings test, but the model does not produce a supervisory stress failure or insolvency: the 480-turn case ends with a 57.92% stressed capital ratio against the 6% threshold. The model therefore does not establish the requested aggressive-recession failure outcome. The published stress scenario remains a paper constraint; it is not an actual default/writeoff path. A future acceptance model needs an explicitly production-grounded recession loss/run path before claiming that outcome.
+
+The service-fee rows in the script are sensitivity experiments only. A 50, 100, or 200 bp annual charge is modeled as a reduction in depositor yield and an equal cash inflow to the bank. It is not an existing fee rule, approved price, or recommendation. No service-fee production mechanic is implemented by this report. The 1991 starting case and neutral midpoint already reach the target without this assumed fee. Depositor capture already compares the posted rate with CB savings APY, with a 0.5 pp denominator floor; there is no hard APY-relative minimum rate in the legal corridor. Do not conflate that APY-sensitive capture formula with a hard rate floor.
+
+At the opening 1991 prime, a 48-turn `$1,000` bill has a 3% coupon, `$30` annual coupon, par mid, and `$990` bid / `$1,010` ask at target pool cash. The round-trip spread is `$20` per unit. The neutral 8.5% prime bill pays `$85` annual coupon but is a separate rate sensitivity. Pool float is not unlimited bank income: purchases must clear the executable ask and pool cash/holder limits; marks use executable bid, while liquidity uses actual pool depth.
+
+## Limits and next evidence
+
+1. `treasuryCashLocal` starts at zero and receives real funded primary proceeds, but this calibration fixture does not debit it for the whole analytical annual budget or all non-bank sovereign service. It can consequently accumulate more than `$1T` over ten years. Paid bank claims in this fixture prove only that the specific bank claim path is funded from issuance proceeds; they do not prove the Treasury could pay every competing cash obligation and still honor them.
+2. `bondTurn.ts` still credits public-float sovereign coupons to the market pool through `creditBondPool` without a visible matched `treasuryCashLocal` debit and frozen issuer-cash receipt in the flagged path. This makes the model's public-float coupon replenishment conditional on current product behavior, not cash-conservation evidence. Do not enable the funded cash flag based on this model alone.
+3. The ordinary bootstrap and required startup lists omit the pool seeding migration. Zero-opening-pool is the model's standard reset case. A 5%-M2 start requires a separate migration invocation; its M2 value depends on available snapshots.
+4. This model does not implement a hard APY-relative rate floor or retail service-fee mechanism. The existing NPC capture formula already compares deposit offers with CB savings APY. The model also does not provide bank-year insured loss estimates. Leave premium calibration unchanged until loss exposure, recoveries, and funded payer paths are represented.
+5. The aggressive recession cases lose earnings but remain adequate under the current supervisory formula. A claim that aggressive recession causes failure needs the actual production default/run mechanics, not a made-up stress writeoff.
+
+The next model checkpoint should include the matched public-float sovereign coupon cash leg and all cash-consuming national obligations, then rerun a sourced recession/default/withdrawal scenario. Until then, treat the neutral ROE numbers as promising but conditional evidence, not accepted bank viability or premium calibration.
