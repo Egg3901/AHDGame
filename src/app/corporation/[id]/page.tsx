@@ -60,6 +60,7 @@ import {
 } from "@/components/corporation/CorporationPageTabs";
 import { BankConsoleTab } from "./bank/BankConsoleTab";
 import { EditorialStancePanel } from "@/components/corporation/EditorialStancePanel";
+import { ManufacturingProductStudio } from "@/components/corporation/ManufacturingProductStudio";
 import type {
   CorporationDetail,
   CEO,
@@ -1118,44 +1119,57 @@ export default function CorporationDetailPage() {
                 )}
 
                 {tab === "sectors" && (
-                  <SectorsTab
-                    sectors={sectors}
-                    isCeo={isCeo}
-                    corpId={id}
-                    corporationType={corporation.type}
-                    corporationSecondaryType={corporation.secondaryType}
-                    liquidCapital={corporation.liquidCapital}
-                    liquidCurrencyCode={corporation.liquidCurrencyCode}
-                    logisticsStrength={corporation.logisticsStrength}
-                    onAbandonSector={handleAbandonSector}
-                    abandoningSectorId={abandoningSectorId}
-                    sectorsMessage={sectorsMessage}
-                    onStrategyChange={handleSectorStrategyChange}
-                    strategyUpdatingSectorId={strategyUpdatingSectorId}
-                    onCancelTransition={handleCancelTransition}
-                    cancelTransitionSectorId={cancelTransitionSectorId}
-                    onGrowthChange={handleGrowthChange}
-                    growthUpdatingSectorId={growthUpdatingSectorId}
-                    currentTurn={corporation?.currentTurn ?? 0}
-                    periodView={periodView}
-                    onPeriodViewChange={setPeriodView}
-                    plantsMode={corporation.plantsMode === true}
-                    expandOnMount={searchParams.get("expand") === "1"}
-                    expandSectorType={
-                      CORPORATION_TYPES.includes(searchParams.get("sectorType") as CorporationType)
-                        ? (searchParams.get("sectorType") as CorporationType)
-                        : undefined
-                    }
-                    expandStateId={searchParams.get("state") ?? undefined}
-                    onExpandDeepLinkConsumed={() => {
-                      const p = new URLSearchParams(searchParams.toString());
-                      p.delete("expand");
-                      p.delete("state");
-                      p.delete("sectorType");
-                      const qs = p.toString();
-                      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-                    }}
-                  />
+                  <div className="space-y-6">
+                    {corporation.productLinesV2Enabled &&
+                      sectors.some((sector) =>
+                        ["manufacturing", "automobiles"].includes(sector.sectorType)
+                      ) && (
+                        <ManufacturingProductStudio
+                          corporationId={id}
+                          onUpdate={fetchCorporation}
+                        />
+                      )}
+                    <SectorsTab
+                      sectors={sectors}
+                      isCeo={isCeo}
+                      corpId={id}
+                      corporationType={corporation.type}
+                      corporationSecondaryType={corporation.secondaryType}
+                      liquidCapital={corporation.liquidCapital}
+                      liquidCurrencyCode={corporation.liquidCurrencyCode}
+                      logisticsStrength={corporation.logisticsStrength}
+                      onAbandonSector={handleAbandonSector}
+                      abandoningSectorId={abandoningSectorId}
+                      sectorsMessage={sectorsMessage}
+                      onStrategyChange={handleSectorStrategyChange}
+                      strategyUpdatingSectorId={strategyUpdatingSectorId}
+                      onCancelTransition={handleCancelTransition}
+                      cancelTransitionSectorId={cancelTransitionSectorId}
+                      onGrowthChange={handleGrowthChange}
+                      growthUpdatingSectorId={growthUpdatingSectorId}
+                      currentTurn={corporation?.currentTurn ?? 0}
+                      periodView={periodView}
+                      onPeriodViewChange={setPeriodView}
+                      plantsMode={corporation.plantsMode === true}
+                      expandOnMount={searchParams.get("expand") === "1"}
+                      expandSectorType={
+                        CORPORATION_TYPES.includes(
+                          searchParams.get("sectorType") as CorporationType
+                        )
+                          ? (searchParams.get("sectorType") as CorporationType)
+                          : undefined
+                      }
+                      expandStateId={searchParams.get("state") ?? undefined}
+                      onExpandDeepLinkConsumed={() => {
+                        const p = new URLSearchParams(searchParams.toString());
+                        p.delete("expand");
+                        p.delete("state");
+                        p.delete("sectorType");
+                        const qs = p.toString();
+                        router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+                      }}
+                    />
+                  </div>
                 )}
 
                 {tab === "commodities" && (
