@@ -204,6 +204,11 @@ export async function buyListedSector(request: Request, { params }: RouteParams)
       stateId: sector.stateId,
       ...getCorporateSectorLaneQuery(sector),
     });
+    if (existingBuyerSector && hasProtectedConstructionProperty(existingBuyerSector))
+      return NextResponse.json(
+        { error: "The buyer's existing site has an unfinished secured obligation." },
+        { status: 409 }
+      );
 
     const priceAnchor = sector.forSale.priceAnchor;
     if (!Number.isFinite(priceAnchor) || priceAnchor <= 0) {

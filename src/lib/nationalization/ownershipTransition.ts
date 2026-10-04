@@ -496,14 +496,16 @@ export async function nationalizeSector(
 
   // Route to the NatCorp that owns this sector type (split-off if one claims it,
   // else the primary). Future takings of a split-off type land in the right corp.
-  const nationalCorp = sector.industryModel
-    ? await resolveNationalCorporationForSector(
-        db,
-        params.countryId,
-        sector.sectorType,
-        sector.industryModel
-      )
-    : await resolveNationalCorporationForSector(db, params.countryId, sector.sectorType);
+  const nationalCorp =
+    sector.industryModel || sector.mediaDiscriminator
+      ? await resolveNationalCorporationForSector(
+          db,
+          params.countryId,
+          sector.sectorType,
+          sector.industryModel,
+          sector.mediaDiscriminator
+        )
+      : await resolveNationalCorporationForSector(db, params.countryId, sector.sectorType);
 
   // Valuation in ₳ via the canonical sector NPV (going-concern, growth-cost-net).
   const [centralBanks, fxByCurrency, donorFxRate, marketMode, gameState] = await Promise.all([
@@ -849,17 +851,19 @@ export async function nationalizeWholeCorp(
 
   const destByType = new Map<string, ObjectId>();
   for (const s of domesticSectors) {
-    const modelKey = `${s.sectorType}:${s.industryModel ?? ""}`;
+    const modelKey = `${s.sectorType}:${s.industryModel ?? ""}:${s.mediaDiscriminator ?? ""}`;
     let destId = destByType.get(modelKey);
     if (!destId) {
-      const dest = s.industryModel
-        ? await resolveNationalCorporationForSector(
-            db,
-            params.countryId,
-            s.sectorType,
-            s.industryModel
-          )
-        : await resolveNationalCorporationForSector(db, params.countryId, s.sectorType);
+      const dest =
+        s.industryModel || s.mediaDiscriminator
+          ? await resolveNationalCorporationForSector(
+              db,
+              params.countryId,
+              s.sectorType,
+              s.industryModel,
+              s.mediaDiscriminator
+            )
+          : await resolveNationalCorporationForSector(db, params.countryId, s.sectorType);
       destId = dest._id;
       destByType.set(modelKey, destId);
     }

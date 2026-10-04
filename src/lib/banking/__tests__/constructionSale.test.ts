@@ -125,6 +125,28 @@ function world(
 }
 
 describe("buyer-funded secured property sale", () => {
+  it.each(["media", "entertainment"])(
+    "preserves canonical entertainment identity against a buyer's %s lane",
+    async (buyerLane) => {
+      const w = world();
+      await w.db
+        .collection("corporateSectors")
+        .updateOne(
+          { _id: w.sectorId },
+          { $set: { sectorType: "media", mediaDiscriminator: "entertainment" } }
+        );
+      const original = w.memory.collection("corporateSectors").docs[0];
+      w.memory.seed("corporateSectors", [
+        original,
+        { _id: new ObjectId(), corporationId: w.buyerId, stateId: "US-CA", sectorType: buyerLane },
+      ]);
+      const result = await buySecuredConstructionProperty(w.input);
+      expect(result.ok).toBe(buyerLane === "media");
+      expect(w.memory.collection("corporations").docs[1].liquidCapital).toBe(
+        buyerLane === "media" ? 850_000 : 1_000_000
+      );
+    }
+  );
   it("retains the cash obligation if payout is rejected after buyer funding landed", async () => {
     const w = world();
     const journals = w.db.collection("bankMoneyMoves");
