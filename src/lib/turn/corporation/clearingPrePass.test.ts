@@ -270,7 +270,6 @@ describe("runClearingPrePass with clearing enabled", () => {
     expect(editorialFill).toBeGreaterThan(0);
     expect(editorialFill).toBeLessThan(noFairnessFill ?? 0);
   });
-
   it("rolls loyalty up and keeps the in-memory corp docs consistent", () => {
     const { corp, lookups } = makeSectorWorld();
     const market = { clearingEnabled: true, plantsEnabled: false } as MarketContext;
