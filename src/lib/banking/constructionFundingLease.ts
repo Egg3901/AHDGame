@@ -213,5 +213,14 @@ export async function releaseCompletedConstructionFunding(
     },
     { $unset: { constructionSettlementOwner: "" } }
   );
+  await db.collection<CorporateSector>("corporateSectors").updateOne(
+    {
+      "constructionFinancing.claimId": claim.claimId,
+      "constructionFinancing.loanId": claim.loanId,
+      "constructionFinancing.status": "building",
+      "constructionFinancing.escrowLocal": 0,
+    },
+    { $set: { "constructionFinancing.fundingCleanupCompleted": true } }
+  );
   return true;
 }

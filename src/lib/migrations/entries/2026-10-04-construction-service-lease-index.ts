@@ -24,6 +24,12 @@ export const migration: Migration = {
           { "constructionFinancing.cancellation.turn": 1 },
           { name: "corporateSectors_construction_cancel_turn", sparse: true }
         );
+      await db
+        .collection("corporateSectors")
+        .createIndex(
+          { "constructionFinancing.status": 1, "constructionFinancing.requestTransition.turn": 1 },
+          { name: "corporateSectors_construction_funding_turn", sparse: true }
+        );
     }
     return {
       documentsUpdated: 0,
