@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { PhaseTag, electionPageTitle } from "./ElectionDetailHelpers";
 import type { ElectionDetail } from "./ElectionDetailTypes";
@@ -44,6 +45,23 @@ export function ElectionHeader({
             isUpcoming={localIsUpcoming}
           />
         </div>
+        {election.electionType === "president" && (
+          <p className="text-sm text-muted">
+            <Link
+              href="/wiki/reference-offices"
+              className="text-primary underline-offset-2 hover:underline"
+            >
+              What the presidency can do
+            </Link>
+            {" · "}
+            <Link
+              href="/guides/running-for-office"
+              className="text-primary underline-offset-2 hover:underline"
+            >
+              How to run for president
+            </Link>
+          </p>
+        )}
         {election.hungarianModernByElection && (
           <p className="text-sm text-muted">
             {t("description", { district: election.hungarianModernByElection.districtId })}

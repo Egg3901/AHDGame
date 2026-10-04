@@ -351,6 +351,11 @@ export default function SupremeCourtClient({ countryId }: { countryId: CountryId
                         A diverged ruling changes real policy, national and state metrics, and
                         regional political lean.
                       </li>
+                      <li>
+                        Players cannot bring cases. Landmark cases arrive on their historical dates
+                        and rare unscripted cases can appear on their own; the Docket History tab
+                        explains each outcome.
+                      </li>
                     </ul>
                   </div>
                 </InfoTooltip>

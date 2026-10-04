@@ -51,6 +51,7 @@ export async function GET(request: Request) {
         summary: b.summary,
         sentToPresidentAt: b.sentToPresidentAt?.toISOString() ?? null,
         presidentActionDeadline: b.presidentActionDeadline?.toISOString() ?? null,
+        presidentActionDeadlineOnTurn: b.presidentActionDeadlineOnTurn ?? null,
       })),
       isPresident: true,
     });

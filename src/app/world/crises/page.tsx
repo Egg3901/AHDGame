@@ -15,6 +15,7 @@ import type { Crisis } from "@/lib/db/types/crisis";
 import { type CountryId } from "@/lib/constants/countries";
 import { useRegisteredCountries } from "@/contexts/RegisteredCountriesContext";
 import { crisisSeverity } from "@/lib/crises/severity";
+import { crisisBoardCounts, crisisListedInScope } from "@/lib/crises/boardCounts";
 import { formatCrisisEffectTarget, formatCrisisEffectValue } from "@/lib/crises/effectLabels";
 import { SovereignDebtWatchPanel } from "@/components/world/SovereignDebtWatchPanel";
 import { CountryFlag } from "@/components/CountryFlag";
@@ -106,6 +107,7 @@ function CrisisCard({
     crisis.status === "resolved"
       ? "border-zinc-400/30 bg-zinc-400/10 text-zinc-400"
       : SEVERITY_BADGE[crisisSeverity(crisis)];
+  const badgeLabel = crisis.status === "resolved" ? `${scopeLabel} · Resolved` : scopeLabel;
 
   return (
     <Link
@@ -127,7 +129,7 @@ function CrisisCard({
               {crisis.name}
             </h3>
             <span className={`shrink-0 text-xs px-2 py-0.5 rounded-full border ${badgeClass}`}>
-              {scopeLabel}
+              {badgeLabel}
             </span>
           </div>
         </div>
@@ -137,7 +139,7 @@ function CrisisCard({
             {crisis.name}
           </h3>
           <span className={`shrink-0 text-xs px-2 py-0.5 rounded-full border ${badgeClass}`}>
-            {scopeLabel}
+            {badgeLabel}
           </span>
         </div>
       )}
@@ -213,7 +215,7 @@ function ConflictCard({ conflict }: { conflict: Conflict }) {
   );
 }
 
-function EmptyScope({ scope }: { scope: ScopeTab }) {
+function EmptyScope({ scope, resolvedCount = 0 }: { scope: ScopeTab; resolvedCount?: number }) {
   const labels: Record<ScopeTab, string> = {
     global: "No active global crises or conflicts",
     country: "No active national crises",
@@ -223,6 +225,11 @@ function EmptyScope({ scope }: { scope: ScopeTab }) {
   return (
     <div className="rounded-xl border border-card-border bg-card p-10 text-center">
       <p className="text-muted text-sm">{labels[scope]}</p>
+      {resolvedCount > 0 && (
+        <p className="mt-1 text-xs text-muted">
+          {`${resolvedCount} resolved ${resolvedCount === 1 ? "crisis is" : "crises are"} listed under Show resolved below.`}
+        </p>
+      )}
     </div>
   );
 }
@@ -395,7 +402,11 @@ export default function CrisesPage() {
   const allResolved = crises.filter((c) => c.status === "resolved");
 
   const activeByScopeTab = allActive.filter((c) => c.scope === activeTab);
-  const historicalByScopeTab = allResolved.filter((c) => c.scope === activeTab);
+  const tabScope = activeTab === "debt" ? null : activeTab;
+  const historicalByScopeTab = allResolved.filter(
+    (c) => tabScope != null && crisisListedInScope(c, tabScope, registered)
+  );
+  const counts = crisisBoardCounts(crises, tabScope, registered);
 
   // Group by country for national + regional tabs
   const countryGroups = registered.reduce<Record<string, Crisis[]>>((acc, cId) => {
@@ -473,15 +484,15 @@ export default function CrisesPage() {
                 Active
               </span>
               <span className="text-base font-bold tabular-nums text-foreground">
-                {loading || error ? "—" : allActive.length}
+                {loading || error ? "—" : counts.activeAllScopes}
               </span>
             </div>
             <div className="flex flex-col px-5 py-3 min-w-max">
               <span className="text-[10px] uppercase tracking-widest text-muted font-medium">
-                Historical
+                Resolved, all scopes
               </span>
               <span className="text-base font-bold tabular-nums text-foreground">
-                {loading || error ? "—" : allResolved.length}
+                {loading || error ? "—" : counts.resolvedAllScopes}
               </span>
             </div>
             <div className="flex flex-col px-5 py-3 min-w-max">
@@ -562,7 +573,7 @@ export default function CrisesPage() {
             {/* Merged Global feed: live conflicts sit alongside global crises. */}
             {activeTab === "global" &&
               (activeByScopeTab.length === 0 && conflicts.length === 0 ? (
-                <EmptyScope scope="global" />
+                <EmptyScope scope="global" resolvedCount={counts.resolvedInScope} />
               ) : (
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   {conflicts.map((conflict) => (
@@ -582,7 +593,7 @@ export default function CrisesPage() {
 
             {(activeTab === "country" || activeTab === "region") &&
               (Object.keys(countryGroups).length === 0 ? (
-                <EmptyScope scope={activeTab} />
+                <EmptyScope scope={activeTab} resolvedCount={counts.resolvedInScope} />
               ) : (
                 <div className="space-y-8">
                   {registered
@@ -622,10 +633,10 @@ export default function CrisesPage() {
                       d="M9 5l7 7-7 7"
                     />
                   </svg>
-                  {showHistorical ? "Hide" : "Show"} Historical Crises
+                  {`${showHistorical ? "Hide" : "Show"} resolved ${tabs.find((t) => t.id === activeTab)?.label.toLowerCase() ?? ""} crises`}
                   {!showHistorical && (
                     <span className="ml-1 rounded-full bg-card-elevated border border-card-border px-1.5 py-0.5 text-xs tabular-nums">
-                      {historicalByScopeTab.length}
+                      {counts.resolvedInScope}
                     </span>
                   )}
                 </button>
