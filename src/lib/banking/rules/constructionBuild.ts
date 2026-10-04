@@ -27,6 +27,8 @@ export interface ConstructionBuildClaim {
   loanFunded?: boolean;
   /** Default keeps the pledge in force until an actual funded recovery. */
   defaultedTurn?: number;
+  /** The paid build's contractual refund stays pledged until its principal is settled. */
+  cancellation?: import("./constructionRecovery").ConstructionCancellationQuote;
 }
 
 type Result<T> = { ok: true; value: T } | { ok: false; error: string };

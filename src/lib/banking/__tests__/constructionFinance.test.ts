@@ -27,6 +27,9 @@ const borrowerId = new ObjectId();
 const bankId = new ObjectId();
 function world(requireApproval = false) {
   const memory = createInMemoryDb();
+  memory.seed("gameConfig", [
+    { _id: "default", privateBankingEnabled: true, bankConstructionFinanceEnabled: true },
+  ]);
   const corporation = makeCorporation({ _id: borrowerId, liquidCapital: 50_000 });
   const bank: BankingSnapshot = {
     turn: 12,
@@ -103,6 +106,28 @@ function world(requireApproval = false) {
 
 beforeEach(() => vi.clearAllMocks());
 describe("construction request lifecycle", () => {
+  it("does not disburse a pending noncash construction request after the flag is disabled", async () => {
+    const { request } = world(true);
+    const requested = await requestConstructionFinance(request);
+    if (!requested.ok) throw new Error(requested.error);
+    await request.db
+      .collection<{ _id: string; bankConstructionFinanceEnabled: boolean }>("gameConfig")
+      .updateOne({ _id: "default" }, { $set: { bankConstructionFinanceEnabled: false } });
+    expect(await acceptLoan(request.db, bankId, new ObjectId(requested.loanId))).toMatchObject({
+      ok: false,
+      error: "New construction funding is disabled",
+    });
+    expect(
+      (await request.db.collection("corporations").findOne({ _id: borrowerId }))?.liquidCapital
+    ).toBe(50_000);
+    expect(
+      (await request.db.collection("corporations").findOne({ _id: bankId }))?.bankCharter
+        .cashReserves
+    ).toBe(2_000_000);
+    expect(
+      (await request.db.collection("corporateSectors").findOne({ _id: sectorId }))?.buildQueue
+    ).toEqual([]);
+  });
   it("auto-approves into one paid build and replays without free proceeds", async () => {
     const { memory, request } = world();
     const result = await requestConstructionFinance(request);

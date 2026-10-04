@@ -5,13 +5,20 @@ export const migration: Migration = {
   description: "Index unfinished construction instalment epoch leases.",
   idempotent: true,
   execute: async (db, ctx) => {
-    if (!ctx.dryRun)
+    if (!ctx.dryRun) {
       await db
         .collection("corporations")
         .createIndex(
           { "bankConstructionFunding.service.turn": 1 },
           { name: "corporations_construction_service_turn", sparse: true }
         );
+      await db
+        .collection("corporateSectors")
+        .createIndex(
+          { "constructionFinancing.cancellation.turn": 1 },
+          { name: "corporateSectors_construction_cancel_turn", sparse: true }
+        );
+    }
     return {
       documentsUpdated: 0,
       notes: [
