@@ -11,7 +11,9 @@ describe("resolveBankingPolicy", () => {
   it("enables Treasury holdings only explicitly with banking enabled", () => {
     expect(resolveBankingPolicy({ bankTreasuryEnabled: true }).bankTreasury).toBe(false);
     expect(resolveBankingPolicy({ privateBankingEnabled: true }).bankTreasury).toBe(false);
-    expect(resolveBankingPolicy({ privateBankingEnabled: true, bankTreasuryEnabled: true }).bankTreasury).toBe(true);
+    expect(
+      resolveBankingPolicy({ privateBankingEnabled: true, bankTreasuryEnabled: true }).bankTreasury
+    ).toBe(true);
   });
   it("enables forex fees only with their explicit flag and active prop trading", () => {
     expect(resolveBankingPolicy({ bankPropForexFeesEnabled: true }).propForexFees).toBe(false);
