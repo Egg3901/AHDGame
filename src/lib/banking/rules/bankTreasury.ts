@@ -12,6 +12,53 @@ import { roundSavingsAmount } from "@/lib/currency/savingsInterest";
 
 export const BANK_TREASURY_MAX_REMAINING_TURNS = 48;
 
+export interface BankTreasuryHolderLot {
+  bankId?: string;
+  charteredTurn?: number;
+  lotId?: string;
+  tradeId?: string;
+  units: number;
+}
+
+/** Count only settled units owned by this charter epoch. */
+export function bankTreasuryHolderUnits(
+  holders: readonly BankTreasuryHolderLot[],
+  bankId: string,
+  charteredTurn: number
+): number {
+  return holders.reduce((sum, holder) => {
+    if (holder.bankId === bankId && holder.charteredTurn === charteredTurn && !holder.tradeId) {
+      return sum + nonNegative(holder.units);
+    }
+    return sum;
+  }, 0);
+}
+
+/** Allocate a whole-unit sale over active purchase lots in stored order. */
+export function allocateBankTreasuryHolderLots(
+  holders: readonly BankTreasuryHolderLot[],
+  bankId: string,
+  charteredTurn: number,
+  requestedUnits: number
+): Array<{ lotId: string; units: number }> {
+  let remaining = Math.max(0, Math.floor(requestedUnits));
+  const allocations: Array<{ lotId: string; units: number }> = [];
+  for (const holder of holders) {
+    if (
+      holder.bankId !== bankId ||
+      holder.charteredTurn !== charteredTurn ||
+      holder.tradeId ||
+      !holder.lotId
+    )
+      continue;
+    const units = Math.min(remaining, Math.floor(nonNegative(holder.units)));
+    if (units > 0) allocations.push({ lotId: holder.lotId, units });
+    remaining -= units;
+    if (remaining === 0) break;
+  }
+  return allocations;
+}
+
 export interface BankTreasuryCashFloorInput {
   cashBackedDeposits: number;
   npcDeposits: number;

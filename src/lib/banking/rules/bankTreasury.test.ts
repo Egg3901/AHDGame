@@ -3,6 +3,8 @@ import type { Bond } from "@/lib/db/types/bond";
 import {
   computeBankTreasuryCashFloor,
   computeBankTreasuryDueInterest,
+  bankTreasuryHolderUnits,
+  allocateBankTreasuryHolderLots,
   planBankTreasurySweep,
   quoteBankTreasuryBond,
 } from "./bankTreasury";
@@ -10,6 +12,21 @@ import { bankBalanceSheet, bankEquity, regulatoryCapital } from "./balanceSheet"
 import { assessCapital } from "./capitalAdequacy";
 
 describe("bank treasury rules", () => {
+  it("sums and allocates settled positions by bank charter epoch", () => {
+    const holders = [
+      { bankId: "bank-a", charteredTurn: 10, lotId: "lot-1", units: 3 },
+      { bankId: "bank-a", charteredTurn: 10, lotId: "lot-2", units: 4 },
+      { bankId: "bank-a", charteredTurn: 10, tradeId: "pending", units: 2 },
+      { bankId: "bank-a", charteredTurn: 9, lotId: "old", units: 8 },
+      { bankId: "bank-b", charteredTurn: 10, lotId: "other", units: 9 },
+    ];
+    expect(bankTreasuryHolderUnits(holders, "bank-a", 10)).toBe(7);
+    expect(allocateBankTreasuryHolderLots(holders, "bank-a", 10, 6)).toEqual([
+      { lotId: "lot-1", units: 3 },
+      { lotId: "lot-2", units: 3 },
+    ]);
+  });
+
   it("keeps cash purchases on equity, prices spread loss, and excludes bills from reserve cash", () => {
     const before = { cashReserves: 1_000, totalLoans: 1_000, npcDeposits: 500, totalDeposits: 500 };
     const afterPurchase = { ...before, cashReserves: 800, sovereignTreasuryMarkValue: 200 };

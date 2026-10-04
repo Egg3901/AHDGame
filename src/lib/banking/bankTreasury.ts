@@ -8,6 +8,8 @@ import { savingsReadsAuthoritative } from "@/lib/banking/rules/policy";
 import {
   computeBankTreasuryCashFloor,
   computeBankTreasuryDueInterest,
+  bankTreasuryHolderUnits,
+  allocateBankTreasuryHolderLots,
   quoteBankTreasuryBond,
   BANK_TREASURY_MAX_REMAINING_TURNS,
 } from "@/lib/banking/rules/bankTreasury";
@@ -93,62 +95,22 @@ function roundLocal(amount: number, currency: CurrencyCode): number {
   return roundSavingsAmount(amount, currency);
 }
 
+function holderLotInputs(holders: readonly BondHolder[]) {
+  return holders.map((holder) => ({
+    bankId: holder.bankId?.toHexString(),
+    charteredTurn: holder.charteredTurn,
+    lotId: holder.bankTreasuryLotId,
+    tradeId: holder.bankTreasuryTradeId,
+    units: holder.units,
+  }));
+}
+
 function activeHolderUnits(
   holders: readonly BondHolder[],
   bankId: ObjectId,
   charteredTurn: number
 ): number {
-  return holders.reduce((sum, holder) => {
-    if (
-      holder.bankId?.equals(bankId) &&
-      holder.charteredTurn === charteredTurn &&
-      !holder.bankTreasuryTradeId
-    )
-      return sum + Math.max(0, holder.units);
-    return sum;
-  }, 0);
-}
-
-/** The sale reservation updates one matching Mongo array element at a time. */
-function activeHolderLotUnits(
-  holders: readonly BondHolder[],
-  bankId: ObjectId,
-  charteredTurn: number
-): number {
-  return holders.reduce((total, holder) => {
-    if (
-      holder.bankId?.equals(bankId) &&
-      holder.charteredTurn === charteredTurn &&
-      !holder.bankTreasuryTradeId
-    )
-      return total + Math.max(0, holder.units);
-    return total;
-  }, 0);
-}
-
-function allocateActiveLots(
-  holders: readonly BondHolder[],
-  bankId: ObjectId,
-  charteredTurn: number,
-  requested: number
-): Array<{ lotId: string; units: number }> {
-  let remaining = requested;
-  const allocations: Array<{ lotId: string; units: number }> = [];
-  for (const holder of holders) {
-    if (
-      !holder.bankId?.equals(bankId) ||
-      holder.charteredTurn !== charteredTurn ||
-      holder.bankTreasuryTradeId ||
-      !holder.bankTreasuryLotId ||
-      holder.units <= 0
-    )
-      continue;
-    const units = Math.min(remaining, Math.floor(holder.units));
-    if (units > 0) allocations.push({ lotId: holder.bankTreasuryLotId, units });
-    remaining -= units;
-    if (remaining <= 0) break;
-  }
-  return allocations;
+  return bankTreasuryHolderUnits(holderLotInputs(holders), bankId.toHexString(), charteredTurn);
 }
 
 function poolSnapshot(pool: BondPoolQuoteSnapshot | undefined): BondPoolQuoteSnapshot {
@@ -1193,7 +1155,7 @@ export async function tradeBankTreasuryBill(
       Math.floor(available / pricePerUnitLocal)
     );
   } else {
-    const availableLots = activeHolderLotUnits(
+    const availableLots = activeHolderUnits(
       bond.holders ?? [],
       input.bankId,
       charter.charteredTurn
@@ -1215,7 +1177,12 @@ export async function tradeBankTreasuryBill(
   const amountLocal = roundLocal(fillUnits * pricePerUnitLocal, charter.currency);
   const allocations =
     input.side === "sell"
-      ? allocateActiveLots(bond.holders ?? [], input.bankId, charter.charteredTurn, fillUnits)
+      ? allocateBankTreasuryHolderLots(
+          holderLotInputs(bond.holders ?? []),
+          input.bankId.toHexString(),
+          charter.charteredTurn,
+          fillUnits
+        )
       : undefined;
   if (
     input.side === "sell" &&
@@ -1353,7 +1320,7 @@ export async function liquidateFailedBankTreasury(
     while (true) {
       const bond = await db.collection<Bond>("bonds").findOne({ _id: initial._id });
       if (!bond || bond.matured || bond.defaulted) break;
-      const lots = activeHolderLotUnits(bond.holders ?? [], bankId, charter.charteredTurn);
+      const lots = activeHolderUnits(bond.holders ?? [], bankId, charter.charteredTurn);
       if (lots <= 0) break;
       const quoteState = await loadQuoteForTrade(db, bond, charter.currency, turn);
       const units = Math.min(lots, quoteState.quote.depthUnitsAtBid);
