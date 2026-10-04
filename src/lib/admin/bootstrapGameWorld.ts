@@ -776,7 +776,7 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
   await seedDdBudgets(db, resetReference, log, preset);
 
   if (freshVehicleSeed.enabled) {
-    const converted = await convertFresh1991AutomobileSeedRows(db);
+    const converted = await convertFresh1991AutomobileSeedRows(db, { dryRun: false });
     log(
       `[manufacturing-vehicles] fresh seed re-keyed ${converted.corporations} corporations and ${converted.sectors} sectors`
     );

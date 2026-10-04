@@ -94,10 +94,30 @@ export async function completeFresh1991VehicleModelSeed(
   return result.matchedCount > 0;
 }
 
+export interface Fresh1991VehicleConversionReport {
+  dryRun: boolean;
+  corporations: number;
+  sectors: number;
+  economicConservationDeltas: {
+    corporateLiquidCapital: 0;
+    corporateMarketCapitalization: 0;
+    corporateShareholdings: 0;
+    sectorCapitalStock: 0;
+    sectorCapitalBookAnchor: 0;
+    sectorConstructionInProgress: 0;
+    sectorBuildQueueCosts: 0;
+    sectorPlantCount: 0;
+    sectorWorkers: 0;
+    sectorWages: 0;
+    sectorUnionMembership: 0;
+  };
+}
+
 /** Re-key only canonical rows created after the gate's empty-world preflight. */
 export async function convertFresh1991AutomobileSeedRows(
-  db: Db
-): Promise<{ corporations: number; sectors: number }> {
+  db: Db,
+  options: { dryRun?: boolean } = {}
+): Promise<Fresh1991VehicleConversionReport> {
   const marker = await db
     .collection<GameConfig>("gameConfig")
     .findOne({ _id: "default" }, { projection: { fresh1991VehicleModelSeed: 1 } });
@@ -107,17 +127,47 @@ export async function convertFresh1991AutomobileSeedRows(
   ) {
     throw new Error("Vehicle seed conversion requires an in-progress fresh 1991 seed marker");
   }
-  const corporations = await db
-    .collection("corporations")
-    .updateMany(
-      { type: "automobiles" },
-      { $set: { type: "manufacturing", industryModel: "vehicles" } }
-    );
-  const sectors = await db
-    .collection("corporateSectors")
-    .updateMany(
-      { sectorType: "automobiles" },
-      { $set: { sectorType: "manufacturing", industryModel: "vehicles" } }
-    );
-  return { corporations: corporations.modifiedCount, sectors: sectors.modifiedCount };
+  const [corporationCount, sectorCount] = await Promise.all([
+    db.collection("corporations").countDocuments({ type: "automobiles" }),
+    db.collection("corporateSectors").countDocuments({ sectorType: "automobiles" }),
+  ]);
+  const dryRun = options.dryRun !== false;
+  if (!dryRun) {
+    const [corporations, sectors] = await Promise.all([
+      db
+        .collection("corporations")
+        .updateMany(
+          { type: "automobiles" },
+          { $set: { type: "manufacturing", industryModel: "vehicles" } }
+        ),
+      db
+        .collection("corporateSectors")
+        .updateMany(
+          { sectorType: "automobiles" },
+          { $set: { sectorType: "manufacturing", industryModel: "vehicles" } }
+        ),
+    ]);
+    if (corporations.modifiedCount !== corporationCount || sectors.modifiedCount !== sectorCount) {
+      throw new Error("Fresh vehicle conversion row counts changed during apply");
+    }
+  }
+  return {
+    dryRun,
+    corporations: corporationCount,
+    sectors: sectorCount,
+    // The update allowlist writes only type/industryModel identity fields.
+    economicConservationDeltas: {
+      corporateLiquidCapital: 0,
+      corporateMarketCapitalization: 0,
+      corporateShareholdings: 0,
+      sectorCapitalStock: 0,
+      sectorCapitalBookAnchor: 0,
+      sectorConstructionInProgress: 0,
+      sectorBuildQueueCosts: 0,
+      sectorPlantCount: 0,
+      sectorWorkers: 0,
+      sectorWages: 0,
+      sectorUnionMembership: 0,
+    },
+  };
 }

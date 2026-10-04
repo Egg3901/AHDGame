@@ -98,11 +98,13 @@ describe("fresh 1991 vehicle-model seed gate", () => {
         capitalBookAnchor: 5_500,
         constructionInProgressAnchor: 250,
         buildQueue: [{ unitsOrdered: 80, costPaidAnchor: 250, onlineTurn: 12 }],
+        plantCount: 20,
         workers: 900,
         wageLevel: 1.1,
         representingUnionId: "union-auto-1",
       },
     ];
+    const beforePreview = structuredClone({ corpRows, sectorRows });
     const db = {
       collection: (name: string) => ({
         findOne: vi.fn(async () => ({
@@ -114,6 +116,12 @@ describe("fresh 1991 vehicle-model seed gate", () => {
             startedAt: new Date(),
           },
         })),
+        countDocuments: vi.fn(async (filter: Record<string, string>) => {
+          const rows: Record<string, unknown>[] =
+            name === "corporations" ? corpRows : name === "corporateSectors" ? sectorRows : [];
+          const [key, value] = Object.entries(filter)[0] ?? [];
+          return rows.filter((row) => row[key] === value).length;
+        }),
         updateMany: vi.fn(async (filter: unknown, update: unknown) => {
           writes.push({ collection: name, filter, update });
           const rows: Record<string, unknown>[] = name === "corporations" ? corpRows : sectorRows;
@@ -130,9 +138,33 @@ describe("fresh 1991 vehicle-model seed gate", () => {
       }),
     } as unknown as Db;
 
-    await expect(convertFresh1991AutomobileSeedRows(db)).resolves.toEqual({
+    const report = await convertFresh1991AutomobileSeedRows(db);
+    expect(report).toEqual({
+      dryRun: true,
       corporations: 1,
       sectors: 1,
+      economicConservationDeltas: {
+        corporateLiquidCapital: 0,
+        corporateMarketCapitalization: 0,
+        corporateShareholdings: 0,
+        sectorCapitalStock: 0,
+        sectorCapitalBookAnchor: 0,
+        sectorConstructionInProgress: 0,
+        sectorBuildQueueCosts: 0,
+        sectorPlantCount: 0,
+        sectorWorkers: 0,
+        sectorWages: 0,
+        sectorUnionMembership: 0,
+      },
+    });
+    expect(writes).toEqual([]);
+    expect({ corpRows, sectorRows }).toEqual(beforePreview);
+
+    await expect(convertFresh1991AutomobileSeedRows(db, { dryRun: false })).resolves.toMatchObject({
+      dryRun: false,
+      corporations: 1,
+      sectors: 1,
+      economicConservationDeltas: report.economicConservationDeltas,
     });
     expect(corpRows[0]).toEqual({
       _id: "issuer-42",
@@ -153,6 +185,7 @@ describe("fresh 1991 vehicle-model seed gate", () => {
       capitalBookAnchor: 5_500,
       constructionInProgressAnchor: 250,
       buildQueue: [{ unitsOrdered: 80, costPaidAnchor: 250, onlineTurn: 12 }],
+      plantCount: 20,
       workers: 900,
       wageLevel: 1.1,
       representingUnionId: "union-auto-1",
@@ -169,5 +202,14 @@ describe("fresh 1991 vehicle-model seed gate", () => {
         update: { $set: { sectorType: "manufacturing", industryModel: "vehicles" } },
       },
     ]);
+
+    const afterApply = structuredClone({ corpRows, sectorRows });
+    await expect(convertFresh1991AutomobileSeedRows(db, { dryRun: false })).resolves.toMatchObject({
+      dryRun: false,
+      corporations: 0,
+      sectors: 0,
+    });
+    expect({ corpRows, sectorRows }).toEqual(afterApply);
+    expect(writes).toHaveLength(4);
   });
 });
