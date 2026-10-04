@@ -3,7 +3,7 @@ import type { Db } from "mongodb";
 import { loadUSMediaOutletDelivery } from "./turnData";
 
 describe("loadUSMediaOutletDelivery", () => {
-  it("projects ad production and sales in one indexed state/type query", async () => {
+  it("projects ad production and sales with ledger scaling and the current transition turn", async () => {
     const toArray = vi.fn().mockResolvedValue([
       {
         _id: "sector-1",
@@ -18,20 +18,27 @@ describe("loadUSMediaOutletDelivery", () => {
         _id: "sector-2",
         stateId: "CA",
         corporationId: { toString: () => "corp-2" },
-        sectorType: "entertainment",
-        strategyId: "standard",
+        sectorType: "media",
+        strategyId: "legacy_broadcast",
         producedUnits: 100,
         soldFraction: 0.5,
       },
     ]);
     const find = vi.fn().mockReturnValue({ toArray });
-    const collection = vi.fn().mockReturnValue({ find });
+    const corporationFind = vi.fn().mockReturnValue({ toArray: async () => [] });
+    const collection = vi.fn((name: string) =>
+      name === "corporateSectors" ? { find } : { find: corporationFind }
+    );
     const db = { collection } as unknown as Db;
 
-    const outlets = await loadUSMediaOutletDelivery(db, 48);
+    const outlets = await loadUSMediaOutletDelivery(db, {
+      currentTurn: 48,
+      currentYear: 1991,
+    });
 
-    expect(collection).toHaveBeenCalledOnce();
+    expect(collection).toHaveBeenCalledTimes(2);
     expect(find).toHaveBeenCalledOnce();
+    expect(corporationFind).toHaveBeenCalledOnce();
     expect(find.mock.calls[0][0]).toMatchObject({
       stateId: { $in: expect.arrayContaining(["CA"]) },
       sectorType: { $in: ["media", "entertainment"] },
@@ -46,9 +53,9 @@ describe("loadUSMediaOutletDelivery", () => {
       stateId: "CA",
       countryId: "US",
       corporationId: "corp-1",
-      deliveredAdvertisingUnits: 80,
+      deliveredAdvertisingUnits: 8,
     });
-    expect(outlets[1].deliveredAdvertisingUnits).toBeGreaterThan(0);
+    expect(outlets[1].deliveredAdvertisingUnits).toBeCloseTo(5);
   });
 
   it("does not count transition-era estimates without a current turn or exact output", async () => {
@@ -65,8 +72,13 @@ describe("loadUSMediaOutletDelivery", () => {
         soldFraction: 1,
       },
     ]);
+    const corporationFind = vi.fn().mockReturnValue({ toArray: async () => [] });
     const db = {
-      collection: vi.fn().mockReturnValue({ find: vi.fn().mockReturnValue({ toArray }) }),
+      collection: vi.fn((name: string) =>
+        name === "corporateSectors"
+          ? { find: vi.fn().mockReturnValue({ toArray }) }
+          : { find: corporationFind }
+      ),
     } as unknown as Db;
 
     const outlets = await loadUSMediaOutletDelivery(db);

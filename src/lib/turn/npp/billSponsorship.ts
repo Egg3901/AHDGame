@@ -709,7 +709,13 @@ export async function processNppBillSponsorship(ctx: NPPContext): Promise<number
     marketAtLeast(await getMarketSystemMode(cmdConfig), "clearing");
   const currentYear = cmdGameState?.currentYear;
   const mediaOwnershipBillAvailable = mediaRegulationEnabled
-    ? isMediaOwnershipBillAvailable(await loadUSMediaOutletDelivery(db, currentTurn))
+    ? isMediaOwnershipBillAvailable(
+        await loadUSMediaOutletDelivery(db, {
+          currentTurn,
+          currentYear,
+          commandEconomyEnabled,
+        })
+      )
     : true;
   const europeanContext = cmdGameState?.europeanIntegration
     ? await loadEuropeanTreatyContext(db, currentTurn)

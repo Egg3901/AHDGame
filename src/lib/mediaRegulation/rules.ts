@@ -1,7 +1,8 @@
 /**
  * Media regulation changes how much advertising a private outlet can deliver.
- * Censorship lowers audience access; an ownership limit caps a concentrated
- * corporation's share. See mediaRegulationAvailabilityByOutlet.
+ * Censorship and ownership laws limit audience access before clearing. The
+ * ownership limit is measured against the prior audience budget, not the
+ * smaller post-limit delivery total.
  */
 
 export interface MediaOutletDelivery {
@@ -17,7 +18,7 @@ export interface MediaStateRegulation {
 }
 
 /** Ownership limits represented by the seven `us_media_communications` options. */
-export const MEDIA_OWNERSHIP_CAP_BY_OPTION: readonly (number | null)[] = [
+export const MEDIA_AUDIENCE_ACCESS_LIMIT_BY_OPTION: readonly (number | null)[] = [
   0.35,
   0.45,
   0.55,
@@ -44,6 +45,21 @@ export function isFairnessDoctrineInEffect(
   );
 }
 
+/**
+ * Broadcast outlets covered by the historical Fairness Doctrine. Legacy data
+ * only identifies `legacy_broadcast` explicitly, so ambiguous `standard`
+ * newspaper and publishing rows remain outside the doctrine.
+ */
+export function isFairnessDoctrineBroadcastOutlet(sectorType: string, strategyId: string): boolean {
+  if (sectorType !== "media") return false;
+  return (
+    strategyId === "legacy_broadcast" ||
+    strategyId === "radio_network" ||
+    strategyId === "broadcast_tv" ||
+    strategyId === "cable_tv"
+  );
+}
+
 function metric(value: number | null | undefined, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value)
     ? Math.max(0, Math.min(100, value))
@@ -64,18 +80,19 @@ export function censorshipReachAvailability(state: MediaStateRegulation): number
 }
 
 /**
- * Apply an enacted media-communications ownership limit to prior delivered
- * advertising. Any incomplete state sample fails open until all sellers have a
- * measured delivery, so stale or missing rows never invent concentration.
+ * Limit each owner's audience access against the state's measured prior-turn
+ * delivered advertising budget. This does not claim to instantly divest
+ * ownership or guarantee a share of the smaller post-limit delivered total.
+ * Incomplete state history fails open rather than inventing concentration.
  */
-export function mediaOwnershipAvailabilityByOutlet(
+export function mediaAudienceAccessLimitUnitsByOutlet(
   outlets: readonly MediaOutletDelivery[],
   policyOptionIndex: number
 ): Map<string, number> {
-  const cap = MEDIA_OWNERSHIP_CAP_BY_OPTION[policyOptionIndex];
-  const factors = new Map<string, number>();
+  const cap = MEDIA_AUDIENCE_ACCESS_LIMIT_BY_OPTION[policyOptionIndex];
+  const limitUnitsByOutlet = new Map<string, number>();
   if (cap == null || !Number.isInteger(policyOptionIndex) || policyOptionIndex < 0) {
-    return factors;
+    return limitUnitsByOutlet;
   }
 
   const deliveredByState = new Map<string, Map<string, number>>();
@@ -103,13 +120,13 @@ export function mediaOwnershipAvailabilityByOutlet(
     if (!(total > 0)) continue;
     for (const [corporationId, units] of byCorporation) {
       const share = units / total;
-      if (share > cap) factors.set(`${stateId}:${corporationId}`, cap / share);
+      if (share > cap) limitUnitsByOutlet.set(`${stateId}:${corporationId}`, cap * total);
     }
   }
-  return factors;
+  return limitUnitsByOutlet;
 }
 
-/** The ownership bill is offered only after a measured US state share crosses 65%. */
+/** The federal ownership bill is offered after measured national US share crosses 65%. */
 export function isMediaOwnershipBillAvailable(outlets: readonly MediaOutletDelivery[]): boolean {
   const deliveredByCountry = new Map<string, Map<string, number>>();
   const incompleteCountries = new Set<string>();
@@ -138,27 +155,4 @@ export function isMediaOwnershipBillAvailable(outlets: readonly MediaOutletDeliv
     if (largestShare > MEDIA_CONCENTRATION_BILL_TRIGGER) return true;
   }
   return false;
-}
-
-/** Compose legal ownership limits with censorship before commodity clearing. */
-export function mediaRegulationAvailabilityByOutlet(args: {
-  outlets: readonly MediaOutletDelivery[];
-  policyOptionIndex: number;
-  stateConditionsById: ReadonlyMap<string, MediaStateRegulation>;
-}): Map<string, number> {
-  const ownership = mediaOwnershipAvailabilityByOutlet(
-    args.outlets.filter((outlet) => outlet.countryId === "US"),
-    args.policyOptionIndex
-  );
-  const availability = new Map<string, number>();
-  for (const outlet of args.outlets) {
-    const key = `${outlet.stateId}:${outlet.corporationId}`;
-    if (availability.has(key)) continue;
-    availability.set(
-      key,
-      censorshipReachAvailability(args.stateConditionsById.get(outlet.stateId) ?? {}) *
-        (ownership.get(key) ?? 1)
-    );
-  }
-  return availability;
 }

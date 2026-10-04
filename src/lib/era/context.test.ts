@@ -17,6 +17,7 @@ describe("getEraContext", () => {
     stubGameState({ _id: "current", currentYear: 2008, preset: "1991-default" });
     expect(await getEraContext(db as unknown as Db)).toEqual({
       year: null,
+      currentTurn: null,
       preset: "1991-default",
       startingYear: null,
       incomeBandIndexByCountry: null,
@@ -46,6 +47,7 @@ describe("getEraContext", () => {
   it("returns nulls when no gameState row exists", async () => {
     expect(await getEraContext(db as unknown as Db)).toEqual({
       year: null,
+      currentTurn: null,
       preset: null,
       startingYear: null,
       incomeBandIndexByCountry: null,

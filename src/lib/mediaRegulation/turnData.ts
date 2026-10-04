@@ -1,8 +1,17 @@
 import type { Db } from "mongodb";
-import type { CorporateSector } from "@/lib/db/types/corporation";
-import { COMMODITY_BASE_PRICES, commodityMixWeight } from "@/lib/constants/commodities";
-import { getEffectiveStrategyRates } from "@/lib/constants/sectorStrategies";
+import type { CorporateSector, Corporation } from "@/lib/db/types/corporation";
+import {
+  COMMODITY_BASE_PRICES,
+  commodityMixWeight,
+  embargoSupplyFactorFor,
+  scaleMeasuredProducedUnits,
+} from "@/lib/constants/commodities";
+import {
+  getEffectiveStrategyRates,
+  plannedEconomyMediaSupplyFactor,
+} from "@/lib/constants/sectorStrategies";
 import { US_STATE_IDS } from "@/lib/countries/us/data/usStateBaselines";
+import { isPlannedEconomy } from "@/lib/constants/commandEconomy";
 import type { MediaOutletDelivery } from "./rules";
 
 /**
@@ -10,9 +19,15 @@ import type { MediaOutletDelivery } from "./rules";
  * The query uses the existing stateId + sectorType index and projects only the
  * prior production, sales and strategy fields used to reconstruct delivered ads.
  */
+export interface MediaOutletLoadContext {
+  currentTurn?: number | null;
+  currentYear?: number | null;
+  commandEconomyEnabled?: boolean;
+}
+
 export async function loadUSMediaOutletDelivery(
   db: Db,
-  currentTurn?: number
+  context: MediaOutletLoadContext = {}
 ): Promise<MediaOutletDelivery[]> {
   const sectors = await db
     .collection<CorporateSector>("corporateSectors")
@@ -24,6 +39,7 @@ export async function loadUSMediaOutletDelivery(
       {
         projection: {
           stateId: 1,
+          countryId: 1,
           corporationId: 1,
           sectorType: 1,
           strategyId: 1,
@@ -33,10 +49,29 @@ export async function loadUSMediaOutletDelivery(
           outputUnitsByCommodity: 1,
           soldFraction: 1,
           soldByCommodity: 1,
+          embargoSuspended: 1,
+          embargoExportExposure: 1,
         },
       }
     )
     .toArray();
+
+  const corporationIds = [
+    ...new Map(
+      sectors.map((sector) => [sector.corporationId.toString(), sector.corporationId])
+    ).values(),
+  ];
+  const corporations = corporationIds.length
+    ? await db
+        .collection<Corporation>("corporations")
+        .find({ _id: { $in: corporationIds } }, { projection: { countryOwnerId: 1 } })
+        .toArray()
+    : [];
+  const nationalCorporations = new Set(
+    corporations
+      .filter((corporation) => corporation.countryOwnerId)
+      .map((corporation) => corporation._id.toString())
+  );
 
   return sectors.flatMap((sector) => {
     const hasTransition =
@@ -47,7 +82,7 @@ export async function loadUSMediaOutletDelivery(
       sector.strategyId ?? "standard",
       sector.transitionFromStrategyId,
       sector.transitionStartTurn,
-      currentTurn ?? (hasTransition ? (sector.transitionStartTurn ?? 0) + 12 : 0)
+      context.currentTurn ?? (hasTransition ? (sector.transitionStartTurn ?? 0) + 12 : 0)
     ).supply;
     if (!((rates.advertising ?? 0) > 0)) return [];
 
@@ -55,11 +90,24 @@ export async function loadUSMediaOutletDelivery(
     const producedAdvertising =
       typeof exactUnits === "number" && Number.isFinite(exactUnits)
         ? Math.max(0, exactUnits)
-        : !(hasTransition && currentTurn == null) &&
+        : !(hasTransition && context.currentTurn == null) &&
             typeof sector.producedUnits === "number" &&
             Number.isFinite(sector.producedUnits) &&
             sector.producedUnits >= 0
-          ? sector.producedUnits * commodityMixWeight(rates, COMMODITY_BASE_PRICES, "advertising")
+          ? (scaleMeasuredProducedUnits({
+              producedUnits: sector.producedUnits,
+              isNatcorp: nationalCorporations.has(sector.corporationId.toString()),
+              embargoSupplyFactor:
+                embargoSupplyFactorFor(sector) *
+                plannedEconomyMediaSupplyFactor(
+                  sector.sectorType,
+                  isPlannedEconomy(
+                    sector.countryId ?? "US",
+                    context.currentYear,
+                    context.commandEconomyEnabled
+                  )
+                ),
+            }) ?? 0) * commodityMixWeight(rates, COMMODITY_BASE_PRICES, "advertising")
           : null;
     const soldFraction =
       typeof sector.soldByCommodity?.advertising === "number"

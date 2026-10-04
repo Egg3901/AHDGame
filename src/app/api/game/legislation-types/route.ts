@@ -121,7 +121,7 @@ export async function GET(request: Request) {
     // it would freeze one era's list across worlds. Null year (flag off) ⇒ no
     // change, byte-identical legacy.
     const db = await getDb();
-    const { year: eraYear, incomeBandIndexByCountry } = await getEraContext(db);
+    const { year: eraYear, currentTurn, incomeBandIndexByCountry } = await getEraContext(db);
     const gated =
       eraYear == null
         ? types
@@ -131,18 +131,26 @@ export async function GET(request: Request) {
     const usLawPicker = country == null || country === "us";
     let mediaOwnershipBillAvailable = true;
     if (usLawPicker && gated.some((type) => String(type._id) === "us_media_communications")) {
-      const mediaConfig = await db
-        .collection<GameConfig>("gameConfig")
-        .findOne(
-          { _id: "default" },
-          { projection: { mediaRegulationEnabled: 1, marketSystemMode: 1 } }
-        );
+      const mediaConfig = await db.collection<GameConfig>("gameConfig").findOne(
+        { _id: "default" },
+        {
+          projection: {
+            mediaRegulationEnabled: 1,
+            marketSystemMode: 1,
+            commandEconomyEnabled: 1,
+          },
+        }
+      );
       const regulationEnabled =
         mediaConfig?.mediaRegulationEnabled === true &&
         marketAtLeast(await getMarketSystemMode(mediaConfig), "clearing");
       if (regulationEnabled) {
         mediaOwnershipBillAvailable = isMediaOwnershipBillAvailable(
-          await loadUSMediaOutletDelivery(db)
+          await loadUSMediaOutletDelivery(db, {
+            currentTurn,
+            currentYear: eraYear,
+            commandEconomyEnabled: mediaConfig?.commandEconomyEnabled === true,
+          })
         );
       }
     }

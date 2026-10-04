@@ -4,7 +4,7 @@ import {
   censorshipReachAvailability,
   isFairnessDoctrineInEffect,
   isMediaOwnershipBillAvailable,
-  mediaRegulationAvailabilityByOutlet,
+  mediaAudienceAccessLimitUnitsByOutlet,
 } from "@/lib/mediaRegulation/rules";
 import { COMMODITY_TYPES, type CommodityType } from "@/lib/constants/commodities";
 import { computeClearingFactors, type SectorClearingInput } from "@/lib/market/clearing";
@@ -15,21 +15,19 @@ const outlets = [
   { stateId: "CA", countryId: "US", corporationId: "network-b", deliveredAdvertisingUnits: 20 },
 ];
 
-const ownershipCases = [0, 1, 2, 3, 4, 5, 6].map((policyOptionIndex) => {
-  const factors = mediaRegulationAvailabilityByOutlet({
-    outlets,
-    policyOptionIndex,
-    stateConditionsById: new Map([["CA", { pressFreedom: 100, stateMediaControl: 0 }]]),
-  });
+const audienceLimitCases = [0, 1, 2, 3, 4, 5, 6].map((policyOptionIndex) => {
+  const limitUnits = mediaAudienceAccessLimitUnitsByOutlet(outlets, policyOptionIndex);
+  const networkAAvailability = Math.min(1, (limitUnits.get("CA:network-a") ?? 80) / 80);
+  const networkBAvailability = Math.min(1, (limitUnits.get("CA:network-b") ?? 20) / 20);
   return {
     policyOptionIndex,
-    networkAAvailability: round(factors.get("CA:network-a") ?? 1),
-    networkBAvailability: round(factors.get("CA:network-b") ?? 1),
-    networkAAvailableUnits: round(80 * (factors.get("CA:network-a") ?? 1)),
-    networkBAvailableUnits: round(20 * (factors.get("CA:network-b") ?? 1)),
+    networkAAvailability: round(networkAAvailability),
+    networkBAvailability: round(networkBAvailability),
+    networkAAccessLimitedUnitsAgainstPriorBudget: round(80 * networkAAvailability),
+    networkBAvailableUnits: round(20 * networkBAvailability),
     filledAgainstStrongPoliticalDemand: clearFundedPoliticalResidual(
-      factors.get("CA:network-a") ?? 1,
-      factors.get("CA:network-b") ?? 1
+      networkAAvailability,
+      networkBAvailability
     ),
   };
 });
@@ -45,14 +43,14 @@ const censorshipCases = [
 
 const ownershipTriggerCases = [
   {
-    label: "at threshold",
+    label: "at national threshold",
     outlets: [
       { stateId: "CA", countryId: "US", corporationId: "network-a", deliveredAdvertisingUnits: 65 },
       { stateId: "CA", countryId: "US", corporationId: "network-b", deliveredAdvertisingUnits: 35 },
     ],
   },
   {
-    label: "above threshold",
+    label: "above national threshold",
     outlets: [
       { stateId: "CA", countryId: "US", corporationId: "network-a", deliveredAdvertisingUnits: 66 },
       { stateId: "CA", countryId: "US", corporationId: "network-b", deliveredAdvertisingUnits: 34 },
@@ -96,7 +94,7 @@ const fresh1991RuleContext = {
   representativePolicyOptionIndex: 3,
   fairnessDoctrineInEffect: isFairnessDoctrineInEffect(1991, 2),
   ownershipBillAvailableAtMeasured80To20Share: isMediaOwnershipBillAvailable(outlets),
-  ownershipAvailabilityAtRepresentativeOption: ownershipCases[3]?.networkAAvailability ?? 1,
+  audienceAvailabilityAtRepresentativeOption: audienceLimitCases[3]?.networkAAvailability ?? 1,
 };
 
 const report = {
@@ -106,11 +104,14 @@ const report = {
   assumptions: {
     priorDeliveredAdvertisingUnitsByOutlet: { "network-a": 80, "network-b": 20 },
     currentTurnPhysicalAdvertisingUnits: { "network-a": 80, "network-b": 20 },
-    missingHistoryBehavior: "ownership enforcement fails open for that state",
+    missingHistoryBehavior: "audience access enforcement fails open for that state",
+    audienceAccessLimitDefinition:
+      "each owner's access limit is measured against prior delivered advertising; unserved audience remains unserved",
     ownershipBillThresholdScope: "national US aggregate, with foreign delivery excluded",
-    enactedOwnershipCapScope: "each US state audience market",
+    enactedAudienceAccessLimitScope:
+      "each US state audience market; no ownership divestiture is modeled",
   },
-  ownershipCases,
+  audienceLimitCases,
   censorshipCases,
   ownershipTriggerCases,
   fairnessEraCases,
@@ -118,11 +119,12 @@ const report = {
   accounting: {
     deliveryIsBoundedBeforeCommercialAndFundedPoliticalClearing: true,
     noAdvertisingUnitsAreCreated: true,
+    accessLimitUsesPriorAudienceBudgetNotPostLimitShare: true,
     unmeasuredHistoryDoesNotInventConcentration: true,
-    fundedPoliticalBuyerDebitEqualsSellerReceipt: ownershipCases.every(
+    fundedPoliticalBuyerDebitEqualsSellerReceipt: audienceLimitCases.every(
       (scenario) => scenario.filledAgainstStrongPoliticalDemand.payoutMatchesDeliveredAnchor
     ),
-    partialPoliticalFillRetainsUnfilledBudget: ownershipCases.every(
+    partialPoliticalFillRetainsUnfilledBudget: audienceLimitCases.every(
       (scenario) => scenario.filledAgainstStrongPoliticalDemand.refundAnchor > 0
     ),
   },

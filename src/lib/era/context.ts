@@ -6,6 +6,8 @@ import { getStartingYearForPreset } from "@/lib/constants/turnTime";
 export interface EraContext {
   /** Live in-game year — non-null ONLY when the era system is enabled. */
   year: number | null;
+  /** Current turn for reconstructing persisted market-transition rates. */
+  currentTurn: number | null;
   preset: string | null;
   /** World starting year (frozen) — anchors the medianIncome band; null flag-off. */
   startingYear: number | null;
@@ -61,11 +63,19 @@ export async function getEraContext(db: Db): Promise<EraContext> {
     }
   );
   const preset = gs?.preset ?? null;
+  const currentTurn = typeof gs?.currentTurn === "number" ? gs.currentTurn : null;
   if (!gs?.eraSystemEnabled) {
-    return { year: null, preset, startingYear: null, incomeBandIndexByCountry: null };
+    return {
+      year: null,
+      currentTurn,
+      preset,
+      startingYear: null,
+      incomeBandIndexByCountry: null,
+    };
   }
   return {
     year: resolveGameYear(gs),
+    currentTurn,
     preset,
     startingYear: gs.startingYear ?? null,
     incomeBandIndexByCountry: gs.incomeBandIndexByCountry ?? null,

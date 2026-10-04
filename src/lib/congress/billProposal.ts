@@ -110,7 +110,7 @@ export async function validateBillProvisions(
 ): Promise<ValidatedProvisions> {
   const allowedDomains =
     CATEGORY_TO_POLICY_DOMAINS[category as keyof typeof CATEGORY_TO_POLICY_DOMAINS] ?? [];
-  const { year: eraYear } = await getEraContext(db);
+  const { year: eraYear, currentTurn } = await getEraContext(db);
   const validatedPolicyProvisions: ValidatedPolicyProvision[] = [];
   const validatedTariffProvisions: {
     type: "tariff";
@@ -547,18 +547,28 @@ export async function validateBillProvisions(
       };
     }
     if (sourceCountry === "US" && lt._id === "us_media_communications") {
-      const mediaConfig = await db
-        .collection<GameConfig>("gameConfig")
-        .findOne(
-          { _id: "default" },
-          { projection: { mediaRegulationEnabled: 1, marketSystemMode: 1 } }
-        );
+      const mediaConfig = await db.collection<GameConfig>("gameConfig").findOne(
+        { _id: "default" },
+        {
+          projection: {
+            mediaRegulationEnabled: 1,
+            marketSystemMode: 1,
+            commandEconomyEnabled: 1,
+          },
+        }
+      );
       const mediaRegulationEnabled =
         mediaConfig?.mediaRegulationEnabled === true &&
         marketAtLeast(await getMarketSystemMode(mediaConfig), "clearing");
       if (
         mediaRegulationEnabled &&
-        !isMediaOwnershipBillAvailable(await loadUSMediaOutletDelivery(db))
+        !isMediaOwnershipBillAvailable(
+          await loadUSMediaOutletDelivery(db, {
+            currentTurn,
+            currentYear: eraYear,
+            commandEconomyEnabled: mediaConfig?.commandEconomyEnabled === true,
+          })
+        )
       ) {
         return {
           ok: false,
