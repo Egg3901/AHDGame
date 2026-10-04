@@ -83,14 +83,16 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (!handler || !handler.options.some((o) => o.id === parsed.data.optionId)) {
       throw badRequest("Invalid option for this event.");
     }
-    const selectedOption = handler.options.find((option) => option.id === parsed.data.optionId)!;
-    const selectedTier = pickTier(selectedOption.outcomeTable, instance.roll);
-    const hasFundedTreasuryEffect =
+    const hasFundedTreasuryAlternative =
       instance.scope === "country" &&
-      selectedTier.effects.some((effect) => effect.type === "treasuryDelta");
+      handler.options.some((option) =>
+        option.outcomeTable.some((tier) =>
+          tier.effects.some((effect) => effect.type === "treasuryDelta")
+        )
+      );
     const treasuryCashLedgerEnabled = instance.resolutionClaim
       ? instance.scope === "country"
-      : hasFundedTreasuryEffect
+      : hasFundedTreasuryAlternative
         ? (
             await db
               .collection<{ _id: string; treasuryCashLedgerEnabled?: boolean }>("gameConfig")
