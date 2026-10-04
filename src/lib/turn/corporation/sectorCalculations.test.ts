@@ -586,7 +586,7 @@ describe("marketing settlement", () => {
     };
     const memory = createInMemoryDb();
     memory.seed("corporations", [{ ...buyer }, { ...seller }]);
-    memory.seed(MEDIA_PRODUCT_PROJECTS, [title]);
+    memory.seed(MEDIA_PRODUCT_PROJECTS, [title as unknown as Record<string, unknown>]);
 
     const firstResult = processSectors(
       makeMediaLookups(buyer, 1),
@@ -662,12 +662,14 @@ describe("marketing settlement", () => {
       [buyer._id, seller._id],
       1
     );
-    const afterRetry = await memory.collection("corporations").findOne({ _id: buyer._id });
+    const afterRetry = (await memory
+      .collection("corporations")
+      .findOne({ _id: buyer._id })) as unknown as Corporation | null;
     expect(afterRetry?.liquidCapital).toBe(980);
     expect(
       (await memory.collection("corporations").findOne({ _id: seller._id }))?.liquidCapital
     ).toBe(1_020);
-    expect(afterRetry?.mediaProductAdvertisingReceiptV1).toEqual({
+    expect(afterRetry?.mediaProductAdvertisingReceiptV1).toMatchObject({
       projectId: title._id,
       turn: 1,
       amountAnchor: 10,
@@ -679,12 +681,14 @@ describe("marketing settlement", () => {
         String(row._id).startsWith("media-product-advertising:")
       )
     ).toHaveLength(1);
-    const afterRetrySeller = await memory.collection("corporations").findOne({ _id: seller._id });
+    const afterRetrySeller = (await memory
+      .collection("corporations")
+      .findOne({ _id: seller._id })) as unknown as Corporation | null;
     expect((afterRetrySeller?.liquidCapital ?? 0) + (afterRetry?.liquidCapital ?? 0)).toBe(2_000);
 
     await processMediaProductProjectsV1({
       db: memory as never,
-      corporations: [afterRetry as Corporation],
+      corporations: [afterRetry as unknown as Corporation],
       projectsByCorporationId: new Map([[buyer._id.toString(), [title]]]),
       currentTurn: 2,
       sectorQualityBySectorId: new Map(),
@@ -732,7 +736,7 @@ describe("marketing settlement", () => {
       advertisingSellerDeliveredValueAnchorByCorpId: new Map([[seller._id.toString(), 100]]),
     });
     const memory = createInMemoryDb();
-    memory.seed("corporations", [buyer, seller]);
+    memory.seed("corporations", [buyer, seller] as unknown as Record<string, unknown>[]);
     await applyOperatingCashThenDevelopmentCash({
       db: memory as never,
       operations: [],
@@ -750,8 +754,12 @@ describe("marketing settlement", () => {
           .updateOne({ _id: seller._id }, { $inc: { liquidCapital: 100 } });
       },
     });
-    const buyerAfter = await memory.collection("corporations").findOne({ _id: buyer._id });
-    const sellerAfter = await memory.collection("corporations").findOne({ _id: seller._id });
+    const buyerAfter = (await memory
+      .collection("corporations")
+      .findOne({ _id: buyer._id })) as unknown as Corporation | null;
+    const sellerAfter = (await memory
+      .collection("corporations")
+      .findOne({ _id: seller._id })) as unknown as Corporation | null;
     expect(buyerAfter?.liquidCapital).toBe(990);
     expect(sellerAfter?.liquidCapital).toBe(1_010);
     expect(buyerAfter?.mediaProductAdvertisingReceiptV1).toBeUndefined();

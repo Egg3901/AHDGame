@@ -91,6 +91,29 @@ describe("qualityPremiumMultiplier", () => {
 describe("computeClearingFactors", () => {
   const basePrices = { steel: 800 } as Record<CommodityType, number>;
 
+  it("limits title-reachable output before clearing and records exact paid units only on request", () => {
+    const input: Parameters<typeof computeClearingFactors>[0] = {
+      sectors: [
+        {
+          sectorId: "newspaper",
+          revenue: 10_000,
+          supplyRates: { advertising: 1 },
+          offerAvailabilityByCommodity: { advertising: 0.575 },
+          posture: 0,
+        },
+      ],
+      balances: bals([["advertising", { supply: 100, demand: 1_000 }]]),
+      priceRatioByCommodity: new Map<CommodityType, number>([["advertising", 1]]),
+      basePrices: { advertising: 100 } as Record<CommodityType, number>,
+    };
+    const unrecorded = computeClearingFactors(input).get("newspaper")!;
+    expect(unrecorded.soldFraction).toBeCloseTo(0.575);
+    expect(unrecorded).not.toHaveProperty("deliveredUnitsByCommodity");
+
+    const recorded = computeClearingFactors({ ...input, recordDelivery: true }).get("newspaper")!;
+    expect(recorded.deliveredUnitsByCommodity?.advertising).toBeCloseTo(57.5);
+  });
+
   it("undercutting sells out while premium holds unsold stock in a glut", () => {
     const results = computeClearingFactors({
       sectors: [

@@ -1,8 +1,8 @@
 import { ObjectId, type Db } from "mongodb";
 import { describe, expect, it, vi } from "vitest";
-import type { Corporation } from "@/lib/db/types";
+import type { Corporation, CorporateSector } from "@/lib/db/types";
 import type { MediaProductProject } from "./mediaProduct";
-import { processMediaProductProjectsV1 } from "./mediaProductPersistence";
+import { processMediaProductProjectsV1, startNppMediaProductsV1 } from "./mediaProductPersistence";
 
 function project(overrides: Partial<MediaProductProject> = {}): MediaProductProject {
   return {
@@ -30,6 +30,7 @@ function project(overrides: Partial<MediaProductProject> = {}): MediaProductProj
 function database(options?: { matchedCount?: number; rows?: MediaProductProject[] }) {
   const projectCollection = {
     bulkWrite: vi.fn().mockResolvedValue({ matchedCount: options?.matchedCount ?? 1 }),
+    insertMany: vi.fn().mockResolvedValue({ insertedCount: 1 }),
     find: vi.fn().mockReturnValue({
       project: vi.fn().mockReturnThis(),
       toArray: vi.fn().mockResolvedValue(options?.rows ?? []),
@@ -280,5 +281,50 @@ describe("processMediaProductProjectsV1", () => {
         },
       },
     });
+  });
+
+  it("lets an NPP reuse slate capacity released by retired titles", async () => {
+    const { db, projectCollection } = database();
+    const corporationId = new ObjectId();
+    const retiredProjects = Array.from({ length: 4 }, (_, index) =>
+      project({
+        _id: `retired-${index}`,
+        corporationId: corporationId.toString(),
+        stage: "retired",
+        activeDevelopmentCorporationId: undefined,
+      })
+    );
+    const projectsByCorporationId = new Map([[corporationId.toString(), retiredProjects]]);
+    const sectorId = new ObjectId();
+
+    const started = await startNppMediaProductsV1({
+      db,
+      corporations: [{ _id: corporationId, ceoType: "npp" } as Corporation],
+      sectorsByCorp: new Map([
+        [
+          corporationId.toString(),
+          [
+            {
+              _id: sectorId,
+              sectorType: "media",
+              strategyId: "newspaper",
+              capitalStock: 10_000,
+              revenue: 10_000,
+            } as unknown as CorporateSector,
+          ],
+        ],
+      ]),
+      projectsByCorporationId,
+      currentYear: 1991,
+      currentTurn: 100,
+    });
+
+    expect(started).toHaveLength(1);
+    expect(started[0]).toMatchObject({
+      corporationId: corporationId.toString(),
+      stage: "development",
+      sectorId: sectorId.toString(),
+    });
+    expect(projectCollection.insertMany).toHaveBeenCalledTimes(1);
   });
 });
