@@ -83,7 +83,8 @@ import {
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 import { getLegalStructureForCorp } from "@/lib/corporations/legalStructure";
 import {
-  SECTOR_STRATEGIES,
+  getSectorStrategies,
+  getStrategy,
   STRATEGY_TRANSITION_TURNS,
   STRATEGY_TRANSITION_MARGIN_PENALTY,
   STRATEGY_RETOOL_COST_FRACTION,
@@ -469,6 +470,7 @@ export async function buildSectorForSaleInfo(
 /** Tech-tree growth-cost reduction (%) shown on the financials panel. */
 export function computeTechGrowthCostReductionPct(args: {
   techTreesEnabled: boolean;
+  mediaOperatingModelsEnabled?: boolean;
   techCurrentYear: number;
   techCorpView: TechCorpView;
   sectorType: CorporationType;
@@ -495,6 +497,7 @@ export function buildSectorStrategySection(args: {
   techCorpView: TechCorpView;
   techCurrentYear: number;
   techTreesEnabled: boolean;
+  mediaOperatingModelsEnabled?: boolean;
   shouldRedact: boolean;
   stateResources: Partial<Record<ExtractableResource, number>> | null | undefined;
   strategyCapacityMultipliers: Map<string, Partial<Record<ExtractableResource, number>>> | null;
@@ -533,6 +536,7 @@ export function buildSectorStrategySection(args: {
     techCorpView,
     techCurrentYear,
     techTreesEnabled,
+    mediaOperatingModelsEnabled = false,
     shouldRedact,
     stateResources,
     strategyCapacityMultipliers,
@@ -540,9 +544,7 @@ export function buildSectorStrategySection(args: {
   } = args;
   return {
     currentStrategyId: sector.strategyId ?? "standard",
-    currentStrategyName:
-      SECTOR_STRATEGIES[sectorType]?.find((s) => s.id === (sector.strategyId ?? "standard"))
-        ?.name ?? "Standard",
+    currentStrategyName: getStrategy(sectorType, sector.strategyId ?? "standard").name,
     isTransitioning: effectiveRates.isTransitioning,
     isReversing: sector.isReversing ?? false,
     transitionFromStrategyId: sector.transitionFromStrategyId ?? null,
@@ -656,7 +658,7 @@ export function buildSectorStrategySection(args: {
       };
 
       return (
-        SECTOR_STRATEGIES[sectorType]?.map((s) => {
+        getSectorStrategies(sectorType, mediaOperatingModelsEnabled).map((s) => {
           const availability = getStrategyAvailability(
             techCorpView,
             s,

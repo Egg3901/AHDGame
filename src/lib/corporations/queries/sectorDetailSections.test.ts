@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { ObjectId } from "mongodb";
-import { computeSectorTaxSection } from "@/lib/corporations/queries/sectorDetailSections";
+import {
+  buildSectorStrategySection,
+  computeSectorTaxSection,
+} from "@/lib/corporations/queries/sectorDetailSections";
 import type { Corporation, CorporateSector, FederalBudget, StateBudget } from "@/lib/db/types";
 
 function makeCorp(overrides: Partial<Corporation> = {}): Corporation {
@@ -96,5 +99,32 @@ describe("computeSectorTaxSection revenue-weighting basis", () => {
     });
 
     expect(result.thisRevenueShare).toBeCloseTo(0.5, 10);
+  });
+});
+
+describe("persisted operating model strategy reads", () => {
+  it("shows an active model by name when its selector is disabled", () => {
+    const section = buildSectorStrategySection({
+      sector: makeSector({ sectorType: "media", strategyId: "newspaper" }),
+      sectorType: "media",
+      effectiveRates: { isTransitioning: false },
+      transitionProgress: 0,
+      strategyTransitionMod: 0,
+      currentTurn: 100,
+      sectorHostLiquidCode: "USD",
+      sectorHostFxRate: 1,
+      commodityPrices: [],
+      techCorpView: { type: "media", unlockedTechNodeIds: [] },
+      techCurrentYear: 1991,
+      techTreesEnabled: false,
+      shouldRedact: false,
+      stateResources: undefined,
+      strategyCapacityMultipliers: null,
+      marginProjection: null,
+      mediaOperatingModelsEnabled: false,
+    });
+
+    expect(section.currentStrategyName).toBe("Newspaper");
+    expect(section.availableStrategies.some((strategy) => strategy.id === "newspaper")).toBe(false);
   });
 });

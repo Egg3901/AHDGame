@@ -74,6 +74,7 @@ interface SectorsTabProps {
    * renders byte-identically to before.
    */
   plantsMode?: boolean;
+  mediaOperatingModelsEnabled?: boolean;
   /** Deep-link from state board: open expand modal on mount. */
   expandOnMount?: boolean;
   /** Deep-link: preselect this sector type in the expand modal. */
@@ -106,6 +107,7 @@ export default function SectorsTab({
   periodView: periodViewProp,
   onPeriodViewChange,
   plantsMode = false,
+  mediaOperatingModelsEnabled = false,
   expandOnMount = false,
   expandSectorType,
   expandStateId,
@@ -355,6 +357,7 @@ export default function SectorsTab({
             sectors={dossierSectors}
             isCeo={isCeo}
             corpId={corpId}
+            mediaOperatingModelsEnabled={mediaOperatingModelsEnabled}
           />
         </div>
       )}
@@ -459,6 +462,7 @@ export default function SectorsTab({
                   fmtMoney={fmtMoney}
                   fmtAnchor={fmtAnchor}
                   plantsMode={plantsMode}
+                  mediaOperatingModelsEnabled={mediaOperatingModelsEnabled}
                 />
               ))}
             </ul>

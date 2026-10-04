@@ -124,6 +124,7 @@ describe("retool capital-stock rescale is plants-gated", () => {
     db.collection("corporations");
     db.collection("corporateSectors");
     db.collection("gameState");
+    db.collection("gameConfig");
     db.collection("commodityPrices");
     db.collection("stateResourceCapacity");
   });
@@ -158,6 +159,56 @@ describe("retool capital-stock rescale is plants-gated", () => {
       500 * RATIO,
       6
     );
+  });
+
+  it("does not allow model selection while its gate is off", async () => {
+    await wireMocks(sectorDoc({ sectorType: "media", strategyId: "standard" }), false);
+    const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
+    vi.mocked(resolveCorporation).mockResolvedValue({
+      ok: true,
+      corporation: { ...corporation, type: "media", sectorType: "media" },
+    } as never);
+    db.collectionMocks.gameConfig.findOne.mockResolvedValue({ mediaOperatingModelsEnabled: false });
+    const { setSectorStrategy } = await import("./setSectorStrategy");
+
+    const response = await setSectorStrategy(request({ strategyId: "newspaper" }), { params });
+
+    expect(response.status).toBe(404);
+    expect(db.collectionMocks.corporateSectors.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.gameConfig.findOne).toHaveBeenCalledExactlyOnceWith(
+      { _id: "default" },
+      { projection: { mediaOperatingModelsEnabled: 1 } }
+    );
+  });
+
+  it("selects a model through the existing paid retool path", async () => {
+    await wireMocks(sectorDoc({ sectorType: "media", strategyId: "standard" }), false);
+    const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
+    vi.mocked(resolveCorporation).mockResolvedValue({
+      ok: true,
+      corporation: { ...corporation, type: "media", sectorType: "media" },
+    } as never);
+    db.collectionMocks.gameConfig.findOne.mockResolvedValue({ mediaOperatingModelsEnabled: true });
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      _id: "current",
+      currentTurn: CURRENT_TURN,
+      currentYear: 1991,
+      sectorTechTreesEnabled: true,
+    });
+    const { setSectorStrategy } = await import("./setSectorStrategy");
+
+    const response = await setSectorStrategy(request({ strategyId: "newspaper" }), { params });
+
+    expect(response.status).toBe(200);
+    expect(sectorSet()).toMatchObject({
+      strategyId: "newspaper",
+      transitionFromStrategyId: "standard",
+      transitionStartTurn: CURRENT_TURN,
+    });
+    const debit = db.collectionMocks.corporations.updateOne.mock.calls[0]?.[1] as {
+      $inc: { liquidCapital: number };
+    };
+    expect(debit.$inc.liquidCapital).toBeLessThan(0);
   });
 
   it("cancelSectorStrategy leaves capitalStock and buildQueue alone below plants", async () => {

@@ -2,8 +2,15 @@ import { describe, expect, it, vi } from "vitest";
 import * as Sentry from "@sentry/nextjs";
 import type { Db } from "mongodb";
 import { checkPersistedSectorTypes } from "@/lib/corporations/checkPersistedSectorTypes";
-import { getEffectiveStrategyRates, getStrategy, SECTOR_STRATEGIES } from "./sectorStrategies";
+import {
+  getEffectiveStrategyRates,
+  getMediaOperatingModelStrategies,
+  getSectorStrategies,
+  getStrategy,
+  SECTOR_STRATEGIES,
+} from "./sectorStrategies";
 import { COMMODITY_TYPES } from "./commodities";
+import { MEDIA_OPERATING_MODELS } from "@/lib/mediaOperatingModels/catalog";
 
 vi.mock("@sentry/nextjs", () => ({ captureMessage: vi.fn() }));
 
@@ -70,6 +77,64 @@ describe("unknown persisted sector types", () => {
 
   it("preserves the first-strategy fallback for a known type with an unknown strategy", () => {
     expect(getStrategy("media", "removed_strategy")).toBe(SECTOR_STRATEGIES.media[0]);
+  });
+});
+
+describe("media operating model strategies", () => {
+  it.each([
+    ["media", "newspaper", 0.5],
+    ["media", "cable_tv", 0.5],
+    ["media", "streaming_platform", 0.5],
+    ["entertainment", "film_studio", 0.6],
+    ["entertainment", "streaming_platform", 0.6],
+  ])("resolves active virtual strategy %s:%s through legacy readers", (sectorType, id, budget) => {
+    const strategy = getStrategy(sectorType, id);
+    expect(strategy.mediaOperatingModelId).toBe(id);
+    expect(Object.values(strategy.supply).reduce((sum, rate) => sum + (rate ?? 0), 0)).toBeCloseTo(
+      budget
+    );
+    expect(getEffectiveStrategyRates(sectorType, id, null, null, 500).supply).toEqual(
+      strategy.supply
+    );
+  });
+
+  it("keeps models out of the existing selectable strategy list unless the gate is on", () => {
+    expect(getSectorStrategies("media").some((strategy) => strategy.mediaOperatingModelId)).toBe(
+      false
+    );
+    expect(
+      getSectorStrategies("media", true).filter((strategy) => strategy.mediaOperatingModelId)
+    ).toEqual(getMediaOperatingModelStrategies("media"));
+  });
+
+  it("dual-reads a persisted model id even when the model selector gate is off", () => {
+    const streamingMedia = getMediaOperatingModelStrategies("media").find(
+      (strategy) => strategy.id === "streaming_platform"
+    )!;
+    expect(getSectorStrategies("media", false).map((strategy) => strategy.id)).not.toContain(
+      "streaming_platform"
+    );
+    expect(getEffectiveStrategyRates("media", "streaming_platform", null, null, 500)).toEqual({
+      supply: streamingMedia.supply,
+      demand: streamingMedia.demand,
+      isTransitioning: false,
+    });
+  });
+
+  it("uses the catalog's named existing input strategy for every lane recipe", () => {
+    for (const model of MEDIA_OPERATING_MODELS) {
+      for (const sectorType of model.sectorTypes) {
+        const recipe = model.recipes[sectorType]!;
+        const existingInput = SECTOR_STRATEGIES[sectorType].find(
+          (strategy) => strategy.id === recipe.inputStrategyId
+        )!;
+        const modelStrategy = getMediaOperatingModelStrategies(sectorType).find(
+          (strategy) => strategy.id === model.id
+        )!;
+
+        expect(modelStrategy.demand, `${sectorType}:${model.id}`).toEqual(existingInput.demand);
+      }
+    }
   });
 });
 
