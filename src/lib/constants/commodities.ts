@@ -1963,6 +1963,7 @@ export function computeRawSupplyDemand(
   sectors: {
     sectorType: string;
     industryModel?: string | null;
+    mediaDiscriminator?: string | null;
     revenue: number;
     stateId: string;
     /** Optional owner used to attribute this sector's realized ledger supply. */
@@ -2185,7 +2186,7 @@ export function computeRawSupplyDemand(
   };
   const outputDemandDeltasByState = new Map<string, Map<CommodityType, number>>();
   const recordOutputDemandDelta = (
-    sector: { countryId?: string; stateId: string },
+    sector: { countryId?: string; stateId: string; mediaDiscriminator?: string | null },
     sectorType: CorporationType,
     commodity: CommodityType,
     outputUnits: number
@@ -2210,7 +2211,11 @@ export function computeRawSupplyDemand(
   }
 
   for (const sector of sectors) {
-    const st = getOperatingSectorType(sector.sectorType, sector.industryModel) as CorporationType;
+    const st = getOperatingSectorType(
+      sector.sectorType,
+      sector.industryModel,
+      sector.mediaDiscriminator
+    ) as CorporationType;
 
     // Ensure state map exists (no base stabilizer — state level is fully dynamic)
     if (!byState.has(sector.stateId)) {
@@ -2239,7 +2244,8 @@ export function computeRawSupplyDemand(
             sector.transitionFromStrategyId,
             sector.transitionStartTurn,
             currentTurn ?? 0,
-            sector.industryModel
+            sector.industryModel,
+            sector.mediaDiscriminator
           )
         : null;
 

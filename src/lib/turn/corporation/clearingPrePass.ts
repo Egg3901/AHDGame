@@ -238,7 +238,8 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
           sector.transitionFromStrategyId,
           sector.transitionStartTurn,
           turn ?? 0,
-          sector.industryModel
+          sector.industryModel,
+          sector.mediaDiscriminator
         );
         // Same remap the world ledger applies (computeRawSupplyDemand): bloc
         // media offers state broadcasting, not advertising. If the offer and

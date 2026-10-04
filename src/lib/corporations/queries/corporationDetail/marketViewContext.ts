@@ -93,6 +93,7 @@ export async function loadMarketViewContext(
     stateId: s.stateId,
     sectorType: s.sectorType,
     industryModel: s.industryModel ?? null,
+    mediaDiscriminator: s.mediaDiscriminator ?? null,
   }));
   const bucketFilter =
     corpBuckets.length > 0
@@ -101,6 +102,7 @@ export async function loadMarketViewContext(
             stateId: b.stateId,
             sectorType: b.sectorType,
             industryModel: b.industryModel,
+            mediaDiscriminator: b.mediaDiscriminator,
           })),
         }
       : null;

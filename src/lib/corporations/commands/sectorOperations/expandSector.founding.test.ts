@@ -13,6 +13,7 @@ import {
   getNationalDominanceGrowthCostMultiplier,
 } from "@/lib/constants/corporations";
 import { foundingStarterUnits, sectorEntryFeeAnchor } from "@/lib/corporations/foundingPlant";
+import { expandSector } from "./expandSector";
 
 /**
  * P3b: founding a sector under plants is a FIRST BUILD.
@@ -177,7 +178,6 @@ describe("expandSector — founding build (plants)", () => {
     vi.mocked(fetchCorporationNationalSectorSharePercent).mockResolvedValueOnce(60);
     await wireMocks(true);
 
-    const { expandSector } = await import("./expandSector");
     const res = await expandSector(request(), { params });
 
     expect(res.status).toBe(201);
@@ -194,7 +194,6 @@ describe("expandSector — founding build (plants)", () => {
       retailDemandTransitionStartTurn: CURRENT_TURN - 48,
       retailDemandTransitionTurns: 192,
     });
-    const { expandSector } = await import("./expandSector");
     const res = await expandSector(request("retail"), { params });
     const body = await res.json();
 
@@ -211,7 +210,6 @@ describe("expandSector — founding build (plants)", () => {
       countryId: "PL",
       name: "Warsaw",
     });
-    const { expandSector } = await import("./expandSector");
     const blockedRequest = new Request("http://localhost/api/corporations/1/sectors", {
       method: "POST",
       body: JSON.stringify({ stateId: "PL-WAW", sectorType: "manufacturing" }),
@@ -228,7 +226,6 @@ describe("expandSector — founding build (plants)", () => {
 
   it("founds the corporation's secondary sector type when requested", async () => {
     await wireMocks(true);
-    const { expandSector } = await import("./expandSector");
     const res = await expandSector(request("agriculture"), { params });
 
     expect(res.status).toBe(201);
@@ -239,12 +236,12 @@ describe("expandSector — founding build (plants)", () => {
       stateId: STATE_ID,
       sectorType: "agriculture",
       industryModel: null,
+      mediaDiscriminator: null,
     });
   });
 
   it("writes a starter-quantum nameplate, not the ₳1M legacy grant (ticket #1027)", async () => {
     await wireMocks(true);
-    const { expandSector } = await import("./expandSector");
     const { revenuePerCapacityUnit } = await import("@/lib/constants/capacityEconomy");
     const res = await expandSector(request(), { params });
     expect(res.status).toBe(201);
@@ -261,7 +258,6 @@ describe("expandSector — founding build (plants)", () => {
 
   it("builds sector types outside the corporation's primary and secondary types (any type is buildable)", async () => {
     await wireMocks(true);
-    const { expandSector } = await import("./expandSector");
     const res = await expandSector(request("energy"), { params });
 
     expect(res.status).toBe(201);
@@ -270,7 +266,6 @@ describe("expandSector — founding build (plants)", () => {
 
   it("charges the entry fee PLUS a founding-discounted starter build", async () => {
     await wireMocks(true);
-    const { expandSector } = await import("./expandSector");
     const res = await expandSector(request(), { params });
     expect(res.status).toBe(201);
 
@@ -294,7 +289,6 @@ describe("expandSector — founding build (plants)", () => {
       },
     } as never);
 
-    const { expandSector } = await import("./expandSector");
     const res = await expandSector(request(), { params });
     const body = await res.json();
 
@@ -306,7 +300,6 @@ describe("expandSector — founding build (plants)", () => {
 
   it("sizes the starter to one manufacturing facility, not a $1M/day nameplate", async () => {
     await wireMocks(true);
-    const { expandSector } = await import("./expandSector");
     await expandSector(request(), { params });
 
     expect(STARTER_UNITS).toBe(25);
@@ -317,7 +310,6 @@ describe("expandSector — founding build (plants)", () => {
 
   it("creates the sector with zero capacity and the starter order queued", async () => {
     await wireMocks(true);
-    const { expandSector } = await import("./expandSector");
     await expandSector(request(), { params });
 
     const doc = insertedSector();
@@ -334,7 +326,6 @@ describe("expandSector — founding build (plants)", () => {
 
   it("preserves the original 36-turn manufacturing founding schedule", async () => {
     await wireMocks(true);
-    const { expandSector } = await import("./expandSector");
     await expandSector(request(), { params });
 
     const queue = insertedSector().buildQueue as Array<Record<string, number>>;
@@ -344,7 +335,6 @@ describe("expandSector — founding build (plants)", () => {
 
   it("draws the starter capacity DOWN from the unowned pool", async () => {
     await wireMocks(true);
-    const { expandSector } = await import("./expandSector");
     await expandSector(request(), { params });
 
     const call = db.collectionMocks.unownedSectors.updateOne.mock.calls[0];
@@ -352,6 +342,7 @@ describe("expandSector — founding build (plants)", () => {
       stateId: STATE_ID,
       sectorType: "manufacturing",
       industryModel: null,
+      mediaDiscriminator: null,
     });
     // Pipeline update, TWO stages. Units are the authoritative leg and are drawn
     // down (clamped >= 0) in stage 1; `revenue` is then RESTATED from the
@@ -371,7 +362,6 @@ describe("expandSector — founding build (plants)", () => {
   it("emits a capex build leg for the starter build only (not the entry fee)", async () => {
     await wireMocks(true);
     const { emitBuildCapexTx } = await import("@/lib/corporations/capexTxLog");
-    const { expandSector } = await import("./expandSector");
     await expandSector(request(), { params });
 
     expect(emitBuildCapexTx).toHaveBeenCalledTimes(1);
@@ -386,7 +376,6 @@ describe("expandSector — founding build (plants)", () => {
 describe("expandSector — cross-border founding", () => {
   it("looks the state up by _id alone, not scoped to the corp's home country", async () => {
     await wireMocks(true);
-    const { expandSector } = await import("./expandSector");
     await expandSector(request(), { params });
 
     const filter = db.collectionMocks.states.findOne.mock.calls[0][0] as Record<string, unknown>;
@@ -402,7 +391,6 @@ describe("expandSector — cross-border founding", () => {
       name: "England",
       countryId: "UK",
     });
-    const { expandSector } = await import("./expandSector");
     const res = await expandSector(request(), { params });
     expect(res.status).toBe(201);
     expect(insertedSector().countryId).toBe("UK");
@@ -419,7 +407,6 @@ describe("expandSector — cross-border founding", () => {
       name: "England",
       countryId: "UK",
     });
-    const { expandSector } = await import("./expandSector");
     await expandSector(request(), { params });
 
     const stages = db.collectionMocks.unownedSectors.updateOne.mock.calls[0][1] as Array<{
@@ -434,7 +421,6 @@ describe("expandSector — cross-border founding", () => {
 describe("expandSector — non-plants path is unchanged", () => {
   it("charges only the flat entry fee and queues nothing", async () => {
     await wireMocks(false);
-    const { expandSector } = await import("./expandSector");
     const res = await expandSector(request(), { params });
     expect(res.status).toBe(201);
 
@@ -450,7 +436,6 @@ describe("expandSector — non-plants path is unchanged", () => {
   it("does not touch the unowned pool or the capex ledger", async () => {
     await wireMocks(false);
     const { emitBuildCapexTx } = await import("@/lib/corporations/capexTxLog");
-    const { expandSector } = await import("./expandSector");
     await expandSector(request(), { params });
 
     expect(db.collectionMocks.unownedSectors.updateOne).not.toHaveBeenCalled();

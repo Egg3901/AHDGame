@@ -32,6 +32,7 @@ export type IndexFundCandidate = Pick<
   | "countryId"
   | "type"
   | "industryModel"
+  | "mediaDiscriminator"
   | "secondaryType"
   | "sharePrice"
   | "totalShares"
@@ -96,6 +97,9 @@ export function isEligibleIndexFundConstituent(
     }
     if (definition.sectorType === "manufacturing" && corporation.industryModel === "vehicles") {
       return false;
+    }
+    if (corporation.mediaDiscriminator === "entertainment") {
+      return definition.sectorType === "entertainment";
     }
     return (
       corporation.type === definition.sectorType ||

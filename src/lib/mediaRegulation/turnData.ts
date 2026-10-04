@@ -184,7 +184,8 @@ export async function loadUSMediaOutletDelivery(
       sector.strategyId ?? "standard",
       sector.transitionFromStrategyId,
       sector.transitionStartTurn,
-      context.currentTurn ?? (hasTransition ? (sector.transitionStartTurn ?? 0) + 12 : 0)
+      context.currentTurn ?? (hasTransition ? (sector.transitionStartTurn ?? 0) + 12 : 0),
+      sector.mediaDiscriminator
     ).supply;
     if (!((rates.advertising ?? 0) > 0)) return [];
 

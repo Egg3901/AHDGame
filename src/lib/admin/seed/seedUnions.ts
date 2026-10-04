@@ -63,12 +63,13 @@ export async function seedUnions(
     countryId: CountryId;
     sectorType: CorporationType;
     industryModel: CorporateSector["industryModel"];
+    mediaDiscriminator: CorporateSector["mediaDiscriminator"];
   }[] = [];
 
   for (const rawCountryId of countryIds) {
     const countryId = rawCountryId as CountryId;
     for (const sectorType of CORPORATION_TYPES) {
-      pairs.push({ countryId, sectorType, industryModel: null });
+      pairs.push({ countryId, sectorType, industryModel: null, mediaDiscriminator: null });
     }
   }
 
@@ -78,40 +79,62 @@ export async function seedUnions(
   const modelSectors = await db
     .collection<CorporateSector>("corporateSectors")
     .find(
-      { industryModel: { $type: "string" } },
-      { projection: { countryId: 1, sectorType: 1, industryModel: 1 } }
+      {
+        $or: [{ industryModel: { $type: "string" } }, { mediaDiscriminator: { $type: "string" } }],
+      },
+      {
+        projection: {
+          countryId: 1,
+          sectorType: 1,
+          industryModel: 1,
+          mediaDiscriminator: 1,
+        },
+      }
     )
     .toArray();
   for (const sector of modelSectors) {
-    if (!sector.countryId || !sector.industryModel) continue;
+    if (!sector.countryId || (!sector.industryModel && !sector.mediaDiscriminator)) continue;
     const exists = pairs.some(
       (pair) =>
         pair.countryId === sector.countryId &&
         pair.sectorType === sector.sectorType &&
-        pair.industryModel === sector.industryModel
+        pair.industryModel === (sector.industryModel ?? null) &&
+        pair.mediaDiscriminator === (sector.mediaDiscriminator ?? null)
     );
     if (!exists) {
       pairs.push({
         countryId: sector.countryId,
         sectorType: sector.sectorType,
-        industryModel: sector.industryModel,
+        industryModel: sector.industryModel ?? null,
+        mediaDiscriminator: sector.mediaDiscriminator ?? null,
       });
     }
   }
 
-  for (const { countryId, sectorType, industryModel } of pairs) {
-    const unionType = getOperatingSectorType(sectorType, industryModel) as CorporationType;
+  for (const { countryId, sectorType, industryModel, mediaDiscriminator } of pairs) {
+    const unionType = getOperatingSectorType(
+      sectorType,
+      industryModel,
+      mediaDiscriminator
+    ) as CorporationType;
     const name = getUnionName(countryId, unionType, preset);
     unionOps.push({
       updateOne: {
         // `null` matches an explicit null AND an absent field, so this is correct
         // both before and after the founder-null backfill.
-        filter: { countryId, sectorType, industryModel, foundedByCharacterId: null },
+        filter: {
+          countryId,
+          sectorType,
+          industryModel,
+          mediaDiscriminator,
+          foundedByCharacterId: null,
+        },
         update: {
           $setOnInsert: {
             countryId,
             sectorType,
             industryModel,
+            mediaDiscriminator,
             name,
             ownerId: null,
             pendingLeaderCharacterId: null,
@@ -155,19 +178,38 @@ export async function seedUnions(
       .collection<Union>("unions")
       .find(
         { foundedByCharacterId: null },
-        { projection: { _id: 1, countryId: 1, sectorType: 1, industryModel: 1 } }
+        {
+          projection: {
+            _id: 1,
+            countryId: 1,
+            sectorType: 1,
+            industryModel: 1,
+            mediaDiscriminator: 1,
+          },
+        }
       )
       .toArray();
     const worldUnionIdByPair = new Map(
-      worldUnions.map((u) => [`${u.countryId}|${u.sectorType}|${u.industryModel ?? ""}`, u._id])
+      worldUnions.map((u) => [
+        `${u.countryId}|${u.sectorType}|${u.industryModel ?? ""}|${u.mediaDiscriminator ?? ""}`,
+        u._id,
+      ])
     );
     const sectorOps: AnyBulkWriteOperation<CorporateSector>[] = [];
-    for (const { countryId, sectorType, industryModel } of pairs) {
-      const unionId = worldUnionIdByPair.get(`${countryId}|${sectorType}|${industryModel ?? ""}`);
+    for (const { countryId, sectorType, industryModel, mediaDiscriminator } of pairs) {
+      const unionId = worldUnionIdByPair.get(
+        `${countryId}|${sectorType}|${industryModel ?? ""}|${mediaDiscriminator ?? ""}`
+      );
       if (!unionId) continue;
       sectorOps.push({
         updateMany: {
-          filter: { countryId, sectorType, industryModel, representingUnionId: null },
+          filter: {
+            countryId,
+            sectorType,
+            industryModel,
+            mediaDiscriminator,
+            representingUnionId: null,
+          },
           update: { $set: { representingUnionId: unionId } },
         },
       });

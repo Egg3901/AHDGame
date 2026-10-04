@@ -126,9 +126,14 @@ export async function resolveNationalCorporationForSector(
   db: Db,
   countryId: CountryId,
   sectorType: CorporationType,
-  industryModel?: Corporation["industryModel"]
+  industryModel?: Corporation["industryModel"],
+  mediaDiscriminator?: Corporation["mediaDiscriminator"]
 ): Promise<Corporation> {
-  const operatingSectorType = getOperatingSectorType(sectorType, industryModel) as CorporationType;
+  const operatingSectorType = getOperatingSectorType(
+    sectorType,
+    industryModel,
+    mediaDiscriminator
+  ) as CorporationType;
   const secondary = await db
     .collection<Corporation>("corporations")
     .findOne({ countryOwnerId: countryId, assignedSectorTypes: operatingSectorType });

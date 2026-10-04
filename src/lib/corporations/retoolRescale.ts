@@ -11,7 +11,7 @@
  * One helper, every path.
  */
 
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { CorporationType, MediaDiscriminator } from "@/lib/constants/corporations";
 import {
   capacityRescaleRatio,
   rescaleBuildQueueForStrategyChange,
@@ -24,6 +24,7 @@ import { seedPlantLedger } from "@/lib/corporations/plantLedger";
 export interface RetoolRescaleInput {
   sectorType: CorporationType;
   industryModel?: string | null;
+  mediaDiscriminator?: MediaDiscriminator | null;
   fromStrategyId: string | null | undefined;
   toStrategyId: string | null | undefined;
   plantsEnabled: boolean;
@@ -54,12 +55,21 @@ export function retoolRescaleFields(input: RetoolRescaleInput): RetoolRescaleSet
     input.sectorType,
     input.fromStrategyId,
     input.toStrategyId,
-    input.industryModel
+    input.industryModel,
+    input.mediaDiscriminator
   );
   const out: RetoolRescaleSet = { retoolRescaleApplied: true };
   if (typeof input.capitalStock === "number" && Number.isFinite(input.capitalStock)) {
     out.capitalStock = input.capitalStock * ratio;
-    Object.assign(out, seedPlantLedger(input.sectorType, out.capitalStock, input.industryModel));
+    Object.assign(
+      out,
+      seedPlantLedger(
+        input.sectorType,
+        out.capitalStock,
+        input.industryModel,
+        input.mediaDiscriminator
+      )
+    );
   }
   if (Array.isArray(input.buildQueue) && input.buildQueue.length > 0) {
     out.buildQueue = rescaleBuildQueueForStrategyChange(input.buildQueue, ratio);
@@ -98,6 +108,7 @@ export function healAutoRetoolOpexAnchor(args: {
   strategyId?: string | null;
   sectorType: CorporationType;
   industryModel?: string | null;
+  mediaDiscriminator?: MediaDiscriminator | null;
   retoolRescaleApplied?: boolean;
   otherOpexPerUnitAnchor?: number;
 }): { otherOpexPerUnitAnchor?: number; retoolRescaleApplied: true } | null {
@@ -121,6 +132,7 @@ export interface RetoolStockBasisHealInput {
   isAutoRetool: boolean;
   sectorType: CorporationType;
   industryModel?: string | null;
+  mediaDiscriminator?: MediaDiscriminator | null;
   strategyId?: string | null;
   transitionFromStrategyId?: string | null;
   transitionStartTurn?: number | null;
@@ -184,6 +196,7 @@ export function healRetoolStockBasis(
       strategyId: input.strategyId,
       sectorType: input.sectorType,
       industryModel: input.industryModel,
+      mediaDiscriminator: input.mediaDiscriminator,
       retoolRescaleApplied: input.retoolRescaleApplied,
       otherOpexPerUnitAnchor: input.otherOpexPerUnitAnchor,
     });
@@ -193,7 +206,8 @@ export function healRetoolStockBasis(
     input.sectorType,
     input.transitionFromStrategyId,
     input.strategyId,
-    input.industryModel
+    input.industryModel,
+    input.mediaDiscriminator
   );
   const out: RetoolStockBasisHeal = { retoolRescaleApplied: true };
   if (typeof input.capitalStock === "number" && Number.isFinite(input.capitalStock)) {

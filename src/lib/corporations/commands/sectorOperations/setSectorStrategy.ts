@@ -97,7 +97,8 @@ export async function setSectorStrategy(request: Request, { params }: RouteParam
     // Validate strategy exists for this sector type
     const sectorType = getOperatingSectorType(
       sector.sectorType,
-      sector.industryModel
+      sector.industryModel,
+      sector.mediaDiscriminator
     ) as CorporationType;
     const strategies = SECTOR_STRATEGIES[sectorType];
     if (!strategies) {
@@ -296,6 +297,7 @@ export async function setSectorStrategy(request: Request, { params }: RouteParam
     const rescale = retoolRescaleFields({
       sectorType,
       industryModel: sector.industryModel,
+      mediaDiscriminator: sector.mediaDiscriminator,
       fromStrategyId: currentStrategyId,
       toStrategyId: strategyId,
       plantsEnabled,

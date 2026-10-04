@@ -68,6 +68,7 @@ export function corpHasStrategicSector(
     countryId: CountryId;
     sectorType: CorporationType;
     industryModel?: string | null;
+    mediaDiscriminator?: string | null;
   }[]
 ): boolean {
   return corpSectors.some(
@@ -75,7 +76,11 @@ export function corpHasStrategicSector(
       s.countryId === countryId &&
       (designatedTypes.has(s.sectorType) ||
         designatedTypes.has(
-          getOperatingSectorType(s.sectorType, s.industryModel) as CorporationType
+          getOperatingSectorType(
+            s.sectorType,
+            s.industryModel,
+            s.mediaDiscriminator
+          ) as CorporationType
         ))
   );
 }

@@ -217,7 +217,11 @@ export async function updateCorporationSettings(request: Request, { params }: Ro
             gameState?.currentYear ?? startingYear + Math.floor((currentTurn - 1) / TURNS_PER_YEAR);
           const migration = migrateUnlockedTechOnPrimaryTypeSwitch(
             corporation.unlockedTechNodeIds,
-            getOperatingSectorType(corporation.type, corporation.industryModel) as CorporationType,
+            getOperatingSectorType(
+              corporation.type,
+              corporation.industryModel,
+              corporation.mediaDiscriminator
+            ) as CorporationType,
             primaryType as CorporationType,
             currentYear,
             corporation.techDecadeLane

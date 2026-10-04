@@ -99,7 +99,8 @@ export async function reverseNationalizationTaking(
                     ...seedPlantLedger(
                       sector.sectorType,
                       prov.formerCapitalStock,
-                      sector.industryModel
+                      sector.industryModel,
+                      sector.mediaDiscriminator
                     ),
                   }
                 : {}),

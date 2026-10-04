@@ -663,7 +663,11 @@ describe("nationalizeWholeCorp", () => {
     // permanently. $setOnInsert is unavailable inside a pipeline, hence the
     // $ifNull identity seeding.
     const unownedUpsert = db.collectionMocks.unownedSectors.updateOne.mock.calls[0];
-    expect(unownedUpsert[0]).toEqual({ stateId: "JP-13", sectorType: "technology" });
+    expect(unownedUpsert[0]).toEqual({
+      stateId: "JP-13",
+      sectorType: "technology",
+      mediaDiscriminator: null,
+    });
     expect(unownedUpsert[2]).toEqual({ upsert: true });
 
     const pipeline = unownedUpsert[1] as Array<{ $set: Record<string, unknown> }>;

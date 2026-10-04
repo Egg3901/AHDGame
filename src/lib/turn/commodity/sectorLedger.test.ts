@@ -106,3 +106,47 @@ describe("automobile model dual-read through commodity pricing", () => {
     expect(computeRawSupplyDemand(modelled).global).toEqual(computeRawSupplyDemand(legacy).global);
   });
 });
+
+describe("entertainment media dual-read through commodity pricing", () => {
+  it("keeps the legacy recipe for a canonical media row with the entertainment discriminator", () => {
+    const id = new ObjectId();
+    const base = {
+      _id: id,
+      corporationId: new ObjectId(),
+      stateId: "US-CA",
+      countryId: "US",
+      strategyId: "film_studio",
+      revenue: 250_000,
+      createdAt: new Date(),
+    };
+    const legacy = buildSectorRows({
+      allSectors: [{ ...base, sectorType: "entertainment" } as unknown as CorporateSector],
+      corporationById: new Map(),
+      natcorpIds: new Set(),
+      fxByCurrency: new Map(),
+      stateToCountry: new Map([["US-CA", "US"]]),
+      ledgerCurrentYear: null,
+      ledgerCommandEconomyEnabled: false,
+      turn: 1,
+    });
+    const canonical = buildSectorRows({
+      allSectors: [
+        {
+          ...base,
+          sectorType: "media",
+          mediaDiscriminator: "entertainment",
+        } as unknown as CorporateSector,
+      ],
+      corporationById: new Map(),
+      natcorpIds: new Set(),
+      fxByCurrency: new Map(),
+      stateToCountry: new Map([["US-CA", "US"]]),
+      ledgerCurrentYear: null,
+      ledgerCommandEconomyEnabled: false,
+      turn: 1,
+    });
+
+    expect(canonical[0]?.mediaDiscriminator).toBe("entertainment");
+    expect(computeRawSupplyDemand(canonical).global).toEqual(computeRawSupplyDemand(legacy).global);
+  });
+});

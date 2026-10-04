@@ -61,6 +61,11 @@ import {
   prepareFresh1991VehicleModelSeed,
 } from "@/lib/admin/seed/fresh1991VehicleModelSeed";
 import {
+  completeFresh1991MediaTaxonomySeed,
+  convertFresh1991MediaTaxonomyRows,
+  prepareFresh1991MediaTaxonomySeed,
+} from "@/lib/admin/seed/fresh1991MediaTaxonomySeed";
+import {
   seedStatePolicies,
   seedBudgets,
   seedUkBudgets,
@@ -268,6 +273,8 @@ export interface BootstrapOptions {
   resetReference?: boolean;
   /** Internal, reset-wrapper-only opt-in for the fresh 1991 vehicle seed. */
   fresh1991VehicleModelSeed?: boolean;
+  /** Internal, reset-wrapper-only opt-in for the fresh 1991 media taxonomy seed. */
+  fresh1991MediaTaxonomySeed?: boolean;
   /** If true, only run seeders — skip election spawning, official seeding, and game state init */
   seedOnly?: boolean;
   /**
@@ -699,6 +706,12 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
     resetReference,
     dryRun: false,
   });
+  const freshMediaTaxonomySeed = await prepareFresh1991MediaTaxonomySeed(db, {
+    enabled: options.fresh1991MediaTaxonomySeed === true,
+    preset,
+    resetReference,
+    dryRun: false,
+  });
 
   // Contain a RECOVERABLE block. Without a run record this is a bare call, so
   // direct callers are unaffected.
@@ -718,6 +731,16 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
       );
     }
     await completeFresh1991VehicleModelSeed(db, requiredWritesSucceeded);
+  };
+  const completeFreshMediaTaxonomySeed = async () => {
+    if (!freshMediaTaxonomySeed.enabled) return;
+    const requiredWritesSucceeded = !options.run || options.run.failures.length === 0;
+    if (!requiredWritesSucceeded) {
+      log(
+        `[media-taxonomy] fresh seed remains incomplete because ${options.run!.failures.length} reset stage(s) failed`
+      );
+    }
+    await completeFresh1991MediaTaxonomySeed(db, requiredWritesSucceeded);
   };
 
   log(seedOnly ? "Re-seeding reference data" : `Bootstrapping clean world (${mode})`);
@@ -934,6 +957,14 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
     log(`NPP corporations seeded: ${r.totalSpawned} corps`);
   });
 
+  if (freshMediaTaxonomySeed.enabled) {
+    const converted = await convertFresh1991MediaTaxonomyRows(db, { dryRun: false });
+    log(
+      `[media-taxonomy] fresh seed canonicalized ${converted.corporations} corporations, ` +
+        `${converted.corporateSectors} sectors, ${converted.unownedSectors} markets, and ${converted.unions} unions`
+    );
+  }
+
   // NPC retail banks: NPP financial corps + real issueCharter path. After
   // seedNppCorporations / seedForex so HQ states, FX, and capital maths work.
   // Idempotent; not gated on privateBankingEnabled (runtime flag gates policy).
@@ -971,6 +1002,7 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
 
   if (seedOnly) {
     await completeFreshVehicleSeed();
+    await completeFreshMediaTaxonomySeed();
     log("Seed-only complete — skipped elections, officials, and game state init");
     return;
   }
@@ -1514,6 +1546,7 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
   };
 
   await completeFreshVehicleSeed();
+  await completeFreshMediaTaxonomySeed();
 
   log("Bootstrap summary:");
   log(`- states: ${summary.states}`);

@@ -467,7 +467,8 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           sector.transitionFromStrategyId,
           sector.transitionStartTurn,
           turn ?? 0,
-          sector.industryModel
+          sector.industryModel,
+          sector.mediaDiscriminator
         );
         const outputs = (Object.keys(rates.supply ?? {}) as CommodityType[]).filter(
           (c) => (rates.supply?.[c] ?? 0) > 0

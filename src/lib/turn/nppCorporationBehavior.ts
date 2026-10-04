@@ -311,7 +311,10 @@ export async function processNppCorporationDecisions(
   // Shared object references let each founding deplete later candidates in this pass.
   const unownedIndex = new Map<string, UnownedSector>();
   for (const us of openUnowned) {
-    unownedIndex.set(bucketKey(us.stateId, us.sectorType), us);
+    unownedIndex.set(
+      bucketKey(us.stateId, us.sectorType, us.industryModel, us.mediaDiscriminator),
+      us
+    );
   }
 
   // NPPs cannot auto-expand into state-controlled buckets; players still may.
@@ -617,7 +620,8 @@ export function makeNppCorpDecision(
     sector.sectorType === corp.type && (sector.industryModel ?? null) === coreSectorModel;
   const operatingCorpType = getOperatingSectorType(
     corp.type,
-    corp.industryModel
+    corp.industryModel,
+    corp.mediaDiscriminator
   ) as CorporationType;
   const updates: Record<string, unknown> = { updatedAt: now };
   const sectorUpdates: NppCorpDecision["sectorUpdates"] = [];
@@ -643,8 +647,16 @@ export function makeNppCorpDecision(
   const nationalShare = (
     countryId: string,
     sectorType: CorporationType,
-    industryModel?: string | null
-  ) => plants?.nationalShareOf?.(corp._id, countryId, sectorType, industryModel) ?? 0;
+    industryModel?: string | null,
+    mediaDiscriminator?: string | null
+  ) =>
+    plants?.nationalShareOf?.(
+      corp._id,
+      countryId,
+      sectorType,
+      industryModel,
+      mediaDiscriminator as "entertainment" | null | undefined
+    ) ?? 0;
   const capacityObservations: CapacityDecisionObservation[] = [];
   // Which of the four operator decision legs bound this corp this turn (#2122);
   // sections below flag the branch they take and the resolver picks the first.
@@ -1274,11 +1286,13 @@ export function makeNppCorpDecision(
         foundingTarget.headroomUnits,
         foundingTarget.revenue,
         plants.eraUnitScale,
-        foundingTarget.industryModel
+        foundingTarget.industryModel,
+        foundingTarget.mediaDiscriminator
       );
       const starterUnits = foundingStarterUnits(
         foundingTarget.sectorType as CorporationType,
-        foundingTarget.industryModel as "vehicles" | null | undefined
+        foundingTarget.industryModel as "vehicles" | null | undefined,
+        foundingTarget.mediaDiscriminator
       );
       // Per-unit founding price. computeBuildCost is linear in units, so a
       // one-unit quote scales exactly while retaining its itemized breakdown.
@@ -1287,6 +1301,7 @@ export function makeNppCorpDecision(
           ? computeBuildCost({
               sectorType: foundingTarget.sectorType as CorporationType,
               industryModel: foundingTarget.industryModel,
+              mediaDiscriminator: foundingTarget.mediaDiscriminator,
               units: 1,
               // Greenfield entry uses the sector-type default strategy.
               strategyId: null,
@@ -1296,7 +1311,8 @@ export function makeNppCorpDecision(
               nationalMarketSharePercent: nationalShare(
                 foundingTarget.countryId,
                 foundingTarget.sectorType as CorporationType,
-                foundingTarget.industryModel
+                foundingTarget.industryModel,
+                foundingTarget.mediaDiscriminator
               ),
               primeRate: plants.primeRateOf(foundingTarget.countryId),
               // NPP CEOs have no Character Business Acumen; neutral is honest.
@@ -1391,13 +1407,16 @@ export function makeNppCorpDecision(
           ? buildUnits *
             revenuePerCapacityUnit(
               foundingTarget.sectorType as CorporationType,
-              plants.eraUnitScale
+              plants.eraUnitScale,
+              foundingTarget.industryModel,
+              foundingTarget.mediaDiscriminator
             )
           : foundingTarget.revenue * nameplateShare;
         newSectors.push({
           stateId: foundingTarget.stateId,
           countryId: foundingTarget.countryId,
           sectorType: foundingTarget.sectorType,
+          mediaDiscriminator: foundingTarget.mediaDiscriminator,
           strategyId: foundingStrategyId,
           // Written in the corp's own currency, because that is what
           // `sectorTurn` reads it as (`readCorpEconomicAnchor` on the way in,
@@ -1420,6 +1439,7 @@ export function makeNppCorpDecision(
         unownedDraws.push({
           stateId: foundingTarget.stateId,
           sectorType: foundingTarget.sectorType as CorporationType,
+          mediaDiscriminator: foundingTarget.mediaDiscriminator,
           units: buildUnits,
           countryId: foundingTarget.countryId,
         });
@@ -1609,7 +1629,14 @@ export function makeNppCorpDecision(
         queue_full: queueDepth >= NPP_REINVEST_MAX_QUEUE_DEPTH,
         no_telemetry: !(produced > 0),
         fill_below_min: produced > 0 && fill < NPP_REINVEST_MIN_FILL,
-        state_controlled: stateControlled.has(bucketKey(sector.stateId, sector.sectorType)),
+        state_controlled: stateControlled.has(
+          bucketKey(
+            sector.stateId,
+            sector.sectorType,
+            sector.industryModel,
+            sector.mediaDiscriminator
+          )
+        ),
       });
       if (preSizingGate) {
         observeReinvestCandidate(preSizingGate, sector, capitalStock, null, 0, null);
@@ -1736,7 +1763,11 @@ export function makeNppCorpDecision(
       // gate a rare-earth price spike could make a mine keep adding capacity
       // after the state's geology was already exhausted; production was capped,
       // but the balance sheet and national sector mix kept inflating.
-      const facilityUnits = foundingStarterUnits(sector.sectorType);
+      const facilityUnits = foundingStarterUnits(
+        sector.sectorType,
+        sector.industryModel as "vehicles" | null | undefined,
+        sector.mediaDiscriminator
+      );
       const utilization = capitalStock > 0 ? runUnits / capitalStock : 0;
       const extractionHeadroom =
         sector.sectorType === "extraction"
@@ -1760,6 +1791,7 @@ export function makeNppCorpDecision(
             computeBuildCost({
               sectorType: sector.sectorType,
               industryModel: sector.industryModel,
+              mediaDiscriminator: sector.mediaDiscriminator,
               units: 1,
               strategyId: sector.strategyId ?? null,
               year: plants.year,
@@ -1768,7 +1800,8 @@ export function makeNppCorpDecision(
               nationalMarketSharePercent: nationalShare(
                 sectorCountryId,
                 sector.sectorType,
-                sector.industryModel
+                sector.industryModel,
+                sector.mediaDiscriminator
               ),
               primeRate: plants.primeRateOf(sectorCountryId),
               acumen: NEUTRAL_STAT,
@@ -1854,6 +1887,7 @@ export function makeNppCorpDecision(
       const reinvestPrice = computeBuildCost({
         sectorType: sector.sectorType,
         industryModel: sector.industryModel,
+        mediaDiscriminator: sector.mediaDiscriminator,
         units,
         strategyId: sector.strategyId ?? null,
         year: plants.year,
@@ -1862,7 +1896,8 @@ export function makeNppCorpDecision(
         nationalMarketSharePercent: nationalShare(
           sector.countryId ?? corp.countryId,
           sector.sectorType,
-          sector.industryModel
+          sector.industryModel,
+          sector.mediaDiscriminator
         ),
         primeRate: plants.primeRateOf(sector.countryId ?? corp.countryId),
         // An NPP CEO is an NPP, not a Character — no Business Acumen to read.

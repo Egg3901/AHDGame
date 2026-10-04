@@ -853,7 +853,8 @@ async function buildCapacityFromDirectedCredit(
             sector.sectorType,
             unitsAdded,
             { capacityBookAnchor: priorBook + unitsAdded * unitPrice },
-            sector.industryModel
+            sector.industryModel,
+            sector.mediaDiscriminator
           ),
         },
       });

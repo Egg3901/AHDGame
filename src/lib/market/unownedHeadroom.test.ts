@@ -26,4 +26,10 @@ describe("computeUnownedHeadroomUnits", () => {
     const manufacturing = computeUnownedHeadroomUnits("manufacturing", 100_000, 1);
     expect(energy).not.toBeCloseTo(manufacturing, 0);
   });
+
+  it("uses the entertainment mix for the canonical media discriminator", () => {
+    expect(computeUnownedHeadroomUnits("media", 50_000, 1, null, "entertainment")).toBeCloseTo(
+      computeUnownedHeadroomUnits("entertainment", 50_000, 1)
+    );
+  });
 });

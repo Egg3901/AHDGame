@@ -143,6 +143,7 @@ export type FlowSector = Pick<
   | "transitionFromStrategyId"
   | "transitionStartTurn"
   | "industryModel"
+  | "mediaDiscriminator"
 > & {
   _id?: CorporateSector["_id"];
   /**
@@ -230,7 +231,8 @@ export function computeSectorCommodityUnits(
     sector.transitionFromStrategyId,
     sector.transitionStartTurn,
     currentTurn,
-    sector.industryModel
+    sector.industryModel,
+    sector.mediaDiscriminator
   );
   // The world ledger treats an unmodified `standard` strategy as the legacy
   // SECTOR_SUPPLY table. Several canonical rates have evolved there without
@@ -239,10 +241,14 @@ export function computeSectorCommodityUnits(
   const usesStrategySupply =
     Boolean(sector.strategyId && sector.strategyId !== "standard") ||
     Boolean(sector.transitionFromStrategyId);
+  const operatingType =
+    sector.sectorType === "media" && sector.mediaDiscriminator === "entertainment"
+      ? "entertainment"
+      : sector.sectorType;
   const ledgerSupplyRates: Partial<Record<CommodityType, number>> = usesStrategySupply
     ? rates.supply
     : Object.fromEntries(
-        (SECTOR_SUPPLY[sector.sectorType] ?? []).map((flow) => [flow.commodity, flow.rate])
+        (SECTOR_SUPPLY[operatingType] ?? []).map((flow) => [flow.commodity, flow.rate])
       );
   const plannedEconomy = isPlannedEconomy(
     sector.countryId,
@@ -257,7 +263,7 @@ export function computeSectorCommodityUnits(
   // the turn engine, the world ledger and the sector page all filter on that,
   // and without it the corp surfaces invent output it could never have made.
   const supplyRates = applyExtractionResourceCapacityToSupply(
-    sector.sectorType,
+    operatingType,
     applyPlannedEconomyOutputMix(sector.sectorType, ledgerSupplyRates, plannedEconomy),
     context.stateResourcesByState?.get(sector.stateId ?? "")
   );

@@ -438,6 +438,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
                 countryId: 1,
                 sectorType: 1,
                 industryModel: 1,
+                mediaDiscriminator: 1,
                 revenue: 1,
               },
             }
@@ -496,6 +497,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         stateId: sector.stateId,
         sectorType: sector.sectorType,
         industryModel: sector.industryModel ?? null,
+        mediaDiscriminator: sector.mediaDiscriminator ?? null,
       }),
     ]);
     const corpByIdForLookup = new Map(corpsForLookup.map((c) => [c._id.toString(), c]));
@@ -508,7 +510,8 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
     // Extract raw state metric values for display context and modifier computation
     const sectorType = getOperatingSectorType(
       sector.sectorType,
-      sector.industryModel
+      sector.industryModel,
+      sector.mediaDiscriminator
     ) as CorporationType;
     const metrics: StateMetricValues = {
       fullMetrics: stateMetrics ?? null,
@@ -592,6 +595,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
     const techCorpView = {
       type: corporation.type,
       industryModel: corporation.industryModel,
+      mediaDiscriminator: corporation.mediaDiscriminator,
       unlockedTechNodeIds: corporation.unlockedTechNodeIds,
       techDecadeLane: corporation.techDecadeLane,
     };
@@ -601,7 +605,8 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       sector.transitionFromStrategyId,
       sector.transitionStartTurn,
       currentTurn,
-      sector.industryModel
+      sector.industryModel,
+      sector.mediaDiscriminator
     );
 
     // Extraction-only: resource capacity and per-resource multipliers ,
@@ -796,14 +801,24 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         (ceo as { stats?: { businessAcumen?: number } } | null)?.stats?.businessAcumen ??
         NEUTRAL_STAT;
       const techBuildCostMultiplier = techTreesEnabled
-        ? getSectorTechEffects(techCorpView, sectorType, sector.industryModel).growthCostMultiplier
+        ? getSectorTechEffects(
+            techCorpView,
+            sectorType,
+            sector.industryModel,
+            sector.mediaDiscriminator
+          ).growthCostMultiplier
         : 1;
       // Tech margin points ride `policyCredit` under plants like every other
       // non-physical modifier, and `computeAllMarginModifiers` does not carry
       // them, so name the row here rather than letting it fall into the scale
       // factor unlabelled (ticket 1122).
       const techMarginBonusPp = techTreesEnabled
-        ? getSectorTechEffects(techCorpView, sectorType, sector.industryModel).marginBonusPp
+        ? getSectorTechEffects(
+            techCorpView,
+            sectorType,
+            sector.industryModel,
+            sector.mediaDiscriminator
+          ).marginBonusPp
         : 0;
       // The physical input bill: the same demand rows the Inputs panel renders,
       // priced at the BILLED unit price (base x realization factor, the price
@@ -883,7 +898,8 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         capacityUnits: sector.operatingCapacityUnits ?? sector.capitalStock,
         strategies: getSectorStrategies(
           sectorType,
-          governorConfig?.mediaOperatingModelsEnabled === true
+          governorConfig?.mediaOperatingModelsEnabled === true,
+          sector.mediaDiscriminator
         ),
         isAvailable: (candidate) =>
           !getStrategyAvailability(techCorpView, candidate, techCurrentYear, techTreesEnabled)
@@ -895,7 +911,13 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
             stateResources === undefined ? undefined : (stateResources ?? {})
           ),
         rescaleRatio: (toStrategyId) =>
-          capacityRescaleRatio(sectorType, sector.strategyId, toStrategyId),
+          capacityRescaleRatio(
+            sectorType,
+            sector.strategyId,
+            toStrategyId,
+            sector.industryModel,
+            sector.mediaDiscriminator
+          ),
         priceRatioFor: marketRatioFor,
         balanceFor: marketBookFor,
         basePrices: eraScaledBasePrices(sectorDetailUnitScale),
@@ -1181,6 +1203,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
           techCorpView,
           sectorType,
           industryModel: sector.industryModel,
+          mediaDiscriminator: sector.mediaDiscriminator,
         }),
         profit: Math.round(sectorAmountInCorpCurrency(profit)),
         // Rates displayed to the player are whichever side (domestic/foreign) actually applies

@@ -108,6 +108,7 @@ export function buildSectorRows(inputs: SectorRowInputs): SectorLedgerRow[] {
     return {
       sectorType: s.sectorType,
       industryModel: s.industryModel,
+      mediaDiscriminator: s.mediaDiscriminator,
       revenue: readCorpEconomicAnchor(s.revenue, hostCurrencyCode, hostFxRate),
       stateId: s.stateId,
       sectorId: s._id.toString(),
@@ -223,7 +224,8 @@ export function buildExtractionRevenueInputs(
             sector.transitionFromStrategyId,
             sector.transitionStartTurn,
             turn,
-            sector.industryModel
+            sector.industryModel,
+            sector.mediaDiscriminator
           )
         : null;
 
@@ -299,7 +301,8 @@ export function accumulatePlantsUnits(
       sector.transitionFromStrategyId,
       sector.transitionStartTurn,
       turn,
-      sector.industryModel
+      sector.industryModel,
+      sector.mediaDiscriminator
     );
     const supplyRates = rates.supply ?? {};
     // Same legs the ledger applies on top of producedUnits (natcorpScale x

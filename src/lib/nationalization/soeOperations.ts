@@ -821,6 +821,7 @@ export interface SoeCapexSectorBuy {
   sectorId: CorporateSector["_id"];
   sectorType: CorporateSector["sectorType"];
   industryModel?: CorporateSector["industryModel"];
+  mediaDiscriminator?: CorporateSector["mediaDiscriminator"];
   capitalStock: number;
   /** Capacity units bought back — exactly this turn's depreciation. */
   unitsAdded: number;
@@ -882,6 +883,7 @@ export function buildSoeCapexGrant(
       sectorId: sector._id,
       sectorType: sector.sectorType,
       industryModel: sector.industryModel,
+      mediaDiscriminator: sector.mediaDiscriminator,
       capitalStock: stock,
       unitsAdded,
       costAnchor,
@@ -932,7 +934,8 @@ async function applyStateCapexGrants(
             buy.sectorType,
             buy.unitsAdded,
             { capacityBookAnchor: buy.nextBookAnchor, updatedAt: now },
-            buy.industryModel
+            buy.industryModel,
+            buy.mediaDiscriminator
           ),
         },
       });

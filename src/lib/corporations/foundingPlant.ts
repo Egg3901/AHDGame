@@ -18,14 +18,16 @@ import type { CorporationType } from "@/lib/constants/corporations";
 import { SECTOR_EXPANSION_BASE_COST } from "@/lib/constants/corporations";
 import { plantSizeUnits } from "@/lib/constants/facilityQuantum";
 import type { ManufacturingIndustryModel } from "@/lib/constants/corporations";
+import type { MediaDiscriminator } from "@/lib/constants/corporations";
 import { getEraNominalAmount } from "@/lib/constants/sectorSeedEra";
 
 /** Capacity units ordered for a greenfield first plant (one facility). */
 export function foundingStarterUnits(
   sectorType: CorporationType,
-  industryModel?: ManufacturingIndustryModel | null
+  industryModel?: ManufacturingIndustryModel | null,
+  mediaDiscriminator?: MediaDiscriminator | null
 ): number {
-  return plantSizeUnits(sectorType, industryModel);
+  return plantSizeUnits(sectorType, industryModel, mediaDiscriminator);
 }
 
 /**

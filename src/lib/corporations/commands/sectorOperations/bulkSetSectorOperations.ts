@@ -147,12 +147,14 @@ export async function bulkSetSectorOperations(request: Request, { params }: Rout
       const techCorpView = {
         type: corporation.type,
         industryModel: corporation.industryModel,
+        mediaDiscriminator: corporation.mediaDiscriminator,
         unlockedTechNodeIds: corporation.unlockedTechNodeIds,
         techDecadeLane: corporation.techDecadeLane,
       };
       const techMultFor = (s: CorporateSector) =>
         techEnabled
-          ? getSectorTechEffects(techCorpView, s.sectorType, s.industryModel).growthCostMultiplier
+          ? getSectorTechEffects(techCorpView, s.sectorType, s.industryModel, s.mediaDiscriminator)
+              .growthCostMultiplier
           : 1;
       let projectedTotal = 0;
       let currentTotal = 0;
