@@ -112,6 +112,7 @@ export function processSector(
     ) ?? false;
   const useTradeExposureEmbargo = lookups.embargoTradeExposureEnabled === true;
   const plantsEnabled = market.plantsEnabled;
+  const explicitPlantCostsEnabled = plantsEnabled && market.explicitPlantCostsEnabled === true;
   const {
     brakedTargetRate,
     newCurrentGrowthRate,
@@ -531,13 +532,19 @@ export function processSector(
     newStrikeStartedAtTurn,
     newStrikeCooldownUntilTurn,
   } = resolveSectorLabourEconomics({
-    labour,
+    labour: explicitPlantCostsEnabled ? { ...labour, wagesEnabled: true } : labour,
     sector,
     sectorCountryId,
     currentTurn,
     currentYear,
-    hourlyRevenue,
-    grossMaintenance: payrollBasis,
+    hourlyRevenue: explicitPlantCostsEnabled
+      ? (plantsNameplateRevenue * activeFraction) / TURNS_PER_DAY
+      : hourlyRevenue,
+    // Staff are paid for active capacity even when its output cannot sell.
+    // This neutral basis also removes the legacy margin cap on payroll.
+    grossMaintenance: explicitPlantCostsEnabled
+      ? (plantsNameplateRevenue * activeFraction) / TURNS_PER_DAY
+      : payrollBasis,
     computedWorkers,
     techLaborCostMultiplier: techEffects.laborCostMultiplier,
     costOfLivingIndex: sectorMetrics?.economic?.costOfLiving?.value,
@@ -642,6 +649,7 @@ export function processSector(
     capitalBookAnchor,
   } = decomposePhysicalCosts({
     plantsEnabled,
+    explicitPlantCostsEnabled,
     embargoLegacyMothball,
     profitMargin: sector.profitMargin,
     totalMarginMod,
@@ -912,7 +920,7 @@ export function processSector(
   // Labour telemetry: persist the per-turn labor cost on a daily basis (like
   // `revenue`), in the sector's host-state currency. Display/analytics only;
   // never read back into the economy. Only written when the labour system is on.
-  if (labour.wagesEnabled) {
+  if (labour.wagesEnabled || explicitPlantCostsEnabled) {
     // Per-turn labor cost (daily basis, host currency) — display/analytics
     // only, never read back into the economy.
     sectorUpdate.laborCost = writeCorpEconomicLocal(
@@ -936,6 +944,9 @@ export function processSector(
     const daily = (anchorPerTurn: number) =>
       writeCorpEconomicLocal(anchorPerTurn * TURNS_PER_DAY, sectorCurrencyCode, sectorFxRate);
     sectorUpdate.plantsPnl = {
+      ...(explicitPlantCostsEnabled
+        ? { costModel: "explicit" as const, plantOverhead: daily(physicalPnl.otherOpex) }
+        : {}),
       // Inventory sell-down earns beside operating revenue and its carry lands
       // in costs (see the `costs` leg of this function's return), so both are
       // in the revenue and profit reported here. That makes `revenue` equal
@@ -977,13 +988,13 @@ export function processSector(
   if (solvedOtherOpexPerUnit != null) {
     sectorUpdate.otherOpexPerUnitAnchor = solvedOtherOpexPerUnit;
     sectorUpdate.otherOpexAnchorMarginBasis = plantsPolicyNeutralBasis;
-  } else if (healedOpex?.otherOpexPerUnitAnchor != null) {
+  } else if (!explicitPlantCostsEnabled && healedOpex?.otherOpexPerUnitAnchor != null) {
     // Persist the rebasing this turn's P&L already used. Skip when this is
     // also the first calibration (branch above): that sector had no leftover
     // residual to rebase.
     sectorUpdate.otherOpexPerUnitAnchor = healedOpex.otherOpexPerUnitAnchor;
   }
-  if (healedOpex) {
+  if (!explicitPlantCostsEnabled && healedOpex) {
     sectorUpdate.retoolRescaleApplied = true;
   }
 
