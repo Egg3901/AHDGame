@@ -11,6 +11,7 @@
  */
 
 import type { BankCharter, PropPosition } from "@/lib/db/types/bank";
+import { bankEquity, type BalanceSheetCharter, type BalanceSheetOptions } from "./balanceSheet";
 
 /** Provisional - max propBookMarkValue / equityBase. */
 export const PROP_LEVERAGE_MULTIPLE = 3;
@@ -20,9 +21,10 @@ function finiteOrZero(value: number | null | undefined): number {
 }
 
 /**
- * Equity base for prop leverage: bank cash + prop mark - interbank debt - CB
- * margin debt. Corporations have no CB savings surface (characters do), so
- * nothing is netted for CB-held savings.
+ * Equity base for prop leverage: shared bank book equity plus the marked prop
+ * book. Cash-backed deposits and every borrowing remain liabilities. Legacy
+ * player savings pointers contribute neither bank cash nor bank liabilities.
+ * Corporations have no CB savings surface, so there is no CB savings asset.
  *
  * `postedCapital` is deliberately absent. Posting capital moves cash into
  * `cashReserves` and increments the memo, so adding both counted the same money
@@ -31,8 +33,9 @@ function finiteOrZero(value: number | null | undefined): number {
  */
 export function computePropEquityBase(
   cashReserves: number,
-  charter: Pick<BankCharter, "propBookMarkValue" | "interbankDebt" | "cbMarginDebt" | "propBook">,
-  markValueOverride?: number
+  charter: Partial<BalanceSheetCharter> & Pick<BankCharter, "propBookMarkValue" | "propBook">,
+  markValueOverride?: number,
+  options: BalanceSheetOptions = {}
 ): number {
   const liquid = Math.max(0, finiteOrZero(cashReserves));
   const mark =
@@ -41,9 +44,7 @@ export function computePropEquityBase(
       : charter.propBookMarkValue !== undefined
         ? Math.max(0, finiteOrZero(charter.propBookMarkValue))
         : sumPositionMarks(charter.propBook);
-  const interbank = Math.max(0, finiteOrZero(charter.interbankDebt ?? 0));
-  const margin = Math.max(0, finiteOrZero(charter.cbMarginDebt ?? 0));
-  return liquid + mark - interbank - margin;
+  return bankEquity({ ...charter, cashReserves: liquid }, options) + mark;
 }
 
 export function sumPositionMarks(positions: PropPosition[] | undefined): number {
