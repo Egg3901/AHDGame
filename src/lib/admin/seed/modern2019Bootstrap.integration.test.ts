@@ -41,7 +41,7 @@ it("builds the five 2019 transition countries before region-derived stages", asy
   const { runConformanceChecks } = await import("@/lib/admin/seedDiagnostic/conformance");
   const { checks } = await runConformanceChecks(db, { preset: "2019-default" });
   const critical = checks.filter((check) => check.severity === "critical");
-  // Conformance checks the complete bootstrap substrate. Seat lifecycle checks
-  // run separately; none of these country readiness checks should be critical.
-  expect(critical).toEqual([]);
+  // Reference bootstrap now supplies canonical seats, so the integrated
+  // transition countries must have no critical readiness findings.
+  expect(critical.map((check) => check.id).sort()).toEqual([]);
 }, 1_800_000);

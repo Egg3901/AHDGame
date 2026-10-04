@@ -274,7 +274,8 @@ export async function buildResultsPayload(
           election.totalSeats,
           tally,
           rosterIds,
-          election.countryId ?? "US"
+          election.countryId ?? "US",
+          election.allocationMethod
         ))
       : null;
 

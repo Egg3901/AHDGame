@@ -16,7 +16,7 @@ import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 import { sectorEconomicRevenue } from "@/lib/corporations/sectorRevenueBasis";
 import {
   sectorDailyProfitAnchor,
-  sumConstructionInProgressAnchor,
+  sectorConstructionInProgressAnchor,
   type SectorCapexFields,
 } from "@/lib/corporations/sectorProfitBasis";
 import { sumBondPrincipalAnchor, sumBondAnnualInterestAnchor } from "@/lib/bonds/bondPrincipalSum";
@@ -149,10 +149,13 @@ export function sumCorporateSectorAnnualRevenue(
  */
 export function sumCorporateSectorConstructionInProgress(
   sectors: readonly (CorporateSector & SectorCapexFields)[],
-  corporationId: ObjectId
+  corporationId: ObjectId,
+  currentTurn?: number | null
 ): number {
   const id = corporationId.toString();
-  return sumConstructionInProgressAnchor(sectors.filter((s) => s.corporationId.toString() === id));
+  return sectors
+    .filter((s) => s.corporationId.toString() === id)
+    .reduce((sum, sector) => sum + sectorConstructionInProgressAnchor(sector, currentTurn), 0);
 }
 
 export interface CorporateCreditComputationInput {

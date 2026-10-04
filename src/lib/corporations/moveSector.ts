@@ -9,12 +9,6 @@ import {
   rescaleBuildQueueForStrategyChange,
 } from "@/lib/constants/capacityEconomy";
 import type { SectorBuildOrder } from "@/lib/db/types";
-// CIP source of truth: the DENORMALIZED `constructionInProgressAnchor`, which
-// is what `mergeSectorPlantFields` sums and what every other consumer reads.
-// `sectorTurn` rewrites it from the post-landing queue every turn, so the two
-// agree by construction; recomputing from the queue here (as this file used to)
-// silently disagreed with the shared helper for any row whose two had drifted,
-// and made a merge quietly "heal" a drifted row on one path only.
 import { mergeSectorPlantFields } from "@/lib/corporations/sectorTransferCapex";
 
 /**
@@ -63,8 +57,9 @@ export async function moveSectorToCorp(
   // re-denominating it on the re-parent branch buys nothing — the restatement
   // writes it in the sector's HOST currency next tick regardless of who owns
   // the row. So under plants the quantity that moves is capacity: `capitalStock`
-  // (nameplate-invariant across a strategy difference, D9), the in-flight
-  // `buildQueue` (units rescaled by the same ratio) and its CIP anchor.
+  // (nameplate-invariant across a strategy difference, D9) and the in-flight
+  // `buildQueue` (units rescaled by the same ratio). The turn derives CIP from
+  // the queue as its single writer.
   const plantsEnabled = marketAtLeast(await getMarketSystemModeForDb(db), "plants");
 
   if (existing && !existing._id.equals(sector._id)) {
@@ -99,7 +94,6 @@ export async function moveSectorToCorp(
         {
           capitalStock: existing.capitalStock,
           buildQueue: existing.buildQueue,
-          constructionInProgressAnchor: existing.constructionInProgressAnchor,
           mothballed: existing.mothballed,
           activeCapacityPercent: existing.activeCapacityPercent,
           plantsStartTurn: existing.plantsStartTurn,
@@ -108,7 +102,6 @@ export async function moveSectorToCorp(
         {
           capitalStock: Math.round(donorStock * ratio * 100) / 100,
           buildQueue: donorQueue,
-          constructionInProgressAnchor: sector.constructionInProgressAnchor,
           mothballed: sector.mothballed,
           activeCapacityPercent: sector.activeCapacityPercent,
           plantsStartTurn: sector.plantsStartTurn,
@@ -127,7 +120,6 @@ export async function moveSectorToCorp(
           },
           $set: {
             ...merged,
-            constructionInProgressAnchor: Math.round(merged.constructionInProgressAnchor),
             updatedAt: now,
           },
         }

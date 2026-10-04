@@ -22,6 +22,8 @@ export type UserApiAccessSuccess = {
 
 export type UserApiAccessResult = UserApiAccessFailure | UserApiAccessSuccess;
 
+// These tokens contain 192 random bits from randomBytes, rather than a
+// user-chosen password. SHA-256 supports indexed lookups without a key migration.
 function hashToken(token: string): string {
   return crypto.createHash("sha256").update(token).digest("hex");
 }

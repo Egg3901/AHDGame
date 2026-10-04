@@ -1,5 +1,4 @@
-import "./ownershipTransition";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
@@ -76,6 +75,12 @@ vi.mock("./nationalCorporation", () => ({
 }));
 
 let db: MockDb;
+
+// Load the orchestration graph before per-test mocks are populated. A slow cold
+// import must not leave a timed-out test running into the next test's fixtures.
+beforeAll(async () => {
+  await import("./ownershipTransition");
+}, 60_000);
 
 beforeEach(() => {
   vi.clearAllMocks();

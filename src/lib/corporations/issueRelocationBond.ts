@@ -123,7 +123,7 @@ export async function previewRelocationBond(
   const totalEquity =
     liquidCapitalAnchor +
     sectorNPV +
-    sumCorporateSectorConstructionInProgress(sectors, corporation._id);
+    sumCorporateSectorConstructionInProgress(sectors, corporation._id, currentTurn);
   // Ticket #1198: a relocation bond is new borrowing, so it answers to the same
   // exit-equity ceiling as an ordinary issuance. Without it this route stayed
   // the open door to the going-concern-vs-realizable gap the ordinary route
@@ -136,6 +136,7 @@ export async function previewRelocationBond(
     fxByCurrency,
     primeRateByCountry,
     plantsEnabled,
+    currentTurn,
   });
   const availableBondCapacity = Math.max(
     0,

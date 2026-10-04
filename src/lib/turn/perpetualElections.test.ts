@@ -1479,6 +1479,33 @@ describe("perpetualElections", () => {
       expect(mock.insertCalls.flat()).toHaveLength(0);
     });
 
+    it("backfills the 1991 SNTV rule on a legacy live race once", async () => {
+      const now = new Date("2026-04-01T00:00:00Z");
+      const live = {
+        _id: new ObjectId(),
+        countryId: "JP",
+        electionType: "shugiin",
+        state: "KAN",
+        cycle: 1,
+        status: "active",
+        totalSeats: 145,
+      } as Election;
+      const mock = makeJPMockDb(["KAN"], [live], [], 100, "1991-default");
+      await mountJPDb(mock);
+
+      const { ensureJPElections } = await import("./perpetualElections");
+      await ensureJPElections(now);
+
+      expect(mock.electionsCollection.bulkWrite).toHaveBeenCalledWith([
+        {
+          updateOne: {
+            filter: { _id: live._id, allocationMethod: { $exists: false } },
+            update: { $set: { allocationMethod: "sntv", updatedAt: now } },
+          },
+        },
+      ]);
+    });
+
     it("spawns the next regular shugiin 'upcoming' with snap.endTurn + 192 anchor right after snap resolves", async () => {
       // Snap cycle 2 ended at LARP turn 299 (one turn before currentTurn).
       // Canonical post-snap cycle 3 endTurn = 299 + 192 = 491. startTurn = 491 − 192 = 299.

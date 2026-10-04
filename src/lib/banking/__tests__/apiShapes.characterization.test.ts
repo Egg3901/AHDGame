@@ -506,6 +506,7 @@ describe("POST /api/banking/loans", () => {
       "bankCorporationId",
       "borrowerId",
       "borrowerType",
+      "charteredTurn",
       "currency",
       "originatedTurn",
       "outstanding",
@@ -514,6 +515,7 @@ describe("POST /api/banking/loans", () => {
       "status",
       "termTurns",
     ]);
+    expect(body.loan.charteredTurn).toBe(retailCharter().charteredTurn);
   });
 });
 

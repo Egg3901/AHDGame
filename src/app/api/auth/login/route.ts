@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { createHash, randomUUID } from "crypto";
+import { createHash, randomBytes, randomUUID } from "crypto";
 import { getDb } from "@/lib/mongodb";
 import { SignJWT } from "jose";
 import { cookies } from "next/headers";
@@ -28,6 +28,10 @@ import {
 } from "@/lib/auth/unifiedMigration";
 import { issueUnifiedGameSession } from "@/lib/auth/unifiedGameSession";
 import { recordIdentitySignals } from "@/lib/identityHistory/recordObservation";
+
+// One random, unused hash per process gives unknown accounts a real bcrypt
+// comparison at the same cost as account registration, without a stored credential.
+const dummyPasswordHash = bcrypt.hashSync(randomBytes(32).toString("base64url"), 12);
 
 /** Partially redact an IP for display in forensic surfaces — never store the
  * raw address in `actionAuditLog.net` (plan §3.1 "net" doc-comment). */
@@ -86,10 +90,7 @@ export async function POST(request: Request) {
 
     if (!user) {
       // Perform dummy bcrypt compare to prevent timing-based username enumeration
-      await bcrypt.compare(
-        password,
-        "$2a$12$dummyhashfortimingprotectiononly00000000000000000000000"
-      );
+      await bcrypt.compare(password, dummyPasswordHash);
       recordAudit({
         source: "api",
         category: "auth",

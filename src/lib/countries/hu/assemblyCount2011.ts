@@ -109,6 +109,7 @@ export async function materializeHu2011Count(input: {
           status: 1,
           enteredAt: 1,
           characterName: 1,
+          constituencyId: 1,
         },
       }
     )
@@ -117,7 +118,18 @@ export async function materializeHu2011Count(input: {
     .collection<ElectionVoteTally>("electionVoteTallies")
     .find(
       { electionId: { $in: polls.map((row) => row._id) } },
-      { session, projection: { electionId: 1, totalVotes: 1, candidateParties: 1, finalized: 1 } }
+      {
+        session,
+        projection: {
+          electionId: 1,
+          totalVotes: 1,
+          candidateParties: 1,
+          finalized: 1,
+          huConstituencyVotes: 1,
+          huListVotes: 1,
+          huDistrictSlate: 1,
+        },
+      }
     )
     .toArray();
   const byPoll = new Map(polls.map((row) => [row._id.toHexString(), row]));
@@ -149,13 +161,48 @@ export async function materializeHu2011Count(input: {
   );
   const plan = buildHuMixedPlan(
     regions.map((row) => ({ id: String(row._id), population: row.population })),
-    polls.map((row) => ({
-      electionId: row._id.toHexString(),
-      regionId: row.state,
-      candidates: canonical.actors
-        .filter((actor) => actor.regionId === row.state)
-        .map((actor) => ({ candidateId: actor.id, partyId: actor.partyId, votes: actor.votes })),
-    }))
+    polls.map((row) => {
+      const tally = byTally.get(row._id.toHexString())!;
+      const resolveCandidateId = (id: string) => canonical.aliases[id] ?? id;
+      const constituencyVotes = tally.huConstituencyVotes
+        ? Object.fromEntries(
+            Object.entries(tally.huConstituencyVotes).map(([districtId, votesByCandidate]) => [
+              districtId,
+              Object.entries(votesByCandidate).reduce<Record<string, number>>(
+                (mapped, [candidateId, votes]) => {
+                  const targetId = resolveCandidateId(candidateId);
+                  mapped[targetId] = (mapped[targetId] ?? 0) + votes;
+                  return mapped;
+                },
+                {}
+              ),
+            ])
+          )
+        : undefined;
+      const districtSlate = tally.huDistrictSlate
+        ? Object.fromEntries(
+            Object.entries(tally.huDistrictSlate).map(([districtId, nomineesByParty]) => [
+              districtId,
+              Object.fromEntries(
+                Object.entries(nomineesByParty).map(([partyId, candidateId]) => [
+                  partyId,
+                  resolveCandidateId(candidateId),
+                ])
+              ),
+            ])
+          )
+        : undefined;
+      return {
+        electionId: row._id.toHexString(),
+        regionId: row.state,
+        constituencyVotes,
+        listVotes: tally.huListVotes,
+        districtSlate,
+        candidates: canonical.actors
+          .filter((actor) => actor.regionId === row.state)
+          .map((actor) => ({ candidateId: actor.id, partyId: actor.partyId, votes: actor.votes })),
+      };
+    })
   );
   const nominees = canonical.actors.map((actor) => {
     const row = byCandidate.get(actor.id)!;

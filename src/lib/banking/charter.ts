@@ -15,6 +15,7 @@ import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
 import { settleAtomicDocumentTransition } from "./atomicDocumentSettlement";
 import { oid } from "./rules/boundary";
 import { archiveCharter } from "@/lib/banking/charterHistory";
+import { loanCharterEpochFilter } from "@/lib/banking/loanEpoch";
 import { getLegalCharterTypes } from "@/lib/banking/separationLaw";
 import { freezeAccountsAt, returnDepositBook } from "@/lib/banking/depositBookReturn";
 import { lifecycleRefusal } from "@/lib/banking/rules/lifecycle";
@@ -160,6 +161,19 @@ export async function checkCharterEligibility(
   if (corporation.bankCharter?.status === "active") {
     reasons.push("Corporation already has an active bank charter");
   }
+  if (
+    corporation.bankCharter &&
+    corporation.bankCharter.status !== "active" &&
+    corporation.bankCharter.charteredTurn === (await getCurrentTurn(db))
+  ) {
+    reasons.push("A bank can be rechartered starting next turn");
+  }
+  if (
+    corporation.bankCharter?.status === "failed" &&
+    typeof corporation.bankCharter.depositorsResolvedTurn !== "number"
+  ) {
+    reasons.push("Resolve the failed bank estate before rechartering");
+  }
 
   // Bank / fund separation: a corporation that sponsors an index fund may not
   // also charter a bank. Creation-time only, so existing dual holders are
@@ -286,15 +300,15 @@ async function issueCharterInner(
   if (prior && prior.status !== "active") {
     await archiveCharter(db, corporationId, prior, charteredTurn, "recharter");
   }
-  // Servicing continues for these named loans and NPC tranches after renewal.
-  // Use the same current/arrears book as the turn, not a stale charter counter;
-  // pending requests and terminal defaults/repaid loans are not funded exposure.
+  // Seed the counter from only this charter's current/arrears epoch, not a
+  // stale charter counter. Pending requests and terminal loans are not exposure.
   const survivingLoans = await db
     .collection<BankLoan>("bankLoans")
     .find(
       {
         bankCorporationId: corporationId,
         status: { $in: ["current", "arrears"] },
+        ...loanCharterEpochFilter(charteredTurn),
       },
       { projection: { outstanding: 1 } }
     )

@@ -144,6 +144,7 @@ export default function WorldClient({
           </section>
 
           <FederationFinances snapshots={legacyFinances} />
+
           <div className="mt-12 grid gap-x-12 gap-y-12 xl:grid-cols-3">
             <div className="min-w-0 space-y-12 xl:col-span-2">
               {openRows.length > 0 && (

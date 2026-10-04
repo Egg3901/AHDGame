@@ -38,6 +38,7 @@ export function charterSnapshotFrom(
     type: charter.type,
     status: charter.status,
     currency: charter.currency,
+    charteredTurn: charter.charteredTurn,
     postedCapital: charter.postedCapital,
     cashReserves: charter.cashReserves,
     npcDeposits: charter.npcDeposits,

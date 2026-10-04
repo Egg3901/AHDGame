@@ -111,7 +111,7 @@ export interface TransitionConsequenceInput {
  * is false, no plant field is written, and every write here is byte-identical to
  * the pre-fix behaviour — which matters because below plants `capitalStock` is
  * owned and re-derived by capital mode, and spreading a fold would also stamp
- * `buildQueue: []` / `constructionInProgressAnchor: 0` / `mothballed: false` /
+ * `buildQueue: []` / `mothballed: false` /
  * `plantsStartTurn: null` onto rows that legitimately carry none of them.
  */
 async function absorbSectorIntoNatCorp(
@@ -147,12 +147,11 @@ async function absorbSectorIntoNatCorp(
       ? Math.max(0, sector.capitalStock)
       : 0;
   // The haircut lands on `capitalStock` and on `capitalStock` ONLY — the same
-  // rule `nationalizeSectorWide` carves by. `constructionInProgressAnchor` and
-  // each build order's `costPaidAnchor` are real ₳ a corp has ALREADY PAID:
-  // shaving 15% off them destroys money rather than capacity and breaks the
-  // invariant that a sector's CIP equals Σ of its own queue. In-flight builds
-  // therefore transfer whole — the state seizes a going concern, and the
-  // compensation paid upstream already prices CIP in (D11 replacement-cost book).
+  // rule `nationalizeSectorWide` carves by. Each build order's `costPaidAnchor`
+  // is real ₳ a corp has ALREADY PAID: shaving 15% off it destroys money rather
+  // than capacity. In-flight builds therefore transfer whole; the state seizes
+  // a going concern, and compensation already prices the queue into replacement
+  // cost book value.
   const haircutStock = Math.round(donorStock * keep * 100) / 100;
   // P5: the paid basis follows the capacity, at the same haircut, so the
   // per-unit basis of the surviving plant is unchanged. Only touched when the
@@ -206,12 +205,7 @@ async function absorbSectorIntoNatCorp(
           currentGrowthCost: sector.currentGrowthCost ?? 0,
         },
         $set: {
-          ...(merged
-            ? {
-                ...merged,
-                constructionInProgressAnchor: Math.round(merged.constructionInProgressAnchor),
-              }
-            : {}),
+          ...(merged ? { ...merged } : {}),
           absorbedAtTurn,
           nationalizedAtTurn: absorbedAtTurn,
           nationalizationTransitionMultiplier: transitionMultiplier,
@@ -467,6 +461,7 @@ export async function nationalizeSector(
     {
       plantsEnabled,
       currentYear: gameState?.currentYear,
+      currentTurn: gameState?.currentTurn,
       eraUnitScale: await loadWorldEraUnitScale(db),
     }
   );
@@ -645,7 +640,12 @@ export async function nationalizeWholeCorp(
   // D11: under plants the sector leg of balance-sheet equity is replacement-cost
   // book, not capitalized earnings.
   const sectorNpvAnchor = corpPlantsEnabled
-    ? sumSectorBookValueAnchor(targetSectors, corpGameState?.currentYear, corpEraUnitScale)
+    ? sumSectorBookValueAnchor(
+        targetSectors,
+        corpGameState?.currentYear,
+        corpEraUnitScale,
+        corpGameState?.currentTurn
+      )
     : computeSectorNpvSum(targetSectors, primeMap, target, fxByCurrency, {
         excludeGrowthCost: true,
       });
@@ -1016,6 +1016,7 @@ export async function payShareholders(
   // Public float → the national treasury (no value dropped). Same unified
   // treasury the rest of the nationalization money flows move (spec §5).
   if (allocation.publicFloatRow && allocation.publicFloatRow.payout > 0) {
+    // The treasury leg settles against the seized corporation like the holder rows.
     await creditTreasuryProceedsFromAnchor(
       db,
       target.countryId,

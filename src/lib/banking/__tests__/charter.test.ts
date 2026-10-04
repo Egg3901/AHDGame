@@ -318,7 +318,7 @@ describe("banking charter", () => {
       ]);
       return memory;
     }
-    it("carries surviving named and NPC exposure without funding pending or written-off claims", async () => {
+    it("does not carry closed charter loans into a reissued charter", async () => {
       const corp = makeCorp({ bankCharter: revoked() });
       const memory = charterWorld(corp);
       const rows = [
@@ -329,16 +329,51 @@ describe("banking charter", () => {
         { borrowerType: "corporation", status: "defaulted", outstanding: 800 },
         { borrowerType: "npcBulk", status: "repaid", outstanding: 700 },
         { borrowerType: "corporation", status: "rejected", outstanding: 500 },
-      ].map((loan) => ({ _id: new ObjectId(), bankCorporationId: corp._id, ...loan }));
+      ].map((loan) => ({
+        _id: new ObjectId(),
+        bankCorporationId: corp._id,
+        originatedTurn: 11,
+        ...loan,
+      }));
       memory.seed("bankLoans", rows);
       const database = memory as unknown as Db;
       const { issueCharter } = await importCharter();
       const result = await issueCharter(database, corp._id, "retail", "USD");
-      expect(result).toMatchObject({ ok: true, charter: { totalLoans: 1200 } });
+      expect(result).toMatchObject({ ok: true, charter: { totalLoans: 0 } });
       expect(memory.collection("bankLoans").docs).toEqual(rows);
       expect(await database.collection("corporations").findOne({ _id: corp._id })).toMatchObject({
         liquidCapital: 50_000_000 - (result.ok ? result.postedCapital : 0),
-        bankCharter: { totalLoans: 1200 },
+        bankCharter: { totalLoans: 0 },
+      });
+    });
+    it("rejects same-turn recharter so charteredTurn remains a unique epoch", async () => {
+      const corp = makeCorp({ bankCharter: { ...revoked(), charteredTurn: 42 } });
+      const memory = charterWorld(corp);
+      const database = memory as unknown as Db;
+      const { issueCharter } = await importCharter();
+
+      const result = await issueCharter(database, corp._id, "retail", "USD");
+
+      expect(result.ok).toBe(false);
+      if (!result.ok)
+        expect(result.reasons).toContain("A bank can be rechartered starting next turn");
+      expect(await database.collection("corporations").findOne({ _id: corp._id })).toMatchObject({
+        bankCharter: { status: "revoked", charteredTurn: 42 },
+      });
+    });
+    it("waits for failed estate resolution before rechartering", async () => {
+      const failed: BankCharter = { ...revoked(), status: "failed" };
+      const corp = makeCorp({ bankCharter: failed });
+      const database = charterWorld(corp) as unknown as Db;
+      const { issueCharter } = await importCharter();
+
+      const result = await issueCharter(database, corp._id, "retail", "USD");
+
+      expect(result.ok).toBe(false);
+      if (!result.ok)
+        expect(result.reasons).toContain("Resolve the failed bank estate before rechartering");
+      expect(await database.collection("corporations").findOne({ _id: corp._id })).toMatchObject({
+        bankCharter: { status: "failed", charteredTurn: 10 },
       });
     });
     it("rejects a stale reissue quote when a competing issuance and loan land after the book read", async () => {
@@ -353,6 +388,8 @@ describe("banking charter", () => {
           borrowerType: "corporation",
           status: "current",
           outstanding: 400,
+          charteredTurn: 10,
+          originatedTurn: 11,
         },
       ]);
       const database = memory as unknown as Db;
@@ -396,9 +433,11 @@ describe("banking charter", () => {
                   insert: {
                     _id: oid(new ObjectId().toHexString()),
                     bankCorporationId: oid(corp._id.toHexString()),
+                    charteredTurn: 42,
                     borrowerType: "corporation",
                     status: "current",
                     outstanding: 100,
+                    originatedTurn: 42,
                   },
                   note: "funded loan",
                 },
@@ -419,7 +458,7 @@ describe("banking charter", () => {
       expect((await issueCharter(database, corp._id, "retail", "USD")).ok).toBe(false);
       expect(await database.collection("corporations").findOne({ _id: corp._id })).toMatchObject({
         liquidCapital: 50_000_000 - requirement,
-        bankCharter: { status: "active", totalLoans: 500, cashReserves: requirement - 100 },
+        bankCharter: { status: "active", totalLoans: 100, cashReserves: requirement - 100 },
       });
       expect(
         await database.collection("corporations").findOne({ _id: borrower._id })

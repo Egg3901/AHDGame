@@ -121,6 +121,7 @@ export async function computeSectorNationalizationPreview(
             {
               plantsEnabled,
               currentYear: previewCurrentYear,
+              currentTurn,
               fraction: f,
               eraUnitScale: previewEraUnitScale,
             }

@@ -23,6 +23,9 @@
  *    deposit insurance fund. That is subrogation, and it is the only
  *    destination that does not either strand the money on a dead charter or
  *    hand a windfall to a shareholder who has already been paid out.
+ *  - **If the charter is already archived**, no live resolution pass can
+ *    distribute its snapshot, so recovery goes to the insurer as a safe
+ *    fallback for legacy data that predates the unresolved-estate guard.
  *
  * Both destinations go through the same money primitive under the same per-loan
  * key as a normal servicing pass, so a retried turn cannot charge a borrower
@@ -32,10 +35,11 @@
 import type { Db } from "mongodb";
 import { lifecycleStage, stageAllows } from "@/lib/banking/rules/lifecycle";
 import type { Corporation } from "@/lib/db/types";
-import type { BankLoan } from "@/lib/db/types/bank";
+import type { BankCharterHistoryEntry, BankLoan } from "@/lib/db/types/bank";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { MoneyTarget } from "@/lib/banking/moneyMove";
 import { ensureFund } from "@/lib/banking/insurance";
+import { loanCharterEpochFilter } from "@/lib/banking/loanEpoch";
 
 export type DeadBankLoanSummary = {
   /** Loans belonging to a wound-up bank that were serviced this turn. */
@@ -56,36 +60,123 @@ type DeadBank = {
   corporationId: Corporation["_id"];
   name: string;
   currency: CurrencyCode;
+  charteredTurn: number;
+  nextCharteredTurn?: number;
+  historyId?: BankCharterHistoryEntry["_id"];
   /** True once the deposit book has been returned and the estate is closed. */
   resolved: boolean;
 };
 
 /** Banks whose charter has ended but whose loan book has not. */
 export async function findDeadBanksWithLoans(db: Db): Promise<DeadBank[]> {
+  const history = await db
+    .collection<BankCharterHistoryEntry>("bankCharterHistory")
+    .find({})
+    .toArray();
+  const historicalCorporationIds = [
+    ...new Map(
+      history.map((entry) => [entry.corporationId.toString(), entry.corporationId])
+    ).values(),
+  ];
   const corps = await db
     .collection<Corporation>("corporations")
-    .find({ "bankCharter.status": { $in: ["failed", "revoked"] } })
+    .find({
+      $or: [
+        { "bankCharter.status": { $in: ["failed", "revoked"] } },
+        ...(historicalCorporationIds.length > 0
+          ? [{ _id: { $in: historicalCorporationIds } }]
+          : []),
+      ],
+    })
     .project<Pick<Corporation, "_id" | "name" | "bankCharter">>({
       name: 1,
       bankCharter: 1,
     })
     .toArray();
-
-  return corps
-    .filter((corp) => corp.bankCharter)
+  const turnsByCorporation = new Map<string, Set<number>>();
+  const addEpoch = (corporationId: Corporation["_id"], charteredTurn: number) => {
+    const key = corporationId.toString();
+    const turns = turnsByCorporation.get(key) ?? new Set<number>();
+    turns.add(charteredTurn);
+    turnsByCorporation.set(key, turns);
+  };
+  for (const entry of history) addEpoch(entry.corporationId, entry.charter.charteredTurn);
+  for (const corp of corps) {
+    if (corp.bankCharter) addEpoch(corp._id, corp.bankCharter.charteredTurn);
+  }
+  const nextEpoch = (corporationId: Corporation["_id"], charteredTurn: number) => {
+    return [...(turnsByCorporation.get(corporationId.toString()) ?? [])]
+      .filter((turn) => turn > charteredTurn)
+      .sort((a, b) => a - b)[0];
+  };
+  const nextEpochField = (corporationId: Corporation["_id"], charteredTurn: number) => {
+    const nextCharteredTurn = nextEpoch(corporationId, charteredTurn);
+    return nextCharteredTurn === undefined ? {} : { nextCharteredTurn };
+  };
+  const deadBanks = corps
+    .filter((corp) => corp.bankCharter && corp.bankCharter.status !== "active")
     .map((corp) => ({
       corporationId: corp._id,
       name: corp.name,
       currency: corp.bankCharter!.currency as CurrencyCode,
+      charteredTurn: corp.bankCharter!.charteredTurn,
+      ...nextEpochField(corp._id, corp.bankCharter!.charteredTurn),
       // A revoked charter has already run the waterfall on the way out, so its
       // estate is closed the moment it is revoked. A failed one is closed only
       // once the resolution sweep has stamped it.
       resolved: stageAllows(lifecycleStage(corp.bankCharter), "windDownEstate"),
     }));
+  const nameById = new Map(corps.map((corp) => [corp._id.toString(), corp.name]));
+  const liveEstateEpochs = new Set(
+    corps
+      .filter((corp) => corp.bankCharter && corp.bankCharter.status !== "active")
+      .map((corp) => `${corp._id.toString()}:${corp.bankCharter!.charteredTurn}`)
+  );
+  deadBanks.push(
+    ...history
+      .filter((entry) => entry.charter.status === "failed" || entry.charter.status === "revoked")
+      .map((entry) => ({
+        corporationId: entry.corporationId,
+        name: nameById.get(entry.corporationId.toString()) ?? "Former bank",
+        currency: entry.charter.currency as CurrencyCode,
+        charteredTurn: entry.charter.charteredTurn,
+        ...nextEpochField(entry.corporationId, entry.charter.charteredTurn),
+        historyId: entry._id,
+        // Once replaced, a failed snapshot has no live waterfall to distribute
+        // it. Old deployments could archive before resolution, so use insurance.
+        resolved:
+          !liveEstateEpochs.has(
+            `${entry.corporationId.toString()}:${entry.charter.charteredTurn}`
+          ) || stageAllows(lifecycleStage(entry.charter), "windDownEstate"),
+      }))
+  );
+
+  // Type switches can archive the same charter epoch more than once. Keep one
+  // recovery owner per originating epoch, preferring the resolved snapshot.
+  const byEpoch = new Map<string, DeadBank>();
+  for (const bank of deadBanks) {
+    const key = `${bank.corporationId.toString()}:${bank.charteredTurn}`;
+    const prior = byEpoch.get(key);
+    if (!prior || (bank.resolved && !prior.resolved)) byEpoch.set(key, bank);
+  }
+  return [...byEpoch.values()];
 }
 
 /** Where a payment to this dead bank should land. */
-export function recoveryTargetFor(bank: DeadBank): MoneyTarget {
+export function recoveryTargetFor(
+  bank: Pick<DeadBank, "corporationId" | "name" | "currency" | "resolved" | "historyId">
+): MoneyTarget {
+  // An archived snapshot has no active resolution waterfall to distribute its
+  // reserve balance. Route these legacy recoveries to the insurer rather than
+  // strand cash in a history document no later pass will debit.
+  if (bank.historyId) {
+    return {
+      collection: "depositInsuranceFunds",
+      filter: { _id: bank.currency },
+      path: "balance",
+      note: `recovery for ${bank.name}'s archived loan book goes to the insurer`,
+    };
+  }
   if (!bank.resolved) {
     return {
       collection: "corporations",
@@ -127,15 +218,15 @@ export async function processDeadBankLoans(
       .collection<BankLoan>("bankLoans")
       .find({
         bankCorporationId: bank.corporationId,
-        borrowerType: { $in: ["character", "corporation"] },
         status: { $in: ["current", "arrears"] },
         lastProcessedTurn: { $ne: turn },
+        ...loanCharterEpochFilter(bank.charteredTurn, bank.nextCharteredTurn),
       })
       .toArray();
     if (loans.length === 0) continue;
 
     const target = recoveryTargetFor(bank);
-    if (bank.resolved) {
+    if (bank.resolved || bank.historyId) {
       // The fund document has to exist before anything is paid into it: a
       // recovery credited to a missing fund is money that silently stops
       // existing, which is the whole class of bug this work is about.
@@ -154,5 +245,3 @@ export async function processDeadBankLoans(
 
   return summary;
 }
-
-export type { DeadBank };

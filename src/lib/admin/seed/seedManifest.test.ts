@@ -95,9 +95,9 @@ describe("runtime lifecycle category determines reset selection", () => {
     "bargainingCampaigns",
     "collectiveAgreements",
     "landeslisten",
+    "fundFloatSettlements",
     "bg1991ListReplacements",
     "bgGrandConstituencyByElections",
-    "fundFloatSettlements",
   ])("wipes %s instead of treating it as reference data", (name) => {
     expect(getCollectionCategory(name)).toBe("runtime");
     expect(getRuntimeCollectionNames()).toContain(name);

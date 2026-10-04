@@ -1,9 +1,14 @@
 import { countPrStv, validateRankedBallots } from "@/lib/turn/election/rules/prStv";
 import type { PoliticalParty, PrimarySnapshot, ElectionVoteTally } from "@/lib/db/types";
-import { getMultiSeatMinShare, largestRemainderSeats } from "@/lib/turn/election/seatAllocation";
+import {
+  getMultiSeatMinShare,
+  largestRemainderSeats,
+  sntvSeats,
+} from "@/lib/turn/election/seatAllocation";
 import type { PartyGroup } from "./candidateEnrichment";
 import type { PollingData } from "./electionResponseTypes";
 import { MULTI_SEAT_TYPES } from "@/lib/utils/electionLabels";
+import type { ElectionMethod } from "@/lib/constants/countries";
 
 // ---------------------------------------------------------------------------
 // Hamilton (Largest-Remainder) seat estimate helper
@@ -22,7 +27,8 @@ export function computeSeatEstimates(
   totalSeats: number | null | undefined,
   tally: ElectionVoteTally | null,
   activeCandidateIdSet: Set<string>,
-  countryId?: string
+  countryId?: string,
+  allocationMethod?: ElectionMethod
 ): Record<string, number> | null {
   if (tally?.bgOrdinaryBallot || tally?.bulgarianFoundingBallot) return null;
   // Same gate as the engine (allocateSeats + the per-turn estimate in
@@ -55,6 +61,17 @@ export function computeSeatEstimates(
     }
   }
   if (totalActiveVotes === 0) return null;
+
+  if (allocationMethod === "sntv") {
+    return sntvSeats(
+      [...activeCandidateIdSet].map((id) => ({
+        id,
+        votes: activeVotes[id] ?? 0,
+        isNPP: tally.candidateIsNPP?.[id],
+      })),
+      totalSeats
+    );
+  }
 
   const minShare = getMultiSeatMinShare(electionType, totalSeats, countryId);
 

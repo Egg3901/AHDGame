@@ -165,7 +165,7 @@ describe("GranularPollPanel", () => {
 
   it("exports CSV when the export button is clicked", () => {
     const poll = buildUsMockPoll();
-    const createObjectURL = vi.fn(() => "blob:url");
+    const createObjectURL = vi.fn((_blob: Blob) => "blob:url");
     const revokeObjectURL = vi.fn();
     URL.createObjectURL = createObjectURL;
     URL.revokeObjectURL = revokeObjectURL;
@@ -176,6 +176,19 @@ describe("GranularPollPanel", () => {
 
     expect(createObjectURL).toHaveBeenCalledOnce();
     expect(revokeObjectURL).toHaveBeenCalledOnce();
+  });
+
+  it("doubles embedded quotes in CSV fields", async () => {
+    const poll = buildUsMockPoll();
+    const dimension = poll.granular!.dims[0];
+    poll.granular!.dimLabels[dimension] = 'Label, with "quotes"\nand a newline';
+    const createObjectURL = vi.fn((_blob: Blob) => "blob:url");
+    URL.createObjectURL = createObjectURL;
+    URL.revokeObjectURL = vi.fn();
+    render(<GranularPollPanel poll={poll} pollData={mockPollData} />);
+    fireEvent.click(screen.getByLabelText("Export granular poll data as CSV"));
+    const blob = createObjectURL.mock.calls[0][0] as unknown as Blob;
+    expect(await blob.text()).toContain('"Label, with ""quotes""\nand a newline"');
   });
 
   it("renders segment explorer chips and shows a segment card on selection", () => {

@@ -619,6 +619,7 @@ export function decideBankCommand(
       const loanDoc = {
         _id: oid(command.loanId),
         bankCorporationId: oid(snapshot.bankId),
+        charteredTurn: active!.charteredTurn,
         currency: snapshot.currency,
         borrowerType: command.borrower.type,
         borrowerId: oid(command.borrower.id),

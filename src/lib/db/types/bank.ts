@@ -238,6 +238,8 @@ export interface BankCharterHistoryEntry {
 export interface BankLoan {
   _id: ObjectId;
   bankCorporationId: ObjectId;
+  /** Charter epoch that originated this loan. Legacy values use originatedTurn until backfilled. */
+  charteredTurn?: number;
   currency: CurrencyCode;
   borrowerType: "corporation" | "character" | "npcBulk";
   borrowerId?: ObjectId;

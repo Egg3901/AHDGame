@@ -312,3 +312,35 @@ describe("issue #2168 summary projections", () => {
     expect(batchCall?.[1]?.projection ?? null).toBeNull();
   });
 });
+
+describe("Hungarian modern election response", () => {
+  it("retains the district-filing rule for the full client response without exposing authorization metadata", async () => {
+    const db = createMockDb();
+    const election = makeElection({
+      countryId: "HU",
+      electionType: "general",
+      state: "HU",
+      status: "upcoming",
+      startTurn: 20,
+      hungarianModernAssembly: {
+        ruleVersion: "mixed-2011-v1",
+        authorizedOnTurn: 10,
+        reason: "parliamentary_decision",
+      },
+    });
+    db.collection("elections").findOne.mockResolvedValue(election);
+    db.collection("gameState").findOne.mockResolvedValue({
+      _id: "current",
+      preset: "1991",
+      currentYear: 2014,
+      currentTurn: 10,
+      isActive: true,
+    });
+    const [response] = await resolveElections(db as unknown as Db, [election], {
+      view: "full",
+      userId: null,
+    });
+    expect(response.countryId).toBe("HU");
+    expect(response.hungarianModernAssembly).toEqual({ ruleVersion: "mixed-2011-v1" });
+  });
+});

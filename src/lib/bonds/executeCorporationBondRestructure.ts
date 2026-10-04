@@ -112,6 +112,7 @@ export async function executeCorporationBondRestructure(
     {
       plantsEnabled,
       currentYear: gameState?.currentYear,
+      currentTurn: gameState?.currentTurn,
       eraUnitScale: await loadWorldEraUnitScale(db),
     }
   );
