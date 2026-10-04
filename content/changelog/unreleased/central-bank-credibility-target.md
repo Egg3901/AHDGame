@@ -20,3 +20,4 @@ areas: [fullstack]
 - Explain the difference between the displayed prime-minus-inflation spread and credibility scoring.
 - Preserve credibility and recovery progress when a shared currency lacks complete member-country indicators.
 - Load the NPP chair's stored hawk or dove stance when scoring its policy choices.
+- Add source-pinned sandbox scrutiny and CPI trajectories with bounded exports for balance qualification.
