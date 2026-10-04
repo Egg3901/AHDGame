@@ -213,6 +213,8 @@ export interface BankingTransition {
   turn: number;
   currency: string;
   legs: TransitionLeg[];
+  /** Retry a guarded credit leg from this frozen receipt after its target becomes eligible. */
+  retryCreditLegOnGuardFailure?: boolean;
   projections: TransitionProjection[];
   event: TransitionEvent;
 }
