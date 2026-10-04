@@ -160,7 +160,12 @@ export async function prepareConstructionBuildEffects(input: {
     value: {
       transition,
       feeLocal,
-      pool: { id: String(pool._id), bucket: input.bucket, eraUnitScale: input.eraUnitScale },
+      pool: {
+        id: String(pool._id),
+        bucket: input.bucket,
+        eraUnitScale: input.eraUnitScale,
+        units: input.units,
+      },
       quotedAt: now,
     },
   };

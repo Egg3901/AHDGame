@@ -11,6 +11,7 @@ import type {
   ExchangeRate,
 } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import { currencyForCountry } from "@/lib/currency/sectorFxSpread";
 import { netPerTurnDebtServiceAnchor } from "@/lib/bonds/corpBondCashflows";
 import {
   buildActiveMarketBuckets,
@@ -549,6 +550,18 @@ export async function processNppCorporationDecisions(
           ...intent,
           corporation: corp,
           currency: corpCurrency,
+          buildContext: {
+            destinationCurrency: currencyForCountry(intent.sector.countryId ?? corp.countryId),
+            bucket: {
+              stateId: intent.sector.stateId,
+              countryId: intent.sector.countryId ?? corp.countryId,
+              sectorType: intent.sector.sectorType,
+              industryModel: intent.sector.industryModel ?? null,
+              mediaDiscriminator: intent.sector.mediaDiscriminator ?? null,
+            },
+            eraUnitScale: plants?.eraUnitScale ?? 1,
+            growthUnits: intent.growthUnits,
+          },
         });
       }
     }
@@ -1948,6 +1961,7 @@ export function makeNppCorpDecision(
           order,
           costLocal,
           cashContributionLimitLocal,
+          growthUnits: candidate.growthUnits,
           priority: candidate.interventionPriority,
           fill: candidate.fill,
         });

@@ -71,7 +71,8 @@ export function quoteConstructionCancellation(input: {
   const pipeline = pool
     ? unownedPoolCredit(
         pool.bucket,
-        queue[orderIndex].unitsOrdered * (1 - deliveredFraction(queue[orderIndex], turn)),
+        (pool.units ?? queue[orderIndex].unitsOrdered) *
+          (1 - deliveredFraction(queue[orderIndex], turn)),
         input.now ?? claim.effects!.quotedAt,
         pool.eraUnitScale
       )

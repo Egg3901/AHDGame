@@ -741,6 +741,7 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
           destinationCurrency: currencyForCountry(countryId),
           bucket: poolBucket,
           eraUnitScale,
+          growthUnits: units,
         },
       });
       if (!finance.ok) return NextResponse.json({ error: finance.error }, { status: 409 });

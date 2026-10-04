@@ -112,6 +112,50 @@ function world(outstanding = 75_000, epoch = 2, defaults = false) {
 }
 
 describe("principal-first financed build cancellation", () => {
+  it("returns only the growth portion of a financed mixed replacement build", async () => {
+    const w = world();
+    const poolId = new ObjectId();
+    w.memory.seed("unownedSectors", [
+      {
+        _id: poolId,
+        stateId: "CA",
+        countryId: "US",
+        sectorType: "manufacturing",
+        industryModel: null,
+        mediaDiscriminator: null,
+        headroomUnits: 150,
+        revenue: 150_000,
+      },
+    ]);
+    await w.db.collection("corporateSectors").updateOne(
+      { _id: w.sectorId },
+      {
+        $set: {
+          "constructionFinancing.effects": {
+            transition: {},
+            feeLocal: 0,
+            pool: {
+              id: poolId.toHexString(),
+              bucket: {
+                stateId: "CA",
+                countryId: "US",
+                sectorType: "manufacturing",
+              },
+              eraUnitScale: 1,
+              units: 35,
+            },
+            quotedAt: new Date("2026-10-04T00:00:00Z"),
+          },
+        },
+      }
+    );
+
+    expect(await cancelFinancedConstruction(w.input)).toMatchObject({ ok: true });
+    expect(await w.db.collection("unownedSectors").findOne({ _id: poolId })).toMatchObject({
+      headroomUnits: 185,
+    });
+  });
+
   it("returns an unencumbered build's refund after secured principal was fully repaid", async () => {
     const { db, memory, sectorId, borrowerId, loanId } = world(0);
     await db.collection("bankLoans").updateOne({ _id: loanId }, { $set: { status: "repaid" } });
