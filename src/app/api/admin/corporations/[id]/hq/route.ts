@@ -16,7 +16,7 @@ import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError, notFound } from "@/lib/api/errors";
-import type { Corporation } from "@/lib/db/types";
+import type { Corporation, CorporateSector } from "@/lib/db/types";
 import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import {
@@ -31,6 +31,7 @@ import type { Character } from "@/lib/db/types/character";
 import type { ImperialCharacter } from "@/lib/db/types/imperialCharacter";
 import { doesCeoResideAtHeadquarters, vacateCorporationCeo } from "@/lib/corporations/ceoResidency";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
+import { hasProtectedConstructionPropertyIn } from "@/lib/corporations/securedConstructionProperty";
 
 const schema = z.object({
   countryId: z.enum(["US", "UK", "JP", "DE"]),
@@ -53,6 +54,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       .findOne({ _id: new ObjectId(id) });
     if (!corp) throw notFound("Corporation not found");
 
+    const propertySectors = await db
+      .collection<CorporateSector>("corporateSectors")
+      .find({ corporationId: corp._id })
+      .toArray();
+    if (hasProtectedConstructionPropertyIn(propertySectors)) {
+      return NextResponse.json(
+        { error: "Resolve secured construction before relocating corporate headquarters" },
+        { status: 409 }
+      );
+    }
+
     const now = new Date();
     const crossCountry = corp.countryId !== parsed.data.countryId;
     const newCurrency = COUNTRY_CURRENCY_MAP[parsed.data.countryId] as CurrencyCode | undefined;
@@ -70,7 +82,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         newCurrency,
         fxByCurrency,
         now,
-        forexEnabled
+        forexEnabled,
+        propertySectors
       );
       if (!convResult.ok) {
         return NextResponse.json(

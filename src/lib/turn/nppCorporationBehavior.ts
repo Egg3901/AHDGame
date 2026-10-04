@@ -35,6 +35,7 @@ import {
   type StrategySituation,
 } from "@/lib/turn/npp/corpStrategy";
 import { chooseNppStrategyRetool } from "@/lib/turn/npp/strategyRetooling";
+import { hasProtectedConstructionProperty } from "@/lib/corporations/securedConstructionProperty";
 import { glutStaggerEligible } from "@/lib/turn/npp/cohort";
 import {
   analyzeSectorProfitability,
@@ -782,6 +783,7 @@ export function makeNppCorpDecision(
   if (numSectors > 1) {
     for (const sp of sectorProfits) {
       if (
+        !hasProtectedConstructionProperty(sp.sector) &&
         sp.income < 0 &&
         sp.margin <= modifiers.divestMarginFloor + levers.divestMarginFloorDelta
       ) {
@@ -819,6 +821,7 @@ export function makeNppCorpDecision(
         (sp) =>
           (sp.sector.lowFillTurns ?? 0) >= STRANDED_DIVEST_TURNS &&
           !isCoreSector(sp.sector) &&
+          !hasProtectedConstructionProperty(sp.sector) &&
           sp.sector.mothballed !== true &&
           !divestedSectorIds.includes(sp.sector._id)
       )
