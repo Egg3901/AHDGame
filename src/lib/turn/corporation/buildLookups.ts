@@ -244,6 +244,7 @@ export async function buildCorporationLookups(
                   outputUnitsByCommodity: 0,
                   outputAnchorByCommodity: 0,
                   productQualityByCommodity: 0,
+                  productOutputCapacityUnits: 0,
                 }),
           },
         }

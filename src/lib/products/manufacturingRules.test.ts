@@ -6,6 +6,8 @@ import {
   allocateManufacturedOutput,
   buildManufacturedSectorOutput,
   productQualityForCommodity,
+  resizeMeasuredManufacturedUnits,
+  scaleManufacturedSectorOutput,
 } from "./manufacturingRules";
 
 describe("manufacturing product line rules", () => {
@@ -19,15 +21,15 @@ describe("manufacturing product line rules", () => {
       basePrices: { steel: 100, building_materials: 50, vehicles: 250 },
     });
 
-    expect(result.nominalOutputAnchorByCommodity.steel).toBe(60);
-    expect(result.nominalOutputAnchorByCommodity.building_materials).toBe(30);
-    expect(result.nominalOutputAnchorByCommodity.vehicles).toBeCloseTo(210);
+    expect(result.nominalOutputAnchorByCommodity.steel).toBeCloseTo(75);
+    expect(result.nominalOutputAnchorByCommodity.building_materials).toBeCloseTo(75);
+    expect(result.nominalOutputAnchorByCommodity.vehicles).toBeCloseTo(350);
     expect(Object.values(result.nominalOutputAnchorByCommodity).reduce((a, b) => a + b, 0)).toBe(
-      300
+      500
     );
-    expect(result.outputUnitsByCommodity.steel).toBe(0.6);
-    expect(result.outputUnitsByCommodity.building_materials).toBe(0.6);
-    expect(result.outputUnitsByCommodity.vehicles).toBeCloseTo(0.84);
+    expect(result.outputUnitsByCommodity.steel).toBeCloseTo(0.75);
+    expect(result.outputUnitsByCommodity.building_materials).toBeCloseTo(1.5);
+    expect(result.outputUnitsByCommodity.vehicles).toBeCloseTo(1.4);
     expect(result.inputThroughputShare).toBe(0.5);
   });
 
@@ -156,17 +158,95 @@ describe("manufacturing product line rules", () => {
     });
 
     expect(Object.values(output.outputAnchorByCommodity).reduce((a, b) => a + b, 0)).toBeCloseTo(
-      600,
+      1000,
       6
     );
-    expect(output.outputAnchorByCommodity.steel).toBeCloseTo(260, 6);
-    expect(output.outputAnchorByCommodity.building_materials).toBeCloseTo(130, 6);
-    expect(output.outputAnchorByCommodity.vehicles).toBeCloseTo(210, 6);
+    expect(output.outputAnchorByCommodity.steel).toBeCloseTo(325, 6);
+    expect(output.outputAnchorByCommodity.building_materials).toBeCloseTo(325, 6);
+    expect(output.outputAnchorByCommodity.vehicles).toBeCloseTo(350, 6);
     expect(output.productQualityByCommodity).toEqual({
       steel: 40,
       building_materials: 50,
       vehicles: 70,
     });
+  });
+
+  it("preserves the exact legacy mix and nominal value before development or at zero allocation", () => {
+    const base = {
+      outputAnchor: 10_000,
+      supplyRates: { steel: 0.4, building_materials: 0.2 },
+      stage: "development" as const,
+      outputCommodity: "building_materials" as const,
+      basePrices: { steel: 100, building_materials: 50 },
+      paidDevelopmentAnchor: 0,
+      paidThresholdAnchor: 1000,
+    };
+    const development = buildManufacturedSectorOutput({ ...base, allocationShare: 0.8 });
+    const zeroAllocation = buildManufacturedSectorOutput({
+      ...base,
+      stage: "mature",
+      allocationShare: 0,
+    });
+
+    expect(development.outputUnitsByCommodity).toEqual({ steel: 50, building_materials: 100 });
+    expect(development.outputAnchorByCommodity).toEqual({ steel: 5000, building_materials: 5000 });
+    expect(zeroAllocation.outputUnitsByCommodity).toEqual(development.outputUnitsByCommodity);
+    expect(zeroAllocation.outputAnchorByCommodity).toEqual(development.outputAnchorByCommodity);
+  });
+
+  it("scales product quantity and nominal value by the same production factor at stage identity", () => {
+    const baseline = buildManufacturedSectorOutput({
+      outputAnchor: 10_000,
+      supplyRates: { steel: 0.4, building_materials: 0.2 },
+      allocationShare: 0,
+      stage: "mature",
+      outputCommodity: "vehicles",
+      basePrices: { steel: 100, building_materials: 50, vehicles: 250 },
+      paidDevelopmentAnchor: 1_000,
+      paidThresholdAnchor: 1_000,
+    });
+    const scaled = scaleManufacturedSectorOutput(baseline, 0.6);
+
+    expect(scaled.outputUnitsByCommodity).toEqual({ steel: 30, building_materials: 60 });
+    expect(scaled.outputAnchorByCommodity).toEqual({ steel: 3_000, building_materials: 3_000 });
+    for (const commodity of ["steel", "building_materials"] as const) {
+      expect(
+        scaled.outputAnchorByCommodity[commodity]! / scaled.outputUnitsByCommodity[commodity]!
+      ).toBe(baseline.outputAnchorByCommodity[commodity]! / baseline.outputUnitsByCommodity[commodity]!);
+    }
+    expect(Object.values(scaled.outputAnchorByCommodity).reduce((a, b) => a + (b ?? 0), 0)).toBe(
+      6_000
+    );
+    expect(
+      Object.values(scaleManufacturedSectorOutput(baseline, 1.25).outputAnchorByCommodity).reduce(
+        (a, b) => a + (b ?? 0),
+        0
+      )
+    ).toBe(12_500);
+  });
+
+  it("resizes lagged realized throughput on today's producing capacity basis", () => {
+    expect(
+      resizeMeasuredManufacturedUnits({
+        producedUnits: 130,
+        currentCapacityUnits: 250,
+        snapshotCapacityUnits: 200,
+      })
+    ).toBeCloseTo(162.5);
+    expect(
+      resizeMeasuredManufacturedUnits({
+        producedUnits: 130,
+        currentCapacityUnits: 150,
+        snapshotCapacityUnits: 200,
+      })
+    ).toBeCloseTo(97.5);
+    expect(
+      resizeMeasuredManufacturedUnits({
+        producedUnits: 250,
+        currentCapacityUnits: 200,
+        snapshotCapacityUnits: 100,
+      })
+    ).toBeCloseTo(500);
   });
 
   it("uses live commodity quality and only a bounded paid-development contribution", () => {

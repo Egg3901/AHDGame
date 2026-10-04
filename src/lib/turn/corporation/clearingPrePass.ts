@@ -56,6 +56,13 @@ import {
   supportsCostPlusPricing,
   validCostPlusBasis,
 } from "@/lib/market/costPlusPricing/rules";
+import {
+  buildManufacturedSectorOutput,
+  resizeMeasuredManufacturedUnits,
+  scaleManufacturedSectorOutput,
+} from "@/lib/products/manufacturingRules";
+import { getManufacturingProductKind } from "@/lib/products/manufacturingCatalog";
+import { isLegalManufacturingProductForPlant } from "@/lib/products/manufacturingEligibility";
 
 /**
  * Clearing pre-pass for the corporation turn, extracted from index.ts so the
@@ -258,6 +265,90 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
             lookups.stateResourceCapacityByState.get(sector.stateId)
           ),
         };
+        const productProject = lookups.productLinesV2Enabled
+          ? lookups.manufacturingProductByCorpId?.get(corpId)
+          : undefined;
+        const productAllocation = productProject?.allocations.find(
+          (allocation) => allocation.sectorId === sector._id.toString()
+        );
+        const productKind = productProject
+          ? getManufacturingProductKind(productProject.kindId)
+          : undefined;
+        const exactProductOutput =
+          market.plantsEnabled &&
+          productProject &&
+          productAllocation &&
+          productKind &&
+          isLegalManufacturingProductForPlant(productProject.kindId, {
+            sectorId: sector._id.toString(),
+            corporationId: corpId,
+            sectorType: sector.sectorType,
+            strategyId: sector.strategyId,
+            capitalStock: sector.capitalStock ?? 0,
+            plantCount: sector.plantCount ?? 0,
+            mothballed: sector.mothballed,
+          })
+            ? (() => {
+                const capacitySnapshot =
+                  typeof sector.productOutputCapacityUnits === "number" &&
+                  Number.isFinite(sector.productOutputCapacityUnits)
+                    ? sector.productOutputCapacityUnits
+                    : (sector.operatingCapacityUnits ?? sector.capitalStock ?? 0);
+                const currentCapacity = sector.operatingCapacityUnits ?? sector.capitalStock ?? 0;
+                const measuredUnits = resizeMeasuredManufacturedUnits({
+                  producedUnits: sector.producedUnits ?? 0,
+                  currentCapacityUnits: currentCapacity,
+                  snapshotCapacityUnits: capacitySnapshot,
+                });
+                const basePrices = eraScaledBasePrices(lookups.eraUnitScale);
+                const outputAnchor = Object.keys(rates.supply ?? {}).reduce(
+                  (sum, rawCommodity) => {
+                    const commodity = rawCommodity as CommodityType;
+                    const units =
+                      measuredUnits *
+                      commodityMixWeight(rates.supply ?? {}, basePrices, commodity);
+                    return sum + units * (basePrices[commodity] ?? 0);
+                  },
+                  0
+                );
+                return buildManufacturedSectorOutput({
+                  outputAnchor,
+                  supplyRates: (rates.supply ?? {}) as Partial<Record<CommodityType, number>>,
+                  allocationShare: productAllocation.share,
+                  stage: productProject.stage,
+                  outputCommodity: productKind.outputCommodity,
+                  basePrices,
+                  currentSectorQualityByCommodity: Object.fromEntries(
+                    Object.keys(rates.supply ?? {}).map((commodity) => [
+                      commodity,
+                      lookups.productSectorQualityById?.get(sector._id.toString()),
+                    ])
+                  ) as Partial<Record<CommodityType, number>>,
+                  paidDevelopmentAnchor: productProject.developmentPaidAnchor,
+                  paidThresholdAnchor: productProject.paidThresholdAnchor,
+                });
+            })()
+            : null;
+        const productOfferScale = exactProductOutput
+          ? (scaleMeasuredProducedUnits({
+              producedUnits: 1,
+              isNatcorp: !!lookups.corpById.get(corpId)?.countryOwnerId,
+              embargoSupplyFactor:
+                embargoSupplyFactorFor(sector) *
+                plannedEconomyMediaSupplyFactor(
+                  sector.sectorType,
+                  isPlannedEconomy(
+                    (sector as { countryId?: string }).countryId,
+                    currentYear,
+                    commandEconomyEnabled
+                  )
+                ),
+              militaryRetainedFraction: 1 - freshMilitaryDiversion(sector, turn ?? 0),
+            }) ?? 0)
+          : 0;
+        const scaledProductOutput = exactProductOutput
+          ? scaleManufacturedSectorOutput(exactProductOutput, productOfferScale)
+          : null;
         const sectorId = sector._id.toString();
         // countryId is backfilled onto every sector in buildLookups (from
         // stateCountryMap, "US" fallback), so the cast is total in practice.
@@ -368,23 +459,12 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
                 commandEconomyEnabled
               )
             );
-          const exactOutputUnits = lookups.productLinesV2Enabled
-            ? (sector.outputUnitsByCommodity as
-                | Partial<Record<CommodityType, number>>
-                | undefined)
-            : undefined;
+          const exactOutputUnits = scaledProductOutput?.outputUnitsByCommodity;
           if (exactOutputUnits) {
-            const scale =
-              scaleMeasuredProducedUnits({
-                producedUnits: 1,
-                isNatcorp,
-                embargoSupplyFactor,
-                militaryRetainedFraction: 1 - freshMilitaryDiversion(sector, turn ?? 0),
-              }) ?? 0;
             for (const [commodity, rawUnits] of Object.entries(exactOutputUnits) as Array<
               [CommodityType, number]
             >) {
-              const units = Math.max(0, rawUnits ?? 0) * scale;
+              const units = Math.max(0, rawUnits ?? 0);
               if (!(units > 0)) continue;
               const byKey = producedByCorpCommodity.get(corpId) ?? new Map<string, number>();
               for (const key of contractScopeKeysFor(commodity, sector.stateId)) {
@@ -452,36 +532,17 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
           outputQuality: qualityPremiumPricingEnabled
             ? (lookups.corpById.get(corpId)?.averageQuality ?? null)
             : undefined,
-          ...(market.plantsEnabled && sector.outputUnitsByCommodity
+          ...(scaledProductOutput
             ? {
                 outputUnitsByCommodity: Object.fromEntries(
-                  Object.entries(sector.outputUnitsByCommodity).map(([commodity, units]) => [
+                  Object.entries(scaledProductOutput.outputUnitsByCommodity).map(([commodity, units]) => [
                     commodity,
-                    Math.max(0, units ?? 0) *
-                      (scaleMeasuredProducedUnits({
-                        producedUnits: 1,
-                        isNatcorp: !!lookups.corpById.get(corpId)?.countryOwnerId,
-                        embargoSupplyFactor:
-                          embargoSupplyFactorFor(sector) *
-                          plannedEconomyMediaSupplyFactor(
-                            sector.sectorType,
-                            isPlannedEconomy(
-                              (sector as { countryId?: string }).countryId,
-                              currentYear,
-                              commandEconomyEnabled
-                            )
-                          ),
-                        militaryRetainedFraction: 1 - freshMilitaryDiversion(sector, turn ?? 0),
-                      }) ?? 0),
+                    Math.max(0, units ?? 0),
                   ])
                 ) as Partial<Record<CommodityType, number>>,
-                outputAnchorByCommodity: sector.outputAnchorByCommodity as
-                  | Partial<Record<CommodityType, number>>
-                  | undefined,
+                outputAnchorByCommodity: scaledProductOutput.outputAnchorByCommodity,
                 productQualityByCommodity: qualityPremiumPricingEnabled
-                  ? (sector.productQualityByCommodity as
-                      | Partial<Record<CommodityType, number>>
-                      | undefined)
+                  ? scaledProductOutput.productQualityByCommodity
                   : undefined,
               }
             : {}),

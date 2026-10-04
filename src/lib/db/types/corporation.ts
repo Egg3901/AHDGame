@@ -794,6 +794,8 @@ export interface CorporateSector {
   outputAnchorByCommodity?: Partial<Record<string, number>>;
   /** Current bounded product quality by output commodity. */
   productQualityByCommodity?: Partial<Record<string, number>>;
+  /** Raw operating-capacity basis used for the measured product output snapshot. */
+  productOutputCapacityUnits?: number;
   /**
    * Plants-tier telemetry: the deliberate market-demand run-rate multiplier
    * applied to this sector's production last turn. 1 means no demand cap;

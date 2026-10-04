@@ -3,7 +3,10 @@
  * contribution from paid development. The portable rules are allocateManufacturedOutput and
  * productQualityForCommodity.
  */
-import type { CommodityType } from "@/lib/constants/commodities";
+import {
+  commodityMixWeight,
+  type CommodityType,
+} from "@/lib/constants/commodities";
 
 export type ManufacturingLifecycleStage =
   "development" | "launch" | "growth" | "mature" | "decline" | "retired";
@@ -61,6 +64,8 @@ export interface ManufacturedOutputAllocationInput {
   outputCommodity: CommodityType;
   /** Commodity base prices in the same anchor basis as outputAnchor. */
   basePrices: Partial<Record<CommodityType, number>>;
+  /** Legacy recipe value by commodity, derived from measured units and mix weights. */
+  baseOutputAnchorByCommodity?: Partial<Record<CommodityType, number>>;
 }
 
 export interface ManufacturedOutputAllocation {
@@ -74,6 +79,42 @@ export interface ManufacturedSectorOutput {
   outputAnchorByCommodity: Partial<Record<CommodityType, number>>;
   outputUnitsByCommodity: Partial<Record<CommodityType, number>>;
   productQualityByCommodity: Partial<Record<CommodityType, number>>;
+}
+
+/** Applies a physical output haircut equally to commodity units and nominal value. */
+export function scaleManufacturedSectorOutput(
+  output: ManufacturedSectorOutput,
+  productionFactor: number
+): ManufacturedSectorOutput {
+  const factor = finiteNonNegative(productionFactor);
+  return {
+    outputAnchorByCommodity: Object.fromEntries(
+      Object.entries(output.outputAnchorByCommodity).map(([commodity, anchor]) => [
+        commodity,
+        finiteNonNegative(anchor ?? 0) * factor,
+      ])
+    ),
+    outputUnitsByCommodity: Object.fromEntries(
+      Object.entries(output.outputUnitsByCommodity).map(([commodity, units]) => [
+        commodity,
+        finiteNonNegative(units ?? 0) * factor,
+      ])
+    ),
+    productQualityByCommodity: output.productQualityByCommodity,
+  };
+}
+
+/** Keeps the last realized throughput ratio while moving it to today's plant basis. */
+export function resizeMeasuredManufacturedUnits(input: {
+  producedUnits: number;
+  currentCapacityUnits: number;
+  snapshotCapacityUnits: number;
+}): number {
+  const producedUnits = finiteNonNegative(input.producedUnits);
+  const currentCapacityUnits = finiteNonNegative(input.currentCapacityUnits);
+  const snapshotCapacityUnits = finiteNonNegative(input.snapshotCapacityUnits);
+  if (snapshotCapacityUnits <= 0) return producedUnits;
+  return producedUnits * (currentCapacityUnits / snapshotCapacityUnits);
 }
 
 const OUTPUT_REDIRECT_BY_STAGE: Record<ManufacturingLifecycleStage, number> = {
@@ -95,6 +136,12 @@ const QUALITY_STAGE_FACTOR: Record<ManufacturingLifecycleStage, number> = {
 };
 
 const MAX_PAID_DEVELOPMENT_QUALITY = 10;
+export const MANUFACTURING_DEVELOPMENT_ELAPSED_TURNS = 12;
+
+/** Five percent of physical capacity stock, with a one-anchor minimum. */
+export function manufacturingDevelopmentThresholdAnchor(allocatedCapacityStock: number): number {
+  return Math.max(1, finiteNonNegative(allocatedCapacityStock) * 0.05);
+}
 
 function finiteNonNegative(value: number): number {
   return Number.isFinite(value) ? Math.max(0, value) : 0;
@@ -212,18 +259,31 @@ export function allocateManufacturedOutput(
   const outputAnchor = finiteNonNegative(input.outputAnchor);
   const allocationShare = clamp(finiteNonNegative(input.allocationShare), 0, 1);
   const outputRates = Object.entries(input.supplyRates ?? {}) as Array<[CommodityType, number]>;
-  const totalRate = outputRates.reduce((sum, [, rate]) => sum + finiteNonNegative(rate), 0);
+  const baseOutputAnchorByCommodity = input.baseOutputAnchorByCommodity ??
+    Object.fromEntries(
+      outputRates.map(([commodity]) => [
+        commodity,
+        outputAnchor * commodityMixWeight(input.supplyRates, input.basePrices, commodity),
+      ])
+    );
+  const totalBaselineAnchor = Object.values(baseOutputAnchorByCommodity).reduce(
+    (sum, anchor) => sum + finiteNonNegative(anchor ?? 0),
+    0
+  );
   const redirectedShare = OUTPUT_REDIRECT_BY_STAGE[input.stage];
-  const allocatedRecipeAnchor = outputAnchor * allocationShare * totalRate;
+  const allocatedRecipeAnchor = totalBaselineAnchor * allocationShare;
   const redirectedAnchor = allocatedRecipeAnchor * redirectedShare;
   const nominalOutputAnchorByCommodity: Partial<Record<CommodityType, number>> = {};
 
-  for (const [commodity, rawRate] of outputRates) {
-    const rate = finiteNonNegative(rawRate);
-    if (rate <= 0) continue;
-    const baseAnchor = outputAnchor * allocationShare * rate;
-    const remainingAnchor = baseAnchor - redirectedAnchor * (rate / totalRate);
-    nominalOutputAnchorByCommodity[commodity] = Math.max(0, remainingAnchor);
+  for (const [commodity, baseAnchorRaw] of Object.entries(baseOutputAnchorByCommodity) as Array<
+    [CommodityType, number]
+  >) {
+    const baseAnchor = finiteNonNegative(baseAnchorRaw);
+    if (baseAnchor <= 0) continue;
+    const weight = totalBaselineAnchor > 0 ? baseAnchor / totalBaselineAnchor : 0;
+    const allocatedBaseAnchor = baseAnchor * allocationShare;
+    const allocatedRemainingAnchor = allocatedBaseAnchor - redirectedAnchor * weight;
+    nominalOutputAnchorByCommodity[commodity] = Math.max(0, allocatedRemainingAnchor);
   }
   if (redirectedAnchor > 0) {
     nominalOutputAnchorByCommodity[input.outputCommodity] =
@@ -256,17 +316,25 @@ export function buildManufacturedSectorOutput(input: {
   outputCommodity: CommodityType;
   basePrices: Partial<Record<CommodityType, number>>;
   currentSectorQualityByCommodity?: Partial<Record<CommodityType, number>>;
+  baseOutputAnchorByCommodity?: Partial<Record<CommodityType, number>>;
   paidDevelopmentAnchor: number;
   paidThresholdAnchor: number;
 }): ManufacturedSectorOutput {
   const allocation = allocateManufacturedOutput(input);
   const share = clamp(finiteNonNegative(input.allocationShare), 0, 1);
   const outputAnchorByCommodity = { ...allocation.nominalOutputAnchorByCommodity };
-  for (const [commodity, rawRate] of Object.entries(input.supplyRates) as Array<
+  const baseline = input.baseOutputAnchorByCommodity ??
+    Object.fromEntries(
+      Object.keys(input.supplyRates).map((commodity) => [
+        commodity,
+        finiteNonNegative(input.outputAnchor) *
+          commodityMixWeight(input.supplyRates, input.basePrices, commodity as CommodityType),
+      ])
+    );
+  for (const [commodity, baseAnchor] of Object.entries(baseline) as Array<
     [CommodityType, number]
   >) {
-    const unallocatedAnchor = finiteNonNegative(input.outputAnchor) * (1 - share) *
-      finiteNonNegative(rawRate);
+    const unallocatedAnchor = finiteNonNegative(baseAnchor) * (1 - share);
     if (unallocatedAnchor > 0) {
       outputAnchorByCommodity[commodity] =
         (outputAnchorByCommodity[commodity] ?? 0) + unallocatedAnchor;

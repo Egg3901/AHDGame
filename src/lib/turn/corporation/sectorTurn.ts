@@ -820,6 +820,7 @@ export function processSector(
           outputUnitsByCommodity: productOutput.outputUnitsByCommodity,
           outputAnchorByCommodity: productOutput.outputAnchorByCommodity,
           productQualityByCommodity: productOutput.productQualityByCommodity,
+          productOutputCapacityUnits: plantsCapacity,
         }
       : {}),
     // Ceiling the supply-agreement damages leg clamps a contracted volume to,
