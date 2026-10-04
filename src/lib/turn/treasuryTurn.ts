@@ -130,7 +130,7 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
     ),
   ];
   const corporationQuotes = new Map<string, SovereignCouponCorporationQuote>();
-  if (corporationIds.length > 0) {
+  if (treasuryCashLedgerEnabled && corporationIds.length > 0) {
     const corporations = await db
       .collection<Corporation>("corporations")
       .find(
@@ -151,10 +151,8 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
         countryId: String(corp.countryId ?? ""),
         currencyCode,
         localPerAnchor,
-        hasExplicitCurrency:
-          corp.liquidCurrencyCode !== undefined &&
-          corp.liquidCurrencyCode !== null &&
-          String(corp.liquidCurrencyCode).trim() !== "",
+        currencyFieldPresent: corp.liquidCurrencyCode !== undefined,
+        currencyFieldValue: corp.liquidCurrencyCode ?? null,
       });
     }
   }
@@ -368,7 +366,12 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
             );
           await settleFundedSovereignCoupons(
             db,
-            { _id: b._id, countryId: b.countryId, sovereignCouponClaims: b.sovereignCouponClaims },
+            {
+              _id: b._id,
+              countryId: b.countryId,
+              sovereignCouponClaims: b.sovereignCouponClaims,
+              sovereignCouponFrozenThrough: b.sovereignCouponFrozenThrough,
+            },
             {
               turn: _turn,
               bonds: sovereignBonds.filter(

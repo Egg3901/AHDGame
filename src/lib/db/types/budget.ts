@@ -785,7 +785,8 @@ export interface FundedSovereignCouponClaim {
     payeeCurrencyCode?: import("@/lib/constants/currencies").CurrencyCode;
     payeeLocalPerAnchor?: number;
     payeeCountryId?: string;
-    payeeHasExplicitCurrency?: boolean;
+    payeeCurrencyFieldPresent?: boolean;
+    payeeCurrencyFieldValue?: string | null;
     personalBalancePath?: string;
   }>;
 }

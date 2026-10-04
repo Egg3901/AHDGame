@@ -100,6 +100,19 @@ describe("funded sovereign coupon claims", () => {
     const claims = savedBudget(db).sovereignCouponClaims ?? [];
     expect(claims).toHaveLength(1);
     const frozen = JSON.stringify(claims[0]);
+    await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), {
+      ...args,
+      bonds: [
+        {
+          ...bond(),
+          couponRate: 99,
+          holders: [{ corporationId: new ObjectId("650000000000000000000099"), units: 80 }],
+        } as unknown as Bond,
+      ],
+      anchorRate: 7,
+      corporateQuotes: new Map(),
+    });
+    expect(JSON.stringify(savedBudget(db).sovereignCouponClaims?.[0])).toBe(frozen);
     savedBudget(db).treasuryCashLocal = 100;
     await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), {
       ...args,
@@ -179,7 +192,8 @@ describe("funded sovereign coupon claims", () => {
           countryId: "US",
           currencyCode: "USD" as CurrencyCode,
           localPerAnchor: 1,
-          hasExplicitCurrency: true,
+          currencyFieldPresent: true,
+          currencyFieldValue: "USD",
         },
       ],
     ]);

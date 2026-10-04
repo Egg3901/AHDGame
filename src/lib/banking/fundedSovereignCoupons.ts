@@ -8,6 +8,7 @@ import { settleTransition, resumeSettlement } from "@/lib/banking/settlementJour
 import type { BankingTransition } from "@/lib/banking/rules/boundary";
 import {
   freezeSovereignCouponClaim,
+  type SovereignCouponBondSnapshot,
   type SovereignCouponCorporationQuote,
 } from "@/lib/banking/rules/sovereignCoupons";
 
@@ -65,8 +66,8 @@ function payoutTransition(
         collection: "corporations",
         filter: {
           _id: new ObjectId(holder.id),
-          ...(holder.payeeHasExplicitCurrency
-            ? { liquidCurrencyCode: payeeCurrency }
+          ...(holder.payeeCurrencyFieldPresent
+            ? { liquidCurrencyCode: holder.payeeCurrencyFieldValue ?? null }
             : { liquidCurrencyCode: { $exists: false }, countryId: holder.payeeCountryId }),
         },
         path: "liquidCapital",
@@ -154,20 +155,50 @@ export async function settleFundedSovereignCoupons(
       !bondAccruesCoupon(bond)
     )
       continue;
+    const bondId = bond._id.toHexString();
+    const claimId = `sovereign-coupon:${bondId}:${input.turn}`;
+    if (claimById.has(claimId)) continue;
+    const frozenKey = `b${bondId}`;
+    if ((budget.sovereignCouponFrozenThrough?.[frozenKey] ?? -1) >= input.turn) continue;
+    const snapshot: SovereignCouponBondSnapshot = {
+      id: bond._id.toHexString(),
+      countryId: String(bond.countryId ?? ""),
+      currencyCode: bond.currencyCode,
+      couponRate: bond.couponRate,
+      publicFloat: bond.publicFloat,
+      holders: (bond.holders ?? []).map((holder) => {
+        if (holder.bankId || holder.bankTreasuryTradeId)
+          return { kind: "bank", units: holder.units };
+        if (holder.characterId)
+          return { kind: "character", id: holder.characterId.toHexString(), units: holder.units };
+        if (holder.imperialCharacterId)
+          return {
+            kind: "imperial",
+            id: holder.imperialCharacterId.toHexString(),
+            units: holder.units,
+          };
+        if (holder.corporationId)
+          return {
+            kind: "corporation",
+            id: holder.corporationId.toHexString(),
+            units: holder.units,
+          };
+        if (holder.fundId)
+          return { kind: "fund", id: holder.fundId.toHexString(), units: holder.units };
+        if (holder.nppId)
+          return { kind: "npp", id: holder.nppId.toHexString(), units: holder.units };
+        return { kind: "bank", units: holder.units };
+      }),
+    };
     const claim = freezeSovereignCouponClaim({
-      bond,
+      bond: snapshot,
       turn: input.turn,
       anchorRate: input.anchorRate,
       forexEnabled: input.forexEnabled,
       corporateQuotes: input.corporateQuotes,
     });
     if (!claim) continue;
-    const frozenKey = `b${claim.bondId}`;
     const frozenPath = `sovereignCouponFrozenThrough.${frozenKey}`;
-    const alreadyFrozen =
-      budget.sovereignCouponFrozenThrough?.[frozenKey] !== undefined &&
-      budget.sovereignCouponFrozenThrough[frozenKey] >= claim.dueTurn;
-    if (alreadyFrozen && !claimById.has(claim.id)) continue;
     const result = await collection.updateOne(
       {
         _id: budget._id,
@@ -185,29 +216,37 @@ export async function settleFundedSovereignCoupons(
         { projection: { sovereignCouponClaims: 1, sovereignCouponFrozenThrough: 1 } }
       );
       const frozen = current?.sovereignCouponClaims?.find((row) => row.id === claim.id);
-      if (frozen && JSON.stringify(frozen) !== JSON.stringify(claim))
-        throw new Error(`Sovereign coupon quote changed for ${claim.id}`);
       if (frozen) claimById.set(claim.id, frozen);
-      else if ((current?.sovereignCouponFrozenThrough?.[frozenKey] ?? -1) < claim.dueTurn)
-        throw new Error(`Sovereign coupon claim install lost for ${claim.id}`);
+      else if ((current?.sovereignCouponFrozenThrough?.[frozenKey] ?? -1) >= claim.dueTurn)
+        continue;
+      else throw new Error(`Sovereign coupon claim install lost for ${claim.id}`);
     } else claimById.set(claim.id, claim);
   }
-  for (const claim of claimById.values()) {
+  const claims = [...claimById.values()];
+  const attemptPrefixes = claims.map(
+    (claim) => `^${claim.id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}:attempt:`
+  );
+  const priorMoves = attemptPrefixes.length
+    ? await db
+        .collection<{ _id: string; status: string }>("bankMoneyMoves")
+        .find(
+          {
+            $or: attemptPrefixes.map((prefix) => ({ _id: { $regex: prefix } })),
+            status: { $in: ["partial", "applied"] },
+          },
+          { projection: { _id: 1, status: 1 } }
+        )
+        .toArray()
+    : [];
+  for (const claim of claims) {
     const attempt = Math.max(input.turn, claim.dueTurn);
-    const attemptPrefix = `^${claim.id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}:attempt:`;
     const prior =
-      (await db
-        .collection<{ _id: string; status: string }>("bankMoneyMoves")
-        .findOne(
-          { _id: { $regex: attemptPrefix }, status: "partial" },
-          { projection: { _id: 1 } }
-        )) ??
-      (await db
-        .collection<{ _id: string; status: string }>("bankMoneyMoves")
-        .findOne(
-          { _id: { $regex: attemptPrefix }, status: "applied" },
-          { projection: { _id: 1 } }
-        ));
+      priorMoves.find(
+        (move) => move._id.startsWith(`${claim.id}:attempt:`) && move.status === "partial"
+      ) ??
+      priorMoves.find(
+        (move) => move._id.startsWith(`${claim.id}:attempt:`) && move.status === "applied"
+      );
     if (!prior && !(await couponTargetsExist(db, claim))) continue;
     const result = prior
       ? await resumeSettlement(db, prior._id)
