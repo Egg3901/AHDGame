@@ -153,6 +153,9 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
           explicitPlantCostsEnabled: 1,
           mediaEditorialEnabled: 1,
           mediaOperatingModelsEnabled: 1,
+          privateBankingEnabled: 1,
+          bankConstructionFinanceEnabled: 1,
+          treasuryCashLedgerEnabled: 1,
         },
       }
     );
@@ -1036,6 +1039,33 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       });
     }
 
+    if (
+      plants &&
+      isCeo &&
+      governorConfig?.privateBankingEnabled === true &&
+      governorConfig.bankConstructionFinanceEnabled === true &&
+      governorConfig.treasuryCashLedgerEnabled === true &&
+      Number.isFinite(corporationFxRate) &&
+      corporationFxRate > 0
+    ) {
+      const currency = resolveCorpLiquidCurrencyCode(corporation);
+      if (currency)
+        plants.buildQuote.financing = {
+          corporationId: String(corporation._id),
+          currency,
+          localPerAnchor: corporationFxRate,
+          ...(sector.constructionFinancing?.status === "awaiting_approval" ||
+          sector.constructionFinancing?.status === "funding"
+            ? {
+                pendingRequest: {
+                  claimId: sector.constructionFinancing.claimId,
+                  status: sector.constructionFinancing.status,
+                },
+              }
+            : {}),
+        };
+    }
+
     if (plants?.investment) {
       plants.investment.bondReference = await loadInvestmentBondReference(
         db,
@@ -1117,6 +1147,8 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         forSale: sector.forSale
           ? {
               listedAt: sector.forSale.listedAt,
+              foreclosed: sector.forSale.foreclosed,
+              pledged: sector.forSale.pledged,
               priceAnchor: sector.forSale.priceAnchor,
               npvAnchor: sector.forSale.npvAnchor,
             }

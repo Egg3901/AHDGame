@@ -8,6 +8,10 @@ import {
   ensurePrimaryNationalCorporation,
 } from "./nationalCorporation";
 import { makeAdoptedSoeState } from "@/lib/economy/soe";
+import {
+  releaseConstructionPropertyTransition,
+  reserveSectorsForTransition,
+} from "@/lib/corporations/securedConstructionProperty";
 
 /**
  * Split-off & merge-back of National Corporation sector types (spec §24.2).
@@ -62,6 +66,24 @@ export async function splitOffSectorType(db: Db, params: SplitOffParams): Promis
 
   // Ensure the primary exists (so the country has a coherent NatCorp set first).
   const primary = await ensurePrimaryNationalCorporation(db, params.countryId);
+  const natCorpIds = await nationalCorporationIds(db, params.countryId);
+  const fromIds = natCorpIds;
+  const sectors =
+    fromIds.length > 0
+      ? await db
+          .collection<CorporateSector>("corporateSectors")
+          .find({ corporationId: { $in: fromIds }, sectorType: params.sectorType })
+          .toArray()
+      : [];
+  const transitionKeys = await reserveSectorsForTransition(
+    db,
+    sectors,
+    "nationalization_restructure",
+    `split-off:${new ObjectId().toHexString()}`
+  );
+  if (!transitionKeys) {
+    throw new Error("Resolve secured construction before splitting this National Corporation type");
+  }
 
   const doc = buildNationalCorporationDoc(params.countryId, {
     name,
@@ -84,18 +106,25 @@ export async function splitOffSectorType(db: Db, params: SplitOffParams): Promis
   const newId = insert.insertedId;
 
   // Move all sectors of this type held by any of the country's NatCorps.
-  const natCorpIds = await nationalCorporationIds(db, params.countryId);
-  const fromIds = natCorpIds.filter((id) => !id.equals(newId));
   let sectorsMoved = 0;
-  if (fromIds.length > 0) {
-    const res = await db
-      .collection<CorporateSector>("corporateSectors")
-      .updateMany(
-        { corporationId: { $in: fromIds }, sectorType: params.sectorType },
-        { $set: { corporationId: newId, updatedAt: now } }
-      );
-    sectorsMoved = res.modifiedCount ?? 0;
+  for (const [index, sector] of sectors.entries()) {
+    const moved = await db.collection<CorporateSector>("corporateSectors").updateOne(
+      {
+        _id: sector._id,
+        corporationId: sector.corporationId,
+        "constructionPropertyTransition.key": transitionKeys[index],
+      },
+      { $set: { corporationId: newId, updatedAt: now } }
+    );
+    if (moved.matchedCount !== 1)
+      throw new Error("A sector changed during the National Corporation split-off");
+    sectorsMoved += 1;
   }
+  await Promise.all(
+    sectors.map((sector, index) =>
+      releaseConstructionPropertyTransition(db, sector._id, transitionKeys[index])
+    )
+  );
 
   // Under a command economy the split-off is an ENTERPRISE, not just a holding
   // shell, so it needs the `soe` overlay to exist as one. Without it
@@ -190,6 +219,19 @@ export async function mergeBackSectorType(
   if (!splitOff) {
     throw new Error(`No split-off National Corporation owns the ${params.sectorType} sector type`);
   }
+  const splitOffSectors = await db
+    .collection<CorporateSector>("corporateSectors")
+    .find({ corporationId: splitOff._id })
+    .toArray();
+  const transitionKeys = await reserveSectorsForTransition(
+    db,
+    splitOffSectors,
+    "nationalization_restructure",
+    `merge-back:${new ObjectId().toHexString()}`
+  );
+  if (!transitionKeys) {
+    throw new Error("Resolve secured construction before merging this National Corporation type");
+  }
 
   // Resolve the target: explicit corp (must be a NatCorp of this country) or primary.
   let target: Corporation;
@@ -208,13 +250,20 @@ export async function mergeBackSectorType(
   }
 
   // Move the split-off's sectors into the target.
-  const res = await db
-    .collection<CorporateSector>("corporateSectors")
-    .updateMany(
-      { corporationId: splitOff._id },
+  let sectorsMoved = 0;
+  for (const [index, sector] of splitOffSectors.entries()) {
+    const moved = await db.collection<CorporateSector>("corporateSectors").updateOne(
+      {
+        _id: sector._id,
+        corporationId: splitOff._id,
+        "constructionPropertyTransition.key": transitionKeys[index],
+      },
       { $set: { corporationId: target._id, updatedAt: now } }
     );
-  const sectorsMoved = res.modifiedCount ?? 0;
+    if (moved.matchedCount !== 1)
+      throw new Error("A sector changed during the National Corporation merge-back");
+    sectorsMoved += 1;
+  }
 
   // If the target is a split-off, it now also owns this type; if it's the
   // primary, the type reverts to the remainder (primary keeps assignedSectorTypes empty).
@@ -227,6 +276,11 @@ export async function mergeBackSectorType(
 
   // Dissolve the emptied split-off shell (no payout, no restore).
   await corps.deleteOne({ _id: splitOff._id });
+  await Promise.all(
+    splitOffSectors.map((sector, index) =>
+      releaseConstructionPropertyTransition(db, sector._id, transitionKeys[index])
+    )
+  );
 
   return {
     targetNationalCorporationId: target._id,

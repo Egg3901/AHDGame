@@ -23,6 +23,7 @@ import { cleanupShareMarketActivityForCorporations } from "@/lib/corporations/cl
 import { stampSubjectDeleted } from "@/lib/financialTxLog/stampDeleted";
 import { allocateShareholderPool } from "@/lib/bonds/corporateBondDefault";
 import { moveSectorToCorp } from "@/lib/corporations/moveSector";
+import { hasProtectedConstructionProperty } from "@/lib/corporations/securedConstructionProperty";
 import { recordAudit } from "@/lib/audit/recordAudit";
 import { assertMergerClearance } from "@/lib/corporations/mergerReview/gate";
 import { attachMergerRemedy } from "@/lib/corporations/mergerReview/lifecycle";
@@ -349,6 +350,15 @@ async function runAgreedAcquisition(
     plan,
   });
 
+  if (targetSectors.some(hasProtectedConstructionProperty)) {
+    if (fresh) await releaseAcquisitionTarget(db, target._id, offer._id);
+    return {
+      ok: false,
+      error: "Resolve secured construction before completing this acquisition",
+      status: 409,
+    };
+  }
+
   // A pinned plan from an earlier attempt rules: on replay the recorded legs
   // are the only amounts ever applied, never the recomputed plan above. A
   // compensated record (withdraw/reject raced the retry) closes the run here.
@@ -460,6 +470,11 @@ async function runAgreedAcquisition(
     const sectorsRemain = await db
       .collection<CorporateSector>("corporateSectors")
       .countDocuments({ corporationId: target._id });
+    if (sectorsRemain > 0) {
+      throw new Error(
+        `Acquisition cannot delete target while ${sectorsRemain} sector property row(s) remain`
+      );
+    }
     const sectorsMovedTotal = settlement.sectorTotal - sectorsRemain;
     await markAcquisitionProgress(db, offer._id, { sectorsMoved: sectorsMovedTotal });
     settlement.sectorsMoved = sectorsMovedTotal;

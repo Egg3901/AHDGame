@@ -188,6 +188,8 @@ export interface TransitionProjection {
   filter?: Record<string, unknown>;
   /** Mongo-style update operators for an update. */
   update?: Record<string, unknown>;
+  /** Ordered noncash $set stages, published with the same durable target receipt. */
+  pipelineUpdate?: Record<string, unknown>[];
   /** The whole document for an insert. */
   insert?: Record<string, unknown>;
   note: string;
