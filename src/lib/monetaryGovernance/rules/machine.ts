@@ -65,10 +65,6 @@ export function boardCanCarry(board: SeatState[]): boolean {
   return boardCanCarryMotionsLib(board as unknown as FomcSeat[]);
 }
 
-function seatedPlayerSeats(board: SeatState[]): SeatState[] {
-  return board.filter((s) => s.occupantType === "player");
-}
-
 function chairSeat(board: SeatState[]): SeatState | undefined {
   return board.find((s) => s.isChair) ?? board[0];
 }
@@ -143,9 +139,9 @@ interface ResolveOutcome {
 
 /**
  * Resolve a voting meeting into the transition when it is decided (or the
- * deadline forces it). A decided tally alone never closes a meeting while a
- * seated player can still ballot; the deadline force-resolves with no-shows
- * abstaining. Never resolves a meeting on the turn it opened.
+ * deadline forces it). Pending player ballots keep an undecided motion open,
+ * but cannot delay a mathematically irreversible outcome. At the deadline,
+ * remaining no-shows abstain. Never resolves a meeting on the turn it opened.
  */
 function resolveMeetingInto(
   state: JurisdictionState,
@@ -164,10 +160,7 @@ function resolveMeetingInto(
     meeting.motion,
     next.board.length
   );
-  const awaitingPlayer = seatedPlayerSeats(next.board).some(
-    (s) => !meeting.ballots.some((b) => b.seatId === s.seatId)
-  );
-  if ((!tally.decided || awaitingPlayer) && !forceDeadline) return noChange;
+  if (!tally.decided && !forceDeadline) return noChange;
 
   const passed = tally.passed;
   const requiresMove =
@@ -664,7 +657,10 @@ function handleResolveMeeting(
   const force = command.force === true || deadlineHit(meeting, clock);
   const outcome = resolveMeetingInto(state, next, transition, meeting, clock, force);
   if (!outcome.resolved) {
-    return refuse("not-ready", "Votes are still open: undecided, or a player ballot is pending.");
+    return refuse(
+      "not-ready",
+      "Votes are still open: pending ballots can still decide the motion."
+    );
   }
   return { allowed: true, next, transition };
 }
