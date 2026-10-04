@@ -41,7 +41,7 @@ type MarketIdentity = {
 /** Legacy entertainment rows and canonical media/entertainment rows are one market. */
 function marketIdentity(
   sectorType: CorporateSector["sectorType"],
-  industryModel?: CorporateSector["industryModel"] | null,
+  industryModel?: string | null,
   mediaDiscriminator?: CorporateSector["mediaDiscriminator"] | null
 ): MarketIdentity {
   if (sectorType === "entertainment") {
