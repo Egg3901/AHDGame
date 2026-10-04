@@ -10,7 +10,7 @@
 
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { calculateBondMarketPrice } from "@/lib/constants/bonds";
-import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
+import { BOND_MATURITY_OPTIONS, BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import { effectiveBankRatesFromPrime } from "@/lib/banking/rules/rates";
 import { computeNpcDepositShare } from "@/lib/banking/rules/deposits";
 import { npcFlowDelta, fundedNpcFlowDelta, perTurnInterest } from "@/lib/banking/rules/loans";
@@ -72,10 +72,13 @@ type Scenario = {
 const RESERVE_RATIO = 0.2;
 const TURNS = 480;
 
-const us1991Budget = getInitialNationalBudgetsForPreset("1991-default").find(
-  (budget) => budget.countryId === "US"
-);
-if (!us1991Budget) throw new Error("The 1991 US national budget seed is missing");
+const us1991Budget = (() => {
+  const budget = getInitialNationalBudgetsForPreset("1991-default").find(
+    (entry) => entry.countryId === "US"
+  );
+  if (!budget) throw new Error("The 1991 US national budget seed is missing");
+  return budget;
+})();
 const us1991ExternalBroadMoney = seedExternalBroadMoney({
   storedGdp: us1991Budget.gdp,
   anchorPerGdpUnit: getGdpAnchorRate("US", "1991-default"),
@@ -99,7 +102,8 @@ const us1991ShortIssueFace =
 const openingSeedTranches = Object.entries(SOVEREIGN_RECONCILE_DISTRIBUTION)
   .filter((entry): entry is [string, number] => Number.isFinite(entry[1]) && entry[1] > 0)
   .map(([maturity, fraction]) => {
-    const maturityTurns = Number(maturity);
+    const maturityTurns = BOND_MATURITY_OPTIONS.find((option) => option === Number(maturity));
+    if (maturityTurns === undefined) throw new Error(`Unsupported seed bond maturity: ${maturity}`);
     const units = Math.floor((us1991Budget.debt.principal * fraction) / BOND_UNIT_FACE_VALUE);
     return {
       maturityTurns,
@@ -858,7 +862,8 @@ const scenarios: Scenario[] = [
 ];
 
 for (const scenario of scenarios) {
-  console.log(JSON.stringify({ name: scenario.name, ...scenario, ...simulate(scenario) }));
+  const { name, ...inputs } = scenario;
+  console.log(JSON.stringify({ name, ...inputs, ...simulate(scenario) }));
 }
 console.log(
   JSON.stringify({
