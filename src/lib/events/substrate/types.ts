@@ -41,6 +41,8 @@ export interface EventResolveContext {
    * omitted the legacy era-blind map applies, so 1991 behavior is unchanged.
    */
   preset?: string;
+  /** Preloaded feature gate for funded national Treasury cash effects. */
+  treasuryCashLedgerEnabled?: boolean;
 }
 
 export interface EventOfferContext {

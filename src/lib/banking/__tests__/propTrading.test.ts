@@ -135,6 +135,72 @@ describe("propTrading open/close/mark", () => {
     db.seed("exchangeRates", fxDocs);
   });
 
+  it("refuses new player stock risk before pricing or cash while retaining forex", async () => {
+    db.collection("gameConfig").docs[0].playerAdvancedBankChartersEnabled = true;
+    const before = liveCorp.bankCharter!.cashReserves;
+    const refused = await openPosition(db as unknown as Db, corpId, {
+      asset: "equity",
+      ref: "UNLISTED",
+      units: 1,
+    });
+    expect(refused).toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/limited to bonds, index units and forex/),
+    });
+    expect(liveCorp.bankCharter!.cashReserves).toBe(before);
+    expect(liveCorp.bankCharter!.propBook).toEqual([]);
+    expect(
+      await openPosition(db as unknown as Db, corpId, { asset: "forex", ref: "EUR", units: 1 })
+    ).toMatchObject({ ok: true });
+  });
+  it.each(["npp", "imperial"] as const)(
+    "keeps %s stock opening available in the advanced player cohort",
+    async (ceoType) => {
+      db.collection("gameConfig").docs[0].playerAdvancedBankChartersEnabled = true;
+      liveCorp.ceoType = ceoType;
+      expect(
+        await openPosition(db as unknown as Db, corpId, {
+          asset: "equity",
+          ref: equityCorp._id.toHexString(),
+          units: 1,
+        })
+      ).toMatchObject({ ok: true });
+    }
+  );
+  it("refuses an NPP stock purchase when player control resumes before the cash write", async () => {
+    db.collection("gameConfig").docs[0].playerAdvancedBankChartersEnabled = true;
+    liveCorp.ceoType = "npp";
+    const initialCash = liveCorp.bankCharter!.cashReserves;
+    const collection = db.collection("corporations");
+    const update = collection.updateOne.bind(collection);
+    vi.spyOn(collection, "updateOne").mockImplementation(async (filter, mutation, options) => {
+      if (JSON.stringify(filter).includes("bankPropBookRevision")) liveCorp.ceoType = "character";
+      return update(filter, mutation, options);
+    });
+    expect(
+      await openPosition(db as unknown as Db, corpId, {
+        asset: "equity",
+        ref: equityCorp._id.toHexString(),
+        units: 1,
+      })
+    ).toMatchObject({ ok: false });
+    expect(liveCorp.bankCharter!.cashReserves).toBe(initialCash);
+    expect(liveCorp.bankCharter!.propBook).toEqual([]);
+  });
+  it("allows existing player stock positions to close after the new opening cohort is enabled", async () => {
+    const initialCash = liveCorp.bankCharter!.cashReserves;
+    const ref = equityCorp._id.toHexString();
+    expect(
+      await openPosition(db as unknown as Db, corpId, { asset: "equity", ref, units: 1 })
+    ).toMatchObject({ ok: true });
+    db.collection("gameConfig").docs[0].playerAdvancedBankChartersEnabled = true;
+    expect(
+      await closePosition(db as unknown as Db, corpId, { asset: "equity", ref, units: 1 })
+    ).toMatchObject({ ok: true });
+    expect(liveCorp.bankCharter!.cashReserves).toBe(initialCash);
+    expect(liveCorp.bankCharter!.propBook).toEqual([]);
+  });
+
   it("enforces leverage cap on open", async () => {
     // True equity stays ~300k once debt is netted; max mark = 900k.
     // Buy 901k of equity while holding enough cash → leverage breach.

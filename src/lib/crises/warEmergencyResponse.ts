@@ -135,11 +135,20 @@ export async function applyWarEmergencyResponse(
       );
   }
   if (effects.treasuryCost) {
-    await applyCountryTreasuryDelta(ctx.db, countryId, ctx.currentTurn, -effects.treasuryCost, {
-      source: "war_emergency_crisis",
-      crisisId: ctx.crisis._id.toHexString(),
-      responseId,
-    });
+    await applyCountryTreasuryDelta(
+      ctx.db,
+      countryId,
+      ctx.currentTurn,
+      -effects.treasuryCost,
+      {
+        source: "war_emergency_crisis",
+        crisisId: ctx.crisis._id.toHexString(),
+        responseId,
+      },
+      undefined,
+      ctx.treasuryCashLedgerEnabled === true,
+      `war-emergency-treasury:${ctx.crisis._id.toHexString()}:${responseId}`
+    );
   }
   if (effects.mitigation) {
     await writeWarEmergencyMitigation(ctx.db, {

@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import type { EventInstance } from "@/lib/db/types/events";
 import { registerEventHandler } from "@/lib/events/substrate/registry";
+import { applyDeclarativeEffects } from "@/lib/events/substrate/applyEffects";
+import type { Db } from "mongodb";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/api/requireAuth", () => ({
@@ -10,6 +13,9 @@ vi.mock("@/lib/api/requireAuth", () => ({
 }));
 vi.mock("@/lib/gameState", () => ({
   getGameState: vi.fn().mockResolvedValue({ currentTurn: 12 }),
+}));
+vi.mock("@/lib/api/headOfGovernment", () => ({
+  getHeadOfGovernmentCharacterId: vi.fn(),
 }));
 vi.mock("@/lib/notifications", () => ({
   createNotification: vi.fn().mockResolvedValue(undefined),
@@ -154,5 +160,115 @@ describe("POST /api/events/[id]/resolve", () => {
 
     expect(response.status).toBe(400);
     expect(db.collectionMocks.eventInstances!.findOneAndUpdate).not.toHaveBeenCalled();
+  });
+
+  it("reserves a free alternative before effects when another option spends funded Treasury cash", async () => {
+    const instanceId = new ObjectId();
+    const scopeId = new ObjectId();
+    const instance: EventInstance = {
+      _id: instanceId,
+      kind: "pree.resolveRouteFundedChoiceTest",
+      scope: "country",
+      scopeId,
+      definitionVersion: 1,
+      status: "pending",
+      roll: 50,
+      payload: { countryId: "US" },
+      offeredAtTurn: 12,
+      offeredAt: new Date(),
+      expiresAtRealtimeMs: Date.now() + 60_000,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    const memory = createInMemoryDb();
+    memory.seed("eventInstances", [instance as unknown as Record<string, unknown>]);
+    memory.seed("eventDefinitions", [
+      { _id: new ObjectId(), kind: instance.kind, deciderRole: "executive" },
+    ]);
+    memory.seed("gameConfig", [{ _id: "default", treasuryCashLedgerEnabled: true }]);
+    memory.seed("gameState", [{ _id: "current", currentTurn: 12, preset: "2019-default" }]);
+    memory.seed("exchangeRates", [{ currencyCode: "USD", rate: 1 }]);
+    memory.seed("federalBudget", [
+      {
+        _id: "US",
+        countryId: "US",
+        currencyCode: "USD",
+        treasuryCashLocal: 20,
+        treasuryBalance: 0,
+      },
+    ]);
+    memory.seed("governmentApprovals", [
+      { _id: "US", countryId: "US", approvalRating: 50, disapprovalRating: 50, netApproval: 0 },
+    ]);
+    registerEventHandler({
+      kind: instance.kind,
+      defaultOptionId: "paid",
+      options: [
+        {
+          id: "free",
+          label: "Free response",
+          description: "No Treasury cost",
+          outcomeTable: [
+            {
+              minRoll: 1,
+              maxRoll: 100,
+              label: "free outcome",
+              effects: [{ type: "approvalDelta", delta: 1 }],
+            },
+          ],
+        },
+        {
+          id: "paid",
+          label: "Paid response",
+          description: "Fund the response",
+          outcomeTable: [
+            {
+              minRoll: 1,
+              maxRoll: 100,
+              label: "paid outcome",
+              effects: [
+                { type: "treasuryDelta", deltaAnchor: -5 },
+                { type: "approvalDelta", delta: 2 },
+              ],
+            },
+          ],
+        },
+      ],
+      applyEffects: async (ctx) => {
+        await applyDeclarativeEffects(ctx, ctx.tier.effects);
+        if (ctx.option.id === "free") {
+          freeEffectsApplied();
+          await letFreeChoiceFinish;
+        }
+      },
+    });
+    let signalFree!: () => void;
+    let releaseFree!: () => void;
+    const freeApplied = new Promise<void>((resolve) => {
+      signalFree = resolve;
+    });
+    const letFreeChoiceFinish = new Promise<void>((resolve) => {
+      releaseFree = resolve;
+    });
+    const freeEffectsApplied = (): void => signalFree();
+
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(memory as unknown as Db);
+    const { getHeadOfGovernmentCharacterId } = await import("@/lib/api/headOfGovernment");
+    vi.mocked(getHeadOfGovernmentCharacterId).mockResolvedValue(characterId);
+
+    const freeResolve = callRoute(makeRequest("free"), instanceId.toHexString());
+    await freeApplied;
+    const paidResponse = await callRoute(makeRequest("paid"), instanceId.toHexString());
+    releaseFree();
+    const freeResponse = await freeResolve;
+
+    expect(freeResponse.status).toBe(200);
+    expect(paidResponse.status).toBe(400);
+    const resolved = memory.collection("eventInstances").docs[0] as unknown as EventInstance;
+    expect(resolved.resolutionClaim).toMatchObject({ optionId: "free", reason: "player" });
+    expect(resolved).toMatchObject({ status: "resolved", resolvedOptionId: "free" });
+    expect(memory.collection("federalBudget").docs[0]?.treasuryCashLocal).toBe(20);
+    expect(memory.collection("governmentApprovals").docs[0]?.approvalRating).toBe(51);
   });
 });

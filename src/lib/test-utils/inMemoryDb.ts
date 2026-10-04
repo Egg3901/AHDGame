@@ -137,6 +137,9 @@ function sameValue(a: unknown, b: unknown): boolean {
  * `{ tags: { $ne: "x" } }` does not.
  */
 function equalsAny(value: unknown, operand: unknown): boolean {
+  // Mongo equality against null also matches a missing field. This applies to
+  // scalar equality and to the equality members consumed by $eq and $in.
+  if (value === undefined && operand === null) return true;
   if (Array.isArray(value) && !Array.isArray(operand)) {
     return value.some((item) => sameValue(item, operand));
   }
@@ -428,6 +431,16 @@ function applyUpdate(doc: Doc, update: Update): void {
           setPath(doc, path, [...base, value]);
         }
       }
+    } else if (op === "$addToSet") {
+      for (const [path, value] of Object.entries(fields as Doc)) {
+        const current = getPath(doc, path);
+        const base = Array.isArray(current) ? [...current] : [];
+        const values = isPlainObject(value) && "$each" in value ? value.$each : [value];
+        for (const item of values as unknown[]) {
+          if (!base.some((existing) => sameValue(existing, item))) base.push(item);
+        }
+        setPath(doc, path, base);
+      }
     } else if (op === "$pull") {
       // Selector form only (`$pull: { path: { field: value } }`): drop every
       // array element matching ALL selector fields. Pulling an absent element
@@ -595,7 +608,12 @@ class InMemoryCollection {
     filter: Doc,
     update: Update,
     options: { upsert?: boolean } = {}
-  ): Promise<{ matchedCount: number; modifiedCount: number; upsertedCount: number }> {
+  ): Promise<{
+    matchedCount: number;
+    modifiedCount: number;
+    upsertedCount: number;
+    upsertedId?: unknown;
+  }> {
     const target = this.docs.find((d) => matchesFilter(d, filter));
     if (!target) {
       if (options.upsert) {
@@ -610,7 +628,7 @@ class InMemoryCollection {
             : {}),
         });
         this.docs.push(seed);
-        return { matchedCount: 0, modifiedCount: 0, upsertedCount: 1 };
+        return { matchedCount: 0, modifiedCount: 0, upsertedCount: 1, upsertedId: seed._id };
       }
       return { matchedCount: 0, modifiedCount: 0, upsertedCount: 0 };
     }
@@ -660,12 +678,18 @@ class InMemoryCollection {
     filter: Doc,
     replacement: Doc,
     options: { upsert?: boolean } = {}
-  ): Promise<{ matchedCount: number; modifiedCount: number; upsertedCount: number }> {
+  ): Promise<{
+    matchedCount: number;
+    modifiedCount: number;
+    upsertedCount: number;
+    upsertedId?: unknown;
+  }> {
     const index = this.docs.findIndex((d) => matchesFilter(d, filter));
     if (index < 0) {
       if (!options.upsert) return { matchedCount: 0, modifiedCount: 0, upsertedCount: 0 };
-      this.docs.push({ ...seedFromFilter(filter), ...clone(replacement) });
-      return { matchedCount: 0, modifiedCount: 0, upsertedCount: 1 };
+      const inserted = { ...seedFromFilter(filter), ...clone(replacement) };
+      this.docs.push(inserted);
+      return { matchedCount: 0, modifiedCount: 0, upsertedCount: 1, upsertedId: inserted._id };
     }
     // A replace keeps `_id` and discards every other previous field — unlike
     // `$set`, which merges.
@@ -729,8 +753,7 @@ class InMemoryCollection {
         matched += res.matchedCount;
         modified += res.modifiedCount;
         upserted += res.upsertedCount;
-        if (res.upsertedCount)
-          upsertedIds[index] = this.docs.find((doc) => matchesFilter(doc, filter))?._id;
+        if (res.upsertedCount) upsertedIds[index] = res.upsertedId;
       } else if (op.insertOne) {
         await this.insertOne((op.insertOne as { document: Doc }).document);
       } else if (op.replaceOne) {
@@ -743,8 +766,7 @@ class InMemoryCollection {
         matched += res.matchedCount;
         modified += res.modifiedCount;
         upserted += res.upsertedCount;
-        if (res.upsertedCount)
-          upsertedIds[index] = this.docs.find((doc) => matchesFilter(doc, filter))?._id;
+        if (res.upsertedCount) upsertedIds[index] = res.upsertedId;
       } else if (op.updateMany) {
         const { filter, update } = op.updateMany as { filter: Doc; update: Update };
         const res = await this.updateMany(filter, update);

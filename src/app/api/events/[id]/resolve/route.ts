@@ -74,7 +74,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (instance.status !== "pending") {
       throw badRequest("This event has already been resolved.");
     }
-    if (Date.now() > instance.expiresAtRealtimeMs) {
+    if (Date.now() > instance.expiresAtRealtimeMs && !instance.resolutionClaim) {
       throw badRequest("This event has expired.");
     }
 
@@ -82,6 +82,22 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (!handler || !handler.options.some((o) => o.id === parsed.data.optionId)) {
       throw badRequest("Invalid option for this event.");
     }
+    const hasFundedTreasuryAlternative =
+      instance.scope === "country" &&
+      handler.options.some((option) =>
+        option.outcomeTable.some((tier) =>
+          tier.effects.some((effect) => effect.type === "treasuryDelta")
+        )
+      );
+    const treasuryCashLedgerEnabled = instance.resolutionClaim
+      ? instance.scope === "country"
+      : hasFundedTreasuryAlternative
+        ? (
+            await db
+              .collection<{ _id: string; treasuryCashLedgerEnabled?: boolean }>("gameConfig")
+              .findOne({ _id: "default" }, { projection: { treasuryCashLedgerEnabled: 1 } })
+          )?.treasuryCashLedgerEnabled === true
+        : false;
 
     if (instance.scope === "country") {
       const definition = await getEventDefinitionsCollection(db).findOne({ kind: instance.kind });
@@ -97,18 +113,28 @@ export async function POST(request: Request, { params }: RouteParams) {
     let effects: EventEffect[] = [];
     let statAdjustment: { stat: string; label: string; delta: number } | null = null;
     try {
-      await resolveEvent(db, instanceId, parsed.data.optionId, "player", currentTurn, {
-        onResolved: async (resolved, ctx) => {
-          tierLabel = ctx.tier.label;
-          effects = ctx.tier.effects;
-          statAdjustment = ctx.statAdjustment ?? null;
-          if (resolved.scope === "country") {
-            await notifyCountryEventResolved(character.userId, resolved, ctx);
-          } else {
-            await notifyPlayerEventResolved(character.userId, resolved, ctx);
-          }
+      await resolveEvent(
+        db,
+        instanceId,
+        parsed.data.optionId,
+        "player",
+        currentTurn,
+        {
+          onResolved: async (resolved, ctx) => {
+            tierLabel = ctx.tier.label;
+            effects = ctx.tier.effects;
+            statAdjustment = ctx.statAdjustment ?? null;
+            if (resolved.scope === "country") {
+              await notifyCountryEventResolved(character.userId, resolved, ctx);
+            } else {
+              await notifyPlayerEventResolved(character.userId, resolved, ctx);
+            }
+          },
         },
-      });
+        undefined,
+        treasuryCashLedgerEnabled,
+        character._id.toString()
+      );
     } catch (error) {
       if (error instanceof EventNotResolvableError) {
         throw badRequest("This event can no longer be resolved.");

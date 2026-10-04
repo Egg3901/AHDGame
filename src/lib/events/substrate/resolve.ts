@@ -1,7 +1,7 @@
 import type { Db, ObjectId } from "mongodb";
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { getEventInstancesCollection } from "@/lib/db/collections/eventInstances";
-import type { EventInstance } from "@/lib/db/types/events";
+import type { EventInstance, OutcomeTier } from "@/lib/db/types/events";
 import { STAT_META } from "@/lib/stats/statMeta";
 import { updateCharacterCooldownLedger, updateCountryCooldownLedger } from "./cooldown";
 import { emitOutcomeNewsWire } from "./outcomeNews";
@@ -23,7 +23,9 @@ export async function resolveEvent(
   reason: "player" | "timeout",
   currentTurn: number,
   hooks?: ResolveEventHooks,
-  preset?: string
+  preset?: string,
+  treasuryCashLedgerEnabled = false,
+  actorId?: string
 ): Promise<EventInstance> {
   const coll = getEventInstancesCollection(db);
   const instance = await coll.findOne({ _id: instanceId });
@@ -37,7 +39,11 @@ export async function resolveEvent(
       `resolveEvent: instance ${instanceId.toHexString()} is ${instance.status}`
     );
   }
-  if (reason === "player" && Date.now() > instance.expiresAtRealtimeMs) {
+  if (
+    reason === "player" &&
+    Date.now() > instance.expiresAtRealtimeMs &&
+    !instance.resolutionClaim
+  ) {
     throw new EventNotResolvableError("resolveEvent: instance has expired");
   }
 
@@ -46,7 +52,7 @@ export async function resolveEvent(
     throw new EventNotResolvableError(`resolveEvent: no handler for kind ${instance.kind}`);
   }
 
-  const option = handler.options.find((o) => o.id === optionId);
+  let option = handler.options.find((o) => o.id === optionId);
   if (!option) {
     throw new Error(`resolveEvent: no option "${optionId}" on handler for ${instance.kind}`);
   }
@@ -71,16 +77,106 @@ export async function resolveEvent(
     }
   }
 
-  const tier = pickTier(option.outcomeTable, effectiveRoll);
+  let tier = pickTier(option.outcomeTable, effectiveRoll);
+  let resolutionTurn = currentTurn;
+  let resolutionReason = reason;
+  let resolutionPreset = preset ?? (await getGameStatePresetOrDefault(db));
+  let resolutionStatAdjustment = statAdjustment;
+  const hasTreasuryAlternative = handler.options.some((candidate) =>
+    candidate.outcomeTable.some((candidateTier) =>
+      candidateTier.effects.some((effect) => effect.type === "treasuryDelta")
+    )
+  );
+  const claimFundedChoice =
+    instance.scope === "country" &&
+    (instance.resolutionClaim !== undefined ||
+      (treasuryCashLedgerEnabled && hasTreasuryAlternative));
+  const useFrozenFundedPath =
+    instance.scope === "country" &&
+    (treasuryCashLedgerEnabled || instance.resolutionClaim !== undefined);
+
+  if (claimFundedChoice) {
+    const claim = instance.resolutionClaim;
+    if (claim) {
+      if (
+        reason !== "timeout" &&
+        (claim.optionId !== optionId ||
+          claim.reason !== reason ||
+          (actorId && claim.actorId !== actorId))
+      ) {
+        throw new EventNotResolvableError(
+          `resolveEvent: instance ${instanceId.toHexString()} is reserved for another choice`
+        );
+      }
+      const claimedOption = handler.options.find((candidate) => candidate.id === claim.optionId);
+      if (!claimedOption) {
+        throw new EventNotResolvableError("resolveEvent: reserved option is no longer available");
+      }
+      option = claimedOption;
+      tier = claim.tier as OutcomeTier;
+      resolutionTurn = claim.turn;
+      resolutionReason = claim.reason;
+      resolutionPreset = claim.preset;
+      resolutionStatAdjustment = claim.statAdjustment;
+    } else {
+      const claimValue = {
+        optionId: option.id,
+        reason,
+        ...(actorId ? { actorId } : {}),
+        turn: currentTurn,
+        preset: resolutionPreset,
+        effectiveRoll,
+        tier,
+        ...(statAdjustment ? { statAdjustment } : {}),
+        claimedAt: new Date(),
+      };
+      const reserved = await coll.findOneAndUpdate(
+        { _id: instanceId, status: "pending", resolutionClaim: { $exists: false } },
+        { $set: { resolutionClaim: claimValue, updatedAt: claimValue.claimedAt } },
+        { returnDocument: "after" }
+      );
+      if (!reserved?.resolutionClaim) {
+        const winner = await coll.findOne({ _id: instanceId, status: "pending" });
+        if (!winner?.resolutionClaim) {
+          throw new EventNotResolvableError(
+            `resolveEvent: instance ${instanceId.toHexString()} was resolved concurrently`
+          );
+        }
+        if (
+          reason !== "timeout" &&
+          (winner.resolutionClaim.optionId !== optionId ||
+            winner.resolutionClaim.reason !== reason ||
+            (actorId && winner.resolutionClaim.actorId !== actorId))
+        ) {
+          throw new EventNotResolvableError(
+            `resolveEvent: instance ${instanceId.toHexString()} is reserved for another choice`
+          );
+        }
+        const claimedOption = handler.options.find(
+          (candidate) => candidate.id === winner.resolutionClaim!.optionId
+        );
+        if (!claimedOption) {
+          throw new EventNotResolvableError("resolveEvent: reserved option is no longer available");
+        }
+        option = claimedOption;
+        tier = winner.resolutionClaim.tier;
+        resolutionTurn = winner.resolutionClaim.turn;
+        resolutionReason = winner.resolutionClaim.reason;
+        resolutionPreset = winner.resolutionClaim.preset;
+        resolutionStatAdjustment = winner.resolutionClaim.statAdjustment;
+      }
+    }
+  }
   const ctx: EventResolveContext = {
     db,
-    currentTurn,
+    currentTurn: resolutionTurn,
     instance,
     option,
     tier,
-    reason,
-    statAdjustment,
-    preset: preset ?? (await getGameStatePresetOrDefault(db)),
+    reason: resolutionReason,
+    statAdjustment: resolutionStatAdjustment,
+    preset: resolutionPreset,
+    treasuryCashLedgerEnabled: useFrozenFundedPath,
   };
 
   if (handler.applyEffects) {
@@ -91,16 +187,20 @@ export async function resolveEvent(
   }
 
   const now = new Date();
-  const terminalStatus = reason === "timeout" ? "expired" : "resolved";
+  const terminalStatus = resolutionReason === "timeout" ? "expired" : "resolved";
   const update = await coll.findOneAndUpdate(
-    { _id: instanceId, status: "pending" },
+    {
+      _id: instanceId,
+      status: "pending",
+      ...(claimFundedChoice ? { "resolutionClaim.optionId": option.id } : {}),
+    },
     {
       $set: {
         status: terminalStatus,
         resolvedAt: now,
-        resolvedOptionId: optionId,
+        resolvedOptionId: option.id,
         resolvedTierLabel: tier.label,
-        resolveReason: reason,
+        resolveReason: resolutionReason,
         updatedAt: now,
       },
     },
@@ -116,7 +216,7 @@ export async function resolveEvent(
   if (update.scope === "character") {
     await updateCharacterCooldownLedger(db, update.scopeId, currentTurn);
   } else if (update.scope === "country") {
-    await updateCountryCooldownLedger(db, update.scopeId, currentTurn);
+    await updateCountryCooldownLedger(db, update.scopeId, resolutionTurn);
   }
 
   // Notable outcomes (record fines, scandals, viral moments) post to the
