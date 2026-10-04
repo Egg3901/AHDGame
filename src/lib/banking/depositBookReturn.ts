@@ -87,6 +87,8 @@ import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
 import { loadBankingPolicy } from "@/lib/banking/policy";
 import { savingsReadsAuthoritative } from "@/lib/banking/rules/policy";
 import type { SavingsAccount } from "@/lib/db/types/savingsAccount";
+import { BANK_FAILURE_EVENTS } from "./failurePolitics";
+import type { BankFailurePoliticalEvent } from "./rules/failurePolitics";
 import { CENTRAL_BANK_HOLDER } from "@/lib/savings/rules/accounts";
 
 /** Budget spending line a deposit insurance backstop is booked against. */
@@ -216,6 +218,8 @@ export async function returnDepositBook(
   options: {
     cause: DepositBookReturnCause;
     turn: number;
+    /** Current delivery turn, distinct from an older resolution claim. */
+    effectsTurn?: number;
     /** Pay any surplus above the household book to the parent. */
     releaseResidualToOwner: boolean;
   }
@@ -550,6 +554,34 @@ export async function returnDepositBook(
     depositAggregateClearProjection(bankIdHex, options.turn, options.cause, now)
   );
 
+  if (policy.failurePolitics && options.cause === "failure" && npc > 0) {
+    const countryId = getCountryIdForCurrency(currency);
+    const budget = await db
+      .collection<FederalBudget>("federalBudget")
+      .findOne({ _id: getNationalBudgetId(countryId) }, { projection: { gdp: 1 } });
+    // Both GDP and paid amounts are in this government's native currency.
+    // Publish last: no event is visible before cash and liability projections land.
+    if (typeof budget?.gdp === "number" && Number.isFinite(budget.gdp) && budget.gdp > 0) {
+      projections.push({
+        collection: BANK_FAILURE_EVENTS,
+        filter: {},
+        insert: {
+          _id: `bank-failure:${bankIdHex}:${charter.charteredTurn}`,
+          bankId: bankIdHex,
+          charteredTurn: charter.charteredTurn,
+          countryId,
+          currency,
+          paidTurn: null,
+          depositExposure: npc,
+          insurancePaid: fromInsuranceFund,
+          taxpayerPaid: fromTreasury,
+          gdp: budget.gdp,
+        },
+        note: "completed funded bank failure political event",
+      });
+    }
+  }
+
   const key = depositBookReturnKey(corporationId, options.cause, options.turn);
   const settled = await settleTransition(db, {
     key,
@@ -580,6 +612,16 @@ export async function returnDepositBook(
       .updateMany(
         { [holderPath]: bankIdHex },
         { $set: { [holderPath]: "centralBank", updatedAt: now } }
+      );
+  }
+  if (policy.failurePolitics && options.cause === "failure") {
+    // Activation follows completed cash and liability settlement, including replay.
+    // A delayed payout starts its decay when delivered, not when first claimed.
+    await db
+      .collection<BankFailurePoliticalEvent>(BANK_FAILURE_EVENTS)
+      .updateOne(
+        { _id: `bank-failure:${bankIdHex}:${charter.charteredTurn}`, paidTurn: null },
+        { $set: { paidTurn: options.effectsTurn ?? options.turn } }
       );
   }
   if (settled.status === "replayed") {

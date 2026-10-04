@@ -105,6 +105,7 @@ import {
   type PoliticalMediaOrderForClearing,
 } from "@/lib/politicalMedia/journal";
 import { applyMediaEditorialEffects } from "@/lib/mediaEditorial/applyEffects";
+import { addSettledPoliticalAttention } from "@/lib/mediaOperatingModels/reach";
 import { applyOperatingCashThenDevelopmentCash } from "./manufacturingDevelopmentCashSettlement";
 
 export type { CorporationTurnResult } from "./corporationTurnRuntime";
@@ -171,6 +172,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           freightSettlementMode: 1,
           canonicalFreightBillingEnabled: 1,
           mediaEditorialEnabled: 1,
+          mediaOperatingModelsEnabled: 1,
         },
       }
     ),
@@ -208,6 +210,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     (marketGovernorConfig as { canonicalFreightBillingEnabled?: boolean } | null)
       ?.canonicalFreightBillingEnabled === true;
   const mediaEditorialEnabled = marketGovernorConfig?.mediaEditorialEnabled === true;
+  const mediaOperatingModelsEnabled = marketGovernorConfig?.mediaOperatingModelsEnabled === true;
   const lookups = await buildCorporationLookups(db, {
     plantsEnabled: plantsEnabledForMarketShare,
     explicitPlantCostsEnabled:
@@ -397,7 +400,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     await savePoliticalMediaSettlementPlan(db, orderId, plan);
   }
   contractedByCorpCommodity = clearingContractedByCorpCommodity;
-  if (mediaEditorialEnabled && market.editorialOutletsByState) {
+  if (mediaEditorialEnabled && !mediaOperatingModelsEnabled && market.editorialOutletsByState) {
     await applyMediaEditorialEffects({
       db,
       turn: turn ?? gameState?.currentTurn ?? 0,
@@ -741,15 +744,58 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   await creditEquityPoolsBatch(db, equityPoolDividendAccruals, "dividendsIn", now);
   mark("sector+corp bulkWrites");
 
+  const settledPoliticalMediaOrders = [];
   if (politicalMediaMarketEnabled) {
     for (const order of politicalMediaOrders) {
       // New plans were already durably saved before sector P&L writes. The
       // loaded order is an opening snapshot, so do not issue the same plan
       // read/CAS a second time after bulk writes.
       if (!order.settlementPlan && !plannedPoliticalMediaOrders.has(order.orderId)) continue;
-      await settlePoliticalMediaOrder(db, order.orderId, turn ?? 0);
+      const results = await settlePoliticalMediaOrder(db, order.orderId, turn ?? 0);
+      const plan = order.settlementPlan ?? plannedPoliticalMediaOrders.get(order.orderId);
+      const settled =
+        order.status === "settled" ||
+        (results.length > 0 &&
+          results.every((result) => result.status === "applied" || result.status === "replayed"));
+      if (settled && plan?.plannedTurn === (turn ?? gameState?.currentTurn ?? 0)) {
+        settledPoliticalMediaOrders.push({
+          orderId: order.orderId,
+          status: "settled" as const,
+          identity: order.identity,
+          settlementPlan: plan,
+        });
+      }
       await applyPoliticalMediaOrderEffect(db, order.orderId);
     }
+  }
+
+  if (mediaEditorialEnabled && mediaOperatingModelsEnabled && market.editorialOutletsByState) {
+    const outletsByState = addSettledPoliticalAttention({
+      commercialOutletsByState: new Map(
+        [...market.editorialOutletsByState].map(([stateId, outlets]) => [
+          stateId,
+          outlets.map((outlet) => ({
+            ...outlet,
+            attentionUnits: outlet.attentionUnits ?? 0,
+          })),
+        ])
+      ),
+      settledOrders: settledPoliticalMediaOrders,
+      stanceByCorporationId: new Map(
+        [...lookups.corpById].map(([corporationId, corporation]) => [
+          corporationId,
+          {
+            economic: corporation.editorialStance?.economic ?? 0,
+            social: corporation.editorialStance?.social ?? 0,
+          },
+        ])
+      ),
+    });
+    await applyMediaEditorialEffects({
+      db,
+      turn: turn ?? gameState?.currentTurn ?? 0,
+      outletsByState,
+    });
   }
 
   // Contracts and surveys read the post-bulkWrite snapshot so this turn's

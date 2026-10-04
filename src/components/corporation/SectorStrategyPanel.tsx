@@ -20,7 +20,11 @@ import Link from "next/link";
 import type { CorporationType } from "@/lib/constants/corporations";
 import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
 import { COMMODITY_LABELS, type CommodityType } from "@/lib/constants/commodities";
-import { SECTOR_STRATEGIES, type SectorStrategy } from "@/lib/constants/sectorStrategies";
+import {
+  getSectorStrategies,
+  getStrategy,
+  type SectorStrategy,
+} from "@/lib/constants/sectorStrategies";
 import { facilityPlural, facilitySingular } from "@/lib/constants/facilityVocabulary";
 import { PROPOSED_ACTION_NOTE, proposedSectorActions } from "@/lib/constants/sectorTypeDossier";
 import type { SectorDetail } from "./CorporationPageTypes";
@@ -37,6 +41,7 @@ interface SectorStrategyPanelProps {
   sectors: SectorDetail[];
   isCeo: boolean;
   corpId: string;
+  mediaOperatingModelsEnabled: boolean;
 }
 
 /** Commodity rates for one side of the chain. Rates are shares of output, never above 1. */
@@ -101,9 +106,10 @@ export function SectorStrategyPanel({
   sectors,
   isCeo,
   corpId,
+  mediaOperatingModelsEnabled,
 }: SectorStrategyPanelProps) {
   const label = CORPORATION_TYPE_LABELS[sectorType] ?? sectorType;
-  const strategies: SectorStrategy[] = SECTOR_STRATEGIES[sectorType] ?? [];
+  const strategies: SectorStrategy[] = getSectorStrategies(sectorType, mediaOperatingModelsEnabled);
 
   const [open, setOpen] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -124,13 +130,22 @@ export function SectorStrategyPanel({
     return map;
   }, [sectors]);
 
+  // Keep active persisted models visible as read-only status when the selector
+  // flag is off. They never enter the row's selectable strategy options.
+  const activePersistedModels = [...byStrategy.keys()].flatMap((id) => {
+    if (strategies.some((strategy) => strategy.id === id)) return [];
+    const strategy = getStrategy(sectorType, id);
+    return strategy.mediaOperatingModelId ? [strategy] : [];
+  });
+  const visibleStrategies = [...strategies, ...activePersistedModels];
+
   // The selection is remembered per session but never allowed to point at a
   // strategy this type does not have — switching type would otherwise land on
   // an empty pane.
   const active =
-    strategies.find((s) => s.id === selectedId) ??
-    strategies.find((s) => (byStrategy.get(s.id)?.length ?? 0) > 0) ??
-    strategies[0];
+    visibleStrategies.find((s) => s.id === selectedId) ??
+    visibleStrategies.find((s) => (byStrategy.get(s.id)?.length ?? 0) > 0) ??
+    visibleStrategies[0];
 
   if (!strategies.length || !active) return null;
 
@@ -164,7 +179,7 @@ export function SectorStrategyPanel({
         <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
           <h2 className="text-sm font-semibold text-foreground">Operating strategies</h2>
           <span className="text-xs text-muted">
-            every strategy {label} offers; the count is sites running it
+            available strategies and active methods for {label}; the count is sites running it
           </span>
         </div>
         <button
@@ -184,7 +199,7 @@ export function SectorStrategyPanel({
             role="tablist"
             aria-label="Operating strategy"
           >
-            {strategies.map((strategy) => {
+            {visibleStrategies.map((strategy) => {
               const running = byStrategy.get(strategy.id) ?? [];
               const count = running.length;
               const isActive = count > 0;

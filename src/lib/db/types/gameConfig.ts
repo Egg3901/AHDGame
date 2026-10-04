@@ -148,6 +148,8 @@ export interface GameConfig {
   commandEconomyEnabled?: boolean;
   /** Public media editorial stance and audience response rules. Missing means off. */
   mediaEditorialEnabled?: boolean;
+  /** Paid media and entertainment operating-model catalog. Default off. */
+  mediaOperatingModelsEnabled?: boolean;
   /**
    * Sovereignty transitions (decolonization). Absent/false ⇒ the phase is a
    * no-op, which is the required default: the evaluator returns a "strong
@@ -221,6 +223,8 @@ export interface GameConfig {
   bankPropForexFeesEnabled?: boolean;
   /** Kill switch: bank-failure contagion cascade. Default on when banking is on. */
   bankContagionEnabled?: boolean;
+  /** Funded bank failures affect approval and consumer confidence. Default off. */
+  bankFailurePoliticsEnabled?: boolean;
   /**
    * Savings account rollout. `off`: legacy character fields only. `shadow`:
    * accounts are materialized from the legacy fields every turn and compared,

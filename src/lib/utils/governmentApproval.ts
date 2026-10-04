@@ -635,7 +635,8 @@ export async function snapshotApprovalHistory(
   db: Db,
   countryId: CountryId,
   turn: number,
-  telemetryCtx?: LongHorizonContext
+  telemetryCtx?: LongHorizonContext,
+  bankFailureMods: ActiveModifier[] = []
 ): Promise<void> {
   const statesCol = db.collection<State>("states");
 
@@ -803,6 +804,7 @@ export async function snapshotApprovalHistory(
     ...orgStatementMods,
     ...war.modifiers,
     ...cabinetMods,
+    ...bankFailureMods,
     ...(unionEnforcementMod ? [unionEnforcementMod] : []),
   ];
   const allNationalMods = [PUBLIC_EXPECTATIONS_MODIFIER, ...nationalMods];

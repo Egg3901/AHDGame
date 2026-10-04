@@ -51,7 +51,12 @@ export interface MarketContext {
   /** Delivered media outlets per audience state, normalized by local delivered units. */
   editorialOutletsByState?: ReadonlyMap<
     string,
-    readonly { corporationId: string; stance: EditorialPosition; audienceShare: number }[]
+    readonly {
+      corporationId: string;
+      stance: EditorialPosition;
+      audienceShare: number;
+      attentionUnits?: number;
+    }[]
   >;
   /**
    * Freight seam: per sector id, the share of its clearing offer (0..1) that

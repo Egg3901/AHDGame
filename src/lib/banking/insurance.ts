@@ -218,6 +218,7 @@ export async function resolveFailedBankDepositors(
   const result = await returnDepositBook(db, corporationId, {
     cause: "failure",
     turn: claimTurn,
+    effectsTurn: turn,
     // A failed bank's shareholders are last in line and, by definition of
     // failure, there is nothing left for them. Never release a residual here.
     releaseResidualToOwner: false,
