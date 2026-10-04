@@ -163,6 +163,40 @@ describe("processBondTurn", () => {
     expect(result.bondsDefaulted).toBe(0);
   });
 
+  it("defers maturity while a funded bank treasury reservation is pending", async () => {
+    const bond = {
+      _id: new ObjectId(),
+      issuerType: "sovereign",
+      countryId: "US",
+      couponRate: 5,
+      maturityTurn: 10,
+      matured: false,
+      defaulted: false,
+      holders: [
+        {
+          bankId: new ObjectId(),
+          charteredTurn: 4,
+          bankTreasuryTradeId: "pending-funded-buy",
+          units: 5,
+        },
+      ],
+      publicFloat: 0,
+      corporationId: new ObjectId(),
+    };
+    mockBondFinds([bond], []);
+    db.collectionMocks["bondHistory"]!.aggregate.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+
+    const result = await processBondTurn(10);
+
+    expect(result.bondsMatured).toBe(0);
+    const writes = db.collectionMocks["bonds"]!.bulkWrite.mock.calls.flatMap(
+      ([ops]) => ops as Array<{ updateOne?: { update?: { $set?: Record<string, unknown> } } }>
+    );
+    expect(writes.some((op) => op.updateOne?.update?.$set?.matured === true)).toBe(false);
+  });
+
   it("continues legacy bridge recovery when no active bonds remain", async () => {
     db.collection("gameState");
     db.collectionMocks["gameState"]!.findOne.mockResolvedValue({ preset: "1991-default" });

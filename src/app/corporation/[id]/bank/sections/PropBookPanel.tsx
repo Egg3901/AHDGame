@@ -50,6 +50,7 @@ export function PropBookPanel({
   currency,
   positions,
   markValue,
+  sovereignTreasuryMarkValue,
   cashReserves,
   totalLoans,
   borrowings,
@@ -62,6 +63,7 @@ export function PropBookPanel({
   currency: CurrencyCode;
   positions: NonNullable<ConsolePayload["charter"]>["propBook"];
   markValue: number;
+  sovereignTreasuryMarkValue: number;
   cashReserves: number;
   totalLoans: number;
   borrowings: BankBorrowings;
@@ -82,6 +84,7 @@ export function PropBookPanel({
   // in risk assets beside the loan book (capitalAdequacy.assessCapital).
   const position = assessCapital({
     cashReserves,
+    sovereignTreasuryMarkValue,
     totalLoans,
     borrowings,
     propBookMarkValue: markValue,
