@@ -6,6 +6,7 @@ import {
   hasProtectedConstructionProperty,
   hasProtectedConstructionPropertyIn,
   reserveSectorsForRestore,
+  reserveSectorsForTransition,
   unprotectedConstructionPropertyFilter,
 } from "./securedConstructionProperty";
 
@@ -132,5 +133,31 @@ describe("secured construction property guard", () => {
     const otherDb = createMockDb();
     expect(await reserveSectorsForRestore(otherDb as unknown as Db, [pledged])).toBe(false);
     expect(otherDb.collectionMocks.corporateSectors).toBeUndefined();
+  });
+
+  it("refuses a same-currency relocation when a concurrent claim wins the property reservation", async () => {
+    const db = createMockDb();
+    db.collection("corporateSectors");
+    db.collectionMocks.corporateSectors.updateOne.mockResolvedValue({ matchedCount: 0 });
+    const sector = {
+      _id: new ObjectId(),
+      corporationId: new ObjectId(),
+      constructionFinancing: undefined,
+    };
+
+    expect(
+      await reserveSectorsForTransition(
+        db as unknown as Db,
+        [sector],
+        "headquarters_relocation",
+        "hq:test"
+      )
+    ).toBeNull();
+    const [filter] = db.collectionMocks.corporateSectors.updateOne.mock.calls[0]!;
+    expect(filter).toMatchObject({
+      _id: sector._id,
+      corporationId: sector.corporationId,
+      $and: expect.any(Array),
+    });
   });
 });
