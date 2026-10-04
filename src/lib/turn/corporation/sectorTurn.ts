@@ -39,7 +39,6 @@ import { computePlantsCapacity } from "./sectorTurn/plantsCapacity";
 import { accumulateMarginModifiers } from "./sectorTurn/marginStack";
 import { resolvePlantsRevenue } from "./sectorTurn/plantsRevenue";
 import { computeGrowthAndRegulatory, decomposePhysicalCosts } from "./sectorTurn/sectorCosts";
-import { costReleasedThisTurn } from "@/lib/corporations/buildDelivery";
 import { resolveBuildQueueTurn } from "./sectorBuildQueueTurn";
 import { resolveSectorGrowthPolicy } from "./sectorGrowthPolicy";
 import {
@@ -305,26 +304,18 @@ export function processSector(
     sectorFxRate,
     eraUnitScale: lookups.eraUnitScale,
   });
-  // ─── C4: the turn's queue write is a DELTA, never a whole-array $set ───────
-  // `nextBuildQueue` is a snapshot; `$set`-ing it would erase any order a CEO
+  // C4: the turn's queue write is a delta, never a whole-array $set.
+  // `nextBuildQueue` is a snapshot; `$set`-ing it would erase an order a CEO
   // placed during this phase. Write only what the turn owns: `$pull` orders
-  // that landed (`onlineTurn <= currentTurn`). A freshly placed order always
-  // has `onlineTurn > currentTurn`, so it cannot match. CIP `$inc`s the same
-  // delta so a concurrent order's contribution survives; rounded values keep
-  // the stored integer exact, and the command restates CIP absolutely so drift
-  // self-heals. Flip-turn credit is a `$push` in a second bulkWrite op - Mongo
-  // rejects `$pull` and `$push` on the same path in one update. bulkWrite is
+  // that landed (`onlineTurn <= currentTurn`). CIP has one writer: this turn
+  // derives its absolute value from the outstanding queue, including smooth
+  // delivery, and clamps it at zero. Other queue writers never adjust CIP.
+  // Flip-turn credit is a `$push` in a second bulkWrite op. Mongo rejects
+  // `$pull` and `$push` on the same path in one update. bulkWrite is
   // ordered, so the pull always precedes the push.
   const landedOrderCount = plantsEnabled
     ? existingQueue.reduce((n, o) => (o.onlineTurn <= currentTurn ? n + 1 : n), 0)
     : 0;
-  // Cost leaving CIP this turn: the sum of what each order released (a landed
-  // legacy order releases its whole cost; a smooth order releases this turn's
-  // slice). `$inc`-ing CIP down by this delta — rather than restating it — is
-  // what keeps a concurrently-placed order's contribution intact (C4).
-  const cipAnchorDelta = Math.round(
-    existingQueue.reduce((sum, o) => sum + costReleasedThisTurn(o, currentTurn), 0)
-  );
   // ─── Plants capacity advance + P5 paid basis ──────────────────────────────
   // Pure computation in `sectorTurn/plantsCapacity.ts`; the orchestrator only
   // threads its inputs and consumes the legs. Names are unchanged, so every
@@ -845,9 +836,8 @@ export function processSector(
     if (plantsUpkeepMarginBasisAnchor == null) {
       sectorUpdate.plantsUpkeepMarginBasisAnchor = plantsUpkeepMarginBasisLive;
     }
-    // P3a/C4: `buildQueue` and `constructionInProgressAnchor` are deliberately
-    // NOT in this `$set`. They are written as a `$pull`/`$inc` delta on the
-    // bulkWrite op below — see the C4 note at `cipAnchorDelta`.
+    // P3a/C4: the queue is updated by a `$pull` below. CIP is derived by this
+    // turn from the post-delivery queue.
     // Keep an independent capital-mode counterfactual so a plants rollback
     // restores the old compounding series instead of a plants-derived value.
     Object.assign(
@@ -1036,10 +1026,9 @@ export function processSector(
     }
   }
 
-  // C4: the queue delta rides along with the `$set` — a `$pull` of the orders
-  // that landed and an `$inc` of the CIP they were holding. Paths are disjoint
-  // from `sectorUpdate` (which no longer carries `buildQueue` /
-  // `constructionInProgressAnchor`), so Mongo accepts the combined update.
+  // C4: the queue delta rides along with the `$set`. CIP is derived absolutely
+  // from the same queue result each turn, which repairs stale and negative
+  // stored values without a sequence of rounded increments.
   const sectorUpdateDoc: SectorUpdateOp["updateOne"]["update"] = { $set: sectorUpdate };
   if (plantsEnabled) {
     // A smooth order releases CIP every turn it delivers, not only on the turn
@@ -1048,9 +1037,10 @@ export function processSector(
     if (landedOrderCount > 0) {
       sectorUpdateDoc.$pull = { buildQueue: { onlineTurn: { $lte: currentTurn } } };
     }
-    if (cipAnchorDelta !== 0) {
-      sectorUpdateDoc.$inc = { constructionInProgressAnchor: -cipAnchorDelta };
-    }
+    sectorUpdateDoc.$set.constructionInProgressAnchor = Math.max(
+      0,
+      Math.round(constructionInProgressAnchor)
+    );
   }
   sectorOps.push({
     updateOne: {

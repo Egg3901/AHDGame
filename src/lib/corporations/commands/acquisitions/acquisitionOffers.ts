@@ -52,6 +52,7 @@ export async function referenceValuationAnchor(db: Db, target: Corporation): Pro
   const sectorNpvAnchor = sectorExitValueAnchor(sectors, primeMap, target, fxByCurrency, {
     plantsEnabled: marketAtLeast(marketMode, "plants"),
     currentYear: gameState?.currentYear,
+    currentTurn: gameState?.currentTurn,
     eraUnitScale: await loadWorldEraUnitScale(db),
     excludeGrowthCost: true,
   });

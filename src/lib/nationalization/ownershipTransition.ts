@@ -468,6 +468,7 @@ export async function nationalizeSector(
     {
       plantsEnabled,
       currentYear: gameState?.currentYear,
+      currentTurn: gameState?.currentTurn,
       eraUnitScale: await loadWorldEraUnitScale(db),
     }
   );
@@ -646,7 +647,12 @@ export async function nationalizeWholeCorp(
   // D11: under plants the sector leg of balance-sheet equity is replacement-cost
   // book, not capitalized earnings.
   const sectorNpvAnchor = corpPlantsEnabled
-    ? sumSectorBookValueAnchor(targetSectors, corpGameState?.currentYear, corpEraUnitScale)
+    ? sumSectorBookValueAnchor(
+        targetSectors,
+        corpGameState?.currentYear,
+        corpEraUnitScale,
+        corpGameState?.currentTurn
+      )
     : computeSectorNpvSum(targetSectors, primeMap, target, fxByCurrency, {
         excludeGrowthCost: true,
       });

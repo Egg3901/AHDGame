@@ -372,6 +372,7 @@ export async function nationalizeSectorWide(
         {
           plantsEnabled,
           currentYear: sweepCurrentYear,
+          currentTurn: params.consequence.turn,
           fraction: f,
           eraUnitScale: sweepEraUnitScale,
         }

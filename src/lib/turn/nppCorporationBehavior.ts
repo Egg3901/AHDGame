@@ -1903,15 +1903,14 @@ export function makeNppCorpDecision(
       // `$pull` of the orders that completed this turn (bulkWrite is ordered,
       // and the NPP ops are appended last), resurrecting every landed order —
       // the capacity would be delivered again on the next tick. It would also
-      // erase any order a player CEO placed during the phase. `$push` + `$inc`
-      // touch only what this decision actually owns, and compose with both.
+      // erase any order a player CEO placed during the phase. `$push` touches
+      // only what this decision actually owns, and composes with both.
       // Same rule, same reason as `sectorTurn`'s C4 note.
       sectorUpdates.push({
         filter: { _id: sector._id },
         update: {
           $set: { updatedAt: now },
           $push: { buildQueue: order },
-          $inc: { constructionInProgressAnchor: Math.round(costAnchor) },
         },
       });
       // Growth builds from nothing — a plant top-up does not draw the unowned

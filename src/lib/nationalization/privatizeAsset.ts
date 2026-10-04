@@ -187,8 +187,12 @@ export async function privatizeAsset(
   let valuationAnchor = 0;
   for (const { sector, fraction } of selected) {
     const fullValueAnchor = plantsEnabled
-      ? sectorBookValueAnchor(sector, gameState?.currentYear, privatizeUnitScale) *
-        NATIONALIZATION_BOOK_PREMIUM
+      ? sectorBookValueAnchor(
+          sector,
+          gameState?.currentYear,
+          privatizeUnitScale,
+          gameState?.currentTurn
+        ) * NATIONALIZATION_BOOK_PREMIUM
       : computeSectorNpvSum([sector], primeMap, source, fxByCurrency);
     valuationAnchor += fullValueAnchor * fraction;
   }

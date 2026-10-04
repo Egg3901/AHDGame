@@ -224,7 +224,7 @@ describe("buildCapacity — build", () => {
     expect(res.status).toBe(201);
   });
 
-  it("queues an order, charges computeBuildCost and tracks CIP", async () => {
+  it("queues an order and charges computeBuildCost while leaving CIP to the turn", async () => {
     await wireMocks(sectorDoc());
     const res = await buildCapacity(request({ action: "build", units: 1_000 }), { params });
     expect(res.status).toBe(201);
@@ -247,7 +247,7 @@ describe("buildCapacity — build", () => {
     expect(queue.length).toBe(1);
     expect(queue[0].unitsOrdered).toBe(1_000);
     expect(queue[0].costPaidAnchor).toBeCloseTo(expected.totalAnchor, 6);
-    expect(set.constructionInProgressAnchor).toBe(Math.round(expected.totalAnchor));
+    expect(set).not.toHaveProperty("constructionInProgressAnchor");
 
     // Cash left the corp.
     const inc = db.collectionMocks.corporations.updateOne.mock.calls[0][1] as {
@@ -453,7 +453,7 @@ describe("buildCapacity — cancel", () => {
 
     const set = sectorSet();
     expect(set.buildQueue).toEqual([]);
-    expect(set.constructionInProgressAnchor).toBe(0);
+    expect(set).not.toHaveProperty("constructionInProgressAnchor");
   });
 
   it("refunds only the UNDELIVERED share of a half-built smooth order", async () => {
