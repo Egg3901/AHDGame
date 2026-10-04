@@ -517,10 +517,13 @@ async function buildWhipDefianceSnapshotsForScopes(
     ...(characterIds.length ? [{ characterId: { $in: characterIds } }] : []),
     ...(nppIds.length ? [{ nppId: { $in: nppIds } }] : []),
   ];
-  const membershipClauses: Filter<CaucusMembership>[] = [
-    ...(characterIds.length ? [{ memberType: "character", memberId: { $in: characterIds } }] : []),
-    ...(nppIds.length ? [{ memberType: "npp", memberId: { $in: nppIds } }] : []),
-  ];
+  const membershipClauses: Filter<CaucusMembership>[] = [];
+  if (characterIds.length) {
+    membershipClauses.push({ memberType: "character", memberId: { $in: characterIds } });
+  }
+  if (nppIds.length) {
+    membershipClauses.push({ memberType: "npp", memberId: { $in: nppIds } });
+  }
   type VoterOfficial = Pick<
     ElectedOfficial,
     "characterId" | "nppId" | "isNPP" | "state" | "officeType"

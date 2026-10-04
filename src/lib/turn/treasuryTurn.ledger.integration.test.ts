@@ -6,6 +6,7 @@ import { withInjectedCrash } from "@/lib/test-utils/faultyDb";
 import { deriveLedgerEntry } from "@/lib/ledger/deriveFromTx";
 import { reconcileLedger } from "@/lib/ledger/reconcile";
 import type { LedgerEntry } from "@/lib/ledger/types";
+import type { FederalBudget } from "@/lib/db/types/budget";
 import { processTreasuryTurn } from "./treasuryTurn";
 import { getDb } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
@@ -76,7 +77,10 @@ describe("treasury accrual stock-flow ownership", () => {
     );
 
     await processTreasuryTurn(10);
-    const budget = db.collection("federalBudget").docs[0];
+    const budget = db.collection("federalBudget").docs[0] as Pick<
+      FederalBudget,
+      "spending" | "treasuryAccrual" | "bankSovereignClaims" | "treasuryBalance"
+    >;
     const receipt = budget.treasuryAccrual as {
       cashDelta: number;
       bankCouponPlan?: Array<{ amountLocal: number; bankId: string; charteredTurn: number }>;
