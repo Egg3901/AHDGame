@@ -26,6 +26,7 @@ import {
 } from "./propForexFees";
 import { addPropForexVolume } from "./rules/propForexFees";
 import { loadBankingPolicy } from "./policy";
+import { allowedPropOpeningAssets } from "./rules/propAssets";
 import { savingsReadsAuthoritative } from "./rules/policy";
 import type { BalanceSheetOptions } from "./rules/balanceSheet";
 
@@ -338,6 +339,17 @@ export async function openPosition(
   }
   if (!input.ref || typeof input.ref !== "string")
     return { ok: false, error: "Position ref is required" };
+  if (policy.advancedCharters && input.asset === "equity") {
+    const owner = await db
+      .collection<Corporation>("corporations")
+      .findOne({ _id: corporationId }, { projection: { ceoType: 1 } });
+    if (!owner) return { ok: false, error: "Corporation not found" };
+    if (!allowedPropOpeningAssets(true, owner.ceoType).includes(input.asset))
+      return {
+        ok: false,
+        error: "Player bank prop purchases are limited to bonds, index units and forex",
+      };
+  }
   const resolvedRef = await resolvePositionRef(db, input.asset, input.ref);
   if (!resolvedRef.ok) return resolvedRef;
   const positionInput = { ...input, ref: resolvedRef.ref };
@@ -351,6 +363,11 @@ export async function openPosition(
       policy.propForexFees ? {} : { projection: { bankPropForexFee: 0, bankPropForexVolume: 0 } }
     );
   if (!corp) return { ok: false, error: "Corporation not found" };
+  if (!allowedPropOpeningAssets(policy.advancedCharters, corp.ceoType).includes(input.asset))
+    return {
+      ok: false,
+      error: "Player bank prop purchases are limited to bonds, index units and forex",
+    };
   const charter = corp.bankCharter;
   if (!isPropCharter(charter)) {
     return {
@@ -459,6 +476,9 @@ export async function openPosition(
     charter,
     revision: corp.bankPropBookRevision,
     operation: "buy",
+    ...(policy.advancedCharters && input.asset === "equity"
+      ? { requiredCeoType: corp.ceoType }
+      : {}),
     turn,
     cashDelta: -cost,
     nextBook,

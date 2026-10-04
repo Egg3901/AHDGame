@@ -4,6 +4,7 @@ import { ObjectId, type Db } from "mongodb";
 import { buildTxDocs, loadTxThresholds, loadAnchorRateMap } from "@/lib/financialTxLog/emit";
 import { loadTurnLengthMinutes } from "@/lib/financialTxLog/expiresAt";
 import type { TxInput } from "@/lib/financialTxLog/emit";
+import type { Corporation } from "@/lib/db/types/corporation";
 import type { BankCharter, PropPosition } from "@/lib/db/types/bank";
 import { settleAtomicDocumentTransition } from "./atomicDocumentSettlement";
 import { propSettlementTransition } from "./rules/propSettlement";
@@ -21,6 +22,7 @@ export async function settlePropBookChange(
     meta?: Record<string, string | number>;
     charter: BankCharter;
     revision?: number;
+    requiredCeoType?: Corporation["ceoType"];
     operation: string;
     turn: number;
     cashDelta: number;
@@ -37,6 +39,7 @@ export async function settlePropBookChange(
     .update(
       JSON.stringify({
         operation: input.operation,
+        requiredCeoType: input.requiredCeoType,
         cashDelta: input.cashDelta,
         nextBook: input.nextBook,
         nextMark: input.nextMark,
@@ -49,6 +52,7 @@ export async function settlePropBookChange(
   const key = `bank.prop:${input.bankId.toHexString()}:${revision}:${digest}`;
   const identity = { _id: oid(input.bankId.toHexString()) };
   const guard = {
+    ...(input.requiredCeoType ? { ceoType: input.requiredCeoType } : {}),
     bankCharter: input.charter,
     bankPropBookRevision: input.revision === undefined ? { $exists: false } : input.revision,
     ...(input.forexFee ? { bankPropForexFee: { $exists: false } } : {}),

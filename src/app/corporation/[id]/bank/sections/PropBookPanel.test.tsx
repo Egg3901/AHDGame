@@ -1,11 +1,38 @@
 /** @vitest-environment happy-dom */
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import messages from "../../../../../../messages/en/corporations.json";
 import { PropBookPanel } from "./PropBookPanel";
 
+afterEach(cleanup);
 describe("forex fee cash preview", () => {
+  it("offers the player opening universe while keeping an existing equity exit", () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <PropBookPanel
+          corporationId="10"
+          currency="USD"
+          positions={[{ asset: "equity", ref: "OLD", units: 1, markValue: 10, costBasis: 10 }]}
+          markValue={10}
+          sovereignTreasuryMarkValue={0}
+          cashReserves={1000}
+          totalLoans={0}
+          borrowings={{}}
+          propLeverage={null}
+          canMutate
+          assetOptions={["bond", "indexUnit", "forex"]}
+          onChanged={vi.fn().mockResolvedValue(undefined)}
+          showToast={vi.fn()}
+        />
+      </NextIntlClientProvider>
+    );
+    expect(screen.queryByRole("option", { name: "Equity" })).toBeNull();
+    expect(screen.getByRole("option", { name: "Forex" })).toBeTruthy();
+    expect(screen.getByLabelText("Investment asset type")).toHaveProperty("value", "bond");
+    expect(screen.getByText("OLD")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Close" })).toBeTruthy();
+  });
   it("quotes before buying and binds the accepted total cash cost", async () => {
     const fetchMock = vi
       .fn()

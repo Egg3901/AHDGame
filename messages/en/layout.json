@@ -1,5 +1,11 @@
 {
   "layout": {
-    "skipToMainContent": "Skip to main content"
+    "skipToMainContent": "Skip to main content",
+    "error": {
+      "networkRetryingTitle": "Reconnecting to the server",
+      "networkRetryingDescription": "A network request was interrupted. Retrying once…",
+      "networkFailureTitle": "Could not reach the server",
+      "networkFailureDescription": "Your browser could not complete a request. Check your connection and try again. This is usually temporary and does not mean you were signed out."
+    }
   }
 }
