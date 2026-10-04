@@ -93,19 +93,19 @@ afterEach(() => {
 });
 
 describe("No Parties character creation", () => {
-  it.each(countries)("offers a deliberate Independent choice in $name", async (country) => {
+  it.each(countries)("hides party selection when $name has no founded parties", async (country) => {
     render(<CreateCharacterPage />);
     fireEvent.click(await screen.findByRole("button", { name: new RegExp(country.name) }));
     await waitFor(() => expect(fetch).toHaveBeenCalledWith(`/api/country/${country.id}/parties`));
-    const partyPanel = screen.getByRole("region", { name: "Party" });
-    const independent = await within(partyPanel).findByRole("button", { name: /Independent/ });
-    fireEvent.click(independent);
-    expect(within(partyPanel).getByText("Done")).toBeTruthy();
-    expect(within(partyPanel).queryByText("Loading parties…")).toBeNull();
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Party" })).toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: "Try guided chat" }));
+    expect(
+      within(screen.getByRole("list", { name: "Creation steps" })).queryByText("Party")
+    ).toBeNull();
     expect(router.replace).not.toHaveBeenCalled();
   });
 
-  it("submits a valid independent character without creating a seed party", async () => {
+  it("submits as Independent without a party choice when no parties exist", async () => {
     render(<CreateCharacterPage />);
     fireEvent.click(await screen.findByRole("button", { name: /United States/ }));
     fireEvent.change(screen.getByPlaceholderText("e.g. Eleanor Vance"), {
@@ -118,11 +118,7 @@ describe("No Parties character creation", () => {
         )[0]
       );
     fireEvent.click(await screen.findByRole("radio", { name: /California/ }));
-    fireEvent.click(
-      await within(screen.getByRole("region", { name: "Party" })).findByRole("button", {
-        name: /Independent/,
-      })
-    );
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Party" })).toBeNull());
     const submit = screen.getByRole("button", { name: /File|Create|Enter/ });
     expect(submit.hasAttribute("disabled")).toBe(false);
     fireEvent.click(submit);

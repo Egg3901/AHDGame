@@ -90,7 +90,8 @@ export default function CreateCharacterPage() {
   const errorRef = useRef<HTMLDivElement>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [states, setStates] = useState<State[]>([]);
-  const [parties, setParties] = useState<PartyOption[]>([]);
+  const [partyOptions, setPartyOptions] = useState<PartyOption[]>([]);
+  const [partyOptionsLoadedFor, setPartyOptionsLoadedFor] = useState<string | null>(null);
   const [creationInfo, setCreationInfo] = useState<GameCreationInfo | null>(null);
   const [countryOptions, setCountryOptions] = useState<CountryCreationInfo[] | undefined>(
     undefined
@@ -180,6 +181,10 @@ export default function CreateCharacterPage() {
     [country, states]
   );
 
+  const parties = useMemo(
+    () => (partyOptionsLoadedFor === country ? partyOptions : []),
+    [partyOptionsLoadedFor, country, partyOptions]
+  );
   const majorParties = useMemo(() => parties.filter((p) => p.isDefault), [parties]);
   const communityParties = useMemo(() => parties.filter((p) => !p.isDefault), [parties]);
 
@@ -279,10 +284,7 @@ export default function CreateCharacterPage() {
 
   // Fetch parties when country changes
   useEffect(() => {
-    if (!country) {
-      setParties([]);
-      return;
-    }
+    if (!country) return;
     let cancelled = false;
     const fetchParties = async () => {
       try {
@@ -291,7 +293,10 @@ export default function CreateCharacterPage() {
           const data = await res.json();
           // Guard against out-of-order responses when the country selection
           // changes again before this request resolves.
-          if (!cancelled) setParties(data.parties ?? []);
+          if (!cancelled) {
+            setPartyOptions(data.parties ?? []);
+            setPartyOptionsLoadedFor(country);
+          }
         }
       } catch (err) {
         console.error("Failed to fetch parties:", err);
@@ -556,19 +561,25 @@ export default function CreateCharacterPage() {
     formData.demographics.wealth
   );
 
+  const noPartiesAvailable =
+    Boolean(country) && partyOptionsLoadedFor === country && parties.length === 0;
+  const partySelectorVisible = Boolean(country) && !noPartiesAvailable;
+
   const statPointsLeft = pointsRemaining(stats);
   const requirements: CandidateFileRequirement[] = [
     { key: "country", label: "Choose a country", met: Boolean(country) },
     { key: "name", label: "Name your politician", met: formData.characterName.trim().length >= 2 },
     { key: "background", label: "Complete the background", met: backgroundComplete },
     { key: "region", label: `Choose a home ${regionNoun}`, met: Boolean(formData.homeState) },
-    // Independent is the opening value, so without this the player can file a
-    // character who cannot stand for most offices without ever having seen the
-    // party step. Picking Independent on purpose satisfies it.
+    // When parties exist, Independent is the opening value, so require a
+    // deliberate choice. An empty list is already an implicit Independent
+    // start and must not block filing.
     {
       key: "party",
-      label: "Pick a party, or choose Independent on purpose",
-      met: partyTouched,
+      label: noPartiesAvailable
+        ? "No founded parties yet"
+        : "Pick a party, or choose Independent on purpose",
+      met: noPartiesAvailable || partyTouched,
     },
     ...(rpgStatsEnabled
       ? [
@@ -962,12 +973,13 @@ export default function CreateCharacterPage() {
   const conversationSteps = buildConversationSteps({
     regionNoun,
     rpgStatsEnabled,
+    partySelectorVisible,
     complete: {
       country: Boolean(country),
       politician: formData.characterName.trim().length >= 2 && backgroundComplete,
       region: Boolean(formData.homeState),
       compass: compassTouched,
-      party: partyTouched,
+      party: noPartiesAvailable || partyTouched,
       stats: statPointsLeft === 0,
       review: requirements.every((r) => r.met),
     },
@@ -1091,7 +1103,7 @@ export default function CreateCharacterPage() {
 
               {compassPanel}
 
-              {partyPanel}
+              {partySelectorVisible && partyPanel}
 
               {/*
               The tutorial choice used to live here as a two-button row. It now
