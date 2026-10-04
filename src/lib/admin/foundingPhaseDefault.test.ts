@@ -55,7 +55,11 @@ const { bootstrapGameWorld } = await import("@/lib/admin/bootstrapGameWorld");
 // touches anything. Nothing here asserts on that write; the stub just has to
 // exist so the founding-flag resolution can be reached.
 const db = {
-  collection: () => ({ updateOne: async () => ({}), insertOne: async () => ({}) }),
+  collection: () => ({
+    updateOne: async () => ({}),
+    insertOne: async () => ({}),
+    deleteMany: async () => ({ deletedCount: 0 }),
+  }),
 } as unknown as Db;
 
 /** The founding flag as it reached BOTH downstream phases. */
