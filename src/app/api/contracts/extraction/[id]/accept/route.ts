@@ -11,7 +11,7 @@ import { schemas } from "@/lib/api/validate";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { getCurrentTurn } from "@/lib/currentTurn";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
-import { isContractIssuanceEnabled } from "@/lib/extraction/featureFlag";
+import { loadContractIssuanceSettings } from "@/lib/extraction/featureFlag";
 import { getExtractionContractsCollection } from "@/lib/db/collections/extractionContracts";
 import { acceptContractOffer } from "@/lib/extraction/commands/acceptContractOffer";
 import { recordAudit } from "@/lib/audit/recordAudit";
@@ -24,14 +24,15 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     const rate = checkRateLimit(auth.user.userId, 20, 60_000);
     if (!rate.ok) return rateLimitResponse(rate.retryAfter);
 
-    if (!(await isContractIssuanceEnabled())) {
-      return NextResponse.json({ error: "Extraction contracts are not enabled." }, { status: 403 });
-    }
-
     const { id } = await params;
     if (!schemas.objectId.safeParse(id).success) throw badRequest("Invalid contract ID");
 
     const db = await getDb();
+    const settings = await loadContractIssuanceSettings(db);
+    if (!settings.contractIssuanceEnabled) {
+      return NextResponse.json({ error: "Extraction contracts are not enabled." }, { status: 403 });
+    }
+
     const contractsCol = await getExtractionContractsCollection(db);
     const contract = await contractsCol.findOne({ _id: new ObjectId(id) });
     if (!contract) throw notFound("Contract not found");
@@ -42,7 +43,14 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     if (ceoErr) return ceoErr;
 
     const turn = await getCurrentTurn(db);
-    const result = await acceptContractOffer(db, contract, resolved.corporation, turn, new Date());
+    const result = await acceptContractOffer(
+      db,
+      contract,
+      resolved.corporation,
+      turn,
+      new Date(),
+      settings.treasuryCashLedgerEnabled
+    );
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
 
     recordAudit({
