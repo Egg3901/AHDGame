@@ -31,7 +31,7 @@ describe("RetoolHintBanner", () => {
   it("gives the CEO a way to the strategy picker", () => {
     const open = vi.fn();
     render(<RetoolHintBanner hint={HINT} isCeo onOpenStrategy={open} />);
-    fireEvent.click(screen.getByRole("button", { name: "Review strategy" }));
-    expect(open).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("button", { name: "Review Hardware retool" }));
+    expect(open).toHaveBeenCalledExactlyOnceWith("hardware");
   });
 });

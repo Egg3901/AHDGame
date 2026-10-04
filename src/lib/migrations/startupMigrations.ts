@@ -6,6 +6,7 @@ import { migration as centralBankPricingPhaseIn } from "./entries/2026-09-11-cen
 import { migration as longHorizonTelemetryIndexes } from "./entries/2026-09-30-long-horizon-telemetry-indexes";
 import { migration as appleProviderIdentityIndex } from "./entries/2026-09-30-apple-provider-identity-index";
 import { migration as ukDualMinistryRoleSlot } from "./entries/2026-09-17-uk-dual-ministry-role-slot";
+import { migration as politicalMediaOrderIndexes } from "./entries/2026-10-04-political-media-order-indexes";
 import { runMigrations, type RunSummary } from "./runner";
 import type { Migration } from "./types";
 
@@ -34,6 +35,8 @@ export const REQUIRED_STARTUP_MIGRATIONS: readonly Migration[] = [
   // rejects that insert until this swap runs, so the DPM appointment failed
   // with a spurious conflict error on worlds that never ran it.
   ukDualMinistryRoleSlot,
+  // Existing saves need the political journal indexes before current-turn replay reads.
+  politicalMediaOrderIndexes,
 ];
 
 export async function runRequiredStartupMigrations(db: Db): Promise<RunSummary> {
