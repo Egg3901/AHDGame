@@ -1321,9 +1321,13 @@ async function serviceNpcBulkBook(
     // fee receipts can still recover the fee from the protected book memo.
     const recordedFee =
       recorded.projections?.reduce((sum, row) => {
+        const increment =
+          row.projection.collection === "corporations" ? row.projection.update?.$inc : null;
         const value =
-          row.projection.collection === "corporations"
-            ? row.projection.update?.$inc?.["bankCharter.loanOriginationFeesLifetime"]
+          increment !== null &&
+          typeof increment === "object" &&
+          "bankCharter.loanOriginationFeesLifetime" in increment
+            ? increment["bankCharter.loanOriginationFeesLifetime"]
             : 0;
         return sum + (typeof value === "number" && Number.isFinite(value) ? value : 0);
       }, 0) ?? 0;
