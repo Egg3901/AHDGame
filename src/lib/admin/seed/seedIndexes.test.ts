@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 import { seedIndexes } from "./seedIndexes";
+import { BOUNDED_NPC_CANDIDATE_GUARDS } from "./indexes/boundedNpcCandidates";
 
 vi.mock("@/lib/auth/providerIdentityIndexes", () => ({
   ensureProviderIdentityIndexes: vi.fn().mockResolvedValue([]),
@@ -21,6 +22,7 @@ function makeInterleavingDb(): { db: Db; createIndex: ReturnType<typeof vi.fn> }
   // unique identity index. Report that index as already present so this
   // ordering test does not drag the repair path in with it.
   const indexes = vi.fn().mockResolvedValue([
+    ...BOUNDED_NPC_CANDIDATE_GUARDS.map(([, key, options]) => ({ key, ...options })),
     {
       name: "corporateSectors_corporationId_stateId_sectorType",
       key: { corporationId: 1, stateId: 1, sectorType: 1 },
@@ -70,6 +72,7 @@ const HEADERS = [
   "Watchlist indexes:",
   "Conflict indexes:",
   "Banking money-move indexes:",
+  "Money-flow receipt indexes:",
 ];
 
 describe("seedIndexes", () => {

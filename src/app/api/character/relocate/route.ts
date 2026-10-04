@@ -64,6 +64,13 @@ export async function POST(request: Request) {
     if (!authResult.ok) return authResult.response;
     const auth = authResult.user;
 
+    if (auth.character.federationPendingResidenceId) {
+      return NextResponse.json(
+        { error: "Choose a playable residence through your federation settlement first." },
+        { status: 409 }
+      );
+    }
+
     const rateLimit = checkRateLimit(auth.userId, 10, 60000);
     if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
 
@@ -249,6 +256,7 @@ async function handleGET() {
       cooldownUntil,
       cooldownDays: RELOCATION_COOLDOWN_DAYS,
       homeState: auth.character.homeState,
+      federationPendingResidenceId: auth.character.federationPendingResidenceId ?? null,
       hasOffice: !!auth.character.currentOffice,
       // True when an in-country move would vacate the seat (governor/house/…).
       // Country-scoped offices (VP/President/cabinet) only resign on country change.

@@ -129,13 +129,13 @@ export async function executeCharacterAction(
   }
 
   const campaignRates = await loadCampaignCurrencyRates(db);
-  const homeCurrency = getHomeCurrency(character);
+  const homeCurrency = getHomeCurrency(character, gameState?.preset);
   // Campaign funds are DECOUPLED from live forex: costs/effects convert anchor →
   // local at the frozen world-seeded currency basis (US ×1.0), never the live
   // exchangeRates. Every use of this rate below is a campaign-fund conversion;
   // personal cash (cashOnHandChange) is applied in local directly.
   const campaignRate = forexEnabled
-    ? campaignLocalRate(character.countryId ?? "US", campaignRates)
+    ? campaignLocalRate(character.countryId ?? "US", campaignRates, gameState?.preset)
     : 1;
   // Render action result messages in the player's LOCAL home currency (campaign
   // funds are stored in local; never surface anchor/₳). effect.fundsChange is

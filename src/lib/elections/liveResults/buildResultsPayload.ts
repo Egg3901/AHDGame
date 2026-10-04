@@ -336,7 +336,15 @@ export async function buildResultsPayload(
     projectedWinner = decisive?.id ?? null;
   }
   // Ended winner-take-one races (incl. popular-vote presidents): top of the poll.
-  const singleWinnerRace = isPresident || (election.totalSeats ?? 1) <= 1;
+  const isRussianDirectBallot =
+    election.countryId === "RU" && isPresident && !!election.russianPresidentialRound;
+  if (isRussianDirectBallot)
+    projectedWinner =
+      tally?.russianPresidentialResult?.outcome === "won"
+        ? (tally.russianPresidentialResult.winnerCandidateId ?? null)
+        : null;
+  const singleWinnerRace =
+    !isRussianDirectBallot && (isPresident || (election.totalSeats ?? 1) <= 1);
   if (!projectedWinner && isEnded && singleWinnerRace && totalCastVotes > 0) {
     projectedWinner = resultsCandidates[0]?.id ?? null;
   }

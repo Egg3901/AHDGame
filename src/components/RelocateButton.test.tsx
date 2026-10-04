@@ -114,4 +114,41 @@ describe("RelocateButton", () => {
     const dialog = screen.getByRole("dialog", { name: "Relocate to another state" });
     expect(dialog.textContent).toMatch(/not be able to relocate again for 3 days \(72 turns\)/i);
   });
+
+  it("routes a pending federation resident through the protected no-fee choice", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          ...readyStatus,
+          canRelocate: false,
+          remainingTurns: 72,
+          federationPendingResidenceId: "1991-default:ussr-split:1",
+        })
+      )
+      .mockResolvedValueOnce(jsonResponse({ ok: true }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(
+      <RelocateButton
+        targetStateId="OR"
+        targetName="Oregon"
+        targetCountryId="US"
+        userHomeState="KYIV"
+        userCountryId="RU"
+        redirectPath="/country/us/region/OR"
+      />
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Choose new home" }));
+    expect(screen.getByRole("dialog", { name: "Choose a new playable home" }).textContent).toMatch(
+      /no relocation fee/i
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Choose this home" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(fetchMock.mock.calls[1][0]).toBe("/api/federation/relocation/residence");
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toMatchObject({
+      applicationId: "1991-default:ussr-split:1",
+      targetCountryId: "US",
+      targetStateId: "OR",
+    });
+  });
 });

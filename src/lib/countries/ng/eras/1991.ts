@@ -1,21 +1,8 @@
 import type { CountryEraOverride } from "../../contract";
+import { INITIAL_RATES_1991 } from "@/lib/constants/currencies";
 
-/**
- * NG, 1991.
- *
- * ⚠ GENERATED from `__snapshots__/ng.pre-move.json`. Regenerate with:
- *
- *     npx tsx scripts/countries/gen-country-eras.ts NG --force
- *
- * ⚠ DIFFERENCES ONLY. Everything not named here comes from the base modules.
- *
- * No config override: this era uses NG's base configuration. The field
- * is ABSENT rather than an empty object, because `getCountryConfig` merges
- * shallowly and `config: {}` reads as an override that supplies nothing.
- *
- * No per-era orders of battle: this era falls back to the base set rather
- * than inventing an empty one.
- */
+/** Nigeria's 1991 regional GDP is stored in circulating naira, not the shared unit. */
 export const NG_1991: CountryEraOverride = {
   preset: "1991-default",
+  config: { usdExchangeRate: 1 / INITIAL_RATES_1991.NG! },
 };

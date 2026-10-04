@@ -253,15 +253,18 @@ export async function seedRUBaselines(
 }
 
 /**
- * Seed the RU governmentFormations doc (D5: FORMED with the NPC Premier from
- * the SU executive HistoricalSeat rows). Must run AFTER historical officials
- * are seeded so the Premier NPP exists; degrades to `pending` when it doesn't
- * and skips entirely when the preset seeds no RU regions.
+ * Seed the RU governmentFormations doc. Cold War presets link the seated
+ * Soviet Premier; the 1991 Union preset opens a neutral pending formation
+ * because its historical executive roster has not been authored.
  */
-export async function seedRUGovernmentFormation(db: Db, log: (msg: string) => void) {
+export async function seedRUGovernmentFormation(
+  db: Db,
+  log: (msg: string) => void,
+  preset: string
+) {
   const { buildRuGovernmentFormation } = await import("@/lib/seeds/ru/ruGovernmentFormation");
   const now = new Date();
-  const doc = await buildRuGovernmentFormation(db, now);
+  const doc = await buildRuGovernmentFormation(db, now, preset);
   if (!doc) {
     log("RU government formation skipped (no RU regions in this preset)");
     return;
@@ -274,5 +277,7 @@ export async function seedRUGovernmentFormation(db: Db, log: (msg: string) => vo
       { $set: { ...formationData, createdAt: now, updatedAt: now } },
       { upsert: true }
     );
-  log(`Seeded RU government formation (${doc.status}, ${doc.totalSeats} Union seats)`);
+  const chamber =
+    preset === "1991-default" ? "Congress" : preset === "2027-default" ? "Duma" : "Union";
+  log(`Seeded RU government formation (${doc.status}, ${doc.totalSeats} ${chamber} seats)`);
 }

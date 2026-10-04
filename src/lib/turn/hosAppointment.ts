@@ -1,7 +1,9 @@
 import { ObjectId, type Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
-import { getCountryConfig, getHeadOfStateOfficeType } from "@/lib/constants/countries";
-import { getJointSittingOfficeTypes } from "@/lib/legislature/chamberOfficeType";
+import {
+  loadRuntimeCountryOffices,
+  type RuntimeCountryOffices,
+} from "@/lib/countries/runtimeOffices";
 import {
   getGovernmentFormationsCollection,
   getPMAppointmentVotesCollection,
@@ -28,17 +30,27 @@ export async function resolveHeadOfStateAppointmentVote(
   db: Db,
   countryId: CountryId,
   voteId: ObjectId,
-  now: Date
+  now: Date,
+  officeLayout?: RuntimeCountryOffices
 ): Promise<void> {
   const votesColl = getPMAppointmentVotesCollection(db);
-  await autoAyeNPPsForParliamentaryAppointment(db, countryId, voteId);
+  const offices = officeLayout ?? (await loadRuntimeCountryOffices(db, countryId));
+  await autoAyeNPPsForParliamentaryAppointment(db, countryId, voteId, offices);
   const vote = await votesColl.findOne({ _id: voteId });
   if (!vote || vote.status !== "active" || vote.office !== "headOfState") return;
+
+  if (offices.config.headOfStateSelection !== "legislatureAppointment") {
+    await votesColl.updateOne(
+      { _id: voteId, status: "active" },
+      { $set: { status: "cancelled", closedAt: now, updatedAt: now } }
+    );
+    return;
+  }
 
   const tally = await computeParliamentaryGovernmentTally(
     db,
     countryId,
-    getJointSittingOfficeTypes(countryId),
+    offices.jointSittingOfficeTypes,
     vote.votes
   );
   const passed = tally.votesFor > tally.votesAgainst;
@@ -58,8 +70,8 @@ export async function resolveHeadOfStateAppointmentVote(
   if (!claimed) return;
   if (!passed) return;
 
-  const config = getCountryConfig(countryId);
-  const hosOfficeType = getHeadOfStateOfficeType(config);
+  const config = offices.config;
+  const hosOfficeType = offices.headOfStateOfficeType;
   if (!hosOfficeType) return;
 
   // Replace the seated head-of-state row.

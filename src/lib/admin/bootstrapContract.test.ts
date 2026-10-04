@@ -136,9 +136,9 @@ describe("bootstrap contract: sovereign issuer corporations", () => {
       expect(entry.corporation.legalStructure).toBeTruthy();
       expect(entry.corporation.liquidCurrencyCode).toBeTruthy();
       // The sovereign corp's denomination should match its country.
-      const map = (await import("@/lib/constants/currencies")).COUNTRY_CURRENCY_MAP;
+      const { getSeedCurrencyCode } = await import("@/lib/constants/currencies");
       expect(entry.corporation.liquidCurrencyCode).toBe(
-        map[entry.corporation.countryId as keyof typeof map]
+        getSeedCurrencyCode(entry.corporation.countryId!, "2019-default")
       );
     }
   });

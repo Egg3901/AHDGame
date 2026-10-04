@@ -352,13 +352,20 @@ describe("processChallengerGeneration: qualification coverage (#2072)", () => {
     ["GR", "vouli", "GR_ATT"],
     ["IE", "dail", "DUB"],
     ["IE", "localCouncil", "DUB"],
+    ["IE", "localCouncil", "KIL"],
+    ["IE", "localCouncil", "MID"],
+    ["IE", "localCouncil", "WEX"],
+    ["IE", "localCouncil", "LIM"],
+    ["IE", "localCouncil", "COR"],
+    ["IE", "localCouncil", "GAL"],
+    ["IE", "localCouncil", "DON"],
     ["JP", "sangiin", "JP_TKY"],
     ["NG", "president", "NG"],
     ["NG", "governor", "NORTH_WEST"],
     ["NG", "senate", "NORTH_WEST"],
     ["NG", "regionalCouncil", "NORTH_WEST"],
   ])(
-    "files a candidate into an empty active %s %s contest",
+    "files a candidate into an empty active %s %s contest in %s",
     async (countryId, electionType, state) => {
       const election = {
         ...cnPeoplesCongress(state),

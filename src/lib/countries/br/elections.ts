@@ -3,7 +3,11 @@ import type { CountryElections } from "../contract";
 import type { CountryElectionPhaseEntry } from "@/lib/turn/countryPhases";
 import type { SpawnElectionsResult } from "@/lib/turn/perpetualElections/registry";
 import { BR_SEATS_PER_REGION } from "@/lib/seeds/br/brRegions";
-import { ensureBRElections, ensureBRSenateElections } from "./elections/perpetual";
+import {
+  ensureBRElections,
+  ensureBRSenateElections,
+  ensureBRGovernorElections,
+} from "./elections/perpetual";
 
 /**
  * Brazil's elections.
@@ -30,7 +34,8 @@ import { ensureBRElections, ensureBRSenateElections } from "./elections/perpetua
 const spawn = async (now: Date, currentTurn?: number): Promise<SpawnElectionsResult> => {
   await ensureBRElections(now, currentTurn);
   await ensureBRSenateElections(now, currentTurn);
-  return { message: "BR Câmara / Senate continuity check complete." };
+  await ensureBRGovernorElections(now, currentTurn);
+  return { message: "BR Câmara / Senate / regional executive continuity check complete." };
 };
 
 /**
@@ -46,6 +51,7 @@ const spawn = async (now: Date, currentTurn?: number): Promise<SpawnElectionsRes
 const phases: CountryElectionPhaseEntry[] = [
   { name: "brElections", fn: ensureBRElections },
   { name: "brSenateElections", fn: ensureBRSenateElections },
+  { name: "brGovernorElections", fn: ensureBRGovernorElections },
 ];
 
 /** Default parties that seed as Major; every other default party seeds Minor. */

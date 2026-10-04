@@ -13,8 +13,10 @@ import type { Election, ElectionStatus, State } from "@/lib/db/types";
 import { type CountryId } from "@/lib/constants/countries";
 import { DEFAULT_DURATIONS } from "@/lib/constants/electionDurations";
 import { pickNextCanonicalCycle, turnToWallClock } from "@/lib/elections/canonicalCycle";
+import type { CycleAnchorContext } from "@/lib/elections/cycleAnchorContext";
 import { electionToLarpYear } from "@/lib/utils/formatters";
 import { getSeatIdFromElection } from "@/lib/seats";
+import { IE_LOCAL_COUNCIL_SEATS } from "@/lib/countries/ie/data/ieLocalCouncilSeats";
 import { planNextLowerChamberCycle } from "@/lib/elections/snapShift";
 import {
   buildCanonicalSpawn,
@@ -32,6 +34,8 @@ import {
  * that differed between the previously-duplicated spawners.
  */
 export interface RegionalDelegateSpec {
+  /** Frozen ballots retain their capacity; the country owns any law transition. */
+  preserveLiveSeatCounts?: boolean;
   countryId: CountryId;
   /** electionType === officeType key (the CN convention). */
   electionType: string;
@@ -51,9 +55,18 @@ export interface RegionalDelegateSpec {
    * families can size the race the way the seed and the country config do —
    * CN's chamber is 2,980 deputies in the modern eras but 1,226 in 1953 (#3779).
    */
-  seatsForRegions: (regions: State[], preset: string | undefined) => Record<string, number>;
+  seatsForRegions: (
+    regions: State[],
+    preset: string | undefined,
+    ctx: CycleAnchorContext,
+    currentYear: number
+  ) => Record<string, number>;
   /** Open the primary immediately (short window vs multi-year cycle). CN/BR: true. */
   openPrimaryImmediately: boolean;
+  minPrimaryHours?: number;
+  /** Country-owned clocks can retain founding terms and bound legal standups. */
+  buildSpawn?: typeof buildCanonicalSpawn;
+  canSpawnCohort?: (elections: readonly Election[]) => boolean;
   /**
    * No-op unless the runtime country status is beta/active. CN/BR are always
    * live and omit this; RU (coming-soon, per-game enabled) sets it in Phase 3.
@@ -153,18 +166,18 @@ export async function ensureRegionalDelegateElections(
     const gate = spec.electionsLiveGate ?? countryElectionsLive;
     if (!(await gate(db, spec.countryId))) return;
   }
-  const { currentTurn: persistedTurn, ctx } = await getCurrentTurnAndCtx(db);
+  const { currentTurn: persistedTurn, currentYear, ctx } = await getCurrentTurnAndCtx(db);
   const currentTurn = inFlightTurn ?? persistedTurn;
 
   const regions = await db
     .collection<State>("states")
     .find(
       { countryId: spec.countryId },
-      { projection: { _id: 1, houseDistricts: 1, stateSenateSeats: 1 } }
+      { projection: { _id: 1, population: 1, houseDistricts: 1, stateSenateSeats: 1 } }
     )
     .toArray();
   if (regions.length === 0) return;
-  const seatMap = spec.seatsForRegions(regions as State[], ctx.preset);
+  const seatMap = spec.seatsForRegions(regions as State[], ctx.preset, ctx, currentYear);
 
   const liveElections = await db
     .collection<Election>("elections")
@@ -179,7 +192,9 @@ export async function ensureRegionalDelegateElections(
   // Carry a resize onto the race that is already running, before deciding what
   // to spawn — a region present in `liveStates` gets no new doc, so without this
   // its correction would wait a whole cycle.
-  const healOps = buildDelegateSeatHealOps(liveElections, seatMap, now);
+  const healOps = spec.preserveLiveSeatCounts
+    ? []
+    : buildDelegateSeatHealOps(liveElections, seatMap, now);
   if (healOps.length > 0) {
     await db.collection<Election>("elections").bulkWrite(healOps);
     console.log(
@@ -197,6 +212,9 @@ export async function ensureRegionalDelegateElections(
     .sort({ updatedAt: -1 })
     .toArray();
 
+  if (spec.canSpawnCohort && !spec.canSpawnCohort([...liveElections, ...completedElections]))
+    return;
+
   function lastCompleted(regionId: string): Election | undefined {
     return completedElections.find((e) => e.state === regionId);
   }
@@ -210,7 +228,7 @@ export async function ensureRegionalDelegateElections(
     const prev = lastCompleted(regionId);
     if (justResolvedInSameTurn(prev, now, currentTurn)) continue;
 
-    const doc = buildCanonicalSpawn({
+    const doc = (spec.buildSpawn ?? buildCanonicalSpawn)({
       electionType: spec.electionType,
       countryId: spec.countryId,
       state: regionId,
@@ -220,6 +238,7 @@ export async function ensureRegionalDelegateElections(
       fallbackTotalSeats: seatMap[regionId] ?? 1,
       ctx,
       openPrimaryImmediately: spec.openPrimaryImmediately,
+      minPrimaryHours: spec.minPrimaryHours,
     });
     if (!doc) continue;
 
@@ -857,17 +876,7 @@ export const WAL_REGIONAL_COUNCIL_SEATS: Record<string, number> = {
  * allocation once it reunifies (population-proportional at the same ratio).
  * Mirrors the UK_REGIONAL_COUNCIL_SEATS pattern.
  */
-export const IE_LOCAL_COUNCIL_SEATS: Record<string, number> = {
-  DUB: 62,
-  KIL: 26,
-  COR: 25,
-  DON: 21,
-  GAL: 19,
-  LIM: 18,
-  WEX: 17,
-  MID: 12,
-  NIR: 95,
-};
+export { IE_LOCAL_COUNCIL_SEATS };
 
 /**
  * Shared spawner for direct-elected regional executive (the "governor"

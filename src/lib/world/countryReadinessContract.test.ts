@@ -332,9 +332,9 @@ describe("probes read the preset, not just the country", () => {
     expect(rosterOf("RU", "2019-default").evidence).not.toContain("CPSU");
   });
 
-  it("reports partiesAuthored as absent where the era seeds no party", () => {
+  it("reports partiesAuthored for the democratic 2019 roster", () => {
     expect(rosterOf("RU", "1979-default").present).toBe(true);
-    expect(rosterOf("RU", "2019-default").present).toBe(false);
+    expect(rosterOf("RU", "2019-default").present).toBe(true);
   });
 });
 

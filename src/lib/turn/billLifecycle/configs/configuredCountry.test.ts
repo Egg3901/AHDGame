@@ -5,6 +5,7 @@ import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { runBillLifecycle } from "../engine";
 import type { ChamberVoteStage } from "../types";
 import { buildConfiguredCountryBillLifecycle } from "./configuredCountry";
+import { getCountryConfigForRuntime } from "@/lib/constants/countries";
 
 vi.mock("@/lib/notifications", () => ({
   createNotifications: vi.fn().mockResolvedValue(undefined),
@@ -29,6 +30,92 @@ const cursor = (rows: unknown[]) => ({
 });
 
 describe("buildConfiguredCountryBillLifecycle", () => {
+  it.each(["regionalHeads", "regionalDelegates"] as const)(
+    "keeps appointed %s Council voting without popular elections",
+    (mode) => {
+      const config = getCountryConfigForRuntime("RU", "1991-default", {
+        ruSovietSuccessionSinceTurn: 48,
+        ruPresidencySinceTurn: 60,
+        ruFederalAssemblySinceTurn: 145,
+        ruCouncilComposition: { mode },
+      });
+      expect(config.legislature.upperChamber?.elected).toBe(false);
+      expect(config.upperElectionSystem).toBeUndefined();
+      expect(
+        config.officeTypes.find((row) => row.key === "federationCouncilMember")?.termYears
+      ).toBeUndefined();
+      const lifecycle = buildConfiguredCountryBillLifecycle("RU", "1991-default", config);
+      const votes = lifecycle.stages.filter((stage) => stage.kind === "chamberVote");
+      expect(votes.map((stage) => stage.status)).toEqual(["active", "active_other"]);
+      expect(lifecycle.stages.some((stage) => stage.kind === "executiveAction")).toBe(true);
+      const concurrent = lifecycle.stages.find((stage) => stage.kind === "concurrentVote");
+      expect(concurrent?.chambersFor({ currentChamber: "stateDuma" })).toEqual([
+        "dumaDeputy",
+        "federationCouncilMember",
+      ]);
+      expect(
+        concurrent?.voteFieldFor({ currentChamber: "stateDuma" }, "federationCouncilMember")
+      ).toBe("otherChamberVotes");
+      const override = lifecycle.stages.find((stage) => stage.kind === "override");
+      expect(override?.chambers).toEqual(["dumaDeputy", "federationCouncilMember"]);
+    }
+  );
+
+  it.each([
+    [{}, "unionCongress", "unionCongressDeputy", undefined, false],
+    [
+      { ruSovietSuccessionSinceTurn: 24, ruProvisionalCongressSeats: 10 },
+      "congressOfPeoplesDeputies",
+      "congressDeputy",
+      undefined,
+      false,
+    ],
+    [
+      { ruSovietSuccessionSinceTurn: 24, ruPresidencySinceTurn: 30 },
+      "congressOfPeoplesDeputies",
+      "congressDeputy",
+      undefined,
+      true,
+    ],
+    [
+      {
+        ruSovietSuccessionSinceTurn: 24,
+        ruPresidencySinceTurn: 25,
+        ruFederalAssemblySinceTurn: 40,
+      },
+      "stateDuma",
+      "dumaDeputy",
+      "federationCouncilMember",
+      true,
+    ],
+  ] as const)(
+    "uses active Russian offices and signature rules for %j",
+    (markers, chamber, lowerOffice, upperOffice, presidential) => {
+      const country = getCountryConfigForRuntime("RU", "1991-default", markers);
+      const config = buildConfiguredCountryBillLifecycle("RU", "1991-default", country);
+      const lower = config.stages.find(
+        (stage): stage is ChamberVoteStage =>
+          stage.kind === "chamberVote" && stage.status === "active"
+      )!;
+      expect(lower.officeTypeFor({ currentChamber: chamber })).toBe(lowerOffice);
+      const concurrent = config.stages.find((stage) => stage.kind === "concurrentVote")!;
+      if (concurrent.kind !== "concurrentVote") throw new Error("Concurrent stage missing");
+      const offices = upperOffice ? [lowerOffice, upperOffice] : [lowerOffice];
+      expect(concurrent.chambersFor({ currentChamber: chamber })).toEqual(offices);
+      expect(concurrent.voteFieldFor({ currentChamber: chamber }, lowerOffice)).toBe("votes");
+      if (upperOffice)
+        expect(concurrent.voteFieldFor({ currentChamber: chamber }, upperOffice)).toBe(
+          "otherChamberVotes"
+        );
+      const executive = config.stages.find((stage) => stage.kind === "executiveAction");
+      expect(!!executive).toBe(presidential);
+      if (executive?.kind === "executiveAction") expect(executive.officeType).toBe("president");
+      const override = config.stages.find((stage) => stage.kind === "override");
+      expect(!!override).toBe(presidential);
+      if (override?.kind === "override") expect(override.chambers).toEqual(offices);
+      expect(config.governmentType).toBe(country.governmentType);
+    }
+  );
   it.each([
     ["FR", "1953-default", 2, false],
     ["FR", "1979-default", 2, true],

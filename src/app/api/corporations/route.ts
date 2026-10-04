@@ -49,7 +49,7 @@ import {
   atomicallyDebitCharacterCash,
   refundCharacterCash,
 } from "@/lib/financialTxLog/atomicCashGuard";
-import { CURRENCY_SYMBOLS, COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
+import { CURRENCY_SYMBOLS, getSeedCurrencyCode } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { isPrivateEnterpriseBlocked } from "@/lib/economy/queries/privateEnterpriseGate";
@@ -375,11 +375,13 @@ export async function POST(request: Request) {
 
     // Check cash on hand (founding costs personal cash, not campaign funds)
     const forexEnabled = await isForexEnabled();
-    const homeCurrency = getHomeCurrency(character);
+    const homeCurrency = getHomeCurrency(character, worldPreset);
 
     const corpCountryId = character.countryId as CountryId;
+    // Preset-aware: player corps founded in a 2027 euro member stamp EUR, so
+    // they match NPP-spawned corps and the seeded EUR exchange rows.
     const corpHomeCurrency: CurrencyCode | undefined = forexEnabled
-      ? (COUNTRY_CURRENCY_MAP[corpCountryId] ?? undefined)
+      ? (getSeedCurrencyCode(corpCountryId, worldPreset) ?? undefined)
       : undefined;
     // Founder charge AND corp seed are both denominated in the corp's local
     // currency. Scaling only the seed (and leaving the charge in ₳) minted
@@ -392,7 +394,8 @@ export async function POST(request: Request) {
     const foundingRate = getFoundingFxRate(
       corpCountryId,
       forexEnabled,
-      await loadCampaignCurrencyRates(db)
+      await loadCampaignCurrencyRates(db),
+      worldPreset
     );
     // Feed-3 (spec §12.4): low investor confidence adds a founding premium. The
     // premium is captured by the country treasury (see the credit below); the

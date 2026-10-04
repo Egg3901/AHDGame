@@ -4,6 +4,7 @@
  * Returns individual voter details for a bill's origin or other chamber votes.
  * Public endpoint — no auth required.
  */
+import { getVotingUpperChamberKey } from "@/lib/countries/rules/officeLayout";
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
@@ -13,7 +14,8 @@ import type { Bill, Character, NPP, ElectedOfficial, PoliticalParty } from "@/li
 import { resolveBillCountryId } from "@/lib/congress/resolveBillCountryId";
 import { buildScopedVoteInputs, type ScopedVoteOfficial } from "@/lib/congress/billVoting";
 import { snapshotWeightMap } from "@/lib/legislature/voteSnapshot";
-import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
+import { type CountryConfig, type CountryId } from "@/lib/constants/countries";
+import { loadRuntimeCountryOffices } from "@/lib/countries/runtimeOffices";
 import { getOfficeTypeForChamber } from "@/lib/legislature/chamberOfficeType";
 import {
   resolveOtherVoteChamberKey,
@@ -32,9 +34,13 @@ interface IndividualVote {
   sequentialId?: number;
 }
 
-function resolveVoteOfficeType(countryId: CountryId, bill: Bill, chamber: "origin" | "other") {
-  const config = getCountryConfig(countryId);
-  const upperKey = config.upperElectionSystem ? config.legislature.upperChamber?.key : null;
+function resolveVoteOfficeType(
+  countryId: CountryId,
+  bill: Bill,
+  chamber: "origin" | "other",
+  config: CountryConfig
+) {
+  const upperKey = getVotingUpperChamberKey(config);
   const chamberKey =
     chamber === "origin"
       ? resolvePrimaryVoteChamberKey(bill, config.legislature.lowerChamber.key)
@@ -42,7 +48,9 @@ function resolveVoteOfficeType(countryId: CountryId, bill: Bill, chamber: "origi
   if (!chamberKey || chamberKey === "cabinet") return null;
   return getOfficeTypeForChamber(
     countryId,
-    chamberKey === "joint" ? config.legislature.lowerChamber.key : chamberKey
+    chamberKey === "joint" ? config.legislature.lowerChamber.key : chamberKey,
+    undefined,
+    config
   );
 }
 
@@ -78,6 +86,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     }
 
     const country = await resolveBillCountryId(db, bill);
+    const { config } = await loadRuntimeCountryOffices(db, country);
 
     // Separate character IDs and NPP IDs
     const charIds: string[] = [];
@@ -156,7 +165,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
             })
             .toArray()
         : [];
-    const voteOfficeType = resolveVoteOfficeType(country, bill, chamber);
+    const voteOfficeType = resolveVoteOfficeType(country, bill, chamber, config);
     const scopedVoteInputs = buildScopedVoteInputs(
       votesMap,
       officials,

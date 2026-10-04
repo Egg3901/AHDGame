@@ -12,6 +12,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
+import { resolvePrimariesIfNeeded } from "./primaryResolution";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/notifications", () => ({
@@ -134,7 +135,6 @@ describe("resolvePrimariesIfNeeded query batching", () => {
     });
     const npps = db.collection("npps");
 
-    const { resolvePrimariesIfNeeded } = await import("./primaryResolution");
     await resolvePrimariesIfNeeded(NOW, 100);
 
     // Non-vacuous: both primaries actually resolved (losers eliminated).

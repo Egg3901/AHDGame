@@ -9,6 +9,8 @@ export interface NppMortalityEligibilityInput {
   isTechnocrat?: boolean;
   currentOffice?: unknown | null;
   retiredAt?: Date | null;
+  /** A financial actor represents filed individual people, rather than one deputy. */
+  representsNativeSlate?: boolean;
 }
 
 export function isEligibleNppForMortality(npp: NppMortalityEligibilityInput): boolean {
@@ -17,6 +19,7 @@ export function isEligibleNppForMortality(npp: NppMortalityEligibilityInput): bo
     npp.birthYear != null &&
     Number.isFinite(npp.birthYear) &&
     npp.isTechnocrat !== true &&
+    npp.representsNativeSlate !== true &&
     npp.currentOffice != null
   );
 }

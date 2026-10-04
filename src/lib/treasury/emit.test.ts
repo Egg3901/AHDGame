@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
-import { emitTreasuryTransaction } from "./emit";
+import { emitTreasuryTransaction, emitTreasuryTransactionsBulk } from "./emit";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 
@@ -9,7 +9,7 @@ interface InsertedDoc extends Record<string, unknown> {
   _id?: ObjectId;
 }
 
-function makeDb(opts: { currentTurn?: number } = {}): {
+function makeDb(opts: { currentTurn?: number; budgetCurrencies?: Record<string, string> } = {}): {
   db: Db;
   inserts: InsertedDoc[];
 } {
@@ -20,6 +20,17 @@ function makeDb(opts: { currentTurn?: number } = {}): {
         return {
           findOne: async () =>
             opts.currentTurn != null ? { _id: "current", currentTurn: opts.currentTurn } : null,
+        };
+      }
+      if (name === "federalBudget") {
+        return {
+          find: () => ({
+            toArray: async () =>
+              Object.entries(opts.budgetCurrencies ?? {}).map(([_id, currencyCode]) => ({
+                _id,
+                currencyCode,
+              })),
+          }),
         };
       }
       return {
@@ -152,5 +163,147 @@ describe("emitTreasuryTransaction", () => {
       memo: "tax",
     });
     expect(inserts[0].turn).toBe(0);
+  });
+
+  it("stamps the era-blind map code when no explicit currency is passed", async () => {
+    const { db, inserts } = makeDb();
+    await emitTreasuryTransaction({
+      db,
+      countryId: "FR",
+      partyId: "1",
+      holderType: "party",
+      holderId: "1",
+      category: "transfers",
+      direction: "debit",
+      amount: 100,
+      memo: "legacy path",
+      turn: 1,
+    });
+    expect(inserts[0].currencyCode).toBe("FRF");
+  });
+
+  it("prefers an explicit currency over the era-blind map", async () => {
+    const { db, inserts } = makeDb();
+    await emitTreasuryTransaction({
+      db,
+      countryId: "FR",
+      partyId: "1",
+      holderType: "party",
+      holderId: "1",
+      category: "transfers",
+      direction: "debit",
+      amount: 100,
+      memo: "2027 euro path",
+      turn: 1,
+      currencyCode: "EUR",
+    });
+    expect(inserts[0].currencyCode).toBe("EUR");
+  });
+
+  it("stamps the persisted 2027 budget currency on a single party transaction", async () => {
+    const { db, inserts } = makeDb({ budgetCurrencies: { FR: "EUR" } });
+    await emitTreasuryTransaction({
+      db,
+      countryId: "FR",
+      partyId: "1",
+      holderType: "party",
+      holderId: "1",
+      category: "transfers",
+      direction: "credit",
+      amount: 100,
+      memo: "euro transfer",
+      turn: 42,
+    });
+    expect(inserts[0].currencyCode).toBe("EUR");
+  });
+
+  it("rejects an unknown persisted code and uses the historical fallback", async () => {
+    const { db, inserts } = makeDb({ budgetCurrencies: { FR: "UNKNOWN" } });
+    await emitTreasuryTransaction({
+      db,
+      countryId: "FR",
+      partyId: "1",
+      holderType: "party",
+      holderId: "1",
+      category: "transfers",
+      direction: "credit",
+      amount: 100,
+      memo: "legacy fallback",
+      turn: 42,
+    });
+    expect(inserts[0].currencyCode).toBe("FRF");
+  });
+
+  it("does not throw after a transfer when the budget currency read fails", async () => {
+    const inserts: InsertedDoc[] = [];
+    const db = {
+      collection(name: string) {
+        if (name === "federalBudget") {
+          return {
+            find: () => ({
+              toArray: async () => {
+                throw new Error("temporary read failure");
+              },
+            }),
+          };
+        }
+        if (name === "treasuryTransactions") {
+          return { insertOne: async (doc: InsertedDoc) => inserts.push(doc) };
+        }
+        throw new Error(name);
+      },
+    } as unknown as Db;
+    await expect(
+      emitTreasuryTransaction({
+        db,
+        countryId: "FR",
+        partyId: "1",
+        holderType: "party",
+        holderId: "1",
+        category: "transfers",
+        direction: "debit",
+        amount: 100,
+        memo: "already committed",
+        turn: 42,
+      })
+    ).resolves.toBeDefined();
+    expect(inserts[0].currencyCode).toBe("FRF");
+  });
+
+  it("uses each persisted budget currency for a mixed-country batch", async () => {
+    const inserts: InsertedDoc[] = [];
+    const db = {
+      collection(name: string) {
+        if (name === "federalBudget") {
+          return {
+            find: () => ({
+              toArray: async () => [
+                { _id: "FR", currencyCode: "EUR" },
+                { _id: "federal", currencyCode: "USD" },
+              ],
+            }),
+          };
+        }
+        if (name === "treasuryTransactions") {
+          return { insertMany: async (docs: InsertedDoc[]) => inserts.push(...docs) };
+        }
+        throw new Error(name);
+      },
+    } as unknown as Db;
+    await emitTreasuryTransactionsBulk(
+      db,
+      (["FR", "US"] as const).map((countryId) => ({
+        countryId,
+        partyId: "1",
+        holderType: "party" as const,
+        holderId: "1",
+        category: "transfers" as const,
+        direction: "credit" as const,
+        amount: 100,
+        memo: "batch",
+        turn: 42,
+      }))
+    );
+    expect(inserts.map((doc) => doc.currencyCode)).toEqual(["EUR", "USD"]);
   });
 });

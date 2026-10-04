@@ -400,7 +400,8 @@ export default function ActionsPage() {
       character,
       !!character.currencyBalances,
       campaignRates,
-      worldFlags.campaignPriceLevel
+      worldFlags.campaignPriceLevel,
+      worldFlags.preset
     );
     // Same rules quote the server executes: level-scaled AP cost, GDP-scaled
     // fund cost with the fundraising discount, and the +1 level gain. When

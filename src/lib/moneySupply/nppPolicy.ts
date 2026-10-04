@@ -27,7 +27,7 @@ import { logger } from "@/lib/observability/logger";
 import { getStartingYearForPreset, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import type { CountryId } from "@/lib/constants/countries";
-import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
+import { getSeedCurrencyCode } from "@/lib/constants/currencies";
 import { executeMonetaryOperation, MONETARY_OPERATION_COOLDOWN_TURNS } from "./operations";
 import { LiquidityAdvanceRejected } from "./liquidityAdvance";
 import { MonetaryOperationRejected } from "./monetaryOperationJournal";
@@ -234,7 +234,9 @@ export async function processNppMonetaryOperations(
     // Treasury's, and the technocrat chair holds no authority to act on its own.
     if (isBankGovernmentControlled(authority, authority.countryId as CountryId, startingYear))
       continue;
-    const currencyCode = COUNTRY_CURRENCY_MAP[bank.countryId] ?? "USD";
+    const currencyCode = member
+      ? "EUR"
+      : getSeedCurrencyCode(countryId, gameState?.preset ?? DEFAULT_SEED_PRESET);
     const budget = budgetById.get(getNationalBudgetId(countryId));
     const [bond, moneySupply] = await Promise.all([
       db

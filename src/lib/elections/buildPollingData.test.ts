@@ -259,6 +259,16 @@ describe("buildPollingData — primary phase", () => {
 // shapes that used to diverge.
 
 describe("computeSeatEstimates — parity with allocateSeats (ticket #1032)", () => {
+  it("withholds a generic seat projection while the founding parallel count is pending", () => {
+    const tally = {
+      totalVotes: { candidate: 1000 },
+      candidateParties: { candidate: "1" },
+      bulgarianFoundingBallot: true,
+    } as never;
+    expect(
+      computeSeatEstimates("nationalAssembly", 80, tally, new Set(["candidate"]), "BG")
+    ).toBeNull();
+  });
   it("uses totalSeats for the House delegation-aware threshold (#2466)", () => {
     const tally = {
       totalVotes: { major: 830, minor: 170 },

@@ -179,11 +179,12 @@ export function fundraiseYieldLocal(
   character: Character,
   forexEnabled: boolean,
   campaignRates?: import("@/lib/campaigns/rules/currency").CampaignCurrencyRates | null,
-  priceLevel = 1
+  priceLevel = 1,
+  preset?: string
 ): number {
   const anchor = fundraiseYieldAnchor(character, priceLevel);
   return forexEnabled
-    ? campaignAnchorToLocal(anchor, character.countryId ?? "US", campaignRates)
+    ? campaignAnchorToLocal(anchor, character.countryId ?? "US", campaignRates, preset)
     : anchor;
 }
 

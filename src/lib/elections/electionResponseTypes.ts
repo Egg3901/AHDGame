@@ -42,6 +42,7 @@ export interface SnapshotEntry {
 }
 
 export interface GeneralVotesData {
+  russianPresidentialResult?: ElectionVoteTally["russianPresidentialResult"];
   totalVotes: Record<string, number>;
   candidateNames: Record<string, string>;
   candidateParties: Record<string, string>;
@@ -107,6 +108,17 @@ export interface ElectionResponse {
   electionType: string;
   state: string;
   countryId: string;
+  bulgarianFoundingRound?: {
+    ruleVersion: "parallel-1990-v1";
+    round: 1 | 2;
+    newNominationDistrictIds?: string[];
+  };
+  hungarianAssemblyRound?: {
+    ruleVersion: "mixed-1989-v1";
+    round: 1 | 2;
+    vacancyDistrictIds?: string[];
+  };
+  russianDumaRound?: { cohortId: string; mandateSinceTurn: number; tier: "constituency" | "list" };
   senateClass: number | null;
   chamberClass: number | null;
   cycle: number;

@@ -17,7 +17,7 @@ import { ES_GEO_URL, ES_REGION_CODES } from "./esGeometry";
 import { SE_GEO_URL, SE_REGION_CODES } from "./seGeometry";
 import { YU_GEO_URL, YU_REGION_CODES } from "./yuGeometry";
 import { CS_GEO_URL, CS_REGION_CODES } from "./csGeometry";
-import { BG_GEO_URL, BG_REGION_CODES } from "./bgGeometry";
+import { BG_GEO_URL, BG_GEO_URL_2027, BG_REGION_CODES, BG_REGION_CODES_2027 } from "./bgGeometry";
 import { HU_GEO_URL, HU_REGION_CODES } from "./huGeometry";
 import { PL_GEO_URL, PL_REGION_CODES } from "./plGeometry";
 import { RO_GEO_URL, RO_REGION_CODES } from "./roGeometry";
@@ -186,6 +186,12 @@ export const REGION_SHARDS: readonly RegionShard[] = [
     area: "bulgaria",
     url: BG_GEO_URL,
     codes: BG_REGION_CODES,
+    baseCountryIds: ["BG"],
+  },
+  {
+    area: "bulgaria-2027",
+    url: BG_GEO_URL_2027,
+    codes: BG_REGION_CODES_2027,
     baseCountryIds: ["BG"],
   },
   // Hungary's three macro-regions (Central Hungary / Transdanubia / Great

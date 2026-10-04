@@ -45,12 +45,9 @@ import {
   getCountryConfig,
   COUNTRY_ORDER,
   getExecutiveOfficeKey,
+  getHeadOfGovernmentOfficeKey,
   isParliamentarySystem,
 } from "@/lib/constants/countries";
-import {
-  getLowerChamberOfficeType,
-  getJointSittingOfficeTypes,
-} from "@/lib/legislature/chamberOfficeType";
 import {
   getLiveLowerChamberSeats,
   lowerChamberMajorityThreshold,
@@ -61,7 +58,6 @@ import { PM_VOTE_DURATION_HOURS } from "@/lib/constants/governmentFormation";
 import { sendCountryGameEvent, DISCORD_COLORS } from "@/lib/discordWebhooks";
 import { clearCabinetOnTransition } from "@/lib/cabinetTransition";
 import { getGameState } from "@/lib/gameState";
-import { getOfficeLabel } from "@/lib/utils/politics";
 import { createNotifications, type NotificationInput } from "@/lib/notifications";
 import { recordCountryEvent } from "@/lib/turn/history/recordCountryEvent";
 import { installNewLeader, renewLeaderMandate } from "@/lib/turn/rulingPartyConfidence";
@@ -72,6 +68,10 @@ import { resolveGoverningPartyIdsFromDocuments } from "@/lib/government/governin
 import { getGameStatePreset } from "@/lib/db/collections/gameState";
 import { hasRequiredPrimeMinisterSeat } from "@/lib/uk/pmSeatEligibility";
 import { isSingleplayer } from "@/lib/singleplayer";
+import {
+  loadRuntimeCountryOffices,
+  type RuntimeCountryOffices,
+} from "@/lib/countries/runtimeOffices";
 import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
 
 export { resolveGoverningPartyIdsFromDocuments };
@@ -105,7 +105,7 @@ export async function tallySeatsByParty(
   preset?: string
 ): Promise<Record<string, number>> {
   const activePreset = preset ?? (await getGameStatePreset(db));
-  const lowerOfficeType = getLowerChamberOfficeType(countryId, activePreset);
+  const { lowerOfficeType } = await loadRuntimeCountryOffices(db, countryId, activePreset);
 
   const officials = await db
     .collection<ElectedOfficial>("electedOfficials")
@@ -583,6 +583,9 @@ export async function appointPrimeMinister(
   }
   const activeGameState = preset ? await getGameState().catch(() => null) : await getGameState();
   const activePreset = preset ?? activeGameState?.preset;
+  const offices = await loadRuntimeCountryOffices(db, countryId, activePreset);
+  const execKey = offices.headOfGovernmentOfficeKey;
+  if (!execKey) throw new Error("The active constitution has no head-of-government office");
   // Capture the outgoing head of government BEFORE any clears so we only
   // announce a genuinely new appointment. Re-appointing the sitting holder
   // (e.g. the same PM winning a fresh formation vote each turn) must not fire a
@@ -607,7 +610,6 @@ export async function appointPrimeMinister(
 
   // Scope PM clear to this country — other countries may have their own PM
   const clearPM = { $set: { currentOffice: null, updatedAt: now } };
-  const execKey = getExecutiveOfficeKey(countryId, activePreset);
   await Promise.all([
     db
       .collection<Character>("characters")
@@ -688,7 +690,7 @@ export async function appointPrimeMinister(
     const pmCareer: CareerEvent = {
       type: "appointed",
       office: pmOffice,
-      officeLabel: getOfficeLabel(pmOffice, countryId),
+      officeLabel: offices.config.executiveTitle,
       date: now,
       ...(char?.party ? { party: char.party } : {}),
     };
@@ -734,7 +736,7 @@ export async function appointPrimeMinister(
     });
   }
 
-  const config = getCountryConfig(countryId, activePreset);
+  const config = offices.config;
   const appointedPerson = characterId
     ? await db
         .collection<Character>("characters")
@@ -802,19 +804,24 @@ export async function appointPrimeMinister(
 export async function autoAyeNPPsForParliamentaryAppointment(
   db: Db,
   countryId: CountryId,
-  voteId: ObjectId
+  voteId: ObjectId,
+  officeLayout?: RuntimeCountryOffices
 ): Promise<void> {
-  const lowerOfficeType = getLowerChamberOfficeType(countryId);
-
   const votesColl = getPMAppointmentVotesCollection(db);
   const vote = await votesColl.findOne({ _id: voteId });
   if (!vote || vote.status !== "active") return;
+  const offices = officeLayout ?? (await loadRuntimeCountryOffices(db, countryId));
+  if (
+    vote.office === "headOfState" &&
+    offices.config.headOfStateSelection !== "legislatureAppointment"
+  )
+    return;
 
   // Head-of-state appointment votes are a JOINT sitting — NPP deputies of
   // both chambers auto-aye, not just the lower chamber (RU Chairman of the
   // Presidium; spec §2.3).
   const voterOfficeTypes =
-    vote.office === "headOfState" ? getJointSittingOfficeTypes(countryId) : [lowerOfficeType];
+    vote.office === "headOfState" ? offices.jointSittingOfficeTypes : [offices.lowerOfficeType];
 
   const qualifyingPartyIds: Set<string> =
     vote.formationType === "coalition" && vote.coalitionPartyIds
@@ -897,7 +904,8 @@ export async function autoAyeNPPsForParliamentaryAppointment(
 export async function autoVoteNPPsForNoConfidence(
   db: Db,
   countryId: CountryId,
-  voteId: ObjectId
+  voteId: ObjectId,
+  officeLayout?: RuntimeCountryOffices
 ): Promise<void> {
   const votesColl = getNoConfidenceVotesCollection(db);
   const vote = await votesColl.findOne({ _id: voteId });
@@ -912,6 +920,7 @@ export async function autoVoteNPPsForNoConfidence(
   );
   // No resolvable government means there is no party line to follow.
   if (governingPartyIds.size === 0) return;
+  const offices = officeLayout ?? (await loadRuntimeCountryOffices(db, countryId));
 
   const whips = await db
     .collection("billWhips")
@@ -931,7 +940,7 @@ export async function autoVoteNPPsForNoConfidence(
 
   const officials = await db
     .collection<ElectedOfficial>("electedOfficials")
-    .find({ officeType: getLowerChamberOfficeType(countryId), countryId, isNPP: true })
+    .find({ officeType: offices.lowerOfficeType, countryId, isNPP: true })
     .toArray();
 
   const existingVotes = vote.votes ?? {};
@@ -979,13 +988,15 @@ export async function resolveParliamentaryAppointmentVote(
   db: Db,
   countryId: CountryId,
   voteId: ObjectId,
-  now: Date
+  now: Date,
+  officeLayout?: RuntimeCountryOffices
 ): Promise<void> {
   const votesColl = getPMAppointmentVotesCollection(db);
   const govColl = getGovernmentFormationsCollection(db);
+  const offices = officeLayout ?? (await loadRuntimeCountryOffices(db, countryId));
 
   // Final auto-aye pass
-  await autoAyeNPPsForParliamentaryAppointment(db, countryId, voteId);
+  await autoAyeNPPsForParliamentaryAppointment(db, countryId, voteId, offices);
 
   const vote = await votesColl.findOne({ _id: voteId });
   if (!vote || vote.status !== "active") return;
@@ -1000,7 +1011,7 @@ export async function resolveParliamentaryAppointmentVote(
   const tally = await computeParliamentaryGovernmentTally(
     db,
     countryId,
-    getLowerChamberOfficeType(countryId),
+    offices.lowerOfficeType,
     vote.votes
   );
   vote.votesFor = tally.votesFor;
@@ -1108,7 +1119,7 @@ export async function resolveParliamentaryAppointmentVote(
       ? await db.collection<Character>("characters").findOne({ _id: vote.nomineeCharacterId })
       : null;
     if (nomineeChar?.userId) {
-      const config = getCountryConfig(countryId);
+      const config = offices.config;
       await createNotifications([
         {
           userId: nomineeChar.userId,
@@ -1120,7 +1131,7 @@ export async function resolveParliamentaryAppointmentVote(
       ]);
     }
 
-    const config = getCountryConfig(countryId);
+    const config = offices.config;
     sendCountryGameEvent(countryId, {
       title: vote.isConfidenceMotion
         ? `${config.executiveTitle} Survives Confidence Motion`
@@ -1162,7 +1173,7 @@ export async function resolveParliamentaryAppointmentVote(
         await unformGovernmentAndVacatePM(db, countryId, now, {
           reason: "confidence-motion-failed",
         });
-        const config = getCountryConfig(countryId);
+        const config = offices.config;
         sendCountryGameEvent(countryId, {
           title: `${config.executiveTitle} Loses Confidence Motion`,
           description: `**${vote.nomineeName}** lost the post-election confidence motion (${vote.votesFor} ayes, ${vote.votesAgainst} nays) and has been removed from office.`,
@@ -1183,7 +1194,7 @@ export async function resolveParliamentaryAppointmentVote(
     }
 
     if (nomineeChar?.userId) {
-      const config = getCountryConfig(countryId);
+      const config = offices.config;
       const title = vote.isConfidenceMotion
         ? `${config.executiveTitle} Confidence Motion Failed`
         : `${config.executiveTitle} Appointment Vote Failed`;
@@ -1246,14 +1257,16 @@ export async function resolveParliamentaryNoConfidenceVote(
   db: Db,
   countryId: CountryId,
   voteId: ObjectId,
-  now: Date
+  now: Date,
+  officeLayout?: RuntimeCountryOffices
 ): Promise<void> {
   const votesColl = getNoConfidenceVotesCollection(db);
   const govColl = getGovernmentFormationsCollection(db);
+  const offices = officeLayout ?? (await loadRuntimeCountryOffices(db, countryId));
 
   // Final party-line pass: benches that were never whipped still vote, so a
   // government whose seats are NPP-held is not silently unseated (ticket-1137).
-  await autoVoteNPPsForNoConfidence(db, countryId, voteId);
+  await autoVoteNPPsForNoConfidence(db, countryId, voteId, offices);
 
   const vote = await votesColl.findOne({ _id: voteId });
   if (!vote || vote.status !== "active") return;
@@ -1264,7 +1277,7 @@ export async function resolveParliamentaryNoConfidenceVote(
   const tally = await computeParliamentaryGovernmentTally(
     db,
     countryId,
-    getLowerChamberOfficeType(countryId),
+    offices.lowerOfficeType,
     vote.votes
   );
   vote.votesFor = tally.votesFor;
@@ -1316,7 +1329,7 @@ export async function resolveParliamentaryNoConfidenceVote(
       notificationInputs.push({
         userId: pmChar.userId,
         title: "Removed from Office",
-        message: `You have been removed as ${getCountryConfig(countryId).executiveTitle} by a vote of no confidence (${vote.votesFor} for, ${vote.votesAgainst} against).`,
+        message: `You have been removed as ${offices.config.executiveTitle} by a vote of no confidence (${vote.votesFor} for, ${vote.votesAgainst} against).`,
         type: "system",
         metadata: { recipientCharacterId: vote.targetPmCharacterId.toString() },
       });
@@ -1324,13 +1337,13 @@ export async function resolveParliamentaryNoConfidenceVote(
 
     sendCountryGameEvent(countryId, {
       title: "Government Collapses — No Confidence Vote Passed",
-      description: `A vote of no confidence has passed (${vote.votesFor}–${vote.votesAgainst}). The ${getCountryConfig(countryId).executiveTitle} has been removed from office.`,
+      description: `A vote of no confidence has passed (${vote.votesFor} - ${vote.votesAgainst}). The ${offices.config.executiveTitle} has been removed from office.`,
       color: DISCORD_COLORS.govCollapsed,
       footer: { text: "A House Divided" },
       timestamp: now.toISOString(),
       cardVoteSplit: [
         {
-          label: getCountryConfig(countryId).legislature.lowerChamber.name,
+          label: offices.config.legislature.lowerChamber.name,
           votesFor: vote.votesFor,
           votesAgainst: vote.votesAgainst,
           votesAbstain: 0,
@@ -1437,6 +1450,14 @@ export async function processParliamentaryGovernmentVotes(
     .find({ countryId, status: "active" })
     .toArray();
   const expiredAppointments = activeAppointments.filter((v) => isVoteClosed(v, currentTurn, now));
+  const activeNoConfidence = await getNoConfidenceVotesCollection(db).findOne({
+    countryId,
+    status: "active",
+  });
+  const confidenceExpired =
+    activeNoConfidence && isVoteClosed(activeNoConfidence, currentTurn, now);
+  if (expiredAppointments.length === 0 && !confidenceExpired) return;
+  const offices = await loadRuntimeCountryOffices(db, countryId);
 
   for (const vote of expiredAppointments) {
     // If a prior vote in this loop passed and cancelled the rest, this vote's
@@ -1448,19 +1469,16 @@ export async function processParliamentaryGovernmentVotes(
       // no cabinet/confidence side effects. Dynamic import avoids a static
       // cycle (hosAppointment imports this module's auto-aye).
       const { resolveHeadOfStateAppointmentVote } = await import("@/lib/turn/hosAppointment");
-      await resolveHeadOfStateAppointmentVote(db, countryId, vote._id, now);
+      await resolveHeadOfStateAppointmentVote(db, countryId, vote._id, now, offices);
     } else {
-      await resolveParliamentaryAppointmentVote(db, countryId, vote._id, now);
+      await resolveParliamentaryAppointmentVote(db, countryId, vote._id, now, offices);
     }
   }
 
   // No-confidence: still one at a time
-  const activeNoConfidence = await getNoConfidenceVotesCollection(db).findOne({
-    countryId,
-    status: "active",
-  });
+
   if (activeNoConfidence && isVoteClosed(activeNoConfidence, currentTurn, now)) {
-    await resolveParliamentaryNoConfidenceVote(db, countryId, activeNoConfidence._id, now);
+    await resolveParliamentaryNoConfidenceVote(db, countryId, activeNoConfidence._id, now, offices);
   }
 }
 
@@ -1482,18 +1500,22 @@ export async function processParliamentaryNPPAutoAye(
     .find({ countryId, status: "active" })
     .toArray();
 
-  for (const vote of activeVotes) {
-    await autoAyeNPPsForParliamentaryAppointment(db, countryId, vote._id);
-  }
-
-  // Same cadence for an active confidence motion, so the live tally shows the
-  // benches as they stand instead of an empty chamber until resolution.
   const activeNoConfidence = await getNoConfidenceVotesCollection(db).findOne({
     countryId,
     status: "active",
   });
+  if (activeVotes.length === 0 && !activeNoConfidence) return;
+  const offices = await loadRuntimeCountryOffices(db, countryId);
+
+  for (const vote of activeVotes) {
+    await autoAyeNPPsForParliamentaryAppointment(db, countryId, vote._id, offices);
+  }
+
+  // Same cadence for an active confidence motion, so the live tally shows the
+  // benches as they stand instead of an empty chamber until resolution.
+
   if (activeNoConfidence) {
-    await autoVoteNPPsForNoConfidence(db, countryId, activeNoConfidence._id);
+    await autoVoteNPPsForNoConfidence(db, countryId, activeNoConfidence._id, offices);
   }
 }
 
@@ -1540,7 +1562,7 @@ export async function checkAppointmentEligibility(
   // changes the canFormGovernment ruling-party gate.
   const runtime = await getCountryState(db, countryId);
   const runtimeConfig = { governmentType: runtime.governmentType };
-  const lowerOfficeType = getLowerChamberOfficeType(countryId);
+  const { lowerOfficeType } = await loadRuntimeCountryOffices(db, countryId);
   const liveLowerSeats = await getLiveLowerChamberSeats(db, countryId);
   const minorityThreshold = Math.ceil(liveLowerSeats * MINORITY_SEAT_FRACTION);
 
@@ -1679,6 +1701,9 @@ export async function unformGovernmentAndVacatePM(
   const govCol = getGovernmentFormationsCollection(db);
   const existing = await govCol.findOne({ _id: countryId });
   if (!existing) return;
+  const offices = await loadRuntimeCountryOffices(db, countryId);
+  const execKeyVacate = offices.headOfGovernmentOfficeKey;
+  if (!execKeyVacate) throw new Error("The active constitution has no head-of-government office");
 
   const gs = await db
     .collection<{ _id: string; currentTurn: number }>("gameState")
@@ -1726,7 +1751,6 @@ export async function unformGovernmentAndVacatePM(
   ]);
 
   const clearPM = { $set: { currentOffice: null, updatedAt: now } };
-  const execKeyVacate = getExecutiveOfficeKey(countryId);
   const departingPlayers = await db
     .collection<Character>("characters")
     .find(
@@ -1822,7 +1846,8 @@ export async function openConfidenceMotionForIncumbent(
     return { opened: false, reason: "already-active" };
   }
 
-  const lowerOfficeType = getLowerChamberOfficeType(countryId);
+  const offices = await loadRuntimeCountryOffices(db, countryId);
+  const lowerOfficeType = offices.lowerOfficeType;
 
   // Verify incumbent retained a seat in the newly-elected lower chamber.
   const official = await db
@@ -1864,7 +1889,7 @@ export async function openConfidenceMotionForIncumbent(
 
   await getPMAppointmentVotesCollection(db).insertOne(voteDoc);
 
-  const config = getCountryConfig(countryId);
+  const config = offices.config;
   const chamberName = config.legislature.lowerChamber.shortName;
   const pmChar = await db.collection<Character>("characters").findOne({ _id: gov.pmCharacterId });
   if (pmChar?.userId) {
@@ -1936,7 +1961,8 @@ export async function failInProgressBills(
   countryId: CountryId,
   now: Date
 ): Promise<number> {
-  const lowerChamberKey = getCountryConfig(countryId).legislature.lowerChamber.key;
+  const offices = await loadRuntimeCountryOffices(db, countryId);
+  const lowerChamberKey = offices.config.legislature.lowerChamber.key;
   if (!lowerChamberKey) return 0;
 
   const telemetryBills = await db
@@ -2000,7 +2026,15 @@ export async function failInProgressBills(
 
 /** Returns all active/beta/coming-soon parliamentary country IDs. */
 export function getParliamentaryCountryIds(preset?: string): CountryId[] {
-  return COUNTRY_ORDER.filter((id) => isParliamentarySystem(getCountryConfig(id, preset)));
+  return COUNTRY_ORDER.filter((id) => {
+    const config = getCountryConfig(id, preset);
+    return (
+      isParliamentarySystem(config) ||
+      (config.governmentType === "presidential" &&
+        config.electionSystems.headOfGovernment === "parliamentary" &&
+        getHeadOfGovernmentOfficeKey(id, preset) !== getExecutiveOfficeKey(id, preset))
+    );
+  });
 }
 
 /**

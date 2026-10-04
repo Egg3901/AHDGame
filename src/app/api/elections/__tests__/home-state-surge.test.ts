@@ -125,10 +125,14 @@ describe("Home State Surge", () => {
       },
       electionCandidates: {
         findOne: vi.fn().mockResolvedValue(mockCandidate),
-        updateOne: vi.fn().mockResolvedValue({ modifiedCount: 1 }),
+        updateOne: vi.fn().mockResolvedValue({ matchedCount: 1, modifiedCount: 1 }),
       },
       characters: {
         findOne: vi.fn().mockResolvedValue(char),
+        updateOne: vi.fn().mockResolvedValue({ matchedCount: 1, modifiedCount: 1 }),
+      },
+      nonAtomicMoneyFlowReceipts: {
+        insertOne: vi.fn().mockResolvedValue({ insertedId: "surge" }),
         updateOne: vi.fn().mockResolvedValue({ modifiedCount: 1 }),
       },
     };

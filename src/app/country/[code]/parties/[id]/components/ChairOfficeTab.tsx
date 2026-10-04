@@ -14,6 +14,7 @@ import { PriorityRegionCard } from "./PriorityRegionCard";
 import { PartyCampaignersCard } from "./PartyCampaignersCard";
 import { MembershipModeCard } from "./MembershipModeCard";
 import { BulkStateOrgControl } from "./BulkStateOrgControl";
+import { HuListVacanciesCard } from "./HuListVacanciesCard";
 
 interface ChairOfficeTabProps {
   party: PartyData;
@@ -225,6 +226,9 @@ export function ChairOfficeTab({ party, countryId, characterId, onUpdate }: Chai
   return (
     <>
       <div className="space-y-6">
+        {countryId.toUpperCase() === "HU" && (
+          <HuListVacanciesCard partyId={party.id} onUpdate={onUpdate} />
+        )}
         <div className="rounded-xl border border-card-border bg-card p-6">
           <h2 className="text-lg font-semibold mb-4">Chair office</h2>
           <p className="text-sm text-muted mb-6">

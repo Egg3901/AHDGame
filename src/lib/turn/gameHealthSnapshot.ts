@@ -288,7 +288,12 @@ async function runIntegrityChecks(
     db
       .collection("elections")
       .aggregate([
-        { $match: { status: "active" } },
+        {
+          $match: {
+            status: "active",
+            $or: [{ endTurn: { $lte: turn + 24 } }, { endTurn: { $exists: false } }],
+          },
+        },
         { $project: { _id: 1 } },
         {
           $lookup: {
@@ -418,13 +423,13 @@ async function runIntegrityChecks(
   };
 }
 
-async function collectSeatIntegrity(
+export async function collectSeatIntegrity(
   db: Db
 ): Promise<{ orphanedOfficialCount: number; seatBackedSeatsWithoutOfficials: number }> {
   const [seats, officials] = await Promise.all([
     db
       .collection<Seat>("seats")
-      .find({}, { projection: { _id: 1, countryId: 1, electionType: 1 } })
+      .find({}, { projection: { _id: 1, countryId: 1, electionType: 1, state: 1 } })
       .toArray(),
     db
       .collection<SeatScopedOfficial>("electedOfficials")
@@ -438,6 +443,7 @@ async function collectSeatIntegrity(
             senateClass: 1,
             chamberClass: 1,
             seatId: 1,
+            seatsHeld: 1,
           },
         }
       )
@@ -447,6 +453,9 @@ async function collectSeatIntegrity(
   const knownSeatIds = new Set(seats.map((seat) => seat._id));
   const seatBackedOfficeKeys = new Set(
     seats.map((seat) => `${seat.countryId}:${seat.electionType}`)
+  );
+  const seatBackedRegionKeys = new Set(
+    seats.map((seat) => `${seat.countryId}:${seat.electionType}:${seat.state}`)
   );
   const filledSeatIds = new Set<string>();
   let orphanedOfficialCount = 0;
@@ -458,7 +467,10 @@ async function collectSeatIntegrity(
     }
 
     const officeConfig = getOfficeTypeConfig(official.countryId, official.officeType);
-    if (!officeConfig) {
+    if (
+      !officeConfig &&
+      !seatBackedOfficeKeys.has(`${official.countryId}:${official.officeType}`)
+    ) {
       orphanedOfficialCount += 1;
       continue;
     }
@@ -476,7 +488,7 @@ async function collectSeatIntegrity(
     }
 
     if (!seatBackedOfficeKeys.has(`${official.countryId}:${official.officeType}`)) {
-      if (officeConfig.isSubNational && !official.state) {
+      if (officeConfig?.isSubNational && !official.state) {
         orphanedOfficialCount += 1;
       }
       continue;
@@ -484,6 +496,19 @@ async function collectSeatIntegrity(
 
     if (official.officeType !== "president" && !official.state) {
       orphanedOfficialCount += 1;
+      continue;
+    }
+
+    // The Japanese upper-house seed stores one party bloc per region, without
+    // choosing either staggered chamber class. Its office and region are real,
+    // but no exact class seat can be marked filled from that aggregate row.
+    if (
+      official.countryId === "JP" &&
+      official.officeType === "sangiin" &&
+      official.chamberClass == null &&
+      (official.seatsHeld ?? 0) > 0 &&
+      seatBackedRegionKeys.has(`JP:sangiin:${official.state}`)
+    ) {
       continue;
     }
 

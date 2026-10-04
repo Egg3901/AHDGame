@@ -17,7 +17,12 @@ const mockGetDb = vi.fn(async () => ({
 vi.mock("@/lib/mongodb", () => ({ getDb: () => mockGetDb() }));
 vi.mock("@/lib/countryAccess", () => ({ isCountryEnabledForPlayers: async () => true }));
 
-import { buildBillVetoedDiscordEmbed, DISCORD_COLORS, sendNewsEvent } from "./discordWebhooks";
+import {
+  buildBillVetoedDiscordEmbed,
+  DISCORD_COLORS,
+  sendDiscordWebhookMultiple,
+  sendNewsEvent,
+} from "./discordWebhooks";
 
 describe("sendNewsEvent dedup (#1208)", () => {
   const fetchMock = vi.fn(async () => ({
@@ -171,5 +176,26 @@ describe("buildBillVetoedDiscordEmbed", () => {
     const msgField = withMsg.fields?.find((f) => f.name === "Veto Message");
     expect(msgField?.value).toBe("This bill is fiscally irresponsible.");
     expect(withoutMsg.fields?.some((f) => f.name === "Veto Message")).toBe(false);
+  });
+
+  it("carries the chamber vote split for the card but strips it before posting", async () => {
+    const embed = buildBillVetoedDiscordEmbed({
+      billTitle: "Tax Bill",
+      billUrl,
+      voteSplit: [{ label: "House", votesFor: 220, votesAgainst: 210, votesAbstain: 5 }],
+    });
+    expect(embed.cardVoteSplit).toHaveLength(1);
+
+    const fetchMock = vi.fn(async (_url: string, _init: { body: string }) => ({
+      ok: true,
+      status: 200,
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    await sendDiscordWebhookMultiple("http://hook/game", [embed]);
+    const call = fetchMock.mock.calls[0];
+    if (!call) throw new Error("fetch was not called");
+    const body = call[1].body;
+    expect(body).not.toContain("cardVoteSplit");
+    expect(body).toContain("Tax Bill");
   });
 });

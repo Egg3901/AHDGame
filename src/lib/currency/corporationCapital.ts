@@ -123,9 +123,20 @@ export function resolveSectorHostCurrencyCode(
   sector: { countryId?: string | null } | null | undefined,
   corp: CorpCapitalCurrencyInfo | null | undefined
 ): CurrencyCode | undefined {
-  const country = sector?.countryId ?? corp?.countryId;
-  if (country && country in COUNTRY_CURRENCY_MAP) {
-    return COUNTRY_CURRENCY_MAP[country as keyof typeof COUNTRY_CURRENCY_MAP];
+  const hostCountry = sector?.countryId ?? corp?.countryId;
+  // Domestic sectors (host == corp home, or no explicit host) are denominated
+  // in the corp's stamped home currency: a 2027 euro-member corp carries EUR
+  // while the era-blind map still resolves its country to a legacy code
+  // (FRF, ...), which matches no live FX row. The seed writer resolves through
+  // this same helper, so write and read agree. Cross-border sectors and
+  // unstamped (pre-migration, 1991) corps resolve through the map as before.
+  const domestic = sector?.countryId == null || sector.countryId === corp?.countryId;
+  const stamped = corp?.liquidCurrencyCode;
+  if (domestic && stamped !== undefined && stamped !== null && String(stamped).trim() !== "") {
+    return stamped as CurrencyCode;
+  }
+  if (hostCountry && hostCountry in COUNTRY_CURRENCY_MAP) {
+    return COUNTRY_CURRENCY_MAP[hostCountry as keyof typeof COUNTRY_CURRENCY_MAP];
   }
   return undefined;
 }

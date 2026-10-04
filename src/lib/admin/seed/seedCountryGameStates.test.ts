@@ -188,6 +188,20 @@ describe("roster-driven enablement", () => {
     }
   });
 
+  it("clears the provisional Congress mandate with Soviet transition markers on reseeding", async () => {
+    const { db } = collectWrites();
+    await seedCountryGameStates(db as unknown as Db, "1991-default", 1991);
+    const russian = db.collectionMocks.countryGameStates!.updateOne.mock.calls.find(
+      (call) => call[0]._id === "RU"
+    );
+    expect(russian?.[1].$unset).toMatchObject({
+      ruSovietSuccessionSinceTurn: "",
+      ruProvisionalCongressSeats: "",
+      ruPresidencySinceTurn: "",
+      ruFederalAssemblySinceTurn: "",
+    });
+  });
+
   it("never writes a US row", async () => {
     const { db, writes } = collectWrites();
     await seedCountryGameStates(db as unknown as Db, "1991-default", 1991);

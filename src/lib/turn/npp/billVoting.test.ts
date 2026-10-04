@@ -10,6 +10,8 @@ import { describe, it, expect, vi } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import type { NPP, Bill, ElectedOfficial, BillWhip, SpeakerNomination } from "@/lib/db/types";
+import { getCountryConfigForRuntime } from "@/lib/constants/countries";
+import { resolveCountryOfficeLayout } from "@/lib/countries/rules/officeLayout";
 import type { NPPContext } from "./context";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
@@ -736,12 +738,20 @@ describe("processBillVoting", () => {
       personality: { loyalty: 50, ambition: 50, stubbornness: 50 },
       donorBaseLevel: 0,
     });
-    const official2 = makeOfficial(party2Npp._id, "house", { countryId: "BR", party: "2" });
-    const official3 = makeOfficial(party3Npp._id, "house", { countryId: "BR", party: "3" });
+    const official2 = makeOfficial(party2Npp._id, "house", {
+      countryId: "BR",
+      party: "2",
+      officeType: "chamber",
+    });
+    const official3 = makeOfficial(party3Npp._id, "house", {
+      countryId: "BR",
+      party: "3",
+      officeType: "chamber",
+    });
     const bill = makeBill({
       countryId: "BR",
       sponsorParty: "1",
-      currentChamber: "house",
+      currentChamber: "chamber",
       status: "active",
     });
 
@@ -1185,4 +1195,208 @@ describe("processBillVoting - concurrent (active_both) bills", () => {
     expect(incFields.votesAgainst ?? 0).toBe(0);
     expect(incFields.votesAbstain ?? 0).toBe(0);
   });
+});
+
+describe("Russian NPC bill votes use the active constitution", () => {
+  it("counts all individual Duma and Council mandates once per NPC profile", async () => {
+    const lower = makeNPP({ countryId: "RU" }),
+      upper = makeNPP({ countryId: "RU" });
+    const db = makeMockDb();
+    const layout = resolveCountryOfficeLayout(
+      getCountryConfigForRuntime("RU", "1991-default", { ruFederalAssemblySinceTurn: 145 })
+    );
+    const lowerBill = makeBill({ countryId: "RU", currentChamber: "stateDuma" });
+    const upperBill = makeBill({ countryId: "RU", currentChamber: "federationCouncil" });
+    const ctx = makeCtx(db, {
+      preset: "1991-default",
+      runtimeCountryOffices: new Map([["RU", layout]]),
+      activeBills: [lowerBill, upperBill],
+      nppMap: new Map([lower, upper].map((row) => [row._id.toHexString(), row])),
+      nppOfficials: [
+        ...Array.from({ length: 225 }, (_, index) =>
+          makeOfficial(lower._id, "house", {
+            countryId: "RU",
+            officeType: "dumaDeputy",
+            constituencyId: `RU-duma-region-${index}`,
+          })
+        ),
+        makeOfficial(lower._id, "house", {
+          countryId: "RU",
+          officeType: "dumaDeputy",
+          constituencyId: "RU-duma-national-list",
+          seatsHeld: 75,
+        }),
+        ...Array.from({ length: 89 }, (_, index) =>
+          makeOfficial(upper._id, "senate", {
+            countryId: "RU",
+            officeType: "federationCouncilMember",
+            constituencyId: `RU-council-${index + 1}`,
+          })
+        ),
+      ],
+    });
+    const { processBillVoting } = await import("./billVoting");
+    expect(await processBillVoting(ctx)).toBe(2);
+    const updates = db._calls.bills.map(
+      (call) => call[1] as { $inc: Record<string, number>; $set: Record<string, unknown> }
+    );
+    expect(
+      updates.map((update) => Object.values(update.$inc).reduce((sum, value) => sum + value, 0))
+    ).toEqual([300, 89]);
+    expect(
+      updates.every(
+        (update) =>
+          Object.keys(update.$set).filter((key) => key.startsWith("votes.npp_")).length === 1
+      )
+    ).toBe(true);
+  });
+  it.each([
+    [{}, "unionCongress", "unionCongressDeputy"],
+    [{ ruSovietSuccessionSinceTurn: 24 }, "congressOfPeoplesDeputies", "congressDeputy"],
+    [{ ruFederalAssemblySinceTurn: 40 }, "stateDuma", "dumaDeputy"],
+    [{ ruFederalAssemblySinceTurn: 40 }, "federationCouncil", "federationCouncilMember"],
+    [
+      { ruFederalAssemblySinceTurn: 40, ruCouncilComposition: { mode: "regionalHeads" } },
+      "federationCouncil",
+      "federationCouncilMember",
+    ],
+    [
+      { ruFederalAssemblySinceTurn: 40, ruCouncilComposition: { mode: "regionalDelegates" } },
+      "federationCouncil",
+      "federationCouncilMember",
+    ],
+  ] as const)(
+    "casts only votes from active national deputies: %s",
+    async (markers, chamber, officeType) => {
+      const npp = makeNPP({ countryId: "RU" });
+      const foreign = makeNPP();
+      const obsolete = makeNPP({ countryId: "RU" });
+      const db = makeMockDb();
+      const bill = makeBill({ countryId: "RU", currentChamber: chamber });
+      const layout = resolveCountryOfficeLayout(
+        getCountryConfigForRuntime("RU", "1991-default", markers)
+      );
+      const ctx = makeCtx(db, {
+        preset: "1991-default",
+        runtimeCountryOffices: new Map([["RU", layout]]),
+        activeBills: [bill],
+        nppMap: new Map([npp, foreign, obsolete].map((n) => [n._id.toString(), n])),
+        nppOfficials: [
+          makeOfficial(npp._id, "house", { countryId: "RU", officeType, seatsHeld: 3 }),
+          makeOfficial(foreign._id, "house", { officeType }),
+          makeOfficial(obsolete._id, "house", {
+            countryId: "RU",
+            officeType: "supremeSovietDeputy",
+          }),
+        ],
+      });
+      const { processBillVoting } = await import("./billVoting");
+      expect(await processBillVoting(ctx)).toBe(1);
+      expect(db._calls.bills).toHaveLength(1);
+      const update = db._calls.bills[0][1] as {
+        $set: Record<string, unknown>;
+        $inc: Record<string, number>;
+      };
+      expect(Object.keys(update.$set)).toContain(`votes.npp_${npp._id}`);
+      expect(Object.keys(update.$set)).not.toContain(`votes.npp_${foreign._id}`);
+      expect(Object.keys(update.$set)).not.toContain(`votes.npp_${obsolete._id}`);
+      expect(Object.values(update.$inc).reduce((sum, value) => sum + value, 0)).toBe(3);
+      expect(db.collection).not.toHaveBeenCalledWith("countryGameStates");
+    }
+  );
+
+  it.each(
+    (["active_both", "veto_override"] as const).flatMap((status) =>
+      ([undefined, "regionalHeads", "regionalDelegates"] as const).map((mode) => ({ status, mode }))
+    )
+  )(
+    "routes both appointed Assembly chamber votes correctly for $status/$mode",
+    async ({ status, mode }) => {
+      const lower = makeNPP({ countryId: "RU" });
+      const upper = makeNPP({ countryId: "RU" });
+      const db = makeMockDb();
+      const bill = makeBill({
+        countryId: "RU",
+        status,
+        currentChamber: "stateDuma",
+        votingEndsOnTurn: 1,
+        otherChamberVotingEndsOnTurn: 1,
+      });
+      const layout = resolveCountryOfficeLayout(
+        getCountryConfigForRuntime("RU", "1991-default", {
+          ruFederalAssemblySinceTurn: 40,
+          ...(mode ? { ruCouncilComposition: { mode } } : {}),
+        })
+      );
+      const { processBillVoting } = await import("./billVoting");
+      expect(
+        await processBillVoting(
+          makeCtx(db, {
+            preset: "1991-default",
+            runtimeCountryOffices: new Map([["RU", layout]]),
+            activeBills: [bill],
+            nppMap: new Map([lower, upper].map((n) => [n._id.toString(), n])),
+            nppOfficials: [
+              makeOfficial(lower._id, "house", { countryId: "RU", officeType: "dumaDeputy" }),
+              makeOfficial(upper._id, "senate", {
+                countryId: "RU",
+                officeType: "federationCouncilMember",
+              }),
+            ],
+          })
+        )
+      ).toBe(2);
+      const update = db._calls.bills[0][1] as { $set: Record<string, unknown> };
+      const field = status === "veto_override" ? "vetoOverrideVotes" : "votes";
+      expect(Object.keys(update.$set)).toContain(`${field}.npp_${lower._id}`);
+      expect(Object.keys(update.$set)).toContain(
+        `${status === "veto_override" ? field : "otherChamberVotes"}.npp_${upper._id}`
+      );
+    }
+  );
+
+  it("casts no votes while Congress is dissolved", async () => {
+    const npp = makeNPP({ countryId: "RU" });
+    const db = makeMockDb();
+    const layout = resolveCountryOfficeLayout(
+      getCountryConfigForRuntime("RU", "1991-default", { ruCongressDissolvedSinceTurn: 40 })
+    );
+    const { processBillVoting } = await import("./billVoting");
+    expect(
+      await processBillVoting(
+        makeCtx(db, {
+          preset: "1991-default",
+          runtimeCountryOffices: new Map([["RU", layout]]),
+          activeBills: [makeBill({ countryId: "RU", status: "veto_override" })],
+          nppMap: new Map([[npp._id.toString(), npp]]),
+          nppOfficials: [
+            makeOfficial(npp._id, "house", { countryId: "RU", officeType: "congressDeputy" }),
+          ],
+        })
+      )
+    ).toBe(0);
+    expect(db._calls.bills).toHaveLength(0);
+  });
+});
+
+it("votes on legacy UK national bills only through Commons", async () => {
+  const uk = makeNPP({ countryId: "UK" });
+  const us = makeNPP();
+  const db = makeMockDb();
+  const { processBillVoting } = await import("./billVoting");
+  expect(
+    await processBillVoting(
+      makeCtx(db, {
+        activeBills: [makeBill({ stateId: "uk_national", currentChamber: "commons" })],
+        nppMap: new Map([uk, us].map((n) => [n._id.toString(), n])),
+        nppOfficials: [
+          makeOfficial(uk._id, "house", { countryId: "UK", officeType: "commons" }),
+          makeOfficial(us._id, "house"),
+        ],
+      })
+    )
+  ).toBe(1);
+  const update = db._calls.bills[0][1] as { $set: Record<string, unknown> };
+  expect(Object.keys(update.$set)).toContain(`votes.npp_${uk._id}`);
+  expect(Object.keys(update.$set)).not.toContain(`votes.npp_${us._id}`);
 });

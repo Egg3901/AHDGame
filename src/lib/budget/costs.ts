@@ -130,10 +130,9 @@ export const COST_SCALE_ANCHORS: Partial<Record<CountryId, CostScaleAnchor>> = {
   // authored at; scaleHigh 1.0 matches the other modern-calibrated sides (IE/CN/NG).
   BR: BR_ECONOMY.costScaleAnchors,
   // NG spending-law per-capita costs are calibrated in 2019 naira (scaleHigh=1).
-  // 1991 nominal GDP-per-capita was ~1/27 of 2019 (₦1.8T/95M vs ₦144T/200M, pre-
-  // SAP-devaluation naira), so scaleLow tames the absolute costs for the SAP-era
-  // budget rather than over-stating a ₦1.8T-GDP economy. gdp/pop mirror the NG
-  // 1991 + 2019 seed configs (enforced by anchorConsistency.test.ts).
+  // The corrected 1991 GDP anchor keeps costs at their modeled share of GDP:
+  // scaleLow is rebased with nominal GDP. GDP/population mirror the 1991 and
+  // 2019 seed configs (enforced by anchorConsistency.test.ts).
   NG: NG_ECONOMY.costScaleAnchors,
 };
 

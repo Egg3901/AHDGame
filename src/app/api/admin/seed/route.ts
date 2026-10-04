@@ -565,7 +565,7 @@ export async function POST(request: Request) {
     if (targets.includes("cnStateMetrics")) await seedCNStateMetrics(db, reset, log, preset);
     if (targets.includes("cnBaselines")) await seedCNBaselines(db, reset, log, preset);
     if (targets.includes("cnGovernmentFormation")) await seedCNGovernmentFormation(db, log);
-    if (targets.includes("ruGovernmentFormation")) await seedRUGovernmentFormation(db, log);
+    if (targets.includes("ruGovernmentFormation")) await seedRUGovernmentFormation(db, log, preset);
     if (targets.includes("cnBudgets")) await seedCnBudgets(db, reset, log, preset);
     if (targets.includes("cnStatePartyOrg")) await seedCnStatePartyOrg(db, reset, log, preset);
     if (targets.includes("ruStatePartyOrg")) await seedRuStatePartyOrg(db, reset, log, preset);

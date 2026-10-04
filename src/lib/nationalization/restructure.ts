@@ -61,10 +61,14 @@ export async function splitOffSectorType(db: Db, params: SplitOffParams): Promis
   }
 
   // Ensure the primary exists (so the country has a coherent NatCorp set first).
-  await ensurePrimaryNationalCorporation(db, params.countryId);
+  const primary = await ensurePrimaryNationalCorporation(db, params.countryId);
 
   const doc = buildNationalCorporationDoc(params.countryId, {
     name,
+    // Inherit the primary's home currency so a split-off on a 2027 euro
+    // member stamps EUR, not the era-blind map code. No extra read: the
+    // ensure above already returned the document.
+    liquidCurrencyCode: primary.liquidCurrencyCode,
     // `buildNationalCorporationDoc` defaults `type` to "financial", which is
     // right for the PRIMARY NatCorp (a sovereign issuer) and wrong for a
     // producing split-off. `corporation.type` is the sector a corp builds into

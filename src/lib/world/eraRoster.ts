@@ -165,8 +165,31 @@ const ERA_ROSTER_LITERAL = {
   "1991-default": {
     default: "absent",
     player: ["US", "UK", "JP"],
-    econ: ["DE", "FR", "IT", "ES", "SE", "TR", "CN", "NG", "BR", "IE", "AT", "FI", "GR"],
-    npp: ["RU", "PL", "CS", "HU", "RO", "BG", "YU"],
+    // Detailed 1991 seed packs run autonomous economies, but opening political
+    // offices are not ready for player access in these seven countries.
+    econ: [
+      "DE",
+      "FR",
+      "IT",
+      "ES",
+      "SE",
+      "TR",
+      "CN",
+      "NG",
+      "BR",
+      "IE",
+      "AT",
+      "FI",
+      "GR",
+      "RU",
+      "PL",
+      "CS",
+      "HU",
+      "RO",
+      "BG",
+      "YU",
+    ],
+    npp: [],
   },
   // CS dissolved 31 Dec 1992, and BAL is coherent only as a Soviet
   // union-republic grouping — both go absent here. YU, as Serbia and
@@ -233,7 +256,10 @@ const ERA_ROSTER_LITERAL = {
     default: "absent",
     player: ["US", "UK", "DE", "JP", "CN"],
     econ: ["IE", "BR", "NG"],
-    npp: ["RU", "FR", "IT", "ES", "SE", "TR", "AT", "FI", "GR", "PL", "HU", "RO", "BG"],
+    // The five modern successor countries are part of the effective 2027
+    // world. They remain hidden from players while their seed qualification
+    // and first election cycle are completed (#2289).
+    npp: ["RU", "PL", "HU", "RO", "BG", "FR", "IT", "ES", "SE", "TR", "AT", "FI", "GR"],
   },
 } satisfies Record<ShippingPreset, EraRosterSpec>;
 

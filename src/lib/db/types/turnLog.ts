@@ -18,6 +18,7 @@ export interface TurnLog {
   durationMs: number;
   success: boolean;
   warnings: string[];
+  health?: GameHealthSummary | null;
   phaseStatuses?: TurnPhaseTelemetryMap;
   /**
    * Anti-abuse scans run after the turn commits (#2694): financialSuspectScan,

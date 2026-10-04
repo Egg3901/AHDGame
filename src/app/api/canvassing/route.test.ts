@@ -3,6 +3,7 @@ import { ObjectId, type Db } from "mongodb";
 import { NextRequest } from "next/server";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { Character } from "@/lib/db/types";
+import type { CanvassSpendInput } from "@/lib/canvassing/canvassSpend";
 
 vi.mock("@/lib/campaignTargeting/audience", () => ({
   loadCampaignAudience: vi.fn().mockResolvedValue(null),
@@ -31,21 +32,29 @@ vi.mock("@/lib/currency/characterFunds", () => ({
   getHomeCurrency: vi.fn().mockReturnValue("USD"),
   loadCharacterFxRate: vi.fn().mockResolvedValue({ rate: 1 }),
 }));
-vi.mock("@/lib/db/runWithOptionalTransaction", () => ({
-  runWithOptionalTransaction: vi.fn(async (_withSession, fallback) => {
-    await fallback();
-  }),
+vi.mock("@/lib/canvassing/canvassSpend", () => ({
+  applyCanvassSpend: vi.fn().mockResolvedValue({ duplicate: false }),
 }));
 vi.mock("@/lib/db/collections", () => ({
   getStateDemographicTurnoutCollection: vi.fn(),
 }));
 
-function makeRequest(body: unknown): Request {
+function makeRequest(body: unknown, idempotencyKey?: string): Request {
   return new Request("http://localhost/api/canvassing", {
     method: "POST",
     body: JSON.stringify(body),
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(idempotencyKey !== undefined ? { "Idempotency-Key": idempotencyKey } : {}),
+    },
   });
+}
+
+async function spendCall(): Promise<CanvassSpendInput> {
+  const { applyCanvassSpend } = await import("@/lib/canvassing/canvassSpend");
+  const mock = vi.mocked(applyCanvassSpend);
+  if (mock.mock.calls.length === 0) throw new Error("applyCanvassSpend was not called");
+  return mock.mock.calls[0][1];
 }
 
 function authedCharacter(overrides: Partial<Character> = {}): Character {
@@ -274,14 +283,13 @@ describe("POST /api/canvassing — country-aware groups", () => {
 
   it("writes a JP canvass to modifiers.jp_voterGroups.<group>", async () => {
     const character = authedCharacter({ homeState: "JP-13", countryId: "JP" } as never);
-    const turnoutUpdateOne = vi.fn().mockResolvedValue({ modifiedCount: 1 });
     const turnoutCollection = {
       findOne: vi.fn().mockResolvedValue({
         _id: "JP-13",
         modifiers: { jp_voterGroups: {} },
         lastUpdated: new Date(),
       }),
-      updateOne: turnoutUpdateOne,
+      updateOne: vi.fn().mockResolvedValue({ modifiedCount: 1 }),
     };
     const { getStateDemographicTurnoutCollection } = await import("@/lib/db/collections");
     vi.mocked(getStateDemographicTurnoutCollection).mockResolvedValue(turnoutCollection as never);
@@ -302,8 +310,18 @@ describe("POST /api/canvassing — country-aware groups", () => {
     );
 
     expect(res.status).toBe(200);
-    const updateArg = turnoutUpdateOne.mock.calls[0][1];
-    expect(Object.keys(updateArg.$set)).toContain("modifiers.jp_voterGroups.komeito_faithful");
+    const input = await spendCall();
+    expect(input.characterId).toEqual(character._id);
+    expect(input.totalFundsCostLocal).toBe(100);
+    expect(input.totalActionsCost).toBe(1);
+    expect(input).not.toHaveProperty("surrogateCampaignId");
+    const turnout = input.turnout;
+    expect(turnout.stateId).toBe("JP-13");
+    expect(turnout.modifierPath).toBe("modifiers.jp_voterGroups.komeito_faithful");
+    expect(turnout.modifierValue).toEqual(expect.any(Number));
+    expect(input.fingerprint).toBe(
+      `${character._id.toHexString()}:JP-13:jp_voterGroups:komeito_faithful:1`
+    );
   });
 
   it("rejects a UK group id submitted by a JP character", async () => {
@@ -335,16 +353,13 @@ describe("POST /api/canvassing running-mate surrogate branch", () => {
 
   // Wire up the character as the running mate on an active general-phase
   // presidential ticket canvassing that ticket's travel state ("PA").
-  async function setupMateCanvass(overrides: {
-    poolModified?: number;
-    spendModified?: number;
-    turnoutModified?: number;
-  }) {
+  async function setupMateCanvass() {
     const character = authedCharacter({ homeState: "GA", countryId: "US" } as never);
     const electionId = new ObjectId();
     const nomineeId = new ObjectId();
     const past = new Date(Date.now() - 60 * 60 * 1000);
     const future = new Date(Date.now() + 60 * 60 * 1000);
+    const ticketCampaignId = new ObjectId();
 
     db.collection("electionCandidates").find.mockReturnValue({
       toArray: () =>
@@ -371,15 +386,7 @@ describe("POST /api/canvassing running-mate surrogate branch", () => {
           },
         ]),
     });
-    db.collection("campaigns").findOne.mockResolvedValue({ _id: new ObjectId() });
-    db.collection("campaigns").updateOne.mockResolvedValue({
-      modifiedCount: overrides.poolModified ?? 1,
-      matchedCount: overrides.poolModified ?? 1,
-    });
-    db.collection("characters").updateOne.mockResolvedValue({
-      modifiedCount: overrides.spendModified ?? 1,
-      matchedCount: overrides.spendModified ?? 1,
-    });
+    db.collection("campaigns").findOne.mockResolvedValue({ _id: ticketCampaignId });
 
     const turnoutCollection = {
       findOne: vi.fn().mockResolvedValue({
@@ -387,7 +394,7 @@ describe("POST /api/canvassing running-mate surrogate branch", () => {
         modifiers: { race: { white: 0 } },
         lastUpdated: new Date(),
       }),
-      updateOne: vi.fn().mockResolvedValue({ modifiedCount: overrides.turnoutModified ?? 1 }),
+      updateOne: vi.fn().mockResolvedValue({ modifiedCount: 1 }),
     };
     const { getStateDemographicTurnoutCollection } = await import("@/lib/db/collections");
     vi.mocked(getStateDemographicTurnoutCollection).mockResolvedValue(turnoutCollection as never);
@@ -397,8 +404,10 @@ describe("POST /api/canvassing running-mate surrogate branch", () => {
       ok: true,
       user: { userId: "u1", character },
     } as never);
+    const { applyCanvassSpend } = await import("@/lib/canvassing/canvassSpend");
+    vi.mocked(applyCanvassSpend).mockResolvedValue({ duplicate: false });
 
-    return { character };
+    return { character, ticketCampaignId };
   }
 
   beforeEach(async () => {
@@ -406,30 +415,33 @@ describe("POST /api/canvassing running-mate surrogate branch", () => {
     db = createMockDb();
     const { getDb } = await import("@/lib/mongodb");
     vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+    const { applyCanvassSpend } = await import("@/lib/canvassing/canvassSpend");
+    vi.mocked(applyCanvassSpend).mockResolvedValue({ duplicate: false });
   });
 
-  it("decrements the ticket surrogate pool by the canvass count and canvasses PA", async () => {
-    await setupMateCanvass({});
+  it("passes the ticket pool draw into the shared spend with the canvass count", async () => {
+    const { ticketCampaignId } = await setupMateCanvass();
     const { POST } = await import("./route");
     const res = await POST(
       makeRequest({ stateId: "PA", category: "race", group: "white", count: 2 }) as never
     );
 
     expect(res.status).toBe(200);
-    // Pool decrement: guarded by $gte and $inc of -count.
-    const poolCall = db.collectionMocks.campaigns.updateOne.mock.calls[0];
-    expect(
-      (poolCall[0] as { runningMateSurrogateActionsRemaining?: { $gte?: number } })
-        .runningMateSurrogateActionsRemaining?.$gte
-    ).toBe(2);
-    expect(
-      (poolCall[1] as { $inc?: { runningMateSurrogateActionsRemaining?: number } }).$inc
-        ?.runningMateSurrogateActionsRemaining
-    ).toBe(-2);
+    // The pool draw moved inside the shared flow: the route hands the ticket
+    // id and the full count down instead of decrementing the pool itself.
+    const input = await spendCall();
+    expect(input.surrogateCampaignId).toEqual(ticketCampaignId);
+    expect(input.totalActionsCost).toBe(2);
+    expect(input.totalFundsCostLocal).toBe(200);
+    // The route performs no balance writes of its own anymore.
+    expect(db.collection("campaigns").updateOne).not.toHaveBeenCalled();
+    expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
   });
 
-  it("returns 409 and does not debit the character when the pool is exhausted", async () => {
-    await setupMateCanvass({ poolModified: 0 });
+  it("returns 409 and spends nothing when the pool is exhausted", async () => {
+    await setupMateCanvass();
+    const { applyCanvassSpend } = await import("@/lib/canvassing/canvassSpend");
+    vi.mocked(applyCanvassSpend).mockRejectedValueOnce(new Error("SURROGATE_DEPLETED"));
     const { POST } = await import("./route");
     const res = await POST(
       makeRequest({ stateId: "PA", category: "race", group: "white", count: 1 }) as never
@@ -438,25 +450,57 @@ describe("POST /api/canvassing running-mate surrogate branch", () => {
 
     expect(res.status).toBe(409);
     expect(body.error).toBe("No running-mate surrogate actions remaining today.");
-    // Character spend never runs when the pool is empty.
-    expect(db.collectionMocks.characters.updateOne).not.toHaveBeenCalled();
+    // The route performs no balance writes of its own; the shared flow owns
+    // the pool draw and leaves the character untouched when it is dry.
+    expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
+    expect(db.collection("campaigns").updateOne).not.toHaveBeenCalled();
   });
 
-  it("restores the surrogate pool when the character spend fails", async () => {
-    await setupMateCanvass({ spendModified: 0 });
+  it("maps a raced character spend to 409 without touching the pool itself", async () => {
+    await setupMateCanvass();
+    const { applyCanvassSpend } = await import("@/lib/canvassing/canvassSpend");
+    vi.mocked(applyCanvassSpend).mockRejectedValueOnce(new Error("INSUFFICIENT_RESOURCES"));
     const { POST } = await import("./route");
     const res = await POST(
       makeRequest({ stateId: "PA", category: "race", group: "white", count: 3 }) as never
     );
+    const body = await res.json();
 
     expect(res.status).toBe(409);
-    // Two campaign writes: the guarded decrement, then the +count restore.
-    const calls = db.collectionMocks.campaigns.updateOne.mock.calls;
-    expect(calls.length).toBe(2);
-    expect(
-      (calls[1][1] as { $inc?: { runningMateSurrogateActionsRemaining?: number } }).$inc
-        ?.runningMateSurrogateActionsRemaining
-    ).toBe(3);
+    expect(body.error).toBe("Your available actions or funds changed. Please try again.");
+    // Compensation (including the pool restore) lives in the shared flow now:
+    // the route issues no restore write of its own.
+    expect(db.collection("campaigns").updateOne).not.toHaveBeenCalled();
+  });
+
+  it("forwards Idempotency-Key replays to the shared spend", async () => {
+    await setupMateCanvass();
+    const { POST } = await import("./route");
+    const res = await POST(
+      makeRequest(
+        { stateId: "PA", category: "race", group: "white", count: 1 },
+        "replay-key"
+      ) as never
+    );
+
+    expect(res.status).toBe(200);
+    const input = await spendCall();
+    expect(input.idempotencyKey).toBe("replay-key");
+  });
+
+  it("rejects an invalid Idempotency-Key before spending", async () => {
+    await setupMateCanvass();
+    const { applyCanvassSpend } = await import("@/lib/canvassing/canvassSpend");
+    const { POST } = await import("./route");
+    const res = await POST(
+      makeRequest(
+        { stateId: "PA", category: "race", group: "white", count: 1 },
+        "x".repeat(129)
+      ) as never
+    );
+
+    expect(res.status).toBe(400);
+    expect(vi.mocked(applyCanvassSpend)).not.toHaveBeenCalled();
   });
 });
 
@@ -469,6 +513,8 @@ describe("canvassing campaign turnout integration", () => {
     db = createMockDb();
     const { getDb } = await import("@/lib/mongodb");
     vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+    const { applyCanvassSpend } = await import("@/lib/canvassing/canvassSpend");
+    vi.mocked(applyCanvassSpend).mockResolvedValue({ duplicate: false });
     const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
     vi.mocked(requireAuthWithCharacter).mockResolvedValue({
       ok: true,
@@ -557,15 +603,13 @@ describe("canvassing campaign turnout integration", () => {
       );
       expect(result.status).toBe(200);
       expect(Number((await result.json()).effect.legacyBoost)).toBeGreaterThan(0);
-      const { getStateDemographicTurnoutCollection } = await import("@/lib/db/collections");
-      expect((await getStateDemographicTurnoutCollection()).updateOne).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({
-          $set: expect.objectContaining({
-            [`modifiers.${category.key}.${category.groups[0].id}`]: expect.any(Number),
-          }),
-        })
-      );
+      const input = await spendCall();
+      expect(input.totalFundsCostLocal).toBe(500);
+      expect(input.totalActionsCost).toBe(5);
+      const turnout = input.turnout;
+      expect(turnout.stateId).toBe("GA");
+      expect(turnout.modifierPath).toBe(`modifiers.${category.key}.${category.groups[0].id}`);
+      expect(turnout.modifierValue).toEqual(expect.any(Number));
     }
   );
 
@@ -627,16 +671,18 @@ describe("canvassing campaign turnout integration", () => {
     const body = await result.json();
     expect(body.effect.turnoutAfter).toBeCloseTo(quote.preview.turnoutAfter, 6);
     expect(Number(body.effect.boost)).toBeGreaterThan(Number(body.effect.legacyBoost) * 10);
-    const { getStateDemographicTurnoutCollection } = await import("@/lib/db/collections");
-    const collection = await getStateDemographicTurnoutCollection();
-    expect(collection.updateOne).toHaveBeenCalledWith(
-      expect.objectContaining({ _id: "GA", lastUpdated: new Date(0) }),
-      expect.objectContaining({
-        $set: expect.objectContaining({
-          "modifiers.race.white": expect.any(Number),
-          campaignModifiers: expect.objectContaining({ race: { white: expect.any(Number) } }),
-        }),
-      })
+    const input = await spendCall();
+    expect(input.totalFundsCostLocal).toBe(500);
+    expect(input.totalActionsCost).toBe(5);
+    const turnout = input.turnout;
+    expect(turnout).toMatchObject({
+      stateId: "GA",
+      lastUpdated: new Date(0),
+      modifierPath: "modifiers.race.white",
+      modifierValue: expect.any(Number),
+    });
+    expect(turnout.campaignModifiers).toEqual(
+      expect.objectContaining({ race: { white: expect.any(Number) } })
     );
   });
 
@@ -650,16 +696,132 @@ describe("canvassing campaign turnout integration", () => {
     }
   );
 
-  it("rejects a stale turnout write and refunds the full spend", async () => {
-    const { getStateDemographicTurnoutCollection } = await import("@/lib/db/collections");
-    const collection = await getStateDemographicTurnoutCollection();
-    vi.mocked(collection.updateOne).mockResolvedValue({ modifiedCount: 0 } as never);
+  it("maps a raced turnout stamp to 409 with the exact spend shape", async () => {
+    const { applyCanvassSpend } = await import("@/lib/canvassing/canvassSpend");
+    vi.mocked(applyCanvassSpend).mockRejectedValueOnce(
+      new Error("TURNOUT_CONFLICT:guard-rejected")
+    );
     const { POST } = await import("./route");
     const response = await POST(new NextRequest(makeRequest(payload)));
     expect(response.status).toBe(409);
-    const calls = db.collection("characters").updateOne.mock.calls;
-    expect(calls).toHaveLength(2);
-    expect(calls[0][1].$inc).toEqual({ actions: -5, funds: -500 });
-    expect(calls[1][1].$inc).toEqual({ actions: 5, funds: 500 });
+    expect((await response.json()).error).toBe(
+      "State turnout changed while canvassing. Please refresh and try again."
+    );
+    // The route hands the full batch cost down; the refund lives in the
+    // shared flow, so the route itself issues no compensation write.
+    const input = await spendCall();
+    expect(input.totalFundsCostLocal).toBe(500);
+    expect(input.totalActionsCost).toBe(5);
+    expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/canvassing — Idempotency-Key replay after balance changes", () => {
+  let db: MockDb;
+
+  async function setupReplay(character: Character, receipt: Record<string, unknown> | null) {
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+    const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue({
+      ok: true,
+      user: { userId: "u1", character },
+    } as never);
+    const turnoutCollection = {
+      findOne: vi.fn().mockResolvedValue({
+        _id: "GA",
+        modifiers: { race: { white: 0 } },
+        lastUpdated: new Date(),
+      }),
+      updateOne: vi.fn().mockResolvedValue({ modifiedCount: 1 }),
+    };
+    const { getStateDemographicTurnoutCollection } = await import("@/lib/db/collections");
+    vi.mocked(getStateDemographicTurnoutCollection).mockResolvedValue(turnoutCollection as never);
+    db.collection("nonAtomicMoneyFlowReceipts").findOne.mockResolvedValue(receipt);
+  }
+
+  function fingerprint(character: Character) {
+    return `${character._id.toHexString()}:GA:race:white:1`;
+  }
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    db = createMockDb();
+    db.collection("electionCandidates").find.mockReturnValue({
+      toArray: () => Promise.resolve([]),
+    });
+    const { applyCanvassSpend } = await import("@/lib/canvassing/canvassSpend");
+    vi.mocked(applyCanvassSpend).mockResolvedValue({ duplicate: false });
+  });
+
+  it("replays a completed canvass after funds and actions changed", async () => {
+    // The auth snapshot shows a broke character: the first request already
+    // spent the batch, so the retry must not fail its own balance checks.
+    const character = authedCharacter({ funds: 0, actions: 0 });
+    await setupReplay(character, {
+      _id: "canvass-1",
+      status: "completed",
+      fingerprint: fingerprint(character),
+    });
+    const { applyCanvassSpend } = await import("@/lib/canvassing/canvassSpend");
+    vi.mocked(applyCanvassSpend).mockResolvedValue({ duplicate: true });
+    const { POST } = await import("./route");
+    const res = await POST(
+      makeRequest(
+        { stateId: "GA", category: "race", group: "white", count: 1 },
+        "canvass-1"
+      ) as never
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.success).toBe(true);
+    expect(body.duplicate).toBe(true);
+    // Recovery runs through the shared flow (a no-op duplicate), never
+    // through route-owned balance writes.
+    expect(vi.mocked(applyCanvassSpend)).toHaveBeenCalledOnce();
+    expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
+    expect(db.collection("campaigns").updateOne).not.toHaveBeenCalled();
+  });
+
+  it("recovers an interrupted canvass without re-checking balances", async () => {
+    const character = authedCharacter({ funds: 0, actions: 0 });
+    await setupReplay(character, {
+      _id: "canvass-2",
+      status: "in_progress",
+      fingerprint: fingerprint(character),
+    });
+    const { POST } = await import("./route");
+    const res = await POST(
+      makeRequest(
+        { stateId: "GA", category: "race", group: "white", count: 1 },
+        "canvass-2"
+      ) as never
+    );
+
+    expect(res.status).toBe(200);
+    const input = await spendCall();
+    expect(input.idempotencyKey).toBe("canvass-2");
+    expect(input.fingerprint).toBe(fingerprint(character));
+  });
+
+  it("rejects a key reused for a different canvass", async () => {
+    const character = authedCharacter();
+    await setupReplay(character, {
+      _id: "canvass-3",
+      status: "completed",
+      fingerprint: "other-fingerprint",
+    });
+    const { applyCanvassSpend } = await import("@/lib/canvassing/canvassSpend");
+    const { POST } = await import("./route");
+    const res = await POST(
+      makeRequest(
+        { stateId: "GA", category: "race", group: "white", count: 1 },
+        "canvass-3"
+      ) as never
+    );
+
+    expect(res.status).toBe(500);
+    expect(vi.mocked(applyCanvassSpend)).not.toHaveBeenCalled();
   });
 });

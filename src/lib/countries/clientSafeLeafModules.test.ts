@@ -39,16 +39,19 @@ const CLIENT_SAFE_MODULES = [
  * that way until `COUNTRY_COMMAND_FLAVOR` -- read by `SituationBoardClient` --
  * started importing all 29 `identity.ts` modules.
  */
-const CLIENT_SAFE = readdirSync("src/lib/countries")
-  .filter((cc) => statSync(join("src/lib/countries", cc)).isDirectory())
-  .flatMap((cc) => CLIENT_SAFE_MODULES.map((m) => `src/lib/countries/${cc}/${m}`))
-  .filter((file) => {
-    try {
-      return statSync(file).isFile();
-    } catch {
-      return false;
-    }
-  });
+const CLIENT_SAFE = [
+  ...readdirSync("src/lib/countries")
+    .filter((cc) => statSync(join("src/lib/countries", cc)).isDirectory())
+    .flatMap((cc) => CLIENT_SAFE_MODULES.map((m) => `src/lib/countries/${cc}/${m}`))
+    .filter((file) => {
+      try {
+        return statSync(file).isFile();
+      } catch {
+        return false;
+      }
+    }),
+  "src/lib/countries/ru/russian1991Config.ts",
+];
 
 /**
  * Registries whose weight is INHERENT, not introduced by the country move.

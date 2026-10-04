@@ -1,5 +1,7 @@
 "use client";
 
+import FederationFinances from "./components/FederationFinances";
+import type { LegacyServiceSnapshot } from "@/lib/world/succession/legacyServiceSnapshot";
 import Link from "next/link";
 import { type CountryId } from "@/lib/constants/countries";
 import { resolveCountryAvailability } from "@/lib/countryAvailability";
@@ -19,6 +21,7 @@ import type { WorldEntityMapSnapshot } from "@/lib/world/worldEntityMap";
 import type { BlocMapData } from "@/lib/world/blocMembership";
 
 interface WorldClientProps {
+  legacyFinances?: LegacyServiceSnapshot[];
   countryAccess: CountryAccessMap;
   nationSnapshots: Record<CountryId, NationWorldSnapshot>;
   /** Gates the Conflicts entry; mirrors the World navbar link. */
@@ -45,6 +48,7 @@ export default function WorldClient({
   conflictsEnabled,
   worldEntities,
   blocMapData,
+  legacyFinances = [],
 }: WorldClientProps) {
   // `countryAccess` is keyed by the runtime registered set (getAllCountryAccess →
   // COUNTRY_ORDER ∪ active countryGameStates), so its keys are the SSOT for which
@@ -139,6 +143,7 @@ export default function WorldClient({
             </p>
           </section>
 
+          <FederationFinances snapshots={legacyFinances} />
           <div className="mt-12 grid gap-x-12 gap-y-12 xl:grid-cols-3">
             <div className="min-w-0 space-y-12 xl:col-span-2">
               {openRows.length > 0 && (
