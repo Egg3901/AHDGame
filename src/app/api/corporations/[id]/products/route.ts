@@ -48,10 +48,11 @@ type ManufacturingPlantSector = Pick<
   | "capitalStock"
   | "plantCount"
   | "mothballed"
-  | "outputUnitsByCommodity"
-  | "productQualityByCommodity"
-  | "soldByCommodity"
-  | "soldByCommodityTurn"
+  | "productLineProjectId"
+  | "productLineOutputTurn"
+  | "productLineOutputUnitsByCommodity"
+  | "productLineSoldUnitsByCommodity"
+  | "productLineQualityByCommodity"
 >;
 
 const noStore = { "Cache-Control": "private, no-store" };
@@ -140,6 +141,11 @@ export async function GET(_request: Request, { params }: RouteParams) {
         capitalStock: 1,
         plantCount: 1,
         mothballed: 1,
+        productLineProjectId: 1,
+        productLineOutputTurn: 1,
+        productLineOutputUnitsByCommodity: 1,
+        productLineSoldUnitsByCommodity: 1,
+        productLineQualityByCommodity: 1,
       })
       .toArray();
     const plants = sectors.map(manufacturingPlant);
@@ -154,6 +160,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
       currentYear: gameState?.currentYear,
       techTreesEnabled,
       unlockedTechNodeIds: corporation.unlockedTechNodeIds,
+      techDecadeLane: corporation.techDecadeLane,
     };
     const legalKinds = legalManufacturingProductKinds(plants, {
       ...eligibilityOptions,
@@ -167,28 +174,32 @@ export async function GET(_request: Request, { params }: RouteParams) {
             const sector = sectors.find(
               (candidate) => candidate._id.toString() === allocation.sectorId
             );
-            const turn = sector?.soldByCommodityTurn;
-            const producedUnits = sector?.outputUnitsByCommodity?.[projectKind.outputCommodity];
-            const soldFraction = sector?.soldByCommodity?.[projectKind.outputCommodity];
+            const turn = sector?.productLineOutputTurn;
+            const producedUnits =
+              sector?.productLineOutputUnitsByCommodity?.[projectKind.outputCommodity];
+            const soldUnits =
+              sector?.productLineSoldUnitsByCommodity?.[projectKind.outputCommodity];
             if (
               !sector ||
+              sector.productLineProjectId !== project._id ||
               typeof turn !== "number" ||
               turn <= project.startedTurn ||
               typeof producedUnits !== "number" ||
               !Number.isFinite(producedUnits) ||
               producedUnits < 0 ||
-              typeof soldFraction !== "number" ||
-              !Number.isFinite(soldFraction)
+              typeof soldUnits !== "number" ||
+              !Number.isFinite(soldUnits) ||
+              soldUnits < 0
             ) {
               return [];
             }
-            const quality = sector.productQualityByCommodity?.[projectKind.outputCommodity];
+            const quality = sector.productLineQualityByCommodity?.[projectKind.outputCommodity];
             return [
               {
                 sectorId: allocation.sectorId,
                 turn,
                 producedUnits,
-                soldUnits: producedUnits * Math.max(0, Math.min(1, soldFraction)),
+                soldUnits: Math.min(producedUnits, soldUnits),
                 quality: typeof quality === "number" && Number.isFinite(quality) ? quality : null,
               },
             ];
@@ -291,6 +302,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         currentYear: gameState?.currentYear,
         techTreesEnabled: gameState?.sectorTechTreesEnabled === true,
         unlockedTechNodeIds: corporation.unlockedTechNodeIds,
+        techDecadeLane: corporation.techDecadeLane,
       }).map((legalKind) => legalKind.id)
     );
     if (!legalKindIds.has(kind.id)) {
@@ -310,6 +322,7 @@ export async function POST(request: Request, { params }: RouteParams) {
             currentYear: gameState?.currentYear,
             techTreesEnabled: gameState?.sectorTechTreesEnabled === true,
             unlockedTechNodeIds: corporation.unlockedTechNodeIds,
+            techDecadeLane: corporation.techDecadeLane,
           })
       )
     ) {

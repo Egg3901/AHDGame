@@ -189,6 +189,7 @@ describe("manufacturing product line rules", () => {
     expect(output.outputAnchorByCommodity.steel).toBeCloseTo(325, 6);
     expect(output.outputAnchorByCommodity.building_materials).toBeCloseTo(325, 6);
     expect(output.outputAnchorByCommodity.vehicles).toBeCloseTo(350, 6);
+    expect(output.projectOutputUnitsByCommodity).toEqual({ vehicles: 1.4 });
     expect(output.productQualityByCommodity).toEqual({
       steel: 40,
       building_materials: 50,
@@ -215,8 +216,29 @@ describe("manufacturing product line rules", () => {
 
     expect(development.outputUnitsByCommodity).toEqual({ steel: 50, building_materials: 100 });
     expect(development.outputAnchorByCommodity).toEqual({ steel: 5000, building_materials: 5000 });
+    expect(development.projectOutputUnitsByCommodity).toEqual({ building_materials: 0 });
     expect(zeroAllocation.outputUnitsByCommodity).toEqual(development.outputUnitsByCommodity);
     expect(zeroAllocation.outputAnchorByCommodity).toEqual(development.outputAnchorByCommodity);
+    expect(zeroAllocation.projectOutputUnitsByCommodity).toEqual({ building_materials: 0 });
+  });
+
+  it("separates a project's redirected output from the same commodity's recipe baseline", () => {
+    const output = buildManufacturedSectorOutput({
+      outputAnchor: 1000,
+      supplyRates: { steel: 0.4, building_materials: 0.2 },
+      allocationShare: 0.5,
+      stage: "mature",
+      outputCommodity: "steel",
+      basePrices: { steel: 100, building_materials: 50 },
+      paidDevelopmentAnchor: 1000,
+      paidThresholdAnchor: 1000,
+    });
+
+    expect(output.outputUnitsByCommodity.steel).toBeCloseTo(6.75);
+    expect(output.projectOutputUnitsByCommodity).toEqual({ steel: 3.5 });
+    expect(output.outputUnitsByCommodity.steel).toBeGreaterThan(
+      output.projectOutputUnitsByCommodity.steel!
+    );
   });
 
   it("scales product quantity and nominal value by the same production factor at stage identity", () => {
@@ -233,6 +255,7 @@ describe("manufacturing product line rules", () => {
     const scaled = scaleManufacturedSectorOutput(baseline, 0.6);
 
     expect(scaled.outputUnitsByCommodity).toEqual({ steel: 30, building_materials: 60 });
+    expect(scaled.projectOutputUnitsByCommodity).toEqual({ vehicles: 0 });
     expect(scaled.outputAnchorByCommodity).toEqual({ steel: 3_000, building_materials: 3_000 });
     for (const commodity of ["steel", "building_materials"] as const) {
       expect(
