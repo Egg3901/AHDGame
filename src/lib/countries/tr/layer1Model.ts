@@ -12,7 +12,7 @@
  */
 import type { CountryLayer1Model, DemographicPosition } from "@/lib/seeds/international/types";
 import { trRegionCensusData, type TRRegionLayer1 } from "@/lib/seeds/tr/trRegionCensusData";
-import { trRegionCensusDataModern } from "@/lib/seeds/tr/trRegionCensusDataModern";
+import { trRegionCensusDataModern } from "./data/trRegionCensusDataModern";
 import { trRegionCensusData1953 } from "@/lib/seeds/tr/trRegionCensusData1953";
 import type { EraId } from "@/lib/seeds/presetSelector";
 

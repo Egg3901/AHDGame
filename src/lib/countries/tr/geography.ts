@@ -2,7 +2,7 @@ import type { CountryGeography } from "../contract";
 import { trMetricPresets1953 } from "./data/trMetricPresets1953";
 import { trMetricPresetsModern } from "./data/trMetricPresetsModern";
 import { trRegionCensusData } from "@/lib/seeds/tr/trRegionCensusData";
-import { trRegionCensusDataModern } from "@/lib/seeds/tr/trRegionCensusDataModern";
+import { trRegionCensusDataModern } from "./data/trRegionCensusDataModern";
 import { trRegionCensusData1953 } from "@/lib/seeds/tr/trRegionCensusData1953";
 import { trRegions } from "./data/trRegions";
 import { trRegions1991 } from "./data/trRegions1991";
