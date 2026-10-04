@@ -146,6 +146,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           brandLoyaltySliceEnabled: 1,
           sectorQualityEnabled: 1,
           qualityPremiumPricingEnabled: 1,
+          explicitPlantCostsEnabled: 1,
           supplyAgreementsEnabled: 1,
           prospectingEnabled: 1,
           commandEconomyEnabled: 1,
@@ -306,6 +307,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     cap: marketGovernorConfig?.marketGovernorCap,
     rampTurns: marketGovernorConfig?.marketGovernorRampTurns,
   });
+  market.explicitPlantCostsEnabled = marketGovernorConfig?.explicitPlantCostsEnabled === true;
   // Canonical freight billing (issue #897): apportion last turn's state-scoped
   // shipping money onto sectors once, before the per-corp loop, and thread the
   // result through the market context like the delivery-limited telemetry.

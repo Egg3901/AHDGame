@@ -1,3 +1,4 @@
+import { createRequire } from "node:module";
 import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
@@ -7,6 +8,8 @@ import noSilentFetchCatch from "./eslint-rules/no-silent-fetch-catch.js";
 import noImplicitLocaleDatetime from "./eslint-rules/no-implicit-locale-datetime.js";
 import noUnawaitedAuthGuard from "./eslint-rules/no-unawaited-auth-guard.js";
 import noDottedBoardPath from "./eslint-rules/no-dotted-board-path.js";
+
+const require = createRequire(import.meta.url);
 
 const eslintConfig = defineConfig([
   ...nextVitals,
@@ -56,6 +59,12 @@ const eslintConfig = defineConfig([
   ]),
   // Project-level rule overrides
   {
+    // eslint-plugin-react 7.37.x detects its version through the removed
+    // context.getFilename() API. Pin the installed React version until the
+    // plugin supports ESLint 10.
+    settings: {
+      react: { version: require("react/package.json").version },
+    },
     plugins: {
       local: {
         rules: {

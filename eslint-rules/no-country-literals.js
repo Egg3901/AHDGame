@@ -11,7 +11,7 @@ module.exports = {
     },
   },
   create(context) {
-    const filename = context.getFilename();
+    const filename = context.filename;
 
     // Allow in config files and tests
     if (

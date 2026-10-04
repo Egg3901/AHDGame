@@ -365,3 +365,27 @@ describe("POST /api/auth/login — source migration fence", () => {
     );
   });
 });
+
+describe("POST /api/auth/login unknown accounts", () => {
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(() => vi.restoreAllMocks());
+
+  it("uses a real cost-12 dummy comparison and never issues a session", async () => {
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue({
+      collection: () => ({ findOne: vi.fn().mockResolvedValue(null) }),
+    } as never);
+    const bcrypt = (await import("bcryptjs")).default;
+    const compare = vi.spyOn(bcrypt, "compare");
+    const { POST } = await import("./route");
+    const response = await POST(loginRequest());
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({ error: "Invalid credentials" });
+    expect(compare).toHaveBeenCalledOnce();
+    const hash = compare.mock.calls[0][1];
+    expect(hash).toHaveLength(60);
+    expect(bcrypt.getRounds(hash)).toBe(12);
+    expect(await compare.mock.results[0].value).toBe(false);
+    expect(cookieSet).not.toHaveBeenCalled();
+  });
+});

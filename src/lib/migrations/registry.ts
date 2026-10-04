@@ -98,6 +98,7 @@ import { migration as longHorizonTelemetryIndexes } from "./entries/2026-09-30-l
 import { migration as financialTxLogCounterpartyIndex } from "./entries/2026-09-30-financial-tx-log-counterparty-index";
 import { migration as appleProviderIdentityIndex } from "./entries/2026-09-30-apple-provider-identity-index";
 import { migration as reconcileSeedIndexes } from "./entries/2026-10-01-reconcile-seed-indexes";
+import { migration as bankLoanCharterEpoch } from "./entries/2026-10-04-bank-loan-charter-epoch";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -317,6 +318,9 @@ export const MIGRATIONS: Migration[] = [
   appleProviderIdentityIndex,
   // #2699: seed indexes a running world never received; skips text/TTL/duplicate-blocked.
   reconcileSeedIndexes,
+  // Metadata only. Deploy this backfill before relying on charter epoch reads;
+  // the runtime also dual-reads untagged legacy rows during rollout.
+  bankLoanCharterEpoch,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.

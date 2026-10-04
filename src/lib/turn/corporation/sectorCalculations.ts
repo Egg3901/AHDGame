@@ -974,7 +974,11 @@ export function processSectors(
       // just paid into a plant still read as having destroyed that equity and
       // got downgraded for investing — the exact failure the parameter exists to
       // prevent. 0 for every pre-P3a corp, so non-plants ratings are unchanged.
-      constructionInProgressAnchor: sumCorporateSectorConstructionInProgress(sectors, corp._id),
+      constructionInProgressAnchor: sumCorporateSectorConstructionInProgress(
+        sectors,
+        corp._id,
+        currentTurn
+      ),
     });
 
     // Per-turn escrow funding (escrow mode only): move configured cash from the
@@ -1198,7 +1202,8 @@ export function processSectors(
         isPrivate: corp.isPrivate ?? false,
         constructionInProgressAnchor: sumCorporateSectorConstructionInProgress(
           lookups.sectorsByCorp.get(corp._id.toString()) ?? [],
-          corp._id
+          corp._id,
+          currentTurn
         ),
       });
       snapshot.creditComposite = creditPack.creditRating.compositeScore;

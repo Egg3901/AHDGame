@@ -27,6 +27,7 @@ export type BankCharterSnapshot = Pick<
   | "type"
   | "status"
   | "currency"
+  | "charteredTurn"
   | "postedCapital"
   | "cashReserves"
   | "npcDeposits"

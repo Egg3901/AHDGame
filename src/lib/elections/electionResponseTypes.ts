@@ -106,6 +106,7 @@ export interface ElectionResponse {
   id: string;
   seatId: string | null;
   electionType: string;
+  allocationMethod?: import("@/lib/constants/countries").ElectionMethod;
   state: string;
   countryId: string;
   bulgarianFoundingRound?: {
@@ -113,6 +114,7 @@ export interface ElectionResponse {
     round: 1 | 2;
     newNominationDistrictIds?: string[];
   };
+  hungarianModernAssembly?: { ruleVersion: "mixed-2011-v1" };
   hungarianAssemblyRound?: {
     ruleVersion: "mixed-1989-v1";
     round: 1 | 2;

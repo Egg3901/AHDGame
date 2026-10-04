@@ -141,6 +141,15 @@ export async function resolveOneGeneralElection(
   }
 
   try {
+    if (
+      tally?.countingMethod === "pr_stv" &&
+      (election.countryId !== "IE" || !["dail", "localCouncil"].includes(election.electionType))
+    )
+      throw new Error("Ranked PR-STV is supported only for Irish Dail and local council races");
+    if (tally?.countingMethod === "pr_stv" && election.conversionTerms)
+      throw new Error(
+        "Ranked PR-STV does not support conversion vote penalties or reserved seat floors"
+      );
     // BG changes from the 1991 transitional assembly to modern party-list PR.
     // The base config is the 1979 single-party FPTP chamber, so read the live
     // preset before method dispatch instead of silently using that default.
@@ -170,15 +179,6 @@ export async function resolveOneGeneralElection(
     ) {
       throw new Error("Bulgarian ordinary Assembly requires its frozen national allocation");
     }
-    if (
-      tally?.countingMethod === "pr_stv" &&
-      (election.countryId !== "IE" || !["dail", "localCouncil"].includes(election.electionType))
-    )
-      throw new Error("Ranked PR-STV is supported only for Irish Dail and local council races");
-    if (tally?.countingMethod === "pr_stv" && election.conversionTerms)
-      throw new Error(
-        "Ranked PR-STV does not support conversion vote penalties or reserved seat floors"
-      );
     // Phase 4: Sainte-Laguë chambers (DE Landtag) use proportional allocation
     // (5% Land-level threshold) instead of FPTP. Dispatch on the configured
     // method — `pr_sainteLague` is unique to the DE Landtag — before any other
@@ -526,7 +526,12 @@ export async function resolveOneGeneralElection(
       // `party` lets allocateSeats compute its minimum-share eligibility on the
       // PARTY aggregate share (same-party candidates pooled) instead of the
       // per-candidate share — see RankedCandidate.party.
-      .map((id) => ({ id, votes: effectiveVotes[id] ?? 0, party: candidateMap.get(id)?.party }))
+      .map((id) => ({
+        id,
+        votes: effectiveVotes[id] ?? 0,
+        party: candidateMap.get(id)?.party,
+        isNPP: candidateMap.get(id)?.isNPP,
+      }))
       .filter(({ id }) => candidateMap.has(id) && !ineligibleCandidateIds.has(id))
       .sort((a, b) => b.votes - a.votes);
 
@@ -554,6 +559,7 @@ export async function resolveOneGeneralElection(
     // it allocateSeats always used the modern UK_COMMONS_SEATS (ticket #1058).
     let houseSeats: Record<string, number> | undefined;
     let commonsSeats: Record<string, number> | undefined;
+    let allocationMethod = election.allocationMethod;
     let gsForHouse: {
       preset?: string;
       redistrictingEnabled?: boolean;
@@ -568,6 +574,17 @@ export async function resolveOneGeneralElection(
       // election's own `totalSeats` for Alaska and Hawaii (#1190).
       houseSeats = (await loadApportionment(db, gsForHouse?.preset, gsForHouse?.currentYear))
         .houseSeats;
+    }
+
+    // Older Japan races predate the per-race snapshot. Resolve them against
+    // their world's era rules; newly spawned races keep their frozen method.
+    if (
+      !allocationMethod &&
+      election.countryId === "JP" &&
+      (election.electionType === "shugiin" || election.electionType === "snap_shugiin")
+    ) {
+      const gameState = await (await getGameStateCollection(db)).findOne({ _id: "current" });
+      allocationMethod = getElectionMethod("JP", election.electionType, gameState?.preset);
     }
 
     if (
@@ -631,6 +648,21 @@ export async function resolveOneGeneralElection(
           (await getCountryState(db, election.countryId)).governmentType
         )
       : null;
+    const prStvResult = isPrStv
+      ? countPrStv(
+          ranked.map((c) => c.id),
+          totalSeats,
+          tally.rankedBallots!
+        )
+      : undefined;
+    if (prStvResult) {
+      const holders = ranked.map(({ id }) => {
+        const c = candidateMap.get(id)!;
+        return `${c.isNPP ? "npp" : "player"}:${c.isNPP ? c.nppId : c.characterId}`;
+      });
+      if (new Set(holders).size !== holders.length)
+        throw new Error("PR-STV requires distinct candidate holder identities");
+    }
     const bgOrdinaryAllocation = bgOrdinaryCandidateSeats
       ? (() => {
           const seatsEstimate: Record<string, number> = { ...bgOrdinaryCandidateSeats };
@@ -735,21 +767,6 @@ export async function resolveOneGeneralElection(
           };
         })()
       : null;
-    const prStvResult = isPrStv
-      ? countPrStv(
-          ranked.map((c) => c.id),
-          totalSeats,
-          tally.rankedBallots!
-        )
-      : undefined;
-    if (prStvResult) {
-      const holders = ranked.map(({ id }) => {
-        const c = candidateMap.get(id)!;
-        return `${c.isNPP ? "npp" : "player"}:${c.isNPP ? c.nppId : c.characterId}`;
-      });
-      if (new Set(holders).size !== holders.length)
-        throw new Error("PR-STV requires distinct candidate holder identities");
-    }
     // The opt-in ranked count seats individual people, not aggregate seat blocks.
     const { isMultiSeat, seatsEstimate, winners, losers } = prStvResult
       ? {
@@ -758,11 +775,11 @@ export async function resolveOneGeneralElection(
           winners: prStvResult.elected.map((id): [string, number] => [id, 1]),
           losers: ranked.filter((c) => !prStvResult.seats[c.id]).map((c) => c.id),
         }
-      : applyLegacySeatFloor(
+      : (bgOrdinaryAllocation ??
+        bgAllocation ??
+        huAllocation ??
+        applyLegacySeatFloor(
           districted ??
-            bgOrdinaryAllocation ??
-            bgAllocation ??
-            huAllocation ??
             allocateSeats(
               election.electionType,
               election.state,
@@ -775,11 +792,12 @@ export async function resolveOneGeneralElection(
               // is byte-identical.
               runtimeBlocQuota?.shares,
               commonsSeats,
-              election.countryId ?? "US"
+              election.countryId ?? "US",
+              allocationMethod
             ),
           ranked,
           election.conversionTerms
-        );
+        ));
 
     if (isMultiSeat) {
       if (isSpecialCommonsElection(election.electionType)) {

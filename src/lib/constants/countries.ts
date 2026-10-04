@@ -245,6 +245,7 @@ export type ElectionMethod =
   | "fptp" // single-seat plurality
   | "pr_hareQuota" // multi-seat Largest Remainder (Hare quota)
   | "pr_dhondt" // national highest-averages party allocation
+  | "sntv" // candidate plurality in a multi-member constituency; at most one seat each
   | "pr_sainteLague" // odd-divisor proportional (DE Landtag)
   | "ams" // additional-member system (DE Bundestag)
   | "electoralCollege" // per-unit FPTP aggregated to a majority (US President)

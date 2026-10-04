@@ -37,6 +37,7 @@ import {
   isNationwideDirectExecutiveElection,
 } from "@/lib/elections/nationwideExecutive";
 import { isActiveElectionCandidateDuplicateKey } from "@/lib/elections/duplicateKey";
+import { isHuDistrictInRegion } from "@/lib/countries/hu/rules/constituencies2014";
 import { validateRussianDumaPlayerFiling } from "@/lib/countries/ru/dumaPlayerFiling";
 import {
   validateRussianCouncilPlayerFiling,
@@ -113,9 +114,13 @@ export async function POST(request: Request, { params }: RouteParams) {
     const electionObjectId = election._id;
 
     const hu1991 = isHu1991AssemblyCampaign(election) || election.hungarianModernByElection != null;
+    const hu2014 =
+      election.countryId === "HU" &&
+      election.electionType === "nationalAssembly" &&
+      election.hungarianModernAssembly?.ruleVersion === "mixed-2011-v1";
     const bgFounding = isBgFoundingCampaign(election);
     let huDistrictId: string | undefined;
-    if (hu1991 || bgFounding) {
+    if (hu1991 || bgFounding || hu2014) {
       if (
         bgFounding &&
         election.bulgarianFoundingRound?.round !== 1 &&
@@ -148,6 +153,12 @@ export async function POST(request: Request, { params }: RouteParams) {
           { status: 400 }
         );
       huDistrictId = parsed.data.constituencyId;
+      if (hu2014 && (!huDistrictId || !isHuDistrictInRegion(huDistrictId, election.state))) {
+        return NextResponse.json(
+          { error: "Choose a valid Hungarian constituency in this region." },
+          { status: 400 }
+        );
+      }
     }
     // Check if election is open for entry
     if (election.status !== "upcoming" && election.status !== "active") {
@@ -480,6 +491,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       enteredAt: now,
       ...(dumaFiling?.allowed ? { russianDumaNomination: dumaFiling.nomination } : {}),
       ...(councilFiling?.allowed ? { russianCouncilNomination: councilFiling.nomination } : {}),
+      ...(hu2014 && huDistrictId ? { constituencyId: huDistrictId } : {}),
       ...(priorCandidacy?.lastRallyTurn !== undefined
         ? { lastRallyTurn: priorCandidacy.lastRallyTurn }
         : {}),
@@ -541,6 +553,24 @@ export async function POST(request: Request, { params }: RouteParams) {
             { status: 403 }
           );
         result = { insertedId: filed.insertedId };
+      } else if (hu2014) {
+        const existingNominee = await db
+          .collection<ElectionCandidate>("electionCandidates")
+          .findOne({
+            electionId: electionObjectId,
+            countryId: "HU",
+            party: character.party,
+            constituencyId: huDistrictId,
+            status: "active",
+          });
+        if (existingNominee) {
+          logRequest("POST", path, 409, Date.now() - start);
+          return NextResponse.json(
+            { error: "Your party already has a candidate in this constituency." },
+            { status: 409 }
+          );
+        }
+        result = await db.collection("electionCandidates").insertOne(candidateDoc);
       } else {
         result = await db.collection("electionCandidates").insertOne(candidateDoc);
       }

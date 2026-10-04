@@ -38,21 +38,32 @@ function docKey(id: unknown): string {
 }
 
 function getPath(doc: Record<string, unknown>, path: string): unknown {
-  return path
-    .split(".")
-    .reduce<unknown>((node, part) => (node as Record<string, unknown>)?.[part], doc);
+  let node: unknown = doc;
+  for (const part of path.split(".")) {
+    const key = part;
+    if (key === "__proto__" || key === "constructor" || key === "prototype") return undefined;
+    if (node == null || typeof node !== "object") return undefined;
+    node = (node as Record<string, unknown>)[key];
+  }
+  return node;
 }
 
 function setPath(doc: Record<string, unknown>, path: string, value: unknown): void {
   const parts = path.split(".");
+  for (const part of parts) {
+    if (part === "__proto__" || part === "constructor" || part === "prototype") return;
+  }
   let node = doc;
   for (let i = 0; i < parts.length - 1; i += 1) {
-    const part = parts[i]!;
-    const next = node[part];
-    if (typeof next !== "object" || next === null) node[part] = {};
-    node = node[part] as Record<string, unknown>;
+    const key = parts[i]!;
+    if (key === "__proto__" || key === "constructor" || key === "prototype") return;
+    const next = node[key];
+    if (typeof next !== "object" || next === null) node[key] = {};
+    node = node[key] as Record<string, unknown>;
   }
-  node[parts[parts.length - 1]!] = value;
+  const key = parts[parts.length - 1]!;
+  if (key === "__proto__" || key === "constructor" || key === "prototype") return;
+  node[key] = value;
 }
 
 function equalValue(a: unknown, b: unknown): boolean {

@@ -53,8 +53,16 @@ export interface ElectionVoteTally {
   /** Frozen executed count; absent on historical and non-STV results. */
   prStvResult?: PrStvResult;
   totalVotes: Record<string, number>;
+  /** HU post-2014: districtId -> candidateId -> constituency ballots. */
+  huConstituencyVotes?: Record<string, Record<string, number>>;
+  /** HU post-2014: partyId -> separate national-list ballots. */
+  huListVotes?: Record<string, number>;
+  /** HU post-2014: districtId -> partyId -> active nominee candidateId. */
+  huDistrictSlate?: Record<string, Record<string, string>>;
   candidateNames: Record<string, string>;
   candidateParties: Record<string, string>;
+  /** Candidate kind at ballot time for bounded SNTV slate projections. */
+  candidateIsNPP?: Record<string, boolean>;
   turnSnapshots: VoteTurnSnapshot[];
   finalized: boolean;
   /** Native first-Duma valid against-all ballots and certification outcome. */

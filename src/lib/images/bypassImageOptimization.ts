@@ -23,32 +23,41 @@ import { CDN_BASE } from "@/lib/images/cdnUrls";
  */
 export function bypassNextImageOptimization(src: string): boolean {
   if (!src) return false;
-  // Strip a leading http(s) origin so host-prefixed local API URLs (e.g. an
-  // avatar stored as `http://localhost:3000/api/uploads/...`, or the production
-  // `https://<host>/api/uploads/...`) match the same path rules as relative
-  // ones. Without this, next/image tries to optimize them and rejects the host
-  // unless it is in `remotePatterns`. The absolute CDN/host checks below still
-  // test the full `src`.
-  const path = src.replace(/^https?:\/\/[^/]+/, "");
-  if (path.startsWith("/api/images/")) return true;
-  if (path.startsWith("/api/logos/")) return true;
-  if (path.startsWith("/api/flags/")) return true;
-  if (path.startsWith("/api/uploads/")) return true;
-  if (src.includes(".public.blob.vercel-storage.com/")) return true;
-  if (src.includes(".r2.dev/")) return true;
-  // CDN_BASE is the production host by default and a local `/cdn` mirror in a
-  // singleplayer build; either way the art is already final-form and must not
-  // be re-encoded by /_next/image.
-  if (src.startsWith(`${CDN_BASE}/`)) return true;
-  if (src.startsWith("https://cdn.ahousedividedgame.com/")) return true;
-  if (src.startsWith("https://upload.wikimedia.org/")) return true;
-  if (src.startsWith("https://commons.wikimedia.org/")) return true;
-  // Fair-use logos live on the language wikis, not Commons (union emblems,
-  // UK:UUP). Without this they route through /_next/image, whose host
-  // allow-list rejects them with a 400 and the caller renders its fallback.
-  if (src.startsWith("https://en.wikipedia.org/")) return true;
-  if (src.startsWith("https://cdn.discordapp.com/")) return true;
-  if (src.startsWith("https://media.discordapp.net/")) return true;
-  if (src.startsWith("https://flagcdn.com/")) return true;
-  return false;
+  try {
+    const relativeOrigin = "https://relative.invalid";
+    const url = new URL(src, relativeOrigin);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return false;
+    if (url.username || url.password) return false;
+
+    // Host-prefixed API routes follow the same rules as relative API routes.
+    const path = url.pathname;
+    if (path.startsWith("/api/images/")) return true;
+    if (path.startsWith("/api/logos/")) return true;
+    if (path.startsWith("/api/flags/")) return true;
+    if (path.startsWith("/api/uploads/")) return true;
+
+    const hostname = url.hostname;
+    if (hostname.endsWith(".public.blob.vercel-storage.com")) return true;
+    if (hostname.endsWith(".r2.dev")) return true;
+
+    // CDN_BASE may point to the singleplayer build's local /cdn mirror.
+    const cdn = new URL(CDN_BASE, relativeOrigin);
+    const cdnPath = `${cdn.pathname.replace(/\/$/, "")}/`;
+    if (url.origin === cdn.origin && path.startsWith(cdnPath)) return true;
+
+    return (
+      url.protocol === "https:" &&
+      [
+        "cdn.ahousedividedgame.com",
+        "upload.wikimedia.org",
+        "commons.wikimedia.org",
+        "en.wikipedia.org",
+        "cdn.discordapp.com",
+        "media.discordapp.net",
+        "flagcdn.com",
+      ].includes(hostname)
+    );
+  } catch {
+    return false;
+  }
 }

@@ -3,8 +3,8 @@
  *
  * Under the plants tier a sector doc carries real, paid-for capital state:
  * `capitalStock` (built capacity), `buildQueue` (capacity paid for but not yet
- * online), `constructionInProgressAnchor` (the ₳ sitting in those orders),
- * `mothballed`, and `plantsStartTurn` (the governor ramp anchor).
+ * online), `mothballed`, and `plantsStartTurn` (the governor ramp anchor).
+ * `constructionInProgressAnchor` is derived from `buildQueue` by sectorTurn.
  *
  * Every path that moves a sector between corps falls into one of two shapes:
  *
@@ -14,19 +14,16 @@
  *     operates in that (state, sectorType) and then DELETED. Without an
  *     explicit fold, every field above is destroyed: the buyer pays a
  *     book/NPV price that included in-flight construction and receives
- *     nothing, and the ₳ in CIP simply vanishes from the world's balance
+ *     nothing, and the paid orders disappear from the world's balance
  *     sheet. {@link mergeSectorPlantFields} is that fold.
  *
  * A third shape, CARVE, splits one sector into two (privatization spin-outs):
  * {@link carveSectorPlantFields} slices the plant state by the same fraction
  * the revenue/worker legs use.
  *
- * FX CONTRACT — the one rule that governs this whole module:
- * `costPaidAnchor` and `constructionInProgressAnchor` are ALREADY ₳ (the field
- * names say so). Callers re-denominate `revenue` / `currentGrowthCost` when a
- * sector crosses corp currencies; they must NOT do the same to these. Passing
- * CIP through an FX conversion on a JPY→USD transfer would restate the same
- * money by ~87×. Nothing in this module touches an FX rate.
+ * FX CONTRACT: `costPaidAnchor` is already ₳. Callers re-denominate `revenue`
+ * and `currentGrowthCost` when a sector crosses corp currencies; they must not
+ * re-denominate paid build orders. Nothing in this module touches an FX rate.
  */
 import { mergedActiveCapacityPercent } from "@/lib/corporations/investment/rules";
 import type { CorporateSector, SectorBuildOrder } from "@/lib/db/types/corporation";
@@ -50,7 +47,6 @@ export interface SectorPlantFields {
    */
   capacityBookAnchor?: number | null;
   buildQueue?: SectorBuildOrder[] | null;
-  constructionInProgressAnchor?: number | null;
   mothballed?: boolean | null;
   activeCapacityPercent?: number | null;
   plantsStartTurn?: number | null;
@@ -72,7 +68,6 @@ export interface SectorPlantFieldsUpdate {
   plantUnitRemainder: number;
   capacityBookAnchor: number;
   buildQueue: SectorBuildOrder[];
-  constructionInProgressAnchor: number;
   mothballed: boolean;
   activeCapacityPercent?: number;
   plantsStartTurn: number | null;
@@ -116,11 +111,8 @@ const shadow = (s: SectorPlantFields): number | null =>
  * - `buildQueue`    — concatenated, re-sorted oldest-landing-first so the turn
  *                     processor's "land everything due" scan keeps its order
  *                     invariant. `costPaidAnchor` copied VERBATIM (see the FX
- *                     contract above); the cancellation refund and the CIP
- *                     total must keep quoting the ₳ actually charged.
- * - `constructionInProgressAnchor` — summed, in ₳. This is the denormalized
- *                     Σ of the merged queue, so it stays consistent by
- *                     construction.
+ *                     contract above); the cancellation refund and queue-
+ *                     derived CIP keep quoting the ₳ actually charged.
  * - `mothballed`    — AND, not OR. A running plant that absorbs a mothballed
  *                     one is still running; the merged doc must not silently
  *                     idle capacity the buyer just paid for. The reverse
@@ -176,8 +168,6 @@ export function mergeSectorPlantFields(
     // number that exits credit cash against.
     capacityBookAnchor: num(survivor.capacityBookAnchor) + num(incoming.capacityBookAnchor),
     buildQueue: mergedQueue,
-    constructionInProgressAnchor:
-      num(survivor.constructionInProgressAnchor) + num(incoming.constructionInProgressAnchor),
     mothballed: survivor.mothballed === true && incoming.mothballed === true,
     ...(activePercent == null ? {} : { activeCapacityPercent: activePercent }),
     plantsStartTurn: starts.length > 0 ? Math.min(...starts) : null,
@@ -209,7 +199,6 @@ export function identitySectorPlantFields(sector: SectorPlantFields): SectorPlan
     plantUnitRemainder: remainder(sector),
     capacityBookAnchor: num(sector.capacityBookAnchor),
     buildQueue: queue(sector),
-    constructionInProgressAnchor: num(sector.constructionInProgressAnchor),
     mothballed: sector.mothballed === true,
     // Explicit default restores a legacy survivor after a failed partial merge.
     activeCapacityPercent: sector.activeCapacityPercent ?? 100,
@@ -222,12 +211,10 @@ export function identitySectorPlantFields(sector: SectorPlantFields): SectorPlan
  * Slice `fraction` of a sector's plant state off for a carve (privatization
  * spin-out), leaving `1 − fraction` behind on the source row.
  *
- * Capacity and CIP scale linearly, exactly like the revenue/worker legs the
- * carve already scales. Build orders scale in BOTH legs — `unitsOrdered` and
- * `costPaidAnchor` — so the carved corp's CIP still equals Σ of its own queue
- * and the two halves still sum to the original: money is conserved across the
- * split, and neither side can cancel an order for a refund larger than the
- * share of the build it took.
+ * Capacity and build orders scale linearly, exactly like the revenue/worker
+ * legs the carve already scales. Build orders scale in BOTH legs,
+ * `unitsOrdered` and `costPaidAnchor`, so each half's CIP is derived from its
+ * own queue and the two halves still conserve the order's paid cost.
  *
  * `plantsStartTurn` and `mothballed` are COPIED, not split: the ramp anchor and
  * the idle flag describe the plant's history and operating state, and both
@@ -262,7 +249,6 @@ export function carveSectorPlantFields(
       unitsOrdered: o.unitsOrdered * f,
       costPaidAnchor: o.costPaidAnchor * f,
     })),
-    constructionInProgressAnchor: num(sector.constructionInProgressAnchor) * f,
     mothballed: sector.mothballed === true,
     ...(sector.activeCapacityPercent == null
       ? {}
@@ -279,7 +265,6 @@ export function hasPlantState(sector: SectorPlantFields): boolean {
   return (
     num(sector.capitalStock) > 0 ||
     count(sector) > 0 ||
-    num(sector.constructionInProgressAnchor) > 0 ||
     queue(sector).length > 0 ||
     sector.mothballed === true ||
     sector.activeCapacityPercent != null ||
@@ -298,7 +283,6 @@ export function readSectorPlantFields(sector: Partial<CorporateSector>): SectorP
     plantUnitRemainder: sector.plantUnitRemainder,
     capacityBookAnchor: sector.capacityBookAnchor,
     buildQueue: sector.buildQueue,
-    constructionInProgressAnchor: sector.constructionInProgressAnchor,
     mothballed: sector.mothballed,
     activeCapacityPercent: sector.activeCapacityPercent,
     plantsStartTurn: sector.plantsStartTurn,

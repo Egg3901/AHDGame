@@ -1177,6 +1177,10 @@ export interface CorporateSector {
    * fallback.
    */
   plantsPnl?: {
+    /** Absent on older snapshots, which use the legacy residual. */
+    costModel?: "legacyResidual" | "explicit";
+    /** Positive plant services within otherOpex, never an additional bill. */
+    plantOverhead?: number;
     /**
      * Realized revenue the P&L was assembled against, inventory sell-down
      * included. Equals the persisted `realizedRevenue` exactly.

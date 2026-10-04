@@ -409,7 +409,10 @@ describe("buildSectorPlantsSection", () => {
       const s = buildSectorPlantsSection({
         eraUnitScale: 1,
         ...BASE_ARGS,
-        sector: sectorFixture({ constructionInProgressAnchor: 100 }),
+        sector: sectorFixture({
+          constructionInProgressAnchor: 9_000,
+          buildQueue: [{ unitsOrdered: 10, costPaidAnchor: 100, startTurn: 100, onlineTurn: 101 }],
+        }),
       });
       // Profit is 150 ₳ per financial DAY, i.e. 150 / 24 per turn.
       expect(s.truth.breakEven).toEqual({ status: "turns", turns: Math.ceil(100 / (150 / 24)) });
@@ -419,7 +422,10 @@ describe("buildSectorPlantsSection", () => {
       const s = buildSectorPlantsSection({
         eraUnitScale: 1,
         ...BASE_ARGS,
-        sector: sectorFixture({ constructionInProgressAnchor: 100 }),
+        sector: sectorFixture({
+          constructionInProgressAnchor: 9_000,
+          buildQueue: [{ unitsOrdered: 10, costPaidAnchor: 100, startTurn: 100, onlineTurn: 101 }],
+        }),
         money: { ...BASE_ARGS.money, profitAnchor: -10 },
       });
       expect(s.truth.breakEven).toEqual({ status: "not_at_current_fills", turns: null });

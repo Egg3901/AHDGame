@@ -38,6 +38,7 @@ import {
 } from "@/lib/corporations/realizedGrowth";
 import { computeFillRate, fillRateBand } from "@/lib/corporations/financialFogOfWar";
 import { summarizeBuildQueue } from "@/lib/corporations/sectorBuildQueue";
+import { queueUndeliveredCost } from "@/lib/corporations/buildDelivery";
 import { readPlantsPnl } from "@/lib/corporations/plantsPnlBasis";
 import { seedPlantLedger } from "@/lib/corporations/plantLedger";
 import {
@@ -613,10 +614,15 @@ export function buildSectorDetails(ctx: SectorRowContext) {
       plantsMode && Number.isFinite(sector.producedUnits) ? (sector.producedUnits as number) : null;
     const soldUnits =
       plantsMode && Number.isFinite(sector.soldUnits) ? (sector.soldUnits as number) : null;
-    const constructionInProgressAnchor =
-      plantsMode && Number.isFinite(sector.constructionInProgressAnchor)
-        ? (sector.constructionInProgressAnchor as number)
-        : null;
+    const constructionInProgressAnchor = plantsMode
+      ? Math.max(
+          0,
+          queueUndeliveredCost(
+            Array.isArray(sector.buildQueue) ? sector.buildQueue : [],
+            currentTurn
+          )
+        )
+      : null;
     const buildQueueSummary = plantsMode
       ? summarizeBuildQueue(sector.buildQueue, currentTurn)
       : null;

@@ -123,9 +123,9 @@ export async function buildNationalElectionNight(
     .collection<Election>("elections")
     .find(
       { countryId: election.countryId, electionType, cycle: election.cycle },
-      { projection: { state: 1, totalSeats: 1, status: 1 } }
+      { projection: { state: 1, totalSeats: 1, status: 1, allocationMethod: 1 } }
     )
-    .toArray()) as Pick<Election, "_id" | "state" | "totalSeats" | "status">[];
+    .toArray()) as Pick<Election, "_id" | "state" | "totalSeats" | "status" | "allocationMethod">[];
   if (siblings.length < 2) return null;
 
   const tallies = await db
@@ -134,13 +134,20 @@ export async function buildNationalElectionNight(
     .project<
       Pick<
         ElectionVoteTally,
-        "electionId" | "state" | "totalVotes" | "candidateParties" | "seatsEstimate" | "finalized"
+        | "electionId"
+        | "state"
+        | "totalVotes"
+        | "candidateParties"
+        | "candidateIsNPP"
+        | "seatsEstimate"
+        | "finalized"
       >
     >({
       electionId: 1,
       state: 1,
       totalVotes: 1,
       candidateParties: 1,
+      candidateIsNPP: 1,
       seatsEstimate: 1,
       finalized: 1,
     })
@@ -176,7 +183,8 @@ export async function buildNationalElectionNight(
             seats,
             tally as unknown as ElectionVoteTally,
             activeIds,
-            election.countryId ?? "US"
+            election.countryId ?? "US",
+            sibling.allocationMethod
           )
         ) ?? {};
       for (const [cid, seatCount] of Object.entries(estimate)) {

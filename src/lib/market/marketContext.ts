@@ -26,6 +26,8 @@ export interface MarketContext {
    * instead of capacity merely haircutting a compounding revenue nameplate.
    */
   plantsEnabled: boolean;
+  /** Default off: explicit positive overhead replaces the margin residual. */
+  explicitPlantCostsEnabled?: boolean;
   /**
    * Pre-pass clearing results per sector id (computed in the corp-phase entry
    * from lagged balances). Absent entries mean "no outputs" → factor 1.

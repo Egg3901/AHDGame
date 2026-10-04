@@ -110,7 +110,11 @@ export async function GET(_request: Request, { params }: RouteParams) {
     // P3a: capitalized build spend is an asset on the equity leg — the same
     // term `executeCorporationBondRefinance` adds, so the refinance capacity
     // shown here equals the capacity the refinance route will actually grant.
-    const cipAnchor = sumCorporateSectorConstructionInProgress(sectors, corporation._id);
+    const cipAnchor = sumCorporateSectorConstructionInProgress(
+      sectors,
+      corporation._id,
+      gameState?.currentTurn ?? 1
+    );
     const totalEquity = totalEquityForBonds(liquidCapitalAnchor, sectorNpv, cipAnchor);
     const defaultedPrincipal = sumDefaultedBondPrincipal(bonds, fxByCurrency);
     const existingDebtAll = sumNonMaturedBondPrincipal(bonds, fxByCurrency);

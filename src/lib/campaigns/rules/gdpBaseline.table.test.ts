@@ -391,7 +391,7 @@ describe("gdpBaseline table derivation (issue #798)", () => {
     // Post-reconcile crush cells: oversized regional authoring scaled down to
     // the authored national GDP (calibration review required on any reseed).
     expect(table.NG["1979"]).toBe(324);
-    // Corrected 1991 native GDP and budget preserve a neutral regional scalar.
+    // Corrected 1991 NG regional GDP uses the authored basis without reconcile.
     expect(table.NG["1991"]).toBe(6_630);
     // Post-reconcile uplift cell: undersized CN regional authoring scaled up
     // to the authored national GDP (calibration review required on any reseed).

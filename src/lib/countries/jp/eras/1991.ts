@@ -27,6 +27,13 @@ export const JP_1991: CountryEraOverride = {
   preset: "1991-default",
   config: {
     usdExchangeRate: 0.007434944237918215,
+    electionSystems: {
+      lowerChamber: "sntv",
+      upperChamber: "pr_hareQuota",
+      subNationalChamber: "pr_hareQuota",
+      headOfGovernment: "parliamentary",
+      headOfState: "ceremonial",
+    },
     legislature: {
       name: "Kokkai",
       path: "/country/jp/legislature",
