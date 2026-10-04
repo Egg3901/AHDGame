@@ -186,6 +186,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           prospectingEnabled: 1,
           commandEconomyEnabled: 1,
           privateBankingEnabled: 1,
+          bankUnderwritingEnabled: 1,
           interstateMoneyWiringEnabled: 1,
           freightSettlementMode: 1,
           canonicalFreightBillingEnabled: 1,
@@ -200,7 +201,9 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     getLabourSystemMode(),
   ]);
   mark("preamble");
-  await resumeFoundingUnderwritingPlans(db, now);
+  if (marketGovernorConfig?.bankUnderwritingEnabled === true) {
+    await resumeFoundingUnderwritingPlans(db, now);
+  }
   const equityPoolTurn = await processEquityMarketPoolTurn(
     db,
     turn ?? gameState?.currentTurn ?? 0,

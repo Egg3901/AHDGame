@@ -225,6 +225,13 @@ export interface Corporation {
   };
   /** Issuer-selected primary-market underwriter for future issues. */
   primaryUnderwritingMandate?: import("@/lib/banking/underwritingTypes").PrimaryUnderwritingMandate;
+  primaryUnderwritingMandateRevision?: number;
+  /** Incoming funded proceeds pin the issuer's native cash denomination until ACK. */
+  primaryUnderwritingIncomingFunding?: {
+    key: string;
+    currencySnapshot: import("@/lib/banking/underwritingTypes").PrimaryUnderwritingCurrencySnapshot;
+    turn: number;
+  };
   /** Frozen unpaid founding IPO plan. The corporation remains private until its journal publishes it. */
   foundingIpoUnderwritingPending?: {
     offer: import("@/lib/banking/underwritingTypes").PrimaryUnderwritingOffer & {
@@ -250,6 +257,27 @@ export interface Corporation {
     issuerName: string;
     poolCollection: "equityMarketPools" | "bondMarketPools";
     instrumentProjection: import("@/lib/banking/rules/boundary").TransitionProjection;
+  };
+  /** Frozen relocation-bond quote held until the matching bond and HQ update ACK. */
+  headquartersRelocationBondFunding?: {
+    operationKey: string;
+    targetStateId: string;
+    targetCountryId: CountryId;
+    turn: number;
+    relocationCostAnchor: number;
+    crossCountry: boolean;
+    relocationSpreadAnchor: number;
+    currencyCode: CurrencyCode;
+    nativeFxRate: number;
+    sourceCountryIdPresent: boolean;
+    sourceCountryId?: CountryId;
+    sourceLiquidCurrencyCodePresent: boolean;
+    sourceLiquidCurrencyCode?: CurrencyCode;
+    bondId: ObjectId;
+    preflight: import("@/lib/corporations/issueRelocationBond").RelocationBondPreflight;
+    ceoVacated: boolean;
+    ceoId?: ObjectId;
+    ceoType?: Corporation["ceoType"];
   };
   /** Cumulative fees from actually funded primary placements, by native currency. */
   bankUnderwritingIncomeByCurrency?: Partial<Record<CurrencyCode, number>>;
