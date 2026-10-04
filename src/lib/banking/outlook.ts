@@ -460,7 +460,11 @@ export async function buildBankOutlook(db: Db, ctx: OutlookContext): Promise<Ban
 
   const runsPropBook = charter.type === "investment" || charter.type === "universal";
   const propMark = Math.max(0, charter.propBookMarkValue ?? 0);
-  const propEquityBase = runsPropBook ? computePropEquityBase(cash, charter) : 0;
+  const propEquityBase = runsPropBook
+    ? computePropEquityBase(cash, charter, undefined, {
+        playerDepositsAreLiabilities: liabilitiesAreReal,
+      })
+    : 0;
 
   return {
     primeRate: prime,
