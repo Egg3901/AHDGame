@@ -17,6 +17,14 @@ describe("seedTelemetryIndexes", () => {
       { worldId: 1, country: 1, region: 1, metric: 1, turn: 1 },
       { name: "macroTelemetry_world_country_region_metric_turn_unique", unique: true }
     );
-    expect(createIndex).toHaveBeenCalledTimes(2);
+    expect(createIndex).toHaveBeenCalledWith(
+      { worldId: 1, country: 1, turn: 1 },
+      { name: "countryTurnTelemetry_world_country_turn_unique", unique: true }
+    );
+    expect(createIndex).toHaveBeenCalledWith(
+      { worldId: 1, turn: 1 },
+      { name: "securityTelemetry_world_turn_unique", unique: true }
+    );
+    expect(createIndex).toHaveBeenCalledTimes(4);
   });
 });

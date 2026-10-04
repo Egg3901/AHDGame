@@ -385,6 +385,59 @@ export function weightedMean(rows: ReadonlyArray<{ value: unknown; weight: unkno
   return weight > 0 ? sum / weight : null;
 }
 
+export interface SovereignBondFlowInput {
+  countryId?: string | null;
+  matured?: boolean;
+  defaulted?: boolean;
+  totalIssued?: number;
+  couponRate?: number;
+  issuedAtTurn?: number;
+  redeemedAtTurn?: number;
+  defaultedAtTurn?: number | null;
+}
+
+export interface SovereignFlows {
+  issuedFace: number;
+  retiredFace: number;
+  defaultedFace: number;
+  scheduledCoupon: number;
+}
+
+/**
+ * Sovereign face flows recorded on `turn` for one country, read off the bond
+ * ledger. Issuance and redemption are matched on the stamped turn, so a turn
+ * that is replayed or retried records the same flows. The coupon is the
+ * scheduled per-turn payment on face still outstanding and not defaulted
+ * (annual rate over `turnsPerYear`), before any settlement shortfall.
+ */
+export function sovereignFlowsForTurn(
+  bonds: readonly SovereignBondFlowInput[],
+  country: string,
+  turn: number,
+  turnsPerYear: number
+): SovereignFlows {
+  let issued = 0;
+  let retired = 0;
+  let defaulted = 0;
+  let coupon = 0;
+  for (const bond of bonds) {
+    if (bond.countryId !== country) continue;
+    const face = finiteOrNull(bond.totalIssued) ?? 0;
+    if (bond.issuedAtTurn === turn) issued += face;
+    if (bond.redeemedAtTurn === turn) retired += face;
+    if (bond.defaultedAtTurn === turn && bond.defaulted === true) defaulted += face;
+    if (!bond.matured && !bond.defaulted && turnsPerYear > 0) {
+      coupon += ((finiteOrNull(bond.couponRate) ?? 0) / 100) * face / turnsPerYear;
+    }
+  }
+  return {
+    issuedFace: round(issued, 2),
+    retiredFace: round(retired, 2),
+    defaultedFace: round(defaulted, 2),
+    scheduledCoupon: round(coupon, 2),
+  };
+}
+
 // ── Annual fiscal and debt decomposition (#2336) ─────────────────────────────
 
 export interface AnnualFiscalRow {
@@ -989,6 +1042,52 @@ export function securitiesMarketMetrics(
   };
 }
 
+export interface BondHolderInput {
+  units?: number;
+  characterId?: unknown;
+  imperialCharacterId?: unknown;
+  corporationId?: unknown;
+  fundId?: unknown;
+  nppId?: unknown;
+  bankId?: unknown;
+}
+
+/**
+ * Aggregate bond units by holder class. Identities never leave this function:
+ * the export carries class totals only. The market pool float and central bank
+ * QE holdings are their own classes so coverage can be recomputed with or
+ * without them.
+ */
+export function bondUnitsByHolderClass(
+  holders: readonly BondHolderInput[],
+  publicFloat?: number,
+  centralBankHoldings?: number
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  const add = (cls: string, units: unknown) => {
+    const n = finiteOrNull(units);
+    if (n === null || n <= 0) return;
+    out[cls] = (out[cls] ?? 0) + n;
+  };
+  for (const h of holders) {
+    const cls = h.fundId
+      ? "fund"
+      : h.nppId
+        ? "npp"
+        : h.bankId
+          ? "bank"
+          : h.corporationId
+            ? "corporation"
+            : h.characterId || h.imperialCharacterId
+              ? "player"
+              : "other";
+    add(cls, h.units);
+  }
+  add("market_pool", publicFloat);
+  add("central_bank", centralBankHoldings);
+  return out;
+}
+
 export interface TotalReturnPoint {
   turn: number;
   price: number | null;
@@ -1020,3 +1119,104 @@ export function totalReturnSeries(
   }
   return out;
 }
+
+// ── Bounded export query ─────────────────────────────────────────────────────
+
+export const RESEARCH_PANELS = ["country-turn", "annual-fiscal", "trade", "securities"] as const;
+export type ResearchPanel = (typeof RESEARCH_PANELS)[number];
+
+/** Longest inclusive turn window a single request may span (10 game years). */
+export const RESEARCH_MAX_TURN_SPAN = 480;
+export const RESEARCH_DEFAULT_LIMIT = 500;
+export const RESEARCH_MAX_LIMIT = 2000;
+/** Securities rows are whole-market documents, so a page holds few turns. */
+export const RESEARCH_SECURITY_MAX_TURNS_PER_PAGE = 12;
+
+export interface ResearchQuery {
+  panel: ResearchPanel;
+  fromTurn: number;
+  toTurn: number;
+  countries: string[] | null;
+  commodities: string[] | null;
+  limit: number;
+  /** Exclusive resume point from a previous page: `<turn>` or `<turn>:<key>`. */
+  after: { turn: number; key: string } | null;
+}
+
+export type ResearchQueryResult =
+  | { ok: true; query: ResearchQuery }
+  | { ok: false; error: string };
+
+function parseList(raw: string | null | undefined): string[] | null {
+  if (!raw) return null;
+  const list = raw
+    .split(",")
+    .map((v) => v.trim())
+    .filter((v) => v.length > 0 && v.length <= 64);
+  return list.length > 0 ? [...new Set(list)].slice(0, 64) : null;
+}
+
+/**
+ * Parse and bound an export request. A missing `toTurn` defaults to `latest`
+ * and a missing `fromTurn` to the start of the allowed window ending there, so
+ * no request can ask for an unbounded history.
+ */
+export function parseResearchQuery(
+  params: Record<string, string | null | undefined>,
+  latestTurn: number
+): ResearchQueryResult {
+  const panel = params.panel as ResearchPanel | undefined;
+  if (!panel || !RESEARCH_PANELS.includes(panel)) {
+    return { ok: false, error: `panel must be one of ${RESEARCH_PANELS.join(", ")}` };
+  }
+  const int = (raw: string | null | undefined) =>
+    raw === undefined || raw === null || raw === "" ? null : Number(raw);
+  const toRaw = int(params.toTurn);
+  const fromRaw = int(params.fromTurn);
+  const limitRaw = int(params.limit);
+  for (const [name, v] of [
+    ["toTurn", toRaw],
+    ["fromTurn", fromRaw],
+    ["limit", limitRaw],
+  ] as const) {
+    if (v !== null && !(Number.isInteger(v) && v >= 0)) {
+      return { ok: false, error: `${name} must be a non-negative integer` };
+    }
+  }
+  const toTurn = toRaw ?? latestTurn;
+  const fromTurn = fromRaw ?? Math.max(0, toTurn - RESEARCH_MAX_TURN_SPAN + 1);
+  if (fromTurn > toTurn) return { ok: false, error: "fromTurn must not exceed toTurn" };
+  if (toTurn - fromTurn + 1 > RESEARCH_MAX_TURN_SPAN) {
+    return { ok: false, error: `turn window is capped at ${RESEARCH_MAX_TURN_SPAN} turns` };
+  }
+  let after: ResearchQuery["after"] = null;
+  if (params.after) {
+    const [turnPart, ...rest] = params.after.split(":");
+    const turn = Number(turnPart);
+    if (!Number.isInteger(turn) || turn < 0) return { ok: false, error: "after is malformed" };
+    after = { turn, key: rest.join(":") };
+  }
+  return {
+    ok: true,
+    query: {
+      panel,
+      fromTurn,
+      toTurn,
+      countries: parseList(params.countries),
+      commodities: parseList(params.commodities),
+      limit: Math.min(RESEARCH_MAX_LIMIT, Math.max(1, limitRaw ?? RESEARCH_DEFAULT_LIMIT)),
+      after,
+    },
+  };
+}
+
+/** Field units and conventions shipped with every export so rows are self-describing. */
+export const RESEARCH_UNITS = {
+  rates: "annual percent (not fractions)",
+  money: "local currency of the row's currencyCode unless a field name ends in Anchor",
+  gdp: "local currency, national level (sum of regions x 1M)",
+  turn: "raw game turn; year is the in-game calendar year of that turn",
+  observedAt: "actual UTC time the row was written at the end of the turn",
+  missing: "null, listed by dotted path in the row's `missing` array; never coerced to zero",
+  downsampling: "none: every retained turn is exported, in turn order",
+} as const;

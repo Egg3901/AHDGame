@@ -60,6 +60,8 @@ import {
   appendMacroTelemetry,
   resolveLongHorizonContext,
 } from "@/lib/telemetry/longHorizon/telemetry";
+import { appendCountryTurnTelemetry } from "@/lib/telemetry/research/countryTurn";
+import { appendSecurityTelemetry } from "@/lib/telemetry/research/securities";
 import { snapshotInterestRateHistory } from "@/lib/turn/interestRateSnapshot";
 import { snapshotPartyHistory } from "@/lib/turn/partyHistorySnapshot";
 import {
@@ -682,6 +684,19 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
         ),
         runtime.runPhase("interestRateSnapshot", () => snapshotInterestRateHistory(db, newTurn)),
         runtime.runPhase("partyHistorySnapshot", () => snapshotPartyHistory(db, newTurn)),
+        // Research panels (#2331, #2332, #2336): country-turn macro/monetary/fiscal
+        // rows and the whole-market securities row. A failure here must never
+        // stop the turn, so each is isolated and only logged.
+        runtime.runPhase("researchTelemetry", async () => {
+          if (!longHorizonCtx) return;
+          const observedAt = new Date();
+          await Promise.all([
+            appendCountryTurnTelemetry(db, longHorizonCtx, newTurn, observedAt),
+            appendSecurityTelemetry(db, longHorizonCtx, newTurn, observedAt),
+          ]).catch((error) => {
+            console.error("[researchTelemetry] write failed", error);
+          });
+        }),
       ]);
     })();
     const snapshotChainB = Promise.all([

@@ -1103,6 +1103,18 @@ const RUNTIME: CollectionEntry[] = [
       "Durable long-horizon GDP/population series (#2100): one doc per (world, country, region, metric, turn), every turn retained under the world-raw-full policy. Wiped on reset, rebuilt by play.",
   },
   {
+    name: "countryTurnTelemetry",
+    category: "runtime",
+    notes:
+      "Research country-turn macro, monetary and fiscal panel (#2331, #2336): one doc per (world, country, turn) under the world-raw-full policy. Wiped on reset, rebuilt by play.",
+  },
+  {
+    name: "securityTelemetry",
+    category: "runtime",
+    notes:
+      "Research securities panel (#2332): one doc per (world, turn) holding every listed equity and live bond observed that turn. Wiped on reset, rebuilt by play.",
+  },
+  {
     name: "parliamentSeatsHistory",
     category: "runtime",
     notes: "Per-turn parliament composition snapshots (capped history), written by the turn phase.",

@@ -202,7 +202,7 @@ export const INDEX_TARGETS = [
     id: "indexesTelemetry",
     label: "Indexes — Long-horizon telemetry",
     description:
-      "UNIQUE series coordinates on approvalTelemetry (world, country, region, turn) and macroTelemetry (world, country, region, metric, turn): the series read path and the cron-retry duplicate guard.",
+      "UNIQUE series coordinates on approvalTelemetry (world, country, region, turn) and macroTelemetry (world, country, region, metric, turn), plus countryTurnTelemetry (world, country, turn) and securityTelemetry (world, turn): the series read path and the cron-retry duplicate guard.",
   },
   {
     id: "indexesMoneyFlow",
