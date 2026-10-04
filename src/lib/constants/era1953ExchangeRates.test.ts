@@ -229,8 +229,10 @@ describe("1953 era usdExchangeRate overrides", () => {
       "HU",
       "IE",
       "JP",
+      "NG",
       "PL",
       "RO",
+      "RU",
       "UK",
       "YU",
     ]);

@@ -80,8 +80,10 @@ describe("getGdpAnchorRate", () => {
       "HU",
       "IE",
       "JP",
+      "NG",
       "PL",
       "RO",
+      "RU",
       "UK",
       "YU",
     ]);

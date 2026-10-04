@@ -1,4 +1,5 @@
 import type { CountryEraOverride } from "../../contract";
+import { INITIAL_RATES_1991 } from "@/lib/constants/currencies";
 import { turnToGameMonth } from "@/lib/utils/gameDate";
 
 /** The direct presidential election was June 12; the office changed hands at
@@ -48,6 +49,9 @@ export function ru1993LegislatureStage(
 export const RU_1991: CountryEraOverride = {
   preset: "1991-default",
   config: {
+    // Both federal and Russian-only regions store original ruble GDP. The
+    // game's opening SUR quote is a valuation basis, not a convertibility claim.
+    usdExchangeRate: 1 / INITIAL_RATES_1991.RU!,
     name: "Soviet Union",
     flagEmoji: "🇸🇺",
     executiveTitle: "Chairman of the Cabinet of Ministers",

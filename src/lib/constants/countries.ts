@@ -1251,8 +1251,8 @@ export const ERA_COUNTRY_CONFIG_OVERRIDES: Record<
     JP: JP_ERAS["1991-default"]?.config,
     // GDP→anchor normalization (see each era file's header): their regional GDP
     // is authored in local currency, so the anchor is the reciprocal of
-    // `INITIAL_RATES_1991`. RU and NG are deliberately absent — see
-    // `gdpAnchorRate1991.test.ts`.
+    // `INITIAL_RATES_1991`. The Soviet slot's output uses original rubles;
+    // Nigeria's local GDP now agrees with its national nominal seed anchor.
     DE: DE_ERAS["1991-default"]?.config,
     IE: IE_ERAS["1991-default"]?.config,
     CN: CN_ERAS["1991-default"]?.config,
@@ -1263,6 +1263,7 @@ export const ERA_COUNTRY_CONFIG_OVERRIDES: Record<
     YU: YU_ERAS["1991-default"]?.config,
     RO: RO_ERAS["1991-default"]?.config,
     RU: RU_ERAS["1991-default"]?.config,
+    NG: NG_ERAS["1991-default"]?.config,
   },
   "1953-default": {
     US: US_ERAS["1953-default"]?.config,
