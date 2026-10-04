@@ -24,6 +24,7 @@ describe("markCountryBondsRepudiated", () => {
       countryId: "US",
       matured: false,
       defaulted: false,
+      sovereignMaturityClaim: { $exists: false },
     });
   });
 

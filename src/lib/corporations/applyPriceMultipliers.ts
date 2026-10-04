@@ -89,7 +89,11 @@ export async function applyPriceMultipliers(db?: Db): Promise<ApplyPriceMultipli
   for (const sector of sectors) {
     const corpId = sector.corporationId.toString();
     const sectorKeys = operatingSectorKeysByCorpId.get(corpId) ?? new Set<string>();
-    sectorKeys.add(`${sector.countryId}:${sector.sectorType}:${sector.industryModel ?? ""}`);
+    // SentimentPulse is scoped by operating country + sector type; its schema
+    // has no industry-model dimension. Keep this key compatible with that
+    // scope while `operatingSectorTypesByCorpId` below retains model-aware
+    // strategy normalization for pulses without an operating-country filter.
+    sectorKeys.add(`${sector.countryId}:${sector.sectorType}`);
     operatingSectorKeysByCorpId.set(corpId, sectorKeys);
     const sectorTypes = operatingSectorTypesByCorpId.get(corpId) ?? new Set<string>();
     sectorTypes.add(

@@ -22,6 +22,7 @@ vi.mock("@/lib/wireEvent", () => ({
 }));
 vi.mock("@/lib/bonds/corporateCredit", () => ({
   sumCorporateSectorConstructionInProgress: vi.fn().mockReturnValue(0),
+  corporateCashArrearsAnchor: vi.fn().mockReturnValue(0),
   computeCorporateCreditAtTurn: vi.fn().mockReturnValue({
     creditRating: { rating: "BBB", compositeScore: 50 },
     totalDebt: 0,
