@@ -118,7 +118,7 @@ export function PresidentialResultsView({ data }: { data: ElectionResultsRespons
                   unit={unit}
                   candidatesById={candidatesById}
                   index={i}
-                  weightLabel={election.totalEv ? "EV" : ""}
+                  weightLabel={election.totalEv ? "EV" : undefined}
                 />
               ))}
             </div>
