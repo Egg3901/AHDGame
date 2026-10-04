@@ -212,7 +212,9 @@ describe("manufacturing product line rules", () => {
     for (const commodity of ["steel", "building_materials"] as const) {
       expect(
         scaled.outputAnchorByCommodity[commodity]! / scaled.outputUnitsByCommodity[commodity]!
-      ).toBe(baseline.outputAnchorByCommodity[commodity]! / baseline.outputUnitsByCommodity[commodity]!);
+      ).toBe(
+        baseline.outputAnchorByCommodity[commodity]! / baseline.outputUnitsByCommodity[commodity]!
+      );
     }
     expect(Object.values(scaled.outputAnchorByCommodity).reduce((a, b) => a + (b ?? 0), 0)).toBe(
       6_000

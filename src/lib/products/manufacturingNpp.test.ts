@@ -24,17 +24,14 @@ describe("chooseNppManufacturingProduct", () => {
 
   it("does not open projects in loss-making or non-scarce markets", () => {
     expect(
-      chooseNppManufacturingProduct([
-        candidate("loss", -10, 1.5),
-        candidate("balanced", 30, 1),
-      ])
+      chooseNppManufacturingProduct([candidate("loss", -10, 1.5), candidate("balanced", 30, 1)])
     ).toBeNull();
   });
 
   it("uses a stable catalog-id tie break", () => {
-    expect(chooseNppManufacturingProduct([candidate("z", 20, 1.2), candidate("a", 20, 1.2)])?.kindId).toBe(
-      "a"
-    );
+    expect(
+      chooseNppManufacturingProduct([candidate("z", 20, 1.2), candidate("a", 20, 1.2)])?.kindId
+    ).toBe("a");
   });
 
   it("scores scarcity against the kind's actual legacy recipe share", () => {

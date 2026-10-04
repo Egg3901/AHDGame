@@ -25,15 +25,20 @@ export async function POST(_request: Request, { params }: RouteParams) {
     const corporation = resolved.corporation;
     const ceoError = requireCeo(corporation, auth.user.userId);
     if (ceoError) return ceoError;
-    const config = await db.collection<GameConfig>("gameConfig").findOne(
-      { _id: "default" },
-      { projection: { marketSystemMode: 1, productLinesV2Enabled: 1 } }
-    );
+    const config = await db
+      .collection<GameConfig>("gameConfig")
+      .findOne(
+        { _id: "default" },
+        { projection: { marketSystemMode: 1, productLinesV2Enabled: 1 } }
+      );
     if (
       config?.productLinesV2Enabled !== true ||
       !marketAtLeast(await getMarketSystemMode(config), "plants")
     ) {
-      return NextResponse.json({ error: "Manufacturing product lines are not enabled" }, { status: 409 });
+      return NextResponse.json(
+        { error: "Manufacturing product lines are not enabled" },
+        { status: 409 }
+      );
     }
     const result = await db.collection(MANUFACTURING_PRODUCT_PROJECTS_V2).updateOne(
       {

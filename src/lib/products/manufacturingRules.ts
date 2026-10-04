@@ -3,10 +3,7 @@
  * contribution from paid development. The portable rules are allocateManufacturedOutput and
  * productQualityForCommodity.
  */
-import {
-  commodityMixWeight,
-  type CommodityType,
-} from "@/lib/constants/commodities";
+import { commodityMixWeight, type CommodityType } from "@/lib/constants/commodities";
 
 export type ManufacturingLifecycleStage =
   "development" | "launch" | "growth" | "mature" | "decline" | "retired";
@@ -46,7 +43,9 @@ const LIFECYCLE_STAGE_TURNS: Partial<Record<ManufacturingLifecycleStage, number>
   decline: 60,
 };
 
-const NEXT_LIFECYCLE_STAGE: Partial<Record<ManufacturingLifecycleStage, ManufacturingLifecycleStage>> = {
+const NEXT_LIFECYCLE_STAGE: Partial<
+  Record<ManufacturingLifecycleStage, ManufacturingLifecycleStage>
+> = {
   launch: "growth",
   growth: "mature",
   mature: "decline",
@@ -193,7 +192,9 @@ export function advanceManufacturingProject(input: {
   const developmentPaidAnchor =
     project.developmentPaidAnchor + finiteNonNegative(receipt.amountAnchor);
   const elapsedDevelopmentTurns =
-    project.stage === "development" ? project.elapsedDevelopmentTurns + 1 : project.elapsedDevelopmentTurns;
+    project.stage === "development"
+      ? project.elapsedDevelopmentTurns + 1
+      : project.elapsedDevelopmentTurns;
   let stage = project.stage;
   let stageStartedTurn = project.stageStartedTurn;
 
@@ -259,7 +260,8 @@ export function allocateManufacturedOutput(
   const outputAnchor = finiteNonNegative(input.outputAnchor);
   const allocationShare = clamp(finiteNonNegative(input.allocationShare), 0, 1);
   const outputRates = Object.entries(input.supplyRates ?? {}) as Array<[CommodityType, number]>;
-  const baseOutputAnchorByCommodity = input.baseOutputAnchorByCommodity ??
+  const baseOutputAnchorByCommodity =
+    input.baseOutputAnchorByCommodity ??
     Object.fromEntries(
       outputRates.map(([commodity]) => [
         commodity,
@@ -323,7 +325,8 @@ export function buildManufacturedSectorOutput(input: {
   const allocation = allocateManufacturedOutput(input);
   const share = clamp(finiteNonNegative(input.allocationShare), 0, 1);
   const outputAnchorByCommodity = { ...allocation.nominalOutputAnchorByCommodity };
-  const baseline = input.baseOutputAnchorByCommodity ??
+  const baseline =
+    input.baseOutputAnchorByCommodity ??
     Object.fromEntries(
       Object.keys(input.supplyRates).map((commodity) => [
         commodity,
@@ -355,8 +358,7 @@ export function buildManufacturedSectorOutput(input: {
     if (typeof currentQuality !== "number" || !Number.isFinite(currentQuality)) continue;
     productQualityByCommodity[commodity] = productQualityForCommodity({
       currentSectorQuality: currentQuality,
-      paidDevelopmentAnchor:
-        commodity === input.outputCommodity ? input.paidDevelopmentAnchor : 0,
+      paidDevelopmentAnchor: commodity === input.outputCommodity ? input.paidDevelopmentAnchor : 0,
       paidThresholdAnchor: input.paidThresholdAnchor,
       stage: commodity === input.outputCommodity ? input.stage : "development",
     });

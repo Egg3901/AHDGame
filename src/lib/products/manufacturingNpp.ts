@@ -37,9 +37,7 @@ export function chooseNppManufacturingProduct<T extends NppManufacturingProductC
           (candidate.scarcityPriceRatio - 1) *
           candidate.supplyMixWeight,
       }))
-      .sort(
-        (a, b) =>
-          b.score - a.score || a.candidate.kindId.localeCompare(b.candidate.kindId)
-      )[0]?.candidate ?? null
+      .sort((a, b) => b.score - a.score || a.candidate.kindId.localeCompare(b.candidate.kindId))[0]
+      ?.candidate ?? null
   );
 }

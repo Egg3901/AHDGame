@@ -113,9 +113,7 @@ describe("manufacturing product line balance evidence", () => {
       developmentPaidAnchor: PROJECT_COST,
       elapsedDevelopmentTurns: 12,
     };
-    const transitions: Array<{ turn: number; stage: string }> = [
-      { turn: 12, stage: "launch" },
-    ];
+    const transitions: Array<{ turn: number; stage: string }> = [{ turn: 12, stage: "launch" }];
 
     for (let turn = 13; turn <= 260; turn += 1) {
       const next = advanceManufacturingProject({
@@ -158,8 +156,9 @@ describe("manufacturing product line balance evidence", () => {
       stage: "mature",
     });
     expect(matureOutput.inputThroughputShare).toBe(0.5);
-    expect(Object.values(matureOutput.nominalOutputAnchorByCommodity).reduce((a, b) => a + b, 0))
-      .toBeCloseTo(50_000, 6);
+    expect(
+      Object.values(matureOutput.nominalOutputAnchorByCommodity).reduce((a, b) => a + b, 0)
+    ).toBeCloseTo(50_000, 6);
   });
 
   it("chooses NPP projects from actual margin, scarcity, and strategy mix exposure", () => {

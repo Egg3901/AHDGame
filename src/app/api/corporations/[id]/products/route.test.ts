@@ -34,7 +34,12 @@ let sectors: object[];
 beforeEach(async () => {
   vi.clearAllMocks();
   db = createMockDb();
-  for (const collection of ["gameConfig", "corporateSectors", "manufacturingProductProjectsV2", "gameState"])
+  for (const collection of [
+    "gameConfig",
+    "corporateSectors",
+    "manufacturingProductProjectsV2",
+    "gameState",
+  ])
     db.collection(collection);
   corporationId = new ObjectId();
   sectorId = new ObjectId();
@@ -63,7 +68,9 @@ beforeEach(async () => {
   });
   db.collectionMocks.corporateSectors.find.mockReturnValue(cursor(sectors));
   db.collectionMocks.manufacturingProductProjectsV2.findOne.mockResolvedValue(null);
-  db.collectionMocks.manufacturingProductProjectsV2.insertOne.mockResolvedValue({ acknowledged: true } as never);
+  db.collectionMocks.manufacturingProductProjectsV2.insertOne.mockResolvedValue({
+    acknowledged: true,
+  } as never);
 });
 
 describe("manufacturing product project routes", () => {
@@ -139,7 +146,9 @@ describe("manufacturing product project routes", () => {
       marketSystemMode: "plants",
       productLinesV2Enabled: true,
     });
-    db.collectionMocks.manufacturingProductProjectsV2.findOne.mockResolvedValue({ _id: "already-active" });
+    db.collectionMocks.manufacturingProductProjectsV2.findOne.mockResolvedValue({
+      _id: "already-active",
+    });
     const { POST } = await import("./route");
     const response = await POST(
       new Request("http://localhost/api/corporations/1/products", {
@@ -167,9 +176,12 @@ describe("manufacturing product project routes", () => {
       modifiedCount: 1,
     } as never);
     const { POST } = await import("./[projectId]/retire/route");
-    const response = await POST(new Request("http://localhost/api/corporations/1/products/project-1/retire"), {
-      params: Promise.resolve({ id: "1", projectId: "project-1" }),
-    });
+    const response = await POST(
+      new Request("http://localhost/api/corporations/1/products/project-1/retire"),
+      {
+        params: Promise.resolve({ id: "1", projectId: "project-1" }),
+      }
+    );
     expect(response.status).toBe(200);
     expect(db.collectionMocks.manufacturingProductProjectsV2.updateOne).toHaveBeenCalledWith(
       {

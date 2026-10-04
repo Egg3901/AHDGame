@@ -160,8 +160,8 @@ export function ManufacturingProductStudio({
       <div>
         <h2 className="text-lg font-bold text-foreground">Product Studio</h2>
         <p className="mt-1 text-sm text-muted">
-          Develop one product project, allocated across owned plants. Unallocated capacity keeps
-          its current strategy output. Paid R&amp;D funds development until the project cost is paid.
+          Develop one product project, allocated across owned plants. Unallocated capacity keeps its
+          current strategy output. Paid R&amp;D funds development until the project cost is paid.
         </p>
       </div>
       {studio.activeProject ? (
@@ -187,7 +187,9 @@ export function ManufacturingProductStudio({
           </div>
           <div className="space-y-1 text-sm text-muted">
             {studio.activeProject.allocations.map((allocation) => {
-              const plant = studio.plants.find((candidate) => candidate.sectorId === allocation.sectorId);
+              const plant = studio.plants.find(
+                (candidate) => candidate.sectorId === allocation.sectorId
+              );
               return (
                 <div key={allocation.sectorId}>
                   {plant?.sectorType ?? "Plant"}: {(allocation.share * 100).toFixed(0)}% capacity
@@ -215,9 +217,13 @@ export function ManufacturingProductStudio({
                 </select>
               </label>
               {legalPlants.map((plant) => (
-                <label key={plant.sectorId} className="flex items-center justify-between gap-4 text-sm">
+                <label
+                  key={plant.sectorId}
+                  className="flex items-center justify-between gap-4 text-sm"
+                >
                   <span className="text-foreground">
-                    {plant.sectorType} · {plant.strategyId ?? "standard"} · {plant.capitalStock.toLocaleString()} capacity
+                    {plant.sectorType} · {plant.strategyId ?? "standard"} ·{" "}
+                    {plant.capitalStock.toLocaleString()} capacity
                   </span>
                   <span className="flex items-center gap-2 text-muted">
                     <input
@@ -231,7 +237,10 @@ export function ManufacturingProductStudio({
                       onChange={(event) =>
                         setShares((current) => ({
                           ...current,
-                          [plant.sectorId]: Math.max(0, Math.min(1, Number(event.target.value) / 100)),
+                          [plant.sectorId]: Math.max(
+                            0,
+                            Math.min(1, Number(event.target.value) / 100)
+                          ),
                         }))
                       }
                     />
@@ -244,13 +253,19 @@ export function ManufacturingProductStudio({
               </Button>
             </>
           ) : (
-            <p className="text-sm text-muted">No owned plant currently has an eligible product strategy.</p>
+            <p className="text-sm text-muted">
+              No owned plant currently has an eligible product strategy.
+            </p>
           )}
         </div>
       ) : (
         <p className="text-sm text-muted">The CEO manages product development.</p>
       )}
-      {message && <p role="status" className="text-sm text-muted">{message}</p>}
+      {message && (
+        <p role="status" className="text-sm text-muted">
+          {message}
+        </p>
+      )}
     </Card>
   );
 }

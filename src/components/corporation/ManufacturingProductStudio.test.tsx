@@ -70,7 +70,9 @@ describe("ManufacturingProductStudio", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(<ManufacturingProductStudio corporationId="corp-1" />);
 
-    expect(await screen.findByText(/Develop one product project, allocated across owned plants/)).toBeTruthy();
+    expect(
+      await screen.findByText(/Develop one product project, allocated across owned plants/)
+    ).toBeTruthy();
     fireEvent.change(await screen.findByLabelText("manufacturing allocation"), {
       target: { value: "50" },
     });

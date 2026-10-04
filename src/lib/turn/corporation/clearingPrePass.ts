@@ -301,16 +301,12 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
                   snapshotCapacityUnits: capacitySnapshot,
                 });
                 const basePrices = eraScaledBasePrices(lookups.eraUnitScale);
-                const outputAnchor = Object.keys(rates.supply ?? {}).reduce(
-                  (sum, rawCommodity) => {
-                    const commodity = rawCommodity as CommodityType;
-                    const units =
-                      measuredUnits *
-                      commodityMixWeight(rates.supply ?? {}, basePrices, commodity);
-                    return sum + units * (basePrices[commodity] ?? 0);
-                  },
-                  0
-                );
+                const outputAnchor = Object.keys(rates.supply ?? {}).reduce((sum, rawCommodity) => {
+                  const commodity = rawCommodity as CommodityType;
+                  const units =
+                    measuredUnits * commodityMixWeight(rates.supply ?? {}, basePrices, commodity);
+                  return sum + units * (basePrices[commodity] ?? 0);
+                }, 0);
                 return buildManufacturedSectorOutput({
                   outputAnchor,
                   supplyRates: (rates.supply ?? {}) as Partial<Record<CommodityType, number>>,
@@ -327,7 +323,7 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
                   paidDevelopmentAnchor: productProject.developmentPaidAnchor,
                   paidThresholdAnchor: productProject.paidThresholdAnchor,
                 });
-            })()
+              })()
             : null;
         const productOfferScale = exactProductOutput
           ? (scaleMeasuredProducedUnits({
@@ -535,10 +531,9 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
           ...(scaledProductOutput
             ? {
                 outputUnitsByCommodity: Object.fromEntries(
-                  Object.entries(scaledProductOutput.outputUnitsByCommodity).map(([commodity, units]) => [
-                    commodity,
-                    Math.max(0, units ?? 0),
-                  ])
+                  Object.entries(scaledProductOutput.outputUnitsByCommodity).map(
+                    ([commodity, units]) => [commodity, Math.max(0, units ?? 0)]
+                  )
                 ) as Partial<Record<CommodityType, number>>,
                 outputAnchorByCommodity: scaledProductOutput.outputAnchorByCommodity,
                 productQualityByCommodity: qualityPremiumPricingEnabled

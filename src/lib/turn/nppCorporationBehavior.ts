@@ -356,10 +356,9 @@ export async function processNppCorporationDecisions(
   const competitorsByBucket = buildCapacityCompetitorIndex(globalSectors);
 
   // Resolve plants and the gated product slot from one shared config snapshot.
-  const nppMarketConfig = await db.collection<GameConfig>("gameConfig").findOne(
-    { _id: "default" },
-    { projection: { marketSystemMode: 1, productLinesV2Enabled: 1 } }
-  );
+  const nppMarketConfig = await db
+    .collection<GameConfig>("gameConfig")
+    .findOne({ _id: "default" }, { projection: { marketSystemMode: 1, productLinesV2Enabled: 1 } });
   const marketMode = await getMarketSystemMode(nppMarketConfig);
   const plantsEnabled = marketAtLeast(marketMode, "plants");
   const productLinesEnabled = plantsEnabled && nppMarketConfig?.productLinesV2Enabled === true;
@@ -539,9 +538,10 @@ export async function processNppCorporationDecisions(
           {
             kindId: kind.id,
             outputCommodity: kind.outputCommodity,
-            allocations: compatiblePlants.map(
-              (plant): ProductPlantAllocation => ({ sectorId: plant.sectorId, share: 1 })
-            ),
+            allocations: compatiblePlants.map((plant): ProductPlantAllocation => ({
+              sectorId: plant.sectorId,
+              share: 1,
+            })),
             capacityStock,
             capacityWeightedMarginPct: marginWeighted / capacityStock,
             scarcityPriceRatio: priceRatioOf(kind.outputCommodity),

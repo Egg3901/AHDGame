@@ -20,7 +20,10 @@ import {
   type ManufacturingPlant,
   type ProductPlantAllocation,
 } from "@/lib/products/manufacturingEligibility";
-import { MANUFACTURING_PRODUCT_KINDS, getManufacturingProductKind } from "@/lib/products/manufacturingCatalog";
+import {
+  MANUFACTURING_PRODUCT_KINDS,
+  getManufacturingProductKind,
+} from "@/lib/products/manufacturingCatalog";
 import {
   MANUFACTURING_DEVELOPMENT_ELAPSED_TURNS,
   manufacturingDevelopmentThresholdAnchor,
@@ -49,10 +52,9 @@ const startProjectSchema = z.object({
 });
 
 async function productLinesAvailable(db: Db): Promise<boolean> {
-  const config = await db.collection<GameConfig>("gameConfig").findOne(
-    { _id: "default" },
-    { projection: { marketSystemMode: 1, productLinesV2Enabled: 1 } }
-  );
+  const config = await db
+    .collection<GameConfig>("gameConfig")
+    .findOne({ _id: "default" }, { projection: { marketSystemMode: 1, productLinesV2Enabled: 1 } });
   return (
     config?.productLinesV2Enabled === true &&
     marketAtLeast(await getMarketSystemMode(config), "plants")
@@ -134,9 +136,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
       techTreesEnabled,
       unlockedTechNodeIds: corporation.unlockedTechNodeIds,
     });
-    const allocations = project
-      ? allocationsForPlantCapacity(plants, project.allocations)
-      : [];
+    const allocations = project ? allocationsForPlantCapacity(plants, project.allocations) : [];
 
     return NextResponse.json(
       {
@@ -188,7 +188,10 @@ export async function POST(request: Request, { params }: RouteParams) {
     const ceoError = requireCeo(corporation, auth.user.userId);
     if (ceoError) return ceoError;
     if (!(await productLinesAvailable(db))) {
-      return NextResponse.json({ error: "Manufacturing product lines are not enabled" }, { status: 409 });
+      return NextResponse.json(
+        { error: "Manufacturing product lines are not enabled" },
+        { status: 409 }
+      );
     }
 
     const kind = getManufacturingProductKind(parsed.data.kindId);
@@ -226,12 +229,13 @@ export async function POST(request: Request, { params }: RouteParams) {
       plantById.get(allocation.sectorId)
     );
     if (
-      selectedPlants.some(
-        (plant) => !plant || !isLegalManufacturingProductForPlant(kind.id, plant)
-      )
+      selectedPlants.some((plant) => !plant || !isLegalManufacturingProductForPlant(kind.id, plant))
     ) {
       return NextResponse.json(
-        { error: "Every allocated plant must have real capacity and a legal strategy for this product" },
+        {
+          error:
+            "Every allocated plant must have real capacity and a legal strategy for this product",
+        },
         { status: 400 }
       );
     }
@@ -240,14 +244,20 @@ export async function POST(request: Request, { params }: RouteParams) {
       return sum + (plant ? plant.capitalStock * allocation.share : 0);
     }, 0);
     if (!(allocatedCapacity > 0) || !Number.isFinite(allocatedCapacity)) {
-      return NextResponse.json({ error: "The project requires positive owned plant capacity" }, { status: 400 });
+      return NextResponse.json(
+        { error: "The project requires positive owned plant capacity" },
+        { status: 400 }
+      );
     }
 
     const activeProject = await db
       .collection<ManufacturingProductProject>(MANUFACTURING_PRODUCT_PROJECTS_V2)
       .findOne({ activeCorporationId: corporation._id.toString() }, { projection: { _id: 1 } });
     if (activeProject) {
-      return NextResponse.json({ error: "This corporation already has an active product project" }, { status: 409 });
+      return NextResponse.json(
+        { error: "This corporation already has an active product project" },
+        { status: 409 }
+      );
     }
 
     const currentTurn = await getCurrentTurn(db);
@@ -267,14 +277,22 @@ export async function POST(request: Request, { params }: RouteParams) {
       elapsedThresholdTurns: MANUFACTURING_DEVELOPMENT_ELAPSED_TURNS,
     };
     try {
-      await db.collection<ManufacturingProductProject>(MANUFACTURING_PRODUCT_PROJECTS_V2).insertOne(project);
+      await db
+        .collection<ManufacturingProductProject>(MANUFACTURING_PRODUCT_PROJECTS_V2)
+        .insertOne(project);
     } catch (error) {
       if (typeof error === "object" && error !== null && "code" in error && error.code === 11000) {
-        return NextResponse.json({ error: "This corporation already has an active product project" }, { status: 409 });
+        return NextResponse.json(
+          { error: "This corporation already has an active product project" },
+          { status: 409 }
+        );
       }
       throw error;
     }
-    return NextResponse.json({ activeProject: projectView(project), currentYear: gameState?.currentYear }, { status: 201 });
+    return NextResponse.json(
+      { activeProject: projectView(project), currentYear: gameState?.currentYear },
+      { status: 201 }
+    );
   } catch (error) {
     return handleRouteError(error);
   }
