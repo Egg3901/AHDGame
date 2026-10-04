@@ -56,10 +56,10 @@ const repEcon = {
   population: 200000000,
 };
 const costScaleAnchors = {
-  gdpLow: 1800000000000,
+  gdpLow: 590059736200,
   // Dated national anchor under #2676; generator applies this after the historical snapshot.
   popLow: 88992220,
-  scaleLow: 0.04,
+  scaleLow: 0.013112438582222222,
   gdpHigh: 144000000000000,
   popHigh: 200000000,
   scaleHigh: 1,

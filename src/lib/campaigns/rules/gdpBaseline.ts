@@ -153,12 +153,12 @@ const GDP_BASELINE_TABLE: Record<GdpBaselineCountry, Record<EraId, number>> = {
   },
   NG: {
     // Modern cells are naira (local); 1953 is USD-anchored (unit "usd").
-    // 1979/1991 inherit the seed-time reconcile crush of oversized regional
-    // authoring (see module doc) — calibration review required on any reseed.
+    // 1979 retains the seed-time reconciliation of oversized regional authoring.
+    // 1991 uses corrected nominal GDP and its matching national budget seed.
     // No 2027 region bundle: seeder falls back to 2019, mirrored here.
     "1953": 113,
     "1979": 324,
-    "1991": 20_226,
+    "1991": 6_630,
     "1999": 3_206_751,
     "2007": 3_724_138,
     "2019": 3_669_401,

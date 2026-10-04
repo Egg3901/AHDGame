@@ -4,7 +4,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CorporationHero } from "./CorporationHero";
+import { CorporationMasthead } from "./CorporationMasthead";
 import type { CorporationDetail } from "./CorporationPageTypes";
 
 const router = vi.hoisted(() => ({ push: vi.fn(), back: vi.fn(), refresh: vi.fn() }));
@@ -26,6 +26,10 @@ vi.mock("@/contexts/CurrencyContext", () => ({
     toInternalFrom: (amount: number) => amount,
   }),
 }));
+vi.mock("@/hooks/useLocalCurrency", () => ({
+  useLocalCurrency: () => ({ fmtAmount: String, fmtFull: String, toAnchor: (v: number) => v }),
+}));
+vi.mock("./ceo/CeoCorporationSettingsModal", () => ({ CeoCorporationSettingsModal: () => null }));
 vi.mock("@/contexts/AuthDataContext", () => ({
   useAuthMe: () => ({ user: { enableExperimentalUI: true } }),
 }));
@@ -39,20 +43,26 @@ function makeCorp(overrides: Partial<CorporationDetail> = {}): CorporationDetail
     sharePrice: 10,
     liquidCapital: 100,
     liquidCurrencyCode: "USD",
+    totalShares: 100,
+    publicFloat: 50,
     ...overrides,
   } as unknown as CorporationDetail;
 }
 
 function renderHero(corp: CorporationDetail, isCeo: boolean) {
   return render(
-    <CorporationHero
+    <CorporationMasthead
       corporation={corp}
       ceo={null}
-      brandHex="#3b82f6"
       isCeo={isCeo}
       onRefresh={() => {}}
       exchangeLabel="NYSE"
       corpId="931"
+      retainedDaily={null}
+      effectiveDividendRate={null}
+      periodView="daily"
+      financialFogOfWar={null}
+      ceoIsInactive={false}
     />
   );
 }
@@ -63,7 +73,7 @@ afterEach(() => {
   router.push.mockClear();
 });
 
-describe("CorporationHero wiki link gate (#2347)", () => {
+describe("CorporationMasthead wiki link gate (#2347)", () => {
   it("links to Wiki only when the page is published", () => {
     vi.stubGlobal(
       "fetch",

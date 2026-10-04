@@ -41,17 +41,7 @@ it("builds the five 2019 transition countries before region-derived stages", asy
   const { runConformanceChecks } = await import("@/lib/admin/seedDiagnostic/conformance");
   const { checks } = await runConformanceChecks(db, { preset: "2019-default" });
   const critical = checks.filter((check) => check.severity === "critical");
-  // probeBootstrap builds reference data but does not reset/seed the canonical
-  // seats collection. A real reset does that before bootstrap. Keep the seven
-  // seat-only readiness findings visible and require every other critical to
-  // disappear, including the 40 RU/PL/HU/RO/BG failures reproduced by worldsim.
-  expect(critical.map((check) => check.id).sort()).toEqual([
-    "readiness.CN.Seats",
-    "readiness.DE.Seats",
-    "readiness.IE.Seats",
-    "readiness.JP.Seats",
-    "readiness.NG.Seats",
-    "readiness.UK.Seats",
-    "readiness.US.Seats",
-  ]);
+  // Conformance checks the complete bootstrap substrate. Seat lifecycle checks
+  // run separately; none of these country readiness checks should be critical.
+  expect(critical).toEqual([]);
 }, 1_800_000);

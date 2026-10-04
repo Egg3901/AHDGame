@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Avatar } from "@/components/Avatar";
 import { HeroImage } from "@/components/HeroImage";
 import { STATE_FLAGS } from "@/lib/constants";
@@ -97,6 +98,41 @@ export function CorporationMasthead({
   onTrade,
   showBanner = false,
 }: CorporationMastheadProps) {
+  const router = useRouter();
+  const [creatingWikiPage, setCreatingWikiPage] = useState(false);
+  const [wikiCreateError, setWikiCreateError] = useState("");
+  async function handleCreateWikiPage() {
+    setCreatingWikiPage(true);
+    setWikiCreateError("");
+    try {
+      const res = await fetch("/api/wiki/my/claim", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          target: "corporation",
+          corporationSequentialId: corporation.sequentialId,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) setWikiCreateError(data.error || "Could not create page");
+      else if (typeof data.slug === "string") {
+        // The request names this corporation; still verify the returned slug
+        // so a malformed or stale response cannot navigate to another page.
+        const expected =
+          typeof corporation.sequentialId === "number"
+            ? corporationWikiSlug(corporation.sequentialId)
+            : null;
+        if (expected != null && data.slug !== expected)
+          setWikiCreateError("Could not confirm this corporation's wiki page. Try again.");
+        else router.push(`/wiki/${data.slug}/edit`);
+      } else setWikiCreateError("Could not create page");
+    } catch {
+      setWikiCreateError("Network error");
+    } finally {
+      setCreatingWikiPage(false);
+    }
+  }
+
   const [settingsOpen, setSettingsOpen] = useState(false);
   const money = useCorpMoney(corporation.liquidCurrencyCode);
   const ticker = deriveTicker({ tickerSymbol: corporation.tickerSymbol, name: corporation.name });
@@ -248,17 +284,38 @@ export function CorporationMasthead({
                   </span>
                 </>
               )}
-              {typeof corporation.sequentialId === "number" && (
-                <>
-                  <Sep />
-                  <Link
-                    href={`/wiki/${corporationWikiSlug(corporation.sequentialId)}`}
-                    className="hover:text-foreground"
-                  >
-                    Wiki
-                  </Link>
-                </>
-              )}
+              {typeof corporation.sequentialId === "number" &&
+                corporation.wikiPagePublished === true && (
+                  <>
+                    <Sep />
+                    <Link
+                      href={`/wiki/${corporationWikiSlug(corporation.sequentialId)}`}
+                      className="hover:text-foreground"
+                    >
+                      Wiki
+                    </Link>
+                  </>
+                )}
+              {typeof corporation.sequentialId === "number" &&
+                corporation.wikiPagePublished !== true &&
+                isCeo &&
+                !corporation.countryOwnerId && (
+                  <>
+                    <Sep />
+                    <button
+                      type="button"
+                      onClick={handleCreateWikiPage}
+                      disabled={creatingWikiPage}
+                      title={
+                        wikiCreateError ||
+                        "No published page yet. Create this corporation's wiki page."
+                      }
+                      className="hover:text-foreground disabled:opacity-50"
+                    >
+                      {creatingWikiPage ? "Creating..." : "Create wiki page"}
+                    </button>
+                  </>
+                )}
             </div>
           </div>
         </div>
