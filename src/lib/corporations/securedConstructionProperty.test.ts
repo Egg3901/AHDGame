@@ -160,4 +160,40 @@ describe("secured construction property guard", () => {
       $and: expect.any(Array),
     });
   });
+
+  it("resumes only the exact held HQ transition after a bond publication crash", async () => {
+    const db = createMockDb();
+    db.collection("corporateSectors");
+    const corporationId = new ObjectId();
+    const sectorId = new ObjectId();
+    const prefix = `headquarters:${corporationId.toHexString()}:US:TX`;
+    const sector = {
+      _id: sectorId,
+      corporationId,
+      constructionFinancing: undefined,
+      constructionPropertyTransition: {
+        key: `${prefix}:${sectorId.toHexString()}`,
+        kind: "headquarters_relocation",
+      },
+    };
+
+    expect(
+      await reserveSectorsForTransition(
+        db as unknown as Db,
+        [sector],
+        "headquarters_relocation",
+        prefix,
+        true
+      )
+    ).toEqual([`${prefix}:${sector._id.toHexString()}`]);
+
+    const refused = await reserveSectorsForTransition(
+      db as unknown as Db,
+      [sector],
+      "headquarters_relocation",
+      "headquarters:wrong:US:TX",
+      true
+    );
+    expect(refused).toBeNull();
+  });
 });

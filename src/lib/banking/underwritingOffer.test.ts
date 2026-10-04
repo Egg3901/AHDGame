@@ -13,7 +13,7 @@ describe("primary underwriting mandate resolution", () => {
       await resolvePrimaryUnderwritingOffer(
         db,
         policy,
-        { _id: new ObjectId(), liquidCurrencyCode: "USD" },
+        { _id: new ObjectId(), countryId: "US", liquidCurrencyCode: "USD" },
         "USD",
         "equity",
         1
@@ -28,6 +28,7 @@ describe("primary underwriting mandate resolution", () => {
     const bank = {
       _id: bankId,
       name: "Harbor Investment Bank",
+      countryId: "US",
       bankCharter: {
         status: "active",
         type: "investment",
@@ -48,7 +49,12 @@ describe("primary underwriting mandate resolution", () => {
     const result = await resolvePrimaryUnderwritingOffer(
       db,
       resolveBankingPolicy({ privateBankingEnabled: true, bankUnderwritingEnabled: true }),
-      { _id: issuerId, liquidCurrencyCode: "USD", primaryUnderwritingMandate: mandate },
+      {
+        _id: issuerId,
+        countryId: "US",
+        liquidCurrencyCode: "USD",
+        primaryUnderwritingMandate: mandate,
+      },
       "USD",
       "corporate_bond",
       21
@@ -62,6 +68,19 @@ describe("primary underwriting mandate resolution", () => {
         feeRate: 0.015,
         instrumentType: "corporate_bond",
         originalQuoteTurn: 21,
+        issuerCurrencySnapshot: {
+          currencyCode: "USD",
+          liquidCurrencyCodePresent: true,
+          liquidCurrencyCode: "USD",
+          countryIdPresent: true,
+          countryId: "US",
+        },
+        bankCurrencySnapshot: {
+          currencyCode: "USD",
+          liquidCurrencyCodePresent: false,
+          countryIdPresent: true,
+          countryId: "US",
+        },
       },
       bank: { _id: bankId, name: "Harbor Investment Bank" },
     });
@@ -71,7 +90,9 @@ describe("primary underwriting mandate resolution", () => {
         "bankCharter.currency": "USD",
         "bankCharter.charteredTurn": 12,
       }),
-      expect.objectContaining({ projection: { _id: 1, name: 1, bankCharter: 1 } })
+      expect.objectContaining({
+        projection: { _id: 1, name: 1, countryId: 1, liquidCurrencyCode: 1, bankCharter: 1 },
+      })
     );
   });
 });

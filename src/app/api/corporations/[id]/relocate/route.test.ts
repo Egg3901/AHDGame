@@ -2,7 +2,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
-vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
+vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn(), getMongoClient: vi.fn() }));
+vi.mock("@/lib/db/transactionWithRetry", () => ({
+  runTransactionWithSessionRetry: vi.fn(async (_client, work) => work({})),
+}));
 vi.mock("@/lib/api/requireAuth", () => ({ requireBasicAuth: vi.fn() }));
 vi.mock("@/lib/api/requireCorporationActions", () => ({
   requireCorporationActionsEnabled: vi.fn(),
@@ -22,6 +25,12 @@ vi.mock("@/lib/api/corporations/resolveQuery", () => ({
   requireCeo: vi.fn(),
 }));
 vi.mock("@/lib/gameState", () => ({ getGameState: vi.fn() }));
+vi.mock("@/lib/countryAccess", () => ({
+  getCountryAccess: vi.fn().mockResolvedValue({ econOnly: false }),
+}));
+vi.mock("@/lib/corporations/relocationCommandEconomyGate", () => ({
+  commandEconomyRelocationBlock: vi.fn().mockResolvedValue(null),
+}));
 vi.mock("@/lib/currency/corporationCapital", () => ({
   getCorpFxRate: vi.fn().mockResolvedValue(1),
   corpLiquidCapitalToAnchor: vi.fn((v: number) => v),
@@ -53,6 +62,7 @@ beforeEach(() => {
   db.collection("states");
   db.collection("characters");
   db.collection("corporations");
+  db.collectionMocks.corporations.updateOne.mockResolvedValue({ matchedCount: 1 } as never);
 });
 
 async function setup(options: {
@@ -100,6 +110,66 @@ async function setup(options: {
 }
 
 describe("POST /api/corporations/[id]/relocate", () => {
+  it("does not insert a relocation bond if an underwriting lease wins after preflight", async () => {
+    const userId = new ObjectId().toString();
+    const corpId = new ObjectId();
+    const ceoCharId = new ObjectId();
+    await setup({
+      userId,
+      ceoCharId,
+      corp: {
+        _id: corpId,
+        countryId: "US",
+        headquartersState: "CA",
+        ceoId: ceoCharId,
+        ceoType: "character",
+        isPrivate: true,
+        liquidCapital: 100_000_000,
+        liquidCurrencyCode: "USD",
+        sharePrice: 10,
+        totalShares: 1_000_000,
+        name: "TestCorp",
+      },
+      targetState: { _id: "TX", name: "Texas", countryId: "US" },
+      ceoHomeState: "TX",
+    });
+    db.collection("bonds");
+
+    const { previewRelocationBond, issueRelocationBond } =
+      await import("@/lib/corporations/issueRelocationBond");
+    vi.mocked(previewRelocationBond).mockResolvedValue({
+      ok: true,
+      faceValue: 1_000_000,
+      couponRate: 0.05,
+      creditRating: "A",
+    } as never);
+    const { getMongoClient } = await import("@/lib/mongodb");
+    vi.mocked(getMongoClient).mockReturnValue({} as never);
+
+    db.collectionMocks.corporations.findOne.mockImplementation(async (_filter) => {
+      return null;
+    });
+    db.collectionMocks.corporations.updateOne.mockImplementation(async (filter) => {
+      if (filter && "headquartersRelocationBondFunding" in filter) {
+        return { matchedCount: 0 } as never;
+      }
+      return { matchedCount: 1 } as never;
+    });
+
+    const { POST } = await import("./route");
+    const req = new Request("http://localhost/api/corporations/1/relocate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ targetStateId: "TX", paymentMethod: "bond" }),
+    });
+    const res = await POST(req, { params: Promise.resolve({ id: "1" }) });
+
+    expect(res.status).toBe(409);
+    expect(issueRelocationBond).not.toHaveBeenCalled();
+    expect(db.collectionMocks.bonds.insertOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.corporations.updateOne).toHaveBeenCalledTimes(1);
+  }, 35_000);
+
   it("same-country cash move: deducts cost, keeps CEO", async () => {
     const userId = new ObjectId().toString();
     const corpId = new ObjectId();
@@ -137,6 +207,10 @@ describe("POST /api/corporations/[id]/relocate", () => {
     expect(data.crossCountry).toBe(false);
     expect(data.ceoVacated).toBe(false);
     const call = db.collectionMocks.corporations.updateOne.mock.calls[0];
+    expect(call[0]).toMatchObject({
+      primaryUnderwritingIncomingFunding: { $exists: false },
+      bankUnderwritingFunding: { $exists: false },
+    });
     const update = call[1] as { $set: Record<string, unknown>; $unset?: Record<string, unknown> };
     expect(update.$set.headquartersState).toBe("TX");
     expect(update.$set.countryId).toBe("US");

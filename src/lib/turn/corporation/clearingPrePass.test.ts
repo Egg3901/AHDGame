@@ -14,6 +14,7 @@ import type { MarketContext } from "@/lib/market/marketContext";
 import type { buildCorporationLookups } from "./buildLookups";
 import { buildManufacturedSectorOutput } from "@/lib/products/rules/manufacturingRules";
 import { eraScaledBasePrices } from "@/lib/constants/commodities";
+import type { MediaProductProject } from "@/lib/products/mediaProduct";
 
 type Lookups = Awaited<ReturnType<typeof buildCorporationLookups>>;
 
@@ -119,6 +120,55 @@ describe("runClearingPrePass with clearing enabled", () => {
     const market = { clearingEnabled: true, plantsEnabled: false } as MarketContext;
 
     expect(() => runClearingPrePass(makeInput({ lookups, market }))).not.toThrow();
+  });
+  it("does not read media product projects while their flag is off", () => {
+    const { lookups } = makeSectorWorld();
+    Object.defineProperty(lookups, "mediaProductProjectsBySectorId", {
+      get() {
+        throw new Error("disabled media product read");
+      },
+    });
+    const market = { clearingEnabled: true, plantsEnabled: true } as MarketContext;
+
+    expect(() => runClearingPrePass(makeInput({ lookups, market }))).not.toThrow();
+  });
+  it("applies live media title coverage to actual offers before commercial clearing", () => {
+    const { sector, lookups } = makeSectorWorld();
+    Object.assign(sector, {
+      sectorType: "media",
+      strategyId: "newspaper",
+      revenue: 100_000,
+      producedUnits: 100,
+    });
+    const project: MediaProductProject = {
+      _id: "project-1",
+      corporationId: "corp1",
+      sectorId: "sector1",
+      kindId: "newspaper_edition",
+      title: "Daily Record",
+      allocationShare: 0.5,
+      stage: "mature",
+      startedTurn: 1,
+      stageStartedTurn: 2,
+      developmentPaidAnchor: 10_000,
+      paidThresholdAnchor: 10_000,
+      elapsedDevelopmentTurns: 2,
+      elapsedThresholdTurns: 2,
+      developmentAdvertisingAnchor: 1_000,
+      developmentAdvertisingTurns: 2,
+    };
+    Object.assign(lookups, {
+      mediaProductSlatesEnabled: true,
+      mediaProductProjectsBySectorId: new Map([["sector1", [project]]]),
+      globalCommodityBalances: new Map([["advertising", { supply: 100, demand: 1_000 }]]),
+    });
+    const market = { clearingEnabled: true, plantsEnabled: true } as MarketContext;
+
+    runClearingPrePass(makeInput({ lookups, market }));
+
+    const clearing = market.clearingBySectorId?.get("sector1");
+    expect(clearing?.soldByCommodity?.advertising).toBeCloseTo(0.575);
+    expect(clearing?.deliveredUnitsByCommodity?.advertising).toBeCloseTo(5.75);
   });
   it("populates clearing results on the market and reports deterministic breaches", () => {
     const { lookups } = makeSectorWorld();
@@ -442,6 +492,66 @@ describe("runClearingPrePass with clearing enabled", () => {
     expect(producedByCorpCommodity.get("corp1")?.get("vehicles")).toBeUndefined();
   });
 
+  it("uses paid product brand in real clearing premiums only when quality pricing is enabled", () => {
+    const clear = (productBrand: number, premiumEnabled: boolean) => {
+      const { lookups, sector } = makeSectorWorld();
+      Object.assign(sector, {
+        industryModel: "vehicles",
+        capitalStock: 200,
+        plantCount: 1,
+        operatingCapacityUnits: 200,
+        pricingPosture: 0.2,
+      });
+      Object.assign(lookups, {
+        productLinesV2Enabled: true,
+        manufacturingProductByCorpId: new Map([
+          [
+            "corp1",
+            {
+              _id: "project-1",
+              kindId: "passenger_car",
+              stage: "mature",
+              allocations: [{ sectorId: "sector1", share: 0.5 }],
+              developmentPaidAnchor: 1_200,
+              paidThresholdAnchor: 1_200,
+              elapsedThresholdTurns: 12,
+              productBrand,
+            },
+          ],
+        ]),
+        productSectorQualityById: new Map([["sector1", 60]]),
+        globalCommodityBalances: new Map([["vehicles", { supply: 200, demand: 600 }]]),
+        priceRatioByCommodity: new Map([["vehicles", 1]]),
+      });
+      const market = { clearingEnabled: true, plantsEnabled: true } as MarketContext;
+      const produced = new Map<string, Map<string, number>>();
+      runClearingPrePass(
+        makeInput({
+          lookups,
+          market,
+          producedByCorpCommodity: produced,
+          qualityPremiumPricingEnabled: premiumEnabled,
+          supplyAgreementsEnabled: true,
+          settleableAgreements: [],
+          contractedByCorpCommodity: new Map(),
+        })
+      );
+      return { clearing: market.clearingBySectorId!.get("sector1")!, produced };
+    };
+
+    const control = clear(0, true);
+    const branded = clear(100, true);
+    expect(branded.produced.get("corp1")?.get("vehicles")).toBeCloseTo(100);
+    expect(branded.produced).toEqual(control.produced);
+    expect(branded.clearing.soldByCommodity?.vehicles).toBe(1);
+    expect(branded.clearing.offerFactorByCommodity?.vehicles).toBeGreaterThan(
+      control.clearing.offerFactorByCommodity!.vehicles!
+    );
+    expect(clear(100, false).clearing.offerFactorByCommodity).toEqual(
+      clear(0, false).clearing.offerFactorByCommodity
+    );
+  });
+
   it.each([
     ["development", 0],
     ["launch", 0.15],
@@ -508,19 +618,19 @@ describe("runClearingPrePass with clearing enabled", () => {
       expect(offered?.productProjectId).toBe("project-1");
       expect(offered?.productOutputTurn).toBe(12);
       expect(offered?.projectOutputUnitsByCommodity?.vehicles).toBeCloseTo(productUnits, 6);
+      // Paid quality belongs only to the redirected product, not the
+      // unallocated baseline units of the same commodity.
       expect(offered?.projectQualityByCommodity?.vehicles).toBeCloseTo(
-        70 +
-          10 *
-            (
-              {
-                development: 0,
-                launch: 0.25,
-                growth: 0.6,
-                mature: 1,
-                decline: 0.6,
-                retired: 0,
-              } as const
-            )[stage],
+        (
+          {
+            development: 70,
+            launch: 70.2,
+            growth: 71.2,
+            mature: 73.5,
+            decline: 71.2,
+            retired: 70,
+          } as const
+        )[stage],
         6
       );
       expect(offered?.projectSoldUnitsByCommodity?.vehicles).toBeCloseTo(

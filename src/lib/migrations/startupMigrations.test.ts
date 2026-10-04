@@ -36,6 +36,8 @@ describe("runRequiredStartupMigrations", () => {
       "2026-10-04-media-discriminator-market-indexes",
       "2026-10-04-construction-service-lease-index",
       "2026-10-04-media-product-projects-v1-index",
+      "2026-10-04-manufacturing-product-projects-v2-index",
+      "2026-10-04-underwriting-recovery-indexes",
     ]);
     expect(REQUIRED_STARTUP_MIGRATIONS.every((migration) => migration.idempotent)).toBe(true);
     expect(runMigrationsMock).toHaveBeenCalledWith(db, {

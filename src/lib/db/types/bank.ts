@@ -149,6 +149,9 @@ export interface BankCharter {
   lastBankingIncome?: number;
   /** Turn represented by `lastBankingIncome`. */
   lastBankingIncomeTurn?: number;
+  /** Actual primary underwriting fees included in lastBankingIncome. */
+  lastBankingUnderwritingFees?: number;
+  lastBankingUnderwritingFeesTurn?: number;
   /**
    * Per-turn earnings split behind `lastBankingIncome`, in the charter
    * currency. Stamped by the same banking pass (same turn as

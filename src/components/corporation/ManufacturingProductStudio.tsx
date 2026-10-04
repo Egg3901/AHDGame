@@ -41,6 +41,10 @@ interface ActiveProductProject {
   paidThresholdAnchor: number;
   elapsedDevelopmentTurns: number;
   elapsedThresholdTurns: number;
+  advertisingAllocationShare?: number;
+  developmentAdvertisingAnchor?: number;
+  developmentAdvertisingTurns?: number;
+  productBrand?: number;
 }
 
 interface ProductResult {
@@ -70,6 +74,7 @@ export function ManufacturingProductStudio({
   const [studio, setStudio] = useState<StudioState | null>(null);
   const [kindId, setKindId] = useState("");
   const [shares, setShares] = useState<Record<string, number>>({});
+  const [advertisingShare, setAdvertisingShare] = useState(0);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -150,7 +155,7 @@ export function ManufacturingProductStudio({
       const response = await fetch(`/api/corporations/${corporationId}/products`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kindId, allocations }),
+        body: JSON.stringify({ kindId, allocations, advertisingAllocationShare: advertisingShare }),
       });
       const data = (await response.json()) as { error?: string };
       if (!response.ok) {
@@ -222,6 +227,13 @@ export function ManufacturingProductStudio({
             {studio.activeProject.paidThresholdAnchor.toLocaleString()} anchor units, with{" "}
             {studio.activeProject.elapsedDevelopmentTurns} of{" "}
             {studio.activeProject.elapsedThresholdTurns} required turns elapsed.
+          </div>
+          <div className="text-sm text-muted">
+            Product brand: {(studio.activeProject.productBrand ?? 0).toLocaleString()} paid
+            advertising anchor units per development turn. Advertising allocation:{" "}
+            {((studio.activeProject.advertisingAllocationShare ?? 0) * 100).toFixed(0)}% of
+            delivered marketing. Brand and paid development support the product quality and premium
+            pricing.
           </div>
           <div className="space-y-1 text-sm text-muted">
             {studio.activeProject.allocations.map((allocation) => {
@@ -350,6 +362,26 @@ export function ManufacturingProductStudio({
                   </div>
                 </div>
               )}
+              <label className="flex items-center gap-2 text-sm text-muted">
+                Product advertising allocation
+                <input
+                  aria-label="Product advertising allocation"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="5"
+                  value={advertisingShare * 100}
+                  className="w-20 rounded border border-border bg-surface px-2 py-1 text-right text-foreground"
+                  onChange={(event) =>
+                    setAdvertisingShare(Math.max(0, Math.min(1, Number(event.target.value) / 100)))
+                  }
+                />
+                % of delivered marketing during development
+              </label>
+              <p className="text-sm text-muted">
+                Only paid delivered advertising builds product brand. Media and manufacturing
+                products share the existing marketing budget.
+              </p>
               <Button disabled={busy || allocations.length === 0} onClick={startProject}>
                 Start product project
               </Button>

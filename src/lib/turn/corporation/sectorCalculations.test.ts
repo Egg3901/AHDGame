@@ -281,6 +281,48 @@ describe("funded manufacturing project development cash", () => {
     return { corp, lookups };
   }
 
+  it("allows media development alongside a launched manufacturing project", () => {
+    const { corp, lookups } = developmentFixture(10000);
+    const manufacturing = lookups.manufacturingProductByCorpId?.get(corp._id.toString());
+    if (!manufacturing) throw new Error("Missing manufacturing fixture");
+    manufacturing.stage = "launch";
+    lookups.mediaProductSlatesEnabled = true;
+    lookups.mediaProductDevelopmentByCorpId = new Map([
+      [
+        corp._id.toString(),
+        {
+          _id: "title",
+          corporationId: corp._id.toString(),
+          activeDevelopmentCorporationId: corp._id.toString(),
+          sectorId: "media",
+          operatingSectorType: "media",
+          kindId: "newspaper_edition",
+          title: "Record",
+          allocationShare: 0.5,
+          stage: "development",
+          startedTurn: 4,
+          stageStartedTurn: 4,
+          developmentPaidAnchor: 0,
+          paidThresholdAnchor: 500,
+          elapsedDevelopmentTurns: 0,
+          elapsedThresholdTurns: 2,
+          developmentAdvertisingAnchor: 0,
+          developmentAdvertisingTurns: 0,
+        },
+      ],
+    ]);
+    const result = processSectors(lookups, 5, new Date());
+    expect(result.manufacturingDevelopmentCashOps).toHaveLength(1);
+    expect(result.manufacturingDevelopmentCashOps[0]).toMatchObject({
+      updateOne: {
+        update: {
+          $inc: { liquidCapital: -500 },
+          $set: { mediaProductDevelopmentReceiptV1: { projectId: "title", amountAnchor: 500 } },
+        },
+      },
+    });
+  });
+
   it("does not record project progress when a loss leaves no operating cash", () => {
     const { corp, lookups } = developmentFixture(0);
     const result = processSectors(lookups, 5, new Date());
@@ -546,6 +588,60 @@ describe("marketing settlement", () => {
     });
     expect(update.$inc?.liquidCapital).toBe(-25);
     expect(update.$set).not.toHaveProperty("mediaProductAdvertisingReceiptV1");
+
+    const title = lookups.mediaProductDevelopmentByCorpId?.get(buyer._id.toString());
+    if (!title) throw new Error("Missing media fixture");
+    title.allocationShare = 1;
+    lookups.productLinesV2Enabled = true;
+    lookups.manufacturingProductByCorpId = new Map([
+      [
+        buyer._id.toString(),
+        {
+          _id: "manufacturing-product",
+          corporationId: buyer._id.toString(),
+          activeCorporationId: buyer._id.toString(),
+          kindId: "passenger_car",
+          stage: "development",
+          stageStartedTurn: 0,
+          startedTurn: 0,
+          allocations: [{ sectorId: "plant", share: 1 }],
+          advertisingAllocationShare: 1,
+          developmentPaidAnchor: 0,
+          paidThresholdAnchor: 100,
+          elapsedDevelopmentTurns: 0,
+          elapsedThresholdTurns: 12,
+        },
+      ],
+    ]);
+    const combined = processSectors(lookups, 2, new Date(), false, 1953, undefined, {
+      ...MARKET_DISABLED,
+      clearingEnabled: true,
+      advertisingSellerDeliveredValueAnchorByCorpId: new Map([[seller._id.toString(), 50]]),
+    });
+    const combinedOp = (combined.corpOps as CorpOp[]).find((op) =>
+      op.updateOne.filter._id.equals(buyer._id)
+    );
+    const pushed = combinedOp?.updateOne.update.$push as Record<string, { amountAnchor: number }>;
+    expect(pushed.mediaProductAdvertisingObligationsV1.amountAnchor).toBe(25);
+    expect(pushed.manufacturingProductAdvertisingObligationsV2.amountAnchor).toBe(25);
+    expect(combinedOp?.updateOne.update.$inc?.liquidCapital).toBe(0);
+    // A pending funded receipt keeps its family slot out of new order admission.
+    buyer.manufacturingProductAdvertisingReceiptV2 = {
+      projectId: "manufacturing-product",
+      turn: 1,
+      amountAnchor: 25,
+    };
+    const held = processSectors(lookups, 3, new Date(), false, 1953, undefined, {
+      ...MARKET_DISABLED,
+      clearingEnabled: true,
+      advertisingSellerDeliveredValueAnchorByCorpId: new Map([[seller._id.toString(), 50]]),
+    });
+    const heldOp = (held.corpOps as CorpOp[]).find((op) =>
+      op.updateOne.filter._id.equals(buyer._id)
+    );
+    expect(heldOp?.updateOne.update.$push).not.toHaveProperty(
+      "manufacturingProductAdvertisingObligationsV2"
+    );
   });
 
   it("pays the frozen title order once across a post-credit crash and changed budget or FX retry", async () => {
@@ -662,12 +758,14 @@ describe("marketing settlement", () => {
       [buyer._id, seller._id],
       1
     );
-    const afterRetry = await memory.collection("corporations").findOne({ _id: buyer._id });
+    const afterRetry = (await memory
+      .collection("corporations")
+      .findOne({ _id: buyer._id })) as unknown as Corporation | null;
     expect(afterRetry?.liquidCapital).toBe(980);
     expect(
       (await memory.collection("corporations").findOne({ _id: seller._id }))?.liquidCapital
     ).toBe(1_020);
-    expect(afterRetry?.mediaProductAdvertisingReceiptV1).toEqual({
+    expect(afterRetry?.mediaProductAdvertisingReceiptV1).toMatchObject({
       projectId: title._id,
       turn: 1,
       amountAnchor: 10,
@@ -755,8 +853,12 @@ describe("marketing settlement", () => {
           .updateOne({ _id: seller._id }, { $inc: { liquidCapital: 100 } });
       },
     });
-    const buyerAfter = await memory.collection("corporations").findOne({ _id: buyer._id });
-    const sellerAfter = await memory.collection("corporations").findOne({ _id: seller._id });
+    const buyerAfter = (await memory
+      .collection("corporations")
+      .findOne({ _id: buyer._id })) as unknown as Corporation | null;
+    const sellerAfter = (await memory
+      .collection("corporations")
+      .findOne({ _id: seller._id })) as unknown as Corporation | null;
     expect(buyerAfter?.liquidCapital).toBe(990);
     expect(sellerAfter?.liquidCapital).toBe(1_010);
     expect(buyerAfter?.mediaProductAdvertisingReceiptV1).toBeUndefined();

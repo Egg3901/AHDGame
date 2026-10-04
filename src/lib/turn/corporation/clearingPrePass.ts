@@ -70,6 +70,8 @@ import {
 } from "@/lib/products/rules/manufacturingRules";
 import { getManufacturingProductKind } from "@/lib/products/manufacturingCatalog";
 import { isLegalManufacturingProductForPlant } from "@/lib/products/rules/manufacturingEligibility";
+import { getMediaProductKind } from "@/lib/products/mediaProductCatalog";
+import { mediaProductOfferAvailability } from "@/lib/products/rules/mediaProductSales";
 
 /**
  * Clearing pre-pass for the corporation turn, extracted from index.ts so the
@@ -327,13 +329,17 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
                   outputCommodity: productKind.outputCommodity,
                   basePrices,
                   currentSectorQualityByCommodity: Object.fromEntries(
-                    Object.keys(rates.supply ?? {}).map((commodity) => [
+                    [
+                      ...new Set([...Object.keys(rates.supply ?? {}), productKind.outputCommodity]),
+                    ].map((commodity) => [
                       commodity,
                       lookups.productSectorQualityById?.get(sector._id.toString()),
                     ])
                   ) as Partial<Record<CommodityType, number>>,
                   paidDevelopmentAnchor: productProject.developmentPaidAnchor,
                   paidThresholdAnchor: productProject.paidThresholdAnchor,
+                  productBrand: productProject.productBrand,
+                  elapsedThresholdTurns: productProject.elapsedThresholdTurns,
                 });
               })()
             : null;
@@ -513,6 +519,18 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
           sectorId,
           revenue: revenueAnchor,
           supplyRates: rates.supply ?? {},
+          ...(lookups.mediaProductSlatesEnabled === true
+            ? (() => {
+                const mediaProjects = (
+                  lookups.mediaProductProjectsBySectorId?.get(sectorId) ?? []
+                ).filter(
+                  (project) => getMediaProductKind(project.kindId)?.modelId === sector.strategyId
+                );
+                return mediaProjects.length > 0
+                  ? { offerAvailabilityByCommodity: mediaProductOfferAvailability(mediaProjects) }
+                  : {};
+              })()
+            : {}),
           posture: typeof sector.pricingPosture === "number" ? sector.pricingPosture : null,
           ...(market.plantsEnabled &&
           market.explicitPlantCostsEnabled === true &&
@@ -805,7 +823,8 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
     market.clearingBySectorId = computeClearingFactors({
       sectors: clearingInputs,
       mediaOwnership,
-      recordDelivery: market.mediaRegulationEnabled === true,
+      recordDelivery:
+        market.mediaRegulationEnabled === true || lookups.mediaProductSlatesEnabled === true,
       balances: lookups.globalCommodityBalances,
       initializedLaggedBooks: lookups.initializedLaggedBooks,
       // Era worlds: one book per seller home country, scoped to the demand the

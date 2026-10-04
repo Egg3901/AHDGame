@@ -34,6 +34,7 @@ import { recoverConstructionFunding } from "./constructionFinance";
 import { recoverConstructionSales } from "./constructionSale";
 import { listDefaultedConstructionCollateral } from "./constructionForeclosure";
 import { recoverConstructionCancellations } from "./constructionCancellation";
+import { resumePrimaryUnderwritingLeases } from "./underwritingSettlement";
 
 export interface BankingRecoverySummary {
   turn: number;
@@ -68,6 +69,18 @@ export async function recoverBankingSettlements(
     estatesStillResolving: [],
   };
   const policy = preloadedPolicy ?? (await loadBankingPolicy(db));
+  const underwriting = await resumePrimaryUnderwritingLeases(db, turn);
+  for (const row of underwriting) {
+    if (row.error) {
+      summary.stillPartial.push({
+        key: row.key,
+        kind: "primary_underwriting",
+        error: row.error,
+      });
+    } else {
+      summary.resumedSettlements.push(row.key);
+    }
+  }
   if (policy.constructionFinance) {
     await recoverConstructionAdmissions(db, turn);
     const sales = await recoverConstructionSales(db, turn);

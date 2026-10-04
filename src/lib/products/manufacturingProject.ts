@@ -4,6 +4,7 @@
  */
 import type { ManufacturingLifecycleStage } from "./rules/manufacturingRules";
 import type { ProductPlantAllocation } from "./rules/manufacturingEligibility";
+import type { ProductAdvertisingQuote } from "./rules/productAdvertising";
 
 export const MANUFACTURING_PRODUCT_PROJECTS_V2 = "manufacturingProductProjectsV2";
 export const MANUFACTURING_PRODUCT_ACTIVE_INDEX_V2 =
@@ -22,6 +23,14 @@ export interface ManufacturingProductProject {
   lastProcessedTurn?: number;
   /** Last paid development receipt acknowledged, separate from the lifecycle clock. */
   lastDevelopmentReceiptTurn?: number;
+  /** Portion of delivered marketing assigned to this product during development. Legacy: zero. */
+  advertisingAllocationShare?: number;
+  developmentAdvertisingAnchor?: number;
+  developmentAdvertisingTurns?: number;
+  lastAdvertisingReceiptTurn?: number;
+  /** Average settled advertising per development turn, frozen after launch. */
+  productBrand?: number;
+  developmentCompletedTurn?: number;
   developmentPaidAnchor: number;
   paidThresholdAnchor: number;
   elapsedDevelopmentTurns: number;
@@ -33,4 +42,17 @@ export interface ManufacturingDevelopmentCashReceiptV2 {
   projectId: string;
   turn: number;
   amountAnchor: number;
+}
+
+/** Buyer and sellers retain their original denominations until every funded leg completes. */
+export interface ManufacturingProductAdvertisingObligationV2 extends ProductAdvertisingQuote {
+  projectId: string;
+  turn: number;
+}
+
+export interface ManufacturingProductAdvertisingReceiptV2 {
+  projectId: string;
+  turn: number;
+  amountAnchor: number;
+  sellerCorporationIds?: string[];
 }

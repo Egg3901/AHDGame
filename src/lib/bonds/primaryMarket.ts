@@ -285,13 +285,27 @@ export async function placeUnsoldBondUnits(
     bankIds.length > 0
       ? db
           .collection<Corporation>("corporations")
-          .find({ _id: { $in: bankIds } }, { projection: { _id: 1, name: 1, bankCharter: 1 } })
+          .find(
+            { _id: { $in: bankIds } },
+            {
+              projection: {
+                _id: 1,
+                name: 1,
+                countryId: 1,
+                liquidCurrencyCode: 1,
+                bankCharter: 1,
+              },
+            }
+          )
           .toArray()
       : Promise.resolve([]),
     issuerIds.length > 0
       ? db
           .collection<Corporation>("corporations")
-          .find({ _id: { $in: issuerIds } }, { projection: { _id: 1, name: 1 } })
+          .find(
+            { _id: { $in: issuerIds } },
+            { projection: { _id: 1, name: 1, countryId: 1, liquidCurrencyCode: 1 } }
+          )
           .toArray()
       : Promise.resolve([]),
   ]);
@@ -386,7 +400,7 @@ export async function placeUnsoldBondUnits(
       const face = units * BOND_UNIT_FACE_VALUE;
       const settlement = await settlePrimaryUnderwritingFill(db, {
         bank,
-        issuer: { _id: issuer._id, name: issuer.name },
+        issuer,
         issuerCurrencyCode: currency,
         offer: underwriting,
         instrumentId: bond._id,

@@ -1,1 +1,6 @@
+---
+date: 2026-10-04
+title: Funded Treasury nationalization recovery
+---
+
 Funded Treasury nationalization payments now settle with their corporation or shareholder recipients through one durable cash receipt. Retries preserve the original amounts and recipient currencies, resume only under the original cash-ledger mode, and retain property holds until ownership changes finish.
