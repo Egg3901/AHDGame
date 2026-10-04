@@ -1,5 +1,4 @@
 import type { ObjectId } from "mongodb";
-import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { Corporation } from "@/lib/db/types/corporation";
 import type { BankingPolicySnapshot } from "@/lib/banking/rules/policy";
 import { isNamedLendingCharter } from "@/lib/banking/charterKinds";
@@ -20,7 +19,7 @@ export interface PreloadedConstructionFundingContext {
 export interface ConstructionFundingContextExpectation {
   bankId: ObjectId;
   borrowerId: ObjectId;
-  borrowerCurrency: CurrencyCode | null | undefined;
+  borrowerCurrency: string | null | undefined;
 }
 
 /** Validate batch data before quoting; settlement still guards the live bank epoch and cash. */

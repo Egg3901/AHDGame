@@ -50,7 +50,6 @@ function candidate(
     order,
     costLocal: 100_000,
     cashContributionLimitLocal: 30_000,
-    growthUnits: 40,
     priority: 1,
     fill: 0.9,
     buildContext: {

@@ -28,6 +28,12 @@ import { quoteConstructionFinance } from "@/lib/banking/rules/constructionFinanc
 import { CAPACITY_BUILD_CANCEL_REFUND } from "@/lib/constants/capacityEconomy";
 import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
 
+type ConstructionBorrowerLoan = Pick<
+  BankLoan,
+  "borrowerId" | "currency" | "outstanding" | "ratePercent" | "originatedTurn" | "termTurns"
+>;
+type BlacklistFund = { slug: string; targetConstituents?: Array<{ corporationId: ObjectId }> };
+
 export const NPP_CONSTRUCTION_FINANCE_CANDIDATE_LIMIT = 64;
 export const NPP_CONSTRUCTION_FINANCE_TERM_TURNS = 48;
 
@@ -128,7 +134,11 @@ export async function loadNppConstructionFundingPool(input: {
         "corporationHistory"
       )
       .find({ corporationId: { $in: borrowerIds }, turn: { $gte: historyStart, $lte: turn } })
-      .project({ corporationId: 1, turn: 1, income: 1 })
+      .project<Pick<CorporationHistory, "corporationId" | "turn" | "income">>({
+        corporationId: 1,
+        turn: 1,
+        income: 1,
+      })
       .toArray(),
     db
       .collection<BankLoan>("bankLoans")
@@ -137,7 +147,7 @@ export async function loadNppConstructionFundingPool(input: {
         borrowerId: { $in: borrowerIds },
         status: { $in: ["current", "arrears"] },
       })
-      .project({
+      .project<ConstructionBorrowerLoan>({
         borrowerId: 1,
         currency: 1,
         outstanding: 1,
@@ -155,11 +165,9 @@ export async function loadNppConstructionFundingPool(input: {
   const [funds, centralBanks] = await Promise.all([
     fundIds.length > 0
       ? db
-          .collection<{ slug: string; targetConstituents?: Array<{ corporationId: ObjectId }> }>(
-            "indexFunds"
-          )
+          .collection<BlacklistFund>("indexFunds")
           .find({ slug: { $in: fundIds } })
-          .project({ slug: 1, targetConstituents: 1 })
+          .project<BlacklistFund>({ slug: 1, targetConstituents: 1 })
           .toArray()
       : Promise.resolve([]),
     db
@@ -167,7 +175,11 @@ export async function loadNppConstructionFundingPool(input: {
       .find({
         _id: { $in: currencies.map((currency) => getBankId(getCountryIdForCurrency(currency))) },
       })
-      .project({ _id: 1, primeRate: 1, bankReserveRequirement: 1 })
+      .project<Pick<CentralBank, "_id" | "primeRate" | "bankReserveRequirement">>({
+        _id: 1,
+        primeRate: 1,
+        bankReserveRequirement: 1,
+      })
       .toArray(),
   ]);
   const fundConstituents = new Map(
@@ -189,7 +201,7 @@ export async function loadNppConstructionFundingPool(input: {
     if (!rows) historiesByCorp.set(id, (rows = []));
     rows.push(history.income);
   }
-  const loansByCorp = new Map<string, BankLoan[]>();
+  const loansByCorp = new Map<string, ConstructionBorrowerLoan[]>();
   for (const loan of loans) {
     if (!loan.borrowerId) continue;
     const id = loan.borrowerId.toHexString();

@@ -602,8 +602,11 @@ describe("NPP capacity reinvestment — the two cash rails", () => {
     });
   });
 
-  it.each([
-    ["a listed sector", { forSale: { askingPrice: 1_000 } }],
+  it.each<[string, Partial<CorporateSector>]>([
+    [
+      "a listed sector",
+      { forSale: { listedAt: new Date(), priceAnchor: 1_000, npvAnchor: 1_000 } },
+    ],
     ["a property transition", { constructionPropertyTransition: { key: "sale-1", kind: "sale" } }],
     [
       "an active construction claim",
@@ -612,7 +615,7 @@ describe("NPP capacity reinvestment — the two cash rails", () => {
           status: "awaiting_approval",
           escrowLocal: 0,
           fundingCleanupCompleted: false,
-        },
+        } as CorporateSector["constructionFinancing"],
       },
     ],
   ])("does not spend or queue a build on %s", (_label, property) => {

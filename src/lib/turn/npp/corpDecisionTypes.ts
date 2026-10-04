@@ -1,4 +1,4 @@
-import type { ObjectId } from "mongodb";
+import type { Filter, ObjectId } from "mongodb";
 import type { CorporationType } from "@/lib/constants/corporations";
 import type { MediaDiscriminator } from "@/lib/constants/corporations";
 import type { Corporation, CorporateSector, SectorBuildOrder } from "@/lib/db/types";
@@ -81,7 +81,7 @@ export interface NppCorpDecision {
   /** Exact total founding charge, separate from any reinvestment or borrowed cash. */
   foundingCashLocal?: number;
   sectorUpdates: Array<{
-    filter: { _id: ObjectId };
+    filter: Filter<CorporateSector> & { _id: ObjectId };
     update: NppSectorUpdateDoc;
   }>;
   newSectors?: Array<{

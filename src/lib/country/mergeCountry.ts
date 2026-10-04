@@ -20,7 +20,7 @@
  * reverse order would retire a country that still owned regions, stranding them
  * in a state nothing enumerates.
  */
-import type { Db } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
 import type { Corporation, CorporateSector, State } from "@/lib/db/types";
 import type { BillStatus } from "@/lib/db/types/legislation";
 import type { CountryGameState } from "@/lib/db/types/gameState";
