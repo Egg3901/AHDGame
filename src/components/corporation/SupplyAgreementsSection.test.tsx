@@ -212,7 +212,7 @@ describe("SupplyAgreementsSection delivery outcome", () => {
     expect(screen.getByRole("option", { name: "Texas (TX)" })).toBeTruthy();
     fireEvent.change(screen.getAllByRole("combobox")[1]!, { target: { value: "TX" } });
     expect(screen.getByText("Current contract capacity")).toBeTruthy();
-    expect(screen.getByText(/Freight is haulage capacity based in one state/)).toBeTruthy();
+    expect(screen.getByText(/This service is supplied within one state/)).toBeTruthy();
   });
 
   it("shows the state on a freight agreement card", async () => {

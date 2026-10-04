@@ -31,9 +31,11 @@ means the existing `events` commodity, healthcare means `visits`, construction
 means `crew-days`, and real estate means `leases`. A future royalty or digital
 content product requires its own delivery semantics.
 
-The focused suite passes 112 tests across seven files, covering state-market
+The isolated delivery at `cb16a0ca656a34a69b282d62adb307522167b72f` passes 214 tests
+across fourteen files, covering state-market
 sales, reachable demand, trade valuation, contract cancellation notice and
-settlement equivalence. Existing corporation-wide agreements for newly local
+settlement equivalence. The contract UI and validation describe each on-site service
+and require its fulfilling state. Existing corporation-wide agreements for newly local
 services use the existing notice migration; state-specific agreements continue.
 Full repository qualification and integrated-world investment calibration are
 separate release checks.
