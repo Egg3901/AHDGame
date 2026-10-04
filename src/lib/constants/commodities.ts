@@ -2142,6 +2142,8 @@ export function computeRawSupplyDemand(
   byState: Map<string, Map<CommodityType, { supply: number; demand: number }>>;
   /** Corporation id -> commodity -> realized units contributed to global supply. */
   supplyByCorporation: Map<string, Map<CommodityType, number>>;
+  /** Sector intermediate-input demand by state and commodity, before calibration. */
+  productionInputDemandByState: Map<string, Map<CommodityType, number>>;
   /**
    * commodity → demand units removed by the PLANTS_LEDGER_DEMAND_SUPPLY_CAP
    * pass this turn (#1460). Recorded, never applied. A capped commodity reports
@@ -2153,6 +2155,7 @@ export function computeRawSupplyDemand(
   const global = new Map<CommodityType, { supply: number; demand: number }>();
   const byState = new Map<string, Map<CommodityType, { supply: number; demand: number }>>();
   const supplyByCorporation = new Map<string, Map<CommodityType, number>>();
+  const productionInputDemandByState = new Map<string, Map<CommodityType, number>>();
   const demandTruncated = new Map<CommodityType, number>();
   const recordCorporationSupply = (
     corporationId: string | { toString(): string } | undefined,
@@ -2447,6 +2450,12 @@ export function computeRawSupplyDemand(
         addUnscaledDemand(commodity, units / luScale);
         const s = stateMap.get(commodity)!;
         s.demand += units;
+        let stateInput = productionInputDemandByState.get(sector.stateId);
+        if (!stateInput) {
+          stateInput = new Map();
+          productionInputDemandByState.set(sector.stateId, stateInput);
+        }
+        stateInput.set(commodity, (stateInput.get(commodity) ?? 0) + units);
       }
     }
   }
@@ -2640,5 +2649,5 @@ export function computeRawSupplyDemand(
 
   applyUnownedCommodityDrift(global, currentTurn);
 
-  return { global, byState, supplyByCorporation, demandTruncated };
+  return { global, byState, supplyByCorporation, productionInputDemandByState, demandTruncated };
 }

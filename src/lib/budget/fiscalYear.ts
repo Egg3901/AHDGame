@@ -21,6 +21,10 @@ import { applyLegacyTrustDelta } from "@/lib/sovereignDefault/sideEffects/trustH
 import { processAnnualDebt, triggerDebtCeilingCrisis, getDebtThreshold } from "./debt";
 import { processFormulaGrants, updateStateGrantRevenue } from "./grants";
 import { calculateCountryInflation } from "./inflation";
+import {
+  countryTurnTariffInflationExposure,
+  loadTurnTariffInflationExposure,
+} from "@/lib/tariffs/tariffInflationExposure";
 import type { StateMetrics } from "@/lib/db/types/stateMetrics";
 import { getNationalDocId, NATIONAL_SCOPE_IDS } from "@/lib/constants/nationalScope";
 import { resolvePipelineGdpGrowth } from "@/lib/country/nationalGdpGrowth";
@@ -113,11 +117,12 @@ export async function processFiscalYear(
   // one FX table, one sourcingNetworkLoad read for the whole annual pass -
   // same hoist-once pattern as `refreshNationalBudgetRevenue`, never one read
   // per country in this per-budget loop.
-  const [moneyWiringConfig, fxByCurrency] = await Promise.all([
+  const [moneyWiringConfig, fxByCurrency, tariffExposureSnapshot] = await Promise.all([
     db
       .collection<GameConfig>("gameConfig")
       .findOne({ _id: "default" }, { projection: { interstateMoneyWiringEnabled: 1 } }),
     loadFxRatesByCurrency(db),
+    loadTurnTariffInflationExposure(db, currentTurn),
   ]);
   const moneyWiringEnabled = moneyWiringConfig?.interstateMoneyWiringEnabled === true;
   const sourcedImportsByCountry = moneyWiringEnabled
@@ -185,7 +190,18 @@ export async function processFiscalYear(
     };
     economicFactors.gdpGrowth = pipelineGdpGrowth;
 
-    const newInflation = await calculateCountryInflation(db, countryId, federalBudget);
+    const newInflation = await calculateCountryInflation(
+      db,
+      countryId,
+      federalBudget,
+      0,
+      0,
+      0,
+      0,
+      undefined,
+      undefined,
+      countryTurnTariffInflationExposure(tariffExposureSnapshot, countryId).tariffRate
+    );
     economicFactors.inflationRate = newInflation;
 
     const newTaxBases = federalBudget.taxBases;

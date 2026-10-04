@@ -20,13 +20,10 @@ import type {
   CentralBank,
   Character,
   CommodityPrice,
-  Corporation,
-  CorporateSector,
   ExchangeRate,
   GameConfig,
   MoneySupplySnapshot,
   NPP,
-  Tariff,
 } from "@/lib/db/types";
 import type { FederalBudget } from "@/lib/db/types/budget";
 import type { LocLedgerEntry } from "@/lib/db/types/locLedger";
@@ -52,8 +49,10 @@ import {
   isNominationWindowOpen,
   CHAIR_ACCEPTANCE_WINDOW_TURNS,
 } from "@/lib/turn/centralBankChairSelection";
-import { computeCountryTariffPressure } from "@/lib/tariffs/tariffEffects";
-import { buildFtaCoverageLookup, loadActiveFtaPairs } from "@/lib/tariffs/ftaOverrides";
+import {
+  countryTurnTariffInflationExposure,
+  loadTurnTariffInflationExposure,
+} from "@/lib/tariffs/tariffInflationExposure";
 import {
   buildCentralBankBootstrapUpdate,
   getCentralBankScope,
@@ -328,12 +327,10 @@ export async function loadCountryCentralBankDetail(params: {
   const [
     gameConfig,
     nationalMetrics,
-    tariffs,
     commodityPriceDocs,
     savingsFlowAgg,
     fxDocForBreakdown,
-    sectors,
-    activeFtaPairs,
+    tariffExposureSnapshot,
   ] = await Promise.all([
     db
       .collection<GameConfig>("gameConfig")
@@ -341,7 +338,6 @@ export async function loadCountryCentralBankDetail(params: {
     nationalDocId
       ? db.collection<StateMetrics>("macroMetrics").findOne({ _id: nationalDocId })
       : Promise.resolve(null),
-    db.collection<Tariff>("tariffs").find({ countryId }).toArray(),
     db
       .collection<CommodityPrice>("commodityPrices")
       .find({}, { projection: { commodity: 1, basePrice: 1, nationalPrices: 1 } })
@@ -360,14 +356,7 @@ export async function loadCountryCentralBankDetail(params: {
       ])
       .toArray(),
     db.collection<ExchangeRate>("exchangeRates").findOne({ _id: countryId }),
-    db
-      .collection<CorporateSector>("corporateSectors")
-      .find(
-        { countryId },
-        { projection: { corporationId: 1, countryId: 1, sectorType: 1, revenue: 1 } }
-      )
-      .toArray(),
-    loadActiveFtaPairs(db),
+    loadTurnTariffInflationExposure(db, currentTurn),
   ]);
 
   const breakdownUnemployment = nationalMetrics?.economic?.unemploymentRate?.value ?? 5.0;
@@ -375,30 +364,8 @@ export async function loadCountryCentralBankDetail(params: {
     nationalMetrics?.economic?.gdpGrowth?.value ??
     getEraTrendGdpGrowth(countryId, gameState?.currentYear) ??
     2.5;
-  const corporationIds = [...new Set(sectors.map((sector) => sector.corporationId.toString()))].map(
-    (id) => new ObjectId(id)
-  );
-  const corporations =
-    corporationIds.length > 0
-      ? await db
-          .collection<Corporation>("corporations")
-          .find({ _id: { $in: corporationIds } }, { projection: { countryId: 1 } })
-          .toArray()
-      : [];
-  const corpById = new Map(
-    corporations.map((corporation) => [corporation._id.toString(), corporation])
-  );
-  // FTA coverage neutralises the foreign-trade portion of every tariff layer
-  // (broad scopes scale by `1 − partner-share`, narrow scopes flip binary), so
-  // partnered trade no longer drives consumer-price inflation.
-  const ftaCoverage = buildFtaCoverageLookup(sectors, corpById, activeFtaPairs);
-  const breakdownTariffRate = computeCountryTariffPressure(
-    tariffs,
-    countryId,
-    sectors,
-    corpById,
-    ftaCoverage
-  );
+  const tariffExposure = countryTurnTariffInflationExposure(tariffExposureSnapshot, countryId);
+  const breakdownTariffRate = tariffExposure.tariffRate;
   const commodityPressures: number[] = [];
   for (const doc of commodityPriceDocs) {
     const nationalPrice = (doc.nationalPrices as Record<string, number> | undefined)?.[countryId];
@@ -698,6 +665,23 @@ export async function loadCountryCentralBankDetail(params: {
       isSharedPolicyArea: policyCurrency === "EUR",
       inflationBreakdownTotal,
       inflationBreakdown,
+      tariffExposure: {
+        available: tariffExposure.available,
+        mode: tariffExposure.mode,
+        coveredCommodities: tariffExposure.coveredCommodities,
+        householdFinal: {
+          absorptionValue: tariffExposure.householdAbsorptionValue,
+          importShare: tariffExposure.importShare,
+          settledDuty: tariffExposure.householdTariffPaid,
+          deliveredDuty: tariffExposure.householdDeliveredTariffPaid,
+        },
+        productionInput: {
+          absorptionValue: tariffExposure.productionInputAbsorptionValue,
+          importShare: tariffExposure.productionInputImportShare,
+          settledDuty: tariffExposure.productionInputTariffPaid,
+          deliveredDuty: tariffExposure.productionInputDeliveredTariffPaid,
+        },
+      },
       effectiveRate,
       rateScale,
       chair: chairData,

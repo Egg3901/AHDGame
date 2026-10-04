@@ -207,7 +207,18 @@ describe("recalculateInflationPerTurn", () => {
     db.collectionMocks.federalBudget.find.mockReturnValue({ toArray: async () => [budget] });
     const { recalculateInflationPerTurn } = await import("./inflationRecalc");
     expect(await recalculateInflationPerTurn(db as unknown as Db, 100)).toBe(1);
-    expect(mockCalculateCountryInflation).toHaveBeenCalledWith(db, "UK", budget);
+    expect(mockCalculateCountryInflation).toHaveBeenCalledWith(
+      db,
+      "UK",
+      budget,
+      0,
+      0,
+      0,
+      0,
+      undefined,
+      undefined,
+      3
+    );
     expect(db.collectionMocks.federalBudget.updateOne).toHaveBeenCalledWith(
       { _id: "UK" },
       {
@@ -448,7 +459,8 @@ describe("recalculateInflationPerTurn", () => {
       expect.any(Number),
       expect.any(Number),
       expect.any(Number),
-      expect.any(Number)
+      expect.any(Number),
+      3
     );
   });
 

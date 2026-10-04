@@ -28,6 +28,17 @@
 import type { CommodityType } from "@/lib/constants/commodities";
 import type { CountryId } from "@/lib/constants/countries";
 import {
+  addPurchaseExposure,
+  emptyPurchaseExposure,
+  purchaseUseShares,
+  summarizePurchaseExposureByCountry,
+  type DemandUsesByState,
+  type PurchaseExposure,
+  type PurchaseExposureByCountry,
+  type PurchaseUse,
+  type PurchaseUseShares,
+} from "./rules/purchaseExposure";
+import {
   FREIGHT_CLASS_BY_COMMODITY,
   isHauledClass,
   SHIPPED_COMMODITIES,
@@ -211,7 +222,10 @@ export interface SourcingFlow {
   ask: number;
   shippingPerUnit: number;
   tariffRatePct: number;
+  /** Duty settled at the border on dispatched units. */
   tariffPaid: number;
+  /** Portion of settled duty attributable to delivered units after route loss. */
+  deliveredTariffPaid: number;
   landedPrice: number;
   /** Domestic origin-state freight capacity consumed (TEU); 0 for imports. */
   freightTeuConsumed: number;
@@ -276,6 +290,8 @@ export interface SourcingResult {
    * across all import flows into that country this turn.
    */
   importAggregatesByCountry: Map<string, ImportAggregate>;
+  /** Proportionally attributed accepted purchases, in seller-ask value, by buyer use. */
+  purchaseExposureByCountry?: PurchaseExposureByCountry;
   /**
    * Per commodity, per state: the state's OWN production that found no buyer
    * anywhere: what is left of its spare after local fill, every interstate
@@ -402,6 +418,8 @@ export interface SourcingInputs {
   byState: ReadonlyMap<string, ReadonlyMap<CommodityType, Balance>>;
   /** Per-country balances, for foreign national spare. */
   byCountry: ReadonlyMap<string, ReadonlyMap<CommodityType, Balance>>;
+  /** Modeled household and production input intents; unclassified demand remains other. */
+  demandUsesByState?: DemandUsesByState;
   /** LAST turn's stored prices — the fixed asks. */
   statePricesFor: (commodity: CommodityType) => Readonly<Record<string, number>> | undefined;
   nationalPricesFor: (commodity: CommodityType) => Readonly<Record<string, number>> | undefined;
@@ -436,6 +454,7 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
     states,
     byState,
     byCountry,
+    demandUsesByState,
     statePricesFor,
     nationalPricesFor,
     basePriceFor,
@@ -469,6 +488,17 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
   const summaries: SourcingCommoditySummary[] = [];
   const landedPremiumByDestState = new Map<string, Map<CommodityType, LandedPremiumAccumulator>>();
   const importAggregatesByCountry = new Map<string, ImportAggregate>();
+  const purchaseExposureByDestState = new Map<
+    string,
+    Map<CommodityType, Record<PurchaseUse, PurchaseExposure>>
+  >();
+  const ensurePurchaseExposure = (stateId: string, commodity: CommodityType) => {
+    let byCommodity = purchaseExposureByDestState.get(stateId);
+    if (!byCommodity) purchaseExposureByDestState.set(stateId, (byCommodity = new Map()));
+    let byUse = byCommodity.get(commodity);
+    if (!byUse) byCommodity.set(commodity, (byUse = emptyPurchaseExposure()));
+    return byUse;
+  };
   const unplacedSupplyByState = new Map<CommodityType, Map<string, number>>();
   const deliveryLimitedSupplyByState = new Map<CommodityType, Map<string, number>>();
   const freightChargesByDestState = new Map<string, Map<CommodityType, number>>();
@@ -533,6 +563,7 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
     const spareByState = new Map<string, number>();
     const localFillByState = new Map<string, number>();
     const unmetByState = new Map<string, number>();
+    const useSharesByState = new Map<string, PurchaseUseShares>();
     // Units of an origin state's spare that a willing, in-tolerance buyer wanted
     // and that state's own freight network could not haul. Accumulated at the
     // capacity gate below, where the origin IS known, rather than inferred from
@@ -557,6 +588,8 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
       const bal = byState.get(stateId)?.get(commodity);
       const supply = bal?.supply ?? 0;
       const demand = bal?.demand ?? 0;
+      const useShares = purchaseUseShares(demand, demandUsesByState?.get(stateId)?.get(commodity));
+      useSharesByState.set(stateId, useShares);
       // Intra-state fill is free by design; only the residual trades interstate.
       const local = Math.min(supply, demand);
       localFillByState.set(stateId, local);
@@ -564,6 +597,13 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
       unmetByState.set(stateId, Math.max(0, demand - supply));
       // Local fill is free: it contributes met units with zero extra cost.
       addLandedPremium(stateId, commodity, local, 0);
+      addPurchaseExposure(ensurePurchaseExposure(stateId, commodity), useShares, {
+        units: local,
+        preDutyValue: local * (statePrices[stateId] ?? basePrice),
+        tariffPaid: 0,
+        deliveredTariffPaid: 0,
+        imported: false,
+      });
     }
     // Foreign national spare (a country's own interstate flows already use the
     // state-level spare above; the national pool is only offered abroad).
@@ -814,6 +854,7 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
         summary.congestionSurchargePaid += congestionSurchargePaid;
 
         const tariffPaid = dispatch * cand.ask * (cand.tariffRatePct / 100);
+        const deliveredTariffPaid = dispatch > 0 ? tariffPaid * (take / dispatch) : 0;
         if (cand.originType === "state") {
           spareByState.set(cand.originId, spare - dispatch);
           summary.interStateUnits += take;
@@ -852,6 +893,17 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
           agg.importValue += take * cand.ask;
           importAggregatesByCountry.set(buyer.countryId, agg);
         }
+        addPurchaseExposure(
+          ensurePurchaseExposure(buyer.stateId, commodity),
+          useSharesByState.get(buyer.stateId) ?? purchaseUseShares(0, undefined),
+          {
+            units: take,
+            preDutyValue: take * cand.ask,
+            tariffPaid,
+            deliveredTariffPaid,
+            imported: cand.originType === "country",
+          }
+        );
 
         if (take >= FLOW_RECORD_FLOOR_UNITS) {
           flows.push({
@@ -866,6 +918,7 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
             shippingPerUnit: round2(cand.shippingPerUnit),
             tariffRatePct: cand.tariffRatePct,
             tariffPaid: round2(tariffPaid),
+            deliveredTariffPaid: round2(deliveredTariffPaid),
             landedPrice: round2(cand.landed),
             freightTeuConsumed: round2(teuConsumed),
           });
@@ -933,6 +986,9 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
     freightDemandTeuByState: freightDemandByState,
     landedPremiumByDestState,
     importAggregatesByCountry,
+    purchaseExposureByCountry: demandUsesByState
+      ? summarizePurchaseExposureByCountry(states, purchaseExposureByDestState)
+      : undefined,
     unplacedSupplyByState,
     deliveryLimitedSupplyByState,
     freightChargesByDestState,

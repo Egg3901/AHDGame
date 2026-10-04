@@ -8,6 +8,7 @@
 import type { CommodityType } from "@/lib/constants/commodities";
 import type { FreightClass } from "./freightClass";
 import type { SourcingFlow, SourcingResult } from "./sourcing";
+import type { PurchaseExposure, PurchaseUse } from "./rules/purchaseExposure";
 
 /** 1 game year — state-level rows are ~50× denser than country rows. */
 export const SOURCING_FLOW_RETENTION_TURNS = 48;
@@ -36,6 +37,16 @@ export interface CommoditySourcingDoc {
   shortageResponsiveUnits: number;
   /** Largest flows first, capped at SOURCING_FLOW_MAX_ITEMIZED. */
   flows: Omit<SourcingFlow, "commodity">[];
+  /**
+   * Delivered purchase values attributed proportionally to modeled demand
+   * cohorts. This is a model allocation, not observed purchaser identity.
+   */
+  purchaseExposureBasis?: "proportional_modeled_demand_uses_v1";
+  /** Active rows are model-delivered; shadow rows are hypothetical only. */
+  purchaseExposureMode?: "active_delivered" | "shadow_simulated";
+  /** Country IDs with explicit per-commodity coverage, including measured zeros. */
+  purchaseExposureCoverageCountries?: string[];
+  purchaseExposureByCountry?: Record<string, Partial<Record<PurchaseUse, PurchaseExposure>>>;
   itemizedFlowCount: number;
   totalFlowCount: number;
   createdAt: Date;
@@ -96,6 +107,8 @@ export function buildSourcingDocs(
      * 1 (unramped, byte-identical to before).
      */
     billingRampFraction?: number;
+    /** Whether this sourcing pass is authoritative ACTIVE delivery or shadow. */
+    purchaseExposureMode?: "active_delivered" | "shadow_simulated";
   }
 ): { commodityDocs: CommoditySourcingDoc[]; networkDoc: SourcingNetworkDoc } {
   const flowsByCommodity = new Map<CommodityType, SourcingFlow[]>();
@@ -114,6 +127,14 @@ export function buildSourcingDocs(
       .sort((a, b) => b.units - a.units)
       .slice(0, SOURCING_FLOW_MAX_ITEMIZED)
       .map(({ commodity: _commodity, ...rest }) => rest);
+    const purchaseExposureByCountry: Record<
+      string,
+      Partial<Record<PurchaseUse, PurchaseExposure>>
+    > = {};
+    for (const [countryId, byCommodity] of result.purchaseExposureByCountry ?? []) {
+      const byUse = byCommodity.get(s.commodity);
+      if (byUse) purchaseExposureByCountry[countryId] = byUse;
+    }
     return {
       basis: "buyer_intent_sourcing",
       commodity: s.commodity,
@@ -130,6 +151,14 @@ export function buildSourcingDocs(
       capacityBoundUnits: s.capacityBoundUnits,
       shortageResponsiveUnits: s.shortageResponsiveUnits,
       flows: itemized,
+      ...(result.purchaseExposureByCountry
+        ? {
+            purchaseExposureBasis: "proportional_modeled_demand_uses_v1" as const,
+            purchaseExposureMode: options?.purchaseExposureMode ?? "shadow_simulated",
+            purchaseExposureCoverageCountries: Object.keys(purchaseExposureByCountry).sort(),
+            purchaseExposureByCountry,
+          }
+        : {}),
       itemizedFlowCount: itemized.length,
       totalFlowCount: all.length,
       createdAt: now,
