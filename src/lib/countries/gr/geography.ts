@@ -1,4 +1,5 @@
 import type { CountryGeography } from "../contract";
+import { modernRegionalPopulation2027 } from "@/lib/seeds/reference/modernRegionalPopulation2027";
 import { grMetricPresets1953 } from "./data/grMetricPresets1953";
 import { grRegions } from "./data/grRegions";
 import { grRegions1953 } from "./data/grRegions1953";
@@ -49,6 +50,7 @@ const regionBundles = {
   "1953-default": grRegions1953,
   "1979-default": grRegions,
   "2019-default": grRegions,
+  "2027-default": modernRegionalPopulation2027("GR", grRegions),
 };
 
 export const GR_GEOGRAPHY: CountryGeography = {
