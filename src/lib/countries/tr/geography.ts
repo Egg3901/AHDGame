@@ -5,6 +5,8 @@ import { trRegionCensusData1953 } from "@/lib/seeds/tr/trRegionCensusData1953";
 import { trRegions } from "./data/trRegions";
 import { trRegions1991 } from "./data/trRegions1991";
 import { trRegions1953 } from "./data/trRegions1953";
+import { trRegions2013 } from "./data/trRegions2013";
+import { trRegionsModern } from "./data/trRegionsModern";
 import { trStateMetrics } from "./data/trStateMetrics";
 import {
   TR_ADJACENCY_MAP,
@@ -56,7 +58,13 @@ const regionBundles = {
   "1991-default": trRegions1991,
   "1953-default": trRegions1953,
   "1979-default": trRegions,
-  "2019-default": trRegions,
+  // Existing direct 1999/2007 seeding used the 2013-weighted population
+  // proxy. Name it explicitly so modern source weights do not leak backward.
+  "1999-default": trRegions2013,
+  "2007-default": trRegions2013,
+  "2019-default": trRegionsModern,
+  "2023-default": trRegionsModern,
+  "2027-default": trRegionsModern,
 };
 
 export const TR_GEOGRAPHY: CountryGeography = {
