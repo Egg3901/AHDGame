@@ -56,7 +56,7 @@ export async function addBankMaturityClaims(
       bankId: holder.bankId.toHexString(),
       charteredTurn: holder.charteredTurn,
       bondId: input.bond._id.toHexString(),
-      dueTurn: input.bond.maturityTurn,
+      ...(input.treasuryCashLedgerEnabled === true ? { dueTurn: input.bond.maturityTurn } : {}),
       countryId: input.countryId,
       currencyCode: input.currencyCode,
       amountLocal,
@@ -113,7 +113,7 @@ export async function addBankMaturityClaims(
       saved.amountLocal !== claim.amountLocal ||
       saved.charteredTurn !== claim.charteredTurn ||
       saved.treasuryCashLedgerEnabled !== claim.treasuryCashLedgerEnabled ||
-      saved.dueTurn !== claim.dueTurn
+      (saved.dueTurn !== undefined && saved.dueTurn !== claim.dueTurn)
     )
       throw new Error(`Bank maturity claim ${claim.id} changed after it was frozen`);
     claims.push(saved);

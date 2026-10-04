@@ -379,6 +379,52 @@ describe("bank sovereign claims", () => {
     ]);
   });
 
+  it("replays a legacy pending maturity claim without adding an optional due turn", async () => {
+    const bondId = new ObjectId("65000000000000000000000b");
+    const claim: BankSovereignClaim = {
+      id: `bank-sovereign-maturity:${bondId.toHexString()}:${bankId.toHexString()}:4`,
+      kind: "maturity",
+      bankId: bankId.toHexString(),
+      charteredTurn: 4,
+      bondId: bondId.toHexString(),
+      countryId: "US",
+      currencyCode: "USD",
+      amountLocal: 1_000,
+      turn: 48,
+    };
+    const memory = world(claim);
+    const legacyBond = {
+      _id: bondId,
+      maturityTurn: 48,
+      holders: [{ bankId, charteredTurn: 4, units: 1 }],
+    } as unknown as Bond;
+    const budgetRows = memory.collection("federalBudget") as unknown as {
+      updateOne: (
+        filter: Record<string, unknown>,
+        update: Record<string, unknown>,
+        options?: unknown
+      ) => Promise<{ matchedCount: number; modifiedCount: number }>;
+    };
+    const updateOne = budgetRows.updateOne.bind(budgetRows);
+    budgetRows.updateOne = async (filter, update, options) => {
+      const existingClaim = filter["bankSovereignClaims.id"] as { $ne?: string } | undefined;
+      if (existingClaim?.$ne === claim.id) return { matchedCount: 0, modifiedCount: 0 };
+      return updateOne(filter, update, options);
+    };
+
+    const replay = await addBankMaturityClaims(memory as unknown as Db, {
+      budgetId: "federal",
+      countryId: "US",
+      currencyCode: "USD",
+      turn: 49,
+      bond: legacyBond,
+    });
+
+    expect(replay).toEqual([claim]);
+    expect(budget(memory).bankSovereignClaims?.[0]).toEqual(claim);
+    expect(budget(memory).bankSovereignClaims?.[0]?.dueTurn).toBeUndefined();
+  });
+
   it("does not recreate a maturity claim after its same-turn payment replay", async () => {
     const memory = world(couponClaim(), 5_000);
     const bond = {
