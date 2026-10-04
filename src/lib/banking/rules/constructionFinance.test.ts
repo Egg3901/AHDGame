@@ -75,6 +75,12 @@ describe("construction finance underwriting", () => {
       amount: 74_250,
       filter: { _id: { $oid: "d".repeat(24) }, "constructionFinancing.claimId": "build-request-1" },
     });
+    expect(result.transition.legs.find((leg) => leg.kind === "debit")).toMatchObject({
+      filter: { "bankCharter.charteredTurn": 1 },
+    });
+    expect(result.transition.projections.find((projection) => projection.update)).toMatchObject({
+      filter: { "bankCharter.charteredTurn": 1 },
+    });
     expect(result.transition.projections[0].insert).toMatchObject({
       charteredTurn: 1,
       constructionCollateral: { claimId: "build-request-1", quotedCostLocal: 100_000 },
