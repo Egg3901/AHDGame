@@ -278,9 +278,7 @@ export async function absorbOwnedSectorIntoNatCorp(
           currentGrowthCost: sector.currentGrowthCost ?? 0,
         },
         $set: {
-          ...(merged
-            ? { ...merged }
-            : {}),
+          ...(merged ? { ...merged } : {}),
           updatedAt: now,
         },
       }

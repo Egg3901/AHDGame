@@ -84,7 +84,7 @@ describe("command-economy ownership repair merge", () => {
     expect(update.$set).toMatchObject({
       capitalStock: 50,
       capacityBookAnchor: 70,
-        buildQueue: [{ unitsOrdered: 2, costPaidAnchor: 6, startTurn: 5, onlineTurn: 9 }],
+      buildQueue: [{ unitsOrdered: 2, costPaidAnchor: 6, startTurn: 5, onlineTurn: 9 }],
       [`remediation.${DEFECT_ID}.${sourceId.toString()}`]: {
         runId: "run-test",
         mergedAt: new Date("2026-08-22T00:00:00Z"),

@@ -192,8 +192,7 @@ export async function nationalizeSectorWide(
     const plantHasSubstance =
       plantsEnabled &&
       incomingPlant != null &&
-      (incomingPlant.capitalStock > 0 ||
-        incomingPlant.buildQueue.length > 0);
+      (incomingPlant.capitalStock > 0 || incomingPlant.buildQueue.length > 0);
     if (revenueAnchor <= 0 && !plantHasSubstance) return;
     // Transition revenue haircut: the state acquires a disrupted slice worth 15%
     // less than the carved value (compensation above is paid on the full value).

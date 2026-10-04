@@ -111,10 +111,7 @@ const KNOWN_CASES: readonly KnownCase[] = [
 
 export const KNOWN_SECTOR_IDS = KNOWN_CASES.map((row) => row.sectorId);
 
-type BookInput = Pick<
-  CorporateSector,
-  "sectorType" | "capacityBookAnchor" | "buildQueue"
->;
+type BookInput = Pick<CorporateSector, "sectorType" | "capacityBookAnchor" | "buildQueue">;
 
 function queuePaidAnchor(queue: readonly SectorBuildOrder[] | null | undefined): number {
   return (queue ?? []).reduce(

@@ -206,9 +206,7 @@ async function absorbSectorIntoNatCorp(
           currentGrowthCost: sector.currentGrowthCost ?? 0,
         },
         $set: {
-          ...(merged
-            ? { ...merged }
-            : {}),
+          ...(merged ? { ...merged } : {}),
           absorbedAtTurn,
           nationalizedAtTurn: absorbedAtTurn,
           nationalizationTransitionMultiplier: transitionMultiplier,

@@ -357,9 +357,7 @@ export async function privatizeAsset(
     // this stays byte-identical. Under plants the remainder is empty only when
     // no capacity and no queued orders survive the split.
     const keptPlantIsEmpty =
-      !plantsEnabled ||
-      (!(keptPlant.capitalStock > 0) &&
-        keptPlant.buildQueue.length === 0);
+      !plantsEnabled || (!(keptPlant.capitalStock > 0) && keptPlant.buildQueue.length === 0);
     if (keptRevenue <= 0 && keptPlantIsEmpty) {
       await sectors.deleteOne({ _id: sector._id });
     } else {
