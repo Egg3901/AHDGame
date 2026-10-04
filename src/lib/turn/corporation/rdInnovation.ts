@@ -201,7 +201,8 @@ export function processRdInnovations(
             sector.sectorType,
             Math.round(deltaCapacity * 100) / 100,
             { updatedAt: now },
-            sector.industryModel
+            sector.industryModel,
+            sector.mediaDiscriminator
           ),
         },
       });

@@ -108,6 +108,37 @@ describe("queryCorporation", () => {
     expect(result!.sectors[0].sectorType).toBe("media");
   });
 
+  it("publishes canonical media lane identity for entertainment corporations and sectors", async () => {
+    db.collectionMocks.corporations!.findOne.mockResolvedValue({
+      ...mockCorp,
+      type: "media",
+      mediaDiscriminator: "entertainment",
+    });
+    db.collectionMocks.corporateSectors!.find.mockReturnValue(
+      cursor([
+        {
+          stateId: "CA",
+          sectorType: "media",
+          mediaDiscriminator: "entertainment",
+          revenue: 40_000,
+          profitMargin: 30,
+          workers: 100,
+        },
+      ])
+    );
+    db.collectionMocks.states!.find.mockReturnValue(cursor([{ _id: "CA", name: "California" }]));
+
+    const { queryCorporation } = await import("./corporation");
+    const result = await queryCorporation(db as unknown as Db, { name: "Acme" });
+
+    expect(result!.type).toBe("media");
+    expect(result!.mediaDiscriminator).toBe("entertainment");
+    expect(result!.sectors[0]).toMatchObject({
+      sectorType: "media",
+      mediaDiscriminator: "entertainment",
+    });
+  });
+
   it("includes creditRating.components (was missing from /corporation)", async () => {
     db.collectionMocks.corporations!.findOne.mockResolvedValue({
       ...mockCorp,

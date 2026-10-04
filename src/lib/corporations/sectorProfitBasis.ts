@@ -28,7 +28,7 @@ import {
   capacityPricePerUnit,
   revenuePerCapacityUnitForStrategy,
 } from "@/lib/constants/capacityEconomy";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { CorporationType, MediaDiscriminator } from "@/lib/constants/corporations";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { SectorBuildOrder } from "@/lib/db/types";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
@@ -208,6 +208,7 @@ export function sectorEconomicScale(
   sector: {
     sectorType: CorporationType;
     industryModel?: string | null;
+    mediaDiscriminator?: MediaDiscriminator | null;
     revenue?: number | null;
     capitalStock?: number | null;
     strategyId?: string | null;
@@ -231,7 +232,8 @@ export function sectorEconomicScale(
       sector.sectorType,
       sector.strategyId,
       unitScale,
-      sector.industryModel
+      sector.industryModel,
+      sector.mediaDiscriminator
     );
   return Number.isFinite(nameplate) ? Math.max(revenue, nameplate) : revenue;
 }
@@ -288,6 +290,7 @@ export function sumConstructionInProgressAnchor(
 export interface SectorBookValueInput extends SectorCapexFields {
   sectorType: CorporationType;
   industryModel?: string | null;
+  mediaDiscriminator?: MediaDiscriminator | null;
   /**
    * Production method the capacity runs. Capacity is priced at the RPU of the
    * product it makes, so the list-price fallback below must read the same
@@ -314,6 +317,7 @@ export function sectorCapacityListValueAnchor(
   sector: {
     sectorType: CorporationType;
     industryModel?: string | null;
+    mediaDiscriminator?: MediaDiscriminator | null;
     strategyId?: string | null;
     capitalStock?: number | null;
   },
@@ -331,7 +335,8 @@ export function sectorCapacityListValueAnchor(
     typeof year === "number" && Number.isFinite(year) ? year : Number.NaN,
     unitScale,
     sector.strategyId ?? null,
-    sector.industryModel
+    sector.industryModel,
+    sector.mediaDiscriminator
   );
   return capacity * pricePerUnit;
 }

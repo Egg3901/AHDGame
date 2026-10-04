@@ -175,7 +175,7 @@ describe("resetGameWorld", () => {
     }
     expect(db.collectionMocks.gameConfig.updateOne).toHaveBeenCalledWith(
       { _id: "default" },
-      { $unset: { fresh1991VehicleModelSeed: "" } }
+      { $unset: { fresh1991VehicleModelSeed: "", fresh1991MediaTaxonomySeed: "" } }
     );
   });
 

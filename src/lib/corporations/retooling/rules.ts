@@ -34,6 +34,7 @@ import {
 interface RetoolCapacityBasis {
   sectorType: CorporationType;
   industryModel?: string | null;
+  mediaDiscriminator?: string | null;
   strategyId?: string | null;
   transitionFromStrategyId?: string | null;
   transitionStartTurn?: number | null;
@@ -65,13 +66,15 @@ export function retoolBlendRatio(args: Omit<RetoolCapacityBasis, "retoolRescaleA
     args.transitionFromStrategyId,
     args.transitionStartTurn,
     args.currentTurn,
-    args.industryModel
+    args.industryModel,
+    args.mediaDiscriminator
   );
   if (!effective.isTransitioning) return 1;
   const target = getStrategyForOperatingModel(
     args.sectorType,
     args.strategyId ?? "standard",
-    args.industryModel
+    args.industryModel,
+    args.mediaDiscriminator
   );
   const targetYield = unitYieldForSupply(target.supply, 1);
   const effectiveYield = unitYieldForSupply(effective.supply, 1);

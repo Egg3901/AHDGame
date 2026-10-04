@@ -140,6 +140,17 @@ describe("pulseAppliesToCorp", () => {
     expect(pulseAppliesToCorp(pulse, "corp", "CN", ["energy"], operatingKeys, partners)).toBe(true);
   });
 
+  it("recognizes entertainment events only for the canonical entertainment lane", () => {
+    const pulse = makePulse({ scope: "sector", countryId: "US", sectorType: "entertainment" });
+    expect(
+      pulseAppliesToCorp(pulse, "corp", "US", ["media"], keys("US:media::entertainment"))
+    ).toBe(true);
+    expect(pulseAppliesToCorp(pulse, "corp", "US", ["media"], keys("US:media::"))).toBe(false);
+    expect(
+      pulseAppliesToCorp(pulse, "corp", "US", ["media"], keys("UK:media::entertainment"))
+    ).toBe(false);
+  });
+
   it("scope=corp matches on corpId", () => {
     const pulse = makePulse({ scope: "corp", corpId: "abc" });
     expect(pulseAppliesToCorp(pulse, "abc", "US", [])).toBe(true);

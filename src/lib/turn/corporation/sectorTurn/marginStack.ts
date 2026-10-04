@@ -63,6 +63,7 @@ export interface MarginStackInput {
     | "headquartersState"
     | "type"
     | "industryModel"
+    | "mediaDiscriminator"
     | "secondaryType"
     | "typeSwitchTurn"
     | "countryOwnerId"
@@ -73,6 +74,7 @@ export interface MarginStackInput {
     CorporateSector,
     | "stateId"
     | "sectorType"
+    | "mediaDiscriminator"
     | "industryModel"
     | "strategyId"
     | "transitionFromStrategyId"
@@ -186,7 +188,8 @@ export function accumulateMarginModifiers(input: MarginStackInput): MarginStackR
   } = input;
   const operatingSectorType = getOperatingSectorType(
     sector.sectorType,
-    sector.industryModel
+    sector.industryModel,
+    sector.mediaDiscriminator
   ) as CorporationType;
 
   // P3.5 SEAM — active-disaster penalties are split at their source
@@ -310,7 +313,11 @@ export function accumulateMarginModifiers(input: MarginStackInput): MarginStackR
     ? 0
     : getSectorTypeMatchModifier(
         operatingSectorType,
-        getOperatingSectorType(corp.type, corp.industryModel) as CorporationType,
+        getOperatingSectorType(
+          corp.type,
+          corp.industryModel,
+          corp.mediaDiscriminator
+        ) as CorporationType,
         corp.secondaryType
       );
   // Logistical sprawl: -0.5% per 2 sectors over 15 for a single-type corp

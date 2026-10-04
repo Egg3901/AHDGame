@@ -305,6 +305,7 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
       countryId,
       sectorType: sector.sectorType,
       industryModel: sector.industryModel,
+      mediaDiscriminator: sector.mediaDiscriminator,
     };
 
     // Capacity settings are command-owned. The turn reads them but never
@@ -428,6 +429,7 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
               stateId: sector.stateId,
               sectorType: sector.sectorType,
               industryModel: sector.industryModel ?? null,
+              mediaDiscriminator: sector.mediaDiscriminator ?? null,
             },
             poolCredit,
             { upsert: true }
@@ -526,17 +528,20 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
           {
             type: corporation.type,
             industryModel: corporation.industryModel,
+            mediaDiscriminator: corporation.mediaDiscriminator,
             unlockedTechNodeIds: corporation.unlockedTechNodeIds,
             techDecadeLane: corporation.techDecadeLane,
           },
           sector.sectorType,
-          sector.industryModel
+          sector.industryModel,
+          sector.mediaDiscriminator
         ).growthCostMultiplier
       : 1;
 
     const cost = computeBuildCost({
       sectorType: sector.sectorType,
       industryModel: sector.industryModel,
+      mediaDiscriminator: sector.mediaDiscriminator,
       units,
       // Capacity is priced at the product this sector actually makes. Ordering
       // into a sector already running a high-RPU strategy used to be charged
@@ -742,6 +747,7 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
             stateId: sector.stateId,
             sectorType: sector.sectorType,
             industryModel: sector.industryModel ?? null,
+            mediaDiscriminator: sector.mediaDiscriminator ?? null,
           },
           drawdown,
           { upsert: true }

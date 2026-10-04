@@ -14,6 +14,7 @@ import {
   getNationalDominanceGrowthCostMultiplier,
 } from "@/lib/constants/corporations";
 import { foundingStarterUnits, sectorEntryFeeAnchor } from "@/lib/corporations/foundingPlant";
+import { expandSector } from "./expandSector";
 
 /**
  * P3b: founding a sector under plants is a FIRST BUILD.
@@ -236,6 +237,7 @@ describe("expandSector — founding build (plants)", () => {
       stateId: STATE_ID,
       sectorType: "agriculture",
       industryModel: null,
+      mediaDiscriminator: null,
     });
   });
 
@@ -341,6 +343,7 @@ describe("expandSector — founding build (plants)", () => {
       stateId: STATE_ID,
       sectorType: "manufacturing",
       industryModel: null,
+      mediaDiscriminator: null,
     });
     // Pipeline update, TWO stages. Units are the authoritative leg and are drawn
     // down (clamped >= 0) in stage 1; `revenue` is then RESTATED from the

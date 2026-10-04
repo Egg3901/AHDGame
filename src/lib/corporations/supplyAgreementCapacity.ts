@@ -1,5 +1,6 @@
 import { activeCapacityFraction } from "@/lib/corporations/investment/rules";
 import type { CorporationType } from "@/lib/constants/corporations";
+import type { MediaDiscriminator } from "@/lib/constants/corporations";
 import {
   COMMODITY_BASE_PRICES,
   commodityMixWeight,
@@ -23,6 +24,7 @@ import { isPlannedEconomy } from "@/lib/constants/commandEconomy";
 export type SupplyAgreementCapacitySector = {
   sectorType: CorporationType;
   industryModel?: string | null;
+  mediaDiscriminator?: MediaDiscriminator | null;
   capitalStock?: number | null;
   strategyId?: string | null;
   transitionFromStrategyId?: string | null;
@@ -98,7 +100,8 @@ export function computeSupplierCommodityCapacityUnits(args: {
       s.transitionFromStrategyId,
       s.transitionStartTurn,
       args.turn,
-      s.industryModel
+      s.industryModel,
+      s.mediaDiscriminator
     );
     const plannedEconomy = isPlannedEconomy(
       s.countryId,
@@ -111,7 +114,9 @@ export function computeSupplierCommodityCapacityUnits(args: {
     // media makes state information rather than advertising, and media supply
     // is derated in every economy.
     const supplyMix = applyPlannedEconomyOutputMix(
-      s.sectorType,
+      s.sectorType === "media" && s.mediaDiscriminator === "entertainment"
+        ? "entertainment"
+        : s.sectorType,
       rates.supply ?? {},
       plannedEconomy
     );
@@ -151,7 +156,8 @@ export function computeSupplierCommodityAchievableUnits(args: {
       sector.transitionFromStrategyId,
       sector.transitionStartTurn,
       args.turn,
-      sector.industryModel
+      sector.industryModel,
+      sector.mediaDiscriminator
     );
     const plannedEconomy = isPlannedEconomy(
       sector.countryId,
@@ -159,7 +165,9 @@ export function computeSupplierCommodityAchievableUnits(args: {
       args.commandEconomyEnabled
     );
     const supplyMix = applyPlannedEconomyOutputMix(
-      sector.sectorType,
+      sector.sectorType === "media" && sector.mediaDiscriminator === "entertainment"
+        ? "entertainment"
+        : sector.sectorType,
       rates.supply ?? {},
       plannedEconomy
     );

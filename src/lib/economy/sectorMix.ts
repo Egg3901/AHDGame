@@ -38,7 +38,10 @@ import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 import { effectiveMarketAnchor, gdpDerivedMarketAnchor } from "@/lib/corporations/marketShare";
 import { loadWorldPreset } from "@/lib/currency/gdpAnchorRate";
 import { defaultSupplyRates, unitYieldForSupply } from "@/lib/constants/capacityEconomy";
-import { getEffectiveStrategyRatesForOperatingModel } from "@/lib/constants/sectorStrategies";
+import {
+  getEffectiveStrategyRatesForOperatingModel,
+  getOperatingSectorType,
+} from "@/lib/constants/sectorStrategies";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 
 export interface CountrySectorMixEntry {
@@ -57,6 +60,7 @@ export interface CountrySectorMixEntry {
 interface PlantsSectorMarketInput {
   type: CorporationType;
   industryModel?: string | null;
+  mediaDiscriminator?: string | null;
   stateId: string;
   revenueAnchor: number;
   capitalStock?: number;
@@ -161,7 +165,8 @@ function outputRatesForSector(
     transitionActive ? sector.transitionFromStrategyId : null,
     transitionActive ? sector.transitionStartTurn : null,
     currentTurn ?? 0,
-    sector.industryModel
+    sector.industryModel,
+    sector.mediaDiscriminator
   ).supply;
 }
 
@@ -496,7 +501,14 @@ export async function aggregateCountrySectorMix(
   const plantsMarketInputs: PlantsSectorMarketInput[] = [];
   for (const s of sectors) {
     const anchor = readCorpEconomicAnchor(s.revenue, hostCode, hostRate);
-    const type = s.sectorType as CorporationType;
+    const operatingType = getOperatingSectorType(
+      s.sectorType,
+      s.industryModel,
+      s.mediaDiscriminator
+    ) as CorporationType;
+    // Manufacturing models remain part of the manufacturing outlook row;
+    // entertainment keeps its separate legacy outlook row after canonicalization.
+    const type = s.industryModel === "vehicles" ? s.sectorType : operatingType;
     ownedByBucket.set(
       bucketKey(s.stateId, type, s.industryModel),
       (ownedByBucket.get(bucketKey(s.stateId, type, s.industryModel)) ?? 0) + anchor
@@ -505,6 +517,7 @@ export async function aggregateCountrySectorMix(
       plantsMarketInputs.push({
         type,
         industryModel: s.industryModel,
+        mediaDiscriminator: s.mediaDiscriminator,
         stateId: s.stateId,
         revenueAnchor: anchor,
         capitalStock: s.capitalStock,
@@ -521,7 +534,13 @@ export async function aggregateCountrySectorMix(
   }
   const unownedByBucket = new Map<string, number>();
   for (const u of unownedDocs) {
-    const key = bucketKey(u.stateId, u.sectorType, u.industryModel);
+    const operatingType = getOperatingSectorType(
+      u.sectorType,
+      u.industryModel,
+      u.mediaDiscriminator
+    ) as CorporationType;
+    const type = u.industryModel === "vehicles" ? u.sectorType : operatingType;
+    const key = bucketKey(u.stateId, type, u.industryModel);
     unownedByBucket.set(key, (unownedByBucket.get(key) ?? 0) + (u.revenue ?? 0));
   }
 

@@ -53,6 +53,9 @@ export type CorporationType = (typeof CORPORATION_TYPES)[number];
 /** Specialized production models that belong to the manufacturing taxonomy. */
 export type ManufacturingIndustryModel = "vehicles";
 
+/** Preserves the former entertainment operating lane inside canonical media. */
+export type MediaDiscriminator = "entertainment";
+
 export const CORPORATION_TYPE_LABELS: Record<CorporationType, string> = {
   financial: "Financial",
   media: "Media",

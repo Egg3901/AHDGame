@@ -108,7 +108,11 @@ export async function unlockTechNode(
   const laneKey = `techDecadeLane.${node.decadeId}`;
   const prereqIds = getNodePrereqIds(node);
   const rivalIds = getExclusiveRivalIds(
-    getOperatingSectorType(corporation.type, corporation.industryModel) as CorporationType,
+    getOperatingSectorType(
+      corporation.type,
+      corporation.industryModel,
+      corporation.mediaDiscriminator
+    ) as CorporationType,
     node
   );
 

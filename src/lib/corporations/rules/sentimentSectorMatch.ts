@@ -9,10 +9,10 @@ export function hasOperatingSentimentSector(
   if (operatingSectorKeys.has(`${countryId}:${sectorType}`)) return true;
   for (const key of operatingSectorKeys) {
     const parts = key.split(":");
-    if (parts.length !== 3 || parts[0] !== countryId || !parts[1]) continue;
+    if ((parts.length !== 3 && parts.length !== 4) || parts[0] !== countryId || !parts[1]) continue;
     if (
       parts[1] === sectorType ||
-      getOperatingSectorType(parts[1], parts[2] || null) === sectorType
+      getOperatingSectorType(parts[1], parts[2] || null, parts[3] || null) === sectorType
     ) {
       return true;
     }

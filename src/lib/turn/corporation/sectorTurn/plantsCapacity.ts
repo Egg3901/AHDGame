@@ -38,6 +38,7 @@ export interface PlantsCapacityInput {
     | "strategyId"
     | "sectorType"
     | "industryModel"
+    | "mediaDiscriminator"
     | "transitionStartTurn"
     | "retoolRescaleApplied"
     | "operatingCapacityTurn"
@@ -149,6 +150,7 @@ export function computePlantsCapacity(input: PlantsCapacityInput): PlantsCapacit
   const retoolBasis = {
     sectorType: sector.sectorType,
     industryModel: sector.industryModel,
+    mediaDiscriminator: sector.mediaDiscriminator,
     strategyId: sector.strategyId,
     transitionFromStrategyId: sector.transitionFromStrategyId,
     transitionStartTurn: sector.transitionStartTurn,
@@ -228,7 +230,12 @@ export function computePlantsCapacity(input: PlantsCapacityInput): PlantsCapacit
       })
     : 0;
   const plantLedger = plantsEnabled
-    ? seedPlantLedger(sector.sectorType, plantsOwnedCapacity, sector.industryModel)
+    ? seedPlantLedger(
+        sector.sectorType,
+        plantsOwnedCapacity,
+        sector.industryModel,
+        sector.mediaDiscriminator
+      )
     : null;
   // ─── P5: the PAID BASIS of that capacity ──────────────────────────────────
   //

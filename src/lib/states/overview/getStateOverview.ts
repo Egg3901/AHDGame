@@ -237,7 +237,7 @@ function buildTopSectors(
   const cache = stateDoc?.topSectorsCache;
   if (cache && cache.sectors.length > 0) {
     return cache.sectors.map((s) => ({
-      id: getOperatingSectorType(s.sectorType, s.industryModel),
+      id: getOperatingSectorType(s.sectorType, s.industryModel, s.mediaDiscriminator),
       share: 0,
       specializationBonus: s.specializationBonus,
     }));

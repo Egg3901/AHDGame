@@ -7,6 +7,7 @@ import type { CorporateSector } from "@/lib/db/types";
 import type { CommodityPrice } from "@/lib/db/types/commodityPrice";
 import type { UnownedSector } from "@/lib/db/types/unownedSector";
 import type { CorporationType } from "@/lib/constants/corporations";
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import { COMMODITY_BASE_PRICES, SECTOR_SUPPLY } from "@/lib/constants/commodities";
 import { foundingStarterUnits } from "@/lib/corporations/foundingPlant";
 import { unownedHeadroomUnitsOf } from "@/lib/corporations/marketShare";
@@ -54,9 +55,13 @@ function ratio(numerator: number, denominator: number): number | null {
 function marketValueFor(
   stateId: string,
   sectorType: CorporationType,
-  pricesByCommodity: ReadonlyMap<string, CommodityPrice>
+  pricesByCommodity: ReadonlyMap<string, CommodityPrice>,
+  mediaDiscriminator?: string | null
 ): MarketValue {
-  const output = SECTOR_SUPPLY[sectorType] ?? [];
+  const output =
+    SECTOR_SUPPLY[
+      getOperatingSectorType(sectorType, undefined, mediaDiscriminator) as CorporationType
+    ] ?? [];
   let demand = 0;
   let supply = 0;
   let delivered = 0;
@@ -102,7 +107,12 @@ function targetDiagnostics(
   const result = new Map<string, NppMarketEntryDiagnostic[]>();
   for (const row of funnel?.diagnostics ?? []) {
     if (!row.targetStateId || !row.targetSectorType) continue;
-    const key = bucketKey(row.targetStateId, row.targetSectorType);
+    const key = bucketKey(
+      row.targetStateId,
+      row.targetSectorType,
+      row.targetIndustryModel,
+      row.targetMediaDiscriminator
+    );
     const list = result.get(key) ?? [];
     list.push(row);
     result.set(key, list);
@@ -119,12 +129,19 @@ export function computeMarketFormationSnapshot(args: {
 }): MarketFormationSnapshot {
   const liveSectors = args.sectors.filter((sector) => sector.mothballed !== true);
   const activeBuckets = new Set(
-    liveSectors.map((sector) => bucketKey(sector.stateId, sector.sectorType))
+    liveSectors.map((sector) =>
+      bucketKey(sector.stateId, sector.sectorType, sector.industryModel, sector.mediaDiscriminator)
+    )
   );
   const firmsByBucket = new Map<string, number>();
   const corpsByBucket = new Map<string, Set<string>>();
   for (const sector of liveSectors) {
-    const key = bucketKey(sector.stateId, sector.sectorType);
+    const key = bucketKey(
+      sector.stateId,
+      sector.sectorType,
+      sector.industryModel,
+      sector.mediaDiscriminator
+    );
     firmsByBucket.set(key, (firmsByBucket.get(key) ?? 0) + 1);
     let corps = corpsByBucket.get(key);
     if (!corps) {
@@ -135,15 +152,25 @@ export function computeMarketFormationSnapshot(args: {
   }
   const universe = new Map<string, UnownedSector>();
   for (const pool of args.unownedSectors)
-    universe.set(bucketKey(pool.stateId, pool.sectorType), pool);
+    universe.set(
+      bucketKey(pool.stateId, pool.sectorType, pool.industryModel, pool.mediaDiscriminator),
+      pool
+    );
   for (const sector of args.sectors) {
-    const key = bucketKey(sector.stateId, sector.sectorType);
+    const key = bucketKey(
+      sector.stateId,
+      sector.sectorType,
+      sector.industryModel,
+      sector.mediaDiscriminator
+    );
     if (!universe.has(key)) {
       universe.set(key, {
         _id: sector._id,
         countryId: sector.countryId,
         stateId: sector.stateId,
         sectorType: sector.sectorType,
+        industryModel: sector.industryModel,
+        mediaDiscriminator: sector.mediaDiscriminator,
         revenue: 0,
         headroomUnits: 0,
         createdAt: sector.createdAt,
@@ -156,18 +183,29 @@ export function computeMarketFormationSnapshot(args: {
   const targeted = targetDiagnostics(args.entryFunnel);
   const facilityReadyByState = new Map<string, number>();
   const cellStats = [...universe.entries()].map(([key, pool]) => {
-    const starterUnits = foundingStarterUnits(pool.sectorType);
+    const starterUnits = foundingStarterUnits(
+      pool.sectorType,
+      pool.industryModel as "vehicles" | null | undefined,
+      pool.mediaDiscriminator
+    );
     const headroomUnits = unownedHeadroomUnitsOf(
       pool.sectorType,
       pool.headroomUnits,
       pool.revenue,
-      args.eraUnitScale
+      args.eraUnitScale,
+      pool.industryModel,
+      pool.mediaDiscriminator
     );
     const facilityReady = starterUnits > 0 && headroomUnits >= starterUnits;
     if (facilityReady && !activeBuckets.has(key)) {
       facilityReadyByState.set(pool.stateId, (facilityReadyByState.get(pool.stateId) ?? 0) + 1);
     }
-    const market = marketValueFor(pool.stateId, pool.sectorType, pricesByCommodity);
+    const market = marketValueFor(
+      pool.stateId,
+      pool.sectorType,
+      pricesByCommodity,
+      pool.mediaDiscriminator
+    );
     const inbound = Math.max(0, market.delivered - market.supply);
     return {
       key,

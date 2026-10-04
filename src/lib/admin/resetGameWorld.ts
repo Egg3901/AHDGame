@@ -332,7 +332,10 @@ export async function resetGameWorld(
   }
   await db
     .collection<GameConfig>("gameConfig")
-    .updateOne({ _id: "default" }, { $unset: { fresh1991VehicleModelSeed: "" } });
+    .updateOne(
+      { _id: "default" },
+      { $unset: { fresh1991VehicleModelSeed: "", fresh1991MediaTaxonomySeed: "" } }
+    );
   log(
     `Wiped ${sweepCollections.length} runtime collections ` +
       `(${officialsResult.deletedCount} officials, ${electionsResult.deletedCount} elections, ` +

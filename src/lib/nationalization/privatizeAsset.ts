@@ -321,7 +321,8 @@ export async function privatizeAsset(
     const openingPlantCount = seedPlantLedger(
       sector.sectorType,
       sector.capitalStock,
-      sector.industryModel
+      sector.industryModel,
+      sector.mediaDiscriminator
     ).plantCount;
     // Split once and pass complementary counts to both rows. Rounding each leg
     // independently could give both halves the sole small facility.

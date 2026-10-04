@@ -175,6 +175,7 @@ describe("buildCapacity — build", () => {
       stateId: "US-CA",
       sectorType: "manufacturing",
       industryModel: null,
+      mediaDiscriminator: null,
     });
     expect(call[2]).toEqual({ upsert: true });
     // Negative delta, clamped so a pool smaller than the order cannot go under.

@@ -63,6 +63,20 @@ describe("buildNppCorporationDecisionIndexes", () => {
 });
 
 describe("indexOpenUnownedSectors", () => {
+  it("keeps manufacturing models and media lanes in distinct pool buckets", () => {
+    const generic = { countryId: "US", stateId: "CA", sectorType: "manufacturing" };
+    const vehicles = { ...generic, industryModel: "vehicles" as const };
+    const media = { countryId: "US", stateId: "CA", sectorType: "media" };
+    const entertainment = { ...media, mediaDiscriminator: "entertainment" as const };
+    const indexes = indexOpenUnownedSectors([generic, vehicles, media, entertainment]);
+
+    expect(indexes.unownedIndex.size).toBe(4);
+    expect(indexes.unownedIndex.get("CA:manufacturing")).toBe(generic);
+    expect(indexes.unownedIndex.get("CA:manufacturing:vehicles")).toBe(vehicles);
+    expect(indexes.unownedIndex.get("CA:media")).toBe(media);
+    expect(indexes.unownedIndex.get("CA:media:generic:entertainment")).toBe(entertainment);
+  });
+
   it("preserves country list order and points duplicate buckets at the last document", () => {
     const first = { countryId: "country-a", stateId: "state-1", sectorType: "energy" };
     const second = { countryId: "country-b", stateId: "state-2", sectorType: "industry" };

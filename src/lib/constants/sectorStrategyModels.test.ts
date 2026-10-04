@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   getEffectiveStrategyRates,
   getEffectiveStrategyRatesForOperatingModel,
+  getOperatingSectorType,
   getStrategy,
   getStrategyForOperatingModel,
 } from "./sectorStrategies";
@@ -39,5 +40,27 @@ describe("manufacturing vehicle operating model", () => {
     expect(modeled).toEqual(legacy);
     expect(modeled.isTransitioning).toBe(true);
     expect(modeled.supply.vehicles).toBeCloseTo((0.5 + 0.45) / 2);
+  });
+});
+
+describe("canonical entertainment media identity", () => {
+  it("resolves strategy lookup and rates through the legacy entertainment recipe", () => {
+    expect(getOperatingSectorType("media", null, "entertainment")).toBe("entertainment");
+    expect(getStrategyForOperatingModel("media", "film_studio", null, "entertainment")).toEqual(
+      getStrategy("entertainment", "film_studio")
+    );
+    expect(
+      getEffectiveStrategyRatesForOperatingModel(
+        "media",
+        "film_studio",
+        null,
+        null,
+        1,
+        null,
+        "entertainment"
+      )
+    ).toEqual(
+      getEffectiveStrategyRatesForOperatingModel("entertainment", "film_studio", null, null, 1)
+    );
   });
 });

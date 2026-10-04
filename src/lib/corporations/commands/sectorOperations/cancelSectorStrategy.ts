@@ -167,7 +167,9 @@ export async function cancelSectorStrategy(request: Request, { params }: RoutePa
     const cancelRescaleRatio = capacityRescaleRatio(
       sector.sectorType as CorporationType,
       newTransitionFromStrategyId,
-      newStrategyId
+      newStrategyId,
+      sector.industryModel,
+      sector.mediaDiscriminator
     );
     const rescaledCapitalStock =
       plantsEnabled &&
@@ -204,7 +206,12 @@ export async function cancelSectorStrategy(request: Request, { params }: RoutePa
             isReversing: true,
             ...(rescaledCapitalStock != null ? { capitalStock: rescaledCapitalStock } : {}),
             ...(rescaledCapitalStock != null
-              ? seedPlantLedger(sector.sectorType, rescaledCapitalStock, sector.industryModel)
+              ? seedPlantLedger(
+                  sector.sectorType,
+                  rescaledCapitalStock,
+                  sector.industryModel,
+                  sector.mediaDiscriminator
+                )
               : {}),
             ...(rescaledBuildQueue != null ? { buildQueue: rescaledBuildQueue } : {}),
             ...(rescaledCancelOtherOpexAnchor != null

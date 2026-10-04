@@ -1291,23 +1291,26 @@ export function getStrategy(sectorType: string, strategyId: string): SectorStrat
 /** Strategy options for queries and menus. Model options are omitted unless enabled. */
 export function getSectorStrategies(
   sectorType: string,
-  mediaOperatingModelsEnabled = false
+  mediaOperatingModelsEnabled = false,
+  mediaDiscriminator?: string | null
 ): SectorStrategy[] {
-  if (!Object.hasOwn(SECTOR_STRATEGIES, sectorType)) return [];
-  const strategies = SECTOR_STRATEGIES[sectorType as CorporationType];
+  const operatingType = getOperatingSectorType(sectorType, undefined, mediaDiscriminator);
+  if (!Object.hasOwn(SECTOR_STRATEGIES, operatingType)) return [];
+  const strategies = SECTOR_STRATEGIES[operatingType as CorporationType];
   return mediaOperatingModelsEnabled
-    ? [...strategies, ...getMediaOperatingModelStrategies(sectorType)]
+    ? [...strategies, ...getMediaOperatingModelStrategies(operatingType)]
     : strategies;
 }
 
 /** Resolve the legacy economic profile represented by a persisted sector. */
 export function getOperatingSectorType(
   sectorType: string,
-  industryModel?: ManufacturingIndustryModel | string | null
+  industryModel?: ManufacturingIndustryModel | string | null,
+  mediaDiscriminator?: string | null
 ): string {
-  return sectorType === "manufacturing" && industryModel === "vehicles"
-    ? "automobiles"
-    : sectorType;
+  if (sectorType === "manufacturing" && industryModel === "vehicles") return "automobiles";
+  if (sectorType === "media" && mediaDiscriminator === "entertainment") return "entertainment";
+  return sectorType;
 }
 
 /**
@@ -1317,9 +1320,13 @@ export function getOperatingSectorType(
 export function getStrategyForOperatingModel(
   sectorType: string,
   strategyId: string,
-  industryModel?: string | null
+  industryModel?: string | null,
+  mediaDiscriminator?: string | null
 ): SectorStrategy {
-  return getStrategy(getOperatingSectorType(sectorType, industryModel), strategyId);
+  return getStrategy(
+    getOperatingSectorType(sectorType, industryModel, mediaDiscriminator),
+    strategyId
+  );
 }
 
 /**
@@ -1333,9 +1340,11 @@ export function getEffectiveStrategyRates(
   strategyId: string,
   transitionFromStrategyId: string | undefined | null,
   transitionStartTurn: number | undefined | null,
-  currentTurn: number
+  currentTurn: number,
+  mediaDiscriminator?: string | null
 ): EffectiveStrategyRates {
-  const target = getStrategy(sectorType, strategyId);
+  const operatingType = getOperatingSectorType(sectorType, undefined, mediaDiscriminator);
+  const target = getStrategy(operatingType, strategyId);
 
   // No transition in progress → return target directly
   if (!transitionFromStrategyId || transitionStartTurn == null) {
@@ -1358,7 +1367,7 @@ export function getEffectiveStrategyRates(
     };
   }
 
-  const source = getStrategy(sectorType, transitionFromStrategyId);
+  const source = getStrategy(operatingType, transitionFromStrategyId);
 
   // Interpolate each commodity rate
   const supply = blendRates(source.supply, target.supply, progress);
@@ -1374,14 +1383,16 @@ export function getEffectiveStrategyRatesForOperatingModel(
   transitionFromStrategyId: string | undefined | null,
   transitionStartTurn: number | undefined | null,
   currentTurn: number,
-  industryModel?: string | null
+  industryModel?: string | null,
+  mediaDiscriminator?: string | null
 ): EffectiveStrategyRates {
   return getEffectiveStrategyRates(
-    getOperatingSectorType(sectorType, industryModel),
+    getOperatingSectorType(sectorType, industryModel, mediaDiscriminator),
     strategyId,
     transitionFromStrategyId,
     transitionStartTurn,
-    currentTurn
+    currentTurn,
+    mediaDiscriminator
   );
 }
 

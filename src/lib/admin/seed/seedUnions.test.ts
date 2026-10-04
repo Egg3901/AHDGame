@@ -12,8 +12,14 @@ function makeDb(
       countryId: string;
       sectorType: string;
       industryModel?: string;
+      mediaDiscriminator?: string;
     }[];
-    modelSectors?: { countryId: string; sectorType: string; industryModel: string }[];
+    modelSectors?: {
+      countryId: string;
+      sectorType: string;
+      industryModel?: string;
+      mediaDiscriminator?: string;
+    }[];
   } = {}
 ) {
   // Resolves like the real driver: `upsertedCount` is the number of ops that
@@ -105,6 +111,44 @@ describe("seedUnions", () => {
       sectorType: "manufacturing",
       industryModel: "vehicles",
     });
+  });
+
+  it("seeds and assigns a distinct media-discriminator union identity", async () => {
+    const unionId = new ObjectId();
+    const { db, bulkWrite, sectorBulkWrite } = makeDb(["US"], {
+      modelSectors: [{ countryId: "US", sectorType: "media", mediaDiscriminator: "entertainment" }],
+      worldUnions: [
+        {
+          _id: unionId,
+          countryId: "US",
+          sectorType: "media",
+          mediaDiscriminator: "entertainment",
+        },
+      ],
+    });
+
+    await seedUnions(db, () => {}, "1991-default", false);
+
+    const operations = bulkWrite.mock.calls[0][0];
+    const entertainmentUnion = operations.find(
+      (op: { updateOne: { filter: Record<string, unknown> } }) =>
+        op.updateOne.filter.mediaDiscriminator === "entertainment"
+    );
+    expect(entertainmentUnion?.updateOne.filter).toMatchObject({
+      sectorType: "media",
+      mediaDiscriminator: "entertainment",
+    });
+    expect(sectorBulkWrite).toHaveBeenCalledTimes(1);
+    const assignment = sectorBulkWrite.mock.calls[0][0].find(
+      (op: { updateMany: { filter: Record<string, unknown> } }) =>
+        op.updateMany.filter.mediaDiscriminator === "entertainment"
+    );
+    expect(assignment?.updateMany.filter).toMatchObject({
+      sectorType: "media",
+      mediaDiscriminator: "entertainment",
+      representingUnionId: null,
+    });
+    expect(assignment?.updateMany.update.$set.representingUnionId).toStrictEqual(unionId);
   });
 
   it("hands each world-seeded union representation of its own (countryId, sectorType) sectors that nobody holds yet", async () => {

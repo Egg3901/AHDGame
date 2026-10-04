@@ -1,13 +1,18 @@
 /** Build the per-run indexes used by NPP corporation decisions. */
-import type { CommodityPrice, Corporation, CorporateSector } from "@/lib/db/types";
+import type { Corporation, CorporateSector } from "@/lib/db/types";
 import type { NPP } from "@/lib/db/types/npp";
-import type { UnownedSector } from "@/lib/db/types/unownedSector";
 import { deriveCeoArchetype, type CeoArchetype } from "@/lib/turn/ceoArchetype";
 import { bucketKey } from "@/lib/nationalization/stateControlledBuckets";
 
 type NppPersonalityRow = Pick<NPP, "_id"> & Partial<Pick<NPP, "personality">>;
 type NppDecisionCorporation = Pick<Corporation, "_id" | "ceoId" | "ceoType">;
-type OpenUnownedSector = Pick<UnownedSector, "countryId" | "stateId" | "sectorType">;
+type OpenUnownedSector = {
+  countryId: string;
+  stateId: string;
+  sectorType: string;
+  industryModel?: string | null;
+  mediaDiscriminator?: string | null;
+};
 
 /** Keep list and bucket indexes pointed at the same mutable sector documents. */
 export function indexOpenUnownedSectors<TSector extends OpenUnownedSector>(openSectors: TSector[]) {
@@ -19,7 +24,10 @@ export function indexOpenUnownedSectors<TSector extends OpenUnownedSector>(openS
 
   const unownedIndex = new Map<string, TSector>();
   for (const sector of openSectors) {
-    unownedIndex.set(bucketKey(sector.stateId, sector.sectorType), sector);
+    unownedIndex.set(
+      bucketKey(sector.stateId, sector.sectorType, sector.industryModel, sector.mediaDiscriminator),
+      sector
+    );
   }
   return { unownedByCountry, unownedIndex };
 }
@@ -39,7 +47,7 @@ export function nppDecisionCohortIds(corporations: NppDecisionCorporation[]) {
  */
 export function buildNppCorporationDecisionIndexes<
   TSector extends Pick<CorporateSector, "corporationId">,
-  TPrice extends Pick<CommodityPrice, "commodity" | "turn">,
+  TPrice extends { commodity: string; turn?: number },
 >(ceoNpps: NppPersonalityRow[], allSectors: TSector[], commodityPriceDocs: TPrice[]) {
   const archetypeByNppId = new Map<string, CeoArchetype>();
   for (const npp of ceoNpps) {

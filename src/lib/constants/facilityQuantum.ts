@@ -30,6 +30,7 @@
  */
 
 import type { CorporationType } from "@/lib/constants/corporations";
+import type { MediaDiscriminator } from "@/lib/constants/corporations";
 import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 
 /**
@@ -61,8 +62,16 @@ const FACILITY_SIZE_UNITS: Record<CorporationType, number> = {
 };
 
 /** Capacity units in one facility of `sectorType`. Always a positive integer. */
-export function plantSizeUnits(sectorType: CorporationType, industryModel?: string | null): number {
-  const operatingType = getOperatingSectorType(sectorType, industryModel) as CorporationType;
+export function plantSizeUnits(
+  sectorType: CorporationType,
+  industryModel?: string | null,
+  mediaDiscriminator?: MediaDiscriminator | null
+): number {
+  const operatingType = getOperatingSectorType(
+    sectorType,
+    industryModel,
+    mediaDiscriminator
+  ) as CorporationType;
   return FACILITY_SIZE_UNITS[operatingType] ?? 1;
 }
 
@@ -74,8 +83,12 @@ export function plantSizeUnits(sectorType: CorporationType, industryModel?: stri
 export function facilitiesFromUnits(
   sectorType: CorporationType,
   units: number,
-  industryModel?: string | null
+  industryModel?: string | null,
+  mediaDiscriminator?: MediaDiscriminator | null
 ): number {
   if (!Number.isFinite(units) || units <= 0) return 0;
-  return Math.max(1, Math.floor(units / plantSizeUnits(sectorType, industryModel)));
+  return Math.max(
+    1,
+    Math.floor(units / plantSizeUnits(sectorType, industryModel, mediaDiscriminator))
+  );
 }

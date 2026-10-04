@@ -88,13 +88,26 @@ export function depleteUnownedPoolsForDraws(
   eraUnitScale: number
 ): void {
   for (const draw of draws) {
-    const pool = unownedIndex.get(bucketKey(draw.stateId, draw.sectorType));
+    const pool = unownedIndex.get(
+      bucketKey(draw.stateId, draw.sectorType, null, draw.mediaDiscriminator)
+    );
     if (!pool) continue;
-    const unitsPerAnchor = unownedHeadroomUnitsPerAnchor(draw.sectorType, eraUnitScale);
+    const unitsPerAnchor = unownedHeadroomUnitsPerAnchor(
+      draw.sectorType,
+      eraUnitScale,
+      undefined,
+      draw.mediaDiscriminator
+    );
     const remaining = Math.max(
       0,
-      unownedHeadroomUnitsOf(draw.sectorType, pool.headroomUnits, pool.revenue, eraUnitScale) -
-        draw.units
+      unownedHeadroomUnitsOf(
+        draw.sectorType,
+        pool.headroomUnits,
+        pool.revenue,
+        eraUnitScale,
+        undefined,
+        draw.mediaDiscriminator
+      ) - draw.units
     );
     pool.headroomUnits = remaining;
     pool.revenue = unitsPerAnchor > 0 ? Math.round(remaining / unitsPerAnchor) : pool.revenue;
@@ -124,6 +137,7 @@ export function buildNppFoundedSectorInserts(args: {
       countryId: ns.countryId as CountryId,
       stateId: ns.stateId,
       sectorType: ns.sectorType,
+      ...(ns.mediaDiscriminator ? { mediaDiscriminator: ns.mediaDiscriminator } : {}),
       targetGrowthRate: ns.starterOrder ? 0 : 2,
       currentGrowthRate: 0,
       currentGrowthCost: 0,
@@ -161,16 +175,19 @@ export async function drawFoundedCapacityFromPools(
 ): Promise<void> {
   if (draws.length === 0) return;
   await db.collection<UnownedSector>("unownedSectors").bulkWrite(
-    draws.map(({ stateId, sectorType, units, countryId }) => {
+    draws.map(({ stateId, sectorType, units, countryId, mediaDiscriminator }) => {
       return {
         updateOne: {
-          filter: { stateId, sectorType },
+          filter: { stateId, sectorType, mediaDiscriminator: mediaDiscriminator ?? null },
           update: [
             {
               $set: {
                 stateId: { $ifNull: ["$stateId", stateId] },
                 countryId: { $ifNull: ["$countryId", countryId] },
                 sectorType: { $ifNull: ["$sectorType", sectorType] },
+                mediaDiscriminator: {
+                  $ifNull: ["$mediaDiscriminator", mediaDiscriminator ?? null],
+                },
                 createdAt: { $ifNull: ["$createdAt", args.now] },
                 headroomUnits: {
                   // Self-healing base, NOT a bare `$ifNull: [..., 0]`: a pool
@@ -180,7 +197,15 @@ export async function drawFoundedCapacityFromPools(
                   $max: [
                     0,
                     {
-                      $subtract: [unownedHeadroomBaseExpr(sectorType, args.eraUnitScale), units],
+                      $subtract: [
+                        unownedHeadroomBaseExpr(
+                          sectorType,
+                          args.eraUnitScale,
+                          undefined,
+                          mediaDiscriminator
+                        ),
+                        units,
+                      ],
                     },
                   ],
                 },
@@ -190,7 +215,15 @@ export async function drawFoundedCapacityFromPools(
             // Restate `revenue` FROM the post-draw units instead of subtracting
             // from it independently; the shared trailing stage keeps the two
             // clamped-at-0 legs one quantity in two units.
-            { $set: unownedPoolTrailingSet(sectorType, true, args.eraUnitScale) },
+            {
+              $set: unownedPoolTrailingSet(
+                sectorType,
+                true,
+                args.eraUnitScale,
+                undefined,
+                mediaDiscriminator
+              ),
+            },
           ],
           upsert: true,
         },
