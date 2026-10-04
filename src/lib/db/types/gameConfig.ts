@@ -218,6 +218,9 @@ export interface GameConfig {
    * read-only freeze: pages render, no actions accepted, nothing unwinds.
    */
   privateBankingEnabled?: boolean;
+  bankConstructionAdmissions?: import("@/lib/banking/constructionAdmission").ConstructionAdmission[];
+  bankConstructionAdmissionClosing?: boolean;
+  bankConstructionAdmissionClosingToken?: string;
   /** Enable funded sovereign-bill holdings for private bank treasuries. Default off. */
   bankTreasuryEnabled?: boolean;
   /** Experimental funded spendable government-cash ledger. Absent means off. */

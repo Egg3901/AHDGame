@@ -1177,6 +1177,8 @@ export interface CorporateSector {
   buildQueue?: SectorBuildOrder[];
   /** Frozen funded build claim and its cash escrow; absent on legacy sectors. */
   constructionFinancing?: import("@/lib/banking/rules/constructionBuild").ConstructionBuildClaim;
+  /** A durable owner mutation excludes new construction claims until completion. */
+  constructionPropertyTransition?: { key: string; kind: string };
   /**
    * Plants tier (P3a): construction in progress, in ₳ (anchor), the sum of
    * `costPaidAnchor` across the outstanding `buildQueue` orders (D10).
@@ -1502,6 +1504,8 @@ export interface CorporateSector {
    * if margins shift before purchase.
    */
   forSale?: {
+    foreclosed?: boolean;
+    pledged?: boolean;
     /** When the listing was created */
     listedAt: Date;
     /**

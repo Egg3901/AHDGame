@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { ObjectId, type Db } from "mongodb";
 import type { Corporation, CorporateSector, SectorBuildOrder } from "@/lib/db/types/corporation";
 import type { BankLoan } from "@/lib/db/types/bank";
@@ -16,6 +16,10 @@ import { prepareConstructionBuildEffects } from "./constructionBuildEffects";
 import type { UnownedPoolBucket } from "@/lib/market/unownedPoolDraw";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { releaseCompletedConstructionFunding } from "./constructionFundingLease";
+import {
+  acquireConstructionAdmission,
+  releaseConstructionAdmission,
+} from "./constructionAdmission";
 
 export type ConstructionFinanceResult =
   { ok: true; pending: boolean; loanId: string; claimId: string } | { ok: false; error: string };
@@ -147,9 +151,18 @@ export async function requestConstructionFinance(input: {
       requestTransition: quote.transition,
       status: "awaiting_approval",
       escrowLocal: 0,
+      admissionToken: randomUUID(),
     };
     if (!isValidConstructionBuildClaim(claim))
       return { ok: false, error: "Construction quote is incomplete" };
+    if (
+      !(await acquireConstructionAdmission(db, {
+        token: claim.admissionToken!,
+        loanId: claim.loanId,
+        turn: loaded.snapshot.turn,
+      }))
+    )
+      return { ok: false, error: "Construction admission is disabled or closing" };
     const reserved = await sectors.updateOne(
       {
         _id: sector._id,
@@ -182,8 +195,10 @@ export async function requestConstructionFinance(input: {
       },
       { $set: { constructionFinancing: claim } }
     );
-    if (reserved.matchedCount !== 1)
+    if (reserved.matchedCount !== 1) {
+      await releaseConstructionAdmission(db, claim.admissionToken);
       return { ok: false, error: "The sector changed while reserving construction finance" };
+    }
   }
   if (
     !claim?.requestTransition ||
@@ -201,8 +216,10 @@ export async function requestConstructionFinance(input: {
   const requested = await settleTransition(db, claim.requestTransition);
   if (requested.error || !["applied", "replayed"].includes(requested.status))
     return { ok: false, error: requested.error ?? "Construction loan request is pending recovery" };
-  if (claim.approvalRequired && claim.status === "awaiting_approval")
+  if (claim.approvalRequired && claim.status === "awaiting_approval") {
+    await releaseConstructionAdmission(db, claim.admissionToken);
     return { ok: true, pending: true, loanId: claim.loanId, claimId };
+  }
   return approveConstructionFinance(
     db,
     new ObjectId(claim.bankId),
@@ -315,8 +332,10 @@ export async function rejectConstructionFinance(
   const claim = sector?.constructionFinancing;
   if (!claim || claim.claimId !== collateral.claimId || claim.bankId !== bankId.toHexString())
     return { ok: false, error: "The construction site no longer has this claim" };
-  if (claim.status === "cancelled" && loan.status === "rejected")
+  if (claim.status === "cancelled" && loan.status === "rejected") {
+    await releaseConstructionAdmission(db, claim.admissionToken);
     return { ok: true, pending: false, loanId: claim.loanId, claimId: claim.claimId };
+  }
   if (
     claim.status !== "awaiting_approval" ||
     claim.escrowLocal !== 0 ||
@@ -361,6 +380,8 @@ export async function rejectConstructionFinance(
     ],
     event: { kind: "loan.rejected", command: "construction.reject", subjectId: claim.loanId },
   });
+  if (!settled.error && ["applied", "replayed"].includes(settled.status))
+    await releaseConstructionAdmission(db, claim.admissionToken);
   return !settled.error && ["applied", "replayed"].includes(settled.status)
     ? { ok: true, pending: false, loanId: claim.loanId, claimId: claim.claimId }
     : { ok: false, error: settled.error ?? "Construction rejection is pending recovery" };

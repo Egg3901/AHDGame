@@ -4,6 +4,7 @@
  * growth-cost reduction, and the strategy panel. Extracted verbatim from
  * sectorDetail.ts (pure code motion; no behavior change).
  */
+import { sectorFxSpreadBetween } from "@/lib/currency/sectorFxSpread";
 import { idleUpkeepUnitPrice } from "@/lib/corporations/physicalPnl";
 import {
   activeCapacityFraction,
@@ -443,12 +444,25 @@ export async function buildSectorForSaleInfo(
       corporationId: viewerCorporation._id,
       stateId: sector.stateId,
       sectorType: sector.sectorType,
+      industryModel: sector.industryModel ?? null,
     },
     { projection: { _id: 1 } }
   );
-  const priceInViewerCapital = Math.round(
-    anchorToCorpLiquidCapital(listing.priceAnchor, viewerCorporation, viewerCorpFxRate)
-  );
+  const buyerCurrency = resolveCorpLiquidCurrencyCode(viewerCorporation);
+  const feeLocal =
+    listing.pledged && sector.constructionFinancing
+      ? Math.round(
+          sectorFxSpreadBetween(
+            buyerCurrency,
+            sector.constructionFinancing.currency as CurrencyCode,
+            listing.priceAnchor
+          ).spreadAnchor * viewerCorpFxRate
+        )
+      : 0;
+  const priceInViewerCapital =
+    Math.round(
+      anchorToCorpLiquidCapital(listing.priceAnchor, viewerCorporation, viewerCorpFxRate)
+    ) + feeLocal;
   const viewerCapitalAnchor = Math.round(
     corpLiquidCapitalToAnchor(
       viewerCorporation.liquidCapital ?? 0,
@@ -456,13 +470,13 @@ export async function buildSectorForSaleInfo(
       viewerCorpFxRate
     )
   );
-  const hasFunds = viewerCapitalAnchor >= listing.priceAnchor;
+  const hasFunds = (viewerCorporation.liquidCapital ?? 0) >= priceInViewerCapital;
   return {
     viewerCorporationId: viewerCorporation._id.toString(),
     viewerLiquidCurrencyCode: resolveCorpLiquidCurrencyCode(viewerCorporation),
     priceInViewerCapital,
     viewerCapitalAnchor,
-    eligible: hasFunds,
+    eligible: hasFunds && !(conflict && listing.pledged),
     conflict: !!conflict,
     hasFunds,
   };

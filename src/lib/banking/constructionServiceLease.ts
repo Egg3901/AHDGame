@@ -125,6 +125,8 @@ export async function recoverConstructionServiceLeases(
         // instalment merely because its first journal is still absent.
         continue;
       }
+      const sale = sector?.constructionFinancing?.sale;
+      if (sale?.transition.key === key && !sale.aborted) continue;
       await releaseConstructionServiceLease(
         db,
         bank._id,
@@ -132,15 +134,13 @@ export async function recoverConstructionServiceLeases(
         key,
         "recovery"
       );
-      await db
-        .collection<BankLoan>("bankLoans")
-        .updateOne(
-          {
-            _id: new ObjectId(lease.loanId),
-            constructionSettlementOwner: key.slice(0, -":payout".length),
-          },
-          { $unset: { constructionSettlementOwner: "" } }
-        );
+      await db.collection<BankLoan>("bankLoans").updateOne(
+        {
+          _id: new ObjectId(lease.loanId),
+          constructionSettlementOwner: key.slice(0, -":payout".length),
+        },
+        { $unset: { constructionSettlementOwner: "" } }
+      );
       continue;
     }
     const record = await db

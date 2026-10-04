@@ -281,7 +281,10 @@ describe("construction loan servicing through the banking turn", () => {
       vi.mocked(getDb).mockResolvedValue(native);
       await db
         .collection("gameConfig")
-        .updateOne({ _id: "default" }, { $set: { bankConstructionFinanceEnabled: true } });
+        .updateOne(
+          { _id: "default" },
+          { $set: { bankConstructionFinanceEnabled: true, treasuryCashLedgerEnabled: true } }
+        );
       const originated = await originateLoan(
         native,
         bankId,
@@ -347,6 +350,12 @@ describe("construction loan servicing through the banking turn", () => {
     "retains security until payoff or funded foreclosure (default=%s)",
     async (defaults) => {
       const { db, bankId, borrowerId } = makeWorld(1_000_000);
+      await db
+        .collection("gameConfig")
+        .updateOne(
+          { _id: "default" },
+          { $set: { bankConstructionFinanceEnabled: true, treasuryCashLedgerEnabled: true } }
+        );
       const { getDb } = await import("@/lib/mongodb");
       vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
       const originated = await originateLoan(
@@ -376,7 +385,12 @@ describe("construction loan servicing through the banking turn", () => {
       db.seed("corporateSectors", [
         {
           _id: sectorId,
+          corporationId: borrowerId,
+          countryId: "US",
           constructionFinancing: {
+            borrowerId: String(borrowerId),
+            currency: "USD",
+            order: { startTurn: START },
             claimId,
             loanId: String(originated.loan._id),
             bankId: String(bankId),

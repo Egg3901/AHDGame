@@ -27,3 +27,10 @@ cash contribution, APR ceiling, and explicit sector pledge. Financed builds rout
 FX fees to the proper central-bank recipients and claim unowned market headroom
 once; cancellation returns only undelivered units to the pool. A committed queue
 finishes its original receipt before another recovery may modify it.
+
+Older interrupted funding receipts finish automatically without approving pending
+lender decisions. Pledged property sales pay principal from actual buyer cash
+before seller proceeds and transfer paid construction free of the old security.
+Defaulted sites enter the property market after the default turn; listing their
+book value creates no recovery cash. Construction finance cannot be disabled
+while admitted cash work, site pledges or lender recovery leases remain.

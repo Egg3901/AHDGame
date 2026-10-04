@@ -30,7 +30,12 @@ const bankId = new ObjectId();
 function world(requireApproval = false) {
   const memory = createInMemoryDb();
   memory.seed("gameConfig", [
-    { _id: "default", privateBankingEnabled: true, bankConstructionFinanceEnabled: true },
+    {
+      _id: "default",
+      privateBankingEnabled: true,
+      treasuryCashLedgerEnabled: true,
+      bankConstructionFinanceEnabled: true,
+    },
   ]);
   const corporation = makeCorporation({ _id: borrowerId, liquidCapital: 50_000 });
   const bank: BankingSnapshot = {
@@ -233,6 +238,29 @@ describe("construction request lifecycle", () => {
       memory.collection("corporations").docs.find((doc) => String(doc._id) === String(borrowerId))
         ?.liquidCapital
     ).toBe(50_000);
+  });
+
+  it("finishes an original funded receipt even when the current reserve quote is invalid", async () => {
+    const { request, memory, bank } = world();
+    const fault = withInjectedCrash(memory, {
+      collection: "corporations",
+      op: "updateOne",
+      onCall: 1,
+      afterWrite: true,
+      matches: (args) =>
+        (args[1] as { $inc?: Record<string, unknown> }).$inc?.["bankCharter.cashReserves"] ===
+        -74_250,
+    });
+    await expect(requestConstructionFinance({ ...request, db: fault.db })).rejects.toBeInstanceOf(
+      InjectedCrash
+    );
+    bank.reserveRatio = NaN;
+    expect(await recoverConstructionFunding(request.db, 100)).toEqual([]);
+    expect(memory.collection("corporateSectors").docs[0]).toMatchObject({
+      buildQueue: [expect.objectContaining({ startTurn: 12 })],
+      constructionFinancing: { fundingCleanupCompleted: true, escrowLocal: 0 },
+    });
+    expect(memory.collection("gameConfig").docs[0].bankConstructionAdmissions).toEqual([]);
   });
 
   it("reserves an approval-required quote without moving cash, then funds it", async () => {
