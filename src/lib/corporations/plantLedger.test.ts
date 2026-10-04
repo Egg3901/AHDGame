@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { advancePlantLedger, seedPlantLedger, splitWholePlantCount } from "./plantLedger";
+import {
+  advancePlantLedger,
+  plantCapacityDeltaPipeline,
+  seedPlantLedger,
+  splitWholePlantCount,
+} from "./plantLedger";
 
 describe("seedPlantLedger", () => {
   it("matches the existing whole-facility presentation without changing stock", () => {
@@ -57,5 +62,38 @@ describe("splitWholePlantCount", () => {
     expect(splitWholePlantCount(3, 0.1)).toEqual({ carved: 1, kept: 2 });
     expect(splitWholePlantCount(3, 0)).toEqual({ carved: 0, kept: 3 });
     expect(splitWholePlantCount(3, 1)).toEqual({ carved: 3, kept: 0 });
+  });
+});
+
+describe("plantCapacityDeltaPipeline", () => {
+  it("derives count and remainder from the post-delta stock in a later atomic stage", () => {
+    const pipeline = plantCapacityDeltaPipeline("energy", 120, { updatedAt: "now" });
+    expect(pipeline).toHaveLength(2);
+    expect(pipeline[0]).toEqual({
+      $set: {
+        capitalStock: {
+          $max: [0, { $add: [{ $ifNull: ["$capitalStock", 0] }, 120] }],
+        },
+      },
+    });
+    expect(pipeline[1]).toMatchObject({
+      $set: {
+        updatedAt: "now",
+        plantCount: {
+          $cond: [
+            { $lte: ["$capitalStock", 0] },
+            0,
+            {
+              $cond: [
+                { $lt: ["$capitalStock", 250] },
+                1,
+                { $floor: { $divide: ["$capitalStock", 250] } },
+              ],
+            },
+          ],
+        },
+      },
+    });
+    expect(pipeline[1]?.$set).toHaveProperty("plantUnitRemainder");
   });
 });

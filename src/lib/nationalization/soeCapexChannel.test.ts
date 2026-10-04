@@ -186,8 +186,23 @@ describe("processSoeOperations — state capex grant", () => {
       (op) => String(op.updateOne.filter._id) === String(sector._id)
     );
     expect(buy).toBeDefined();
-    const inc = (buy!.updateOne.update as { $inc: { capitalStock: number } }).$inc;
-    expect(inc.capitalStock).toBeCloseTo(10_000 * CAPITAL_DEPRECIATION_PER_TURN, 9);
+    const update = buy!.updateOne.update as Array<Record<string, unknown>>;
+    expect(update[0]).toMatchObject({
+      $set: {
+        capitalStock: {
+          $max: [
+            0,
+            {
+              $add: [
+                { $ifNull: ["$capitalStock", 0] },
+                expect.closeTo(10_000 * CAPITAL_DEPRECIATION_PER_TURN, 9),
+              ],
+            },
+          ],
+        },
+      },
+    });
+    expect(update[1]).toHaveProperty("$set.plantCount");
 
     // The state PAYS — visibly, on the same signed treasury balance every other
     // government flow moves.

@@ -136,6 +136,8 @@ export function buildNppFoundedSectorInserts(args: {
       ...(ns.starterOrder
         ? {
             capitalStock: 0,
+            plantCount: 0,
+            plantUnitRemainder: 0,
             buildQueue: [ns.starterOrder],
             plantsStartTurn: args.turn,
           }
