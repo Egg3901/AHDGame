@@ -507,9 +507,8 @@ export interface GameState {
    * stamps it onto their `retiredCharacters` doc, the post-reset gate surfaces
    * it on next login, and it becomes re-viewable in character history. Voluntary
    * and admin retirements also build a recap while on. Fail-closed: absent/false
-   * = system inert (no recaps written, gate returns nothing). Default OFF (staged
-   * rollout — not in DEFAULT_GAME_STATE_FLAGS); an explicit enable survives
-   * future resets via missingGameStateFlagDefaults.
+   * = system inert (no recaps written, gate returns nothing). Fresh worlds seed
+   * it on (DEFAULT_GAME_STATE_FLAGS).
    */
   seasonRecapEnabled?: boolean;
   seasonRecapEnabledBy?: string;
@@ -520,17 +519,16 @@ export interface GameState {
    * committed, and neither the Cold War Ledger nor the Influence tab renders.
    * Seeding is the deliberate exception — opening values are written regardless
    * so flipping this on a live world shows a populated map, not blank rows.
-   * Fail-closed: only an explicit `true` enables. NOT in
-   * DEFAULT_GAME_STATE_FLAGS — staged rollout, default off; an explicit enable
-   * survives resets.
+   * Fail-closed: only an explicit `true` enables. Fresh worlds seed it on
+   * (DEFAULT_GAME_STATE_FLAGS).
    */
   intOrgAlignmentEnabled?: boolean;
   intOrgAlignmentEnabledBy?: string;
   intOrgAlignmentEnabledAt?: string;
   /**
    * Master gate for settlement crises (the German Question). Fail-closed: only
-   * an explicit `true` enables. NOT in DEFAULT_GAME_STATE_FLAGS — staged
-   * rollout, default off; an explicit enable survives resets.
+   * an explicit `true` enables. Fresh worlds seed it on
+   * (DEFAULT_GAME_STATE_FLAGS).
    */
   settlementCrisisEnabled?: boolean;
   settlementCrisisEnabledBy?: string;

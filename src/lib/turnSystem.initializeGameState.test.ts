@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { DEFAULT_GAME_STATE_FLAGS } from "@/lib/seeds/reference/featureFlagDefaults";
+import { getDb } from "@/lib/mongodb";
 import { initializeGameState } from "./turnSystem";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
@@ -28,9 +31,7 @@ describe("initializeGameState", () => {
       };
     };
 
-    return import("@/lib/mongodb").then(async (m) => {
-      vi.mocked(m.getDb).mockResolvedValue({ collection } as never);
-    });
+    vi.mocked(getDb).mockResolvedValue({ collection } as never);
   });
 
   it("bakes both startingYear and preset on the new gameState doc", async () => {
@@ -44,11 +45,12 @@ describe("initializeGameState", () => {
       preset: "2019-default",
     });
     expect(insertedDoc?.worldEpochId).toMatch(/^[a-f0-9]{24}$/);
-  }, 30000);
+  });
 
   it("bakes the production-default feature flags into a fresh world", async () => {
     await initializeGameState();
 
+    expect(insertedDoc).toMatchObject(DEFAULT_GAME_STATE_FLAGS);
     expect(insertedDoc).toMatchObject({
       forexEnabled: true,
       playerRandomEventsEnabled: true,
@@ -84,7 +86,7 @@ describe("initializeGameState", () => {
     // eurozoneEnabled is era-derived — seedForex sets it per preset, so it is
     // absent on the bare init doc.
     expect(insertedDoc).not.toHaveProperty("eurozoneEnabled");
-  }, 30000);
+  });
 
   it("does not overwrite an existing gameState doc", async () => {
     existingDoc = {
