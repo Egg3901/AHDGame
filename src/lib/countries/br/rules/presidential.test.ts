@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { brazilPresidentialRules, decideBrazilPresidency } from "./presidential";
+import {
+  brazilPresidentialRules,
+  decideBrazilPresidency,
+  isBrazilIndirectPresidentialElection,
+} from "./presidential";
 import { canonicalTurnsForCycle } from "@/lib/elections/canonicalCycle";
+import { getCountryConfig } from "@/lib/constants/countries";
 
 describe("Brazil presidential renewal", () => {
   it("uses era-specific selection, cadence and anchors", () => {
@@ -10,8 +15,34 @@ describe("Brazil presidential renewal", () => {
       mode: "plurality",
     });
     expect(brazilPresidentialRules("1979-default").mode).toBe("indirect");
+    expect(getCountryConfig("BR", "1979-default").electionSystems.headOfState).toBe(
+      "parliamentary"
+    );
     expect(brazilPresidentialRules("1991-default").firstYear).toBe(1994);
     expect(() => brazilPresidentialRules("unknown")).toThrow();
+  });
+  it("excludes only congressional presidential ballots from popular counting", () => {
+    const election = { countryId: "BR", electionType: "president" };
+    expect(isBrazilIndirectPresidentialElection(election, "1979-default")).toBe(true);
+    expect(isBrazilIndirectPresidentialElection(election, "1991-default")).toBe(false);
+    expect(
+      isBrazilIndirectPresidentialElection(
+        { ...election, brazilPresidentialMode: "indirect" },
+        "1991-default"
+      )
+    ).toBe(true);
+    expect(
+      isBrazilIndirectPresidentialElection(
+        { ...election, brazilPresidentialMode: "majority" },
+        "1979-default"
+      )
+    ).toBe(false);
+    expect(
+      isBrazilIndirectPresidentialElection({ ...election, countryId: "US" }, "1979-default")
+    ).toBe(false);
+    expect(
+      isBrazilIndirectPresidentialElection({ ...election, electionType: "senate" }, "1979-default")
+    ).toBe(false);
   });
   it("anchors Brazil independently of the US president and retains its five-year cadence", () => {
     const ctx = { preset: "1953-default", startingYear: 1953, preIterationTurns: 20 };

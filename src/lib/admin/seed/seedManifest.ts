@@ -327,6 +327,12 @@ const RUNTIME: CollectionEntry[] = [
       "One bond market pool per currency: the cash side of every bond's publicFloat, with lifetime flow counters. Seeded by migration from a share of M2; wiped with the world.",
   },
   {
+    name: "bankTreasuryTrades",
+    category: "runtime",
+    notes:
+      "Durable frozen intents and recovery receipts for funded bank sovereign treasury trades. Wiped with the game world.",
+  },
+  {
     name: "equityMarketPools",
     category: "runtime",
     notes:

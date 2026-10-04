@@ -223,7 +223,7 @@ export async function returnDepositBook(
   const corp = await db
     .collection<Corporation>("corporations")
     .findOne({ _id: corporationId }, { projection: { bankCharter: 1, liquidCapital: 1 } });
-  const charter = corp?.bankCharter;
+  let charter = corp?.bankCharter;
   if (!corp || !charter) return EMPTY;
 
   const currency = charter.currency as CurrencyCode;
@@ -233,6 +233,28 @@ export async function returnDepositBook(
 
   const policy = await loadBankingPolicy(db);
   const playerDepositsAreLiabilities = savingsReadsAuthoritative(policy, currency);
+  if (
+    policy.bankTreasury &&
+    charter.status === "failed" &&
+    charter.depositorsResolvedTurn == null
+  ) {
+    const { liquidateFailedBankTreasury } = await import("@/lib/banking/bankTreasury");
+    const liquidation = await liquidateFailedBankTreasury(db, corporationId, policy, options.turn);
+    if (liquidation.pending || liquidation.error) {
+      return {
+        ...EMPTY,
+        error: liquidation.error ?? "Failed-bank treasury liquidation is still settling",
+      };
+    }
+    if (liquidation.soldUnits > 0) {
+      const refreshed = await db
+        .collection<Corporation>("corporations")
+        .findOne({ _id: corporationId }, { projection: { bankCharter: 1 } });
+      if (!refreshed?.bankCharter)
+        return { ...EMPTY, error: "Failed-bank charter disappeared after bill liquidation" };
+      charter = refreshed.bankCharter;
+    }
+  }
   const sheetOptions = { playerDepositsAreLiabilities };
 
   // Under the pointer model the pointer flips first, outside the money move:

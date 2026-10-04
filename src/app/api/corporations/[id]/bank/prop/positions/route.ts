@@ -7,7 +7,7 @@ import { handleRouteError, notFound } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { isBankPropTradingEnabled } from "@/lib/banking/featureFlag";
-import { closePosition, openPosition } from "@/lib/banking/propTrading";
+import { closePosition, openPosition, quoteForexPosition } from "@/lib/banking/propTrading";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -17,7 +17,12 @@ const positionSchema = z.object({
   asset: z.enum(["equity", "bond", "indexUnit", "forex"]),
   ref: z.string().min(1).max(64),
   units: z.number().finite().positive(),
+  quoteOnly: z.boolean().optional(),
+  maxCost: z.number().finite().nonnegative().optional(),
+  minProceeds: z.number().finite().nonnegative().optional(),
 });
+
+const closeSchema = positionSchema.extend({ quoteOnly: z.literal(false).optional() });
 
 // POST /api/corporations/[id]/bank/prop/positions — Open a prop-book position (CEO).
 // Auth: requireAuth (CEO)
@@ -41,12 +46,17 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     const db = await getDb();
-    const resolved = await resolveCorporation(db, id);
+    const resolved = await resolveCorporation(db, id, { userId: 1, ceoVacant: 1 });
     if (!resolved.ok) return resolved.response;
     const { corporation } = resolved;
 
     const ceoCheck = requireCeo(corporation, auth.user.userId);
     if (ceoCheck) return ceoCheck;
+
+    if (parsed.data.quoteOnly) {
+      const quote = await quoteForexPosition(db, corporation._id, parsed.data);
+      return NextResponse.json(quote, { status: quote.ok ? 200 : 400 });
+    }
 
     const result = await openPosition(db, corporation._id, parsed.data);
     if (!result.ok) {
@@ -57,6 +67,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       success: true,
       position: result.position,
       cost: result.cost,
+      fee: result.fee,
       cashReserves: result.cashReserves,
       propBookMarkValue: result.propBookMarkValue,
     });
@@ -81,13 +92,13 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     }
 
     const { id } = await params;
-    const parsed = await parseJsonBody(request, positionSchema);
+    const parsed = await parseJsonBody(request, closeSchema);
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
     }
 
     const db = await getDb();
-    const resolved = await resolveCorporation(db, id);
+    const resolved = await resolveCorporation(db, id, { userId: 1, ceoVacant: 1 });
     if (!resolved.ok) return resolved.response;
     const { corporation } = resolved;
 
@@ -102,6 +113,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     return NextResponse.json({
       success: true,
       proceeds: result.proceeds,
+      fee: result.fee,
       realizedPnl: result.realizedPnl,
       cashReserves: result.cashReserves,
       propBookMarkValue: result.propBookMarkValue,

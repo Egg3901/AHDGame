@@ -217,6 +217,8 @@ export interface GameConfig {
   playerFundSponsorshipEnabled?: boolean;
   /** Kill switch: investment-bank proprietary trading (incl. leveraged forex). Default on when banking is on. */
   bankPropTradingEnabled?: boolean;
+  /** Size-priced forex prop orders and their fee journal. Default off. */
+  bankPropForexFeesEnabled?: boolean;
   /** Kill switch: bank-failure contagion cascade. Default on when banking is on. */
   bankContagionEnabled?: boolean;
   /**

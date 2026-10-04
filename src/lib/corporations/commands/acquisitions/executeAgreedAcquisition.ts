@@ -161,7 +161,8 @@ async function runAgreedAcquisition(
   const bankConflict = bankTransferConflict(target, acquirer);
   if (
     bankConflict &&
-    (hasFundedSovereignEscrow(target) ||
+    (target.bankPropForexFee ||
+      hasFundedSovereignEscrow(target) ||
       !(await isOwnInterruptedCharterClaim(db, offer, target, acquirer)))
   ) {
     return { ok: false, error: bankConflict, status: 400 };

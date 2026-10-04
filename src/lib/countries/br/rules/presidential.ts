@@ -1,3 +1,20 @@
+/** Congressional ballots have no popular-vote accumulation. */
+export function isBrazilIndirectPresidentialElection(
+  election: {
+    countryId?: string;
+    electionType: string;
+    brazilPresidentialMode?: "plurality" | "indirect" | "majority";
+  },
+  preset?: string
+): boolean {
+  return (
+    election.countryId === "BR" &&
+    election.electionType === "president" &&
+    (election.brazilPresidentialMode === "indirect" ||
+      (!election.brazilPresidentialMode && preset === "1979-default"))
+  );
+}
+
 /** Brazil renews the presidency through the era's selection system. */
 export function brazilPresidentialRules(preset: string): {
   firstYear: number;
