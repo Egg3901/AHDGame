@@ -760,6 +760,7 @@ async function vietnamSupport(ctx: CrisisActionContext): Promise<void> {
       resyncDerived: true,
       witness: {
         flow: "crisis_response",
+        key: `vietnam-support:${ctx.crisis._id.toString()}:${ctx.countryId}:${ctx.currentTurn}:${ctx.characterId.toString()}`,
         site: "crises/optionActions",
         treasuryCashLedgerEnabled: ctx.treasuryCashLedgerEnabled,
       },

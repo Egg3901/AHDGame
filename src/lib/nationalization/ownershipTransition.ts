@@ -505,6 +505,7 @@ export async function nationalizeSector(
   const compensationLedger = payoutAnchor > 0 ? await resolveTreasuryCashOptions(db) : undefined;
   await debitTreasuryCompensation(db, params.countryId, payoutAnchor, fxByCurrency, now, {
     flow: "nationalization_compensation",
+    key: `nationalize-sector:${params.countryId}:${sector._id.toString()}:${gameState?.currentTurn ?? 0}`,
     ledger: compensationLedger,
   });
 
@@ -727,6 +728,7 @@ export async function nationalizeWholeCorp(
   };
   await debitTreasuryCompensation(db, params.countryId, payoutPoolAnchor, fxByCurrency, now, {
     flow: "nationalization_buyout_pool",
+    key: `nationalize-corporation:${params.countryId}:${target._id.toString()}:${params.consequence.turn}`,
     ledger,
     passThroughCorpId: target._id.toString(),
   });
@@ -1065,6 +1067,7 @@ export async function payShareholders(
       ledger
         ? {
             flow: "nationalization_buyout_float",
+            key: `nationalize-float:${target._id.toString()}:${params.consequence.turn}`,
             ledger: ledger.treasury,
             passThroughCorpId: target._id.toString(),
           }

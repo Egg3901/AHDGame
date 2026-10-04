@@ -42,7 +42,7 @@ beforeEach(() => {
   resetLedgerShadowFlagCache();
 });
 
-async function world(native: boolean, shadow = true) {
+async function world(native: boolean, shadow = true, cashLedger = false) {
   let db: Db;
   if (native) {
     const uri = new URL(process.env.AHD_TREASURY_SPEND_MONGO_URI ?? "mongodb://127.0.0.1:27018");
@@ -60,8 +60,12 @@ async function world(native: boolean, shadow = true) {
     db = client.db(`ahd_sim_fixture_trspend_${randomUUID().replaceAll("-", "").slice(0, 24)}`);
   } else db = createInMemoryDb() as unknown as Db;
   await db
-    .collection<{ _id: string; ledgerShadow: boolean }>("gameConfig")
-    .insertOne({ _id: "default", ledgerShadow: shadow });
+    .collection<{
+      _id: string;
+      ledgerShadow: boolean;
+      treasuryCashLedgerEnabled?: boolean;
+    }>("gameConfig")
+    .insertOne({ _id: "default", ledgerShadow: shadow, treasuryCashLedgerEnabled: cashLedger });
   // Turn 1 is processed; turn 2 is accumulating, as between turns in production.
   await db
     .collection<{ _id: string; currentTurn: number; preset: string }>("gameState")
@@ -80,6 +84,7 @@ async function world(native: boolean, shadow = true) {
       ...(countryId === "UK" ? { currencyCode: "GBP" } : {}),
       ...(countryId === "US" ? { currencyCode: "USD" } : {}),
       treasuryBalance: 1_000_000,
+      ...(cashLedger ? { treasuryCashLocal: 1_000_000 } : {}),
       gdp: 2_000_000,
     }))
   );
@@ -214,6 +219,33 @@ for (const native of [false, true]) {
         } as CrisisDecisionOption);
         await levyMobilisation(db, { armed: true, turn: 2 });
         expect(await db.collection("ledgerEntries").countDocuments()).toBe(0);
+      });
+
+      it("settles funded Treasury spending once and replays the frozen receipt", async () => {
+        const db = await world(native, false, true);
+        const witness = {
+          flow: "crisis_response" as const,
+          key: "fixture-crisis-response:UK:option-a",
+          site: "test/funded-expense",
+        };
+        const first = await spendFromTreasury(db, "UK", 125, { witness });
+        const replay = await spendFromTreasury(db, "UK", 125, { witness });
+
+        expect(first.newTreasuryBalance).toBe(999_875);
+        expect(replay.newTreasuryBalance).toBe(999_875);
+        expect(await db.collection("federalBudget").findOne({ countryId: "UK" })).toMatchObject({
+          treasuryCashLocal: 999_875,
+          treasuryBalance: 999_875,
+        });
+        expect(
+          await db
+            .collection("bankMoneyMoves")
+            .findOne({ _id: "treasury-spend:fixture-crisis-response:UK:option-a" })
+        ).toMatchObject({
+          status: "applied",
+          event: { command: "test/funded-expense", amount: 125 },
+        });
+        expect(await db.collection("bankMoneyMoves").countDocuments()).toBe(1);
       });
     }
   );

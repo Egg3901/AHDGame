@@ -11,7 +11,9 @@ vi.mock("@/lib/budget/publicEnterpriseRevenue", () => ({
     .fn()
     .mockResolvedValue({ plantsEnabled: false, currentTurn: null, rampTurns: 12 }),
 }));
-vi.mock("./treasury", () => ({ remitToTreasury: vi.fn().mockResolvedValue(0) }));
+vi.mock("./treasury", () => ({
+  remitToTreasury: vi.fn(async (_db: unknown, input: { amountLocal: number }) => input.amountLocal),
+}));
 vi.mock("@/lib/currency/corporationCapital", () => ({
   loadFxRatesByCurrency: vi.fn().mockResolvedValue(new Map()),
   resolveCorpLiquidCurrencyCode: vi.fn(() => "CNY"),

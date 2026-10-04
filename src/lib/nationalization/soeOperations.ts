@@ -636,14 +636,16 @@ export async function processSoeOperations(
     // the owner's books show the profit estimate (ticket #1269). The debit is
     // unconditional: an unaffordable cover pushes the treasury negative
     // (national debt) rather than being withheld — soft-budget semantics.
+    const cashLedger = await treasuryLedger();
     await coverSoeOperatingLoss(
       db,
       b.countryId,
       b.coveredAnchor,
       fxByCurrency,
       now,
-      await treasuryLedger(),
-      treasuryCurrencyByCountry.get(b.countryId)
+      cashLedger,
+      treasuryCurrencyByCountry.get(b.countryId),
+      `soe-loss-backing:${cashLedger.context?.turn ?? 0}:${b.countryId}:${b.corpId.toString()}`
     );
     // Credit only what the treasury actually paid. Below plants that is the
     // whole hole (liquidCapital → 0, as before); under plants an over-built SOE
@@ -940,14 +942,16 @@ async function applyStateCapexGrants(
   if (ops.length === 0) return;
   await db.collection<CorporateSector>("corporateSectors").bulkWrite(ops);
   for (const [countryId, grantAnchor] of grantByCountry) {
+    const cashLedger = await treasuryLedger();
     await debitTreasurySoeCapex(
       db,
       countryId,
       grantAnchor,
       fxByCurrency,
       now,
-      await treasuryLedger(),
-      treasuryCurrencyByCountry.get(countryId)
+      cashLedger,
+      treasuryCurrencyByCountry.get(countryId),
+      `soe-capex-grant:${cashLedger.context?.turn ?? 0}:${countryId}`
     );
   }
 }
