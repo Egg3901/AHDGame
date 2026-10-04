@@ -5,6 +5,8 @@
  */
 import { loadPandemicSignal } from "@/lib/livingConflict/pandemicSignal";
 import { loadPendingRefugeeReceptions } from "@/lib/livingConflict/refugeeReception";
+import { loadPendingConflictCivilianLosses } from "@/lib/livingConflict/civilianLoss";
+import { planConflictCivilianLosses } from "@/lib/livingConflict/rules/civilianLoss";
 import {
   planRefugeeReceptions,
   servingCohortsForReception,
@@ -220,12 +222,20 @@ export async function runDemographicFlows(
     ]);
 
   const pandemic = await loadPandemicSignal(db, gameState?.livingConflictsEnabled === true);
-  const receptionOrders = await loadPendingRefugeeReceptions(
-    db,
-    worldEpochId,
-    turn,
-    gameState?.livingConflictsEnabled === true
-  );
+  const [receptionOrders, civilianLossOrders] = await Promise.all([
+    loadPendingRefugeeReceptions(
+      db,
+      worldEpochId,
+      turn,
+      gameState?.livingConflictsEnabled === true
+    ),
+    loadPendingConflictCivilianLosses(
+      db,
+      worldEpochId,
+      turn,
+      gameState?.livingConflictsEnabled === true
+    ),
+  ]);
 
   // Configurable age thresholds (defaults 18 / 18 / 64; future laws write gameState).
   // Voting age is resolved per country because electoral-law enactment writes the
@@ -414,14 +424,15 @@ export async function runDemographicFlows(
     };
 
     const { vector, flows } = advanceCohort(p.before, inputs, turn, TURNS_PER_YEAR);
-    const serving = receptionOrders.length
-      ? servingCohortsForReception(
-          vector,
-          p.conscriptionPolicy.eligibleBand,
-          p.conscription.servingMale,
-          p.conscription.servingFemale
-        )
-      : { male: [], female: [] };
+    const serving =
+      receptionOrders.length || civilianLossOrders.length
+        ? servingCohortsForReception(
+            vector,
+            p.conscriptionPolicy.eligibleBand,
+            p.conscription.servingMale,
+            p.conscription.servingFemale
+          )
+        : { male: [], female: [] };
     works.push({
       id: p.demo._id,
       countryId: p.countryId,
@@ -452,6 +463,26 @@ export async function runDemographicFlows(
     destination.vector = moved.destination;
     origin.flows.netMigration -= moved.moved;
     destination.flows.netMigration += moved.moved;
+  }
+
+  const civilianLosses: ReturnType<typeof planConflictCivilianLosses> = civilianLossOrders.length
+    ? planConflictCivilianLosses(
+        civilianLossOrders,
+        works.map((work) => ({
+          regionId: work.id,
+          countryId: stateById.get(work.id)?.countryId ?? work.countryId,
+          vector: work.vector,
+          servingMaleByAge: work.servingMaleByAge,
+          servingFemaleByAge: work.servingFemaleByAge,
+        })),
+        turn,
+        worldEpochId
+      )
+    : { regions: [], results: [], deathsByRegion: {} };
+  for (const region of civilianLosses.regions) {
+    const work = workById.get(region.regionId)!;
+    work.vector = region.vector;
+    work.flows.deaths += civilianLosses.deathsByRegion[region.regionId] ?? 0;
   }
 
   const receptions: ReturnType<typeof planRefugeeReceptions> = receptionOrders.length
@@ -564,5 +595,6 @@ export async function runDemographicFlows(
     regions,
     stats: { regionsProcessed: real.length, circuitBreakerTrips },
     refugeeReceptions: receptions.results,
+    civilianLosses: civilianLosses.results,
   });
 }

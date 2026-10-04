@@ -21,6 +21,22 @@ import {
 const NO_WARS = { nuclearWarIntensity: 0, nuclearWarCount: 0, otherWarIntensity: 0 };
 
 describe("tensionBand", () => {
+  it("keeps a keyed event neutral after its visible event history has expired", async () => {
+    const db = createMockDb();
+    db.collection("coldWarTension").findOne.mockResolvedValue({
+      value: 30,
+      pressureFloor: 12,
+      updatedTurn: 40,
+      events: [],
+      appliedEventIds: ["outcome"],
+      updatedAt: new Date(0),
+    });
+    const state = await applyTensionEvent(db as unknown as Db, 8, "escalation", "Old outcome", 8, {
+      eventId: "outcome",
+    });
+    expect(state.value).toBe(30);
+    expect(db.collection("coldWarTension").updateOne).not.toHaveBeenCalled();
+  });
   it("maps the full range to the five bands", () => {
     expect(tensionBand(5)).toBe("DETENTE");
     expect(tensionBand(20)).toBe("CALM");

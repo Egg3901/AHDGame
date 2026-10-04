@@ -275,6 +275,8 @@ export interface LivingConflictDef {
  * west/east support, so a two-sided war and a one-sided disaster share a shape.
  */
 export interface LivingConflictState {
+  /** Durable Yugoslav response trajectory identities; later outcomes do not erase replay fences. */
+  appliedResponseOutcomeIds?: string[];
   /** Authored fresh-2027 disposition, distinct from the runtime lifecycle. */
   openingDisposition?: "inherited" | "settled" | "not_applicable" | "counterfactual";
   openingProvenance?: {

@@ -167,5 +167,6 @@ describe("runtime lifecycle category determines reset selection", () => {
 describe("refugee reception runtime lifecycle", () => {
   it("clears immutable reception history with the reset runtime", () => {
     expect(getCollectionCategory("refugeeReceptionHistory")).toBe("runtime");
+    expect(getCollectionCategory("conflictCivilianLossHistory")).toBe("runtime");
   });
 });

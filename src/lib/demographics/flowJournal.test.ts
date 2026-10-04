@@ -93,6 +93,35 @@ function metricValue(
 }
 
 describe("demographic flow journal", () => {
+  it("rejects malformed civilian loss history before publishing or writing population", async () => {
+    const db = fixture();
+    const result = {
+      _id: "loss",
+      worldEpochId: EPOCH,
+      interactionId: "65a000000000000000000001",
+      crisisId: "65a000000000000000000002",
+      outcomeId: "escalation",
+      countryId: "YU",
+      stock: "civilian-residents" as const,
+      appliedTurn: TURN,
+      requestedPeople: 2,
+      deaths: 2,
+      regions: [{ regionId: "R1", deaths: 1 }],
+      reason: "applied" as const,
+    };
+    await expect(
+      freezeAndApplyDemographicFlowPlan(db as unknown as Db, {
+        worldEpochId: EPOCH,
+        turn: TURN,
+        regions: [makeRegion()],
+        stats,
+        civilianLosses: [result],
+      })
+    ).rejects.toThrow("Invalid frozen civilian");
+    expect(collection(db, DEMOGRAPHIC_FLOW_PROJECTIONS).docs).toHaveLength(0);
+    expect(collection(db, DEMOGRAPHIC_FLOW_RECEIPTS).docs).toHaveLength(0);
+    expect(collection(db, "states").docs[0].population).toBe(0);
+  });
   it("resumes a partial cross-collection write from the frozen region projection", async () => {
     const db = fixture();
     const states = collection(db, "states");

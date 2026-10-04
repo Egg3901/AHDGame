@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useToast } from "@/contexts/ToastContext";
 import type { CrisisDecisionNode, CrisisEffect } from "@/lib/db/types/crisis";
 import type { RefugeeReceptionResult } from "@/lib/livingConflict/rules/refugeeReception";
+import type { ConflictCivilianLossResult } from "@/lib/livingConflict/rules/civilianLoss";
 import { formatCrisisEffectTarget, formatCrisisEffectValue } from "@/lib/crises/effectLabels";
 import { buildDecisionHistory } from "@/lib/crises/decisionHistory";
 import { computeFiscalImpact } from "@/lib/budget/fiscalImpact";
@@ -52,6 +53,7 @@ interface SerializedInteraction {
     eligibleCountries: number;
     campaignStageBefore?: string;
     campaignStageAfter?: string;
+    civilianLossResult?: ConflictCivilianLossResult;
   };
 }
 
@@ -677,6 +679,27 @@ export default function CrisisInteractionPanel({ crisisId }: { crisisId: string 
                   {interaction.globalResponseOutcome.eligibleCountries} eligible governments
                   responded
                 </p>
+                {interaction.globalResponseOutcome.civilianLossResult ? (
+                  <p className="mt-1 text-[11px] text-muted">
+                    <Tooltip
+                      content={
+                        interaction.globalResponseOutcome.civilianLossResult.regions
+                          .map(
+                            (region) =>
+                              `${region.regionId}: ${Math.round(region.deaths).toLocaleString()} civilian deaths`
+                          )
+                          .join("; ") || "No eligible civilian stock in the authorized territory"
+                      }
+                    >
+                      <span>
+                        {Math.round(
+                          interaction.globalResponseOutcome.civilianLossResult.deaths
+                        ).toLocaleString()}{" "}
+                        civilian deaths recorded
+                      </span>
+                    </Tooltip>
+                  </p>
+                ) : null}
                 {interaction.globalResponseOutcome.campaignStageAfter ? (
                   <p className="mt-1 text-[11px] text-muted">
                     Campaign stage:{" "}

@@ -3,6 +3,11 @@ import type {
   RefugeeReceptionOrder,
   RefugeeReceptionResult,
 } from "@/lib/livingConflict/rules/refugeeReception";
+import type {
+  ConflictCivilianLossSpec,
+  ConflictCivilianLossOrder,
+  ConflictCivilianLossResult,
+} from "@/lib/livingConflict/rules/civilianLoss";
 import { ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CommodityType } from "@/lib/constants/commodities";
@@ -349,6 +354,8 @@ export interface GlobalResponseOutcome {
   tensionDelta?: number;
   /** Enforceable trade restriction for governments that explicitly participated. */
   tradeSanction?: CrisisTradeSanction;
+  /** Explicit resident deaths, independent of campaign risk scores. */
+  civilianLoss?: ConflictCivilianLossSpec;
   wireMessage: string;
 }
 
@@ -373,6 +380,8 @@ export interface ResolvedGlobalResponse {
   eligibleCountries: number;
   campaignStageBefore?: CampaignStage;
   campaignStageAfter?: CampaignStage;
+  civilianLossOrder?: ConflictCivilianLossOrder;
+  civilianLossResult?: ConflictCivilianLossResult;
   resolvedAt: Date;
 }
 
@@ -401,6 +410,9 @@ export interface CrisisInteraction {
   /** Durable response outbox; claiming a leader's choice writes these atomically. */
   populationOrderEpochId?: string;
   populationOrdersPending?: boolean;
+  /** Outcome CAS owns this separate outbox so response completion cannot clear it. */
+  civilianLossEpochId?: string;
+  civilianLossPending?: boolean;
   decisionDeadline: Date | null;
   autoResolveOnExpiry: boolean;
   resolvedAt: Date | null;

@@ -1052,6 +1052,7 @@ const RUNTIME: CollectionEntry[] = [
   { name: "crisisAidCommitments", category: "runtime" },
   { name: "crisisInteractions", category: "runtime" },
   { name: "refugeeReceptionHistory", category: "runtime" },
+  { name: "conflictCivilianLossHistory", category: "runtime" },
   {
     name: "crisisAutoCooldowns",
     category: "runtime",

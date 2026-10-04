@@ -1,0 +1,267 @@
+{
+  "sourceHashes": {
+    "src/lib/livingConflict/rules/civilianLoss.ts": "e3eb582b3068d57f163813c4cc25dc0a814e749ae3adbf7f3b35142f1fb34879",
+    "src/lib/livingConflict/civilianLoss.ts": "5d43ab03da9768c99b23c34f859cbc25e2d5b2924f4a2c5899ae2815c2f9c227",
+    "src/lib/livingConflict/globalResponse.ts": "7bf1f7047d9aa560606ef54f967a3f037eb18635e9fc13249c010878d702091a",
+    "src/lib/livingConflict/defs/yugoslavia.ts": "7cdf8486292586343fd943983bbaae3e4c3c71a374cdca40c15f051594e79307",
+    "src/lib/demographics/phase.ts": "90a6de4469ac308032ff24043b3243e6c4f72073487f5fc40e966d7052e155b6",
+    "src/lib/demographics/flowJournal.ts": "c8aa955156a59654882e079d76eb7d3f61f99a7360f4d2e4b8c639eb4ff03b30",
+    "src/lib/db/types/crisis.ts": "c9eec6145b2841772fe841b32b49bd1292a63cd19b7368c3cb7fb747957c2cd6",
+    "src/lib/livingConflict/types.ts": "4fc39414bdcf5768809f7fc10951ffb609fdfda5254f104dc6c054d1f094c4e4",
+    "src/lib/coldwar/tension.ts": "47aac8bddd5acf77f27b67a59b6c6c6be23d520ccbd4fe3fe672783259e4435a",
+    "src/lib/coldwar/rules/tensionEvent.ts": "c10db6a50ce13e5069e488833afa77724a8e91716d2db80838c1707bf4686632"
+  },
+  "model": "Three synthetic regions; actual Yugoslav outcome conditions, resolution, demographics and recovery",
+  "baselinePopulation": 300144.01569788205,
+  "cases": [
+    {
+      "boundary": "none",
+      "deaths": 10,
+      "regions": [
+        {
+          "regionId": "YU_ONE",
+          "deaths": 5
+        },
+        {
+          "regionId": "YU_TWO",
+          "deaths": 5
+        }
+      ],
+      "populationMatchesRecordedLoss": true,
+      "replayMatchesUninterrupted": true,
+      "historyEntries": 1,
+      "militaryPersonnel": 1000,
+      "trajectoryAppliedOnce": true,
+      "tensionValue": 20,
+      "tensionEvents": 1,
+      "executionCost": {
+        "commands": 59,
+        "reads": 40,
+        "replyBsonBytes": 34119
+      }
+    },
+    {
+      "boundary": "outcome-claim",
+      "deaths": 10,
+      "regions": [
+        {
+          "regionId": "YU_ONE",
+          "deaths": 5
+        },
+        {
+          "regionId": "YU_TWO",
+          "deaths": 5
+        }
+      ],
+      "populationMatchesRecordedLoss": true,
+      "replayMatchesUninterrupted": true,
+      "historyEntries": 1,
+      "militaryPersonnel": 1000,
+      "trajectoryAppliedOnce": true,
+      "tensionValue": 20,
+      "tensionEvents": 1,
+      "executionCost": {
+        "commands": 59,
+        "reads": 42,
+        "replyBsonBytes": 39127
+      }
+    },
+    {
+      "boundary": "trajectory",
+      "deaths": 10,
+      "regions": [
+        {
+          "regionId": "YU_ONE",
+          "deaths": 5
+        },
+        {
+          "regionId": "YU_TWO",
+          "deaths": 5
+        }
+      ],
+      "populationMatchesRecordedLoss": true,
+      "replayMatchesUninterrupted": true,
+      "historyEntries": 1,
+      "militaryPersonnel": 1000,
+      "trajectoryAppliedOnce": true,
+      "tensionValue": 20,
+      "tensionEvents": 1,
+      "executionCost": {
+        "commands": 61,
+        "reads": 44,
+        "replyBsonBytes": 40311
+      }
+    },
+    {
+      "boundary": "tension-before",
+      "deaths": 10,
+      "regions": [
+        {
+          "regionId": "YU_ONE",
+          "deaths": 5
+        },
+        {
+          "regionId": "YU_TWO",
+          "deaths": 5
+        }
+      ],
+      "populationMatchesRecordedLoss": true,
+      "replayMatchesUninterrupted": true,
+      "historyEntries": 1,
+      "militaryPersonnel": 1000,
+      "trajectoryAppliedOnce": true,
+      "tensionValue": 20,
+      "tensionEvents": 1,
+      "executionCost": {
+        "commands": 64,
+        "reads": 46,
+        "replyBsonBytes": 40796
+      }
+    },
+    {
+      "boundary": "tension-after",
+      "deaths": 10,
+      "regions": [
+        {
+          "regionId": "YU_ONE",
+          "deaths": 5
+        },
+        {
+          "regionId": "YU_TWO",
+          "deaths": 5
+        }
+      ],
+      "populationMatchesRecordedLoss": true,
+      "replayMatchesUninterrupted": true,
+      "historyEntries": 1,
+      "militaryPersonnel": 1000,
+      "trajectoryAppliedOnce": true,
+      "tensionValue": 20,
+      "tensionEvents": 1,
+      "executionCost": {
+        "commands": 62,
+        "reads": 45,
+        "replyBsonBytes": 40686
+      }
+    },
+    {
+      "boundary": "vector",
+      "deaths": 10,
+      "regions": [
+        {
+          "regionId": "YU_ONE",
+          "deaths": 5
+        },
+        {
+          "regionId": "YU_TWO",
+          "deaths": 5
+        }
+      ],
+      "populationMatchesRecordedLoss": true,
+      "replayMatchesUninterrupted": true,
+      "historyEntries": 1,
+      "militaryPersonnel": 1000,
+      "trajectoryAppliedOnce": true,
+      "tensionValue": 20,
+      "tensionEvents": 1,
+      "executionCost": {
+        "commands": 71,
+        "reads": 49,
+        "replyBsonBytes": 44926
+      }
+    },
+    {
+      "boundary": "history",
+      "deaths": 10,
+      "regions": [
+        {
+          "regionId": "YU_ONE",
+          "deaths": 5
+        },
+        {
+          "regionId": "YU_TWO",
+          "deaths": 5
+        }
+      ],
+      "populationMatchesRecordedLoss": true,
+      "replayMatchesUninterrupted": true,
+      "historyEntries": 1,
+      "militaryPersonnel": 1000,
+      "trajectoryAppliedOnce": true,
+      "tensionValue": 20,
+      "tensionEvents": 1,
+      "executionCost": {
+        "commands": 74,
+        "reads": 52,
+        "replyBsonBytes": 47440
+      }
+    },
+    {
+      "boundary": "outcome-completion",
+      "deaths": 10,
+      "regions": [
+        {
+          "regionId": "YU_ONE",
+          "deaths": 5
+        },
+        {
+          "regionId": "YU_TWO",
+          "deaths": 5
+        }
+      ],
+      "populationMatchesRecordedLoss": true,
+      "replayMatchesUninterrupted": true,
+      "historyEntries": 1,
+      "militaryPersonnel": 1000,
+      "trajectoryAppliedOnce": true,
+      "tensionValue": 20,
+      "tensionEvents": 1,
+      "executionCost": {
+        "commands": 76,
+        "reads": 53,
+        "replyBsonBytes": 47699
+      }
+    },
+    {
+      "boundary": "header-completion",
+      "deaths": 10,
+      "regions": [
+        {
+          "regionId": "YU_ONE",
+          "deaths": 5
+        },
+        {
+          "regionId": "YU_TWO",
+          "deaths": 5
+        }
+      ],
+      "populationMatchesRecordedLoss": true,
+      "replayMatchesUninterrupted": true,
+      "historyEntries": 1,
+      "militaryPersonnel": 1000,
+      "trajectoryAppliedOnce": true,
+      "tensionValue": 20,
+      "tensionEvents": 1,
+      "executionCost": {
+        "commands": 76,
+        "reads": 53,
+        "replyBsonBytes": 47699
+      }
+    }
+  ],
+  "concurrentResponsePreservedAndRetallied": true,
+  "olderOutcomeReplayAfterLaterOutcomeNeutral": true,
+  "tensionReplayNeutralAfterVisibleHistoryTruncation": true,
+  "successorCivilianDeaths": 0,
+  "assumptions": {
+    "residentPopulationShare": 5e-5,
+    "profile": "Proportional available civilian age/sex cohorts"
+  },
+  "limitations": [
+    "Gameplay quantities are uncalibrated assumptions, not historical estimates.",
+    "Military unit deaths already belong to battle settlement; no new deployment/home-cohort attribution is modeled.",
+    "No productive-capacity impairment, funded reconstruction or source-pinned whole-world qualification is established.",
+    "Trajectory retry covers Yugoslav campaign/track deltas; other post-claim side effects and final wire delivery are not a generic outcome outbox.",
+    "Costs include first per-Db index setup and synthetic resolution/replays, not full-world performance."
+  ]
+}

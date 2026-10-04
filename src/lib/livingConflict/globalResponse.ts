@@ -1,4 +1,10 @@
+/**
+ * Shared response votes select authored outcomes and claim their durable result.
+ * resolveGlobalResponse freezes civilian mortality authorization in the outcome CAS;
+ * demographic receipts apply and report its actual resident losses on a later turn.
+ */
 import { ARAB_UPRISINGS_KEY } from "./rules/arabOrigins";
+import { prepareConflictCivilianLossOrder } from "./civilianLoss";
 import { resolveArabRegion, describeArabRegion } from "./rules/arabRegional";
 import { projectArabRegion } from "./rules/arabProjection";
 import { prepareFinancialFiscalResponse } from "@/lib/crises/financialCrisisFiscalResponse";
@@ -503,6 +509,42 @@ async function applyEffectsForCountry(
   );
 }
 
+async function applyOutcomeTension(
+  db: Db,
+  crisis: Crisis,
+  outcome: GlobalResponseOutcome,
+  resolutionId: string,
+  knownWorld?: Awaited<ReturnType<typeof getGameState>>
+): Promise<void> {
+  if (!outcome.tensionDelta) return;
+  const world = knownWorld === undefined ? await getGameState(db) : knownWorld;
+  const minimumValue =
+    outcome.tensionDelta < 0
+      ? tensionFloor(
+          (
+            await readStandingPressureSnapshot(
+              db,
+              world ?? {},
+              world?.currentTurn ?? crisis.startTurn
+            )
+          ).pressures
+        )
+      : undefined;
+  await applyTensionEvent(
+    db,
+    world?.currentTurn ?? crisis.startTurn,
+    outcome.tensionDelta > 0 ? "escalation" : "detente",
+    outcome.label,
+    outcome.tensionDelta,
+    {
+      minimumValue,
+      ...(crisis.globalResponse?.conflictKey === "yugoslav_dissolution"
+        ? { eventId: `yugoslav:${resolutionId}` }
+        : {}),
+    }
+  );
+}
+
 async function applyOutcomeTrajectory(
   db: Db,
   crisis: Crisis,
@@ -515,6 +557,14 @@ async function applyOutcomeTrajectory(
   if (!def) return null;
 
   let state = await loadConflictState(db, def.key);
+  if (
+    def.key === "yugoslav_dissolution" &&
+    state.appliedResponseOutcomeIds?.includes(resolutionId)
+  ) {
+    await applyOutcomeTension(db, crisis, outcome, resolutionId);
+    const stage = normalizeCampaignState(state.campaign).stage;
+    return { previousStage: stage, nextStage: stage, applied: false };
+  }
   if (def.key === ARAB_UPRISINGS_KEY && state.arabRegional?.resolutionIds.includes(resolutionId)) {
     const stage = normalizeCampaignState(state.campaign).stage;
     return { previousStage: stage, nextStage: stage, applied: false };
@@ -525,6 +575,12 @@ async function applyOutcomeTrajectory(
     delta: outcome.campaignDelta,
     nextStage: outcome.nextCampaignStage,
   });
+  // Yugoslav trajectory and its applied identity share one livingConflicts write.
+  // Retry a claimed outcome after a crash, without repeating track/intensity deltas.
+  if (def.key === "yugoslav_dissolution" && !campaignResult.applied) {
+    await applyOutcomeTension(db, crisis, outcome, resolutionId);
+    return { ...campaignResult, nextStage: state.campaign?.stage ?? campaignResult.nextStage };
+  }
   state.campaign = campaignResult.state;
   if (outcome.intensityDelta) {
     state = adjustIntensity(state, outcome.intensityDelta);
@@ -558,29 +614,15 @@ async function applyOutcomeTrajectory(
       interventionCommitment: terrorismInterventionCommitment(state),
     };
   }
-  await saveConflictState(db, state);
-  if (campaignResult.applied && outcome.tensionDelta) {
-    const minimumValue =
-      outcome.tensionDelta < 0
-        ? tensionFloor(
-            (
-              await readStandingPressureSnapshot(
-                db,
-                gameState ?? {},
-                gameState?.currentTurn ?? crisis.startTurn
-              )
-            ).pressures
-          )
-        : undefined;
-    await applyTensionEvent(
-      db,
-      gameState?.currentTurn ?? crisis.startTurn,
-      outcome.tensionDelta > 0 ? "escalation" : "detente",
-      outcome.label,
-      outcome.tensionDelta,
-      { minimumValue }
-    );
+  if (def.key === "yugoslav_dissolution") {
+    const previousIds = state.appliedResponseOutcomeIds ?? [];
+    if (previousIds.length >= 10_000)
+      throw new Error("Yugoslav outcome replay ledger exceeds the safe limit");
+    state.appliedResponseOutcomeIds = [...previousIds, resolutionId];
   }
+  await saveConflictState(db, state);
+  if (campaignResult.applied)
+    await applyOutcomeTension(db, crisis, outcome, resolutionId, gameState);
   return { ...campaignResult, nextStage: state.campaign?.stage ?? campaignResult.nextStage };
 }
 
@@ -604,7 +646,11 @@ export async function resolveGlobalResponse(
     );
     if (prior) {
       await applyCrisisTradeSanctions(db, crisis, interaction, prior);
-      if (crisis.globalResponse.conflictKey === ARAB_UPRISINGS_KEY)
+      if (
+        crisis.globalResponse.conflictKey === ARAB_UPRISINGS_KEY ||
+        (crisis.globalResponse.conflictKey === "yugoslav_dissolution" &&
+          interaction.globalResponseOutcome.civilianLossOrder)
+      )
         await applyOutcomeTrajectory(
           db,
           crisis,
@@ -690,6 +736,12 @@ export async function resolveGlobalResponse(
     );
   }
 
+  const civilianLossOrder = await prepareConflictCivilianLossOrder(
+    db,
+    crisis,
+    interaction,
+    outcome
+  );
   const now = new Date();
   const resolved: ResolvedGlobalResponse = {
     outcomeId: outcome.outcomeId,
@@ -700,6 +752,7 @@ export async function resolveGlobalResponse(
     scores,
     respondedCountries: interaction.leaderResponses?.length ?? 0,
     eligibleCountries: Object.keys(crisis.globalResponse.roleByCountry).length,
+    ...(civilianLossOrder ? { civilianLossOrder } : {}),
     resolvedAt: now,
   };
   const responsesWithExposure = (interaction.leaderResponses ?? []).map((response) => {
@@ -718,10 +771,19 @@ export async function resolveGlobalResponse(
   await applyCrisisTradeSanctions(db, crisis, interaction, outcome);
 
   const claimed = await db.collection<CrisisInteraction>("crisisInteractions").updateOne(
-    { _id: interaction._id, globalResponseOutcome: { $exists: false } },
+    {
+      _id: interaction._id,
+      globalResponseOutcome: { $exists: false },
+      ...(interaction.leaderResponses
+        ? { leaderResponses: interaction.leaderResponses }
+        : { $or: [{ leaderResponses: { $exists: false } }, { leaderResponses: [] }] }),
+    },
     {
       $set: {
         globalResponseOutcome: resolved,
+        ...(civilianLossOrder
+          ? { civilianLossEpochId: civilianLossOrder.worldEpochId, civilianLossPending: true }
+          : {}),
         leaderResponses: responsesWithExposure,
         currentNodeId: null,
         decisionDeadline: null,
@@ -732,13 +794,11 @@ export async function resolveGlobalResponse(
     }
   );
   if (claimed.modifiedCount === 0) {
-    return (
-      (
-        await db
-          .collection<CrisisInteraction>("crisisInteractions")
-          .findOne({ _id: interaction._id })
-      )?.globalResponseOutcome ?? null
-    );
+    const latest = await db
+      .collection<CrisisInteraction>("crisisInteractions")
+      .findOne({ _id: interaction._id });
+    if (latest?.globalResponseOutcome) return latest.globalResponseOutcome;
+    throw new Error("Global response changed during resolution; retry from current responses");
   }
 
   for (const [countryId, role] of Object.entries(crisis.globalResponse.roleByCountry)) {

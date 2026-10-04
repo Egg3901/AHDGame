@@ -1,3 +1,7 @@
+/**
+ * Yugoslav choices authorize response costs, reception and selected escalation losses.
+ * YUGOSLAVIA_DEF uses explicit civilian-loss and refugee specs independently of risk scores.
+ */
 import type { GlobalResponseOutcome } from "@/lib/db/types/crisis";
 import type {
   ConflictEvent,
@@ -10,6 +14,7 @@ import type {
 import { choiceNode, responseOpt } from "../authoring";
 import { cfx } from "../effects";
 import { YUGOSLAV_REFUGEE_RECEPTION } from "../rules/refugeeReception";
+import { YUGOSLAV_ESCALATION_CIVILIAN_LOSS } from "../rules/civilianLoss";
 
 // Primary historical anchors constrain sanctions, ceasefire, peacekeeping, and
 // intervention pressure without fixing borders or campaigns: UNSC Resolution
@@ -264,6 +269,7 @@ const outcomes: GlobalResponseOutcome[] = [
     description: "Arming, coercion, and external commitments widen organized violence.",
     priority: 40,
     conditions: [{ axis: "escalation", min: 7 }],
+    civilianLoss: YUGOSLAV_ESCALATION_CIVILIAN_LOSS,
     intensityDelta: 15,
     trackDeltas: {
       constitutionalCohesion: -10,

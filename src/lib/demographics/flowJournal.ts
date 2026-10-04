@@ -4,8 +4,10 @@
  * resumeDemographicFlowReceipt completes partial writes without recomputing flows.
  */
 import { randomUUID } from "node:crypto";
-import { BSON } from "mongodb";
+import { BSON, ObjectId } from "mongodb";
 import { materializeRefugeeReceptionResults } from "@/lib/livingConflict/refugeeReception";
+import { materializeConflictCivilianLossResults } from "@/lib/livingConflict/civilianLoss";
+import type { ConflictCivilianLossResult } from "@/lib/livingConflict/rules/civilianLoss";
 import type { RefugeeReceptionResult } from "@/lib/livingConflict/rules/refugeeReception";
 import type { Db, Filter } from "mongodb";
 import type { AgeSexVector } from "./cohortVector";
@@ -63,6 +65,7 @@ export interface DemographicFlowReceipt {
   createdAt: Date;
   completedAt?: Date;
   refugeeReceptions?: RefugeeReceptionResult[];
+  civilianLosses?: ConflictCivilianLossResult[];
 }
 
 export interface DemographicFlowProjection extends DemographicFlowRegionInput {
@@ -364,6 +367,12 @@ async function materializeReceipt(
     receipt._id,
     receipt.createdAt
   );
+  await materializeConflictCivilianLossResults(
+    db,
+    receipt.civilianLosses ?? [],
+    receipt._id,
+    receipt.createdAt
+  );
   const completedAt = new Date();
   const result = await db
     .collection<DemographicFlowReceipt>(DEMOGRAPHIC_FLOW_RECEIPTS)
@@ -468,6 +477,7 @@ export async function freezeAndApplyDemographicFlowPlan(
     regions: DemographicFlowRegionInput[];
     stats: DemographicFlowStats;
     refugeeReceptions?: RefugeeReceptionResult[];
+    civilianLosses?: ConflictCivilianLossResult[];
   }
 ): Promise<DemographicFlowStats> {
   assertEpochId(input.worldEpochId);
@@ -479,9 +489,42 @@ export async function freezeAndApplyDemographicFlowPlan(
   if (existing) return (await materializeReceipt(db, existing)).stats;
 
   const regions = input.regions.map(freezeRegionInput);
+  const projectionRegionIds = new Set(regions.map((region) => region.regionId));
   const refugeeReceptions = input.refugeeReceptions?.length
     ? structuredClone(input.refugeeReceptions)
     : undefined;
+  const civilianLosses = input.civilianLosses?.length
+    ? structuredClone(input.civilianLosses)
+    : undefined;
+  if (
+    civilianLosses &&
+    (new Set(civilianLosses.map((result) => result._id)).size !== civilianLosses.length ||
+      civilianLosses.some(
+        (result) =>
+          result.worldEpochId !== input.worldEpochId ||
+          result.appliedTurn !== input.turn ||
+          !ObjectId.isValid(result.interactionId) ||
+          !ObjectId.isValid(result.crisisId) ||
+          !Number.isFinite(result.requestedPeople) ||
+          result.requestedPeople < 0 ||
+          !Number.isFinite(result.deaths) ||
+          result.deaths < 0 ||
+          result.deaths > result.requestedPeople + 1e-7 ||
+          result.stock !== "civilian-residents" ||
+          new Set(result.regions.map((region) => region.regionId)).size !== result.regions.length ||
+          result.regions.some(
+            (region) =>
+              !Number.isFinite(region.deaths) ||
+              region.deaths < 0 ||
+              !projectionRegionIds.has(region.regionId)
+          ) ||
+          Math.abs(result.regions.reduce((sum, region) => sum + region.deaths, 0) - result.deaths) >
+            1e-7
+      ))
+  )
+    throw new Error("Invalid frozen civilian loss results");
+  if (BSON.calculateObjectSize({ refugeeReceptions, civilianLosses }) > 4_000_000)
+    throw new Error("Oversized frozen population outcome results");
   if (
     refugeeReceptions &&
     (BSON.calculateObjectSize({ refugeeReceptions }) > 4_000_000 ||
@@ -491,7 +534,7 @@ export async function freezeAndApplyDemographicFlowPlan(
       ))
   )
     throw new Error("Invalid or oversized frozen refugee reception results");
-  if (new Set(regions.map((region) => region.regionId)).size !== regions.length) {
+  if (projectionRegionIds.size !== regions.length) {
     throw new Error("Demographic flow plan has duplicate region IDs");
   }
   const planId = randomUUID();
@@ -520,6 +563,7 @@ export async function freezeAndApplyDemographicFlowPlan(
     stats: { ...input.stats },
     createdAt,
     ...(refugeeReceptions ? { refugeeReceptions } : {}),
+    ...(civilianLosses ? { civilianLosses } : {}),
   };
   try {
     await db.collection<DemographicFlowReceipt>(DEMOGRAPHIC_FLOW_RECEIPTS).insertOne(receipt);
