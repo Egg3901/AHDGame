@@ -8,8 +8,7 @@ import {
   getHeadOfGovernmentOfficeKey,
 } from "@/lib/constants/countries";
 import { getGameStatePreset } from "@/lib/db/collections/gameState";
-import { getCountryState } from "@/lib/countryState";
-import { primeCountryStates } from "@/lib/countryState";
+import { getCountryState, primeCountryStates } from "@/lib/countryState";
 import type { ElectedOfficial } from "@/lib/db/types/officials";
 import type { ParliamentaryGovernment } from "@/lib/db/types/parliamentaryGovernment";
 
