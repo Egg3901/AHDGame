@@ -20,7 +20,8 @@ Sentry.init({
   // Deploy identifier (full git SHA) injected via next.config.ts. Ties every
   // event to a specific build and matches uploaded source-map artifacts.
   release: process.env.SENTRY_RELEASE,
-  environment: process.env.RAILWAY_ENVIRONMENT_NAME || process.env.NODE_ENV,
+  environment:
+    process.env.SENTRY_ENVIRONMENT || process.env.RAILWAY_ENVIRONMENT_NAME || process.env.NODE_ENV,
 
   // Define how likely traces are sampled. Adjust this value in production, or use tracesSampler for greater control.
   tracesSampleRate: isProduction ? 0.1 : 1,
