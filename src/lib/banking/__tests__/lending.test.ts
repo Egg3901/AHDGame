@@ -418,17 +418,18 @@ describe("banking lending", () => {
       });
 
       const after = bankDoc(memory, bank._id);
-      expect(after.bankCharter.cashReserves).toBe(before - 100_000);
+      expect(after.bankCharter.cashReserves).toBe(before - 99_000);
       expect(after.bankCharter.totalLoans).toBe(100_000);
       expect(after.liquidCapital).toBe(50_000_000);
-      expect(bankDoc(memory, BORROWER_CORP).liquidCapital).toBe(350_000);
+      expect(bankDoc(memory, BORROWER_CORP).liquidCapital).toBe(349_000);
       expect(memory.collection("bankLoans").docs).toHaveLength(1);
 
       const { emitTx } = await import("@/lib/financialTxLog/emit");
       const [, entry] = vi.mocked(emitTx).mock.calls.at(-1)!;
       expect(entry).toMatchObject({
         type: "bank_loan_origination",
-        amount: 100_000,
+        amount: 99_000,
+        meta: expect.objectContaining({ principal: 100_000, originationFee: 1_000 }),
         counterpartyType: "corporation",
         counterpartyId: bank._id,
       });
@@ -448,7 +449,7 @@ describe("banking lending", () => {
       const person = memory.collection("characters").docs[0] as {
         currencyBalances: { personal: { USD: number } };
       };
-      expect(person.currencyBalances.personal.USD).toBe(11_000);
+      expect(person.currencyBalances.personal.USD).toBe(10_900);
     });
 
     it("lets an investment charter disburse a named corporation loan from its own cash", async () => {
@@ -465,7 +466,7 @@ describe("banking lending", () => {
         200_000
       );
       expect(result.ok).toBe(true);
-      expect(bankDoc(memory, bank._id).bankCharter.cashReserves).toBe(300_000);
+      expect(bankDoc(memory, bank._id).bankCharter.cashReserves).toBe(302_000);
       expect(bankDoc(memory, bank._id).bankCharter.totalLoans).toBe(200_000);
     });
 
