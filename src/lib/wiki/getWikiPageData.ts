@@ -4,6 +4,8 @@ import { getDb } from "@/lib/mongodb";
 import type { WikiPage, WikiPageDifficulty, WikiPageContentType } from "@/lib/db/types";
 import { isCustomWikiPage, resolveWikiCategory } from "@/lib/wiki/pageClassification";
 import { getAllCountryAccess } from "@/lib/countryAccess";
+import type { CountryId } from "@/lib/constants/countries";
+import type { CountryAccess } from "@/lib/countryAccess";
 
 export interface WikiPageData {
   slug: string;
@@ -105,7 +107,9 @@ export const getAllWikiSlugsAsync = unstable_cache(loadAllWikiSlugs, ["wiki-all-
 /**
  * Get all published wiki pages for display (uncached; use export below).
  */
-async function loadAllWikiPagesForDisplay(): Promise<WikiPageData[]> {
+async function loadAllWikiPagesForDisplay(
+  accessMap: Record<CountryId, CountryAccess>
+): Promise<WikiPageData[]> {
   const db = await getDb();
   const dbPages = await db
     .collection<WikiPage>("wikiPages")
@@ -137,7 +141,6 @@ async function loadAllWikiPagesForDisplay(): Promise<WikiPageData[]> {
     )
     .toArray();
 
-  const accessMap = await getAllCountryAccess();
   const visiblePages = dbPages.filter(
     (p) => !p.countryId || (accessMap[p.countryId]?.enabledForPlayers ?? false)
   );
@@ -169,7 +172,7 @@ async function loadAllWikiPagesForDisplay(): Promise<WikiPageData[]> {
  * Published wiki index for overview / category listings — cached to reduce Mongo load and TTFB.
  */
 export const getAllWikiPagesForDisplay = unstable_cache(
-  loadAllWikiPagesForDisplay,
+  async () => loadAllWikiPagesForDisplay(await getAllCountryAccess()),
   ["wiki-all-published-pages"],
   { revalidate: 120 }
 );
@@ -182,7 +185,9 @@ export interface WikiPageSpotlight {
   viewCount?: number;
 }
 
-async function loadRecentWikiPages(): Promise<WikiPageSpotlight[]> {
+async function loadRecentWikiPages(
+  accessMap: Record<CountryId, CountryAccess>
+): Promise<WikiPageSpotlight[]> {
   const db = await getDb();
   const pages = await db
     .collection<WikiPage>("wikiPages")
@@ -193,7 +198,6 @@ async function loadRecentWikiPages(): Promise<WikiPageSpotlight[]> {
     .sort({ createdAt: -1 })
     .limit(5)
     .toArray();
-  const accessMap = await getAllCountryAccess();
   return pages
     .filter((p) => !p.countryId || (accessMap[p.countryId]?.enabledForPlayers ?? false))
     .map((p) => ({
@@ -204,11 +208,15 @@ async function loadRecentWikiPages(): Promise<WikiPageSpotlight[]> {
     }));
 }
 
-export const getRecentWikiPages = unstable_cache(loadRecentWikiPages, ["wiki-recent-pages"], {
-  revalidate: 120,
-});
+export const getRecentWikiPages = unstable_cache(
+  async () => loadRecentWikiPages(await getAllCountryAccess()),
+  ["wiki-recent-pages"],
+  { revalidate: 120 }
+);
 
-async function loadMostViewedWikiPages(): Promise<WikiPageSpotlight[]> {
+async function loadMostViewedWikiPages(
+  accessMap: Record<CountryId, CountryAccess>
+): Promise<WikiPageSpotlight[]> {
   const db = await getDb();
   const pages = await db
     .collection<WikiPage>("wikiPages")
@@ -229,7 +237,6 @@ async function loadMostViewedWikiPages(): Promise<WikiPageSpotlight[]> {
     .sort({ viewCount: -1 })
     .limit(5)
     .toArray();
-  const accessMap = await getAllCountryAccess();
   return pages
     .filter((p) => !p.countryId || (accessMap[p.countryId]?.enabledForPlayers ?? false))
     .map((p) => ({
@@ -242,7 +249,29 @@ async function loadMostViewedWikiPages(): Promise<WikiPageSpotlight[]> {
 }
 
 export const getMostViewedWikiPages = unstable_cache(
-  loadMostViewedWikiPages,
+  async () => loadMostViewedWikiPages(await getAllCountryAccess()),
   ["wiki-most-viewed-pages"],
   { revalidate: 120 }
 );
+
+export interface WikiIndexData {
+  pages: WikiPageData[];
+  recentPages: WikiPageSpotlight[];
+  mostViewedPages: WikiPageSpotlight[];
+}
+
+/** Uncached builder used by the shared index cache and its freshness regression. */
+export async function loadWikiIndexData(): Promise<WikiIndexData> {
+  const accessMap = await getAllCountryAccess();
+  const [pages, recentPages, mostViewedPages] = await Promise.all([
+    loadAllWikiPagesForDisplay(accessMap),
+    loadRecentWikiPages(accessMap),
+    loadMostViewedWikiPages(accessMap),
+  ]);
+  return { pages, recentPages, mostViewedPages };
+}
+
+/** All three overview panels share one country-access snapshot and cache freshness window. */
+export const getWikiIndexData = unstable_cache(loadWikiIndexData, ["wiki-index-data"], {
+  revalidate: 120,
+});

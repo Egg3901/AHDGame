@@ -58,12 +58,16 @@ export async function GET(request: Request, { params }: RouteParams) {
       // Private supply-agreements gate — a governor-set gameConfig flag ("default"
       // doc), surfaced on the corp payload so the CEO panel can show/hide without
       // an extra round-trip.
-      db
-        .collection<GameConfig>("gameConfig")
-        .findOne(
-          { _id: "default" },
-          { projection: { supplyAgreementsEnabled: 1, contractIssuanceEnabled: 1 } }
-        ),
+      db.collection<GameConfig>("gameConfig").findOne(
+        { _id: "default" },
+        {
+          projection: {
+            supplyAgreementsEnabled: 1,
+            contractIssuanceEnabled: 1,
+            mediaEditorialEnabled: 1,
+          },
+        }
+      ),
       resolveCorporation(db, id),
       getAuthUser().catch(() => null),
     ]);
@@ -78,6 +82,7 @@ export async function GET(request: Request, { params }: RouteParams) {
 
     if (!resolved.ok) return resolved.response;
     const { corporation } = resolved;
+    const mediaEditorialEnabled = config?.mediaEditorialEnabled === true;
     const modViewEnabled =
       !authUser?.isAdmin &&
       authUser?.isModerator === true &&
@@ -88,6 +93,19 @@ export async function GET(request: Request, { params }: RouteParams) {
       currentTurn,
       viewerUserId: authUser?.userId ?? null,
     })) as Record<string, unknown>;
+    const hasMediaSector =
+      corporation.type === "media" ||
+      corporation.secondaryType === "media" ||
+      (Array.isArray(detail.sectors) &&
+        (detail.sectors as Array<{ sectorType?: string }>).some(
+          (sector) => sector.sectorType === "media"
+        ));
+    if (mediaEditorialEnabled && hasMediaSector) {
+      const editorial = await db
+        .collection<Corporation>("corporations")
+        .findOne({ _id: corporation._id }, { projection: { editorialStance: 1 } });
+      if (editorial?.editorialStance) corporation.editorialStance = editorial.editorialStance;
+    }
 
     // Surface any open privatization vote so the corp page can mount the panel.
     // Must be nested inside `corporation` — the page sets state from data.corporation,
@@ -144,6 +162,11 @@ export async function GET(request: Request, { params }: RouteParams) {
       supplyAgreementsEnabled;
     (detail.corporation as Record<string, unknown>).contractIssuanceEnabled =
       contractIssuanceEnabled;
+    (detail.corporation as Record<string, unknown>).mediaEditorialEnabled = mediaEditorialEnabled;
+    if (mediaEditorialEnabled && hasMediaSector) {
+      (detail.corporation as Record<string, unknown>).editorialStance =
+        corporation.editorialStance ?? { economic: 0, social: 0 };
+    }
 
     let redact = shouldRedactCorporation(
       corporation,
@@ -190,6 +213,10 @@ export async function GET(request: Request, { params }: RouteParams) {
           techTreesEnabled,
           supplyAgreementsEnabled,
           contractIssuanceEnabled,
+          mediaEditorialEnabled,
+          ...(mediaEditorialEnabled && hasMediaSector
+            ? { editorialStance: corporation.editorialStance ?? { economic: 0, social: 0 } }
+            : {}),
         },
         ceo: detail.ceo,
         ceoIsInactive: detail.ceoIsInactive,

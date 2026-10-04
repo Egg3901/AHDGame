@@ -39,6 +39,7 @@ vi.mock("@/lib/congress/governmentVoteBreakdown", () => ({
   computeCabinetNominationTally: vi
     .fn()
     .mockResolvedValue({ votesFor: 0, votesAgainst: 0, votesAbstain: 0 }),
+  computeCabinetNominationTallies: vi.fn().mockResolvedValue(new Map()),
 }));
 
 const objectId = new ObjectId();

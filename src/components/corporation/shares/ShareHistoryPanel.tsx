@@ -44,7 +44,8 @@ const KIND_BADGE_CLASS: Record<ShareHistoryEntry["kind"], string> = {
   reverse_split: "bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/30",
 };
 
-function fmtAnchor(n: number): string {
+function fmtAnchor(n: number | null): string {
+  if (n === null || !Number.isFinite(n)) return "Unavailable";
   return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 

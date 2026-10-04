@@ -139,15 +139,15 @@ describe("deposit-book return counters", () => {
     const { getDb } = await import("@/lib/mongodb");
     vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
 
-    // Crash at the fiscal projection after every money leg has landed,
-    // independent of cash-debit and receipt housekeeping writes.
+    // Skip the treasury debit leg and kill the spending projection after all
+    // money legs have landed, before the counters are booked.
     const faulty = withInjectedCrash(db, {
       collection: "federalBudget",
       op: "updateOne",
       onCall: 1,
-      matches: ([, update]) => {
-        const increment = (update as { $inc?: Record<string, unknown> }).$inc;
-        return increment?.["spending.total"] !== undefined;
+      matches: (args) => {
+        const update = args[1] as { $inc?: Record<string, unknown> };
+        return Object.hasOwn(update.$inc ?? {}, "spending.byCategory.depositInsurance");
       },
     });
     await expect(
@@ -160,8 +160,8 @@ describe("deposit-book return counters", () => {
     faulty.disarm();
     expect(bank(db).bankCharter.cashReserves).toBe(0);
     expect(fund(db).balance).toBe(0);
-    expect(db.collection("centralBanks").docs[0]).toMatchObject({ externalBroadMoney: 2_000_000 });
     expect(db.collection("federalBudget").docs[0]).toMatchObject({ treasuryBalance: 8_400_000 });
+    expect(db.collection("centralBanks").docs[0]).toMatchObject({ externalBroadMoney: 2_000_000 });
     expect(fund(db).payoutsLifetime).toBe(0);
 
     const retry = await returnDepositBook(db as unknown as Db, BANK, {

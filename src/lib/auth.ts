@@ -138,16 +138,10 @@ function isAuthTokenRevoked(user: User, payload: UserPayload): boolean {
   return isTokenRevokedByCutoff(user.authRevokedAt, payload.iat);
 }
 
-// Auth-clear reasons that are genuinely anomalous (a *valid* token whose user
-// is gone or banned) and warrant their own GlitchTip event. Everything else
-// (expired/rotated tokens → user_null, deliberate logout) is routine and is
-// recorded as a breadcrumb only, so it provides forensic context before a real
-// error without flooding the dashboard with tens of thousands of "events".
-const SUSPICIOUS_AUTH_CLEAR_REASONS = new Set([
-  "auth_me:user_banned",
-  "auth_me:user_not_found",
-  "user_delete_account",
-]);
+// A valid session whose account unexpectedly vanished warrants an error-tracker
+// warning. Ban enforcement, account deletion and logout are expected cleanup;
+// retain their breadcrumbs without raising separate issues.
+const SUSPICIOUS_AUTH_CLEAR_REASONS = new Set(["auth_me:user_not_found"]);
 
 /**
  * Clear the auth-token cookie.

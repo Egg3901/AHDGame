@@ -156,17 +156,23 @@ function account(db: InMemoryDb): SavingsAccount {
 }
 /**
  * Everything that is cash somewhere. Savings balances are claims, not cash,
- * and the treasury balance is funded cash. An insurance backstop transfers
- * that cash to depositors rather than minting money.
+ * and the treasury balance is cash. A funded insurance backstop debits this
+ * cash, then credits household money at the central bank.
  */
 function money(db: InMemoryDb): number {
+  const treasuryCash = db
+    .collection("federalBudget")
+    .docs.reduce(
+      (sum, budget) => sum + ((budget as { treasuryBalance?: number }).treasuryBalance ?? 0),
+      0
+    );
   return (
     cb(db).externalBroadMoney +
     bank(db).bankCharter.cashReserves +
     bank(db).liquidCapital +
     owner(db).currencyBalances.personal.USD +
     fund(db) +
-    (db.collection("federalBudget").docs[0] as { treasuryBalance: number }).treasuryBalance
+    treasuryCash
   );
 }
 /** Net money the journal says it created (mint) or destroyed (burn). */

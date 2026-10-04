@@ -182,6 +182,8 @@ export interface Character {
   /** Party influence — accumulates per turn based on policy alignment and leadership. Floored at 0. */
   partyInfluence?: number;
   favorability: number;
+  /** Last corporation-turn editorial favorability receipt, for replay safety. */
+  mediaEditorialLastAppliedTurn?: number;
   infamy: number;
   /**
    * @deprecated Removed from the schema in cf-inconsistency-fix Phase 5.

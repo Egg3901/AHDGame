@@ -3,17 +3,9 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { BankingHubClient } from "./BankingHubClient";
 import { NextIntlClientProvider } from "next-intl";
 import english from "../../../messages/en/corporations.json";
-
-function renderBankingHub() {
-  return render(
-    <NextIntlClientProvider locale="en" timeZone="UTC" messages={english}>
-      <BankingHubClient />
-    </NextIntlClientProvider>
-  );
-}
+import { BankingHubClient } from "./BankingHubClient";
 
 const { showToast } = vi.hoisted(() => ({ showToast: vi.fn() }));
 vi.mock("@/contexts/ToastContext", () => ({
@@ -168,6 +160,14 @@ beforeEach(() => {
   showToast.mockClear();
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => payload }));
 });
+
+function renderBankingHub() {
+  return render(
+    <NextIntlClientProvider locale="en" messages={english}>
+      <BankingHubClient />
+    </NextIntlClientProvider>
+  );
+}
 
 describe("BankingHubClient", () => {
   it("keeps bank IDs as option values without showing them in the admin picker", async () => {

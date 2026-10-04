@@ -3,6 +3,7 @@ import { ObjectId, type Db } from "mongodb";
 import type { BankSovereignClaim, FederalBudget } from "@/lib/db/types/budget";
 import type { Bond } from "@/lib/db/types/bond";
 import type { Corporation } from "@/lib/db/types/corporation";
+import type { LedgerEntry } from "@/lib/ledger/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/constants/bonds";
 import { roundSavingsAmount } from "@/lib/currency/savingsInterest";
@@ -189,7 +190,7 @@ function ledgerProjection(
   key: string,
   turn: number,
   destination: "bank" | "insurance" = "bank"
-): BankingTransition["projections"][number] {
+): { collection: "ledgerEntries"; insert: LedgerEntry & Record<string, unknown>; note: string } {
   if (!claim.anchorRate || !Number.isFinite(claim.anchorRate) || claim.anchorRate <= 0)
     throw new Error(`Bank sovereign claim ${claim.id} has no ledger valuation`);
   const anchorAmount = claim.amountLocal / claim.anchorRate;
@@ -236,12 +237,12 @@ async function ensureLedgerWitness(
   turn: number,
   destination: "bank" | "insurance"
 ): Promise<void> {
-  const expected = ledgerProjection(claim, key, turn, destination).insert!;
+  const expected = ledgerProjection(claim, key, turn, destination).insert;
   if (!(expected._id instanceof ObjectId)) throw new Error("Ledger witness id must be an ObjectId");
-  const rows = db.collection<{ _id: ObjectId }>("ledgerEntries");
+  const rows = db.collection<LedgerEntry>("ledgerEntries");
   await rows.updateOne({ _id: expected._id }, { $setOnInsert: expected }, { upsert: true });
   const stored = await rows.findOne({ _id: expected._id });
-  const economicIdentity = (row: typeof expected) => ({
+  const economicIdentity = (row: LedgerEntry) => ({
     turn: row.turn,
     createdAt: row.createdAt,
     txType: row.txType,
@@ -251,8 +252,7 @@ async function ensureLedgerWitness(
   });
   if (
     !stored ||
-    JSON.stringify(economicIdentity(stored as typeof expected)) !==
-      JSON.stringify(economicIdentity(expected))
+    JSON.stringify(economicIdentity(stored)) !== JSON.stringify(economicIdentity(expected))
   ) {
     throw new Error(`Bank sovereign ledger witness ${claim.id} conflicts with its receipt`);
   }

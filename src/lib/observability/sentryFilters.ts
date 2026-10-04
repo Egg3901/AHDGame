@@ -1,6 +1,43 @@
 // Pure, testable predicates for client-side Sentry `beforeSend` filtering.
 // Kept dependency-free so they can be unit-tested without booting the SDK.
 
+interface StreamErrorEvent {
+  exception?: {
+    values?: Array<{
+      value?: string;
+      mechanism?: { type?: string };
+      stacktrace?: { frames?: Array<{ filename?: string; in_app?: boolean }> };
+    }>;
+  };
+}
+
+/** Next.js reports a render-stream close when its HTTP client disconnects. */
+export function isNextRenderStreamDisconnect(event: StreamErrorEvent): boolean {
+  const values = event.exception?.values;
+  if (!values || values.length !== 1) return false;
+  const value = values[0];
+  if (
+    value.value !== "The destination stream closed early." ||
+    value.mechanism?.type !== "auto.function.nextjs.on_request_error"
+  )
+    return false;
+  const frames = value.stacktrace?.frames;
+  if (!frames?.length) return false;
+  const isNextRenderFrame = (filename: string) =>
+    /(?:^|\/)node_modules\/next\/dist\/compiled\/next-server\/app-page(?:-turbo)?(?:-experimental)?\.runtime\.prod\.js$/.test(
+      filename
+    );
+  return (
+    frames.some((frame) => isNextRenderFrame(frame.filename ?? "")) &&
+    frames.every(
+      (frame) =>
+        frame.in_app !== true &&
+        !!frame.filename &&
+        (frame.filename.startsWith("node:") || isNextRenderFrame(frame.filename))
+    )
+  );
+}
+
 /**
  * Detects the classic "value-less non-Error promise rejection" noise
  * (GlitchTip AHD-89): a promise rejected with no reason — `undefined`, `null`,

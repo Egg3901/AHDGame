@@ -146,6 +146,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
           marketGovernorCap: 1,
           marketGovernorRampTurns: 1,
           explicitPlantCostsEnabled: 1,
+          mediaEditorialEnabled: 1,
         },
       }
     );
@@ -163,6 +164,14 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
     if (!sector) {
       return NextResponse.json({ error: "Sector not found" }, { status: 404 });
     }
+    const editorialStance =
+      governorConfig?.mediaEditorialEnabled === true && sector.sectorType === "media"
+        ? ((
+            await db
+              .collection<Corporation>("corporations")
+              .findOne({ _id: corporation._id }, { projection: { editorialStance: 1 } })
+          )?.editorialStance ?? { economic: 0, social: 0 })
+        : undefined;
 
     // Check if requesting user is CEO
     const user = await getAuthUser().catch(() => null);
@@ -1073,6 +1082,9 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         // Drives the Prospect modal's success-odds / yield preview (corp-side
         // prospecting math is a pure function of rdScore).
         rdScore: corporation.rdScore ?? 0,
+        ...(governorConfig?.mediaEditorialEnabled === true && sector.sectorType === "media"
+          ? { mediaEditorialEnabled: true, editorialStance }
+          : {}),
       },
       ceo: ceo
         ? { name: ceo.name, sequentialId: ceo.sequentialId, avatarUrl: ceo.avatarUrl }
