@@ -23,6 +23,7 @@ export interface BankingPolicyConfig {
   bankContagionEnabled?: boolean;
   lineOfCreditEnabled?: boolean;
   playerAdvancedBankChartersEnabled?: boolean;
+  treasuryCashLedgerEnabled?: boolean;
   savingsAccountsMode?: SavingsAccountsMode;
   savingsAccountsReadCurrencies?: string[];
 }
@@ -36,6 +37,7 @@ export const BANKING_POLICY_PROJECTION = Object.freeze({
   bankContagionEnabled: 1,
   lineOfCreditEnabled: 1,
   playerAdvancedBankChartersEnabled: 1,
+  treasuryCashLedgerEnabled: 1,
   savingsAccountsMode: 1,
   savingsAccountsReadCurrencies: 1,
 } as const);
@@ -55,6 +57,7 @@ export interface BankingPolicySnapshot {
   lineOfCredit: boolean;
   /** Investment and universal charters offered to players. Requires private banking. */
   advancedCharters: boolean;
+  treasuryCashLedger: boolean;
   /** Savings account rollout stage. */
   savingsAccounts: SavingsAccountsMode;
   /** Currencies whose reads come from the accounts. Empty unless authoritative. */
@@ -92,6 +95,7 @@ export function resolveBankingPolicy(
     contagion: privateBanking && config?.bankContagionEnabled !== false,
     lineOfCredit: config?.lineOfCreditEnabled !== false,
     advancedCharters: privateBanking && config?.playerAdvancedBankChartersEnabled === true,
+    treasuryCashLedger: config?.treasuryCashLedgerEnabled === true,
     savingsAccounts,
     savingsReadCurrencies: readCurrencies,
   });

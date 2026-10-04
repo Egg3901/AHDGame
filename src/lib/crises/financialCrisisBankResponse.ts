@@ -12,6 +12,7 @@ import {
   financialRescueTransition,
 } from "@/lib/livingConflict/rules/financialRescue";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
+import { loadBankingPolicy } from "@/lib/banking/policy";
 
 export type FinancialCrisisBankResponse = "recapitalize" | "guarantee" | "resolve";
 
@@ -44,7 +45,8 @@ export function rankBanksForFinancialIntervention(
 export async function prepareFinancialCrisisBankResponse(
   db: Db,
   countryId: string,
-  option: CrisisDecisionOption
+  option: CrisisDecisionOption,
+  treasuryCashLedgerEnabled?: boolean
 ): Promise<void> {
   if (option.action?.kind !== "financialCrisisResponse") return;
   if (!["recapitalize", "guarantee", "resolve"].includes(option.action.response)) return;
@@ -52,6 +54,8 @@ export async function prepareFinancialCrisisBankResponse(
     .collection<FederalBudget>("federalBudget")
     .findOne({ countryId: countryId as FederalBudget["countryId"] });
   const currency = resolveCountryCurrencyCode(budget);
+  const cashLedgerEnabled =
+    treasuryCashLedgerEnabled ?? (await loadBankingPolicy(db)).treasuryCashLedger;
   const eligible = await db.collection<Corporation>("corporations").findOne(
     {
       countryId: countryId as Corporation["countryId"],
@@ -67,7 +71,10 @@ export async function prepareFinancialCrisisBankResponse(
     budget?.gdpSmoothed || budget?.gdp || 0,
     option.treasuryCostPctGdp ?? 0
   );
-  if (!(amount > 0) || (budget?.treasuryBalance ?? 0) < amount) {
+  const availableCash = cashLedgerEnabled
+    ? (budget?.treasuryCashLocal ?? 0)
+    : (budget?.treasuryBalance ?? 0);
+  if (!(amount > 0) || availableCash < amount) {
     throw badRequest(
       "The rescue needs funded treasury cash. Raise funding through the sovereign bond market first."
     );
@@ -90,7 +97,13 @@ export async function applyFinancialCrisisBankResponse(
     .findOne({ _id: actionId });
   if (pending)
     throw new Error("Rescue settlement is pending recovery; funding will not be duplicated");
-  await prepareFinancialCrisisBankResponse(ctx.db, ctx.countryId, ctx.option);
+  const treasuryCashLedgerEnabled = (await loadBankingPolicy(ctx.db)).treasuryCashLedger;
+  await prepareFinancialCrisisBankResponse(
+    ctx.db,
+    ctx.countryId,
+    ctx.option,
+    treasuryCashLedgerEnabled
+  );
   const budget = await ctx.db
     .collection<FederalBudget>("federalBudget")
     .findOne({ countryId: ctx.countryId as FederalBudget["countryId"] });
@@ -149,6 +162,7 @@ export async function applyFinancialCrisisBankResponse(
       id: bank._id.toHexString(),
       confidence: bank.bankCharter?.confidence ?? 0.5,
     })),
+    treasuryCashLedgerEnabled,
   });
   transition.projections.push({
     collection: "financialCrisisBankActions",

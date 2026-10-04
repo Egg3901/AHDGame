@@ -74,6 +74,12 @@ export function governmentLiquidFromTreasury(treasuryBalance: unknown): number {
   return Math.max(0, treasuryBalance);
 }
 
+/** Funded Treasury cash is a nonnegative stock and never inherits signed fiscal position. */
+export function governmentLiquidFromSpendableCash(treasuryCashLocal: unknown): number {
+  if (typeof treasuryCashLocal !== "number" || !Number.isFinite(treasuryCashLocal)) return 0;
+  return Math.max(0, treasuryCashLocal);
+}
+
 /** Fiscal advances first cancel a signed deficit, then add spendable cash. */
 export function treasuryAdvanceMoneyDelta(before: number, amount: number): number {
   return governmentLiquidFromTreasury(before + amount) - governmentLiquidFromTreasury(before);

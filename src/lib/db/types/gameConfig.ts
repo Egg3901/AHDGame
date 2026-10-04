@@ -202,6 +202,8 @@ export interface GameConfig {
   privateBankingEnabled?: boolean;
   /** Enable funded sovereign-bill holdings for private bank treasuries. Default off. */
   bankTreasuryEnabled?: boolean;
+  /** Experimental funded spendable government-cash ledger. Absent means off. */
+  treasuryCashLedgerEnabled?: boolean;
   /**
    * Gate on player-chartered ADVANCED bank types. When absent/false, players may
    * only charter (or switch to) a RETAIL bank; investment and universal charters

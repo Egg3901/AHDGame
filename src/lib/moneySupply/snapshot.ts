@@ -20,6 +20,7 @@ import {
   aggregatesForCurrency,
   emptyComponents,
   governmentLiquidFromTreasury,
+  governmentLiquidFromSpendableCash,
   homeCurrency,
   PERSONS_PER_HOUSEHOLD,
   HOUSEHOLD_LIQUID_RATIO,
@@ -35,8 +36,12 @@ export const MONEY_SUPPLY_SNAPSHOTS_COLLECTION = "moneySupplySnapshots";
 export async function snapshotMoneySupply(db: Db, turn: number): Promise<number> {
   const config = await db
     .collection<GameConfig>("gameConfig")
-    .findOne({ _id: "default" }, { projection: { moneySupplyEnabled: 1 } });
+    .findOne(
+      { _id: "default" },
+      { projection: { moneySupplyEnabled: 1, treasuryCashLedgerEnabled: 1 } }
+    );
   if (!isMoneySupplyEnabledFromConfig(config)) return 0;
+  const treasuryCashLedgerEnabled = config.treasuryCashLedgerEnabled === true;
 
   const gameState = await db
     .collection<{ _id: string; preset?: string }>("gameState")
@@ -111,7 +116,16 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
       .toArray(),
     db
       .collection<FederalBudget>("federalBudget")
-      .find({}, { projection: { countryId: 1, currencyCode: 1, treasuryBalance: 1 } })
+      .find(
+        {},
+        {
+          projection: {
+            countryId: 1,
+            currencyCode: 1,
+            ...(treasuryCashLedgerEnabled ? { treasuryCashLocal: 1 } : { treasuryBalance: 1 }),
+          },
+        }
+      )
       .toArray(),
     db
       .collection<OrganizationFund>("organizationFunds")
@@ -212,7 +226,9 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
       byCurrency,
       (budget.currencyCode ?? currencyFor(budget.countryId as CountryId)) as CurrencyCode,
       "governmentLiquid",
-      governmentLiquidFromTreasury(budget.treasuryBalance)
+      treasuryCashLedgerEnabled
+        ? governmentLiquidFromSpendableCash(budget.treasuryCashLocal)
+        : governmentLiquidFromTreasury(budget.treasuryBalance)
     );
   // Fund cash is ₳ and the rate table is local-per-₳, so cashAnchor × rate is
   // the native figure. This used to be left at 0 because the equity leg of a

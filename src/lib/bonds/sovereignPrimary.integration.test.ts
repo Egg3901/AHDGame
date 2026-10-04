@@ -77,6 +77,76 @@ function assertLedger(db: InMemoryDb) {
 }
 
 describe("sovereign primary settlement", () => {
+  it("credits funded Treasury cash only from pool cash in the durable issue receipt", async () => {
+    const db = world();
+    const beforePool = Number(pool(db).cashLocal);
+    await commitSovereignPrimary(
+      db as unknown as Db,
+      {
+        key: "funded-cash-ledger-test",
+        turn: TURN,
+        countryId: "US",
+        currency: "USD",
+        budgetId: "federal",
+        poolCash: 12_000,
+        monetaryCash: 8_000,
+        face: 20_000,
+        annualCoupon: 1_000,
+        now: NOW,
+      },
+      [],
+      {
+        ledgerShadow: true,
+        treasuryCashLedgerEnabled: true,
+        turnLengthMinutes: 60,
+        rates: new Map([["USD", 1]]),
+        ledgerTurn: TURN,
+      }
+    );
+
+    expect(Number(pool(db).cashLocal)).toBe(beforePool - 12_000);
+    expect(budget(db).treasuryBalance).toBe(20_100);
+    expect(budget(db).treasuryCashLocal).toBe(12_000);
+    expect(principal(db)).toBe(20_000);
+    const cashEntry = db
+      .collection("ledgerEntries")
+      .docs.find((entry) =>
+        (entry.legs as { account: string }[]).some((leg) =>
+          leg.account.startsWith("government_cash:")
+        )
+      );
+    expect(cashEntry?.legs).toEqual([
+      expect.objectContaining({ account: "government_cash:US:USD", amount: 12_000 }),
+      expect.objectContaining({ account: "bond_pool:USD:USD", amount: -12_000 }),
+    ]);
+
+    await commitSovereignPrimary(
+      db as unknown as Db,
+      {
+        key: "funded-cash-ledger-test",
+        turn: TURN,
+        countryId: "US",
+        currency: "USD",
+        budgetId: "federal",
+        poolCash: 12_000,
+        monetaryCash: 8_000,
+        face: 20_000,
+        annualCoupon: 1_000,
+        now: NOW,
+      },
+      [],
+      {
+        ledgerShadow: true,
+        treasuryCashLedgerEnabled: true,
+        turnLengthMinutes: 60,
+        rates: new Map([["USD", 1]]),
+        ledgerTurn: TURN,
+      }
+    );
+    expect(budget(db).treasuryCashLocal).toBe(12_000);
+    expect(Number(pool(db).cashLocal)).toBe(beforePool - 12_000);
+  });
+
   it("conserves funded scheduled cash and retries without another unit or debt", async () => {
     const db = world();
     const before = cash(db);

@@ -164,19 +164,32 @@ async function ensureTreasuryInsuranceCash(
     turn: number;
     now: Date;
     amount: number;
+    treasuryCashLedgerEnabled?: boolean;
   }
 ): Promise<string | null> {
   if (!(args.amount > 0)) return null;
   const countryId = getCountryIdForCurrency(args.currency);
   const budgetId = getNationalBudgetId(countryId);
-  const budget = await db
-    .collection<FederalBudget>("federalBudget")
-    .findOne({ _id: budgetId }, { projection: { treasuryBalance: 1 } });
+  const budget = await db.collection<FederalBudget>("federalBudget").findOne(
+    { _id: budgetId },
+    {
+      projection: args.treasuryCashLedgerEnabled
+        ? { treasuryCashLocal: 1 }
+        : { treasuryBalance: 1 },
+    }
+  );
   if (!budget) return `No federal budget is available for ${countryId}.`;
 
   const treasuryCash =
-    typeof budget.treasuryBalance === "number" && Number.isFinite(budget.treasuryBalance)
-      ? Math.max(0, budget.treasuryBalance)
+    typeof (args.treasuryCashLedgerEnabled ? budget.treasuryCashLocal : budget.treasuryBalance) ===
+      "number" &&
+    Number.isFinite(
+      args.treasuryCashLedgerEnabled ? budget.treasuryCashLocal : budget.treasuryBalance
+    )
+      ? Math.max(
+          0,
+          (args.treasuryCashLedgerEnabled ? budget.treasuryCashLocal : budget.treasuryBalance)!
+        )
       : 0;
   if (treasuryCash >= args.amount) return null;
 
@@ -190,13 +203,20 @@ async function ensureTreasuryInsuranceCash(
   });
   if (!issuance) return `Could not issue a funded insurance bond for ${countryId}.`;
 
-  const fundedBudget = await db
-    .collection<FederalBudget>("federalBudget")
-    .findOne({ _id: budgetId }, { projection: { treasuryBalance: 1 } });
+  const fundedBudget = await db.collection<FederalBudget>("federalBudget").findOne(
+    { _id: budgetId },
+    {
+      projection: args.treasuryCashLedgerEnabled
+        ? { treasuryCashLocal: 1 }
+        : { treasuryBalance: 1 },
+    }
+  );
+  const fundedBalance = args.treasuryCashLedgerEnabled
+    ? fundedBudget?.treasuryCashLocal
+    : fundedBudget?.treasuryBalance;
   const fundedCash =
-    typeof fundedBudget?.treasuryBalance === "number" &&
-    Number.isFinite(fundedBudget.treasuryBalance)
-      ? Math.max(0, fundedBudget.treasuryBalance)
+    typeof fundedBalance === "number" && Number.isFinite(fundedBalance)
+      ? Math.max(0, fundedBalance)
       : 0;
   return fundedCash >= args.amount
     ? null
@@ -325,6 +345,7 @@ export async function returnDepositBook(
       turn: options.turn,
       now,
       amount: toCents(fromTreasury),
+      treasuryCashLedgerEnabled: policy.treasuryCashLedger,
     });
     if (fundingError) return { ...EMPTY, depositorsFlipped, error: fundingError };
   }
@@ -440,8 +461,13 @@ export async function returnDepositBook(
         kind: "debit",
         amount: fromTreasury,
         collection: "federalBudget",
-        filter: { _id: getNationalBudgetId(getCountryIdForCurrency(currency)) },
-        path: "treasuryBalance",
+        filter: policy.treasuryCashLedger
+          ? {
+              _id: getNationalBudgetId(getCountryIdForCurrency(currency)),
+              treasuryCashLocal: { $gte: fromTreasury },
+            }
+          : { _id: getNationalBudgetId(getCountryIdForCurrency(currency)) },
+        path: policy.treasuryCashLedger ? "treasuryCashLocal" : "treasuryBalance",
         note: "funded treasury deposit insurance backstop",
       });
     }
@@ -513,6 +539,14 @@ export async function returnDepositBook(
     });
   }
   if (fromTreasury > 0) {
+    if (policy.treasuryCashLedger) {
+      projections.push({
+        collection: "federalBudget",
+        filter: { _id: getNationalBudgetId(getCountryIdForCurrency(currency)) },
+        update: { $inc: { treasuryBalance: -fromTreasury } },
+        note: "Keep the signed fiscal-position record aligned with the funded insurance draw",
+      });
+    }
     projections.push({
       collection: "federalBudget",
       filter: { _id: getNationalBudgetId(getCountryIdForCurrency(currency)) },
@@ -828,24 +862,32 @@ function depositAggregateClearProjection(
 export async function debitTreasuryDepositInsurance(
   db: Db,
   currency: CurrencyCode,
-  amount: number
+  amount: number,
+  treasuryCashLedgerEnabled = false
 ): Promise<void> {
   if (!(amount > 0)) return;
   const countryId = getCountryIdForCurrency(currency);
   const budgetId = getNationalBudgetId(countryId);
   const now = new Date();
-  const result = await db.collection<FederalBudget>("federalBudget").updateOne(
-    { _id: budgetId, treasuryBalance: { $gte: amount } },
-    {
-      $inc: {
-        treasuryBalance: -amount,
-        [`spending.byCategory.${DEPOSIT_INSURANCE_SPENDING_KEY}`]: amount,
-        "spending.total": amount,
-        surplus: -amount,
-      },
-      $set: { updatedAt: now },
-    }
-  );
+  const result = await db
+    .collection<FederalBudget>("federalBudget")
+    .updateOne(
+      treasuryCashLedgerEnabled
+        ? { _id: budgetId, treasuryCashLocal: { $gte: amount } }
+        : { _id: budgetId, treasuryBalance: { $gte: amount } },
+      {
+        $inc: {
+          ...(treasuryCashLedgerEnabled
+            ? { treasuryCashLocal: -amount }
+            : { treasuryBalance: -amount }),
+          ...(treasuryCashLedgerEnabled ? { treasuryBalance: -amount } : {}),
+          [`spending.byCategory.${DEPOSIT_INSURANCE_SPENDING_KEY}`]: amount,
+          "spending.total": amount,
+          surplus: -amount,
+        },
+        $set: { updatedAt: now },
+      }
+    );
   if (!result.matchedCount)
     throw new Error("Treasury cash cannot cover the deposit insurance debit.");
 }
