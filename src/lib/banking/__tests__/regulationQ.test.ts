@@ -71,6 +71,19 @@ describe("regulationQ corridors", () => {
     );
   });
 
+  it("uses modern defaults for the 1991 reset", async () => {
+    db.collectionMocks.gameState!.findOne.mockResolvedValue({
+      _id: "current",
+      preset: "1991-default",
+      currentTurn: 1,
+    });
+    const { getRateCorridors } = await importRegulationQ();
+    await expect(getRateCorridors(db as unknown as Db, "US")).resolves.toEqual({
+      deposit: MODERN_DEPOSIT_CORRIDOR,
+      lending: MODERN_LENDING_CORRIDOR,
+    });
+  });
+
   it("uses historical Reg-Q defaults when era unit scale > 1", async () => {
     db.collectionMocks.gameState!.findOne.mockResolvedValue({
       _id: "current",

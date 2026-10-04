@@ -20,6 +20,7 @@ import { getLegalCharterTypes } from "@/lib/banking/separationLaw";
 import { freezeAccountsAt, returnDepositBook } from "@/lib/banking/depositBookReturn";
 import { lifecycleRefusal } from "@/lib/banking/rules/lifecycle";
 import { clampOffsets, getRateCorridors } from "@/lib/banking/regulationQ";
+import { startingBankOffsets } from "@/lib/banking/rules/rates";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { getCurrentTurn } from "@/lib/currentTurn";
 import { charterTypeMay } from "@/lib/banking/rules/capabilities";
@@ -318,10 +319,9 @@ async function issueCharterInner(
     0
   );
 
-  // Initial offsets must sit inside the era corridor; 0/0 is out of band in
-  // historical worlds (deposit ceiling below prime, lending floor above it).
+  // Start within the legal corridor with room for the CEO to move either way.
   const corridors = await getRateCorridors(db, getCountryIdForCurrency(currency));
-  const initialOffsets = clampOffsets({ depositOffset: 0, lendingOffset: 0 }, corridors);
+  const initialOffsets = startingBankOffsets(corridors);
 
   const charter: BankCharter = {
     type: requestedType,

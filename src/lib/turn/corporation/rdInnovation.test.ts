@@ -10,7 +10,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { ObjectId } from "mongodb";
-import { processRdInnovations } from "./rdInnovation";
+import { processRdInnovations, type RdInnovationResult } from "./rdInnovation";
 import type { CorporationLookups } from "./types";
 import type { Corporation, CorporateSector } from "@/lib/db/types";
 import type { ExtractableResource } from "@/lib/constants/commodities";
@@ -26,6 +26,14 @@ import {
 vi.mock("@/lib/notifications", () => ({
   createNotifications: vi.fn().mockResolvedValue(undefined),
 }));
+
+function revenueBoost(operation: RdInnovationResult["sectorBoostOps"][number]): number {
+  const update = operation.updateOne.update;
+  if (Array.isArray(update)) throw new Error("Expected a legacy revenue update");
+  const boost = update.$inc?.revenue;
+  if (typeof boost !== "number") throw new Error("Expected a numeric revenue boost");
+  return boost;
+}
 
 function baseLookups(
   corporations: Corporation[],
@@ -184,7 +192,8 @@ describe("processRdInnovations", () => {
 
     expect(result.innovationsTriggered).toBe(1);
     const update = result.sectorBoostOps[0]!.updateOne.update;
-    const pipeline = update as unknown as Array<Record<string, unknown>>;
+    if (!Array.isArray(update)) throw new Error("Expected a plant capacity update pipeline");
+    const pipeline = update;
     expect(pipeline[0]).not.toHaveProperty("$inc.revenue");
     // rng 0 → the MIN of the regular boost band, applied to the STOCK.
     const stockDelta = (
@@ -252,7 +261,7 @@ describe("processRdInnovations", () => {
     expect(result.innovationsTriggered).toBe(1);
     expect(result.sectorBoostOps).toHaveLength(1);
     const op = result.sectorBoostOps[0];
-    expect(op.updateOne.update.$inc.revenue).toBe(Math.round(100_000 * RD_REGULAR_BOOST_MAX));
+    expect(revenueBoost(op)).toBe(Math.round(100_000 * RD_REGULAR_BOOST_MAX));
   });
 
   it("magnitude is RNG, not a function of rdScore (same score → different rolls produce different boosts)", () => {
@@ -268,8 +277,8 @@ describe("processRdInnovations", () => {
     randSpy.mockReturnValueOnce(0).mockReturnValueOnce(0).mockReturnValueOnce(0.9);
     const b = processRdInnovations(baseLookups([corp], [sectorB]), 6, now);
 
-    const boostA = a.sectorBoostOps[0].updateOne.update.$inc.revenue;
-    const boostB = b.sectorBoostOps[0].updateOne.update.$inc.revenue;
+    const boostA = revenueBoost(a.sectorBoostOps[0]);
+    const boostB = revenueBoost(b.sectorBoostOps[0]);
     expect(boostB).toBeGreaterThan(boostA);
   });
 
@@ -282,7 +291,7 @@ describe("processRdInnovations", () => {
 
     expect(result.innovationsTriggered).toBe(1);
     const op = result.sectorBoostOps[0];
-    expect(op.updateOne.update.$inc.revenue).toBe(Math.round(100_000 * RD_REGULAR_BOOST_MIN));
+    expect(revenueBoost(op)).toBe(Math.round(100_000 * RD_REGULAR_BOOST_MIN));
   });
 
   it("applies RD_EXTRACTION_BOOST_MAX for extraction corps when magnitude roll is 1.0", () => {
@@ -296,7 +305,7 @@ describe("processRdInnovations", () => {
 
     expect(result.innovationsTriggered).toBe(1);
     const op = result.sectorBoostOps[0];
-    expect(op.updateOne.update.$inc.revenue).toBe(Math.round(100_000 * RD_EXTRACTION_BOOST_MAX));
+    expect(revenueBoost(op)).toBe(Math.round(100_000 * RD_EXTRACTION_BOOST_MAX));
   });
 
   it("does NOT double-convert boost through FX (JP corp currency-safety)", () => {
@@ -316,7 +325,7 @@ describe("processRdInnovations", () => {
     expect(result.innovationsTriggered).toBe(1);
     // Expected boost: ¥1M × MAX = ¥50,000 (post-rebalance). If FX bug returned, we'd see ~¥7.5M.
     const op = result.sectorBoostOps[0];
-    expect(op.updateOne.update.$inc.revenue).toBe(Math.round(1_000_000 * RD_REGULAR_BOOST_MAX));
+    expect(revenueBoost(op)).toBe(Math.round(1_000_000 * RD_REGULAR_BOOST_MAX));
   });
 
   it("skips capacity boost for states without a capacity document", () => {

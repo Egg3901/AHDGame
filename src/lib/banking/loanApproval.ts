@@ -4,6 +4,7 @@
  * rejectLoan leaves the bank's and borrower's cash unchanged.
  */
 import type { Db, ObjectId } from "mongodb";
+import { quoteLoanOrigination } from "@/lib/banking/rules/loanFees";
 import type { BankLoan } from "@/lib/db/types/bank";
 import type { Corporation } from "@/lib/db/types/corporation";
 import type { Character } from "@/lib/db/types/character";
@@ -165,6 +166,7 @@ async function acceptLoanInner(
       loanId: loanId.toHexString(),
       borrower: borrower.snapshot,
       principal: loan.outstanding,
+      originationFee: loan.originationFee ?? 0,
       ratePercent: loan.ratePercent,
       termTurns: loan.termTurns,
     },
@@ -214,13 +216,16 @@ async function acceptLoanInner(
           subjectId: loan.borrowerId,
           subjectName: borrowerName,
         }),
-    amount: loan.principal,
+    amount: quoteLoanOrigination(loan.outstanding, loan.currency, loan.originationFee ?? 0)
+      .proceeds,
     currencyCode: loan.currency,
     counterpartyType: "corporation",
     counterpartyId: bankCorporationId,
     counterpartyName: bankCorp.name,
     meta: {
       loanId: loan._id.toString(),
+      principal: loan.outstanding,
+      originationFee: loan.originationFee ?? 0,
       bankCorporationId: bankCorporationId.toString(),
       ratePercent: loan.ratePercent,
       termTurns: loan.termTurns,
