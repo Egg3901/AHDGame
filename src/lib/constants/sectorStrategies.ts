@@ -19,7 +19,7 @@
  */
 
 import * as Sentry from "@sentry/nextjs";
-import type { CorporationType } from "./corporations";
+import type { CorporationType, ManufacturingIndustryModel } from "./corporations";
 import type { CommodityType } from "./commodities";
 import { COMMODITY_BASE_PRICES } from "./commodities";
 import {
@@ -1291,13 +1291,42 @@ export function getStrategy(sectorType: string, strategyId: string): SectorStrat
 /** Strategy options for queries and menus. Model options are omitted unless enabled. */
 export function getSectorStrategies(
   sectorType: string,
-  mediaOperatingModelsEnabled = false
+  mediaOperatingModelsEnabled = false,
+  mediaDiscriminator?: string | null
 ): SectorStrategy[] {
-  if (!Object.hasOwn(SECTOR_STRATEGIES, sectorType)) return [];
-  const strategies = SECTOR_STRATEGIES[sectorType as CorporationType];
+  const operatingType = getOperatingSectorType(sectorType, undefined, mediaDiscriminator);
+  if (!Object.hasOwn(SECTOR_STRATEGIES, operatingType)) return [];
+  const strategies = SECTOR_STRATEGIES[operatingType as CorporationType];
   return mediaOperatingModelsEnabled
-    ? [...strategies, ...getMediaOperatingModelStrategies(sectorType)]
+    ? [...strategies, ...getMediaOperatingModelStrategies(operatingType)]
     : strategies;
+}
+
+/** Resolve the legacy economic profile represented by a persisted sector. */
+export function getOperatingSectorType(
+  sectorType: string,
+  industryModel?: ManufacturingIndustryModel | string | null,
+  mediaDiscriminator?: string | null
+): string {
+  if (sectorType === "manufacturing" && industryModel === "vehicles") return "automobiles";
+  if (sectorType === "media" && mediaDiscriminator === "entertainment") return "entertainment";
+  return sectorType;
+}
+
+/**
+ * Resolve a strategy for a persisted sector and its optional manufacturing
+ * production model. Vehicle models reuse the unchanged automobile recipes.
+ */
+export function getStrategyForOperatingModel(
+  sectorType: string,
+  strategyId: string,
+  industryModel?: string | null,
+  mediaDiscriminator?: string | null
+): SectorStrategy {
+  return getStrategy(
+    getOperatingSectorType(sectorType, industryModel, mediaDiscriminator),
+    strategyId
+  );
 }
 
 /**
@@ -1311,9 +1340,11 @@ export function getEffectiveStrategyRates(
   strategyId: string,
   transitionFromStrategyId: string | undefined | null,
   transitionStartTurn: number | undefined | null,
-  currentTurn: number
+  currentTurn: number,
+  mediaDiscriminator?: string | null
 ): EffectiveStrategyRates {
-  const target = getStrategy(sectorType, strategyId);
+  const operatingType = getOperatingSectorType(sectorType, undefined, mediaDiscriminator);
+  const target = getStrategy(operatingType, strategyId);
 
   // No transition in progress → return target directly
   if (!transitionFromStrategyId || transitionStartTurn == null) {
@@ -1336,13 +1367,33 @@ export function getEffectiveStrategyRates(
     };
   }
 
-  const source = getStrategy(sectorType, transitionFromStrategyId);
+  const source = getStrategy(operatingType, transitionFromStrategyId);
 
   // Interpolate each commodity rate
   const supply = blendRates(source.supply, target.supply, progress);
   const demand = blendRates(source.demand, target.demand, progress);
 
   return { supply, demand, isTransitioning: true };
+}
+
+/** Resolve a strategy transition through the sector's optional production model. */
+export function getEffectiveStrategyRatesForOperatingModel(
+  sectorType: string,
+  strategyId: string,
+  transitionFromStrategyId: string | undefined | null,
+  transitionStartTurn: number | undefined | null,
+  currentTurn: number,
+  industryModel?: string | null,
+  mediaDiscriminator?: string | null
+): EffectiveStrategyRates {
+  return getEffectiveStrategyRates(
+    getOperatingSectorType(sectorType, industryModel, mediaDiscriminator),
+    strategyId,
+    transitionFromStrategyId,
+    transitionStartTurn,
+    currentTurn,
+    mediaDiscriminator
+  );
 }
 
 /** Linearly blend two rate maps. Commodities in either map are included. */

@@ -8,6 +8,7 @@ import {
 import { ATTACK_OWNED_COST_FRACTION } from "@/lib/constants/corporations";
 import type { CorporationType } from "@/lib/constants/corporations";
 import {
+  attackCapacityBasisAnchor,
   attackCostAnchorUnderPlants,
   capacityCaptureUnits,
   resolveWorldYear,
@@ -33,6 +34,33 @@ const CASES: Array<{ sectorType: CorporationType; year: number }> = [
 ];
 
 describe("capacityCaptureUnits", () => {
+  it("preserves automobile capacity and book pricing through the vehicle model", () => {
+    expect(capacityPricePerUnit("manufacturing", 1991, 1, "standard", "vehicles")).toBe(
+      capacityPricePerUnit("automobiles", 1991, 1, "standard")
+    );
+    expect(capacityCaptureUnits(500_000, "manufacturing", "standard", 1, "vehicles")).toEqual(
+      capacityCaptureUnits(500_000, "automobiles", "standard", 1)
+    );
+    expect(
+      attackCapacityBasisAnchor(
+        {
+          sectorType: "manufacturing",
+          industryModel: "vehicles",
+          capitalStock: 250_000,
+          strategyId: "standard",
+        },
+        true,
+        1
+      )
+    ).toBe(
+      attackCapacityBasisAnchor(
+        { sectorType: "automobiles", capitalStock: 250_000, strategyId: "standard" },
+        true,
+        1
+      )
+    );
+  });
+
   it("applies attrition: the attacker receives less than the defender loses", () => {
     const { unitsTaken, unitsReceived } = capacityCaptureUnits(1_000_000, "manufacturing", null, 1);
     expect(unitsTaken).toBeGreaterThan(0);

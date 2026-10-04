@@ -154,6 +154,29 @@ describe("resolveNationalCorporationForSector", () => {
     });
   });
 
+  it("routes a manufacturing vehicle model through the legacy automobile split", async () => {
+    const splitId = new ObjectId();
+    db.collectionMocks.corporations.findOne.mockResolvedValue({
+      _id: splitId,
+      countryId: "CN",
+      countryOwnerId: "CN",
+      assignedSectorTypes: ["automobiles"],
+    });
+
+    const corp = await resolveNationalCorporationForSector(
+      db as unknown as Db,
+      "CN",
+      "manufacturing",
+      "vehicles"
+    );
+
+    expect(corp._id.toString()).toBe(splitId.toString());
+    expect(db.collectionMocks.corporations.findOne).toHaveBeenCalledWith({
+      countryOwnerId: "CN",
+      assignedSectorTypes: "automobiles",
+    });
+  });
+
   it("falls back to the primary when no split-off claims the type", async () => {
     const primaryId = new ObjectId();
     // 1st find (split-off lookup) → []; 2nd (primary lookup) → primary.

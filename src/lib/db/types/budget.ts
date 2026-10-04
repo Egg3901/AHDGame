@@ -457,6 +457,8 @@ export interface BankSovereignClaim {
   bankId: string;
   charteredTurn: number;
   bondId?: string;
+  /** Scheduled maturity of a bond-backed principal claim, stable across retries. */
+  dueTurn?: number;
   bondIds?: string[];
   countryId: string;
   currencyCode: import("@/lib/constants/currencies").CurrencyCode;

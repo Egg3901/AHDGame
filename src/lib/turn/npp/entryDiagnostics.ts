@@ -130,7 +130,11 @@ export function buildNppMarketEntryDiagnostic(args: {
   cohortEligible: boolean;
   strategyAllowsExpansion: boolean;
   hasLogisticsCapacity: boolean;
-  target?: { stateId: string; sectorType: CorporationType } | null;
+  target?: {
+    stateId: string;
+    sectorType: CorporationType;
+    industryModel?: string | null;
+  } | null;
   shortageScore?: number;
   frontierStates: ReadonlySet<string>;
   retailBlocked?: boolean;
@@ -171,7 +175,8 @@ export function buildNppMarketEntryDiagnostic(args: {
       !args.frontierStates.has(args.target.stateId),
     openMarketTypeFallback:
       args.target != null &&
-      args.target.sectorType !== args.corporation.type &&
+      (args.target.sectorType !== args.corporation.type ||
+        (args.target.industryModel ?? null) !== (args.corporation.industryModel ?? null)) &&
       args.target.sectorType !== args.corporation.secondaryType,
   };
 }

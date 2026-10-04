@@ -304,6 +304,8 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
       stateId: sector.stateId,
       countryId,
       sectorType: sector.sectorType,
+      industryModel: sector.industryModel,
+      mediaDiscriminator: sector.mediaDiscriminator,
     };
 
     // Capacity settings are command-owned. The turn reads them but never
@@ -422,9 +424,16 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
       if (poolCredit) {
         await db
           .collection<UnownedSector>("unownedSectors")
-          .updateOne({ stateId: sector.stateId, sectorType: sector.sectorType }, poolCredit, {
-            upsert: true,
-          })
+          .updateOne(
+            {
+              stateId: sector.stateId,
+              sectorType: sector.sectorType,
+              industryModel: sector.industryModel ?? null,
+              mediaDiscriminator: sector.mediaDiscriminator ?? null,
+            },
+            poolCredit,
+            { upsert: true }
+          )
           .catch((err) => {
             console.error("[buildCapacity] unowned pool credit failed", err);
           });
@@ -491,6 +500,7 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
         corporationId: corporation._id,
         countryId,
         sectorType: sector.sectorType,
+        industryModel: sector.industryModel,
       }),
       fetchSectorCompetitorCount(db, sector, corporation._id),
     ]);
@@ -517,15 +527,21 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
       ? getSectorTechEffects(
           {
             type: corporation.type,
+            industryModel: corporation.industryModel,
+            mediaDiscriminator: corporation.mediaDiscriminator,
             unlockedTechNodeIds: corporation.unlockedTechNodeIds,
             techDecadeLane: corporation.techDecadeLane,
           },
-          corporation.type
+          sector.sectorType,
+          sector.industryModel,
+          sector.mediaDiscriminator
         ).growthCostMultiplier
       : 1;
 
     const cost = computeBuildCost({
       sectorType: sector.sectorType,
+      industryModel: sector.industryModel,
+      mediaDiscriminator: sector.mediaDiscriminator,
       units,
       // Capacity is priced at the product this sector actually makes. Ordering
       // into a sector already running a high-RPU strategy used to be charged
@@ -726,9 +742,16 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
     if (drawdown) {
       await db
         .collection<UnownedSector>("unownedSectors")
-        .updateOne({ stateId: sector.stateId, sectorType: sector.sectorType }, drawdown, {
-          upsert: true,
-        })
+        .updateOne(
+          {
+            stateId: sector.stateId,
+            sectorType: sector.sectorType,
+            industryModel: sector.industryModel ?? null,
+            mediaDiscriminator: sector.mediaDiscriminator ?? null,
+          },
+          drawdown,
+          { upsert: true }
+        )
         .catch((err) => {
           console.error("[buildCapacity] unowned pool drawdown failed", err);
         });

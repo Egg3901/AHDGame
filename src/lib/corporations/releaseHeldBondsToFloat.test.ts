@@ -54,6 +54,7 @@ describe("releaseCorporationHeldBondsToFloat", () => {
       1,
       {
         _id: bondA,
+        sovereignMaturityClaim: { $exists: false },
         holders: { $elemMatch: { corporationId: holderCorpId, units: 50000 } },
       },
       {
@@ -66,6 +67,7 @@ describe("releaseCorporationHeldBondsToFloat", () => {
       2,
       {
         _id: bondB,
+        sovereignMaturityClaim: { $exists: false },
         holders: { $elemMatch: { corporationId: holderCorpId, units: 250 } },
       },
       {
@@ -96,6 +98,7 @@ describe("releaseCorporationHeldBondsToFloat", () => {
     expect(db.collection("bonds").updateOne).toHaveBeenCalledWith(
       {
         _id: bondA,
+        sovereignMaturityClaim: { $exists: false },
         holders: { $elemMatch: { corporationId: holderCorpId, units: 0 } },
       },
       {

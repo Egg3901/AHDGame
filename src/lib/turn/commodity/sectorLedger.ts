@@ -20,7 +20,7 @@ import {
 } from "@/lib/constants/commodities";
 import { isPlannedEconomy } from "@/lib/constants/commandEconomy";
 import { plannedEconomyMediaSupplyFactor } from "@/lib/constants/sectorStrategies";
-import { getEffectiveStrategyRates } from "@/lib/constants/sectorStrategies";
+import { getEffectiveStrategyRatesForOperatingModel } from "@/lib/constants/sectorStrategies";
 import type { CorporationType } from "@/lib/constants/corporations";
 import { impliedOutputUnits } from "@/lib/market/capital";
 import { realizedOutputFraction } from "@/lib/extraction/realizedOutputFraction";
@@ -107,6 +107,8 @@ export function buildSectorRows(inputs: SectorRowInputs): SectorLedgerRow[] {
       );
     return {
       sectorType: s.sectorType,
+      industryModel: s.industryModel,
+      mediaDiscriminator: s.mediaDiscriminator,
       revenue: readCorpEconomicAnchor(s.revenue, hostCurrencyCode, hostFxRate),
       stateId: s.stateId,
       sectorId: s._id.toString(),
@@ -216,12 +218,14 @@ export function buildExtractionRevenueInputs(
     const hasStrategy = sector.strategyId && sector.strategyId !== "standard";
     const strategyRates =
       hasStrategy || sector.transitionFromStrategyId
-        ? getEffectiveStrategyRates(
+        ? getEffectiveStrategyRatesForOperatingModel(
             "extraction",
             sector.strategyId ?? "standard",
             sector.transitionFromStrategyId,
             sector.transitionStartTurn,
-            turn
+            turn,
+            sector.industryModel,
+            sector.mediaDiscriminator
           )
         : null;
 
@@ -291,12 +295,14 @@ export function accumulatePlantsUnits(
   for (const sector of sectorData) {
     if (sector.sectorType === "extraction" || sector.mothballed) continue;
     if (typeof sector.producedUnits !== "number") continue;
-    const rates = getEffectiveStrategyRates(
-      sector.sectorType as Parameters<typeof getEffectiveStrategyRates>[0],
+    const rates = getEffectiveStrategyRatesForOperatingModel(
+      sector.sectorType,
       sector.strategyId ?? "standard",
       sector.transitionFromStrategyId,
       sector.transitionStartTurn,
-      turn
+      turn,
+      sector.industryModel,
+      sector.mediaDiscriminator
     );
     const supplyRates = rates.supply ?? {};
     // Same legs the ledger applies on top of producedUnits (natcorpScale x

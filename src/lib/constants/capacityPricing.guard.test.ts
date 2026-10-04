@@ -284,12 +284,12 @@ describe("capacity pricing call-site registry", () => {
       for (const call of calls) {
         if (call.fn === "capacityPricePerUnit") {
           // Positional: the 4th argument IS the strategy. A 3-arg call is the
-          // old, strategy-blind signature and would not compile, but this
-          // catches it at the source level too.
+          // old, strategy-blind signature; the optional model discriminator
+          // may follow it as a 5th argument.
           expect(
             splitTopLevel(call.args).length,
-            `${file}: capacityPricePerUnit needs 4 arguments, got ${splitTopLevel(call.args).length}`
-          ).toBe(4);
+            `${file}: capacityPricePerUnit needs at least 4 arguments, got ${splitTopLevel(call.args).length}`
+          ).toBeGreaterThanOrEqual(4);
         } else {
           expect(
             /\bstrategyId\s*:/.test(call.args),
@@ -306,7 +306,7 @@ describe("capacity pricing call-site registry", () => {
       const nulls = calls.filter((c) => {
         if (c.fn === "computeBuildCost") return /\bstrategyId\s*:\s*null\b/.test(c.args);
         const parts = splitTopLevel(c.args);
-        return parts.length === 4 && parts[3].trim() === "null";
+        return parts.length >= 4 && parts[3].trim() === "null";
       });
       if (entry.expect === "sector") {
         const allowed = PER_CALL_NULL_EXCEPTIONS[file] ?? 0;

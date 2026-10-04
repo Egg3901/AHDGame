@@ -125,6 +125,8 @@ export function chooseNppStrategyRetool(ctx: StrategyRetoolContext): StrategyRet
       transitionCooldownUntilTurn: ctx.turn + STRATEGY_COOLDOWN_TURNS,
       ...retoolRescaleFields({
         sectorType: best.sector.sectorType as CorporationType,
+        industryModel: best.sector.industryModel,
+        mediaDiscriminator: best.sector.mediaDiscriminator,
         fromStrategyId,
         toStrategyId: best.toStrategyId,
         plantsEnabled: ctx.plantsEnabled,

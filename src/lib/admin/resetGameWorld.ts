@@ -1,6 +1,7 @@
 import { resolveStartingPartiesMode, type StartingPartiesMode } from "./startingParties";
 import { MongoServerError, type Db } from "mongodb";
 import type { Character, GameState, User } from "@/lib/db/types";
+import type { GameConfig } from "@/lib/db/types/gameConfig";
 import { getStartingYearForPreset } from "@/lib/constants/turnTime";
 import { resolveResetStartDate, type ResetStartDate } from "@/lib/admin/resetStartDate";
 import { seedHistoricalOfficials } from "@/lib/npp/seedHistorical";
@@ -329,6 +330,12 @@ export async function resetGameWorld(
       `Required reset cleanup failed for: ${failedWipes.map((failure) => failure.collection).join(", ")}`
     );
   }
+  await db
+    .collection<GameConfig>("gameConfig")
+    .updateOne(
+      { _id: "default" },
+      { $unset: { fresh1991VehicleModelSeed: "", fresh1991MediaTaxonomySeed: "" } }
+    );
   log(
     `Wiped ${sweepCollections.length} runtime collections ` +
       `(${officialsResult.deletedCount} officials, ${electionsResult.deletedCount} elections, ` +

@@ -758,7 +758,12 @@ async function vietnamSupport(ctx: CrisisActionContext): Promise<void> {
   if (amountLocal > 0) {
     await spendFromTreasury(db, ctx.countryId as CountryId, amountLocal, {
       resyncDerived: true,
-      witness: { flow: "crisis_response", site: "crises/optionActions" },
+      witness: {
+        flow: "crisis_response",
+        key: `vietnam-support:${ctx.crisis._id.toString()}:${ctx.countryId}:${ctx.currentTurn}:${ctx.characterId.toString()}`,
+        site: "crises/optionActions",
+        treasuryCashLedgerEnabled: ctx.treasuryCashLedgerEnabled,
+      },
     });
   }
 

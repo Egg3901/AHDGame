@@ -168,6 +168,8 @@ export function oid(hex: string): OidRef {
 export interface TransitionLeg {
   kind: ValueLegKind;
   amount: number;
+  /** Frozen native-currency value used to balance cross-currency transfers. */
+  valuation?: { currencyCode: string; localPerAnchor: number };
   collection?: string;
   filter?: Record<string, unknown>;
   path?: string;

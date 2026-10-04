@@ -6,6 +6,7 @@ import { CORPORATION_TYPES, type CorporationType } from "@/lib/constants/corpora
 import type { CountryId } from "@/lib/constants/countries";
 import { getUnionName } from "@/lib/unions/unionNames";
 import { BASE_APPROVAL } from "@/lib/unions/unionDues";
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 
 /**
  * Starting annual dues charged per member on a freshly seeded union. 0, not a
@@ -58,47 +59,106 @@ export async function seedUnions(
   const now = new Date();
   let upserted = 0;
   const unionOps: AnyBulkWriteOperation<Union>[] = [];
-  const pairs: { countryId: CountryId; sectorType: CorporationType }[] = [];
+  const pairs: {
+    countryId: CountryId;
+    sectorType: CorporationType;
+    industryModel: CorporateSector["industryModel"];
+    mediaDiscriminator: CorporateSector["mediaDiscriminator"];
+  }[] = [];
 
   for (const rawCountryId of countryIds) {
     const countryId = rawCountryId as CountryId;
     for (const sectorType of CORPORATION_TYPES) {
-      pairs.push({ countryId, sectorType });
-      const name = getUnionName(countryId, sectorType, preset);
-      unionOps.push({
-        updateOne: {
-          // `null` matches an explicit null AND an absent field, so this is correct
-          // both before and after the founder-null backfill.
-          filter: { countryId, sectorType, foundedByCharacterId: null },
-          update: {
-            $setOnInsert: {
-              countryId,
-              sectorType,
-              name,
-              ownerId: null,
-              pendingLeaderCharacterId: null,
-              // Explicit null, not an absent field: the partial unique index on
-              // (countryId, sectorType) keys off `$type: "null"`, because a
-              // partial index cannot test for an absent field.
-              foundedByCharacterId: null,
-              treasury: 0,
-              // Union dues v1: approval starts at the neutral-but-untested
-              // baseline (a union that charges nothing and runs nothing is not
-              // disliked, merely unproven), dues at 0 (see
-              // SEED_DUES_PER_WORKER_ANNUAL), and no service programmes running.
-              approval: BASE_APPROVAL,
-              duesPerWorkerAnnual: SEED_DUES_PER_WORKER_ANNUAL,
-              activeServices: [],
-              lastCalledStrikeTurn: null,
-              demandedWageLevel: null,
-              createdAt: now,
-              updatedAt: now,
-            },
-          },
-          upsert: true,
+      pairs.push({ countryId, sectorType, industryModel: null, mediaDiscriminator: null });
+    }
+  }
+
+  // Model-specific markets are seeded from the same sector snapshot that the
+  // union assignment below uses. The legacy type slot remains present, while a
+  // manufacturing vehicle market gets its own union identity and index key.
+  const modelSectors = await db
+    .collection<CorporateSector>("corporateSectors")
+    .find(
+      {
+        $or: [{ industryModel: { $type: "string" } }, { mediaDiscriminator: { $type: "string" } }],
+      },
+      {
+        projection: {
+          countryId: 1,
+          sectorType: 1,
+          industryModel: 1,
+          mediaDiscriminator: 1,
         },
+      }
+    )
+    .toArray();
+  for (const sector of modelSectors) {
+    if (!sector.countryId || (!sector.industryModel && !sector.mediaDiscriminator)) continue;
+    const exists = pairs.some(
+      (pair) =>
+        pair.countryId === sector.countryId &&
+        pair.sectorType === sector.sectorType &&
+        pair.industryModel === (sector.industryModel ?? null) &&
+        pair.mediaDiscriminator === (sector.mediaDiscriminator ?? null)
+    );
+    if (!exists) {
+      pairs.push({
+        countryId: sector.countryId,
+        sectorType: sector.sectorType,
+        industryModel: sector.industryModel ?? null,
+        mediaDiscriminator: sector.mediaDiscriminator ?? null,
       });
     }
+  }
+
+  for (const { countryId, sectorType, industryModel, mediaDiscriminator } of pairs) {
+    const unionType = getOperatingSectorType(
+      sectorType,
+      industryModel,
+      mediaDiscriminator
+    ) as CorporationType;
+    const name = getUnionName(countryId, unionType, preset);
+    unionOps.push({
+      updateOne: {
+        // `null` matches an explicit null AND an absent field, so this is correct
+        // both before and after the founder-null backfill.
+        filter: {
+          countryId,
+          sectorType,
+          industryModel,
+          mediaDiscriminator,
+          foundedByCharacterId: null,
+        },
+        update: {
+          $setOnInsert: {
+            countryId,
+            sectorType,
+            industryModel,
+            mediaDiscriminator,
+            name,
+            ownerId: null,
+            pendingLeaderCharacterId: null,
+            // Explicit null, not an absent field: the partial unique index on
+            // (countryId, sectorType) keys off `$type: "null"`, because a
+            // partial index cannot test for an absent field.
+            foundedByCharacterId: null,
+            treasury: 0,
+            // Union dues v1: approval starts at the neutral-but-untested
+            // baseline (a union that charges nothing and runs nothing is not
+            // disliked, merely unproven), dues at 0 (see
+            // SEED_DUES_PER_WORKER_ANNUAL), and no service programmes running.
+            approval: BASE_APPROVAL,
+            duesPerWorkerAnnual: SEED_DUES_PER_WORKER_ANNUAL,
+            activeServices: [],
+            lastCalledStrikeTurn: null,
+            demandedWageLevel: null,
+            createdAt: now,
+            updatedAt: now,
+          },
+        },
+        upsert: true,
+      },
+    });
   }
 
   if (unionOps.length > 0) {
@@ -116,18 +176,40 @@ export async function seedUnions(
   if (pairs.length > 0) {
     const worldUnions = await db
       .collection<Union>("unions")
-      .find({ foundedByCharacterId: null }, { projection: { _id: 1, countryId: 1, sectorType: 1 } })
+      .find(
+        { foundedByCharacterId: null },
+        {
+          projection: {
+            _id: 1,
+            countryId: 1,
+            sectorType: 1,
+            industryModel: 1,
+            mediaDiscriminator: 1,
+          },
+        }
+      )
       .toArray();
     const worldUnionIdByPair = new Map(
-      worldUnions.map((u) => [`${u.countryId}|${u.sectorType}`, u._id])
+      worldUnions.map((u) => [
+        `${u.countryId}|${u.sectorType}|${u.industryModel ?? ""}|${u.mediaDiscriminator ?? ""}`,
+        u._id,
+      ])
     );
     const sectorOps: AnyBulkWriteOperation<CorporateSector>[] = [];
-    for (const { countryId, sectorType } of pairs) {
-      const unionId = worldUnionIdByPair.get(`${countryId}|${sectorType}`);
+    for (const { countryId, sectorType, industryModel, mediaDiscriminator } of pairs) {
+      const unionId = worldUnionIdByPair.get(
+        `${countryId}|${sectorType}|${industryModel ?? ""}|${mediaDiscriminator ?? ""}`
+      );
       if (!unionId) continue;
       sectorOps.push({
         updateMany: {
-          filter: { countryId, sectorType, representingUnionId: null },
+          filter: {
+            countryId,
+            sectorType,
+            industryModel,
+            mediaDiscriminator,
+            representingUnionId: null,
+          },
           update: { $set: { representingUnionId: unionId } },
         },
       });

@@ -25,6 +25,7 @@ export interface MergedSectorSummary {
   corporationId: string;
   stateId: string;
   sectorType: string;
+  industryModel?: string | null;
   count: number;
 }
 
@@ -171,6 +172,7 @@ export async function normalizeAndMergeCorporateSectors(
       corporationId: keeper.corporationId.toString(),
       stateId: keeper.stateId,
       sectorType: keeper.sectorType,
+      industryModel: keeper.industryModel ?? null,
       count: group.length,
     });
   }

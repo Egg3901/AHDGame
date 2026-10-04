@@ -40,7 +40,8 @@ import {
   analyzeSectorProfitability,
   type SectorProfitInfo,
 } from "@/lib/turn/npp/sectorProfitability";
-import { chooseCostMothballSector, lossChronicityUpdates } from "@/lib/turn/npp/costMothball";
+import { lossChronicityUpdates } from "@/lib/turn/npp/costMothball";
+import { buildNppGlutMothballUpdates } from "@/lib/turn/npp/glutMothballing";
 export { GLUT_STATE_CHANGE_STAGGER, glutStaggerEligible } from "@/lib/turn/npp/cohort";
 export {
   STRATEGY_SHIFT_MARGIN_TRIGGER,
@@ -75,6 +76,7 @@ import { STARTING_YEAR, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { CAPITAL_DEPRECIATION_PER_TURN } from "@/lib/market/capital";
 import type { BuildCapexTxInput } from "@/lib/corporations/capexTxLog";
 import { getLogisticsSupportedSectorCount } from "@/lib/constants/corporations";
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import {
   CAPACITY_BUILD_TURNS,
   computeBuildCost,
@@ -187,10 +189,6 @@ import {
   NPP_EXTRACTION_FOUNDING_MAX_FACILITIES,
   MAX_DIVIDEND_RATE,
   DEFAULT_ARCHETYPE,
-  GLUT_MOTHBALL_FILL_THRESHOLD,
-  GLUT_MOTHBALL_PRICE_RATIO,
-  GLUT_RESTART_PRICE_RATIO,
-  COST_MOTHBALL_LOSS_TURNS,
 } from "@/lib/turn/npp/nppCorporationTuning";
 
 export {
@@ -310,7 +308,10 @@ export async function processNppCorporationDecisions(
   // Shared object references let each founding deplete later candidates in this pass.
   const unownedIndex = new Map<string, UnownedSector>();
   for (const us of openUnowned) {
-    unownedIndex.set(bucketKey(us.stateId, us.sectorType), us);
+    unownedIndex.set(
+      bucketKey(us.stateId, us.sectorType, us.industryModel, us.mediaDiscriminator),
+      us
+    );
   }
 
   // NPPs cannot auto-expand into state-controlled buckets; players still may.
@@ -611,6 +612,14 @@ export function makeNppCorpDecision(
   placementSignals?: PlacementSignals
 ): NppCorpDecision {
   const { corp, sectors, now, modifiers } = ctx;
+  const coreSectorModel = corp.industryModel ?? null;
+  const isCoreSector = (sector: CorporateSector) =>
+    sector.sectorType === corp.type && (sector.industryModel ?? null) === coreSectorModel;
+  const operatingCorpType = getOperatingSectorType(
+    corp.type,
+    corp.industryModel,
+    corp.mediaDiscriminator
+  ) as CorporationType;
   const updates: Record<string, unknown> = { updatedAt: now };
   const sectorUpdates: NppCorpDecision["sectorUpdates"] = [];
   const newSectors: NppCorpDecision["newSectors"] = [];
@@ -632,8 +641,19 @@ export function makeNppCorpDecision(
     anchorToCorpCapital(amountAnchor, corpCurrencyCode, corpFxRate);
   const cashToAnchor = makeCapacityCashToAnchor(corp, corpFxRate);
   const capacityCohort = resolveCapacityCohort(corp);
-  const nationalShare = (countryId: string, sectorType: CorporationType) =>
-    plants?.nationalShareOf?.(corp._id, countryId, sectorType) ?? 0;
+  const nationalShare = (
+    countryId: string,
+    sectorType: CorporationType,
+    industryModel?: string | null,
+    mediaDiscriminator?: string | null
+  ) =>
+    plants?.nationalShareOf?.(
+      corp._id,
+      countryId,
+      sectorType,
+      industryModel,
+      mediaDiscriminator as "entertainment" | null | undefined
+    ) ?? 0;
   const capacityObservations: CapacityDecisionObservation[] = [];
   // Which of the four operator decision legs bound this corp this turn (#2122);
   // sections below flag the branch they take and the resolver picks the first.
@@ -766,7 +786,7 @@ export function makeNppCorpDecision(
         sp.margin <= modifiers.divestMarginFloor + levers.divestMarginFloorDelta
       ) {
         // Protect the corp's primary sector type — that's its core business
-        if (sp.sector.sectorType === corp.type) {
+        if (isCoreSector(sp.sector)) {
           constraintFlags.divest_core_protected = true;
           continue;
         }
@@ -798,7 +818,7 @@ export function makeNppCorpDecision(
       .filter(
         (sp) =>
           (sp.sector.lowFillTurns ?? 0) >= STRANDED_DIVEST_TURNS &&
-          sp.sector.sectorType !== corp.type &&
+          !isCoreSector(sp.sector) &&
           sp.sector.mothballed !== true &&
           !divestedSectorIds.includes(sp.sector._id)
       )
@@ -944,102 +964,17 @@ export function makeNppCorpDecision(
   }
 
   // ── 2c. Glut mothballing (plants only) ────────────────────────────────────
-  // Sections 2a/2b only STOP a glutted sector from growing; nothing ever takes
-  // existing capacity OFF the market. Under plants that matters: NPP plants
-  // seeded at national-economy scale (100k-300k units/day) keep producing
-  // full-tilt into markets clearing at soldFraction 0.01-0.08, pinning every
-  // finished-good price to the log-curve floor and starving player plants of
-  // fill (ticket #1027 — chemicals sat 72x oversupplied, advertising 125x).
-  // Negative productionPolicy is the WRONG lever for this (its lean-ops
-  // asymmetry cuts input demand harder than output and worsened gluts, GH
-  // #3370); mothballing is the right one — a mothballed plant is cold on BOTH
-  // sides, so a glutted market loses supply while the extraction inputs it was
-  // hoarding (all in shortage, live fertilizers fill 0.1) are released.
-  //
-  // Deliberately gradual and self-limiting: a corp is only ELIGIBLE for a
-  // state change on its stagger slot (see GLUT_STATE_CHANGE_STAGGER — young
-  // worlds are wall-to-wall single-sector NPP corps, so per-corp limits alone
-  // are cohort-wide cliffs), at most ONE change per corp per turn, and only
-  // while the sector's own fill is under GLUT_MOTHBALL_FILL_THRESHOLD — as
-  // capacity idles, surviving sellers' fill rises and the trigger stops
-  // firing. A single-sector corp MAY go fully cold: the restart pass prices
-  // its market without needing fill, so cold is recoverable, and exempting
-  // last sectors would exempt essentially the whole glut. Restarts use the
-  // price signal with a wide hysteresis band and are preferred over new
-  // mothballs so a recovering market reactivates before it sheds more.
-  // State-owned corps (countryOwnerId) are exempt: SOEs are policy
-  // instruments, not margin-seekers.
-  if (
-    plants?.enabled &&
-    !corp.countryOwnerId &&
-    glutStaggerEligible(corp._id.toString(), ctx.turn)
-  ) {
-    let stateChangeBudget = 1;
-
-    // Restart pass first: recovering markets reactivate before anything sheds.
-    for (const sp of sectorProfits) {
-      if (stateChangeBudget <= 0) break;
-      if (sp.sector.mothballed !== true) continue;
-      if (divestedSectorIds.includes(sp.sector._id)) continue;
-      const ratio = sectorShortageScore(
-        sp.sector.sectorType,
-        sp.sector.countryId ?? corp.countryId,
-        priceRatioOf
-      );
-      if (ratio >= GLUT_RESTART_PRICE_RATIO) {
-        sectorUpdates.push({
-          filter: { _id: sp.sector._id },
-          // A revived plant re-earns chronic-cost status from zero instead
-          // of mothballing again on its first losing turn (step 5).
-          update: { $set: { mothballed: false, pnlLossTurns: 0, updatedAt: now } },
-        });
-        stateChangeBudget -= 1;
-      }
-    }
-
-    if (stateChangeBudget > 0) {
-      let worst: { sp: SectorProfitInfo; fill: number } | null = null;
-      for (const sp of sectorProfits) {
-        if (sp.sector.mothballed === true) continue;
-        if (divestedSectorIds.includes(sp.sector._id)) continue;
-        // Extraction is excluded: every extractable is shortage-side (its
-        // fill is ~1 so the gate would never fire) and its output/rationing
-        // legs live outside the clearing book this signal reads.
-        if (sp.sector.sectorType === "extraction") continue;
-        const fill = sp.sector.soldFraction;
-        // soldFraction is only written under clearing mode; a sector that
-        // has never cleared (mid-build, legacy) is not a candidate.
-        if (fill == null || fill >= GLUT_MOTHBALL_FILL_THRESHOLD) continue;
-        const ratio = sectorShortageScore(
-          sp.sector.sectorType,
-          sp.sector.countryId ?? corp.countryId,
-          priceRatioOf
-        );
-        if (ratio > GLUT_MOTHBALL_PRICE_RATIO) continue;
-        if (worst == null || fill < worst.fill) worst = { sp, fill };
-      }
-      if (worst) {
-        sectorUpdates.push({
-          filter: { _id: worst.sp.sector._id },
-          update: { $set: { mothballed: true, updatedAt: now } },
-        });
-      } else {
-        // Filled plants can still lose money. Mothball the longest-running loss;
-        // this reversible action shares the budget and follows fill-based sheds.
-        const coldest = chooseCostMothballSector(
-          sectorProfits,
-          divestedSectorIds,
-          COST_MOTHBALL_LOSS_TURNS
-        );
-        if (coldest) {
-          sectorUpdates.push({
-            filter: { _id: coldest.sector._id },
-            update: { $set: { mothballed: true, updatedAt: now } },
-          });
-        }
-      }
-    }
-  }
+  sectorUpdates.push(
+    ...buildNppGlutMothballUpdates({
+      corporation: corp,
+      turn: ctx.turn,
+      now,
+      plantsEnabled: plants?.enabled === true,
+      sectorProfits,
+      divestedSectorIds,
+      priceRatioOf,
+    })
+  );
 
   // Input-squeeze strategy shifts use the 2c cohort independently: a mothball and a strategy
   // shift never target the same sector (a shift candidate is running and
@@ -1164,7 +1099,7 @@ export function makeNppCorpDecision(
       sectorUpdates,
       strategy: strategyDecision?.state,
       operatorObservation: buildNppOperatorObservation({
-        sectorType: corp.type,
+        sectorType: operatingCorpType,
         cashNegative: cashLocal < 0,
         passive: true,
         profitable: isProfitable,
@@ -1262,15 +1197,23 @@ export function makeNppCorpDecision(
         foundingTarget.sectorType as CorporationType,
         foundingTarget.headroomUnits,
         foundingTarget.revenue,
-        plants.eraUnitScale
+        plants.eraUnitScale,
+        foundingTarget.industryModel,
+        foundingTarget.mediaDiscriminator
       );
-      const starterUnits = foundingStarterUnits(foundingTarget.sectorType as CorporationType);
+      const starterUnits = foundingStarterUnits(
+        foundingTarget.sectorType as CorporationType,
+        foundingTarget.industryModel as "vehicles" | null | undefined,
+        foundingTarget.mediaDiscriminator
+      );
       // Per-unit founding price. computeBuildCost is linear in units, so a
       // one-unit quote scales exactly while retaining its itemized breakdown.
       const foundingUnitQuote =
         starterUnits > 0
           ? computeBuildCost({
               sectorType: foundingTarget.sectorType as CorporationType,
+              industryModel: foundingTarget.industryModel,
+              mediaDiscriminator: foundingTarget.mediaDiscriminator,
               units: 1,
               // Greenfield entry uses the sector-type default strategy.
               strategyId: null,
@@ -1279,7 +1222,9 @@ export function makeNppCorpDecision(
               marketSharePercent: 0,
               nationalMarketSharePercent: nationalShare(
                 foundingTarget.countryId,
-                foundingTarget.sectorType as CorporationType
+                foundingTarget.sectorType as CorporationType,
+                foundingTarget.industryModel,
+                foundingTarget.mediaDiscriminator
               ),
               primeRate: plants.primeRateOf(foundingTarget.countryId),
               // NPP CEOs have no Character Business Acumen; neutral is honest.
@@ -1374,13 +1319,16 @@ export function makeNppCorpDecision(
           ? buildUnits *
             revenuePerCapacityUnit(
               foundingTarget.sectorType as CorporationType,
-              plants.eraUnitScale
+              plants.eraUnitScale,
+              foundingTarget.industryModel,
+              foundingTarget.mediaDiscriminator
             )
           : foundingTarget.revenue * nameplateShare;
         newSectors.push({
           stateId: foundingTarget.stateId,
           countryId: foundingTarget.countryId,
           sectorType: foundingTarget.sectorType,
+          mediaDiscriminator: foundingTarget.mediaDiscriminator,
           strategyId: foundingStrategyId,
           // Written in the corp's own currency, because that is what
           // `sectorTurn` reads it as (`readCorpEconomicAnchor` on the way in,
@@ -1403,6 +1351,7 @@ export function makeNppCorpDecision(
         unownedDraws.push({
           stateId: foundingTarget.stateId,
           sectorType: foundingTarget.sectorType as CorporationType,
+          mediaDiscriminator: foundingTarget.mediaDiscriminator,
           units: buildUnits,
           countryId: foundingTarget.countryId,
         });
@@ -1592,7 +1541,14 @@ export function makeNppCorpDecision(
         queue_full: queueDepth >= NPP_REINVEST_MAX_QUEUE_DEPTH,
         no_telemetry: !(produced > 0),
         fill_below_min: produced > 0 && fill < NPP_REINVEST_MIN_FILL,
-        state_controlled: stateControlled.has(bucketKey(sector.stateId, sector.sectorType)),
+        state_controlled: stateControlled.has(
+          bucketKey(
+            sector.stateId,
+            sector.sectorType,
+            sector.industryModel,
+            sector.mediaDiscriminator
+          )
+        ),
       });
       if (preSizingGate) {
         observeReinvestCandidate(preSizingGate, sector, capitalStock, null, 0, null);
@@ -1719,7 +1675,11 @@ export function makeNppCorpDecision(
       // gate a rare-earth price spike could make a mine keep adding capacity
       // after the state's geology was already exhausted; production was capped,
       // but the balance sheet and national sector mix kept inflating.
-      const facilityUnits = foundingStarterUnits(sector.sectorType);
+      const facilityUnits = foundingStarterUnits(
+        sector.sectorType,
+        sector.industryModel as "vehicles" | null | undefined,
+        sector.mediaDiscriminator
+      );
       const utilization = capitalStock > 0 ? runUnits / capitalStock : 0;
       const extractionHeadroom =
         sector.sectorType === "extraction"
@@ -1742,12 +1702,19 @@ export function makeNppCorpDecision(
         ? toCorpLocal(
             computeBuildCost({
               sectorType: sector.sectorType,
+              industryModel: sector.industryModel,
+              mediaDiscriminator: sector.mediaDiscriminator,
               units: 1,
               strategyId: sector.strategyId ?? null,
               year: plants.year,
               eraUnitScale: plants.eraUnitScale,
               marketSharePercent: growthShare,
-              nationalMarketSharePercent: nationalShare(sectorCountryId, sector.sectorType),
+              nationalMarketSharePercent: nationalShare(
+                sectorCountryId,
+                sector.sectorType,
+                sector.industryModel,
+                sector.mediaDiscriminator
+              ),
               primeRate: plants.primeRateOf(sectorCountryId),
               acumen: NEUTRAL_STAT,
               hostCostOfLivingIndex: plants.costOfLivingOf(sector.stateId),
@@ -1831,6 +1798,8 @@ export function makeNppCorpDecision(
       // Keep the breakdown for capacity-decision telemetry.
       const reinvestPrice = computeBuildCost({
         sectorType: sector.sectorType,
+        industryModel: sector.industryModel,
+        mediaDiscriminator: sector.mediaDiscriminator,
         units,
         strategyId: sector.strategyId ?? null,
         year: plants.year,
@@ -1838,7 +1807,9 @@ export function makeNppCorpDecision(
         marketSharePercent,
         nationalMarketSharePercent: nationalShare(
           sector.countryId ?? corp.countryId,
-          sector.sectorType
+          sector.sectorType,
+          sector.industryModel,
+          sector.mediaDiscriminator
         ),
         primeRate: plants.primeRateOf(sector.countryId ?? corp.countryId),
         // An NPP CEO is an NPP, not a Character — no Business Acumen to read.
@@ -1981,7 +1952,7 @@ export function makeNppCorpDecision(
     strategy: strategyDecision?.state,
     capacityObservations,
     operatorObservation: buildNppOperatorObservation({
-      sectorType: corp.type,
+      sectorType: operatingCorpType,
       cashNegative: cashLocal < 0,
       passive: false,
       profitable: isProfitable,

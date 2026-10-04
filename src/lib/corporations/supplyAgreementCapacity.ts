@@ -1,5 +1,6 @@
 import { activeCapacityFraction } from "@/lib/corporations/investment/rules";
 import type { CorporationType } from "@/lib/constants/corporations";
+import type { MediaDiscriminator } from "@/lib/constants/corporations";
 import {
   COMMODITY_BASE_PRICES,
   commodityMixWeight,
@@ -10,7 +11,7 @@ import {
 } from "@/lib/constants/commodities";
 import {
   applyPlannedEconomyOutputMix,
-  getEffectiveStrategyRates,
+  getEffectiveStrategyRatesForOperatingModel,
   plannedEconomyMediaSupplyFactor,
 } from "@/lib/constants/sectorStrategies";
 import { retoolOperatingCapacityRatio } from "@/lib/corporations/retooling/rules";
@@ -22,6 +23,8 @@ import { isPlannedEconomy } from "@/lib/constants/commandEconomy";
  */
 export type SupplyAgreementCapacitySector = {
   sectorType: CorporationType;
+  industryModel?: string | null;
+  mediaDiscriminator?: MediaDiscriminator | null;
   capitalStock?: number | null;
   strategyId?: string | null;
   transitionFromStrategyId?: string | null;
@@ -91,12 +94,14 @@ export function computeSupplierCommodityCapacityUnits(args: {
       retoolOperatingCapacityRatio({ ...s, currentTurn: args.turn }) *
       activeCapacityFraction({ activeCapacityPercent: s.activeCapacityPercent });
     if (!(capacity > 0)) continue;
-    const rates = getEffectiveStrategyRates(
+    const rates = getEffectiveStrategyRatesForOperatingModel(
       s.sectorType,
       s.strategyId ?? "standard",
       s.transitionFromStrategyId,
       s.transitionStartTurn,
-      args.turn
+      args.turn,
+      s.industryModel,
+      s.mediaDiscriminator
     );
     const plannedEconomy = isPlannedEconomy(
       s.countryId,
@@ -109,7 +114,9 @@ export function computeSupplierCommodityCapacityUnits(args: {
     // media makes state information rather than advertising, and media supply
     // is derated in every economy.
     const supplyMix = applyPlannedEconomyOutputMix(
-      s.sectorType,
+      s.sectorType === "media" && s.mediaDiscriminator === "entertainment"
+        ? "entertainment"
+        : s.sectorType,
       rates.supply ?? {},
       plannedEconomy
     );
@@ -143,12 +150,14 @@ export function computeSupplierCommodityAchievableUnits(args: {
 }): number | null {
   let units = 0;
   for (const sector of supplyAgreementSectorsInScope(args.sectors, args.stateId)) {
-    const rates = getEffectiveStrategyRates(
+    const rates = getEffectiveStrategyRatesForOperatingModel(
       sector.sectorType,
       sector.strategyId ?? "standard",
       sector.transitionFromStrategyId,
       sector.transitionStartTurn,
-      args.turn
+      args.turn,
+      sector.industryModel,
+      sector.mediaDiscriminator
     );
     const plannedEconomy = isPlannedEconomy(
       sector.countryId,
@@ -156,7 +165,9 @@ export function computeSupplierCommodityAchievableUnits(args: {
       args.commandEconomyEnabled
     );
     const supplyMix = applyPlannedEconomyOutputMix(
-      sector.sectorType,
+      sector.sectorType === "media" && sector.mediaDiscriminator === "entertainment"
+        ? "entertainment"
+        : sector.sectorType,
       rates.supply ?? {},
       plannedEconomy
     );

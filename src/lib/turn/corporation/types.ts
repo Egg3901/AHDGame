@@ -342,6 +342,14 @@ export interface CorpSnapshot {
   /** Pre-tax operating income minus overhead, before bond flows and dividends (₳/turn). */
   incomePreDividends: number;
   income: number;
+  /** Net operating cash delta in the corporation's liquid currency for this turn. */
+  operatingCashIncomeLocal?: number;
+  /** Currency used by the operating cash writer above. */
+  operatingCashCurrency?: CurrencyCode;
+  /** Per-country federal tax withholding in anchor units, frozen with this snapshot. */
+  federalTaxByCountryAnchor?: Map<string, number>;
+  /** Corporation cash currency units per anchor, used to freeze source-side value. */
+  operatingCashLocalPerAnchor?: number;
   /** Coupon income earned as a bond holder this turn (₳/turn). */
   perTurnBondCouponIncome: number;
   /** Gross bond coupon expense on issued bonds this turn (₳/turn). */

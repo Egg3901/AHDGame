@@ -229,7 +229,7 @@ export async function applyLegislationEffect(
           // International-organization membership actions (Foreign Policy). Fund
           // moves treasury → org fund; leave/join effects land in later tasks.
           if (p.subType === "fund") {
-            await applyOrgFundProvision(db, countryId, p);
+            await applyOrgFundProvision(db, countryId, p, String(bill._id));
           } else if (p.subType === "leave") {
             await applyOrgLeaveProvision(db, bill, countryId, p);
           } else if (p.subType === "join") {

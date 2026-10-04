@@ -90,6 +90,8 @@ export type TreasuryCashFlow = keyof typeof FLOW_ACCOUNTING;
 export interface TreasuryCashContext {
   turn: number;
   preset: string;
+  ledgerShadowEnabled?: boolean;
+  treasuryCashLedgerEnabled?: boolean;
   rates: ReadonlyMap<string, number>;
   treasuryCurrencies: ReadonlyMap<string, CurrencyCode>;
   /** A phase-owned batch; direct callers publish immediately. */
@@ -113,9 +115,18 @@ export async function loadTreasuryCashContext(
 ): Promise<TreasuryCashContext | null> {
   try {
     const config = await db
-      .collection<{ _id: string; ledgerShadow?: boolean }>("gameConfig")
-      .findOne({ _id: "default" }, { projection: { ledgerShadow: 1 } });
-    if (config?.ledgerShadow !== true) return null;
+      .collection<{
+        _id: string;
+        ledgerShadow?: boolean;
+        treasuryCashLedgerEnabled?: boolean;
+      }>("gameConfig")
+      .findOne(
+        { _id: "default" },
+        { projection: { ledgerShadow: 1, treasuryCashLedgerEnabled: 1 } }
+      );
+    const ledgerShadowEnabled = config?.ledgerShadow === true;
+    const treasuryCashLedgerEnabled = config?.treasuryCashLedgerEnabled === true;
+    if (!ledgerShadowEnabled && !treasuryCashLedgerEnabled) return null;
     const [state, rates, budgets] = await Promise.all([
       db
         .collection<{ _id: string; currentTurn: number; preset?: string }>("gameState")
@@ -138,6 +149,8 @@ export async function loadTreasuryCashContext(
     return {
       turn: resolvedTurn,
       preset: state?.preset ?? DEFAULT_SEED_PRESET,
+      ledgerShadowEnabled,
+      treasuryCashLedgerEnabled,
       rates: new Map(rates.map((row) => [row.currencyCode, row.rate])),
       treasuryCurrencies: new Map(
         budgets.map((row) => [row.countryId, snapshotTreasuryCurrency(row)])
@@ -174,7 +187,7 @@ export async function witnessTreasuryCash(
   if (!Number.isFinite(input.amount) || input.amount === 0) return;
   try {
     const { context } = await resolveTreasuryCashOptions(db, options);
-    if (!context) return;
+    if (!context || context.ledgerShadowEnabled === false) return;
     const { account } = input;
     let ledgerAccount: string;
     let currency: CurrencyCode;

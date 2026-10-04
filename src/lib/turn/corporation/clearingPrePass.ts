@@ -12,7 +12,7 @@ import {
   type LoyaltySectorInput,
 } from "./brandLoyaltyTurn";
 import {
-  getEffectiveStrategyRates,
+  getEffectiveStrategyRatesForOperatingModel,
   applyPlannedEconomyOutputMix,
   plannedEconomyMediaSupplyFactor,
 } from "@/lib/constants/sectorStrategies";
@@ -46,7 +46,9 @@ import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 import { advertisingDeliveredValueByCorp } from "./advertisingDeliveredValue";
 import { mediaAudienceFit } from "@/lib/mediaEditorial/rules";
 import {
-  mediaRegulationAvailabilityByOutlet,
+  censorshipReachAvailability,
+  mediaAudienceAccessLimitUnitsByOutlet,
+  isFairnessDoctrineBroadcastOutlet,
   type MediaOutletDelivery,
   type MediaStateRegulation,
 } from "@/lib/mediaRegulation/rules";
@@ -175,6 +177,7 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
     const deliveryLimitedBySectorId = new Map<string, number>();
     const deliveryLimitedClassBySectorId = new Map<string, FreightClass | null>();
     const priorMediaAdOutlets: MediaOutletDelivery[] = [];
+    const sectorTypeBySectorId = new Map<string, string>();
     /**
      * Share of a sector's output its host state could place last turn, 1 when
      * there is no measured limit. Min across the sector's output commodities:
@@ -229,12 +232,14 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
     for (const [corpId, sectors] of lookups.sectorsByCorp) {
       const corp = lookups.corpById.get(corpId);
       for (const sector of sectors) {
-        const baseRates = getEffectiveStrategyRates(
+        const baseRates = getEffectiveStrategyRatesForOperatingModel(
           sector.sectorType,
           sector.strategyId ?? "standard",
           sector.transitionFromStrategyId,
           sector.transitionStartTurn,
-          turn ?? 0
+          turn ?? 0,
+          sector.industryModel,
+          sector.mediaDiscriminator
         );
         // Same remap the world ledger applies (computeRawSupplyDemand): bloc
         // media offers state broadcasting, not advertising. If the offer and
@@ -276,15 +281,33 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
           (sector.sectorType === "media" || sector.sectorType === "entertainment") &&
           (rates.supply.advertising ?? 0) > 0
         ) {
+          const countryId =
+            lookups.stateCountryMap?.get(sector.stateId) ??
+            (sector as { countryId?: string }).countryId;
           const outputByCommodity = sector.outputUnitsByCommodity;
+          const measuredUnits = scaleMeasuredProducedUnits({
+            producedUnits: sector.producedUnits,
+            isNatcorp: !!lookups.corpById.get(corpId)?.countryOwnerId,
+            embargoSupplyFactor:
+              embargoSupplyFactorFor(sector) *
+              plannedEconomyMediaSupplyFactor(
+                sector.sectorType,
+                isPlannedEconomy(
+                  (sector as { countryId?: string }).countryId,
+                  currentYear,
+                  commandEconomyEnabled
+                )
+              ),
+            militaryRetainedFraction: 1 - freshMilitaryDiversion(sector, turn ?? 0),
+          });
           const producedAdvertising =
             typeof outputByCommodity?.advertising === "number" &&
             Number.isFinite(outputByCommodity.advertising)
               ? Math.max(0, outputByCommodity.advertising)
-              : typeof sector.producedUnits === "number" &&
-                  Number.isFinite(sector.producedUnits) &&
-                  sector.producedUnits >= 0
-                ? sector.producedUnits *
+              : typeof measuredUnits === "number" &&
+                  Number.isFinite(measuredUnits) &&
+                  measuredUnits >= 0
+                ? measuredUnits *
                   commodityMixWeight(
                     rates.supply,
                     eraScaledBasePrices(lookups.eraUnitScale),
@@ -297,7 +320,7 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
               : sector.soldFraction;
           priorMediaAdOutlets.push({
             stateId: sector.stateId,
-            countryId: (sector as { countryId?: string }).countryId ?? "US",
+            countryId: countryId ?? "",
             corporationId: corpId,
             deliveredAdvertisingUnits:
               producedAdvertising != null &&
@@ -325,6 +348,7 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
             sectorId: sector._id.toString(),
             corporationId: corpId,
             sectorType: sector.sectorType,
+            industryModel: sector.industryModel,
             strategyId: sector.strategyId,
             capitalStock: sector.capitalStock ?? 0,
             plantCount: sector.plantCount ?? 0,
@@ -399,6 +423,7 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
         // Shared ownership map for both bilateral supply agreements and the
         // anonymous advertising settlement that follows clearing.
         sectorCorpId.set(sectorId, corpId);
+        sectorTypeBySectorId.set(sectorId, sector.sectorType);
         if (supplyAgreementsEnabled) {
           supplyAgreementDemandSectors.push({
             corporationId: corpId,
@@ -581,6 +606,10 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
                 productQualityByCommodity: qualityPremiumPricingEnabled
                   ? scaledProductOutput.productQualityByCommodity
                   : undefined,
+                projectOutputUnitsByCommodity: scaledProductOutput.projectOutputUnitsByCommodity,
+                projectQualityByCommodity: scaledProductOutput.productQualityByCommodity,
+                productProjectId: String(productProject!._id),
+                productOutputTurn: turn ?? undefined,
               }
             : {}),
           // Plants tier: last turn's measured output is the offer (lagged, like
@@ -689,11 +718,17 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
           deliveryLimitedBySectorId.set(sectorId, deliveryLimit.fraction);
           deliveryLimitedClassBySectorId.set(sectorId, deliveryLimit.freightClass);
         }
+        const sectorCountryId =
+          lookups.stateCountryMap?.get(sector.stateId) ??
+          (sector as { countryId?: string }).countryId;
+        const fairnessDoctrineApplies =
+          market.mediaFairnessDoctrineEnabled === true &&
+          sectorCountryId === "US" &&
+          isFairnessDoctrineBroadcastOutlet(sector.sectorType, sector.strategyId ?? "");
         if (
           lookups.editorialAudienceLeanByState &&
           sector.sectorType === "media" &&
-          (market.mediaEditorialEnabled ||
-            (market.mediaFairnessDoctrineEnabled && sector.countryId === "US"))
+          (market.mediaEditorialEnabled || fairnessDoctrineApplies)
         ) {
           const stance = lookups.corpById.get(corpId)?.editorialStance;
           const audience = lookups.editorialAudienceLeanByState.get(sector.stateId);
@@ -753,20 +788,46 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
           stateMediaControl: metrics.mediaInformation?.stateMediaControl?.value,
         });
       }
-      const availabilityByOutlet = mediaRegulationAvailabilityByOutlet({
-        outlets: priorMediaAdOutlets,
-        policyOptionIndex: market.mediaRegulationPolicyOptionIndex ?? 3,
-        stateConditionsById,
-      });
+      const accessLimitUnitsByOutlet = mediaAudienceAccessLimitUnitsByOutlet(
+        priorMediaAdOutlets.filter((outlet) => outlet.countryId === "US"),
+        market.mediaRegulationPolicyOptionIndex ?? 3
+      );
+      const currentAdvertisingUnitsByOutlet = new Map<string, number>();
       for (const sector of clearingInputs) {
         const sectorId = sector.sectorId;
+        const sectorType = sectorTypeBySectorId.get(sectorId);
+        if (sectorType !== "media" && sectorType !== "entertainment") continue;
         const stateId = clearingStateBySector.get(sectorId);
         const corporationId = sectorCorpId.get(sectorId);
         if (!stateId || !corporationId) continue;
-        const regulationAvailability = availabilityByOutlet.get(`${stateId}:${corporationId}`);
-        if (regulationAvailability == null) continue;
+        const key = `${stateId}:${corporationId}`;
+        currentAdvertisingUnitsByOutlet.set(
+          key,
+          (currentAdvertisingUnitsByOutlet.get(key) ?? 0) +
+            physicalAdvertisingOfferUnits(sector, market.plantsEnabled, lookups.eraUnitScale)
+        );
+      }
+      for (const sector of clearingInputs) {
+        const sectorId = sector.sectorId;
+        const sectorType = sectorTypeBySectorId.get(sectorId);
+        if (sectorType !== "media" && sectorType !== "entertainment") continue;
+        const stateId = clearingStateBySector.get(sectorId);
+        const corporationId = sectorCorpId.get(sectorId);
+        if (!stateId || !corporationId) continue;
+        const key = `${stateId}:${corporationId}`;
+        const offeredUnits = currentAdvertisingUnitsByOutlet.get(key) ?? 0;
+        const accessLimitUnits = accessLimitUnitsByOutlet.get(key);
+        const accessAvailability =
+          accessLimitUnits != null && offeredUnits > accessLimitUnits && offeredUnits > 0
+            ? accessLimitUnits / offeredUnits
+            : 1;
+        const censorshipAvailability = censorshipReachAvailability(
+          stateConditionsById.get(stateId) ?? {}
+        );
         sector.editorialAdvertisingAvailability =
-          (sector.editorialAdvertisingAvailability ?? 1) * regulationAvailability;
+          (sector.editorialAdvertisingAvailability ?? 1) *
+          accessAvailability *
+          censorshipAvailability;
       }
     }
     // Book-sanity invariant (issue #2054): the diagnostic reports the RAW
@@ -1071,4 +1132,33 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
     buyerDemandByCorpCommodity,
     politicalMediaSettlementPlans,
   };
+}
+
+/** Mirrors the production clearing offer basis for the advertising commodity. */
+function physicalAdvertisingOfferUnits(
+  input: SectorClearingInput,
+  plantsEnabled: boolean,
+  eraUnitScale: number
+): number {
+  if (input.outputUnitsByCommodity != null) {
+    const exactUnits = input.outputUnitsByCommodity.advertising;
+    return typeof exactUnits === "number" && Number.isFinite(exactUnits)
+      ? Math.max(0, exactUnits)
+      : 0;
+  }
+  const rate = input.supplyRates.advertising ?? 0;
+  if (!(rate > 0)) return 0;
+  if (
+    plantsEnabled &&
+    typeof input.producedUnits === "number" &&
+    Number.isFinite(input.producedUnits) &&
+    input.producedUnits >= 0
+  ) {
+    return (
+      input.producedUnits *
+      commodityMixWeight(input.supplyRates, eraScaledBasePrices(eraUnitScale), "advertising")
+    );
+  }
+  const basePrice = eraScaledBasePrices(eraUnitScale).advertising;
+  return basePrice > 0 ? Math.max(0, (input.revenue * rate) / basePrice) : 0;
 }

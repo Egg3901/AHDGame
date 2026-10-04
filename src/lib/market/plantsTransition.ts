@@ -107,6 +107,8 @@ export interface PlantsPreflightSectorInput {
   id: string;
   corporationId?: string | null;
   sectorType: CorporationType;
+  industryModel?: string | null;
+  mediaDiscriminator?: "entertainment" | null;
   stateId?: string | null;
   countryId?: string | null;
   /** Pre-flip nameplate revenue, ₳ per turn-basis, as stored. */
@@ -298,7 +300,9 @@ export function assessPlantsFlipForSector(
     sector.sectorType,
     ctx.currentYear ?? CAPACITY_ANCHOR_YEAR,
     ctx.eraUnitScale ?? 1,
-    sector.strategyId ?? null
+    sector.strategyId ?? null,
+    sector.industryModel,
+    sector.mediaDiscriminator
   );
   const creditApplies = willMigrate && growthCostAnchor > 0 && unitPriceAnchor > 0;
   const buildCreditUnits = creditApplies ? growthCostAnchor / unitPriceAnchor : 0;

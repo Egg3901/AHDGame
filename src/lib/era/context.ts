@@ -2,10 +2,13 @@ import type { Db } from "mongodb";
 import type { GameState } from "@/lib/db/types/gameState";
 import { resolveGameYear } from "./era";
 import { getStartingYearForPreset } from "@/lib/constants/turnTime";
+import type { MarketSystemMode } from "@/lib/market/modes";
 
 export interface EraContext {
   /** Live in-game year — non-null ONLY when the era system is enabled. */
   year: number | null;
+  /** Current turn for reconstructing persisted market-transition rates. */
+  currentTurn: number | null;
   preset: string | null;
   /** World starting year (frozen) — anchors the medianIncome band; null flag-off. */
   startingYear: number | null;
@@ -15,6 +18,12 @@ export interface EraContext {
    * first flag-on turn (scoring falls back to the full legacy band).
    */
   incomeBandIndexByCountry: Partial<Record<string, number>> | null;
+  /** Cached configuration mirrored by the admin route for zero-read law gates. */
+  mediaRegulation: {
+    enabled: boolean;
+    marketSystemMode: MarketSystemMode;
+    commandEconomyEnabled: boolean;
+  };
 }
 
 /**
@@ -57,18 +66,35 @@ export async function getEraContext(db: Db): Promise<EraContext> {
         startingYear: 1,
         eraSystemEnabled: 1,
         incomeBandIndexByCountry: 1,
+        mediaRegulationSnapshot: 1,
       },
     }
   );
   const preset = gs?.preset ?? null;
+  const currentTurn = typeof gs?.currentTurn === "number" ? gs.currentTurn : null;
+  const regulation = gs?.mediaRegulationSnapshot;
+  const mediaRegulation = {
+    enabled: regulation?.enabled === true,
+    marketSystemMode: regulation?.marketSystemMode ?? "off",
+    commandEconomyEnabled: regulation?.commandEconomyEnabled === true,
+  } satisfies EraContext["mediaRegulation"];
   if (!gs?.eraSystemEnabled) {
-    return { year: null, preset, startingYear: null, incomeBandIndexByCountry: null };
+    return {
+      year: null,
+      currentTurn,
+      preset,
+      startingYear: null,
+      incomeBandIndexByCountry: null,
+      mediaRegulation,
+    };
   }
   return {
     year: resolveGameYear(gs),
+    currentTurn,
     preset,
     startingYear: gs.startingYear ?? null,
     incomeBandIndexByCountry: gs.incomeBandIndexByCountry ?? null,
+    mediaRegulation,
   };
 }
 

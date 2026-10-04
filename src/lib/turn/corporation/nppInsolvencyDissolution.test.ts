@@ -98,6 +98,24 @@ describe("processNppInsolventCorpDissolution", () => {
     });
   });
 
+  it("keeps a cashless corp insolvent while funded operating or tax arrears remain", async () => {
+    const insolvent = corp({
+      liquidCapital: 0,
+      countryId: "US",
+      nppInsolventSinceTurn: TURN - PERSISTENT_INSOLVENCY_GRACE_TURNS,
+      operatingCashArrearsByCurrency: { USD: 600_000 },
+      federalTaxArrearsAnchorByCountry: { US: 500_001 },
+    });
+    const { db } = makeDb([insolvent]);
+
+    const result = await processNppInsolventCorpDissolution(db, TURN);
+
+    expect(result).toEqual({ candidates: 1, dissolved: 1 });
+    expect(vi.mocked(executeCorporationBondDefaultDissolution).mock.calls[0][1]).toMatchObject({
+      _id: insolvent._id,
+    });
+  });
+
   it("caps dissolutions per turn and does the deepest holes first", async () => {
     // 30 insolvent corps, cap is 25 — the 25 deepest should be dissolved.
     const corps = Array.from({ length: 30 }, (_, i) =>

@@ -105,6 +105,56 @@ describe("isEligibleIndexFundConstituent", () => {
       })
     ).toBe(true);
   });
+
+  it("keeps canonical entertainment corporations in their legacy fund without double counting them as media", () => {
+    const entertainmentCorp = corp({ type: "media", mediaDiscriminator: "entertainment" });
+    expect(
+      isEligibleIndexFundConstituent(entertainmentCorp, {
+        scope: "global",
+        kind: "sector",
+        sectorType: "entertainment",
+      })
+    ).toBe(true);
+    expect(
+      isEligibleIndexFundConstituent(entertainmentCorp, {
+        scope: "global",
+        kind: "sector",
+        sectorType: "media",
+      })
+    ).toBe(false);
+    expect(
+      isEligibleIndexFundConstituent(corp({ type: "media" }), {
+        scope: "global",
+        kind: "sector",
+        sectorType: "media",
+      })
+    ).toBe(true);
+  });
+
+  it("keeps vehicle-model corporations in the automobile fund, not generic manufacturing", () => {
+    const vehicleCorp = corp({ type: "manufacturing", industryModel: "vehicles" });
+    expect(
+      isEligibleIndexFundConstituent(vehicleCorp, {
+        scope: "global",
+        kind: "sector",
+        sectorType: "automobiles",
+      })
+    ).toBe(true);
+    expect(
+      isEligibleIndexFundConstituent(vehicleCorp, {
+        scope: "global",
+        kind: "sector",
+        sectorType: "manufacturing",
+      })
+    ).toBe(false);
+    expect(
+      isEligibleIndexFundConstituent(corp({ type: "manufacturing" }), {
+        scope: "global",
+        kind: "sector",
+        sectorType: "manufacturing",
+      })
+    ).toBe(true);
+  });
 });
 
 describe("buildIndexFundTargetConstituents", () => {

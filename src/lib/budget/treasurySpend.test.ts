@@ -69,4 +69,23 @@ describe("spendFromTreasury", () => {
     expect(setOp.treasuryBalance).toBe(300);
     expect(setOp).not.toHaveProperty("debt.principal");
   });
+
+  it("requires a stable receipt key for funded spending", async () => {
+    seedBudget(900, 250);
+    await expect(
+      spendFromTreasury(db as unknown as Db, "US", 300, {
+        witness: {
+          flow: "crisis_response",
+          site: "test",
+          treasuryCashLedgerEnabled: true,
+        },
+      })
+    ).rejects.toThrow("stable receipt key");
+  });
+
+  it("keeps the flag-off path free of a configuration read", async () => {
+    seedBudget(1000);
+    await spendFromTreasury(db as unknown as Db, "US", 100);
+    expect(db.collectionMocks.gameConfig).toBeUndefined();
+  });
 });

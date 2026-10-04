@@ -450,7 +450,8 @@ export function selectGlobalResponseOutcome(
 export async function spendGlobalResponseCost(
   db: Db,
   countryId: string,
-  option: CrisisDecisionOption
+  option: CrisisDecisionOption,
+  receiptKey?: string
 ): Promise<number> {
   // The financial rescue journal owns both funding and recipient cash.
   if (option.action?.kind === "financialCrisisResponse") return 0;
@@ -465,7 +466,11 @@ export async function spendGlobalResponseCost(
   if (amount > 0) {
     await spendFromTreasury(db, countryId, amount, {
       resyncDerived: true,
-      witness: { flow: "crisis_response", site: "livingConflict/globalResponse" },
+      witness: {
+        flow: "crisis_response",
+        key: receiptKey ?? `global-response:${countryId}:${option.optionId}`,
+        site: "livingConflict/globalResponse",
+      },
     });
   }
   return amount;

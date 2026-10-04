@@ -108,6 +108,10 @@ export async function expandSector(request: Request, { params }: RouteParams) {
     // are a soft economic penalty, not a hard gate. When no type is requested we
     // default to the corp's primary type.
     const sectorType = plantsEnabled ? (requestedSectorType ?? corporation.type) : corporation.type;
+    const industryModel =
+      sectorType === corporation.type ? (corporation.industryModel ?? null) : null;
+    const mediaDiscriminator =
+      sectorType === corporation.type ? (corporation.mediaDiscriminator ?? null) : null;
 
     // Check the state exists. NOT scoped to the corp's home country: founding
     // abroad is allowed, and the whole command downstream is built for it — the
@@ -138,13 +142,17 @@ export async function expandSector(request: Request, { params }: RouteParams) {
     }
 
     // Check not already in this state
-    const existingSector = await db
-      .collection<CorporateSector>("corporateSectors")
-      .findOne(
-        plantsEnabled
-          ? { corporationId: corporation._id, stateId, sectorType }
-          : { corporationId: corporation._id, stateId }
-      );
+    const existingSector = await db.collection<CorporateSector>("corporateSectors").findOne(
+      plantsEnabled
+        ? {
+            corporationId: corporation._id,
+            stateId,
+            sectorType,
+            industryModel,
+            mediaDiscriminator,
+          }
+        : { corporationId: corporation._id, stateId }
+    );
     if (existingSector) {
       return NextResponse.json(
         { error: "You already have operations in this state" },
@@ -162,10 +170,12 @@ export async function expandSector(request: Request, { params }: RouteParams) {
       ? getSectorTechEffects(
           {
             type: corporation.type,
+            industryModel: corporation.industryModel,
             unlockedTechNodeIds: corporation.unlockedTechNodeIds,
             techDecadeLane: corporation.techDecadeLane,
           },
-          corporation.type
+          corporation.type,
+          corporation.industryModel
         )
       : null;
     const expansionDiscount = techEffects?.expansionDiscount ?? 0;
@@ -227,7 +237,7 @@ export async function expandSector(request: Request, { params }: RouteParams) {
       eraUnitScale = getEraUnitScale(worldPreset);
 
       // One facility quantum — the honest "first plant", not a $1M/day nameplate.
-      starterUnits = foundingStarterUnits(sectorType);
+      starterUnits = foundingStarterUnits(sectorType, industryModel, mediaDiscriminator);
 
       const [primeRate, ceoChar, hostMetrics, nationalMarketSharePercent] = await Promise.all([
         resolveCountryPrimeRate(db, state.countryId),
@@ -243,11 +253,15 @@ export async function expandSector(request: Request, { params }: RouteParams) {
           corporationId: corporation._id,
           countryId: state.countryId as CountryId,
           sectorType,
+          industryModel,
+          mediaDiscriminator,
         }),
       ]);
 
       starterBuildAnchor = computeBuildCost({
         sectorType,
+        industryModel,
+        mediaDiscriminator,
         units: starterUnits,
         // A founded sector is created with no strategy, so it runs the
         // sector-type default; quote it at the same price it will be charged.
@@ -320,7 +334,8 @@ export async function expandSector(request: Request, { params }: RouteParams) {
     // actually be worth once it lands (units × revenue-per-unit at the default
     // mix — the same figure the plants restatement converges to).
     const startingRevenueAnchor = plantsEnabled
-      ? starterUnits * revenuePerCapacityUnit(sectorType, eraUnitScale)
+      ? starterUnits *
+        revenuePerCapacityUnit(sectorType, eraUnitScale, industryModel, mediaDiscriminator)
       : DEFAULT_SECTOR_STARTING_REVENUE;
     const startingRevenueLocal = Math.round(
       writeCorpEconomicLocal(
@@ -338,6 +353,8 @@ export async function expandSector(request: Request, { params }: RouteParams) {
       countryId: state.countryId,
       stateId,
       sectorType,
+      ...(industryModel ? { industryModel } : {}),
+      ...(mediaDiscriminator ? { mediaDiscriminator } : {}),
       targetGrowthRate: 0,
       currentGrowthRate: 0,
       currentGrowthCost: 0,
@@ -445,7 +462,7 @@ export async function expandSector(request: Request, { params }: RouteParams) {
       // as the founder's headroom by the sector browser and the supply math
       // (ticket #1271, the same defect `buildCapacity` carried).
       const starterDrawdown = unownedPoolDrawdown(
-        { stateId, countryId: state.countryId, sectorType },
+        { stateId, countryId: state.countryId, sectorType, industryModel, mediaDiscriminator },
         starterUnits,
         now,
         eraUnitScale
@@ -453,7 +470,9 @@ export async function expandSector(request: Request, { params }: RouteParams) {
       if (starterDrawdown) {
         await db
           .collection<UnownedSector>("unownedSectors")
-          .updateOne({ stateId, sectorType }, starterDrawdown, { upsert: true });
+          .updateOne({ stateId, sectorType, industryModel, mediaDiscriminator }, starterDrawdown, {
+            upsert: true,
+          });
       }
 
       // Shadow-ledger debit leg for the starter build — the cash → CIP reclass,
@@ -477,6 +496,7 @@ export async function expandSector(request: Request, { params }: RouteParams) {
           createdAt: now,
           sectorId: newSectorId,
           sectorType,
+          ...(industryModel ? { industryModel } : {}),
           units: starterUnits,
           meta: { founding: true, onlineTurn: starterOnlineTurn },
         }).catch((err) => {

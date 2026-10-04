@@ -213,7 +213,11 @@ export async function GET(request: Request) {
         name: corp.name,
         description: corp.description,
         type: corp.type,
-        typeLabel: CORPORATION_TYPE_LABELS[corp.type],
+        industryModel: corp.industryModel ?? null,
+        typeLabel:
+          corp.type === "manufacturing" && corp.industryModel === "vehicles"
+            ? "Vehicle manufacturing"
+            : CORPORATION_TYPE_LABELS[corp.type],
         headquartersState: corp.headquartersState,
         headquartersStateName: stateNameMap.get(corp.headquartersState) ?? corp.headquartersState,
         liquidCapital: corp.liquidCapital,

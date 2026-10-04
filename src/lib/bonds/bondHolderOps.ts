@@ -29,6 +29,7 @@ export async function reserveBondUnitsForHolder(
       _id: bondId,
       publicFloat: { $gte: units },
       ...options?.guardFilter,
+      sovereignMaturityClaim: { $exists: false },
       [`holders.${target.field}`]: target.id,
     },
     {
@@ -51,6 +52,7 @@ export async function reserveBondUnitsForHolder(
       _id: bondId,
       publicFloat: { $gte: units },
       ...options?.guardFilter,
+      sovereignMaturityClaim: { $exists: false },
       holders: {
         $not: { $elemMatch: { [target.field]: target.id } },
       },
@@ -68,6 +70,7 @@ export async function reserveBondUnitsForHolder(
       _id: bondId,
       publicFloat: { $gte: units },
       ...options?.guardFilter,
+      sovereignMaturityClaim: { $exists: false },
       [`holders.${target.field}`]: target.id,
     },
     {

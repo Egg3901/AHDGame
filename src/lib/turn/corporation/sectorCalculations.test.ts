@@ -54,6 +54,7 @@ function getTotalPayment(map: Map<string, Map<CurrencyCode, number>>, charId: st
 
 vi.mock("@/lib/bonds/corporateCredit", () => ({
   sumCorporateSectorConstructionInProgress: vi.fn().mockReturnValue(0),
+  corporateCashArrearsAnchor: vi.fn().mockReturnValue(0),
   computeCorporateCreditAtTurn: vi.fn().mockReturnValue({
     creditRating: { rating: "BBB", compositeScore: 50 },
     totalDebt: 0,
@@ -97,17 +98,21 @@ vi.mock("@/lib/constants/commodities", async (importOriginal) => {
 vi.mock("@/lib/utils/productionPolicy", () => ({
   trendProductionPolicy: vi.fn().mockImplementation((current: number) => current),
   getRevenueMultiplier: vi.fn().mockReturnValue(1),
+  getInputMultiplier: vi.fn().mockReturnValue(1),
+  getOutputMultiplier: vi.fn().mockReturnValue(1),
 }));
 
 vi.mock("@/lib/constants/sectorStrategies", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/constants/sectorStrategies")>();
+  const mockEffectiveRates = vi.fn().mockReturnValue({
+    growthRate: 1,
+    profitMargin: 0,
+    isTransitioning: false,
+  });
   return {
     ...actual,
-    getEffectiveStrategyRates: vi.fn().mockReturnValue({
-      growthRate: 1,
-      profitMargin: 0,
-      isTransitioning: false,
-    }),
+    getEffectiveStrategyRates: mockEffectiveRates,
+    getEffectiveStrategyRatesForOperatingModel: mockEffectiveRates,
   };
 });
 
@@ -854,6 +859,46 @@ describe("corporate tax deduction", () => {
     // No cross-contamination.
     expect(snapshot.taxPaidByCountryDomestic.has("UK")).toBe(false);
     expect(snapshot.taxPaidByCountryForeign.has("US")).toBe(false);
+  });
+
+  it("defers only operating cash when the funded Treasury journal owns it", () => {
+    const corp = makeCorp({ headquartersState: "US-CA", countryId: "US", liquidCapital: 1_000 });
+    const sector = makeSector(corp._id, {
+      stateId: "US-CA",
+      countryId: "US",
+      revenue: 24_000,
+      profitMargin: 50,
+      targetGrowthRate: 0,
+      currentGrowthRate: 0,
+    });
+    const lookups = baseLookups([corp], [sector]);
+    lookups.domesticCorpTaxRateByCountry.set("US", 20);
+
+    const result = processSectors(
+      lookups,
+      1,
+      new Date(),
+      false,
+      undefined,
+      undefined,
+      undefined,
+      false,
+      false,
+      false,
+      new Set(),
+      true
+    );
+    const snapshot = result.corpSnapshots[0];
+    const operation = result.corpOps[0];
+    if (!operation || !("updateOne" in operation)) throw new Error("Expected a corp cash update");
+    const cashIncrement = (operation.updateOne.update as { $inc?: { liquidCapital?: number } }).$inc
+      ?.liquidCapital;
+    const incomeLocal = snapshot.operatingCashIncomeLocal ?? 0;
+
+    expect(incomeLocal).toBeGreaterThan(0);
+    expect(snapshot.federalTaxByCountryAnchor?.get("US")).toBeGreaterThan(0);
+    expect(cashIncrement).toBe(0);
+    expect(snapshot.liquidCapital).toBeCloseTo(corp.liquidCapital + incomeLocal);
   });
 
   it("taxes each sector at its own country's federal rate (cross-border corp)", () => {
@@ -3115,6 +3160,51 @@ describe("throughput coupling", () => {
 // ── Posted-price clearing (marketSystemMode >= "clearing", Fix 2) ──
 
 describe("market clearing", () => {
+  it("persists only project snapshots from this turn's clearing fill", () => {
+    const corp = makeCorp();
+    const sector = makeSector(corp._id, {
+      capitalStock: 500,
+      plantCount: 2,
+      producedUnits: 100,
+      operatingCapacityUnits: 500,
+      productOutputCapacityUnits: 500,
+    });
+    const lookups = baseLookups([corp], [sector]);
+    const clearing = {
+      factor: 1,
+      soldFraction: 0.5,
+      soldByCommodity: { vehicles: 0.5 },
+      effectivePosture: 0,
+      productProjectId: "project-1",
+      productOutputTurn: 2,
+      projectOutputUnitsByCommodity: { vehicles: 10 },
+      projectSoldUnitsByCommodity: { vehicles: 5 },
+      projectQualityByCommodity: { vehicles: 72 },
+    };
+    const run = (productOutputTurn: number) =>
+      processSectors(lookups, 2, new Date(), false, undefined, undefined, {
+        ...MARKET_DISABLED,
+        plantsEnabled: true,
+        clearingEnabled: true,
+        clearingBySectorId: new Map([[sector._id.toString(), { ...clearing, productOutputTurn }]]),
+      });
+    const current = run(2).sectorOps[0] as {
+      updateOne: { update: { $set: Record<string, unknown> } };
+    };
+    const stale = run(1).sectorOps[0] as {
+      updateOne: { update: { $set: Record<string, unknown> } };
+    };
+
+    expect(current.updateOne.update.$set).toMatchObject({
+      productLineProjectId: "project-1",
+      productLineOutputTurn: 2,
+      productLineOutputUnitsByCommodity: { vehicles: 10 },
+      productLineSoldUnitsByCommodity: { vehicles: 5 },
+      productLineQualityByCommodity: { vehicles: 72 },
+    });
+    expect(stale.updateOne.update.$set.productLineProjectId).toBeUndefined();
+  });
+
   it("applies the pre-pass clearing factor to realized revenue and persists telemetry", () => {
     const corp = makeCorp();
     const sector = makeSector(corp._id, { revenue: 24_000, profitMargin: 50 });

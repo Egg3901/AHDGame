@@ -32,7 +32,13 @@ export interface ProspectingSurvey {
   costAnchor: number;
   /** rdScore snapshot at launch (corp surveys) — drives the success roll. */
   rdScoreAtStart?: number;
-  status: "active" | "succeeded" | "failed";
+  status: "funding" | "active" | "succeeded" | "failed";
+  /** Stable source receipt and native price frozen before a funded national debit. */
+  fundingKey?: string;
+  costLocal?: number;
+  currencyCode?: string;
+  treasuryLocalPerAnchor?: number;
+  priorSuccessCount?: number;
   /** Capacity units added on success. */
   capacityGained?: number;
   resolvedTurn?: number;

@@ -8,6 +8,7 @@ import {
 } from "@/lib/corporations/specialization/rules";
 import type { Corporation, CorporateSector } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import type { CorporationType } from "@/lib/constants/corporations";
 import type { CommodityType } from "@/lib/constants/commodities";
 import { eraScaledBasePrices } from "@/lib/constants/commodities";
 import { trendProductionPolicy, getRevenueMultiplier } from "@/lib/utils/productionPolicy";
@@ -31,7 +32,8 @@ import {
 import { getCountryConfig } from "@/lib/constants/countries";
 import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
 import {
-  getEffectiveStrategyRates,
+  getEffectiveStrategyRatesForOperatingModel,
+  getOperatingSectorType,
   STRATEGY_TRANSITION_TURNS,
 } from "@/lib/constants/sectorStrategies";
 import type { SectorUpdateOp } from "./types";
@@ -98,14 +100,30 @@ export function processSector(
     pendingCapacityBindingEvents,
     sectorOps,
   } = env;
+  const operatingSectorType = getOperatingSectorType(
+    sector.sectorType,
+    sector.industryModel,
+    sector.mediaDiscriminator
+  ) as CorporationType;
 
   // Per-sector tech effects: Corporate-lane bonuses apply to every sector at
   // reduced strength; Sector-lane bonuses apply only to the corp's primary
   // sector type, full strength. Neutral when the feature gate is off.
   const techEffects = techTreesEnabled
     ? currentYear != null
-      ? getSectorTechEffectsForYear(corp, sector.sectorType, currentYear)
-      : getSectorTechEffects(corp, sector.sectorType)
+      ? getSectorTechEffectsForYear(
+          corp,
+          sector.sectorType,
+          currentYear,
+          sector.industryModel,
+          sector.mediaDiscriminator
+        )
+      : getSectorTechEffects(
+          corp,
+          sector.sectorType,
+          sector.industryModel,
+          sector.mediaDiscriminator
+        )
     : NEUTRAL_TECH_EFFECTS;
   // Normalize host-currency revenue to anchor currency. Recover corrupt values
   // here so NaN cannot spread through corporate totals and tax accruals.
@@ -241,12 +259,14 @@ export function processSector(
   // capacity haircut, price realization, and the blended commodity margin
   // modifiers (so non-standard strategies are priced against what the
   // sector actually produces/consumes).
-  const strategyRates = getEffectiveStrategyRates(
+  const strategyRates = getEffectiveStrategyRatesForOperatingModel(
     sector.sectorType,
     sector.strategyId ?? "standard",
     sector.transitionFromStrategyId,
     sector.transitionStartTurn,
-    turn ?? 0
+    turn ?? 0,
+    sector.industryModel,
+    sector.mediaDiscriminator
   );
   const { capacityUtil, capacityHaircutStartTurn, capacityHaircut } = resolveSectorCapacityHaircut(
     sector,
@@ -490,7 +510,7 @@ export function processSector(
   // and regulatory legs below all scale with the boosted figure, so margins
   // are preserved and the lift lands in profit, then NPV, then share price.
   const hourlyRevenue =
-    realizedHourlyRevenue * sectorRevenueBoostMultiplier(currentTurn, sector.sectorType);
+    realizedHourlyRevenue * sectorRevenueBoostMultiplier(currentTurn, operatingSectorType);
   // (moved to resolvePlantsRevenue: trade-exposure embargo legs)
   // (moved to resolvePlantsRevenue: P3b extraction hard min)
   // (moved to resolvePlantsRevenue: pre-plants counterfactual baseline)
@@ -527,7 +547,15 @@ export function processSector(
 
   const payrollSpecializationMod = isStateOwned(corp)
     ? 0
-    : specializationPayrollModifier(sector.sectorType, corp.type, corp.secondaryType);
+    : specializationPayrollModifier(
+        operatingSectorType,
+        getOperatingSectorType(
+          corp.type,
+          corp.industryModel,
+          corp.mediaDiscriminator
+        ) as CorporationType,
+        corp.secondaryType
+      );
   const { payrollBasis, operatingSaving } = specializationMaintenance({
     revenue: hourlyRevenue,
     operatingMargin: effectiveMargin,
@@ -717,6 +745,7 @@ export function processSector(
       sectorId: sector._id.toString(),
       corporationId: corp._id.toString(),
       sectorType: sector.sectorType,
+      industryModel: sector.industryModel,
       strategyId: sector.strategyId,
       capitalStock: sector.capitalStock ?? 0,
       plantCount: sector.plantCount ?? 0,
@@ -821,6 +850,15 @@ export function processSector(
           outputAnchorByCommodity: productOutput.outputAnchorByCommodity,
           productQualityByCommodity: productOutput.productQualityByCommodity,
           productOutputCapacityUnits: plantsCapacity,
+        }
+      : {}),
+    ...(market.plantsEnabled && clearing?.productProjectId && clearing.productOutputTurn === turn
+      ? {
+          productLineProjectId: clearing.productProjectId,
+          productLineOutputTurn: clearing.productOutputTurn,
+          productLineOutputUnitsByCommodity: clearing.projectOutputUnitsByCommodity ?? {},
+          productLineSoldUnitsByCommodity: clearing.projectSoldUnitsByCommodity ?? {},
+          productLineQualityByCommodity: clearing.projectQualityByCommodity ?? {},
         }
       : {}),
     // Ceiling the supply-agreement damages leg clamps a contracted volume to,
@@ -952,6 +990,7 @@ export function processSector(
       clearingEnabled: market.clearingEnabled,
       clearing,
       clearingFactor,
+      currentTurn,
       clearingStartTurn,
       mothballed,
       sector,

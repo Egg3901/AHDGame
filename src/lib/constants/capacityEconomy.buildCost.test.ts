@@ -25,6 +25,23 @@ import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
 const RPU_MANUFACTURING = revenuePerCapacityUnit("manufacturing", 1);
 
 describe("computeBuildCost", () => {
+  it("prices manufacturing vehicles on the unchanged automobile capacity basis", () => {
+    const shared = {
+      units: 800,
+      strategyId: "standard",
+      year: 1991,
+      eraUnitScale: 1,
+      marketSharePercent: 0,
+      nationalMarketSharePercent: 0,
+      primeRate: 3,
+      acumen: NEUTRAL_STAT,
+      founding: true,
+    };
+    expect(
+      computeBuildCost({ ...shared, sectorType: "manufacturing", industryModel: "vehicles" })
+    ).toEqual(computeBuildCost({ ...shared, sectorType: "automobiles" }));
+  });
+
   it("is units × era price × dominance × rate, hand-computed", () => {
     // At the anchor year the era index is exactly 1, so the unit price is
     // GROWTH_COST_MULTIPLIER × RPU (identity B).

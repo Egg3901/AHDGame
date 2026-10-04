@@ -118,6 +118,18 @@ describe("identity A (labour): workers per unit/day of capacity", () => {
 });
 
 describe("identity B (price): ₳ per unit/day of capacity", () => {
+  it("prices canonical entertainment capacity from the legacy entertainment recipe", () => {
+    expect(defaultSupplyRates("media", null, "entertainment")).toEqual(
+      defaultSupplyRates("entertainment")
+    );
+    expect(revenuePerCapacityUnit("media", 1, null, "entertainment")).toBeCloseTo(
+      revenuePerCapacityUnit("entertainment", 1)
+    );
+    expect(
+      capacityPricePerUnit("media", CAPACITY_ANCHOR_YEAR, 1, null, null, "entertainment")
+    ).toBeCloseTo(capacityPricePerUnit("entertainment", CAPACITY_ANCHOR_YEAR, 1, null));
+  });
+
   it.each(ANCHOR_SECTORS)(
     "%s at the anchor year equals the legacy growth charge ÷ the capacity it buys",
     (type) => {

@@ -32,7 +32,21 @@ describe("ManufacturingProductStudio", () => {
           enabled: true,
           isCeo: true,
           activeProject: null,
-          catalog: [{ id: "cement", label: "Cement", outputCommodity: "building_materials" }],
+          catalog: [
+            {
+              id: "cement",
+              label: "Cement",
+              outputCommodity: "building_materials",
+              technologyRequirements: [
+                {
+                  strategyId: "standard",
+                  strategyName: "Standard",
+                  minDecade: null,
+                  requiresTechUnlock: false,
+                },
+              ],
+            },
+          ],
           plants: [
             {
               sectorId: "plant-1",
@@ -76,6 +90,8 @@ describe("ManufacturingProductStudio", () => {
     fireEvent.change(await screen.findByLabelText("manufacturing allocation"), {
       target: { value: "50" },
     });
+    expect(await screen.findByText(/Estimated development cost: 25 anchor units/)).toBeTruthy();
+    expect(screen.getByText(/Standard/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Start product project" }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
@@ -84,5 +100,54 @@ describe("ManufacturingProductStudio", () => {
       allocations: [{ sectorId: "plant-1", share: 0.5 }],
     });
     expect(await screen.findByText("development · building_materials")).toBeTruthy();
+  });
+
+  it("shows settled product sales and the live quality inputs for an active project", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          enabled: true,
+          isCeo: true,
+          activeProject: {
+            id: "project-1",
+            kindId: "passenger_car",
+            kindLabel: "Passenger car",
+            outputCommodity: "vehicles",
+            stage: "growth",
+            allocations: [{ sectorId: "plant-1", share: 1 }],
+            developmentPaidAnchor: 50,
+            paidThresholdAnchor: 100,
+            elapsedDevelopmentTurns: 12,
+            elapsedThresholdTurns: 12,
+          },
+          catalog: [],
+          plants: [
+            {
+              sectorId: "plant-1",
+              sectorType: "automobiles",
+              capitalStock: 1000,
+              plantCount: 4,
+              eligibleKindIds: ["passenger_car"],
+            },
+          ],
+          productResults: [
+            {
+              sectorId: "plant-1",
+              turn: 14,
+              producedUnits: 80,
+              soldUnits: 60,
+              quality: 72,
+            },
+          ],
+        }),
+      })
+    );
+    render(<ManufacturingProductStudio corporationId="corp-1" />);
+
+    expect(await screen.findByText(/Last settled product sales/)).toBeTruthy();
+    expect(screen.getByText(/turn 14: 60 of 80 units sold · quality 72.0/)).toBeTruthy();
+    expect(screen.getByText(/paid development adds up to 10 points/i)).toBeTruthy();
   });
 });

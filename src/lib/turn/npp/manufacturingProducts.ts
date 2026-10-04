@@ -8,6 +8,7 @@ import {
 } from "@/lib/products/manufacturingProject";
 import { selectNppManufacturingProduct } from "@/lib/products/rules/selectNppManufacturingProduct";
 import type { CommodityPriceRatioFn } from "@/lib/turn/npp/marketSignals";
+import type { TechLane } from "@/lib/constants/techTree/nodes";
 import {
   MANUFACTURING_DEVELOPMENT_ELAPSED_TURNS,
   manufacturingDevelopmentThresholdAnchor,
@@ -78,6 +79,7 @@ export function createNppManufacturingProductProjectV2(input: {
   currentYear?: number;
   techTreesEnabled: boolean;
   unlockedTechNodeIds?: readonly string[];
+  techDecadeLane?: Record<string, TechLane>;
   eraUnitScale: number;
   priceRatioOf: CommodityPriceRatioFn;
 }): ManufacturingProductProject | undefined {
@@ -101,7 +103,7 @@ export function createNppManufacturingProductProjectV2(input: {
 
 export function buildNppProductProjectsV2(input: {
   state: Awaited<ReturnType<typeof loadNppProductProjectsV2>>;
-  nppCorporations: readonly Pick<Corporation, "_id" | "unlockedTechNodeIds">[];
+  nppCorporations: readonly Pick<Corporation, "_id" | "unlockedTechNodeIds" | "techDecadeLane">[];
   sectorsByCorp: ReadonlyMap<string, readonly CorporateSector[]>;
   turn: number;
   techCurrentYear: number;
@@ -121,6 +123,7 @@ export function buildNppProductProjectsV2(input: {
       currentYear: input.techCurrentYear > 0 ? input.techCurrentYear : undefined,
       techTreesEnabled: input.techTreesEnabled,
       unlockedTechNodeIds: corporation.unlockedTechNodeIds,
+      techDecadeLane: corporation.techDecadeLane,
       eraUnitScale: plants.eraUnitScale,
       priceRatioOf: input.priceRatioOf,
     });

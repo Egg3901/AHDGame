@@ -636,14 +636,16 @@ export async function processSoeOperations(
     // the owner's books show the profit estimate (ticket #1269). The debit is
     // unconditional: an unaffordable cover pushes the treasury negative
     // (national debt) rather than being withheld — soft-budget semantics.
+    const cashLedger = await treasuryLedger();
     await coverSoeOperatingLoss(
       db,
       b.countryId,
       b.coveredAnchor,
       fxByCurrency,
       now,
-      await treasuryLedger(),
-      treasuryCurrencyByCountry.get(b.countryId)
+      cashLedger,
+      treasuryCurrencyByCountry.get(b.countryId),
+      `soe-loss-backing:${cashLedger.context?.turn ?? 0}:${b.countryId}:${b.corpId.toString()}`
     );
     // Credit only what the treasury actually paid. Below plants that is the
     // whole hole (liquidCapital → 0, as before); under plants an over-built SOE
@@ -818,6 +820,8 @@ function computeSoeShareOfStateSector(
 export interface SoeCapexSectorBuy {
   sectorId: CorporateSector["_id"];
   sectorType: CorporateSector["sectorType"];
+  industryModel?: CorporateSector["industryModel"];
+  mediaDiscriminator?: CorporateSector["mediaDiscriminator"];
   capitalStock: number;
   /** Capacity units bought back — exactly this turn's depreciation. */
   unitsAdded: number;
@@ -858,7 +862,8 @@ export function buildSoeCapexGrant(
       sector.sectorType,
       priceYear,
       unitScale,
-      sector.strategyId ?? null
+      sector.strategyId ?? null,
+      sector.industryModel
     );
     if (!Number.isFinite(unitPrice) || unitPrice <= 0) continue;
     const unitsAdded = stock * CAPITAL_DEPRECIATION_PER_TURN;
@@ -877,6 +882,8 @@ export function buildSoeCapexGrant(
     buys.push({
       sectorId: sector._id,
       sectorType: sector.sectorType,
+      industryModel: sector.industryModel,
+      mediaDiscriminator: sector.mediaDiscriminator,
       capitalStock: stock,
       unitsAdded,
       costAnchor,
@@ -923,10 +930,13 @@ async function applyStateCapexGrants(
       ops.push({
         updateOne: {
           filter: { _id: buy.sectorId },
-          update: plantCapacityDeltaPipeline(buy.sectorType, buy.unitsAdded, {
-            capacityBookAnchor: buy.nextBookAnchor,
-            updatedAt: now,
-          }),
+          update: plantCapacityDeltaPipeline(
+            buy.sectorType,
+            buy.unitsAdded,
+            { capacityBookAnchor: buy.nextBookAnchor, updatedAt: now },
+            buy.industryModel,
+            buy.mediaDiscriminator
+          ),
         },
       });
     }
@@ -935,14 +945,16 @@ async function applyStateCapexGrants(
   if (ops.length === 0) return;
   await db.collection<CorporateSector>("corporateSectors").bulkWrite(ops);
   for (const [countryId, grantAnchor] of grantByCountry) {
+    const cashLedger = await treasuryLedger();
     await debitTreasurySoeCapex(
       db,
       countryId,
       grantAnchor,
       fxByCurrency,
       now,
-      await treasuryLedger(),
-      treasuryCurrencyByCountry.get(countryId)
+      cashLedger,
+      treasuryCurrencyByCountry.get(countryId),
+      `soe-capex-grant:${cashLedger.context?.turn ?? 0}:${countryId}`
     );
   }
 }

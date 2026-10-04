@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   allocationsForPlantCapacity,
+  isLegalManufacturingProductForPlant,
   legalManufacturingProductKinds,
   validateProductAllocations,
 } from "./manufacturingEligibility";
@@ -62,5 +63,45 @@ describe("manufacturing product eligibility", () => {
     expect(legal.map((kind) => kind.id)).toContain("passenger_car");
     expect(legal.map((kind) => kind.id)).toContain("commercial_vehicle");
     expect(legal.map((kind) => kind.id)).not.toContain("truck");
+  });
+
+  it("keeps vehicle product eligibility after the model-aware 1991 taxonomy conversion", () => {
+    const convertedVehiclePlant = {
+      ...plants[1],
+      sectorType: "manufacturing",
+      industryModel: "vehicles" as const,
+    };
+
+    expect(isLegalManufacturingProductForPlant("passenger_car", convertedVehiclePlant)).toBe(true);
+    expect(
+      legalManufacturingProductKinds([convertedVehiclePlant]).map((kind) => kind.id)
+    ).toContain("passenger_car");
+    expect(
+      legalManufacturingProductKinds([convertedVehiclePlant]).map((kind) => kind.id)
+    ).not.toContain("structural_steel");
+  });
+
+  it("applies era and technology gates to the specific allocated vehicle plant", () => {
+    const evPlant = {
+      ...plants[1],
+      sectorType: "manufacturing",
+      industryModel: "vehicles" as const,
+      strategyId: "ev",
+    };
+
+    expect(
+      legalManufacturingProductKinds([evPlant], {
+        currentYear: 1953,
+        techTreesEnabled: true,
+        unlockedTechNodeIds: [],
+      })
+    ).toEqual([]);
+    expect(
+      isLegalManufacturingProductForPlant("passenger_car", evPlant, {
+        currentYear: 1953,
+        techTreesEnabled: true,
+        unlockedTechNodeIds: [],
+      })
+    ).toBe(false);
   });
 });

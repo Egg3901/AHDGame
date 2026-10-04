@@ -13,6 +13,7 @@ beforeEach(() => {
   db.collection("gameState");
   db.collection("gameConfig");
   db.collection("corporateSectors");
+  db.collection("bankMoneyMoves");
 });
 
 describe("validateBillProvisions — embargo", () => {
@@ -131,28 +132,38 @@ describe("validateBillProvisions: media ownership availability", () => {
       policyDomain: "mediaInformation",
       policyOptions: [],
     });
-    db.collectionMocks.gameState.findOne.mockResolvedValue(null);
-    db.collectionMocks.gameConfig.findOne.mockResolvedValue({
-      mediaRegulationEnabled: true,
-      marketSystemMode: "clearing",
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      _id: "current",
+      currentYear: 1991,
+      currentTurn: 12,
+      eraSystemEnabled: true,
+      mediaRegulationSnapshot: {
+        enabled: true,
+        marketSystemMode: "clearing",
+        commandEconomyEnabled: false,
+      },
     });
     db.collectionMocks.corporateSectors.find.mockReturnValue({
       toArray: async () => [
         {
+          _id: "sector-a",
           stateId: "CA",
           corporationId: { toString: () => "corp-a" },
           sectorType: "media",
           strategyId: "standard",
           producedUnits: 100,
           soldByCommodity: { advertising: 0.6 },
+          soldByCommodityTurn: 12,
         },
         {
+          _id: "sector-b",
           stateId: "CA",
           corporationId: { toString: () => "corp-b" },
           sectorType: "media",
           strategyId: "standard",
           producedUnits: 100,
           soldByCommodity: { advertising: 0.4 },
+          soldByCommodityTurn: 12,
         },
       ],
     } as never);
@@ -170,16 +181,22 @@ describe("validateBillProvisions: media ownership availability", () => {
       policyDomain: "mediaInformation",
       policyOptions: [],
     });
-    db.collectionMocks.gameState.findOne.mockResolvedValue(null);
-    db.collectionMocks.gameConfig.findOne.mockResolvedValue({
-      mediaRegulationEnabled: false,
-      marketSystemMode: "clearing",
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      _id: "current",
+      mediaRegulationSnapshot: {
+        enabled: false,
+        marketSystemMode: "clearing",
+        commandEconomyEnabled: false,
+      },
     });
 
     const result = await validateBillProvisions(db as unknown as Db, [provision], "social", "US");
 
     expect(result.ok).toBe(true);
     expect(db.collectionMocks.corporateSectors.find).not.toHaveBeenCalled();
+    expect(db.collectionMocks.gameConfig.findOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.bankMoneyMoves.find).not.toHaveBeenCalled();
+    expect(db.collectionMocks.gameState.findOne).toHaveBeenCalledOnce();
   });
 });
 

@@ -56,7 +56,8 @@ import { evaluateModifiers } from "@/lib/utils/approvalModifiers";
 import { resolveGameYear } from "@/lib/era/era";
 import { buildFlatMetrics } from "@/lib/utils/governmentApproval";
 import {
-  getEffectiveStrategyRates,
+  getEffectiveStrategyRatesForOperatingModel,
+  getOperatingSectorType,
   STRATEGY_TRANSITION_MARGIN_PENALTY,
   STRATEGY_TRANSITION_TURNS,
 } from "@/lib/constants/sectorStrategies";
@@ -239,6 +240,8 @@ export function buildSectorDetails(ctx: SectorRowContext) {
 
   const techCorpView = {
     type: corporation.type,
+    industryModel: corporation.industryModel,
+    mediaDiscriminator: corporation.mediaDiscriminator,
     unlockedTechNodeIds: corporation.unlockedTechNodeIds,
     techDecadeLane: corporation.techDecadeLane,
   };
@@ -264,7 +267,11 @@ export function buildSectorDetails(ctx: SectorRowContext) {
   let totalUnitsOnOrder = 0;
 
   const sectorDetails = sectors.map((sector) => {
-    const st = sector.sectorType as CorporationType;
+    const st = getOperatingSectorType(
+      sector.sectorType,
+      sector.industryModel,
+      sector.mediaDiscriminator
+    ) as CorporationType;
     const metrics = stateMetricsMap.get(sector.stateId) ?? getEmptyStateMetricValues();
 
     const stateBalances = rawStateBalances.get(sector.stateId) ?? new Map();
@@ -283,12 +290,14 @@ export function buildSectorDetails(ctx: SectorRowContext) {
       national: Math.round(nationalWeight * 10000) / 100,
       local: Math.round(localWeight * 10000) / 100,
     };
-    const sectorEffectiveRates = getEffectiveStrategyRates(
+    const sectorEffectiveRates = getEffectiveStrategyRatesForOperatingModel(
       st,
       sector.strategyId ?? "standard",
       sector.transitionFromStrategyId,
       sector.transitionStartTurn,
-      currentTurn
+      currentTurn,
+      sector.industryModel,
+      sector.mediaDiscriminator
     );
     const effectiveSupply = applyExtractionResourceCapacityToSupply(
       st,
@@ -395,7 +404,11 @@ export function buildSectorDetails(ctx: SectorRowContext) {
       metrics,
       commodityMod,
       homeLocationBonus,
-      corporation.type,
+      getOperatingSectorType(
+        corporation.type,
+        corporation.industryModel,
+        corporation.mediaDiscriminator
+      ) as CorporationType,
       sectors.length,
       macroEcon,
       corporation.logisticsStrength ?? 0,
@@ -469,8 +482,14 @@ export function buildSectorDetails(ctx: SectorRowContext) {
         );
     const techEffects =
       currentYear != null
-        ? getSectorTechEffectsForYear(techCorpView, st, currentYear)
-        : getSectorTechEffects(techCorpView, st);
+        ? getSectorTechEffectsForYear(
+            techCorpView,
+            st,
+            currentYear,
+            sector.industryModel,
+            sector.mediaDiscriminator
+          )
+        : getSectorTechEffects(techCorpView, st, sector.industryModel, sector.mediaDiscriminator);
     const techMarginBonus = techEffects.marginBonusPp;
     const stackMargin = softCapEffectiveMargin(
       mods.effective + soeEfficiency + expropriationRisk + techMarginBonus
@@ -608,7 +627,12 @@ export function buildSectorDetails(ctx: SectorRowContext) {
       plantsMode && Number.isInteger(sector.plantCount) && (sector.plantCount ?? 0) >= 0
         ? (sector.plantCount as number)
         : plantsMode
-          ? seedPlantLedger(sector.sectorType, sector.capitalStock).plantCount
+          ? seedPlantLedger(
+              sector.sectorType,
+              sector.capitalStock,
+              sector.industryModel,
+              sector.mediaDiscriminator
+            ).plantCount
           : null;
     const producedUnits =
       plantsMode && Number.isFinite(sector.producedUnits) ? (sector.producedUnits as number) : null;
@@ -679,7 +703,11 @@ export function buildSectorDetails(ctx: SectorRowContext) {
       countryId: sector.countryId,
       stateName: stateNameMap.get(sector.stateId) ?? sector.stateId,
       sectorType: sector.sectorType,
-      sectorLabel: CORPORATION_TYPE_LABELS[sector.sectorType as CorporationType],
+      industryModel: sector.industryModel ?? null,
+      sectorLabel:
+        sector.sectorType === "manufacturing" && sector.industryModel === "vehicles"
+          ? "Vehicle manufacturing"
+          : CORPORATION_TYPE_LABELS[st],
       displayName: sector.displayName ?? null,
       targetGrowthRate:
         sector.targetGrowthRate ?? sector.currentGrowthRate ?? sector.growthRate ?? 0,

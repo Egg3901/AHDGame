@@ -7,7 +7,11 @@ import type { BankSovereignClaim, FederalBudget } from "@/lib/db/types/budget";
 import { treasuryAccrualWithBankCouponReserve } from "@/lib/budget/rules/treasuryAccrual";
 import { addBankMaturityClaims, settleBankSovereignClaims } from "./bankSovereignClaims";
 import { bankCouponClaim, bankCouponPlanForCountry } from "./rules/sovereignClaims";
-import { settleSovereignBondMaturity } from "@/lib/bonds/sovereign";
+import {
+  freezeFundedSovereignBondMaturityQuote,
+  settleFundedSovereignBondMaturity,
+  settleSovereignBondMaturity,
+} from "@/lib/bonds/sovereign";
 
 const bankId = new ObjectId("650000000000000000000001");
 
@@ -277,6 +281,52 @@ describe("bank sovereign claims", () => {
     });
   });
 
+  it("routes a frozen claim to insurance when its bank corporation is gone", async () => {
+    const claim = { ...couponClaim(), treasuryCashLedgerEnabled: true };
+    const memory = world(claim);
+    await memory
+      .collection("federalBudget")
+      .updateOne({ _id: "federal" }, { $set: { treasuryCashLocal: 100 } });
+    await memory.collection("corporations").deleteOne({ _id: bankId });
+
+    await settleBankSovereignClaims(memory as unknown as Db, budget(memory), 13);
+
+    expect(budget(memory)).toMatchObject({ treasuryBalance: 90, treasuryCashLocal: 90 });
+    expect(budget(memory).bankSovereignClaims).toEqual([]);
+    expect(memory.collection("depositInsuranceFunds").docs[0]).toMatchObject({
+      _id: "USD",
+      balance: 10,
+    });
+    expect(memory.collection("bankMoneyMoves").docs).toContainEqual(
+      expect.objectContaining({ _id: `${claim.id}:orphan-insurance:13`, status: "applied" })
+    );
+  });
+
+  it("retries an unfunded orphan claim after cash becomes available", async () => {
+    const claim = { ...couponClaim(120), treasuryCashLedgerEnabled: true };
+    const memory = world(claim, 100);
+    await memory
+      .collection("federalBudget")
+      .updateOne({ _id: "federal" }, { $set: { treasuryCashLocal: 100 } });
+    await memory.collection("corporations").deleteOne({ _id: bankId });
+
+    await settleBankSovereignClaims(memory as unknown as Db, budget(memory), 13);
+    expect(budget(memory)).toMatchObject({ treasuryBalance: 100, treasuryCashLocal: 100 });
+    expect(budget(memory).bankSovereignClaims).toEqual([claim]);
+
+    await memory
+      .collection("federalBudget")
+      .updateOne({ _id: "federal" }, { $set: { treasuryBalance: 200, treasuryCashLocal: 200 } });
+    await settleBankSovereignClaims(memory as unknown as Db, budget(memory), 14);
+
+    expect(budget(memory)).toMatchObject({ treasuryBalance: 80, treasuryCashLocal: 80 });
+    expect(budget(memory).bankSovereignClaims).toEqual([]);
+    expect(memory.collection("depositInsuranceFunds").docs[0]).toMatchObject({
+      _id: "USD",
+      balance: 120,
+    });
+  });
+
   it("sends an unpaid claim to insurance if its charter epoch changes before funding", async () => {
     const claim = couponClaim(120);
     const memory = world(claim, 100);
@@ -375,6 +425,52 @@ describe("bank sovereign claims", () => {
     ]);
   });
 
+  it("replays a legacy pending maturity claim without adding an optional due turn", async () => {
+    const bondId = new ObjectId("65000000000000000000000b");
+    const claim: BankSovereignClaim = {
+      id: `bank-sovereign-maturity:${bondId.toHexString()}:${bankId.toHexString()}:4`,
+      kind: "maturity",
+      bankId: bankId.toHexString(),
+      charteredTurn: 4,
+      bondId: bondId.toHexString(),
+      countryId: "US",
+      currencyCode: "USD",
+      amountLocal: 1_000,
+      turn: 48,
+    };
+    const memory = world(claim);
+    const legacyBond = {
+      _id: bondId,
+      maturityTurn: 48,
+      holders: [{ bankId, charteredTurn: 4, units: 1 }],
+    } as unknown as Bond;
+    const budgetRows = memory.collection("federalBudget") as unknown as {
+      updateOne: (
+        filter: Record<string, unknown>,
+        update: Record<string, unknown>,
+        options?: unknown
+      ) => Promise<{ matchedCount: number; modifiedCount: number }>;
+    };
+    const updateOne = budgetRows.updateOne.bind(budgetRows);
+    budgetRows.updateOne = async (filter, update, options) => {
+      const existingClaim = filter["bankSovereignClaims.id"] as { $ne?: string } | undefined;
+      if (existingClaim?.$ne === claim.id) return { matchedCount: 0, modifiedCount: 0 };
+      return updateOne(filter, update, options);
+    };
+
+    const replay = await addBankMaturityClaims(memory as unknown as Db, {
+      budgetId: "federal",
+      countryId: "US",
+      currencyCode: "USD",
+      turn: 49,
+      bond: legacyBond,
+    });
+
+    expect(replay).toEqual([claim]);
+    expect(budget(memory).bankSovereignClaims?.[0]).toEqual(claim);
+    expect(budget(memory).bankSovereignClaims?.[0]?.dueTurn).toBeUndefined();
+  });
+
   it("does not recreate a maturity claim after its same-turn payment replay", async () => {
     const memory = world(couponClaim(), 5_000);
     const bond = {
@@ -420,6 +516,141 @@ describe("bank sovereign claims", () => {
         expect.objectContaining({ _id: `${claimId}:bank:48`, status: "applied" }),
       ])
     );
+  });
+
+  it("does not repay a bank holder when non-bank maturity waits for cash across turns", async () => {
+    const memory = createInMemoryDb();
+    memory.seed("federalBudget", [
+      {
+        _id: "federal",
+        countryId: "US",
+        currencyCode: "USD",
+        treasuryBalance: 2_000,
+        treasuryCashLocal: 1_000,
+        debt: { principal: 2_000 },
+        spending: { total: 0, debtInterest: 0 },
+        revenue: { total: 0 },
+        bankSovereignClaims: [],
+      },
+    ]);
+    memory.seed("corporations", [
+      {
+        _id: bankId,
+        bankCharter: {
+          status: "active",
+          currency: "USD",
+          charteredTurn: 4,
+          cashReserves: 5,
+        },
+      },
+    ]);
+    const characterId = new ObjectId("650000000000000000000009");
+    const bond = {
+      _id: new ObjectId("65000000000000000000000a"),
+      issuerType: "sovereign",
+      countryId: "US",
+      currencyCode: "USD",
+      totalIssued: 2_000,
+      couponRate: 0,
+      maturityTurn: 48,
+      matured: false,
+      defaulted: false,
+      publicFloat: 0,
+      holders: [
+        { bankId, charteredTurn: 4, units: 1 },
+        { characterId, units: 1 },
+      ],
+    } as unknown as Bond;
+    memory.seed("bonds", [bond as unknown as Record<string, unknown>]);
+    memory.seed("characters", [{ _id: characterId, cashOnHand: 0 }]);
+    const holderLegs = [
+      {
+        collection: "characters",
+        filter: { _id: characterId },
+        path: "cashOnHand",
+        amount: 1_000,
+        currencyCode: "USD" as const,
+        localPerAnchor: 1,
+        note: "Pay non-bank sovereign holder",
+      },
+    ];
+    await freezeFundedSovereignBondMaturityQuote(memory as unknown as Db, {
+      bond,
+      dueTurn: 48,
+      currencyCode: "USD",
+      treasuryLocalPerAnchor: 1,
+      nonBankRepaymentLocal: 1_000,
+      holderLegs,
+      now: new Date("2026-10-04T00:00:00Z"),
+    });
+
+    await addBankMaturityClaims(memory as unknown as Db, {
+      budgetId: "federal",
+      countryId: "US",
+      currencyCode: "USD",
+      turn: 48,
+      bond,
+      anchorRate: 1,
+      treasuryCashLedgerEnabled: true,
+    });
+    await settleBankSovereignClaims(memory as unknown as Db, budget(memory), 48);
+    expect(vault(memory)).toBe(1_005);
+    expect(memory.collection("federalBudget").docs[0]?.treasuryCashLocal).toBe(0);
+
+    expect(
+      await settleFundedSovereignBondMaturity(memory as unknown as Db, {
+        bond,
+        turn: 48,
+        dueTurn: 48,
+        currencyCode: "USD",
+        treasuryLocalPerAnchor: 1,
+        nonBankRepaymentLocal: 1_000,
+        holderLegs,
+        now: new Date("2026-10-04T00:00:00Z"),
+      })
+    ).toBeNull();
+    expect(memory.collection("characters").docs[0]?.cashOnHand).toBe(0);
+
+    expect(
+      await addBankMaturityClaims(memory as unknown as Db, {
+        budgetId: "federal",
+        countryId: "US",
+        currencyCode: "USD",
+        turn: 49,
+        bond,
+        anchorRate: 2,
+        treasuryCashLedgerEnabled: true,
+      })
+    ).toEqual([]);
+    expect(budget(memory).bankSovereignClaims).toEqual([]);
+    expect(vault(memory)).toBe(1_005);
+
+    await memory
+      .collection("federalBudget")
+      .updateOne({ _id: "federal" }, { $set: { treasuryCashLocal: 1_000 } });
+    const final = await settleFundedSovereignBondMaturity(memory as unknown as Db, {
+      bond,
+      turn: 49,
+      dueTurn: 48,
+      currencyCode: "USD",
+      treasuryLocalPerAnchor: 2,
+      nonBankRepaymentLocal: 9_999,
+      holderLegs: [],
+      now: new Date("2026-10-11T00:00:00Z"),
+    });
+    expect(final?.status).toBe("applied");
+    expect(vault(memory)).toBe(1_005);
+    expect(memory.collection("characters").docs[0]?.cashOnHand).toBe(1_000);
+    expect(memory.collection("federalBudget").docs[0]?.treasuryCashLocal).toBe(0);
+    expect(memory.collection("bonds").docs[0]).toMatchObject({
+      matured: true,
+      sovereignMaturityClaim: {
+        paid: true,
+        paidBankClaimIds: [
+          `bank-sovereign-maturity:${bond._id.toHexString()}:${bankId.toHexString()}:4`,
+        ],
+      },
+    });
   });
 
   it("keeps an unfunded matured-bond bank claim retryable on a later treasury turn", async () => {

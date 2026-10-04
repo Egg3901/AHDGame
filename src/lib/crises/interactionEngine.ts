@@ -9,7 +9,6 @@ import type {
   CrisisDecisionNode,
 } from "@/lib/db/types/crisis";
 import type { FederalBudget, ElectedOfficial } from "@/lib/db/types";
-import { witnessTreasuryCash } from "@/lib/nationalization/treasuryLedger";
 import {
   getCountryConfig,
   getHeadOfStateOfficeType,
@@ -42,23 +41,20 @@ async function getTreasuryBalance(db: Db, countryId: string): Promise<number> {
 }
 
 /** Debit `amount` (country-local) from the national treasury. Treasury may go negative. */
-async function debitTreasury(db: Db, countryId: string, amount: number): Promise<void> {
-  const now = new Date();
-  const result = await db
-    .collection<FederalBudget>("federalBudget")
-    .updateOne(
-      { countryId: countryId as FederalBudget["countryId"] },
-      { $inc: { treasuryBalance: -amount }, $set: { updatedAt: now } }
-    );
-  if ((result?.matchedCount ?? 0) > 0) {
-    await witnessTreasuryCash(db, undefined, {
+async function debitTreasury(
+  db: Db,
+  countryId: string,
+  amount: number,
+  receiptKey: string
+): Promise<void> {
+  await spendFromTreasury(db, countryId, amount, {
+    resyncDerived: true,
+    witness: {
       flow: "crisis_response",
-      account: { kind: "government", countryId: countryId as CountryId },
-      amount: -amount,
-      now,
+      key: receiptKey,
       site: "crises/interactionEngine",
-    });
-  }
+    },
+  });
 }
 
 /**
@@ -564,9 +560,19 @@ export async function submitCrisisDecision(
     interaction.leaderResponses = [...(interaction.leaderResponses ?? []), response];
 
     if (option.requiredBudget) {
-      await debitTreasury(db, countryId, option.requiredBudget);
+      await debitTreasury(
+        db,
+        countryId,
+        option.requiredBudget,
+        `crisis-budget:${interactionId.toString()}:${countryId}:${optionId}`
+      );
     }
-    await spendGlobalResponseCost(db, countryId, option);
+    await spendGlobalResponseCost(
+      db,
+      countryId,
+      option,
+      `global-response:${interactionId.toString()}:${countryId}:${optionId}`
+    );
 
     if (option.effects.length > 0) {
       await applyEffectsForCountry(db, countryId, option.effects);
@@ -622,7 +628,11 @@ export async function submitCrisisDecision(
       }
       await spendFromTreasury(db, countryId, option.collectiveContribution, {
         resyncDerived: true,
-        witness: { flow: "crisis_response", site: "crises/interactionEngine" },
+        witness: {
+          flow: "crisis_response",
+          key: `crisis-collective:${interaction._id.toString()}:${characterId.toString()}:${optionId}`,
+          site: "crises/interactionEngine",
+        },
       });
 
       interaction.contributors.push({
@@ -688,7 +698,12 @@ export async function submitCrisisDecision(
           `Insufficient funds. Required: ${option.requiredBudget}, Available: ${treasury}`
         );
       }
-      await debitTreasury(db, countryId, option.requiredBudget);
+      await debitTreasury(
+        db,
+        countryId,
+        option.requiredBudget,
+        `crisis-budget:${interactionId.toString()}:${countryId}:${optionId}`
+      );
     }
 
     appliedEffects = option.effects;
