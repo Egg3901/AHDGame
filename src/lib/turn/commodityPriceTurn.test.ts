@@ -144,6 +144,17 @@ describe("commodityPriceTurn", () => {
       });
     });
 
+    it("projects the operating lane discriminators consumed by the supply ledger", async () => {
+      setupMocks();
+
+      await processCommodityPriceTurn(100);
+
+      expect(mockFind.mock.calls[0]?.[1]?.projection).toMatchObject({
+        industryModel: 1,
+        mediaDiscriminator: 1,
+      });
+    });
+
     it("projects exact product output only when the corporation product flag is on", async () => {
       setupMocks({ productsEnabled: true });
 

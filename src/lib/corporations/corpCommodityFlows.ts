@@ -264,7 +264,12 @@ export function computeSectorCommodityUnits(
   // and without it the corp surfaces invent output it could never have made.
   const supplyRates = applyExtractionResourceCapacityToSupply(
     operatingType,
-    applyPlannedEconomyOutputMix(sector.sectorType, ledgerSupplyRates, plannedEconomy),
+    applyPlannedEconomyOutputMix(
+      sector.sectorType,
+      ledgerSupplyRates,
+      plannedEconomy,
+      sector.mediaDiscriminator
+    ),
     context.stateResourcesByState?.get(sector.stateId ?? "")
   );
 
@@ -319,7 +324,11 @@ export function computeSectorCommodityUnits(
           // advertising book), so omitting it overstated media tenfold.
           embargoSupplyFactor:
             embargoSupplyFactorFor(sector) *
-            plannedEconomyMediaSupplyFactor(sector.sectorType, plannedEconomy),
+            plannedEconomyMediaSupplyFactor(
+              sector.sectorType,
+              plannedEconomy,
+              sector.mediaDiscriminator
+            ),
         })
       : null;
   // Utilization scales INPUT demand: a plant running at 60% of nameplate

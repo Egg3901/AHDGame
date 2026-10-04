@@ -52,7 +52,10 @@ for (const budget of budgetConfigs) {
     SECTOR_SUPPLY.entertainment?.find((flow) => flow.commodity === "advertising")?.rate ?? 0;
   const mediaSupplyValue = planned
     ? 0
-    : dailyGdp * (weights.media ?? 0) * mediaRate * plannedEconomyMediaSupplyFactor("media", false);
+    : dailyGdp *
+      (weights.media ?? 0) *
+      mediaRate *
+      plannedEconomyMediaSupplyFactor("media", false, null);
   const entertainmentSupplyValue = dailyGdp * (weights.entertainment ?? 0) * entertainmentRate;
   const advertisingSupplyValuePerDay = mediaSupplyValue + entertainmentSupplyValue;
 

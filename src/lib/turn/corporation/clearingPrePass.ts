@@ -273,7 +273,8 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
                 (sector as { countryId?: string }).countryId,
                 currentYear,
                 commandEconomyEnabled
-              )
+              ),
+              sector.mediaDiscriminator
             ),
             lookups.stateResourceCapacityByState.get(sector.stateId)
           ),
@@ -355,7 +356,8 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
                     (sector as { countryId?: string }).countryId,
                     currentYear,
                     commandEconomyEnabled
-                  )
+                  ),
+                  sector.mediaDiscriminator
                 ),
               militaryRetainedFraction: 1 - freshMilitaryDiversion(sector, turn ?? 0),
             }) ?? 0)
@@ -436,7 +438,8 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
                   (sector as { countryId?: string }).countryId,
                   currentYear,
                   commandEconomyEnabled
-                )
+                ),
+                sector.mediaDiscriminator
               ),
           });
           const supplyRates = rates.supply ?? {};
@@ -472,7 +475,8 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
                 (sector as { countryId?: string }).countryId,
                 currentYear,
                 commandEconomyEnabled
-              )
+              ),
+              sector.mediaDiscriminator
             );
           const exactOutputUnits = scaledProductOutput?.outputUnitsByCommodity;
           if (exactOutputUnits) {
@@ -643,7 +647,8 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
                         (sector as { countryId?: string }).countryId,
                         currentYear,
                         commandEconomyEnabled
-                      )
+                      ),
+                      sector.mediaDiscriminator
                     ),
                   // Arsenal-retention leg (issue #2054): the world supply
                   // ledger multiplies this same share out of supply, so an
