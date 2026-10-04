@@ -9,6 +9,9 @@
  */
 
 import { ObjectId } from "mongodb";
+import { baselineFor } from "@/lib/politicalMetrics/seeds/baselineAnchors";
+import { computeMarketDemand } from "@/lib/sovereignDefault/marketDemand";
+import { getEffectiveRate } from "@/lib/db/types/centralBank";
 import {
   computeBankTreasuryCashFloor,
   computeBankTreasuryDueInterest,
@@ -85,6 +88,8 @@ type Scenario = {
   legacyTreasurySweep?: boolean;
   /** Historical cash-only public-float maturity for comparison only. */
   publicFloatCashOnly?: boolean;
+  /** Explicit fixed-appetite sensitivity; default uses the production demand core. */
+  fixedPoolAppetite?: number;
   openingPoolCash?: number;
   /** Experimental balance-based service charge for fee sensitivity only. */
   serviceFeeAnnualBps?: number;
@@ -208,6 +213,8 @@ function simulate(scenario: Scenario) {
   // an explicit sensitivity, not the normal seeded-world opening state.
   let poolCash = scenario.openingPoolCash ?? conservativePoolCashSeed;
   let poolTargetCash = poolCash > 0 ? conservativePoolCashSeed : 0;
+  let poolAppetite = scenario.fixedPoolAppetite ?? 1;
+  let minimumPoolAppetite = poolAppetite;
   let poolCashInflow = 0;
   let poolCashSweep = 0;
   let treasuryCash = 0;
@@ -416,7 +423,7 @@ function simulate(scenario: Scenario) {
     const loansBefore = sumLoans(tranches);
     const bondMarkBefore = sovereignLots.reduce((sum, bond) => {
       if (bond.heldUnits <= 0 || bond.maturityTurn <= turn) return sum;
-      const quote = quoteSimBond(bond, turn, prime, poolCash, poolTargetCash);
+      const quote = quoteSimBond(bond, turn, prime, poolCash, poolTargetCash, poolAppetite);
       return sum + Math.round(quote.bid * BOND_UNIT_FACE_VALUE * bond.heldUnits * 100) / 100;
     }, 0);
     const equityBefore = cash + loansBefore + bondMarkBefore - deposits;
@@ -563,7 +570,7 @@ function simulate(scenario: Scenario) {
           currentTurn: turn,
           poolCashLocal: poolCash,
           poolTargetCashLocal: poolTargetCash,
-          appetite: 1,
+          appetite: poolAppetite,
         })
       );
       const plans = scenario.legacyTreasurySweep
@@ -596,7 +603,7 @@ function simulate(scenario: Scenario) {
           currentTurn: turn,
           poolCashLocal: poolCash,
           poolTargetCashLocal: poolTargetCash,
-          appetite: 1,
+          appetite: poolAppetite,
         });
         if (
           !scenario.legacyTreasurySweep &&
@@ -628,7 +635,7 @@ function simulate(scenario: Scenario) {
           (a, b) => a.maturityTurn - b.maturityTurn || a.bondId.localeCompare(b.bondId)
         )) {
           if (shortfall <= 0 || bond.heldUnits <= 0 || bond.maturityTurn <= turn) continue;
-          const quote = quoteSimBond(bond, turn, prime, poolCash, poolTargetCash);
+          const quote = quoteSimBond(bond, turn, prime, poolCash, poolTargetCash, poolAppetite);
           const bid = Math.round(quote.bid * BOND_UNIT_FACE_VALUE * 100) / 100;
           if (!(bid > 0)) continue;
           const units = Math.min(
@@ -698,7 +705,7 @@ function simulate(scenario: Scenario) {
         const underwriting = planSovereignUnderwriting({
           requestedUnits,
           poolCashLocal: poolCash,
-          appetite: 1,
+          appetite: poolAppetite,
           pricePerUnitLocal: BOND_UNIT_FACE_VALUE,
         });
         const fundedUnits = underwriting.placedUnits;
@@ -736,6 +743,35 @@ function simulate(scenario: Scenario) {
       .reduce((sum, bond) => sum + bond.totalUnits * BOND_UNIT_FACE_VALUE, 0);
     const poolTarget = Math.max(conservativePoolCashSeed, rolloverTarget);
     poolTargetCash = poolTarget;
+    const termsAtPoolRefresh = sovereignDebtTerms(sovereignPrincipal, {
+      gdp: us1991Budget.gdp,
+      gdpSmoothed: us1991Budget.gdpSmoothed,
+      investorConfidence: us1991Budget.investorConfidence,
+      imfBailoutActive: us1991Budget.imfSovereignBailoutActive,
+      sovereignRiskAnchor: us1991Budget.sovereignRiskAnchor,
+    });
+    // GDP, integrity, FX, inflation and entity holdings are frozen boundaries
+    // of this bank-only diagnostic. Debt and its rating follow modeled stock.
+    poolAppetite =
+      scenario.fixedPoolAppetite ??
+      round3(
+        computeMarketDemand({
+          countryCode: "US",
+          currentTurn: turn,
+          debtToGdp: sovereignPrincipal / us1991Budget.gdp,
+          inflationRate: scenario.inflation / 100,
+          trust: baselineFor("US", "governance.integrity", 1991) / 100,
+          sovereignCouponRate: getSovereignCouponRate(
+            getEffectiveRate(prime, termsAtPoolRefresh.creditRating),
+            TURNS_PER_YEAR
+          ),
+          fxDepreciationRate10t: 0,
+          turnsSinceLastDefault: null,
+          entityHoldings: 0,
+          requiredIssuance: 0,
+        }).demandRatio
+      );
+    minimumPoolAppetite = Math.min(minimumPoolAppetite, poolAppetite);
     const cashMoves = planPoolCashMoves({ cashLocal: poolCash, targetCashLocal: poolTarget });
     if (cashMoves.inflow > 0) {
       poolCash += cashMoves.inflow;
@@ -777,7 +813,7 @@ function simulate(scenario: Scenario) {
           replacementCurrency: "USD",
           sourceFacePerUnitLocal: BOND_UNIT_FACE_VALUE,
           replacementPricePerUnitLocal: BOND_UNIT_FACE_VALUE,
-          appetite: scenario.publicFloatCashOnly ? undefined : 1,
+          appetite: scenario.publicFloatCashOnly ? undefined : poolAppetite,
           maturityTurns: TURNS_PER_YEAR,
         });
         if (disposition.acceptedUnits > 0) {
@@ -814,7 +850,7 @@ function simulate(scenario: Scenario) {
         heldBillMark: Math.round(
           sovereignLots.reduce((sum, bond) => {
             if (bond.heldUnits <= 0 || bond.maturityTurn <= turn) return sum;
-            const quote = quoteSimBond(bond, turn, prime, poolCash, poolTargetCash);
+            const quote = quoteSimBond(bond, turn, prime, poolCash, poolTargetCash, poolAppetite);
             return sum + quote.bid * BOND_UNIT_FACE_VALUE * bond.heldUnits;
           }, 0)
         ),
@@ -843,7 +879,7 @@ function simulate(scenario: Scenario) {
     );
     const billMarkAtSolvency = sovereignLots.reduce((sum, bond) => {
       if (bond.heldUnits <= 0 || bond.maturityTurn <= turn) return sum;
-      const quote = quoteSimBond(bond, turn, prime, poolCash, poolTargetCash);
+      const quote = quoteSimBond(bond, turn, prime, poolCash, poolTargetCash, poolAppetite);
       return sum + Math.round(quote.bid * BOND_UNIT_FACE_VALUE * bond.heldUnits * 100) / 100;
     }, 0);
     const confidence = computeConfidence({
@@ -915,7 +951,7 @@ function simulate(scenario: Scenario) {
       // into the funded pool before sizing the insurance shortfall.
       for (const bond of sovereignLots) {
         if (bond.heldUnits <= 0 || bond.maturityTurn <= turn) continue;
-        const quote = quoteSimBond(bond, turn, prime, poolCash, poolTargetCash);
+        const quote = quoteSimBond(bond, turn, prime, poolCash, poolTargetCash, poolAppetite);
         const bid = round2(quote.bid * BOND_UNIT_FACE_VALUE);
         if (!(bid > 0)) continue;
         const units = Math.min(bond.heldUnits, Math.floor(poolCash / bid));
@@ -942,7 +978,7 @@ function simulate(scenario: Scenario) {
           const placed = planSovereignUnderwriting({
             requestedUnits: Math.floor(tranche.amount / BOND_UNIT_FACE_VALUE),
             poolCashLocal: poolCash,
-            appetite: 1,
+            appetite: poolAppetite,
             pricePerUnitLocal: BOND_UNIT_FACE_VALUE,
           }).placedUnits;
           if (placed <= 0) continue;
@@ -999,7 +1035,7 @@ function simulate(scenario: Scenario) {
   const finalSavingsApy = savingsApyPercent(primeAtEnd, scenario.inflation, 0);
   const endingBillMark = sovereignLots.reduce((sum, bond) => {
     if (bond.heldUnits <= 0) return sum;
-    const quote = quoteSimBond(bond, finalTurn, primeAtEnd, poolCash, poolTargetCash);
+    const quote = quoteSimBond(bond, finalTurn, primeAtEnd, poolCash, poolTargetCash, poolAppetite);
     return sum + Math.round(quote.bid * BOND_UNIT_FACE_VALUE * bond.heldUnits * 100) / 100;
   }, 0);
   const unpaidMaturityClaims = pendingMaturities.reduce((sum, claim) => sum + claim.bankLocal, 0);
@@ -1092,6 +1128,8 @@ function simulate(scenario: Scenario) {
     realizedBillGainLifetime: Math.round(realizedBillGainLifetime),
     cumulativeNetIncome: Math.round(cumulativeNetIncome),
     maximumCashConservationError: round2(maximumCashConservationError),
+    endingPoolAppetite: poolAppetite,
+    minimumPoolAppetite,
     maximumEquityBridgeError: round2(maximumEquityBridgeError),
     annualIncomeOnInitialEquityPercent: round2((lastAnnualIncome / openingEquity) * 100),
     cumulativeFees: Math.round(feeIncome),
@@ -1189,7 +1227,8 @@ function quoteSimBond(
   turn: number,
   prime: number,
   poolCash: number,
-  targetCashLocal: number
+  targetCashLocal: number,
+  appetite: number
 ) {
   const mid =
     bond.marketPrice ??
@@ -1199,7 +1238,7 @@ function quoteSimBond(
     issuerType: "sovereign",
     cashLocal: poolCash,
     targetCashLocal,
-    appetite: 1,
+    appetite,
   });
 }
 

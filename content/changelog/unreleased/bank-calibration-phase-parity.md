@@ -12,5 +12,7 @@ public-float claims, retains unpaid sovereign principal, and stops new coupons
 after contractual maturity. It reports full-year income and equity returns
 separately and pairs funded household and deposit-insurance cash movements.
 
-An explicitly marked positive-carry sweep probe remains a diagnostic experiment.
-It does not change runtime trading or establish production balance acceptance.
+The diagnostic uses shared funded sweep, rollover and market-demand rules. It
+tracks bill acquisition basis and realized sale or redemption gains, checks
+paired cash movements and reconciles income to equity. Neutral returns remain
+above the target; these results do not establish production balance acceptance.
