@@ -347,6 +347,7 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
             sectorId: sector._id.toString(),
             corporationId: corpId,
             sectorType: sector.sectorType,
+            industryModel: sector.industryModel,
             strategyId: sector.strategyId,
             capitalStock: sector.capitalStock ?? 0,
             plantCount: sector.plantCount ?? 0,
@@ -604,6 +605,10 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
                 productQualityByCommodity: qualityPremiumPricingEnabled
                   ? scaledProductOutput.productQualityByCommodity
                   : undefined,
+                projectOutputUnitsByCommodity: scaledProductOutput.projectOutputUnitsByCommodity,
+                projectQualityByCommodity: scaledProductOutput.productQualityByCommodity,
+                productProjectId: String(productProject!._id),
+                productOutputTurn: turn ?? undefined,
               }
             : {}),
           // Plants tier: last turn's measured output is the offer (lagged, like

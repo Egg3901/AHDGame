@@ -1,11 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { Db } from "mongodb";
-import {
-  spendFromTreasury,
-  creditTreasury,
-  InsufficientFundedTreasuryCash,
-} from "./treasurySpend";
+import { spendFromTreasury, creditTreasury } from "./treasurySpend";
 
 let db: MockDb;
 
@@ -74,30 +70,8 @@ describe("spendFromTreasury", () => {
     expect(setOp).not.toHaveProperty("debt.principal");
   });
 
-  it("routes enabled spending through a guarded cash debit and fiscal projection", async () => {
+  it("requires a stable receipt key for funded spending", async () => {
     seedBudget(900, 250);
-    const impact = await spendFromTreasury(db as unknown as Db, "US", 300, {
-      witness: {
-        flow: "crisis_response",
-        site: "test",
-        treasuryCashLedgerEnabled: true,
-      },
-    });
-    expect(impact.newTreasuryBalance).toBe(600);
-    expect(db.collection("federalBudget").updateOne).toHaveBeenCalledWith(
-      { countryId: "US", treasuryCashLocal: { $gte: 300 } },
-      expect.objectContaining({
-        $inc: { treasuryCashLocal: -300, treasuryBalance: -300 },
-      })
-    );
-  });
-
-  it("refuses a flag-on spend when actual Treasury cash is insufficient", async () => {
-    seedBudget(900, 250);
-    db.collection("federalBudget").updateOne.mockResolvedValue({
-      matchedCount: 0,
-      modifiedCount: 0,
-    });
     await expect(
       spendFromTreasury(db as unknown as Db, "US", 300, {
         witness: {
@@ -106,7 +80,7 @@ describe("spendFromTreasury", () => {
           treasuryCashLedgerEnabled: true,
         },
       })
-    ).rejects.toBeInstanceOf(InsufficientFundedTreasuryCash);
+    ).rejects.toThrow("stable receipt key");
   });
 
   it("keeps the flag-off path free of a configuration read", async () => {

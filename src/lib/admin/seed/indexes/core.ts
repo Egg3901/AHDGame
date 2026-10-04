@@ -1,16 +1,16 @@
 import { ensureProviderIdentityIndexes } from "@/lib/auth/providerIdentityIndexes";
 import type { Db } from "mongodb";
-import { normalizeAndMergeCorporateSectors } from "@/lib/corporations/repairDuplicateSectors";
 import { assertUniqueCorporationSequentialIds } from "./assertUniqueCorporationIds";
 import { ensureIndex } from "./helpers";
 
 const CORPORATE_SECTOR_IDENTITY_INDEX_NAME =
-  "corporateSectors_corporationId_stateId_sectorType_industryModel";
+  "corporateSectors_corporation_state_type_models_unique";
 const CORPORATE_SECTOR_IDENTITY_INDEX_KEY = {
   corporationId: 1,
   stateId: 1,
   sectorType: 1,
   industryModel: 1,
+  mediaDiscriminator: 1,
 } as const;
 
 function hasCorporateSectorIdentityIndex(
@@ -239,20 +239,14 @@ export async function seedCoreIndexes(db: Db, log: (msg: string) => void) {
     { name: "corporateSectors_stateId" },
     log
   );
-  // Dirty environments can still carry pre-fix duplicate sectors, which blocks the unique index
-  // that now enforces the invariant at write time.
+  // Registered startup migration installs the model-aware unique key before
+  // bootstrap reaches this seeder. Do not normalize existing sector documents
+  // here: taxonomy deployment is index-only and must not heal old worlds.
   const corporateSectorIndexes = await db.collection("corporateSectors").indexes();
   if (!hasCorporateSectorIdentityIndex(corporateSectorIndexes)) {
-    const { normalizedSectors, mergedGroups } = await normalizeAndMergeCorporateSectors(
-      db,
-      new Date()
+    throw new Error(
+      `Required corporate sector identity index ${CORPORATE_SECTOR_IDENTITY_INDEX_NAME} is missing; run registered startup migrations first`
     );
-    if (normalizedSectors.length > 0 || mergedGroups.length > 0) {
-      log(
-        `  ~ corporateSectors.${CORPORATE_SECTOR_IDENTITY_INDEX_NAME} prerequisites repaired ` +
-          `(${normalizedSectors.length} country normalizations, ${mergedGroups.length} duplicate merges)`
-      );
-    }
   }
   await ensureIndex(
     db,

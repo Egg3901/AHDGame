@@ -174,8 +174,8 @@ export async function seedUnownedSectors(
   await db
     .collection("unownedSectors")
     .createIndex(
-      { stateId: 1, sectorType: 1, industryModel: 1 },
-      { name: "unowned_state_type_model_unique", unique: true, background: true }
+      { stateId: 1, sectorType: 1, industryModel: 1, mediaDiscriminator: 1 },
+      { name: "unowned_state_type_models_unique", unique: true, background: true }
     );
   await db.collection("unownedSectors").createIndex({ countryId: 1 });
 
@@ -228,7 +228,11 @@ export async function seedUnownedSectors(
       );
       ops.push({
         updateOne: {
-          filter: { stateId: state._id as string, sectorType, industryModel },
+          filter: {
+            stateId: state._id as string,
+            sectorType,
+            industryModel,
+          },
           update: refresh
             ? {
                 $set: { revenue: seedRevenue, headroomUnits, countryId, updatedAt: now },

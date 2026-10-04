@@ -407,7 +407,11 @@ async function respondWithNegotiation(
   if (concession > 0) {
     await spendFromTreasury(db, countryId, concession, {
       resyncDerived: true,
-      witness: { flow: "crisis_response", site: "crises/unionBanStrike" },
+      witness: {
+        flow: "crisis_response",
+        key: `union-ban-negotiation:${crisis._id.toString()}:${characterId.toString()}:${currentTurn}`,
+        site: "crises/unionBanStrike",
+      },
     });
   }
 

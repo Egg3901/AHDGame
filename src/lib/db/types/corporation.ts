@@ -277,6 +277,14 @@ export interface Corporation {
   /** Atomic admission key for landed NPP capacity-build cash history. */
   nppReinvestmentCashWitnessKey?: string;
   liquidCapital: number;
+  /** Unfunded realized operating costs by native liquid currency. */
+  operatingCashArrearsByCurrency?: Partial<Record<CurrencyCode, number>>;
+  /** Latest turn that added an operating payable for each currency. */
+  operatingCashArrearsLastTurnByCurrency?: Partial<Record<CurrencyCode, number>>;
+  /** Unpaid federal withholding liabilities in anchor units by country. */
+  federalTaxArrearsAnchorByCountry?: Partial<Record<CountryId, number>>;
+  /** Latest turn that added a tax payable for each country. */
+  federalTaxArrearsLastTurnByCountry?: Partial<Record<CountryId, number>>;
   /**
    * Currency denomination of liquidCapital.
    * Set during forex migration to the corp's home currency.
@@ -817,6 +825,13 @@ export interface CorporateSector {
   outputAnchorByCommodity?: Partial<Record<string, number>>;
   /** Current bounded product quality by output commodity. */
   productQualityByCommodity?: Partial<Record<string, number>>;
+  /** Project-owned output from one clearing offer, distinct from baseline recipe output. */
+  productLineProjectId?: string;
+  /** Turn whose physical project offer and commodity fills were settled. */
+  productLineOutputTurn?: number;
+  productLineOutputUnitsByCommodity?: Partial<Record<string, number>>;
+  productLineSoldUnitsByCommodity?: Partial<Record<string, number>>;
+  productLineQualityByCommodity?: Partial<Record<string, number>>;
   /** Raw operating-capacity basis used for the measured product output snapshot. */
   productOutputCapacityUnits?: number;
   /**

@@ -38,6 +38,7 @@ import { readCorpEconomicAnchor, writeCorpEconomicLocal } from "@/lib/currency/c
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { getGameState } from "@/lib/gameState";
 import { computeTechAssetValueAnchor } from "@/lib/corporations/techAssetValue";
+import { corporateCashArrearsAnchor } from "@/lib/bonds/corporateCredit";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { sumConstructionInProgressAnchor } from "@/lib/corporations/sectorProfitBasis";
 import { ceoOwnershipFraction } from "@/lib/corporations/ceoOwnership";
@@ -259,7 +260,13 @@ export async function recomputeSharePricesAfterBondTurn(
       liquidCapitalAnchor: Math.max(0, liquidCapitalAnchor),
       bankEquityAnchor,
       sectorNPVAnchor,
-      issuedBondDebt: lookups.issuedBondDebtByCorpId.get(id) ?? 0,
+      issuedBondDebt:
+        (lookups.issuedBondDebtByCorpId.get(id) ?? 0) +
+        corporateCashArrearsAnchor({
+          operatingByCurrency: corp.operatingCashArrearsByCurrency,
+          federalTaxByCountryAnchor: corp.federalTaxArrearsAnchorByCountry,
+          fxByCurrency: lookups.exchangeRatesByCurrency,
+        }),
       bondHoldingsAnchor: lookups.bondAndImfPortfolioAnchorByCorpId.get(id) ?? 0,
       normalizedEarningsAnchor: adjustedEarningsMap.get(id) ?? 0,
       // Annualised bond-coupon income. hist value is per-turn local currency;

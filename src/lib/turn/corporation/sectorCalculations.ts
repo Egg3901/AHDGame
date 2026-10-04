@@ -17,6 +17,7 @@ import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import { MARKET_DISABLED, type MarketContext } from "@/lib/market/marketContext";
 import {
   computeCorporateCreditAtTurn,
+  corporateCashArrearsAnchor,
   sumCorporateSectorConstructionInProgress,
 } from "@/lib/bonds/corporateCredit";
 import { ceoOwnershipFraction } from "@/lib/corporations/ceoOwnership";
@@ -144,7 +145,9 @@ export function processSectors(
   /** gameConfig.privateBankingEnabled — branch/commodity capacity split. */
   privateBankingEnabled: boolean = false,
   /** Currency pools that supersede issuer-funded share-buyback escrow. */
-  equityMarketPoolCurrencies: ReadonlySet<CurrencyCode> = new Set()
+  equityMarketPoolCurrencies: ReadonlySet<CurrencyCode> = new Set(),
+  /** Route modeled operating cash through the durable Treasury cash journal. */
+  treasuryCashLedgerEnabled: boolean = false
 ): SectorCalculationsResult {
   const currentTurn = typeof turn === "number" ? turn : 1;
 
@@ -1037,6 +1040,11 @@ export function processSectors(
         corp._id,
         currentTurn
       ),
+      otherLiabilitiesAnchor: corporateCashArrearsAnchor({
+        operatingByCurrency: corp.operatingCashArrearsByCurrency,
+        federalTaxByCountryAnchor: corp.federalTaxArrearsAnchorByCountry,
+        fxByCurrency: lookups.exchangeRatesByCurrency,
+      }),
     });
 
     // Capture snapshot for history charts + credit time series
@@ -1046,6 +1054,10 @@ export function processSectors(
       totalCosts: totalCorpCosts,
       incomePreDividends,
       income,
+      operatingCashIncomeLocal: incomeForBalance,
+      operatingCashCurrency: resolvedHomeCurrency,
+      federalTaxByCountryAnchor: new Map(taxPaidByCountry),
+      operatingCashLocalPerAnchor: localFxRate,
       perTurnBondCouponIncome,
       perTurnBondInterestExpense,
       perTurnBondDragOnNetIncome,
@@ -1107,7 +1119,7 @@ export function processSectors(
         filter: { _id: corp._id },
         update: {
           $inc: {
-            liquidCapital: incomeForBalance - escrowFundingMove,
+            liquidCapital: (treasuryCashLedgerEnabled ? 0 : incomeForBalance) - escrowFundingMove,
             ...(escrowFundingMove > 0 ? { shareEscrowBalance: escrowFundingMove } : {}),
             marketingStrength: marketingGrowth,
             logisticsStrength: logisticsDelta,
@@ -1291,6 +1303,11 @@ export function processSectors(
           corp._id,
           currentTurn
         ),
+        otherLiabilitiesAnchor: corporateCashArrearsAnchor({
+          operatingByCurrency: corp.operatingCashArrearsByCurrency,
+          federalTaxByCountryAnchor: corp.federalTaxArrearsAnchorByCountry,
+          fxByCurrency: lookups.exchangeRatesByCurrency,
+        }),
       });
       snapshot.creditComposite = creditPack.creditRating.compositeScore;
       snapshot.creditRating = creditPack.creditRating.rating;

@@ -4,9 +4,9 @@
  * productQualityForCommodity.
  */
 import { commodityMixWeight, type CommodityType } from "@/lib/constants/commodities";
+import { advanceProductLifecycle, type ProductLifecycleStage } from "./productLifecycle";
 
-export type ManufacturingLifecycleStage =
-  "development" | "launch" | "growth" | "mature" | "decline" | "retired";
+export type ManufacturingLifecycleStage = ProductLifecycleStage;
 
 export interface PaidDevelopmentProgress {
   currentPaidAnchor: number;
@@ -36,22 +36,6 @@ export interface ManufacturingResearchSpendAllocation {
   genericResearchAnchor: number;
 }
 
-const LIFECYCLE_STAGE_TURNS: Partial<Record<ManufacturingLifecycleStage, number>> = {
-  launch: 24,
-  growth: 48,
-  mature: 120,
-  decline: 60,
-};
-
-const NEXT_LIFECYCLE_STAGE: Partial<
-  Record<ManufacturingLifecycleStage, ManufacturingLifecycleStage>
-> = {
-  launch: "growth",
-  growth: "mature",
-  mature: "decline",
-  decline: "retired",
-};
-
 export interface ManufacturedOutputAllocationInput {
   /** Nameplate revenue basis in anchor currency per day, derived from real plant capacity. */
   outputAnchor: number;
@@ -70,6 +54,8 @@ export interface ManufacturedOutputAllocationInput {
 export interface ManufacturedOutputAllocation {
   nominalOutputAnchorByCommodity: Partial<Record<CommodityType, number>>;
   outputUnitsByCommodity: Partial<Record<CommodityType, number>>;
+  /** Only the redirected product portion, excluding the legacy recipe baseline. */
+  projectOutputUnitsByCommodity: Partial<Record<CommodityType, number>>;
   /** Recipe input demand follows assigned plant capacity once, not output item count. */
   inputThroughputShare: number;
 }
@@ -77,6 +63,7 @@ export interface ManufacturedOutputAllocation {
 export interface ManufacturedSectorOutput {
   outputAnchorByCommodity: Partial<Record<CommodityType, number>>;
   outputUnitsByCommodity: Partial<Record<CommodityType, number>>;
+  projectOutputUnitsByCommodity: Partial<Record<CommodityType, number>>;
   productQualityByCommodity: Partial<Record<CommodityType, number>>;
 }
 
@@ -95,6 +82,12 @@ export function scaleManufacturedSectorOutput(
     ),
     outputUnitsByCommodity: Object.fromEntries(
       Object.entries(output.outputUnitsByCommodity).map(([commodity, units]) => [
+        commodity,
+        finiteNonNegative(units ?? 0) * factor,
+      ])
+    ),
+    projectOutputUnitsByCommodity: Object.fromEntries(
+      Object.entries(output.projectOutputUnitsByCommodity).map(([commodity, units]) => [
         commodity,
         finiteNonNegative(units ?? 0) * factor,
       ])
@@ -180,53 +173,33 @@ export function advanceManufacturingProject(input: {
   receipt: { projectId: string; turn: number; amountAnchor: number };
 }): ManufacturingProjectProgress | null {
   const { project, receipt } = input;
-  if (
-    receipt.projectId !== project._id ||
-    !Number.isInteger(receipt.turn) ||
-    receipt.turn < project.startedTurn ||
-    receipt.turn <= (project.lastProcessedTurn ?? 0)
-  ) {
-    return null;
-  }
-
-  const developmentPaidAnchor =
-    project.developmentPaidAnchor + finiteNonNegative(receipt.amountAnchor);
-  const elapsedDevelopmentTurns =
-    project.stage === "development"
-      ? project.elapsedDevelopmentTurns + 1
-      : project.elapsedDevelopmentTurns;
-  let stage = project.stage;
-  let stageStartedTurn = project.stageStartedTurn;
-
-  if (stage === "development") {
-    const progress = advancePaidDevelopment({
-      currentPaidAnchor: developmentPaidAnchor,
-      additionalPaidAnchor: 0,
-      elapsedTurns: elapsedDevelopmentTurns,
+  const progress = advanceProductLifecycle({
+    product: {
+      id: project._id,
+      stage: project.stage,
+      stageStartedTurn: project.stageStartedTurn,
+      startedTurn: project.startedTurn,
+      lastProcessedTurn: project.lastProcessedTurn,
+      developmentPaidAnchor: project.developmentPaidAnchor,
       paidThresholdAnchor: project.paidThresholdAnchor,
+      elapsedDevelopmentTurns: project.elapsedDevelopmentTurns,
       elapsedThresholdTurns: project.elapsedThresholdTurns,
-    });
-    if (progress.ready) {
-      stage = "launch";
-      stageStartedTurn = receipt.turn;
-    }
-  } else {
-    const elapsedStageTurns = Math.max(0, receipt.turn - stageStartedTurn + 1);
-    const stageTurns = LIFECYCLE_STAGE_TURNS[stage];
-    const next = NEXT_LIFECYCLE_STAGE[stage];
-    if (stageTurns != null && next && elapsedStageTurns >= stageTurns) {
-      stage = next;
-      stageStartedTurn = receipt.turn;
-    }
-  }
+    },
+    receipt: {
+      productId: receipt.projectId,
+      turn: receipt.turn,
+      paidDevelopmentAnchor: receipt.amountAnchor,
+    },
+  });
+  if (!progress) return null;
 
   return {
-    stage,
-    stageStartedTurn,
-    lastProcessedTurn: receipt.turn,
-    developmentPaidAnchor,
-    elapsedDevelopmentTurns,
-    active: stage !== "retired",
+    stage: progress.stage,
+    stageStartedTurn: progress.stageStartedTurn,
+    lastProcessedTurn: progress.lastProcessedTurn,
+    developmentPaidAnchor: progress.developmentPaidAnchor,
+    elapsedDevelopmentTurns: progress.elapsedDevelopmentTurns,
+    active: progress.active,
   };
 }
 
@@ -319,6 +292,10 @@ export function allocateManufacturedOutput(
       (nominalOutputAnchorByCommodity[input.outputCommodity] ?? 0) + redirectedAnchor;
   }
 
+  const productBasePrice = input.basePrices[input.outputCommodity] ?? 0;
+  const projectOutputUnitsByCommodity: Partial<Record<CommodityType, number>> =
+    productBasePrice > 0 ? { [input.outputCommodity]: redirectedAnchor / productBasePrice } : {};
+
   const outputUnitsByCommodity: Partial<Record<CommodityType, number>> = {};
   for (const [commodity, nominalAnchor] of Object.entries(nominalOutputAnchorByCommodity) as Array<
     [CommodityType, number]
@@ -332,6 +309,7 @@ export function allocateManufacturedOutput(
   return {
     nominalOutputAnchorByCommodity,
     outputUnitsByCommodity,
+    projectOutputUnitsByCommodity,
     inputThroughputShare: allocationShare,
   };
 }
@@ -384,7 +362,10 @@ export function buildManufacturedSectorOutput(input: {
   }
 
   const productQualityByCommodity: Partial<Record<CommodityType, number>> = {};
-  for (const commodity of Object.keys(outputAnchorByCommodity) as CommodityType[]) {
+  for (const commodity of new Set([
+    ...(Object.keys(outputAnchorByCommodity) as CommodityType[]),
+    input.outputCommodity,
+  ])) {
     const currentQuality = input.currentSectorQualityByCommodity?.[commodity];
     if (typeof currentQuality !== "number" || !Number.isFinite(currentQuality)) continue;
     productQualityByCommodity[commodity] = productQualityForCommodity({
@@ -395,7 +376,12 @@ export function buildManufacturedSectorOutput(input: {
     });
   }
 
-  return { outputAnchorByCommodity, outputUnitsByCommodity, productQualityByCommodity };
+  return {
+    outputAnchorByCommodity,
+    outputUnitsByCommodity,
+    projectOutputUnitsByCommodity: allocation.projectOutputUnitsByCommodity,
+    productQualityByCommodity,
+  };
 }
 
 /** Uses live per-commodity sector quality plus a bounded contribution from paid development. */

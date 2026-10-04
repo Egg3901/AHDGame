@@ -238,6 +238,7 @@ describe("expandSector — founding build (plants)", () => {
     expect(db.collectionMocks.unownedSectors.updateOne.mock.calls[0][0]).toEqual({
       stateId: STATE_ID,
       sectorType: "agriculture",
+      industryModel: null,
     });
   });
 
@@ -347,7 +348,11 @@ describe("expandSector — founding build (plants)", () => {
     await expandSector(request(), { params });
 
     const call = db.collectionMocks.unownedSectors.updateOne.mock.calls[0];
-    expect(call[0]).toEqual({ stateId: STATE_ID, sectorType: "manufacturing" });
+    expect(call[0]).toEqual({
+      stateId: STATE_ID,
+      sectorType: "manufacturing",
+      industryModel: null,
+    });
     // Pipeline update, TWO stages. Units are the authoritative leg and are drawn
     // down (clamped >= 0) in stage 1; `revenue` is then RESTATED from the
     // post-draw units in stage 2 via the shared `unownedPoolTrailingSet`, rather

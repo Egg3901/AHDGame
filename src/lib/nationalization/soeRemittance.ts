@@ -117,7 +117,7 @@ export async function processSoeRemittance(
     if (amountLocal <= 0) continue;
 
     const countryId = (corp.countryOwnerId ?? corp.countryId) as CountryId;
-    await remitToTreasury(
+    const remittedLocal = await remitToTreasury(
       db,
       {
         countryId,
@@ -128,6 +128,7 @@ export async function processSoeRemittance(
       now,
       ledger
     );
+    if (remittedLocal <= 0) continue;
     perCorp.push({ corpId: corp._id, countryId, amountLocal });
     remitted++;
   }
