@@ -39,6 +39,7 @@ vi.mock("@/lib/world/succession/continuingServiceTurn", () => ({
   processContinuingFederationServiceTurn: vi.fn().mockResolvedValue(0),
 }));
 vi.mock("@/lib/bonds/sovereign", () => ({
+  getNationalBudgetId: vi.fn().mockReturnValue("federal"),
   getBondCountryId: vi.fn().mockReturnValue("US"),
   isCorporateBond: vi.fn((b: { isCorporate?: boolean }) => !!b.isCorporate),
   issueScheduledSovereignBondSeries: vi.fn().mockResolvedValue(undefined),

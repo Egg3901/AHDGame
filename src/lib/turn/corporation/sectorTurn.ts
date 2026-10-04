@@ -61,6 +61,12 @@ import {
   sectorRevenueBoostMultiplier,
 } from "@/lib/corporations/rules/marketBoost";
 import { isStateScopedCommodity } from "@/lib/market/commodityMarketScope";
+import {
+  inputBasketCostIndex,
+  recordCostPlusBasis,
+  supportsCostPlusPricing,
+  validCostPlusBasis,
+} from "@/lib/market/costPlusPricing/rules";
 
 /** Process one sector and append its persisted update to the turn collectors. */
 export function processSector(
@@ -420,6 +426,12 @@ export function processSector(
     strategySupply: strategyRates.supply,
     techEffects,
     plantsEnabled,
+    costPlusPricingEnabled:
+      market.clearingEnabled &&
+      explicitPlantCostsEnabled &&
+      supportsCostPlusPricing(sector.sectorType) &&
+      sector.pricingMode === "costPlus" &&
+      validCostPlusBasis(sector.costPlusCostBasis),
     mothballed,
     nameplateUnits,
     activeFraction,
@@ -993,6 +1005,27 @@ export function processSector(
     // also the first calibration (branch above): that sector had no leftover
     // residual to rebase.
     sectorUpdate.otherOpexPerUnitAnchor = healedOpex.otherOpexPerUnitAnchor;
+  }
+  if (explicitPlantCostsEnabled && physicalPnl && supportsCostPlusPricing(sector.sectorType)) {
+    const basis = recordCostPlusBasis({
+      inputsCost: physicalPnl.inputsCost,
+      fixedCost:
+        physicalPnl.laborCost +
+        physicalPnl.otherOpex +
+        physicalPnl.upkeep +
+        physicalPnl.complianceCost,
+      nominalProducedRevenue:
+        plantsCapacity > 0
+          ? ((plantsNameplateRevenue / TURNS_PER_DAY) * producedUnits) / plantsCapacity
+          : 0,
+      inputCostIndex: inputBasketCostIndex(
+        effectiveDemand ?? {},
+        lookups.reachableInputPriceRatiosByCountry?.get(sectorCountryId) ??
+          lookups.priceRatioByCommodity
+      ),
+      turn: currentTurn,
+    });
+    if (basis) sectorUpdate.costPlusCostBasis = basis;
   }
   if (!explicitPlantCostsEnabled && healedOpex) {
     sectorUpdate.retoolRescaleApplied = true;

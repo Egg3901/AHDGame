@@ -99,7 +99,12 @@ describe("buildSoeCapexGrant", () => {
 // ── The wiring: treasury pays, the enterprise receives plant ────────────────
 
 type Written = {
-  sectorBulk: Array<{ updateOne: { filter: { _id: ObjectId }; update: Record<string, unknown> } }>;
+  sectorBulk: Array<{
+    updateOne: {
+      filter: { _id: ObjectId };
+      update: Record<string, unknown> | Record<string, unknown>[];
+    };
+  }>;
   budgetIncs: Array<{ filter: unknown; update: Record<string, unknown> }>;
   corpBulk: unknown[];
 };
@@ -186,8 +191,24 @@ describe("processSoeOperations — state capex grant", () => {
       (op) => String(op.updateOne.filter._id) === String(sector._id)
     );
     expect(buy).toBeDefined();
-    const inc = (buy!.updateOne.update as { $inc: { capitalStock: number } }).$inc;
-    expect(inc.capitalStock).toBeCloseTo(10_000 * CAPITAL_DEPRECIATION_PER_TURN, 9);
+    const update = buy!.updateOne.update;
+    if (!Array.isArray(update)) throw new Error("Expected a plant capacity update pipeline");
+    expect(update[0]).toMatchObject({
+      $set: {
+        capitalStock: {
+          $max: [
+            0,
+            {
+              $add: [
+                { $ifNull: ["$capitalStock", 0] },
+                expect.closeTo(10_000 * CAPITAL_DEPRECIATION_PER_TURN, 9),
+              ],
+            },
+          ],
+        },
+      },
+    });
+    expect(update[1]).toHaveProperty("$set.plantCount");
 
     // The state PAYS — visibly, on the same signed treasury balance every other
     // government flow moves.

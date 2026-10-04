@@ -11,6 +11,7 @@
  */
 
 import type { BankCharterType } from "@/lib/db/types/bank";
+import { quoteLoanOrigination } from "./loanFees";
 import {
   bankBalanceSheet,
   getCashReserves,
@@ -615,6 +616,7 @@ export function decideBankCommand(
         );
       }
 
+      const quote = quoteLoanOrigination(principal, snapshot.currency);
       const pending = active!.requireApproval === true;
       const loanDoc = {
         _id: oid(command.loanId),
@@ -624,6 +626,7 @@ export function decideBankCommand(
         borrowerType: command.borrower.type,
         borrowerId: oid(command.borrower.id),
         principal,
+        originationFee: quote.originationFee,
         outstanding: principal,
         ratePercent,
         originatedTurn: snapshot.turn,
@@ -635,7 +638,7 @@ export function decideBankCommand(
         command.borrower.type === "character"
           ? {
               kind: "credit",
-              amount: principal,
+              amount: quote.proceeds,
               collection: "characters",
               filter: { _id: oid(command.borrower.id) },
               path: `currencyBalances.personal.${snapshot.currency}`,
@@ -643,7 +646,7 @@ export function decideBankCommand(
             }
           : {
               kind: "credit",
-              amount: principal,
+              amount: quote.proceeds,
               collection: "corporations",
               filter: { _id: oid(command.borrower.id) },
               path: "liquidCapital",
@@ -651,7 +654,13 @@ export function decideBankCommand(
             };
       return {
         allowed: true,
-        derived: { ratePercent, maxPrincipal, pending },
+        derived: {
+          ratePercent,
+          maxPrincipal,
+          pending,
+          originationFee: quote.originationFee,
+          proceeds: quote.proceeds,
+        },
         transition: transition(
           snapshot,
           pending ? "named_loan_request" : "named_loan_origination",
@@ -659,7 +668,12 @@ export function decideBankCommand(
           pending
             ? []
             : [
-                vaultLeg(snapshot, "debit", principal, "the bank funds the loan from its vault"),
+                vaultLeg(
+                  snapshot,
+                  "debit",
+                  quote.proceeds,
+                  "the bank funds net loan proceeds from its vault"
+                ),
                 borrowerLeg,
               ],
           [
@@ -670,7 +684,14 @@ export function decideBankCommand(
                   {
                     collection: "corporations",
                     filter: corpFilter(snapshot.bankId),
-                    update: { $inc: { "bankCharter.totalLoans": principal } },
+                    update: {
+                      $inc: {
+                        "bankCharter.totalLoans": principal,
+                        ...(quote.originationFee > 0
+                          ? { "bankCharter.loanOriginationFeesLifetime": quote.originationFee }
+                          : {}),
+                      },
+                    },
                     note: "cached loan book total",
                   },
                 ]),
@@ -683,6 +704,8 @@ export function decideBankCommand(
             statusAfter: pending ? "pending" : "current",
             amount: principal,
             meta: {
+              originationFee: quote.originationFee,
+              proceeds: quote.proceeds,
               borrowerType: command.borrower.type,
               termTurns: command.termTurns,
               ratePercent,
@@ -743,11 +766,12 @@ export function decideBankCommand(
           `Principal exceeds borrower income limit (max ${Math.floor(incomeCap)})`
         );
       }
+      const quote = quoteLoanOrigination(principal, snapshot.currency, command.originationFee ?? 0);
       const proceeds: TransitionLeg =
         command.borrower.type === "character"
           ? {
               kind: "credit",
-              amount: principal,
+              amount: quote.proceeds,
               collection: "characters",
               filter: { _id: oid(command.borrower.id) },
               path: `currencyBalances.personal.${snapshot.currency}`,
@@ -755,7 +779,7 @@ export function decideBankCommand(
             }
           : {
               kind: "credit",
-              amount: principal,
+              amount: quote.proceeds,
               collection: "corporations",
               filter: { _id: oid(command.borrower.id) },
               path: "liquidCapital",
@@ -763,12 +787,18 @@ export function decideBankCommand(
             };
       return {
         allowed: true,
+        derived: { originationFee: quote.originationFee, proceeds: quote.proceeds },
         transition: transition(
           snapshot,
           "named_loan_disbursement",
           command.loanId,
           [
-            vaultLeg(snapshot, "debit", principal, "the bank funds the loan from its vault"),
+            vaultLeg(
+              snapshot,
+              "debit",
+              quote.proceeds,
+              "the bank funds the quoted net proceeds from its vault"
+            ),
             proceeds,
           ],
           [
@@ -787,7 +817,14 @@ export function decideBankCommand(
             {
               collection: "corporations",
               filter: corpFilter(snapshot.bankId),
-              update: { $inc: { "bankCharter.totalLoans": principal } },
+              update: {
+                $inc: {
+                  "bankCharter.totalLoans": principal,
+                  ...(quote.originationFee > 0
+                    ? { "bankCharter.loanOriginationFeesLifetime": quote.originationFee }
+                    : {}),
+                },
+              },
               note: "cached loan book total",
             },
           ],
@@ -799,7 +836,11 @@ export function decideBankCommand(
             statusBefore: "pending",
             statusAfter: "current",
             amount: principal,
-            meta: { borrowerType: command.borrower.type },
+            meta: {
+              borrowerType: command.borrower.type,
+              originationFee: quote.originationFee,
+              proceeds: quote.proceeds,
+            },
           }
         ),
       };

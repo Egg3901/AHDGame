@@ -170,6 +170,17 @@ export interface Corporation {
    * at least one financial sector; one bank per corp. See src/lib/db/types/bank.ts.
    */
   bankCharter?: import("./bank").BankCharter;
+  /** Funded sovereign claims held outside the replaceable charter subdocument. */
+  bankSovereignEscrows?: Record<
+    string,
+    {
+      bankId: string;
+      charteredTurn: number;
+      currencyCode: CurrencyCode;
+      amountLocal: number;
+      claimKind: "coupon" | "maturity";
+    }
+  >;
   /** Monotonic generation for atomic proprietary book settlement. */
   bankPropBookRevision?: number;
   /**
@@ -991,6 +1002,14 @@ export interface CorporateSector {
    * anchors the fade-in ramp.
    */
   pricingPosture?: number | null;
+  /** Optional industrial input-indexed pricing; ignored while explicit plant costs are off. */
+  pricingMode?: "market" | "costPlus";
+  /** Last producing turn's actual operating costs per nominal output value. */
+  costPlusCostBasis?: {
+    inputCostShare: number;
+    fixedCostShare: number;
+    turn: number;
+  };
   clearingFactor?: number;
   soldFraction?: number;
   /**

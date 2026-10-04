@@ -8,12 +8,13 @@ import { reconcileLedger } from "@/lib/ledger/reconcile";
 import type { LedgerEntry } from "@/lib/ledger/types";
 import { processTreasuryTurn } from "./treasuryTurn";
 import { getDb } from "@/lib/mongodb";
+import { ObjectId } from "mongodb";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 
-function world() {
+function world(bankTreasuryEnabled = false) {
   const db = createInMemoryDb();
-  db.seed("gameConfig", [{ _id: "default", ledgerShadow: true }]);
+  db.seed("gameConfig", [{ _id: "default", ledgerShadow: true, bankTreasuryEnabled }]);
   db.seed("gameState", [{ _id: "current", currentTurn: 10 }]);
   db.seed("exchangeRates", [{ _id: "USD", currencyCode: "USD", rate: 1 }]);
   db.seed("federalBudget", [
@@ -33,6 +34,89 @@ function world() {
 }
 
 describe("treasury accrual stock-flow ownership", () => {
+  it("does not read bonds while bank treasury holdings are disabled", async () => {
+    const db = world(false);
+    const bonds = db.collection("bonds");
+    const find = vi.spyOn(bonds, "find");
+    await processTreasuryTurn(10);
+    expect(find).not.toHaveBeenCalled();
+  });
+
+  it("funds opening bank-holder coupons once from treasury cash without changing gross budget interest", async () => {
+    const db = world(true);
+    const bankId = new ObjectId("650000000000000000000001");
+    const bondId = new ObjectId("650000000000000000000002");
+    await db.collection("corporations").insertOne({
+      _id: bankId,
+      bankCharter: {
+        status: "active",
+        currency: "USD",
+        charteredTurn: 4,
+        cashReserves: 5,
+      },
+    });
+    await db.collection("bonds").insertOne({
+      _id: bondId,
+      issuerType: "sovereign",
+      countryId: "US",
+      currencyCode: "USD",
+      couponRate: 4.8,
+      defaulted: false,
+      holders: [{ bankId, charteredTurn: 4, units: 100 }],
+    });
+    await db.collection("federalBudget").updateOne(
+      { _id: "federal" },
+      {
+        $set: {
+          treasuryBalance: 1_000,
+          debt: { principal: 48_000, interestRate: 0.05 },
+          spending: { total: 24_000, debtInterest: 7_500 },
+        },
+      }
+    );
+
+    await processTreasuryTurn(10);
+    const budget = db.collection("federalBudget").docs[0] as {
+      treasuryAccrual?: unknown;
+      spending: { debtInterest: number };
+      bankSovereignClaims: unknown[];
+      treasuryBalance: number;
+    };
+    const receipt = budget.treasuryAccrual as {
+      cashDelta: number;
+      bankCouponPlan?: Array<{ amountLocal: number; bankId: string; charteredTurn: number }>;
+      components: { debtService: number };
+    };
+    expect(receipt.bankCouponPlan).toEqual([
+      {
+        amountLocal: 100,
+        bankId: bankId.toHexString(),
+        charteredTurn: 4,
+        bondIds: [bondId.toHexString()],
+      },
+    ]);
+    expect(receipt.components.debtService).toBeCloseTo(0);
+    expect(budget.spending.debtInterest).toBe(7_500);
+    expect(budget.bankSovereignClaims).toEqual([]);
+    expect(budget.treasuryBalance).toBe(1_000 + receipt.cashDelta - 100);
+    expect(
+      (db.collection("corporations").docs[0].bankCharter as { cashReserves: number }).cashReserves
+    ).toBe(105);
+    expect(db.collection("bankMoneyMoves").docs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ _id: expect.stringContaining(":funding:10"), status: "applied" }),
+        expect.objectContaining({ _id: expect.stringContaining(":bank:10"), status: "applied" }),
+      ])
+    );
+    const transfer = db
+      .collection("ledgerEntries")
+      .docs.find((entry) => entry.emitSite === "banking/bankSovereignClaims");
+    expect(transfer?.legs).toMatchObject([
+      { account: "government:US:USD", amount: -100, role: "primary" },
+      { account: `bank_vault:${bankId.toHexString()}:USD`, amount: 100, role: "contra" },
+    ]);
+  });
+
   it("records the actual signed treasury movement without inventing financing", async () => {
     const db = world();
     await processTreasuryTurn(10);

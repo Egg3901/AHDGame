@@ -192,6 +192,8 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       ?.canonicalFreightBillingEnabled === true;
   const lookups = await buildCorporationLookups(db, {
     plantsEnabled: plantsEnabledForMarketShare,
+    explicitPlantCostsEnabled:
+      plantsEnabledForMarketShare && marketGovernorConfig?.explicitPlantCostsEnabled === true,
     productionTurn: turn,
     freightSettlementActive,
     moneyWiringEnabled: interstateMoneyWiringEnabled,

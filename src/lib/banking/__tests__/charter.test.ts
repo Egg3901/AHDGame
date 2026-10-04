@@ -480,8 +480,8 @@ describe("banking charter", () => {
           cashReserves: requirement,
           postedCapital: requirement,
           status: "active",
-          depositOffset: 0,
-          lendingOffset: 0.25,
+          depositOffset: -1.75,
+          lendingOffset: 4.125,
         },
       });
       const receipt = await database

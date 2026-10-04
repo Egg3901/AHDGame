@@ -145,6 +145,8 @@ describe("deposit insurance", () => {
       npcDeposits?: number;
       fundBalance?: number;
       playerSavings?: number[];
+      treasuryBalance?: number;
+      bondPoolCash?: number;
     }) {
       bankId = new ObjectId();
       memory = createInMemoryDb();
@@ -169,7 +171,6 @@ describe("deposit insurance", () => {
           },
         },
       ]);
-      memory.seed("centralBanks", [{ _id: "US", externalBroadMoney: 1_000_000 }]);
       memory.seed("depositInsuranceFunds", [
         {
           _id: "USD",
@@ -183,12 +184,25 @@ describe("deposit insurance", () => {
       memory.seed("federalBudget", [
         {
           _id: "federal",
-          treasuryBalance: 10_000_000,
-          spending: { total: 0, byCategory: {} },
+          countryId: "US",
+          currencyCode: "USD",
+          revenue: { total: 1_000_000 },
+          treasuryBalance: options.treasuryBalance ?? 10_000_000,
+          spending: { total: 0, debtInterest: 0, byCategory: {} },
+          debt: { principal: 0, interestRate: 0, ceiling: 1_000_000_000 },
           surplus: 0,
+          gdp: 1_000_000,
         },
       ]);
       memory.seed("gameState", [{ _id: "current", preset: "2019-default", currentTurn: 50 }]);
+      memory.seed("gameConfig", [{ _id: "default", ledgerShadow: false }]);
+      memory.seed("centralBanks", [
+        { _id: "US", primeRate: 5, externalBroadMoney: 1_000_000, netMoneyCreatedLifetime: 0 },
+      ]);
+      memory.seed("exchangeRates", [{ _id: "USD", currencyCode: "USD", rate: 1 }]);
+      memory.seed("bondMarketPools", [
+        { _id: "USD", cashLocal: options.bondPoolCash ?? 0, targetCashLocal: 0 },
+      ]);
       memory.seed(
         "characters",
         (options.playerSavings ?? []).map((savings) => ({
@@ -275,6 +289,67 @@ describe("deposit insurance", () => {
       expect(budget.treasuryBalance).toBe(10_000_000 - 90_000);
       expect(budget.spending.total).toBe(90_000);
       expect(cbNow()).toBe(1_100_000);
+    });
+
+    it("uses treasury cash first and finances only the remaining backstop from the bond pool", async () => {
+      build({
+        cashReserves: 0,
+        npcDeposits: 100_000,
+        fundBalance: 20_000,
+        treasuryBalance: 50_000,
+        bondPoolCash: 100_000,
+      });
+
+      const result = await resolveFailedBankDepositors(memory as unknown as Db, bankId, 50);
+
+      expect(result.resolved).toBe(true);
+      expect(result.treasuryBackstop).toBe(80_000);
+      expect(cbNow()).toBe(1_100_000);
+      expect(memory.collection("federalBudget").docs[0]).toMatchObject({
+        treasuryBalance: 0,
+        debt: { principal: 30_000 },
+        spending: { byCategory: { depositInsurance: 80_000 } },
+      });
+      expect(memory.collection("bondMarketPools").docs[0].cashLocal).toBe(70_000);
+      expect(memory.collection("bonds").docs).toHaveLength(1);
+      expect(memory.collection("bonds").docs[0]).toMatchObject({
+        issuerType: "sovereign",
+        publicFloat: 30,
+        totalIssued: 30_000,
+        unsoldUnits: 0,
+      });
+      expect(memory.collection("centralBanks").docs[0].netMoneyCreatedLifetime).toBe(0);
+    });
+
+    it("leaves the estate unresolved when treasury cash and pool funding are insufficient", async () => {
+      build({
+        cashReserves: 0,
+        npcDeposits: 100_000,
+        treasuryBalance: 5_000,
+        bondPoolCash: 10_000,
+      });
+
+      const result = await resolveFailedBankDepositors(memory as unknown as Db, bankId, 50);
+
+      expect(result.resolved).toBe(false);
+      expect(result.error).toContain("cannot cover");
+      expect(cbNow()).toBe(1_000_000);
+      expect(charterNow().depositorsResolvedTurn).toBeUndefined();
+      expect(memory.collection("federalBudget").docs[0].treasuryBalance).toBe(14_000);
+      expect(memory.collection("federalBudget").docs[0].debt).toMatchObject({ principal: 9_000 });
+      expect(memory.collection("bondMarketPools").docs[0].cashLocal).toBe(1_000);
+      expect(memory.collection("bonds").docs[0]).toMatchObject({
+        publicFloat: 9,
+        totalIssued: 9_000,
+        unsoldUnits: 86,
+      });
+
+      const retry = await resolveFailedBankDepositors(memory as unknown as Db, bankId, 50);
+
+      expect(retry.resolved).toBe(false);
+      expect(memory.collection("bonds").docs).toHaveLength(1);
+      expect(memory.collection("federalBudget").docs[0].debt).toMatchObject({ principal: 9_000 });
+      expect(memory.collection("federalBudget").docs[0].treasuryBalance).toBe(14_000);
     });
 
     it("is idempotent: a second resolution is a no-op", async () => {

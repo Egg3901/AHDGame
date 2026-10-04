@@ -1,3 +1,4 @@
+import { quoteLoanOrigination } from "@/lib/banking/rules/loanFees";
 import { resumeTreasuryReserveTransfers } from "@/lib/budget/treasuryReserveTransfer";
 /**
  * Private banking each turn. processBankingTurn moves household deposits,
@@ -353,6 +354,7 @@ type BankPassCaches = {
 };
 
 type BankPassResult = {
+  loanOriginationFeesCollected: number;
   depositInterestPaid: number;
   depositInterestShortfall: number;
   loanInterestCollected: number;
@@ -376,6 +378,7 @@ async function processOneBank(
   const currency = charter.currency as CurrencyCode;
   const bankIdHex = corp._id.toString();
   const result: BankPassResult = {
+    loanOriginationFeesCollected: 0,
     depositInterestPaid: 0,
     depositInterestShortfall: 0,
     loanInterestCollected: 0,
@@ -871,6 +874,7 @@ async function processOneBank(
     rates.lendingRatePercent,
     {
       loanFundingCapacity,
+      primeRatePercent: cb?.primeRate ?? 0,
       cashReserves,
       totalLoans,
       cbDocId,
@@ -883,6 +887,7 @@ async function processOneBank(
   cashReserves = bulkResult.cashReserves;
   totalLoans = bulkResult.totalLoans;
   result.loanInterestCollected += bulkResult.interestCollected;
+  result.loanOriginationFeesCollected += bulkResult.feesCollected;
   result.defaultsWrittenOff += bulkResult.writtenOff;
   result.npcBulkShortfall += bulkResult.shortfall;
 
@@ -915,7 +920,8 @@ async function processOneBank(
         "bankCharter.depositCeiling": depositCeiling,
         "bankCharter.lastBankingTurn": turn,
         "bankCharter.lastBankingIncome":
-          result.loanInterestCollected -
+          result.loanInterestCollected +
+          result.loanOriginationFeesCollected -
           result.depositInterestPaid -
           result.insurancePremiumPaid -
           result.defaultsWrittenOff,
@@ -926,6 +932,7 @@ async function processOneBank(
         // net and their own lines below, starting from zero here.
         "bankCharter.lastBankingDepositInterest": result.depositInterestPaid,
         "bankCharter.lastBankingLoanInterest": result.loanInterestCollected,
+        "bankCharter.lastBankingLoanOriginationFees": result.loanOriginationFeesCollected,
         "bankCharter.lastBankingInterbankInterestPaid": 0,
         "bankCharter.lastBankingInterbankInterestReceived": 0,
         "bankCharter.lastBankingFacilityInterest": 0,
@@ -937,7 +944,8 @@ async function processOneBank(
   );
 
   result.bankingIncome =
-    result.loanInterestCollected -
+    result.loanInterestCollected +
+    result.loanOriginationFeesCollected -
     result.depositInterestPaid -
     result.insurancePremiumPaid -
     result.defaultsWrittenOff;
@@ -1207,6 +1215,7 @@ async function readBorrowerAvailable(
 }
 
 type NpcBulkState = {
+  primeRatePercent: number;
   /** Total lending capacity from deposits after the reserve requirement. */
   loanFundingCapacity: number;
   cashReserves: number;
@@ -1224,6 +1233,7 @@ type NpcBulkResult = {
   cashReserves: number;
   totalLoans: number;
   interestCollected: number;
+  feesCollected: number;
   writtenOff: number;
   shortfall: number;
 };
@@ -1266,6 +1276,7 @@ async function serviceNpcBulkBook(
       _id: string;
       legs: TransitionLeg[];
       projections?: { projection: TransitionProjection }[];
+      event?: { meta?: { originationFees?: number; interestPaid?: number; writtenOff?: number } };
     }>(MONEY_MOVE_COLLECTION)
     .findOne({ _id: settlementKey });
   if (recorded) {
@@ -1306,17 +1317,33 @@ async function serviceNpcBulkBook(
         .findOne({ _id: state.cbDocId }, { projection: { externalBroadMoney: 1 } }),
     ]);
     if (state.cb && pool) state.cb.externalBroadMoney = pool.externalBroadMoney;
+    // New journals freeze the original income split with their claim. Older
+    // fee receipts can still recover the fee from the protected book memo.
+    const recordedFee =
+      recorded.projections?.reduce((sum, row) => {
+        const increment =
+          row.projection.collection === "corporations" ? row.projection.update?.$inc : null;
+        const value =
+          increment !== null &&
+          typeof increment === "object" &&
+          "bankCharter.loanOriginationFeesLifetime" in increment
+            ? increment["bankCharter.loanOriginationFeesLifetime"]
+            : 0;
+        return sum + (typeof value === "number" && Number.isFinite(value) ? value : 0);
+      }, 0) ?? 0;
     return {
       cashReserves: getCashReserves(bank?.bankCharter),
       totalLoans: loans[0]?.total ?? 0,
-      interestCollected: 0,
-      writtenOff: 0,
+      interestCollected: recorded.event?.meta?.interestPaid ?? 0,
+      feesCollected: recorded.event?.meta?.originationFees ?? recordedFee,
+      writtenOff: recorded.event?.meta?.writtenOff ?? 0,
       shortfall: 0,
     };
   }
   let { cashReserves, totalLoans } = state;
   let creditedToPool = 0;
   let interestCollected = 0;
+  let feesCollected = 0;
   let writtenOff = 0;
   let shortfall = 0;
 
@@ -1333,7 +1360,7 @@ async function serviceNpcBulkBook(
   // Idempotency: the whole book is stamped together, so one processed tranche
   // means the pass already ran for this bank this turn.
   if (existing.some((loan) => loan.lastProcessedTurn === turn)) {
-    return { cashReserves, totalLoans, interestCollected, writtenOff, shortfall };
+    return { cashReserves, totalLoans, interestCollected, feesCollected, writtenOff, shortfall };
   }
 
   const currentTotal = existing.reduce((sum, loan) => sum + Math.max(0, loan.outstanding ?? 0), 0);
@@ -1363,6 +1390,7 @@ async function serviceNpcBulkBook(
   // price still moves volume, it just moves it per band now instead of across
   // the whole book at once.
   const targets = bandOriginationTargets({
+    primeRatePercent: state.primeRatePercent,
     fundingCapacity: npcFundingCapacity,
     lendingRatePercent,
     profile: state.lendingProfile,
@@ -1409,9 +1437,12 @@ async function serviceNpcBulkBook(
     });
     // Principal changes only by what the payer can actually deliver. In
     // particular a winding-down household book cannot repay an empty pool.
-    cashReserves -= adjust;
-    creditedToPool += adjust;
-    poolAvailable += adjust;
+    const fee = adjust > 0 ? quoteLoanOrigination(adjust, currency).originationFee : 0;
+    const fundedCash = adjust - fee;
+    cashReserves -= fundedCash;
+    creditedToPool += fundedCash;
+    poolAvailable += fundedCash;
+    feesCollected += fee;
 
     const nextOutstandingBeforeYield = Math.max(0, current + adjust);
     if (nextOutstandingBeforeYield <= 0 && current <= 0) continue;
@@ -1486,7 +1517,14 @@ async function serviceNpcBulkBook(
     bookProjections.push({
       collection: "corporations",
       filter: { _id: oid(bankIdHex) },
-      update: { $inc: { "bankCharter.totalLoans": totalLoans - state.totalLoans } },
+      update: {
+        $inc: {
+          "bankCharter.totalLoans": totalLoans - state.totalLoans,
+          ...(feesCollected > 0
+            ? { "bankCharter.loanOriginationFeesLifetime": feesCollected }
+            : {}),
+        },
+      },
       note: "the cached loan total follows the household book",
     });
     // Principal and interest share one net cash transfer and one recorded
@@ -1525,7 +1563,12 @@ async function serviceNpcBulkBook(
         kind: "loan.paid",
         command: "bank.household.service",
         amount: interestFromPool,
-        meta: { tranches: work.length, interestPaid: interestFromPool, writtenOff },
+        meta: {
+          tranches: work.length,
+          interestPaid: interestFromPool,
+          originationFees: feesCollected,
+          writtenOff,
+        },
       },
     });
     if (settled.status === "partial" || settled.status === "rejected" || settled.error) {
@@ -1557,7 +1600,7 @@ async function serviceNpcBulkBook(
     });
   }
 
-  return { cashReserves, totalLoans, interestCollected, writtenOff, shortfall };
+  return { cashReserves, totalLoans, interestCollected, feesCollected, writtenOff, shortfall };
 }
 
 async function serviceDeadNpcBulkLoan(

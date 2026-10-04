@@ -219,6 +219,7 @@ export const setSectorStockpileSchema = z.object({
 // the CEO's price relative to market, -20%..+20%; null reverts to auto.
 export const setSectorPricingSchema = z.object({
   pricingPosture: z.number().min(-0.2).max(0.2).nullable(),
+  pricingMode: z.enum(["market", "costPlus"]).optional(),
 });
 
 export const setSectorWageLevelSchema = z.object({

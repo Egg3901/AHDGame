@@ -32,6 +32,7 @@ import { revenuePerCapacityUnitForStrategy } from "@/lib/constants/capacityEcono
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { buildPersonalBalanceInc, getHomeCurrency } from "@/lib/currency/characterFunds";
 import { sumBondPrincipalAnchor } from "@/lib/bonds/bondPrincipalSum";
+import { seedPlantLedger } from "@/lib/corporations/plantLedger";
 import {
   allocateShareholderPool,
   buildPrimeRateMap,
@@ -179,6 +180,7 @@ async function absorbSectorIntoNatCorp(
       ? mergeSectorPlantFields(readSectorPlantFields(existing), {
           ...readSectorPlantFields(sector),
           capitalStock: haircutStock,
+          ...seedPlantLedger(sector.sectorType, haircutStock),
           capacityBookAnchor: haircutBook,
         })
       : null;
@@ -229,6 +231,7 @@ async function absorbSectorIntoNatCorp(
           corporationId: destId,
           revenue: transferRevenue,
           ...(plantsEnabled ? { capitalStock: haircutStock } : {}),
+          ...(plantsEnabled ? seedPlantLedger(sector.sectorType, haircutStock) : {}),
           ...(plantsEnabled && haircutBook != null ? { capacityBookAnchor: haircutBook } : {}),
           absorbedAtTurn,
           nationalizedAtTurn: absorbedAtTurn,

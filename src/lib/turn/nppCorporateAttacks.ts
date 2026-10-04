@@ -60,6 +60,7 @@ import {
   capacityCaptureBookUpdates,
   resolveWorldYear,
 } from "@/lib/corporations/capacityCapture";
+import { plantCapacityDeltaPipeline, seedPlantLedger } from "@/lib/corporations/plantLedger";
 import { deriveCeoArchetype } from "./ceoArchetype";
 import { logWireEvent, wireHeadlineSectorAttack } from "@/lib/wireEvent";
 import { createNotification } from "@/lib/notifications";
@@ -343,15 +344,18 @@ export async function executeNppSectorAttack(
     : null;
 
   // Reduce the defender: capacity units under plants, revenue below it.
-  await db.collection<CorporateSector>("corporateSectors").updateOne(
-    { _id: targetSector._id },
-    plantsEnabled
-      ? {
-          $inc: { capitalStock: -(Math.round(unitsTaken * 100) / 100) },
-          $set: { updatedAt: now, ...(captureBook?.defenderSet ?? {}) },
-        }
-      : { $inc: { revenue: -captureInDefenderLocal }, $set: { updatedAt: now } }
-  );
+  await db
+    .collection<CorporateSector>("corporateSectors")
+    .updateOne(
+      { _id: targetSector._id },
+      plantsEnabled
+        ? plantCapacityDeltaPipeline(
+            targetSector.sectorType as CorporationType,
+            -(Math.round(unitsTaken * 100) / 100),
+            { updatedAt: now, ...(captureBook?.defenderSet ?? {}) }
+          )
+        : { $inc: { revenue: -captureInDefenderLocal }, $set: { updatedAt: now } }
+    );
 
   // Nameplate-invariant across a strategy difference — see the player route.
   const unitsForAttacker = plantsEnabled
@@ -368,10 +372,14 @@ export async function executeNppSectorAttack(
     await db.collection<CorporateSector>("corporateSectors").updateOne(
       { _id: existing._id },
       plantsEnabled
-        ? {
-            $inc: { capitalStock: capitalStockDelta },
-            $set: { updatedAt: now, capacityBookAnchor: captureBook?.attackerBookAnchor ?? 0 },
-          }
+        ? plantCapacityDeltaPipeline(
+            targetSector.sectorType as CorporationType,
+            capitalStockDelta,
+            {
+              updatedAt: now,
+              capacityBookAnchor: captureBook?.attackerBookAnchor ?? 0,
+            }
+          )
         : { $inc: { revenue: captureInAttackerLocal }, $set: { updatedAt: now } }
     );
   } else {
@@ -388,6 +396,7 @@ export async function executeNppSectorAttack(
       ...(plantsEnabled
         ? {
             capitalStock: capitalStockDelta,
+            ...seedPlantLedger(targetSector.sectorType as CorporationType, capitalStockDelta),
             capacityBookAnchor: captureBook?.attackerBookAnchor ?? 0,
             plantsStartTurn: currentTurn,
           }
@@ -406,13 +415,14 @@ export async function executeNppSectorAttack(
         await db.collection<CorporateSector>("corporateSectors").updateOne(
           { corporationId: attacker._id, stateId, sectorType: targetSector.sectorType },
           plantsEnabled
-            ? {
-                $inc: { capitalStock: capitalStockDelta },
-                $set: {
+            ? plantCapacityDeltaPipeline(
+                targetSector.sectorType as CorporationType,
+                capitalStockDelta,
+                {
                   updatedAt: now,
                   capacityBookAnchor: captureBook?.attackerBookAnchor ?? 0,
-                },
-              }
+                }
+              )
             : { $inc: { revenue: captureInAttackerLocal }, $set: { updatedAt: now } }
         );
       } else {

@@ -25,6 +25,15 @@ const midBuild = (over: Partial<SectorPlantFields> = {}): SectorPlantFields => (
 });
 
 describe("mergeSectorPlantFields", () => {
+  it("seeds canonical count from merged stock instead of adding sub-quantum counts", () => {
+    const merged = mergeSectorPlantFields(
+      { sectorType: "energy", capitalStock: 100, plantCount: 1, plantUnitRemainder: 0 },
+      { sectorType: "energy", capitalStock: 100, plantCount: 1, plantUnitRemainder: 0 }
+    );
+    expect(merged.capitalStock).toBe(200);
+    expect(merged.plantCount).toBe(1);
+    expect(merged.plantUnitRemainder).toBe(0);
+  });
   it("sums capacity and concatenates the queue", () => {
     const merged = mergeSectorPlantFields(
       midBuild(),
@@ -117,6 +126,61 @@ describe("mergeSectorPlantFields", () => {
 });
 
 describe("carveSectorPlantFields", () => {
+  it("requires a conserved facility split when the source has a sector type", () => {
+    expect(() => carveSectorPlantFields({ sectorType: "energy", capitalStock: 400 }, 0.5)).toThrow(
+      "A plant carve requires its conserved whole-facility count split"
+    );
+  });
+
+  it("allocates stock by whole facilities and conserves a sole small facility", () => {
+    const source = {
+      sectorType: "energy" as const,
+      capitalStock: 400,
+      plantCount: 1,
+      plantUnitRemainder: 0,
+      capacityBookAnchor: 40_000,
+    };
+    const carved = carveSectorPlantFields(source, 0.5, 1);
+    const kept = carveSectorPlantFields(source, 0.5, 0);
+    expect(carved.capitalStock).toBe(400);
+    expect(kept.capitalStock).toBe(0);
+    expect(carved.plantCount + kept.plantCount).toBe(1);
+    expect(carved.capacityBookAnchor + kept.capacityBookAnchor).toBe(40_000);
+  });
+
+  it("does not transfer a remainder without an owned facility or stock", () => {
+    const source = {
+      sectorType: "energy" as const,
+      capitalStock: 0,
+      plantCount: 0,
+      plantUnitRemainder: 200,
+    };
+    const carved = carveSectorPlantFields(source, 0.5, 0);
+    const kept = carveSectorPlantFields(source, 0.5, 0);
+    expect(carved.capitalStock + kept.capitalStock).toBe(0);
+    expect(carved.plantCount + kept.plantCount).toBe(0);
+    expect(carved.plantUnitRemainder + kept.plantUnitRemainder).toBe(0);
+  });
+
+  it("splits partial stock by whole-facility count and conserves its exact remainder", () => {
+    const source = {
+      sectorType: "energy" as const,
+      capitalStock: 1_150,
+      plantCount: 4,
+      plantUnitRemainder: 150,
+      capacityBookAnchor: 115_000,
+    };
+    const carved = carveSectorPlantFields(source, 0.25, 1);
+    const kept = carveSectorPlantFields(source, 0.75, 3);
+    expect(carved.capitalStock).toBe(287.5);
+    expect(kept.capitalStock).toBe(862.5);
+    expect(carved.capitalStock + kept.capitalStock).toBe(1_150);
+    expect(carved.plantCount).toBe(1);
+    expect(kept.plantCount).toBe(3);
+    expect(carved.plantUnitRemainder + kept.plantUnitRemainder).toBe(150);
+    expect(carved.capacityBookAnchor + kept.capacityBookAnchor).toBe(115_000);
+  });
+
   it("splits capacity and both legs of each build order", () => {
     const carved = carveSectorPlantFields(midBuild(), 0.25);
     expect(carved.capitalStock).toBe(125);

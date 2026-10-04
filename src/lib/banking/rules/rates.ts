@@ -5,6 +5,7 @@
  */
 
 import type { BankCharter } from "@/lib/db/types/bank";
+import type { RateCorridor } from "@/lib/banking/separationLaw";
 import { savingsApyPercent } from "@/lib/currency/savingsInterest";
 
 /** Floor on effective deposit rate (percent). Provisional - flagged for user review. */
@@ -12,6 +13,17 @@ export const MIN_DEPOSIT_RATE_PERCENT = 0.05;
 
 /** Floor on effective lending rate (percent). Provisional - flagged for user review. */
 export const MIN_LENDING_RATE_PERCENT = 0.1;
+
+/** New charters start halfway through the legal corridor rather than at its edge. */
+export function startingBankOffsets(corridors: {
+  deposit: RateCorridor;
+  lending: RateCorridor;
+}): Pick<BankCharter, "depositOffset" | "lendingOffset"> {
+  return {
+    depositOffset: (corridors.deposit.minOffset + corridors.deposit.maxOffset) / 2,
+    lendingOffset: (corridors.lending.minOffset + corridors.lending.maxOffset) / 2,
+  };
+}
 
 /**
  * Effective deposit and lending rates = prime + offsets, floored at the

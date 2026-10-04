@@ -275,6 +275,9 @@ export async function buildSectorCommoditySections(args: {
         soldFraction: number | null;
         clearingFactor: number | null;
         brandPostureNorm?: number | null;
+        costPlusEnabled?: boolean;
+        costPlusReady?: boolean;
+        pricingMode?: "market" | "costPlus";
       }
     | undefined;
   if (market.clearingEnabled) {
