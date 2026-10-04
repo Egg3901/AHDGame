@@ -1,6 +1,6 @@
 {
   "title": "Media regulation advertising availability diagnostic",
-  "method": "Runs the production media regulation rules against a measured prior-turn US advertising split and authored press metrics. This is a rule sensitivity report, not a world simulation or a 1991 seed target.",
+  "method": "Runs production media regulation rules against a prior-turn audience budget and current-turn settled delivery attribution. This is a rule sensitivity report, not a world simulation or a 1991 seed target.",
   "assumptions": {
     "priorDeliveredAdvertisingUnitsByOutlet": {
       "network-a": 80,
@@ -10,16 +10,18 @@
       "network-a": 80,
       "network-b": 20
     },
-    "missingHistoryBehavior": "ownership enforcement fails open for that state",
+    "missingHistoryBehavior": "audience access enforcement fails open for that state",
+    "audienceAccessLimitDefinition": "each owner's access limit is measured against prior delivered advertising; unserved audience remains unserved",
     "ownershipBillThresholdScope": "national US aggregate, with foreign delivery excluded",
-    "enactedOwnershipCapScope": "each US state audience market"
+    "enactedAudienceAccessLimitScope": "each US state audience market; no ownership divestiture is modeled",
+    "ownershipBillMeasurement": "current-turn sector sold units less all planned political units, plus each matching applied seller receipt once by stable movement id"
   },
-  "ownershipCases": [
+  "audienceLimitCases": [
     {
       "policyOptionIndex": 0,
       "networkAAvailability": 0.4375,
       "networkBAvailability": 1,
-      "networkAAvailableUnits": 35,
+      "networkAAccessLimitedUnitsAgainstPriorBudget": 35,
       "networkBAvailableUnits": 20,
       "filledAgainstStrongPoliticalDemand": {
         "rawProducedUnits": 100,
@@ -39,7 +41,7 @@
       "policyOptionIndex": 1,
       "networkAAvailability": 0.5625,
       "networkBAvailability": 1,
-      "networkAAvailableUnits": 45,
+      "networkAAccessLimitedUnitsAgainstPriorBudget": 45,
       "networkBAvailableUnits": 20,
       "filledAgainstStrongPoliticalDemand": {
         "rawProducedUnits": 100,
@@ -59,7 +61,7 @@
       "policyOptionIndex": 2,
       "networkAAvailability": 0.6875,
       "networkBAvailability": 1,
-      "networkAAvailableUnits": 55,
+      "networkAAccessLimitedUnitsAgainstPriorBudget": 55,
       "networkBAvailableUnits": 20,
       "filledAgainstStrongPoliticalDemand": {
         "rawProducedUnits": 100,
@@ -79,7 +81,7 @@
       "policyOptionIndex": 3,
       "networkAAvailability": 0.8125,
       "networkBAvailability": 1,
-      "networkAAvailableUnits": 65,
+      "networkAAccessLimitedUnitsAgainstPriorBudget": 65,
       "networkBAvailableUnits": 20,
       "filledAgainstStrongPoliticalDemand": {
         "rawProducedUnits": 100,
@@ -99,7 +101,7 @@
       "policyOptionIndex": 4,
       "networkAAvailability": 0.9375,
       "networkBAvailability": 1,
-      "networkAAvailableUnits": 75,
+      "networkAAccessLimitedUnitsAgainstPriorBudget": 75,
       "networkBAvailableUnits": 20,
       "filledAgainstStrongPoliticalDemand": {
         "rawProducedUnits": 100,
@@ -119,7 +121,7 @@
       "policyOptionIndex": 5,
       "networkAAvailability": 1,
       "networkBAvailability": 1,
-      "networkAAvailableUnits": 80,
+      "networkAAccessLimitedUnitsAgainstPriorBudget": 80,
       "networkBAvailableUnits": 20,
       "filledAgainstStrongPoliticalDemand": {
         "rawProducedUnits": 100,
@@ -139,7 +141,7 @@
       "policyOptionIndex": 6,
       "networkAAvailability": 1,
       "networkBAvailability": 1,
-      "networkAAvailableUnits": 80,
+      "networkAAccessLimitedUnitsAgainstPriorBudget": 80,
       "networkBAvailableUnits": 20,
       "filledAgainstStrongPoliticalDemand": {
         "rawProducedUnits": 100,
@@ -178,11 +180,11 @@
   ],
   "ownershipTriggerCases": [
     {
-      "label": "at threshold",
+      "label": "at national threshold",
       "billAvailable": false
     },
     {
-      "label": "above threshold",
+      "label": "above national threshold",
       "billAvailable": true
     },
     {
@@ -206,17 +208,38 @@
       "fairnessDoctrineInEffect": false
     }
   ],
+  "currentTurnPoliticalAttribution": {
+    "physicalSoldUnits": 80,
+    "plannedPoliticalUnits": 20,
+    "appliedSellerReceiptUnits": 10,
+    "unpaidPlannedUnits": 10,
+    "measuredReachUnits": 70,
+    "reachWhenNoSellerReceiptHasApplied": 60,
+    "staleSnapshotReach": null
+  },
+  "attributionReadBudget": {
+    "flagOffAdditionalQueries": 0,
+    "flagOnQueries": {
+      "sectorAndOwnerLoads": 2,
+      "currentTurnOrderPlans": 1,
+      "appliedSellerReceipts": "1 only when a current-turn settlement plan has sellers"
+    },
+    "sellerReceiptIndex": "bankMoneyMoves_politicalMedia_sellerReceiptTurn"
+  },
   "fresh1991RuleContext": {
     "currentYear": 1991,
     "representativePolicyOptionIndex": 3,
     "fairnessDoctrineInEffect": false,
     "ownershipBillAvailableAtMeasured80To20Share": true,
-    "ownershipAvailabilityAtRepresentativeOption": 0.8125
+    "audienceAvailabilityAtRepresentativeOption": 0.8125
   },
   "accounting": {
     "deliveryIsBoundedBeforeCommercialAndFundedPoliticalClearing": true,
     "noAdvertisingUnitsAreCreated": true,
+    "accessLimitUsesPriorAudienceBudgetNotPostLimitShare": true,
     "unmeasuredHistoryDoesNotInventConcentration": true,
+    "unpaidPoliticalPlansDoNotCountAsReach": true,
+    "staleDeliverySnapshotsFailClosed": true,
     "fundedPoliticalBuyerDebitEqualsSellerReceipt": true,
     "partialPoliticalFillRetainsUnfilledBudget": true
   }

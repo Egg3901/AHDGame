@@ -3,13 +3,12 @@ import { unstable_cache } from "next/cache";
 import { handleRouteError } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import type { LegislationType } from "@/lib/db/types";
-import type { GameConfig } from "@/lib/db/types/gameConfig";
 import { BILL_CATEGORIES, CATEGORY_TO_POLICY_DOMAINS } from "@shared/constants/legislation";
 import { LEGISLATION_TYPES_CACHE_TAG } from "@/lib/legislation/cacheTag";
 import { getEraContext } from "@/lib/era/context";
 import { isLegislationTypeActive, isNewThisEra } from "@/lib/era/legislationCatalog";
 import { attachPoliticalLegislationEstimates } from "@/lib/politicalLegislation/estimates";
-import { getMarketSystemMode, marketAtLeast } from "@/lib/market/featureFlag";
+import { marketAtLeast } from "@/lib/market/featureFlag";
 import { isMediaOwnershipBillAvailable } from "@/lib/mediaRegulation/rules";
 import { loadUSMediaOutletDelivery } from "@/lib/mediaRegulation/turnData";
 
@@ -121,7 +120,12 @@ export async function GET(request: Request) {
     // it would freeze one era's list across worlds. Null year (flag off) ⇒ no
     // change, byte-identical legacy.
     const db = await getDb();
-    const { year: eraYear, incomeBandIndexByCountry } = await getEraContext(db);
+    const {
+      year: eraYear,
+      currentTurn,
+      incomeBandIndexByCountry,
+      mediaRegulation,
+    } = await getEraContext(db);
     const gated =
       eraYear == null
         ? types
@@ -131,18 +135,16 @@ export async function GET(request: Request) {
     const usLawPicker = country == null || country === "us";
     let mediaOwnershipBillAvailable = true;
     if (usLawPicker && gated.some((type) => String(type._id) === "us_media_communications")) {
-      const mediaConfig = await db
-        .collection<GameConfig>("gameConfig")
-        .findOne(
-          { _id: "default" },
-          { projection: { mediaRegulationEnabled: 1, marketSystemMode: 1 } }
-        );
       const regulationEnabled =
-        mediaConfig?.mediaRegulationEnabled === true &&
-        marketAtLeast(await getMarketSystemMode(mediaConfig), "clearing");
+        mediaRegulation.enabled && marketAtLeast(mediaRegulation.marketSystemMode, "clearing");
       if (regulationEnabled) {
         mediaOwnershipBillAvailable = isMediaOwnershipBillAvailable(
-          await loadUSMediaOutletDelivery(db)
+          await loadUSMediaOutletDelivery(db, {
+            currentTurn,
+            currentYear: eraYear,
+            commandEconomyEnabled: mediaRegulation.commandEconomyEnabled,
+            includeSettledPolitical: true,
+          })
         );
       }
     }

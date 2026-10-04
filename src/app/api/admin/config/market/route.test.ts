@@ -21,6 +21,7 @@ describe("GET/PATCH /api/admin/config/market — extractionOutputScaleEnabled", 
     vi.clearAllMocks();
     db = createMockDb();
     db.collection("gameConfig");
+    db.collection("gameState");
 
     const { getDb } = await import("@/lib/mongodb");
     vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
@@ -97,6 +98,89 @@ describe("GET/PATCH /api/admin/config/market — extractionOutputScaleEnabled", 
       unknown
     >;
     expect(setArg).not.toHaveProperty("extractionOutputScaleEnabled");
+  });
+
+  it("mirrors media regulation gates into the existing game-state route snapshot", async () => {
+    db.collectionMocks.gameConfig!.findOne.mockResolvedValue({
+      _id: "default",
+      marketSystemMode: "plants",
+      commandEconomyEnabled: false,
+      mediaRegulationEnabled: false,
+    });
+
+    const { PATCH } = await import("./route");
+    const res = await PATCH(makePatchRequest({ mode: "clearing", mediaRegulationEnabled: true }));
+
+    expect(res.status).toBe(200);
+    expect(db.collectionMocks.gameState!.updateOne).toHaveBeenNthCalledWith(
+      1,
+      { _id: "current" },
+      {
+        $set: {
+          mediaRegulationSnapshot: {
+            enabled: false,
+            marketSystemMode: "clearing",
+            commandEconomyEnabled: false,
+          },
+        },
+      }
+    );
+    expect(db.collectionMocks.gameState!.updateOne).toHaveBeenNthCalledWith(
+      2,
+      { _id: "current" },
+      {
+        $set: {
+          mediaRegulationSnapshot: {
+            enabled: true,
+            marketSystemMode: "clearing",
+            commandEconomyEnabled: false,
+          },
+        },
+      }
+    );
+  });
+
+  it("fails regulation off when the synchronized activation snapshot write fails", async () => {
+    db.collectionMocks.gameConfig!.findOne.mockResolvedValue({
+      _id: "default",
+      marketSystemMode: "plants",
+      commandEconomyEnabled: false,
+      mediaRegulationEnabled: false,
+    });
+    db.collectionMocks.gameState!.updateOne
+      .mockImplementationOnce(async () => ({ acknowledged: true }) as never)
+      .mockRejectedValueOnce(new Error("snapshot write failed"))
+      .mockImplementationOnce(async () => ({ acknowledged: true }) as never);
+
+    const { PATCH } = await import("./route");
+    const res = await PATCH(makePatchRequest({ mode: "clearing", mediaRegulationEnabled: true }));
+
+    expect(res.status).toBeGreaterThanOrEqual(500);
+    expect(db.collectionMocks.gameConfig!.updateOne).toHaveBeenCalledTimes(2);
+    expect(db.collectionMocks.gameConfig!.updateOne).toHaveBeenLastCalledWith(
+      { _id: "default" },
+      { $set: { mediaRegulationEnabled: false } },
+      { upsert: true }
+    );
+    expect(db.collectionMocks.gameState!.updateOne).toHaveBeenLastCalledWith(
+      { _id: "current" },
+      { $set: { mediaRegulationSnapshot: expect.objectContaining({ enabled: false }) } }
+    );
+  });
+
+  it("refuses to enable media regulation below clearing", async () => {
+    db.collectionMocks.gameConfig!.findOne.mockResolvedValue({
+      _id: "default",
+      marketSystemMode: "plants",
+      mediaRegulationEnabled: false,
+    });
+
+    const { PATCH } = await import("./route");
+    const res = await PATCH(makePatchRequest({ mode: "ledger", mediaRegulationEnabled: true }));
+
+    expect(res.status).toBe(400);
+    expect(db.collectionMocks.gameConfig!.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.gameState!.updateOne).not.toHaveBeenCalled();
   });
 
   it("exposes the v2 product flag and keeps it false when absent", async () => {

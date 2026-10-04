@@ -14,7 +14,13 @@ describe("GET /api/game/legislation-types media ownership availability", () => {
 
   beforeEach(() => {
     db = createMockDb();
-    for (const collection of ["gameState", "gameConfig", "legislationTypes", "corporateSectors"]) {
+    for (const collection of [
+      "gameState",
+      "gameConfig",
+      "legislationTypes",
+      "corporateSectors",
+      "bankMoneyMoves",
+    ]) {
       db.collection(collection);
     }
     db.collectionMocks.gameState.findOne.mockResolvedValue(null);
@@ -34,9 +40,13 @@ describe("GET /api/game/legislation-types media ownership availability", () => {
   });
 
   it("keeps existing law choices and avoids market reads when disabled", async () => {
-    db.collectionMocks.gameConfig.findOne.mockResolvedValue({
-      mediaRegulationEnabled: false,
-      marketSystemMode: "clearing",
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      _id: "current",
+      mediaRegulationSnapshot: {
+        enabled: false,
+        marketSystemMode: "clearing",
+        commandEconomyEnabled: false,
+      },
     });
 
     const response = await GET(
@@ -46,12 +56,21 @@ describe("GET /api/game/legislation-types media ownership availability", () => {
 
     expect(types.map((type) => type._id)).toContain("us_media_communications");
     expect(db.collectionMocks.corporateSectors.find).not.toHaveBeenCalled();
+    expect(db.collectionMocks.gameConfig.findOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.bankMoneyMoves.find).not.toHaveBeenCalled();
+    expect(db.collectionMocks.gameState.findOne).toHaveBeenCalledOnce();
   });
 
   it("hides ownership legislation below measured concentration", async () => {
-    db.collectionMocks.gameConfig.findOne.mockResolvedValue({
-      mediaRegulationEnabled: true,
-      marketSystemMode: "clearing",
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      _id: "current",
+      currentTurn: 100,
+      currentYear: 1991,
+      mediaRegulationSnapshot: {
+        enabled: true,
+        marketSystemMode: "clearing",
+        commandEconomyEnabled: false,
+      },
     });
     db.collectionMocks.corporateSectors.find.mockReturnValue({ toArray: async () => [] } as never);
 

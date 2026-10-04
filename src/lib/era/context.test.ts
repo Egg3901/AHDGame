@@ -17,9 +17,15 @@ describe("getEraContext", () => {
     stubGameState({ _id: "current", currentYear: 2008, preset: "1991-default" });
     expect(await getEraContext(db as unknown as Db)).toEqual({
       year: null,
+      currentTurn: null,
       preset: "1991-default",
       startingYear: null,
       incomeBandIndexByCountry: null,
+      mediaRegulation: {
+        enabled: false,
+        marketSystemMode: "off",
+        commandEconomyEnabled: false,
+      },
     });
   });
 
@@ -29,8 +35,19 @@ describe("getEraContext", () => {
       currentYear: 2008,
       preset: "1991-default",
       eraSystemEnabled: true,
+      mediaRegulationSnapshot: {
+        enabled: true,
+        marketSystemMode: "clearing",
+        commandEconomyEnabled: true,
+      },
     });
-    expect((await getEraContext(db as unknown as Db)).year).toBe(2008);
+    const ctx = await getEraContext(db as unknown as Db);
+    expect(ctx.year).toBe(2008);
+    expect(ctx.mediaRegulation).toEqual({
+      enabled: true,
+      marketSystemMode: "clearing",
+      commandEconomyEnabled: true,
+    });
   });
 
   it("derives from turn + startingYear when currentYear is absent", async () => {
@@ -46,9 +63,15 @@ describe("getEraContext", () => {
   it("returns nulls when no gameState row exists", async () => {
     expect(await getEraContext(db as unknown as Db)).toEqual({
       year: null,
+      currentTurn: null,
       preset: null,
       startingYear: null,
       incomeBandIndexByCountry: null,
+      mediaRegulation: {
+        enabled: false,
+        marketSystemMode: "off",
+        commandEconomyEnabled: false,
+      },
     });
   });
 

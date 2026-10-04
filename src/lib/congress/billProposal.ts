@@ -21,7 +21,6 @@ import {
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import type { LegislationType, SubsidyProvision, EndSubsidyProvision } from "@/lib/db/types";
-import type { GameConfig } from "@/lib/db/types/gameConfig";
 import type {
   EmbargoProvision,
   EndEmbargoProvision,
@@ -49,7 +48,7 @@ import {
 import { getEraContext } from "@/lib/era/context";
 import { resolveTaxSliderProvisionFields } from "@/lib/politicalLegislation/taxSlider";
 import { isLegislationTypeActive } from "@/lib/era/legislationCatalog";
-import { getMarketSystemMode, marketAtLeast } from "@/lib/market/featureFlag";
+import { marketAtLeast } from "@/lib/market/featureFlag";
 import { isMediaOwnershipBillAvailable } from "@/lib/mediaRegulation/rules";
 import { loadUSMediaOutletDelivery } from "@/lib/mediaRegulation/turnData";
 
@@ -110,7 +109,7 @@ export async function validateBillProvisions(
 ): Promise<ValidatedProvisions> {
   const allowedDomains =
     CATEGORY_TO_POLICY_DOMAINS[category as keyof typeof CATEGORY_TO_POLICY_DOMAINS] ?? [];
-  const { year: eraYear } = await getEraContext(db);
+  const { year: eraYear, currentTurn, mediaRegulation } = await getEraContext(db);
   const validatedPolicyProvisions: ValidatedPolicyProvision[] = [];
   const validatedTariffProvisions: {
     type: "tariff";
@@ -547,18 +546,18 @@ export async function validateBillProvisions(
       };
     }
     if (sourceCountry === "US" && lt._id === "us_media_communications") {
-      const mediaConfig = await db
-        .collection<GameConfig>("gameConfig")
-        .findOne(
-          { _id: "default" },
-          { projection: { mediaRegulationEnabled: 1, marketSystemMode: 1 } }
-        );
       const mediaRegulationEnabled =
-        mediaConfig?.mediaRegulationEnabled === true &&
-        marketAtLeast(await getMarketSystemMode(mediaConfig), "clearing");
+        mediaRegulation.enabled && marketAtLeast(mediaRegulation.marketSystemMode, "clearing");
       if (
         mediaRegulationEnabled &&
-        !isMediaOwnershipBillAvailable(await loadUSMediaOutletDelivery(db))
+        !isMediaOwnershipBillAvailable(
+          await loadUSMediaOutletDelivery(db, {
+            currentTurn,
+            currentYear: eraYear,
+            commandEconomyEnabled: mediaRegulation.commandEconomyEnabled,
+            includeSettledPolitical: true,
+          })
+        )
       ) {
         return {
           ok: false,
