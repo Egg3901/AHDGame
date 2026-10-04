@@ -68,6 +68,7 @@ export async function GET(request: Request, { params }: RouteParams) {
             mediaEditorialEnabled: 1,
             marketSystemMode: 1,
             productLinesV2Enabled: 1,
+            mediaOperatingModelsEnabled: 1,
           },
         }
       ),
@@ -89,6 +90,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     if (!resolved.ok) return resolved.response;
     const { corporation } = resolved;
     const mediaEditorialEnabled = config?.mediaEditorialEnabled === true;
+    const mediaOperatingModelsEnabled = config?.mediaOperatingModelsEnabled === true;
     const modViewEnabled =
       !authUser?.isAdmin &&
       authUser?.isModerator === true &&
@@ -169,6 +171,8 @@ export async function GET(request: Request, { params }: RouteParams) {
     (detail.corporation as Record<string, unknown>).contractIssuanceEnabled =
       contractIssuanceEnabled;
     (detail.corporation as Record<string, unknown>).mediaEditorialEnabled = mediaEditorialEnabled;
+    (detail.corporation as Record<string, unknown>).mediaOperatingModelsEnabled =
+      mediaOperatingModelsEnabled;
     if (mediaEditorialEnabled && hasMediaSector) {
       (detail.corporation as Record<string, unknown>).editorialStance =
         corporation.editorialStance ?? { economic: 0, social: 0 };
@@ -221,6 +225,7 @@ export async function GET(request: Request, { params }: RouteParams) {
           supplyAgreementsEnabled,
           contractIssuanceEnabled,
           mediaEditorialEnabled,
+          mediaOperatingModelsEnabled,
           ...(mediaEditorialEnabled && hasMediaSector
             ? { editorialStance: corporation.editorialStance ?? { economic: 0, social: 0 } }
             : {}),

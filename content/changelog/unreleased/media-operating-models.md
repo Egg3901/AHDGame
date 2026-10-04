@@ -1,10 +1,10 @@
 ---
 date: 2026-10-04
-title: Add media operating model catalog
+title: Add gated media operating models
 summary: >-
-  Adds a pure catalog for eight media and entertainment business models, with
-  era and current technology-lane references. It establishes a base-value
-  preserving output-rate conversion without changing existing sector behavior.
+  Adds eight gated media and entertainment business models with era and tech
+  unlocks, value-preserving output mixes, existing physical input baskets, and
+  paid-only political audience receipts.
 tags: [media, entertainment, economy]
 badges: [patch]
 areas: [backend]
@@ -12,6 +12,7 @@ areas: [backend]
 
 ## What changed
 
-- Added catalog metadata for newspaper, radio, broadcast television, cable television, film, music, publishing, and streaming models.
-- Added a pure conversion rule that keeps legacy base-value output budgets while allowing model recipe unit yield to change.
-- No model selection or gameplay reads are enabled in this foundation checkpoint.
+- Added gated selection for newspaper, radio, broadcast television, cable television, film, music, publishing, and streaming models.
+- Model output mixes preserve the existing nominal output value budget. Input rates use existing strategy baskets and continue through the ordinary production and physical-cost rules.
+- Model changes require the existing technology unlock and paid retool path. Streaming remains unavailable before its era and technology node.
+- Active persisted model IDs continue to resolve in turn, commodity-ledger, and detail reads while selection is disabled. Political audience reach includes only completed seller allocation receipts.

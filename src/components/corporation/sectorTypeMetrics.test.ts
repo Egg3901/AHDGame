@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CORPORATION_TYPES } from "@/lib/constants/corporations";
-import { SECTOR_STRATEGIES } from "@/lib/constants/sectorStrategies";
+import { getSectorStrategies, SECTOR_STRATEGIES } from "@/lib/constants/sectorStrategies";
 import { proposedSectorActions } from "@/lib/constants/sectorTypeDossier";
 import type { SectorDetail } from "./CorporationPageTypes";
 import {
@@ -125,6 +125,15 @@ describe("typeOutputMix", () => {
 });
 
 describe("resolveSectorStrategy", () => {
+  it("resolves a persisted virtual model while the new selector is disabled", () => {
+    const active = sector({ sectorType: "media", strategyId: "newspaper" });
+
+    expect(
+      getSectorStrategies("media", false).some((strategy) => strategy.id === "newspaper")
+    ).toBe(false);
+    expect(resolveSectorStrategy(active)?.id).toBe("newspaper");
+  });
+
   it("resolves a stored id the type no longer has the way the engine does", () => {
     const stale = sector({ sectorType: "manufacturing", strategyId: "a_removed_method" });
     // getStrategy falls back to the type's first strategy; the panel and this

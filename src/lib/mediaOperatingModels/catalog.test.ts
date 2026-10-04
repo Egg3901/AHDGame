@@ -14,24 +14,29 @@ describe("media operating model catalog", () => {
     );
   });
 
-  it("keeps streaming outside the 1953 opening world and on the existing media tech lane", () => {
+  it("keeps streaming outside the 1953 opening world and on the current tech lanes", () => {
     const streaming = getMediaOperatingModel("streaming_platform");
     expect(streaming?.availableFromYear).toBeGreaterThan(1953);
-    expect(streaming?.technology).toEqual({
-      sectorType: "media",
-      decade: "2009",
-      nodeName: "Streaming Platforms",
+    expect(streaming?.technologies).toEqual({
+      media: { decade: "2009", nodeName: "Streaming Platforms" },
+      entertainment: { decade: "2009", nodeName: "Streaming Distribution" },
     });
   });
 
   it("points every paid technology prerequisite at a node in its existing sector lane", () => {
     for (const model of MEDIA_OPERATING_MODELS) {
-      if (!model.technology) continue;
-      const nodeExists = TECH_TREE[model.technology.sectorType].some(
-        (node) =>
-          node.decadeId === model.technology?.decade && node.name === model.technology?.nodeName
-      );
-      expect(nodeExists, model.id).toBe(true);
+      for (const [sectorType, technology] of Object.entries(model.technologies)) {
+        const node = TECH_TREE[sectorType as "media" | "entertainment"].find(
+          (candidate) =>
+            candidate.decadeId === technology.decade && candidate.name === technology.nodeName
+        );
+        expect(
+          node?.effects.some(
+            (effect) => effect.kind === "unlockStrategy" && effect.strategyId === model.id
+          ),
+          `${model.id} on ${sectorType}`
+        ).toBe(true);
+      }
     }
   });
 

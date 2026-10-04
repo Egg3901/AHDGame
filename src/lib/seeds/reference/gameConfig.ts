@@ -123,6 +123,7 @@ export const gameConfig: GameConfig = {
   // Editorial stance reads state political leans and changes media ad availability.
   // It stays dark on fresh worlds until its rollout is explicitly approved.
   mediaEditorialEnabled: false,
+  mediaOperatingModelsEnabled: false,
 
   // Sovereignty transitions (decolonization). Safe as a default because the
   // phase carries its own era ceiling — a modern-preset world is a no-op even

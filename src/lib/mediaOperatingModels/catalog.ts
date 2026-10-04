@@ -24,22 +24,23 @@ export interface MediaOperatingModelDefinition {
   sectorTypes: readonly MediaOperatingModelSector[];
   availableFromYear: number;
   outputProducts: readonly ("advertising" | "entertainment_services")[];
-  technology?: {
-    sectorType: MediaOperatingModelSector;
-    decade: string;
-    nodeName: string;
-  };
+  /** Existing input basket charged through ordinary sector physical costs. */
+  recipes: Partial<
+    Record<MediaOperatingModelSector, { inputStrategyId: string; outputStrategyId: string }>
+  >;
+  technologies: Partial<Record<MediaOperatingModelSector, { decade: string; nodeName: string }>>;
 }
 
 /** Catalog entries only describe models; they do not grant or unlock them. */
-export const MEDIA_OPERATING_MODELS = [
+export const MEDIA_OPERATING_MODELS: readonly MediaOperatingModelDefinition[] = [
   {
     id: "newspaper",
     name: "Newspaper",
     sectorTypes: ["media"],
     availableFromYear: 1900,
     outputProducts: ["advertising"],
-    technology: { sectorType: "media", decade: "1940", nodeName: "Wartime Press Partnerships" },
+    recipes: { media: { inputStrategyId: "standard", outputStrategyId: "standard" } },
+    technologies: { media: { decade: "1940", nodeName: "Wartime Press Partnerships" } },
   },
   {
     id: "radio_network",
@@ -47,7 +48,10 @@ export const MEDIA_OPERATING_MODELS = [
     sectorTypes: ["media"],
     availableFromYear: 1920,
     outputProducts: ["advertising"],
-    technology: { sectorType: "media", decade: "1940", nodeName: "Radio Network Dominance" },
+    recipes: {
+      media: { inputStrategyId: "legacy_broadcast", outputStrategyId: "legacy_broadcast" },
+    },
+    technologies: { media: { decade: "1940", nodeName: "Radio Network Dominance" } },
   },
   {
     id: "broadcast_tv",
@@ -55,7 +59,10 @@ export const MEDIA_OPERATING_MODELS = [
     sectorTypes: ["media"],
     availableFromYear: 1950,
     outputProducts: ["advertising"],
-    technology: { sectorType: "media", decade: "1950", nodeName: "Television Broadcasting" },
+    recipes: {
+      media: { inputStrategyId: "legacy_broadcast", outputStrategyId: "legacy_broadcast" },
+    },
+    technologies: { media: { decade: "1950", nodeName: "Television Broadcasting" } },
   },
   {
     id: "cable_tv",
@@ -63,7 +70,10 @@ export const MEDIA_OPERATING_MODELS = [
     sectorTypes: ["media"],
     availableFromYear: 1980,
     outputProducts: ["advertising", "entertainment_services"],
-    technology: { sectorType: "media", decade: "1989", nodeName: "Cable Syndication" },
+    recipes: {
+      media: { inputStrategyId: "streaming_media", outputStrategyId: "streaming_media" },
+    },
+    technologies: { media: { decade: "1989", nodeName: "Cable Syndication" } },
   },
   {
     id: "film_studio",
@@ -71,11 +81,10 @@ export const MEDIA_OPERATING_MODELS = [
     sectorTypes: ["entertainment"],
     availableFromYear: 1910,
     outputProducts: ["entertainment_services"],
-    technology: {
-      sectorType: "entertainment",
-      decade: "1940",
-      nodeName: "Hollywood Studio System",
+    recipes: {
+      entertainment: { inputStrategyId: "standard", outputStrategyId: "standard" },
     },
+    technologies: { entertainment: { decade: "1940", nodeName: "Hollywood Studio System" } },
   },
   {
     id: "music_label",
@@ -83,7 +92,10 @@ export const MEDIA_OPERATING_MODELS = [
     sectorTypes: ["entertainment"],
     availableFromYear: 1950,
     outputProducts: ["entertainment_services"],
-    technology: { sectorType: "entertainment", decade: "1950", nodeName: "Record Labels" },
+    recipes: {
+      entertainment: { inputStrategyId: "standard", outputStrategyId: "standard" },
+    },
+    technologies: { entertainment: { decade: "1950", nodeName: "Record Labels" } },
   },
   {
     id: "publishing_house",
@@ -91,7 +103,10 @@ export const MEDIA_OPERATING_MODELS = [
     sectorTypes: ["media"],
     availableFromYear: 1900,
     outputProducts: ["advertising", "entertainment_services"],
-    technology: { sectorType: "media", decade: "1950", nodeName: "Magazine Publishing Scale" },
+    recipes: {
+      media: { inputStrategyId: "standard", outputStrategyId: "streaming_media" },
+    },
+    technologies: { media: { decade: "1950", nodeName: "Magazine Publishing Scale" } },
   },
   {
     id: "streaming_platform",
@@ -99,9 +114,16 @@ export const MEDIA_OPERATING_MODELS = [
     sectorTypes: ["media", "entertainment"],
     availableFromYear: 2005,
     outputProducts: ["advertising", "entertainment_services"],
-    technology: { sectorType: "media", decade: "2009", nodeName: "Streaming Platforms" },
+    recipes: {
+      media: { inputStrategyId: "streaming_media", outputStrategyId: "streaming_media" },
+      entertainment: { inputStrategyId: "streaming", outputStrategyId: "streaming" },
+    },
+    technologies: {
+      media: { decade: "2009", nodeName: "Streaming Platforms" },
+      entertainment: { decade: "2009", nodeName: "Streaming Distribution" },
+    },
   },
-] as const satisfies readonly MediaOperatingModelDefinition[];
+];
 
 export function getMediaOperatingModel(modelId: string): MediaOperatingModelDefinition | undefined {
   return MEDIA_OPERATING_MODELS.find((model) => model.id === modelId);

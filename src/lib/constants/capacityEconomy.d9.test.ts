@@ -7,6 +7,7 @@ import {
   capacityRescaleRatio,
   rescaleBuildQueueForStrategyChange,
   rescaleCapacityForStrategyChange,
+  defaultSupplyRates,
   revenuePerCapacityUnit,
   revenuePerCapacityUnitForStrategy,
   techOutputUnitsMultiplier,
@@ -33,6 +34,15 @@ function mixPriceOf(sectorType: CorporationType, strategyId: string): number {
 }
 
 describe("D9 — RPU per strategy", () => {
+  it("keeps the 1953 baseline media and entertainment recipes on standard", () => {
+    expect(defaultSupplyRates("media")).toEqual(
+      SECTOR_STRATEGIES.media.find((strategy) => strategy.id === "standard")?.supply
+    );
+    expect(defaultSupplyRates("entertainment")).toEqual(
+      SECTOR_STRATEGIES.entertainment.find((strategy) => strategy.id === "standard")?.supply
+    );
+  });
+
   it("agrees with the engine's own mixPrice (revenue ÷ impliedOutputUnits)", () => {
     for (const sectorType of ["extraction", "manufacturing", "energy"] as CorporationType[]) {
       for (const strategy of SECTOR_STRATEGIES[sectorType] ?? []) {
@@ -90,6 +100,35 @@ describe("D9 — rescaleCapacityForStrategyChange", () => {
     const nameplateAfter = stockAfter * mixPriceOf(type, to);
     expect(nameplateAfter).toBeCloseTo(nameplateBefore, 6);
   });
+
+  it.each([
+    ["media", "standard", "cable_tv"],
+    ["media", "standard", "publishing_house"],
+    ["entertainment", "standard", "streaming_platform"],
+  ] as Array<[CorporationType, string, string]>)(
+    "keeps mixed-output model capacity and paid queue value stable for %s %s -> %s",
+    (type, from, to) => {
+      const stockBefore = 4321;
+      const ratio = capacityRescaleRatio(type, from, to);
+      const nameplateBefore = stockBefore * mixPriceOf(type, from);
+      const stockAfter = rescaleCapacityForStrategyChange(stockBefore, type, from, to);
+      const nameplateAfter = stockAfter * mixPriceOf(type, to);
+      const queue = [{ unitsOrdered: 250, costPaidAnchor: 17_500, strategyId: from }];
+      const rescaledQueue = rescaleBuildQueueForStrategyChange(queue, ratio);
+
+      expect(Object.keys(getStrategy(type, to).supply).length).toBeGreaterThan(1);
+      expect(ratio).not.toBe(1);
+      expect(nameplateAfter).toBeCloseTo(nameplateBefore, 6);
+      expect(rescaledQueue[0].unitsOrdered * mixPriceOf(type, to)).toBeCloseTo(
+        queue[0].unitsOrdered * mixPriceOf(type, from),
+        6
+      );
+      expect(rescaledQueue[0]).toMatchObject({
+        costPaidAnchor: queue[0].costPaidAnchor,
+        strategyId: from,
+      });
+    }
+  );
 
   it("is exactly reversible — retooling and changing your mind mints nothing", () => {
     const stock = 12_345.678;
