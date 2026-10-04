@@ -1,3 +1,7 @@
+/**
+ * Paid media titles share only their sector's reachable, cleared output.
+ * `attributeMediaProductSales` removes unpaid political fills and records delivered title units and value.
+ */
 import type { Db } from "mongodb";
 import type { CommodityType } from "@/lib/constants/commodities";
 import type { MediaProductProject } from "./mediaProduct";

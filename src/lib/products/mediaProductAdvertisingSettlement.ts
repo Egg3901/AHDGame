@@ -1,3 +1,7 @@
+/**
+ * Title advertising moves the buyer's frozen native cash to the quoted outlets.
+ * `settleMediaProductAdvertisingObligations` guards denominations and publishes only funded receipts.
+ */
 import { ObjectId, type Db } from "mongodb";
 import type { Corporation, MediaProductAdvertisingObligationV1 } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";

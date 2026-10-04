@@ -1,3 +1,7 @@
+/**
+ * Funded title advertising splits one paid anchor budget across buyer and sellers.
+ * `quoteFundedProductAdvertising` freezes each native amount, exchange rate, and account denomination.
+ */
 import type { CurrencyCode } from "@/lib/constants/currencies";
 
 export interface ProductAdvertisingDenominationWitness {

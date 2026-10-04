@@ -3,7 +3,8 @@ date: 2026-10-04
 title: Paid media product slates
 summary: >-
   Media corporations can fund named titles through paid research, then apply
-  bounded quality and audience effects to existing output.
+  bounded quality and audience effects to existing output. Title sales use the
+  exact cleared delivery, and advertising payments retain their original currencies.
 tags: [media, products]
 # How big this change is, which sets how it is grouped in the release post.
 # One of: major | minor | patch | hotfix
