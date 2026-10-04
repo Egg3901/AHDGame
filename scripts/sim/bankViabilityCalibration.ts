@@ -10,7 +10,7 @@
 
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { calculateBondMarketPrice } from "@/lib/constants/bonds";
-import { BOND_MATURITY_OPTIONS, BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
+import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import { effectiveBankRatesFromPrime } from "@/lib/banking/rules/rates";
 import { computeNpcDepositShare } from "@/lib/banking/rules/deposits";
 import { npcFlowDelta, fundedNpcFlowDelta, perTurnInterest } from "@/lib/banking/rules/loans";
@@ -18,6 +18,7 @@ import {
   bandOriginationTargets,
   getCreditBand,
   stressLossFraction,
+  STRESS_LOSS_MULTIPLIER,
   type CreditBandId,
 } from "@/lib/banking/rules/creditBands";
 import { computeInsurancePremium } from "@/lib/banking/rules/insurance";
@@ -66,19 +67,21 @@ type Scenario = {
   openingPoolCash?: number;
   /** Experimental balance-based service charge for fee sensitivity only. */
   serviceFeeAnnualBps?: number;
-  recessionShock?: { turn: number; primeIncreasePp: number };
+  recessionShock?: {
+    turn: number;
+    primeIncreasePp: number;
+    defaultRateMultiplier?: number;
+    applyStressLoss?: boolean;
+  };
 };
 
 const RESERVE_RATIO = 0.2;
 const TURNS = 480;
 
-const us1991Budget = (() => {
-  const budget = getInitialNationalBudgetsForPreset("1991-default").find(
-    (entry) => entry.countryId === "US"
-  );
-  if (!budget) throw new Error("The 1991 US national budget seed is missing");
-  return budget;
-})();
+const us1991Budget = getInitialNationalBudgetsForPreset("1991-default").find(
+  (budget) => budget.countryId === "US"
+);
+if (!us1991Budget) throw new Error("The 1991 US national budget seed is missing");
 const us1991ExternalBroadMoney = seedExternalBroadMoney({
   storedGdp: us1991Budget.gdp,
   anchorPerGdpUnit: getGdpAnchorRate("US", "1991-default"),
@@ -102,8 +105,7 @@ const us1991ShortIssueFace =
 const openingSeedTranches = Object.entries(SOVEREIGN_RECONCILE_DISTRIBUTION)
   .filter((entry): entry is [string, number] => Number.isFinite(entry[1]) && entry[1] > 0)
   .map(([maturity, fraction]) => {
-    const maturityTurns = BOND_MATURITY_OPTIONS.find((option) => option === Number(maturity));
-    if (maturityTurns === undefined) throw new Error(`Unsupported seed bond maturity: ${maturity}`);
+    const maturityTurns = Number(maturity);
     const units = Math.floor((us1991Budget.debt.principal * fraction) / BOND_UNIT_FACE_VALUE);
     return {
       maturityTurns,
@@ -124,6 +126,12 @@ type SimBond = {
   totalUnits: number;
   floatUnits: number;
   heldUnits: number;
+};
+
+type PendingCouponClaim = {
+  bondId: string;
+  bankLocal: number;
+  publicFloatLocal: number;
 };
 
 function simulate(scenario: Scenario) {
@@ -155,10 +163,12 @@ function simulate(scenario: Scenario) {
   let sovereignPrincipal = us1991Budget.debt.principal;
   let annualBudgetInterest = us1991Budget.spending.debtInterest;
   let bankCouponClaimsDueTotal = 0;
+  let publicFloatCouponClaimsDueTotal = 0;
   let bankMaturityPrincipalDueTotal = 0;
   let paidMaturityPrincipal = 0;
   let billCouponIncomeThisTurn = 0;
-  const pendingBankCoupons: number[] = [];
+  const pendingCouponClaims: PendingCouponClaim[] = [];
+  let paidPublicFloatCoupons = 0;
   const pendingBankMaturities: number[] = [];
   const pendingPoolMaturities: number[] = [];
   let poolMaturityPrincipalDueTotal = 0;
@@ -167,6 +177,7 @@ function simulate(scenario: Scenario) {
   let poolSaleCashPaid = 0;
   let forcedSaleUnits = 0;
   let lastNetIncome = 0;
+  let realizedRecessionWriteoff = 0;
   let turnTwelveSnapshot: Record<string, number> = {};
 
   for (let turn = 0; turn < scenario.turns; turn += 1) {
@@ -177,10 +188,31 @@ function simulate(scenario: Scenario) {
     // TreasuryTurn runs before bank actions and BondTurn. The signed fiscal
     // position remains a separate analytical track. Funded claims draw only
     // spendable cash credited by actual pool-funded issuance.
-    const openingBankCouponDue = sovereignLots.reduce((sum, bond) => {
-      if (bond.issuedTurn >= turn || bond.maturityTurn < turn || bond.heldUnits <= 0) return sum;
-      return sum + perTurnInterest(bond.heldUnits * BOND_UNIT_FACE_VALUE, bond.couponRate, "USD");
-    }, 0);
+    const dueCouponClaims = sovereignLots
+      .filter(
+        (bond) =>
+          bond.issuedTurn < turn &&
+          bond.maturityTurn >= turn &&
+          bond.heldUnits + bond.floatUnits > 0
+      )
+      .sort((left, right) => left.bondId.localeCompare(right.bondId))
+      .map((bond) => ({
+        bondId: bond.bondId,
+        bankLocal: perTurnInterest(bond.heldUnits * BOND_UNIT_FACE_VALUE, bond.couponRate, "USD"),
+        publicFloatLocal: perTurnInterest(
+          bond.floatUnits * BOND_UNIT_FACE_VALUE,
+          bond.couponRate,
+          "USD"
+        ),
+      }))
+      .filter((claim) => claim.bankLocal + claim.publicFloatLocal > 0);
+    pendingCouponClaims.push(...dueCouponClaims);
+    const openingBankCouponDue = dueCouponClaims.reduce((sum, claim) => sum + claim.bankLocal, 0);
+    bankCouponClaimsDueTotal += openingBankCouponDue;
+    publicFloatCouponClaimsDueTotal += dueCouponClaims.reduce(
+      (sum, claim) => sum + claim.publicFloatLocal,
+      0
+    );
     const debtRate = sovereignDebtTerms(sovereignPrincipal, {
       gdp: us1991Budget.gdp,
       gdpSmoothed: us1991Budget.gdpSmoothed,
@@ -193,19 +225,19 @@ function simulate(scenario: Scenario) {
     const nonBankFiscalCashDelta =
       us1991AnnualPrimaryBalance / TURNS_PER_YEAR - (debtService - bankCouponReserve);
     treasuryPosition = Math.round(treasuryPosition + nonBankFiscalCashDelta);
-    if (openingBankCouponDue > 0) {
-      pendingBankCoupons.push(openingBankCouponDue);
-      bankCouponClaimsDueTotal += openingBankCouponDue;
-    }
-
-    // A bank coupon becomes cash income only after the funded cash debit can
-    // fund the whole frozen claim. Failed claims remain due, not income.
-    while (pendingBankCoupons.length > 0 && treasuryCash >= pendingBankCoupons[0]!) {
-      const paid = pendingBankCoupons.shift()!;
-      treasuryCash -= paid;
-      cash += paid;
-      couponsReceived += paid;
-      billCouponIncomeThisTurn += paid;
+    // Public float and bank coupon legs share one funded issuer cash debit per
+    // bond claim. Failed claims remain due without paying either recipient.
+    while (pendingCouponClaims.length > 0) {
+      const claim = pendingCouponClaims[0]!;
+      const total = claim.bankLocal + claim.publicFloatLocal;
+      if (treasuryCash < total) break;
+      pendingCouponClaims.shift();
+      treasuryCash -= total;
+      cash += claim.bankLocal;
+      poolCash += claim.publicFloatLocal;
+      couponsReceived += claim.bankLocal;
+      paidPublicFloatCoupons += claim.publicFloatLocal;
+      billCouponIncomeThisTurn += claim.bankLocal;
     }
     while (pendingBankMaturities.length > 0 && treasuryCash >= pendingBankMaturities[0]!) {
       const paid = pendingBankMaturities.shift()!;
@@ -292,13 +324,30 @@ function simulate(scenario: Scenario) {
       const interest = perTurnInterest(nextOutstanding, rate, "USD");
       const defaults = perTurnInterest(
         nextOutstanding,
-        getCreditBand(target.band).defaultRatePercent,
+        getCreditBand(target.band).defaultRatePercent *
+          (scenario.recessionShock && turn >= scenario.recessionShock.turn
+            ? (scenario.recessionShock.defaultRateMultiplier ?? 1)
+            : 1),
         "USD"
       );
       loanInterest += interest;
       defaultLoss += defaults;
       cash += interest;
       tranches.set(target.band, { outstanding: Math.max(0, nextOutstanding - defaults), rate });
+    }
+    if (scenario.recessionShock?.applyStressLoss && turn === scenario.recessionShock.turn) {
+      const lossFraction = stressLossFraction(
+        [...tranches.entries()].map(([creditBand, tranche]) => ({
+          creditBand,
+          outstanding: tranche.outstanding,
+        }))
+      );
+      for (const [creditBand, tranche] of tranches) {
+        const loss = tranche.outstanding * lossFraction;
+        realizedRecessionWriteoff += loss;
+        tranches.set(creditBand, { ...tranche, outstanding: tranche.outstanding - loss });
+      }
+      defaultLoss += realizedRecessionWriteoff;
     }
     feeIncome += feesThisTurn;
     if (scenario.treasuryAutoSweep) {
@@ -386,19 +435,6 @@ function simulate(scenario: Scenario) {
       const swept = Math.min(poolCash, cashMoves.sweep);
       poolCash -= swept;
       poolCashSweep += swept;
-    }
-
-    // The pool receives its existing public-float coupon flow, but
-    // bank-holder coupons above require a funded treasury claim.
-    for (const bond of sovereignLots) {
-      if (bond.issuedTurn < turn && bond.maturityTurn >= turn) {
-        const poolCoupon = perTurnInterest(
-          bond.floatUnits * BOND_UNIT_FACE_VALUE,
-          bond.couponRate,
-          "USD"
-        );
-        poolCash += poolCoupon;
-      }
     }
 
     if (turn > 0 && turn % SOVEREIGN_ISSUANCE_INTERVAL_TURNS === 0) {
@@ -507,7 +543,12 @@ function simulate(scenario: Scenario) {
         fundedTreasuryCash: Math.round(treasuryCash),
         bankCouponsPaid: Math.round(couponsReceived),
         bankCouponsDue: Math.round(bankCouponClaimsDueTotal),
-        unpaidBankCoupons: Math.round(pendingBankCoupons.reduce((sum, amount) => sum + amount, 0)),
+        unpaidBankCoupons: Math.round(
+          pendingCouponClaims.reduce((sum, claim) => sum + claim.bankLocal, 0)
+        ),
+        unpaidPublicFloatCoupons: Math.round(
+          pendingCouponClaims.reduce((sum, claim) => sum + claim.publicFloatLocal, 0)
+        ),
       };
     }
   }
@@ -575,6 +616,7 @@ function simulate(scenario: Scenario) {
     cumulativeFees: Math.round(feeIncome),
     cumulativeServiceFees: Math.round(serviceFeeIncome),
     cumulativePremiums: Math.round(premiumExpense),
+    realizedRecessionWriteoff: Math.round(realizedRecessionWriteoff),
     outstandingPoolAndBankBillUnits: sovereignLots.reduce(
       (sum, bond) => sum + bond.floatUnits + bond.heldUnits,
       0
@@ -591,7 +633,14 @@ function simulate(scenario: Scenario) {
     heldFundedBillUnits: sovereignLots.reduce((sum, bond) => sum + bond.heldUnits, 0),
     fundedBillCouponCash: Math.round(couponsReceived),
     bankCouponClaimsDueTotal: Math.round(bankCouponClaimsDueTotal),
-    unpaidBankCouponClaims: Math.round(pendingBankCoupons.reduce((sum, amount) => sum + amount, 0)),
+    unpaidBankCouponClaims: Math.round(
+      pendingCouponClaims.reduce((sum, claim) => sum + claim.bankLocal, 0)
+    ),
+    publicFloatCouponClaimsDueTotal: Math.round(publicFloatCouponClaimsDueTotal),
+    paidPublicFloatCoupons: Math.round(paidPublicFloatCoupons),
+    unpaidPublicFloatCouponClaims: Math.round(
+      pendingCouponClaims.reduce((sum, claim) => sum + claim.publicFloatLocal, 0)
+    ),
     bankMaturityPrincipalDueTotal: Math.round(bankMaturityPrincipalDueTotal),
     unpaidBankMaturityPrincipal: Math.round(unpaidMaturityClaims),
     endingSignedFiscalPosition: Math.round(treasuryPosition),
@@ -800,18 +849,28 @@ const scenarios: Scenario[] = [
     depositOffset: midpointRate - neutralPrime,
     lendingOffset: lendingMidpointOffset,
     turns: TURNS,
-    recessionShock: { turn: 240, primeIncreasePp: 5 },
+    recessionShock: {
+      turn: 240,
+      primeIncreasePp: 5,
+      defaultRateMultiplier: STRESS_LOSS_MULTIPLIER,
+      applyStressLoss: true,
+    },
     treasuryAutoSweep: true,
   },
   {
-    name: "first-year-aggressive-five-point-prime-shock-at-turn-24",
+    name: "first-year-aggressive-five-point-prime-and-five-times-defaults-at-turn-12",
     profile: "aggressive",
     prime: neutralPrime,
     inflation,
     depositOffset: midpointRate - neutralPrime,
     lendingOffset: lendingMidpointOffset,
     turns: TURNS_PER_YEAR,
-    recessionShock: { turn: TURNS_PER_YEAR / 2, primeIncreasePp: 5 },
+    recessionShock: {
+      turn: TURNS_PER_YEAR / 4,
+      primeIncreasePp: 5,
+      defaultRateMultiplier: STRESS_LOSS_MULTIPLIER,
+      applyStressLoss: true,
+    },
     treasuryAutoSweep: true,
   },
   {
@@ -862,8 +921,7 @@ const scenarios: Scenario[] = [
 ];
 
 for (const scenario of scenarios) {
-  const { name, ...inputs } = scenario;
-  console.log(JSON.stringify({ name, ...inputs, ...simulate(scenario) }));
+  console.log(JSON.stringify({ name: scenario.name, ...scenario, ...simulate(scenario) }));
 }
 console.log(
   JSON.stringify({
