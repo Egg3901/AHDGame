@@ -84,8 +84,20 @@ export function quoteConstructionFinance(
     return { allowed: false, error: "Loan quote is unavailable" };
   const transition: BankingTransition = {
     ...decision.transition,
-    legs: decision.transition.legs.map((leg) =>
-      leg.kind === "credit" && leg.collection === "corporations" && leg.path === "liquidCapital"
+    legs: decision.transition.legs.map((leg) => {
+      if (
+        leg.kind === "debit" &&
+        leg.collection === "corporations" &&
+        leg.path === "bankCharter.cashReserves"
+      ) {
+        return {
+          ...leg,
+          filter: { ...leg.filter, "bankCharter.charteredTurn": input.bank.charter!.charteredTurn },
+        };
+      }
+      return leg.kind === "credit" &&
+        leg.collection === "corporations" &&
+        leg.path === "liquidCapital"
         ? {
             ...leg,
             collection: "corporateSectors",
@@ -93,8 +105,8 @@ export function quoteConstructionFinance(
             path: "constructionFinancing.escrowLocal",
             note: "Fund the quoted construction escrow, not borrower spending cash",
           }
-        : leg
-    ),
+        : leg;
+    }),
     projections: decision.transition.projections.map((projection) =>
       projection.collection === "bankLoans" && projection.insert
         ? {
@@ -109,7 +121,15 @@ export function quoteConstructionFinance(
               },
             },
           }
-        : projection
+        : projection.collection === "corporations" && projection.update
+          ? {
+              ...projection,
+              filter: {
+                ...projection.filter,
+                "bankCharter.charteredTurn": input.bank.charter!.charteredTurn,
+              },
+            }
+          : projection
     ),
   };
   return {
