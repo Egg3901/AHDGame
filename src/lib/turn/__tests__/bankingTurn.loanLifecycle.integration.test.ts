@@ -208,3 +208,104 @@ describe("named loan lifecycle through the banking turn", () => {
     expect(theLoan(db).status).toBe("defaulted");
   });
 });
+
+describe("construction loan servicing through the banking turn", () => {
+  it.each([false, true])(
+    "retains security until payoff or funded foreclosure (default=%s)",
+    async (defaults) => {
+      const { db, bankId, borrowerId } = makeWorld(1_000_000);
+      const { getDb } = await import("@/lib/mongodb");
+      vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+      const originated = await originateLoan(
+        db as unknown as Db,
+        bankId,
+        { type: "corporation", id: borrowerId },
+        PRINCIPAL,
+        TERM
+      );
+      if (!originated.ok) throw new Error(originated.error);
+      const sectorId = new ObjectId();
+      const claimId = "pledged-build";
+      await db.collection("bankLoans").updateOne(
+        { _id: originated.loan._id },
+        {
+          $set: {
+            constructionCollateral: {
+              claimId,
+              sectorId,
+              quotedCostLocal: 20_000,
+              constructionCostLocal: 20_000,
+            },
+            constructionSettlementOwner: `construction:${claimId}:funding`,
+          },
+        }
+      );
+      db.seed("corporateSectors", [
+        {
+          _id: sectorId,
+          constructionFinancing: {
+            claimId,
+            status: "building",
+            escrowLocal: 0,
+            loanFunded: true,
+            borrowerContributionPaid: true,
+          },
+        },
+      ]);
+      if (defaults) corp(db, borrowerId).liquidCapital = 0;
+      const before = money(db);
+      const last = defaults ? START + ARREARS_DEFAULT_TURNS : START + TERM - 1;
+      for (let turn = START + 1; turn <= last; turn++) {
+        await processBankingTurn(db as unknown as Db, turn);
+        expect(theLoan(db).constructionSettlementOwner).toBeUndefined();
+        expect(corp(db, bankId).bankCharter!.totalLoans).toBeCloseTo(
+          theLoan(db).status === "defaulted" ? 0 : theLoan(db).outstanding,
+          6
+        );
+        expect(money(db)).toBeCloseTo(before, 6);
+      }
+      const sector = await db.collection("corporateSectors").findOne({ _id: sectorId });
+      expect(sector).toMatchObject({
+        constructionFinancing: {
+          status: defaults ? "building" : "released",
+          ...(defaults ? { defaultedTurn: last } : {}),
+        },
+      });
+      expect(theLoan(db).status).toBe(defaults ? "defaulted" : "repaid");
+    }
+  );
+
+  it("waits for a cancellation receipt to finish before quoting a repayment", async () => {
+    const { db, bankId, borrowerId } = makeWorld(1_000_000);
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+    const originated = await originateLoan(
+      db as unknown as Db,
+      bankId,
+      { type: "corporation", id: borrowerId },
+      PRINCIPAL,
+      TERM
+    );
+    if (!originated.ok) throw new Error(originated.error);
+    const sectorId = new ObjectId();
+    await db.collection("bankLoans").updateOne(
+      { _id: originated.loan._id },
+      {
+        $set: {
+          constructionCollateral: {
+            claimId: "claim",
+            sectorId,
+            quotedCostLocal: 20_000,
+            constructionCostLocal: 20_000,
+          },
+          constructionSettlementOwner: "construction:claim:cancel",
+        },
+      }
+    );
+    const cash = corp(db, borrowerId).liquidCapital;
+    await processBankingTurn(db as unknown as Db, START + 1);
+    expect(corp(db, borrowerId).liquidCapital).toBe(cash);
+    expect(theLoan(db).outstanding).toBe(PRINCIPAL);
+    expect(theLoan(db).lastProcessedTurn).toBeUndefined();
+  });
+});

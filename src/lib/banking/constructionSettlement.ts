@@ -11,6 +11,7 @@ import {
   constructionPaidBuildTransition,
 } from "./rules/constructionBuild";
 import { settleAtomicDocumentTransition } from "./atomicDocumentSettlement";
+import { acquireConstructionLoanLock, releaseConstructionLoanLock } from "./constructionLoanLock";
 import { MONEY_MOVE_COLLECTION } from "./moneyMove";
 import { settleTransition, resumeSettlement, type SettlementResult } from "./settlementJournal";
 
@@ -46,7 +47,16 @@ export async function settleReservedConstruction(input: {
     !ObjectId.isValid(claim.loanId)
   )
     return { ok: false, error: "Construction claim ownership or currency changed" };
-  if (claim.status === "building") return { ok: true };
+  if (claim.status === "building") {
+    await db.collection<BankLoan>("bankLoans").updateOne(
+      {
+        _id: new ObjectId(claim.loanId),
+        constructionSettlementOwner: `construction:${claim.claimId}:funding`,
+      },
+      { $unset: { constructionSettlementOwner: "" } }
+    );
+    return { ok: true };
+  }
 
   const loanId = new ObjectId(claim.loanId);
   const loans = db.collection<BankLoan>("bankLoans");
@@ -61,6 +71,9 @@ export async function settleReservedConstruction(input: {
   )
     return { ok: false, error: "The construction loan does not match its frozen claim" };
 
+  const lockKey = `construction:${claim.claimId}:funding`;
+  const owned = await acquireConstructionLoanLock(db, loan, lockKey);
+  if (!owned) return { ok: false, error: "Another settlement owns construction funding" };
   const fundingKey = `named_loan_disbursement:${claim.bankId}:${claim.loanId}`;
   // An original partial journal owns its quote even if today's bank is no
   // longer eligible. Finish that delivery before evaluating a new command.
@@ -88,7 +101,10 @@ export async function settleReservedConstruction(input: {
       },
       { commandId: claim.loanId }
     );
-    if (!decision.allowed) return { ok: false, error: decision.message };
+    if (!decision.allowed) {
+      await releaseConstructionLoanLock(db, loan, lockKey);
+      return { ok: false, error: decision.message };
+    }
     const contribution = constructionContributionTransition({
       enabled: true,
       sectorId: sectorId.toHexString(),
@@ -119,7 +135,10 @@ export async function settleReservedConstruction(input: {
   const paidClaim = sector?.constructionFinancing;
   if (!sector || !paidClaim || paidClaim.claimId !== claim.claimId)
     return { ok: false, error: "The reserved construction claim changed" };
-  if (paidClaim.status === "building") return { ok: true };
+  if (paidClaim.status === "building") {
+    await releaseConstructionLoanLock(db, loan, lockKey);
+    return { ok: true };
+  }
   const paid = constructionPaidBuildTransition({
     enabled: true,
     sectorId: sectorId.toHexString(),
@@ -132,6 +151,7 @@ export async function settleReservedConstruction(input: {
     identity: { _id: oid(sectorId.toHexString()) },
     guard: paid.value.guard,
   });
+  if (complete(appended)) await releaseConstructionLoanLock(db, loan, lockKey);
   return complete(appended)
     ? { ok: true }
     : { ok: false, error: appended.error ?? "The funded build is awaiting queue settlement" };

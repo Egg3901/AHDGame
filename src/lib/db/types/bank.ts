@@ -331,6 +331,8 @@ export interface BankLoan {
   lastProcessedTurn?: number;
   /** Lender decision lock for a reserved construction claim, before any cash moves. */
   constructionDecision?: "approve" | "reject";
+  /** One stable cash receipt owns debt quoting until its projections finish. */
+  constructionSettlementOwner?: string;
   /** Security attached only to the capacity paid through this build claim. */
   constructionCollateral?: {
     claimId: string;
