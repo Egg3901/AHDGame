@@ -22,7 +22,7 @@ import { ObjectId, type Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { getCountryState } from "@/lib/countryState";
-import type { Character, ElectedOfficial, PoliticalParty } from "@/lib/db/types";
+import type { Character, ElectedOfficial, NPP, PoliticalParty } from "@/lib/db/types";
 import { getNextSequentialId } from "@/lib/db/sequentialId";
 import { vacateDepartedLeadership } from "@/lib/parties/vacateDepartedLeadership";
 import { recomputePartyMemberCount } from "@/lib/parties/recomputePartyMemberCount";
@@ -48,22 +48,14 @@ export interface OfficialAlignment {
  * broken by stable input order. If fewer than 3 officials exist,
  * returns all of them.
  */
-export function pickDefectors(officials: OfficialAlignment[]): OfficialAlignment[] {
-  if (officials.length === 0) return [];
-  const target = Math.min(officials.length, Math.max(3, Math.ceil(officials.length * 0.15)));
-  // Stable sort: tag with index, sort by divergence desc + index asc to break ties.
-  const tagged = officials.map((o, idx) => ({ ...o, _idx: idx }));
-  tagged.sort((a, b) => {
-    if (b.divergence !== a.divergence) return b.divergence - a.divergence;
-    return a._idx - b._idx;
-  });
-  return tagged.slice(0, target).map(({ _idx: _, ...rest }) => rest);
-}
+export { pickDefectors } from "./rules/factionDefection";
+import { pickDefectors } from "./rules/factionDefection";
 
 export interface FactionSplitResult {
   newPartySequentialId: number;
   defectorCount: number;
   defectorCharacterIds: ObjectId[];
+  defectorNppIds: ObjectId[];
 }
 
 /**
@@ -102,24 +94,20 @@ export async function fireFactionSplit(
     .toArray();
   if (officials.length === 0) return null;
 
-  // Only character-held seats can defect. NPP-held seats carry
-  // `characterId: null`; letting those nulls into the defector list made the
-  // `$in` seat-update below match EVERY null-characterId row and flip all
-  // NPP seats to the new party (#3164). The ruling party's chair and the
-  // country's installed leader are also excluded — the placeholder scorer
-  // ranks everyone equally, and "the leader defects from their own party"
-  // is never the intended read of a faction split.
+  // Actor namespaces stay separate: a null characterId must never enter a
+  // character filter, and the sitting leader cannot defect from their party.
   const gov = await getGovernmentFormationsCollection(db).findOne({ _id: countryId });
-  const excluded = new Set(
-    [rulingParty.chairId, gov?.pmCharacterId]
-      .filter((id): id is ObjectId => id != null)
-      .map((id) => id.toString())
-  );
+  const actorKey = (o: Pick<ElectedOfficial, "characterId" | "nppId">) =>
+    o.characterId ? `character:${o.characterId}` : o.nppId ? `npp:${o.nppId}` : null;
+  const excluded = new Set([
+    rulingParty.chairId ? `character:${rulingParty.chairId}` : null,
+    gov?.pmCharacterId ? `character:${gov.pmCharacterId}` : null,
+    gov?.pmNppId ? `npp:${gov.pmNppId}` : null,
+  ]);
   const seen = new Set<string>();
   const eligible = officials.filter((o) => {
-    if (!o.characterId) return false;
-    const key = o.characterId.toString();
-    if (excluded.has(key) || seen.has(key)) return false;
+    const key = actorKey(o);
+    if (!key || excluded.has(key) || seen.has(key)) return false;
     seen.add(key);
     return true;
   });
@@ -129,33 +117,43 @@ export async function fireFactionSplit(
   // election engine uses for policy distance, then blended toward the caucus
   // mean so a faction walks out as a faction rather than as an arbitrary 15% of
   // the bench. See `./factionDivergence` for why both halves matter.
-  const eligibleIds = eligible.map((o) => o.characterId as ObjectId);
-  const [defectorChars, memberships] = await Promise.all([
+  const characterIds = eligible.flatMap((o) => (o.characterId ? [o.characterId] : []));
+  const nppIds = eligible.flatMap((o) => (!o.characterId && o.nppId ? [o.nppId] : []));
+  const [defectorChars, defectorNpps, memberships] = await Promise.all([
     db
       .collection<Character>("characters")
-      .find({ _id: { $in: eligibleIds } }, { projection: { _id: 1, policies: 1 } })
+      .find({ _id: { $in: characterIds } }, { projection: { _id: 1, policies: 1 } })
+      .toArray(),
+    db
+      .collection<NPP>("npps")
+      .find(
+        { _id: { $in: nppIds } },
+        { projection: { _id: 1, "policies.economic": 1, "policies.social": 1 } }
+      )
       .toArray(),
     db
       .collection<CaucusMembership>("caucusMemberships")
       .find(
         {
           countryId,
-          memberType: "character",
-          memberId: { $in: eligibleIds },
           status: "active",
+          $or: [
+            { memberType: "character", memberId: { $in: characterIds } },
+            { memberType: "npp", memberId: { $in: nppIds } },
+          ],
         },
-        { projection: { memberId: 1, caucusId: 1 } }
+        { projection: { memberId: 1, memberType: 1, caucusId: 1 } }
       )
       .toArray(),
   ]);
-  const positionByChar = new Map(defectorChars.map((c) => [c._id.toString(), c.policies ?? null]));
-  // One caucus per official: a character in several keeps the first, which is
-  // deterministic on the collection's natural order and enough for cohesion.
-  const caucusByChar = new Map<string, string>();
+  const positions = new Map<string, { economic?: number; social?: number } | null>([
+    ...defectorChars.map((c) => [`character:${c._id}`, c.policies ?? null] as const),
+    ...defectorNpps.map((c) => [`npp:${c._id}`, c.policies ?? null] as const),
+  ]);
+  const caucuses = new Map<string, string>();
   for (const m of memberships) {
-    const key = m.memberId?.toString();
-    if (!key || caucusByChar.has(key)) continue;
-    caucusByChar.set(key, m.caucusId.toString());
+    const key = `${m.memberType}:${m.memberId}`;
+    if (!caucuses.has(key)) caucuses.set(key, m.caucusId.toString());
   }
 
   const line: PartyLine = {
@@ -164,24 +162,20 @@ export async function fireFactionSplit(
   };
   const scored = applyCaucusCohesion(
     eligible.map((o) => {
-      const key = (o.characterId as ObjectId).toString();
-      const pos = positionByChar.get(key);
+      const key = actorKey(o)!;
+      const pos = positions.get(key);
       return {
         characterId: key,
         divergence: scoreDivergence(
           { characterId: key, economic: pos?.economic, social: pos?.social },
           line
         ),
-        caucusId: caucusByChar.get(key) ?? null,
+        caucusId: caucuses.get(key) ?? null,
       };
     })
   );
-  const byId = new Map(eligible.map((o) => [(o.characterId as ObjectId).toString(), o]));
-  const alignments: OfficialAlignment[] = scored.map((s) => ({
-    characterId: byId.get(s.characterId)!.characterId as ObjectId,
-    divergence: s.divergence,
-  }));
-  const defectors = pickDefectors(alignments);
+  const byId = new Map(eligible.map((o) => [actorKey(o)!, o]));
+  const defectors = pickDefectors(scored).map((score) => byId.get(score.characterId)!);
   if (defectors.length === 0) return null;
 
   // The new party sits where its defectors actually sit, not where the party
@@ -189,7 +183,7 @@ export async function fireFactionSplit(
   // every faction an ideological copy of its parent.
   const centre = factionCentreOfGravity(
     defectors.map((d) => {
-      const pos = positionByChar.get(d.characterId.toString());
+      const pos = positions.get(actorKey(d)!);
       return { economic: pos?.economic, social: pos?.social };
     }),
     line
@@ -222,13 +216,15 @@ export async function fireFactionSplit(
     nationalTaxRate: rulingParty.nationalTaxRate,
     politicalStrength: 0,
     regimeStatus: "approved",
+    createdTurn: _currentTurn,
     createdAt: now,
     updatedAt: now,
   };
   await db.collection<PoliticalParty>("politicalParties").insertOne(newParty);
 
   // Re-assign each defector character's party affiliation.
-  const defectorIds = defectors.map((d) => d.characterId);
+  const defectorIds = defectors.flatMap((d) => (d.characterId ? [d.characterId] : []));
+  const defectorNppIds = defectors.flatMap((d) => (!d.characterId && d.nppId ? [d.nppId] : []));
   await db
     .collection<Character>("characters")
     .updateMany({ _id: { $in: defectorIds } }, { $set: { party: String(newSeq), updatedAt: now } });
@@ -240,6 +236,16 @@ export async function fireFactionSplit(
       { countryId, characterId: { $in: defectorIds } },
       { $set: { party: String(newSeq) } }
     );
+
+  await db
+    .collection<NPP>("npps")
+    .updateMany(
+      { _id: { $in: defectorNppIds } },
+      { $set: { party: String(newSeq), updatedAt: now } }
+    );
+  await db
+    .collection<ElectedOfficial>("electedOfficials")
+    .updateMany({ countryId, nppId: { $in: defectorNppIds } }, { $set: { party: String(newSeq) } });
 
   // #0701 split-cleanup — a defector may have been the ruling party's chair,
   // vice chair, or treasurer. Vacate those slots so the ruling party no
@@ -267,6 +273,7 @@ export async function fireFactionSplit(
     newPartySequentialId: newSeq,
     defectorCount: defectors.length,
     defectorCharacterIds: defectorIds,
+    defectorNppIds,
   };
 }
 

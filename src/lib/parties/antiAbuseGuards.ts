@@ -1,3 +1,4 @@
+import { customPartyMature } from "./rules/nppMaturation";
 import type { Db } from "mongodb";
 import type { Character, GameState, PoliticalParty, PurgeRejoinBlock } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
@@ -106,7 +107,8 @@ export async function getPartyNppControlStatus(args: {
 
 export function buildNppElectionEligiblePartyKeys(
   parties: PoliticalParty[],
-  now = new Date()
+  now = new Date(),
+  currentTurn?: number
 ): Set<string> {
   const eligible = new Set<string>();
   for (const party of parties) {
@@ -117,7 +119,10 @@ export function buildNppElectionEligiblePartyKeys(
       continue;
     }
 
-    if (cooldownResult(party.createdAt, PARTY_NPP_ENTRY_MIN_PARTY_AGE_MS, now).ok) {
+    if (
+      customPartyMature(party.createdTurn, currentTurn, party.nppElectionMatureAtTurn) ??
+      cooldownResult(party.createdAt, PARTY_NPP_ENTRY_MIN_PARTY_AGE_MS, now).ok
+    ) {
       eligible.add(`${countryId}:${partyId}`);
     }
   }

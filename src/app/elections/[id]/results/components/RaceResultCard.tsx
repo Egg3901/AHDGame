@@ -8,7 +8,7 @@ interface RaceResultCardProps {
   candidatesById: Map<string, ResultsCandidate>;
   /** Grid index — staggers the entrance animation. */
   index: number;
-  weightLabel: "EV" | "seats";
+  weightLabel: "EV" | "seats" | "";
 }
 
 /**

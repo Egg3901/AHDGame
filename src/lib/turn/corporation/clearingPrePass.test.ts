@@ -157,7 +157,7 @@ describe("runClearingPrePass with clearing enabled", () => {
 
   it("rebuilds offers from current capacity and project stage instead of stale product maps", () => {
     const { lookups } = makeSectorWorld();
-    const sector = lookups.sectorsByCorp.get("corp1")![0] as Record<string, unknown>;
+    const sector = lookups.sectorsByCorp.get("corp1")![0];
     Object.assign(sector, {
       capitalStock: 200,
       plantCount: 1,

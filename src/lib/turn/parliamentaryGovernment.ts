@@ -379,6 +379,11 @@ export async function updateParliamentaryGovernmentSeats(
       (sum, partyId) => sum + (seatsByParty[partyId] ?? 0),
       0
     );
+  } else if (existing.coalitionPartyIds?.length) {
+    totalSeatsSupporting = existing.coalitionPartyIds.reduce(
+      (sum, partyId) => sum + (seatsByParty[partyId] ?? 0),
+      0
+    );
   } else {
     totalSeatsSupporting = existing.governingPartyId
       ? (seatsByParty[existing.governingPartyId] ?? 0)
@@ -455,7 +460,7 @@ export async function resetParliamentaryGovernmentAfterElection(
 
   const hasSittingPM =
     existing?.status === "formed" &&
-    existing.pmCharacterId &&
+    (existing.pmCharacterId || existing.pmNppId) &&
     (await hasRequiredPrimeMinisterSeat(db, countryId, existing.pmCharacterId, existing.pmNppId));
 
   if (hasSittingPM) {
@@ -470,6 +475,11 @@ export async function resetParliamentaryGovernmentAfterElection(
       const coalitionPartyIds = (coalition?.members ?? []).map((m) => String(m.partySequentialId));
       totalSeatsSupporting = coalitionPartyIds.reduce(
         (sum, pid) => sum + (seatsByParty[pid] ?? 0),
+        0
+      );
+    } else if (existing.coalitionPartyIds?.length) {
+      totalSeatsSupporting = existing.coalitionPartyIds.reduce(
+        (sum, partyId) => sum + (seatsByParty[partyId] ?? 0),
         0
       );
     } else {
@@ -719,6 +729,31 @@ export async function appointPrimeMinister(
     await db
       .collection<NPP>("npps")
       .updateOne({ _id: nppId }, { $set: { currentOffice: { type: execKey }, updatedAt: now } });
+    const runtime = await getCountryState(db, countryId);
+    if (runtime.hasLeaderConfidenceModel) {
+      const actor = await db
+        .collection<NPP>("npps")
+        .findOne({ _id: nppId }, { projection: { party: 1 } });
+      const ref = { kind: "npp" as const, id: nppId };
+      if (isSameHolder)
+        await renewLeaderMandate(
+          db,
+          countryId,
+          ref,
+          execKey,
+          actor?.party ?? null,
+          activeGameState?.currentTurn ?? 0
+        );
+      else
+        await installNewLeader(
+          db,
+          countryId,
+          ref,
+          execKey,
+          actor?.party ?? null,
+          activeGameState?.currentTurn ?? 0
+        );
+    }
   }
 
   if (outgoingPlayerPm) {
@@ -823,10 +858,9 @@ export async function autoAyeNPPsForParliamentaryAppointment(
   const voterOfficeTypes =
     vote.office === "headOfState" ? offices.jointSittingOfficeTypes : [offices.lowerOfficeType];
 
-  const qualifyingPartyIds: Set<string> =
-    vote.formationType === "coalition" && vote.coalitionPartyIds
-      ? new Set(vote.coalitionPartyIds)
-      : new Set([vote.nomineePartyId]);
+  const qualifyingPartyIds: Set<string> = vote.coalitionPartyIds?.length
+    ? new Set(vote.coalitionPartyIds)
+    : new Set([vote.nomineePartyId]);
 
   const whips = await db
     .collection("billWhips")
@@ -862,6 +896,12 @@ export async function autoAyeNPPsForParliamentaryAppointment(
       voteChoice = whipDir === "for" ? "aye" : "nay";
     } else if (inQualifyingParty) {
       voteChoice = "aye";
+    } else if (
+      vote.isConfidenceMotion &&
+      mp.party &&
+      !vote.confidenceAbstentionPartyIds?.includes(mp.party)
+    ) {
+      voteChoice = "nay";
     }
     if (voteChoice === null) continue;
 
@@ -1053,7 +1093,7 @@ export async function resolveParliamentaryAppointmentVote(
         db,
         countryId,
         vote.nomineeCharacterId,
-        null,
+        vote.nomineeNppId ?? null,
         vote.nomineeName,
         now
       );
@@ -1080,11 +1120,13 @@ export async function resolveParliamentaryAppointmentVote(
         $set: {
           status: "formed",
           pmCharacterId: vote.nomineeCharacterId,
+          pmNppId: vote.nomineeNppId ?? null,
           pmName: vote.nomineeName,
           governingPartyId: vote.nomineePartyId,
           formationType: vote.formationType,
           coalitionId: vote.coalitionId,
           coalitionPartyIds: vote.coalitionPartyIds,
+          confidenceAbstentionPartyIds: vote.confidenceAbstentionPartyIds ?? [],
           totalSeatsSupporting,
           lostMajority: false,
           activeVoteId: null,
@@ -1167,6 +1209,8 @@ export async function resolveParliamentaryAppointmentVote(
       const alternativePassed = await votesColl.findOne({
         countryId,
         status: "passed",
+        isConfidenceMotion: { $ne: true },
+        closedAt: { $gte: vote.openedAt },
         _id: { $ne: voteId },
       });
       if (!alternativePassed) {
@@ -1726,6 +1770,7 @@ export async function unformGovernmentAndVacatePM(
         lostMajority: false,
         coalitionId: null,
         coalitionPartyIds: null,
+        confidenceAbstentionPartyIds: [],
         activeVoteId: null,
         collapsedAt,
         formedAt: null,
@@ -1802,7 +1847,10 @@ export async function updateSeatCountsOnly(db: Db, countryId: CountryId, now: Da
   if (!existing) return;
 
   const seatsByParty = await tallySeatsByParty(db, countryId);
-  const governingPartyId = getLargestParty(seatsByParty);
+  const governingPartyId =
+    existing.status === "formed" && (existing.pmCharacterId || existing.pmNppId)
+      ? (existing.governingPartyId ?? getLargestParty(seatsByParty))
+      : getLargestParty(seatsByParty);
   const cycle = (existing.cycle ?? 0) + 1;
 
   await govCol.updateOne(
@@ -1830,7 +1878,7 @@ export async function openConfidenceMotionForIncumbent(
   const govCol = getGovernmentFormationsCollection(db);
   const gov = await govCol.findOne({ _id: countryId });
 
-  if (!gov || !gov.pmCharacterId) {
+  if (!gov || !(gov.pmCharacterId || gov.pmNppId)) {
     return { opened: false, reason: "no-incumbent" };
   }
   if (gov.status !== "formed") {
@@ -1850,9 +1898,11 @@ export async function openConfidenceMotionForIncumbent(
   const lowerOfficeType = offices.lowerOfficeType;
 
   // Verify incumbent retained a seat in the newly-elected lower chamber.
-  const official = await db
-    .collection<ElectedOfficial>("electedOfficials")
-    .findOne({ characterId: gov.pmCharacterId, officeType: lowerOfficeType, countryId });
+  const official = await db.collection<ElectedOfficial>("electedOfficials").findOne({
+    ...(gov.pmCharacterId ? { characterId: gov.pmCharacterId } : { nppId: gov.pmNppId }),
+    officeType: lowerOfficeType,
+    countryId,
+  });
   if (!official) {
     return { opened: false, reason: "incumbent-lost-seat" };
   }
@@ -1868,12 +1918,15 @@ export async function openConfidenceMotionForIncumbent(
     _id: voteId,
     countryId,
     nomineeCharacterId: gov.pmCharacterId,
+    nomineeNppId: gov.pmNppId ?? null,
+    nomineeMode: gov.pmCharacterId ? ("character" as const) : ("npp" as const),
     nomineeName: gov.pmName ?? "",
-    nomineePartyId: gov.governingPartyId ?? official.party ?? "",
+    nomineePartyId: official.party ?? gov.governingPartyId ?? "",
     nominatedByCharacterId: gov.pmCharacterId,
     formationType: gov.formationType ?? "majority",
     coalitionId: gov.coalitionId ?? null,
     coalitionPartyIds: gov.coalitionPartyIds ?? null,
+    confidenceAbstentionPartyIds: gov.confidenceAbstentionPartyIds ?? [],
     votesFor: 0,
     votesAgainst: 0,
     votes: {} as Record<string, "aye" | "nay">,
@@ -1891,7 +1944,9 @@ export async function openConfidenceMotionForIncumbent(
 
   const config = offices.config;
   const chamberName = config.legislature.lowerChamber.shortName;
-  const pmChar = await db.collection<Character>("characters").findOne({ _id: gov.pmCharacterId });
+  const pmChar = gov.pmCharacterId
+    ? await db.collection<Character>("characters").findOne({ _id: gov.pmCharacterId })
+    : null;
   if (pmChar?.userId) {
     await createNotifications([
       {
@@ -1899,7 +1954,7 @@ export async function openConfidenceMotionForIncumbent(
         title: `${config.executiveTitle} Confidence Motion`,
         message: `A post-election confidence motion has opened. ${chamberName} members will vote over the next ${PM_VOTE_DURATION_HOURS} hours on whether you remain ${config.executiveTitle}.`,
         type: "system",
-        metadata: { recipientCharacterId: gov.pmCharacterId.toString() },
+        metadata: { recipientCharacterId: gov.pmCharacterId?.toString() },
       },
     ]);
   }

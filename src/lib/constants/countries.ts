@@ -998,6 +998,7 @@ export const COUNTRIES_WITH_BESPOKE_PRESIDENTIAL_ELECTIONS = new Set<CountryId>(
  */
 export const COUNTRIES_WITH_PRESIDENTIAL_ELECTION_CYCLES = new Set<CountryId>([
   "US",
+  "BR",
   ...COUNTRIES_WITH_BESPOKE_PRESIDENTIAL_ELECTIONS,
 ]);
 
@@ -1220,6 +1221,9 @@ export const ERA_COUNTRY_CONFIG_OVERRIDES: Record<
   string,
   Partial<Record<CountryId, EraCountryConfigOverride>>
 > = {
+  "1979-default": {
+    BR: BR_ERAS["1979-default"]?.config,
+  },
   // First non-1953 era to use this table. The lookup was always generic; nothing
   // had exercised it.
   //

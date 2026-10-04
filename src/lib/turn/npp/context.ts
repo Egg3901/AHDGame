@@ -492,7 +492,11 @@ export async function loadNPPContext(now: Date, options?: NPPContextOptions): Pr
     }
     partyCountries.set(partyId, existing);
   }
-  const nppElectionEligiblePartyKeys = buildNppElectionEligiblePartyKeys(allParties, now);
+  const nppElectionEligiblePartyKeys = buildNppElectionEligiblePartyKeys(
+    allParties,
+    now,
+    currentTurn
+  );
 
   // Group officials by NPP
   const officialsByNPP = new Map<string, ElectedOfficial[]>();

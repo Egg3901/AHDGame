@@ -7,6 +7,7 @@ import {
   buildManufacturedSectorOutput,
   manufacturingDevelopmentThresholdAnchor,
   MANUFACTURING_DEVELOPMENT_ELAPSED_TURNS,
+  type ManufacturingLifecycleStage,
 } from "./rules/manufacturingRules";
 
 const CAPITAL_STOCK = 100_000;
@@ -19,10 +20,22 @@ const BASELINE = {
   basePrices: { steel: 100, building_materials: 50, vehicles: 250 },
 };
 
-function initialProject() {
+interface EvidenceProject {
+  _id: string;
+  stage: ManufacturingLifecycleStage;
+  stageStartedTurn: number;
+  startedTurn: number;
+  lastProcessedTurn: number;
+  developmentPaidAnchor: number;
+  paidThresholdAnchor: number;
+  elapsedDevelopmentTurns: number;
+  elapsedThresholdTurns: number;
+}
+
+function initialProject(): EvidenceProject {
   return {
     _id: "product-1",
-    stage: "development" as const,
+    stage: "development",
     stageStartedTurn: 1,
     startedTurn: 1,
     lastProcessedTurn: 0,
@@ -107,7 +120,7 @@ describe("manufacturing product line balance evidence", () => {
     } as const;
     let project = {
       ...initialProject(),
-      stage: "launch" as const,
+      stage: "launch" as ManufacturingLifecycleStage,
       stageStartedTurn: 12,
       lastProcessedTurn: 12,
       developmentPaidAnchor: PROJECT_COST,

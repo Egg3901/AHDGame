@@ -516,6 +516,7 @@ const RUNTIME: CollectionEntry[] = [
   { name: "ministerialOrders", category: "runtime" },
   { name: "governmentApprovals", category: "runtime" },
   { name: "governmentFormations", category: "runtime" },
+  { name: "governmentAccountability", category: "runtime" },
   { name: "parliamentaryGovernments", category: "runtime" },
   { name: "ukCabinetCooldowns", category: "runtime" },
   { name: "ukGovernment", category: "runtime" },

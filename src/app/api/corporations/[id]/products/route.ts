@@ -37,6 +37,17 @@ interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
+type ManufacturingPlantSector = Pick<
+  CorporateSector,
+  | "_id"
+  | "corporationId"
+  | "sectorType"
+  | "strategyId"
+  | "capitalStock"
+  | "plantCount"
+  | "mothballed"
+>;
+
 const noStore = { "Cache-Control": "private, no-store" };
 const startProjectSchema = z.object({
   kindId: z.string().min(1).max(80),
@@ -61,7 +72,7 @@ async function productLinesAvailable(db: Db): Promise<boolean> {
   );
 }
 
-function manufacturingPlant(sector: CorporateSector): ManufacturingPlant {
+function manufacturingPlant(sector: ManufacturingPlantSector): ManufacturingPlant {
   return {
     sectorId: sector._id.toString(),
     corporationId: sector.corporationId.toString(),
@@ -113,7 +124,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const sectors = await db
       .collection<CorporateSector>("corporateSectors")
       .find({ corporationId: corporation._id })
-      .project({
+      .project<ManufacturingPlantSector>({
         _id: 1,
         corporationId: 1,
         sectorType: 1,
@@ -200,7 +211,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const sectors = await db
       .collection<CorporateSector>("corporateSectors")
       .find({ corporationId: corporation._id })
-      .project({
+      .project<ManufacturingPlantSector>({
         _id: 1,
         corporationId: 1,
         sectorType: 1,
