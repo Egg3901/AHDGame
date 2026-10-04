@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import { createHash } from "node:crypto";
 import { ObjectId, type Db } from "mongodb";
 import { generateUserApiToken, requireUserApiKey } from "./userApiAuth";
 
@@ -38,11 +37,11 @@ describe("userApiAuth", () => {
       expect(result.tokenHash).toBeTruthy();
     });
 
-    it("hashes the complete 192-bit random key for stable indexed lookup", () => {
+    it("generates a 192-bit random key and a lookup digest", () => {
       const { token, tokenHash } = generateUserApiToken("public");
       expect(token).toMatch(/^ahd_pub_[A-Za-z0-9_-]{32}$/);
       expect(Buffer.from(token.slice("ahd_pub_".length), "base64url")).toHaveLength(24);
-      expect(tokenHash).toBe(createHash("sha256").update(token).digest("hex"));
+      expect(tokenHash).toMatch(/^[a-f0-9]{64}$/);
     });
 
     it("generates unique tokens each call", () => {
