@@ -6,11 +6,22 @@ import type { GoverningAgenda } from "@/lib/nppAutonomy/governingAgenda";
 import type { PersistedCommandStance, PersistedFiscalStance } from "@/lib/nppAutonomy/fiscalStance";
 import type { GoverningGoalState } from "@/lib/nppAutonomy/v5/rules/governingGoals";
 import type { PersistedReshuffleGuardState } from "@/lib/nppAutonomy/rules/reshuffleGuard";
+import type { MandateDomains } from "@/lib/nppAutonomy/rules/electoralMandate";
 
 // --- GovernmentFormation ---
 
 export type GovernmentFormationStatus = "pending" | "formed" | "collapsed";
 export type GovernmentFormationType = "majority" | "coalition" | "minority" | "admin";
+
+export interface PersistedElectoralMandate {
+  /** Party sequential id the mandate belongs to. */
+  partyId: string;
+  /** Which party sources contributed. */
+  sources: Array<"platform" | "manifesto">;
+  domains: MandateDomains;
+  strength: number;
+  computedTurn: number;
+}
 
 export interface GovernmentFormation {
   /** Serializes native Hungarian mandate changes with a new chamber handover. */
@@ -116,6 +127,14 @@ export interface GovernmentFormation {
    * tax/spending bills the government sponsors. Recomputed with the agenda.
    */
   fiscalStance?: PersistedFiscalStance | null;
+
+  /**
+   * The governing party's electoral mandate (#2321): bounded domain emphasis
+   * derived from its locked manifesto pledges and platform, scaled by its
+   * chamber share. Recomputed with the agenda and fed into it, so an
+   * autonomous government's priorities follow what its party won on.
+   */
+  electoralMandate?: PersistedElectoralMandate | null;
 
   /**
    * Planned-economy command levers for an NPP-headed government in a command /
