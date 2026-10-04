@@ -253,6 +253,46 @@ export interface SourcingCommoditySummary {
   gridLossUnits: number;
 }
 
+/**
+ * Exact delivered trade between two countries for one commodity (#2333).
+ * `exporter === importer` is same-country interstate haulage. Accumulated at
+ * the accept site, so the itemization floor on `flows` cannot drop small legs.
+ * Money fields are in the sourcing pass's price units (the stored commodity
+ * asks); `askValue` is dispatched units at the seller ask, `landedValue` is
+ * delivered units at the landed price.
+ */
+export interface SourcingPairAggregate {
+  commodity: CommodityType;
+  exporter: string;
+  importer: string;
+  deliveredUnits: number;
+  dispatchedUnits: number;
+  askValue: number;
+  freightPaid: number;
+  tariffPaid: number;
+  landedValue: number;
+  /** Sum of units x applied tariff rate; divide by deliveredUnits for the unit-weighted rate. */
+  tariffRateUnits: number;
+  legs: number;
+}
+
+/**
+ * Buyer-intent outcome for one destination country and commodity (#2333).
+ * The unmet-by-reason counters follow exactly the accounting of the global
+ * {@link SourcingCommoditySummary}: a request refused by one seller's capacity
+ * is counted at that gate even if another seller later serves it.
+ */
+export interface SourcingDestinationAggregate {
+  commodity: CommodityType;
+  country: string;
+  localUnits: number;
+  interStateUnits: number;
+  importUnits: number;
+  unmetUnits: number;
+  toleranceBoundUnits: number;
+  capacityBoundUnits: number;
+}
+
 /** Delivered units and the extra-cost-over-local-price they carried, for a state/commodity. */
 export interface LandedPremiumAccumulator {
   metUnits: number;
@@ -355,6 +395,10 @@ export interface SourcingResult {
    * sold the unit anyway (ticket #1180).
    */
   deliveryLimitedSupplyByState: Map<CommodityType, Map<string, number>>;
+  /** Exact country-pair delivered trade, for the research trade panel (#2333). */
+  pairAggregates: SourcingPairAggregate[];
+  /** Exact per-destination-country buyer-intent outcome (#2333). */
+  destinationAggregates: SourcingDestinationAggregate[];
 }
 
 type Balance = { supply: number; demand: number };
@@ -503,6 +547,8 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
   const deliveryLimitedSupplyByState = new Map<CommodityType, Map<string, number>>();
   const freightChargesByDestState = new Map<string, Map<CommodityType, number>>();
   const haulRevenueByOriginState = new Map<string, number>();
+  const pairAggregates: SourcingPairAggregate[] = [];
+  const destinationAggregates: SourcingDestinationAggregate[] = [];
 
   const addFreightBilling = (
     destStateId: string,
@@ -583,6 +629,46 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
         stateId,
         (capacityBoundTeuByOriginState.get(stateId) ?? 0) + units * teuPerUnit
       );
+    };
+    const pairByKey = new Map<string, SourcingPairAggregate>();
+    const destinationByCountry = new Map<string, SourcingDestinationAggregate>();
+    const destinationFor = (country: string): SourcingDestinationAggregate => {
+      let row = destinationByCountry.get(country);
+      if (!row) {
+        row = {
+          commodity,
+          country,
+          localUnits: 0,
+          interStateUnits: 0,
+          importUnits: 0,
+          unmetUnits: 0,
+          toleranceBoundUnits: 0,
+          capacityBoundUnits: 0,
+        };
+        destinationByCountry.set(country, row);
+      }
+      return row;
+    };
+    const pairFor = (exporter: string, importer: string): SourcingPairAggregate => {
+      const key = `${exporter}\u0000${importer}`;
+      let row = pairByKey.get(key);
+      if (!row) {
+        row = {
+          commodity,
+          exporter,
+          importer,
+          deliveredUnits: 0,
+          dispatchedUnits: 0,
+          askValue: 0,
+          freightPaid: 0,
+          tariffPaid: 0,
+          landedValue: 0,
+          tariffRateUnits: 0,
+          legs: 0,
+        };
+        pairByKey.set(key, row);
+      }
+      return row;
     };
     for (const { stateId } of sortedStates) {
       const bal = byState.get(stateId)?.get(commodity);
@@ -697,6 +783,10 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
       gridLossUnits: 0,
     };
     for (const local of localFillByState.values()) summary.intraStateUnits += local;
+    for (const { stateId, countryId } of sortedStates) {
+      const local = localFillByState.get(stateId) ?? 0;
+      if (local > 0) destinationFor(countryId).localUnits += local;
+    }
 
     for (const buyer of sortedStates) {
       let unmet = unmetByState.get(buyer.stateId) ?? 0;
@@ -758,6 +848,7 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
         if (!isGrid && cand.landed > ceiling) {
           // Sorted ascending: everything past here also breaks the ceiling.
           summary.toleranceBoundUnits += unmet;
+          destinationFor(buyer.countryId).toleranceBoundUnits += unmet;
           break;
         }
         const spare =
@@ -795,6 +886,7 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
             if (!(nominal > 0)) {
               // A state with no freight supply at all hauls nothing.
               summary.capacityBoundUnits += deliver;
+              destinationFor(buyer.countryId).capacityBoundUnits += deliver;
               addCapacityBound(cand.originId, deliver, teuPerUnit);
               continue;
             }
@@ -812,6 +904,7 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
             const dispatchCeiling = unitsToNominal + (overflowAffordable ? unitsInOverflow : 0);
             if (dispatchCeiling <= 0) {
               summary.capacityBoundUnits += deliver;
+              destinationFor(buyer.countryId).capacityBoundUnits += deliver;
               addCapacityBound(cand.originId, deliver, teuPerUnit);
               continue;
             }
@@ -823,8 +916,12 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
               // outcome and must not tell the seller to build freight.
               if (overflowAffordable) {
                 summary.capacityBoundUnits += lost;
+                destinationFor(buyer.countryId).capacityBoundUnits += lost;
                 addCapacityBound(cand.originId, lost, teuPerUnit);
-              } else summary.toleranceBoundUnits += lost;
+              } else {
+                summary.toleranceBoundUnits += lost;
+                destinationFor(buyer.countryId).toleranceBoundUnits += lost;
+              }
               dispatch = dispatchCeiling;
               deliver = dispatch * deliveryFactor;
             }
@@ -867,6 +964,20 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
         }
         unmet -= take;
         unmetByState.set(buyer.stateId, unmet);
+
+        const exporter = cand.originType === "state" ? buyer.countryId : cand.originId;
+        const pair = pairFor(exporter, buyer.countryId);
+        pair.deliveredUnits += take;
+        pair.dispatchedUnits += dispatch;
+        pair.askValue += dispatch * cand.ask;
+        pair.freightPaid += take * cand.shippingPerUnit + congestionSurchargePaid;
+        pair.tariffPaid += tariffPaid;
+        pair.landedValue += take * cand.landed;
+        pair.tariffRateUnits += take * cand.tariffRatePct;
+        pair.legs += 1;
+        const destination = destinationFor(buyer.countryId);
+        if (cand.originType === "state") destination.interStateUnits += take;
+        else destination.importUnits += take;
 
         // Delivered-units + extra-cost accumulation for money wiring, regardless
         // of the itemization floor below (that floor only caps the doc's flow
@@ -926,6 +1037,7 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
       }
 
       summary.unmetUnits += Math.max(0, unmet);
+      if (unmet > 0) destinationFor(buyer.countryId).unmetUnits += unmet;
     }
 
     // Every buyer has been offered every seller, so whatever is still spare is
@@ -977,6 +1089,16 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
     summary.congestionSurchargePaid = round2(summary.congestionSurchargePaid);
     summary.gridLossUnits = round2(summary.gridLossUnits);
     summaries.push(summary);
+    for (const pair of [...pairByKey.values()].sort(
+      (a, b) => a.exporter.localeCompare(b.exporter) || a.importer.localeCompare(b.importer)
+    )) {
+      pairAggregates.push(pair);
+    }
+    for (const destination of [...destinationByCountry.values()].sort((a, b) =>
+      a.country.localeCompare(b.country)
+    )) {
+      destinationAggregates.push(destination);
+    }
   }
 
   return {
@@ -993,5 +1115,7 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
     deliveryLimitedSupplyByState,
     freightChargesByDestState,
     haulRevenueByOriginState,
+    pairAggregates,
+    destinationAggregates,
   };
 }
