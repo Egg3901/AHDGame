@@ -30,6 +30,9 @@ export type UKElectionType =
 export type ElectionStatus = "upcoming" | "active" | "completed" | "resolved" | "cancelled";
 
 export interface Election {
+  brazilPresidentialRound?: 1 | 2;
+  brazilPresidentialMode?: "plurality" | "indirect" | "majority";
+  brazilPresidentialPredecessorId?: ObjectId;
   /** A modern Hungarian vacancy ballot freezes one existing district and electorate. */
   hungarianModernByElection?: {
     receiptId: string;

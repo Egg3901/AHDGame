@@ -31,7 +31,9 @@ function makeMockDb() {
     return {
       ...doc,
       _id: doc._id,
-      leaderCharacterId: new ObjectId(doc.leaderCharacterId.toString()),
+      leaderCharacterId: doc.leaderCharacterId
+        ? new ObjectId(doc.leaderCharacterId.toString())
+        : null,
       confidenceHistory: doc.confidenceHistory.map((h) => ({ ...h, at: new Date(h.at) })),
       popularLegitimacyHistory: (doc.popularLegitimacyHistory ?? []).map((h) => ({
         ...h,

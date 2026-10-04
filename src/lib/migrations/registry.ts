@@ -1,3 +1,4 @@
+import { migration as governmentAccountability } from "./entries/2026-10-04-government-accountability";
 // Central registry of deployable migrations, in chronological order. Each
 // entry's id is stable forever (used as the _id of the migrationsRun marker)
 // and `idempotent` must reflect actual runtime safety.
@@ -14,6 +15,7 @@
 
 import { migration as locRecoveryOwnerIndex } from "./entries/2026-09-30-loc-recovery-owner-index";
 import { migration as politicalMediaOrderIndexes } from "./entries/2026-10-04-political-media-order-indexes";
+import { migration as bankPropForexFeeIndex } from "./entries/2026-10-04-bank-prop-forex-fee-index";
 import { migration as supplyListingIndexes } from "./entries/2026-09-17-supply-listing-indexes";
 import { migration as ukDualMinistryRoleSlot } from "./entries/2026-09-17-uk-dual-ministry-role-slot";
 import { migration as electionResultSnapshots } from "./entries/2026-09-20-election-result-snapshots";
@@ -100,6 +102,8 @@ import { migration as financialTxLogCounterpartyIndex } from "./entries/2026-09-
 import { migration as appleProviderIdentityIndex } from "./entries/2026-09-30-apple-provider-identity-index";
 import { migration as reconcileSeedIndexes } from "./entries/2026-10-01-reconcile-seed-indexes";
 import { migration as bankLoanCharterEpoch } from "./entries/2026-10-04-bank-loan-charter-epoch";
+import { migration as manufacturingProductProjectsV2Index } from "./entries/2026-10-04-manufacturing-product-projects-v2-index";
+import { migration as bankTreasuryTradeIndexes } from "./entries/2026-10-04-bank-treasury-trade-indexes";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -310,6 +314,7 @@ export const MIGRATIONS: Migration[] = [
   // these nodes for future spawns.
   backfillNppTechBaselines,
   locRecoveryOwnerIndex,
+  bankPropForexFeeIndex,
   // #2688: also in the startup allowlist; listed here so `npm run migrate`
   // reports it and `--only ... --force` can rerun it.
   longHorizonTelemetryIndexes,
@@ -322,7 +327,11 @@ export const MIGRATIONS: Migration[] = [
   // Metadata only. Deploy this backfill before relying on charter epoch reads;
   // the runtime also dual-reads untagged legacy rows during rollout.
   bankLoanCharterEpoch,
+  governmentAccountability,
   politicalMediaOrderIndexes,
+  // v2 product lines use a separate collection and one active slot per corporation.
+  manufacturingProductProjectsV2Index,
+  bankTreasuryTradeIndexes,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.

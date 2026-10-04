@@ -122,6 +122,10 @@ export interface PoliticalParty {
   heroImageUrl?: string;
   logoUrl?: string;
   discordInviteUrl?: string | null;
+  /** Game turn of formation for autonomous election-entry maturation. */
+  createdTurn?: number;
+  /** Legacy saves preserve earned maturity without inventing a birth turn. */
+  nppElectionMatureAtTurn?: number;
   createdAt: Date;
   updatedAt: Date;
   /** Coalition this party belongs to, if any */

@@ -22,6 +22,7 @@ export const COUNTRY_ELECTION_PHASE_NAMES = [
   "brElections",
   "brSenateElections",
   "brGovernorElections",
+  "brPresidentialElection",
   "ruSupremeSovietElections",
   "ruNationalitiesElections",
   "ruRepublicSovietElections",

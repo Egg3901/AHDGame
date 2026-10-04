@@ -32,9 +32,10 @@ const NO_COUNTS = {
  * every merge path reports the same message. Returns null when clear.
  */
 export function bankTransferConflict(
-  target: Pick<Corporation, "name" | "bankCharter" | "bankSovereignEscrows">,
+  target: Pick<Corporation, "name" | "bankCharter" | "bankSovereignEscrows" | "bankPropForexFee">,
   acquirer: Pick<Corporation, "name" | "bankCharter">
 ): string | null {
+  if (target.bankPropForexFee) return `Cannot merge ${target.name} while a forex fee is settling.`;
   if (hasFundedSovereignEscrow(target)) {
     return `Cannot merge ${target.name} while funded sovereign bank payments remain unsettled.`;
   }
@@ -330,6 +331,7 @@ export async function transferBankCharterToAcquirer(
           name: 1,
           bankCharter: 1,
           bankSovereignEscrows: 1,
+          bankPropForexFee: 1,
           bankCharterTransfer: 1,
         },
       }
@@ -340,6 +342,8 @@ export async function transferBankCharterToAcquirer(
     ),
   ]);
   if (!target) return { ok: false, error: "Target corporation no longer exists" };
+  if (target.bankPropForexFee)
+    return { ok: false, error: "Forex fee settlement must finish before a charter transfer" };
   if (!acquirer) return { ok: false, error: "Acquiring corporation no longer exists" };
 
   const charter = target.bankCharter ?? null;

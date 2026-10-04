@@ -6,6 +6,7 @@ import type {
   OrgRegLedgerSource,
   OrgRegMetric,
   StatePartyOrg,
+  StateApprovalHistory,
   StateRegistrationPool,
 } from "@/lib/db/types";
 import { POOL_SENTINEL_PARTY_ID } from "@/lib/db/types";
@@ -14,6 +15,7 @@ import {
   resolveExecutiveOffice,
 } from "@/lib/states/regionalExecutive";
 import type { CountryId } from "@/lib/constants/countries";
+import { earnedOfficeholdingBonus } from "@/lib/government/rules/accountability";
 import { loadTurnLengthMinutes } from "@/lib/financialTxLog/expiresAt";
 import {
   HOME_FIELD_DECAY_RELIEF,
@@ -354,7 +356,7 @@ interface ProcessStateInput {
   turn: number;
   now: Date;
   /** The party holding this state's executive + its magnitude band, when any. */
-  governor?: { partyId: string; sign: 1 | 2 | 3 } | null;
+  governor?: { partyId: string; sign: number } | null;
   /**
    * Enacted registration-access law, -50..+50 (`gameState.registrationAccessBias`).
    * Absent/0 = the neutral regime, byte-identical to the pre-law behaviour.
@@ -699,6 +701,17 @@ export async function processRegDriftDecay(
     }
   }
 
+  const approvalRows = await db
+    .collection<StateApprovalHistory>("stateApprovalHistory")
+    .find(
+      { countryId: { $in: countryIds } },
+      { projection: { countryId: 1, stateId: 1, approvalRating: 1 } }
+    )
+    .toArray();
+  const approvalByRegion = new Map(
+    approvalRows.map((row) => [`${row.countryId}:${row.stateId ?? row._id}`, row.approvalRating])
+  );
+
   const partyOps: AnyBulkWriteOperation<StatePartyOrg>[] = [];
   const poolOps: AnyBulkWriteOperation<StateRegistrationPool>[] = [];
   const ledgerRows: OrgRegLedger[] = [];
@@ -725,7 +738,14 @@ export async function processRegDriftDecay(
       pool,
       turn: currentTurn,
       now,
-      governor: executive ? { partyId: executive.partyId, sign: executive.sign } : null,
+      governor: executive
+        ? {
+            partyId: executive.partyId,
+            sign:
+              executive.sign *
+              earnedOfficeholdingBonus(approvalByRegion.get(`${pool.countryId}:${pool.stateId}`)),
+          }
+        : null,
       registrationAccessBias: accessBiasFor(pool.countryId),
     });
     if (!planned) continue;

@@ -232,6 +232,9 @@ function evalExpr(expr: unknown, doc: Doc): unknown {
   if (typeof expr === "string" && expr.startsWith("$")) return getPath(doc, expr.slice(1));
   if (!isPlainObject(expr)) return expr;
   const [op, rawArgs] = Object.entries(expr)[0];
+  if (op === "$cond" && Array.isArray(rawArgs)) {
+    return evalExpr(rawArgs[evalExpr(rawArgs[0], doc) ? 1 : 2], doc);
+  }
   const args = Array.isArray(rawArgs)
     ? rawArgs.map((a) => evalExpr(a, doc))
     : [evalExpr(rawArgs, doc)];
@@ -258,6 +261,11 @@ function evalExpr(expr: unknown, doc: Doc): unknown {
       return ((args[0] as number) ?? 0) - ((args[1] as number) ?? 0);
     case "$multiply":
       return args.reduce((prod: number, a) => prod * ((a as number) ?? 0), 1);
+    case "$divide":
+      if (args[1] === 0) throw new Error("inMemoryDb: division by zero");
+      return args[0] == null || args[1] == null ? null : (args[0] as number) / (args[1] as number);
+    case "$floor":
+      return args[0] == null ? null : Math.floor(args[0] as number);
     case "$max":
       return Math.max(...args.map((a) => (a as number) ?? 0));
     case "$min":
@@ -336,12 +344,18 @@ function resolvePositional(doc: Doc, update: Update, filter: Doc | undefined): U
       throw new Error(`inMemoryDb: positional "${arrayPath}" is not an array`);
     const prefix = `${arrayPath}.`;
     const conditions: Doc = {};
-    for (const [key, condition] of Object.entries(filter ?? {})) {
-      if (key.startsWith(prefix)) conditions[key.slice(prefix.length)] = condition;
-      else if (key === arrayPath && isPlainObject(condition) && "$elemMatch" in condition) {
-        Object.assign(conditions, (condition as { $elemMatch: Doc }).$elemMatch);
+    const collect = (row: Doc): void => {
+      for (const [key, condition] of Object.entries(row)) {
+        if (key === "$and" && Array.isArray(condition)) {
+          for (const branch of condition) if (isPlainObject(branch)) collect(branch);
+        } else if (key.startsWith(prefix)) {
+          conditions[key.slice(prefix.length)] = condition;
+        } else if (key === arrayPath && isPlainObject(condition) && "$elemMatch" in condition) {
+          Object.assign(conditions, (condition as { $elemMatch: Doc }).$elemMatch);
+        }
       }
-    }
+    };
+    collect(filter ?? {});
     if (Object.keys(conditions).length === 0) {
       throw new Error(`inMemoryDb: positional "${arrayPath}.$" needs a filter on that array`);
     }

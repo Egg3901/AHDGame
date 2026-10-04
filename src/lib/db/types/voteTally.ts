@@ -42,6 +42,7 @@ export interface ResolvedSeatHolder {
 }
 
 export interface ElectionVoteTally {
+  brazilPresidentialResult?: import("@/lib/countries/br/rules/presidential").BrazilPresidentialDecision;
   _id: ObjectId;
   electionId: ObjectId;
   state: string;

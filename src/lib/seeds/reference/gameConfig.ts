@@ -86,6 +86,8 @@ export const gameConfig: GameConfig = {
   // fresh world has no legacy revenue to rebase, so it does not apply here.
   labourSystemMode: "full",
   marketSystemMode: "plants",
+  // Product projects are opt-in; absent and false both keep product reads off.
+  productLinesV2Enabled: false,
   // Freight routes are observable from a fresh world, but the economic effect
   // requires an explicit, separately-soaked rollout.
   freightSettlementMode: "shadow",

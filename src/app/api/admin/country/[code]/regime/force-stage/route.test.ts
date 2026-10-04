@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mockGetDb = vi.fn();
+const mockFormationFindOne = vi.fn();
 const mockRequireAdmin = vi.fn();
 const mockGetCurrentTurn = vi.fn();
 const mockGetRegimeColl = vi.fn();
@@ -11,6 +12,9 @@ const mockOfferDecision = vi.fn();
 const mockFireFactionSplit = vi.fn();
 
 vi.mock("@/lib/mongodb", () => ({ getDb: () => mockGetDb() }));
+vi.mock("@/lib/db/collections/governmentFormation", () => ({
+  getGovernmentFormationsCollection: () => ({ findOne: mockFormationFindOne }),
+}));
 vi.mock("@/lib/api/requireAdmin", () => ({
   requireAdmin: (...args: unknown[]) => mockRequireAdmin(...args),
 }));
@@ -43,6 +47,7 @@ function request(body: unknown = { toStage: "discontent" }): Request {
 describe("POST /api/admin/country/[code]/regime/force-stage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockFormationFindOne.mockResolvedValue(null);
     mockGetDb.mockResolvedValue({});
     mockRequireAdmin.mockResolvedValue({
       ok: true,

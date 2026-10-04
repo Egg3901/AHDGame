@@ -4,6 +4,8 @@
  * capacity; forecasts account for construction, observed sales and cash costs.
  */
 
+import { calculateBondYieldToMaturityPercent } from "@/lib/constants/bonds";
+
 export const COLD_CAPACITY_UPKEEP_FRACTION = 0.05;
 
 /** Both revenue governors must have expired in the observed operating turn. */
@@ -139,6 +141,8 @@ export interface InvestmentForecastInput {
 }
 
 export interface InvestmentHorizon {
+  /** First turn charged build cash has been recovered after all forecast deductions. */
+  cashPaybackTurn: number | null;
   turns: number;
   deliveredUnits: number;
   soldUnitsDaily: number;
@@ -184,6 +188,7 @@ export function forecastSectorInvestment(
   const taxRate = Math.max(0, Math.min(100, input.taxRatePercent)) / 100;
   const depreciation = Math.max(0, Math.min(1, input.depreciationPerTurn));
   const horizons: InvestmentHorizon[] = [];
+  let cashPaybackTurn: number | null = null;
   let capacity = 0;
   let operatingCashAnchor = 0;
   let overheadAnchor = 0;
@@ -207,10 +212,12 @@ export function forecastSectorInvestment(
     overheadAnchor += overhead;
     taxAnchor += Math.max(0, operating - overhead) * taxRate;
     replacementReserveAnchor += capacity * depreciation * input.chargedPerUnitAnchor;
+    const availableCashAnchor =
+      operatingCashAnchor - overheadAnchor - taxAnchor - replacementReserveAnchor;
+    if (cashPaybackTurn === null && availableCashAnchor >= cost) cashPaybackTurn = turn;
     if (turn === 48 || turn === 96 || turn === 192) {
-      const availableCashAnchor =
-        operatingCashAnchor - overheadAnchor - taxAnchor - replacementReserveAnchor;
       horizons.push({
+        cashPaybackTurn,
         turns: turn,
         deliveredUnits: capacity,
         soldUnitsDaily: sold,
@@ -227,4 +234,50 @@ export function forecastSectorInvestment(
     }
   }
   return horizons;
+}
+
+export interface InvestmentBondReference {
+  annualYieldPercent: number;
+  issuerName: string;
+  currencyCode: string;
+  turnsToMaturity: number;
+  quoteTurn: number;
+}
+
+/** Current reference at the stored price, without promising an execution or future yield. */
+export function investmentBondReference(
+  bond: {
+    couponRate: number;
+    marketPrice: number;
+    maturityTurn: number;
+    currencyCode?: string;
+    issuerName?: string;
+    countryId?: string;
+  } | null,
+  currencyCode: string,
+  currentTurn: number
+): InvestmentBondReference | null {
+  if (
+    !bond ||
+    bond.currencyCode !== currencyCode ||
+    ![bond.couponRate, bond.marketPrice, bond.maturityTurn, currentTurn].every(Number.isFinite) ||
+    bond.couponRate < 0 ||
+    bond.marketPrice <= 0 ||
+    bond.maturityTurn <= currentTurn
+  )
+    return null;
+  const turnsToMaturity = bond.maturityTurn - currentTurn;
+  const annualYieldPercent = calculateBondYieldToMaturityPercent(
+    bond.couponRate,
+    bond.marketPrice,
+    turnsToMaturity
+  );
+  if (!Number.isFinite(annualYieldPercent)) return null;
+  return {
+    annualYieldPercent,
+    issuerName: bond.issuerName ?? bond.countryId ?? "Sovereign",
+    currencyCode,
+    turnsToMaturity,
+    quoteTurn: currentTurn,
+  };
 }

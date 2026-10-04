@@ -7,6 +7,7 @@ import {
   ensureBRElections,
   ensureBRSenateElections,
   ensureBRGovernorElections,
+  ensureBRPresidentialElection,
 } from "./elections/perpetual";
 
 /**
@@ -35,6 +36,7 @@ const spawn = async (now: Date, currentTurn?: number): Promise<SpawnElectionsRes
   await ensureBRElections(now, currentTurn);
   await ensureBRSenateElections(now, currentTurn);
   await ensureBRGovernorElections(now, currentTurn);
+  await ensureBRPresidentialElection(now, currentTurn);
   return { message: "BR Câmara / Senate / regional executive continuity check complete." };
 };
 
@@ -52,6 +54,7 @@ const phases: CountryElectionPhaseEntry[] = [
   { name: "brElections", fn: ensureBRElections },
   { name: "brSenateElections", fn: ensureBRSenateElections },
   { name: "brGovernorElections", fn: ensureBRGovernorElections },
+  { name: "brPresidentialElection", fn: ensureBRPresidentialElection },
 ];
 
 /** Default parties that seed as Major; every other default party seeds Minor. */

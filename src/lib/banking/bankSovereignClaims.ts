@@ -30,15 +30,30 @@ export async function addBankMaturityClaims(
   }
 ): Promise<BankSovereignClaim[]> {
   const claims: BankSovereignClaim[] = [];
+  const unitsByEpoch = new Map<
+    string,
+    { bankId: ObjectId; charteredTurn: number; units: number }
+  >();
   for (const holder of input.bond.holders ?? []) {
     if (!holder.bankId || !Number.isSafeInteger(holder.charteredTurn)) continue;
+    if (holder.bankTreasuryTradeId) continue;
+    const key = `${holder.bankId.toHexString()}:${holder.charteredTurn}`;
+    const existing = unitsByEpoch.get(key) ?? {
+      bankId: holder.bankId,
+      charteredTurn: holder.charteredTurn!,
+      units: 0,
+    };
+    existing.units += Math.max(0, holder.units);
+    unitsByEpoch.set(key, existing);
+  }
+  for (const holder of unitsByEpoch.values()) {
     const amountLocal = roundSavingsAmount(holder.units * BOND_UNIT_FACE_VALUE, input.currencyCode);
     if (amountLocal <= 0) continue;
     const claim: BankSovereignClaim = {
       id: `bank-sovereign-maturity:${input.bond._id.toHexString()}:${holder.bankId.toHexString()}:${holder.charteredTurn}`,
       kind: "maturity",
       bankId: holder.bankId.toHexString(),
-      charteredTurn: holder.charteredTurn!,
+      charteredTurn: holder.charteredTurn,
       bondId: input.bond._id.toHexString(),
       countryId: input.countryId,
       currencyCode: input.currencyCode,

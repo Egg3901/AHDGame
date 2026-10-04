@@ -26,10 +26,9 @@ import type { SupremeCourtSeat } from "@/lib/db/types/scotus";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
 import { logger } from "../observability/logger";
 import {
-  governmentApprovalFavorabilityDrain,
-  loadGovernmentApprovalByCountry,
-  loadRulingExecutiveParties,
-} from "./governmentApprovalFavorability";
+  observeGovernmentAccountability,
+  memberAccountabilityDrain,
+} from "@/lib/government/accountability";
 const MIN_BASE_ACTIONS_PER_TURN = 4;
 /*
  * Fallback if `gameConfig.chairActionBonus` is missing on legacy configs.
@@ -61,10 +60,7 @@ export async function processActionRefresh(
   now: Date
 ): Promise<void> {
   const db = await getDb();
-  const [rulingPartyByCountry, approvalByCountry] = await Promise.all([
-    loadRulingExecutiveParties(db),
-    loadGovernmentApprovalByCountry(db),
-  ]);
+  const accountability = await observeGovernmentAccountability(db);
   const baseActionsPerTurn = Math.max(config?.baseActionsPerTurn ?? 0, MIN_BASE_ACTIONS_PER_TURN);
   const chairActionBonus = config?.chairActionBonus ?? DEFAULT_CHAIR_ACTION_BONUS;
 
@@ -270,11 +266,13 @@ export async function processActionRefresh(
 
     const currentFavorability = character.favorability ?? 50;
     const favPenalty = calculateFavorabilityAboveThresholdPenalty(currentFavorability);
-    const rulingParty = rulingPartyByCountry.get(character.countryId);
-    const governmentDrain =
-      rulingParty != null && character.party != null && rulingParty === character.party
-        ? governmentApprovalFavorabilityDrain(approvalByCountry.get(character.countryId) ?? 50)
-        : 0;
+    const governmentDrain = memberAccountabilityDrain(
+      accountability,
+      character.countryId,
+      character.homeState,
+      character.party,
+      `character:${character._id}`
+    );
     /*
      * Infamy drain — the advertised "(infamy − 20) × 0.05 favorability per
      * turn" from the profile pages and stats wiki, now actually applied.
@@ -378,13 +376,13 @@ export async function processActionRefresh(
 
     const currentFavorability = npp.favorability ?? 50;
     const favPenalty = calculateFavorabilityAboveThresholdPenalty(currentFavorability);
-    const rulingParty = rulingPartyByCountry.get(npp.countryId as CountryId);
-    const governmentDrain =
-      rulingParty != null && npp.party != null && rulingParty === npp.party
-        ? governmentApprovalFavorabilityDrain(
-            approvalByCountry.get(npp.countryId as CountryId) ?? 50
-          )
-        : 0;
+    const governmentDrain = memberAccountabilityDrain(
+      accountability,
+      npp.countryId ?? "US",
+      npp.homeState,
+      npp.party,
+      `npp:${npp._id}`
+    );
     const newFavorability = Math.min(
       100,
       Math.max(0, currentFavorability - favPenalty - governmentDrain)

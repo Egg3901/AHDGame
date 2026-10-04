@@ -61,7 +61,7 @@ export async function appointNppPresident(
   // the fallback still supplies a governing brain.
   if (
     COUNTRIES_WITH_PRESIDENTIAL_ELECTION_CYCLES.has(countryId) &&
-    config.status !== "coming-soon"
+    (config.status !== "coming-soon" || countryId === "BR")
   ) {
     return false;
   }

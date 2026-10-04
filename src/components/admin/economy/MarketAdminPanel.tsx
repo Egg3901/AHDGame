@@ -13,6 +13,7 @@ interface MarketFlags {
   brandLoyaltyEnabled: boolean;
   brandLoyaltySliceEnabled: boolean;
   sectorQualityEnabled: boolean;
+  productLinesV2Enabled: boolean;
   supplyAgreementsEnabled: boolean;
   shortageResponsiveSourcingEnabled: boolean;
   extractionOutputScaleEnabled: boolean;
@@ -42,6 +43,12 @@ const FEATURE_TOGGLES: Array<{
     label: "Output quality",
     description:
       "Four-pillar quality per sector, rolled up to corp average and commodity propagation.",
+  },
+  {
+    key: "productLinesV2Enabled",
+    label: "Manufacturing product lines v2",
+    description:
+      "One active product project per corporation, allocated across owned plants. During development, paid R&D funds the project until its cost is met.",
   },
   {
     key: "supplyAgreementsEnabled",
@@ -92,6 +99,7 @@ export function MarketAdminPanel() {
           brandLoyaltyEnabled: data.brandLoyaltyEnabled === true,
           brandLoyaltySliceEnabled: data.brandLoyaltySliceEnabled === true,
           sectorQualityEnabled: data.sectorQualityEnabled === true,
+          productLinesV2Enabled: data.productLinesV2Enabled === true,
           supplyAgreementsEnabled: data.supplyAgreementsEnabled === true,
           shortageResponsiveSourcingEnabled: data.shortageResponsiveSourcingEnabled === true,
           extractionOutputScaleEnabled: data.extractionOutputScaleEnabled === true,

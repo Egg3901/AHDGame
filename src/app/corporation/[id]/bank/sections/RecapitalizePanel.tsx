@@ -24,6 +24,7 @@ export function RecapitalizePanel({
   requiredReservesAmount,
   withdrawable,
   totalLoans,
+  sovereignTreasuryMarkValue,
   propBookMarkValue,
   borrowings,
   canMutate,
@@ -36,6 +37,7 @@ export function RecapitalizePanel({
   requiredReservesAmount: number;
   withdrawable: number;
   totalLoans: number;
+  sovereignTreasuryMarkValue: number;
   propBookMarkValue: number;
   borrowings: BankBorrowings;
   canMutate: boolean;
@@ -45,6 +47,7 @@ export function RecapitalizePanel({
   const position = assessCapital({
     cashReserves,
     totalLoans,
+    sovereignTreasuryMarkValue,
     borrowings,
     propBookMarkValue,
   });

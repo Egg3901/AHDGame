@@ -117,6 +117,7 @@ export type {
   GovernmentStatus,
   GovernmentFormationType,
 } from "./parliamentaryGovernment";
+export type { GovernmentFormation } from "./governmentFormation";
 export type { GovernmentApproval } from "./governmentApproval";
 export type { StateApprovalHistory } from "./stateApproval";
 export type {

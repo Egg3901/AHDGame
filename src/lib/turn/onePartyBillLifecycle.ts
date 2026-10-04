@@ -15,6 +15,7 @@
  * purge events recorded against the country are folded in and marked
  * processed once consumed.
  */
+import { governmentLeaderReference, leaderStateId } from "@/lib/government/leaderReference";
 
 import type { Db } from "mongodb";
 import { getDb } from "@/lib/mongodb";
@@ -278,8 +279,9 @@ async function processCountryBills(
   // ever installed via installNewLeader) bypasses every regime tick
   // silently. ensureLeaderStateExists is a no-op when the row exists.
   const gov = await getGovernmentFormationsCollection(db).findOne({ _id: countryId });
-  if (gov?.pmCharacterId) {
-    await ensureLeaderStateExists(db, countryId, gov.pmCharacterId, currentTurn).catch((err) =>
+  const leader = governmentLeaderReference(gov);
+  if (leader) {
+    await ensureLeaderStateExists(db, countryId, leader, currentTurn).catch((err) =>
       console.error(`${countryId} leader-state self-heal on per-turn tick failed:`, err)
     );
   }
@@ -342,11 +344,11 @@ async function processCountryEscalation(
   currentTurn: number
 ): Promise<void> {
   const gov = await getGovernmentFormationsCollection(db).findOne({ _id: countryId });
-  if (!gov?.pmCharacterId) return;
+  const leader = governmentLeaderReference(gov);
+  if (!leader) return;
 
   const leaderState = await getCountryLeaderStatesCollection(db).findOne({
-    countryId,
-    leaderCharacterId: gov.pmCharacterId,
+    _id: leaderStateId(countryId, leader),
   });
   if (!leaderState) return;
 
@@ -355,7 +357,7 @@ async function processCountryEscalation(
     countryId,
     popularLegitimacy: leaderState.popularLegitimacy ?? INITIAL_POPULAR_LEGITIMACY,
     partyConfidence: leaderState.partyConfidence,
-    rulingLeaderCharacterId: gov.pmCharacterId,
+    rulingLeaderCharacterId: leader,
     currentTurn,
   });
 }
@@ -380,7 +382,8 @@ async function processCountryPopularDrift(
 
   // Need the current leader to write the per-leader scalar
   const gov = await getGovernmentFormationsCollection(db).findOne({ _id: countryId });
-  if (!gov?.pmCharacterId) return;
+  const leader = governmentLeaderReference(gov);
+  if (!leader) return;
 
   const purgeColl = db.collection<PurgeEvent>("rulingPartyPurgeEvents");
   const pendingPurges = await purgeColl.find({ countryId, processed: false }).toArray();
@@ -397,7 +400,7 @@ async function processCountryPopularDrift(
   await processPopularLegitimacyTurn({
     db,
     countryId,
-    leaderCharacterId: gov.pmCharacterId,
+    leaderCharacterId: leader,
     currentTurn,
     economic,
     purges: mapPurgeEventsToInput(pendingPurges),
