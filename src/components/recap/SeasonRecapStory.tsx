@@ -32,10 +32,7 @@ export function SeasonRecapStory({ recap, onClose }: SeasonRecapStoryProps) {
   const story = useMemo(() => buildStory(recap), [recap]);
   const accent = useMemo(() => recapAccent(recap.partyColor), [recap.partyColor]);
   const motion = !usePrefersReducedMotion();
-  const player = useStoryPlayer(
-    story.map((s) => s.ms),
-    true
-  );
+  const player = useStoryPlayer(story.map((s) => s.ms));
   const { index, next, prev, togglePause, paused } = player;
   const slide = story[index];
   const isFinale = slide?.kind === "finale";
@@ -124,10 +121,20 @@ export function SeasonRecapStory({ recap, onClose }: SeasonRecapStoryProps) {
               key={`${s.kind}-${i}`}
               className="h-[2px] flex-1 overflow-hidden rounded-full bg-white/20"
             >
-              <div
-                className="h-full bg-white"
-                style={{ width: `${i < index ? 100 : i === index ? player.progress * 100 : 0}%` }}
-              />
+              {i === index && s.ms > 0 ? (
+                // The active segment's animation is the slide timer.
+                <div
+                  key={index}
+                  className="h-full bg-white"
+                  style={{
+                    animation: `ahdw-progress ${s.ms}ms linear forwards`,
+                    animationPlayState: player.running ? "running" : "paused",
+                  }}
+                  onAnimationEnd={next}
+                />
+              ) : (
+                <div className="h-full bg-white" style={{ width: i <= index ? "100%" : "0%" }} />
+              )}
             </div>
           ))}
         </div>

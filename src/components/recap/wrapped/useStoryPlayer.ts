@@ -1,19 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 /**
- * Playback state for the Wrapped story: which slide is showing, whether the
- * auto-advance timer runs, and per-slide holds. A slide can `hold()` the timer
- * (the guess slide waits for an answer) and `release()` it again; the progress
- * bar reads `elapsed / duration` for the active segment.
+ * Playback state for the Wrapped story: which slide is showing and whether its
+ * timer runs. The timer itself is the progress bar's CSS animation (the shell
+ * advances on `animationend`), so playback costs no per-frame React renders.
+ * A slide can `hold()` the timer (the guess slide waits for an answer) and
+ * `release()` it again.
  */
 export interface StoryPlayer {
   index: number;
   paused: boolean;
   held: boolean;
-  /** 0..1 progress through the active slide. */
-  progress: number;
+  /** True while the active slide's progress animation should run. */
+  running: boolean;
   goTo: (i: number) => void;
   next: () => void;
   prev: () => void;
@@ -22,18 +23,14 @@ export interface StoryPlayer {
   release: () => void;
 }
 
-export function useStoryPlayer(durations: number[], enabled: boolean): StoryPlayer {
+export function useStoryPlayer(durations: number[]): StoryPlayer {
   const total = durations.length;
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
   const [held, setHeld] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const elapsedRef = useRef(0);
 
   const goTo = useCallback(
     (i: number) => {
-      elapsedRef.current = 0;
-      setProgress(0);
       setHeld(false);
       setIndex(Math.max(0, Math.min(total - 1, i)));
     },
@@ -41,40 +38,21 @@ export function useStoryPlayer(durations: number[], enabled: boolean): StoryPlay
   );
   const next = useCallback(() => goTo(index + 1), [goTo, index]);
   const prev = useCallback(() => goTo(index - 1), [goTo, index]);
-
-  const duration = durations[index] ?? 0;
-  const running = enabled && !paused && !held && duration > 0 && index < total - 1;
-
-  useEffect(() => {
-    if (!running) return;
-    let raf = 0;
-    let last = 0;
-    const tick = (ts: number) => {
-      if (last) elapsedRef.current += ts - last;
-      last = ts;
-      const p = Math.min(1, elapsedRef.current / duration);
-      setProgress(p);
-      if (p >= 1) {
-        goTo(index + 1);
-        return;
-      }
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [running, duration, index, goTo]);
+  const hold = useCallback(() => setHeld(true), []);
+  const release = useCallback(() => setHeld(false), []);
+  const togglePause = useCallback(() => setPaused((p) => !p), []);
 
   return {
     index,
     paused,
     held,
-    progress: index >= total - 1 ? 1 : progress,
+    running: !paused && !held && (durations[index] ?? 0) > 0 && index < total - 1,
     goTo,
     next,
     prev,
-    togglePause: useCallback(() => setPaused((p) => !p), []),
-    hold: useCallback(() => setHeld(true), []),
-    release: useCallback(() => setHeld(false), []),
+    togglePause,
+    hold,
+    release,
   };
 }
 

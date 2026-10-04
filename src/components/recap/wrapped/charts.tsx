@@ -23,6 +23,7 @@ export const WRAPPED_KEYFRAMES = `
 @keyframes ahdw-widen{from{transform:scaleX(0)}to{transform:scaleX(1)}}
 @keyframes ahdw-draw{from{stroke-dashoffset:1}to{stroke-dashoffset:0}}
 @keyframes ahdw-fade{from{opacity:0}to{opacity:1}}
+@keyframes ahdw-progress{from{width:0%}to{width:100%}}
 @keyframes ahdw-pop{0%{opacity:0;transform:scale(.4)}70%{opacity:1;transform:scale(1.15)}100%{opacity:1;transform:scale(1)}}
 `;
 
