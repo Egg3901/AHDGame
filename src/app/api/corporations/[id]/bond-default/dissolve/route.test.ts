@@ -344,11 +344,9 @@ describe("POST /api/corporations/[id]/bond-default/dissolve", () => {
     expect(db.collectionMocks.bonds.deleteMany).toHaveBeenCalled();
     expect(db.collectionMocks.corporations.deleteOne).toHaveBeenCalledWith({ _id: corpId });
     expect(db.collectionMocks.unownedSectors.findOneAndUpdate).toHaveBeenCalledTimes(1);
-    expect(db.collectionMocks.corporateSectors.deleteMany).toHaveBeenCalledWith({
-      _id: {
-        $in: [expect.any(Object)],
-      },
-    });
+    const sectorDeleteFilter = db.collectionMocks.corporateSectors.deleteMany.mock.calls[0][0];
+    expect(sectorDeleteFilter._id.$in).toHaveLength(1);
+    expect(sectorDeleteFilter["constructionPropertyTransition.kind"]).toBe("restore");
   });
 
   it("returns 400 when body validation fails", async () => {

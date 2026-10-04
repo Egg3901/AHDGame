@@ -151,7 +151,7 @@ describe("nationalizeSector", () => {
     expect(resolveNationalCorporationForSector).toHaveBeenCalledWith(db, "CN", "energy");
 
     const sectorUpdate = db.collectionMocks.corporateSectors.updateOne.mock.calls[0];
-    expect(sectorUpdate[0]).toEqual({ _id: sectorId });
+    expect(sectorUpdate[0]).toMatchObject({ _id: sectorId, $and: expect.any(Array) });
     expect(sectorUpdate[1].$set.corporationId).toEqual(natCorpId);
     // Transition revenue haircut (6M × 0.85) + nationalization anchor stamped.
     expect(sectorUpdate[1].$set.revenue).toBe(5_100_000);
@@ -288,7 +288,9 @@ describe("nationalizeSector", () => {
     expect(mergeUpdate![1].$set.nationalizedAtTurn).toBe(1);
 
     // The donor's taken row is folded in (deleted), not left re-parented.
-    expect(db.collectionMocks.corporateSectors.deleteOne).toHaveBeenCalledWith({ _id: sectorId });
+    expect(db.collectionMocks.corporateSectors.deleteOne).toHaveBeenCalledWith(
+      expect.objectContaining({ _id: sectorId, $and: expect.any(Array) })
+    );
     const reparent = db.collectionMocks.corporateSectors.updateOne.mock.calls.find((c) =>
       c[0]?._id?.equals?.(sectorId)
     );
@@ -395,7 +397,7 @@ describe("nationalizeWholeCorp", () => {
     const sectorUpdate = db.collectionMocks.corporateSectors.updateOne.mock.calls.find(
       (c) => c[1]?.$set?.corporationId != null
     );
-    expect(sectorUpdate![0]).toEqual({ _id: sectorId });
+    expect(sectorUpdate![0]).toMatchObject({ _id: sectorId, $and: expect.any(Array) });
     expect(sectorUpdate![1].$set.corporationId).toEqual(primaryId);
 
     // Bonds re-stamped to the primary (issuer continuity).
@@ -653,7 +655,10 @@ describe("nationalizeWholeCorp", () => {
     const sectorUpdate = db.collectionMocks.corporateSectors.updateOne.mock.calls.find(
       (c) => c[1]?.$set?.corporationId != null
     );
-    expect(sectorUpdate![0]).toEqual({ _id: domesticSectorId });
+    expect(sectorUpdate![0]).toMatchObject({
+      _id: domesticSectorId,
+      $and: expect.any(Array),
+    });
 
     // Foreign sector merged into the unowned market (₳-converted, by state+type)
     // and removed. This is an AGGREGATION PIPELINE update, not $inc +
@@ -813,9 +818,9 @@ describe("nationalizeWholeCorp", () => {
     expect(merge![1].$set.nationalizedAtTurn).toBe(1);
     expect(merge![1].$inc.workers).toBe(500);
     // …and the donor row is DELETED (not blind-re-parented onto a colliding key).
-    expect(db.collectionMocks.corporateSectors.deleteOne).toHaveBeenCalledWith({
-      _id: donorSectorId,
-    });
+    expect(db.collectionMocks.corporateSectors.deleteOne).toHaveBeenCalledWith(
+      expect.objectContaining({ _id: donorSectorId, $and: expect.any(Array) })
+    );
     const blindReparent = db.collectionMocks.corporateSectors.updateOne.mock.calls.find(
       (c) => c[1]?.$set?.corporationId != null
     );

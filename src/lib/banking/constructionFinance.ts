@@ -20,6 +20,7 @@ import {
   acquireConstructionAdmission,
   releaseConstructionAdmission,
 } from "./constructionAdmission";
+import { unprotectedConstructionPropertyFilter } from "./rules/constructionProperty";
 
 export type ConstructionFinanceResult =
   { ok: true; pending: boolean; loanId: string; claimId: string } | { ok: false; error: string };
@@ -174,6 +175,7 @@ export async function requestConstructionFinance(input: {
               $or: [{ strategyId: { $exists: false } }, { strategyId: { $type: "null" } }],
             }),
         $and: [
+          unprotectedConstructionPropertyFilter(),
           {
             $or: [
               { buildQueue: sector.buildQueue ?? [] },

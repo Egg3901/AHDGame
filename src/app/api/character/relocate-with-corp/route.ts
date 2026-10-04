@@ -12,7 +12,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { getDb } from "@/lib/mongodb";
-import type { State, Corporation } from "@/lib/db/types";
+import type { State, Corporation, CorporateSector } from "@/lib/db/types";
 import { handleRouteError } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
@@ -38,6 +38,7 @@ import {
   type ConvertCorpCurrencySuccess,
 } from "@/lib/corporations/convertCorpCurrency";
 import { findActiveResidentCeoCorporation } from "@/lib/corporations/ceoResidency";
+import { hasProtectedConstructionPropertyIn } from "@/lib/corporations/securedConstructionProperty";
 import { commandEconomyRelocationBlock } from "@/lib/corporations/relocationCommandEconomyGate";
 import {
   getRelocationCooldownStatus,
@@ -148,6 +149,16 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+    const propertySectors = await db
+      .collection<CorporateSector>("corporateSectors")
+      .find({ corporationId: corp._id })
+      .toArray();
+    if (hasProtectedConstructionPropertyIn(propertySectors)) {
+      return NextResponse.json(
+        { error: "Resolve secured construction before relocating corporate headquarters" },
+        { status: 409 }
+      );
+    }
 
     // The CEO may still move alone; taking a private corporation along would
     // found private enterprise inside a command economy.
@@ -252,7 +263,8 @@ export async function POST(request: Request) {
         newCurrency,
         fxByCurrency,
         now,
-        forexEnabled
+        forexEnabled,
+        propertySectors
       );
       if (!convResult.ok) {
         return NextResponse.json(

@@ -8,7 +8,7 @@ import { handleRouteError } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { getGameState } from "@/lib/gameState";
 import { closeCeoTenure } from "@/lib/corporations/ceoHistory";
-import type { Corporation, State } from "@/lib/db/types";
+import type { Corporation, CorporateSector, State } from "@/lib/db/types";
 import type { Character } from "@/lib/db/types/character";
 import type { ImperialCharacter } from "@/lib/db/types/imperialCharacter";
 import type { CountryId } from "@/lib/constants/countries";
@@ -38,6 +38,7 @@ import {
   type ConvertCorpCurrencySuccess,
 } from "@/lib/corporations/convertCorpCurrency";
 import { doesCeoResideAtHeadquarters } from "@/lib/corporations/ceoResidency";
+import { hasProtectedConstructionPropertyIn } from "@/lib/corporations/securedConstructionProperty";
 
 const relocateSchema = z.object({
   targetStateId: z.string().min(1, "Target state/region ID required"),
@@ -88,6 +89,17 @@ export async function relocateHeadquarters(request: Request, { params }: RoutePa
     const resolved = await resolveCorporation(db, id);
     if (!resolved.ok) return resolved.response;
     const { corporation } = resolved;
+
+    const propertySectors = await db
+      .collection<CorporateSector>("corporateSectors")
+      .find({ corporationId: corporation._id })
+      .toArray();
+    if (hasProtectedConstructionPropertyIn(propertySectors)) {
+      return NextResponse.json(
+        { error: "Resolve secured construction before relocating corporate headquarters" },
+        { status: 409 }
+      );
+    }
 
     if (corporation.federationPendingHeadquartersId) {
       return NextResponse.json(
@@ -289,7 +301,8 @@ export async function relocateHeadquarters(request: Request, { params }: RoutePa
         newCurrency,
         fxByCurrency,
         now,
-        forexEnabled
+        forexEnabled,
+        propertySectors
       );
       if (!convResult.ok) {
         return NextResponse.json(
