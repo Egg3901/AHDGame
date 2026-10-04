@@ -4,9 +4,9 @@
  * productQualityForCommodity.
  */
 import { commodityMixWeight, type CommodityType } from "@/lib/constants/commodities";
+import { advanceProductLifecycle, type ProductLifecycleStage } from "./productLifecycle";
 
-export type ManufacturingLifecycleStage =
-  "development" | "launch" | "growth" | "mature" | "decline" | "retired";
+export type ManufacturingLifecycleStage = ProductLifecycleStage;
 
 export interface PaidDevelopmentProgress {
   currentPaidAnchor: number;
@@ -35,22 +35,6 @@ export interface ManufacturingResearchSpendAllocation {
   productDevelopmentAnchor: number;
   genericResearchAnchor: number;
 }
-
-const LIFECYCLE_STAGE_TURNS: Partial<Record<ManufacturingLifecycleStage, number>> = {
-  launch: 24,
-  growth: 48,
-  mature: 120,
-  decline: 60,
-};
-
-const NEXT_LIFECYCLE_STAGE: Partial<
-  Record<ManufacturingLifecycleStage, ManufacturingLifecycleStage>
-> = {
-  launch: "growth",
-  growth: "mature",
-  mature: "decline",
-  decline: "retired",
-};
 
 export interface ManufacturedOutputAllocationInput {
   /** Nameplate revenue basis in anchor currency per day, derived from real plant capacity. */
@@ -180,53 +164,33 @@ export function advanceManufacturingProject(input: {
   receipt: { projectId: string; turn: number; amountAnchor: number };
 }): ManufacturingProjectProgress | null {
   const { project, receipt } = input;
-  if (
-    receipt.projectId !== project._id ||
-    !Number.isInteger(receipt.turn) ||
-    receipt.turn < project.startedTurn ||
-    receipt.turn <= (project.lastProcessedTurn ?? 0)
-  ) {
-    return null;
-  }
-
-  const developmentPaidAnchor =
-    project.developmentPaidAnchor + finiteNonNegative(receipt.amountAnchor);
-  const elapsedDevelopmentTurns =
-    project.stage === "development"
-      ? project.elapsedDevelopmentTurns + 1
-      : project.elapsedDevelopmentTurns;
-  let stage = project.stage;
-  let stageStartedTurn = project.stageStartedTurn;
-
-  if (stage === "development") {
-    const progress = advancePaidDevelopment({
-      currentPaidAnchor: developmentPaidAnchor,
-      additionalPaidAnchor: 0,
-      elapsedTurns: elapsedDevelopmentTurns,
+  const progress = advanceProductLifecycle({
+    product: {
+      id: project._id,
+      stage: project.stage,
+      stageStartedTurn: project.stageStartedTurn,
+      startedTurn: project.startedTurn,
+      lastProcessedTurn: project.lastProcessedTurn,
+      developmentPaidAnchor: project.developmentPaidAnchor,
       paidThresholdAnchor: project.paidThresholdAnchor,
+      elapsedDevelopmentTurns: project.elapsedDevelopmentTurns,
       elapsedThresholdTurns: project.elapsedThresholdTurns,
-    });
-    if (progress.ready) {
-      stage = "launch";
-      stageStartedTurn = receipt.turn;
-    }
-  } else {
-    const elapsedStageTurns = Math.max(0, receipt.turn - stageStartedTurn + 1);
-    const stageTurns = LIFECYCLE_STAGE_TURNS[stage];
-    const next = NEXT_LIFECYCLE_STAGE[stage];
-    if (stageTurns != null && next && elapsedStageTurns >= stageTurns) {
-      stage = next;
-      stageStartedTurn = receipt.turn;
-    }
-  }
+    },
+    receipt: {
+      productId: receipt.projectId,
+      turn: receipt.turn,
+      paidDevelopmentAnchor: receipt.amountAnchor,
+    },
+  });
+  if (!progress) return null;
 
   return {
-    stage,
-    stageStartedTurn,
-    lastProcessedTurn: receipt.turn,
-    developmentPaidAnchor,
-    elapsedDevelopmentTurns,
-    active: stage !== "retired",
+    stage: progress.stage,
+    stageStartedTurn: progress.stageStartedTurn,
+    lastProcessedTurn: progress.lastProcessedTurn,
+    developmentPaidAnchor: progress.developmentPaidAnchor,
+    elapsedDevelopmentTurns: progress.elapsedDevelopmentTurns,
+    active: progress.active,
   };
 }
 
