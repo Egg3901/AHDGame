@@ -89,9 +89,9 @@ describe("sovereign primary settlement", () => {
         currency: "USD",
         budgetId: "federal",
         poolCash: 12_000,
-        monetaryCash: 8_000,
-        face: 20_000,
-        annualCoupon: 1_000,
+        monetaryCash: 0,
+        face: 12_000,
+        annualCoupon: 600,
         now: NOW,
       },
       [],
@@ -105,9 +105,9 @@ describe("sovereign primary settlement", () => {
     );
 
     expect(Number(pool(db).cashLocal)).toBe(beforePool - 12_000);
-    expect(budget(db).treasuryBalance).toBe(20_100);
+    expect(budget(db).treasuryBalance).toBe(12_100);
     expect(budget(db).treasuryCashLocal).toBe(12_000);
-    expect(principal(db)).toBe(20_000);
+    expect(principal(db)).toBe(12_000);
     const cashEntry = db
       .collection("ledgerEntries")
       .docs.find((entry) =>
@@ -129,9 +129,9 @@ describe("sovereign primary settlement", () => {
         currency: "USD",
         budgetId: "federal",
         poolCash: 12_000,
-        monetaryCash: 8_000,
-        face: 20_000,
-        annualCoupon: 1_000,
+        monetaryCash: 0,
+        face: 12_000,
+        annualCoupon: 600,
         now: NOW,
       },
       [],

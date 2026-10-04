@@ -99,11 +99,19 @@ function assertSame(saved: Command, input: Command): void {
 }
 async function prepare(db: Db, command: Command): Promise<void> {
   const budgetId = command.countryId === "US" ? "federal" : command.countryId;
-  const [budget, gameConfig] = await Promise.all([
+  const [budget, config] = await Promise.all([
     db.collection<FederalBudget>("federalBudget").findOne({ _id: budgetId }),
-    db
-      .collection<GameConfig>("gameConfig")
-      .findOne({ _id: "default" }, { projection: { treasuryCashLedgerEnabled: 1 } }),
+    db.collection<GameConfig>("gameConfig").findOne(
+      { _id: "default" },
+      {
+        projection: {
+          treasuryCashLedgerEnabled: 1,
+          ledgerShadow: 1,
+          auditLog: 1,
+          turnLengthMinutes: 1,
+        },
+      }
+    ),
   ]);
   if (!budget) throw new TreasuryReserveTransferRejected("Federal budget not found", 404);
   const bankId = getBankId(command.countryId);
@@ -125,7 +133,7 @@ async function prepare(db: Db, command: Command): Promise<void> {
     debtCeiling: ceiling,
   });
   if (error) throw new TreasuryReserveTransferRejected(error);
-  const treasuryCashLedgerEnabled = gameConfig?.treasuryCashLedgerEnabled === true;
+  const treasuryCashLedgerEnabled = config?.treasuryCashLedgerEnabled === true;
   const availableTreasuryCash = treasuryCashLedgerEnabled
     ? budget.treasuryCashLocal
     : budget.treasuryBalance;
@@ -158,12 +166,6 @@ async function prepare(db: Db, command: Command): Promise<void> {
     },
   };
   const projections: TransitionProjection[] = [];
-  const config = await db
-    .collection<GameConfig>("gameConfig")
-    .findOne(
-      { _id: "default" },
-      { projection: { ledgerShadow: 1, auditLog: 1, turnLengthMinutes: 1 } }
-    );
   const [rate, state, thresholds, cadence] = await Promise.all([
     db
       .collection<{ currencyCode: string; rate: number }>("exchangeRates")
@@ -246,7 +248,7 @@ async function prepare(db: Db, command: Command): Promise<void> {
       insert: { ...entry, ...valuation },
       note: "Original conserved treasury/reserve cash witness",
     });
-    if (gameConfig?.treasuryCashLedgerEnabled === true) {
+    if (config?.treasuryCashLedgerEnabled === true) {
       const cashEntry = finalizeLedgerEntry({
         turn: entry.turn,
         createdAt: now,

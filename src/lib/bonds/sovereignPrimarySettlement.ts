@@ -132,17 +132,10 @@ export async function commitSovereignPrimary(
   projections: TransitionProjection[],
   accounting: PrimaryAccountingContext
 ): Promise<void> {
-  const transition = sovereignPrimaryTransition(input);
-  if (accounting.treasuryCashLedgerEnabled && input.poolCash > 0) {
-    transition.legs.push({
-      kind: "credit",
-      amount: input.poolCash,
-      collection: "federalBudget",
-      filter: { _id: input.budgetId },
-      path: "treasuryCashLocal",
-      note: "Record only cash actually removed from the sovereign bond pool",
-    });
-  }
+  const transition = sovereignPrimaryTransition({
+    ...input,
+    treasuryCashLedgerEnabled: accounting.treasuryCashLedgerEnabled === true,
+  });
   transition.projections.push(...projections);
   const observedRate = primaryFinancingRate(accounting, input.countryId, input.currency);
   if (

@@ -11,6 +11,7 @@ import { settleTransition } from "@/lib/banking/settlementJournal";
 import type { BankingTransition } from "@/lib/banking/rules/boundary";
 import { financialInterventionAmount } from "@/lib/livingConflict/rules/financialRescue";
 import { financialAusteritySpending } from "@/lib/livingConflict/rules/financialFiscal";
+import { loadBankingPolicy } from "@/lib/banking/policy";
 import { buildInitialLegislativePhases } from "@/lib/sovereignDefault/legislative/buildPhases";
 import type { CrisisActionContext } from "./optionActions";
 
@@ -20,7 +21,8 @@ export type FinancialFiscalResponse =
 export async function prepareFinancialFiscalResponse(
   db: Db,
   countryId: string,
-  option: CrisisDecisionOption
+  option: CrisisDecisionOption,
+  treasuryCashLedgerEnabled?: boolean
 ): Promise<void> {
   if (option.action?.kind !== "financialCrisisResponse") return;
   const response = option.action.response;
@@ -59,7 +61,10 @@ export async function prepareFinancialFiscalResponse(
     const centralBank = await db
       .collection("centralBanks")
       .findOne({ _id: getBankId(countryId as CountryId) as never });
-    if (!(amount > 0) || budget.treasuryBalance < amount || !centralBank || !currency)
+    const availableCash = treasuryCashLedgerEnabled
+      ? (budget.treasuryCashLocal ?? 0)
+      : budget.treasuryBalance;
+    if (!(amount > 0) || availableCash < amount || !centralBank || !currency)
       throw badRequest(
         "Stimulus requires funded treasury cash and an operating monetary authority."
       );
@@ -77,6 +82,10 @@ export async function applyFinancialFiscalResponse(
     return;
   if (await ctx.db.collection<{ _id: string }>("bankMoneyMoves").findOne({ _id: key }))
     throw new Error("Fiscal intervention is pending settlement recovery");
+  const treasuryCashLedgerEnabled =
+    response === "stimulus" || response === "sovereign_support"
+      ? (ctx.treasuryCashLedgerEnabled ?? (await loadBankingPolicy(ctx.db)).treasuryCashLedger)
+      : false;
   if (response === "restructure") {
     // The global responder proposes; the existing lower/upper chamber pipeline
     // alone can authorize an actual haircut and creditor cascade.
@@ -124,12 +133,23 @@ export async function applyFinancialFiscalResponse(
     } as never);
     return;
   }
-  await prepareFinancialFiscalResponse(ctx.db, ctx.countryId, ctx.option);
+  await prepareFinancialFiscalResponse(
+    ctx.db,
+    ctx.countryId,
+    ctx.option,
+    treasuryCashLedgerEnabled
+  );
   const budget = await ctx.db
     .collection<FederalBudget>("federalBudget")
     .findOne({ countryId: ctx.countryId as CountryId });
   if (!budget) throw new Error("National budget disappeared");
   const currency = resolveCountryCurrencyCode(budget)!;
+  const supportRecipient =
+    response === "sovereign_support"
+      ? await sovereignSupportRecipient(ctx.db, ctx.countryId, currency)
+      : null;
+  if (response === "sovereign_support" && !supportRecipient)
+    throw badRequest("The eligible sovereign recipient is no longer available.");
   const amount =
     response === "stimulus" || response === "sovereign_support"
       ? financialInterventionAmount(
@@ -152,8 +172,14 @@ export async function applyFinancialFiscalResponse(
         kind: "debit",
         amount,
         collection: "federalBudget",
-        filter: { _id: budget._id, countryId: ctx.countryId },
-        path: "treasuryBalance",
+        filter: treasuryCashLedgerEnabled
+          ? {
+              _id: budget._id,
+              countryId: ctx.countryId,
+              treasuryCashLocal: { $gte: amount },
+            }
+          : { _id: budget._id, countryId: ctx.countryId },
+        path: treasuryCashLedgerEnabled ? "treasuryCashLocal" : "treasuryBalance",
         note: "Fund the household fiscal transfer",
       },
       {
@@ -183,14 +209,13 @@ export async function applyFinancialFiscalResponse(
     });
   }
   if (response === "sovereign_support") {
-    const recipient = await sovereignSupportRecipient(ctx.db, ctx.countryId, currency);
-    if (!recipient) throw badRequest("The eligible sovereign recipient is no longer available.");
+    const recipient = supportRecipient!;
     transition.legs[1] = {
       kind: "credit",
       amount,
       collection: "federalBudget",
       filter: { _id: recipient._id, countryId: recipient.countryId },
-      path: "treasuryBalance",
+      path: treasuryCashLedgerEnabled ? "treasuryCashLocal" : "treasuryBalance",
       note: "Deliver the same-currency sovereign rescue grant",
     };
     transition.projections.push({
@@ -199,6 +224,23 @@ export async function applyFinancialFiscalResponse(
       update: { $inc: { financialCrisisGrantsReceived: amount } },
       note: "Record the grant separately from bond-owned principal",
     });
+  }
+  if (treasuryCashLedgerEnabled && amount > 0) {
+    transition.projections.push({
+      collection: "federalBudget",
+      filter: { _id: budget._id, countryId: ctx.countryId },
+      update: { $inc: { treasuryBalance: -amount } },
+      note: "Keep donor signed fiscal position aligned with the funded cash transfer",
+    });
+    if (response === "sovereign_support") {
+      const recipient = supportRecipient!;
+      transition.projections.push({
+        collection: "federalBudget",
+        filter: { _id: recipient._id, countryId: recipient.countryId },
+        update: { $inc: { treasuryBalance: amount } },
+        note: "Keep recipient signed fiscal position aligned with funded Treasury cash",
+      });
+    }
   }
   transition.projections.push({
     collection: "financialCrisisFiscalActions",

@@ -159,6 +159,44 @@ describe("snapshotMoneySupply", () => {
     expect(second.annualizedM2GrowthPct).toBeGreaterThan(0);
   });
 
+  it("counts only funded Treasury cash when the cash ledger is enabled", async () => {
+    db.collectionMocks.gameConfig.findOne.mockResolvedValue({
+      moneySupplyEnabled: true,
+      treasuryCashLedgerEnabled: true,
+    });
+    db.collectionMocks.federalBudget.find.mockReturnValue(
+      cursorWith([
+        {
+          countryId: "US",
+          currencyCode: "USD",
+          treasuryBalance: 9_000,
+          treasuryCashLocal: 300,
+        },
+      ])
+    );
+    db.collectionMocks.states.find.mockReturnValue(cursorWith([]));
+
+    await snapshotMoneySupply(db as unknown as Db, 12);
+
+    const snapshot =
+      db.collectionMocks[MONEY_SUPPLY_SNAPSHOTS_COLLECTION].replaceOne.mock.calls[0]?.[1];
+    expect(snapshot.governmentLiquid).toBe(300);
+    const options = db.collectionMocks.federalBudget.find.mock.calls[0]?.[1] as {
+      projection: Record<string, unknown>;
+    };
+    expect(options.projection).toHaveProperty("treasuryCashLocal", 1);
+    expect(options.projection).not.toHaveProperty("treasuryBalance");
+  });
+
+  it("does not project the new cash stock when the flag is off", async () => {
+    await snapshotMoneySupply(db as unknown as Db, 12);
+    const options = db.collectionMocks.federalBudget.find.mock.calls[0]?.[1] as {
+      projection: Record<string, unknown>;
+    };
+    expect(options.projection).toHaveProperty("treasuryBalance", 1);
+    expect(options.projection).not.toHaveProperty("treasuryCashLocal");
+  });
+
   it("writes a moneySupplySnapshot row for a bank-less command economy (bug: 6 Warsaw-Pact countries had zero rows)", async () => {
     db.collectionMocks.gameState.findOne.mockResolvedValue({ preset: "1991-default" });
     // Only US has a centralBanks doc — PL (a command economy excluded from

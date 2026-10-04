@@ -55,7 +55,9 @@ export async function prepareFinancialCrisisBankResponse(
     .findOne({ countryId: countryId as FederalBudget["countryId"] });
   const currency = resolveCountryCurrencyCode(budget);
   const cashLedgerEnabled =
-    treasuryCashLedgerEnabled ?? (await loadBankingPolicy(db)).treasuryCashLedger;
+    option.action.response === "resolve"
+      ? false
+      : (treasuryCashLedgerEnabled ?? (await loadBankingPolicy(db)).treasuryCashLedger);
   const eligible = await db.collection<Corporation>("corporations").findOne(
     {
       countryId: countryId as Corporation["countryId"],
@@ -97,7 +99,10 @@ export async function applyFinancialCrisisBankResponse(
     .findOne({ _id: actionId });
   if (pending)
     throw new Error("Rescue settlement is pending recovery; funding will not be duplicated");
-  const treasuryCashLedgerEnabled = (await loadBankingPolicy(ctx.db)).treasuryCashLedger;
+  const treasuryCashLedgerEnabled =
+    response === "resolve"
+      ? false
+      : (ctx.treasuryCashLedgerEnabled ?? (await loadBankingPolicy(ctx.db)).treasuryCashLedger);
   await prepareFinancialCrisisBankResponse(
     ctx.db,
     ctx.countryId,

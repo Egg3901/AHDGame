@@ -12,7 +12,7 @@ import {
 } from "./financialCrisisFiscalResponse";
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 
-function world(response: FinancialFiscalResponse) {
+function world(response: FinancialFiscalResponse, treasuryCashLocal = 0) {
   const memory = createInMemoryDb();
   memory.seed("federalBudget", [
     {
@@ -21,6 +21,7 @@ function world(response: FinancialFiscalResponse) {
       currencyCode: "USD",
       gdp: 10000,
       treasuryBalance: 1000,
+      treasuryCashLocal,
       debt: { principal: 600 },
       revenue: { total: 500 },
       spending: {
@@ -57,6 +58,57 @@ describe("financial crisis fiscal transmission", () => {
     expect(bank?.externalBroadMoney).toBe(2200);
     expect(budget?.debt.principal).toBe(600);
     expect(budget?.treasuryBalance + bank!.externalBroadMoney).toBe(3000);
+  });
+  it("funds stimulus only from the spendable cash stock", async () => {
+    const { ctx } = world("stimulus");
+    ctx.treasuryCashLedgerEnabled = true;
+    await expect(applyFinancialFiscalResponse(ctx, "stimulus")).rejects.toThrow();
+    const budget = await ctx.db.collection("federalBudget").findOne({ countryId: "US" });
+    const centralBank = await ctx.db
+      .collection<{ _id: string; externalBroadMoney: number }>("centralBanks")
+      .findOne({ _id: getBankId("US") });
+    expect(budget?.treasuryBalance).toBe(1000);
+    expect(budget?.treasuryCashLocal).toBe(0);
+    expect(centralBank?.externalBroadMoney).toBe(2000);
+  });
+  it("settles funded stimulus once and updates signed position without minting cash", async () => {
+    const { ctx } = world("stimulus", 250);
+    ctx.treasuryCashLedgerEnabled = true;
+    await applyFinancialFiscalResponse(ctx, "stimulus");
+    await applyFinancialFiscalResponse(ctx, "stimulus");
+    const budget = await ctx.db.collection("federalBudget").findOne({ countryId: "US" });
+    const centralBank = await ctx.db
+      .collection<{ _id: string; externalBroadMoney: number }>("centralBanks")
+      .findOne({ _id: getBankId("US") });
+    expect(budget?.treasuryCashLocal).toBe(50);
+    expect(budget?.treasuryBalance).toBe(800);
+    expect(centralBank?.externalBroadMoney).toBe(2200);
+  });
+  it("routes a funded sovereign support grant from Treasury cash to the recipient", async () => {
+    const { memory, ctx } = world("sovereign_support");
+    ctx.treasuryCashLedgerEnabled = true;
+    const donor = await ctx.db.collection("federalBudget").findOne({ countryId: "US" });
+    await ctx.db
+      .collection("federalBudget")
+      .updateOne({ countryId: "US" }, { $set: { treasuryCashLocal: 300 } });
+    memory.seed("federalBudget", [
+      {
+        _id: "national-budget-fr",
+        countryId: "FR",
+        currencyCode: "USD",
+        treasuryBalance: -500,
+        treasuryCashLocal: 0,
+        sovereignCrisisState: "crisisPending",
+      },
+    ]);
+    await applyFinancialFiscalResponse(ctx, "sovereign_support");
+    const updatedDonor = await ctx.db.collection("federalBudget").findOne({ countryId: "US" });
+    const recipient = await ctx.db.collection("federalBudget").findOne({ countryId: "FR" });
+    expect(donor?.treasuryBalance).toBe(1000);
+    expect(updatedDonor?.treasuryCashLocal).toBe(100);
+    expect(updatedDonor?.treasuryBalance).toBe(800);
+    expect(recipient?.treasuryCashLocal).toBe(200);
+    expect(recipient?.treasuryBalance).toBe(-300);
   });
   it("cuts primary spending while preserving contractual coupons", async () => {
     const { ctx } = world("austerity");

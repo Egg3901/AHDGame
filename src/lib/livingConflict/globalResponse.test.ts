@@ -307,7 +307,7 @@ describe("prepareGlobalResponseOption — capacity refusals", () => {
       effects: [],
     } as unknown as CrisisDecisionOption);
 
-    expect(capability.domesticSupport).toBe(60);
+    expect(capability.capability.domesticSupport).toBe(60);
   });
 
   it.each(["intervene", "peacekeeping"])(

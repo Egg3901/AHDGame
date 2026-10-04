@@ -75,6 +75,8 @@ export interface CrisisActionContext {
   countryId: string;
   /** The turn the decision was submitted on (for lifecycle/deadline math). */
   currentTurn: number;
+  /** Frozen funding policy for a preflighted treasury intervention. */
+  treasuryCashLedgerEnabled?: boolean;
 }
 
 /** Human-readable sector label (steel is produced by the "manufacturing" sector). */
