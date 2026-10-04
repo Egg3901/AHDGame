@@ -128,7 +128,11 @@ export function fragileReinvestmentPriority(
   const localPriceRatioOf: CommodityPriceRatioFn = (commodity, fallbackCountryId) =>
     placementSignals.statePriceRatioOf?.(commodity, sector.stateId) ??
     priceRatioOf(commodity, fallbackCountryId);
-  const operatingSectorType = getOperatingSectorType(sector.sectorType, sector.industryModel);
+  const operatingSectorType = getOperatingSectorType(
+    sector.sectorType,
+    sector.industryModel,
+    sector.mediaDiscriminator
+  );
   const commodity = fragileMarketCommodityForSector(
     operatingSectorType as CorporationType,
     countryId,
@@ -141,7 +145,8 @@ export function fragileReinvestmentPriority(
     sector.transitionFromStrategyId,
     sector.transitionStartTurn,
     turn,
-    sector.industryModel
+    sector.industryModel,
+    sector.mediaDiscriminator
   ).supply;
   if ((effectiveSupply[commodity] ?? 0) <= 0) return 0;
   return localPriceRatioOf(commodity, countryId) ?? 0;

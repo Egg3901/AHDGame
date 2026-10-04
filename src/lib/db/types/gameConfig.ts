@@ -157,6 +157,13 @@ export interface GameConfig {
   mediaEditorialEnabled?: boolean;
   /** Paid media and entertainment operating-model catalog. Default off. */
   mediaOperatingModelsEnabled?: boolean;
+  /** Combined media and entertainment taxonomy gate. Default off. */
+  fresh1991MediaTaxonomySeed?: {
+    preset: "1991-default";
+    schema: "media-entertainment-taxonomy-v1";
+    status: "in_progress" | "complete";
+    startedAt: Date;
+  };
   /** Media ownership limits and censorship effects in the advertising market. Default off. */
   mediaRegulationEnabled?: boolean;
   /**

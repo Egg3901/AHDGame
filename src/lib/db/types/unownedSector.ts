@@ -1,6 +1,10 @@
 import type { ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
-import type { CorporationType, ManufacturingIndustryModel } from "@/lib/constants/corporations";
+import type {
+  CorporationType,
+  ManufacturingIndustryModel,
+  MediaDiscriminator,
+} from "@/lib/constants/corporations";
 
 export interface RecentCorporateSectorRestore {
   sectorId: string;
@@ -14,6 +18,8 @@ export interface UnownedSector {
   sectorType: CorporationType;
   /** Model identity for a specialized manufacturing market; absent is legacy/generic. */
   industryModel?: ManufacturingIndustryModel | null;
+  /** Separates the former entertainment market inside canonical media. */
+  mediaDiscriminator?: MediaDiscriminator | null;
   /**
    * Current daily revenue, same units as CorporateSector.revenue. Unlike
    * CorporateSector.revenue (host-local currency, see sectorToHostCurrency

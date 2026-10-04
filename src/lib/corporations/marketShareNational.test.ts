@@ -8,6 +8,38 @@ import {
 } from "./marketShare";
 
 describe("fetchCorporationNationalSectorSharesByCountry", () => {
+  it("keeps media and entertainment market shares separate", () => {
+    const mediaOwner = new ObjectId();
+    const entertainmentOwner = new ObjectId();
+    const shares = buildCorporationNationalRevenueShareByMarket([
+      {
+        corporationId: mediaOwner,
+        countryId: "US",
+        stateId: "US-CA",
+        sectorType: "media",
+        revenue: 100,
+        mediaDiscriminator: null,
+      },
+      {
+        corporationId: entertainmentOwner,
+        countryId: "US",
+        stateId: "US-CA",
+        sectorType: "media",
+        revenue: 300,
+        mediaDiscriminator: "entertainment",
+      },
+    ]);
+
+    expect(
+      shares.get(corporationNationalSectorShareKey(mediaOwner, "US", "media", null, null))
+    ).toBe(100);
+    expect(
+      shares.get(
+        corporationNationalSectorShareKey(entertainmentOwner, "US", "media", null, "entertainment")
+      )
+    ).toBe(100);
+  });
+
   it("aggregates the corporation and market across every state in the host country", async () => {
     const corporationId = new ObjectId();
     const rivalId = new ObjectId();
@@ -46,6 +78,7 @@ describe("fetchCorporationNationalSectorSharesByCountry", () => {
         stateId: { $in: ["US-TX", "US-CA"] },
         sectorType: "logistics",
         industryModel: null,
+        mediaDiscriminator: null,
       },
       {
         projection: {
@@ -53,6 +86,7 @@ describe("fetchCorporationNationalSectorSharesByCountry", () => {
           stateId: 1,
           sectorType: 1,
           industryModel: 1,
+          mediaDiscriminator: 1,
           revenue: 1,
         },
       }

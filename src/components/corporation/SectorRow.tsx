@@ -101,14 +101,16 @@ export function SectorRow({
 
   const operatingSectorType = getOperatingSectorType(
     sector.sectorType,
-    sector.industryModel
+    sector.industryModel,
+    sector.mediaDiscriminator
   ) as CorporationType;
   const strategies = getSectorStrategies(operatingSectorType, mediaOperatingModelsEnabled);
   const currentId = sector.strategyId ?? "standard";
   const currentStrategy = getStrategyForOperatingModel(
     sector.sectorType,
     currentId,
-    sector.industryModel
+    sector.industryModel,
+    sector.mediaDiscriminator
   );
   const currentStrategyListed = strategies.some((strategy) => strategy.id === currentId);
   const isTransitioning = !!sector.transitionFromStrategyId;

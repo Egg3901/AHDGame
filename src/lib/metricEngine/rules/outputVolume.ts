@@ -1,5 +1,6 @@
 import { REVENUE_TREND_MIN_SPAN, REVENUE_TREND_TARGET_SPAN } from "@/lib/turn/gdpGrowth";
 import type { CorporationType } from "@/lib/constants/corporations";
+import type { MediaDiscriminator } from "@/lib/constants/corporations";
 import { unitYieldForSupply } from "@/lib/constants/capacityEconomy";
 import { getEffectiveStrategyRatesForOperatingModel } from "@/lib/constants/sectorStrategies";
 
@@ -10,6 +11,7 @@ export interface OutputVolumeSector {
   transitionFromStrategyId?: string | null;
   transitionStartTurn?: number | null;
   industryModel?: string | null;
+  mediaDiscriminator?: MediaDiscriminator | null;
 }
 
 /**
@@ -26,7 +28,8 @@ export function constantPriceOutput(sector: OutputVolumeSector, turn: number): n
     sector.transitionFromStrategyId,
     sector.transitionStartTurn,
     turn,
-    sector.industryModel
+    sector.industryModel,
+    sector.mediaDiscriminator
   );
   const unitYield = unitYieldForSupply(rates.supply, 1);
   if (!Number.isFinite(unitYield) || unitYield <= 0) return null;

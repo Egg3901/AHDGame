@@ -732,7 +732,11 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
           // until the lookup is wired in. negativeProductionSustainedTurns is
           // available directly on the sector and is passed through correctly.
           const mods = computeAllMarginModifiers(
-            getOperatingSectorType(sector.sectorType, sector.industryModel) as Corporation["type"],
+            getOperatingSectorType(
+              sector.sectorType,
+              sector.industryModel,
+              sector.mediaDiscriminator
+            ) as Corporation["type"],
             sector.profitMargin,
             {
               fullMetrics: stateMetrics,
@@ -748,7 +752,11 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
             },
             commodityMod,
             homeLocationBonus,
-            getOperatingSectorType(corp.type, corp.industryModel) as Corporation["type"],
+            getOperatingSectorType(
+              corp.type,
+              corp.industryModel,
+              corp.mediaDiscriminator
+            ) as Corporation["type"],
             corpSectors.length,
             macroEcon,
             corp.logisticsStrength ?? 0,

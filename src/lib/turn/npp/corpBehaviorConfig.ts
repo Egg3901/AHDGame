@@ -27,7 +27,11 @@ export function pickBestNppTechNode(
     (corp.liquidCapital ?? 0) - Math.max(0, options.cashReserve ?? 0)
   );
   const candidates = getTreeForType(
-    getOperatingSectorType(corp.type, corp.industryModel) as Corporation["type"]
+    getOperatingSectorType(
+      corp.type,
+      corp.industryModel,
+      corp.mediaDiscriminator
+    ) as Corporation["type"]
   )
     .map((node) => ({ node, cashCost: techNodeCashCost(node, dailyGrossRevenue) }))
     .filter(

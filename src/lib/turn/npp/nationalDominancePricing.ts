@@ -11,13 +11,14 @@ export function buildNppNationalShareResolver(
   sectors: CorporateSector[]
 ): NonNullable<NppPlantsContext["nationalShareOf"]> {
   const shares = buildCorporationNationalRevenueShareByMarket(sectors);
-  return (corporationId, countryId, sectorType, industryModel) =>
+  return (corporationId, countryId, sectorType, industryModel, mediaDiscriminator) =>
     shares.get(
       corporationNationalSectorShareKey(
         corporationId,
         countryId as CountryId,
         sectorType,
-        industryModel
+        industryModel,
+        mediaDiscriminator
       )
     ) ?? 0;
 }

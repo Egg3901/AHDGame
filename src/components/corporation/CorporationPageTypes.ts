@@ -589,6 +589,7 @@ export interface SectorDetail {
   stateName: string;
   sectorType: string;
   industryModel?: string | null;
+  mediaDiscriminator?: "entertainment" | null;
   sectorLabel: string;
   displayName?: string | null;
   targetGrowthRate: number;

@@ -51,6 +51,7 @@ export interface NationalizeSectorWideParams {
   countryId: CountryId;
   sectorType: CorporationType;
   industryModel?: Corporation["industryModel"];
+  mediaDiscriminator?: Corporation["mediaDiscriminator"];
   /** Fraction carved from each in-scope holder, 0 < f ≤ 1. */
   carveFraction: number;
   scope: SectorScope;
@@ -434,7 +435,12 @@ export async function nationalizeSectorWide(
         resolveSectorHostCurrencyCode(sec, donor),
         fxRateForSectorHostFromMap(sec, donor, fxByCurrency)
       );
-      const openingPlantCount = seedPlantLedger(sec.sectorType, sec.capitalStock).plantCount;
+      const openingPlantCount = seedPlantLedger(
+        sec.sectorType,
+        sec.capitalStock,
+        sec.industryModel,
+        sec.mediaDiscriminator
+      ).plantCount;
       // Compute the whole-facility split once so donor and state counts are
       // complementary, including a one-facility sub-quantum holding.
       const plantCountSplit = splitWholePlantCount(openingPlantCount, f);
@@ -475,7 +481,9 @@ export async function nationalizeSectorWide(
               capitalStock: sliced.capitalStock * (1 - NATIONALIZATION_REVENUE_HAIRCUT),
               ...seedPlantLedger(
                 sec.sectorType,
-                sliced.capitalStock * (1 - NATIONALIZATION_REVENUE_HAIRCUT)
+                sliced.capitalStock * (1 - NATIONALIZATION_REVENUE_HAIRCUT),
+                sec.industryModel,
+                sec.mediaDiscriminator
               ),
               // P5: the paid basis takes the SAME haircut as the capacity it
               // prices, so the per-unit basis is invariant across the taking.
@@ -647,7 +655,12 @@ export async function nationalizeSectorWide(
             },
             $set: {
               ...(captureUnits > 0
-                ? seedPlantLedger(params.sectorType, (ns.capitalStock ?? 0) + captureUnits)
+                ? seedPlantLedger(
+                    params.sectorType,
+                    (ns.capitalStock ?? 0) + captureUnits,
+                    params.industryModel,
+                    params.mediaDiscriminator
+                  )
                 : {}),
               nationalizedAtTurn: params.consequence.turn,
               nationalizationTransitionMultiplier: transitionMultiplier,

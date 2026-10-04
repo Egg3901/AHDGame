@@ -28,7 +28,14 @@ export interface RestoreSectorsToUnownedResult {
 
 type RestorableSector = Pick<
   CorporateSector,
-  "_id" | "corporationId" | "countryId" | "stateId" | "sectorType" | "industryModel" | "revenue"
+  | "_id"
+  | "corporationId"
+  | "countryId"
+  | "stateId"
+  | "sectorType"
+  | "industryModel"
+  | "mediaDiscriminator"
+  | "revenue"
 > &
   Partial<Pick<CorporateSector, "capitalStock" | "strategyId" | "buildQueue">>;
 
@@ -38,6 +45,7 @@ interface RestorableSectorDelta {
   countryId: CorporateSector["countryId"];
   sectorType: CorporateSector["sectorType"];
   industryModel: CorporateSector["industryModel"];
+  mediaDiscriminator: CorporateSector["mediaDiscriminator"];
   revenue: number;
   /** Capacity units returned to the pool (plants only; 0 otherwise). */
   units: number;
@@ -169,12 +177,14 @@ export async function restoreSectorsToUnowned(
           sector.sectorType as CorporationType,
           sector.strategyId,
           eraUnitScale,
-          sector.industryModel
+          sector.industryModel,
+          sector.mediaDiscriminator
         ) *
         unownedHeadroomUnitsPerAnchor(
           sector.sectorType as CorporationType,
           eraUnitScale,
-          sector.industryModel
+          sector.industryModel,
+          sector.mediaDiscriminator
         )
       : 0;
 
@@ -186,6 +196,7 @@ export async function restoreSectorsToUnowned(
         stateId: sector.stateId,
         sectorType: sector.sectorType,
         industryModel: sector.industryModel,
+        mediaDiscriminator: sector.mediaDiscriminator,
         revenue,
         units,
       });
@@ -201,7 +212,8 @@ export async function restoreSectorsToUnowned(
     const unitsPerAnchor = unownedHeadroomUnitsPerAnchor(
       delta.sectorType as CorporationType,
       eraUnitScale,
-      delta.industryModel
+      delta.industryModel,
+      delta.mediaDiscriminator
     );
     const anchorPerUnit = unitsPerAnchor > 0 ? 1 / unitsPerAnchor : 0;
     const creditField = unownedPoolLeadingField(plantsEnabled);
@@ -221,6 +233,7 @@ export async function restoreSectorsToUnowned(
         ...(delta.industryModel != null || delta.sectorType === "manufacturing"
           ? { industryModel: delta.industryModel ?? null }
           : {}),
+        mediaDiscriminator: delta.mediaDiscriminator ?? null,
       },
       [
         {
@@ -231,6 +244,9 @@ export async function restoreSectorsToUnowned(
             ...(delta.industryModel != null || delta.sectorType === "manufacturing"
               ? { industryModel: { $ifNull: ["$industryModel", delta.industryModel ?? null] } }
               : {}),
+            mediaDiscriminator: {
+              $ifNull: ["$mediaDiscriminator", delta.mediaDiscriminator ?? null],
+            },
             createdAt: { $ifNull: ["$createdAt", now] },
             updatedAt: now,
             // The credited field is the AUTHORITATIVE one for the tier:
@@ -320,7 +336,9 @@ export async function restoreSectorsToUnowned(
           $set: unownedPoolTrailingSet(
             delta.sectorType as CorporationType,
             plantsEnabled,
-            eraUnitScale
+            eraUnitScale,
+            delta.industryModel,
+            delta.mediaDiscriminator
           ),
         },
       ],

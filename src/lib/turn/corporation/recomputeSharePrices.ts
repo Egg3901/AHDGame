@@ -242,7 +242,11 @@ export async function recomputeSharePricesAfterBondTurn(
         lookups.primeRateByCountry.get(corp.countryId) ??
         countryPrimeRate) / 100;
     const riskPremium = sectorRiskPremiumAtTurn(
-      getOperatingSectorType(corp.type, corp.industryModel) as Corporation["type"],
+      getOperatingSectorType(
+        corp.type,
+        corp.industryModel,
+        corp.mediaDiscriminator
+      ) as Corporation["type"],
       turn
     );
 

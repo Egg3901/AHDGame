@@ -181,7 +181,12 @@ async function absorbSectorIntoNatCorp(
       ? mergeSectorPlantFields(readSectorPlantFields(existing), {
           ...readSectorPlantFields(sector),
           capitalStock: haircutStock,
-          ...seedPlantLedger(sector.sectorType, haircutStock, sector.industryModel),
+          ...seedPlantLedger(
+            sector.sectorType,
+            haircutStock,
+            sector.industryModel,
+            sector.mediaDiscriminator
+          ),
           capacityBookAnchor: haircutBook,
         })
       : null;
@@ -233,7 +238,12 @@ async function absorbSectorIntoNatCorp(
           revenue: transferRevenue,
           ...(plantsEnabled ? { capitalStock: haircutStock } : {}),
           ...(plantsEnabled
-            ? seedPlantLedger(sector.sectorType, haircutStock, sector.industryModel)
+            ? seedPlantLedger(
+                sector.sectorType,
+                haircutStock,
+                sector.industryModel,
+                sector.mediaDiscriminator
+              )
             : {}),
           ...(plantsEnabled && haircutBook != null ? { capacityBookAnchor: haircutBook } : {}),
           absorbedAtTurn,
@@ -310,7 +320,8 @@ async function releaseSectorToUnowned(
               sector.sectorType as CorporationType,
               sector.strategyId,
               eraUnitScale,
-              sector.industryModel
+              sector.industryModel,
+              sector.mediaDiscriminator
             )
         )
       )
@@ -344,7 +355,8 @@ async function releaseSectorToUnowned(
     const unitsPerAnchor = unownedHeadroomUnitsPerAnchor(
       sector.sectorType as CorporationType,
       eraUnitScale,
-      sector.industryModel
+      sector.industryModel,
+      sector.mediaDiscriminator
     );
     const sectorType = sector.sectorType as CorporationType;
     const creditField = unownedPoolLeadingField(plantsEnabled);
@@ -369,6 +381,7 @@ async function releaseSectorToUnowned(
         ...(sector.industryModel != null || sector.sectorType === "manufacturing"
           ? { industryModel: sector.industryModel ?? null }
           : {}),
+        mediaDiscriminator: sector.mediaDiscriminator ?? null,
       },
       [
         {
@@ -380,6 +393,9 @@ async function releaseSectorToUnowned(
             ...(sector.industryModel != null || sector.sectorType === "manufacturing"
               ? { industryModel: { $ifNull: ["$industryModel", sector.industryModel ?? null] } }
               : {}),
+            mediaDiscriminator: {
+              $ifNull: ["$mediaDiscriminator", sector.mediaDiscriminator ?? null],
+            },
             createdAt: { $ifNull: ["$createdAt", now] },
             [creditField]: {
               $add: [
@@ -387,7 +403,8 @@ async function releaseSectorToUnowned(
                   sectorType,
                   plantsEnabled,
                   eraUnitScale,
-                  sector.industryModel
+                  sector.industryModel,
+                  sector.mediaDiscriminator
                 ),
                 creditAmount,
               ],
@@ -400,7 +417,8 @@ async function releaseSectorToUnowned(
             sectorType,
             plantsEnabled,
             eraUnitScale,
-            sector.industryModel
+            sector.industryModel,
+            sector.mediaDiscriminator
           ),
         },
       ],

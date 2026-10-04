@@ -22,7 +22,7 @@ import { ObjectId } from "mongodb";
 import type { Corporation, CorporateSector, GameConfig, GameState } from "@/lib/db/types";
 import type { CommodityType } from "@/lib/constants/commodities";
 import { SECTOR_DEMAND, SECTOR_SUPPLY } from "@/lib/constants/commodities";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { CorporationType, MediaDiscriminator } from "@/lib/constants/corporations";
 import {
   CONTRACT_CANCEL_NOTICE_TURNS,
   CONTRACT_OVERCOMMIT_TOLERANCE,
@@ -66,6 +66,7 @@ export type NppAgreementParty = {
   sectors: Array<{
     sectorType: CorporationType;
     industryModel?: string | null;
+    mediaDiscriminator?: MediaDiscriminator | null;
     capitalStock?: number | null;
     producedUnits?: number | null;
     soldFraction?: number | null;
@@ -130,7 +131,8 @@ function commoditiesOf(
   transitionFrom: string | null | undefined,
   transitionStart: number | null | undefined,
   turn: number,
-  industryModel?: string | null
+  industryModel?: string | null,
+  mediaDiscriminator?: MediaDiscriminator | null
 ): CommodityType[] {
   const rates = getEffectiveStrategyRatesForOperatingModel(
     sectorType,
@@ -138,12 +140,17 @@ function commoditiesOf(
     transitionFrom,
     transitionStart,
     turn,
-    industryModel
+    industryModel,
+    mediaDiscriminator
   );
   const mix = side === "supply" ? rates.supply : rates.demand;
   const fromStrategy = (Object.keys(mix) as CommodityType[]).filter((c) => (mix[c] ?? 0) > 0);
   if (fromStrategy.length > 0) return fromStrategy;
-  const operatingType = getOperatingSectorType(sectorType, industryModel) as CorporationType;
+  const operatingType = getOperatingSectorType(
+    sectorType,
+    industryModel,
+    mediaDiscriminator
+  ) as CorporationType;
   const table = side === "supply" ? SECTOR_SUPPLY[operatingType] : SECTOR_DEMAND[operatingType];
   return (table ?? []).filter((f) => f.rate > 0).map((f) => f.commodity);
 }
@@ -164,7 +171,8 @@ function sellerFill(
       s.transitionFromStrategyId,
       s.transitionStartTurn,
       turn,
-      s.industryModel
+      s.industryModel,
+      s.mediaDiscriminator
     );
     if (!outputs.includes(commodity)) continue;
     if (typeof s.soldFraction === "number" && Number.isFinite(s.soldFraction)) {
@@ -194,7 +202,8 @@ function buyerStarved(
       s.transitionFromStrategyId,
       s.transitionStartTurn,
       turn,
-      s.industryModel
+      s.industryModel,
+      s.mediaDiscriminator
     );
     if (!inputs.includes(commodity)) continue;
     uses = true;
@@ -297,7 +306,8 @@ export function decideNppSupplyAgreements(args: {
         s.transitionFromStrategyId,
         s.transitionStartTurn,
         turn,
-        s.industryModel
+        s.industryModel,
+        s.mediaDiscriminator
       ).includes(a.commodity);
     });
     if (!uses) continue;
@@ -331,7 +341,8 @@ export function decideNppSupplyAgreements(args: {
                 s.transitionFromStrategyId,
                 s.transitionStartTurn,
                 turn,
-                s.industryModel
+                s.industryModel,
+                s.mediaDiscriminator
               ).includes(a.commodity)
           )
         ? 1
@@ -373,7 +384,8 @@ export function decideNppSupplyAgreements(args: {
         s.transitionFromStrategyId,
         s.transitionStartTurn,
         turn,
-        s.industryModel
+        s.industryModel,
+        s.mediaDiscriminator
       )) {
         if (supplyAgreementRequiresState(c)) {
           if (!s.stateId) continue;
@@ -494,6 +506,7 @@ export function toParty(corp: Corporation, sectors: CorporateSector[]): NppAgree
     sectors: sectors.map((s) => ({
       sectorType: s.sectorType,
       industryModel: s.industryModel,
+      mediaDiscriminator: s.mediaDiscriminator,
       capitalStock: s.capitalStock,
       producedUnits: s.producedUnits,
       soldFraction: s.soldFraction,

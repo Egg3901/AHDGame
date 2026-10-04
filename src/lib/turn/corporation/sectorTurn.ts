@@ -102,7 +102,8 @@ export function processSector(
   } = env;
   const operatingSectorType = getOperatingSectorType(
     sector.sectorType,
-    sector.industryModel
+    sector.industryModel,
+    sector.mediaDiscriminator
   ) as CorporationType;
 
   // Per-sector tech effects: Corporate-lane bonuses apply to every sector at
@@ -110,8 +111,19 @@ export function processSector(
   // sector type, full strength. Neutral when the feature gate is off.
   const techEffects = techTreesEnabled
     ? currentYear != null
-      ? getSectorTechEffectsForYear(corp, sector.sectorType, currentYear, sector.industryModel)
-      : getSectorTechEffects(corp, sector.sectorType, sector.industryModel)
+      ? getSectorTechEffectsForYear(
+          corp,
+          sector.sectorType,
+          currentYear,
+          sector.industryModel,
+          sector.mediaDiscriminator
+        )
+      : getSectorTechEffects(
+          corp,
+          sector.sectorType,
+          sector.industryModel,
+          sector.mediaDiscriminator
+        )
     : NEUTRAL_TECH_EFFECTS;
   // Normalize host-currency revenue to anchor currency. Recover corrupt values
   // here so NaN cannot spread through corporate totals and tax accruals.
@@ -253,7 +265,8 @@ export function processSector(
     sector.transitionFromStrategyId,
     sector.transitionStartTurn,
     turn ?? 0,
-    sector.industryModel
+    sector.industryModel,
+    sector.mediaDiscriminator
   );
   const { capacityUtil, capacityHaircutStartTurn, capacityHaircut } = resolveSectorCapacityHaircut(
     sector,
@@ -536,7 +549,11 @@ export function processSector(
     ? 0
     : specializationPayrollModifier(
         operatingSectorType,
-        getOperatingSectorType(corp.type, corp.industryModel) as CorporationType,
+        getOperatingSectorType(
+          corp.type,
+          corp.industryModel,
+          corp.mediaDiscriminator
+        ) as CorporationType,
         corp.secondaryType
       );
   const { payrollBasis, operatingSaving } = specializationMaintenance({

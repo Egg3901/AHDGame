@@ -145,6 +145,7 @@ export interface State {
     sectors: Array<{
       sectorType: CorporationType;
       industryModel?: string | null;
+      mediaDiscriminator?: string | null;
       revenue: number;
       /**
        * `"primary"` when this sector matches `sectorSpecializations.primary`

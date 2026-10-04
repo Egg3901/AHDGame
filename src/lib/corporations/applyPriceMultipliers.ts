@@ -92,7 +92,9 @@ export async function applyPriceMultipliers(db?: Db): Promise<ApplyPriceMultipli
     sectorKeys.add(`${sector.countryId}:${sector.sectorType}:${sector.industryModel ?? ""}`);
     operatingSectorKeysByCorpId.set(corpId, sectorKeys);
     const sectorTypes = operatingSectorTypesByCorpId.get(corpId) ?? new Set<string>();
-    sectorTypes.add(getOperatingSectorType(sector.sectorType, sector.industryModel));
+    sectorTypes.add(
+      getOperatingSectorType(sector.sectorType, sector.industryModel, sector.mediaDiscriminator)
+    );
     operatingSectorTypesByCorpId.set(corpId, sectorTypes);
   }
 
@@ -102,7 +104,9 @@ export async function applyPriceMultipliers(db?: Db): Promise<ApplyPriceMultipli
     const corpId = corp._id.toString();
     const sectorTypes = [
       ...(operatingSectorTypesByCorpId.get(corpId) ?? new Set<string>()),
-      ...(corp.type ? [getOperatingSectorType(corp.type, corp.industryModel)] : []),
+      ...(corp.type
+        ? [getOperatingSectorType(corp.type, corp.industryModel, corp.mediaDiscriminator)]
+        : []),
       ...(corp.secondaryType ? [corp.secondaryType] : []),
     ];
     const operatingSectorKeys = operatingSectorKeysByCorpId.get(corpId) ?? new Set<string>();

@@ -1,5 +1,6 @@
 import type { ObjectId } from "mongodb";
 import type { CorporationType } from "@/lib/constants/corporations";
+import type { MediaDiscriminator } from "@/lib/constants/corporations";
 import type { Corporation, CorporateSector, SectorBuildOrder } from "@/lib/db/types";
 import type { CeoArchetypeModifiers } from "@/lib/turn/ceoArchetype";
 import type { NppStrategyState } from "./corpStrategy";
@@ -87,6 +88,7 @@ export interface NppCorpDecision {
     stateId: string;
     countryId: string;
     sectorType: CorporationType;
+    mediaDiscriminator?: MediaDiscriminator | null;
     revenue: number;
     profitMargin: number;
     strategyId?: string;
@@ -96,6 +98,7 @@ export interface NppCorpDecision {
   unownedDraws?: Array<{
     stateId: string;
     sectorType: CorporationType;
+    mediaDiscriminator?: MediaDiscriminator | null;
     units: number;
     countryId: string;
   }>;
@@ -103,6 +106,7 @@ export interface NppCorpDecision {
   reinvestments?: Array<{
     sectorId: ObjectId;
     sectorType: CorporationType;
+    mediaDiscriminator?: MediaDiscriminator | null;
     units: number;
     costAnchor: number;
     costLocal: number;
@@ -136,6 +140,7 @@ export interface NppPlantsContext {
     corporationId: ObjectId,
     countryId: string,
     sectorType: CorporationType,
-    industryModel?: string | null
+    industryModel?: string | null,
+    mediaDiscriminator?: MediaDiscriminator | null
   ) => number;
 }

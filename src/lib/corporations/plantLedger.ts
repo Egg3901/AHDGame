@@ -1,4 +1,5 @@
 import type { CorporationType } from "@/lib/constants/corporations";
+import type { MediaDiscriminator } from "@/lib/constants/corporations";
 import { plantSizeUnits } from "@/lib/constants/facilityQuantum";
 
 export interface PlantLedgerState {
@@ -9,6 +10,7 @@ export interface PlantLedgerState {
 interface PlantLedgerSector {
   sectorType: CorporationType;
   industryModel?: string | null;
+  mediaDiscriminator?: MediaDiscriminator | null;
   plantCount?: number | null;
   plantUnitRemainder?: number | null;
 }
@@ -32,12 +34,13 @@ function wholeNonNegative(value: number | null | undefined): number {
 export function seedPlantLedger(
   sectorType: CorporationType,
   capitalStock: number | null | undefined,
-  industryModel?: string | null
+  industryModel?: string | null,
+  mediaDiscriminator?: MediaDiscriminator | null
 ): PlantLedgerState {
   const stock = finiteNonNegative(capitalStock);
   if (stock <= 0) return { plantCount: 0, plantUnitRemainder: 0 };
 
-  const quantum = plantSizeUnits(sectorType, industryModel);
+  const quantum = plantSizeUnits(sectorType, industryModel, mediaDiscriminator);
   if (stock < quantum) return { plantCount: 1, plantUnitRemainder: 0 };
 
   const plantCount = Math.floor(stock / quantum);
@@ -56,9 +59,10 @@ export function plantCapacityDeltaPipeline(
   sectorType: CorporationType,
   delta: number,
   setFields: Record<string, unknown> = {},
-  industryModel?: string | null
+  industryModel?: string | null,
+  mediaDiscriminator?: MediaDiscriminator | null
 ): Array<Record<string, unknown>> {
-  const quantum = plantSizeUnits(sectorType, industryModel);
+  const quantum = plantSizeUnits(sectorType, industryModel, mediaDiscriminator);
   const stock = "$capitalStock";
   const count = { $floor: { $divide: [stock, quantum] } };
   return [
@@ -101,6 +105,7 @@ export function plantCapacityDeltaPipeline(
 export function advancePlantLedger(input: {
   sectorType: CorporationType;
   industryModel?: string | null;
+  mediaDiscriminator?: MediaDiscriminator | null;
   plantCount: number | null | undefined;
   plantUnitRemainder: number | null | undefined;
   currentCapitalStock: number | null | undefined;
@@ -111,8 +116,13 @@ export function advancePlantLedger(input: {
         plantCount: wholeNonNegative(input.plantCount),
         plantUnitRemainder: finiteNonNegative(input.plantUnitRemainder),
       }
-    : seedPlantLedger(input.sectorType, input.currentCapitalStock, input.industryModel);
-  const quantum = plantSizeUnits(input.sectorType, input.industryModel);
+    : seedPlantLedger(
+        input.sectorType,
+        input.currentCapitalStock,
+        input.industryModel,
+        input.mediaDiscriminator
+      );
+  const quantum = plantSizeUnits(input.sectorType, input.industryModel, input.mediaDiscriminator);
   const accumulated = seeded.plantUnitRemainder + finiteNonNegative(input.deliveredUnits);
   const completedPlants = Math.floor(accumulated / quantum);
 
@@ -131,6 +141,7 @@ export function advanceSectorPlantLedger(
   return advancePlantLedger({
     sectorType: sector.sectorType,
     industryModel: sector.industryModel,
+    mediaDiscriminator: sector.mediaDiscriminator,
     plantCount: sector.plantCount,
     plantUnitRemainder: sector.plantUnitRemainder,
     currentCapitalStock,

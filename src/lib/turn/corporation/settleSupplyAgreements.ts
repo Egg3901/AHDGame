@@ -592,6 +592,7 @@ export interface SupplyAgreementDemandSector {
   corporationId: string;
   sectorType: CorporationType;
   industryModel?: string | null;
+  mediaDiscriminator?: string | null;
   revenueAnchor: number;
   strategyId?: string;
   transitionFromStrategyId?: string | null;
@@ -632,7 +633,8 @@ export function computeSupplyAgreementBuyerDemand(args: {
       sector.transitionFromStrategyId,
       sector.transitionStartTurn,
       args.currentTurn,
-      sector.industryModel
+      sector.industryModel,
+      sector.mediaDiscriminator
     );
     const utilization =
       args.plantsEnabled &&

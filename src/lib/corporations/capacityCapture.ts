@@ -81,6 +81,7 @@ export function attackCapacityBasisAnchor(
   sector: {
     sectorType: CorporationType;
     industryModel?: string | null;
+    mediaDiscriminator?: "entertainment" | null;
     capitalStock?: number | null;
     strategyId?: string | null;
   },
@@ -99,7 +100,8 @@ export function attackCapacityBasisAnchor(
       sector.sectorType,
       sector.strategyId,
       unitScale,
-      sector.industryModel
+      sector.industryModel,
+      sector.mediaDiscriminator
     );
   return Number.isFinite(anchor) && anchor > 0 ? anchor : null;
 }
@@ -182,6 +184,7 @@ export function capacityCaptureBookUpdates(args: {
   defender: {
     sectorType: CorporationType;
     industryModel?: string | null;
+    mediaDiscriminator?: "entertainment" | null;
     /**
      * Priced at this strategy when no recorded basis exists (identity B).
      * REQUIRED but nullable so the compiler enumerates every caller: capacity
@@ -197,6 +200,7 @@ export function capacityCaptureBookUpdates(args: {
   attacker: {
     sectorType: CorporationType;
     industryModel?: string | null;
+    mediaDiscriminator?: "entertainment" | null;
     strategyId: string | null;
     capitalStock?: number | null;
     capacityBookAnchor?: number | null;
@@ -226,7 +230,8 @@ export function capacityCaptureBookUpdates(args: {
             year,
             eraUnitScale,
             defender.strategyId ?? null,
-            defender.industryModel
+            defender.industryModel,
+            defender.mediaDiscriminator
           ),
     sourceStock: defenderStock,
     unitsTaken,
@@ -255,7 +260,8 @@ export function capacityCaptureBookUpdates(args: {
           // the pair is always read from the same sector rather than mixing an
           // attacker type with a defender strategy.
           (attacker ? attacker.strategyId : defender.strategyId) ?? null,
-          attacker?.industryModel ?? defender.industryModel
+          attacker?.industryModel ?? defender.industryModel,
+          attacker?.mediaDiscriminator ?? defender.mediaDiscriminator
         );
   return {
     defenderSet:
@@ -292,11 +298,19 @@ export function capacityCaptureUnits(
   sectorType: CorporationType,
   strategyId: string | null | undefined,
   unitScale: number,
-  industryModel?: string | null
+  industryModel?: string | null,
+  mediaDiscriminator?: "entertainment" | null
 ): CapacityCaptureResult {
   const unitsTaken =
     Number.isFinite(capturedAnchor) && capturedAnchor > 0
-      ? computeSectorImpliedUnits(sectorType, capturedAnchor, strategyId, unitScale, industryModel)
+      ? computeSectorImpliedUnits(
+          sectorType,
+          capturedAnchor,
+          strategyId,
+          unitScale,
+          industryModel,
+          mediaDiscriminator
+        )
       : 0;
   return {
     unitsTaken,
@@ -323,6 +337,7 @@ export function attackCostAnchorUnderPlants(args: {
   unitsReceived: number;
   sectorType: CorporationType;
   industryModel?: string | null;
+  mediaDiscriminator?: "entertainment" | null;
   /**
    * Strategy of the sector being seized — the floor prices the capacity it
    * actually produces. REQUIRED but nullable (pass `null` for an unowned-pool
@@ -338,6 +353,7 @@ export function attackCostAnchorUnderPlants(args: {
     unitsReceived,
     sectorType,
     industryModel,
+    mediaDiscriminator,
     strategyId,
     year,
     eraUnitScale,
@@ -346,7 +362,14 @@ export function attackCostAnchorUnderPlants(args: {
   if (!(Number.isFinite(unitsReceived) && unitsReceived > 0)) return legacy;
   const capacityFloor =
     unitsReceived *
-    capacityPricePerUnit(sectorType, year, eraUnitScale, strategyId ?? null, industryModel) *
+    capacityPricePerUnit(
+      sectorType,
+      year,
+      eraUnitScale,
+      strategyId ?? null,
+      industryModel,
+      mediaDiscriminator
+    ) *
     ATTACK_BUILD_PRICE_PREMIUM;
   return Math.round(Math.max(legacy, capacityFloor));
 }

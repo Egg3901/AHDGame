@@ -241,6 +241,7 @@ export function buildSectorDetails(ctx: SectorRowContext) {
   const techCorpView = {
     type: corporation.type,
     industryModel: corporation.industryModel,
+    mediaDiscriminator: corporation.mediaDiscriminator,
     unlockedTechNodeIds: corporation.unlockedTechNodeIds,
     techDecadeLane: corporation.techDecadeLane,
   };
@@ -266,7 +267,11 @@ export function buildSectorDetails(ctx: SectorRowContext) {
   let totalUnitsOnOrder = 0;
 
   const sectorDetails = sectors.map((sector) => {
-    const st = getOperatingSectorType(sector.sectorType, sector.industryModel) as CorporationType;
+    const st = getOperatingSectorType(
+      sector.sectorType,
+      sector.industryModel,
+      sector.mediaDiscriminator
+    ) as CorporationType;
     const metrics = stateMetricsMap.get(sector.stateId) ?? getEmptyStateMetricValues();
 
     const stateBalances = rawStateBalances.get(sector.stateId) ?? new Map();
@@ -291,7 +296,8 @@ export function buildSectorDetails(ctx: SectorRowContext) {
       sector.transitionFromStrategyId,
       sector.transitionStartTurn,
       currentTurn,
-      sector.industryModel
+      sector.industryModel,
+      sector.mediaDiscriminator
     );
     const effectiveSupply = applyExtractionResourceCapacityToSupply(
       st,
@@ -398,7 +404,11 @@ export function buildSectorDetails(ctx: SectorRowContext) {
       metrics,
       commodityMod,
       homeLocationBonus,
-      getOperatingSectorType(corporation.type, corporation.industryModel) as CorporationType,
+      getOperatingSectorType(
+        corporation.type,
+        corporation.industryModel,
+        corporation.mediaDiscriminator
+      ) as CorporationType,
       sectors.length,
       macroEcon,
       corporation.logisticsStrength ?? 0,
@@ -472,8 +482,14 @@ export function buildSectorDetails(ctx: SectorRowContext) {
         );
     const techEffects =
       currentYear != null
-        ? getSectorTechEffectsForYear(techCorpView, st, currentYear, sector.industryModel)
-        : getSectorTechEffects(techCorpView, st, sector.industryModel);
+        ? getSectorTechEffectsForYear(
+            techCorpView,
+            st,
+            currentYear,
+            sector.industryModel,
+            sector.mediaDiscriminator
+          )
+        : getSectorTechEffects(techCorpView, st, sector.industryModel, sector.mediaDiscriminator);
     const techMarginBonus = techEffects.marginBonusPp;
     const stackMargin = softCapEffectiveMargin(
       mods.effective + soeEfficiency + expropriationRisk + techMarginBonus
@@ -611,7 +627,12 @@ export function buildSectorDetails(ctx: SectorRowContext) {
       plantsMode && Number.isInteger(sector.plantCount) && (sector.plantCount ?? 0) >= 0
         ? (sector.plantCount as number)
         : plantsMode
-          ? seedPlantLedger(sector.sectorType, sector.capitalStock, sector.industryModel).plantCount
+          ? seedPlantLedger(
+              sector.sectorType,
+              sector.capitalStock,
+              sector.industryModel,
+              sector.mediaDiscriminator
+            ).plantCount
           : null;
     const producedUnits =
       plantsMode && Number.isFinite(sector.producedUnits) ? (sector.producedUnits as number) : null;

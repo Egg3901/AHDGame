@@ -1,6 +1,6 @@
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
-import type { Corporation, UnownedSector } from "@/lib/db/types";
+import type { Corporation, CorporateSector, UnownedSector } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import {
   resolveSectorHostCurrencyCode,
@@ -99,6 +99,7 @@ export async function shedSectorsForCorps(
       stateId: string;
       sectorType: string;
       industryModel: string | null;
+      mediaDiscriminator: CorporateSector["mediaDiscriminator"];
       countryId: CountryId;
       revenue: number;
       /** Capacity units freed to the pool (plants only; 0 otherwise). */
@@ -191,7 +192,12 @@ export async function shedSectorsForCorps(
         const nextBook = priorBook != null ? priorBook * remainingFraction : null;
 
         s.capitalStock = stock - shedUnits;
-        const plantLedger = seedPlantLedger(s.sectorType, s.capitalStock, s.industryModel);
+        const plantLedger = seedPlantLedger(
+          s.sectorType,
+          s.capitalStock,
+          s.industryModel,
+          s.mediaDiscriminator
+        );
         s.workers = workers - shedWorkers;
         if (nextBook != null) s.capacityBookAnchor = nextBook;
         s.updatedAt = now;
@@ -215,7 +221,9 @@ export async function shedSectorsForCorps(
 
         if (
           shedUnits > 0 &&
-          !stateControlled.has(bucketKey(s.stateId, s.sectorType, s.industryModel))
+          !stateControlled.has(
+            bucketKey(s.stateId, s.sectorType, s.industryModel, s.mediaDiscriminator)
+          )
         ) {
           // Corp units and pool units are BOTH "output units/day", but each is
           // priced by its own mix: the corp's at its live `strategyId`, the pool
@@ -229,17 +237,20 @@ export async function shedSectorsForCorps(
               s.sectorType as CorporationType,
               s.strategyId,
               lookups.eraUnitScale,
-              s.industryModel
+              s.industryModel,
+              s.mediaDiscriminator
             );
           const poolUnits =
             nameplateAnchor *
             unownedHeadroomUnitsPerAnchor(
               s.sectorType as CorporationType,
               lookups.eraUnitScale,
-              s.industryModel
+              s.industryModel,
+              s.mediaDiscriminator
             );
           const industryModel = s.industryModel ?? null;
-          const key = `${s.stateId}\0${s.sectorType}\0${industryModel ?? ""}`;
+          const mediaDiscriminator = s.mediaDiscriminator ?? null;
+          const key = `${s.stateId}\0${s.sectorType}\0${industryModel ?? ""}\0${mediaDiscriminator ?? ""}`;
           // Host country, not a hardcoded one: the pool row this creates carries
           // a countryId every reader filters on (ticket #1271).
           const countryId = (lookups.stateCountryMap.get(s.stateId) ?? s.countryId) as CountryId;
@@ -250,6 +261,7 @@ export async function shedSectorsForCorps(
               stateId: s.stateId,
               sectorType: s.sectorType,
               industryModel,
+              mediaDiscriminator,
               countryId,
               revenue: 0,
               units: poolUnits,
@@ -277,7 +289,9 @@ export async function shedSectorsForCorps(
 
       if (
         shedRev > 0 &&
-        !stateControlled.has(bucketKey(s.stateId, s.sectorType, s.industryModel))
+        !stateControlled.has(
+          bucketKey(s.stateId, s.sectorType, s.industryModel, s.mediaDiscriminator)
+        )
       ) {
         // shedRev is in the sector's host-state currency; convert to the
         // ₳-native unowned pool at the host rate, not the owning corp's.
@@ -287,7 +301,8 @@ export async function shedSectorsForCorps(
           fxRateForSectorHostFromMap(s, null, lookups.exchangeRatesByCurrency)
         );
         const industryModel = s.industryModel ?? null;
-        const key = `${s.stateId}\0${s.sectorType}\0${industryModel ?? ""}`;
+        const mediaDiscriminator = s.mediaDiscriminator ?? null;
+        const key = `${s.stateId}\0${s.sectorType}\0${industryModel ?? ""}\0${mediaDiscriminator ?? ""}`;
         // The pool row this shed creates carries a countryId every reader
         // filters on, so it is the country the STATE is in and never a
         // hardcoded one (ticket #1271: the same defect `buildCapacity`,
@@ -302,6 +317,7 @@ export async function shedSectorsForCorps(
             stateId: s.stateId,
             sectorType: s.sectorType,
             industryModel,
+            mediaDiscriminator,
             countryId,
             revenue: shedRevAnchor,
             units: 0,
@@ -329,6 +345,7 @@ export async function shedSectorsForCorps(
     stateId,
     sectorType,
     industryModel,
+    mediaDiscriminator,
     countryId,
     revenue,
     units,
@@ -349,6 +366,7 @@ export async function shedSectorsForCorps(
             stateId,
             sectorType,
             ...(industryModel != null || sectorType === "manufacturing" ? { industryModel } : {}),
+            mediaDiscriminator,
           },
           update: [
             {
@@ -359,6 +377,7 @@ export async function shedSectorsForCorps(
                 ...(industryModel != null || sectorType === "manufacturing"
                   ? { industryModel: { $ifNull: ["$industryModel", industryModel] } }
                   : {}),
+                mediaDiscriminator: { $ifNull: ["$mediaDiscriminator", mediaDiscriminator] },
                 createdAt: { $ifNull: ["$createdAt", now] },
                 updatedAt: now,
                 headroomUnits: {
@@ -367,7 +386,8 @@ export async function shedSectorsForCorps(
                       sectorType as CorporationType,
                       true,
                       lookups.eraUnitScale,
-                      industryModel
+                      industryModel,
+                      mediaDiscriminator
                     ),
                     units,
                   ],
@@ -379,7 +399,8 @@ export async function shedSectorsForCorps(
                 sectorType as CorporationType,
                 true,
                 lookups.eraUnitScale,
-                industryModel
+                industryModel,
+                mediaDiscriminator
               ),
             },
           ],
@@ -395,6 +416,7 @@ export async function shedSectorsForCorps(
           stateId,
           sectorType,
           ...(industryModel != null || sectorType === "manufacturing" ? { industryModel } : {}),
+          mediaDiscriminator,
         },
         update: {
           $inc: { revenue },
@@ -405,6 +427,7 @@ export async function shedSectorsForCorps(
             countryId,
             sectorType: sectorType as UnownedSector["sectorType"],
             ...(industryModel != null || sectorType === "manufacturing" ? { industryModel } : {}),
+            mediaDiscriminator,
             createdAt: now,
           },
         },

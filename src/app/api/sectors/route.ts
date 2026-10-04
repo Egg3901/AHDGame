@@ -24,6 +24,7 @@ import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 import { loadCommandEconomyBlockedCountries } from "@/lib/economy/queries/commandEconomyMarketGate";
 import { loadCountryPresentationOverrides } from "@/lib/country/countryIdentity";
 import { loadWorldPreset } from "@/lib/currency/gdpAnchorRate";
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 
 export type SectorView = "unowned" | "owned" | "forSale";
 export type SectorSort = "revenue" | "type" | "state" | "country" | "margin" | "growth";
@@ -31,6 +32,7 @@ export type SectorSort = "revenue" | "type" | "state" | "country" | "margin" | "
 type SectorRow = {
   id: string;
   sectorType: CorporationType;
+  mediaDiscriminator?: string | null;
   sectorTypeLabel: string;
   stateId: string;
   stateName: string;
@@ -201,7 +203,20 @@ export async function GET(request: Request) {
       // Query persisted unowned sectors
       const unownedFilter: Record<string, unknown> = {};
       if (sectorTypeFilter && CORPORATION_TYPES.includes(sectorTypeFilter)) {
-        unownedFilter.sectorType = sectorTypeFilter;
+        if (sectorTypeFilter === "entertainment") {
+          unownedFilter.$and = [
+            {
+              $or: [
+                { sectorType: "entertainment" },
+                { sectorType: "media", mediaDiscriminator: "entertainment" },
+              ],
+            },
+          ];
+        } else {
+          unownedFilter.sectorType = sectorTypeFilter;
+          if (sectorTypeFilter === "media")
+            unownedFilter.mediaDiscriminator = { $ne: "entertainment" };
+        }
       }
       Object.assign(unownedFilter, unownedScopedFilter);
 
@@ -209,7 +224,13 @@ export async function GET(request: Request) {
         await db
           .collection<UnownedSector>("unownedSectors")
           .find(unownedFilter, {
-            projection: { sectorType: 1, stateId: 1, countryId: 1, revenue: 1 },
+            projection: {
+              sectorType: 1,
+              mediaDiscriminator: 1,
+              stateId: 1,
+              countryId: 1,
+              revenue: 1,
+            },
           })
           .toArray()
       )
@@ -229,8 +250,20 @@ export async function GET(request: Request) {
         const st = stateMap.get(us.stateId);
         rows.push({
           id: us._id.toString(),
-          sectorType: us.sectorType,
-          sectorTypeLabel: CORPORATION_TYPE_LABELS[us.sectorType],
+          sectorType: getOperatingSectorType(
+            us.sectorType,
+            undefined,
+            us.mediaDiscriminator
+          ) as CorporationType,
+          mediaDiscriminator: us.mediaDiscriminator ?? null,
+          sectorTypeLabel:
+            CORPORATION_TYPE_LABELS[
+              getOperatingSectorType(
+                us.sectorType,
+                undefined,
+                us.mediaDiscriminator
+              ) as CorporationType
+            ],
           stateId: us.stateId,
           stateName: st?.name ?? us.stateId,
           countryId: hostCountryOf(us.stateId, us.countryId),
@@ -254,7 +287,20 @@ export async function GET(request: Request) {
       // Owned or forSale — query corporateSectors
       const corpFilter: Record<string, unknown> = {};
       if (sectorTypeFilter && CORPORATION_TYPES.includes(sectorTypeFilter)) {
-        corpFilter.sectorType = sectorTypeFilter;
+        if (sectorTypeFilter === "entertainment") {
+          corpFilter.$and = [
+            {
+              $or: [
+                { sectorType: "entertainment" },
+                { sectorType: "media", mediaDiscriminator: "entertainment" },
+              ],
+            },
+          ];
+        } else {
+          corpFilter.sectorType = sectorTypeFilter;
+          if (sectorTypeFilter === "media")
+            corpFilter.mediaDiscriminator = { $ne: "entertainment" };
+        }
       }
       Object.assign(corpFilter, countryScopedFilter);
       if (view === "forSale") {
@@ -266,6 +312,7 @@ export async function GET(request: Request) {
         .find(corpFilter, {
           projection: {
             sectorType: 1,
+            mediaDiscriminator: 1,
             stateId: 1,
             countryId: 1,
             corporationId: 1,
@@ -326,8 +373,20 @@ export async function GET(request: Request) {
 
         rows.push({
           id: s._id.toString(),
-          sectorType: s.sectorType,
-          sectorTypeLabel: CORPORATION_TYPE_LABELS[s.sectorType],
+          sectorType: getOperatingSectorType(
+            s.sectorType,
+            undefined,
+            s.mediaDiscriminator
+          ) as CorporationType,
+          mediaDiscriminator: s.mediaDiscriminator ?? null,
+          sectorTypeLabel:
+            CORPORATION_TYPE_LABELS[
+              getOperatingSectorType(
+                s.sectorType,
+                undefined,
+                s.mediaDiscriminator
+              ) as CorporationType
+            ],
           stateId: s.stateId,
           stateName: st?.name ?? s.stateId,
           countryId: hostCountryId,

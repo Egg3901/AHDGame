@@ -325,7 +325,11 @@ export function processSectors(
       ? (() => {
           const [c1, c2] =
             SECTOR_RD_COMMODITIES[
-              getOperatingSectorType(corp.type, corp.industryModel) as string
+              getOperatingSectorType(
+                corp.type,
+                corp.industryModel,
+                corp.mediaDiscriminator
+              ) as string
             ] ?? [];
           return computeRdDemandFactor(
             lookups.globalCommodityBalances.get("software"),
@@ -1352,7 +1356,11 @@ export function processSectors(
       (lookups.primeRateByCountry.get(corp.countryId) ??
         getCountryConfig(corp.countryId).centralBank.defaultPrimeRate) / 100;
     const riskPremium = sectorRiskPremiumAtTurn(
-      getOperatingSectorType(corp.type, corp.industryModel) as Corporation["type"],
+      getOperatingSectorType(
+        corp.type,
+        corp.industryModel,
+        corp.mediaDiscriminator
+      ) as Corporation["type"],
       currentTurn
     );
     const growthNumer = corpGrowthNumerByCorpId.get(id) ?? 0;

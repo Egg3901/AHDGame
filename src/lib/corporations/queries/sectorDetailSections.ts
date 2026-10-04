@@ -476,12 +476,26 @@ export function computeTechGrowthCostReductionPct(args: {
   techCorpView: TechCorpView;
   sectorType: CorporationType;
   industryModel?: CorporateSector["industryModel"];
+  mediaDiscriminator?: CorporateSector["mediaDiscriminator"];
 }): number {
-  const { techTreesEnabled, techCurrentYear, techCorpView, sectorType, industryModel } = args;
+  const {
+    techTreesEnabled,
+    techCurrentYear,
+    techCorpView,
+    sectorType,
+    industryModel,
+    mediaDiscriminator,
+  } = args;
   if (!techTreesEnabled) return 0;
   const effects = techCurrentYear
-    ? getSectorTechEffectsForYear(techCorpView, sectorType, techCurrentYear, industryModel)
-    : getSectorTechEffects(techCorpView, sectorType, industryModel);
+    ? getSectorTechEffectsForYear(
+        techCorpView,
+        sectorType,
+        techCurrentYear,
+        industryModel,
+        mediaDiscriminator
+      )
+    : getSectorTechEffects(techCorpView, sectorType, industryModel, mediaDiscriminator);
   return Math.round((1 - effects.growthCostMultiplier) * 100 * 10) / 10;
 }
 
@@ -660,55 +674,70 @@ export function buildSectorStrategySection(args: {
       };
 
       return (
-        getSectorStrategies(sectorType, mediaOperatingModelsEnabled).map((s) => {
-          const availability = getStrategyAvailability(
-            techCorpView,
-            s,
-            techCurrentYear,
-            techTreesEnabled
-          );
-          const projection = projectStrategy(s);
-          return {
-            id: s.id,
-            name: s.name,
-            description: s.description,
-            locked: availability.locked,
-            lockReason: availability.reason ?? null,
-            minDecade: s.minDecade ?? null,
-            // Percentage points this strategy would move the effective margin
-            // by, at today's commodity prices. null when redacted.
-            projectedMarginDelta: projection.marginDelta,
-            // Fractional change to realized revenue via price realization.
-            projectedRealizationDelta: projection.realizationDelta,
-            // D9 capacity rescale preview (plants tier): retooling re-denominates
-            // capacity into the new output mix at equal value, so the unit count
-            // moves even though nothing was built or scrapped. Shipped for every
-            // mode (harmless below plants, where the page does not read it) using
-            // the SAME `capacityRescaleRatio` the retool command applies.
-            capacityRescaleRatio: capacityRescaleRatio(sectorType, sector.strategyId, s.id),
-            capacityAfterRetool:
-              typeof sector.capitalStock === "number" && Number.isFinite(sector.capitalStock)
-                ? sector.capitalStock * capacityRescaleRatio(sectorType, sector.strategyId, s.id)
-                : null,
-            // ₳/turn preview; null when redacted or not an extraction sector.
-            projectedRevenuePerTurn:
-              sectorType === "extraction" && !shouldRedact
-                ? Math.round(
-                    projectStrategyRevenuePerTurn({
-                      revenueAnchor: sectorRevenueForPreview,
-                      supply: s.supply,
-                      priceRatioByCommodity: previewPriceRatioByCommodity,
-                      capacityMultipliers:
-                        stateResources === undefined
-                          ? undefined // no cap doc — uncapped legacy state
-                          : stateResources === null
-                            ? null // cap doc with no resources — zero capacity
-                            : (strategyCapacityMultipliers?.get(s.id) ?? {}),
-                    })
-                  )
-                : null,
-          };
-        }) ?? []
+        getSectorStrategies(sectorType, mediaOperatingModelsEnabled, sector.mediaDiscriminator).map(
+          (s) => {
+            const availability = getStrategyAvailability(
+              techCorpView,
+              s,
+              techCurrentYear,
+              techTreesEnabled
+            );
+            const projection = projectStrategy(s);
+            return {
+              id: s.id,
+              name: s.name,
+              description: s.description,
+              locked: availability.locked,
+              lockReason: availability.reason ?? null,
+              minDecade: s.minDecade ?? null,
+              // Percentage points this strategy would move the effective margin
+              // by, at today's commodity prices. null when redacted.
+              projectedMarginDelta: projection.marginDelta,
+              // Fractional change to realized revenue via price realization.
+              projectedRealizationDelta: projection.realizationDelta,
+              // D9 capacity rescale preview (plants tier): retooling re-denominates
+              // capacity into the new output mix at equal value, so the unit count
+              // moves even though nothing was built or scrapped. Shipped for every
+              // mode (harmless below plants, where the page does not read it) using
+              // the SAME `capacityRescaleRatio` the retool command applies.
+              capacityRescaleRatio: capacityRescaleRatio(
+                sectorType,
+                sector.strategyId,
+                s.id,
+                sector.industryModel,
+                sector.mediaDiscriminator
+              ),
+              capacityAfterRetool:
+                typeof sector.capitalStock === "number" && Number.isFinite(sector.capitalStock)
+                  ? sector.capitalStock *
+                    capacityRescaleRatio(
+                      sectorType,
+                      sector.strategyId,
+                      s.id,
+                      sector.industryModel,
+                      sector.mediaDiscriminator
+                    )
+                  : null,
+              // ₳/turn preview; null when redacted or not an extraction sector.
+              projectedRevenuePerTurn:
+                sectorType === "extraction" && !shouldRedact
+                  ? Math.round(
+                      projectStrategyRevenuePerTurn({
+                        revenueAnchor: sectorRevenueForPreview,
+                        supply: s.supply,
+                        priceRatioByCommodity: previewPriceRatioByCommodity,
+                        capacityMultipliers:
+                          stateResources === undefined
+                            ? undefined // no cap doc, uncapped legacy state
+                            : stateResources === null
+                              ? null // cap doc with no resources, zero capacity
+                              : (strategyCapacityMultipliers?.get(s.id) ?? {}),
+                      })
+                    )
+                  : null,
+            };
+          }
+        ) ?? []
       );
     })(),
     currentTurn,
@@ -998,7 +1027,11 @@ export function computeSectorMarginSection(args: {
     metrics,
     commodityMarginMod,
     homeLocationBonus,
-    getOperatingSectorType(corporation.type, corporation.industryModel) as CorporationType,
+    getOperatingSectorType(
+      corporation.type,
+      corporation.industryModel,
+      corporation.mediaDiscriminator
+    ) as CorporationType,
     totalCorpSectors,
     macroEcon,
     corporation.logisticsStrength ?? 0,
@@ -1493,7 +1526,12 @@ export function buildSectorPlantsSection(args: {
   const plantCount =
     Number.isInteger(sector.plantCount) && (sector.plantCount ?? 0) >= 0
       ? (sector.plantCount as number)
-      : seedPlantLedger(sectorType, sector.capitalStock, sector.industryModel).plantCount;
+      : seedPlantLedger(
+          sectorType,
+          sector.capitalStock,
+          sector.industryModel,
+          sector.mediaDiscriminator
+        ).plantCount;
   const producedUnits = num(sector.producedUnits);
   const soldUnits = num(sector.soldUnits);
   const mothballed = sector.mothballed === true;
@@ -1847,7 +1885,13 @@ export function buildSectorPlantsSection(args: {
     workersDesired: num(sector.workersDesired) ?? workers,
     labourStaffingFactor: Math.max(0, Math.min(1, num(sector.labourStaffingFactor) ?? 1)),
     unionizationPct: num(sector.unionization) ?? 0,
-    laborIntensity: laborIntensity(sectorType, currentYear, eraUnitScale),
+    laborIntensity: laborIntensity(
+      sectorType,
+      currentYear,
+      eraUnitScale,
+      sector.industryModel,
+      sector.mediaDiscriminator
+    ),
     governor: {
       active: governorTurnsRemaining > 0,
       startTurn: plantsStartTurn,
