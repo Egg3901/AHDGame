@@ -15,7 +15,7 @@ import {
   STALE_MARKET_MODE_STAMP_UNSET,
   STALE_PER_WORLD_GAME_CONFIG_UNSET,
 } from "@/lib/admin/seed/runCoreSeed";
-import { coreGameConfigUpdate } from "./coreGameConfigUpdate";
+import { coreGameConfigUpdate, STALE_FREIGHT_MODE_STAMP_UNSET } from "./coreGameConfigUpdate";
 import { gameConfig as referenceGameConfig } from "@/lib/seeds/reference/gameConfig";
 
 describe("runSeed reset drops", () => {
@@ -45,11 +45,40 @@ describe("runSeed reset drops", () => {
     // Same shape as STALE_PROGRESS_GAME_STATE_UNSET on gameState — an explicit
     // $unset list beats a blanket drop.
     expect(Object.keys(STALE_PER_WORLD_GAME_CONFIG_UNSET).sort()).toEqual([
+      "commodityNominalPriceIndex",
+      "commodityNominalPriceIndexTurn",
       "marketGuardReferenceFundamentalMcap",
       "marketGuardReferenceMcap",
       "marketGuardReferenceTurn",
       "marketGuardTrippedAt",
+      "retailDemandTransitionStartTurn",
+      "retailDemandTransitionTurns",
     ]);
+  });
+
+  it("clears the commodity price level and the Retail unwind, which a new world starts without", () => {
+    // `commodityNominalPriceIndex` multiplies every commodity base price
+    // (src/lib/turn/commodity/pricing.ts) and `retailDemandTransitionStartTurn`
+    // pauses new Retail capacity until start + duration
+    // (src/lib/market/retailDemandTransition.ts). Both are stamped by the world
+    // that was played, in that world's turns, and `gameConfig` is never dropped.
+    for (const key of [
+      "commodityNominalPriceIndex",
+      "commodityNominalPriceIndexTurn",
+      "retailDemandTransitionStartTurn",
+      "retailDemandTransitionTurns",
+    ]) {
+      expect(STALE_PER_WORLD_GAME_CONFIG_UNSET, key).toHaveProperty(key, "");
+    }
+  });
+
+  it("never clears a key the reference seed writes, so the two writes cannot fight", () => {
+    // The unset runs before `coreGameConfigUpdate`'s `$set`; a key in both would
+    // be cleared and then re-written, and the list would be documenting a
+    // default it does not apply.
+    for (const key of Object.keys(STALE_PER_WORLD_GAME_CONFIG_UNSET)) {
+      expect(referenceGameConfig, key).not.toHaveProperty(key);
+    }
   });
 
   it("keeps the market-guard configuration knobs, which are not per-world state", () => {
@@ -101,6 +130,123 @@ describe("reset adopts the reference market tier", () => {
 
   it("has a reference tier for the reset branch to adopt", () => {
     expect(referenceGameConfig.marketSystemMode).toBeTruthy();
+  });
+});
+
+describe("reset adopts the reference freight tier", () => {
+  // `freightSettlementMode` is in the reference seed, so a reset sets it back to
+  // "shadow". The stamps naming who last changed it, and on which turn, belong to
+  // the world that tier was chosen in, the same as the market-tier stamps above.
+  it("clears the provenance stamps naming whoever set the previous world's freight tier", () => {
+    expect(Object.keys(STALE_FREIGHT_MODE_STAMP_UNSET).sort()).toEqual([
+      "freightSettlementModeUpdatedAt",
+      "freightSettlementModeUpdatedBy",
+      "freightSettlementModeUpdatedTurn",
+    ]);
+  });
+
+  it("unsets both stamp sets on reset and none on a top-up, without colliding with the $set", () => {
+    const reset = coreGameConfigUpdate(true, 1991);
+    const topUp = coreGameConfigUpdate(false, 1991);
+    expect(Object.keys(reset.$unset ?? {}).sort()).toEqual([
+      "freightSettlementModeUpdatedAt",
+      "freightSettlementModeUpdatedBy",
+      "freightSettlementModeUpdatedTurn",
+      "marketSystemModeUpdatedAt",
+      "marketSystemModeUpdatedBy",
+      "marketSystemModeUpdatedTurn",
+    ]);
+    expect(topUp).not.toHaveProperty("$unset");
+    expect(reset.$set?.freightSettlementMode).toBe(referenceGameConfig.freightSettlementMode);
+    // MongoDB rejects an update that both sets and unsets one path.
+    expect(Object.keys(reset.$unset ?? {}).filter((key) => key in (reset.$set ?? {}))).toEqual([]);
+  });
+});
+
+describe("reset leaves a new world its own prices and Retail rules", () => {
+  /** Apply the top-level `$set` / `$unset` of an update the way MongoDB would. */
+  function applyUpdate(
+    doc: Record<string, unknown>,
+    update: { $set?: object; $unset?: object }
+  ): Record<string, unknown> {
+    const next: Record<string, unknown> = { ...doc, ...update.$set };
+    for (const key of Object.keys(update.$unset ?? {})) delete next[key];
+    return next;
+  }
+
+  // A world that was played to turn 1329: the first block is stamped by the turn
+  // engine or by an operator in that world's turns, the second is configuration
+  // an operator chose and a reset preserves by design.
+  const deadWorld: Record<string, unknown> = {
+    _id: "default",
+    commodityNominalPriceIndex: 1.9569,
+    commodityNominalPriceIndexTurn: 1329,
+    retailDemandTransitionStartTurn: 514,
+    retailDemandTransitionTurns: 192,
+    marketGuardReferenceMcap: 3_560_375_953,
+    marketGuardReferenceTurn: 2,
+    freightSettlementMode: "active",
+    freightSettlementModeUpdatedBy: "operator",
+    freightSettlementModeUpdatedAt: "2026-08-13T23:16:31.180Z",
+    freightSettlementModeUpdatedTurn: 100,
+    marketSystemModeUpdatedBy: "operator",
+    maintenanceMode: "full",
+    registrationEnabled: false,
+    savingsAccountsMode: "authoritative",
+    privateBankingEnabled: true,
+    publicReviewMode: true,
+  };
+
+  // Mirrors the two writes `runSeed` issues on a reset, in order.
+  const afterReset = () =>
+    applyUpdate(
+      applyUpdate(deadWorld, { $unset: STALE_PER_WORLD_GAME_CONFIG_UNSET }),
+      coreGameConfigUpdate(true, 1991) as { $set?: object; $unset?: object }
+    );
+
+  it("starts the price level, Retail rules and freight provenance from nothing", () => {
+    const after = afterReset();
+    for (const key of [
+      "commodityNominalPriceIndex",
+      "commodityNominalPriceIndexTurn",
+      "retailDemandTransitionStartTurn",
+      "retailDemandTransitionTurns",
+      "marketGuardReferenceMcap",
+      "marketGuardReferenceTurn",
+      "freightSettlementModeUpdatedBy",
+      "freightSettlementModeUpdatedAt",
+      "freightSettlementModeUpdatedTurn",
+      "marketSystemModeUpdatedBy",
+    ]) {
+      expect(after, `gameConfig.${key} must not survive the reset`).not.toHaveProperty(key);
+    }
+    expect(after.freightSettlementMode).toBe("shadow");
+    expect(after.seedYear).toBe(1991);
+  });
+
+  it("keeps the operator configuration the reset is not allowed to touch", () => {
+    expect(afterReset()).toMatchObject({
+      maintenanceMode: "full",
+      registrationEnabled: false,
+      savingsAccountsMode: "authoritative",
+      privateBankingEnabled: true,
+      publicReviewMode: true,
+    });
+  });
+
+  it("runSeed clears the markers inside the reset branch, before the reference write", () => {
+    // `runSeed` cannot be driven without a live connection (see the file header),
+    // so the order is asserted on the source, like the command-economy gate below.
+    const src = fs.readFileSync(
+      path.resolve(process.cwd(), "src/lib/admin/seed/runCoreSeed.ts"),
+      "utf8"
+    );
+    const resetBranch = src.indexOf("if (reset) {");
+    const clearWrite = src.indexOf("{ $unset: STALE_PER_WORLD_GAME_CONFIG_UNSET }");
+    const referenceWrite = src.indexOf("coreGameConfigUpdate(reset, seedYear)");
+    expect(resetBranch).toBeGreaterThan(-1);
+    expect(clearWrite).toBeGreaterThan(resetBranch);
+    expect(referenceWrite).toBeGreaterThan(clearWrite);
   });
 });
 

@@ -500,6 +500,92 @@ describe("resetGameWorld", () => {
     expect(Object.keys(set).filter((k) => k in (unset ?? {}))).toEqual([]);
   });
 
+  it("clears the law, treaty, currency and calendar state a played world leaves on gameState", async () => {
+    // Outgoing world: a 1979 world that legislation, treaties and the turn
+    // phases have all written to. None of these is an operator choice, and the
+    // new world's readers take whatever is stored over their own era default.
+    const outgoing: Record<string, unknown> = {
+      _id: "current",
+      currentTurn: 1329,
+      currentYear: 1979,
+      startingYear: 1953,
+      lastStatehoodYear: 1979,
+      lastMilitaryBranchYearProcessed: 1979,
+      europeanIntegration: {
+        stage: "community",
+        source: "legacy-settlement",
+        establishedTurn: 1262,
+        ratifications: {},
+      },
+      votingAgeEligibleByCountry: { US: 25, UK: 16, DD: 16 },
+      registrationAccessBiasByCountry: { US: -50, UK: 50, DD: 50 },
+      eurozoneEnabled: true,
+      euroAdoptedCountries: ["DE", "IE"],
+      euroMonetaryUnion: { revision: 1, members: {} },
+      euroAdoptionAuthorizations: { DE: { billId: "bill-1", turn: 900 } },
+      manuallyEnabledSeats: ["secretary_of_education"],
+      // Operator choices. The reset preserves every one of these by design.
+      fastMode: true,
+      autoSectorSeedEnabled: false,
+      nppForeignPolicyStage: "war",
+      settlementCrisisEnabled: true,
+      macroGrowthV1: true,
+      granularElectorateEnabled: true,
+      defenceProcurementPaused: false,
+    };
+    db.collection("gameState");
+    db.collectionMocks.gameState.findOne.mockResolvedValue(outgoing);
+
+    await resetGameWorld(db as never, {
+      deleteProfiles: true,
+      preset: "1991-default",
+      seedHistorical: false,
+    });
+
+    const currentUpdate = db.collectionMocks.gameState.updateOne.mock.calls.find(
+      (c) => (c[0] as { _id?: string })?._id === "current"
+    );
+    expect(currentUpdate).toBeDefined();
+    const update = currentUpdate![1] as {
+      $set?: Record<string, unknown>;
+      $unset?: Record<string, string>;
+    };
+    expect(Object.keys(update.$set ?? {}).filter((k) => k in (update.$unset ?? {}))).toEqual([]);
+
+    // Apply the update to the outgoing document the way MongoDB would.
+    const after: Record<string, unknown> = { ...outgoing, ...(update.$set ?? {}) };
+    for (const key of Object.keys(update.$unset ?? {})) delete after[key];
+
+    for (const key of [
+      "lastStatehoodYear",
+      "lastMilitaryBranchYearProcessed",
+      "europeanIntegration",
+      "votingAgeEligibleByCountry",
+      "registrationAccessBiasByCountry",
+      "eurozoneEnabled",
+      "euroAdoptedCountries",
+      "euroMonetaryUnion",
+      "euroAdoptionAuthorizations",
+      "manuallyEnabledSeats",
+    ]) {
+      expect(after, `gameState.${key} must not survive the reset`).not.toHaveProperty(key);
+    }
+
+    // Clock and preset are the new world's; operator choices are untouched.
+    expect(after).toMatchObject({
+      currentTurn: 1,
+      startingYear: 1991,
+      preset: "1991-default",
+      fastMode: true,
+      autoSectorSeedEnabled: false,
+      nppForeignPolicyStage: "war",
+      settlementCrisisEnabled: true,
+      macroGrowthV1: true,
+      granularElectorateEnabled: true,
+      defenceProcurementPaused: false,
+    });
+  });
+
   it("removes squatter documents from gameState without touching `current`", async () => {
     await resetGameWorld(db as never, {
       deleteProfiles: true,

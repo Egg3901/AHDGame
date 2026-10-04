@@ -179,12 +179,16 @@ export const RESET_DROP_COLLECTIONS: ReadonlyArray<{
 ];
 
 /**
- * Per-world markers the turn engine stamps onto `gameConfig`, cleared on reset.
+ * Per-world markers the turn engine (or an operator, in that world's turns) stamps
+ * onto `gameConfig`, cleared on reset.
  *
  * These are the one thing the old blanket `gameConfig` drop legitimately bought.
  * `src/lib/market/launchGuard.ts` stamps a reference market cap and turn on the
  * config doc and compares later turns against it; carried into a new world they
  * would measure the new market's drawdown against the dead world's valuation.
+ * The commodity price level and the Retail demand unwind are the same shape: both
+ * are read as the new world's own, and both are absent in a world that has not
+ * played them (`resetFreshWorldDefaults.test.ts` pins each reader).
  *
  * Same shape and rationale as `STALE_PROGRESS_GAME_STATE_UNSET` on `gameState`
  * — an explicit `$unset` list, not a blanket drop, so the ~100 operational
@@ -197,9 +201,24 @@ export const STALE_PER_WORLD_GAME_CONFIG_UNSET: Readonly<Record<string, "">> = O
   marketGuardReferenceFundamentalMcap: "",
   marketGuardReferenceTurn: "",
   marketGuardTrippedAt: "",
+  // Shared nominal commodity price level and the last turn it was advanced to
+  // (src/lib/turn/commodityPriceTurn.ts, src/lib/market/commodityNominalIndex.ts).
+  // Absent resolves to a level of 1 advanced one turn; a carried 1.96 multiplies every
+  // commodity base price of the new world (src/lib/turn/commodity/pricing.ts).
+  commodityNominalPriceIndex: "",
+  commodityNominalPriceIndexTurn: "",
+  // Retail demand unwind (src/lib/market/retailDemandTransition.ts). Absent is the
+  // documented "not started" state, which leaves Retail capacity open; a carried start
+  // turn pauses new Retail capacity until start + duration on the new world's clock
+  // (corporations/commands/sectorOperations/buildCapacity.ts, expandSector.ts).
+  retailDemandTransitionStartTurn: "",
+  retailDemandTransitionTurns: "",
 });
 
-export { STALE_MARKET_MODE_STAMP_UNSET } from "./coreGameConfigUpdate";
+export {
+  STALE_MARKET_MODE_STAMP_UNSET,
+  STALE_FREIGHT_MODE_STAMP_UNSET,
+} from "./coreGameConfigUpdate";
 
 export type RunSeedOptions = {
   db: Db;

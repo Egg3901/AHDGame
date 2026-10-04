@@ -14,6 +14,20 @@ export const STALE_MARKET_MODE_STAMP_UNSET: Readonly<Record<string, "">> = Objec
   marketSystemModeUpdatedTurn: "",
 });
 
+/**
+ * Provenance stamps for `freightSettlementMode`, cleared on the same terms as the
+ * market-tier stamps above. The reference seed carries the "shadow" tier, so a
+ * reset puts it back, and stamps naming who moved the previous world's freight
+ * tier (and on which of that world's turns) would otherwise describe a change this
+ * world never had. Written only by `/api/admin/config/freight-settlement`; no
+ * reader consumes them.
+ */
+export const STALE_FREIGHT_MODE_STAMP_UNSET: Readonly<Record<string, "">> = Object.freeze({
+  freightSettlementModeUpdatedBy: "",
+  freightSettlementModeUpdatedAt: "",
+  freightSettlementModeUpdatedTurn: "",
+});
+
 /** Configuration writes shared by core reset and non-destructive seed top-ups. */
 export function coreGameConfigUpdate(reset: boolean, seedYear: number): UpdateFilter<GameConfig> {
   const { marketSystemMode, campaignEraPriceLevelEnabled, ...reference } = gameConfig;
@@ -22,7 +36,7 @@ export function coreGameConfigUpdate(reset: boolean, seedYear: number): UpdateFi
   return reset
     ? {
         $set: { ...reference, seedYear, marketSystemMode, campaignEraPriceLevelEnabled },
-        $unset: STALE_MARKET_MODE_STAMP_UNSET,
+        $unset: { ...STALE_MARKET_MODE_STAMP_UNSET, ...STALE_FREIGHT_MODE_STAMP_UNSET },
       }
     : {
         $set: { ...reference, seedYear },

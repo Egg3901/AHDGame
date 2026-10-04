@@ -85,17 +85,23 @@ export const FULL_RESET_DELETABLE_USERS_FILTER = Object.freeze({
  * never dropped — see RUNTIME_WIPE_SPECIAL_CASES), and the reset's `$set` covers
  * only a closed list of fields. Anything else the PREVIOUS world stamped onto the
  * doc therefore survives forever and is read by the new world's turn engine as if
- * it were its own progress. Every field below is a per-world progress marker
- * (a "last time this phase fired" guard or a derived per-world index), so each
- * must be cleared or the phase it guards mis-fires — or never fires at all — on
- * the new world.
+ * it were its own progress. Every field below is per-world state: a "last time
+ * this phase fired" guard, a derived per-world index, or law and treaty state that
+ * enacted bills and the turn phases wrote (franchise, registration access, the
+ * European Community, the euro, cabinet seats opened by legislation). Each must be
+ * cleared or the reader it feeds mis-fires, or never fires at all, on the new world.
  *
  * Confirmed live on a 1953 world reset from a 2010s world: `lastCensusYear: 2010`,
  * `lastAutoSeedTurn: 944`, `lastBundestagReconciledCycle: 6`, `currentEraId: "2010s"`.
  *
- * Keys are `$unset`, not `$set` to a default: absent is the documented "never
- * fired yet" state for every one of these guards, and re-deriving them is the
- * owning phase's job on the first turn of the new world.
+ * Keys are `$unset`, not `$set` to a default: absent is the documented fresh-world
+ * state for every one of these readers (`resetFreshWorldDefaults.test.ts` pins each),
+ * and re-deriving them is the owning phase's or seeder's job on the new world.
+ *
+ * ⚠️ Operator choices do NOT belong here: feature gates, kill switches and tier
+ * settings (`fastMode`, `autoSectorSeedEnabled`, `nppForeignPolicyStage`,
+ * `settlementCrisisEnabled`, and the rest) survive a reset on purpose; see
+ * `missingGameStateFlagDefaults`, which fills only what was never set.
  */
 export const STALE_PROGRESS_GAME_STATE_UNSET: Readonly<Record<string, "">> = Object.freeze({
   // Decennial census guard: `shouldRunCensus` requires `currentYear > lastCensusYear`
@@ -134,6 +140,38 @@ export const STALE_PROGRESS_GAME_STATE_UNSET: Readonly<Record<string, "">> = Obj
   // Counts terms served per country; the previous world's counts would term-limit
   // brand-new presidents in the new one.
   presidentialTenureByCountry: "",
+  // Statehood admission guard: `shouldEvaluateStatehood` requires `currentYear >
+  // lastStatehoodYear` (src/lib/turn/statehood.ts). Absent evaluates the first year;
+  // a carried 1979 skips every admission roll of an earlier era up to 1979.
+  lastStatehoodYear: "",
+  // Military-branch year-crossing guard (src/lib/turn/militaryBranchYearCrossing.ts).
+  // Absent is the documented first run, which stands up every branch active now; a
+  // carried year skips that and returns early (`currentYear <= lastYear`) on an earlier era.
+  lastMilitaryBranchYearProcessed: "",
+  // European institutional state. `ensureEuropeanIntegrationState` returns whatever is
+  // stored and derives a fresh one only when the field is absent
+  // (src/lib/internationalOrganizations/europeanIntegration/service.ts). A carried
+  // "legacy-settlement" Community seats no members in the new era's EU, and the
+  // ratifications it holds name the old world's membership ids.
+  europeanIntegration: "",
+  // Franchise and registration law, written only by enacted electoral-law bills
+  // (src/lib/elections/electoralLaws.ts). Absent falls back to the era default:
+  // `resolveVotingAgeEligible` (21 before 1971, 18 after, src/lib/constants/votingAge.ts)
+  // and a registration bias of 0 (src/lib/turn/partyOrg/regDriftDecay.ts).
+  votingAgeEligibleByCountry: "",
+  registrationAccessBiasByCountry: "",
+  // Euro accession, written by enacted EuroAdoptionProvision bills and the settlement
+  // phase (src/lib/currency/euro/). `seedForex` fills the first two with `$ifNull`, so
+  // it PRESERVES what is stored (a post-euro world would hand EUR to a 1991 one); once
+  // cleared it derives them from the preset. The last two read as "no union" and
+  // "no authorizations" when absent (euro/service.ts, euro/rules.ts).
+  eurozoneEnabled: "",
+  euroAdoptedCountries: "",
+  euroMonetaryUnion: "",
+  euroAdoptionAuthorizations: "",
+  // Cabinet seats a create_department bill forced active (src/lib/legislationEffects.ts).
+  // Absent reads as an empty set (src/lib/cabinet/liveGameYear.ts).
+  manuallyEnabledSeats: "",
 });
 
 interface ResetGameWorldOptions {
