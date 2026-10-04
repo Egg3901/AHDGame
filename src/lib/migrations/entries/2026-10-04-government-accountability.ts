@@ -118,7 +118,7 @@ export const migration: Migration = {
         const reference = { kind: "npp" as const, id: gov.pmNppId };
         if (
           !(await db
-            .collection("countryLeaderStates")
+            .collection<{ _id: string }>("countryLeaderStates")
             .findOne({ _id: leaderStateId(gov.countryId, reference) }))
         ) {
           initialized++;

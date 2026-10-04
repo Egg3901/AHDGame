@@ -69,6 +69,7 @@ function share(
     _id: "TEST",
     countryId: family.country,
     categoryWeights: { ideology: 100 },
+    lastUpdated: new Date(0),
     groups: {
       left: { population: lean, turnout: 60, economicLean: -1.5, socialLean: -1 },
       right: { population: 100 - lean, turnout: 60, economicLean: 1.5, socialLean: 1 },

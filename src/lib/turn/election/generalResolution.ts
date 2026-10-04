@@ -152,7 +152,7 @@ export async function resolveOneGeneralElection(
       const resolved = await resolveBrazilPresidentialElection(
         db,
         election,
-        tally,
+        tally ?? null,
         now,
         currentTurn
       );
