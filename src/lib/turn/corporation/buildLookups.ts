@@ -140,6 +140,8 @@ export async function buildCorporationLookups(
      * so the corporation turn computes and writes nothing.
      */
     canonicalFreightBillingEnabled?: boolean;
+    /** Project editorial positions and audience lean only while the rule is enabled. */
+    mediaEditorialEnabled?: boolean;
   }
 ): Promise<CorporationLookups> {
   await reconcileSignedTariffBills(db);
@@ -199,7 +201,13 @@ export async function buildCorporationLookups(
     activeEmbargoDocs,
     worldPreset,
   ] = await Promise.all([
-    db.collection<Corporation>("corporations").find({}).toArray(),
+    db
+      .collection<Corporation>("corporations")
+      .find(
+        {},
+        options?.mediaEditorialEnabled === true ? {} : { projection: { editorialStance: 0 } }
+      )
+      .toArray(),
     // `plantsPnl` is ~15% of the collection. corporationTurn writes it via
     // sectorTurn as a complete overwrite and never reads the prior value.
     // `soldByCommodity` IS read: the demand throttle values last turn's sales
@@ -309,7 +317,20 @@ export async function buildCorporationLookups(
     getActiveSubsidies(db),
     db
       .collection<State>("states")
-      .find({}, { projection: { _id: 1, countryId: 1, gdp: 1, sectorSpecializations: 1 } })
+      .find(
+        {},
+        {
+          projection: {
+            _id: 1,
+            countryId: 1,
+            gdp: 1,
+            sectorSpecializations: 1,
+            ...(options?.mediaEditorialEnabled === true
+              ? { cachedEconomicLean: 1, cachedSocialLean: 1 }
+              : {}),
+          },
+        }
+      )
       .toArray(),
     // Only currencyCode + rate read; consumed only as exchangeRatesByCurrency map.
     db
@@ -1205,6 +1226,18 @@ export async function buildCorporationLookups(
     corporations,
     sectorsByCorp,
     corpById,
+    editorialAudienceLeanByState:
+      options?.mediaEditorialEnabled === true
+        ? new Map(
+            states.map((state) => [
+              state._id,
+              {
+                economic: state.cachedEconomicLean ?? 0,
+                social: state.cachedSocialLean ?? 0,
+              },
+            ])
+          )
+        : undefined,
     ceoBusinessAcumenByCorpId,
     bondsByCorpId,
     bondsHeldByCorpId,

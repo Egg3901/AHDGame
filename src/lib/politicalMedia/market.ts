@@ -21,7 +21,7 @@ export interface PoliticalAdClearingOffer {
   priceRatio?: number;
   sellerCurrencyCode: string;
   sellerLocalPerAnchor: number;
-  /** Normalized physical offer, before ordinary commercial fills. */
+  /** Normalized physical offer, before editorial availability and commercial fills. */
   offeredUnits: number;
 }
 
@@ -94,9 +94,15 @@ export function settlePoliticalAdMarket(args: {
     const rate = offer.input.supplyRates.advertising ?? 0;
     const clearing = offer.clearing;
     const soldFraction = clearing?.soldByCommodity?.advertising ?? 0;
+    const editorialAvailability = Number.isFinite(offer.input.editorialAdvertisingAvailability)
+      ? Math.max(0, Math.min(1, offer.input.editorialAdvertisingAvailability!))
+      : 1;
+    const availableUnits = offer.offeredUnits * editorialAvailability;
+    const commercialSoldUnits = offer.offeredUnits * Math.max(0, Math.min(1, soldFraction));
     const unsoldUnits = Math.max(
       0,
-      offer.offeredUnits * (1 - Math.max(0, Math.min(1, soldFraction))) -
+      availableUnits -
+        commercialSoldUnits -
         (persistedUnitsBySectorId.get(offer.input.sectorId) ?? 0)
     );
     if (

@@ -44,6 +44,7 @@ import {
 } from "@/lib/currency/corporationCapital";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 import { advertisingDeliveredValueByCorp } from "./advertisingDeliveredValue";
+import { mediaAudienceFit } from "@/lib/mediaEditorial/rules";
 import {
   rawAdvertisingOffer,
   settlePoliticalAdMarket,
@@ -529,6 +530,11 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
           deliveryLimitedBySectorId.set(sectorId, deliveryLimit.fraction);
           deliveryLimitedClassBySectorId.set(sectorId, deliveryLimit.freightClass);
         }
+        if (lookups.editorialAudienceLeanByState && sector.sectorType === "media") {
+          const stance = lookups.corpById.get(corpId)?.editorialStance;
+          const audience = lookups.editorialAudienceLeanByState.get(sector.stateId);
+          clearingInput.editorialAdvertisingAvailability = mediaAudienceFit(stance, audience);
+        }
         if (sector.stateId) clearingStateBySector.set(sectorId, sector.stateId);
         clearingInputs.push(clearingInput);
         // Brand loyalty (A2): remember what the rollup needs, joined post-clearing.
@@ -649,6 +655,7 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
     // reachable price. processSectors routes that delivered value through one
     // equal-and-opposite transfer.
     const clearingBasePrices = eraScaledBasePrices(lookups.eraUnitScale);
+    const deliveredUnitsBySector = new Map<string, number>();
     const advertisingSellerDeliveredValueAnchorByCorpId = advertisingDeliveredValueByCorp({
       inputs: clearingInputs.map((input) => ({
         sectorId: input.sectorId,
@@ -668,10 +675,12 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
       sectorCorpId,
       commodityMixWeight,
       qualityPremiumPricingEnabled,
+      ...(lookups.editorialAudienceLeanByState
+        ? { deliveredUnitsBySectorOut: deliveredUnitsBySector }
+        : {}),
     });
     market.advertisingSellerDeliveredValueAnchorByCorpId =
       advertisingSellerDeliveredValueAnchorByCorpId;
-
     if (politicalMediaOrders.length > 0) {
       const rawOffers = new Map<
         string,
@@ -774,6 +783,46 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
       market.clearingBySectorId = political.clearingBySectorId;
       market.politicalAdSellerPayoutLocalByCorpId = political.sellerPayoutLocalByCorpId;
       politicalMediaSettlementPlans = political.settlementPlans;
+    }
+
+    if (lookups.editorialAudienceLeanByState) {
+      const sectorById = new Map(
+        [...lookups.sectorsByCorp.values()].flatMap((sectors) =>
+          sectors.map((sector) => [sector._id.toString(), sector] as const)
+        )
+      );
+      const deliveredByState = new Map<
+        string,
+        Map<string, { units: number; stance: { economic: number; social: number } }>
+      >();
+      for (const [sectorId, units] of deliveredUnitsBySector) {
+        const sector = sectorById.get(sectorId);
+        if (!sector || sector.sectorType !== "media" || !sector.stateId) continue;
+        const corporationId = sector.corporationId.toString();
+        const outlets = deliveredByState.get(sector.stateId) ?? new Map();
+        const existing = outlets.get(corporationId);
+        outlets.set(corporationId, {
+          units: (existing?.units ?? 0) + units,
+          stance: lookups.corpById.get(corporationId)?.editorialStance ?? {
+            economic: 0,
+            social: 0,
+          },
+        });
+        deliveredByState.set(sector.stateId, outlets);
+      }
+      market.editorialOutletsByState = new Map(
+        [...deliveredByState].map(([stateId, outlets]) => {
+          const total = [...outlets.values()].reduce((sum, outlet) => sum + outlet.units, 0);
+          return [
+            stateId,
+            [...outlets].map(([corporationId, outlet]) => ({
+              corporationId,
+              stance: outlet.stance,
+              audienceShare: total > 0 ? outlet.units / total : 0,
+            })),
+          ];
+        })
+      );
     }
     if (bookViolations.length > 0) {
       console.warn(
