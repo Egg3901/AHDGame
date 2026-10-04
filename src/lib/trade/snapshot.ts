@@ -1,6 +1,7 @@
 import type { CountryId } from "@/lib/constants/countries";
 import type { CommodityType } from "@/lib/constants/commodities";
 import { COMMODITY_TYPES } from "@/lib/constants/commodities";
+import { isStateScopedCommodity } from "@/lib/market/rules/commodityMarketScope";
 import type {
   TradeFlowSnapshot,
   CommodityTradeFlows,
@@ -33,7 +34,8 @@ export interface TradeSnapshotInput {
 }
 
 /**
- * Run trade clearing (in UNITS) for every commodity from per-country balances.
+ * Run trade clearing (in UNITS) from per-country balances. State-local
+ * services retain their surplus and deficit without international flows.
  * Returned per-commodity results feed both the dampened-convergence step
  * (`applyTradeConvergence`) and the ₳ valuation (`valueTradeSnapshot`). Pure.
  */
@@ -62,7 +64,9 @@ export function clearAllCommodities(
         countries,
         supply,
         demand,
-        affinity: (e, i) => affinityFor(commodity, e, i),
+        affinity: isStateScopedCommodity(commodity)
+          ? () => 0
+          : (e, i) => affinityFor(commodity, e, i),
         capUnits: capUnitsFor ? (e, i) => capUnitsFor(commodity, e, i) : undefined,
       })
     );

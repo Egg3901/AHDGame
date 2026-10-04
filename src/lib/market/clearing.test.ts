@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { COMMODITY_TYPES, type CommodityType } from "@/lib/constants/commodities";
+import { isStateScopedCommodity } from "./rules/commodityMarketScope";
 import {
   autoPosture,
   clampPricingPosture,
@@ -594,7 +595,7 @@ describe("computeClearingFactors: state-scoped commodities", () => {
   });
 
   it("is byte-identical for every reachable commodity while state markets are active", () => {
-    const commodities = COMMODITY_TYPES.filter((commodity) => commodity !== "freight");
+    const commodities = COMMODITY_TYPES.filter((commodity) => !isStateScopedCommodity(commodity));
     const supplyRates = Object.fromEntries(commodities.map((commodity) => [commodity, 1]));
     const balances = bals(commodities.map((commodity) => [commodity, { supply: 100, demand: 60 }]));
     const priceRatios = new Map<CommodityType, number>(

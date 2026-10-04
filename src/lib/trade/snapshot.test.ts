@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildTradeFlowSnapshot, type TradeSnapshotInput } from "./snapshot";
+import { buildTradeFlowSnapshot, clearAllCommodities, type TradeSnapshotInput } from "./snapshot";
 import { getBaseAffinity } from "./affinity";
 import type { CommodityType } from "@/lib/constants/commodities";
 import type { CountryId } from "@/lib/constants/countries";
@@ -39,6 +39,45 @@ const baseInput = (
 });
 
 describe("buildTradeFlowSnapshot", () => {
+  it.each([
+    "freight",
+    "construction_services",
+    "healthcare_services",
+    "real_estate_services",
+    "entertainment_services",
+  ] as const)(
+    "leaves %s surplus and deficits local even with an open foreign lane",
+    (commodity) => {
+      const balances = byCountryOf([
+        ["US", { [commodity]: [100, 0] }],
+        ["CN", { [commodity]: [0, 100] }],
+      ]);
+      const clearing = clearAllCommodities(["US", "CN"], balances, () => 1);
+      const result = clearing.get(commodity)!;
+      expect(result.clearedVolume).toBe(0);
+      expect(result.perCountry.US).toEqual({ exports: 0, imports: 0, net: 0, uncleared: 100 });
+      expect(result.perCountry.CN).toEqual({ exports: 0, imports: 0, net: 0, uncleared: -100 });
+      const snapshot = buildTradeFlowSnapshot(
+        baseInput(balances, new Map(), new Map([[commodity, 10]]), ["US", "CN"])
+      );
+      expect(snapshot.commodities[commodity]).toBeUndefined();
+      expect(snapshot.world.clearedVolume).toBe(0);
+    }
+  );
+
+  it.each(["software", "consulting_services"] as const)(
+    "allows remotely delivered %s to trade",
+    (commodity) => {
+      const balances = byCountryOf([
+        ["US", { [commodity]: [100, 0] }],
+        ["CN", { [commodity]: [0, 100] }],
+      ]);
+      expect(
+        clearAllCommodities(["US", "CN"], balances, () => 1).get(commodity)!.clearedVolume
+      ).toBeCloseTo(100);
+    }
+  );
+
   it("values a single steel flow in ₳ (units × exporter price)", () => {
     // US surplus 100 steel, CN deficit 100 steel; price $800.
     const byCountry = byCountryOf([
