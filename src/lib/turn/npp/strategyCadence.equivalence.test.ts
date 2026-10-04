@@ -19,7 +19,17 @@ import { createHash } from "node:crypto";
 import { makeNppCorpDecision, type NppPlantsContext } from "../nppCorporationBehavior";
 import { ceoArchetypeModifiers } from "@/lib/npp/ceoArchetype";
 import { glutStaggerEligible } from "./cohort";
-import type { NppStrategyState } from "./corpStrategy";
+import {
+  advanceStrategy,
+  NPP_CORP_STRATEGIES,
+  type NppStrategyState,
+  type StrategySituation,
+} from "./corpStrategy";
+import {
+  memoizeOnce,
+  strategyEvaluationDue,
+  strategyStateNeedsPersist,
+} from "./rules/strategyCadence";
 import type { Corporation, CorporateSector, UnownedSector } from "@/lib/db/types";
 import { CAPACITY_ANCHOR_YEAR } from "@/lib/constants/capacityEconomy";
 import { computeUnownedHeadroomUnits } from "@/lib/market/unownedHeadroom";
@@ -76,14 +86,94 @@ interface Fixture {
 }
 
 const FIXTURES: Fixture[] = [
-  { name: "healthy", seed: 11, corpId: 101, margin: 32, drift: 4, soldFraction: 1, debtServiceAnchor: 0, caretaker: false, headroom: true },
-  { name: "healthy-boxed-in", seed: 12, corpId: 102, margin: 28, drift: 6, soldFraction: 0.95, debtServiceAnchor: 0, caretaker: false, headroom: false },
-  { name: "thin", seed: 13, corpId: 103, margin: 6, drift: 8, soldFraction: 0.8, debtServiceAnchor: 0, caretaker: false, headroom: true },
-  { name: "losing", seed: 14, corpId: 104, margin: -12, drift: 10, soldFraction: 0.7, debtServiceAnchor: 0, caretaker: false, headroom: true },
-  { name: "debt-dominant", seed: 15, corpId: 105, margin: 20, drift: 5, soldFraction: 1, debtServiceAnchor: 900_000, caretaker: false, headroom: true },
-  { name: "low-fill", seed: 16, corpId: 106, margin: 18, drift: 5, soldFraction: 0.1, debtServiceAnchor: 0, caretaker: false, headroom: true },
-  { name: "caretaker", seed: 17, corpId: 107, margin: 4, drift: 9, soldFraction: 0.9, debtServiceAnchor: 0, caretaker: true, headroom: true },
-  { name: "oscillating", seed: 18, corpId: 108, margin: 10, drift: 40, soldFraction: 0.6, debtServiceAnchor: 100_000, caretaker: false, headroom: false },
+  {
+    name: "healthy",
+    seed: 11,
+    corpId: 101,
+    margin: 32,
+    drift: 4,
+    soldFraction: 1,
+    debtServiceAnchor: 0,
+    caretaker: false,
+    headroom: true,
+  },
+  {
+    name: "healthy-boxed-in",
+    seed: 12,
+    corpId: 102,
+    margin: 28,
+    drift: 6,
+    soldFraction: 0.95,
+    debtServiceAnchor: 0,
+    caretaker: false,
+    headroom: false,
+  },
+  {
+    name: "thin",
+    seed: 13,
+    corpId: 103,
+    margin: 6,
+    drift: 8,
+    soldFraction: 0.8,
+    debtServiceAnchor: 0,
+    caretaker: false,
+    headroom: true,
+  },
+  {
+    name: "losing",
+    seed: 14,
+    corpId: 104,
+    margin: -12,
+    drift: 10,
+    soldFraction: 0.7,
+    debtServiceAnchor: 0,
+    caretaker: false,
+    headroom: true,
+  },
+  {
+    name: "debt-dominant",
+    seed: 15,
+    corpId: 105,
+    margin: 20,
+    drift: 5,
+    soldFraction: 1,
+    debtServiceAnchor: 900_000,
+    caretaker: false,
+    headroom: true,
+  },
+  {
+    name: "low-fill",
+    seed: 16,
+    corpId: 106,
+    margin: 18,
+    drift: 5,
+    soldFraction: 0.1,
+    debtServiceAnchor: 0,
+    caretaker: false,
+    headroom: true,
+  },
+  {
+    name: "caretaker",
+    seed: 17,
+    corpId: 107,
+    margin: 4,
+    drift: 9,
+    soldFraction: 0.9,
+    debtServiceAnchor: 0,
+    caretaker: true,
+    headroom: true,
+  },
+  {
+    name: "oscillating",
+    seed: 18,
+    corpId: 108,
+    margin: 10,
+    drift: 40,
+    soldFraction: 0.6,
+    debtServiceAnchor: 100_000,
+    caretaker: false,
+    headroom: false,
+  },
 ];
 
 function buildCorp(f: Fixture): Corporation {
@@ -142,7 +232,10 @@ type Decision = ReturnType<typeof makeNppCorpDecision>;
  */
 function replay(
   f: Fixture,
-  carry: (prior: NppStrategyState | undefined, next: NppStrategyState | undefined) => NppStrategyState | undefined
+  carry: (
+    prior: NppStrategyState | undefined,
+    next: NppStrategyState | undefined
+  ) => NppStrategyState | undefined
 ) {
   const rng = mulberry32(f.seed);
   const corp = buildCorp(f);
@@ -206,13 +299,93 @@ describe("strategy cadence split (#2693): decisions are unchanged", () => {
 
   it("covers switching, not just holding", () => {
     const switched = FIXTURES.filter((f) => {
-      const ids = new Set(
-        traces[f.name].map(
-          (t) => (t as [number, string | null, string])[1]
-        )
-      );
+      const ids = new Set(traces[f.name].map((t) => (t as [number, string | null, string])[1]));
       return ids.size > 1;
     });
     expect(switched.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("persisting only meaningful changes yields the identical trace", () => {
+    for (const f of FIXTURES) {
+      const gated = replay(f, (prior, next) =>
+        next && strategyStateNeedsPersist(prior, next) ? next : prior
+      );
+      expect(gated, f.name).toEqual(golden[f.name]);
+    }
+  });
+
+  it("the persistence gate writes far less often than every turn", () => {
+    for (const f of FIXTURES) {
+      let writes = 0;
+      replay(f, (prior, next) => {
+        if (next && strategyStateNeedsPersist(prior, next)) {
+          writes++;
+          return next;
+        }
+        return prior;
+      });
+      expect(writes, f.name).toBeLessThan(TURNS / 2);
+    }
+  });
+});
+
+describe("strategy evaluation cadence", () => {
+  const trapped = (score: number): StrategySituation => ({
+    score,
+    debtDominant: false,
+    chronicLowFill: false,
+    isCaretaker: false,
+    get hasHeadroom(): boolean {
+      throw new Error("headroom read while evaluation was not due");
+    },
+  });
+
+  it("never reads the situation beyond the score when evaluation is not due", () => {
+    const rng = mulberry32(99);
+    for (let i = 0; i < 400; i++) {
+      const id = NPP_CORP_STRATEGIES[Math.floor(rng() * NPP_CORP_STRATEGIES.length)];
+      const prior: NppStrategyState = {
+        id,
+        adoptedTurn: 1000 - Math.floor(rng() * 80),
+        baselineScore: rng() * 40 - 20,
+      };
+      const turn = 1000;
+      const eligible = rng() < 0.5;
+      const score = rng() * 60 - 30;
+      if (strategyEvaluationDue({ prior, turn, eligible })) continue;
+      const out = advanceStrategy({ prior, turn, situation: trapped(score), eligible });
+      expect(out.changed).toBe(false);
+      expect(out.state.id).toBe(prior.id);
+    }
+  });
+
+  it("is due on first sight and for a held strategy past tenure on its slot", () => {
+    expect(strategyEvaluationDue({ prior: undefined, turn: 5, eligible: false })).toBe(true);
+    const prior: NppStrategyState = { id: "harvest", adoptedTurn: 100, baselineScore: 0 };
+    expect(strategyEvaluationDue({ prior, turn: 105, eligible: true })).toBe(false);
+    expect(strategyEvaluationDue({ prior, turn: 108, eligible: false })).toBe(false);
+    expect(strategyEvaluationDue({ prior, turn: 108, eligible: true })).toBe(true);
+  });
+
+  it("memoizeOnce computes once", () => {
+    let calls = 0;
+    const read = memoizeOnce(() => ++calls);
+    expect([read(), read(), read()]).toEqual([1, 1, 1]);
+  });
+
+  it("persistence ignores lastScore only", () => {
+    const stored: NppStrategyState = {
+      id: "expand",
+      adoptedTurn: 10,
+      baselineScore: 5,
+      lastScore: 6,
+      scores: { expand: 7 },
+    };
+    expect(strategyStateNeedsPersist(stored, { ...stored, lastScore: 9 })).toBe(false);
+    expect(strategyStateNeedsPersist(stored, { ...stored, scores: { expand: 8 } })).toBe(true);
+    expect(strategyStateNeedsPersist(stored, { ...stored, id: "harvest" })).toBe(true);
+    expect(strategyStateNeedsPersist(stored, { ...stored, adoptedTurn: 11 })).toBe(true);
+    expect(strategyStateNeedsPersist(stored, { ...stored, baselineScore: 6 })).toBe(true);
+    expect(strategyStateNeedsPersist(undefined, stored)).toBe(true);
   });
 });
