@@ -78,7 +78,10 @@ export function quoteConstructionFinance(
     { commandId: input.loanId }
   );
   if (!decision.allowed) return { allowed: false, error: decision.message };
-  const pending = decision.derived.pending === true;
+  const pending = decision.derived?.pending === true;
+  const ratePercent = decision.derived?.ratePercent;
+  if (typeof ratePercent !== "number" || !Number.isFinite(ratePercent))
+    return { allowed: false, error: "Loan quote is unavailable" };
   const transition: BankingTransition = {
     ...decision.transition,
     legs: decision.transition.legs.map((leg) =>
@@ -117,7 +120,7 @@ export function quoteConstructionFinance(
     originationFee: quote.originationFee,
     borrowerContribution,
     collateralLimit,
-    ratePercent: Number(decision.derived.ratePercent),
+    ratePercent,
     transition,
   };
 }
