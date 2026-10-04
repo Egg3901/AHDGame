@@ -32,10 +32,11 @@
 import type { Db } from "mongodb";
 import { lifecycleStage, stageAllows } from "@/lib/banking/rules/lifecycle";
 import type { Corporation } from "@/lib/db/types";
-import type { BankLoan } from "@/lib/db/types/bank";
+import type { BankCharterHistoryEntry, BankLoan } from "@/lib/db/types/bank";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { MoneyTarget } from "@/lib/banking/moneyMove";
 import { ensureFund } from "@/lib/banking/insurance";
+import { loanCharterEpochFilter } from "@/lib/banking/loanEpoch";
 
 export type DeadBankLoanSummary = {
   /** Loans belonging to a wound-up bank that were serviced this turn. */
@@ -56,37 +57,86 @@ type DeadBank = {
   corporationId: Corporation["_id"];
   name: string;
   currency: CurrencyCode;
+  charteredTurn: number;
+  archivedTurn?: number;
+  historyId?: BankCharterHistoryEntry["_id"];
   /** True once the deposit book has been returned and the estate is closed. */
   resolved: boolean;
 };
 
 /** Banks whose charter has ended but whose loan book has not. */
 export async function findDeadBanksWithLoans(db: Db): Promise<DeadBank[]> {
+  const history = await db
+    .collection<BankCharterHistoryEntry>("bankCharterHistory")
+    .find({ "charter.status": { $in: ["failed", "revoked"] } })
+    .toArray();
+  const historicalCorporationIds = [
+    ...new Map(
+      history.map((entry) => [entry.corporationId.toString(), entry.corporationId])
+    ).values(),
+  ];
   const corps = await db
     .collection<Corporation>("corporations")
-    .find({ "bankCharter.status": { $in: ["failed", "revoked"] } })
+    .find({
+      $or: [
+        { "bankCharter.status": { $in: ["failed", "revoked"] } },
+        ...(historicalCorporationIds.length > 0
+          ? [{ _id: { $in: historicalCorporationIds } }]
+          : []),
+      ],
+    })
     .project<Pick<Corporation, "_id" | "name" | "bankCharter">>({
       name: 1,
       bankCharter: 1,
     })
     .toArray();
-
-  return corps
-    .filter((corp) => corp.bankCharter)
+  const deadBanks = corps
+    .filter((corp) => corp.bankCharter && corp.bankCharter.status !== "active")
     .map((corp) => ({
       corporationId: corp._id,
       name: corp.name,
       currency: corp.bankCharter!.currency as CurrencyCode,
+      charteredTurn: corp.bankCharter!.charteredTurn,
       // A revoked charter has already run the waterfall on the way out, so its
       // estate is closed the moment it is revoked. A failed one is closed only
       // once the resolution sweep has stamped it.
       resolved: stageAllows(lifecycleStage(corp.bankCharter), "windDownEstate"),
     }));
+  const nameById = new Map(corps.map((corp) => [corp._id.toString(), corp.name]));
+  deadBanks.push(
+    ...history.map((entry) => ({
+      corporationId: entry.corporationId,
+      name: nameById.get(entry.corporationId.toString()) ?? "Former bank",
+      currency: entry.charter.currency as CurrencyCode,
+      charteredTurn: entry.charter.charteredTurn,
+      archivedTurn: entry.archivedTurn,
+      historyId: entry._id,
+      resolved: stageAllows(lifecycleStage(entry.charter), "windDownEstate"),
+    }))
+  );
+
+  // Type switches can archive the same charter epoch more than once. Keep one
+  // recovery owner per originating epoch, preferring the resolved snapshot.
+  const byEpoch = new Map<string, DeadBank>();
+  for (const bank of deadBanks) {
+    const key = `${bank.corporationId.toString()}:${bank.charteredTurn}`;
+    const prior = byEpoch.get(key);
+    if (!prior || (bank.resolved && !prior.resolved)) byEpoch.set(key, bank);
+  }
+  return [...byEpoch.values()];
 }
 
 /** Where a payment to this dead bank should land. */
 export function recoveryTargetFor(bank: DeadBank): MoneyTarget {
   if (!bank.resolved) {
+    if (bank.historyId) {
+      return {
+        collection: "bankCharterHistory",
+        filter: { _id: bank.historyId },
+        path: "charter.cashReserves",
+        note: `recovery into ${bank.name}'s archived estate, before it is distributed`,
+      };
+    }
     return {
       collection: "corporations",
       filter: { _id: bank.corporationId },
@@ -127,9 +177,9 @@ export async function processDeadBankLoans(
       .collection<BankLoan>("bankLoans")
       .find({
         bankCorporationId: bank.corporationId,
-        borrowerType: { $in: ["character", "corporation"] },
         status: { $in: ["current", "arrears"] },
         lastProcessedTurn: { $ne: turn },
+        ...loanCharterEpochFilter(bank.charteredTurn, bank.archivedTurn),
       })
       .toArray();
     if (loans.length === 0) continue;

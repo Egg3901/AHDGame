@@ -225,4 +225,100 @@ describe("named loan servicing across charter types", () => {
     const [loan] = await loans(run.world);
     expect(loan.outstanding).toBeCloseTo(outstandingAfterFirst, 9);
   });
+
+  it("services the prior resolved epoch to insurance after recharter", async () => {
+    const world = makeWorld("investment");
+    const corporation = world.db
+      .collection("corporations")
+      .docs.find((row) => row._id.equals(world.bankId))!;
+    corporation.liquidCapital = 50_000_000;
+    corporation.bankCharter = charter("investment", {
+      status: "failed",
+      charteredTurn: 1,
+      totalLoans: 12_000,
+      cashReserves: 0,
+    });
+    world.db.seed("corporateSectors", [
+      { _id: new ObjectId(), corporationId: world.bankId, sectorType: "financial" },
+    ]);
+    world.db.collection("gameConfig").docs[0].playerAdvancedBankChartersEnabled = true;
+    world.db.collection("centralBanks").docs[0].externalBroadMoney = 100_000;
+    const oldLoanId = new ObjectId();
+    const oldNpcLoanId = new ObjectId();
+    world.db.seed("depositInsuranceFunds", [
+      {
+        _id: "USD",
+        balance: 0,
+        insuredCap: 100_000,
+        premiumsCollectedLifetime: 0,
+        payoutsLifetime: 0,
+        treasuryBackstopLifetime: 0,
+      },
+    ]);
+    world.db.seed("bankLoans", [
+      {
+        _id: oldLoanId,
+        bankCorporationId: world.bankId,
+        charteredTurn: 1,
+        currency: "USD",
+        borrowerType: "corporation",
+        borrowerId: world.borrowerId,
+        principal: 12_000,
+        outstanding: 12_000,
+        ratePercent: 8,
+        originatedTurn: TURN - 20,
+        termTurns: TERM,
+        status: "current",
+      },
+      {
+        _id: oldNpcLoanId,
+        bankCorporationId: world.bankId,
+        charteredTurn: 1,
+        currency: "USD",
+        borrowerType: "npcBulk",
+        creditBand: "A",
+        principal: 12_000,
+        outstanding: 12_000,
+        ratePercent: 8,
+        originatedTurn: TURN - 20,
+        termTurns: TERM,
+        status: "current",
+      },
+    ]);
+    const { returnDepositBook } = await import("@/lib/banking/depositBookReturn");
+    const resolved = await returnDepositBook(world.db as unknown as Db, world.bankId, {
+      cause: "failure",
+      turn: TURN - 2,
+      releaseResidualToOwner: true,
+    });
+    expect(resolved.returned).toBe(true);
+    const { issueCharter } = await import("@/lib/banking/charter");
+    const rechartered = await issueCharter(
+      world.db as unknown as Db,
+      world.bankId,
+      "investment",
+      "USD"
+    );
+    expect(rechartered.ok).toBe(true);
+    if (!rechartered.ok) throw new Error(rechartered.reasons.join("; "));
+    expect(rechartered.charter.charteredTurn).toBe(TURN);
+    expect(rechartered.charter.totalLoans).toBe(0);
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(world.db as unknown as Db);
+
+    const summary = await processBankingTurn(world.db as unknown as Db, TURN + 1);
+    const loanRows = await loans(world);
+    const oldLoan = loanRows.find((loan) => loan._id.equals(oldLoanId))!;
+    const oldNpcLoan = loanRows.find((loan) => loan._id.equals(oldNpcLoanId))!;
+    const fund = await world.db.collection("depositInsuranceFunds").findOne({ _id: "USD" });
+    const activeBank = await bank(world);
+
+    expect(oldLoan.lastProcessedTurn).toBe(TURN + 1);
+    expect(oldNpcLoan.lastProcessedTurn).toBe(TURN + 1);
+    expect(fund?.balance).toBeGreaterThan(0);
+    expect(activeBank.cashReserves).toBeCloseTo(rechartered.postedCapital, 6);
+    expect(activeBank.totalLoans).toBe(0);
+    expect(summary.deadBankRecoveredToInsurer).toBeGreaterThan(0);
+    expect(oldLoan._id.equals(oldLoanId)).toBe(true);
+  });
 });

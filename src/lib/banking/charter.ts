@@ -15,6 +15,7 @@ import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
 import { settleAtomicDocumentTransition } from "./atomicDocumentSettlement";
 import { oid } from "./rules/boundary";
 import { archiveCharter } from "@/lib/banking/charterHistory";
+import { loanCharterEpochFilter } from "@/lib/banking/loanEpoch";
 import { getLegalCharterTypes } from "@/lib/banking/separationLaw";
 import { freezeAccountsAt, returnDepositBook } from "@/lib/banking/depositBookReturn";
 import { lifecycleRefusal } from "@/lib/banking/rules/lifecycle";
@@ -160,6 +161,13 @@ export async function checkCharterEligibility(
   if (corporation.bankCharter?.status === "active") {
     reasons.push("Corporation already has an active bank charter");
   }
+  if (
+    corporation.bankCharter &&
+    corporation.bankCharter.status !== "active" &&
+    corporation.bankCharter.charteredTurn === (await getCurrentTurn(db))
+  ) {
+    reasons.push("A bank can be rechartered starting next turn");
+  }
 
   // Bank / fund separation: a corporation that sponsors an index fund may not
   // also charter a bank. Creation-time only, so existing dual holders are
@@ -295,6 +303,7 @@ async function issueCharterInner(
       {
         bankCorporationId: corporationId,
         status: { $in: ["current", "arrears"] },
+        ...loanCharterEpochFilter(charteredTurn),
       },
       { projection: { outstanding: 1 } }
     )
