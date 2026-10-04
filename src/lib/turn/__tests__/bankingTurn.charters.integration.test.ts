@@ -230,8 +230,8 @@ describe("named loan servicing across charter types", () => {
   it("services the prior resolved epoch to insurance after recharter", async () => {
     const world = makeWorld("investment");
     const corporation = world.db.collection("corporations").docs.find((row) => {
-      return (row as Corporation)._id.equals(world.bankId);
-    }) as Corporation;
+      return (row as unknown as Corporation)._id.equals(world.bankId);
+    }) as unknown as Corporation;
     corporation.liquidCapital = 50_000_000;
     corporation.bankCharter = charter("investment", {
       status: "failed",
