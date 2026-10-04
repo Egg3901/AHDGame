@@ -4,8 +4,9 @@
  * these are explicitly not observed regional compositions. The 2019 and 2027 presets
  * project this 2023 weighting vintage and do not claim year-specific census observations.
  *
- * Age: TurkStat ABPRS 2023 resident population, reference date 31 Dec 2023, all eligible
- * residents; exact national 18+ cohorts from 15-19 less the matching 15-17 child count,
+ * Age: TurkStat ABPRS 2023 resident population, reference date 31 Dec 2023, including
+ * resident foreign nationals; this is an age proxy, not a citizen-elector count.
+ * Exact national 18+ cohorts come from 15-19 less the matching 15-17 child count,
  * then five-year age bins. Adult denominator 63,166,343. Province single-age data was
  * unavailable, so the same national profile is used in each macro-region.
  * Education: TurkStat National Education Statistics 2023, population 25+, citizens only.
@@ -17,7 +18,8 @@
  * Urbanity: TurkStat 2022 grid-based Degree of Urbanisation (DEGURBA), national shares;
  * dense/intermediate/thinly-populated are mapped to urban/suburban/rural.
  * Ethnicity: KONDA July 2019 adult self-identification survey, national profile; Turkish
- * 80%, Kurdish 14%, with Zaza/Arab/other aggregated into runtime other 6%. Survey estimate,
+ * 80%, Kurdish 14%, with Zaza/Arab/other plus the one-point rounded residual mapped
+ * to runtime other 6%. Survey estimate,
  * not census data. It is copied nationally; no regional ethnic counts are inferred.
  * Income: the existing region-specific 1979 income distribution is retained as an explicit
  * gameplay carry-forward until a dated regional distribution is sourced.
