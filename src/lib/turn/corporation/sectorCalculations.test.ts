@@ -782,9 +782,11 @@ describe("marketing settlement", () => {
       Number(afterRetrySeller?.liquidCapital ?? 0) + Number(afterRetry?.liquidCapital ?? 0)
     ).toBe(2_000);
 
+    if (!afterRetry) throw new Error("Missing persisted buyer fixture");
+
     await processMediaProductProjectsV1({
       db: memory as never,
-      corporations: [afterRetry as unknown as Corporation],
+      corporations: [afterRetry],
       projectsByCorporationId: new Map([[buyer._id.toString(), [title]]]),
       currentTurn: 2,
       sectorQualityBySectorId: new Map(),
