@@ -2,6 +2,8 @@ import type { EconomicInterventionPlan } from "@/lib/economy/interventionGoverna
 
 export interface GameConfig {
   _id: string;
+  /** Enables product-project reads and output adapters; absent remains off. */
+  productLinesV2Enabled?: boolean;
   /** Shared nominal commodity price level. Scarcity remains in price/base ratios. */
   commodityNominalPriceIndex?: number;
   /** Last commodity turn included in commodityNominalPriceIndex. */
@@ -144,6 +146,8 @@ export interface GameConfig {
    * See `@/lib/constants/commandEconomy`.
    */
   commandEconomyEnabled?: boolean;
+  /** Public media editorial stance and audience response rules. Missing means off. */
+  mediaEditorialEnabled?: boolean;
   /**
    * Sovereignty transitions (decolonization). Absent/false ⇒ the phase is a
    * no-op, which is the required default: the evaluator returns a "strong
@@ -476,6 +480,8 @@ export interface GameConfig {
    * See src/lib/market/clearing.ts (qualityPremiumMultiplier).
    */
   qualityPremiumPricingEnabled?: boolean;
+  /** Funded political advertising orders, settled against unsold media output. */
+  politicalMediaMarketEnabled?: boolean;
   /** Fresh-world explicit plant overhead. Default off preserves legacy residuals. */
   explicitPlantCostsEnabled?: boolean;
   /**

@@ -59,6 +59,8 @@ import {
   DefaultedBondCrisisModal,
 } from "@/components/corporation/CorporationPageTabs";
 import { BankConsoleTab } from "./bank/BankConsoleTab";
+import { EditorialStancePanel } from "@/components/corporation/EditorialStancePanel";
+import { ManufacturingProductStudio } from "@/components/corporation/ManufacturingProductStudio";
 import type {
   CorporationDetail,
   CEO,
@@ -1072,21 +1074,34 @@ export default function CorporationDetailPage() {
             return (
               <div className="space-y-8">
                 {tab === "overview" && (
-                  <OverviewTab
-                    corporation={corporation}
-                    financials={financials}
-                    balanceSheet={balanceSheet}
-                    bondInfo={bondInfo}
-                    sectors={sectors}
-                    corpId={id}
-                    periodView={periodView}
-                    onPeriodViewChange={setPeriodView}
-                    onTabChange={setTab}
-                    financialFogOfWar={financialFogOfWar}
-                    isCeo={isCeo}
-                    myCharacterId={myCharacterId}
-                    onTrade={canTrade ? openTrade : undefined}
-                  />
+                  <div className="space-y-6">
+                    <OverviewTab
+                      corporation={corporation}
+                      financials={financials}
+                      balanceSheet={balanceSheet}
+                      bondInfo={bondInfo}
+                      sectors={sectors}
+                      corpId={id}
+                      periodView={periodView}
+                      onPeriodViewChange={setPeriodView}
+                      onTabChange={setTab}
+                      financialFogOfWar={financialFogOfWar}
+                      isCeo={isCeo}
+                      myCharacterId={myCharacterId}
+                      onTrade={canTrade ? openTrade : undefined}
+                    />
+                    {corporation.mediaEditorialEnabled === true &&
+                      (corporation.type === "media" ||
+                        corporation.secondaryType === "media" ||
+                        sectors.some((sector) => sector.sectorType === "media")) && (
+                        <EditorialStancePanel
+                          corporationId={id}
+                          stance={corporation.editorialStance}
+                          isCeo={isCeo}
+                          onSaved={() => void fetchCorporation()}
+                        />
+                      )}
+                  </div>
                 )}
 
                 {tab === "financials" && financials && (
@@ -1104,44 +1119,57 @@ export default function CorporationDetailPage() {
                 )}
 
                 {tab === "sectors" && (
-                  <SectorsTab
-                    sectors={sectors}
-                    isCeo={isCeo}
-                    corpId={id}
-                    corporationType={corporation.type}
-                    corporationSecondaryType={corporation.secondaryType}
-                    liquidCapital={corporation.liquidCapital}
-                    liquidCurrencyCode={corporation.liquidCurrencyCode}
-                    logisticsStrength={corporation.logisticsStrength}
-                    onAbandonSector={handleAbandonSector}
-                    abandoningSectorId={abandoningSectorId}
-                    sectorsMessage={sectorsMessage}
-                    onStrategyChange={handleSectorStrategyChange}
-                    strategyUpdatingSectorId={strategyUpdatingSectorId}
-                    onCancelTransition={handleCancelTransition}
-                    cancelTransitionSectorId={cancelTransitionSectorId}
-                    onGrowthChange={handleGrowthChange}
-                    growthUpdatingSectorId={growthUpdatingSectorId}
-                    currentTurn={corporation?.currentTurn ?? 0}
-                    periodView={periodView}
-                    onPeriodViewChange={setPeriodView}
-                    plantsMode={corporation.plantsMode === true}
-                    expandOnMount={searchParams.get("expand") === "1"}
-                    expandSectorType={
-                      CORPORATION_TYPES.includes(searchParams.get("sectorType") as CorporationType)
-                        ? (searchParams.get("sectorType") as CorporationType)
-                        : undefined
-                    }
-                    expandStateId={searchParams.get("state") ?? undefined}
-                    onExpandDeepLinkConsumed={() => {
-                      const p = new URLSearchParams(searchParams.toString());
-                      p.delete("expand");
-                      p.delete("state");
-                      p.delete("sectorType");
-                      const qs = p.toString();
-                      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-                    }}
-                  />
+                  <div className="space-y-6">
+                    {corporation.productLinesV2Enabled &&
+                      sectors.some((sector) =>
+                        ["manufacturing", "automobiles"].includes(sector.sectorType)
+                      ) && (
+                        <ManufacturingProductStudio
+                          corporationId={id}
+                          onUpdate={fetchCorporation}
+                        />
+                      )}
+                    <SectorsTab
+                      sectors={sectors}
+                      isCeo={isCeo}
+                      corpId={id}
+                      corporationType={corporation.type}
+                      corporationSecondaryType={corporation.secondaryType}
+                      liquidCapital={corporation.liquidCapital}
+                      liquidCurrencyCode={corporation.liquidCurrencyCode}
+                      logisticsStrength={corporation.logisticsStrength}
+                      onAbandonSector={handleAbandonSector}
+                      abandoningSectorId={abandoningSectorId}
+                      sectorsMessage={sectorsMessage}
+                      onStrategyChange={handleSectorStrategyChange}
+                      strategyUpdatingSectorId={strategyUpdatingSectorId}
+                      onCancelTransition={handleCancelTransition}
+                      cancelTransitionSectorId={cancelTransitionSectorId}
+                      onGrowthChange={handleGrowthChange}
+                      growthUpdatingSectorId={growthUpdatingSectorId}
+                      currentTurn={corporation?.currentTurn ?? 0}
+                      periodView={periodView}
+                      onPeriodViewChange={setPeriodView}
+                      plantsMode={corporation.plantsMode === true}
+                      expandOnMount={searchParams.get("expand") === "1"}
+                      expandSectorType={
+                        CORPORATION_TYPES.includes(
+                          searchParams.get("sectorType") as CorporationType
+                        )
+                          ? (searchParams.get("sectorType") as CorporationType)
+                          : undefined
+                      }
+                      expandStateId={searchParams.get("state") ?? undefined}
+                      onExpandDeepLinkConsumed={() => {
+                        const p = new URLSearchParams(searchParams.toString());
+                        p.delete("expand");
+                        p.delete("state");
+                        p.delete("sectorType");
+                        const qs = p.toString();
+                        router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+                      }}
+                    />
+                  </div>
                 )}
 
                 {tab === "commodities" && (

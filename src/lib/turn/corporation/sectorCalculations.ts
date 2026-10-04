@@ -79,6 +79,10 @@ import {
   perTurnBondCouponIncomeAsHolder,
 } from "@/lib/bonds/corpBondCashflows";
 import { addCorpToCorpSettlement, type SettleCorpInfo } from "./settleSupplyAgreements";
+import {
+  allocateManufacturingResearchSpend,
+  capManufacturingDevelopmentSpendToCash,
+} from "@/lib/products/rules/manufacturingRules";
 
 /** Primary commodities that proxy R&D conditions for each sector type. */
 const SECTOR_RD_COMMODITIES: Partial<Record<string, [string, string?]>> = {
@@ -180,6 +184,7 @@ export function processSectors(
       update: { $inc: Record<string, number>; $set: Record<string, unknown> };
     };
   }[] = [];
+  const manufacturingDevelopmentCashOps: AnyBulkWriteOperation<Corporation>[] = [];
 
   // Shared read-only inputs + cross-sector collectors for the per-sector
   // computation, which lives in ./sectorTurn (processSector). The collector
@@ -482,6 +487,17 @@ export function processSectors(
     const hourlyLogistics = requestedHourlyLogistics * opsOverheadScale;
     const hourlyRd = requestedHourlyRd * opsOverheadScale;
 
+    const activeManufacturingProject = lookups.productLinesV2Enabled
+      ? lookups.manufacturingProductByCorpId?.get(corpId)
+      : undefined;
+    const proposedResearchAllocation = allocateManufacturingResearchSpend({
+      paidResearchAnchor: hourlyRd,
+      projectPaidAnchor: activeManufacturingProject?.developmentPaidAnchor ?? 0,
+      projectCostAnchor: activeManufacturingProject?.paidThresholdAnchor ?? 0,
+      stage: activeManufacturingProject?.stage,
+    });
+    const genericResearchSpend = proposedResearchAllocation.genericResearchAnchor;
+
     // liquidCapital normalized to ₳ using the per-corp FX resolved at loop entry.
     // Every downstream comparison against liquidCapital must normalize to a common
     // denomination — the field is in home currency post-forex, every computed
@@ -526,7 +542,11 @@ export function processSectors(
     }
 
     // Compute income before CEO salary to determine what the corp can afford
-    const costsBeforeCeo = corpCosts + hourlyMarketing + hourlyLogistics + hourlyRd;
+    const costsBeforeCeo =
+      corpCosts +
+      hourlyMarketing +
+      hourlyLogistics +
+      (lookups.productLinesV2Enabled ? genericResearchSpend : hourlyRd);
     const incomeBeforeCeo = corpRevenue - costsBeforeCeo;
     const corpCountryId = corp.countryId;
 
@@ -913,8 +933,8 @@ export function processSectors(
 
     // R&D score: decays 3%/turn, grows with spending. Diminishing returns on stored
     // score above 100 (mirrors marketing). Drives innovation probability and boost magnitude.
-    // Grows on the overhead-clamped spend (hourlyRd), the same figure deducted as
-    // an operating cost above, so R&D score cannot outrun what the corp paid.
+    // Grows on generic R&D only. Product development is handled as guarded
+    // capitalized cash spend below and cannot also earn generic research score.
     const currentRdScore = corp.rdScore ?? 0;
     // rdDemandFactor (±15%) ties R&D output to technology + consulting demand.
     // moraleFactor (#84, ±15%) rewards paying workers above baseline: happier
@@ -923,7 +943,7 @@ export function processSectors(
     const moraleFactor = rdMoraleFactor(avgWageLevel);
     const newRdScore = calcRdScoreAfterTurn(
       currentRdScore,
-      hourlyRd * TURNS_PER_DAY * rdDemandFactor * moraleFactor
+      genericResearchSpend * TURNS_PER_DAY * rdDemandFactor * moraleFactor
     );
     const rdScoreDelta = newRdScore - currentRdScore;
 
@@ -935,6 +955,40 @@ export function processSectors(
       income + (marketingSpendAnchorByBuyerId.has(corpId) ? hourlyMarketing : 0);
     const incomeForBalance = anchorToCorpCapital(
       cashIncomeBeforeMarketingSettlement,
+      resolvedHomeCurrency,
+      localFxRate
+    );
+
+    // Per-turn escrow funding (escrow mode only): move configured cash from the
+    // treasury into the market-making escrow. Both fields are corp-local, so this
+    // is a 1:1 local move. The escrow is NOT a share-price valuation input
+    // (decoupled 2026-06-07), so funding the escrow lowers liquidCapital and thus
+    // the tangible-book floor — it is no longer price-neutral. Only the persisted
+    // liquidCapital/escrow need reflect the move here.
+    // `incomeForBalance` is the pre-settlement local-currency cash delta used
+    // by both this bulk op and the initial snapshot. The settlement pass later
+    // applies its delta to both representations before pricing and persistence.
+    const escrowFundingMove =
+      !equityMarketPoolCurrencies.has((resolvedHomeCurrency ?? "USD") as CurrencyCode) &&
+      getShareBuybackMode(corp) === "escrow"
+        ? computeEscrowFundingTransfer({
+            fundingPerTurn: corp.escrowFundingPerTurn,
+            liquidCapital: corp.liquidCapital + incomeForBalance,
+          })
+        : 0;
+    const productDevelopmentSpendAnchor = capManufacturingDevelopmentSpendToCash({
+      proposedDevelopmentAnchor:
+        corp.manufacturingProductDevelopmentPaidTurnV2 === currentTurn
+          ? 0
+          : proposedResearchAllocation.productDevelopmentAnchor,
+      liquidCapitalAnchor,
+      incomeBeforeDevelopmentAnchor:
+        income - corpCapitalToAnchor(escrowFundingMove, resolvedHomeCurrency, localFxRate),
+    });
+    // Product development is capitalized separately from operating R&D. The
+    // unaffordable portion is neither debited nor credited toward progress.
+    const productDevelopmentSpendLocal = anchorToCorpCapital(
+      productDevelopmentSpendAnchor,
       resolvedHomeCurrency,
       localFxRate
     );
@@ -980,24 +1034,6 @@ export function processSectors(
         currentTurn
       ),
     });
-
-    // Per-turn escrow funding (escrow mode only): move configured cash from the
-    // treasury into the market-making escrow. Both fields are corp-local, so this
-    // is a 1:1 local move. The escrow is NOT a share-price valuation input
-    // (decoupled 2026-06-07), so funding the escrow lowers liquidCapital and thus
-    // the tangible-book floor — it is no longer price-neutral. Only the persisted
-    // liquidCapital/escrow need reflect the move here.
-    // `incomeForBalance` is the pre-settlement local-currency cash delta used
-    // by both this bulk op and the initial snapshot. The settlement pass later
-    // applies its delta to both representations before pricing and persistence.
-    const escrowFundingMove =
-      !equityMarketPoolCurrencies.has((resolvedHomeCurrency ?? "USD") as CurrencyCode) &&
-      getShareBuybackMode(corp) === "escrow"
-        ? computeEscrowFundingTransfer({
-            fundingPerTurn: corp.escrowFundingPerTurn,
-            liquidCapital: corp.liquidCapital + incomeForBalance,
-          })
-        : 0;
 
     // Capture snapshot for history charts + credit time series
     corpSnapshots.push({
@@ -1098,6 +1134,37 @@ export function processSectors(
       },
     });
 
+    if (
+      lookups.productLinesV2Enabled &&
+      activeManufacturingProject &&
+      productDevelopmentSpendAnchor > 0 &&
+      corp.manufacturingProductDevelopmentPaidTurnV2 !== currentTurn
+    ) {
+      manufacturingDevelopmentCashOps.push({
+        updateOne: {
+          filter: {
+            _id: corp._id,
+            manufacturingProductDevelopmentPaidTurnV2: { $ne: currentTurn },
+            manufacturingProductDevelopmentReceiptV2: { $exists: false },
+            $expr: {
+              $gte: [{ $ifNull: ["$liquidCapital", 0] }, productDevelopmentSpendLocal],
+            },
+          },
+          update: {
+            $inc: { liquidCapital: -productDevelopmentSpendLocal },
+            $set: {
+              manufacturingProductDevelopmentPaidTurnV2: currentTurn,
+              manufacturingProductDevelopmentReceiptV2: {
+                projectId: activeManufacturingProject._id,
+                turn: currentTurn,
+                amountAnchor: productDevelopmentSpendAnchor,
+              },
+            },
+          },
+        },
+      } as AnyBulkWriteOperation<Corporation>);
+    }
+
     // Track CEO salary payment (uses capped amount, not requested)
     if (actualCeoSalary > 0 && corp.ceoId) {
       if (corp.ceoType === "npp") {
@@ -1116,7 +1183,11 @@ export function processSectors(
   // already capped above, so unfilled budget remains in treasury. Pair legs
   // stay unrounded until every corporation's transfers have been aggregated,
   // preventing small buyers from losing every sub-unit seller allocation.
-  if (marketingSpendAnchorByBuyerId.size > 0 && totalAdvertisingDeliveredValueAnchor > 0) {
+  const politicalSellerPayouts = market.politicalAdSellerPayoutLocalByCorpId ?? new Map();
+  if (
+    (marketingSpendAnchorByBuyerId.size > 0 && totalAdvertisingDeliveredValueAnchor > 0) ||
+    politicalSellerPayouts.size > 0
+  ) {
     const marketingDeltasLocal = new Map<string, number>();
     const corpInfo = (corpId: string): SettleCorpInfo | undefined => {
       const corp = lookups.corpById.get(corpId);
@@ -1128,27 +1199,29 @@ export function processSectors(
         fxRate: fxRateForCorpFromMap(corp, lookups.exchangeRatesByCurrency),
       };
     };
-    for (const [buyerId, spendAnchor] of marketingSpendAnchorByBuyerId) {
-      const buyer = corpInfo(buyerId);
-      if (!buyer) continue;
-      let allocatedAnchor = 0;
-      for (let i = 0; i < advertisingSellerDeliveredValues.length; i++) {
-        const [sellerId, deliveredValueAnchor] = advertisingSellerDeliveredValues[i];
-        const seller = corpInfo(sellerId);
-        if (!seller) continue;
-        const amountAnchor =
-          i === advertisingSellerDeliveredValues.length - 1
-            ? spendAnchor - allocatedAnchor
-            : spendAnchor * (deliveredValueAnchor / totalAdvertisingDeliveredValueAnchor);
-        allocatedAnchor += amountAnchor;
-        addCorpToCorpSettlement(
-          marketingDeltasLocal,
-          buyerId,
-          buyer,
-          sellerId,
-          seller,
-          amountAnchor
-        );
+    if (totalAdvertisingDeliveredValueAnchor > 0) {
+      for (const [buyerId, spendAnchor] of marketingSpendAnchorByBuyerId) {
+        const buyer = corpInfo(buyerId);
+        if (!buyer) continue;
+        let allocatedAnchor = 0;
+        for (let i = 0; i < advertisingSellerDeliveredValues.length; i++) {
+          const [sellerId, deliveredValueAnchor] = advertisingSellerDeliveredValues[i];
+          const seller = corpInfo(sellerId);
+          if (!seller) continue;
+          const amountAnchor =
+            i === advertisingSellerDeliveredValues.length - 1
+              ? spendAnchor - allocatedAnchor
+              : spendAnchor * (deliveredValueAnchor / totalAdvertisingDeliveredValueAnchor);
+          allocatedAnchor += amountAnchor;
+          addCorpToCorpSettlement(
+            marketingDeltasLocal,
+            buyerId,
+            buyer,
+            sellerId,
+            seller,
+            amountAnchor
+          );
+        }
       }
     }
     // Net the settled advertising out of each seller's CASH leg. The seller
@@ -1162,11 +1235,20 @@ export function processSectors(
     // the delivered book the receipt equals the delivered value and the two
     // cancel (money conserved); a funding shortfall (delivered > funded) leaves
     // the unpaid remainder as bad debt on the seller, never minted cash.
-    for (const [sellerId, deliveredValueAnchor] of advertisingSellerDeliveredValues) {
-      const seller = corpInfo(sellerId);
-      if (!seller) continue;
-      const deliveredLocal = anchorToCorpCapital(deliveredValueAnchor, seller.ccy, seller.fxRate);
-      if (!Number.isFinite(deliveredLocal)) continue;
+    if (totalAdvertisingDeliveredValueAnchor > 0) {
+      for (const [sellerId, deliveredValueAnchor] of advertisingSellerDeliveredValues) {
+        const seller = corpInfo(sellerId);
+        if (!seller) continue;
+        const deliveredLocal = anchorToCorpCapital(deliveredValueAnchor, seller.ccy, seller.fxRate);
+        if (!Number.isFinite(deliveredLocal)) continue;
+        marketingDeltasLocal.set(
+          sellerId,
+          (marketingDeltasLocal.get(sellerId) ?? 0) - deliveredLocal
+        );
+      }
+    }
+    for (const [sellerId, deliveredLocal] of politicalSellerPayouts) {
+      if (!Number.isFinite(deliveredLocal) || deliveredLocal <= 0) continue;
       marketingDeltasLocal.set(
         sellerId,
         (marketingDeltasLocal.get(sellerId) ?? 0) - deliveredLocal
@@ -1338,6 +1420,7 @@ export function processSectors(
   return {
     sectorOps,
     corpOps: corpOps as AnyBulkWriteOperation<Corporation>[],
+    manufacturingDevelopmentCashOps,
     corpSnapshots,
     ceoSalaryPayments,
     dividendPayments,

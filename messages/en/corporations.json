@@ -217,6 +217,15 @@
       "fee": "Origination fee (1%)",
       "proceeds": "Cash you receive",
       "explanation": "The fee is withheld when funded. You repay the full principal."
+    },
+    "editorialStance": {
+      "title": "Editorial stance",
+      "description": "Your newsroom's published position shapes its audience and the politicians it supports.",
+      "economic": "Economic",
+      "social": "Social",
+      "save": "Publish stance",
+      "saving": "Publishing...",
+      "saveFailed": "Could not publish the editorial stance."
     }
   }
 }

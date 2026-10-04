@@ -238,6 +238,104 @@ function makeSector(corpId: ObjectId, overrides: Partial<CorporateSector> = {}):
   } as CorporateSector;
 }
 
+describe("funded manufacturing project development cash", () => {
+  function developmentFixture(liquidCapital: number) {
+    const corp = makeCorp({
+      liquidCapital,
+      rdBudget: 24_000,
+    });
+    const sector = makeSector(corp._id, { profitMargin: 0 });
+    const lookups = baseLookups([corp], [sector]);
+    lookups.productLinesV2Enabled = true;
+    lookups.manufacturingProductByCorpId = new Map([
+      [
+        corp._id.toString(),
+        {
+          _id: "product-1",
+          corporationId: corp._id.toString(),
+          activeCorporationId: corp._id.toString(),
+          kindId: "passenger_car",
+          stage: "development",
+          stageStartedTurn: 4,
+          allocations: [{ sectorId: sector._id.toString(), share: 1 }],
+          startedTurn: 4,
+          developmentPaidAnchor: 0,
+          paidThresholdAnchor: 500,
+          elapsedDevelopmentTurns: 0,
+          elapsedThresholdTurns: 12,
+        },
+      ],
+    ]);
+    return { corp, lookups };
+  }
+
+  it("does not record project progress when a loss leaves no operating cash", () => {
+    const { corp, lookups } = developmentFixture(0);
+    const result = processSectors(lookups, 5, new Date());
+    const normal = result.corpOps[0] as {
+      updateOne: { update: { $inc: { liquidCapital: number }; $set: Record<string, unknown> } };
+    };
+    expect(normal.updateOne.update.$inc.liquidCapital).toBeLessThan(0);
+    expect(normal.updateOne.update.$set).not.toHaveProperty(
+      "manufacturingProductDevelopmentReceiptV2"
+    );
+    expect(result.manufacturingDevelopmentCashOps).toHaveLength(0);
+    expect(corp.liquidCapital).toBe(0);
+  });
+
+  it("debits only the affordable amount and guards live cash, old receipts, and same-turn retries", () => {
+    const { corp, lookups } = developmentFixture(1_500);
+    const result = processSectors(lookups, 5, new Date());
+    const guarded = result.manufacturingDevelopmentCashOps[0] as {
+      updateOne: {
+        filter: Record<string, unknown>;
+        update: { $inc: { liquidCapital: number }; $set: Record<string, unknown> };
+      };
+    };
+
+    expect(guarded.updateOne.filter).toMatchObject({
+      _id: corp._id,
+      manufacturingProductDevelopmentPaidTurnV2: { $ne: 5 },
+      manufacturingProductDevelopmentReceiptV2: { $exists: false },
+      $expr: {
+        $gte: [{ $ifNull: ["$liquidCapital", 0] }, 500],
+      },
+    });
+    expect(guarded.updateOne.update).toEqual({
+      $inc: { liquidCapital: -500 },
+      $set: {
+        manufacturingProductDevelopmentPaidTurnV2: 5,
+        manufacturingProductDevelopmentReceiptV2: {
+          projectId: "product-1",
+          turn: 5,
+          amountAnchor: 500,
+        },
+      },
+    });
+
+    const normalCashWrite = result.corpOps[0] as {
+      updateOne: { update: { $inc: { liquidCapital: number } } };
+    };
+    expect(result.corpSnapshots[0].liquidCapital).toBe(
+      corp.liquidCapital + normalCashWrite.updateOne.update.$inc.liquidCapital
+    );
+    expect(result.corpSnapshots[0].liquidCapitalAnchorAfterIncome).toBe(
+      result.corpSnapshots[0].liquidCapital
+    );
+
+    // A concurrent spend to 499 makes the actual Mongo predicate false. If a
+    // crash occurs after receipt consumption, retaining this turn stamp makes
+    // a retried turn's otherwise-empty-slot predicate false as well.
+    expect(499 < (guarded.updateOne.filter.$expr as { $gte: [unknown, number] }).$gte[1]).toBe(
+      true
+    );
+    expect(
+      5 ===
+        (guarded.updateOne.filter.manufacturingProductDevelopmentPaidTurnV2 as { $ne: number }).$ne
+    ).toBe(true);
+  });
+});
+
 // ── Zero corporations ─────────────────────────────────────────────────────────
 
 describe("processSectors with no corporations", () => {

@@ -1,4 +1,5 @@
 import type { Campaign } from "@/lib/db/types";
+import type { DowngradeEntry } from "./autoDowngrade";
 import {
   getMaintenanceCost,
   getTreeMaintenanceCost,
@@ -43,4 +44,34 @@ export function calculateMaintenanceCosts(campaign: Campaign, electionType?: str
     }
   }
   return total;
+}
+
+/** Per-turn media-only upkeep, in anchor funds before currency conversion. */
+export function calculateMediaMaintenanceCosts(campaign: Campaign, electionType?: string): number {
+  return campaign.mediaSpendingTree?.starter
+    ? getTreeMaintenanceCost("mediaSpending", campaign.mediaSpendingTree, electionType)
+    : getMaintenanceCost("mediaSpending", campaign.mediaSpendingLevel ?? 0, electionType);
+}
+
+/** Media-only upkeep after the current turn's insolvency demotions. */
+export function calculateMediaMaintenanceAfterDowngrade(
+  campaign: Campaign,
+  downgrades: DowngradeEntry[],
+  electionType?: string
+): number {
+  const adjusted: Campaign = {
+    ...campaign,
+    mediaSpendingTree: campaign.mediaSpendingTree ? { ...campaign.mediaSpendingTree } : undefined,
+  };
+  for (const downgrade of downgrades) {
+    if (downgrade.category !== "mediaSpending") continue;
+    if (downgrade.branch && adjusted.mediaSpendingTree?.starter) {
+      adjusted.mediaSpendingTree[downgrade.branch] = downgrade.toLevel;
+    } else if (adjusted.mediaSpendingTree?.starter) {
+      adjusted.mediaSpendingTree = { starter: false, a: 0, b: 0, c: 0 };
+    } else {
+      adjusted.mediaSpendingLevel = downgrade.toLevel;
+    }
+  }
+  return calculateMediaMaintenanceCosts(adjusted, electionType);
 }

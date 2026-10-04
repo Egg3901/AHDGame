@@ -1989,6 +1989,8 @@ export function computeRawSupplyDemand(
      * derivation, so the first plants turn is unchanged.
      */
     producedUnits?: number | null;
+    /** Exact product output units, replacing the legacy mix split when present. */
+    outputUnitsByCommodity?: Partial<Record<CommodityType, number>>;
     /**
      * Share of this plant's output (0..1) shipped to a government arsenal under a defence
      * procurement contract. That output was already paid for per lot and does not also
@@ -2242,9 +2244,16 @@ export function computeRawSupplyDemand(
     const rawSupplyMix: Partial<Record<CommodityType, number>> = strategyRates
       ? strategyRates.supply
       : Object.fromEntries((SECTOR_SUPPLY[st] ?? []).map((f) => [f.commodity, f.rate]));
-    const supplyEntries = Object.entries(
+    const strategySupplyEntries = Object.entries(
       applyPlannedEconomyOutputMix(st, rawSupplyMix, sector.plannedEconomy === true)
     ) as [CommodityType, number][];
+    const supplyEntries = [...strategySupplyEntries];
+    if (plantsEnabled && sector.outputUnitsByCommodity) {
+      const existing = new Set(supplyEntries.map(([commodity]) => commodity));
+      for (const commodity of Object.keys(sector.outputUnitsByCommodity) as CommodityType[]) {
+        if (!existing.has(commodity)) supplyEntries.push([commodity, 0]);
+      }
+    }
 
     // ── Plants: real production replaces the revenue nameplate ────────────────
     // The nameplate derivation (revenue × rate / basePrice) is a PROXY for
@@ -2296,10 +2305,28 @@ export function computeRawSupplyDemand(
         : 1;
     const plantsSupplyRates: Partial<Record<CommodityType, number>> | null =
       plantsSupplyUnits != null ? Object.fromEntries(supplyEntries) : null;
+    const hasExactOutputMap = plantsEnabled && sector.outputUnitsByCommodity != null;
+    const exactOutputScale =
+      plantsSupplyScaledUnits({
+        producedUnits: 1,
+        isNatcorp: sector.isNatcorp === true,
+        embargoSupplyFactor: sector.embargoSupplyFactor,
+      }) ?? 1;
 
     for (const [commodity, rate] of supplyEntries) {
       // D12: a mothballed plant is cold — it supplies nothing to the world.
       if (plantsMothballed) continue;
+      if (hasExactOutputMap) {
+        const rawUnits = sector.outputUnitsByCommodity?.[commodity] ?? 0;
+        const units = Math.max(0, rawUnits) * exactOutputScale * militaryRetained;
+        if (units > 0) {
+          global.get(commodity)!.supply += units;
+          stateMap.get(commodity)!.supply += units;
+          recordCorporationSupply(sector.corporationId, commodity, units);
+          recordOutputDemandDelta(sector, st, commodity, units);
+        }
+        continue;
+      }
       if (plantsSupplyUnits != null && plantsSupplyRates) {
         // Canonical plants basis (issue #2054): the same chain the clearing
         // offer builds through, so the book and the ledger cannot sit in

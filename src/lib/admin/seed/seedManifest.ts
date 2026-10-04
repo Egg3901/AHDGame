@@ -524,6 +524,12 @@ const RUNTIME: CollectionEntry[] = [
   { name: "corporationVotes", category: "runtime" },
   { name: "corporateSectors", category: "runtime" },
   {
+    name: "manufacturingProductProjectsV2",
+    category: "runtime",
+    notes:
+      "Active product development projects, including paid progress and plant allocations. Reset with corporations and sectors; per-turn development receipts are embedded on corporations and are wiped with those rows.",
+  },
+  {
     name: "pendingNationalizations",
     category: "runtime",
     notes: "Legislative takings in their notice window; resolved/cleared in the corp turn.",

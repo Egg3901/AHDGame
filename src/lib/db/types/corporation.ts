@@ -1,4 +1,5 @@
 import type { ObjectId } from "mongodb";
+import type { ManufacturingDevelopmentCashReceiptV2 } from "@/lib/products/manufacturingProject";
 import type { CorporationType } from "../../constants/corporations";
 import type { CountryId } from "../../constants/countries";
 import type { CurrencyCode } from "../../constants/currencies";
@@ -170,6 +171,8 @@ export interface Corporation {
    * at least one financial sector; one bank per corp. See src/lib/db/types/bank.ts.
    */
   bankCharter?: import("./bank").BankCharter;
+  /** Public media editorial position. Missing means neutral for legacy worlds. */
+  editorialStance?: { economic: number; social: number };
   /** Funded sovereign claims held outside the replaceable charter subdocument. */
   bankSovereignEscrows?: Record<
     string,
@@ -560,6 +563,10 @@ export interface Corporation {
    * into corporationHistory. Absent until quality pillars (Package B) are live.
    */
   averageQuality?: number;
+  /** Project-bound cash receipt written beside the R&D cash debit while product lines v2 is on. */
+  manufacturingProductDevelopmentReceiptV2?: ManufacturingDevelopmentCashReceiptV2;
+  /** Idempotency stamp retained after its project-bound cash receipt is consumed. */
+  manufacturingProductDevelopmentPaidTurnV2?: number;
   creditRatingComponents?: {
     debtToEquity: number;
     interestCoverage: number;
@@ -783,6 +790,14 @@ export interface CorporateSector {
    * Display/telemetry only, never read back into the economy.
    */
   producedUnits?: number;
+  /** Exact output units per commodity for an active manufactured product. */
+  outputUnitsByCommodity?: Partial<Record<string, number>>;
+  /** Nominal output anchor per commodity for the same measured production. */
+  outputAnchorByCommodity?: Partial<Record<string, number>>;
+  /** Current bounded product quality by output commodity. */
+  productQualityByCommodity?: Partial<Record<string, number>>;
+  /** Raw operating-capacity basis used for the measured product output snapshot. */
+  productOutputCapacityUnits?: number;
   /**
    * Plants-tier telemetry: the deliberate market-demand run-rate multiplier
    * applied to this sector's production last turn. 1 means no demand cap;

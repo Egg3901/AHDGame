@@ -13,6 +13,7 @@
 // scripts/migrations/incidents/ and DO NOT belong in this registry.
 
 import { migration as locRecoveryOwnerIndex } from "./entries/2026-09-30-loc-recovery-owner-index";
+import { migration as politicalMediaOrderIndexes } from "./entries/2026-10-04-political-media-order-indexes";
 import { migration as supplyListingIndexes } from "./entries/2026-09-17-supply-listing-indexes";
 import { migration as ukDualMinistryRoleSlot } from "./entries/2026-09-17-uk-dual-ministry-role-slot";
 import { migration as electionResultSnapshots } from "./entries/2026-09-20-election-result-snapshots";
@@ -99,6 +100,7 @@ import { migration as financialTxLogCounterpartyIndex } from "./entries/2026-09-
 import { migration as appleProviderIdentityIndex } from "./entries/2026-09-30-apple-provider-identity-index";
 import { migration as reconcileSeedIndexes } from "./entries/2026-10-01-reconcile-seed-indexes";
 import { migration as bankLoanCharterEpoch } from "./entries/2026-10-04-bank-loan-charter-epoch";
+import { migration as manufacturingProductProjectsV2Index } from "./entries/2026-10-04-manufacturing-product-projects-v2-index";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -321,6 +323,9 @@ export const MIGRATIONS: Migration[] = [
   // Metadata only. Deploy this backfill before relying on charter epoch reads;
   // the runtime also dual-reads untagged legacy rows during rollout.
   bankLoanCharterEpoch,
+  politicalMediaOrderIndexes,
+  // v2 product lines use a separate collection and one active slot per corporation.
+  manufacturingProductProjectsV2Index,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.

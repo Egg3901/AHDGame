@@ -137,6 +137,99 @@ for (const side of ["source", "destination"] as const) {
 }
 
 describe("durable leg outcomes", () => {
+  it("rejects an invalid zero-amount valuation before filtering empty legs", async () => {
+    const f = fixture();
+    const result = await applyMoneyMove(f.db, {
+      key: "invalid-zero-quote",
+      kind: "political-media-test",
+      legs: [
+        {
+          kind: "debit",
+          amount: 0,
+          valuation: { currencyCode: "USD", localPerAnchor: 0 },
+          collection: "accounts",
+          filter: { _id: "source" },
+          path: "balance",
+          note: "zero payer leg",
+        },
+        {
+          kind: "credit",
+          amount: 0,
+          valuation: { currencyCode: "AHD", localPerAnchor: 1 },
+          collection: "accounts",
+          filter: { _id: "destination" },
+          path: "balance",
+          note: "zero escrow leg",
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      status: "rejected",
+      error: expect.stringContaining("valuation"),
+    });
+    expect(f.journals.docs).toHaveLength(0);
+    expect(f.balances()).toEqual([1000, 100]);
+  });
+
+  it("freezes valued native legs and rejects a replay with a changed FX quote", async () => {
+    const f = fixture();
+    const valued: MoneyMove = {
+      key: "valued-transfer",
+      kind: "political-media-funding",
+      quoteIdentity: { targetState: "CA" },
+      legs: [
+        {
+          kind: "debit",
+          amount: 125,
+          valuation: { currencyCode: "USD", localPerAnchor: 1.25 },
+          collection: "accounts",
+          filter: { _id: "source" },
+          path: "balance",
+          note: "campaign wallet",
+        },
+        {
+          kind: "credit",
+          amount: 100,
+          valuation: { currencyCode: "AHD", localPerAnchor: 1 },
+          collection: "accounts",
+          filter: { _id: "destination" },
+          path: "balance",
+          note: "anchor escrow",
+        },
+      ],
+    };
+
+    expect((await applyMoneyMove(f.db, valued)).status).toBe("applied");
+    expect(f.balances()).toEqual([875, 200]);
+    expect(f.journals.docs[0]).toEqual(
+      expect.objectContaining({
+        legs: expect.arrayContaining([
+          expect.objectContaining({
+            valuation: { currencyCode: "USD", localPerAnchor: 1.25 },
+          }),
+        ]),
+      })
+    );
+    expect(
+      await applyMoneyMove(f.db, {
+        ...valued,
+        legs: valued.legs.map((leg) =>
+          leg.kind === "debit"
+            ? { ...leg, valuation: { currencyCode: "USD", localPerAnchor: 1.5 } }
+            : leg
+        ),
+      })
+    ).toMatchObject({ status: "rejected", error: expect.stringContaining("different valued") });
+    expect(
+      await applyMoneyMove(f.db, {
+        ...valued,
+        quoteIdentity: { targetState: "NY" },
+      })
+    ).toMatchObject({ status: "rejected", error: expect.stringContaining("different valued") });
+    expect(f.balances()).toEqual([875, 200]);
+  });
+
   it("keeps an acknowledged refusal terminal after eligibility improves", async () => {
     const f = fixture();
     f.accounts.docs[0].balance = 5;

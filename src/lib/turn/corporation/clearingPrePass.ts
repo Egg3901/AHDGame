@@ -38,15 +38,31 @@ import { FREIGHT_CLASS_BY_COMMODITY, type FreightClass } from "@/lib/logistics/f
 import { contractScopeKeysFor } from "./loadSettleableSupplyAgreements";
 import {
   fxRateForSectorHostFromMap,
+  fxRateForCorpFromMap,
+  resolveCorpLiquidCurrencyCode,
   resolveSectorHostCurrencyCode,
 } from "@/lib/currency/corporationCapital";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 import { advertisingDeliveredValueByCorp } from "./advertisingDeliveredValue";
+import { mediaAudienceFit } from "@/lib/mediaEditorial/rules";
+import {
+  rawAdvertisingOffer,
+  settlePoliticalAdMarket,
+  type PoliticalAdClearingOffer,
+} from "@/lib/politicalMedia/market";
+import type { PoliticalMediaOrderForClearing } from "@/lib/politicalMedia/journal";
 import {
   inputBasketCostIndex,
   supportsCostPlusPricing,
   validCostPlusBasis,
 } from "@/lib/market/costPlusPricing/rules";
+import {
+  buildManufacturedSectorOutput,
+  resizeMeasuredManufacturedUnits,
+  scaleManufacturedSectorOutput,
+} from "@/lib/products/rules/manufacturingRules";
+import { getManufacturingProductKind } from "@/lib/products/manufacturingCatalog";
+import { isLegalManufacturingProductForPlant } from "@/lib/products/rules/manufacturingEligibility";
 
 /**
  * Clearing pre-pass for the corporation turn, extracted from index.ts so the
@@ -77,6 +93,7 @@ export interface ClearingPrePassInput {
   brandLoyaltyEnabled: boolean;
   brandLoyaltySliceEnabled: boolean;
   qualityPremiumPricingEnabled: boolean;
+  politicalMediaOrders?: readonly PoliticalMediaOrderForClearing[];
 }
 
 export interface ClearingPrePassResult {
@@ -84,6 +101,10 @@ export interface ClearingPrePassResult {
   brandLoyaltyUpdates: CorpLoyaltyUpdate[];
   contractedByCorpCommodity: Map<string, Map<string, number>> | undefined;
   buyerDemandByCorpCommodity: Map<string, Map<string, number>> | undefined;
+  politicalMediaSettlementPlans: Array<{
+    orderId: string;
+    plan: import("@/lib/politicalMedia/journal").PoliticalMediaSettlementPlan;
+  }>;
 }
 
 export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePassResult {
@@ -103,9 +124,11 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
     brandLoyaltyEnabled,
     brandLoyaltySliceEnabled,
     qualityPremiumPricingEnabled,
+    politicalMediaOrders = [],
   } = input;
   let { contractedByCorpCommodity } = input;
   let buyerDemandByCorpCommodity: Map<string, Map<string, number>> | undefined;
+  let politicalMediaSettlementPlans: ClearingPrePassResult["politicalMediaSettlementPlans"] = [];
   // Brand loyalty (A2, shadow-safe): per-sector meta captured during the
   // clearing-input build, joined to clearing results after the pass.
   const loyaltySectorMeta = new Map<
@@ -242,6 +265,86 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
             lookups.stateResourceCapacityByState.get(sector.stateId)
           ),
         };
+        const productProject = lookups.productLinesV2Enabled
+          ? lookups.manufacturingProductByCorpId?.get(corpId)
+          : undefined;
+        const productAllocation = productProject?.allocations.find(
+          (allocation) => allocation.sectorId === sector._id.toString()
+        );
+        const productKind = productProject
+          ? getManufacturingProductKind(productProject.kindId)
+          : undefined;
+        const exactProductOutput =
+          market.plantsEnabled &&
+          productProject &&
+          productAllocation &&
+          productKind &&
+          isLegalManufacturingProductForPlant(productProject.kindId, {
+            sectorId: sector._id.toString(),
+            corporationId: corpId,
+            sectorType: sector.sectorType,
+            strategyId: sector.strategyId,
+            capitalStock: sector.capitalStock ?? 0,
+            plantCount: sector.plantCount ?? 0,
+            mothballed: sector.mothballed,
+          })
+            ? (() => {
+                const capacitySnapshot =
+                  typeof sector.productOutputCapacityUnits === "number" &&
+                  Number.isFinite(sector.productOutputCapacityUnits)
+                    ? sector.productOutputCapacityUnits
+                    : (sector.operatingCapacityUnits ?? sector.capitalStock ?? 0);
+                const currentCapacity = sector.operatingCapacityUnits ?? sector.capitalStock ?? 0;
+                const measuredUnits = resizeMeasuredManufacturedUnits({
+                  producedUnits: sector.producedUnits ?? 0,
+                  currentCapacityUnits: currentCapacity,
+                  snapshotCapacityUnits: capacitySnapshot,
+                });
+                const basePrices = eraScaledBasePrices(lookups.eraUnitScale);
+                const outputAnchor = Object.keys(rates.supply ?? {}).reduce((sum, rawCommodity) => {
+                  const commodity = rawCommodity as CommodityType;
+                  const units =
+                    measuredUnits * commodityMixWeight(rates.supply ?? {}, basePrices, commodity);
+                  return sum + units * (basePrices[commodity] ?? 0);
+                }, 0);
+                return buildManufacturedSectorOutput({
+                  outputAnchor,
+                  supplyRates: (rates.supply ?? {}) as Partial<Record<CommodityType, number>>,
+                  allocationShare: productAllocation.share,
+                  stage: productProject.stage,
+                  outputCommodity: productKind.outputCommodity,
+                  basePrices,
+                  currentSectorQualityByCommodity: Object.fromEntries(
+                    Object.keys(rates.supply ?? {}).map((commodity) => [
+                      commodity,
+                      lookups.productSectorQualityById?.get(sector._id.toString()),
+                    ])
+                  ) as Partial<Record<CommodityType, number>>,
+                  paidDevelopmentAnchor: productProject.developmentPaidAnchor,
+                  paidThresholdAnchor: productProject.paidThresholdAnchor,
+                });
+              })()
+            : null;
+        const productOfferScale = exactProductOutput
+          ? (scaleMeasuredProducedUnits({
+              producedUnits: 1,
+              isNatcorp: !!lookups.corpById.get(corpId)?.countryOwnerId,
+              embargoSupplyFactor:
+                embargoSupplyFactorFor(sector) *
+                plannedEconomyMediaSupplyFactor(
+                  sector.sectorType,
+                  isPlannedEconomy(
+                    (sector as { countryId?: string }).countryId,
+                    currentYear,
+                    commandEconomyEnabled
+                  )
+                ),
+              militaryRetainedFraction: 1 - freshMilitaryDiversion(sector, turn ?? 0),
+            }) ?? 0)
+          : 0;
+        const scaledProductOutput = exactProductOutput
+          ? scaleManufacturedSectorOutput(exactProductOutput, productOfferScale)
+          : null;
         const sectorId = sector._id.toString();
         // countryId is backfilled onto every sector in buildLookups (from
         // stateCountryMap, "US" fallback), so the cast is total in practice.
@@ -341,38 +444,55 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
           }
         }
         if (supplyAgreementsEnabled && market.plantsEnabled && sector.mothballed !== true) {
-          const scaled = plantsSupplyScaledUnits({
-            producedUnits: sector.producedUnits,
-            isNatcorp: !!lookups.corpById.get(corpId)?.countryOwnerId,
-            // Mirrors the ledger (computeRawSupplyDemand): embargo haircut plus
-            // the planned-economy media derate. Offer and ledger must agree.
-            embargoSupplyFactor:
-              embargoSupplyFactorFor(sector) *
-              plannedEconomyMediaSupplyFactor(
-                sector.sectorType,
-                isPlannedEconomy(
-                  (sector as { countryId?: string }).countryId,
-                  currentYear,
-                  commandEconomyEnabled
-                )
-              ),
-          });
-          if (scaled !== null && scaled > 0) {
-            const supplyRates = rates.supply ?? {};
-            for (const commodity of Object.keys(supplyRates) as CommodityType[]) {
-              const units =
-                scaled *
-                commodityMixWeight(
-                  supplyRates,
-                  eraScaledBasePrices(lookups.eraUnitScale),
-                  commodity
-                );
+          const isNatcorp = !!lookups.corpById.get(corpId)?.countryOwnerId;
+          const embargoSupplyFactor =
+            embargoSupplyFactorFor(sector) *
+            plannedEconomyMediaSupplyFactor(
+              sector.sectorType,
+              isPlannedEconomy(
+                (sector as { countryId?: string }).countryId,
+                currentYear,
+                commandEconomyEnabled
+              )
+            );
+          const exactOutputUnits = scaledProductOutput?.outputUnitsByCommodity;
+          if (exactOutputUnits) {
+            for (const [commodity, rawUnits] of Object.entries(exactOutputUnits) as Array<
+              [CommodityType, number]
+            >) {
+              const units = Math.max(0, rawUnits ?? 0);
               if (!(units > 0)) continue;
               const byKey = producedByCorpCommodity.get(corpId) ?? new Map<string, number>();
               for (const key of contractScopeKeysFor(commodity, sector.stateId)) {
                 byKey.set(key, (byKey.get(key) ?? 0) + units);
               }
               producedByCorpCommodity.set(corpId, byKey);
+            }
+          } else {
+            const scaled = plantsSupplyScaledUnits({
+              producedUnits: sector.producedUnits,
+              isNatcorp,
+              // Mirrors the ledger (computeRawSupplyDemand): embargo haircut plus
+              // the planned-economy media derate. Offer and ledger must agree.
+              embargoSupplyFactor,
+            });
+            if (scaled !== null && scaled > 0) {
+              const supplyRates = rates.supply ?? {};
+              for (const commodity of Object.keys(supplyRates) as CommodityType[]) {
+                const units =
+                  scaled *
+                  commodityMixWeight(
+                    supplyRates,
+                    eraScaledBasePrices(lookups.eraUnitScale),
+                    commodity
+                  );
+                if (!(units > 0)) continue;
+                const byKey = producedByCorpCommodity.get(corpId) ?? new Map<string, number>();
+                for (const key of contractScopeKeysFor(commodity, sector.stateId)) {
+                  byKey.set(key, (byKey.get(key) ?? 0) + units);
+                }
+                producedByCorpCommodity.set(corpId, byKey);
+              }
             }
           }
         }
@@ -408,6 +528,19 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
           outputQuality: qualityPremiumPricingEnabled
             ? (lookups.corpById.get(corpId)?.averageQuality ?? null)
             : undefined,
+          ...(scaledProductOutput
+            ? {
+                outputUnitsByCommodity: Object.fromEntries(
+                  Object.entries(scaledProductOutput.outputUnitsByCommodity).map(
+                    ([commodity, units]) => [commodity, Math.max(0, units ?? 0)]
+                  )
+                ) as Partial<Record<CommodityType, number>>,
+                outputAnchorByCommodity: scaledProductOutput.outputAnchorByCommodity,
+                productQualityByCommodity: qualityPremiumPricingEnabled
+                  ? scaledProductOutput.productQualityByCommodity
+                  : undefined,
+              }
+            : {}),
           // Plants tier: last turn's measured output is the offer (lagged, like
           // every other clearing input). Null for a sector that has never run a
           // plants turn, the book falls back to the revenue nameplate.
@@ -513,6 +646,11 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
           const deliveryLimit = deliveryLimitedForSector(sector.stateId, rates.supply ?? {});
           deliveryLimitedBySectorId.set(sectorId, deliveryLimit.fraction);
           deliveryLimitedClassBySectorId.set(sectorId, deliveryLimit.freightClass);
+        }
+        if (lookups.editorialAudienceLeanByState && sector.sectorType === "media") {
+          const stance = lookups.corpById.get(corpId)?.editorialStance;
+          const audience = lookups.editorialAudienceLeanByState.get(sector.stateId);
+          clearingInput.editorialAdvertisingAvailability = mediaAudienceFit(stance, audience);
         }
         if (sector.stateId) clearingStateBySector.set(sectorId, sector.stateId);
         clearingInputs.push(clearingInput);
@@ -634,6 +772,7 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
     // reachable price. processSectors routes that delivered value through one
     // equal-and-opposite transfer.
     const clearingBasePrices = eraScaledBasePrices(lookups.eraUnitScale);
+    const deliveredUnitsBySector = new Map<string, number>();
     const advertisingSellerDeliveredValueAnchorByCorpId = advertisingDeliveredValueByCorp({
       inputs: clearingInputs.map((input) => ({
         sectorId: input.sectorId,
@@ -653,9 +792,155 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
       sectorCorpId,
       commodityMixWeight,
       qualityPremiumPricingEnabled,
+      ...(lookups.editorialAudienceLeanByState
+        ? { deliveredUnitsBySectorOut: deliveredUnitsBySector }
+        : {}),
     });
     market.advertisingSellerDeliveredValueAnchorByCorpId =
       advertisingSellerDeliveredValueAnchorByCorpId;
+    if (politicalMediaOrders.length > 0) {
+      const rawOffers = new Map<
+        string,
+        { input: SectorClearingInput; raw: number; group: string; real: boolean }
+      >();
+      const totalsByGroup = new Map<string, { normalizable: number; exemptReal: number }>();
+      for (const input of clearingInputs) {
+        const group = clearingGroupBySector?.get(input.sectorId) ?? "";
+        const exactUnits = (
+          input as SectorClearingInput & {
+            outputUnitsByCommodity?: Partial<Record<CommodityType, number>>;
+          }
+        ).outputUnitsByCommodity?.advertising;
+        const hasExactUnits = typeof exactUnits === "number" && Number.isFinite(exactUnits);
+        const raw = hasExactUnits
+          ? Math.max(0, exactUnits)
+          : rawAdvertisingOffer({
+              input,
+              plantsEnabled: market.plantsEnabled,
+              clearingBasePrices,
+            });
+        if (!(raw > 0)) continue;
+        const real =
+          hasExactUnits || (market.plantsEnabled && typeof input.producedUnits === "number");
+        rawOffers.set(input.sectorId, { input, raw, group, real });
+        const totals = totalsByGroup.get(group) ?? { normalizable: 0, exemptReal: 0 };
+        if (real) totals.exemptReal += raw;
+        else totals.normalizable += raw;
+        totalsByGroup.set(group, totals);
+      }
+
+      const normalizationByGroup = new Map<string, number>();
+      for (const [group, totals] of totalsByGroup) {
+        const laggedSupply =
+          (group
+            ? lookups.countryClearingBooks
+                ?.get(group as import("@/lib/constants/countries").CountryId)
+                ?.get("advertising")
+            : undefined) ?? lookups.globalCommodityBalances.get("advertising");
+        const raw = totals.normalizable + totals.exemptReal;
+        let normalization = 1;
+        if (laggedSupply && raw > laggedSupply.supply && totals.normalizable > 0) {
+          const target = laggedSupply.supply - totals.exemptReal;
+          normalization = target <= 0 ? 0 : Math.min(1, target / totals.normalizable);
+        }
+        normalizationByGroup.set(group, normalization);
+      }
+
+      const sectorById = new Map(
+        [...lookups.sectorsByCorp.values()].flatMap((sectors) =>
+          sectors.map((sector) => [sector._id.toString(), sector] as const)
+        )
+      );
+      const adOffers: PoliticalAdClearingOffer[] = [];
+      for (const [sectorId, row] of rawOffers) {
+        const corporationId = sectorCorpId.get(sectorId);
+        const sector = sectorById.get(sectorId);
+        const corp = corporationId ? lookups.corpById.get(corporationId) : undefined;
+        if (!corporationId || !sector || !corp) continue;
+        const currencyCode = resolveCorpLiquidCurrencyCode(corp) ?? "AHD";
+        const localPerAnchor = fxRateForCorpFromMap(corp, lookups.exchangeRatesByCurrency);
+        const priceRatio =
+          lookups.reachablePriceRatioByCountry?.get(row.group)?.get("advertising") ??
+          lookups.priceRatioByCommodity.get("advertising");
+        adOffers.push({
+          input: row.input,
+          clearing: market.clearingBySectorId?.get(sectorId),
+          corporationId,
+          countryId: row.group || sector.countryId || "US",
+          stateId: clearingStateBySector.get(sectorId),
+          basePrice: clearingBasePrices.advertising,
+          priceRatio,
+          sellerCurrencyCode: currencyCode,
+          sellerLocalPerAnchor: localPerAnchor,
+          offeredUnits: row.raw * (row.real ? 1 : (normalizationByGroup.get(row.group) ?? 1)),
+        });
+      }
+
+      const political = settlePoliticalAdMarket({
+        orders: politicalMediaOrders
+          .filter((order) => !order.settlementPlan)
+          .map((order) => ({
+            orderId: order.orderId,
+            countryId: order.identity.countryId,
+            stateId: order.identity.targetStateId,
+            createdTurn: order.identity.createdTurn,
+            budgetAnchor: order.identity.requestedAnchor,
+          })),
+        persistedPlans: politicalMediaOrders
+          .filter(
+            (order) => order.settlementPlan && order.settlementPlan.plannedTurn === (turn ?? 0)
+          )
+          .map((order) => ({ orderId: order.orderId, plan: order.settlementPlan! })),
+        offers: adOffers,
+        clearingBySectorId: market.clearingBySectorId ?? new Map(),
+        clearingEnabled: market.clearingEnabled,
+        qualityPremiumEnabled: qualityPremiumPricingEnabled,
+        turn: turn ?? 0,
+      });
+      market.clearingBySectorId = political.clearingBySectorId;
+      market.politicalAdSellerPayoutLocalByCorpId = political.sellerPayoutLocalByCorpId;
+      politicalMediaSettlementPlans = political.settlementPlans;
+    }
+
+    if (lookups.editorialAudienceLeanByState) {
+      const sectorById = new Map(
+        [...lookups.sectorsByCorp.values()].flatMap((sectors) =>
+          sectors.map((sector) => [sector._id.toString(), sector] as const)
+        )
+      );
+      const deliveredByState = new Map<
+        string,
+        Map<string, { units: number; stance: { economic: number; social: number } }>
+      >();
+      for (const [sectorId, units] of deliveredUnitsBySector) {
+        const sector = sectorById.get(sectorId);
+        if (!sector || sector.sectorType !== "media" || !sector.stateId) continue;
+        const corporationId = sector.corporationId.toString();
+        const outlets = deliveredByState.get(sector.stateId) ?? new Map();
+        const existing = outlets.get(corporationId);
+        outlets.set(corporationId, {
+          units: (existing?.units ?? 0) + units,
+          stance: lookups.corpById.get(corporationId)?.editorialStance ?? {
+            economic: 0,
+            social: 0,
+          },
+        });
+        deliveredByState.set(sector.stateId, outlets);
+      }
+      market.editorialOutletsByState = new Map(
+        [...deliveredByState].map(([stateId, outlets]) => {
+          const total = [...outlets.values()].reduce((sum, outlet) => sum + outlet.units, 0);
+          return [
+            stateId,
+            [...outlets].map(([corporationId, outlet]) => ({
+              corporationId,
+              stance: outlet.stance,
+              audienceShare: total > 0 ? outlet.units / total : 0,
+            })),
+          ];
+        })
+      );
+    }
     if (bookViolations.length > 0) {
       console.warn(
         "[clearing] canonical-basis invariant breach on " +
@@ -712,5 +997,6 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
     brandLoyaltyUpdates,
     contractedByCorpCommodity,
     buyerDemandByCorpCommodity,
+    politicalMediaSettlementPlans,
   };
 }

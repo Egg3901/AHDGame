@@ -29,7 +29,7 @@ import { bookFor, loadReachableBooks } from "@/lib/trade/queries/loadReachableBo
 import { getStrategy } from "@/lib/constants/sectorStrategies";
 import { CAPACITY_BUILD_TURNS, computeBuildCost } from "@/lib/constants/capacityEconomy";
 import { foundingStarterUnits, sectorEntryFeeAnchor } from "@/lib/corporations/foundingPlant";
-import { resolveCountryPrimeRate } from "@/lib/corporations/sectorGrowthCost";
+import { resolveCountryPrimeRates } from "@/lib/corporations/sectorGrowthCost";
 import { getSectorTechEffects } from "@/lib/constants/techTree";
 import { isSectorTechTreesEnabled } from "@/lib/corporations/techTree/featureFlag";
 import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
@@ -447,23 +447,18 @@ export async function GET(request: Request, { params }: RouteParams) {
       // the build price, so a single blended quote would be wrong in most
       // states. One lookup per unique country, one bulk lookup for the states.
       const uniqueCountryIds = [...new Set(states.map((s) => s.countryId))];
-      const [nationalShareByCountry, primeRateEntries, costOfLivingDocs] = await Promise.all([
+      const [nationalShareByCountry, primeRateByCountry, costOfLivingDocs] = await Promise.all([
         fetchCorporationNationalSectorSharesByCountry(db, {
           corporationId: corporation._id,
           sectorType,
           countryIds: uniqueCountryIds as CountryId[],
         }),
-        Promise.all(
-          uniqueCountryIds.map(
-            async (c) => [c, await resolveCountryPrimeRate(db, c)] as [string, number]
-          )
-        ),
+        resolveCountryPrimeRates(db, uniqueCountryIds as CountryId[]),
         db
           .collection<StateMetrics>("macroMetrics")
           .find({ _id: { $in: stateIds } }, { projection: { "economic.costOfLiving": 1 } })
           .toArray(),
       ]);
-      const primeRateByCountry = new Map<string, number>(primeRateEntries);
       const costOfLivingByState = new Map(
         costOfLivingDocs.map((d) => [d._id, d.economic?.costOfLiving?.value ?? null])
       );

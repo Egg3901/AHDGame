@@ -29,6 +29,8 @@ export function getAmplitudeModule(): Promise<AmplitudeModule | null> {
         // session replay. PostHog owns replay if it is ever piloted.
         autocapture: false,
         defaultTracking: false,
+        // No remote SDK features are used, so avoid its extra network request.
+        fetchRemoteConfig: false,
         flushIntervalMillis: 10_000,
         trackingOptions: {
           ipAddress: false,

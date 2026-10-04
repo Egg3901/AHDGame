@@ -1,0 +1,85 @@
+{
+  "title": "Media editorial audience fill diagnostic",
+  "method": "Uses computeClearingFactors, advertisingDeliveredValueByCorp and settlePoliticalAdMarket with production offers, market balances, and prices. Scenarios vary only pre-clearing advertising availability.",
+  "assumptions": {
+    "rawOutputUnitsPerOutlet": 100,
+    "laggedSupplyUnits": 200,
+    "laggedDemandUnits": 100,
+    "baseAndRealizedAdvertisingPrice": 1,
+    "turnsPerDay": 24,
+    "maximumAudienceLoss": 0.25,
+    "audienceLeanForBalancedScenario": {
+      "economic": 0,
+      "social": 0
+    },
+    "divergentStance": {
+      "economic": 5,
+      "social": 5
+    }
+  },
+  "derived": {
+    "neutralUnsetStanceAvailabilityAtMaximumLean": 1,
+    "neutralUnsetStanceCandidateNudge": 0,
+    "maximumDivergenceAvailability": 0.75,
+    "alignedPoliticianNudgeAtFullAudienceShare": 0.5,
+    "alignedPoliticianNudgeAtHalfAudienceShare": 0.25
+  },
+  "scenarios": {
+    "balancedEditorial": {
+      "sectors": {
+        "neutral": {
+          "rawOutputUnits": 100,
+          "soldFraction": 0.5,
+          "commercialRevenuePerTurn": 2.0833333333333335,
+          "adSellerReceiptAnchorPerTurn": 2.0833333333333335
+        },
+        "divergent": {
+          "rawOutputUnits": 100,
+          "soldFraction": 0.5,
+          "commercialRevenuePerTurn": 2.0833333333333335,
+          "adSellerReceiptAnchorPerTurn": 2.0833333333333335
+        }
+      }
+    },
+    "maximumDivergence": {
+      "sectors": {
+        "neutral": {
+          "rawOutputUnits": 100,
+          "soldFraction": 0.5,
+          "commercialRevenuePerTurn": 2.0833333333333335,
+          "adSellerReceiptAnchorPerTurn": 2.0833333333333335
+        },
+        "divergent": {
+          "rawOutputUnits": 100,
+          "soldFraction": 0.375,
+          "commercialRevenuePerTurn": 1.5625,
+          "adSellerReceiptAnchorPerTurn": 1.5625
+        }
+      }
+    }
+  },
+  "strongFundedPoliticalDemand": {
+    "balancedAvailability": {
+      "availableUnits": 100,
+      "commercialSoldUnits": 50,
+      "politicalSoldUnits": 50,
+      "totalSoldUnits": 100,
+      "overflowUnits": 0,
+      "finalSoldFraction": 1
+    },
+    "maximumDivergence": {
+      "availableUnits": 75,
+      "commercialSoldUnits": 37.5,
+      "politicalSoldUnits": 37.5,
+      "totalSoldUnits": 75,
+      "overflowUnits": 0,
+      "finalSoldFraction": 0.75
+    }
+  },
+  "accounting": {
+    "buyerValueIsComputedFromTheSameFilledUnitsAsSellerReceipt": true,
+    "reducedAvailabilityRemainsUnsoldOutput": true,
+    "buyerDemandIsNotExpanded": true,
+    "combinedCommercialAndPoliticalFillsStayWithinAvailableUnits": true
+  }
+}
