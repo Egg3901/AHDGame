@@ -8,7 +8,7 @@ import {
   getHeadOfGovernmentOfficeKey,
 } from "@/lib/constants/countries";
 import { getGameStatePreset } from "@/lib/db/collections/gameState";
-import { getCountryState } from "@/lib/countryState";
+import { getCountryState, primeCountryStates } from "@/lib/countryState";
 import type { ElectedOfficial } from "@/lib/db/types/officials";
 import type { ParliamentaryGovernment } from "@/lib/db/types/parliamentaryGovernment";
 
@@ -61,6 +61,98 @@ export async function getHeadOfGovernmentCharacterId(
     .collection<ParliamentaryGovernment>("parliamentaryGovernments")
     .findOne({ _id: countryId as string });
   return legacy?.pmCharacterId ?? null;
+}
+
+/** Resolve country heads together, sharing country-state, formation, and president reads. */
+export async function getHeadOfGovernmentCharacterIds(
+  db: Db,
+  countryIds: readonly CountryId[]
+): Promise<Map<CountryId, ObjectId | null>> {
+  const uniqueCountryIds = [...new Set(countryIds)];
+  if (uniqueCountryIds.length === 0) return new Map();
+
+  await primeCountryStates(db, uniqueCountryIds);
+  const runtimeStates = await Promise.all(
+    uniqueCountryIds.map(
+      async (countryId) => [countryId, await getCountryState(db, countryId)] as const
+    )
+  );
+  const runtimeByCountry = new Map(runtimeStates);
+  const presidentialCountries = uniqueCountryIds.filter(
+    (countryId) => runtimeByCountry.get(countryId)?.governmentType === "presidential"
+  );
+  const preset = presidentialCountries.length ? await getGameStatePreset(db) : undefined;
+  const separatePmCountries = new Set(
+    presidentialCountries.filter(
+      (countryId) =>
+        getCountryConfig(countryId, preset).electionSystems.headOfGovernment === "parliamentary" &&
+        getHeadOfGovernmentOfficeKey(countryId, preset) !== getExecutiveOfficeKey(countryId, preset)
+    )
+  );
+  const presidentCountries = presidentialCountries.filter(
+    (countryId) => !separatePmCountries.has(countryId)
+  );
+  const formationCountries = uniqueCountryIds.filter(
+    (countryId) =>
+      runtimeByCountry.get(countryId)?.governmentType !== "presidential" ||
+      separatePmCountries.has(countryId)
+  );
+
+  const [formations, presidents] = await Promise.all([
+    formationCountries.length
+      ? getGovernmentFormationsCollection(db)
+          .find({ _id: { $in: formationCountries } })
+          .toArray()
+      : Promise.resolve([]),
+    presidentCountries.length
+      ? db
+          .collection<ElectedOfficial>("electedOfficials")
+          .find({
+            countryId: { $in: presidentCountries },
+            officeType: "president",
+            characterId: { $ne: null },
+          })
+          .toArray()
+      : Promise.resolve([]),
+  ]);
+  const formationByCountry = new Map(formations.map((formation) => [formation._id, formation]));
+  const presidentByCountry = new Map<CountryId, ObjectId>();
+  for (const president of presidents) {
+    const countryId = president.countryId as CountryId;
+    if (president.characterId && !presidentByCountry.has(countryId)) {
+      presidentByCountry.set(countryId, president.characterId);
+    }
+  }
+
+  const legacyCountries = formationCountries.filter(
+    (countryId) => !separatePmCountries.has(countryId) && !formationByCountry.has(countryId)
+  );
+  const legacyGovernments = legacyCountries.length
+    ? await db
+        .collection<ParliamentaryGovernment>("parliamentaryGovernments")
+        .find({ _id: { $in: legacyCountries } })
+        .toArray()
+    : [];
+  const legacyByCountry = new Map(
+    legacyGovernments.map((government) => [government._id as CountryId, government])
+  );
+
+  return new Map(
+    uniqueCountryIds.map((countryId) => {
+      if (separatePmCountries.has(countryId)) {
+        return [countryId, formationByCountry.get(countryId)?.pmCharacterId ?? null] as const;
+      }
+      if (presidentByCountry.has(countryId)) {
+        return [countryId, presidentByCountry.get(countryId)!] as const;
+      }
+      if (runtimeByCountry.get(countryId)?.governmentType === "presidential") {
+        return [countryId, null] as const;
+      }
+      const formation = formationByCountry.get(countryId);
+      if (formation) return [countryId, formation.pmCharacterId ?? null] as const;
+      return [countryId, legacyByCountry.get(countryId)?.pmCharacterId ?? null] as const;
+    })
+  );
 }
 
 /**

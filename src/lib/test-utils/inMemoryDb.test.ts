@@ -217,6 +217,40 @@ describe("inMemoryDb — driver surface used by bootstrapGameWorld", () => {
 });
 
 describe("inMemoryDb — query and update operators", () => {
+  it("matches null and missing fields like Mongo equality, $eq, $in, and $ne", async () => {
+    const db = createInMemoryDb();
+    const coll = db.collection("items");
+    coll.docs.push(
+      { _id: "null", value: null },
+      { _id: "missing" },
+      { _id: "text", value: "present" },
+      { _id: "empty-array", value: [] },
+      { _id: "array-with-null", value: ["present", null] },
+      { _id: "array-without-null", value: ["present"] }
+    );
+
+    expect((await coll.find({ value: null }).toArray()).map((row) => row._id)).toEqual([
+      "null",
+      "missing",
+      "array-with-null",
+    ]);
+    expect((await coll.find({ value: { $eq: null } }).toArray()).map((row) => row._id)).toEqual([
+      "null",
+      "missing",
+      "array-with-null",
+    ]);
+    expect((await coll.find({ value: { $in: [null] } }).toArray()).map((row) => row._id)).toEqual([
+      "null",
+      "missing",
+      "array-with-null",
+    ]);
+    expect((await coll.find({ value: { $ne: null } }).toArray()).map((row) => row._id)).toEqual([
+      "text",
+      "empty-array",
+      "array-without-null",
+    ]);
+  });
+
   it("$regex matches strings, honouring $options: 'i'", async () => {
     const db = createInMemoryDb();
     db.seed("parties", [
@@ -392,11 +426,14 @@ it("reports only newly inserted bulk ids on mixed upsert and replay", async () =
         upsert: true,
       },
     },
+    { updateOne: { filter: { _id: "absent-no-upsert" }, update: { $set: { amount: 5 } } } },
     { replaceOne: { filter: { _id: "replacement" }, replacement: { amount: -30 }, upsert: true } },
   ];
   const first = await db.collection("history").bulkWrite(operations);
-  expect(first.upsertedIds).toEqual({ 1: "build", 2: "replacement" });
+  expect(first.upsertedIds).toEqual({ 1: "build", 3: "replacement" });
   expect(first.upsertedCount).toBe(2);
+  expect(first.matchedCount).toBe(1);
+  expect(first.modifiedCount).toBe(1);
   const replay = await db.collection("history").bulkWrite(operations);
   expect(replay.upsertedIds).toEqual({});
   expect(replay.upsertedCount).toBe(0);
