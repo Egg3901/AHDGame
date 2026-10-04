@@ -205,6 +205,37 @@ describe("funded bank treasury settlement", () => {
     expect(balance(db).bond.holders).toEqual([]);
   });
 
+  it("preserves unrelated fractional legacy holders during a bank sale", async () => {
+    const db = world();
+    const characterId = new ObjectId("dddddddddddddddddddddddd");
+    await db
+      .collection("bonds")
+      .updateOne({ _id: BOND }, { $set: { holders: [{ characterId, units: 2.5 }] } });
+    await expect(
+      tradeBankTreasuryBill(db as unknown as Db, {
+        bankId: BANK,
+        bondId: BOND,
+        side: "buy",
+        units: 2,
+        turn: TURN,
+        policy: POLICY,
+        tradeId: "treasury-fractional-legacy-buy",
+      })
+    ).resolves.toMatchObject({ status: "completed", units: 2 });
+    await expect(
+      tradeBankTreasuryBill(db as unknown as Db, {
+        bankId: BANK,
+        bondId: BOND,
+        side: "sell",
+        units: 2,
+        turn: TURN,
+        policy: POLICY,
+        tradeId: "treasury-fractional-legacy-sale",
+      })
+    ).resolves.toMatchObject({ status: "completed", units: 2 });
+    expect(balance(db).bond.holders).toContainEqual({ characterId, units: 2.5 });
+  });
+
   it("reserves overlapping multi-lot sales atomically so a loser cannot strand units", async () => {
     const db = world();
     for (const [tradeId, units] of [

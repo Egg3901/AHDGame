@@ -183,7 +183,7 @@ export async function settleAtomicDocumentTransition(
       });
       if (
         after.length !== before.length + reserved.length ||
-        after.some((holder) => !Number.isSafeInteger(holder.units) || Number(holder.units) < 0) ||
+        after.some((holder) => !Number.isFinite(holder.units) || Number(holder.units) < 0) ||
         !isDeepStrictEqual(after.slice(0, before.length), expectedSources) ||
         after.reduce((sum, holder) => sum + Number(holder.units), 0) !==
           before.reduce((sum, holder) => sum + Number(holder.units), 0) ||
