@@ -101,8 +101,8 @@ import {
   type ProductPlantAllocation,
 } from "@/lib/products/manufacturingEligibility";
 import { chooseNppManufacturingProduct } from "@/lib/products/manufacturingNpp";
-import { commodityMixWeight, COMMODITY_BASE_PRICES } from "@/lib/constants/commodities";
-import { getStrategy } from "@/lib/constants/sectorStrategies";
+import { commodityMixWeight, eraScaledBasePrices } from "@/lib/constants/commodities";
+import { getEffectiveStrategyRates } from "@/lib/constants/sectorStrategies";
 import {
   MANUFACTURING_DEVELOPMENT_ELAPSED_TURNS,
   manufacturingDevelopmentThresholdAnchor,
@@ -510,6 +510,7 @@ export async function processNppCorporationDecisions(
         unlockedTechNodeIds: corp.unlockedTechNodeIds,
       });
       const profits = analyzeSectorProfitability(sectors, true);
+      const sectorById = new Map(sectors.map((sector) => [sector._id.toString(), sector]));
       const marginBySectorId = new Map(
         profits.map((profit) => [profit.sector._id.toString(), profit.margin])
       );
@@ -523,17 +524,25 @@ export async function processNppCorporationDecisions(
           (sum, plant) => sum + plant.capitalStock * (marginBySectorId.get(plant.sectorId) ?? 0),
           0
         );
-        const mixWeight = compatiblePlants.reduce(
-          (sum, plant) =>
+        const mixWeight = compatiblePlants.reduce((sum, plant) => {
+          const sector = sectorById.get(plant.sectorId);
+          const currentRates = getEffectiveStrategyRates(
+            plant.sectorType,
+            plant.strategyId ?? "standard",
+            sector?.transitionFromStrategyId,
+            sector?.transitionStartTurn,
+            turn
+          );
+          return (
             sum +
             plant.capitalStock *
               commodityMixWeight(
-                getStrategy(plant.sectorType, plant.strategyId ?? "standard").supply,
-                COMMODITY_BASE_PRICES,
+                currentRates.supply,
+                eraScaledBasePrices(plants.eraUnitScale),
                 kind.outputCommodity
-              ),
-          0
-        );
+              )
+          );
+        }, 0);
         return [
           {
             kindId: kind.id,
