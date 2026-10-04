@@ -1,3 +1,4 @@
+import { migration as bankFailurePoliticsIndex } from "./entries/2026-10-04-bank-failure-politics-index";
 import type { Db } from "mongodb";
 import { migration as bankPropForexFeeIndex } from "./entries/2026-10-04-bank-prop-forex-fee-index";
 import { migration as repairOrphanIndexFundState } from "./entries/2026-09-03-repair-orphan-index-fund-state";
@@ -41,6 +42,7 @@ export const REQUIRED_STARTUP_MIGRATIONS: readonly Migration[] = [
   politicalMediaOrderIndexes,
   bankTreasuryTradeIndexes,
   bankPropForexFeeIndex,
+  bankFailurePoliticsIndex,
 ];
 
 export async function runRequiredStartupMigrations(db: Db): Promise<RunSummary> {

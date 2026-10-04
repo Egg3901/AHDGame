@@ -53,6 +53,8 @@ export function toneFor(effect: number): ModifierTone {
 /** The chip's hover text: what this modifier measures. */
 export function buildModifierTitle(modifier: ActiveModifier): string {
   if (modifier.source === "address") return ADDRESS_TITLE;
+  if (modifier.source === "banking")
+    return "Taxpayer-funded bank failure backstop relative to GDP. Approval cost fades over one game year; confidence is measured separately.";
   if (modifier.source === "war") return WAR_TITLES[modifier.id] ?? WAR_FALLBACK_TITLE;
   return METRIC_TITLE;
 }

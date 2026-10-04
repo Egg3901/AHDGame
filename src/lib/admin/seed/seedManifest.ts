@@ -599,6 +599,12 @@ const RUNTIME: CollectionEntry[] = [
   },
   { name: "depositInsuranceFunds", category: "runtime" },
   {
+    name: "bankFailurePoliticalEvents",
+    category: "runtime",
+    notes:
+      "Funded bank-failure political receipts belong to the current world and are wiped on reset.",
+  },
+  {
     name: "interbankLoans",
     category: "runtime",
     notes: "Retail/universal banks lending non-reserved cash to investment/universal banks.",
