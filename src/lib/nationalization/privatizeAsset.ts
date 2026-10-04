@@ -355,11 +355,10 @@ export async function privatizeAsset(
     // The condition wanted is "the remainder is empty". Below plants revenue is
     // the only quantity carried, so `keptRevenue <= 0` says that exactly and
     // this stays byte-identical. Under plants the remainder is empty only when
-    // no capacity, no CIP and no queued orders survive the split.
+    // no capacity and no queued orders survive the split.
     const keptPlantIsEmpty =
       !plantsEnabled ||
       (!(keptPlant.capitalStock > 0) &&
-        !(keptPlant.constructionInProgressAnchor > 0) &&
         keptPlant.buildQueue.length === 0);
     if (keptRevenue <= 0 && keptPlantIsEmpty) {
       await sectors.deleteOne({ _id: sector._id });

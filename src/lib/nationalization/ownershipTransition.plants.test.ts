@@ -214,8 +214,9 @@ describe("absorbSectorIntoNatCorp — merge branch", () => {
     // Capacity is CONSERVED across the merge, less the single deliberate haircut
     // sink: survivor 2000 + donor 1000 × 0.85.
     expect(set.capitalStock).toBe(2000 + 1000 * KEEP);
-    // CIP + both build orders transfer at full ₳ value, queue in landing order.
-    expect(set.constructionInProgressAnchor).toBe(50_000);
+    // Both orders transfer at full ₳ value, queue in landing order. The stored
+    // CIP snapshot is reconciled from that queue by sectorTurn.
+    expect(set).not.toHaveProperty("constructionInProgressAnchor");
     expect((set.buildQueue as { onlineTurn: number }[]).map((o) => o.onlineTurn)).toEqual([9, 20]);
     // Earlier ramp anchor wins — re-anchoring would re-clamp production the
     // donor had already ramped past.

@@ -113,7 +113,7 @@ export const KNOWN_SECTOR_IDS = KNOWN_CASES.map((row) => row.sectorId);
 
 type BookInput = Pick<
   CorporateSector,
-  "sectorType" | "capacityBookAnchor" | "constructionInProgressAnchor" | "buildQueue"
+  "sectorType" | "capacityBookAnchor" | "buildQueue"
 >;
 
 function queuePaidAnchor(queue: readonly SectorBuildOrder[] | null | undefined): number {
@@ -129,18 +129,6 @@ function queuePaidAnchor(queue: readonly SectorBuildOrder[] | null | undefined):
   );
 }
 
-function normalizedCip(
-  sector: Pick<CorporateSector, "constructionInProgressAnchor" | "buildQueue">
-) {
-  const recorded =
-    typeof sector.constructionInProgressAnchor === "number" &&
-    Number.isFinite(sector.constructionInProgressAnchor) &&
-    sector.constructionInProgressAnchor > 0
-      ? sector.constructionInProgressAnchor
-      : 0;
-  return Math.max(recorded, queuePaidAnchor(sector.buildQueue));
-}
-
 /** Paid plant basis plus every still-live paid build order, all in anchor units. */
 export function administrativeBookValueAnchor(sector: BookInput): number {
   const capacity =
@@ -149,7 +137,7 @@ export function administrativeBookValueAnchor(sector: BookInput): number {
     sector.capacityBookAnchor > 0
       ? sector.capacityBookAnchor
       : 0;
-  return capacity + normalizedCip(sector);
+  return capacity + queuePaidAnchor(sector.buildQueue);
 }
 
 const additiveTopLevelFields = [
@@ -215,14 +203,8 @@ export function buildAdministrativeSectorMerge(
   now: Date,
   runId: string
 ): AdministrativeSectorMergeUpdate {
-  const survivorPlant = {
-    ...readSectorPlantFields(survivor),
-    constructionInProgressAnchor: normalizedCip(survivor),
-  };
-  const sourcePlant = {
-    ...readSectorPlantFields(source),
-    constructionInProgressAnchor: normalizedCip(source),
-  };
+  const survivorPlant = readSectorPlantFields(survivor);
+  const sourcePlant = readSectorPlantFields(source);
   const mergedPlant = mergeSectorPlantFields(survivorPlant, sourcePlant);
   const mergedPnl = mergePlantsPnl(survivor, source);
   const markerPath = `remediation.${DEFECT_ID}.${sourceSectorId.toString()}`;

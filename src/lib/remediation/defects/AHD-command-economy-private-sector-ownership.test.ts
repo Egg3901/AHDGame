@@ -23,7 +23,7 @@ describe("command-economy ownership repair valuation", () => {
     ).toBeCloseTo(4_510.47757108131, 9);
   });
 
-  it("uses the larger of recorded CIP and the queue total", () => {
+  it("ignores a stale stored CIP when the queue is empty", () => {
     expect(
       administrativeBookValueAnchor({
         sectorType: "media",
@@ -31,7 +31,7 @@ describe("command-economy ownership repair valuation", () => {
         constructionInProgressAnchor: 3,
         buildQueue: [],
       })
-    ).toBeCloseTo(12_406.610080694778, 9);
+    ).toBeCloseTo(12_403.610080694778, 9);
   });
 });
 
@@ -84,13 +84,13 @@ describe("command-economy ownership repair merge", () => {
     expect(update.$set).toMatchObject({
       capitalStock: 50,
       capacityBookAnchor: 70,
-      constructionInProgressAnchor: 16,
-      buildQueue: [{ unitsOrdered: 2, costPaidAnchor: 6, startTurn: 5, onlineTurn: 9 }],
+        buildQueue: [{ unitsOrdered: 2, costPaidAnchor: 6, startTurn: 5, onlineTurn: 9 }],
       [`remediation.${DEFECT_ID}.${sourceId.toString()}`]: {
         runId: "run-test",
         mergedAt: new Date("2026-08-22T00:00:00Z"),
       },
     });
+    expect(update.$set).not.toHaveProperty("constructionInProgressAnchor");
   });
 });
 

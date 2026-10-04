@@ -158,7 +158,7 @@ describe("buyListedSector — transaction log types", () => {
   });
 });
 
-describe("buyListedSector — mid-build transfer moves the queue (P3b)", () => {
+describe("buyListedSector - mid-build transfer preserves queue state (P3b)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     db = createMockDb();
@@ -178,7 +178,7 @@ describe("buyListedSector — mid-build transfer moves the queue (P3b)", () => {
     plantsStartTurn: 12,
   };
 
-  it("transfer path: the doc is re-pointed, so the queue and CIP ride along untouched", async () => {
+  it("transfer path: the doc is re-pointed, so the queue rides along untouched", async () => {
     await wireCommonMocks();
     db.collectionMocks.corporateSectors.findOne
       .mockResolvedValueOnce({ ...midBuildSector })
@@ -197,7 +197,7 @@ describe("buyListedSector — mid-build transfer moves the queue (P3b)", () => {
     expect(transferUpdate.$set).not.toHaveProperty("constructionInProgressAnchor");
   });
 
-  it("merge path: capacity, build queue and CIP are folded into the survivor, not destroyed", async () => {
+  it("merge path: capacity and build queue are folded into the survivor", async () => {
     await wireCommonMocks();
 
     const existingBuyerSector = {
@@ -240,8 +240,8 @@ describe("buyListedSector — mid-build transfer moves the queue (P3b)", () => {
     expect((merged.buildQueue as { onlineTurn: number }[]).map((o) => o.onlineTurn)).toEqual([
       30, 34,
     ]);
-    // ₳ CIP summed, NOT re-denominated through either corp's currency.
-    expect(merged.constructionInProgressAnchor).toBe(5_000_000);
+    // CIP is derived from the preserved queue, not copied as a second value.
+    expect(merged).not.toHaveProperty("constructionInProgressAnchor");
     expect(
       (merged.buildQueue as { costPaidAnchor: number }[]).map((o) => o.costPaidAnchor)
     ).toEqual([4_000_000, 1_000_000]);

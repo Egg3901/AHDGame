@@ -1026,21 +1026,19 @@ export function processSector(
     }
   }
 
-  // C4: the queue delta rides along with the `$set`. CIP is derived absolutely
-  // from the same queue result each turn, which repairs stale and negative
-  // stored values without a sequence of rounded increments.
+  // C4: CIP is written absolutely from the queue result each turn, repairing
+  // stale and negative stored values without a sequence of rounded increments.
   const sectorUpdateDoc: SectorUpdateOp["updateOne"]["update"] = { $set: sectorUpdate };
   if (plantsEnabled) {
     // A smooth order releases CIP every turn it delivers, not only on the turn
-    // it fully lands, so the `$inc` is gated on the delta, not on a full
-    // landing. The `$pull` still only fires when an order actually came due.
+    // it fully lands. The `$pull` still only fires when an order actually came due.
     if (landedOrderCount > 0) {
       sectorUpdateDoc.$pull = { buildQueue: { onlineTurn: { $lte: currentTurn } } };
     }
-    sectorUpdateDoc.$set.constructionInProgressAnchor = Math.max(
-      0,
-      Math.round(constructionInProgressAnchor)
-    );
+    sectorUpdateDoc.$set = {
+      ...sectorUpdateDoc.$set,
+      constructionInProgressAnchor: Math.max(0, Math.round(constructionInProgressAnchor)),
+    };
   }
   sectorOps.push({
     updateOne: {

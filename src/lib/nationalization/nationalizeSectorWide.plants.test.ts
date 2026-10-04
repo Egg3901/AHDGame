@@ -194,9 +194,10 @@ describe("nationalizeSectorWide — plants capacity conservation", () => {
     expect(gained + kept + sink).toBeCloseTo(400, 6);
 
     // Buildings in flight transfer at the carve fraction and at FULL ₳ value —
-    // the haircut never touches money already charged to a corp.
-    expect(ins.constructionInProgressAnchor).toBeCloseTo(45, 6);
-    expect(donorSet().constructionInProgressAnchor).toBeCloseTo(45, 6);
+    // the haircut never touches money already charged to a corp. The stored
+    // CIP snapshot is recalculated from the resulting queue by sectorTurn.
+    expect(ins).not.toHaveProperty("constructionInProgressAnchor");
+    expect(donorSet()).not.toHaveProperty("constructionInProgressAnchor");
     expect((ins.buildQueue as { unitsOrdered: number; costPaidAnchor: number }[])[0]).toMatchObject(
       {
         unitsOrdered: 20,
@@ -211,7 +212,7 @@ describe("nationalizeSectorWide — plants capacity conservation", () => {
     marketMode.value = "plants";
     await run(1);
     expect(inserted().capitalStock).toBeCloseTo(400 * (1 - NATIONALIZATION_REVENUE_HAIRCUT), 6);
-    expect(inserted().constructionInProgressAnchor).toBeCloseTo(90, 6);
+    expect(inserted()).not.toHaveProperty("constructionInProgressAnchor");
     expect(db.collectionMocks.corporateSectors.deleteOne).toHaveBeenCalledWith({
       _id: donorSectorId,
     });
@@ -368,6 +369,6 @@ describe("nationalizeSectorWide — mothballed survivor absorbing unowned headro
     expect(merged.capitalStock as number).toBeGreaterThan(100);
     // Every other field is the survivor's own, i.e. a true merge identity.
     expect(merged.plantsStartTurn).toBe(7);
-    expect(merged.constructionInProgressAnchor).toBe(0);
+    expect(merged).not.toHaveProperty("constructionInProgressAnchor");
   });
 });

@@ -262,7 +262,6 @@ describe("plants build queue — landing", () => {
       {
         capitalStock: 5_000,
         buildQueue: [order({ costPaidAnchor: 300_000, onlineTurn: 1040 })],
-        constructionInProgressAnchor: 3_000_000,
       },
       {
         capitalStock: 2_000,
@@ -274,16 +273,16 @@ describe("plants build queue — landing", () => {
             smooth: true,
           }),
         ],
-        constructionInProgressAnchor: -50_000,
       }
     );
+    expect(transferred).not.toHaveProperty("constructionInProgressAnchor");
     const { doc } = run(
       "plants",
       makeSector({
         capitalStock: transferred.capitalStock,
         plantsStartTurn: 900,
         buildQueue: transferred.buildQueue,
-        constructionInProgressAnchor: transferred.constructionInProgressAnchor,
+        constructionInProgressAnchor: 3_000_000,
       }),
       1000
     );
@@ -785,7 +784,10 @@ describe("plants build queue — a command racing the turn (C4)", () => {
       onlineTurn: 1000 + BUILD_TURNS,
     };
     const live = commandPlaceOrder(sector as unknown as Record<string, unknown>, fresh);
-    expect(live.constructionInProgressAnchor).toBe(500_000);
+    expect(live).toMatchObject({
+      buildQueue: [...(sector.buildQueue as SectorBuildOrder[]), fresh],
+      constructionInProgressAnchor: sector.constructionInProgressAnchor,
+    });
 
     const after = applySectorOps(live, env);
 
