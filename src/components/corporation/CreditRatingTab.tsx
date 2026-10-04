@@ -14,7 +14,10 @@ import {
   calculateCreditScore,
   getBondCouponRate,
   MAX_BOND_ISSUANCE_FRACTION,
+  CORPORATE_CREDIT_MATURITY_HORIZON_TURNS,
 } from "@/lib/constants/bonds";
+import { assessMaturityLiquidity } from "@/lib/bonds/rules/maturityLiquidity";
+import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import {
   CREDIT_RATING_SPREADS,
   CREDIT_RATINGS,
@@ -65,7 +68,7 @@ const COMPONENT_COPY: Record<keyof typeof CREDIT_RATING_WEIGHTS, { label: string
     },
     liquidity: {
       label: "Cash cushion",
-      hint: "Cash in hand against a year of bond interest. A bigger cushion scores higher.",
+      hint: "Cash against annual interest and estimated coverage of bond repayments in the next half game year.",
     },
   };
 
@@ -191,10 +194,31 @@ function WhatIfDebtPanel({
           : 0;
     const newEquity = newLiquid + npv;
     const penalty = bondInfo.bondDefaultCreditPenalty?.active ?? false;
+    const repaymentScale = totalDebt > 0 && d < 0 ? newDebt / totalDebt : 1;
+    const maturity = assessMaturityLiquidity({
+      obligations: bondInfo.bonds.map((bond) => ({
+        principalAnchor:
+          (bond.totalIssuedAnchor ??
+            toInternalFrom(
+              bond.totalIssued,
+              bond.currencyCode as Parameters<typeof toInternalFrom>[1]
+            )) * repaymentScale,
+        maturityTurn: bond.maturityTurn,
+        matured: bond.matured,
+        defaulted: bond.defaulted,
+      })),
+      liquidCapitalAnchor: newLiquid,
+      incomePerTurn: cd.annualIncome / TURNS_PER_YEAR,
+      annualCouponObligations: newAnnual,
+      currentTurn: bondInfo.currentTurn,
+      horizonTurns: CORPORATE_CREDIT_MATURITY_HORIZON_TURNS,
+      turnsPerYear: TURNS_PER_YEAR,
+    });
     return calculateCreditScore(newLiquid, newDebt, cd.annualIncome, newAnnual, newEquity, {
       bondDefaultCreditPenaltyActive: penalty,
+      nearTermLiquidityScore: maturity.liquidityScore ?? undefined,
     });
-  }, [bondInfo, liqAnchor, clampedDebtDelta]);
+  }, [bondInfo, liqAnchor, clampedDebtDelta, toInternalFrom]);
 
   const canSlideDebt = debtSliderBounds.max > debtSliderBounds.min;
   if (!bondInfo.creditDiagnostics || !whatIf) return null;
@@ -204,7 +228,8 @@ function WhatIfDebtPanel({
       <div className="space-y-2 py-1">
         <p className="text-xs text-muted">
           Raise or repay face value at your current average coupon. Cash moves one for one with the
-          debt.
+          debt. Repayments are spread proportionally across existing bonds; estimated future income
+          stays fixed.
         </p>
         <div className="flex flex-wrap items-center gap-3">
           <label htmlFor="credit-debt-delta" className="text-xs text-muted">

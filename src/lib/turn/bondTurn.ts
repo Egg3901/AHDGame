@@ -52,6 +52,7 @@ import {
   executeMarketMakerTrade,
   distributeConversionSpreadsBatch,
 } from "@/lib/currency/marketMaker";
+import { corporateBondMaturityLiquidity } from "@/lib/bonds/corporateCredit";
 import { garnishLocFromIncome } from "@/lib/lineOfCredit/garnishment";
 import {
   anchorToCorpCapital,
@@ -1002,7 +1003,18 @@ export async function processBondTurn(
           0, // We don't have per-turn income here, use 0 for conservative estimate
           annualInterest,
           totalEquity,
-          { bondDefaultCreditPenaltyActive: !!penaltyActive }
+          {
+            bondDefaultCreditPenaltyActive: !!penaltyActive,
+            nearTermLiquidityScore:
+              corporateBondMaturityLiquidity({
+                bonds: corpBonds,
+                liquidCapitalAnchor: corpLiquidAnchor,
+                incomePerTurn: 0,
+                annualCouponObligations: annualInterest,
+                currentTurn: turn,
+                fxByCurrency,
+              }).liquidityScore ?? undefined,
+          }
         );
         currentRate = getBondCouponRate(primeRate, creditResult.rating);
       }

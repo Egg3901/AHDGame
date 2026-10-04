@@ -13,6 +13,7 @@ import {
 import { loadCorpExitEquityAnchor } from "@/lib/bonds/corpExitEquity";
 import {
   sumCorporateSectorNpv,
+  corporateBondMaturityLiquidity,
   sumCorporateSectorConstructionInProgress,
 } from "@/lib/bonds/corporateCredit";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
@@ -161,7 +162,18 @@ export async function previewRelocationBond(
     annualIncome,
     annualInterest,
     totalEquity,
-    { bondDefaultCreditPenaltyActive: penaltyActive }
+    {
+      bondDefaultCreditPenaltyActive: penaltyActive,
+      nearTermLiquidityScore:
+        corporateBondMaturityLiquidity({
+          bonds: existingBonds,
+          liquidCapitalAnchor,
+          incomePerTurn: annualIncome / TURNS_PER_YEAR,
+          annualCouponObligations: annualInterest,
+          currentTurn,
+          fxByCurrency,
+        }).liquidityScore ?? undefined,
+    }
   );
   const centralBank = centralBanks.find((bank) => bank.countryId === corporation.countryId);
   const primeRate =

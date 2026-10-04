@@ -36,6 +36,7 @@ import {
 import { indexFundOwnershipFraction } from "@/lib/corporations/indexOwnership";
 import {
   computeCorporateCreditAtTurn,
+  corporateBondMaturityLiquidity,
   sumCorporateSectorNpv,
   sumCorporateSectorPerTurnIncome,
   sumCorporateSectorAnnualRevenue,
@@ -704,6 +705,15 @@ export async function POST(request: Request, { params }: RouteParams) {
       totalEquity,
       {
         bondDefaultCreditPenaltyActive: penaltyActive,
+        nearTermLiquidityScore:
+          corporateBondMaturityLiquidity({
+            bonds: existingBonds,
+            liquidCapitalAnchor: postLiquidCapitalAnchor,
+            incomePerTurn: issueIncomePerTurn,
+            annualCouponObligations: annualInterest,
+            currentTurn,
+            fxByCurrency,
+          }).liquidityScore ?? undefined,
         // Ticket #1138: this route DISPLAYS, it does not advance the model. Passing
         // the stored snapshot as `previousCompositeScore` blended it a second time
         // and reported a score the turn never wrote. Use it verbatim instead.

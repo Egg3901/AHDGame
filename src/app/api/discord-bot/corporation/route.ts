@@ -26,6 +26,7 @@ import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { BOND_MATURITY_LABELS } from "@/lib/db/types/bond";
 import type { BondMaturityTurns } from "@/lib/db/types/bond";
 import { calculateCreditScore, getBondCouponRate } from "@/lib/constants/bonds";
+import { corporateBondMaturityLiquidity } from "@/lib/bonds/corporateCredit";
 import { isBondDefaultCreditPenaltyActive } from "@/lib/bonds/corporateBondDefault";
 import type { CentralBank } from "@/lib/db/types";
 import { getCountryConfig } from "@/lib/constants/countries";
@@ -334,6 +335,24 @@ async function buildCorpDetail(nameLower: string): Promise<CorpDetailPayload> {
     totalEquity,
     {
       bondDefaultCreditPenaltyActive: isBondDefaultCreditPenaltyActive(corporation, currentTurn),
+      nearTermLiquidityScore:
+        corporateBondMaturityLiquidity({
+          bonds: outstandingBonds,
+          liquidCapitalAnchor: corpCapitalToAnchor(
+            corporation.liquidCapital,
+            corpCurrency,
+            corpFxRate
+          ),
+          incomePerTurn: corpCapitalToAnchor(
+            (income * GAME_DAYS_PER_YEAR) / TURNS_PER_YEAR,
+            corpCurrency,
+            corpFxRate
+          ),
+          annualCouponObligations: annualInterestAnchor,
+          currentTurn,
+          fxByCurrency,
+        }).liquidityScore ?? undefined,
+      persistedCompositeScore: corporation.creditCompositeSnapshot ?? undefined,
     }
   );
 

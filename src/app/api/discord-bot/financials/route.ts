@@ -35,6 +35,7 @@ import {
   calculateCreditScore,
   getBondCouponRate,
 } from "@/lib/constants/bonds";
+import { corporateBondMaturityLiquidity } from "@/lib/bonds/corporateCredit";
 import { isBondDefaultCreditPenaltyActive } from "@/lib/bonds/corporateBondDefault";
 import { getCountryConfig } from "@/lib/constants/countries";
 import { getGameState } from "@/lib/gameState";
@@ -370,6 +371,24 @@ export async function GET(request: Request) {
       totalAssets,
       {
         bondDefaultCreditPenaltyActive: isBondDefaultCreditPenaltyActive(corporation, currentTurn),
+        nearTermLiquidityScore:
+          corporateBondMaturityLiquidity({
+            bonds: outstandingBonds,
+            liquidCapitalAnchor: corpCapitalToAnchor(
+              corporation.liquidCapital,
+              corpCurrency,
+              corpFxRate
+            ),
+            incomePerTurn: corpCapitalToAnchor(
+              (income * GAME_DAYS_PER_YEAR) / TURNS_PER_YEAR,
+              corpCurrency,
+              corpFxRate
+            ),
+            annualCouponObligations: annualInterestAnchor,
+            currentTurn,
+            fxByCurrency,
+          }).liquidityScore ?? undefined,
+        persistedCompositeScore: corporation.creditCompositeSnapshot ?? undefined,
       }
     );
 
