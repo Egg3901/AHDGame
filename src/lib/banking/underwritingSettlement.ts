@@ -51,7 +51,7 @@ export async function resumeFoundingUnderwritingPlans(
     const { offer, instrumentProjection } = pending;
     const key = primaryUnderwritingSettlementKey("equity", offer.instrumentId, pending.turn);
     const existingJournal = await db
-      .collection(MONEY_MOVE_COLLECTION)
+      .collection<{ _id: string }>(MONEY_MOVE_COLLECTION)
       .findOne({ _id: key }, { projection: { _id: 1 } });
     if (existingJournal) {
       const resumed = await resumeSettlement(db, key);
@@ -118,7 +118,7 @@ export async function settlePrimaryUnderwritingFill(
   const { bank, issuer, offer, instrumentId, turn, now } = input;
   const key = primaryUnderwritingSettlementKey(offer.instrumentType, instrumentId, turn);
   const priorClaim = await db
-    .collection(MONEY_MOVE_COLLECTION)
+    .collection<{ _id: string }>(MONEY_MOVE_COLLECTION)
     .findOne({ _id: key }, { projection: { _id: 1 } });
   if (priorClaim) return resumeSettlement(db, key);
 

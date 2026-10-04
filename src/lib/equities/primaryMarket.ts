@@ -353,7 +353,7 @@ export async function placePendingShareIssuances(
             _id: corporation._id,
             "pendingShareIssuance.remainingShares": { $gte: shares },
           },
-          update: publication,
+          pipelineUpdate: publication,
           note: "Publish the filled share tranche after its cash and underwriting fee settle",
         },
       });

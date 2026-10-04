@@ -10,6 +10,7 @@ import {
   type PrimaryUnderwritingOffer,
 } from "@/lib/banking/rules/underwriting";
 import { settlePrimaryUnderwritingFill } from "@/lib/banking/underwritingSettlement";
+import type { TransitionProjection } from "@/lib/banking/rules/boundary";
 import { issuanceDilutionFactorExpr } from "@/lib/corporations/shareConsolidation";
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { getEraFoundingBounds, getEraFounderShares } from "@/lib/constants/sectorSeedEra";
@@ -685,7 +686,7 @@ export async function POST(request: Request) {
                 },
               ],
               note: "Publish funded founding IPO shares and net proceeds",
-            } as const;
+            } satisfies TransitionProjection;
           })()
         : undefined;
     const corporation: Omit<Corporation, "_id"> = {

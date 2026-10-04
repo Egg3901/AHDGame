@@ -22,7 +22,15 @@ function world(): InMemoryDb {
       _id: BANK,
       name: "Northstar Securities",
       liquidCapital: 2_000,
-      bankCharter: { type: "investment", status: "active", currency: "USD", charteredTurn: 9 },
+      bankCharter: {
+        type: "investment",
+        status: "active",
+        currency: "USD",
+        charteredTurn: 9,
+        postedCapital: 1_000,
+        depositOffset: 0,
+        lendingOffset: 0,
+      },
     },
     { _id: ISSUER, name: "Orchid Works", liquidCapital: 1_000 },
   ]);
@@ -41,6 +49,9 @@ function input() {
       status: "active" as const,
       currency: "USD" as const,
       charteredTurn: 9,
+      postedCapital: 1_000,
+      depositOffset: 0,
+      lendingOffset: 0,
     },
   };
   return {
@@ -198,7 +209,15 @@ describe("settlePrimaryUnderwritingFill", () => {
     const corps = db.collection("corporations").docs as Array<Record<string, unknown>>;
     const issuer = corps.find((row) => (row._id as ObjectId).equals(ISSUER))!;
     const bank = corps.find((row) => (row._id as ObjectId).equals(BANK))!;
-    bank.bankCharter = { type: "investment", status: "active", currency: "USD", charteredTurn: 10 };
+    bank.bankCharter = {
+      type: "investment",
+      status: "active",
+      currency: "USD",
+      charteredTurn: 10,
+      postedCapital: 1_000,
+      depositOffset: 0,
+      lendingOffset: 0,
+    };
     issuer.isPrivate = true;
     issuer.foundingIpoUnderwritingPending = {
       offer: fill.offer,

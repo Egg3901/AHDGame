@@ -14,6 +14,7 @@ describe("primary underwriting mandate resolution", () => {
         db,
         policy,
         { _id: new ObjectId(), liquidCurrencyCode: "USD" },
+        "USD",
         "equity",
         1
       )

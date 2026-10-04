@@ -25,7 +25,9 @@ export async function GET(request: Request) {
     }
     const [forexEnabled, gameState] = await Promise.all([
       isForexEnabled(),
-      db.collection("gameState").findOne({ _id: "current" }, { projection: { preset: 1 } }),
+      db
+        .collection<{ _id: string; preset?: string }>("gameState")
+        .findOne({ _id: "current" }, { projection: { preset: 1 } }),
     ]);
     const currencyCode = forexEnabled
       ? getSeedCurrencyCode(countryId as CountryId, gameState?.preset ?? DEFAULT_SEED_PRESET)

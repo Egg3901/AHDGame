@@ -257,7 +257,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           instrumentProjection: {
             collection: "corporations",
             filter: cooldownQuery,
-            update: updatePipeline,
+            pipelineUpdate: updatePipeline,
             note: "Publish the funded share issuance and approved pending remainder",
           },
         });
