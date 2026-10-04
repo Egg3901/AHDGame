@@ -17,6 +17,9 @@ export interface ConstructionBuildClaim {
   proceedsLocal: number;
   termTurns: number;
   ratePercent: number;
+  /** Freeze the lender's approval policy and its noncash request before publication. */
+  approvalRequired?: boolean;
+  requestTransition?: BankingTransition;
   order: SectorBuildOrder;
   status: "awaiting_approval" | "funding" | "building" | "released" | "cancelled";
   escrowLocal: number;
@@ -26,7 +29,7 @@ export interface ConstructionBuildClaim {
 
 type Result<T> = { ok: true; value: T } | { ok: false; error: string };
 
-function validClaim(claim: ConstructionBuildClaim): boolean {
+export function isValidConstructionBuildClaim(claim: ConstructionBuildClaim): boolean {
   return (
     [claim.claimId, claim.loanId, claim.bankId, claim.borrowerId, claim.currency].every(
       (id) => typeof id === "string" && id.length > 0
@@ -71,7 +74,7 @@ export function constructionContributionTransition(input: {
   claim: ConstructionBuildClaim;
 }): Result<BankingTransition> {
   const { claim, sectorId, turn } = input;
-  if (!input.enabled || !validClaim(claim) || claim.status !== "funding")
+  if (!input.enabled || !isValidConstructionBuildClaim(claim) || claim.status !== "funding")
     return { ok: false, error: "Construction funding is unavailable" };
   const amount = claim.borrowerContributionLocal;
   if (amount <= 0) return { ok: false, error: "Construction contribution must be positive" };
@@ -134,7 +137,7 @@ export function constructionPaidBuildTransition(input: {
   const { claim, sectorId, turn } = input;
   if (
     !input.enabled ||
-    !validClaim(claim) ||
+    !isValidConstructionBuildClaim(claim) ||
     claim.status !== "funding" ||
     claim.borrowerContributionPaid !== true ||
     claim.loanFunded !== true ||
@@ -193,6 +196,7 @@ export function constructionPaidBuildTransition(input: {
               $set: {
                 buildQueue: [...input.queue, order],
                 "constructionFinancing.status": "building",
+                "constructionFinancing.order": order,
               },
             },
             note: "Publish the paid order in the same write as its escrow debit",
