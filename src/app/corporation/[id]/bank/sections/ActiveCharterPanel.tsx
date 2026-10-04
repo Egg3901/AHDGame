@@ -577,6 +577,7 @@ export function ActiveCharterPanel({
               borrowings={borrowingsFromCharter(charter)}
               propLeverage={data.outlook?.propLeverage ?? null}
               canMutate={canMutate}
+              forexFeesEnabled={data.bankPropForexFeesEnabled === true}
               onChanged={onChanged}
               showToast={showToast}
             />

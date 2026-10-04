@@ -1,6 +1,7 @@
 /** A prop trade exchanges bank cash and a marked noncash position under one journal receipt. */
 import { oid, type BankingTransition } from "./boundary";
 import type { PropPosition } from "@/lib/db/types/bank";
+import type { PropForexFeeReceipt, PropForexVolume } from "./propForexFees";
 
 export function propSettlementTransition(input: {
   bankId: string;
@@ -13,6 +14,8 @@ export function propSettlementTransition(input: {
   nextMark: number;
   nextRevision: number;
   now: Date;
+  forexFee?: PropForexFeeReceipt;
+  forexVolume?: PropForexVolume[];
 }): BankingTransition {
   const amount = Math.abs(input.cashDelta);
   const credit = input.cashDelta > 0;
@@ -27,7 +30,7 @@ export function propSettlementTransition(input: {
         ? [
             {
               kind: credit ? "mint" : "debit",
-              amount,
+              amount: credit ? amount + (input.forexFee?.feeLocal ?? 0) : amount,
               ...(!credit
                 ? { collection: "corporations", filter, path: "bankCharter.cashReserves" }
                 : {}),
@@ -35,7 +38,7 @@ export function propSettlementTransition(input: {
             },
             {
               kind: credit ? "credit" : "burn",
-              amount,
+              amount: credit ? amount : amount - (input.forexFee?.feeLocal ?? 0),
               ...(credit
                 ? { collection: "corporations", filter, path: "bankCharter.cashReserves" }
                 : {}),
@@ -43,6 +46,18 @@ export function propSettlementTransition(input: {
                 ? "Prop proceeds returned to bank cash"
                 : "Prop-book purchase reclassification",
             },
+            ...(input.forexFee?.feeLocal
+              ? [
+                  {
+                    kind: "credit" as const,
+                    amount: input.forexFee.feeLocal,
+                    collection: "corporations",
+                    filter,
+                    path: "bankPropForexFee.amountLocal",
+                    note: "Fund original forex fee escrow",
+                  },
+                ]
+              : []),
           ]
         : [],
     projections: [
@@ -56,6 +71,12 @@ export function propSettlementTransition(input: {
             "bankCharter.propBookMarkValue": input.nextMark,
             bankPropBookRevision: input.nextRevision,
             updatedAt: input.now,
+            ...(input.forexFee?.feeLocal
+              ? {
+                  bankPropForexFee: { ...input.forexFee, amountLocal: input.forexFee.feeLocal },
+                }
+              : {}),
+            ...(input.forexVolume ? { bankPropForexVolume: input.forexVolume } : {}),
           },
         },
         note: "Publish the settled prop position and revision",

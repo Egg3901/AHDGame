@@ -197,6 +197,12 @@ export interface Corporation {
   >;
   /** Monotonic generation for atomic proprietary book settlement. */
   bankPropBookRevision?: number;
+  /** Bank-level rolling forex volume survives charter replacement. */
+  bankPropForexVolume?: import("@/lib/banking/rules/propForexFees").PropForexVolume[];
+  /** Fees reserved with a prop trade, delivered from the original cash quote. */
+  bankPropForexFee?: import("@/lib/banking/rules/propForexFees").PropForexFeeReceipt & {
+    amountLocal: number;
+  };
   /**
    * Crash-recovery plan for an in-flight bank-charter transfer
    * (transferCharter.ts, issue #2014). Stamped on the absorbed shell before

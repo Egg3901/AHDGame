@@ -14,6 +14,7 @@
 
 import { migration as locRecoveryOwnerIndex } from "./entries/2026-09-30-loc-recovery-owner-index";
 import { migration as politicalMediaOrderIndexes } from "./entries/2026-10-04-political-media-order-indexes";
+import { migration as bankPropForexFeeIndex } from "./entries/2026-10-04-bank-prop-forex-fee-index";
 import { migration as supplyListingIndexes } from "./entries/2026-09-17-supply-listing-indexes";
 import { migration as ukDualMinistryRoleSlot } from "./entries/2026-09-17-uk-dual-ministry-role-slot";
 import { migration as electionResultSnapshots } from "./entries/2026-09-20-election-result-snapshots";
@@ -312,6 +313,7 @@ export const MIGRATIONS: Migration[] = [
   // these nodes for future spawns.
   backfillNppTechBaselines,
   locRecoveryOwnerIndex,
+  bankPropForexFeeIndex,
   // #2688: also in the startup allowlist; listed here so `npm run migrate`
   // reports it and `--only ... --force` can rerun it.
   longHorizonTelemetryIndexes,

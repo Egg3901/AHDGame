@@ -25,6 +25,9 @@ import { resolveFailedBankDepositors } from "@/lib/banking/insurance";
 import { revokeCharter } from "@/lib/banking/charter";
 import { countBankingEvent, recordBankingStage } from "@/lib/banking/telemetry";
 import { lifecycleStage } from "@/lib/banking/rules/lifecycle";
+import { recoverPropForexFees } from "./propForexFees";
+import { loadBankingPolicy } from "./policy";
+import type { BankingPolicySnapshot } from "./rules/policy";
 
 export interface BankingRecoverySummary {
   turn: number;
@@ -47,7 +50,8 @@ const MAX_RECORDS_PER_PASS = 200;
  */
 export async function recoverBankingSettlements(
   db: Db,
-  turn: number
+  turn: number,
+  preloadedPolicy?: BankingPolicySnapshot
 ): Promise<BankingRecoverySummary> {
   const started = Date.now();
   const summary: BankingRecoverySummary = {
@@ -57,6 +61,14 @@ export async function recoverBankingSettlements(
     estatesRecovered: [],
     estatesStillResolving: [],
   };
+  const policy = preloadedPolicy ?? (await loadBankingPolicy(db));
+  const unfinishedForexFees = policy.propForexFees ? await recoverPropForexFees(db, turn) : [];
+  for (const bankId of unfinishedForexFees)
+    summary.stillPartial.push({
+      key: `bank.prop.forex.fee:${bankId}`,
+      kind: "bank.prop.forex.fee",
+      error: "Funded forex fee still awaiting settlement",
+    });
 
   // Estates first: their settlements are resumed inside the resolution
   // itself, under the estate's own claim, and a record the estate owns must

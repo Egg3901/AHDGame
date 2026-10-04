@@ -19,6 +19,7 @@ export type ConsolePayload = {
   bankPropTradingEnabled: boolean;
   bankTreasuryEnabled?: boolean;
   bankTreasury?: BankTreasuryOverview | null;
+  bankPropForexFeesEnabled?: boolean;
   visible: boolean;
   isCeo: boolean;
   isAdmin: boolean;
