@@ -24,6 +24,12 @@ const COLLECTIONS_DIR = join(process.cwd(), "src/lib/db/collections");
  * module declares must carry a manifest classification.
  */
 describe("seed manifest classification coverage", () => {
+  it("clears population receipts and frozen projections on reset", () => {
+    for (const name of ["demographicFlowReceipts", "demographicFlowProjections"]) {
+      expect(getCollectionCategory(name)).toBe("runtime");
+      expect(getRuntimeCollectionNames()).toContain(name);
+    }
+  });
   it("wipes funded bank-failure receipts with the world they belong to", () => {
     expect(getCollectionCategory("bankFailurePoliticalEvents")).toBe("runtime");
     expect(getRuntimeCollectionNames()).toContain("bankFailurePoliticalEvents");

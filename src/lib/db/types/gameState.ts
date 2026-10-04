@@ -73,6 +73,10 @@ export interface IterationStampFields {
 }
 
 export interface GameState {
+  /** Unique world identity for replay receipts; replaced on each reset. */
+  worldEpochId?: string;
+  /** Written before journal-enabled population planning, distinguishing legacy crash recovery. */
+  demographicFlowAttempt?: { worldEpochId: string; turn: number };
   /**
    * Snapshot of media regulation gates used by legislation endpoints that
    * already read this document. Admin market configuration keeps it current so

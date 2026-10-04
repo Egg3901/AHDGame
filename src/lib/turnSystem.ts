@@ -50,6 +50,7 @@ import {
 } from "@/lib/observability/mongoRoundTrips";
 import { createTurnPhaseRuntime } from "@/simulation/engine/turnPhaseRuntime";
 import { buildTurnExecutionContext } from "@/simulation/engine/turnExecutionContext";
+import { recoverDemographicFlowsBeforeContext } from "@/lib/demographics/recoverFlows";
 import { getTurnPhaseRegistry } from "@/simulation/phases/turnPhaseRegistry";
 import { runWithLedgerTurn } from "@/lib/ledger/ledgerTurn";
 import { getSimTurnPhasePredicate } from "@/simulation/phases/simTurnProfiles";
@@ -92,6 +93,7 @@ export async function initializeGameState(): Promise<GameState> {
 
   const initialState: GameState = {
     _id: "current",
+    worldEpochId: new ObjectId().toHexString(),
     currentTurn: 1,
     currentYear: STARTING_YEAR,
     // Always pair `startingYear` with the matching `preset`. Writing only
@@ -491,6 +493,10 @@ async function processTurnImpl(
     gameState.currentTurn = repairedClock.currentTurn;
     gameState.currentYear = repairedClock.currentYear;
     gameState.lastTurnProcessed = repairedClock.lastTurnProcessed;
+
+    // Population vectors, totals and readouts can land in separate writes.
+    // Repair their frozen receipt before any resumed phase reads the context.
+    await recoverDemographicFlowsBeforeContext(db, gameState, resumedFromCrash?.appliedPhases);
 
     const config = await db.collection<GameConfig>("gameConfig").findOne({ _id: "default" });
     const phaseStatuses = createInitialTurnPhaseStatuses();

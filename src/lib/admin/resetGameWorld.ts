@@ -1,5 +1,5 @@
 import { resolveStartingPartiesMode, type StartingPartiesMode } from "./startingParties";
-import { MongoServerError, type Db } from "mongodb";
+import { MongoServerError, ObjectId, type Db } from "mongodb";
 import type { Character, GameState, User } from "@/lib/db/types";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
 import { getStartingYearForPreset } from "@/lib/constants/turnTime";
@@ -436,6 +436,7 @@ export async function resetGameWorld(
   const resetDate = resolveResetStartDate(preset, options.startDate);
   const { startingYear } = resetDate;
   const gameStateUpdate: Record<string, unknown> = {
+    worldEpochId: new ObjectId().toHexString(),
     currentTurn: resetDate.currentTurn,
     currentYear: resetDate.currentYear,
     resetStartDate: { year: resetDate.year, week: resetDate.week },
@@ -468,6 +469,7 @@ export async function resetGameWorld(
   // start while active) and flag the founding phase. A normal reset clears any
   // stale flag from a prior world so the calendar/schedule behave normally.
   const gameStateUnset: Record<string, ""> = { ...STALE_PROGRESS_GAME_STATE_UNSET };
+  gameStateUnset.demographicFlowAttempt = "";
   gameStateUpdate.preIterationTurns = 0;
   if (preIteration) {
     gameStateUpdate.preIteration = { active: true, startedTurn: 1 };

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { initializeGameState } from "./turnSystem";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 
@@ -33,7 +34,6 @@ describe("initializeGameState", () => {
   });
 
   it("bakes both startingYear and preset on the new gameState doc", async () => {
-    const { initializeGameState } = await import("./turnSystem");
     await initializeGameState();
 
     expect(insertedDoc).not.toBeNull();
@@ -43,10 +43,10 @@ describe("initializeGameState", () => {
       startingYear: 2019,
       preset: "2019-default",
     });
+    expect(insertedDoc?.worldEpochId).toMatch(/^[a-f0-9]{24}$/);
   }, 30000);
 
   it("bakes the production-default feature flags into a fresh world", async () => {
-    const { initializeGameState } = await import("./turnSystem");
     await initializeGameState();
 
     expect(insertedDoc).toMatchObject({
@@ -93,7 +93,6 @@ describe("initializeGameState", () => {
       preset: "1991-default",
       currentTurn: 100,
     };
-    const { initializeGameState } = await import("./turnSystem");
     const result = await initializeGameState();
 
     expect(insertedDoc).toBeNull();
