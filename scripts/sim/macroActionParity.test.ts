@@ -167,9 +167,21 @@ describe("macro player/NPP action parity fixture", () => {
     });
     const sectorOps = playerTurn.sectorWrites.flat();
     expect(sectorOps).toHaveLength(1);
-    expect(sectorOps[0]).toMatchObject({
-      updateOne: { update: { $inc: { capitalStock: 0.05 } } },
+    const rawCapacityDelta = (sectorOps[0] as { updateOne: { update: unknown } }).updateOne.update;
+    expect(Array.isArray(rawCapacityDelta)).toBe(true);
+    if (!Array.isArray(rawCapacityDelta)) throw new Error("Expected plant capacity pipeline");
+    const capacityDelta = rawCapacityDelta as Array<Record<string, unknown>>;
+    expect(capacityDelta).toHaveLength(2);
+    expect(capacityDelta[0]).toEqual({
+      $set: {
+        capitalStock: {
+          $max: [0, { $add: [{ $ifNull: ["$capitalStock", 0] }, 0.05] }],
+        },
+      },
     });
+    expect(capacityDelta[1]?.$set).toMatchObject({ capacityBookAnchor: 1036 });
+    expect(capacityDelta[1]?.$set).toHaveProperty("plantCount");
+    expect(capacityDelta[1]?.$set).toHaveProperty("plantUnitRemainder");
     for (const ops of [playerTurn.sectorWrites, nppTurn.sectorWrites]) {
       for (const op of ops.flat()) {
         const update = (op as { updateOne: { update: Record<string, Record<string, unknown>> } })
