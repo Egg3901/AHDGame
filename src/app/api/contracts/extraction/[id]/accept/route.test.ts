@@ -5,7 +5,8 @@ import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/api/requireAuth", () => ({ requireBasicAuth: vi.fn() }));
-vi.mock("@/lib/extraction/featureFlag", () => ({ isContractIssuanceEnabled: vi.fn() }));
+vi.mock("@/lib/extraction/featureFlag", () => ({ loadContractIssuanceSettings: vi.fn() }));
+vi.mock("@/lib/audit/recordAudit", () => ({ recordAudit: vi.fn() }));
 vi.mock("@/lib/currentTurn", () => ({ getCurrentTurn: vi.fn().mockResolvedValue(100) }));
 vi.mock("@/lib/api/corporations/resolveQuery", () => ({
   resolveCorporation: vi.fn(),
@@ -43,8 +44,11 @@ describe("POST /api/contracts/extraction/[id]/accept", () => {
       user: { userId: new ObjectId().toString() },
     } as never);
 
-    const { isContractIssuanceEnabled } = await import("@/lib/extraction/featureFlag");
-    vi.mocked(isContractIssuanceEnabled).mockResolvedValue(true);
+    const { loadContractIssuanceSettings } = await import("@/lib/extraction/featureFlag");
+    vi.mocked(loadContractIssuanceSettings).mockResolvedValue({
+      contractIssuanceEnabled: true,
+      treasuryCashLedgerEnabled: false,
+    });
 
     db.collectionMocks.extractionContracts.findOne.mockResolvedValue({
       _id: CONTRACT_ID,
@@ -70,8 +74,11 @@ describe("POST /api/contracts/extraction/[id]/accept", () => {
   });
 
   it("returns 403 when contract issuance is disabled", async () => {
-    const { isContractIssuanceEnabled } = await import("@/lib/extraction/featureFlag");
-    vi.mocked(isContractIssuanceEnabled).mockResolvedValue(false);
+    const { loadContractIssuanceSettings } = await import("@/lib/extraction/featureFlag");
+    vi.mocked(loadContractIssuanceSettings).mockResolvedValue({
+      contractIssuanceEnabled: false,
+      treasuryCashLedgerEnabled: false,
+    });
     const res = await callAccept();
     expect(res.status).toBe(403);
   });

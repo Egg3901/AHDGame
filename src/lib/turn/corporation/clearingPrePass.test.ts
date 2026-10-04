@@ -522,7 +522,7 @@ describe("runClearingPrePass with clearing enabled", () => {
         6
       );
       expect(offered?.projectSoldUnitsByCommodity?.vehicles).toBeCloseTo(
-        productUnits * (offered?.soldByCommodity.vehicles ?? 0),
+        productUnits * (offered?.soldByCommodity?.vehicles ?? 0),
         6
       );
       expect(producedByCorpCommodity.get("corp1")?.get("vehicles")).toBeCloseTo(200, 6);

@@ -172,7 +172,11 @@ describe("commitSettlementPlay", () => {
     // so borrowing is modelled rather than refused.
     const { spendFromTreasury } = await import("@/lib/budget/treasurySpend");
     expect(vi.mocked(spendFromTreasury)).toHaveBeenCalledWith(expect.anything(), "DD", 45_000_000, {
-      witness: { flow: "settlement_play", site: "settlement/commitPlay" },
+      witness: {
+        flow: "settlement_play",
+        site: "settlement/commitPlay",
+        key: "settlement-play:aid:DD",
+      },
     });
     expect(prime(db, "settlementCrises").updateOne).toHaveBeenCalled();
     expect(prime(db, "settlementPlays").insertOne).toHaveBeenCalled();
@@ -553,7 +557,13 @@ describe("commitSettlementPlay", () => {
         expect.anything(),
         "DD",
         45_000_000,
-        { witness: { flow: "settlement_play", site: "settlement/commitPlay" } }
+        {
+          witness: {
+            flow: "settlement_play",
+            site: "settlement/commitPlay",
+            key: "settlement-play:aid:DD",
+          },
+        }
       );
     });
 

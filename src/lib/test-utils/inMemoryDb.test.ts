@@ -4,6 +4,46 @@ import { plantCapacityDeltaPipeline } from "@/lib/corporations/plantLedger";
 import { plantSizeUnits } from "@/lib/constants/facilityQuantum";
 
 describe("inMemoryDb document paths", () => {
+  it("upserts a capacity pipeline and replays it against the same identity", async () => {
+    const db = createInMemoryDb();
+    const filter = { stateId: "US-CA", sectorType: "manufacturing", mediaDiscriminator: null };
+    const pipeline = [
+      { $set: { headroom: { $max: [0, { $subtract: [{ $ifNull: ["$headroom", 100] }, 20] }] } } },
+      { $set: { revenue: { $multiply: ["$headroom", 10] } } },
+    ];
+    const collection = db.collection("pools");
+    expect(await collection.updateOne(filter, pipeline, { upsert: true })).toMatchObject({
+      matchedCount: 0,
+      upsertedCount: 1,
+    });
+    expect(await collection.findOne(filter)).toMatchObject({
+      ...filter,
+      headroom: 80,
+      revenue: 800,
+    });
+    expect(await collection.updateOne(filter, pipeline, { upsert: true })).toMatchObject({
+      matchedCount: 1,
+      upsertedCount: 0,
+    });
+    expect(await collection.findOne(filter)).toMatchObject({ headroom: 60, revenue: 600 });
+    expect(collection.docs).toHaveLength(1);
+  });
+
+  it("evaluates each pipeline stage from its input for findOneAndUpdate upserts", async () => {
+    const db = createInMemoryDb();
+    const result = await db
+      .collection("pools")
+      .findOneAndUpdate(
+        { _id: "pool", stock: 10 },
+        [
+          { $set: { stock: { $subtract: ["$stock", 3] }, openingStock: "$stock" } },
+          { $set: { closingStock: "$stock" } },
+        ],
+        { upsert: true, returnDocument: "after" }
+      );
+    expect(result).toEqual({ _id: "pool", stock: 7, openingStock: 10, closingStock: 7 });
+  });
+
   it("applies real capacity pipelines and derives the ledger from the updated stock", async () => {
     const db = createInMemoryDb();
     const quantum = plantSizeUnits("manufacturing");
@@ -203,6 +243,17 @@ describe("inMemoryDb — driver surface used by bootstrapGameWorld", () => {
   it("indexes() resolves to an array so callers can .catch()", async () => {
     const db = createInMemoryDb();
     await expect(db.collection("crises").indexes()).resolves.toEqual([]);
+  });
+
+  it("reports Mongo IndexNotFound metadata when a migration drops an absent index", async () => {
+    const db = createInMemoryDb();
+    await expect(db.collection("sectors").dropIndex("legacy_identity")).rejects.toMatchObject({
+      code: 27,
+      codeName: "IndexNotFound",
+    });
+    await db.collection("sectors").createIndex({ stateId: 1 }, { name: "legacy_identity" });
+    await expect(db.collection("sectors").dropIndex("legacy_identity")).resolves.toBeUndefined();
+    expect(await db.collection("sectors").indexes()).toEqual([]);
   });
 
   it("find() cursor is async-iterable", async () => {

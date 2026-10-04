@@ -22,7 +22,11 @@ import {
   assertUniqueCorporationSequentialIds,
   findDuplicateCorporationSequentialIds,
 } from "./assertUniqueCorporationIds";
-import { seedCoreIndexes } from "./core";
+import {
+  CORPORATE_SECTOR_IDENTITY_INDEX_KEY,
+  CORPORATE_SECTOR_IDENTITY_INDEX_NAME,
+  seedCoreIndexes,
+} from "./core";
 
 // The seven duplicate groups from the issue #2028 report: identifiers
 // 900009 through 900016 reused across country/type seed sources.
@@ -48,7 +52,14 @@ function mockDb(corps: unknown[], createIndexImpl?: () => Promise<string>) {
   const createIndex = vi.fn().mockImplementation(createIndexImpl ?? (async () => "ok"));
   const db = {
     collection: vi.fn(() => ({
-      indexes: vi.fn().mockResolvedValue([{ key: { _id: 1 }, name: "_id_" }]),
+      indexes: vi.fn().mockResolvedValue([
+        { key: { _id: 1 }, name: "_id_" },
+        {
+          key: CORPORATE_SECTOR_IDENTITY_INDEX_KEY,
+          name: CORPORATE_SECTOR_IDENTITY_INDEX_NAME,
+          unique: true,
+        },
+      ]),
       find: vi.fn(() => ({ toArray: vi.fn().mockResolvedValue(corps) })),
       createIndex,
     })),
@@ -168,6 +179,11 @@ describe("seedCoreIndexes corporation guard (issue #2028)", () => {
         indexes: vi.fn().mockResolvedValue([
           { key: { _id: 1 }, name: "_id_" },
           { key: { sequentialId: 1 }, name: "legacy_corps_seq", unique: true },
+          {
+            key: CORPORATE_SECTOR_IDENTITY_INDEX_KEY,
+            name: CORPORATE_SECTOR_IDENTITY_INDEX_NAME,
+            unique: true,
+          },
         ]),
         find: vi.fn(() => ({ toArray: vi.fn().mockResolvedValue([]) })),
         createIndex,
@@ -187,7 +203,14 @@ describe("seedCoreIndexes corporation guard (issue #2028)", () => {
     });
     const db = {
       collection: vi.fn(() => ({
-        indexes: vi.fn().mockResolvedValue([{ key: { _id: 1 }, name: "_id_" }]),
+        indexes: vi.fn().mockResolvedValue([
+          { key: { _id: 1 }, name: "_id_" },
+          {
+            key: CORPORATE_SECTOR_IDENTITY_INDEX_KEY,
+            name: CORPORATE_SECTOR_IDENTITY_INDEX_NAME,
+            unique: true,
+          },
+        ]),
         find: vi.fn(() => ({ toArray: vi.fn().mockResolvedValue([]) })),
         createIndex,
       })),

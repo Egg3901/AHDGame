@@ -12,6 +12,7 @@ import type { DisasterEffectEntry } from "@/lib/crises/disasterMarginPenalty";
 // ── Same mocks as the main sectorCalculations.test.ts ──────────────────────
 
 vi.mock("@/lib/bonds/corporateCredit", () => ({
+  corporateCashArrearsAnchor: vi.fn().mockReturnValue(0),
   sumCorporateSectorConstructionInProgress: vi.fn().mockReturnValue(0),
   computeCorporateCreditAtTurn: vi.fn().mockReturnValue({
     creditRating: { rating: "BBB", compositeScore: 50 },

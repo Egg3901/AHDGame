@@ -43,6 +43,7 @@ vi.mock("@/lib/countryAccess", () => ({
 }));
 
 vi.mock("@/lib/bonds/corporateCredit", () => ({
+  corporateCashArrearsAnchor: vi.fn().mockReturnValue(0),
   sumCorporateSectorConstructionInProgress: vi.fn().mockReturnValue(0),
   computeCorporateCreditAtTurn: vi.fn().mockReturnValue({
     creditRating: { rating: "BBB", compositeScore: 50 },

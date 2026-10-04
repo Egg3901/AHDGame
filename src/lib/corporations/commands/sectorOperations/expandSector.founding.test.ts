@@ -14,7 +14,6 @@ import {
   getNationalDominanceGrowthCostMultiplier,
 } from "@/lib/constants/corporations";
 import { foundingStarterUnits, sectorEntryFeeAnchor } from "@/lib/corporations/foundingPlant";
-import { expandSector } from "./expandSector";
 
 /**
  * P3b: founding a sector under plants is a FIRST BUILD.

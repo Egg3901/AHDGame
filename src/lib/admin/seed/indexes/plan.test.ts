@@ -9,6 +9,11 @@ describe("collectSeedIndexPlan (#2699)", () => {
     const names = new Set(plan.map((entry) => entry.options.name));
     expect(names.has("macroTelemetry_world_country_region_metric_turn_unique")).toBe(true);
     expect(names.has("financialTxLog_counterpartyId_id")).toBe(true);
+    expect(
+      plan.filter(
+        (entry) => entry.options.name === "corporateSectors_corporation_state_type_models_unique"
+      )
+    ).toHaveLength(1);
     expect(plan.some(isTextIndex)).toBe(true);
     expect(plan.some(isTtlIndex)).toBe(true);
   });
