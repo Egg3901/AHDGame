@@ -1206,6 +1206,7 @@ export interface SectorPlantsSection {
     taxRatePercent: number;
     freightNetCostDailyAnchor?: number;
     inventoryRevenueDailyAnchor?: number;
+    bondReference?: import("@/lib/corporations/investment/rules").InvestmentBondReference | null;
   };
   buildQuote: {
     /** Base ₳ per unit at this era, before the multipliers below. */
