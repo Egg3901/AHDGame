@@ -171,7 +171,11 @@ describe("buildCapacity — build", () => {
     await buildCapacity(request({ action: "build", units: 1_000 }), { params });
 
     const call = db.collectionMocks.unownedSectors.updateOne.mock.calls[0];
-    expect(call[0]).toEqual({ stateId: "US-CA", sectorType: "manufacturing" });
+    expect(call[0]).toEqual({
+      stateId: "US-CA",
+      sectorType: "manufacturing",
+      industryModel: null,
+    });
     expect(call[2]).toEqual({ upsert: true });
     // Negative delta, clamped so a pool smaller than the order cannot go under.
     expect(JSON.stringify(poolPipeline()[0].$set.headroomUnits)).toContain("-1000");
