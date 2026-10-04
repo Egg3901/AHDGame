@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getDb } from "@/lib/mongodb";
+import { getDb, getMongoClient } from "@/lib/mongodb";
+import { runTransactionWithSessionRetry } from "@/lib/db/transactionWithRetry";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
@@ -57,6 +58,8 @@ interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
+class RelocationUnderwritingLeaseConflict extends Error {}
+
 /**
  * POST /api/corporations/[id]/relocate
  * Relocate corporation HQ. CEO only. Cost 7% of market cap in-country,
@@ -93,6 +96,13 @@ export async function relocateHeadquarters(request: Request, { params }: RoutePa
     const resolved = await resolveCorporation(db, id);
     if (!resolved.ok) return resolved.response;
     const { corporation } = resolved;
+
+    if (corporation.primaryUnderwritingIncomingFunding || corporation.bankUnderwritingFunding) {
+      return NextResponse.json(
+        { error: "Primary underwriting cash is settling; retry relocation after settlement" },
+        { status: 409 }
+      );
+    }
 
     const propertySectors = await db
       .collection<CorporateSector>("corporateSectors")
@@ -366,14 +376,24 @@ export async function relocateHeadquarters(request: Request, { params }: RoutePa
           workingFxRate
         );
 
-        await db.collection<Corporation>("corporations").updateOne(
-          { _id: workingCorp._id },
+        const updateResult = await db.collection<Corporation>("corporations").updateOne(
+          {
+            _id: workingCorp._id,
+            primaryUnderwritingIncomingFunding: { $exists: false },
+            bankUnderwritingFunding: { $exists: false },
+          },
           {
             $set: baseCorpSet,
             ...(ceoVacated ? { $unset: { ceoId: "", userId: "" } } : {}),
             $inc: { liquidCapital: -relocationInCorpCapital },
           }
         );
+        if (updateResult.matchedCount !== 1) {
+          return NextResponse.json(
+            { error: "Primary underwriting cash is settling; retry relocation after settlement" },
+            { status: 409 }
+          );
+        }
 
         // Route the cross-currency relocation spread (old → new currency).
         if (relocationSpreadAnchor > 0 && oldCurrency && newCurrency) {
@@ -427,30 +447,65 @@ export async function relocateHeadquarters(request: Request, { params }: RoutePa
       if (!bondPreflight) {
         return NextResponse.json({ error: "Internal bond-path error" }, { status: 500 });
       }
-      const bondResult = await issueRelocationBond(
-        db,
-        workingCorp,
-        relocationCost,
-        currentTurn,
-        bondPreflight,
-        fxByCurrency
-      );
-      if (!bondResult.ok) return bondResult.response;
-      const { bondFaceValue, couponRate, creditRating } = bondResult.data;
+      const bondCommit = await runTransactionWithSessionRetry(getMongoClient, async (session) => {
+        if (!session) return { status: "transactions_unavailable" as const };
+        const leaseFreeFilter = {
+          _id: workingCorp._id,
+          primaryUnderwritingIncomingFunding: { $exists: false },
+          bankUnderwritingFunding: { $exists: false },
+        };
+        const leaseFree = await db
+          .collection<Corporation>("corporations")
+          .findOne(leaseFreeFilter, { projection: { _id: 1 }, session });
+        if (!leaseFree) return { status: "underwriting_busy" as const };
 
-      const netDeltaInCorpCapital = anchorToCorpLiquidCapital(
-        bondFaceValue - relocationCost,
-        workingCorp,
-        workingFxRate
-      );
-      await db.collection<Corporation>("corporations").updateOne(
-        { _id: workingCorp._id },
-        {
-          $set: baseCorpSet,
-          ...(ceoVacated ? { $unset: { ceoId: "", userId: "" } } : {}),
-          $inc: { liquidCapital: netDeltaInCorpCapital },
+        const bondResult = await issueRelocationBond(
+          db,
+          workingCorp,
+          relocationCost,
+          currentTurn,
+          bondPreflight,
+          fxByCurrency,
+          session
+        );
+        if (!bondResult.ok)
+          return { status: "bond_refused" as const, response: bondResult.response };
+        const netDeltaInCorpCapital = anchorToCorpLiquidCapital(
+          bondResult.data.bondFaceValue - relocationCost,
+          workingCorp,
+          workingFxRate
+        );
+        const updateResult = await db.collection<Corporation>("corporations").updateOne(
+          leaseFreeFilter,
+          {
+            $set: baseCorpSet,
+            ...(ceoVacated ? { $unset: { ceoId: "", userId: "" } } : {}),
+            $inc: { liquidCapital: netDeltaInCorpCapital },
+          },
+          { session }
+        );
+        if (updateResult.matchedCount !== 1) throw new RelocationUnderwritingLeaseConflict();
+        return { status: "committed" as const, data: bondResult.data };
+      }).catch((error: unknown) => {
+        if (error instanceof RelocationUnderwritingLeaseConflict) {
+          return { status: "underwriting_busy" as const };
         }
-      );
+        throw error;
+      });
+      if (bondCommit.status === "transactions_unavailable") {
+        return NextResponse.json(
+          { error: "Bond relocation requires atomic database transactions; try again later" },
+          { status: 503 }
+        );
+      }
+      if (bondCommit.status === "underwriting_busy") {
+        return NextResponse.json(
+          { error: "Primary underwriting cash is settling; retry relocation after settlement" },
+          { status: 409 }
+        );
+      }
+      if (bondCommit.status === "bond_refused") return bondCommit.response;
+      const { bondFaceValue, couponRate, creditRating } = bondCommit.data;
 
       if (ceoVacated && corporation.ceoId) {
         await closeCeoTenure(db, workingCorp._id, {

@@ -1,15 +1,78 @@
 import { ObjectId, type Db } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import type { PrimaryUnderwritingOffer } from "./underwritingTypes";
+import {
+  capturePrimaryUnderwritingCurrencySnapshot,
+  type PrimaryUnderwritingCurrencySnapshot,
+  type PrimaryUnderwritingOffer,
+} from "./underwritingTypes";
 import { quotePrimaryUnderwritingFee } from "./rules/underwriting";
 import { MONEY_MOVE_COLLECTION } from "./moneyMove";
 import { resumeSettlement, settleTransition, type SettlementResult } from "./settlementJournal";
 import { oid, type BankingTransition, type TransitionProjection } from "./rules/boundary";
 
+function recipientCurrencySnapshotFilter(
+  snapshot: PrimaryUnderwritingCurrencySnapshot
+): Record<string, unknown> {
+  const exactField = (present: boolean, value: string | null | undefined) =>
+    present ? { $exists: true, $eq: value } : { $exists: false };
+  return {
+    liquidCurrencyCode: exactField(snapshot.liquidCurrencyCodePresent, snapshot.liquidCurrencyCode),
+    countryId: exactField(snapshot.countryIdPresent, snapshot.countryId),
+  };
+}
+
+function sameCurrencySnapshot(
+  left: PrimaryUnderwritingCurrencySnapshot | null,
+  right: PrimaryUnderwritingCurrencySnapshot
+): boolean {
+  return (
+    left !== null &&
+    left.currencyCode === right.currencyCode &&
+    left.liquidCurrencyCodePresent === right.liquidCurrencyCodePresent &&
+    (!left.liquidCurrencyCodePresent || left.liquidCurrencyCode === right.liquidCurrencyCode) &&
+    left.countryIdPresent === right.countryIdPresent &&
+    (!left.countryIdPresent || left.countryId === right.countryId)
+  );
+}
+
+async function acquireIssuerUnderwritingReceiptLease(
+  db: Db,
+  issuerId: ObjectId,
+  key: string,
+  offer: PrimaryUnderwritingOffer,
+  turn: number,
+  now: Date
+): Promise<boolean> {
+  const corporations = db.collection<Corporation>("corporations");
+  const acquired = await corporations.updateOne(
+    {
+      _id: issuerId,
+      ...recipientCurrencySnapshotFilter(offer.issuerCurrencySnapshot),
+      primaryUnderwritingIncomingFunding: { $exists: false },
+    },
+    {
+      $set: {
+        primaryUnderwritingIncomingFunding: {
+          key,
+          currencySnapshot: offer.issuerCurrencySnapshot,
+          turn,
+        },
+        updatedAt: now,
+      },
+    }
+  );
+  if (acquired.matchedCount === 1) return true;
+  const current = await corporations.findOne(
+    { _id: issuerId, "primaryUnderwritingIncomingFunding.key": key },
+    { projection: { _id: 1 } }
+  );
+  return current !== null;
+}
+
 export interface PrimaryUnderwritingFillInput {
-  bank: Pick<Corporation, "_id" | "name" | "bankCharter">;
-  issuer: Pick<Corporation, "_id" | "name">;
+  bank: Pick<Corporation, "_id" | "name" | "countryId" | "liquidCurrencyCode" | "bankCharter">;
+  issuer: Pick<Corporation, "_id" | "name" | "countryId" | "liquidCurrencyCode">;
   issuerCurrencyCode: CurrencyCode;
   offer: PrimaryUnderwritingOffer;
   instrumentId: ObjectId;
@@ -44,8 +107,50 @@ export async function resumeFoundingUnderwritingPlans(
     .find({ "foundingIpoUnderwritingPending.offer.instrumentId": { $exists: true } })
     .sort({ foundedAtTurn: 1 })
     .limit(50)
+    .project<
+      Pick<
+        Corporation,
+        | "_id"
+        | "name"
+        | "countryId"
+        | "liquidCurrencyCode"
+        | "foundedAtTurn"
+        | "foundingIpoUnderwritingPending"
+      >
+    >({
+      _id: 1,
+      name: 1,
+      countryId: 1,
+      liquidCurrencyCode: 1,
+      foundedAtTurn: 1,
+      foundingIpoUnderwritingPending: 1,
+    })
     .toArray();
   const result = { completed: 0, pending: 0, aborted: 0 };
+  const bankIds = [
+    ...new Map(
+      issuers
+        .map((issuer) => issuer.foundingIpoUnderwritingPending?.offer.bankCorporationId)
+        .filter((id): id is ObjectId => id instanceof ObjectId)
+        .map((id) => [id.toHexString(), id])
+    ).values(),
+  ];
+  const banks =
+    bankIds.length === 0
+      ? []
+      : await corporations
+          .find({ _id: { $in: bankIds } })
+          .project<
+            Pick<Corporation, "_id" | "name" | "countryId" | "liquidCurrencyCode" | "bankCharter">
+          >({
+            _id: 1,
+            name: 1,
+            countryId: 1,
+            liquidCurrencyCode: 1,
+            bankCharter: 1,
+          })
+          .toArray();
+  const bankById = new Map(banks.map((bank) => [bank._id.toHexString(), bank]));
   for (const issuer of issuers) {
     const pending = issuer.foundingIpoUnderwritingPending;
     if (!pending) continue;
@@ -61,10 +166,7 @@ export async function resumeFoundingUnderwritingPlans(
       continue;
     }
 
-    const bank = await corporations.findOne(
-      { _id: offer.bankCorporationId },
-      { projection: { _id: 1, name: 1, bankCharter: 1 } }
-    );
+    const bank = bankById.get(offer.bankCorporationId.toHexString());
     if (!bank) {
       await corporations.updateOne(
         {
@@ -78,7 +180,12 @@ export async function resumeFoundingUnderwritingPlans(
     }
     const settled = await settlePrimaryUnderwritingFill(db, {
       bank,
-      issuer: { _id: issuer._id, name: issuer.name },
+      issuer: {
+        _id: issuer._id,
+        name: issuer.name,
+        countryId: issuer.countryId,
+        liquidCurrencyCode: issuer.liquidCurrencyCode,
+      },
       issuerCurrencyCode: offer.currencyCode,
       offer,
       instrumentId: offer.instrumentId,
@@ -108,6 +215,97 @@ export async function resumeFoundingUnderwritingPlans(
   return result;
 }
 
+/** Resume durable funded-buildup leases even when the feature flag was disabled. */
+export async function resumePrimaryUnderwritingLeases(
+  db: Db,
+  turn: number
+): Promise<Array<{ key: string; error?: string }>> {
+  const corporations = db.collection<Corporation>("corporations");
+  const banks = await corporations
+    .find({ "bankUnderwritingFunding.turn": { $lt: turn } })
+    .sort({ "bankUnderwritingFunding.turn": 1 })
+    .limit(200)
+    .project<
+      Pick<
+        Corporation,
+        | "_id"
+        | "name"
+        | "countryId"
+        | "liquidCurrencyCode"
+        | "bankCharter"
+        | "bankUnderwritingFunding"
+      >
+    >({
+      _id: 1,
+      name: 1,
+      countryId: 1,
+      liquidCurrencyCode: 1,
+      bankCharter: 1,
+      bankUnderwritingFunding: 1,
+    })
+    .toArray();
+  if (banks.length === 0) return [];
+  const issuerIds = [
+    ...new Map(
+      banks
+        .map((bank) => bank.bankUnderwritingFunding?.issuerCorporationId)
+        .filter((id): id is ObjectId => id instanceof ObjectId)
+        .map((id) => [id.toHexString(), id])
+    ).values(),
+  ];
+  const issuers = await corporations
+    .find({ _id: { $in: issuerIds } })
+    .project<Pick<Corporation, "_id" | "name" | "countryId" | "liquidCurrencyCode">>({
+      _id: 1,
+      name: 1,
+      countryId: 1,
+      liquidCurrencyCode: 1,
+    })
+    .toArray();
+  const issuerById = new Map(issuers.map((issuer) => [issuer._id.toHexString(), issuer]));
+  const resumed: Array<{ key: string; error?: string }> = [];
+  for (const bank of banks) {
+    const lease = bank.bankUnderwritingFunding;
+    if (!lease) continue;
+    const issuer = issuerById.get(lease.issuerCorporationId.toHexString());
+    if (!issuer || !bank.bankCharter || !lease.instrumentId) {
+      resumed.push({ key: lease.key, error: "Underwriting lease lost a required party or term" });
+      continue;
+    }
+    try {
+      const result = await settlePrimaryUnderwritingFill(db, {
+        bank: {
+          _id: bank._id,
+          name: bank.name,
+          countryId: bank.countryId,
+          liquidCurrencyCode: bank.liquidCurrencyCode,
+          bankCharter: bank.bankCharter,
+        },
+        issuer,
+        issuerCurrencyCode: lease.currencyCode,
+        offer: lease.offer,
+        instrumentId: lease.instrumentId,
+        grossPlacedLocal: lease.grossLocal,
+        turn: lease.turn,
+        now: new Date(),
+        poolCollection: lease.poolCollection,
+        instrumentProjection: lease.instrumentProjection,
+      });
+      if (result.status !== "applied" && result.status !== "replayed") {
+        resumed.push({ key: lease.key, error: result.error ?? `settlement ${result.status}` });
+      } else {
+        resumed.push({ key: lease.key });
+      }
+    } catch (error) {
+      resumed.push({
+        key: lease.key,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  return resumed;
+}
+
 /**
  * Fund one actual fill as a single journaled cash move. The parent corporation
  * lease outlives a replaceable charter and remains held until the final ACK.
@@ -127,11 +325,19 @@ export async function settlePrimaryUnderwritingFill(
     grossPlacedLocal: input.grossPlacedLocal,
     feeRate: offer.feeRate,
   });
+  const issuerSnapshot = capturePrimaryUnderwritingCurrencySnapshot(issuer);
+  const bankSnapshot = capturePrimaryUnderwritingCurrencySnapshot(bank);
   if (
     quote.grossPlacedLocal <= 0 ||
     !bank._id.equals(offer.bankCorporationId) ||
     !issuer._id.equals(offer.issuerCorporationId) ||
     input.issuerCurrencyCode !== offer.currencyCode ||
+    offer.issuerCurrencySnapshot.currencyCode !== offer.currencyCode ||
+    offer.bankCurrencySnapshot.currencyCode !== offer.currencyCode ||
+    !issuerSnapshot ||
+    !bankSnapshot ||
+    !sameCurrencySnapshot(issuerSnapshot, offer.issuerCurrencySnapshot) ||
+    !sameCurrencySnapshot(bankSnapshot, offer.bankCurrencySnapshot) ||
     issuer._id.equals(bank._id) ||
     !bank.bankCharter ||
     bank.bankCharter.status !== "active" ||
@@ -169,6 +375,7 @@ export async function settlePrimaryUnderwritingFill(
   const acquired = await corporations.updateOne(
     {
       _id: bank._id,
+      ...recipientCurrencySnapshotFilter(offer.bankCurrencySnapshot),
       "bankCharter.status": "active",
       "bankCharter.resolutionClaimedTurn": { $exists: false },
       bankCharterTransfer: { $exists: false },
@@ -209,6 +416,29 @@ export async function settlePrimaryUnderwritingFill(
     }
   }
 
+  const issuerLeaseAcquired = await acquireIssuerUnderwritingReceiptLease(
+    db,
+    issuer._id,
+    key,
+    frozenLease.offer,
+    frozenLease.turn,
+    now
+  );
+  if (!issuerLeaseAcquired) {
+    await corporations.updateOne(
+      { _id: bank._id, "bankUnderwritingFunding.key": key },
+      { $unset: { bankUnderwritingFunding: "" }, $set: { updatedAt: now } }
+    );
+    return {
+      status: "rejected",
+      key,
+      appliedLegs: [],
+      appliedProjections: [],
+      newlyAppliedProjections: [],
+      error: "Issuer native currency is busy or has changed",
+    };
+  }
+
   const frozenQuote = {
     grossPlacedLocal: frozenLease.grossLocal,
     feeLocal: frozenLease.feeLocal,
@@ -247,7 +477,11 @@ export async function settlePrimaryUnderwritingFill(
         kind: "credit",
         amount: frozenQuote.issuerNetLocal,
         collection: "corporations",
-        filter: { _id: oid(frozenLease.issuerCorporationId.toHexString()) },
+        filter: {
+          _id: oid(frozenLease.issuerCorporationId.toHexString()),
+          "primaryUnderwritingIncomingFunding.key": key,
+          ...recipientCurrencySnapshotFilter(frozenLease.offer.issuerCurrencySnapshot),
+        },
         path: "liquidCapital",
         note: "Issuer receives net primary proceeds",
       },
@@ -255,9 +489,13 @@ export async function settlePrimaryUnderwritingFill(
         kind: "credit",
         amount: frozenQuote.feeLocal,
         collection: "corporations",
-        filter: { _id: oid(bank._id.toHexString()), "bankUnderwritingFunding.key": key },
-        path: "liquidCapital",
-        note: "Underwriter receives fee on funded placement",
+        filter: {
+          _id: oid(bank._id.toHexString()),
+          "bankUnderwritingFunding.key": key,
+          ...recipientCurrencySnapshotFilter(frozenLease.offer.bankCurrencySnapshot),
+        },
+        path: "bankCharter.cashReserves",
+        note: "Underwriter receives the funded fee in its charter currency reserve",
       },
     ],
     projections: [
@@ -274,14 +512,65 @@ export async function settlePrimaryUnderwritingFill(
       {
         collection: "corporations",
         filter: { _id: oid(bank._id.toHexString()), "bankUnderwritingFunding.key": key },
-        update: {
-          $inc: {
-            [`bankUnderwritingIncomeByCurrency.${frozenLease.currencyCode}`]: frozenQuote.feeLocal,
+        pipelineUpdate: [
+          {
+            $set: {
+              [`bankUnderwritingIncomeByCurrency.${frozenLease.currencyCode}`]: {
+                $add: [
+                  {
+                    $ifNull: [`$bankUnderwritingIncomeByCurrency.${frozenLease.currencyCode}`, 0],
+                  },
+                  frozenQuote.feeLocal,
+                ],
+              },
+              bankUnderwritingReceipts: {
+                $slice: [
+                  {
+                    $concatArrays: [{ $ifNull: ["$bankUnderwritingReceipts", []] }, [receipt]],
+                  },
+                  -100,
+                ],
+              },
+              "bankCharter.lastBankingIncome": {
+                $cond: [
+                  { $eq: ["$bankCharter.lastBankingIncomeTurn", frozenLease.turn] },
+                  {
+                    $add: [
+                      { $ifNull: ["$bankCharter.lastBankingIncome", 0] },
+                      frozenQuote.feeLocal,
+                    ],
+                  },
+                  frozenQuote.feeLocal,
+                ],
+              },
+              "bankCharter.lastBankingUnderwritingFees": {
+                $cond: [
+                  { $eq: ["$bankCharter.lastBankingUnderwritingFeesTurn", frozenLease.turn] },
+                  {
+                    $add: [
+                      { $ifNull: ["$bankCharter.lastBankingUnderwritingFees", 0] },
+                      frozenQuote.feeLocal,
+                    ],
+                  },
+                  frozenQuote.feeLocal,
+                ],
+              },
+              "bankCharter.lastBankingIncomeTurn": frozenLease.turn,
+              "bankCharter.lastBankingUnderwritingFeesTurn": frozenLease.turn,
+              updatedAt: now,
+            },
           },
-          $push: { bankUnderwritingReceipts: { $each: [receipt], $slice: -100 } },
-          $set: { updatedAt: now },
-        },
+        ],
         note: "Record actual funded underwriting fee receipt",
+      },
+      {
+        collection: "corporations",
+        filter: {
+          _id: oid(frozenLease.issuerCorporationId.toHexString()),
+          "primaryUnderwritingIncomingFunding.key": key,
+        },
+        update: { $unset: { primaryUnderwritingIncomingFunding: "" }, $set: { updatedAt: now } },
+        note: "Release issuer native-currency hold after placement ACK",
       },
       {
         collection: "corporations",
@@ -319,6 +608,10 @@ export async function settlePrimaryUnderwritingFill(
     (settled.status === "partial" || settled.status === "rejected") &&
     settled.appliedLegs.length === 0
   ) {
+    await corporations.updateOne(
+      { _id: issuer._id, "primaryUnderwritingIncomingFunding.key": key },
+      { $unset: { primaryUnderwritingIncomingFunding: "" }, $set: { updatedAt: now } }
+    );
     await corporations.updateOne(
       { _id: bank._id, "bankUnderwritingFunding.key": key },
       { $unset: { bankUnderwritingFunding: "" }, $set: { updatedAt: now } }

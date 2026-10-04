@@ -99,6 +99,12 @@ export async function convertCorpCurrency(
   forexEnabled: boolean,
   sectorSnapshot?: CorporateSector[]
 ): Promise<ConvertCorpCurrencyResult> {
+  if (corp.primaryUnderwritingIncomingFunding || corp.bankUnderwritingFunding) {
+    return {
+      ok: false,
+      error: "Primary underwriting proceeds are settling; retry the currency move after settlement",
+    };
+  }
   const fromCurrency = resolveCorpLiquidCurrencyCode(corp);
   // No-op: same currency already; nothing to change.
   if (fromCurrency === toCurrencyCode) {
@@ -326,9 +332,18 @@ export async function convertCorpCurrency(
   ) => {
     let corpWriteApplied = false;
     try {
-      await db
-        .collection<Corporation>("corporations")
-        .updateOne({ _id: corp._id }, { $set: corpSet }, sessionOpts);
+      const corpWrite = await db.collection<Corporation>("corporations").updateOne(
+        {
+          _id: corp._id,
+          primaryUnderwritingIncomingFunding: { $exists: false },
+          bankUnderwritingFunding: { $exists: false },
+        },
+        { $set: corpSet },
+        sessionOpts
+      );
+      if (corpWrite.matchedCount !== 1) {
+        throw new Error("Primary underwriting proceeds are settling; currency move must retry");
+      }
       corpWriteApplied = true;
       if (sectorOps.length > 0) {
         const bulkResult = await db

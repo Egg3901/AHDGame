@@ -58,6 +58,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       .findOne({ _id: new ObjectId(id) });
     if (!corp) throw notFound("Corporation not found");
 
+    if (corp.primaryUnderwritingIncomingFunding || corp.bankUnderwritingFunding) {
+      return NextResponse.json(
+        { error: "Primary underwriting cash is settling; retry relocation after settlement" },
+        { status: 409 }
+      );
+    }
+
     const propertySectors = await db
       .collection<CorporateSector>("corporateSectors")
       .find({ corporationId: corp._id })
@@ -113,8 +120,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       );
     }
     try {
-      await db.collection<Corporation>("corporations").updateOne(
-        { _id: new ObjectId(id) },
+      const updateResult = await db.collection<Corporation>("corporations").updateOne(
+        {
+          _id: new ObjectId(id),
+          primaryUnderwritingIncomingFunding: { $exists: false },
+          bankUnderwritingFunding: { $exists: false },
+        },
         {
           $set: {
             countryId: parsed.data.countryId,
@@ -123,6 +134,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           },
         }
       );
+      if (updateResult.matchedCount !== 1) {
+        return NextResponse.json(
+          { error: "Primary underwriting cash is settling; retry relocation after settlement" },
+          { status: 409 }
+        );
+      }
     } finally {
       if (hqTransitionKeys) {
         await Promise.all(

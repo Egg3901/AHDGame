@@ -3,6 +3,8 @@ import { ObjectId, type Db } from "mongodb";
 import { createInMemoryDb, type InMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { InjectedCrash, withInjectedCrash } from "@/lib/test-utils/faultyDb";
 import { listUnfinishedProjections } from "./settlementJournal";
+import { recoverBankingSettlements } from "./recovery";
+import { resolveBankingPolicy } from "./rules/policy";
 import {
   resumeFoundingUnderwritingPlans,
   settlePrimaryUnderwritingFill,
@@ -21,6 +23,8 @@ function world(): InMemoryDb {
     {
       _id: BANK,
       name: "Northstar Securities",
+      countryId: "US",
+      liquidCurrencyCode: "USD",
       liquidCapital: 2_000,
       bankCharter: {
         type: "investment",
@@ -30,9 +34,16 @@ function world(): InMemoryDb {
         postedCapital: 1_000,
         depositOffset: 0,
         lendingOffset: 0,
+        cashReserves: 0,
       },
     },
-    { _id: ISSUER, name: "Orchid Works", liquidCapital: 1_000 },
+    {
+      _id: ISSUER,
+      name: "Orchid Works",
+      countryId: "US",
+      liquidCurrencyCode: "USD",
+      liquidCapital: 1_000,
+    },
   ]);
   db.seed("equityMarketPools", [{ _id: "USD", cashLocal: 50_000, lifetime: {} }]);
   db.seed("shareIssues", [{ _id: INSTRUMENT, filled: 0 }]);
@@ -40,10 +51,17 @@ function world(): InMemoryDb {
 }
 
 function input() {
-  const issuer = { _id: ISSUER, name: "Orchid Works" };
+  const issuer = {
+    _id: ISSUER,
+    name: "Orchid Works",
+    countryId: "US" as const,
+    liquidCurrencyCode: "USD" as const,
+  };
   const bank = {
     _id: BANK,
     name: "Northstar Securities",
+    countryId: "US" as const,
+    liquidCurrencyCode: "USD" as const,
     bankCharter: {
       type: "investment" as const,
       status: "active" as const,
@@ -52,6 +70,7 @@ function input() {
       postedCapital: 1_000,
       depositOffset: 0,
       lendingOffset: 0,
+      cashReserves: 0,
     },
   };
   return {
@@ -67,6 +86,20 @@ function input() {
       instrumentType: "equity" as const,
       instrumentId: INSTRUMENT,
       originalQuoteTurn: 30,
+      issuerCurrencySnapshot: {
+        currencyCode: "USD" as const,
+        liquidCurrencyCodePresent: true,
+        liquidCurrencyCode: "USD",
+        countryIdPresent: true,
+        countryId: "US",
+      },
+      bankCurrencySnapshot: {
+        currencyCode: "USD" as const,
+        liquidCurrencyCodePresent: true,
+        liquidCurrencyCode: "USD",
+        countryIdPresent: true,
+        countryId: "US",
+      },
     },
     instrumentId: INSTRUMENT,
     grossPlacedLocal: 20_000,
@@ -93,6 +126,25 @@ function docs(db: InMemoryDb) {
 }
 
 describe("settlePrimaryUnderwritingFill", () => {
+  it("rejects incomplete caller currency snapshots before debiting the source pool", async () => {
+    const db = world();
+    const fill = input();
+    const issuerWithoutCountry = { ...fill.issuer };
+    Reflect.deleteProperty(issuerWithoutCountry, "countryId");
+
+    const result = await settlePrimaryUnderwritingFill(db as unknown as Db, {
+      ...fill,
+      issuer: issuerWithoutCountry,
+    });
+
+    expect(result.status).toBe("rejected");
+    expect(db.collection("equityMarketPools").docs[0].cashLocal).toBe(50_000);
+    expect(
+      db.collection("corporations").docs.find((corp) => (corp._id as ObjectId).equals(BANK))
+        ?.bankUnderwritingFunding
+    ).toBe(undefined);
+  });
+
   let db: InMemoryDb;
   beforeEach(() => {
     db = world();
@@ -106,7 +158,14 @@ describe("settlePrimaryUnderwritingFill", () => {
     expect(state.pool.cashLocal).toBe(30_000);
     expect(state.pool.lifetime).toMatchObject({ issuanceOut: 20_000 });
     expect(state.issuer.liquidCapital).toBe(20_700);
-    expect(state.bank.liquidCapital).toBe(2_300);
+    expect(state.bank.liquidCapital).toBe(2_000);
+    expect(state.bank.bankCharter).toMatchObject({
+      cashReserves: 300,
+      lastBankingIncome: 300,
+      lastBankingIncomeTurn: 31,
+      lastBankingUnderwritingFees: 300,
+      lastBankingUnderwritingFeesTurn: 31,
+    });
     expect(state.bank.bankUnderwritingIncomeByCurrency).toEqual({ USD: 300 });
     expect(state.bank.bankUnderwritingReceipts).toMatchObject([
       { grossPlacedLocal: 20_000, feeLocal: 300, issuerNetLocal: 19_700, charteredTurn: 9 },
@@ -118,8 +177,25 @@ describe("settlePrimaryUnderwritingFill", () => {
     expect(["applied", "replayed"]).toContain(replay.status);
     expect(docs(db).pool.cashLocal).toBe(30_000);
     expect(docs(db).issuer.liquidCapital).toBe(20_700);
-    expect(docs(db).bank.liquidCapital).toBe(2_300);
+    expect(docs(db).bank.liquidCapital).toBe(2_000);
     expect(docs(db).bank.bankUnderwritingReceipts).toHaveLength(1);
+  });
+
+  it("adds a placement fee to the bank's existing same-turn P&L", async () => {
+    const charter = docs(db).bank.bankCharter as Record<string, unknown>;
+    charter.lastBankingIncome = 75;
+    charter.lastBankingIncomeTurn = 31;
+    charter.lastBankingUnderwritingFees = 25;
+    charter.lastBankingUnderwritingFeesTurn = 31;
+
+    await settlePrimaryUnderwritingFill(db as unknown as Db, input());
+    expect(docs(db).bank.bankCharter).toMatchObject({
+      lastBankingIncome: 375,
+      lastBankingIncomeTurn: 31,
+      lastBankingUnderwritingFees: 325,
+      lastBankingUnderwritingFeesTurn: 31,
+      cashReserves: 300,
+    });
   });
 
   it("does not publish or credit an unfunded fill", async () => {
@@ -133,6 +209,22 @@ describe("settlePrimaryUnderwritingFill", () => {
     expect(docs(db).bank.bankUnderwritingReceipts).toBeUndefined();
     expect(docs(db).bank.bankUnderwritingFunding).toBeUndefined();
   });
+
+  it.each(["issuer", "bank"] as const)(
+    "does not settle into a recipient whose fallback identity changed after quote (%s)",
+    async (recipient) => {
+      const row = docs(db)[recipient] as Record<string, unknown>;
+      row.countryId = recipient === "issuer" ? "CA" : "GB";
+
+      const result = await settlePrimaryUnderwritingFill(db as unknown as Db, input());
+      expect(result.status).toBe("rejected");
+      expect(docs(db).pool.cashLocal).toBe(50_000);
+      expect(docs(db).issuer.liquidCapital).toBe(1_000);
+      expect(docs(db).bank.bankCharter).toMatchObject({ cashReserves: 0 });
+      expect(docs(db).bank.bankUnderwritingFunding).toBeUndefined();
+      expect(docs(db).issuer.primaryUnderwritingIncomingFunding).toBeUndefined();
+    }
+  );
 
   it("retains the original lease and quote through a projection crash, then resumes", async () => {
     const fill = input();
@@ -159,9 +251,78 @@ describe("settlePrimaryUnderwritingFill", () => {
     });
     expect(["applied", "replayed"]).toContain(retry.status);
     expect(docs(db).issuer.liquidCapital).toBe(20_700);
-    expect(docs(db).bank.liquidCapital).toBe(2_300);
+    expect(docs(db).bank.liquidCapital).toBe(2_000);
     expect(docs(db).bank.bankUnderwritingIncomeByCurrency).toEqual({ USD: 300 });
     expect(docs(db).bank.bankUnderwritingFunding).toBeUndefined();
+  });
+
+  it("pins issuer currency through the funded payout and releases the hold after ACK", async () => {
+    const fill = input();
+    const faulty = withInjectedCrash(db, {
+      collection: "corporations",
+      op: "updateOne",
+      onCall: 3,
+    });
+    await expect(settlePrimaryUnderwritingFill(faulty.db, fill)).rejects.toBeInstanceOf(
+      InjectedCrash
+    );
+    faulty.disarm();
+
+    const state = docs(db);
+    expect(state.pool.cashLocal).toBe(30_000);
+    expect(state.issuer.primaryUnderwritingIncomingFunding).toMatchObject({
+      key: `primary-underwriting:equity:${INSTRUMENT.toHexString()}:31`,
+      currencySnapshot: { currencyCode: "USD" },
+    });
+    expect(state.issuer.liquidCapital).toBe(1_000);
+    const rejectedCurrencyMove = await db
+      .collection("corporations")
+      .updateOne(
+        { _id: ISSUER, primaryUnderwritingIncomingFunding: { $exists: false } },
+        { $set: { liquidCurrencyCode: "CAD" } }
+      );
+    expect(rejectedCurrencyMove.matchedCount).toBe(0);
+
+    const repairedRetry = await settlePrimaryUnderwritingFill(db as unknown as Db, fill);
+    expect(repairedRetry.status).toBe("applied");
+    expect(state.issuer.liquidCapital).toBe(20_700);
+    expect(state.bank.liquidCapital).toBe(2_000);
+    expect(state.issuer.primaryUnderwritingIncomingFunding).toBeUndefined();
+  });
+
+  it("recovers a durable lease and funded journal while underwriting and banking are off", async () => {
+    const fill = input();
+    const faulty = withInjectedCrash(db, {
+      collection: "corporations",
+      op: "updateOne",
+      onCall: 2,
+    });
+    await expect(settlePrimaryUnderwritingFill(faulty.db, fill)).rejects.toBeInstanceOf(
+      InjectedCrash
+    );
+    faulty.disarm();
+    expect(docs(db).bank.bankUnderwritingFunding).toBeTruthy();
+    expect(
+      await db
+        .collection("corporations")
+        .find({ "bankUnderwritingFunding.turn": { $lt: 32 } })
+        .toArray()
+    ).toHaveLength(1);
+    expect(docs(db).pool.cashLocal).toBe(50_000);
+
+    const recovered = await recoverBankingSettlements(
+      db as unknown as Db,
+      32,
+      resolveBankingPolicy(null)
+    );
+    expect(recovered.resumedSettlements).toContain(
+      `primary-underwriting:equity:${INSTRUMENT.toHexString()}:31`
+    );
+    expect(docs(db).pool.cashLocal).toBe(30_000);
+    expect(docs(db).issuer.liquidCapital).toBe(20_700);
+    expect(docs(db).bank.bankCharter).toMatchObject({ cashReserves: 300, lastBankingIncome: 300 });
+    expect(docs(db).bank.bankUnderwritingFunding).toBeUndefined();
+    expect(docs(db).issuer.primaryUnderwritingIncomingFunding).toBeUndefined();
   });
 
   it("recovers a private founding shell only through its frozen funded projection", async () => {
@@ -200,7 +361,7 @@ describe("settlePrimaryUnderwritingFill", () => {
       liquidCapital: 20_700,
     });
     expect(docs(db).issuer.foundingIpoUnderwritingPending).toBeNull();
-    expect(docs(db).bank.liquidCapital).toBe(2_300);
+    expect(docs(db).bank.bankCharter).toMatchObject({ cashReserves: 300, lastBankingIncome: 300 });
     expect(docs(db).pool.cashLocal).toBe(30_000);
   });
 

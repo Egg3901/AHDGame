@@ -1,4 +1,4 @@
-import type { Db } from "mongodb";
+import type { ClientSession, Db } from "mongodb";
 import { NextResponse } from "next/server";
 import type { Corporation, Bond, CentralBank, CorporateSector } from "@/lib/db/types";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
@@ -214,7 +214,8 @@ export async function issueRelocationBond(
   currentTurn: number,
   preflight: RelocationBondPreflight,
   /** Pre-loaded FX map — reused when the caller already has one. Omit to load fresh. */
-  fxByCurrencyOverride?: ReadonlyMap<CurrencyCode, number>
+  fxByCurrencyOverride?: ReadonlyMap<CurrencyCode, number>,
+  session?: ClientSession
 ): Promise<{ ok: true; data: IssueRelocationBondResult } | { ok: false; response: Response }> {
   if (preflight.cooldownTurnsRemaining != null) {
     return {
@@ -297,7 +298,7 @@ export async function issueRelocationBond(
     createdAt: now,
     updatedAt: now,
   };
-  await db.collection("bonds").insertOne(bondDoc);
+  await db.collection("bonds").insertOne(bondDoc, session ? { session } : {});
 
   return {
     ok: true,

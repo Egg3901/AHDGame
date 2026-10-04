@@ -221,6 +221,13 @@ export interface Corporation {
   };
   /** Issuer-selected primary-market underwriter for future issues. */
   primaryUnderwritingMandate?: import("@/lib/banking/underwritingTypes").PrimaryUnderwritingMandate;
+  primaryUnderwritingMandateRevision?: number;
+  /** Incoming funded proceeds pin the issuer's native cash denomination until ACK. */
+  primaryUnderwritingIncomingFunding?: {
+    key: string;
+    currencySnapshot: import("@/lib/banking/underwritingTypes").PrimaryUnderwritingCurrencySnapshot;
+    turn: number;
+  };
   /** Frozen unpaid founding IPO plan. The corporation remains private until its journal publishes it. */
   foundingIpoUnderwritingPending?: {
     offer: import("@/lib/banking/underwritingTypes").PrimaryUnderwritingOffer & {
