@@ -222,6 +222,55 @@ describe("runClearingPrePass with clearing enabled", () => {
     expect(fairnessFill).toBeLessThan(postRepealFill ?? 0);
   });
 
+  it("limits the Fairness Doctrine to US outlets while preserving global editorial stance effects", () => {
+    const { corp, sector, lookups } = makeSectorWorld();
+    Object.assign(corp, { editorialStance: { economic: 5, social: 5 } });
+    Object.assign(sector, {
+      stateId: "GB-LON",
+      countryId: "GB",
+      sectorType: "media",
+      strategyId: "standard",
+      producedUnits: 100,
+    });
+    Object.assign(lookups, {
+      globalCommodityBalances: new Map([["advertising", { supply: 100, demand: 100 }]]),
+      editorialAudienceLeanByState: new Map([["GB-LON", { economic: -5, social: -5 }]]),
+    });
+
+    const fairnessMarket = {
+      clearingEnabled: true,
+      plantsEnabled: true,
+      mediaFairnessDoctrineEnabled: true,
+      mediaEditorialEnabled: false,
+    } as MarketContext;
+    const noFairnessMarket = {
+      clearingEnabled: true,
+      plantsEnabled: true,
+      mediaFairnessDoctrineEnabled: false,
+      mediaEditorialEnabled: false,
+    } as MarketContext;
+    const editorialMarket = {
+      clearingEnabled: true,
+      plantsEnabled: true,
+      mediaFairnessDoctrineEnabled: false,
+      mediaEditorialEnabled: true,
+    } as MarketContext;
+
+    runClearingPrePass(makeInput({ lookups, market: fairnessMarket }));
+    const fairnessFill =
+      fairnessMarket.clearingBySectorId?.get("sector1")?.soldByCommodity?.advertising;
+    runClearingPrePass(makeInput({ lookups, market: noFairnessMarket }));
+    const noFairnessFill =
+      noFairnessMarket.clearingBySectorId?.get("sector1")?.soldByCommodity?.advertising;
+    runClearingPrePass(makeInput({ lookups, market: editorialMarket }));
+    const editorialFill =
+      editorialMarket.clearingBySectorId?.get("sector1")?.soldByCommodity?.advertising;
+
+    expect(fairnessFill).toBe(noFairnessFill);
+    expect(editorialFill).toBeGreaterThan(0);
+    expect(editorialFill).toBeLessThan(noFairnessFill ?? 0);
+  });
+
   it("rolls loyalty up and keeps the in-memory corp docs consistent", () => {
     const { corp, lookups } = makeSectorWorld();
     const market = { clearingEnabled: true, plantsEnabled: false } as MarketContext;

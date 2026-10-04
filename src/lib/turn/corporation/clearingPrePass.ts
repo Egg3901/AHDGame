@@ -692,7 +692,8 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
         if (
           lookups.editorialAudienceLeanByState &&
           sector.sectorType === "media" &&
-          (market.mediaEditorialEnabled || market.mediaFairnessDoctrineEnabled)
+          (market.mediaEditorialEnabled ||
+            (market.mediaFairnessDoctrineEnabled && sector.countryId === "US"))
         ) {
           const stance = lookups.corpById.get(corpId)?.editorialStance;
           const audience = lookups.editorialAudienceLeanByState.get(sector.stateId);
