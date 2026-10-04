@@ -92,6 +92,13 @@ import { processEquityMarketPoolTurn } from "@/lib/equities/marketPoolTurn";
 import { placePendingShareIssuances } from "@/lib/equities/primaryMarket";
 import { creditEquityPoolsBatch } from "@/lib/equities/marketPool";
 import { partitionedBulkWrite } from "./partitionedBulkWrite";
+import {
+  applyPoliticalMediaOrderEffect,
+  loadPoliticalMediaOrdersForClearing,
+  savePoliticalMediaSettlementPlan,
+  settlePoliticalMediaOrder,
+  type PoliticalMediaOrderForClearing,
+} from "@/lib/politicalMedia/journal";
 
 export type { CorporationTurnResult } from "./corporationTurnRuntime";
 
@@ -146,6 +153,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           brandLoyaltySliceEnabled: 1,
           sectorQualityEnabled: 1,
           qualityPremiumPricingEnabled: 1,
+          politicalMediaMarketEnabled: 1,
           explicitPlantCostsEnabled: 1,
           supplyAgreementsEnabled: 1,
           prospectingEnabled: 1,
@@ -199,6 +207,10 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     moneyWiringEnabled: interstateMoneyWiringEnabled,
     canonicalFreightBillingEnabled,
   });
+  const politicalMediaMarketEnabled = marketGovernorConfig?.politicalMediaMarketEnabled === true;
+  const politicalMediaOrders: PoliticalMediaOrderForClearing[] = politicalMediaMarketEnabled
+    ? await loadPoliticalMediaOrdersForClearing(db, turn ?? 0)
+    : [];
   const currentYear = gameState?.currentYear;
   // Soft-budget gate for the turn path (see sectorTurn's affordability brake and
   // nppInsolvencyDissolution, which already exempts planned economies). Read off
@@ -336,6 +348,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     brandLoyaltyUpdates,
     contractedByCorpCommodity: clearingContractedByCorpCommodity,
     buyerDemandByCorpCommodity,
+    politicalMediaSettlementPlans,
   } = runClearingPrePass({
     lookups,
     market,
@@ -353,7 +366,14 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     brandLoyaltyEnabled,
     brandLoyaltySliceEnabled,
     qualityPremiumPricingEnabled,
+    politicalMediaOrders,
   });
+  const plannedPoliticalMediaOrders = new Map(
+    politicalMediaSettlementPlans.map(({ orderId, plan }) => [orderId, plan])
+  );
+  for (const { orderId, plan } of politicalMediaSettlementPlans) {
+    await savePoliticalMediaSettlementPlan(db, orderId, plan);
+  }
   contractedByCorpCommodity = clearingContractedByCorpCommodity;
   mark("marketContext");
 
@@ -654,6 +674,18 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   // on pre-migration worlds.
   await creditEquityPoolsBatch(db, equityPoolDividendAccruals, "dividendsIn", now);
   mark("sector+corp bulkWrites");
+
+  if (politicalMediaMarketEnabled) {
+    for (const order of politicalMediaOrders) {
+      if (!order.settlementPlan) {
+        const plan = plannedPoliticalMediaOrders.get(order.orderId);
+        if (!plan) continue;
+        await savePoliticalMediaSettlementPlan(db, order.orderId, plan);
+      }
+      await settlePoliticalMediaOrder(db, order.orderId, turn ?? 0);
+      await applyPoliticalMediaOrderEffect(db, order.orderId);
+    }
+  }
 
   // Contracts and surveys read the post-bulkWrite snapshot so this turn's
   // mothball / production-policy / cash writes are visible. Matching before

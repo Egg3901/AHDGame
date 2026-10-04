@@ -1,0 +1,1 @@
+Fund political ad actions and campaign media upkeep through a funded market order. Orders fill only unsold advertising output in the target state, refund unfilled budget, and apply political effects only for delivered paid ads. Campaign upkeep is placed after current corporation clearing and enters the next clearing pass.

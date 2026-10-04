@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { calculateMaintenanceCosts } from "./maintenance";
+import {
+  calculateMaintenanceCosts,
+  calculateMediaMaintenanceAfterDowngrade,
+  calculateMediaMaintenanceCosts,
+} from "./maintenance";
 import type { Campaign } from "@/lib/db/types";
 
 describe("calculateMaintenanceCosts", () => {
@@ -40,5 +44,40 @@ describe("calculateMaintenanceCosts", () => {
 
     // Ground: 22000 (5500+16500), Media: 24000 (6000+18000)
     expect(calculateMaintenanceCosts(campaign)).toBe(46000);
+  });
+});
+
+describe("calculateMediaMaintenanceAfterDowngrade", () => {
+  it("uses the downgraded legacy media level for the funded upkeep amount", () => {
+    const campaign = { mediaSpendingLevel: 3 } as Campaign;
+    const downgraded = { ...campaign, mediaSpendingLevel: 2 } as Campaign;
+
+    expect(
+      calculateMediaMaintenanceAfterDowngrade(
+        campaign,
+        [{ category: "mediaSpending", fromLevel: 3, toLevel: 2 }],
+        undefined
+      )
+    ).toBe(calculateMediaMaintenanceCosts(downgraded));
+  });
+
+  it("uses the downgraded branch level without mutating the campaign snapshot", () => {
+    const campaign = {
+      mediaSpendingLevel: 0,
+      mediaSpendingTree: { starter: true, a: 2, b: 0, c: 0 },
+    } as Campaign;
+    const downgraded = {
+      ...campaign,
+      mediaSpendingTree: { ...campaign.mediaSpendingTree!, a: 1 },
+    } as Campaign;
+
+    expect(
+      calculateMediaMaintenanceAfterDowngrade(
+        campaign,
+        [{ category: "mediaSpending", branch: "a", fromLevel: 2, toLevel: 1 }],
+        undefined
+      )
+    ).toBe(calculateMediaMaintenanceCosts(downgraded));
+    expect(campaign.mediaSpendingTree?.a).toBe(2);
   });
 });
