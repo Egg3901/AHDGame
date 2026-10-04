@@ -997,7 +997,15 @@ class InMemoryCollection {
     const before = this.indexDescriptions.length;
     this.indexDescriptions = this.indexDescriptions.filter((index) => index.name !== name);
     if (this.indexDescriptions.length === before) {
-      throw new Error(`index not found with name [${name}]`);
+      const error = new Error(`index not found with name [${name}]`) as Error & {
+        code: number;
+        codeName: string;
+      };
+      // Match MongoDB's IndexNotFound error so migrations can distinguish an
+      // idempotent drop from a real failure.
+      error.code = 27;
+      error.codeName = "IndexNotFound";
+      throw error;
     }
   }
 }

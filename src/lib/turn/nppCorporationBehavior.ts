@@ -1,19 +1,15 @@
-/**
- * NPC corporations plan investment, staffing and shareholder returns.
- * processNppCorporationDecisions shares turn snapshots; makeNppCorpDecision
- * plans each corporation using that context.
- */
-import {
-  loadNppDecisionFxRates,
-  loadNppMarketDecisionContext,
-  loadNppPlantsDecisionContext,
-} from "@/lib/turn/npp/decisionContext";
 import {
   buildNppDecisionCashWrites,
   type NppFoundingCashWitness,
 } from "@/lib/turn/npp/foundingCashLedger";
 import type { Db, ObjectId } from "mongodb";
-import type { Corporation, CorporateSector, SectorBuildOrder, GameState } from "@/lib/db/types";
+import type {
+  Corporation,
+  CorporateSector,
+  SectorBuildOrder,
+  GameState,
+  ExchangeRate,
+} from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { netPerTurnDebtServiceAnchor } from "@/lib/bonds/corpBondCashflows";
 import {
@@ -44,7 +40,8 @@ import {
   analyzeSectorProfitability,
   type SectorProfitInfo,
 } from "@/lib/turn/npp/sectorProfitability";
-import { chooseCostMothballSector, lossChronicityUpdates } from "@/lib/turn/npp/costMothball";
+import { lossChronicityUpdates } from "@/lib/turn/npp/costMothball";
+import { buildNppGlutMothballUpdates } from "@/lib/turn/npp/glutMothballing";
 export { GLUT_STATE_CHANGE_STAGGER, glutStaggerEligible } from "@/lib/turn/npp/cohort";
 export {
   STRATEGY_SHIFT_MARGIN_TRIGGER,
@@ -69,7 +66,11 @@ import {
 } from "@/lib/corporations/strandedPlant";
 import { labourAtLeast, isLabourSystemMode } from "@/lib/labour/modes";
 import { CHRONIC_LOW_FILL_THRESHOLD } from "@/lib/turn/npp/strategyExpectedRevenue";
-import { bucketKey } from "@/lib/nationalization/stateControlledBuckets";
+import {
+  bucketKey,
+  computeStateControlledBuckets,
+  loadNationalCorpIds,
+} from "@/lib/nationalization/stateControlledBuckets";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
 import { STARTING_YEAR, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { CAPITAL_DEPRECIATION_PER_TURN } from "@/lib/market/capital";
@@ -84,9 +85,14 @@ import {
 } from "@/lib/constants/capacityEconomy";
 import { foundingStarterUnits, sectorEntryFeeAnchor } from "@/lib/corporations/foundingPlant";
 import { unownedHeadroomUnitsOf } from "@/lib/corporations/marketShare";
+import { buildNppNationalShareResolver } from "@/lib/turn/npp/nationalDominancePricing";
+import { resolvePresetIdFromGameState } from "@/lib/world/countryReadinessContract";
 import { buildNppPriceSignals } from "@/lib/turn/npp/priceSignals";
+import type { RelocationPrimeBank } from "@/lib/corporations/issueRelocationBond";
+import { loadNppBankRateSnapshot } from "@/lib/turn/npp/bankRateSnapshot";
 import {
   buildNppProductProjectsV2,
+  loadNppCostOfLivingByState,
   loadNppProductProjectsV2,
 } from "@/lib/turn/npp/manufacturingProducts";
 import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
@@ -102,6 +108,7 @@ import {
   type NppOperatorObservation,
 } from "@/lib/corporations/nppOperatorTelemetry/rules";
 import {
+  buildCapacityCompetitorIndex,
   createFoundingCapacityOutcome,
   createReinvestCapacityObserver,
   evaluateReinvestPreSizingGate,
@@ -124,6 +131,7 @@ import {
   drawFoundedCapacityFromPools,
   flushNppCapacityWriteback,
 } from "@/lib/turn/npp/capacityWriteback";
+import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 import { getNppCashFloorAnchor } from "@/lib/turn/npp/nppCashReserve";
 import { loadNppBehaviorConfig } from "@/lib/turn/npp/behaviorConfig";
@@ -181,10 +189,6 @@ import {
   NPP_EXTRACTION_FOUNDING_MAX_FACILITIES,
   MAX_DIVIDEND_RATE,
   DEFAULT_ARCHETYPE,
-  GLUT_MOTHBALL_FILL_THRESHOLD,
-  GLUT_MOTHBALL_PRICE_RATIO,
-  GLUT_RESTART_PRICE_RATIO,
-  COST_MOTHBALL_LOSS_TURNS,
 } from "@/lib/turn/npp/nppCorporationTuning";
 
 export {
@@ -310,19 +314,67 @@ export async function processNppCorporationDecisions(
     );
   }
 
-  const { globalSectors, stateControlled, competitorsByBucket } =
-    await loadNppMarketDecisionContext(db);
+  // NPPs cannot auto-expand into state-controlled buckets; players still may.
+  const [nationalCorpIds, globalSectors] = await Promise.all([
+    loadNationalCorpIds(db),
+    db
+      .collection<CorporateSector>("corporateSectors")
+      .find(
+        {},
+        {
+          projection: {
+            stateId: 1,
+            countryId: 1,
+            sectorType: 1,
+            revenue: 1,
+            corporationId: 1,
+            nationalizedAtTurn: 1,
+            mothballed: 1,
+          },
+        }
+      )
+      .toArray(),
+  ]);
+  const stateControlled = computeStateControlledBuckets(globalSectors, nationalCorpIds);
   placementSignals.activeMarketBuckets = buildActiveMarketBuckets(globalSectors);
+
+  // Rival index for capacity-decision telemetry, off the already-loaded
+  // `globalSectors` snapshot: no turn-path reads. See capacityDecisionTelemetry.
+  const competitorsByBucket = buildCapacityCompetitorIndex(globalSectors);
 
   const manufacturingProductProjectState = await loadNppProductProjectsV2(db, nppCorps);
   const plantsEnabled = manufacturingProductProjectState.plantsEnabled;
-  const { plants, bankRates } = await loadNppPlantsDecisionContext(
-    db,
-    turn,
-    nppCorps,
-    globalSectors,
-    plantsEnabled
-  );
+  let plants: NppPlantsContext | undefined;
+  let bankRates: RelocationPrimeBank[] | undefined;
+  if (plantsEnabled) {
+    const gsPlants = await db
+      .collection<GameState>("gameState")
+      .findOne(
+        { _id: "current" },
+        { projection: { currentYear: 1, startingYear: 1, currentTurn: 1, preset: 1 } }
+      );
+    const plantsYear =
+      gsPlants?.currentYear ??
+      (gsPlants?.startingYear ?? STARTING_YEAR) +
+        Math.floor(((gsPlants?.currentTurn ?? turn) - 1) / TURNS_PER_YEAR);
+
+    const countryIds = [...new Set(nppCorps.map((c) => c.countryId))];
+    // Bank rates are fixed during this phase; reuse this snapshot for quotes.
+    const bankSnapshot = await loadNppBankRateSnapshot(db, countryIds);
+    bankRates = bankSnapshot.bankRates;
+    const primeByCountry = bankSnapshot.primeByCountry;
+    const colByState = await loadNppCostOfLivingByState(db);
+    const nationalShareOf = buildNppNationalShareResolver(globalSectors);
+    plants = {
+      enabled: true,
+      year: plantsYear,
+      eraUnitScale: await loadWorldEraUnitScale(db),
+      preset: resolvePresetIdFromGameState(gsPlants),
+      primeRateOf: (cid) => primeByCountry.get(cid) ?? 0,
+      costOfLivingOf: (sid) => colByState.get(sid) ?? null,
+      nationalShareOf,
+    };
+  }
   const unownedDraws: NonNullable<NppCorpDecision["unownedDraws"]> = [];
   // Capacity-decision observations, aggregated in memory and flushed once for
   // the whole cohort below: no per-row turn queries, no new reads.
@@ -356,7 +408,14 @@ export async function processNppCorporationDecisions(
     priceRatioOf,
   });
 
-  const fxByCurrency = await loadNppDecisionFxRates(db);
+  // Local-per-₳ rates for every live currency, loaded once. NPP money constants
+  // are all ₳; `liquidCapital` is not. See `NppCorpDecisionContext.fxRate`.
+  const fxByCurrency = new Map<string, number>();
+  for (const rate of await db.collection<ExchangeRate>("exchangeRates").find({}).toArray()) {
+    if (rate.currencyCode && typeof rate.rate === "number" && rate.rate > 0) {
+      fxByCurrency.set(rate.currencyCode, rate.rate);
+    }
+  }
 
   // ─── Debt service, loaded once for the cohort ─────────────────────────────
   // Same two maps `buildCorporationLookups` builds for the turn engine, and the
@@ -905,102 +964,17 @@ export function makeNppCorpDecision(
   }
 
   // ── 2c. Glut mothballing (plants only) ────────────────────────────────────
-  // Sections 2a/2b only STOP a glutted sector from growing; nothing ever takes
-  // existing capacity OFF the market. Under plants that matters: NPP plants
-  // seeded at national-economy scale (100k-300k units/day) keep producing
-  // full-tilt into markets clearing at soldFraction 0.01-0.08, pinning every
-  // finished-good price to the log-curve floor and starving player plants of
-  // fill (ticket #1027 — chemicals sat 72x oversupplied, advertising 125x).
-  // Negative productionPolicy is the WRONG lever for this (its lean-ops
-  // asymmetry cuts input demand harder than output and worsened gluts, GH
-  // #3370); mothballing is the right one — a mothballed plant is cold on BOTH
-  // sides, so a glutted market loses supply while the extraction inputs it was
-  // hoarding (all in shortage, live fertilizers fill 0.1) are released.
-  //
-  // Deliberately gradual and self-limiting: a corp is only ELIGIBLE for a
-  // state change on its stagger slot (see GLUT_STATE_CHANGE_STAGGER — young
-  // worlds are wall-to-wall single-sector NPP corps, so per-corp limits alone
-  // are cohort-wide cliffs), at most ONE change per corp per turn, and only
-  // while the sector's own fill is under GLUT_MOTHBALL_FILL_THRESHOLD — as
-  // capacity idles, surviving sellers' fill rises and the trigger stops
-  // firing. A single-sector corp MAY go fully cold: the restart pass prices
-  // its market without needing fill, so cold is recoverable, and exempting
-  // last sectors would exempt essentially the whole glut. Restarts use the
-  // price signal with a wide hysteresis band and are preferred over new
-  // mothballs so a recovering market reactivates before it sheds more.
-  // State-owned corps (countryOwnerId) are exempt: SOEs are policy
-  // instruments, not margin-seekers.
-  if (
-    plants?.enabled &&
-    !corp.countryOwnerId &&
-    glutStaggerEligible(corp._id.toString(), ctx.turn)
-  ) {
-    let stateChangeBudget = 1;
-
-    // Restart pass first: recovering markets reactivate before anything sheds.
-    for (const sp of sectorProfits) {
-      if (stateChangeBudget <= 0) break;
-      if (sp.sector.mothballed !== true) continue;
-      if (divestedSectorIds.includes(sp.sector._id)) continue;
-      const ratio = sectorShortageScore(
-        sp.sector.sectorType,
-        sp.sector.countryId ?? corp.countryId,
-        priceRatioOf
-      );
-      if (ratio >= GLUT_RESTART_PRICE_RATIO) {
-        sectorUpdates.push({
-          filter: { _id: sp.sector._id },
-          // A revived plant re-earns chronic-cost status from zero instead
-          // of mothballing again on its first losing turn (step 5).
-          update: { $set: { mothballed: false, pnlLossTurns: 0, updatedAt: now } },
-        });
-        stateChangeBudget -= 1;
-      }
-    }
-
-    if (stateChangeBudget > 0) {
-      let worst: { sp: SectorProfitInfo; fill: number } | null = null;
-      for (const sp of sectorProfits) {
-        if (sp.sector.mothballed === true) continue;
-        if (divestedSectorIds.includes(sp.sector._id)) continue;
-        // Extraction is excluded: every extractable is shortage-side (its
-        // fill is ~1 so the gate would never fire) and its output/rationing
-        // legs live outside the clearing book this signal reads.
-        if (sp.sector.sectorType === "extraction") continue;
-        const fill = sp.sector.soldFraction;
-        // soldFraction is only written under clearing mode; a sector that
-        // has never cleared (mid-build, legacy) is not a candidate.
-        if (fill == null || fill >= GLUT_MOTHBALL_FILL_THRESHOLD) continue;
-        const ratio = sectorShortageScore(
-          sp.sector.sectorType,
-          sp.sector.countryId ?? corp.countryId,
-          priceRatioOf
-        );
-        if (ratio > GLUT_MOTHBALL_PRICE_RATIO) continue;
-        if (worst == null || fill < worst.fill) worst = { sp, fill };
-      }
-      if (worst) {
-        sectorUpdates.push({
-          filter: { _id: worst.sp.sector._id },
-          update: { $set: { mothballed: true, updatedAt: now } },
-        });
-      } else {
-        // Filled plants can still lose money. Mothball the longest-running loss;
-        // this reversible action shares the budget and follows fill-based sheds.
-        const coldest = chooseCostMothballSector(
-          sectorProfits,
-          divestedSectorIds,
-          COST_MOTHBALL_LOSS_TURNS
-        );
-        if (coldest) {
-          sectorUpdates.push({
-            filter: { _id: coldest.sector._id },
-            update: { $set: { mothballed: true, updatedAt: now } },
-          });
-        }
-      }
-    }
-  }
+  sectorUpdates.push(
+    ...buildNppGlutMothballUpdates({
+      corporation: corp,
+      turn: ctx.turn,
+      now,
+      plantsEnabled: plants?.enabled === true,
+      sectorProfits,
+      divestedSectorIds,
+      priceRatioOf,
+    })
+  );
 
   // Input-squeeze strategy shifts use the 2c cohort independently: a mothball and a strategy
   // shift never target the same sector (a shift candidate is running and

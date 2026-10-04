@@ -42,16 +42,19 @@ vi.mock("@/lib/countryAccess", () => ({
   getSimulatedCountryIds: vi.fn().mockResolvedValue(["BR"]),
 }));
 
-vi.mock("@/lib/bonds/corporateCredit", () => ({
-  corporateCashArrearsAnchor: vi.fn().mockReturnValue(0),
-  sumCorporateSectorConstructionInProgress: vi.fn().mockReturnValue(0),
-  computeCorporateCreditAtTurn: vi.fn().mockReturnValue({
-    creditRating: { rating: "BBB", compositeScore: 50 },
-    totalDebt: 0,
-    totalEquity: 1_000_000,
-  }),
-  isCorporateIssuerBond: vi.fn().mockReturnValue(false),
-}));
+vi.mock("@/lib/bonds/corporateCredit", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/bonds/corporateCredit")>();
+  return {
+    ...actual,
+    sumCorporateSectorConstructionInProgress: vi.fn().mockReturnValue(0),
+    computeCorporateCreditAtTurn: vi.fn().mockReturnValue({
+      creditRating: { rating: "BBB", compositeScore: 50 },
+      totalDebt: 0,
+      totalEquity: 1_000_000,
+    }),
+    isCorporateIssuerBond: vi.fn().mockReturnValue(false),
+  };
+});
 
 vi.mock("@/lib/tariffs/tariffEffects", () => ({
   getForeignTariffMarginModifier: vi.fn().mockReturnValue(0),

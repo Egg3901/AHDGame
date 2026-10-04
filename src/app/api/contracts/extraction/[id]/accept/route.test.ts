@@ -103,5 +103,13 @@ describe("POST /api/contracts/extraction/[id]/accept", () => {
     const json = await res.json();
     expect(json.success).toBe(true);
     expect(json.expiresTurn).toBe(148);
+    expect(acceptContractOffer).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({ _id: CONTRACT_ID }),
+      expect.objectContaining({ _id: expect.any(ObjectId) }),
+      100,
+      expect.any(Date),
+      false
+    );
   });
 });

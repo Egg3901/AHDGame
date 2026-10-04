@@ -1,5 +1,4 @@
 import type { CreateIndexesOptions, Db, IndexSpecification } from "mongodb";
-import { migration as mediaDiscriminatorMarketIndexes } from "@/lib/migrations/entries/2026-10-04-media-discriminator-market-indexes";
 import { seedIndexes } from "../seedIndexes";
 
 /** One index `seedIndexes` creates, as captured without touching a database. */
@@ -22,39 +21,32 @@ export type SeedIndexPlanEntry = {
  */
 export async function collectSeedIndexPlan(): Promise<SeedIndexPlanEntry[]> {
   const plan: SeedIndexPlanEntry[] = [];
-  // Core index seeding now requires the model-aware sector index installed by
-  // this registered startup migration. Replay that migration into metadata
-  // only, separately from the seed plan, so the collector presents the same
-  // pre-seed contract as a bootstrapped world without counting migration DDL
-  // as seed declarations.
-  const installed = new Map<
-    string,
-    Array<{ key: Record<string, unknown> } & CreateIndexesOptions>
-  >();
-  const migrationDb = {
-    collection: (name: string) => ({
-      createIndex: async (key: IndexSpecification, options: CreateIndexesOptions = {}) => {
-        const indexes = installed.get(name) ?? [];
-        indexes.push({ key: key as Record<string, unknown>, ...options });
-        installed.set(name, indexes);
-        return options.name ?? JSON.stringify(key);
+  // bootstrapGameWorld runs these registered identity migrations before
+  // seedIndexes. Model their resulting index in the stand-in so seedCoreIndexes
+  // sees the same prerequisite it requires on a real bootstrap. Its subsequent
+  // idempotent createIndex call still places the index in the captured plan.
+  const startupIndexes: Record<string, Array<Record<string, unknown>>> = {
+    corporateSectors: [
+      {
+        v: 2,
+        key: {
+          corporationId: 1,
+          stateId: 1,
+          sectorType: 1,
+          industryModel: 1,
+          mediaDiscriminator: 1,
+        },
+        name: "corporateSectors_corporation_state_type_models_unique",
+        unique: true,
       },
-      dropIndex: async (indexName: string) => {
-        installed.set(
-          name,
-          (installed.get(name) ?? []).filter((index) => index.name !== indexName)
-        );
-      },
-    }),
-  } as unknown as Db;
-  await mediaDiscriminatorMarketIndexes.execute(migrationDb, { dryRun: false });
-  const recorded = (collection: string) =>
-    [
-      ...(installed.get(collection) ?? []),
-      ...plan
-        .filter((entry) => entry.collection === collection)
-        .map((entry) => ({ v: 2, key: entry.key, name: entry.options.name, ...entry.options })),
-    ];
+    ],
+  };
+  const recorded = (collection: string) => [
+    ...(startupIndexes[collection] ?? []),
+    ...plan
+      .filter((entry) => entry.collection === collection)
+      .map((entry) => ({ v: 2, key: entry.key, name: entry.options.name, ...entry.options })),
+  ];
   const emptyCursor = () => {
     const cursor = {
       toArray: async () => [],
