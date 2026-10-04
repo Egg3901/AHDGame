@@ -102,6 +102,7 @@ describe("buildCorporationLookups — bond holdings", () => {
     for (const name of [
       "corporations",
       "corporateSectors",
+      "manufacturingProductProjectsV2",
       "stateMetrics",
       "commodityPrices",
       "centralBanks",
@@ -131,6 +132,53 @@ describe("buildCorporationLookups — bond holdings", () => {
     expect(positions!.length).toBe(2);
     const issuerTypes = positions!.map((p) => p.bond.issuerType ?? "undefined").sort();
     expect(issuerTypes).toEqual(["corporation", "sovereign"]);
+  });
+
+  it("excludes product output maps from sector reads while the product gate is off", async () => {
+    const { buildCorporationLookups } = await import("./buildLookups");
+    await buildCorporationLookups(db as unknown as Db);
+
+    const sectorFind = db.collectionMocks.corporateSectors.find;
+    const corporationFind = db.collectionMocks.corporations.find;
+    const projection = sectorFind.mock.calls[0]?.[1]?.projection;
+    const corporationProjection = corporationFind.mock.calls[0]?.[1]?.projection;
+    expect(projection).toMatchObject({
+      outputUnitsByCommodity: 0,
+      outputAnchorByCommodity: 0,
+      productQualityByCommodity: 0,
+    });
+    expect(corporationProjection).toHaveProperty("manufacturingProductDevelopmentReceiptV2", 0);
+  });
+
+  it("projects product output maps only when explicitly enabled", async () => {
+    const { buildCorporationLookups } = await import("./buildLookups");
+    await buildCorporationLookups(db as unknown as Db, { productLinesV2Enabled: true });
+
+    const sectorFind = db.collectionMocks.corporateSectors.find;
+    const corporationFind = db.collectionMocks.corporations.find;
+    const projection = sectorFind.mock.calls[0]?.[1]?.projection;
+    const corporationProjection = corporationFind.mock.calls[0]?.[1]?.projection;
+    expect(projection).not.toHaveProperty("outputUnitsByCommodity");
+    expect(projection).not.toHaveProperty("outputAnchorByCommodity");
+    expect(projection).not.toHaveProperty("productQualityByCommodity");
+    expect(corporationProjection).not.toHaveProperty("manufacturingProductDevelopmentReceiptV2");
+  });
+
+  it("does not query the v2 product project collection while the gate is off", async () => {
+    const { buildCorporationLookups } = await import("./buildLookups");
+    await buildCorporationLookups(db as unknown as Db);
+
+    expect(db.collectionMocks.manufacturingProductProjectsV2.find).not.toHaveBeenCalled();
+  });
+
+  it("reads active v2 projects only when explicitly enabled", async () => {
+    const { buildCorporationLookups } = await import("./buildLookups");
+    await buildCorporationLookups(db as unknown as Db, { productLinesV2Enabled: true });
+
+    expect(db.collectionMocks.manufacturingProductProjectsV2.find).toHaveBeenCalledWith(
+      { activeCorporationId: { $exists: true } },
+      { projection: expect.objectContaining({ allocations: 1, kindId: 1, stage: 1 }) }
+    );
   });
 
   it("sovereign bond holdings contribute to bondAndImfPortfolioAnchorByCorpId", async () => {

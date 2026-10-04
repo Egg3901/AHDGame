@@ -152,4 +152,33 @@ describe("runClearingPrePass with clearing enabled", () => {
     expect(result.contractedByCorpCommodity).toBeDefined();
     expect(result.contractedByCorpCommodity?.size).toBe(0);
   });
+
+  it("uses exact product output units for supply-agreement delivery accounting", () => {
+    const { lookups } = makeSectorWorld();
+    const sector = lookups.sectorsByCorp.get("corp1")![0] as Record<string, unknown>;
+    Object.assign(sector, {
+      outputUnitsByCommodity: { vehicles: 20 },
+      outputAnchorByCommodity: { vehicles: 5000 },
+      productQualityByCommodity: { vehicles: 72 },
+    });
+    Object.assign(lookups, { productLinesV2Enabled: true });
+    const market = { clearingEnabled: true, plantsEnabled: true } as MarketContext;
+    const producedByCorpCommodity = new Map<string, Map<string, number>>();
+
+    runClearingPrePass(
+      makeInput({
+        lookups,
+        market,
+        producedByCorpCommodity,
+        supplyAgreementsEnabled: true,
+        settleableAgreements: [],
+        contractedByCorpCommodity: new Map(),
+      })
+    );
+
+    expect(market.clearingBySectorId?.get("sector1")?.soldByCommodity).toHaveProperty(
+      "vehicles"
+    );
+    expect(producedByCorpCommodity.get("corp1")?.get("vehicles")).toBe(20);
+  });
 });

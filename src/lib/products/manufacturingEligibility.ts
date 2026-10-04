@@ -90,7 +90,8 @@ export function legalManufacturingProductKinds(
     }
     for (const kind of MANUFACTURING_PRODUCT_KINDS) {
       if (
-        kind.sectorTypes.includes(plant.sectorType as CorporationType) &&
+      kind.sectorTypes.includes(plant.sectorType as CorporationType) &&
+        kind.strategyIds.includes(strategy.id) &&
         (strategy.supply[kind.outputCommodity] ?? 0) > 0
       ) {
         legal.add(kind.id);
@@ -129,5 +130,9 @@ export function isLegalManufacturingProductForPlant(
   const strategy = SECTOR_STRATEGIES[plant.sectorType as keyof typeof SECTOR_STRATEGIES]?.find(
     (candidate) => candidate.id === (plant.strategyId ?? "standard")
   );
-  return (strategy?.supply[kind.outputCommodity] ?? 0) > 0;
+  return (
+    !!strategy &&
+    kind.strategyIds.includes(strategy.id) &&
+    (strategy.supply[kind.outputCommodity] ?? 0) > 0
+  );
 }

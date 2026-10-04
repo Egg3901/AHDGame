@@ -23,6 +23,7 @@ import { getMarketSystemMode, marketAtLeast } from "@/lib/market/featureFlag";
 import { buildMarketContext } from "@/lib/market/marketContext";
 import { runClearingPrePass } from "./clearingPrePass";
 import { computeQualityUpdates } from "./brandQualityTurn";
+import { consumeManufacturingDevelopmentReceiptsV2 } from "@/lib/products/manufacturingProjectPersistence";
 import { getEffectiveStrategyRates } from "@/lib/constants/sectorStrategies";
 import { settleSupplyAgreements, type SettleableSupplyAgreement } from "./settleSupplyAgreements";
 import type { CommodityType } from "@/lib/constants/commodities";
@@ -148,6 +149,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       {
         projection: {
           marketSystemMode: 1,
+          productLinesV2Enabled: 1,
           marketGovernorCap: 1,
           marketGovernorRampTurns: 1,
           brandLoyaltyEnabled: 1,
@@ -210,11 +212,22 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     moneyWiringEnabled: interstateMoneyWiringEnabled,
     canonicalFreightBillingEnabled,
     mediaEditorialEnabled,
+    productLinesV2Enabled:
+      plantsEnabledForMarketShare &&
+      (marketGovernorConfig as { productLinesV2Enabled?: boolean } | null)
+        ?.productLinesV2Enabled === true,
   });
   const politicalMediaMarketEnabled = marketGovernorConfig?.politicalMediaMarketEnabled === true;
   const politicalMediaOrders: PoliticalMediaOrderForClearing[] = politicalMediaMarketEnabled
     ? await loadPoliticalMediaOrdersForClearing(db, turn ?? 0)
     : [];
+  if (lookups.productLinesV2Enabled && lookups.manufacturingProductByCorpId) {
+    await consumeManufacturingDevelopmentReceiptsV2({
+      db,
+      corporations: lookups.corporations,
+      projectsByCorporationId: lookups.manufacturingProductByCorpId,
+    });
+  }
   const currentYear = gameState?.currentYear;
   // Soft-budget gate for the turn path (see sectorTurn's affordability brake and
   // nppInsolvencyDissolution, which already exempts planned economies). Read off
@@ -393,7 +406,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   // Independent of clearing; flag-gated. Display/telemetry only in this phase.
   let qualityCorpUpdates = new Map<string, number>();
   let newCommodityQuality: Map<CommodityType, number> | null = null;
-  if (sectorQualityEnabled) {
+  if (sectorQualityEnabled || lookups.productLinesV2Enabled) {
     const laggedQ = new Map<CommodityType, number>();
     const qDocs = await db
       .collection("commodityQuality")
@@ -420,6 +433,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           (c) => (rates.demand?.[c] ?? 0) > 0
         );
         return {
+          sectorId: sector._id.toString(),
           revenueWeight: Math.max(0, sector.revenue),
           wageLevel: typeof sector.wageLevel === "number" ? sector.wageLevel : 1,
           outputs,
@@ -433,9 +447,15 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
         sectors: qSectors,
       });
     }
-    const { corpQuality, commodityQuality } = computeQualityUpdates(qCorps, laggedQ);
-    qualityCorpUpdates = corpQuality;
-    newCommodityQuality = commodityQuality;
+    const { corpQuality, commodityQuality, sectorQualityBySectorId } = computeQualityUpdates(
+      qCorps,
+      laggedQ
+    );
+    lookups.productSectorQualityById = sectorQualityBySectorId;
+    if (sectorQualityEnabled) {
+      qualityCorpUpdates = corpQuality;
+      newCommodityQuality = commodityQuality;
+    }
     // Keep in-memory corp docs current so the history snapshot charts this turn.
     for (const [corpId, q] of corpQuality) {
       const corp = lookups.corpById.get(corpId);

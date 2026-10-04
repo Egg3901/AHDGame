@@ -6,7 +6,11 @@ import { handleRouteError } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { createAdminLog } from "@/lib/adminLog";
 import type { GameConfig } from "@/lib/db/types";
-import { getMarketSystemMode, type MarketSystemMode } from "@/lib/market/featureFlag";
+import {
+  getMarketSystemMode,
+  marketAtLeast,
+  type MarketSystemMode,
+} from "@/lib/market/featureFlag";
 import { MARKET_MODE_INFO, MARKET_MODE_ORDER } from "@/lib/market/modes";
 import { getCurrentTurn } from "@/lib/currentTurn";
 import {
@@ -43,6 +47,7 @@ const patchSchema = z.object({
   sectorQualityEnabled: z.boolean().optional(),
   // Package B: quality → premium pricing coupling (requires sectorQualityEnabled).
   qualityPremiumPricingEnabled: z.boolean().optional(),
+  productLinesV2Enabled: z.boolean().optional(),
   supplyAgreementsEnabled: z.boolean().optional(),
   shortageResponsiveSourcingEnabled: z.boolean().optional(),
   intervention: economicInterventionPlanSchema.optional(),
@@ -93,6 +98,7 @@ export async function GET() {
           brandLoyaltySliceEnabled: 1,
           sectorQualityEnabled: 1,
           qualityPremiumPricingEnabled: 1,
+          productLinesV2Enabled: 1,
           supplyAgreementsEnabled: 1,
           shortageResponsiveSourcingEnabled: 1,
           sovereignIssuanceConsolidationEnabled: 1,
@@ -117,6 +123,7 @@ export async function GET() {
       brandLoyaltySliceEnabled: config?.brandLoyaltySliceEnabled === true,
       sectorQualityEnabled: config?.sectorQualityEnabled === true,
       qualityPremiumPricingEnabled: config?.qualityPremiumPricingEnabled === true,
+      productLinesV2Enabled: config?.productLinesV2Enabled === true,
       supplyAgreementsEnabled: config?.supplyAgreementsEnabled === true,
       shortageResponsiveSourcingEnabled: config?.shortageResponsiveSourcingEnabled === true,
       sovereignIssuanceConsolidationEnabled: config?.sovereignIssuanceConsolidationEnabled === true,
@@ -167,6 +174,7 @@ export async function PATCH(request: Request) {
       brandLoyaltySliceEnabled,
       sectorQualityEnabled,
       qualityPremiumPricingEnabled,
+      productLinesV2Enabled,
       supplyAgreementsEnabled,
       shortageResponsiveSourcingEnabled,
       intervention,
@@ -197,6 +205,7 @@ export async function PATCH(request: Request) {
       brandLoyaltySliceEnabled?: boolean;
       sectorQualityEnabled?: boolean;
       qualityPremiumPricingEnabled?: boolean;
+      productLinesV2Enabled?: boolean;
       supplyAgreementsEnabled?: boolean;
       shortageResponsiveSourcingEnabled?: boolean;
       intervention?: EconomicInterventionPlan;
@@ -233,6 +242,12 @@ export async function PATCH(request: Request) {
     }
 
     const db = await getDb();
+    if (productLinesV2Enabled === true && !marketAtLeast(mode, "plants")) {
+      return NextResponse.json(
+        { error: "Product lines require the plants market tier." },
+        { status: 400 }
+      );
+    }
     const gameConfig = db.collection<GameConfig>("gameConfig");
 
     const priorMode = await getMarketSystemMode();
@@ -348,6 +363,8 @@ export async function PATCH(request: Request) {
       governorSet.sectorQualityEnabled = sectorQualityEnabled;
     if (typeof qualityPremiumPricingEnabled === "boolean")
       governorSet.qualityPremiumPricingEnabled = qualityPremiumPricingEnabled;
+    if (typeof productLinesV2Enabled === "boolean")
+      governorSet.productLinesV2Enabled = productLinesV2Enabled;
     if (typeof supplyAgreementsEnabled === "boolean")
       governorSet.supplyAgreementsEnabled = supplyAgreementsEnabled;
     if (typeof shortageResponsiveSourcingEnabled === "boolean") {

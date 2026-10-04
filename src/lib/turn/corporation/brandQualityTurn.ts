@@ -19,6 +19,7 @@ import {
  */
 
 export interface QualitySectorInput {
+  sectorId?: string;
   revenueWeight: number;
   wageLevel: number;
   outputs: readonly CommodityType[];
@@ -37,6 +38,8 @@ export interface QualityUpdateResult {
   corpQuality: Map<string, number>;
   /** commodity → new average output quality (0–100), for next turn's inputs. */
   commodityQuality: Map<CommodityType, number>;
+  /** Current live quality by sector for gated product-line output adapters. */
+  sectorQualityBySectorId: Map<string, number>;
 }
 
 function meanInputQuality(
@@ -62,6 +65,7 @@ export function computeQualityUpdates(
   const corpQuality = new Map<string, number>();
   // Accumulate revenue-weighted output quality per commodity.
   const commodityAcc = new Map<CommodityType, { w: number; acc: number }>();
+  const sectorQualityBySectorId = new Map<string, number>();
 
   for (const corp of corps) {
     const perSector: { quality: number | null; revenueWeight: number }[] = [];
@@ -76,6 +80,7 @@ export function computeQualityUpdates(
         outputCommodities: sector.outputs,
       });
       perSector.push({ quality: q, revenueWeight: sector.revenueWeight });
+      if (q != null && sector.sectorId) sectorQualityBySectorId.set(sector.sectorId, q);
       // Feed the per-commodity rollup (only quality-bearing sectors).
       if (q != null) {
         const w = Math.max(0, sector.revenueWeight);
@@ -98,5 +103,5 @@ export function computeQualityUpdates(
     if (e.w > 0) commodityQuality.set(c, Math.round((e.acc / e.w) * 10) / 10);
   }
 
-  return { corpQuality, commodityQuality };
+  return { corpQuality, commodityQuality, sectorQualityBySectorId };
 }

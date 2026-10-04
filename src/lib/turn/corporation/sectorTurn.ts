@@ -9,6 +9,7 @@ import {
 import type { Corporation, CorporateSector } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { CommodityType } from "@/lib/constants/commodities";
+import { eraScaledBasePrices } from "@/lib/constants/commodities";
 import { trendProductionPolicy, getRevenueMultiplier } from "@/lib/utils/productionPolicy";
 import {
   calculateDailyGrowthCost,
@@ -67,6 +68,9 @@ import {
   supportsCostPlusPricing,
   validCostPlusBasis,
 } from "@/lib/market/costPlusPricing/rules";
+import { buildManufacturedSectorOutput } from "@/lib/products/manufacturingRules";
+import { getManufacturingProductKind } from "@/lib/products/manufacturingCatalog";
+import { isLegalManufacturingProductForPlant } from "@/lib/products/manufacturingEligibility";
 
 /** Process one sector and append its persisted update to the turn collectors. */
 export function processSector(
@@ -694,6 +698,47 @@ export function processSector(
     prevCapitalBookAnchor: sector.capitalBookAnchor,
     npvBoostMultiplier: sectorNpvBoostMultiplier(currentTurn),
   });
+
+  const productProject = lookups.productLinesV2Enabled
+    ? lookups.manufacturingProductByCorpId?.get(corp._id.toString())
+    : undefined;
+  const productAllocation = productProject?.allocations.find(
+    (allocation) => allocation.sectorId === sector._id.toString()
+  );
+  const productKind = productProject
+    ? getManufacturingProductKind(productProject.kindId)
+    : undefined;
+  const productOutput =
+    plantsEnabled &&
+    productProject &&
+    productKind &&
+    productAllocation &&
+    isLegalManufacturingProductForPlant(productProject.kindId, {
+      sectorId: sector._id.toString(),
+      corporationId: corp._id.toString(),
+      sectorType: sector.sectorType,
+      strategyId: sector.strategyId,
+      capitalStock: sector.capitalStock ?? 0,
+      plantCount: sector.plantCount ?? 0,
+      mothballed: sector.mothballed,
+    })
+      ? buildManufacturedSectorOutput({
+          outputAnchor: producedUnits * plantsMixPrice,
+          supplyRates: (strategyRates.supply ?? {}) as Partial<Record<CommodityType, number>>,
+          allocationShare: productAllocation.share,
+          stage: productProject.stage,
+          outputCommodity: productKind.outputCommodity,
+          basePrices: eraScaledBasePrices(lookups.eraUnitScale),
+          currentSectorQualityByCommodity: Object.fromEntries(
+            Object.keys(strategyRates.supply ?? {}).map((commodity) => [
+              commodity,
+              lookups.productSectorQualityById?.get(sector._id.toString()),
+            ])
+          ) as Partial<Record<CommodityType, number>>,
+          paidDevelopmentAnchor: productProject.developmentPaidAnchor,
+          paidThresholdAnchor: productProject.paidThresholdAnchor,
+        })
+      : null;
   // (moved to decomposePhysicalCosts: inputs bill + financial legs)
   // (moved to decomposePhysicalCosts: calibration solve + residual)
   // (moved to decomposePhysicalCosts: P&L assembly, profit, NPV, book anchor)
@@ -716,6 +761,8 @@ export function processSector(
           soldByCommodity: clearing.soldByCommodity ?? {},
           supplyRates: (strategyRates.supply ?? {}) as Partial<Record<CommodityType, number>>,
           mixPriceAnchor: plantsMixPrice,
+          outputUnitsByCommodity: productOutput?.outputUnitsByCommodity,
+          outputAnchorByCommodity: productOutput?.outputAnchorByCommodity,
         })
       : null;
   const hourlyInventoryRevenue = inventoryTurn
@@ -768,6 +815,13 @@ export function processSector(
     // economy.
     producedUnits: Math.round(producedUnits * 100) / 100,
     soldUnits: Math.round(soldUnits * 100) / 100,
+    ...(productOutput
+      ? {
+          outputUnitsByCommodity: productOutput.outputUnitsByCommodity,
+          outputAnchorByCommodity: productOutput.outputAnchorByCommodity,
+          productQualityByCommodity: productOutput.productQualityByCommodity,
+        }
+      : {}),
     // Ceiling the supply-agreement damages leg clamps a contracted volume to,
     // so a supplier is never billed for output it could not physically have
     // made. See the derivation beside `contractAchievableUnits` above.

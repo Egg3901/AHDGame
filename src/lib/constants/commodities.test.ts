@@ -15,6 +15,7 @@ import {
   COMMODITY_BASE_PRICES,
   FINANCIAL_DEMAND_ISSUANCE_FRACTION,
   COMMODITY_TYPES,
+  NATCORP_COMMODITY_MULTIPLIER,
   COMMODITY_AGGREGATE_INPUT_CAP,
   COMMODITY_AGGREGATE_SURPLUS_CAP,
   BUILDING_MATERIALS_GDP_DEMAND_FRACTION,
@@ -944,6 +945,35 @@ describe("computeRawSupplyDemand — plants tier (real production, P3b)", () => 
       totalSplit += res.get(commodity)!.supply;
     }
     expect(totalSplit).toBeCloseTo(produced, 4);
+  });
+
+  it("uses exact product output units and keeps normal market multipliers", () => {
+    const inputs = {
+      sectorType: "manufacturing",
+      revenue: 1_000_000,
+      stateId: "S1",
+      producedUnits: 500,
+      isNatcorp: true,
+      militaryDivertedFraction: 0.25,
+    };
+    const result = plants([
+      {
+        ...inputs,
+        outputUnitsByCommodity: { steel: 20, vehicles: 3 },
+      },
+    ]);
+    const state = result.byState.get("S1")!;
+    const unchangedInputs = plants([inputs]).byState.get("S1")!;
+
+    expect(state.get("steel")!.supply).toBeCloseTo(20 * NATCORP_COMMODITY_MULTIPLIER * 0.75, 6);
+    expect(state.get("vehicles")!.supply).toBeCloseTo(
+      3 * NATCORP_COMMODITY_MULTIPLIER * 0.75,
+      6
+    );
+    expect(state.get("building_materials")!.supply).toBe(0);
+    for (const [commodity, balance] of state) {
+      expect(balance.demand).toBeCloseTo(unchangedInputs.get(commodity)!.demand, 6);
+    }
   });
 
   it("attributes the ledger's standard chemical mix to the owning corporation", () => {

@@ -357,38 +357,66 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
           }
         }
         if (supplyAgreementsEnabled && market.plantsEnabled && sector.mothballed !== true) {
-          const scaled = plantsSupplyScaledUnits({
-            producedUnits: sector.producedUnits,
-            isNatcorp: !!lookups.corpById.get(corpId)?.countryOwnerId,
-            // Mirrors the ledger (computeRawSupplyDemand): embargo haircut plus
-            // the planned-economy media derate. Offer and ledger must agree.
-            embargoSupplyFactor:
-              embargoSupplyFactorFor(sector) *
-              plannedEconomyMediaSupplyFactor(
-                sector.sectorType,
-                isPlannedEconomy(
-                  (sector as { countryId?: string }).countryId,
-                  currentYear,
-                  commandEconomyEnabled
-                )
-              ),
-          });
-          if (scaled !== null && scaled > 0) {
-            const supplyRates = rates.supply ?? {};
-            for (const commodity of Object.keys(supplyRates) as CommodityType[]) {
-              const units =
-                scaled *
-                commodityMixWeight(
-                  supplyRates,
-                  eraScaledBasePrices(lookups.eraUnitScale),
-                  commodity
-                );
+          const isNatcorp = !!lookups.corpById.get(corpId)?.countryOwnerId;
+          const embargoSupplyFactor =
+            embargoSupplyFactorFor(sector) *
+            plannedEconomyMediaSupplyFactor(
+              sector.sectorType,
+              isPlannedEconomy(
+                (sector as { countryId?: string }).countryId,
+                currentYear,
+                commandEconomyEnabled
+              )
+            );
+          const exactOutputUnits = lookups.productLinesV2Enabled
+            ? (sector.outputUnitsByCommodity as
+                | Partial<Record<CommodityType, number>>
+                | undefined)
+            : undefined;
+          if (exactOutputUnits) {
+            const scale =
+              scaleMeasuredProducedUnits({
+                producedUnits: 1,
+                isNatcorp,
+                embargoSupplyFactor,
+                militaryRetainedFraction: 1 - freshMilitaryDiversion(sector, turn ?? 0),
+              }) ?? 0;
+            for (const [commodity, rawUnits] of Object.entries(exactOutputUnits) as Array<
+              [CommodityType, number]
+            >) {
+              const units = Math.max(0, rawUnits ?? 0) * scale;
               if (!(units > 0)) continue;
               const byKey = producedByCorpCommodity.get(corpId) ?? new Map<string, number>();
               for (const key of contractScopeKeysFor(commodity, sector.stateId)) {
                 byKey.set(key, (byKey.get(key) ?? 0) + units);
               }
               producedByCorpCommodity.set(corpId, byKey);
+            }
+          } else {
+            const scaled = plantsSupplyScaledUnits({
+              producedUnits: sector.producedUnits,
+              isNatcorp,
+              // Mirrors the ledger (computeRawSupplyDemand): embargo haircut plus
+              // the planned-economy media derate. Offer and ledger must agree.
+              embargoSupplyFactor,
+            });
+            if (scaled !== null && scaled > 0) {
+              const supplyRates = rates.supply ?? {};
+              for (const commodity of Object.keys(supplyRates) as CommodityType[]) {
+                const units =
+                  scaled *
+                  commodityMixWeight(
+                    supplyRates,
+                    eraScaledBasePrices(lookups.eraUnitScale),
+                    commodity
+                  );
+                if (!(units > 0)) continue;
+                const byKey = producedByCorpCommodity.get(corpId) ?? new Map<string, number>();
+                for (const key of contractScopeKeysFor(commodity, sector.stateId)) {
+                  byKey.set(key, (byKey.get(key) ?? 0) + units);
+                }
+                producedByCorpCommodity.set(corpId, byKey);
+              }
             }
           }
         }
@@ -424,6 +452,39 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
           outputQuality: qualityPremiumPricingEnabled
             ? (lookups.corpById.get(corpId)?.averageQuality ?? null)
             : undefined,
+          ...(market.plantsEnabled && sector.outputUnitsByCommodity
+            ? {
+                outputUnitsByCommodity: Object.fromEntries(
+                  Object.entries(sector.outputUnitsByCommodity).map(([commodity, units]) => [
+                    commodity,
+                    Math.max(0, units ?? 0) *
+                      (scaleMeasuredProducedUnits({
+                        producedUnits: 1,
+                        isNatcorp: !!lookups.corpById.get(corpId)?.countryOwnerId,
+                        embargoSupplyFactor:
+                          embargoSupplyFactorFor(sector) *
+                          plannedEconomyMediaSupplyFactor(
+                            sector.sectorType,
+                            isPlannedEconomy(
+                              (sector as { countryId?: string }).countryId,
+                              currentYear,
+                              commandEconomyEnabled
+                            )
+                          ),
+                        militaryRetainedFraction: 1 - freshMilitaryDiversion(sector, turn ?? 0),
+                      }) ?? 0),
+                  ])
+                ) as Partial<Record<CommodityType, number>>,
+                outputAnchorByCommodity: sector.outputAnchorByCommodity as
+                  | Partial<Record<CommodityType, number>>
+                  | undefined,
+                productQualityByCommodity: qualityPremiumPricingEnabled
+                  ? (sector.productQualityByCommodity as
+                      | Partial<Record<CommodityType, number>>
+                      | undefined)
+                  : undefined,
+              }
+            : {}),
           // Plants tier: last turn's measured output is the offer (lagged, like
           // every other clearing input). Null for a sector that has never run a
           // plants turn, the book falls back to the revenue nameplate.

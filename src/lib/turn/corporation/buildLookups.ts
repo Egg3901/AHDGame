@@ -36,6 +36,11 @@ import { buildTradeAffinity } from "@/lib/trade/tradeAffinity";
 import { buildCountryClearingBooks } from "@/lib/market/tradePartition";
 import { sectorCountryForClearing } from "./sectorCountry";
 import { COUNTRY_ORDER } from "@/lib/constants/countries";
+import {
+  MANUFACTURING_PRODUCT_PROJECTS_V2,
+  type ManufacturingProductProject,
+} from "@/lib/products/manufacturingProject";
+import { activeManufacturingProductProjectProjection } from "@/lib/products/manufacturingProjectPersistence";
 import type { TradeEmbargo } from "@/lib/db/types/tradeEmbargo";
 import type { OrganizationMembership } from "@/lib/db/types/internationalOrganization";
 import {
@@ -130,6 +135,8 @@ export async function buildCorporationLookups(
      * `landedPremiumByState`. Omitted/false keeps that map empty.
      */
     moneyWiringEnabled?: boolean;
+    /** Read product output maps only while the corporation product gate is on. */
+    productLinesV2Enabled?: boolean;
     /** Use lagged freight-delivery availability as a local input constraint. */
     freightSettlementActive?: boolean;
     /**
@@ -200,12 +207,20 @@ export async function buildCorporationLookups(
     orgMembershipDocs,
     activeEmbargoDocs,
     worldPreset,
+    activeManufacturingProjects,
   ] = await Promise.all([
     db
       .collection<Corporation>("corporations")
       .find(
         {},
-        options?.mediaEditorialEnabled === true ? {} : { projection: { editorialStance: 0 } }
+        {
+          projection: {
+            ...(options?.mediaEditorialEnabled === true ? {} : { editorialStance: 0 }),
+            ...(options?.productLinesV2Enabled === true
+              ? {}
+              : { manufacturingProductDevelopmentReceiptV2: 0 }),
+          },
+        }
       )
       .toArray(),
     // `plantsPnl` is ~15% of the collection. corporationTurn writes it via
@@ -223,6 +238,13 @@ export async function buildCorporationLookups(
               ? {}
               : { pricingMode: 0, costPlusCostBasis: 0 }),
             ...(options?.omitBuildQueue ? { buildQueue: 0 } : {}),
+            ...(options?.productLinesV2Enabled
+              ? {}
+              : {
+                  outputUnitsByCommodity: 0,
+                  outputAnchorByCommodity: 0,
+                  productQualityByCommodity: 0,
+                }),
           },
         }
       )
@@ -363,6 +385,15 @@ export async function buildCorporationLookups(
       })
       .toArray(),
     loadWorldPreset(db),
+    options?.productLinesV2Enabled === true
+      ? db
+          .collection<ManufacturingProductProject>(MANUFACTURING_PRODUCT_PROJECTS_V2)
+          .find(
+            { activeCorporationId: { $exists: true } },
+            { projection: activeManufacturingProductProjectProjection() }
+          )
+          .toArray()
+      : Promise.resolve([] as ManufacturingProductProject[]),
   ]);
 
   // A split can preserve a player's corporation while its owner chooses a new
@@ -371,6 +402,9 @@ export async function buildCorporationLookups(
   const { firms: corporations, facilities: allSectors } = excludePendingFederationFirms(
     loadedCorporations,
     loadedSectors
+  );
+  const manufacturingProductByCorpId = new Map<string, ManufacturingProductProject>(
+    activeManufacturingProjects.map((project) => [project.corporationId, project])
   );
 
   // Backfill countryId on corporations and sectors missing it (pre-migration data)
@@ -1225,6 +1259,8 @@ export async function buildCorporationLookups(
     eraUnitScale,
     corporations,
     sectorsByCorp,
+    productLinesV2Enabled: options?.productLinesV2Enabled === true,
+    manufacturingProductByCorpId,
     corpById,
     editorialAudienceLeanByState:
       options?.mediaEditorialEnabled === true

@@ -13,6 +13,7 @@ import type { StateSectorSpecialization } from "@/lib/constants/corporations";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { CrossCorpStockHolding } from "@/lib/corporations/portfolioAnchorValuation";
 import type { FtaCoverage } from "@/lib/tariffs/ftaOverrides";
+import type { ManufacturingProductProject } from "@/lib/products/manufacturingProject";
 
 /**
  * All data pre-fetched from the DB and converted into lookup structures.
@@ -22,6 +23,10 @@ import type { FtaCoverage } from "@/lib/tariffs/ftaOverrides";
 export interface CorporationLookups {
   corporations: Corporation[];
   sectorsByCorp: Map<string, CorporateSector[]>;
+  productLinesV2Enabled?: boolean;
+  productSectorQualityById?: Map<string, number>;
+  /** Active v2 manufacturing projects, empty and unread while productLinesV2 is off. */
+  manufacturingProductByCorpId?: Map<string, ManufacturingProductProject>;
   corpById: Map<string, Corporation>;
   /** Two-axis electorate lean, projected only while mediaEditorialEnabled is true. */
   editorialAudienceLeanByState?: Map<string, { economic: number; social: number }>;

@@ -79,6 +79,7 @@ import {
   perTurnBondCouponIncomeAsHolder,
 } from "@/lib/bonds/corpBondCashflows";
 import { addCorpToCorpSettlement, type SettleCorpInfo } from "./settleSupplyAgreements";
+import { allocateManufacturingResearchSpend } from "@/lib/products/manufacturingRules";
 
 /** Primary commodities that proxy R&D conditions for each sector type. */
 const SECTOR_RD_COMMODITIES: Partial<Record<string, [string, string?]>> = {
@@ -916,6 +917,17 @@ export function processSectors(
     // Grows on the overhead-clamped spend (hourlyRd), the same figure deducted as
     // an operating cost above, so R&D score cannot outrun what the corp paid.
     const currentRdScore = corp.rdScore ?? 0;
+    const activeManufacturingProject = lookups.productLinesV2Enabled
+      ? lookups.manufacturingProductByCorpId?.get(corpId)
+      : undefined;
+    const researchAllocation = allocateManufacturingResearchSpend({
+      paidResearchAnchor: hourlyRd,
+      projectPaidAnchor: activeManufacturingProject?.developmentPaidAnchor ?? 0,
+      projectCostAnchor: activeManufacturingProject?.paidThresholdAnchor ?? 0,
+      stage: activeManufacturingProject?.stage,
+    });
+    const productDevelopmentSpendAnchor = researchAllocation.productDevelopmentAnchor;
+    const genericResearchSpend = researchAllocation.genericResearchAnchor;
     // rdDemandFactor (±15%) ties R&D output to technology + consulting demand.
     // moraleFactor (#84, ±15%) rewards paying workers above baseline: happier
     // workers convert R&D spend more efficiently. Neutral when labour is off.
@@ -923,7 +935,7 @@ export function processSectors(
     const moraleFactor = rdMoraleFactor(avgWageLevel);
     const newRdScore = calcRdScoreAfterTurn(
       currentRdScore,
-      hourlyRd * TURNS_PER_DAY * rdDemandFactor * moraleFactor
+      genericResearchSpend * TURNS_PER_DAY * rdDemandFactor * moraleFactor
     );
     const rdScoreDelta = newRdScore - currentRdScore;
 
@@ -1083,6 +1095,15 @@ export function processSectors(
             creditCompositeSnapshot: creditPack.creditRating.compositeScore,
             creditSnapshotTurn: currentTurn,
             creditRatingComponents: creditPack.creditRating.components,
+            ...(lookups.productLinesV2Enabled && activeManufacturingProject
+              ? {
+                  manufacturingProductDevelopmentReceiptV2: {
+                    projectId: activeManufacturingProject._id,
+                    turn: currentTurn,
+                    amountAnchor: productDevelopmentSpendAnchor,
+                  },
+                }
+              : {}),
             // Ticket #919: `shouldClearDividends` already zeroes THIS turn's payout
             // (see payoutDividendRate above) whenever net income dips negative for a
             // single turn — that's the correct, transient skip. Persisting

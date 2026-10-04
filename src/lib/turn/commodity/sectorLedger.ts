@@ -127,6 +127,10 @@ export function buildSectorRows(inputs: SectorRowInputs): SectorLedgerRow[] {
         ledgerCommandEconomyEnabled
       ),
       producedUnits: typeof s.producedUnits === "number" ? s.producedUnits : null,
+      outputUnitsByCommodity: s.outputUnitsByCommodity,
+      outputAnchorByCommodity: s.outputAnchorByCommodity,
+      productQualityByCommodity: s.productQualityByCommodity,
+      soldByCommodity: s.soldByCommodity,
       // Output shipped to a state arsenal under a defence contract does not
       // also reach the market. Resolved for staleness here because this is
       // where the turn is known; the ledger itself only multiplies.
@@ -307,6 +311,26 @@ export function accumulatePlantsUnits(
       isNatcorp: sector.isNatcorp,
       embargoSupplyFactor: sector.embargoSupplyFactor,
     };
+    if (sector.outputUnitsByCommodity) {
+      const productScale =
+        plantsSupplyScaledUnits({ ...scaleArgs, producedUnits: 1 }) ?? 1;
+      for (const [commodity, rawProduced] of Object.entries(
+        sector.outputUnitsByCommodity
+      ) as [CommodityType, number][]) {
+        if (!Number.isFinite(rawProduced) || rawProduced <= 0) continue;
+        const producedExact = rawProduced * productScale;
+        const soldFraction = sector.soldByCommodity?.[commodity];
+        const soldUnits =
+          typeof soldFraction === "number" && Number.isFinite(soldFraction)
+            ? producedExact * Math.max(0, Math.min(1, soldFraction))
+            : 0;
+        const entry = plantsUnitsByCommodity.get(commodity) ?? { produced: 0, sold: 0 };
+        entry.produced += producedExact;
+        entry.sold += soldUnits;
+        plantsUnitsByCommodity.set(commodity, entry);
+      }
+      continue;
+    }
     const produced =
       plantsSupplyScaledUnits({ ...scaleArgs, producedUnits: sector.producedUnits }) ?? 0;
     const sold =

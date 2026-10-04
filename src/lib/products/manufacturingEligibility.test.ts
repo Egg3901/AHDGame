@@ -54,4 +54,13 @@ describe("manufacturing product eligibility", () => {
       { sectorId: "steel-1", capacityStock: 250, share: 0.5 },
     ]);
   });
+
+  it("applies product-specific strategy compatibility", () => {
+    const evPlant = { ...plants[1], strategyId: "ev" };
+    const legal = legalManufacturingProductKinds([evPlant]);
+
+    expect(legal.map((kind) => kind.id)).toContain("passenger_car");
+    expect(legal.map((kind) => kind.id)).toContain("commercial_vehicle");
+    expect(legal.map((kind) => kind.id)).not.toContain("truck");
+  });
 });
