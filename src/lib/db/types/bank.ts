@@ -308,6 +308,8 @@ export interface BankLoan {
   /** Quoted fee withheld from named-loan proceeds. Absent legacy requests pay no fee. */
   originationFee?: number;
   outstanding: number;
+  /** Actual cash principal recovered from pledged property or build refunds. */
+  collateralRecoveredLocal?: number;
   ratePercent: number;
   originatedTurn: number;
   /** Contract length in turns (required for named player loans). */
