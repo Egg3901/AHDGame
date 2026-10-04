@@ -54,4 +54,5 @@ export interface ManufacturingProductAdvertisingReceiptV2 {
   projectId: string;
   turn: number;
   amountAnchor: number;
+  sellerCorporationIds?: string[];
 }
