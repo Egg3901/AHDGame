@@ -4,6 +4,11 @@
  * before writing them, so the same world turn resumes without aging or moving people twice.
  */
 import { loadPandemicSignal } from "@/lib/livingConflict/pandemicSignal";
+import { loadPendingRefugeeReceptions } from "@/lib/livingConflict/refugeeReception";
+import {
+  planRefugeeReceptions,
+  servingCohortsForReception,
+} from "@/lib/livingConflict/rules/refugeeReception";
 import { pandemicMortality } from "@/lib/livingConflict/rules/pandemic";
 import type { Db } from "mongodb";
 import type { GameState } from "@/lib/db/types/gameState";
@@ -91,6 +96,8 @@ interface RegionWork {
   flows: CohortFlowTallies;
   m: MetricsDoc | undefined;
   militaryServicePop: number; // active conscription withdrawal (§4.5)
+  servingMaleByAge: readonly number[];
+  servingFemaleByAge: readonly number[];
 }
 
 const val = (x: { value?: number } | undefined, dflt: number): number =>
@@ -213,6 +220,12 @@ export async function runDemographicFlows(
     ]);
 
   const pandemic = await loadPandemicSignal(db, gameState?.livingConflictsEnabled === true);
+  const receptionOrders = await loadPendingRefugeeReceptions(
+    db,
+    worldEpochId,
+    turn,
+    gameState?.livingConflictsEnabled === true
+  );
 
   // Configurable age thresholds (defaults 18 / 18 / 64; future laws write gameState).
   // Voting age is resolved per country because electoral-law enactment writes the
@@ -245,6 +258,7 @@ export async function runDemographicFlows(
     countryId: string;
     cappedNet: number;
     conscription: ReturnType<typeof estimateConscriptionEffects>;
+    conscriptionPolicy: ConscriptionPolicy;
   }
   const preps: RegionPrep[] = [];
   let blocPop = 0;
@@ -301,12 +315,21 @@ export async function runDemographicFlows(
     // Conscription (§4.5): resolve the country's policy and withdraw the serving
     // slice — serving women leave the childbearing pool (fertility ↓); the total
     // is exposed as militaryServicePopulation for the P1c labor subtraction.
-    const conscription = estimateConscriptionEffects(
-      resolveConscriptionPolicy(demo.countryId, gameState?.conscription?.[demo.countryId]),
-      before
+    const policy = resolveConscriptionPolicy(
+      demo.countryId,
+      gameState?.conscription?.[demo.countryId]
     );
+    const conscription = estimateConscriptionEffects(policy, before);
 
-    preps.push({ demo, before, m, countryId: demo.countryId, cappedNet, conscription });
+    preps.push({
+      demo,
+      before,
+      m,
+      countryId: demo.countryId,
+      cappedNet,
+      conscription,
+      conscriptionPolicy: policy,
+    });
   }
 
   // Member free movement pairs a modeled origin with a modeled destination.
@@ -391,6 +414,14 @@ export async function runDemographicFlows(
     };
 
     const { vector, flows } = advanceCohort(p.before, inputs, turn, TURNS_PER_YEAR);
+    const serving = receptionOrders.length
+      ? servingCohortsForReception(
+          vector,
+          p.conscriptionPolicy.eligibleBand,
+          p.conscription.servingMale,
+          p.conscription.servingFemale
+        )
+      : { male: [], female: [] };
     works.push({
       id: p.demo._id,
       countryId: p.countryId,
@@ -399,6 +430,8 @@ export async function runDemographicFlows(
       flows,
       m: p.m,
       militaryServicePop: p.conscription.activeServingPop,
+      servingMaleByAge: serving.male,
+      servingFemaleByAge: serving.female,
     });
   }
 
@@ -419,6 +452,31 @@ export async function runDemographicFlows(
     destination.vector = moved.destination;
     origin.flows.netMigration -= moved.moved;
     destination.flows.netMigration += moved.moved;
+  }
+
+  const receptions: ReturnType<typeof planRefugeeReceptions> = receptionOrders.length
+    ? planRefugeeReceptions(
+        receptionOrders,
+        works.map((work) => ({
+          regionId: work.id,
+          countryId: stateById.get(work.id)?.countryId ?? work.countryId,
+          vector: work.vector,
+          remainingMigrationCapacity: Math.max(
+            0,
+            capNetMigrants(Number.MAX_VALUE, totalPopulation(work.before), TURNS_PER_YEAR) -
+              Math.abs(work.flows.netMigration)
+          ),
+          servingMaleByAge: work.servingMaleByAge,
+          servingFemaleByAge: work.servingFemaleByAge,
+        })),
+        turn,
+        worldEpochId
+      )
+    : { regions: [], results: [], netByRegion: {} };
+  for (const region of receptions.regions) {
+    const work = workById.get(region.regionId)!;
+    work.vector = region.vector;
+    work.flows.netMigration += receptions.netByRegion[region.regionId] ?? 0;
   }
 
   // ── Stage 2: per-country INTERNAL migration (cross-region, zero-sum, N1/F-B) ──
@@ -505,5 +563,6 @@ export async function runDemographicFlows(
     turn,
     regions,
     stats: { regionsProcessed: real.length, circuitBreakerTrips },
+    refugeeReceptions: receptions.results,
   });
 }

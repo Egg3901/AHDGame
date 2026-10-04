@@ -131,6 +131,21 @@ describe("calculateFederalSpending", () => {
     });
   });
 
+  it("includes realized refugee services once in ordinary recurring spending", async () => {
+    const db = createMockDb();
+    const spending = await calculateFederalSpending(
+      db as unknown as Db,
+      mockBudget(),
+      10,
+      undefined,
+      { CN: 1200 }
+    );
+    expect(spending.byCategory.refugeeReceptionServices).toBe(1200);
+    expect(spending.total).toBe(1385);
+    expect(db.collection("refugeeReceptionHistory").find).not.toHaveBeenCalled();
+    expect(db.collection("federalBudget").updateOne).not.toHaveBeenCalled();
+  });
+
   it("uses enacted spending laws when a nonzero cost exists", async () => {
     const db = createMockDb();
     db.collection("enactedLaws").find.mockReturnValue({

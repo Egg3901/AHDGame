@@ -4,6 +4,9 @@
  * resumeDemographicFlowReceipt completes partial writes without recomputing flows.
  */
 import { randomUUID } from "node:crypto";
+import { BSON } from "mongodb";
+import { materializeRefugeeReceptionResults } from "@/lib/livingConflict/refugeeReception";
+import type { RefugeeReceptionResult } from "@/lib/livingConflict/rules/refugeeReception";
 import type { Db, Filter } from "mongodb";
 import type { AgeSexVector } from "./cohortVector";
 import {
@@ -59,6 +62,7 @@ export interface DemographicFlowReceipt {
   stats: DemographicFlowStats;
   createdAt: Date;
   completedAt?: Date;
+  refugeeReceptions?: RefugeeReceptionResult[];
 }
 
 export interface DemographicFlowProjection extends DemographicFlowRegionInput {
@@ -354,6 +358,12 @@ async function materializeReceipt(
     }
   }
 
+  await materializeRefugeeReceptionResults(
+    db,
+    receipt.refugeeReceptions ?? [],
+    receipt._id,
+    receipt.createdAt
+  );
   const completedAt = new Date();
   const result = await db
     .collection<DemographicFlowReceipt>(DEMOGRAPHIC_FLOW_RECEIPTS)
@@ -457,6 +467,7 @@ export async function freezeAndApplyDemographicFlowPlan(
     turn: number;
     regions: DemographicFlowRegionInput[];
     stats: DemographicFlowStats;
+    refugeeReceptions?: RefugeeReceptionResult[];
   }
 ): Promise<DemographicFlowStats> {
   assertEpochId(input.worldEpochId);
@@ -468,6 +479,18 @@ export async function freezeAndApplyDemographicFlowPlan(
   if (existing) return (await materializeReceipt(db, existing)).stats;
 
   const regions = input.regions.map(freezeRegionInput);
+  const refugeeReceptions = input.refugeeReceptions?.length
+    ? structuredClone(input.refugeeReceptions)
+    : undefined;
+  if (
+    refugeeReceptions &&
+    (BSON.calculateObjectSize({ refugeeReceptions }) > 4_000_000 ||
+      new Set(refugeeReceptions.map((result) => result._id)).size !== refugeeReceptions.length ||
+      refugeeReceptions.some(
+        (result) => result.worldEpochId !== input.worldEpochId || result.appliedTurn !== input.turn
+      ))
+  )
+    throw new Error("Invalid or oversized frozen refugee reception results");
   if (new Set(regions.map((region) => region.regionId)).size !== regions.length) {
     throw new Error("Demographic flow plan has duplicate region IDs");
   }
@@ -496,6 +519,7 @@ export async function freezeAndApplyDemographicFlowPlan(
     expectedRegionCount: projections.length,
     stats: { ...input.stats },
     createdAt,
+    ...(refugeeReceptions ? { refugeeReceptions } : {}),
   };
   try {
     await db.collection<DemographicFlowReceipt>(DEMOGRAPHIC_FLOW_RECEIPTS).insertOne(receipt);

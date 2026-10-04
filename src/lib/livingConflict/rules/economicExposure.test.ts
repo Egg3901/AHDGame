@@ -17,6 +17,11 @@ const conflict = normalizeConflictState(YUGOSLAVIA_DEF, {
 });
 
 describe("living crisis economic exposure", () => {
+  it("does not assume Yugoslav reception by fixed host country", () => {
+    const host = crisisEconomicExposure(conflict, { _id: "AT", countryId: "AT" }, undefined, 8);
+    expect(host.hostingShare).toBe(0);
+    expect(crisisParticipationMultiplier(host)).toBe(1);
+  });
   it("keeps Ukraine damage and host strain after a ceasefire, with bounded overlapping exposure", () => {
     const war = normalizeConflictState(RUSSIA_UKRAINE_DEF, {
       defKey: RUSSIA_UKRAINE_DEF.key,
@@ -89,7 +94,7 @@ describe("living crisis economic exposure", () => {
     expect(crisisParticipationMultiplier(us)).toBe(1);
     expect(crisisPotentialGrowthPenalty(at)).toBe(0);
     expect(at.displacedShare).toBe(0);
-    expect(at.hostingShare).toBeGreaterThan(0);
+    expect(at.hostingShare).toBe(0);
   });
 
   it("keeps same-turn replay stable and never invents population transfers", () => {

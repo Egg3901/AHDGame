@@ -30,6 +30,7 @@ import {
   type PlantsBudgetContext,
 } from "./publicEnterpriseRevenue";
 import { calculateFederalSpending } from "./spending";
+import { loadRefugeeServiceCosts } from "@/lib/livingConflict/refugeeReception";
 import { keepLatestActiveLawPerType } from "./keepLatestActiveLawPerType";
 import { countryFiscalBase } from "@/lib/politicalLegislation/fiscalBase";
 import { COST_INCOME_ANCHORS } from "@/lib/politicalLegislation/costAnchors";
@@ -550,14 +551,17 @@ export async function refreshNationalBudgetRevenue(db: Db, budgetIds?: string[])
   // otherwise re-read them per budget. Money wiring (phase B): same hoist -
   // one gameConfig flag check and one sourcingNetworkLoad read for the whole
   // pass, never one per country.
-  const [plantsContext, eraContext, fxByCurrency, moneyWiringConfig] = await Promise.all([
-    loadPlantsBudgetContext(db),
-    getEraContext(db).catch(() => null),
-    loadFxRatesByCurrency(db),
-    db
-      .collection<GameConfig>("gameConfig")
-      .findOne({ _id: "default" }, { projection: { interstateMoneyWiringEnabled: 1 } }),
-  ]);
+  const [plantsContext, eraContext, fxByCurrency, moneyWiringConfig, refugeeServiceCosts] =
+    await Promise.all([
+      loadPlantsBudgetContext(db),
+      getEraContext(db).catch(() => null),
+      loadFxRatesByCurrency(db),
+      db
+        .collection<GameConfig>("gameConfig")
+        .findOne({ _id: "default" }, { projection: { interstateMoneyWiringEnabled: 1 } }),
+      // All countries share this projected obligation load; never one per budget.
+      loadRefugeeServiceCosts(db),
+    ]);
   const moneyWiringEnabled = moneyWiringConfig?.interstateMoneyWiringEnabled === true;
   const sourcedImportsByCountry = moneyWiringEnabled
     ? await loadLatestSourcedImportAggregates(db, await getCurrentTurn(db))
@@ -586,7 +590,8 @@ export async function refreshNationalBudgetRevenue(db: Db, budgetIds?: string[])
         db,
         { ...budget, revenue },
         budget.debt.principal * budget.debt.interestRate,
-        eraContext ?? undefined
+        eraContext ?? undefined,
+        refugeeServiceCosts
       );
       const surplus = revenue.total - spending.total;
       return {

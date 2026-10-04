@@ -381,6 +381,8 @@ export function visibleGlobalResponses(
       responseScores: undefined,
       campaignCommitment: undefined,
       capabilitySnapshot: undefined,
+      refugeeReceptionOrder: undefined,
+      refugeeReceptionResult: undefined,
     };
   });
 }

@@ -1,3 +1,8 @@
+import type {
+  RefugeeReceptionSpec,
+  RefugeeReceptionOrder,
+  RefugeeReceptionResult,
+} from "@/lib/livingConflict/rules/refugeeReception";
 import { ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CommodityType } from "@/lib/constants/commodities";
@@ -227,6 +232,8 @@ export interface CrisisDecisionOption {
   responseScores?: Record<string, number>;
   /** Spend this share of the responding country's GDP from its treasury. */
   treasuryCostPctGdp?: number;
+  /** Conserved civilian admissions and recurring services, authorized by this choice. */
+  refugeeReception?: RefugeeReceptionSpec;
   /** Live national capacity and campaign-stage requirements, enforced server-side. */
   campaignRequirement?: CampaignRequirement;
   /** Persistent contribution to the campaign, beyond this option's immediate effects. */
@@ -300,6 +307,8 @@ export interface CrisisLeaderResponse {
   visibility?: CampaignResponseVisibility;
   revealedAt?: Date;
   respondedAt: Date;
+  refugeeReceptionOrder?: RefugeeReceptionOrder;
+  refugeeReceptionResult?: RefugeeReceptionResult;
 }
 
 export interface GlobalResponseOutcomeCondition {
@@ -389,6 +398,9 @@ export interface CrisisInteraction {
    */
   leaderResponses?: CrisisLeaderResponse[];
   globalResponseOutcome?: ResolvedGlobalResponse;
+  /** Durable response outbox; claiming a leader's choice writes these atomically. */
+  populationOrderEpochId?: string;
+  populationOrdersPending?: boolean;
   decisionDeadline: Date | null;
   autoResolveOnExpiry: boolean;
   resolvedAt: Date | null;

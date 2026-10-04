@@ -14,6 +14,7 @@ import {
   resolveCharacterRoles,
 } from "./interactionEngine";
 import type { Crisis, CrisisInteraction, CrisisDecisionNode } from "@/lib/db/types/crisis";
+import { YUGOSLAV_REFUGEE_RECEPTION } from "@/lib/livingConflict/rules/refugeeReception";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/wireEvent", () => ({ logWireEvent: vi.fn().mockResolvedValue(undefined) }));
@@ -668,6 +669,44 @@ function stubGlobalCrisis(interaction: CrisisInteraction) {
 }
 
 describe("submitCrisisDecision — multi-responder global crises", () => {
+  it("atomically claims a sovereign reception choice with its pending population order", async () => {
+    const tree = structuredClone(GLOBAL_TREE);
+    tree[0].options![1].refugeeReception = YUGOSLAV_REFUGEE_RECEPTION;
+    const interaction = makeGlobalInteraction({ decisionTree: tree });
+    stubGlobalCrisis(interaction);
+    db.collection("gameState").findOne.mockResolvedValue({
+      worldEpochId: "reception-world",
+      currentTurn: 7,
+      livingConflictsEnabled: true,
+    });
+    db.collection("states")
+      .find()
+      .toArray.mockResolvedValue([{ _id: "CA", countryId: "US", population: 1000 }]);
+    db.collection("federalBudget").findOne.mockResolvedValue({ gdp: 10_000_000 });
+    db.collection("livingConflicts").findOne.mockResolvedValue({
+      hasOpened: true,
+      status: "active",
+      tracks: { displacement: 12 },
+    });
+    await submitCrisisDecision(mdb(), interaction._id, "reserves", new ObjectId(), "US", [
+      "headOfState",
+    ]);
+    const [, claim] = db.collection("crisisInteractions").updateOne.mock.calls[0];
+    expect(claim.$push.leaderResponses.refugeeReceptionOrder).toMatchObject({
+      worldEpochId: "reception-world",
+      originCountryId: "YU",
+      destinationCountryId: "US",
+      requestedPeople: 3,
+      annualServiceCostPerPerson: 2000,
+      status: "pending",
+    });
+    expect(claim.$set).toMatchObject({
+      populationOrderEpochId: "reception-world",
+      populationOrdersPending: true,
+    });
+    expect(db.collection("federalBudget").updateOne).not.toHaveBeenCalled();
+    expect(db.collection("refugeeReceptionHistory").bulkWrite).not.toHaveBeenCalled();
+  });
   it("records a per-leader response without resolving the interaction", async () => {
     const interaction = makeGlobalInteraction();
     stubGlobalCrisis(interaction);

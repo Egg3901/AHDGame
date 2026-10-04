@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useToast } from "@/contexts/ToastContext";
 import type { CrisisDecisionNode, CrisisEffect } from "@/lib/db/types/crisis";
+import type { RefugeeReceptionResult } from "@/lib/livingConflict/rules/refugeeReception";
 import { formatCrisisEffectTarget, formatCrisisEffectValue } from "@/lib/crises/effectLabels";
 import { buildDecisionHistory } from "@/lib/crises/decisionHistory";
 import { computeFiscalImpact } from "@/lib/budget/fiscalImpact";
@@ -25,6 +26,7 @@ interface LeaderResponse {
   effects?: CrisisEffect[];
   responseScores?: Record<string, number>;
   respondedAt: string;
+  refugeeReceptionResult?: RefugeeReceptionResult;
 }
 
 /** Interaction shape as serialized by GET /api/crises/[id]/interaction (ObjectId → string). */
@@ -206,6 +208,23 @@ function LeaderResponseRow({ r, effects }: { r: LeaderResponse; effects: CrisisE
       ) : null}
       <span className="text-muted/70 shrink-0">·</span>
       <span className="text-muted truncate">{r.characterName}</span>
+      {r.refugeeReceptionResult ? (
+        <span
+          className="text-muted tabular-nums"
+          title={[
+            ...r.refugeeReceptionResult.routes.map(
+              (route) =>
+                `${route.originRegionId} to ${route.destinationRegionId}: ${Math.round(route.people).toLocaleString()} people`
+            ),
+            `Annual initial services in host currency: ${Math.round(r.refugeeReceptionResult.annualServiceCost).toLocaleString()}`,
+          ].join("; ")}
+        >
+          {Math.round(r.refugeeReceptionResult.movedPeople).toLocaleString()} received;
+          {r.refugeeReceptionResult.movedPeople > 0
+            ? `support through turn ${r.refugeeReceptionResult.serviceEndTurn - 1}`
+            : ""}
+        </span>
+      ) : null}
       <span className="ml-auto flex items-center gap-1.5 shrink-0">
         <span className="rounded-full border border-primary/30 bg-primary/5 px-2 py-0.5 text-[11px] font-medium text-primary">
           {r.optionLabel}

@@ -52,9 +52,9 @@ export function crisisEconomicExposure(
       current.representedActors?.some(
         (actor) => actor.regionIds.includes(region._id) || actor.countryId === region.countryId
       );
-    const host =
-      !local &&
-      (ukraine ? ["PL", "RO", "HU", "TR", "DE"] : ["AT", "IT", "GR"]).includes(region.countryId);
+    // Yugoslav reception uses actual transferred residents and service obligations.
+    // Fixed host penalties would charge a country even when its leader closed the border.
+    const host = !local && ukraine && ["PL", "RO", "HU", "TR", "DE"].includes(region.countryId);
     const displacement = bounded(current.tracks?.displacement, 100) / 100;
     const damage = bounded(current.tracks?.infrastructureDamage, 100) / 100;
     const reconstruction = bounded(current.tracks?.reconstruction, 100) / 100;

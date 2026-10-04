@@ -1,3 +1,9 @@
+/**
+ * Crisis choices authorize country actions and global responses.
+ * submitCrisisDecision claims each leader once and preserves humanitarian orders
+ * with that response; the population phase later records actual reception and services.
+ */
+import { prepareRefugeeReceptionOrder } from "@/lib/livingConflict/refugeeReception";
 import { applyLivingConflictFallback } from "@/lib/livingConflict/fallbackTrajectory";
 import { canCharacterInteract, canRespondToCrisis } from "./rules/authorization";
 export { canCharacterInteract } from "./rules/authorization";
@@ -510,6 +516,14 @@ export async function submitCrisisDecision(
       ? await prepareGlobalResponseOption(db, crisis, countryId, option)
       : undefined;
     const capabilitySnapshot = preparedGlobalResponse?.capability;
+    const refugeeReceptionOrder = await prepareRefugeeReceptionOrder(
+      db,
+      crisis,
+      interaction,
+      countryId,
+      option,
+      currentNode.nodeId
+    );
 
     if (option.requiredBudget) {
       const treasury = await getTreasuryBalance(db, countryId);
@@ -538,6 +552,7 @@ export async function submitCrisisDecision(
       campaignCommitment: option.campaignCommitment,
       visibility: option.responseVisibility ?? "public",
       respondedAt: new Date(),
+      ...(refugeeReceptionOrder ? { refugeeReceptionOrder } : {}),
     };
     interaction.updatedAt = new Date();
 
@@ -551,7 +566,15 @@ export async function submitCrisisDecision(
       },
       {
         $push: { leaderResponses: response },
-        $set: { updatedAt: interaction.updatedAt },
+        $set: {
+          updatedAt: interaction.updatedAt,
+          ...(refugeeReceptionOrder
+            ? {
+                populationOrderEpochId: refugeeReceptionOrder.worldEpochId,
+                populationOrdersPending: true,
+              }
+            : {}),
+        },
       }
     );
     if (claimed.modifiedCount === 0) {
