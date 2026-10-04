@@ -189,6 +189,89 @@ describe("GET /api/crises/active-for-character — option availability", () => {
   });
 });
 
+describe("GET /api/crises/active-for-character — domestic bank response", () => {
+  it("shows the bank response choices to the seated finance minister in the affected country", async () => {
+    const responseNode = {
+      nodeId: "response",
+      type: "choice" as const,
+      title: "Domestic bank response",
+      description: "Choose a funded response.",
+      requiredRoles: ["headOfState", "financeMinister", "centralBankChair"],
+      timeLimitMinutes: null,
+      options: [
+        {
+          optionId: "recapitalize",
+          label: "Recapitalize",
+          description: "Funded recapitalization.",
+          nextNodeId: "terminal",
+          effects: [],
+        },
+      ],
+    };
+    const crisis = {
+      ...makeCrisis(),
+      name: "Domestic Bank Stress",
+      scope: "country",
+      countryIds: ["IE"],
+      globalResponse: undefined,
+      interactionDefinition: { decisionTree: [responseNode] },
+    };
+    const interaction = {
+      ...makeInteraction(),
+      decisionTree: [responseNode],
+      currentNodeId: "response",
+    };
+    db.collectionMocks["crises"]!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([crisis]),
+    });
+    mockInteractions(interaction);
+    db.collection("cabinetMembers");
+    db.collection("centralBanks");
+    db.collection("governmentFormations");
+    db.collection("electedOfficials");
+    db.collection("politicalParties");
+    db.collectionMocks["cabinetMembers"]!.findOne.mockResolvedValue(null);
+    db.collectionMocks["centralBanks"]!.findOne.mockResolvedValue(null);
+    db.collectionMocks["governmentFormations"]!.findOne.mockResolvedValue(null);
+    db.collectionMocks["electedOfficials"]!.findOne.mockResolvedValue(null);
+    db.collectionMocks["politicalParties"]!.findOne.mockResolvedValue(null);
+
+    const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue({
+      ok: true,
+      user: {
+        userId: new ObjectId().toString(),
+        username: "minister",
+        email: "minister@example.com",
+        role: "user",
+        isAdmin: false,
+        hasCharacter: true,
+        character: {
+          _id: characterId,
+          name: "Finance Minister",
+          countryId: "IE",
+          homeState: "IE-D",
+          currentOffice: { type: "parliamentaryCabinet", positionId: "minister_for_finance" },
+        },
+      },
+    } as unknown as Awaited<ReturnType<typeof requireAuthWithCharacter>>);
+
+    const res = await get();
+    const body = (await res.json()) as {
+      crises: Array<{
+        canInteract: boolean;
+        currentNode: { options: Array<{ optionId: string }> };
+      }>;
+    };
+
+    expect(body.crises).toHaveLength(1);
+    expect(body.crises[0]?.canInteract).toBe(true);
+    expect(body.crises[0]?.currentNode.options.map((option) => option.optionId)).toEqual([
+      "recapitalize",
+    ]);
+  });
+});
+
 describe("GET /api/crises/active-for-character — query volume", () => {
   it("loads the nation's capability once no matter how many global responses are open", async () => {
     // Capability is country-scoped: budget, approval and military rows are the
