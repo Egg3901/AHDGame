@@ -8,10 +8,33 @@ import {
 } from "./policy";
 
 describe("resolveBankingPolicy", () => {
+  it("enables Treasury holdings only explicitly with banking enabled", () => {
+    expect(resolveBankingPolicy({ bankTreasuryEnabled: true }).bankTreasury).toBe(false);
+    expect(resolveBankingPolicy({ privateBankingEnabled: true }).bankTreasury).toBe(false);
+    expect(
+      resolveBankingPolicy({ privateBankingEnabled: true, bankTreasuryEnabled: true }).bankTreasury
+    ).toBe(true);
+  });
+  it("enables forex fees only with their explicit flag and active prop trading", () => {
+    expect(resolveBankingPolicy({ bankPropForexFeesEnabled: true }).propForexFees).toBe(false);
+    expect(
+      resolveBankingPolicy({ privateBankingEnabled: true, bankPropForexFeesEnabled: true })
+        .propForexFees
+    ).toBe(true);
+    expect(
+      resolveBankingPolicy({
+        privateBankingEnabled: true,
+        bankPropForexFeesEnabled: true,
+        bankPropTradingEnabled: false,
+      }).propForexFees
+    ).toBe(false);
+  });
   it("defaults to banking off, LOC on, with a missing config document", () => {
     expect(resolveBankingPolicy(null)).toEqual({
       privateBanking: false,
       propTrading: false,
+      propForexFees: false,
+      bankTreasury: false,
       contagion: false,
       lineOfCredit: true,
       advancedCharters: false,
@@ -25,6 +48,8 @@ describe("resolveBankingPolicy", () => {
     expect(resolveBankingPolicy({ privateBankingEnabled: true })).toEqual({
       privateBanking: true,
       propTrading: true,
+      propForexFees: false,
+      bankTreasury: false,
       contagion: true,
       lineOfCredit: true,
       advancedCharters: false,
@@ -69,6 +94,8 @@ describe("resolveBankingPolicy", () => {
     expect(BANKING_POLICY_ALL_ON).toEqual({
       privateBanking: true,
       propTrading: true,
+      propForexFees: true,
+      bankTreasury: true,
       contagion: true,
       lineOfCredit: true,
       advancedCharters: true,

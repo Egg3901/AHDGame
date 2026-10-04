@@ -117,6 +117,7 @@ export async function processBankSupervision(db: Db, turn: number): Promise<Supe
         totalLoans: charter.totalLoans ?? 0,
         borrowings: borrowingsFromCharter(charter),
         propBookMarkValue: charter.propBookMarkValue ?? 0,
+        sovereignTreasuryMarkValue: charter.sovereignTreasuryMarkValue ?? 0,
         bookTranches: tranchesByBank.get(corp._id.toString()),
       });
       summary.banksAssessed += 1;

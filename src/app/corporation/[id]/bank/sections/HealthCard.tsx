@@ -92,6 +92,7 @@ export function HealthCard({ data }: { data: ConsolePayload }) {
   const charter = data.charter!;
   const capital = assessCapital({
     cashReserves: charter.cashReserves,
+    sovereignTreasuryMarkValue: charter.sovereignTreasuryMarkValue,
     totalLoans: charter.totalLoans,
     borrowings: borrowingsFromCharter(charter),
     propBookMarkValue: charter.propBookMarkValue,

@@ -125,6 +125,7 @@ export interface CapitalAssessmentInput {
    */
   borrowings: Borrowings;
   propBookMarkValue?: number;
+  sovereignTreasuryMarkValue?: number;
   /** Book composition for the band-weighted shock. Omit for the flat fallback. */
   bookTranches?: readonly BookTranche[];
 }
@@ -150,13 +151,18 @@ export function assessCapital(input: CapitalAssessmentInput): CapitalPosition {
   // that reads the same as a bank with no capital but no hole. The line itself
   // is `regulatoryCapital` from `balanceSheet.ts`; it is computed there so the
   // console, the solvency pass and this module cannot drift apart.
-  const capitalAnchor = regulatoryCapital({
-    cashReserves: input.cashReserves,
-    ...input.borrowings,
-  });
+  const capitalAnchor = regulatoryCapital(
+    {
+      cashReserves: input.cashReserves,
+      ...input.borrowings,
+    },
+    { sovereignTreasuryMarkValue: input.sovereignTreasuryMarkValue }
+  );
 
   const riskAssetsAnchor =
-    Math.max(0, finite(input.totalLoans)) + Math.max(0, finite(input.propBookMarkValue));
+    Math.max(0, finite(input.totalLoans)) +
+    Math.max(0, finite(input.propBookMarkValue)) +
+    Math.max(0, finite(input.sovereignTreasuryMarkValue));
 
   const appliedStressLossFraction = input.bookTranches
     ? stressLossFraction(input.bookTranches)

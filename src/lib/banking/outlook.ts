@@ -386,6 +386,7 @@ export async function buildBankOutlook(db: Db, ctx: OutlookContext): Promise<Ban
     totalLoans: ctx.sheet.totalLoans,
     borrowings: borrowingsFromCharter(charter),
     propBookMarkValue: charter.propBookMarkValue,
+    sovereignTreasuryMarkValue: charter.sovereignTreasuryMarkValue,
   });
   const shortfall = capitalShortfall(position);
   let recommendationKind: BankOutlook["recommendationKind"] = "none";

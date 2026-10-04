@@ -173,6 +173,17 @@ export interface Corporation {
   bankCharter?: import("./bank").BankCharter;
   /** Public media editorial position. Missing means neutral for legacy worlds. */
   editorialStance?: { economic: number; social: number };
+  /** Funded sale proceeds held here until delivered to the matching charter or insurer. */
+  bankTreasuryEscrows?: Record<
+    string,
+    {
+      bankId: string;
+      charteredTurn: number;
+      currencyCode: CurrencyCode;
+      amountLocal: number;
+      tradeId: string;
+    }
+  >;
   /** Funded sovereign claims held outside the replaceable charter subdocument. */
   bankSovereignEscrows?: Record<
     string,
@@ -186,6 +197,12 @@ export interface Corporation {
   >;
   /** Monotonic generation for atomic proprietary book settlement. */
   bankPropBookRevision?: number;
+  /** Bank-level rolling forex volume survives charter replacement. */
+  bankPropForexVolume?: import("@/lib/banking/rules/propForexFees").PropForexVolume[];
+  /** Fees reserved with a prop trade, delivered from the original cash quote. */
+  bankPropForexFee?: import("@/lib/banking/rules/propForexFees").PropForexFeeReceipt & {
+    amountLocal: number;
+  };
   /**
    * Crash-recovery plan for an in-flight bank-charter transfer
    * (transferCharter.ts, issue #2014). Stamped on the absorbed shell before

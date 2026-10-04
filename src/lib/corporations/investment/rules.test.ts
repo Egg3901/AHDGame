@@ -10,6 +10,7 @@ import {
   capacityUpkeepUnits,
   forecastSectorInvestment,
   investmentBuildTurns,
+  investmentBondReference,
   type InvestmentForecastInput,
 } from "./rules";
 
@@ -176,5 +177,41 @@ describe("investment cash scenarios", () => {
   it("withholds estimates without an observed run or with invalid inputs", () => {
     expect(forecastSectorInvestment({ ...forecastInput, producedUnits: 0 })).toBeNull();
     expect(forecastSectorInvestment({ ...forecastInput, chargedPerUnitAnchor: NaN })).toBeNull();
+  });
+});
+
+describe("cash payback and bond reference", () => {
+  it("recovers charged cash rather than depreciated plant value or operating margin", () => {
+    const points = forecastSectorInvestment({
+      ...forecastInput,
+      constructionPerUnitAnchor: 100,
+      chargedPerUnitAnchor: 101,
+      soldUnits: 1000,
+      revenueDailyAnchor: 24000,
+      operatingCostDailyAnchor: 0,
+    });
+    expect(points?.map((point) => point.cashPaybackTurn)).toEqual([null, null, 101]);
+    expect(points?.[2].remainingPaidBasisAnchor).toBe(10000);
+  });
+  it("does not label an unsold or loss-making investment as repaid", () => {
+    const points = forecastSectorInvestment({ ...forecastInput, demandGapUnits: 0 });
+    expect(points?.every((point) => point.cashPaybackTurn === null)).toBe(true);
+  });
+  it("uses the existing yield rule and refuses foreign or invalid quote inputs", () => {
+    const bond = {
+      couponRate: 6,
+      marketPrice: 1,
+      maturityTurn: 50,
+      currencyCode: "USD",
+      issuerName: "Treasury",
+    };
+    expect(investmentBondReference(bond, "USD", 2)).toMatchObject({
+      annualYieldPercent: 6,
+      turnsToMaturity: 48,
+      quoteTurn: 2,
+    });
+    expect(investmentBondReference(bond, "EUR", 2)).toBeNull();
+    expect(investmentBondReference({ ...bond, marketPrice: NaN }, "USD", 2)).toBeNull();
+    expect(investmentBondReference(bond, "USD", 50)).toBeNull();
   });
 });
