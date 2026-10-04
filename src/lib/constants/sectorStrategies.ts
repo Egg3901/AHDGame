@@ -18,6 +18,7 @@
  * with the transition).
  */
 
+import * as Sentry from "@sentry/nextjs";
 import type { CorporationType } from "./corporations";
 import type { CommodityType } from "./commodities";
 import { COMMODITY_BASE_PRICES } from "./commodities";
@@ -1190,12 +1191,32 @@ export const SECTOR_STRATEGIES: Record<CorporationType, SectorStrategy[]> = {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
+const reportedUnknownSectorTypes = new Set<string>();
+const UNKNOWN_SECTOR_STRATEGY: SectorStrategy = {
+  id: "standard",
+  name: "Unknown sector",
+  description: "Production is unavailable until this sector type is recognized.",
+  supply: {},
+  demand: {},
+};
+
 /**
  * Look up a strategy by sector type and strategy ID.
- * Falls back to "standard" if not found.
+ * Falls back to the sector's first strategy if the strategy ID is unknown.
+ * Unknown persisted sector types use an inert strategy until repaired.
  */
-export function getStrategy(sectorType: CorporationType, strategyId: string): SectorStrategy {
-  const strategies = SECTOR_STRATEGIES[sectorType];
+export function getStrategy(sectorType: string, strategyId: string): SectorStrategy {
+  if (!Object.hasOwn(SECTOR_STRATEGIES, sectorType)) {
+    if (!reportedUnknownSectorTypes.has(sectorType)) {
+      reportedUnknownSectorTypes.add(sectorType);
+      Sentry.captureMessage("Unknown persisted sector type: using inert strategy", {
+        level: "error",
+        extra: { sectorType },
+      });
+    }
+    return UNKNOWN_SECTOR_STRATEGY;
+  }
+  const strategies = SECTOR_STRATEGIES[sectorType as CorporationType];
   return strategies.find((s) => s.id === strategyId) ?? strategies[0];
 }
 
@@ -1206,7 +1227,7 @@ export function getStrategy(sectorType: CorporationType, strategyId: string): Se
  * and new strategy over STRATEGY_TRANSITION_TURNS turns.
  */
 export function getEffectiveStrategyRates(
-  sectorType: CorporationType,
+  sectorType: string,
   strategyId: string,
   transitionFromStrategyId: string | undefined | null,
   transitionStartTurn: number | undefined | null,
