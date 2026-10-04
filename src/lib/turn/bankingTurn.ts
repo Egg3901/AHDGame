@@ -46,6 +46,10 @@ import {
   releaseConstructionLoanLock,
 } from "@/lib/banking/constructionLoanLock";
 import {
+  acquireConstructionServiceLease,
+  releaseConstructionServiceLease,
+} from "@/lib/banking/constructionServiceLease";
+import {
   facilityInterestTransition,
   facilityInterestAmounts,
 } from "@/lib/banking/rules/facilityInterest";
@@ -1012,18 +1016,26 @@ async function serviceNamedLoanBook(
     list.push(loan);
     loansByBorrower.set(key, list);
   }
+  const serviceBorrower = async (borrowerLoans: typeof loans) => {
+    for (const loan of borrowerLoans) {
+      const loanResult = await servicePlayerLoan(db, turn, corp._id, loan, currency, corp.name);
+      total.interestCollected += loanResult.interestCollected;
+      total.principalRepaid += loanResult.principalRepaid;
+      total.writtenOff += loanResult.writtenOff;
+      total.bankCredit += loanResult.bankCredit;
+      total.totalLoansDelta += loanResult.totalLoansDelta;
+    }
+  };
+  const borrowerGroups = [...loansByBorrower.values()];
   await Promise.all(
-    [...loansByBorrower.values()].map(async (borrowerLoans) => {
-      for (const loan of borrowerLoans) {
-        const loanResult = await servicePlayerLoan(db, turn, corp._id, loan, currency, corp.name);
-        total.interestCollected += loanResult.interestCollected;
-        total.principalRepaid += loanResult.principalRepaid;
-        total.writtenOff += loanResult.writtenOff;
-        total.bankCredit += loanResult.bankCredit;
-        total.totalLoansDelta += loanResult.totalLoansDelta;
-      }
-    })
+    borrowerGroups
+      .filter((group) => !group.some((loan) => loan.constructionCollateral))
+      .map(serviceBorrower)
   );
+  // Construction receipts hold one lender epoch. Keep their borrower groups
+  // serial so parallel admission cannot repeatedly starve all but one loan.
+  for (const group of borrowerGroups)
+    if (group.some((loan) => loan.constructionCollateral)) await serviceBorrower(group);
   return total;
 }
 
@@ -1127,6 +1139,31 @@ async function servicePlayerLoan(
       return empty;
     }
   }
+  const serviceKey = loanServiceKey(String(loan._id), turn);
+  const holdBankEpoch =
+    !!loan.constructionCollateral &&
+    creditTarget.collection === "corporations" &&
+    creditTarget.path === "bankCharter.cashReserves";
+  if (holdBankEpoch) {
+    if (!(await acquireConstructionServiceLease(db, loan, serviceKey, turn))) {
+      await releaseConstructionLoanLock(db, loan, serviceKey);
+      return empty;
+    }
+    creditTarget = {
+      ...creditTarget,
+      filter: {
+        ...creditTarget.filter,
+        "bankCharter.charteredTurn": loan.charteredTurn,
+        "bankConstructionFunding.kind": "servicing",
+        "bankConstructionFunding.service.key": serviceKey,
+      },
+    };
+  }
+  const releaseService = async () => {
+    if (holdBankEpoch)
+      await releaseConstructionServiceLease(db, bankCorporationId, loan._id, serviceKey);
+    else await releaseConstructionLoanLock(db, loan, serviceKey);
+  };
 
   // The decision is pure; the transition carries the borrower's debit, the
   // lender's credit and the loan-document update guarded on the turn stamp.
@@ -1148,8 +1185,7 @@ async function servicePlayerLoan(
   });
   if (decision.outcome === "closed") {
     const closed = await settleTransition(db, transition);
-    if (!closed.error && ["applied", "replayed"].includes(closed.status))
-      await releaseConstructionLoanLock(db, loan, transition.key);
+    if (!closed.error && ["applied", "replayed"].includes(closed.status)) await releaseService();
     return empty;
   }
 
@@ -1160,7 +1196,7 @@ async function servicePlayerLoan(
       settled.appliedLegs.length === 0 &&
       settled.appliedProjections.length === 0)
   )
-    await releaseConstructionLoanLock(db, loan, transition.key);
+    await releaseService();
   if (settled.status === "rejected") return empty;
   const moneyLanded =
     transition.legs.length > 0 && settled.appliedLegs.length === transition.legs.length;

@@ -28,6 +28,7 @@ import { lifecycleStage } from "@/lib/banking/rules/lifecycle";
 import { recoverPropForexFees } from "./propForexFees";
 import { loadBankingPolicy } from "./policy";
 import type { BankingPolicySnapshot } from "./rules/policy";
+import { recoverConstructionServiceLeases } from "./constructionServiceLease";
 
 export interface BankingRecoverySummary {
   turn: number;
@@ -62,6 +63,10 @@ export async function recoverBankingSettlements(
     estatesStillResolving: [],
   };
   const policy = preloadedPolicy ?? (await loadBankingPolicy(db));
+  if (policy.constructionFinance) {
+    const unfinished = await recoverConstructionServiceLeases(db, turn);
+    for (const record of unfinished) summary.stillPartial.push({ ...record, kind: "loan_service" });
+  }
   const unfinishedForexFees = policy.propForexFees ? await recoverPropForexFees(db, turn) : [];
   for (const bankId of unfinishedForexFees)
     summary.stillPartial.push({
