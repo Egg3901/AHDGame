@@ -24,6 +24,7 @@ import {
   MANUFACTURING_PRODUCT_KINDS,
   getManufacturingProductKind,
 } from "@/lib/products/manufacturingCatalog";
+import { SECTOR_STRATEGIES } from "@/lib/constants/sectorStrategies";
 import {
   MANUFACTURING_DEVELOPMENT_ELAPSED_TURNS,
   manufacturingDevelopmentThresholdAnchor,
@@ -42,10 +43,15 @@ type ManufacturingPlantSector = Pick<
   | "_id"
   | "corporationId"
   | "sectorType"
+  | "industryModel"
   | "strategyId"
   | "capitalStock"
   | "plantCount"
   | "mothballed"
+  | "outputUnitsByCommodity"
+  | "productQualityByCommodity"
+  | "soldByCommodity"
+  | "soldByCommodityTurn"
 >;
 
 const noStore = { "Cache-Control": "private, no-store" };
@@ -77,6 +83,7 @@ function manufacturingPlant(sector: ManufacturingPlantSector): ManufacturingPlan
     sectorId: sector._id.toString(),
     corporationId: sector.corporationId.toString(),
     sectorType: sector.sectorType,
+    industryModel: sector.industryModel,
     strategyId: sector.strategyId,
     capitalStock: sector.capitalStock ?? 0,
     plantCount: sector.plantCount ?? 0,
@@ -128,6 +135,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
         _id: 1,
         corporationId: 1,
         sectorType: 1,
+        industryModel: 1,
         strategyId: 1,
         capitalStock: 1,
         plantCount: 1,
@@ -142,30 +150,84 @@ export async function GET(_request: Request, { params }: RouteParams) {
     ]);
     const gameState = await getGameState();
     const techTreesEnabled = gameState?.sectorTechTreesEnabled === true;
-    const legalKinds = legalManufacturingProductKinds(plants, {
+    const eligibilityOptions = {
       currentYear: gameState?.currentYear,
       techTreesEnabled,
       unlockedTechNodeIds: corporation.unlockedTechNodeIds,
+    };
+    const legalKinds = legalManufacturingProductKinds(plants, {
+      ...eligibilityOptions,
     });
     const allocations = project ? allocationsForPlantCapacity(plants, project.allocations) : [];
+    const currentTurn = await getCurrentTurn(db);
+    const projectKind = project ? getManufacturingProductKind(project.kindId) : undefined;
+    const productResults =
+      project && projectKind
+        ? allocations.flatMap((allocation) => {
+            const sector = sectors.find(
+              (candidate) => candidate._id.toString() === allocation.sectorId
+            );
+            const turn = sector?.soldByCommodityTurn;
+            const producedUnits = sector?.outputUnitsByCommodity?.[projectKind.outputCommodity];
+            const soldFraction = sector?.soldByCommodity?.[projectKind.outputCommodity];
+            if (
+              !sector ||
+              typeof turn !== "number" ||
+              turn <= project.startedTurn ||
+              typeof producedUnits !== "number" ||
+              !Number.isFinite(producedUnits) ||
+              producedUnits < 0 ||
+              typeof soldFraction !== "number" ||
+              !Number.isFinite(soldFraction)
+            ) {
+              return [];
+            }
+            const quality = sector.productQualityByCommodity?.[projectKind.outputCommodity];
+            return [
+              {
+                sectorId: allocation.sectorId,
+                turn,
+                producedUnits,
+                soldUnits: producedUnits * Math.max(0, Math.min(1, soldFraction)),
+                quality: typeof quality === "number" && Number.isFinite(quality) ? quality : null,
+              },
+            ];
+          })
+        : [];
 
     return NextResponse.json(
       {
         enabled: true,
         isCeo: requireCeo(corporation, auth.user.userId) === null,
-        currentTurn: await getCurrentTurn(db),
+        currentTurn,
         activeProject: projectView(project),
+        productResults,
         catalog: legalKinds.map((kind) => ({
           id: kind.id,
           label: kind.label,
           outputCommodity: kind.outputCommodity,
           sectorTypes: kind.sectorTypes,
           strategyIds: kind.strategyIds,
+          technologyRequirements: kind.sectorTypes.flatMap((sectorType) =>
+            SECTOR_STRATEGIES[sectorType].flatMap((strategy) =>
+              kind.strategyIds.includes(strategy.id) &&
+              (strategy.supply[kind.outputCommodity] ?? 0) > 0
+                ? [
+                    {
+                      strategyId: strategy.id,
+                      strategyName: strategy.name,
+                      minDecade: strategy.minDecade ?? null,
+                      requiresTechUnlock: strategy.requiresTechUnlock === true,
+                    },
+                  ]
+                : []
+            )
+          ),
         })),
         plants: plants.map((plant) => ({
           ...plant,
           eligibleKindIds: MANUFACTURING_PRODUCT_KINDS.filter((kind) =>
-            isLegalManufacturingProductForPlant(kind.id, plant)
+            isLegalManufacturingProductForPlant(kind.id, plant, eligibilityOptions)
           ).map((kind) => kind.id),
         })),
         allocatedCapacityStock: allocations.reduce((sum, item) => sum + item.capacityStock, 0),
@@ -215,6 +277,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         _id: 1,
         corporationId: 1,
         sectorType: 1,
+        industryModel: 1,
         strategyId: 1,
         capitalStock: 1,
         plantCount: 1,
@@ -240,7 +303,15 @@ export async function POST(request: Request, { params }: RouteParams) {
       plantById.get(allocation.sectorId)
     );
     if (
-      selectedPlants.some((plant) => !plant || !isLegalManufacturingProductForPlant(kind.id, plant))
+      selectedPlants.some(
+        (plant) =>
+          !plant ||
+          !isLegalManufacturingProductForPlant(kind.id, plant, {
+            currentYear: gameState?.currentYear,
+            techTreesEnabled: gameState?.sectorTechTreesEnabled === true,
+            unlockedTechNodeIds: corporation.unlockedTechNodeIds,
+          })
+      )
     ) {
       return NextResponse.json(
         {

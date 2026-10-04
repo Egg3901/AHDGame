@@ -2,16 +2,24 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Button, Card, LoadingSpinner } from "@/components/ui";
+import { manufacturingDevelopmentThresholdAnchor } from "@/lib/products/rules/manufacturingRules";
 
 interface ProductKind {
   id: string;
   label: string;
   outputCommodity: string;
+  technologyRequirements?: Array<{
+    strategyId: string;
+    strategyName: string;
+    minDecade: string | null;
+    requiresTechUnlock: boolean;
+  }>;
 }
 
 interface ProductPlant {
   sectorId: string;
   sectorType: string;
+  industryModel?: string | null;
   strategyId?: string | null;
   capitalStock: number;
   plantCount: number;
@@ -31,12 +39,21 @@ interface ActiveProductProject {
   elapsedThresholdTurns: number;
 }
 
+interface ProductResult {
+  sectorId: string;
+  turn: number;
+  producedUnits: number;
+  soldUnits: number;
+  quality: number | null;
+}
+
 interface StudioState {
   enabled: boolean;
   isCeo: boolean;
   catalog: ProductKind[];
   plants: ProductPlant[];
   activeProject: ActiveProductProject | null;
+  productResults?: ProductResult[];
 }
 
 export function ManufacturingProductStudio({
@@ -103,6 +120,13 @@ export function ManufacturingProductStudio({
   const allocations = legalPlants
     .map((plant) => ({ sectorId: plant.sectorId, share: shares[plant.sectorId] ?? 0 }))
     .filter((allocation) => allocation.share > 0);
+  const allocatedCapacity = legalPlants.reduce(
+    (sum, plant) => sum + plant.capitalStock * (shares[plant.sectorId] ?? 0),
+    0
+  );
+  const estimatedDevelopmentCost =
+    allocations.length > 0 ? manufacturingDevelopmentThresholdAnchor(allocatedCapacity) : null;
+  const selectedKind = studio.catalog.find((kind) => kind.id === kindId);
 
   async function startProject() {
     if (!kindId || allocations.length === 0) return;
@@ -192,11 +216,39 @@ export function ManufacturingProductStudio({
               );
               return (
                 <div key={allocation.sectorId}>
-                  {plant?.sectorType ?? "Plant"}: {(allocation.share * 100).toFixed(0)}% capacity
+                  {plant?.sectorType ?? "Plant"}
+                  {plant?.industryModel ? ` (${plant.industryModel})` : ""}:{" "}
+                  {(allocation.share * 100).toFixed(0)}% capacity
                 </div>
               );
             })}
           </div>
+          <div className="space-y-1 text-sm text-muted" aria-label="Realized product sales">
+            <div className="font-medium text-foreground">Last settled product sales</div>
+            {(studio.productResults ?? []).length > 0 ? (
+              (studio.productResults ?? []).map((result) => {
+                const plant = studio.plants.find(
+                  (candidate) => candidate.sectorId === result.sectorId
+                );
+                return (
+                  <div key={`${result.sectorId}-${result.turn}`}>
+                    {plant?.sectorType ?? "Plant"}
+                    {plant?.industryModel ? ` (${plant.industryModel})` : ""}, turn {result.turn}:{" "}
+                    {result.soldUnits.toLocaleString()} of {result.producedUnits.toLocaleString()}{" "}
+                    units sold
+                    {result.quality != null ? ` · quality ${result.quality.toFixed(1)}` : ""}
+                  </div>
+                );
+              })
+            ) : (
+              <div>No settled product sales recorded yet.</div>
+            )}
+          </div>
+          <p className="text-xs text-muted">
+            Product quality starts from current plant quality, which reflects technology,
+            operations, input quality, and wages. Paid development adds up to 10 points as the
+            project advances; the wage-derived baseline is recalculated each turn.
+          </p>
         </div>
       ) : studio.isCeo ? (
         <div className="space-y-3">
@@ -222,8 +274,10 @@ export function ManufacturingProductStudio({
                   className="flex items-center justify-between gap-4 text-sm"
                 >
                   <span className="text-foreground">
-                    {plant.sectorType} · {plant.strategyId ?? "standard"} ·{" "}
-                    {plant.capitalStock.toLocaleString()} capacity
+                    {plant.sectorType}
+                    {plant.industryModel ? ` (${plant.industryModel})` : ""} ·{" "}
+                    {plant.strategyId ?? "standard"} · {plant.capitalStock.toLocaleString()}{" "}
+                    capacity
                   </span>
                   <span className="flex items-center gap-2 text-muted">
                     <input
@@ -248,6 +302,40 @@ export function ManufacturingProductStudio({
                   </span>
                 </label>
               ))}
+              {selectedKind && (
+                <div className="space-y-2 rounded border border-border p-3 text-sm text-muted">
+                  {estimatedDevelopmentCost != null && (
+                    <div>
+                      Estimated development cost: {estimatedDevelopmentCost.toLocaleString()} anchor
+                      units (5% of allocated plant capital, one-unit minimum).
+                    </div>
+                  )}
+                  <div>
+                    Quality starts from live plant quality: technology, operations, input quality,
+                    and wages. Paid development adds up to 10 points as the project advances.
+                  </div>
+                  <div>
+                    Technology requirements are carried by the eligible plant strategy:
+                    {selectedKind.technologyRequirements?.length ? (
+                      <ul className="mt-1 list-disc pl-5">
+                        {selectedKind.technologyRequirements.map((requirement) => (
+                          <li key={`${requirement.strategyId}-${requirement.minDecade ?? "base"}`}>
+                            {requirement.strategyName}
+                            {requirement.minDecade
+                              ? `, available from ${requirement.minDecade}`
+                              : ""}
+                            {requirement.requiresTechUnlock
+                              ? ", requires its technology unlock"
+                              : ""}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      " no additional technology gates."
+                    )}
+                  </div>
+                </div>
+              )}
               <Button disabled={busy || allocations.length === 0} onClick={startProject}>
                 Start product project
               </Button>
