@@ -146,6 +146,8 @@ describe("buildCorporationLookups — bond holdings", () => {
       outputAnchorByCommodity: 0,
       productQualityByCommodity: 0,
     });
+    expect(corporationProjection).toHaveProperty("manufacturingProductAdvertisingObligationsV2", 0);
+    expect(corporationProjection).toHaveProperty("manufacturingProductAdvertisingReceiptV2", 0);
     expect(corporationProjection).toHaveProperty("manufacturingProductDevelopmentReceiptV2", 0);
     expect(corporationProjection).toHaveProperty("manufacturingProductDevelopmentPaidTurnV2", 0);
     expect(corporationProjection).toHaveProperty("mediaProductAdvertisingObligationsV1", 0);
@@ -161,6 +163,10 @@ describe("buildCorporationLookups — bond holdings", () => {
     expect(projection).not.toHaveProperty("outputUnitsByCommodity");
     expect(projection).not.toHaveProperty("outputAnchorByCommodity");
     expect(projection).not.toHaveProperty("productQualityByCommodity");
+    expect(corporationProjection).not.toHaveProperty(
+      "manufacturingProductAdvertisingObligationsV2"
+    );
+    expect(corporationProjection).not.toHaveProperty("manufacturingProductAdvertisingReceiptV2");
     expect(corporationProjection).not.toHaveProperty("manufacturingProductDevelopmentReceiptV2");
     expect(corporationProjection).not.toHaveProperty("manufacturingProductDevelopmentPaidTurnV2");
     expect(corporationProjection).toHaveProperty("mediaProductAdvertisingObligationsV1", 0);

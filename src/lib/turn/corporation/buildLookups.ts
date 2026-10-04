@@ -223,6 +223,8 @@ export async function buildCorporationLookups(
             ...(options?.productLinesV2Enabled === true
               ? {}
               : {
+                  manufacturingProductAdvertisingObligationsV2: 0,
+                  manufacturingProductAdvertisingReceiptV2: 0,
                   manufacturingProductDevelopmentReceiptV2: 0,
                   manufacturingProductDevelopmentPaidTurnV2: 0,
                 }),

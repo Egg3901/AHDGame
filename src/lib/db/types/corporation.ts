@@ -1,5 +1,9 @@
 import type { ObjectId } from "mongodb";
-import type { ManufacturingDevelopmentCashReceiptV2 } from "@/lib/products/manufacturingProject";
+import type {
+  ManufacturingDevelopmentCashReceiptV2,
+  ManufacturingProductAdvertisingObligationV2,
+  ManufacturingProductAdvertisingReceiptV2,
+} from "@/lib/products/manufacturingProject";
 import type {
   MediaProductAdvertisingReceipt,
   MediaProductDevelopmentReceipt,
@@ -685,6 +689,8 @@ export interface Corporation {
   averageQuality?: number;
   /** Project-bound cash receipt written beside the R&D cash debit while product lines v2 is on. */
   manufacturingProductDevelopmentReceiptV2?: ManufacturingDevelopmentCashReceiptV2;
+  manufacturingProductAdvertisingObligationsV2?: ManufacturingProductAdvertisingObligationV2[];
+  manufacturingProductAdvertisingReceiptV2?: ManufacturingProductAdvertisingReceiptV2;
   mediaProductDevelopmentReceiptV1?: MediaProductDevelopmentReceipt;
   mediaProductAdvertisingReceiptV1?: MediaProductAdvertisingReceipt;
   /** Frozen original buyer quote, including seller allocations, until durable settlement completes. */
