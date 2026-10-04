@@ -60,9 +60,9 @@ import {
   buildManufacturedSectorOutput,
   resizeMeasuredManufacturedUnits,
   scaleManufacturedSectorOutput,
-} from "@/lib/products/manufacturingRules";
+} from "@/lib/products/rules/manufacturingRules";
 import { getManufacturingProductKind } from "@/lib/products/manufacturingCatalog";
-import { isLegalManufacturingProductForPlant } from "@/lib/products/manufacturingEligibility";
+import { isLegalManufacturingProductForPlant } from "@/lib/products/rules/manufacturingEligibility";
 
 /**
  * Clearing pre-pass for the corporation turn, extracted from index.ts so the

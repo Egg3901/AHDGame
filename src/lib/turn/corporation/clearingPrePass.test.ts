@@ -12,7 +12,7 @@ import { describe, it, expect } from "vitest";
 import { runClearingPrePass, type ClearingPrePassInput } from "./clearingPrePass";
 import type { MarketContext } from "@/lib/market/marketContext";
 import type { buildCorporationLookups } from "./buildLookups";
-import { buildManufacturedSectorOutput } from "@/lib/products/manufacturingRules";
+import { buildManufacturedSectorOutput } from "@/lib/products/rules/manufacturingRules";
 import { eraScaledBasePrices } from "@/lib/constants/commodities";
 
 type Lookups = Awaited<ReturnType<typeof buildCorporationLookups>>;

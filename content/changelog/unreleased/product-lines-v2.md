@@ -17,5 +17,5 @@ areas: [fullstack]
 ## What changed
 
 - Added gated manufacturing product projects with plant-backed allocations, legal strategy checks, a player studio, and NPP selection based on margin, scarcity, and existing recipe exposure.
-- Development costs 5% of allocated plant capital and requires 12 elapsed turns. Paid R&D funds the active project first, and the remaining R&D spend continues to general research.
+- Development costs 5% of allocated plant capital and requires 12 elapsed turns. Only funded R&D advances the project; unpaid development spend cannot push cash below zero, and the remaining R&D spend continues to general research.
 - Product stages redirect a bounded share of nominal recipe value while conserving total output value and using live sector quality. The feature flag defaults off.

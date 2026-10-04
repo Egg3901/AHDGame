@@ -54,6 +54,7 @@ describe("manufacturing product project persistence v2", () => {
     };
     const corporation = {
       _id: { toString: () => corporationId },
+      manufacturingProductDevelopmentPaidTurnV2: 6,
       manufacturingProductDevelopmentReceiptV2: {
         projectId: "project-1",
         turn: 6,
@@ -72,10 +73,7 @@ describe("manufacturing product project persistence v2", () => {
     expect(projectWrite.updateOne.filter).toMatchObject({
       _id: "project-1",
       activeCorporationId: corporationId,
-      $or: [
-        { lastProcessedTurn: { $exists: false } },
-        { lastProcessedTurn: { $lt: 6 } },
-      ],
+      $or: [{ lastProcessedTurn: { $exists: false } }, { lastProcessedTurn: { $lt: 6 } }],
     });
     expect(projectWrite.updateOne.update.$set).toMatchObject({
       stage: "launch",
@@ -88,6 +86,7 @@ describe("manufacturing product project persistence v2", () => {
     });
     expect(projects.get(corporationId)?.stage).toBe("launch");
     expect(corporation.manufacturingProductDevelopmentReceiptV2).toBeUndefined();
+    expect(corporation.manufacturingProductDevelopmentPaidTurnV2).toBe(6);
   });
 
   it("clears an old project's receipt without transferring it to the active project", async () => {

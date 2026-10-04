@@ -3,6 +3,7 @@ import {
   advancePaidDevelopment,
   advanceManufacturingProject,
   allocateManufacturingResearchSpend,
+  capManufacturingDevelopmentSpendToCash,
   allocateManufacturedOutput,
   buildManufacturedSectorOutput,
   productQualityForCommodity,
@@ -71,6 +72,30 @@ describe("manufacturing product line rules", () => {
         stage: "launch",
       })
     ).toEqual({ productDevelopmentAnchor: 0, genericResearchAnchor: 35 });
+  });
+
+  it("caps development spend at post-P&L cash and gives unfunded spend no credit", () => {
+    expect(
+      capManufacturingDevelopmentSpendToCash({
+        proposedDevelopmentAnchor: 30,
+        liquidCapitalAnchor: 100,
+        incomeBeforeDevelopmentAnchor: -80,
+      })
+    ).toBe(20);
+    expect(
+      capManufacturingDevelopmentSpendToCash({
+        proposedDevelopmentAnchor: 30,
+        liquidCapitalAnchor: 0,
+        incomeBeforeDevelopmentAnchor: -100,
+      })
+    ).toBe(0);
+    expect(
+      capManufacturingDevelopmentSpendToCash({
+        proposedDevelopmentAnchor: 30,
+        liquidCapitalAnchor: 100,
+        incomeBeforeDevelopmentAnchor: -100,
+      })
+    ).toBe(0);
   });
 
   it("applies one matching paid receipt once and advances only after both thresholds", () => {

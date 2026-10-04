@@ -218,7 +218,10 @@ export async function buildCorporationLookups(
             ...(options?.mediaEditorialEnabled === true ? {} : { editorialStance: 0 }),
             ...(options?.productLinesV2Enabled === true
               ? {}
-              : { manufacturingProductDevelopmentReceiptV2: 0 }),
+              : {
+                  manufacturingProductDevelopmentReceiptV2: 0,
+                  manufacturingProductDevelopmentPaidTurnV2: 0,
+                }),
           },
         }
       )

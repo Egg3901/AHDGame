@@ -2,8 +2,8 @@
  * A corporation's active manufactured product is one project allocated across owned plants.
  * ManufacturingProductProject stores paid development and the turn needed for replay-safe progress.
  */
-import type { ManufacturingLifecycleStage } from "./manufacturingRules";
-import type { ProductPlantAllocation } from "./manufacturingEligibility";
+import type { ManufacturingLifecycleStage } from "./rules/manufacturingRules";
+import type { ProductPlantAllocation } from "./rules/manufacturingEligibility";
 
 export const MANUFACTURING_PRODUCT_PROJECTS_V2 = "manufacturingProductProjectsV2";
 export const MANUFACTURING_PRODUCT_ACTIVE_INDEX_V2 =

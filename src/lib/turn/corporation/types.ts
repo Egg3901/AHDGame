@@ -434,6 +434,8 @@ export interface SectorUpdateOp {
 export interface SectorCalculationsResult {
   sectorOps: SectorUpdateOp[];
   corpOps: AnyBulkWriteOperation<Corporation>[];
+  /** Live-balance guarded product-development cash debits, applied after all other corp cash ops. */
+  manufacturingDevelopmentCashOps: AnyBulkWriteOperation<Corporation>[];
   corpSnapshots: CorpSnapshot[];
   ceoSalaryPayments: Map<string, Map<CurrencyCode, number>>;
   dividendPayments: Map<string, Map<CurrencyCode, number>>;

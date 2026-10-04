@@ -19,7 +19,7 @@ import {
   validateProductAllocations,
   type ManufacturingPlant,
   type ProductPlantAllocation,
-} from "@/lib/products/manufacturingEligibility";
+} from "@/lib/products/rules/manufacturingEligibility";
 import {
   MANUFACTURING_PRODUCT_KINDS,
   getManufacturingProductKind,
@@ -27,7 +27,7 @@ import {
 import {
   MANUFACTURING_DEVELOPMENT_ELAPSED_TURNS,
   manufacturingDevelopmentThresholdAnchor,
-} from "@/lib/products/manufacturingRules";
+} from "@/lib/products/rules/manufacturingRules";
 import {
   MANUFACTURING_PRODUCT_PROJECTS_V2,
   type ManufacturingProductProject,

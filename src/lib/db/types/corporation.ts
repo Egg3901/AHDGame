@@ -565,6 +565,8 @@ export interface Corporation {
   averageQuality?: number;
   /** Project-bound cash receipt written beside the R&D cash debit while product lines v2 is on. */
   manufacturingProductDevelopmentReceiptV2?: ManufacturingDevelopmentCashReceiptV2;
+  /** Idempotency stamp retained after its project-bound cash receipt is consumed. */
+  manufacturingProductDevelopmentPaidTurnV2?: number;
   creditRatingComponents?: {
     debtToEquity: number;
     interestCoverage: number;

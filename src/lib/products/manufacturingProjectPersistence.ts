@@ -4,7 +4,7 @@
  */
 import type { Db } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
-import { advanceManufacturingProject } from "./manufacturingRules";
+import { advanceManufacturingProject } from "./rules/manufacturingRules";
 import {
   MANUFACTURING_PRODUCT_ACTIVE_INDEX_V2,
   MANUFACTURING_PRODUCT_PROJECTS_V2,
@@ -107,7 +107,11 @@ export async function consumeManufacturingDevelopmentReceiptsV2(input: {
     if (result.matchedCount !== projectOps.length) {
       const currentProjects = await input.db
         .collection<ManufacturingProductProject>(MANUFACTURING_PRODUCT_PROJECTS_V2)
-        .find({ _id: { $in: [...receiptByCorporationId.values()].map(({ receipt }) => receipt.projectId) } })
+        .find({
+          _id: {
+            $in: [...receiptByCorporationId.values()].map(({ receipt }) => receipt.projectId),
+          },
+        })
         .project(activeManufacturingProductProjectProjection())
         .toArray();
       const currentById = new Map(currentProjects.map((project) => [project._id, project]));

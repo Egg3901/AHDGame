@@ -6,7 +6,7 @@ import { SECTOR_STRATEGIES } from "@/lib/constants/sectorStrategies";
 import type { CorporationType } from "@/lib/constants/corporations";
 import { getStrategyAvailability } from "@/lib/constants/techTree/strategyAvailability";
 import type { TechLane } from "@/lib/constants/techTree/nodes";
-import { getManufacturingProductKind, MANUFACTURING_PRODUCT_KINDS } from "./manufacturingCatalog";
+import { getManufacturingProductKind, MANUFACTURING_PRODUCT_KINDS } from "../manufacturingCatalog";
 
 export interface ManufacturingPlant {
   sectorId: string;
@@ -90,7 +90,7 @@ export function legalManufacturingProductKinds(
     }
     for (const kind of MANUFACTURING_PRODUCT_KINDS) {
       if (
-      kind.sectorTypes.includes(plant.sectorType as CorporationType) &&
+        kind.sectorTypes.includes(plant.sectorType as CorporationType) &&
         kind.strategyIds.includes(strategy.id) &&
         (strategy.supply[kind.outputCommodity] ?? 0) > 0
       ) {

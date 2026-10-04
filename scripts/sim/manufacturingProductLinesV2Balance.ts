@@ -7,8 +7,8 @@ import {
   scaleManufacturedSectorOutput,
   MANUFACTURING_DEVELOPMENT_ELAPSED_TURNS,
   type ManufacturingLifecycleStage,
-} from "../../src/lib/products/manufacturingRules";
-import { chooseNppManufacturingProduct } from "../../src/lib/products/manufacturingNpp";
+} from "../../src/lib/products/rules/manufacturingRules";
+import { chooseNppManufacturingProduct } from "../../src/lib/products/rules/manufacturingNpp";
 
 const allocatedCapitalStock = 100_000;
 const projectCost = manufacturingDevelopmentThresholdAnchor(allocatedCapitalStock);

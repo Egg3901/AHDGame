@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chooseNppManufacturingProduct } from "./manufacturingNpp";
+import { chooseNppManufacturingProduct } from "./rules/manufacturingNpp";
 import {
   advanceManufacturingProject,
   allocateManufacturedOutput,
@@ -7,7 +7,7 @@ import {
   buildManufacturedSectorOutput,
   manufacturingDevelopmentThresholdAnchor,
   MANUFACTURING_DEVELOPMENT_ELAPSED_TURNS,
-} from "./manufacturingRules";
+} from "./rules/manufacturingRules";
 
 const CAPITAL_STOCK = 100_000;
 const PROJECT_COST = manufacturingDevelopmentThresholdAnchor(CAPITAL_STOCK);

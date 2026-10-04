@@ -68,9 +68,9 @@ import {
   supportsCostPlusPricing,
   validCostPlusBasis,
 } from "@/lib/market/costPlusPricing/rules";
-import { buildManufacturedSectorOutput } from "@/lib/products/manufacturingRules";
+import { buildManufacturedSectorOutput } from "@/lib/products/rules/manufacturingRules";
 import { getManufacturingProductKind } from "@/lib/products/manufacturingCatalog";
-import { isLegalManufacturingProductForPlant } from "@/lib/products/manufacturingEligibility";
+import { isLegalManufacturingProductForPlant } from "@/lib/products/rules/manufacturingEligibility";
 
 /** Process one sector and append its persisted update to the turn collectors. */
 export function processSector(

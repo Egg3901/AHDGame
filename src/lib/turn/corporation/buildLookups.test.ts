@@ -148,6 +148,7 @@ describe("buildCorporationLookups — bond holdings", () => {
       productQualityByCommodity: 0,
     });
     expect(corporationProjection).toHaveProperty("manufacturingProductDevelopmentReceiptV2", 0);
+    expect(corporationProjection).toHaveProperty("manufacturingProductDevelopmentPaidTurnV2", 0);
   });
 
   it("projects product output maps only when explicitly enabled", async () => {
@@ -162,6 +163,7 @@ describe("buildCorporationLookups — bond holdings", () => {
     expect(projection).not.toHaveProperty("outputAnchorByCommodity");
     expect(projection).not.toHaveProperty("productQualityByCommodity");
     expect(corporationProjection).not.toHaveProperty("manufacturingProductDevelopmentReceiptV2");
+    expect(corporationProjection).not.toHaveProperty("manufacturingProductDevelopmentPaidTurnV2");
   });
 
   it("does not query the v2 product project collection while the gate is off", async () => {

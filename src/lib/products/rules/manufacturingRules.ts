@@ -251,6 +251,28 @@ export function allocateManufacturingResearchSpend(input: {
 }
 
 /**
+ * A development allocation can only consume cash that remains after the rest
+ * of the corporation's planned P&L. The caller still performs an atomic live
+ * balance check before recording the payment receipt.
+ */
+export function capManufacturingDevelopmentSpendToCash(input: {
+  proposedDevelopmentAnchor: number;
+  liquidCapitalAnchor: number;
+  incomeBeforeDevelopmentAnchor: number;
+}): number {
+  const proposed = Number.isFinite(input.proposedDevelopmentAnchor)
+    ? Math.max(0, input.proposedDevelopmentAnchor)
+    : 0;
+  if (proposed === 0) return 0;
+  const cashAvailable =
+    (Number.isFinite(input.liquidCapitalAnchor) ? input.liquidCapitalAnchor : 0) +
+    (Number.isFinite(input.incomeBeforeDevelopmentAnchor)
+      ? input.incomeBeforeDevelopmentAnchor
+      : 0);
+  return Math.min(proposed, Math.max(0, cashAvailable));
+}
+
+/**
  * Redirects part of a plant's existing nominal recipe value to the product output. Quantity is
  * computed only after value is conserved, so a costly output cannot multiply recipe value.
  */

@@ -551,6 +551,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   const {
     sectorOps,
     corpOps,
+    manufacturingDevelopmentCashOps,
     corpSnapshots,
     ceoSalaryPayments,
     dividendPayments,
@@ -656,6 +657,12 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       },
     });
   }
+
+  // Product-development cash is a separately capitalized spend. Apply its
+  // live-balance/idempotence guard after the rest of the turn's corporation
+  // cash writes so same-turn salaries, settlements, and NPP decisions are
+  // included in the available balance check.
+  corpOps.push(...manufacturingDevelopmentCashOps);
 
   // Merge NPP sector growth-rate updates into sectorOps
   for (const nppSectorUpdate of nppSectorUpdates) {
