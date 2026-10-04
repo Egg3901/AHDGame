@@ -54,6 +54,15 @@ function input(): ConstructionFinanceQuoteInput {
 }
 
 describe("construction finance underwriting", () => {
+  it.each([NaN, Infinity, -0.1, 1.1])(
+    "refuses an invalid reserve ratio %s before quoting cash",
+    (reserveRatio) => {
+      const request = input();
+      request.bank.reserveRatio = reserveRatio;
+      expect(quoteConstructionFinance(request)).toMatchObject({ allowed: false });
+    }
+  );
+
   it("funds only construction escrow and requires own cash including the withheld fee", () => {
     const result = quoteConstructionFinance(input());
     expect(result.allowed).toBe(true);

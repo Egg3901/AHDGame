@@ -36,6 +36,16 @@ describe("construction service recovery index", () => {
         },
         sparse: true,
       },
+      {
+        name: "corporateSectors_construction_sale_turn",
+        key: { "constructionFinancing.sale.turn": 1 },
+        sparse: true,
+      },
+      {
+        name: "corporateSectors_construction_default_turn",
+        key: { "constructionFinancing.defaultedTurn": 1 },
+        sparse: true,
+      },
     ]);
   });
 });

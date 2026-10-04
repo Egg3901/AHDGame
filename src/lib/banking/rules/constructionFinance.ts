@@ -51,6 +51,9 @@ export function quoteConstructionFinance(
   if (input.borrower.type !== "corporation")
     return { allowed: false, error: "Construction finance requires a corporate borrower" };
   if (
+    !Number.isFinite(input.bank.reserveRatio) ||
+    input.bank.reserveRatio < 0 ||
+    input.bank.reserveRatio > 1 ||
     !positive(input.constructionCostLocal) ||
     !positive(input.collateralCostLocal) ||
     input.collateralCostLocal > input.constructionCostLocal ||

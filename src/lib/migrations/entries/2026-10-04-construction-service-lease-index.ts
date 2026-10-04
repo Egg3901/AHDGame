@@ -30,6 +30,18 @@ export const migration: Migration = {
           { "constructionFinancing.status": 1, "constructionFinancing.requestTransition.turn": 1 },
           { name: "corporateSectors_construction_funding_turn", sparse: true }
         );
+      await db
+        .collection("corporateSectors")
+        .createIndex(
+          { "constructionFinancing.sale.turn": 1 },
+          { name: "corporateSectors_construction_sale_turn", sparse: true }
+        );
+      await db
+        .collection("corporateSectors")
+        .createIndex(
+          { "constructionFinancing.defaultedTurn": 1 },
+          { name: "corporateSectors_construction_default_turn", sparse: true }
+        );
     }
     return {
       documentsUpdated: 0,

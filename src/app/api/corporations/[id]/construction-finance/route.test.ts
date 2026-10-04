@@ -22,7 +22,12 @@ function setup(enabled = true) {
   const memory = createInMemoryDb();
   const corporation = makeCorporation({ _id: new ObjectId(), liquidCurrencyCode: "USD" });
   memory.seed("gameConfig", [
-    { _id: "default", privateBankingEnabled: true, bankConstructionFinanceEnabled: enabled },
+    {
+      _id: "default",
+      privateBankingEnabled: true,
+      treasuryCashLedgerEnabled: true,
+      bankConstructionFinanceEnabled: enabled,
+    },
   ]);
   memory.seed("centralBanks", [{ _id: "US", primeRate: 3 }]);
   memory.seed("corporations", [

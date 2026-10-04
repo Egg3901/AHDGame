@@ -47,7 +47,12 @@ function world(outstanding = 75_000, epoch = 2, defaults = false) {
     loanFunded: true,
   };
   memory.seed("gameConfig", [
-    { _id: "default", privateBankingEnabled: true, bankConstructionFinanceEnabled: true },
+    {
+      _id: "default",
+      privateBankingEnabled: true,
+      treasuryCashLedgerEnabled: true,
+      bankConstructionFinanceEnabled: true,
+    },
   ]);
   memory.seed("gameState", [{ _id: "current", currentTurn: 10 }]);
   memory.seed("corporations", [

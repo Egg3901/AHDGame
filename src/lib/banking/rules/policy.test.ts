@@ -8,7 +8,7 @@ import {
 } from "./policy";
 
 describe("resolveBankingPolicy", () => {
-  it("requires both banking and explicit construction finance permission", () => {
+  it("requires banking, Treasury cash accounting and explicit construction finance permission", () => {
     expect(resolveBankingPolicy({ bankConstructionFinanceEnabled: true }).constructionFinance).toBe(
       false
     );
@@ -16,6 +16,13 @@ describe("resolveBankingPolicy", () => {
     expect(
       resolveBankingPolicy({ privateBankingEnabled: true, bankConstructionFinanceEnabled: true })
         .constructionFinance
+    ).toBe(false);
+    expect(
+      resolveBankingPolicy({
+        privateBankingEnabled: true,
+        treasuryCashLedgerEnabled: true,
+        bankConstructionFinanceEnabled: true,
+      }).constructionFinance
     ).toBe(true);
   });
   it("enables the funded Treasury cash ledger only on an explicit true flag", () => {

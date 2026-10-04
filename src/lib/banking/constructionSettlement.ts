@@ -17,6 +17,7 @@ import {
   abortUnfundedConstruction,
   releaseCompletedConstructionFunding,
 } from "./constructionFundingLease";
+import { acquireConstructionAdmission } from "./constructionAdmission";
 import { MONEY_MOVE_COLLECTION } from "./moneyMove";
 import { settleTransition, resumeSettlement, type SettlementResult } from "./settlementJournal";
 
@@ -71,6 +72,16 @@ export async function settleReservedConstruction(input: {
   )
     return { ok: false, error: "The construction loan does not match its frozen claim" };
 
+  if (
+    claim.admissionToken &&
+    !(await acquireConstructionAdmission(db, {
+      token: claim.admissionToken,
+      loanId: claim.loanId,
+      turn: claim.requestTransition?.turn ?? claim.order.startTurn,
+    }))
+  )
+    return { ok: false, error: "Construction cash admission is disabled or closing" };
+
   const lockKey = `construction:${claim.claimId}:funding`;
   const owned = await acquireConstructionLoanLock(db, loan, lockKey);
   if (!owned) return { ok: false, error: "Another settlement owns construction funding" };
@@ -101,6 +112,14 @@ export async function settleReservedConstruction(input: {
     if (input.bank.charter?.charteredTurn !== claim.charteredTurn) {
       await abortUnfundedConstruction(db, claim, sectorId, input.bank.turn);
       return { ok: false, error: "The lender charter changed before construction funding" };
+    }
+    if (
+      !Number.isFinite(input.bank.reserveRatio) ||
+      input.bank.reserveRatio < 0 ||
+      input.bank.reserveRatio > 1
+    ) {
+      await abortUnfundedConstruction(db, claim, sectorId, input.bank.turn);
+      return { ok: false, error: "The lender reserve requirement is invalid" };
     }
     const decision = decideBankCommand(
       input.bank,
