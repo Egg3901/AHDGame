@@ -429,6 +429,8 @@ export async function nationalizeSectorWide(
         fxRateForSectorHostFromMap(sec, donor, fxByCurrency)
       );
       const openingPlantCount = seedPlantLedger(sec.sectorType, sec.capitalStock).plantCount;
+      // Compute the whole-facility split once so donor and state counts are
+      // complementary, including a one-facility sub-quantum holding.
       const plantCountSplit = splitWholePlantCount(openingPlantCount, f);
       // PLANTS — the capacity leg of the carve. Below plants this is null and
       // both writes below are byte identical to the pre-P3b behaviour.

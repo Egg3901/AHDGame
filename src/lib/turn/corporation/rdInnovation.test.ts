@@ -184,10 +184,14 @@ describe("processRdInnovations", () => {
 
     expect(result.innovationsTriggered).toBe(1);
     const update = result.sectorBoostOps[0]!.updateOne.update;
-    expect(update.$inc.revenue).toBeUndefined();
+    const pipeline = update as unknown as Array<Record<string, unknown>>;
+    expect(pipeline[0]).not.toHaveProperty("$inc.revenue");
     // rng 0 → the MIN of the regular boost band, applied to the STOCK.
-    expect(update.$inc.capitalStock).toBeGreaterThan(0);
-    expect(update.$inc.capitalStock).toBeLessThan(1_000);
+    const stockDelta = (
+      pipeline[0]?.$set as { capitalStock: { $max: [number, { $add: [unknown, number] }] } }
+    ).capitalStock.$max[1].$add[1];
+    expect(stockDelta).toBeGreaterThan(0);
+    expect(stockDelta).toBeLessThan(1_000);
   });
 
   it("under plants skips a sector with no capacity to improve", () => {

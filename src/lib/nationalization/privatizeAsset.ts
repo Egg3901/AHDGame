@@ -319,6 +319,8 @@ export async function privatizeAsset(
     // split by the same fraction — without it the carved corp would land in the
     // rollback script's "no restore point, needs a human decision" bucket.
     const openingPlantCount = seedPlantLedger(sector.sectorType, sector.capitalStock).plantCount;
+    // Split once and pass complementary counts to both rows. Rounding each leg
+    // independently could give both halves the sole small facility.
     const plantCountSplit = splitWholePlantCount(openingPlantCount, fraction);
     const carvedPlant = carveSectorPlantFields(sector, fraction, plantCountSplit.carved);
     const keptPlant = carveSectorPlantFields(sector, keep, plantCountSplit.kept);

@@ -227,6 +227,9 @@ export function carveSectorPlantFields(
   fraction: number,
   plantCountOverride?: number
 ): SectorPlantFieldsUpdate {
+  if (sector.sectorType && plantCountOverride == null) {
+    throw new Error("A plant carve requires its conserved whole-facility count split");
+  }
   const f = Math.max(0, Math.min(1, Number.isFinite(fraction) ? fraction : 0));
   const sourceShadow = shadow(sector);
   const carvedPlantCount =

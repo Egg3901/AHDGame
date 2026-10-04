@@ -19,7 +19,7 @@ import { sumCorporateSectorConstructionInProgress } from "@/lib/bonds/corporateC
 import type { CorpSnapshot, SoeBackingSnapshot } from "@/lib/turn/corporation/types";
 import type { ActionAuditInput } from "@/lib/db/types/actionAuditLog";
 import { isStateOwned } from "./nationalCorporation";
-import { seedPlantLedger } from "@/lib/corporations/plantLedger";
+import { plantCapacityDeltaPipeline } from "@/lib/corporations/plantLedger";
 import { findMergedRegionMetricsMany } from "@/lib/macroMetrics/merge";
 import { isMacroMetricPath } from "@/lib/macroMetrics/paths";
 import { boardDeltaForLegacyEffect } from "@/lib/politicalLegislation/legacyEffectBridge";
@@ -923,14 +923,10 @@ async function applyStateCapexGrants(
       ops.push({
         updateOne: {
           filter: { _id: buy.sectorId },
-          update: {
-            $inc: { capitalStock: buy.unitsAdded },
-            $set: {
-              ...seedPlantLedger(buy.sectorType, buy.capitalStock + buy.unitsAdded),
-              capacityBookAnchor: buy.nextBookAnchor,
-              updatedAt: now,
-            },
-          },
+          update: plantCapacityDeltaPipeline(buy.sectorType, buy.unitsAdded, {
+            capacityBookAnchor: buy.nextBookAnchor,
+            updatedAt: now,
+          }),
         },
       });
     }

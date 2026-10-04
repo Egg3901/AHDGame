@@ -60,7 +60,7 @@ import {
   capacityCaptureBookUpdates,
   resolveWorldYear,
 } from "@/lib/corporations/capacityCapture";
-import { seedPlantLedger } from "@/lib/corporations/plantLedger";
+import { plantCapacityDeltaPipeline, seedPlantLedger } from "@/lib/corporations/plantLedger";
 import { deriveCeoArchetype } from "./ceoArchetype";
 import { logWireEvent, wireHeadlineSectorAttack } from "@/lib/wireEvent";
 import { createNotification } from "@/lib/notifications";
@@ -344,22 +344,18 @@ export async function executeNppSectorAttack(
     : null;
 
   // Reduce the defender: capacity units under plants, revenue below it.
-  await db.collection<CorporateSector>("corporateSectors").updateOne(
-    { _id: targetSector._id },
-    plantsEnabled
-      ? {
-          $inc: { capitalStock: -(Math.round(unitsTaken * 100) / 100) },
-          $set: {
-            ...seedPlantLedger(
-              targetSector.sectorType as CorporationType,
-              (targetSector.capitalStock ?? 0) - Math.round(unitsTaken * 100) / 100
-            ),
-            updatedAt: now,
-            ...(captureBook?.defenderSet ?? {}),
-          },
-        }
-      : { $inc: { revenue: -captureInDefenderLocal }, $set: { updatedAt: now } }
-  );
+  await db
+    .collection<CorporateSector>("corporateSectors")
+    .updateOne(
+      { _id: targetSector._id },
+      plantsEnabled
+        ? plantCapacityDeltaPipeline(
+            targetSector.sectorType as CorporationType,
+            -(Math.round(unitsTaken * 100) / 100),
+            { updatedAt: now, ...(captureBook?.defenderSet ?? {}) }
+          )
+        : { $inc: { revenue: -captureInDefenderLocal }, $set: { updatedAt: now } }
+    );
 
   // Nameplate-invariant across a strategy difference — see the player route.
   const unitsForAttacker = plantsEnabled
@@ -376,17 +372,14 @@ export async function executeNppSectorAttack(
     await db.collection<CorporateSector>("corporateSectors").updateOne(
       { _id: existing._id },
       plantsEnabled
-        ? {
-            $inc: { capitalStock: capitalStockDelta },
-            $set: {
-              ...seedPlantLedger(
-                targetSector.sectorType as CorporationType,
-                (existing.capitalStock ?? 0) + capitalStockDelta
-              ),
+        ? plantCapacityDeltaPipeline(
+            targetSector.sectorType as CorporationType,
+            capitalStockDelta,
+            {
               updatedAt: now,
               capacityBookAnchor: captureBook?.attackerBookAnchor ?? 0,
-            },
-          }
+            }
+          )
         : { $inc: { revenue: captureInAttackerLocal }, $set: { updatedAt: now } }
     );
   } else {
@@ -419,25 +412,17 @@ export async function executeNppSectorAttack(
         .insertOne(newSector as CorporateSector);
     } catch (error) {
       if (isCorporateSectorDuplicateKey(error)) {
-        const racedExisting = await db.collection<CorporateSector>("corporateSectors").findOne({
-          corporationId: attacker._id,
-          stateId,
-          sectorType: targetSector.sectorType,
-        });
         await db.collection<CorporateSector>("corporateSectors").updateOne(
           { corporationId: attacker._id, stateId, sectorType: targetSector.sectorType },
           plantsEnabled
-            ? {
-                $inc: { capitalStock: capitalStockDelta },
-                $set: {
-                  ...seedPlantLedger(
-                    targetSector.sectorType as CorporationType,
-                    (racedExisting?.capitalStock ?? 0) + capitalStockDelta
-                  ),
+            ? plantCapacityDeltaPipeline(
+                targetSector.sectorType as CorporationType,
+                capitalStockDelta,
+                {
                   updatedAt: now,
                   capacityBookAnchor: captureBook?.attackerBookAnchor ?? 0,
-                },
-              }
+                }
+              )
             : { $inc: { revenue: captureInAttackerLocal }, $set: { updatedAt: now } }
         );
       } else {

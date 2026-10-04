@@ -126,6 +126,12 @@ describe("mergeSectorPlantFields", () => {
 });
 
 describe("carveSectorPlantFields", () => {
+  it("requires a conserved facility split when the source has a sector type", () => {
+    expect(() =>
+      carveSectorPlantFields({ sectorType: "energy", capitalStock: 400 }, 0.5)
+    ).toThrow("A plant carve requires its conserved whole-facility count split");
+  });
+
   it("allocates stock by whole facilities and conserves a sole small facility", () => {
     const source = {
       sectorType: "energy" as const,
