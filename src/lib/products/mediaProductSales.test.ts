@@ -5,9 +5,9 @@ import {
   attributeMediaProductSales,
   mediaProductOfferAvailability,
   paidPoliticalMediaSellerReceipts,
-  persistMediaProductSales,
   reconcileMediaProductDelivery,
-} from "./mediaProductSales";
+} from "./rules/mediaProductSales";
+import { persistMediaProductSales } from "./mediaProductSales";
 import type { SectorClearingResult } from "@/lib/market/clearing";
 
 function project(overrides: Partial<MediaProductProject> = {}): MediaProductProject {
@@ -147,6 +147,36 @@ describe("media product sales attribution", () => {
       0
     );
     expect(titleUnits).toBeLessThanOrEqual(clearing.deliveredUnitsByCommodity?.advertising ?? 0);
+  });
+
+  it("attributes only the current model's titles after a sector strategy switch", () => {
+    const projects = [
+      project(),
+      project({
+        _id: "radio-title",
+        kindId: "radio_program",
+        allocationShare: 0.5,
+      }),
+    ];
+    const clearing: SectorClearingResult = {
+      factor: 1,
+      soldFraction: 0.5,
+      effectivePosture: 0,
+      soldByCommodity: { advertising: 0.5 },
+      deliveredUnitsByCommodity: { advertising: 50 },
+      offerFactorByCommodity: { advertising: 1 },
+    };
+
+    const attributed = attributeMediaProductSales({
+      projects,
+      clearing,
+      basePrices: { advertising: 100 },
+      turn: 14,
+      strategyId: "radio_network",
+    });
+
+    expect(attributed.map((row) => row.projectId)).toEqual(["radio-title"]);
+    expect(attributed[0]?.deliveredUnitsByCommodity.advertising).toBeCloseTo(50 / 3);
   });
 
   it("removes unpaid political plans and credits only applied seller receipts", () => {

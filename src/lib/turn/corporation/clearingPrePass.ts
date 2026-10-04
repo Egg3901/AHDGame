@@ -71,7 +71,7 @@ import {
 import { getManufacturingProductKind } from "@/lib/products/manufacturingCatalog";
 import { isLegalManufacturingProductForPlant } from "@/lib/products/rules/manufacturingEligibility";
 import { getMediaProductKind } from "@/lib/products/mediaProductCatalog";
-import { mediaProductOfferAvailability } from "@/lib/products/mediaProductSales";
+import { mediaProductOfferAvailability } from "@/lib/products/rules/mediaProductSales";
 
 /**
  * Clearing pre-pass for the corporation turn, extracted from index.ts so the

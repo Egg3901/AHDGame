@@ -119,10 +119,10 @@ import {
 import {
   attributeMediaProductSales,
   paidPoliticalMediaSellerReceipts,
-  persistMediaProductSales,
   reconcileMediaProductDelivery,
   type PaidPoliticalMediaSellerAmount,
-} from "@/lib/products/mediaProductSales";
+} from "@/lib/products/rules/mediaProductSales";
+import { persistMediaProductSales } from "@/lib/products/mediaProductSales";
 import { getMediaProductKind } from "@/lib/products/mediaProductCatalog";
 import { aggregateMediaProductSectorEffects } from "@/lib/products/rules/mediaProductRules";
 
@@ -1006,9 +1006,18 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   if (mediaProductSlatesEnabled && lookups.mediaProductProjectsBySectorId) {
     const basePrices = eraScaledBasePrices(lookups.eraUnitScale);
     const attributions: ReturnType<typeof attributeMediaProductSales> = [];
+    const strategyIdBySectorId = new Map<string, string>();
+    for (const sectors of lookups.sectorsByCorp.values()) {
+      for (const sector of sectors) {
+        if (typeof sector.strategyId === "string") {
+          strategyIdBySectorId.set(sector._id.toString(), sector.strategyId);
+        }
+      }
+    }
     for (const [sectorId, projects] of lookups.mediaProductProjectsBySectorId) {
       const clearing = market.clearingBySectorId?.get(sectorId);
-      if (!clearing?.deliveredUnitsByCommodity) continue;
+      const strategyId = strategyIdBySectorId.get(sectorId);
+      if (!clearing?.deliveredUnitsByCommodity || !strategyId) continue;
       const reconciled = reconcileMediaProductDelivery({
         clearing,
         plannedPoliticalUnits: plannedPoliticalUnitsBySectorId.get(sectorId) ?? 0,
@@ -1023,6 +1032,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           clearing: reconciled.clearing,
           basePrices,
           turn: currentTurnNumber,
+          strategyId,
           paidPoliticalUnitsByCommodity: reconciled.paidPoliticalUnitsByCommodity,
           paidPoliticalRevenueAnchorByCommodity: reconciled.paidPoliticalRevenueAnchorByCommodity,
         })
