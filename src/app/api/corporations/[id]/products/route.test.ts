@@ -33,6 +33,8 @@ let sectors: object[];
 
 beforeEach(async () => {
   vi.clearAllMocks();
+  const { getGameState } = await import("@/lib/gameState");
+  vi.mocked(getGameState).mockResolvedValue({ currentTurn: 10, currentYear: 1953 } as never);
   db = createMockDb();
   for (const collection of [
     "gameConfig",
@@ -50,6 +52,7 @@ beforeEach(async () => {
       sectorType: "automobiles",
       strategyId: "standard",
       capitalStock: 1000,
+      capacityBookAnchor: 50_000,
       plantCount: 2,
       mothballed: false,
     },
@@ -83,6 +86,9 @@ describe("manufacturing product project routes", () => {
     expect(await response.json()).toMatchObject({ enabled: false, isCeo: true });
     expect(db.collectionMocks.manufacturingProductProjectsV2.findOne).not.toHaveBeenCalled();
     expect(db.collectionMocks.manufacturingProductProjectsV2.find).not.toHaveBeenCalled();
+    expect(db.collectionMocks.corporateSectors.find).not.toHaveBeenCalled();
+    const { getGameState } = await import("@/lib/gameState");
+    expect(getGameState).not.toHaveBeenCalled();
   });
 
   it("returns project-specific settled sales, quality, and actual strategy tech requirements", async () => {
@@ -150,6 +156,87 @@ describe("manufacturing product project routes", () => {
       })
     );
   });
+
+  it("returns the monetary basis for a partial-allocation preview without rewriting an existing quote", async () => {
+    db.collectionMocks.gameConfig.findOne.mockResolvedValue({
+      marketSystemMode: "plants",
+      productLinesV2Enabled: true,
+    });
+    db.collectionMocks.manufacturingProductProjectsV2.findOne.mockResolvedValue({
+      _id: "existing",
+      kindId: "passenger_car",
+      stage: "development",
+      startedTurn: 10,
+      allocations: [{ sectorId: sectorId.toString(), share: 0.5 }],
+      paidThresholdAnchor: 25,
+      developmentPaidAnchor: 12,
+      elapsedDevelopmentTurns: 4,
+      elapsedThresholdTurns: 12,
+    });
+    const { GET } = await import("./route");
+    const response = await GET(new Request("http://localhost/api/corporations/1/products"), {
+      params: Promise.resolve({ id: "1" }),
+    });
+    const body = await response.json();
+    expect(body.plants[0]).toMatchObject({ capitalStock: 1000, developmentCapitalAnchor: 50_000 });
+    expect(body.allocatedCapacityStock).toBe(500);
+    expect(body.activeProject).toMatchObject({
+      paidThresholdAnchor: 25,
+      developmentPaidAnchor: 12,
+    });
+  });
+
+  it.each(["1953-default", "1991-default"])(
+    "uses the era-priced legacy monetary fallback in %s",
+    async (preset) => {
+      const { sectorCapacityBookAnchor } = await import("@/lib/corporations/sectorProfitBasis");
+      const { getEraUnitScale } = await import("@/lib/constants/sectorSeedEra");
+      const { getGameState } = await import("@/lib/gameState");
+      const currentYear = preset === "1953-default" ? 1953 : 1991;
+      vi.mocked(getGameState).mockResolvedValue({ currentTurn: 10, currentYear, preset } as never);
+      sectors = [
+        {
+          ...sectors[0],
+          capacityBookAnchor: undefined,
+          sectorType: "manufacturing",
+          industryModel: "vehicles",
+        },
+      ];
+      db.collectionMocks.corporateSectors.find.mockReturnValue(cursor(sectors));
+      db.collectionMocks.gameConfig.findOne.mockResolvedValue({
+        marketSystemMode: "plants",
+        productLinesV2Enabled: true,
+      });
+      const { POST } = await import("./route");
+      const response = await POST(
+        new Request("http://localhost/api/corporations/1/products", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            kindId: "passenger_car",
+            allocations: [{ sectorId: sectorId.toString(), share: 0.5 }],
+          }),
+        }),
+        { params: Promise.resolve({ id: "1" }) }
+      );
+      expect(response.status).toBe(201);
+      const basis = sectorCapacityBookAnchor(
+        {
+          sectorType: "manufacturing",
+          industryModel: "vehicles",
+          strategyId: "standard",
+          capitalStock: 1000,
+        },
+        currentYear,
+        getEraUnitScale(preset)
+      );
+      expect(
+        db.collectionMocks.manufacturingProductProjectsV2.insertOne.mock.calls[0][0]
+          .paidThresholdAnchor
+      ).toBeCloseTo(basis * 0.5 * 0.05);
+      expect(basis).not.toBe(1000);
+    }
+  );
 
   it("does not attribute another project's snapshot to a new development stage", async () => {
     db.collectionMocks.gameConfig.findOne.mockResolvedValue({
@@ -264,7 +351,7 @@ describe("manufacturing product project routes", () => {
       activeCorporationId: corporationId.toString(),
       kindId: "passenger_car",
       stage: "development",
-      paidThresholdAnchor: 25,
+      paidThresholdAnchor: 1250,
       elapsedThresholdTurns: 12,
     });
     expect(project.allocations).toEqual([{ sectorId: sectorId.toString(), share: 0.5 }]);

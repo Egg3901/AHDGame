@@ -28,6 +28,16 @@ describe("loadUSMediaOutletDelivery", () => {
         producedUnits: 100,
         soldFraction: 0.5,
       },
+      {
+        _id: "canonical-entertainment",
+        stateId: "CA",
+        corporationId: { toString: () => "corp-3" },
+        sectorType: "media",
+        mediaDiscriminator: "entertainment",
+        strategyId: "live_service",
+        producedUnits: 100,
+        soldFraction: 1,
+      },
     ]);
     const find = vi.fn().mockReturnValue({ toArray });
     const corporationFind = vi.fn().mockReturnValue({ toArray: async () => [] });
@@ -52,6 +62,7 @@ describe("loadUSMediaOutletDelivery", () => {
       producedUnits: 1,
       soldByCommodity: 1,
       outputUnitsByCommodity: 1,
+      mediaDiscriminator: 1,
     });
     expect(outlets).toHaveLength(2);
     expect(outlets[0]).toMatchObject({
@@ -126,9 +137,11 @@ describe("loadUSMediaOutletDelivery", () => {
           sectorType: "media",
           strategyId: "standard",
           producedUnits: 100,
-          outputUnitsByCommodity: { advertising: 100 },
+          outputUnitsByCommodity: { advertising: 1000 },
           soldByCommodity: { advertising: 0.8 },
           soldByCommodityTurn: 12,
+          soldUnitsByCommodity: { advertising: 80 },
+          soldUnitsByCommodityTurn: 12,
         },
       ],
     });
@@ -202,7 +215,9 @@ describe("loadUSMediaOutletDelivery", () => {
                     strategyId: "standard",
                     outputUnitsByCommodity: { advertising: 100 },
                     soldByCommodity: { advertising: 0.9 },
-                    soldByCommodityTurn: 19,
+                    soldByCommodityTurn: 20,
+                    soldUnitsByCommodity: { advertising: 90 },
+                    soldUnitsByCommodityTurn: 19,
                   },
                 ],
               }),

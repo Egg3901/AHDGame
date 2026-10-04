@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  capDeliveredMediaUnits,
+  mediaPoliticalResidualLimit,
   censorshipReachAvailability,
   currentTurnDeliveredAdvertisingUnits,
   isFairnessDoctrineBroadcastOutlet,
@@ -163,5 +165,49 @@ describe("media regulation availability", () => {
         5
       ).size
     ).toBe(0);
+  });
+});
+
+describe("current delivered ownership limits", () => {
+  const rows = (units: number[]) =>
+    units.map((units, index) => ({
+      sectorId: String(index),
+      stateId: "CA",
+      corporationId: String(index),
+      units,
+    }));
+  it("bounds final normalized shares instead of the prior audience denominator", () => {
+    const units = [...capDeliveredMediaUnits(rows([70, 30]), 0.65).values()];
+    expect(units[0]).toBeCloseTo((30 * 0.65) / 0.35);
+    expect(units[1]).toBe(30);
+    expect(units[0]! / (units[0]! + units[1]!)).toBeCloseTo(0.65);
+  });
+  it("cannot invent another owner to make an infeasible market satisfy the law", () => {
+    expect([...capDeliveredMediaUnits(rows([70, 30]), 0.35).values()]).toEqual([0, 0]);
+    expect([...capDeliveredMediaUnits(rows([70, 20, 10]), 0.35).values()]).toEqual(
+      expect.arrayContaining([10])
+    );
+    const units = [...capDeliveredMediaUnits(rows([70, 20, 10]), 0.35).values()];
+    expect(Math.max(...units) / units.reduce((a, b) => a + b, 0)).toBeCloseTo(0.35);
+  });
+  it("combines split outlets under one owner and keeps states separate", () => {
+    const result = capDeliveredMediaUnits(
+      [
+        ...rows([40, 30, 30]).map((row, index) => ({
+          ...row,
+          corporationId: index < 2 ? "same" : "other",
+        })),
+        { sectorId: "NY", stateId: "NY", corporationId: "same", units: 100 },
+      ],
+      0.65
+    );
+    expect(result.get("0")! + result.get("1")!).toBeCloseTo((30 * 0.65) / 0.35);
+    expect(result.get("NY")).toBe(0);
+  });
+  it("bounds political delivery even when no other political seller is paid", () => {
+    const extra = mediaPoliticalResidualLimit(20, 100, 0.65);
+    expect((20 + extra) / (100 + extra)).toBeCloseTo(0.65);
+    expect(mediaPoliticalResidualLimit(65, 100, 0.65)).toBe(0);
+    expect(mediaPoliticalResidualLimit(0, 0, 0.65)).toBe(0);
   });
 });

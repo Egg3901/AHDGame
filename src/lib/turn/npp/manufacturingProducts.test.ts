@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { ObjectId } from "mongodb";
 import type { CorporateSector } from "@/lib/db/types";
-import { buildNppProductProjectsV2, type loadNppProductProjectsV2 } from "./manufacturingProducts";
+import { sectorCapacityBookAnchor } from "@/lib/corporations/sectorProfitBasis";
+import {
+  createNppManufacturingProductProjectV2,
+  buildNppProductProjectsV2,
+  type loadNppProductProjectsV2,
+} from "./manufacturingProducts";
 
 describe("NPP product project selection", () => {
   const corporationId = new ObjectId().toString();
@@ -12,6 +17,7 @@ describe("NPP product project selection", () => {
     sectorType: "manufacturing",
     strategyId: "electronics_manufacturing",
     capitalStock: 500,
+    capacityBookAnchor: 50_000,
     plantCount: 2,
     revenue: 10_000,
     profitMargin: 30,
@@ -47,12 +53,29 @@ describe("NPP product project selection", () => {
       activeCorporationId: corporationId,
       stage: "development",
       allocations: [{ sectorId, share: 1 }],
-      paidThresholdAnchor: 25,
+      paidThresholdAnchor: 2500,
       elapsedThresholdTurns: 12,
     });
     expect(["consumer_electronics", "industrial_electronics", "electronic_components"]).toContain(
       projects[0].kindId
     );
+  });
+
+  it("uses the same era-priced fallback when a selected NPP plant has no stored capital value", () => {
+    const legacy = { ...sector, capacityBookAnchor: undefined };
+    const project = createNppManufacturingProductProjectV2({
+      corporationId,
+      sectors: [legacy],
+      turn: 10,
+      currentYear: 1991,
+      techTreesEnabled: false,
+      eraUnitScale: 1,
+      priceRatioOf: () => 2,
+    });
+    expect(project?.paidThresholdAnchor).toBeCloseTo(
+      sectorCapacityBookAnchor(legacy, 1991, 1) * 0.05
+    );
+    expect(project?.paidThresholdAnchor).not.toBe(25);
   });
 
   it("does not replace an active project or select while the feature gate is off", () => {

@@ -5,7 +5,7 @@ import {
   currentTurnDeliveredAdvertisingUnits,
   isFairnessDoctrineInEffect,
   isMediaOwnershipBillAvailable,
-  mediaAudienceAccessLimitUnitsByOutlet,
+  MEDIA_AUDIENCE_ACCESS_LIMIT_BY_OPTION,
 } from "@/lib/mediaRegulation/rules";
 import { COMMODITY_TYPES, type CommodityType } from "@/lib/constants/commodities";
 import { computeClearingFactors, type SectorClearingInput } from "@/lib/market/clearing";
@@ -16,22 +16,13 @@ const outlets = [
   { stateId: "CA", countryId: "US", corporationId: "network-b", deliveredAdvertisingUnits: 20 },
 ];
 
-const audienceLimitCases = [0, 1, 2, 3, 4, 5, 6].map((policyOptionIndex) => {
-  const limitUnits = mediaAudienceAccessLimitUnitsByOutlet(outlets, policyOptionIndex);
-  const networkAAvailability = Math.min(1, (limitUnits.get("CA:network-a") ?? 80) / 80);
-  const networkBAvailability = Math.min(1, (limitUnits.get("CA:network-b") ?? 20) / 20);
-  return {
+const audienceLimitCases = MEDIA_AUDIENCE_ACCESS_LIMIT_BY_OPTION.map(
+  (shareCap, policyOptionIndex) => ({
     policyOptionIndex,
-    networkAAvailability: round(networkAAvailability),
-    networkBAvailability: round(networkBAvailability),
-    networkAAccessLimitedUnitsAgainstPriorBudget: round(80 * networkAAvailability),
-    networkBAvailableUnits: round(20 * networkBAvailability),
-    filledAgainstStrongPoliticalDemand: clearFundedPoliticalResidual(
-      networkAAvailability,
-      networkBAvailability
-    ),
-  };
-});
+    shareCap,
+    filledAgainstStrongPoliticalDemand: clearFundedPoliticalResidual(1, 1, shareCap),
+  })
+);
 
 const censorshipCases = [
   { name: "open press", pressFreedom: 100, stateMediaControl: 0 },
@@ -123,19 +114,20 @@ const fresh1991RuleContext = {
   representativePolicyOptionIndex: 3,
   fairnessDoctrineInEffect: isFairnessDoctrineInEffect(1991, 2),
   ownershipBillAvailableAtMeasured80To20Share: isMediaOwnershipBillAvailable(outlets),
-  audienceAvailabilityAtRepresentativeOption: audienceLimitCases[3]?.networkAAvailability ?? 1,
+  finalDeliveredShareAtRepresentativeOption:
+    audienceLimitCases[3]?.filledAgainstStrongPoliticalDemand.largestFinalShare ?? 0,
 };
 
 const report = {
   title: "Media regulation advertising availability diagnostic",
   method:
-    "Runs production media regulation rules against a prior-turn audience budget and current-turn settled delivery attribution. This is a rule sensitivity report, not a world simulation or a 1991 seed target.",
+    "Runs production clearing and political residual rules against final normalized delivery and current-turn settled attribution. This is a rule sensitivity report, not a world simulation or a 1991 seed target.",
   assumptions: {
-    priorDeliveredAdvertisingUnitsByOutlet: { "network-a": 80, "network-b": 20 },
     currentTurnPhysicalAdvertisingUnits: { "network-a": 80, "network-b": 20 },
-    missingHistoryBehavior: "audience access enforcement fails open for that state",
+    missingHistoryBehavior:
+      "ownership enforcement uses current clearing; bill eligibility fails closed on incomplete current-turn measurement",
     audienceAccessLimitDefinition:
-      "each owner's access limit is measured against prior delivered advertising; unserved audience remains unserved",
+      "each owner is bounded against final delivered state units; no positive delivery is feasible when too few owners satisfy the cap",
     ownershipBillThresholdScope: "national US aggregate, with foreign delivery excluded",
     enactedAudienceAccessLimitScope:
       "each US state audience market; no ownership divestiture is modeled",
@@ -158,9 +150,14 @@ const report = {
   },
   fresh1991RuleContext,
   accounting: {
-    deliveryIsBoundedBeforeCommercialAndFundedPoliticalClearing: true,
+    finalCommercialFillsAndPoliticalResidualAreBoundedBeforeReceipts: true,
     noAdvertisingUnitsAreCreated: true,
-    accessLimitUsesPriorAudienceBudgetNotPostLimitShare: true,
+    capUsesFinalDeliveredShare: true,
+    allFinalSharesMeetEnactedCap: audienceLimitCases.every(
+      (scenario) =>
+        scenario.shareCap == null ||
+        scenario.filledAgainstStrongPoliticalDemand.largestFinalShare <= scenario.shareCap + 1e-6
+    ),
     unmeasuredHistoryDoesNotInventConcentration: true,
     unpaidPoliticalPlansDoNotCountAsReach:
       currentTurnPoliticalAttribution.reachWhenNoSellerReceiptHasApplied === 60,
@@ -186,7 +183,25 @@ function round(value: number): number {
   return Math.round(value * 1_000_000) / 1_000_000;
 }
 
-function clearFundedPoliticalResidual(networkAAvailability: number, networkBAvailability: number) {
+function clearFundedPoliticalResidual(
+  networkAAvailability: number,
+  networkBAvailability: number,
+  shareCap: number | null = null
+) {
+  const mediaOwnership =
+    shareCap == null
+      ? undefined
+      : {
+          shareCap,
+          stateBySector: new Map([
+            ["network-a", "CA"],
+            ["network-b", "CA"],
+          ]),
+          corporationBySector: new Map([
+            ["network-a", "network-a"],
+            ["network-b", "network-b"],
+          ]),
+        };
   const basePrices = Object.fromEntries(
     COMMODITY_TYPES.map((commodity) => [commodity, 1])
   ) as Record<CommodityType, number>;
@@ -208,6 +223,7 @@ function clearFundedPoliticalResidual(networkAAvailability: number, networkBAvai
   ];
   const clearingBySectorId = computeClearingFactors({
     sectors,
+    mediaOwnership,
     balances: new Map([["advertising", { supply: 100, demand: 50 }]]),
     priceRatioByCommodity: new Map([["advertising", 1]]),
     basePrices,
@@ -239,6 +255,7 @@ function clearFundedPoliticalResidual(networkAAvailability: number, networkBAvai
       offeredUnits: input.sectorId === "network-a" ? 80 : 20,
     })),
     clearingBySectorId,
+    mediaOwnership,
     clearingEnabled: true,
     qualityPremiumEnabled: false,
     turn: 1,
@@ -252,6 +269,13 @@ function clearFundedPoliticalResidual(networkAAvailability: number, networkBAvai
     0
   );
   return {
+    largestFinalShare: (() => {
+      const a =
+        80 * (settlement.clearingBySectorId.get("network-a")?.soldByCommodity?.advertising ?? 0);
+      const b =
+        20 * (settlement.clearingBySectorId.get("network-b")?.soldByCommodity?.advertising ?? 0);
+      return a + b > 0 ? round(Math.max(a, b) / (a + b)) : 0;
+    })(),
     rawProducedUnits: 100,
     availableUnits: round(availableUnits),
     commercialUnits: round(commercialUnits),

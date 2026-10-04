@@ -164,6 +164,7 @@ export async function resolveFailedBankDepositors(
       "bankCharter.status": "failed",
       "bankCharter.resolutionClaimedTurn": { $exists: false },
       bankConstructionFunding: { $exists: false },
+      bankPrimaryFunding: { $exists: false },
       $or: [
         { "bankCharter.depositorsResolvedTurn": { $exists: false } },
         { "bankCharter.depositorsResolvedTurn": null },

@@ -11,6 +11,8 @@ import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQu
 import { marketAtLeast, getMarketSystemMode } from "@/lib/market/featureFlag";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
 import type { CorporateSector } from "@/lib/db/types/corporation";
+import { sectorCapacityBookAnchor } from "@/lib/corporations/sectorProfitBasis";
+import { getEraUnitScale } from "@/lib/constants/sectorSeedEra";
 import { getCurrentTurn } from "@/lib/currentTurn";
 import {
   allocationsForPlantCapacity,
@@ -28,6 +30,7 @@ import { SECTOR_STRATEGIES } from "@/lib/constants/sectorStrategies";
 import {
   MANUFACTURING_DEVELOPMENT_ELAPSED_TURNS,
   manufacturingDevelopmentThresholdAnchor,
+  allocatedManufacturingCapitalAnchor,
 } from "@/lib/products/rules/manufacturingRules";
 import {
   MANUFACTURING_PRODUCT_PROJECTS_V2,
@@ -45,6 +48,7 @@ type ManufacturingPlantSector = Pick<
   | "sectorType"
   | "industryModel"
   | "strategyId"
+  | "capacityBookAnchor"
   | "capitalStock"
   | "plantCount"
   | "mothballed"
@@ -139,6 +143,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
         industryModel: 1,
         strategyId: 1,
         capitalStock: 1,
+        capacityBookAnchor: 1,
         plantCount: 1,
         mothballed: 1,
         productLineProjectId: 1,
@@ -148,13 +153,20 @@ export async function GET(_request: Request, { params }: RouteParams) {
         productLineQualityByCommodity: 1,
       })
       .toArray();
-    const plants = sectors.map(manufacturingPlant);
     const [project] = await Promise.all([
       db.collection<ManufacturingProductProject>(MANUFACTURING_PRODUCT_PROJECTS_V2).findOne({
         activeCorporationId: corporationId,
       }),
     ]);
-    const gameState = await getGameState();
+    const gameState = await getGameState(db);
+    const plants = sectors.map((sector) => ({
+      ...manufacturingPlant(sector),
+      developmentCapitalAnchor: sectorCapacityBookAnchor(
+        sector,
+        gameState?.currentYear,
+        getEraUnitScale(gameState?.preset)
+      ),
+    }));
     const techTreesEnabled = gameState?.sectorTechTreesEnabled === true;
     const eligibilityOptions = {
       currentYear: gameState?.currentYear,
@@ -280,7 +292,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const kind = getManufacturingProductKind(parsed.data.kindId);
     if (!kind) return NextResponse.json({ error: "Unknown product kind" }, { status: 400 });
-    const gameState = await getGameState();
+    const gameState = await getGameState(db);
     const sectors = await db
       .collection<CorporateSector>("corporateSectors")
       .find({ corporationId: corporation._id })
@@ -291,11 +303,19 @@ export async function POST(request: Request, { params }: RouteParams) {
         industryModel: 1,
         strategyId: 1,
         capitalStock: 1,
+        capacityBookAnchor: 1,
         plantCount: 1,
         mothballed: 1,
       })
       .toArray();
-    const plants = sectors.map(manufacturingPlant);
+    const plants = sectors.map((sector) => ({
+      ...manufacturingPlant(sector),
+      developmentCapitalAnchor: sectorCapacityBookAnchor(
+        sector,
+        gameState?.currentYear,
+        getEraUnitScale(gameState?.preset)
+      ),
+    }));
     const plantById = new Map(plants.map((plant) => [plant.sectorId, plant]));
     const legalKindIds = new Set(
       legalManufacturingProductKinds(plants, {
@@ -367,7 +387,9 @@ export async function POST(request: Request, { params }: RouteParams) {
       allocations: parsed.data.allocations as ProductPlantAllocation[],
       startedTurn: currentTurn,
       developmentPaidAnchor: 0,
-      paidThresholdAnchor: manufacturingDevelopmentThresholdAnchor(allocatedCapacity),
+      paidThresholdAnchor: manufacturingDevelopmentThresholdAnchor(
+        allocatedManufacturingCapitalAnchor(plants, parsed.data.allocations)
+      ),
       elapsedDevelopmentTurns: 0,
       elapsedThresholdTurns: MANUFACTURING_DEVELOPMENT_ELAPSED_TURNS,
     };

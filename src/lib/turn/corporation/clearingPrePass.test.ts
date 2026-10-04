@@ -136,7 +136,7 @@ describe("runClearingPrePass with clearing enabled", () => {
     expect(result.contractedByCorpCommodity).toBeUndefined();
   });
 
-  it("shares one prior audience allowance across same-owner outlets after capacity grows", () => {
+  it("enforces the final delivered owner share across multiple grown outlets", () => {
     const { corp, sector, lookups } = makeSectorWorld();
     Object.assign(sector, {
       stateId: "US-CA",
@@ -182,7 +182,7 @@ describe("runClearingPrePass with clearing enabled", () => {
       clearingEnabled: true,
       plantsEnabled: true,
       mediaRegulationEnabled: true,
-      mediaRegulationPolicyOptionIndex: 0,
+      mediaRegulationPolicyOptionIndex: 3,
     } as MarketContext;
 
     runClearingPrePass(makeInput({ lookups, market }));
@@ -192,7 +192,9 @@ describe("runClearingPrePass with clearing enabled", () => {
     const competitorFill = market.clearingBySectorId?.get("sector2")?.soldByCommodity?.advertising;
     expect(dominantFill).toBeGreaterThan(0);
     expect(dominantFill).toBeCloseTo(secondOwnedFill ?? 0);
-    expect(200 * (dominantFill ?? 0) + 100 * (secondOwnedFill ?? 0)).toBeCloseTo(5.6);
+    const ownerUnits = 200 * (dominantFill ?? 0) + 100 * (secondOwnedFill ?? 0);
+    const rivalUnits = 100 * (competitorFill ?? 0);
+    expect(ownerUnits / (ownerUnits + rivalUnits)).toBeCloseTo(0.65);
     expect(competitorFill).toBeCloseTo(1);
   });
   it("scopes the pre-repeal Fairness Doctrine to US broadcast outlets", () => {

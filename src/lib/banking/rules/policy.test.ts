@@ -62,9 +62,11 @@ describe("resolveBankingPolicy", () => {
       propTrading: false,
       propForexFees: false,
       bankTreasury: false,
+      sovereignPrimary: false,
       treasuryCashLedger: false,
       contagion: false,
       lineOfCredit: true,
+      primaryUnderwriting: false,
       advancedCharters: false,
       savingsAccounts: "off",
       savingsReadCurrencies: [],
@@ -80,9 +82,11 @@ describe("resolveBankingPolicy", () => {
       propTrading: true,
       propForexFees: false,
       bankTreasury: false,
+      sovereignPrimary: false,
       treasuryCashLedger: false,
       contagion: true,
       lineOfCredit: true,
+      primaryUnderwriting: false,
       advancedCharters: false,
       savingsAccounts: "off",
       savingsReadCurrencies: [],
@@ -107,6 +111,17 @@ describe("resolveBankingPolicy", () => {
   it("turns LOC off only on an explicit false", () => {
     expect(resolveBankingPolicy({ lineOfCreditEnabled: false }).lineOfCredit).toBe(false);
     expect(resolveBankingPolicy({ lineOfCreditEnabled: undefined }).lineOfCredit).toBe(true);
+  });
+
+  it("enables primary underwriting only when private banking and its flag are both on", () => {
+    expect(resolveBankingPolicy({ bankUnderwritingEnabled: true }).primaryUnderwriting).toBe(false);
+    expect(
+      resolveBankingPolicy({
+        privateBankingEnabled: true,
+        bankUnderwritingEnabled: true,
+      }).primaryUnderwriting
+    ).toBe(true);
+    expect(resolveBankingPolicy({ privateBankingEnabled: true }).primaryUnderwriting).toBe(false);
   });
 
   it("offers advanced charters only on an explicit true with banking on", () => {
@@ -137,9 +152,11 @@ describe("resolveBankingPolicy", () => {
       propTrading: true,
       propForexFees: true,
       bankTreasury: true,
+      sovereignPrimary: true,
       treasuryCashLedger: true,
       contagion: true,
       lineOfCredit: true,
+      primaryUnderwriting: true,
       advancedCharters: true,
       savingsAccounts: "off",
       savingsReadCurrencies: [],

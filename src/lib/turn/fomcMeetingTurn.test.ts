@@ -507,7 +507,7 @@ describe("processFomcMeetings — player vote window", () => {
     expect(meeting.status).toBe("voting");
     // The 6 NPP seats have voted (and, sharing one macro context and one hawk
     // alignment, all agree with the chair's motion) — enough to pass 4-of-7 —
-    // yet the meeting must stay open for the unvoted player seat.
+    // The opening turn stays open so players can see and ballot on the motion.
     expect(meeting.ballots).toHaveLength(6);
     expect(meeting.ballots.every((b) => b.vote === meeting.motion)).toBe(true);
     expect(meeting.resolvesOnTurn).toBe(108 + 24);
@@ -546,11 +546,31 @@ describe("processFomcMeetings — player vote window", () => {
     expect(result.ratesChanged).toBe(1);
   });
 
+  it("persists an irreversible NPP majority on the next turn without a player ballot", async () => {
+    const db = makeDb({
+      _id: "US",
+      countryId: "US",
+      primeRate: 5,
+      lastFomcMeetingTurn: 108,
+      fomcTermStartedAtTurn: 100,
+      activeFomcMeeting: nppMajorityMeeting(108),
+      fomcBoard: usBoard(),
+    });
+    const result = await processFomcMeetings(db as unknown as Db, 109, 1956, new Date());
+    const $set = setOf(db);
+    expect($set.activeFomcMeeting).toBeNull();
+    expect($set.fomcMeetingHistory).toEqual([
+      expect.objectContaining({ result: "passed", resolvedAtTurn: 109 }),
+    ]);
+    expect($set.primeRate).toBe(5.25);
+    expect(result).toMatchObject({ meetingsResolved: 1, ratesChanged: 1, meetingsOpened: 0 });
+  });
+
   it("does NOT resolve a meeting on the turn it opens, even on an all-NPP board (#1211)", async () => {
     // A meeting must never open and resolve inside one turn phase: the chair and
     // members have to see the motion before it carries. Even an all-NPP board —
     // whose auto ballots alone decide the tally at open — leaves the meeting open
-    // for its window and resolves at the deadline, not on the opening turn.
+    // on its opening turn, then resolves once the next turn begins.
     const db = makeDb({
       _id: "JP",
       countryId: "JP",
@@ -771,13 +791,18 @@ describe("castFomcBallot — live player votes", () => {
         nppId: null,
       })
     );
+    const pendingMeeting = nppMajorityMeeting(108);
+    pendingMeeting.ballots = pendingMeeting.ballots.map((ballot, index) => ({
+      ...ballot,
+      vote: index < 3 ? "hike" : "cut",
+    }));
     const db = makeDb({
       _id: "US",
       countryId: "US",
       primeRate: 5,
       lastFomcMeetingTurn: 108,
       fomcTermStartedAtTurn: 100,
-      activeFomcMeeting: nppMajorityMeeting(108),
+      activeFomcMeeting: pendingMeeting,
       fomcBoard: board,
     });
 
