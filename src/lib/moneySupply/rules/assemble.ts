@@ -32,6 +32,7 @@ export function emptyComponents(): MutableComponents {
     householdSavings: 0,
     externalBroadMoney: 0,
     bankReserves: 0,
+    bankVaultCash: 0,
     creditOutstanding: 0,
     sovereignBondsOutstanding: 0,
     centralBankBondHoldings: 0,
@@ -187,10 +188,11 @@ export interface FundedBankCashFields {
 }
 
 /**
- * Include real cash held by bank charters or durable delivery escrows in the
- * corporate-liquid stock. These fields are separate from parent
- * `liquidCapital`; securities, loans, and charter posted-capital memos are not
- * cash. Escrows remain money while a payout waits for epoch-safe delivery.
+ * Record real cash held by bank charters or durable delivery escrows as a raw
+ * audit stock. Bank vault cash is reserve backing already represented by
+ * deposits in observed M2, so it must not be added to corporate liquid money.
+ * Securities, loans, and charter posted-capital memos are not cash. Escrows
+ * remain cash while payout waits for epoch-safe delivery.
  */
 export function addFundedBankCash(
   byCurrency: Map<CurrencyCode, MutableComponents>,
@@ -199,14 +201,14 @@ export function addFundedBankCash(
   for (const bank of banks) {
     const charterCurrency = bank.bankCharter?.currency as CurrencyCode | undefined;
     if (charterCurrency) {
-      addComponent(byCurrency, charterCurrency, "corporateLiquid", bank.bankCharter?.cashReserves);
+      addComponent(byCurrency, charterCurrency, "bankVaultCash", bank.bankCharter?.cashReserves);
     }
     for (const escrow of Object.values(bank.bankTreasuryEscrows ?? {})) {
       if (escrow.currencyCode)
         addComponent(
           byCurrency,
           escrow.currencyCode as CurrencyCode,
-          "corporateLiquid",
+          "bankVaultCash",
           escrow.amountLocal
         );
     }
@@ -215,7 +217,7 @@ export function addFundedBankCash(
         addComponent(
           byCurrency,
           escrow.currencyCode as CurrencyCode,
-          "corporateLiquid",
+          "bankVaultCash",
           escrow.amountLocal
         );
     }
@@ -223,7 +225,7 @@ export function addFundedBankCash(
       addComponent(
         byCurrency,
         bank.bankPropForexFee.currencyCode as CurrencyCode,
-        "corporateLiquid",
+        "bankVaultCash",
         bank.bankPropForexFee.amountLocal
       );
   }
