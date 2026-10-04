@@ -53,7 +53,8 @@ export interface ApprovalSnapshotRun {
 export async function snapshotApprovalsForTurn(
   db: Db,
   turn: number,
-  telemetryCtx?: LongHorizonContext
+  telemetryCtx?: LongHorizonContext,
+  bankFailurePoliticsEnabled = false
 ): Promise<ApprovalSnapshotRun> {
   const activeIds = COUNTRY_ORDER.filter((id) => COUNTRY_CONFIGS[id].status === "active");
   const approvals = db.collection<GovernmentApproval>("governmentApprovals");
@@ -90,7 +91,7 @@ export async function snapshotApprovalsForTurn(
   const seeded = seededStateCountries.filter(known);
 
   const plan = planApprovalSnapshot(activeIds, belligerents, documented, seeded);
-  const bankFailures = await loadBankFailureEffects(db, turn);
+  const bankFailures = await loadBankFailureEffects(db, turn, bankFailurePoliticsEnabled);
   await Promise.all(
     plan.ids.map((id) => {
       const modifiers = bankFailureApprovalModifiers(bankFailures.get(id));
