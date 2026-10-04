@@ -2,7 +2,7 @@
 import { SECTOR_STRATEGIES } from "../../src/lib/constants/sectorStrategies";
 import { getSectorLaborShare } from "../../src/lib/labour/laborCost";
 import { computeInputsCost, assemblePhysicalPnl } from "../../src/lib/corporations/physicalPnl";
-import { computePlantOverhead } from "../../src/lib/corporations/plantOverhead";
+import { computePlantOverhead } from "../../src/lib/corporations/plantCosts/rules";
 import { COMMODITY_BASE_PRICES, type CommodityType } from "../../src/lib/constants/commodities";
 import { TURNS_PER_DAY, type CorporationType } from "../../src/lib/constants/corporations";
 

@@ -30,7 +30,7 @@ import {
   solveOtherOpexPerUnit,
 } from "@/lib/corporations/physicalPnl";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
-import { computePlantOverhead } from "@/lib/corporations/plantOverhead";
+import { computePlantOverhead } from "@/lib/corporations/plantCosts/rules";
 import type { Corporation } from "@/lib/db/types";
 import type { CorporationLookups } from "../types";
 
