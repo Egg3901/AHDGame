@@ -197,6 +197,15 @@ export interface Corporation {
   };
   /** Issuer-selected primary-market underwriter for future issues. */
   primaryUnderwritingMandate?: import("@/lib/banking/rules/underwriting").PrimaryUnderwritingMandate;
+  /** Frozen unpaid founding IPO plan. The corporation remains private until its journal publishes it. */
+  foundingIpoUnderwritingPending?: {
+    offer: import("@/lib/banking/rules/underwriting").PrimaryUnderwritingOffer & {
+      instrumentId: ObjectId;
+    };
+    grossPlacedLocal: number;
+    turn: number;
+    instrumentProjection: import("@/lib/banking/rules/boundary").TransitionProjection;
+  } | null;
   /** Original-epoch lease held only while a funded underwriting claim is settling. */
   bankUnderwritingFunding?: {
     key: string;
@@ -204,11 +213,15 @@ export interface Corporation {
     instrumentType: "equity" | "corporate_bond";
     instrumentId?: ObjectId;
     charteredTurn: number;
+    offer: import("@/lib/banking/rules/underwriting").PrimaryUnderwritingOffer;
     currencyCode: CurrencyCode;
     grossLocal: number;
     feeLocal: number;
     issuerNetLocal: number;
     turn: number;
+    issuerName: string;
+    poolCollection: "equityMarketPools" | "bondMarketPools";
+    instrumentProjection: import("@/lib/banking/rules/boundary").TransitionProjection;
   };
   /** Cumulative fees from actually funded primary placements, by native currency. */
   bankUnderwritingIncomeByCurrency?: Partial<Record<CurrencyCode, number>>;

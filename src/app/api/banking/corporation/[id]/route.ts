@@ -177,6 +177,10 @@ async function handleGET(_request: Request, { params }: RouteParams) {
       return NextResponse.json({
         privateBankingEnabled: privateEnabled,
         bankPropTradingEnabled: propTradingEnabled,
+        primaryUnderwritingEnabled: policy.primaryUnderwriting === true,
+        ...(policy.primaryUnderwriting
+          ? { underwritingReceipts: corporation.bankUnderwritingReceipts ?? [] }
+          : {}),
         bankTreasuryEnabled: policy.bankTreasury,
         bankTreasury: null,
         bankPropForexFeesEnabled: policy.propForexFees,
@@ -470,6 +474,10 @@ async function handleGET(_request: Request, { params }: RouteParams) {
     return NextResponse.json({
       privateBankingEnabled: privateEnabled,
       bankPropTradingEnabled: propTradingEnabled,
+      primaryUnderwritingEnabled: policy.primaryUnderwriting === true,
+      ...(policy.primaryUnderwriting
+        ? { underwritingReceipts: corporation.bankUnderwritingReceipts ?? [] }
+        : {}),
       bankTreasuryEnabled: policy.bankTreasury,
       bankTreasury,
       bankPropForexFeesEnabled: policy.propForexFees,

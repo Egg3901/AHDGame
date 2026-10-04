@@ -3,7 +3,10 @@ import { ObjectId, type Db } from "mongodb";
 import { createInMemoryDb, type InMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { InjectedCrash, withInjectedCrash } from "@/lib/test-utils/faultyDb";
 import { listUnfinishedProjections } from "./settlementJournal";
-import { settlePrimaryUnderwritingFill } from "./underwritingSettlement";
+import {
+  resumeFoundingUnderwritingPlans,
+  settlePrimaryUnderwritingFill,
+} from "./underwritingSettlement";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 
@@ -43,6 +46,7 @@ function input() {
   return {
     bank,
     issuer,
+    issuerCurrencyCode: "USD" as const,
     offer: {
       bankCorporationId: BANK,
       issuerCorporationId: ISSUER,
@@ -147,5 +151,72 @@ describe("settlePrimaryUnderwritingFill", () => {
     expect(docs(db).bank.liquidCapital).toBe(2_300);
     expect(docs(db).bank.bankUnderwritingIncomeByCurrency).toEqual({ USD: 300 });
     expect(docs(db).bank.bankUnderwritingFunding).toBeUndefined();
+  });
+
+  it("recovers a private founding shell only through its frozen funded projection", async () => {
+    const fill = input();
+    const corps = db.collection("corporations").docs as Array<Record<string, unknown>>;
+    const issuer = corps.find((row) => (row._id as ObjectId).equals(ISSUER))!;
+    issuer.foundingIpoUnderwritingPending = {
+      offer: fill.offer,
+      grossPlacedLocal: fill.grossPlacedLocal,
+      turn: fill.turn,
+      instrumentProjection: {
+        collection: "corporations",
+        filter: {
+          _id: ISSUER,
+          "foundingIpoUnderwritingPending.offer.instrumentId": INSTRUMENT,
+        },
+        pipelineUpdate: [
+          {
+            $set: {
+              isPrivate: false,
+              publicFloat: 12,
+              foundingIpoUnderwritingPending: null,
+            },
+          },
+        ],
+        note: "Publish founded issuer only after funding",
+      },
+    };
+    expect(await db.collection("corporations").findOne({ _id: BANK })).not.toBeNull();
+
+    const recovered = await resumeFoundingUnderwritingPlans(db as unknown as Db, NOW);
+    expect(recovered).toEqual({ completed: 1, pending: 0, aborted: 0 });
+    expect(docs(db).issuer).toMatchObject({
+      isPrivate: false,
+      publicFloat: 12,
+      liquidCapital: 20_700,
+    });
+    expect(docs(db).issuer.foundingIpoUnderwritingPending).toBeNull();
+    expect(docs(db).bank.liquidCapital).toBe(2_300);
+    expect(docs(db).pool.cashLocal).toBe(30_000);
+  });
+
+  it("keeps an unpaid founding shell private if the frozen charter is unavailable", async () => {
+    const fill = input();
+    const corps = db.collection("corporations").docs as Array<Record<string, unknown>>;
+    const issuer = corps.find((row) => (row._id as ObjectId).equals(ISSUER))!;
+    const bank = corps.find((row) => (row._id as ObjectId).equals(BANK))!;
+    bank.bankCharter = { type: "investment", status: "active", currency: "USD", charteredTurn: 10 };
+    issuer.isPrivate = true;
+    issuer.foundingIpoUnderwritingPending = {
+      offer: fill.offer,
+      grossPlacedLocal: fill.grossPlacedLocal,
+      turn: fill.turn,
+      instrumentProjection: {
+        collection: "corporations",
+        filter: { _id: ISSUER },
+        pipelineUpdate: [{ $set: { isPrivate: false, foundingIpoUnderwritingPending: null } }],
+        note: "Publish funded founding float",
+      },
+    };
+
+    const recovered = await resumeFoundingUnderwritingPlans(db as unknown as Db, NOW);
+    expect(recovered).toEqual({ completed: 0, pending: 0, aborted: 1 });
+    expect(docs(db).issuer).toMatchObject({ isPrivate: true, liquidCapital: 1_000 });
+    expect(docs(db).issuer.foundingIpoUnderwritingPending).toBeUndefined();
+    expect(docs(db).pool.cashLocal).toBe(50_000);
+    expect(docs(db).bank.liquidCapital).toBe(2_000);
   });
 });

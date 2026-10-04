@@ -5,12 +5,19 @@ import { goPublic } from "./goPublic";
 
 const placementMocks = vi.hoisted(() => ({
   prepare: vi.fn(),
+  plan: vi.fn(),
   refund: vi.fn(),
+  settle: vi.fn(),
 }));
 
 vi.mock("@/lib/equities/primaryMarket", () => ({
   prepareEquityPrimaryPlacement: placementMocks.prepare,
+  planEquityPrimaryPlacement: placementMocks.plan,
   refundPreparedEquityPlacement: placementMocks.refund,
+}));
+
+vi.mock("@/lib/banking/underwritingSettlement", () => ({
+  settlePrimaryUnderwritingFill: placementMocks.settle,
 }));
 
 function makeCorp(overrides: Record<string, unknown> = {}) {
@@ -54,6 +61,79 @@ describe("goPublic command", () => {
         paidLocal: requestedShares * pricePerShare,
       })
     );
+    placementMocks.plan.mockImplementation((_db, _corp, requestedShares: number) => {
+      const placedShares = Math.floor(requestedShares * 0.6);
+      return {
+        poolActive: true,
+        currency: "USD",
+        requestedShares,
+        placedShares,
+        unsoldShares: requestedShares - placedShares,
+        plannedGrossLocal: placedShares,
+      };
+    });
+    placementMocks.settle.mockResolvedValue({ status: "applied" });
+  });
+
+  it("publishes only funded IPO shares through the underwriting journal", async () => {
+    const corporation = makeCorp({ totalShares: 100, sharePrice: 1 });
+    const bankId = new ObjectId();
+    const offer = {
+      bankCorporationId: bankId,
+      issuerCorporationId: corporation._id,
+      charteredTurn: 5,
+      currencyCode: "USD",
+      feeRate: 0.015,
+      instrumentType: "equity",
+      originalQuoteTurn: 9,
+    };
+    const { db, updateOne } = makeDb();
+    const result = await goPublic({
+      db,
+      corporation: corporation as never,
+      floatPct: 40,
+      currentTurn: 9,
+      underwriting: {
+        offer,
+        bank: {
+          _id: bankId,
+          name: "Bank",
+          bankCharter: {
+            status: "active",
+            type: "investment",
+            currency: "USD",
+            charteredTurn: 5,
+          },
+        },
+      } as never,
+    });
+
+    if (!result.ok) throw new Error(result.error);
+    const issued = result.newShares;
+    const listed = Math.floor(issued * 0.6);
+    const fee = Math.round(listed * 0.015 * 100) / 100;
+    expect(result).toMatchObject({
+      ok: true,
+      newShares: issued,
+      listedShares: listed,
+      pendingShares: issued - listed,
+      proceeds: listed - fee,
+      totalSharesAfter: 100 + listed,
+      grossPlacedLocal: listed,
+      underwritingFeeLocal: fee,
+      issuerNetLocal: listed - fee,
+    });
+    expect(placementMocks.prepare).not.toHaveBeenCalled();
+    expect(placementMocks.settle).toHaveBeenCalledOnce();
+    const projection = placementMocks.settle.mock.calls[0][1].instrumentProjection;
+    expect(projection.collection).toBe("corporations");
+    expect(projection.pipelineUpdate[0].$set.totalShares).toEqual({
+      $add: [{ $ifNull: ["$totalShares", 0] }, listed],
+    });
+    expect(projection.pipelineUpdate[0].$set.pendingShareIssuance.remainingShares).toBe(
+      issued - listed
+    );
+    expect(updateOne).not.toHaveBeenCalled();
   });
 
   it("rejects when corp is already public", async () => {

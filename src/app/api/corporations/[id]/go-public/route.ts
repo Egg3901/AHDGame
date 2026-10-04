@@ -11,6 +11,9 @@ import { subsidiaryIssuanceBlockReason } from "@/lib/corporations/subsidiaries/i
 import { getGameState } from "@/lib/gameState";
 import { goPublic } from "@/lib/corporations/commands/capitalOperations/goPublic";
 import { logWireEvent, wireHeadlineCorpIpo } from "@/lib/wireEvent";
+import { loadBankingPolicy } from "@/lib/banking/policy";
+import { resolvePrimaryUnderwritingOffer } from "@/lib/banking/underwritingOffer";
+import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -53,6 +56,17 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const gameState = await getGameState();
     const currentTurn = gameState?.currentTurn ?? 0;
+    const underwriting = corporation.primaryUnderwritingMandate
+      ? await resolvePrimaryUnderwritingOffer(
+          db,
+          await loadBankingPolicy(db),
+          corporation,
+          (resolveCorpLiquidCurrencyCode(corporation) ??
+            "USD") as import("@/lib/constants/currencies").CurrencyCode,
+          "equity",
+          currentTurn
+        )
+      : null;
 
     const result = await goPublic({
       db,
@@ -60,6 +74,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       floatPct: parsed.data.floatPct,
       currentTurn,
       superShareMultiplier: parsed.data.superShareMultiplier,
+      underwriting: underwriting ?? undefined,
     });
 
     if (!result.ok) {
@@ -76,6 +91,13 @@ export async function POST(request: Request, { params }: RouteParams) {
       pendingShares: result.pendingShares,
       proceeds: result.proceeds,
       totalSharesAfter: result.totalSharesAfter,
+      ...(result.grossPlacedLocal !== undefined
+        ? {
+            grossPlacedLocal: result.grossPlacedLocal,
+            underwritingFeeLocal: result.underwritingFeeLocal,
+            issuerNetLocal: result.issuerNetLocal,
+          }
+        : {}),
     });
   } catch (error) {
     return handleRouteError(error);
