@@ -4,6 +4,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { BankingHubClient } from "./BankingHubClient";
+import { NextIntlClientProvider } from "next-intl";
+import english from "../../../messages/en/corporations.json";
+
+function renderBankingHub() {
+  return render(
+    <NextIntlClientProvider locale="en" timeZone="UTC" messages={english}>
+      <BankingHubClient />
+    </NextIntlClientProvider>
+  );
+}
 
 const { showToast } = vi.hoisted(() => ({ showToast: vi.fn() }));
 vi.mock("@/contexts/ToastContext", () => ({
@@ -165,7 +175,7 @@ describe("BankingHubClient", () => {
       "fetch",
       vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ...payload, isAdmin: true }) })
     );
-    render(<BankingHubClient />);
+    renderBankingHub();
 
     const picker = (await screen.findByLabelText("Bank to unwind")) as HTMLSelectElement;
     expect(picker.value).toBe("bank-1");
@@ -174,7 +184,7 @@ describe("BankingHubClient", () => {
   });
 
   it("puts private-bank customer actions in the first screen shortcuts", async () => {
-    render(<BankingHubClient />);
+    renderBankingHub();
 
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Browse private banks" })).toBeTruthy()
@@ -188,7 +198,7 @@ describe("BankingHubClient", () => {
   });
 
   it("uses tabs for the commercial banking, policy, and account hierarchy", async () => {
-    render(<BankingHubClient />);
+    renderBankingHub();
 
     await waitFor(() =>
       expect(screen.getByRole("heading", { name: "Banking & Credit" })).toBeTruthy()
@@ -252,7 +262,7 @@ describe("BankingHubClient", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<BankingHubClient />);
+    renderBankingHub();
     await waitFor(() => expect(screen.getByText("Continental Trust")).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: "Deposit savings at Continental Trust" }));
     fireEvent.change(screen.getByLabelText("Deposit amount in USD"), {
@@ -272,7 +282,7 @@ describe("BankingHubClient", () => {
   });
 
   it("sorts the private-bank table by savings APY, loan rate, and health", async () => {
-    render(<BankingHubClient />);
+    renderBankingHub();
     await waitFor(() => expect(screen.getByText("Meridian Mutual")).toBeTruthy());
 
     const bankRows = () =>
@@ -312,7 +322,7 @@ describe("BankingHubClient", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<BankingHubClient />);
+    renderBankingHub();
     await waitFor(() =>
       expect(screen.getByRole("heading", { name: "Banking & Credit" })).toBeTruthy()
     );
@@ -356,7 +366,7 @@ describe("BankingHubClient", () => {
         return { ok: true, json: async () => payload };
       });
       vi.stubGlobal("fetch", fetchMock);
-      render(<BankingHubClient />);
+      renderBankingHub();
       await waitFor(() => expect(screen.getByText("Continental Trust")).toBeTruthy());
       fireEvent.click(screen.getByRole("button", { name: "Deposit savings at Continental Trust" }));
       fireEvent.change(screen.getByLabelText("Deposit amount in USD"), {
@@ -394,7 +404,7 @@ describe("BankingHubClient", () => {
       return { ok: true, json: async () => payload };
     });
     vi.stubGlobal("fetch", fetchMock);
-    render(<BankingHubClient />);
+    renderBankingHub();
     await waitFor(() => expect(screen.getByRole("tab", { name: "Your accounts" })).toBeTruthy());
     fireEvent.click(screen.getByRole("tab", { name: "Your accounts" }));
     fireEvent.change(screen.getByLabelText("Savings holder for USD"), {
@@ -428,7 +438,7 @@ describe("BankingHubClient", () => {
       })
     );
 
-    render(<BankingHubClient />);
+    renderBankingHub();
     await waitFor(() => expect(screen.getByText("Bank of England")).toBeTruthy());
 
     expect(screen.queryByRole("tab", { name: /Private banks/ })).toBeNull();

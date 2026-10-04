@@ -1,6 +1,8 @@
 /** Repair actual executive attribution without resetting an incumbent's mandate. */
 import type { Migration } from "../types";
-import type { GovernmentFormation, ElectedOfficial, PoliticalParty } from "@/lib/db/types";
+import type { ElectedOfficial, PoliticalParty } from "@/lib/db/types";
+import type { GovernmentFormation } from "@/lib/db/types/governmentFormation";
+import type { CountryLeaderState } from "@/lib/db/types/countryLeaderState";
 import type { ObjectId } from "mongodb";
 import { leaderStateId } from "@/lib/government/leaderReference";
 import { installNewLeader } from "@/lib/turn/rulingPartyConfidence";
@@ -118,7 +120,7 @@ export const migration: Migration = {
         const reference = { kind: "npp" as const, id: gov.pmNppId };
         if (
           !(await db
-            .collection("countryLeaderStates")
+            .collection<CountryLeaderState>("countryLeaderStates")
             .findOne({ _id: leaderStateId(gov.countryId, reference) }))
         ) {
           initialized++;

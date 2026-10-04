@@ -8,7 +8,7 @@ interface RaceResultCardProps {
   candidatesById: Map<string, ResultsCandidate>;
   /** Grid index — staggers the entrance animation. */
   index: number;
-  weightLabel: "EV" | "seats";
+  weightLabel?: "EV" | "seats";
 }
 
 /**
@@ -31,7 +31,7 @@ export function RaceResultCard({ unit, candidatesById, index, weightLabel }: Rac
         <span className="truncate text-sm font-semibold" title={unit.name}>
           {unit.name}
         </span>
-        {unit.weight > 0 && (
+        {weightLabel && unit.weight > 0 && (
           <span className="shrink-0 rounded bg-card-border/60 px-1.5 py-0.5 text-[10px] font-semibold text-muted tabular-nums">
             {unit.weight} {weightLabel}
           </span>

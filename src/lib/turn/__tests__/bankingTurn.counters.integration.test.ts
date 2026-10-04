@@ -139,12 +139,16 @@ describe("deposit-book return counters", () => {
     const { getDb } = await import("@/lib/mongodb");
     vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
 
-    // Kill the flow at the first federalBudget write, which is the first
-    // projection after the money legs.
+    // Crash at the fiscal projection after every money leg has landed,
+    // independent of cash-debit and receipt housekeeping writes.
     const faulty = withInjectedCrash(db, {
       collection: "federalBudget",
       op: "updateOne",
       onCall: 1,
+      matches: ([, update]) => {
+        const increment = (update as { $inc?: Record<string, unknown> }).$inc;
+        return increment?.["spending.total"] !== undefined;
+      },
     });
     await expect(
       returnDepositBook(faulty.db, BANK, {
@@ -157,6 +161,7 @@ describe("deposit-book return counters", () => {
     expect(bank(db).bankCharter.cashReserves).toBe(0);
     expect(fund(db).balance).toBe(0);
     expect(db.collection("centralBanks").docs[0]).toMatchObject({ externalBroadMoney: 2_000_000 });
+    expect(db.collection("federalBudget").docs[0]).toMatchObject({ treasuryBalance: 8_400_000 });
     expect(fund(db).payoutsLifetime).toBe(0);
 
     const retry = await returnDepositBook(db as unknown as Db, BANK, {

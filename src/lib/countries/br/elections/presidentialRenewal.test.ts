@@ -62,32 +62,44 @@ beforeEach(async () => {
     ctx: { preset: "1991-default", startingYear: 1991 },
   });
   mock.collection("gameState").findOne.mockResolvedValue({ preset: "1991-default" });
-  mock.collection("elections").findOne.mockImplementation(async (filter) => {
+  mock.collection("elections").findOne.mockImplementation(async (filter: { status?: string }) => {
     if (filter.status === "resolved")
       return races.findLast((race) => race.status === "resolved") ?? null;
     return races.find((race) => race.status !== "resolved") ?? null;
   });
-  mock.collection("elections").updateOne.mockImplementation(async (_filter, update) => {
-    races.push({ _id: new ObjectId(), ...update.$setOnInsert } as Election);
-    return { matchedCount: 0, upsertedCount: 1 };
-  });
+  mock
+    .collection("elections")
+    .updateOne.mockImplementation(
+      async (_filter: Record<string, unknown>, update: { $setOnInsert: Omit<Election, "_id"> }) => {
+        races.push({ _id: new ObjectId(), ...update.$setOnInsert });
+        return { matchedCount: 0, upsertedCount: 1 };
+      }
+    );
   mock
     .collection("electionCandidates")
     .find()
     .toArray.mockImplementation(async () => nominees);
   mock
     .collection("electedOfficials")
-    .findOne.mockImplementation(async (filter) =>
+    .findOne.mockImplementation(async (filter: { officeType?: string }) =>
       filter.officeType === "president" ? president : null
     );
-  mock.collection("electedOfficials").updateOne.mockImplementation(async (filter, update) => {
-    if (filter.officeType === "president") president = { ...filter, ...update.$set };
-    return { matchedCount: 1, modifiedCount: 1 };
-  });
-  mock.collection("governmentFormations").updateOne.mockImplementation(async (_filter, update) => {
-    Object.assign(government, update.$set);
-    return { matchedCount: 1, modifiedCount: 1 };
-  });
+  mock
+    .collection("electedOfficials")
+    .updateOne.mockImplementation(
+      async (filter: Partial<ElectedOfficial>, update: { $set: Partial<ElectedOfficial> }) => {
+        if (filter.officeType === "president") president = { ...filter, ...update.$set };
+        return { matchedCount: 1, modifiedCount: 1 };
+      }
+    );
+  mock
+    .collection("governmentFormations")
+    .updateOne.mockImplementation(
+      async (_filter: Record<string, unknown>, update: { $set: Record<string, unknown> }) => {
+        Object.assign(government, update.$set);
+        return { matchedCount: 1, modifiedCount: 1 };
+      }
+    );
 });
 
 function ballot(

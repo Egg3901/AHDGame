@@ -15,6 +15,7 @@ import { ObjectId, type Db } from "mongodb";
 import { processCommandEconomyTurn } from "./commandEconomyTurn";
 import { soeCapacityReplacementCostAnchor } from "@/lib/economy/soe";
 import { CAPITAL_DEPRECIATION_PER_TURN } from "@/lib/market/capital";
+import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 
 const YEAR = 1953;
 const CORP_ID = new ObjectId();
@@ -47,14 +48,17 @@ const SECTOR = {
 };
 
 type Captured = {
-  sectorBulk: Array<{
-    updateOne: { filter: unknown; update: { $inc?: { capitalStock?: number } } };
-  }>;
+  sectorStock: () => number;
   budgetSets: Array<Record<string, unknown>>;
 };
 
 function makeDb(creditAggressiveness: number): { db: Db; captured: Captured } {
-  const captured: Captured = { sectorBulk: [], budgetSets: [] };
+  const sectors = createInMemoryDb();
+  sectors.seed("corporateSectors", [SECTOR]);
+  const captured: Captured = {
+    sectorStock: () => sectors.collection("corporateSectors").docs[0].capitalStock as number,
+    budgetSets: [],
+  };
   const budget = {
     _id: new ObjectId(),
     countryId: "RU",
@@ -97,13 +101,7 @@ function makeDb(creditAggressiveness: number): { db: Db; captured: Captured } {
             bulkWrite: async () => ({}),
           };
         case "corporateSectors":
-          return {
-            find: () => ({ toArray: async () => [SECTOR] }),
-            bulkWrite: async (ops: Captured["sectorBulk"]) => {
-              captured.sectorBulk.push(...ops);
-              return {};
-            },
-          };
+          return sectors.collection("corporateSectors");
         default:
           return empty;
       }
@@ -119,9 +117,8 @@ describe("directed credit — capacity replacement floor", () => {
     const { db, captured } = makeDb(0);
     await processCommandEconomyTurn(db, 1, YEAR);
 
-    const inc = captured.sectorBulk[0]?.updateOne.update.$inc?.capitalStock;
-    expect(inc).toBeDefined();
-    expect(inc!).toBeCloseTo(STOCK * CAPITAL_DEPRECIATION_PER_TURN, 6);
+    const inc = captured.sectorStock() - STOCK;
+    expect(inc).toBeCloseTo(STOCK * CAPITAL_DEPRECIATION_PER_TURN, 6);
   });
 
   it("the floored credit is PAID FOR — its unbacked share prints, like any tranche", async () => {
@@ -138,7 +135,7 @@ describe("directed credit — capacity replacement floor", () => {
     const { db, captured } = makeDb(0);
     await processCommandEconomyTurn(db, 1, YEAR);
 
-    const inc = captured.sectorBulk[0]!.updateOne.update.$inc!.capitalStock!;
+    const inc = captured.sectorStock() - STOCK;
     // Units bought == units worn out. `capitalStock` is unchanged net of
     // depreciation, so no amount of restraint or plan-shortfall can make the
     // floor fund growth.
@@ -168,7 +165,7 @@ describe("directed credit — capacity replacement floor", () => {
   it("an aggressive posture is unchanged — the floor only lifts, never caps", async () => {
     const { db, captured } = makeDb(1);
     await processCommandEconomyTurn(db, 1, YEAR);
-    const inc = captured.sectorBulk[0]!.updateOne.update.$inc!.capitalStock!;
+    const inc = captured.sectorStock() - STOCK;
     expect(inc).toBeGreaterThanOrEqual(STOCK * CAPITAL_DEPRECIATION_PER_TURN);
   });
 });

@@ -4,6 +4,7 @@
  * constituency contests keep their normal party nomination limit.
  */
 import { nativeAssemblyPrimaryAdvanceLimit } from "./election/assemblyPrimaryProgression";
+import { isBrazilIndirectPresidentialElection } from "@/lib/countries/br/rules/presidential";
 import {
   bindBallotElectorate,
   nationwideBallotCountries,
@@ -1951,15 +1952,7 @@ export async function accumulateGeneralElectionVotes(
   const tallyWrites: AnyBulkWriteOperation<ElectionVoteTally>[] = [];
   for (const election of orderedElections) {
     try {
-      // An indirect Brazilian ballot is counted from Congress at resolution.
-      // A popular-vote accumulation would display a result that cannot elect it.
-      if (
-        election.countryId === "BR" &&
-        election.electionType === "president" &&
-        (election.brazilPresidentialMode === "indirect" ||
-          (!election.brazilPresidentialMode && preload?.preset === "1979-default"))
-      )
-        continue;
+      if (isBrazilIndirectPresidentialElection(election, preload?.preset)) continue;
       const existing = tallyByElection.get(election._id.toString());
       const activeCandidates = candidatesByElection.get(election._id.toString()) ?? [];
 

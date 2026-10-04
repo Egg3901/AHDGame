@@ -59,7 +59,7 @@ describe("certified Brazil results", () => {
       mock as unknown as Db,
       race,
       { currentTurn: 100 } as GameState,
-      { isAdmin: false }
+      { isAdmin: false, apportionmentYear: null }
     );
     expect(payload.summary.projectedWinner).toBeNull();
     mock.collection("electionVoteTallies").findOne.mockResolvedValue({
@@ -70,7 +70,7 @@ describe("certified Brazil results", () => {
       mock as unknown as Db,
       { ...race, brazilPresidentialRound: 2 },
       { currentTurn: 124 } as GameState,
-      { isAdmin: false }
+      { isAdmin: false, apportionmentYear: null }
     );
     expect(final.summary.projectedWinner).toBe(String(candidates[1]));
   });

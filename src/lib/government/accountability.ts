@@ -5,12 +5,8 @@ import {
   getLowerChamberOfficeType,
   getUpperChamberOfficeType,
 } from "@/lib/legislature/chamberOfficeType";
-import type {
-  ElectedOfficial,
-  GovernmentFormation,
-  StateApprovalHistory,
-  State,
-} from "@/lib/db/types";
+import type { ElectedOfficial, StateApprovalHistory, State } from "@/lib/db/types";
+import type { GovernmentFormation } from "@/lib/db/types/governmentFormation";
 import type { GovernmentAccountability } from "@/lib/db/types/governmentAccountability";
 import {
   responsibilityShares,

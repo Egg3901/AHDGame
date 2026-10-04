@@ -9,6 +9,7 @@ import type {
   CareerEvent,
   OfficeType,
 } from "@/lib/db/types";
+import type { GovernmentFormation } from "@/lib/db/types/governmentFormation";
 import { getOfficeLabel } from "@/lib/utils/politics";
 import { clearCabinetOnTransition } from "@/lib/cabinetTransition";
 import {
@@ -372,31 +373,29 @@ export async function seatPresidentialExecutive(
     "parliamentary";
   // Keep the government record aligned with elected presidential handovers.
   // This includes background NPP governments created by the vacancy fallback.
-  await db
-    .collection<import("@/lib/db/types").GovernmentFormation>("governmentFormations")
-    .updateOne(
-      { _id: electionCountry },
-      {
-        $set: {
-          status: "formed",
-          presidentCharacterId: winnerCandidate.isNPP ? null : winnerCandidate.characterId,
-          presidentNppId: winnerCandidate.isNPP ? winnerCandidate.nppId : null,
-          presidentName: winnerCandidate.characterName,
-          ...(!separatePrimeMinister
-            ? {
-                formationType: null,
-                pmName: winnerCandidate.characterName,
-                pmCharacterId: winnerCandidate.isNPP ? null : winnerCandidate.characterId,
-                pmNppId: winnerCandidate.isNPP ? winnerCandidate.nppId : null,
-                governingPartyId: winnerCandidate.party,
-              }
-            : {}),
-          formedTurn: params.turn ?? election.endTurn ?? 0,
-          formedAt: now,
-          updatedAt: now,
-        },
-      }
-    );
+  await db.collection<GovernmentFormation>("governmentFormations").updateOne(
+    { _id: electionCountry },
+    {
+      $set: {
+        status: "formed",
+        presidentCharacterId: winnerCandidate.isNPP ? null : winnerCandidate.characterId,
+        presidentNppId: winnerCandidate.isNPP ? winnerCandidate.nppId : null,
+        presidentName: winnerCandidate.characterName,
+        ...(!separatePrimeMinister
+          ? {
+              formationType: null,
+              pmName: winnerCandidate.characterName,
+              pmCharacterId: winnerCandidate.isNPP ? null : winnerCandidate.characterId,
+              pmNppId: winnerCandidate.isNPP ? winnerCandidate.nppId : null,
+              governingPartyId: winnerCandidate.party,
+            }
+          : {}),
+        formedTurn: params.turn ?? election.endTurn ?? 0,
+        formedAt: now,
+        updatedAt: now,
+      },
+    }
+  );
   const turn = params.turn ?? election.endTurn ?? 0;
   const transitions: Array<{
     officeType: string;

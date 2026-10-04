@@ -30,16 +30,29 @@ const families: { country: CountryId; office: string; executive?: boolean }[] = 
   { country: "SE", office: "riksdag" },
   { country: "FR", office: "assembly" },
 ];
-const categories = [
+const categories: DemographicCategory[] = [
   {
     _id: "ideology",
     name: "Ideology",
+    defaultWeight: 100,
     groups: [
-      { id: "left", defaultEconomicLean: -1.5, defaultSocialLean: -1, defaultTurnout: 60 },
-      { id: "right", defaultEconomicLean: 1.5, defaultSocialLean: 1, defaultTurnout: 60 },
+      {
+        id: "left",
+        name: "Left",
+        defaultEconomicLean: -1.5,
+        defaultSocialLean: -1,
+        defaultTurnout: 60,
+      },
+      {
+        id: "right",
+        name: "Right",
+        defaultEconomicLean: 1.5,
+        defaultSocialLean: 1,
+        defaultTurnout: 60,
+      },
     ],
   },
-] as DemographicCategory[];
+];
 
 function share(
   family: (typeof families)[number],
@@ -65,15 +78,16 @@ function share(
     archetypeApprovals: {},
     infamy: 0,
   })) as EnrichedCandidate[];
-  const demo = {
+  const demo: StateDemographics = {
     _id: "TEST",
     countryId: family.country,
     categoryWeights: { ideology: 100 },
+    lastUpdated: new Date("2026-10-04T00:00:00Z"),
     groups: {
       left: { population: lean, turnout: 60, economicLean: -1.5, socialLean: -1 },
       right: { population: 100 - lean, turnout: 60, economicLean: 1.5, socialLean: 1 },
     },
-  } as StateDemographics;
+  };
   const options: DistributeVotesOptions = {
     isGeneralElection: true,
     countryId: family.country,

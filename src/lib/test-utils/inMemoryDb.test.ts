@@ -1,7 +1,50 @@
 import { describe, expect, it } from "vitest";
 import { createInMemoryDb } from "./inMemoryDb";
+import { plantCapacityDeltaPipeline } from "@/lib/corporations/plantLedger";
+import { plantSizeUnits } from "@/lib/constants/facilityQuantum";
 
 describe("inMemoryDb document paths", () => {
+  it("applies real capacity pipelines and derives the ledger from the updated stock", async () => {
+    const db = createInMemoryDb();
+    const quantum = plantSizeUnits("manufacturing");
+    db.seed("sectors", [{ _id: "plant", capitalStock: quantum * 1.5 }]);
+    await db
+      .collection("sectors")
+      .updateOne({ _id: "plant" }, plantCapacityDeltaPipeline("manufacturing", quantum * 1.25));
+    expect(db.collection("sectors").docs[0]).toMatchObject({
+      capitalStock: quantum * 2.75,
+      plantCount: 2,
+      plantUnitRemainder: quantum * 0.75,
+    });
+    await db
+      .collection("sectors")
+      .updateOne({ _id: "plant" }, plantCapacityDeltaPipeline("manufacturing", -quantum * 2));
+    expect(db.collection("sectors").docs[0]).toMatchObject({
+      capitalStock: quantum * 0.75,
+      plantCount: 1,
+      plantUnitRemainder: 0,
+    });
+    await db
+      .collection("sectors")
+      .updateOne({ _id: "plant" }, plantCapacityDeltaPipeline("manufacturing", -quantum));
+    expect(db.collection("sectors").docs[0]).toMatchObject({
+      capitalStock: 0,
+      plantCount: 0,
+      plantUnitRemainder: 0,
+    });
+  });
+  it("evaluates only the selected conditional branch", async () => {
+    const db = createInMemoryDb();
+    db.seed("ratios", [{ _id: "zero", divisor: 0 }]);
+    await db.collection("ratios").updateOne({ _id: "zero" }, [
+      {
+        $set: {
+          ratio: { $cond: [{ $eq: ["$divisor", 0] }, null, { $divide: [1, "$divisor"] }] },
+        },
+      },
+    ]);
+    expect(db.collection("ratios").docs[0].ratio).toBeNull();
+  });
   it("sorts a find cursor before limiting the latest revision", async () => {
     const db = createInMemoryDb();
     db.seed("revisions", [
