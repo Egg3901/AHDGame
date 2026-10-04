@@ -36,15 +36,28 @@ import {
   isElectionTypeEntryBlocked,
   isNationwideDirectExecutiveElection,
 } from "@/lib/elections/nationwideExecutive";
-import { isActiveElectionCandidateDuplicateKey } from "@/lib/elections/duplicateKey";
+import {
+  isActiveElectionCandidateDuplicateKey,
+  isActiveJapanShugiinNominationDuplicateKey,
+} from "@/lib/elections/duplicateKey";
 import { isHuDistrictInRegion } from "@/lib/countries/hu/rules/constituencies2014";
 import { validateRussianDumaPlayerFiling } from "@/lib/countries/ru/dumaPlayerFiling";
 import {
   validateRussianCouncilPlayerFiling,
   registerRussianCouncilPlayerCandidate,
 } from "@/lib/countries/ru/councilPlayerFiling";
+import { JP_SHUGIIN_1994_CONSTITUENCIES } from "@/lib/countries/jp/data/jpShugiinConstituencies1994";
+import {
+  ensureJapanShugiinFilingIndexes,
+  japanShugiinDistrictPartyKey,
+} from "@/lib/countries/jp/elections/shugiinFilingIndexes";
 
-const hu1991EntryBody = z.object({ constituencyId: z.string().min(1).max(80).optional() }).strict();
+const hu1991EntryBody = z
+  .object({
+    constituencyId: z.string().min(1).max(80).optional(),
+    japanShugiinListOrder: z.number().int().min(1).max(300).optional(),
+  })
+  .strict();
 const councilFilingErrors = {
   "already-filed": "You are already entered in this Council race.",
   "association-full": "Your association already has two player nominees in this subject.",
@@ -118,9 +131,15 @@ export async function POST(request: Request, { params }: RouteParams) {
       election.countryId === "HU" &&
       election.electionType === "nationalAssembly" &&
       election.hungarianModernAssembly?.ruleVersion === "mixed-2011-v1";
+    const japanMixed =
+      election.countryId === "JP" &&
+      (election.electionType === "shugiin" || election.electionType === "snap_shugiin") &&
+      election.japanShugiinRules?.ruleVersion === "mixed-1994-v1";
     const bgFounding = isBgFoundingCampaign(election);
     let huDistrictId: string | undefined;
-    if (hu1991 || bgFounding || hu2014) {
+    let japanDistrictId: string | undefined;
+    let japanShugiinListOrder: number | undefined;
+    if (hu1991 || bgFounding || hu2014 || japanMixed) {
       if (
         bgFounding &&
         election.bulgarianFoundingRound?.round !== 1 &&
@@ -153,6 +172,76 @@ export async function POST(request: Request, { params }: RouteParams) {
           { status: 400 }
         );
       huDistrictId = parsed.data.constituencyId;
+      if (japanMixed) {
+        japanDistrictId = parsed.data.constituencyId;
+        japanShugiinListOrder = parsed.data.japanShugiinListOrder;
+        if (
+          (!japanDistrictId && japanShugiinListOrder == null) ||
+          (japanDistrictId &&
+            !JP_SHUGIIN_1994_CONSTITUENCIES.some(
+              (district) => district.id === japanDistrictId && district.regionId === election.state
+            ))
+        ) {
+          return NextResponse.json(
+            { error: "Choose a valid 1994 Shugiin constituency or party-list nomination." },
+            { status: 400 }
+          );
+        }
+        if (japanShugiinListOrder != null) {
+          const partySequentialId = Number.parseInt(character.party ?? "", 10);
+          const registeredParty =
+            Number.isSafeInteger(partySequentialId) && partySequentialId > 0
+              ? await db.collection<PoliticalParty>("politicalParties").findOne({
+                  countryId: "JP",
+                  sequentialId: partySequentialId,
+                })
+              : null;
+          if (!registeredParty || registeredParty.regimeStatus === "banned") {
+            return NextResponse.json(
+              {
+                error:
+                  "Join a registered, unbanned Japanese party before filing a Shugiin list nomination.",
+              },
+              { status: 403 }
+            );
+          }
+        }
+        try {
+          await ensureJapanShugiinFilingIndexes(db);
+        } catch {
+          logRequest("POST", path, 503, Date.now() - start);
+          return NextResponse.json(
+            { error: "Japanese Shugiin filing guards are unavailable; try again later." },
+            { status: 503 }
+          );
+        }
+        if (japanDistrictId && character.party !== "independent") {
+          const occupied = await db.collection<ElectionCandidate>("electionCandidates").findOne({
+            electionId: electionObjectId,
+            party: character.party,
+            constituencyId: japanDistrictId,
+            status: "active",
+          });
+          if (occupied)
+            return NextResponse.json(
+              { error: "Your party already has a nominee in this Shugiin constituency." },
+              { status: 409 }
+            );
+        }
+        if (japanShugiinListOrder != null) {
+          const occupied = await db.collection<ElectionCandidate>("electionCandidates").findOne({
+            electionId: electionObjectId,
+            party: character.party,
+            japanShugiinListOrder,
+            status: "active",
+          });
+          if (occupied)
+            return NextResponse.json(
+              { error: "Your party already has a nominee at this Shugiin list rank." },
+              { status: 409 }
+            );
+        }
+      }
       if (hu2014 && (!huDistrictId || !isHuDistrictInRegion(huDistrictId, election.state))) {
         return NextResponse.json(
           { error: "Choose a valid Hungarian constituency in this region." },
@@ -492,6 +581,16 @@ export async function POST(request: Request, { params }: RouteParams) {
       ...(dumaFiling?.allowed ? { russianDumaNomination: dumaFiling.nomination } : {}),
       ...(councilFiling?.allowed ? { russianCouncilNomination: councilFiling.nomination } : {}),
       ...(hu2014 && huDistrictId ? { constituencyId: huDistrictId } : {}),
+      ...(japanDistrictId ? { constituencyId: japanDistrictId } : {}),
+      ...(japanShugiinListOrder != null ? { japanShugiinListOrder } : {}),
+      ...(japanMixed && japanDistrictId && character.party !== "independent"
+        ? {
+            japanShugiinDistrictPartyKey: japanShugiinDistrictPartyKey(
+              character.party,
+              japanDistrictId
+            ),
+          }
+        : {}),
       ...(priorCandidacy?.lastRallyTurn !== undefined
         ? { lastRallyTurn: priorCandidacy.lastRallyTurn }
         : {}),
@@ -575,6 +674,13 @@ export async function POST(request: Request, { params }: RouteParams) {
         result = await db.collection("electionCandidates").insertOne(candidateDoc);
       }
     } catch (error) {
+      if (isActiveJapanShugiinNominationDuplicateKey(error)) {
+        logRequest("POST", path, 409, Date.now() - start);
+        return NextResponse.json(
+          { error: "Your party already has a candidate in that Shugiin ballot position." },
+          { status: 409 }
+        );
+      }
       if (isActiveElectionCandidateDuplicateKey(error)) {
         const activeCandidate = await db
           .collection<ElectionCandidate>("electionCandidates")

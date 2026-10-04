@@ -11,9 +11,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ObjectId } from "mongodb";
 import { resolveOneGeneralElection } from "./generalResolution";
 import type { Db } from "mongodb";
-import type { Election, ElectionVoteTally } from "@/lib/db/types";
+import type { Election, ElectionVoteTally, ElectionCandidate, NPP } from "@/lib/db/types";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import type { NPPContext } from "@/lib/turn/npp/context";
+import { processElectionEntry } from "@/lib/turn/npp/electionEntry";
 import { resolveOneGeneralElection as resolveBulgarianElection } from "./generalResolution";
+import { JP_SHUGIIN_1994_CONSTITUENCIES } from "@/lib/countries/jp/data/jpShugiinConstituencies1994";
+import { accumulateJapanBallots } from "@/lib/countries/jp/rules/shugiinBallotMath";
 
 // ── Module mocks ─────────────────────────────────────────────────────────────
 
@@ -153,6 +157,88 @@ beforeEach(async () => {
 // ── resolveOneGeneralElection ─────────────────────────────────────────────────
 
 describe("resolveOneGeneralElection", () => {
+  it.each(["no-tally", "zero-votes", "no-eligible-candidates"] as const)(
+    "records Japan's frozen chamber capacity when a race ends with %s",
+    async (emptyPath) => {
+      const election = makeElection({
+        countryId: "JP",
+        electionType: "shugiin",
+        state: "KAN",
+        totalSeats: 148,
+        status: "completed",
+        japanShugiinRules: {
+          ruleVersion: "mixed-1994-v1",
+          districtSeats: 85,
+          listSeats: 63,
+        },
+      });
+      const tally =
+        emptyPath === "no-tally"
+          ? null
+          : makeTally(
+              election._id,
+              emptyPath === "zero-votes" ? {} : { [new ObjectId().toString()]: 10 }
+            );
+
+      await resolveOneGeneralElection(db as unknown as Db, election, tally, CURRENT_TURN, NOW);
+
+      expect(db.collectionMocks.countryGameStates!.updateOne).toHaveBeenCalledWith(
+        expect.objectContaining({ _id: "JP" }),
+        {
+          $set: {
+            "jpShugiinResolvedRegionalRules.KAN": expect.objectContaining({
+              ruleVersion: "mixed-1994-v1",
+              totalSeats: 148,
+              electionId: election._id.toString(),
+            }),
+          },
+        }
+      );
+      expect(db.collectionMocks.elections!.updateOne).toHaveBeenCalledWith(
+        { _id: election._id },
+        expect.objectContaining({ $set: expect.objectContaining({ status: "resolved" }) })
+      );
+    }
+  );
+
+  it.each(["no-tally", "finalized-tally"] as const)(
+    "keeps a Japan %s race retryable when its capacity write fails",
+    async (path) => {
+      const election = makeElection({
+        countryId: "JP",
+        electionType: "shugiin",
+        state: "KAN",
+        totalSeats: 148,
+        status: "completed",
+        japanShugiinRules: {
+          ruleVersion: "mixed-1994-v1",
+          districtSeats: 85,
+          listSeats: 63,
+        },
+      });
+      const tally = path === "no-tally" ? null : makeTally(election._id, {}, { finalized: true });
+      db.collection("countryGameStates");
+      db.collectionMocks.countryGameStates!.updateOne.mockRejectedValueOnce(
+        new Error("capacity write interrupted")
+      );
+
+      await expect(
+        resolveOneGeneralElection(db as unknown as Db, election, tally, CURRENT_TURN, NOW)
+      ).rejects.toThrow("capacity write interrupted");
+      const statuses = db.collectionMocks
+        .elections!.updateOne.mock.calls.map(([, update]) => update.$set?.status)
+        .filter(Boolean);
+      expect(statuses.at(-1)).toBe("completed");
+
+      await resolveOneGeneralElection(db as unknown as Db, election, tally, CURRENT_TURN + 1, NOW);
+      expect(db.collectionMocks.countryGameStates!.updateOne).toHaveBeenCalledTimes(2);
+      const retriedStatuses = db.collectionMocks
+        .elections!.updateOne.mock.calls.map(([, update]) => update.$set?.status)
+        .filter(Boolean);
+      expect(retriedStatuses.at(-1)).toBe("resolved");
+    }
+  );
+
   it("does not claim or seat a bound Duma ballot through the single-race resolver", async () => {
     const election = makeElection({
       countryId: "RU",
@@ -295,6 +381,254 @@ describe("resolveOneGeneralElection", () => {
       ["B", 2],
       ["C", 1],
     ]);
+  });
+
+  it("resolves Japan district and list ballots separately and excludes a direct winner from the list", async () => {
+    const election = makeElection({
+      countryId: "JP",
+      electionType: "shugiin",
+      state: "KAN",
+      totalSeats: 148,
+      status: "completed",
+      japanShugiinRules: {
+        ruleVersion: "mixed-1994-v1",
+        districtSeats: 85,
+        listSeats: 63,
+        authorizedOnTurn: 1,
+        reformBillId: "bill-1994-reform",
+      },
+    });
+    const directId = new ObjectId();
+    const direct = Object.assign(
+      makeCandidate(election._id, { party: "A", characterName: "District winner" }),
+      { _id: directId, constituencyId: "JP-KAN-13-01", japanShugiinListOrder: 1 }
+    );
+    const listCandidates = Array.from({ length: 63 }, (_, index) => {
+      const id = new ObjectId();
+      return Object.assign(
+        makeCandidate(election._id, { party: "A", characterName: `List nominee ${index + 1}` }),
+        { _id: id, japanShugiinListOrder: index + 2 }
+      );
+    });
+    const candidates = [direct, ...listCandidates];
+    const districtVotes = Object.fromEntries(
+      JP_SHUGIIN_1994_CONSTITUENCIES.filter((district) => district.regionId === "KAN").map(
+        (district) => [
+          district.id,
+          district.id === direct.constituencyId ? { [directId]: 100 } : {},
+        ]
+      )
+    );
+    const totalVotes = Object.fromEntries(
+      candidates.map((candidate) => [candidate._id.toString(), 0])
+    );
+    totalVotes[directId.toString()] = 100;
+    const tally = makeTally(election._id, totalVotes, {
+      candidateNames: Object.fromEntries(
+        candidates.map((candidate) => [candidate._id.toString(), candidate.characterName])
+      ),
+      candidateParties: Object.fromEntries(
+        candidates.map((candidate) => [candidate._id.toString(), "A"])
+      ),
+      japanShugiinConstituencyVotes: districtVotes,
+      japanShugiinListVotes: { A: 1_000 },
+    });
+    db.collectionMocks.electionCandidates!.find.mockReturnValue(makeCursor(candidates));
+    db.collectionMocks.characters!.find.mockReturnValue(
+      makeCursor(
+        candidates.map((candidate) => ({ _id: candidate.characterId, userId: new ObjectId() }))
+      )
+    );
+
+    const result = await resolveOneGeneralElection(
+      db as unknown as Db,
+      election,
+      tally,
+      CURRENT_TURN,
+      NOW
+    );
+
+    expect(result.resolved).toBe(true);
+    const seated = db.collectionMocks.electedOfficials!.insertOne.mock.calls.map(
+      ([official]) => official as { characterName: string; seatsHeld: number }
+    );
+    const directMandate = seated.find((official) => official.characterName === "District winner");
+    expect(directMandate?.seatsHeld).toBe(1);
+    expect(
+      seated.filter((official) => official.characterName.startsWith("List nominee "))
+    ).toHaveLength(63);
+    expect(db.collectionMocks.countryGameStates!.updateOne).toHaveBeenCalledWith(
+      {
+        _id: "JP",
+        $or: [
+          { "jpShugiinResolvedRegionalRules.KAN.cycle": { $exists: false } },
+          { "jpShugiinResolvedRegionalRules.KAN.cycle": { $lte: election.cycle } },
+        ],
+      },
+      {
+        $set: {
+          "jpShugiinResolvedRegionalRules.KAN": {
+            ruleVersion: "mixed-1994-v1",
+            totalSeats: 148,
+            districtSeats: 85,
+            listSeats: 63,
+            electionId: election._id.toString(),
+            cycle: election.cycle,
+            resolvedAtTurn: CURRENT_TURN,
+          },
+        },
+      }
+    );
+  });
+
+  it("loads zero-vote list nominees and generated NPP list seats, while pruning stale district IDs", async () => {
+    const election = makeElection({
+      countryId: "JP",
+      electionType: "shugiin",
+      state: "KAN",
+      totalSeats: 148,
+      status: "completed",
+      japanShugiinRules: {
+        ruleVersion: "mixed-1994-v1",
+        districtSeats: 85,
+        listSeats: 63,
+        authorizedOnTurn: 1,
+        reformBillId: "bill-1994-reform",
+      },
+    });
+    const directNppId = new ObjectId();
+    const retiredNppId = new ObjectId();
+    const npps = [
+      { _id: directNppId, name: "Generated direct NPP", party: "A" },
+      { _id: retiredNppId, name: "Retired generated NPP", party: "B" },
+    ].map(
+      (row) =>
+        ({
+          _id: row._id,
+          name: row.name,
+          countryId: "JP",
+          homeState: "KAN",
+          party: row.party,
+          politicalInfluence: 50,
+          favorability: 50,
+          policies: { economic: 0, social: 0 },
+          currentOffice: null,
+          personality: { loyalty: 50, ambition: 50, stubbornness: 50 },
+          generatedAt: NOW,
+          retiredAt: null,
+          createdAt: NOW,
+          updatedAt: NOW,
+        }) as NPP
+    );
+    const generatedCandidates: ElectionCandidate[] = [];
+    db.collectionMocks.electionCandidates!.insertOne.mockImplementation(
+      async (candidate: ElectionCandidate) => {
+        generatedCandidates.push(candidate);
+        return { insertedId: candidate._id };
+      }
+    );
+    const nppContext: NPPContext = {
+      now: NOW,
+      db: db as unknown as Db,
+      allNPPs: npps,
+      nppMap: new Map(npps.map((npp) => [npp._id.toString(), npp])),
+      openPrimaries: [election],
+      nppCandidacies: new Set(),
+      candidatesByElection: new Map([[election._id.toString(), []]]),
+      nppOfficials: [],
+      officialsByNPP: new Map(),
+      activeBills: [],
+      billWhips: new Map(),
+      activeStateBills: [],
+      stateBillWhips: new Map(),
+      statePartyOrgs: new Map(),
+      partyByCompositeKey: new Map(),
+      partyCountries: new Map(),
+      legislationTypeMap: new Map(),
+      stateDemographicsMap: new Map(),
+      statesById: new Map(),
+      currentTurn: CURRENT_TURN,
+      preset: "1991-default",
+    };
+    expect(await processElectionEntry(nppContext)).toBe(2);
+    expect(generatedCandidates).toHaveLength(2);
+    const zeroVotePlayer = Object.assign(
+      makeCandidate(election._id, { party: "A", characterName: "Zero-vote list nominee" }),
+      { japanShugiinListOrder: 1 }
+    );
+    const directNpp = generatedCandidates.find((candidate) => candidate.party === "A")!;
+    const retiredNpp = generatedCandidates.find((candidate) => candidate.party === "B")!;
+    const candidates = [zeroVotePlayer, ...generatedCandidates];
+    const staleBallotId = new ObjectId().toString();
+    const firstDistrict = JP_SHUGIIN_1994_CONSTITUENCIES.find(
+      (district) => district.regionId === "KAN"
+    )!;
+    const tallied = accumulateJapanBallots({
+      regionId: "KAN",
+      candidates: [
+        {
+          candidateId: directNpp._id.toString(),
+          partyId: "A",
+          isNPP: true,
+          votes: 8_500,
+        },
+        {
+          candidateId: retiredNpp._id.toString(),
+          partyId: "B",
+          isNPP: true,
+          votes: 0,
+        },
+      ],
+      listVoteIncrements: { A: 8_500 },
+    });
+    const districtVotes = tallied.constituencyVotes;
+    districtVotes[firstDistrict.id][staleBallotId] = 1_000_000;
+    const tally = makeTally(
+      election._id,
+      {},
+      {
+        candidateParties: { [staleBallotId]: "A" },
+        japanShugiinConstituencyVotes: districtVotes,
+        japanShugiinListVotes: tallied.listVotes,
+      }
+    );
+    db.collectionMocks.electionCandidates!.find.mockReturnValue(makeCursor(candidates));
+    db.collectionMocks.characters!.find.mockReturnValue(
+      makeCursor([{ _id: zeroVotePlayer.characterId, userId: new ObjectId() }])
+    );
+    db.collectionMocks.npps!.find.mockReturnValue(makeCursor([npps[0]]));
+
+    const result = await resolveOneGeneralElection(
+      db as unknown as Db,
+      election,
+      tally,
+      CURRENT_TURN,
+      NOW
+    );
+
+    expect(result.resolved).toBe(true);
+    expect(db.collectionMocks.electionCandidates!.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        electionId: election._id,
+        status: "active",
+        $or: expect.arrayContaining([
+          { isNPP: true },
+          { japanShugiinListOrder: { $exists: true } },
+        ]),
+      })
+    );
+    const seated = db.collectionMocks.electedOfficials!.insertOne.mock.calls.map(
+      ([official]) => official as { characterName: string; seatsHeld: number }
+    );
+    expect(
+      seated.find((official) => official.characterName === "Zero-vote list nominee")?.seatsHeld
+    ).toBe(1);
+    expect(
+      seated.find((official) => official.characterName === "Generated direct NPP")?.seatsHeld
+    ).toBe(147);
+    expect(seated.some((official) => official.characterName === "Retired generated NPP")).toBe(
+      false
+    );
   });
 
   it.each([true, false])(

@@ -57,7 +57,7 @@ import {
   BillFiscalImpactStrip,
   LawProvisionComparison,
 } from "@/components/bills/LawProvisionComparison";
-import { type CountryId } from "@/lib/constants/countries";
+import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { getNationalStateId } from "@/lib/policy/nationalStateId";
 import { TaxRateSliderControl } from "@/components/legislation/TaxRateSliderControl";
@@ -173,7 +173,8 @@ export function ProposeLegislationModal({
   const [title, setTitle] = useState("");
   const [summary, setSummary] = useState("");
   const [cat, setCat] = useState(BILL_CATEGORIES[0] as string);
-  const { maastrichtEligibleCountries } = useWorldFlags();
+  const worldFlags = useWorldFlags();
+  const { maastrichtEligibleCountries } = worldFlags;
   const [treatyAction, setTreatyAction] = useState<"" | "ratify" | "reject">("");
   const canDecideTreaty =
     cat === "foreign policy" && maastrichtEligibleCountries?.includes(countryId) === true;
@@ -199,7 +200,7 @@ export function ProposeLegislationModal({
   const isSubsidyCat = SUBSIDY_BILL_CATEGORIES.has(cat as BillCategory);
   const isNatCat = NATIONALIZATION_BILL_CATEGORIES.has(cat as BillCategory);
   const isElectoralCat = ELECTORAL_LAW_BILL_CATEGORIES.has(cat as BillCategory);
-  const { euroAdoptionEligibleCountries = [] } = useWorldFlags();
+  const { euroAdoptionEligibleCountries = [] } = worldFlags;
   const canProposeEuro = cat === "economy" && euroAdoptionEligibleCountries.includes(countryId);
   const [includeEuroAdoption, setIncludeEuroAdoption] = useState(false);
   const isCentralBankCat = CENTRAL_BANK_INDEPENDENCE_BILL_CATEGORIES.has(cat as BillCategory);
@@ -215,10 +216,30 @@ export function ProposeLegislationModal({
   const [unionLawBias, setUnionLawBias] = useState(0);
   // Electoral law — franchise and registration access, each opt-in separately so
   // a bill touching one axis does not silently reset the other.
-  const [includeVotingAge, setIncludeVotingAge] = useState(false);
-  const [votingAge, setVotingAge] = useState(18);
-  const [includeRegAccess, setIncludeRegAccess] = useState(false);
-  const [registrationAccess, setRegistrationAccess] = useState(0);
+  const [electoralLaw, setElectoralLaw] = useState({
+    includeVotingAge: false,
+    votingAge: 18,
+    includeRegAccess: false,
+    registrationAccess: 0,
+    includeJapanShugiinReform: false,
+  });
+  const {
+    includeVotingAge,
+    votingAge,
+    includeRegAccess,
+    registrationAccess,
+    includeJapanShugiinReform,
+  } = electoralLaw;
+  function updateElectoralLaw<K extends keyof typeof electoralLaw>(
+    key: K,
+    value: (typeof electoralLaw)[K]
+  ) {
+    setElectoralLaw((current) => ({ ...current, [key]: value }));
+  }
+  const canProposeJapanShugiinReform =
+    countryId === COUNTRY_CONFIGS.JP.id &&
+    worldFlags.preset === "1991-default" &&
+    (worldFlags.currentYear ?? 0) >= 1994;
   // Central bank independence — opt-in, economy category. grant hands
   // rate-setting to the bank; revoke returns it to the government.
   const [includeCbIndependence, setIncludeCbIndependence] = useState(false);
@@ -436,11 +457,12 @@ export function ProposeLegislationModal({
         social: r.social,
         ...(r.proposedRate !== undefined ? { proposedRate: r.proposedRate } : {}),
       }));
-      if (isElectoralCat && (includeVotingAge || includeRegAccess)) {
+      if (isElectoralCat && (includeVotingAge || includeRegAccess || includeJapanShugiinReform)) {
         provisionsPayload.push({
           type: "electoral_law",
           ...(includeVotingAge ? { votingAge } : {}),
           ...(includeRegAccess ? { registrationAccess } : {}),
+          ...(includeJapanShugiinReform ? { japanShugiinReform: true } : {}),
         });
       }
       if (canProposeEuro && includeEuroAdoption) {
@@ -1127,7 +1149,7 @@ export function ProposeLegislationModal({
                   <input
                     type="checkbox"
                     checked={includeVotingAge}
-                    onChange={(e) => setIncludeVotingAge(e.target.checked)}
+                    onChange={(e) => updateElectoralLaw("includeVotingAge", e.target.checked)}
                     className="rounded"
                   />
                   Set the voting age
@@ -1140,7 +1162,9 @@ export function ProposeLegislationModal({
                     step={1}
                     value={votingAge}
                     disabled={!includeVotingAge}
-                    onInput={(e) => setVotingAge(Number((e.target as HTMLInputElement).value))}
+                    onInput={(e) =>
+                      updateElectoralLaw("votingAge", Number((e.target as HTMLInputElement).value))
+                    }
                     className="flex-1 accent-sky-500 disabled:opacity-40"
                   />
                   <span className="min-w-[48px] rounded-md border border-card-border bg-card-elevated px-2 py-1 text-right font-mono text-xs">
@@ -1153,7 +1177,7 @@ export function ProposeLegislationModal({
                   <input
                     type="checkbox"
                     checked={includeRegAccess}
-                    onChange={(e) => setIncludeRegAccess(e.target.checked)}
+                    onChange={(e) => updateElectoralLaw("includeRegAccess", e.target.checked)}
                     className="rounded"
                   />
                   Set registration access
@@ -1172,7 +1196,10 @@ export function ProposeLegislationModal({
                     value={registrationAccess}
                     disabled={!includeRegAccess}
                     onInput={(e) =>
-                      setRegistrationAccess(Number((e.target as HTMLInputElement).value))
+                      updateElectoralLaw(
+                        "registrationAccess",
+                        Number((e.target as HTMLInputElement).value)
+                      )
                     }
                     className="flex-1 accent-sky-500 disabled:opacity-40"
                   />
@@ -1181,8 +1208,25 @@ export function ProposeLegislationModal({
                   </span>
                 </div>
               </div>
+              {canProposeJapanShugiinReform && (
+                <label className="flex cursor-pointer items-start gap-2 rounded-md border border-amber-500/30 p-2 text-xs text-muted">
+                  <input
+                    type="checkbox"
+                    checked={includeJapanShugiinReform}
+                    onChange={(event) =>
+                      updateElectoralLaw("includeJapanShugiinReform", event.target.checked)
+                    }
+                    className="mt-0.5 rounded"
+                  />
+                  <span>
+                    Propose Japan&apos;s 1994 Shūgiin transition: 300 single-member districts and
+                    200 regional party-list seats. Sitting members keep their mandates until a later
+                    election.
+                  </span>
+                </label>
+              )}
               <p className="text-[11px] italic text-muted/60">
-                {!includeVotingAge && !includeRegAccess
+                {!includeVotingAge && !includeRegAccess && !includeJapanShugiinReform
                   ? "No electoral-law provision will be included in this bill."
                   : [
                       includeVotingAge ? `Voting age set to ${votingAge}.` : null,
@@ -1193,6 +1237,7 @@ export function ProposeLegislationModal({
                             ? `Registration access +${registrationAccess} — voters reach the rolls faster and fewer lapse.`
                             : `Registration access ${registrationAccess} — the rolls grow slower and lapse faster.`
                         : null,
+                      includeJapanShugiinReform ? "Japan Shugiin reform requires passage." : null,
                     ]
                       .filter(Boolean)
                       .join(" ")}

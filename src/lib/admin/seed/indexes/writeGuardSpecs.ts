@@ -1,5 +1,6 @@
 import type { CreateIndexesOptions, IndexSpecification } from "mongodb";
 import { BOUNDED_NPC_CANDIDATE_GUARDS } from "./boundedNpcCandidates";
+import { JAPAN_SHUGIIN_FILING_INDEXES } from "@/lib/countries/jp/elections/shugiinFilingIndexes";
 
 /**
  * THE write-guard index specs. One definition, two consumers.
@@ -26,6 +27,7 @@ export type IndexSpecTuple = [string, IndexSpecification, CreateIndexesOptions];
 /** Election-entry and endorsement guards. */
 export const ELECTION_WRITE_GUARD_INDEXES: IndexSpecTuple[] = [
   ...BOUNDED_NPC_CANDIDATE_GUARDS,
+  ...JAPAN_SHUGIIN_FILING_INDEXES,
   [
     "statePartyCandidates",
     { stateId: 1, partyId: 1, characterId: 1 },

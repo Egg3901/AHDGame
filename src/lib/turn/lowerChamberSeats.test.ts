@@ -7,6 +7,10 @@ import {
   lowerChamberMajorityThreshold,
 } from "./lowerChamberSeats";
 import { getCountryConfig } from "@/lib/constants/countries";
+import {
+  JP_SHUGIIN_1994_DISTRICT_SEATS,
+  JP_SHUGIIN_1994_LIST_SEATS,
+} from "@/lib/countries/jp/rules/shugiinElectoralLaw";
 
 function cursorOf<T>(docs: T[]) {
   const c = {
@@ -88,6 +92,67 @@ describe("getLiveLowerChamberSeats", () => {
       bgOrdinaryAssemblySinceTurn: 41,
     });
     expect(await getLiveLowerChamberSeats(db as unknown as Db, "BG")).toBe(240);
+  });
+
+  it("keeps Japan's sitting chamber until each region resolves under its frozen rule", async () => {
+    db.collection("gameState").findOne.mockResolvedValue({ preset: "1991-default" });
+    const countryStates = db.collection("countryGameStates");
+    countryStates.findOne.mockResolvedValue({
+      _id: "JP",
+      jpShugiinElectoralMandate: {
+        law: "mixed-1994-v1",
+        passedTurn: 88,
+        billId: "bill-1994-reform",
+      },
+    });
+    // Approval changes only future races; the current 512-seat chamber stays intact.
+    expect(await getLiveLowerChamberSeats(db as unknown as Db, "JP")).toBe(512);
+
+    countryStates.findOne.mockResolvedValue({
+      _id: "JP",
+      jpShugiinElectoralMandate: {
+        law: "mixed-1994-v1",
+        passedTurn: 88,
+        billId: "bill-1994-reform",
+      },
+      jpShugiinResolvedRegionalRules: {
+        KAN: {
+          ruleVersion: "mixed-1994-v1",
+          totalSeats: 148,
+          districtSeats: 85,
+          listSeats: 63,
+          electionId: "election-kan",
+          cycle: 1,
+          resolvedAtTurn: 100,
+        },
+      },
+    });
+    expect(await getLiveLowerChamberSeats(db as unknown as Db, "JP")).toBe(515);
+
+    const fullyTurnedOver = Object.fromEntries(
+      Object.entries(JP_SHUGIIN_1994_DISTRICT_SEATS).map(([regionId, districtSeats]) => [
+        regionId,
+        {
+          ruleVersion: "mixed-1994-v1" as const,
+          totalSeats: districtSeats + JP_SHUGIIN_1994_LIST_SEATS[regionId],
+          districtSeats,
+          listSeats: JP_SHUGIIN_1994_LIST_SEATS[regionId],
+          electionId: `election-${regionId}`,
+          cycle: 1,
+          resolvedAtTurn: 100,
+        },
+      ])
+    );
+    countryStates.findOne.mockResolvedValue({
+      _id: "JP",
+      jpShugiinElectoralMandate: {
+        law: "mixed-1994-v1",
+        passedTurn: 88,
+        billId: "bill-1994-reform",
+      },
+      jpShugiinResolvedRegionalRules: fullyTurnedOver,
+    });
+    expect(await getLiveLowerChamberSeats(db as unknown as Db, "JP")).toBe(500);
   });
 
   it("reads both Romanian chambers from the durable 1992 transition marker", async () => {

@@ -1,6 +1,6 @@
 import { withCampaignRules } from "@/lib/campaignTargeting/rules";
 import { getDb } from "@/lib/mongodb";
-import type { Election, ElectionStatus, State } from "@/lib/db/types";
+import type { CountryGameState, Election, ElectionStatus, State } from "@/lib/db/types";
 import {
   getJpSangiinClassSeats,
   getJpSangiinSeats,
@@ -20,6 +20,10 @@ import {
   sendBatchedElectionAnnouncements,
 } from "@/lib/turn/perpetualElections/engine";
 import { ensureRegionalGovernorElections } from "@/lib/turn/perpetualElections/shared";
+import {
+  japanShugiinFrozenRegionCapacity,
+  japanShugiinRulesForRegion,
+} from "@/lib/countries/jp/rules/shugiinElectoralLaw";
 
 /**
  * Ensure every JP region has an active or upcoming Shugiin election.
@@ -40,6 +44,9 @@ export async function ensureJPElections(now: Date, inFlightTurn?: number): Promi
   const db = await getDb();
   const { currentTurn: persistedTurn, ctx } = await getCurrentTurnAndCtx(db);
   const currentTurn = inFlightTurn ?? persistedTurn;
+  const jpCountryState = await db
+    .collection<CountryGameState>("countryGameStates")
+    .findOne({ _id: "JP" }, { projection: { jpShugiinElectoralMandate: 1 } });
   // Era-specific apportionment: 466 in 1953, 512 in 1991, and 465 after 1994.
   const shugiinSeatsByRegion = getJpShugiinSeats(ctx.preset);
 
@@ -69,10 +76,20 @@ export async function ensureJPElections(now: Date, inFlightTurn?: number): Promi
   const eraMethod = getElectionMethod("JP", "shugiin", ctx.preset);
   if (eraMethod === "sntv") {
     const methodHealOps = liveElections
-      .filter((e) => !e.allocationMethod)
+      .filter(
+        (e) =>
+          e.japanShugiinRules?.ruleVersion !== "mixed-1994-v1" &&
+          (e.allocationMethod == null || (e.status === "upcoming" && e.allocationMethod !== "sntv"))
+      )
       .map((e) => ({
         updateOne: {
-          filter: { _id: e._id, allocationMethod: { $exists: false } },
+          filter: {
+            _id: e._id,
+            ...(e.allocationMethod == null
+              ? { allocationMethod: { $exists: false } }
+              : { allocationMethod: e.allocationMethod, status: "upcoming" }),
+            "japanShugiinRules.ruleVersion": { $ne: "mixed-1994-v1" },
+          },
           update: { $set: { allocationMethod: eraMethod, updatedAt: now } },
         },
       }));
@@ -81,7 +98,18 @@ export async function ensureJPElections(now: Date, inFlightTurn?: number): Promi
     }
   }
   const seatHealOps = liveElections.flatMap((e) => {
-    const authoritative = shugiinSeatsByRegion[e.state];
+    const authoritative = japanShugiinFrozenRegionCapacity(
+      e.japanShugiinRules
+        ? {
+            law: e.japanShugiinRules.ruleVersion,
+            totalSeats: e.japanShugiinRules.districtSeats + e.japanShugiinRules.listSeats,
+            districtSeats: e.japanShugiinRules.districtSeats,
+            listSeats: e.japanShugiinRules.listSeats,
+          }
+        : undefined,
+      e.state,
+      shugiinSeatsByRegion[e.state]
+    );
     if (typeof authoritative !== "number" || authoritative <= 0 || e.totalSeats === authoritative)
       return [];
     return [
@@ -144,11 +172,32 @@ export async function ensureJPElections(now: Date, inFlightTurn?: number): Promi
     const endTime = turnToWallClock(spawn.endTurn, now, currentTurn);
     const status: "active" | "upcoming" = spawn.startTurn <= currentTurn ? "active" : "upcoming";
 
+    const japanRules = japanShugiinRulesForRegion(
+      ctx.preset,
+      regionId,
+      shugiinSeatsByRegion[regionId] ?? 0,
+      jpCountryState?.jpShugiinElectoralMandate
+    );
     toInsert.push({
       countryId: "JP",
       electionType: "shugiin",
       state: regionId,
-      allocationMethod: getElectionMethod("JP", "shugiin", ctx.preset),
+      ...(japanRules?.law === "mixed-1994-v1"
+        ? {}
+        : { allocationMethod: getElectionMethod("JP", "shugiin", ctx.preset) }),
+      ...(japanRules
+        ? {
+            japanShugiinRules: {
+              ruleVersion: japanRules.law,
+              districtSeats: japanRules.districtSeats,
+              listSeats: japanRules.listSeats,
+              ...(japanRules.authorizedOnTurn != null
+                ? { authorizedOnTurn: japanRules.authorizedOnTurn }
+                : {}),
+              ...(japanRules.reformBillId ? { reformBillId: japanRules.reformBillId } : {}),
+            },
+          }
+        : {}),
       seatId: getSeatIdFromElection({
         countryId: "JP",
         electionType: "shugiin",
@@ -162,7 +211,7 @@ export async function ensureJPElections(now: Date, inFlightTurn?: number): Promi
       status,
       // The preset apportionment is authoritative. A prior cycle may have been
       // created before its era map existed (1953 carried the modern 465-seat map).
-      totalSeats: shugiinSeatsByRegion[regionId] ?? 1,
+      totalSeats: japanRules?.totalSeats ?? shugiinSeatsByRegion[regionId] ?? 1,
       startTime,
       primaryEndTime,
       endTime,

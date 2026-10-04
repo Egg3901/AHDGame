@@ -217,6 +217,7 @@ export const electoralLawProvisionSchema = z.object({
   type: z.literal("electoral_law"),
   votingAge: z.number().int().min(16).max(25).optional(),
   registrationAccess: z.number().min(-50).max(50).optional(),
+  japanShugiinReform: z.literal(true).optional(),
 });
 
 /**

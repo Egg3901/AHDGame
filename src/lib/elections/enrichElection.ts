@@ -1431,6 +1431,15 @@ export async function _enrichElection(
     ...(election.hungarianModernAssembly
       ? { hungarianModernAssembly: { ruleVersion: election.hungarianModernAssembly.ruleVersion } }
       : {}),
+    ...(election.japanShugiinRules
+      ? {
+          japanShugiinRules: {
+            ruleVersion: election.japanShugiinRules.ruleVersion,
+            districtSeats: election.japanShugiinRules.districtSeats,
+            listSeats: election.japanShugiinRules.listSeats,
+          },
+        }
+      : {}),
     ...(election.hungarianModernByElection
       ? { hungarianModernByElection: { districtId: election.hungarianModernByElection.districtId } }
       : {}),

@@ -676,6 +676,25 @@ export interface GameState {
 export interface CountryGameState {
   /** Country ID - acts as document _id */
   _id: CountryId;
+  /** JP 1991: approved 1994 Shugiin reform applies to later elections only. */
+  jpShugiinElectoralMandate?: {
+    law: "mixed-1994-v1";
+    passedTurn: number;
+    billId: string;
+  };
+  /** Latest successfully resolved Shugiin rule/capacity per region. */
+  jpShugiinResolvedRegionalRules?: Record<
+    string,
+    {
+      ruleVersion: "sntv-1991-v1" | "mixed-1994-v1";
+      totalSeats: number;
+      districtSeats: number;
+      listSeats: number;
+      electionId: string;
+      cycle: number;
+      resolvedAtTurn: number;
+    }
+  >;
   /** HU 1991: enacted 1994 electoral amendment, never inferred from the year. */
   huElectoralLaw1994SinceTurn?: number;
   /** A bound parliamentary decision authorizes the later Hungarian electoral system. */

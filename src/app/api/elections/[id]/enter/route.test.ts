@@ -48,6 +48,11 @@ vi.mock("@/lib/campaigns/isCampaignEligible", () => ({
 }));
 vi.mock("@/lib/elections/duplicateKey", () => ({
   isActiveElectionCandidateDuplicateKey: vi.fn().mockReturnValue(false),
+  isActiveJapanShugiinNominationDuplicateKey: vi.fn((error: unknown) => {
+    if (typeof error !== "object" || error === null || !("keyPattern" in error)) return false;
+    const keyPattern = error.keyPattern as Record<string, unknown>;
+    return Boolean(keyPattern.constituencyId || keyPattern.japanShugiinListOrder);
+  }),
 }));
 
 import { POST } from "./route";
@@ -918,7 +923,7 @@ describe("Hungarian 1991 constituency filing route", () => {
     };
     vi.mocked(requireAuthWithCharacter).mockResolvedValue({
       ok: true,
-      user: { userId: "synthetic-player", character },
+      user: { userId: new ObjectId().toHexString(), character },
     } as never);
     const { getGameTime } = await import("@/lib/time/gameTime");
     vi.mocked(getGameTime).mockResolvedValue({
@@ -1299,5 +1304,283 @@ describe("Bulgarian founding constituency filing route", () => {
     await setupBulgaria(2);
     expect((await POST(makeReq(), parameters)).status).toBe(403);
     expect(db.collection("electionCandidates").insertOne).not.toHaveBeenCalled();
+  });
+});
+
+describe("Japan mixed Shugiin filing route", () => {
+  it("allows multiple independent constituency filings without reserving a party slot", async () => {
+    const db = setupScenario({
+      electionCountry: "US",
+      characterCountry: "US",
+      characterParty: "independent",
+      partyDocReturn: null,
+    });
+    const election = {
+      _id: electionOid,
+      countryId: "JP",
+      electionType: "shugiin",
+      state: "KAN",
+      cycle: 1,
+      status: "active",
+      primaryEndTime: new Date("2026-04-02T00:00:00Z"),
+      japanShugiinRules: {
+        ruleVersion: "mixed-1994-v1",
+        districtSeats: 85,
+        listSeats: 63,
+      },
+    };
+    vi.mocked(resolveElectionRouteParam).mockResolvedValue({ ok: true, election } as never);
+    const { getGameTime } = await import("@/lib/time/gameTime");
+    vi.mocked(getGameTime).mockResolvedValue({
+      effectiveNow: new Date("2026-04-01T00:00:00Z"),
+      currentTurn: 50,
+    } as never);
+    db.collection("countryState");
+    db.collectionMocks.countryState!.findOne.mockResolvedValue({ _id: "JP" });
+    const district = { constituencyId: "JP-KAN-13-01" };
+
+    for (const characterId of [characterOid, new ObjectId()]) {
+      const character = {
+        _id: characterId,
+        countryId: "JP",
+        name: `Independent ${characterId.toHexString()}`,
+        homeState: "KAN",
+        party: "independent",
+        policies: { economic: 0, social: 0 },
+        favorability: 50,
+        politicalInfluence: 10,
+        careerHistory: [],
+        executiveTermsServed: 0,
+        currentOffice: null,
+      };
+      vi.mocked(requireAuthWithCharacter).mockResolvedValue({
+        ok: true,
+        user: { userId: characterId.toHexString(), character },
+      } as never);
+      const response = await POST(
+        new Request("http://test/route", {
+          method: "POST",
+          body: JSON.stringify(district),
+        }),
+        { params: Promise.resolve({ id: electionOid.toHexString() }) }
+      );
+      expect(response.status).toBe(200);
+    }
+
+    const filedRows = db.collectionMocks.electionCandidates!.insertOne.mock.calls.map(
+      ([candidate]) => candidate as Record<string, unknown>
+    );
+    expect(filedRows).toHaveLength(2);
+    expect(filedRows.every((candidate) => !("japanShugiinDistrictPartyKey" in candidate))).toBe(
+      true
+    );
+  });
+
+  it("stores the player's statutory district and separate party-list rank", async () => {
+    const db = setupScenario({
+      electionCountry: "US",
+      characterCountry: "US",
+      characterParty: "1",
+      partyDocReturn: null,
+    });
+    const district = { id: "JP-KAN-13-01", regionId: "KAN" };
+    const election = {
+      _id: electionOid,
+      countryId: "JP",
+      electionType: "shugiin",
+      state: "KAN",
+      cycle: 1,
+      status: "active",
+      primaryEndTime: new Date("2026-04-02T00:00:00Z"),
+      japanShugiinRules: {
+        ruleVersion: "mixed-1994-v1",
+        districtSeats: 85,
+        listSeats: 63,
+      },
+    };
+    vi.mocked(resolveElectionRouteParam).mockResolvedValue({ ok: true, election } as never);
+    const character = {
+      _id: characterOid,
+      countryId: "JP",
+      name: "Synthetic Shugiin candidate",
+      homeState: "KAN",
+      party: "1",
+      policies: { economic: 0, social: 0 },
+      favorability: 50,
+      politicalInfluence: 10,
+      careerHistory: [],
+      executiveTermsServed: 0,
+      currentOffice: null,
+    };
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue({
+      ok: true,
+      user: { userId: "synthetic-player", character },
+    } as never);
+    const { getGameTime } = await import("@/lib/time/gameTime");
+    vi.mocked(getGameTime).mockResolvedValue({
+      effectiveNow: new Date("2026-04-01T00:00:00Z"),
+      currentTurn: 50,
+    } as never);
+    db.collection("countryState");
+    db.collectionMocks.politicalParties!.findOne.mockResolvedValue({
+      _id: new ObjectId(),
+      countryId: "JP",
+      sequentialId: 1,
+      regimeStatus: "approved",
+    } as never);
+    db.collectionMocks.countryState!.findOne.mockResolvedValue({ _id: "JP" });
+    db.collectionMocks.characters!.findOne.mockResolvedValue(null);
+
+    const response = await POST(
+      new Request("http://test/route", {
+        method: "POST",
+        body: JSON.stringify({ constituencyId: district.id, japanShugiinListOrder: 2 }),
+      }),
+      { params: Promise.resolve({ id: electionOid.toHexString() }) }
+    );
+
+    expect(response.status).toBe(200);
+    expect(db.collectionMocks.electionCandidates!.createIndex).toHaveBeenCalledTimes(2);
+    expect(db.collectionMocks.electionCandidates!.insertOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        constituencyId: district.id,
+        japanShugiinListOrder: 2,
+        countryId: "JP",
+      })
+    );
+  });
+
+  it("rejects a list nomination from an unregistered party", async () => {
+    const db = setupScenario({
+      electionCountry: "US",
+      characterCountry: "US",
+      characterParty: "999",
+      partyDocReturn: null,
+    });
+    const election = {
+      _id: electionOid,
+      countryId: "JP",
+      electionType: "shugiin",
+      state: "KAN",
+      cycle: 1,
+      status: "active",
+      primaryEndTime: new Date("2026-04-02T00:00:00Z"),
+      japanShugiinRules: {
+        ruleVersion: "mixed-1994-v1",
+        districtSeats: 85,
+        listSeats: 63,
+      },
+    };
+    vi.mocked(resolveElectionRouteParam).mockResolvedValue({ ok: true, election } as never);
+    const character = {
+      _id: characterOid,
+      countryId: "JP",
+      name: "Synthetic Shugiin candidate",
+      homeState: "KAN",
+      party: "999",
+      policies: { economic: 0, social: 0 },
+      favorability: 50,
+      politicalInfluence: 10,
+      careerHistory: [],
+      executiveTermsServed: 0,
+      currentOffice: null,
+    };
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue({
+      ok: true,
+      user: { userId: "synthetic-player", character },
+    } as never);
+    const { getGameTime } = await import("@/lib/time/gameTime");
+    vi.mocked(getGameTime).mockResolvedValue({
+      effectiveNow: new Date("2026-04-01T00:00:00Z"),
+      currentTurn: 50,
+    } as never);
+    db.collection("countryState");
+    db.collectionMocks.countryState!.findOne.mockResolvedValue({ _id: "JP" });
+    db.collectionMocks.characters!.findOne.mockResolvedValue(null);
+
+    const response = await POST(
+      new Request("http://test/route", {
+        method: "POST",
+        body: JSON.stringify({ japanShugiinListOrder: 2 }),
+      }),
+      { params: Promise.resolve({ id: electionOid.toHexString() }) }
+    );
+
+    expect(response.status).toBe(403);
+    expect(db.collectionMocks.electionCandidates!.insertOne).not.toHaveBeenCalled();
+  });
+
+  it("returns 409 when a concurrent filing wins the unique Shugiin ballot slot", async () => {
+    const db = setupScenario({
+      electionCountry: "US",
+      characterCountry: "US",
+      characterParty: "1",
+      partyDocReturn: null,
+    });
+    const election = {
+      _id: electionOid,
+      countryId: "JP",
+      electionType: "shugiin",
+      state: "KAN",
+      cycle: 1,
+      status: "active",
+      primaryEndTime: new Date("2026-04-02T00:00:00Z"),
+      japanShugiinRules: {
+        ruleVersion: "mixed-1994-v1",
+        districtSeats: 85,
+        listSeats: 63,
+      },
+    };
+    vi.mocked(resolveElectionRouteParam).mockResolvedValue({ ok: true, election } as never);
+    const character = {
+      _id: characterOid,
+      countryId: "JP",
+      name: "Synthetic Shugiin candidate",
+      homeState: "KAN",
+      party: "1",
+      policies: { economic: 0, social: 0 },
+      favorability: 50,
+      politicalInfluence: 10,
+      careerHistory: [],
+      executiveTermsServed: 0,
+      currentOffice: null,
+    };
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue({
+      ok: true,
+      user: { userId: "synthetic-player", character },
+    } as never);
+    const { getGameTime } = await import("@/lib/time/gameTime");
+    vi.mocked(getGameTime).mockResolvedValue({
+      effectiveNow: new Date("2026-04-01T00:00:00Z"),
+      currentTurn: 50,
+    } as never);
+    db.collection("countryState");
+    db.collectionMocks.politicalParties!.findOne.mockResolvedValue({
+      _id: new ObjectId(),
+      countryId: "JP",
+      sequentialId: 1,
+      regimeStatus: "approved",
+    } as never);
+    db.collectionMocks.countryState!.findOne.mockResolvedValue({ _id: "JP" });
+    db.collectionMocks.characters!.findOne.mockResolvedValue(null);
+    db.collectionMocks.electionCandidates!.insertOne.mockRejectedValue(
+      Object.assign(new Error("E11000 duplicate key"), {
+        code: 11000,
+        keyPattern: { electionId: 1, party: 1, japanShugiinListOrder: 1 },
+      })
+    );
+
+    const response = await POST(
+      new Request("http://test/route", {
+        method: "POST",
+        body: JSON.stringify({ japanShugiinListOrder: 2 }),
+      }),
+      { params: Promise.resolve({ id: electionOid.toHexString() }) }
+    );
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      error: "Your party already has a candidate in that Shugiin ballot position.",
+    });
   });
 });

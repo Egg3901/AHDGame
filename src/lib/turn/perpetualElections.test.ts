@@ -2,7 +2,7 @@
  * Unit tests for perpetual elections: timer advancement, presidential year, durations.
  * Verifies election sync logic and House timing (96h = 2 years).
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Election } from "@/lib/db/types";
 
@@ -12,6 +12,11 @@ vi.mock("@/lib/mongodb", () => ({
 
 describe("perpetualElections", () => {
   describe("DEFAULT_DURATIONS", () => {
+    beforeAll(async () => {
+      // Load the turn orchestration graph before timing the duration assertions.
+      await import("./perpetualElections");
+    }, 60_000);
+
     it("House is 96h (2 years), shorter than Senate (288h) and Governor (192h)", async () => {
       const { DEFAULT_DURATIONS } = await import("./perpetualElections");
       expect(DEFAULT_DURATIONS.house.durationHours).toBe(96);
@@ -1380,7 +1385,8 @@ describe("perpetualElections", () => {
       liveOrUpcoming: Election[],
       completed: Election[],
       currentTurn: number,
-      preset?: string
+      preset?: string,
+      mandate?: { law: "mixed-1994-v1"; passedTurn: number; billId: string }
     ) {
       const insertCalls: Omit<Election, "_id">[][] = [];
       const electionsCollection = {
@@ -1408,7 +1414,18 @@ describe("perpetualElections", () => {
         }),
       };
       const gameStateCollection = { findOne: vi.fn().mockResolvedValue({ currentTurn, preset }) };
-      return { electionsCollection, statesCollection, gameStateCollection, insertCalls };
+      const countryGameStatesCollection = {
+        findOne: vi
+          .fn()
+          .mockResolvedValue(mandate ? { _id: "JP", jpShugiinElectoralMandate: mandate } : null),
+      };
+      return {
+        electionsCollection,
+        statesCollection,
+        gameStateCollection,
+        countryGameStatesCollection,
+        insertCalls,
+      };
     }
 
     async function mountJPDb(mock: ReturnType<typeof makeJPMockDb>) {
@@ -1418,6 +1435,7 @@ describe("perpetualElections", () => {
           if (name === "elections") return mock.electionsCollection;
           if (name === "states") return mock.statesCollection;
           if (name === "gameState") return mock.gameStateCollection;
+          if (name === "countryGameStates") return mock.countryGameStatesCollection;
           return { find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }) };
         }),
       } as never);
@@ -1499,11 +1517,113 @@ describe("perpetualElections", () => {
       expect(mock.electionsCollection.bulkWrite).toHaveBeenCalledWith([
         {
           updateOne: {
-            filter: { _id: live._id, allocationMethod: { $exists: false } },
+            filter: {
+              _id: live._id,
+              allocationMethod: { $exists: false },
+              "japanShugiinRules.ruleVersion": { $ne: "mixed-1994-v1" },
+            },
             update: { $set: { allocationMethod: "sntv", updatedAt: now } },
           },
         },
       ]);
+    });
+
+    it("repairs an explicit pre-reform allocation only before an upcoming race opens", async () => {
+      const now = new Date("2026-04-01T00:00:00Z");
+      const upcoming = {
+        _id: new ObjectId(),
+        countryId: "JP",
+        electionType: "shugiin",
+        state: "KAN",
+        cycle: 1,
+        status: "upcoming",
+        totalSeats: 145,
+        allocationMethod: "pr_hareQuota",
+      } as Election;
+      const active = { ...upcoming, _id: new ObjectId(), status: "active" } as Election;
+      const mock = makeJPMockDb(["KAN"], [upcoming, active], [], 100, "1991-default");
+      await mountJPDb(mock);
+
+      const { ensureJPElections } = await import("./perpetualElections");
+      await ensureJPElections(now);
+
+      expect(mock.electionsCollection.bulkWrite).toHaveBeenCalledWith([
+        {
+          updateOne: {
+            filter: {
+              _id: upcoming._id,
+              allocationMethod: "pr_hareQuota",
+              status: "upcoming",
+              "japanShugiinRules.ruleVersion": { $ne: "mixed-1994-v1" },
+            },
+            update: { $set: { allocationMethod: "sntv", updatedAt: now } },
+          },
+        },
+      ]);
+    });
+
+    it("repairs a corrupt live total from law-consistent frozen regional capacities", async () => {
+      const now = new Date("2026-04-01T00:00:00Z");
+      const mixed = {
+        _id: new ObjectId(),
+        countryId: "JP",
+        electionType: "shugiin",
+        state: "KAN",
+        cycle: 1,
+        status: "active",
+        totalSeats: 145,
+        japanShugiinRules: { ruleVersion: "mixed-1994-v1", districtSeats: 85, listSeats: 63 },
+      } as Election;
+      const mock = makeJPMockDb(["KAN"], [mixed], [], 100, "1991-default", {
+        law: "mixed-1994-v1",
+        passedTurn: 88,
+        billId: "bill-1994-reform",
+      });
+      await mountJPDb(mock);
+
+      const { ensureJPElections } = await import("./perpetualElections");
+      await ensureJPElections(now);
+
+      expect(mock.electionsCollection.bulkWrite).toHaveBeenCalledWith([
+        {
+          updateOne: {
+            filter: {
+              _id: mixed._id,
+              totalSeats: 145,
+              status: { $in: ["active", "upcoming"] },
+            },
+            update: { $set: { totalSeats: 148, updatedAt: now } },
+          },
+        },
+      ]);
+    });
+
+    it("spawns post-approval Shugiin races with the regional mixed-rule snapshot", async () => {
+      const now = new Date("2026-04-01T00:00:00Z");
+      const mock = makeJPMockDb(["KAN"], [], [], 100, "1991-default", {
+        law: "mixed-1994-v1",
+        passedTurn: 88,
+        billId: "bill-1994-reform",
+      });
+      await mountJPDb(mock);
+
+      const { ensureJPElections } = await import("./perpetualElections");
+      await ensureJPElections(now);
+
+      const spawned = mock.insertCalls.flat();
+      expect(spawned).toHaveLength(1);
+      expect(spawned[0]).toMatchObject({
+        state: "KAN",
+        totalSeats: 148,
+        japanShugiinRules: {
+          ruleVersion: "mixed-1994-v1",
+          districtSeats: 85,
+          listSeats: 63,
+          authorizedOnTurn: 88,
+          reformBillId: "bill-1994-reform",
+        },
+      });
+      expect(spawned[0].allocationMethod).toBeUndefined();
     });
 
     it("spawns the next regular shugiin 'upcoming' with snap.endTurn + 192 anchor right after snap resolves", async () => {
