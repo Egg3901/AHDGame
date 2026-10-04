@@ -14,6 +14,7 @@ import {
   rejectConstructionFinance,
   recoverConstructionFunding,
 } from "../constructionFinance";
+import type { PreloadedConstructionFundingContext } from "../constructionFundingContext";
 
 import { cancelFinancedConstruction } from "../constructionCancellation";
 import { acceptLoan, rejectLoan } from "../loanApproval";
@@ -37,7 +38,12 @@ function world(requireApproval = false) {
       bankConstructionFinanceEnabled: true,
     },
   ]);
-  const corporation = makeCorporation({ _id: borrowerId, liquidCapital: 50_000 });
+  const corporation = makeCorporation({
+    _id: borrowerId,
+    countryId: "US",
+    liquidCurrencyCode: "USD",
+    liquidCapital: 50_000,
+  });
   const bank: BankingSnapshot = {
     turn: 12,
     policy: BANKING_POLICY_ALL_ON,
@@ -111,6 +117,30 @@ function world(requireApproval = false) {
   return { memory, bank, request };
 }
 
+function preloadedContext(
+  memory: ReturnType<typeof createInMemoryDb>,
+  bankSnapshot: BankingSnapshot
+): PreloadedConstructionFundingContext {
+  return {
+    bankSnapshot,
+    bankCorporation: memory
+      .collection("corporations")
+      .docs.find(
+        (row) => String(row._id) === bankId.toHexString()
+      ) as PreloadedConstructionFundingContext["bankCorporation"],
+    borrowerSnapshot: {
+      type: "corporation",
+      id: borrowerId.toHexString(),
+      incomePerTurn: 10_000,
+      committedPaymentPerTurn: 0,
+      blocked: false,
+      currencyMatches: true,
+    },
+    turn: 12,
+    policy: BANKING_POLICY_ALL_ON,
+  };
+}
+
 beforeEach(() => vi.clearAllMocks());
 describe("construction request lifecycle", () => {
   it("refuses APR drift before reserving the sector or moving cash", async () => {
@@ -148,7 +178,7 @@ describe("construction request lifecycle", () => {
   it("auto-approves into one paid build and replays without free proceeds", async () => {
     const { memory, request } = world();
     const result = await requestConstructionFinance(request);
-    expect(result).toMatchObject({ ok: true, pending: false });
+    expect(result, JSON.stringify(result)).toMatchObject({ ok: true, pending: false });
     expect(await requestConstructionFinance(request)).toEqual(result);
     expect(
       await request.db.collection("corporateSectors").findOne({ _id: sectorId })
@@ -164,6 +194,79 @@ describe("construction request lifecycle", () => {
         .cashReserves
     ).toBe(1_925_750);
     expect(memory.collection("bankLoans").docs).toHaveLength(1);
+  });
+
+  it("uses one selected preloaded bank and borrower pair for an NPP-funded build", async () => {
+    const { memory, bank, request } = world();
+    const fundingContext = preloadedContext(memory, bank);
+    const result = await requestConstructionFinance({
+      ...request,
+      preloadedFundingContext: fundingContext,
+    });
+
+    expect(result, JSON.stringify(result)).toMatchObject({ ok: true, pending: false });
+    expect(loadBankingSnapshot).not.toHaveBeenCalled();
+    expect(loadBorrowerSnapshot).not.toHaveBeenCalled();
+    expect(
+      await request.db.collection("corporateSectors").findOne({ _id: sectorId })
+    ).toMatchObject({ buildQueue: [{ unitsOrdered: 100 }] });
+  });
+
+  it("leaves an approval-required NPP construction request pending with no queued capacity", async () => {
+    const { memory, bank, request } = world(true);
+    const result = await requestConstructionFinance({
+      ...request,
+      preloadedFundingContext: preloadedContext(memory, bank),
+    });
+
+    expect(result, JSON.stringify(result)).toMatchObject({ ok: true, pending: true });
+    expect(
+      await request.db.collection("corporateSectors").findOne({ _id: sectorId })
+    ).toMatchObject({
+      constructionFinancing: { status: "awaiting_approval", escrowLocal: 0 },
+      buildQueue: [],
+    });
+    expect(loadBankingSnapshot).not.toHaveBeenCalled();
+    expect(loadBorrowerSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("fails closed on a stale batch charter epoch and keeps live cash guards authoritative", async () => {
+    const staleEpoch = world();
+    const epochContext = preloadedContext(staleEpoch.memory, staleEpoch.bank);
+    await staleEpoch.request.db
+      .collection("corporations")
+      .updateOne({ _id: bankId }, { $set: { "bankCharter.charteredTurn": 3 } });
+    expect(
+      await requestConstructionFinance({
+        ...staleEpoch.request,
+        preloadedFundingContext: epochContext,
+      })
+    ).toMatchObject({ ok: false });
+    expect(staleEpoch.memory.collection("bankLoans").docs).toHaveLength(0);
+    expect(
+      (await staleEpoch.request.db.collection("corporateSectors").findOne({ _id: sectorId }))
+        ?.buildQueue
+    ).toEqual([]);
+
+    const staleCash = world();
+    const cashContext = preloadedContext(staleCash.memory, staleCash.bank);
+    await staleCash.request.db
+      .collection("corporations")
+      .updateOne({ _id: borrowerId }, { $set: { liquidCapital: 0 } });
+    expect(
+      await requestConstructionFinance({
+        ...staleCash.request,
+        preloadedFundingContext: cashContext,
+      })
+    ).toMatchObject({ ok: false });
+    expect(
+      (await staleCash.request.db.collection("corporateSectors").findOne({ _id: sectorId }))
+        ?.buildQueue
+    ).toEqual([]);
+    expect(
+      (await staleCash.request.db.collection("corporations").findOne({ _id: borrowerId }))
+        ?.liquidCapital
+    ).toBe(0);
   });
 
   it("releases bank admission when replaying a committed paid build after a crash", async () => {

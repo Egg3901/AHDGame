@@ -5,6 +5,9 @@ import type { CorporationType, ManufacturingIndustryModel } from "@/lib/constant
 export interface RecentCorporateSectorRestore {
   sectorId: string;
   restoredAt: Date;
+  /** Keep the source receipt until a release confirms deletion of its sector row. */
+  pendingSourceDelete?: boolean;
+  operationKey?: string;
 }
 
 export interface UnownedSector {

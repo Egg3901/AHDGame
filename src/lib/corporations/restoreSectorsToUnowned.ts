@@ -261,7 +261,12 @@ export async function restoreSectorsToUnowned(
                     $filter: {
                       input: { $ifNull: ["$recentCorporateSectorRestores", []] },
                       as: "restore",
-                      cond: { $gte: ["$$restore.restoredAt", retryWindowStart] },
+                      cond: {
+                        $or: [
+                          { $eq: ["$$restore.pendingSourceDelete", true] },
+                          { $gte: ["$$restore.restoredAt", retryWindowStart] },
+                        ],
+                      },
                     },
                   },
                 },
@@ -294,7 +299,12 @@ export async function restoreSectorsToUnowned(
                     $filter: {
                       input: { $ifNull: ["$recentCorporateSectorRestores", []] },
                       as: "restore",
-                      cond: { $gte: ["$$restore.restoredAt", retryWindowStart] },
+                      cond: {
+                        $or: [
+                          { $eq: ["$$restore.pendingSourceDelete", true] },
+                          { $gte: ["$$restore.restoredAt", retryWindowStart] },
+                        ],
+                      },
                     },
                   },
                 },
@@ -348,7 +358,8 @@ export async function restoreSectorsToUnowned(
       before?.recentCorporateSectorRestores?.some(
         (restore) =>
           restore.sectorId === restoreToken &&
-          restore.restoredAt.getTime() >= retryWindowStart.getTime()
+          (restore.pendingSourceDelete === true ||
+            restore.restoredAt.getTime() >= retryWindowStart.getTime())
       ) ?? false;
     if (!alreadyRestored) {
       // Under plants the ₳ figure callers report is the NAMEPLATE value of the

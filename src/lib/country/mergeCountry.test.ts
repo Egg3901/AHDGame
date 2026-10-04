@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import { createMockDb, type MockCollection, type MockDb } from "@/lib/test-utils/mockDb";
 
@@ -308,6 +309,9 @@ describe("mergeCountry", () => {
     corps.find.mockReturnValue(
       cursor([{ _id: "shell", name: "Germany", liquidCapital: 40, liquidCurrencyCode: "DDM" }])
     );
+    prime(db, "corporateSectors").find.mockReturnValue(
+      cursor([{ _id: new ObjectId(), corporationId: "shell", sectorType: "energy" }])
+    );
 
     const { mergeCountry } = await import("./mergeCountry");
     await mergeCountry(db as unknown as Db, {
@@ -322,10 +326,14 @@ describe("mergeCountry", () => {
       expect.objectContaining({ $set: expect.objectContaining({ countryOwnerId: "DD" }) })
     );
     // Sectors and bonds follow the shell onto the survivor...
-    expect(prime(db, "corporateSectors").updateMany).toHaveBeenCalledWith(
-      { corporationId: "shell" },
-      expect.objectContaining({ $set: expect.objectContaining({ corporationId: "survivor" }) })
+    const sectorMove = prime(db, "corporateSectors").updateOne.mock.calls.find(
+      (call) => call[1]?.$set?.corporationId === "survivor"
     );
+    expect(sectorMove).toBeDefined();
+    expect(sectorMove?.[0]).toMatchObject({
+      corporationId: "shell",
+      "constructionPropertyTransition.key": expect.any(String),
+    });
     expect(prime(db, "bonds").updateMany).toHaveBeenCalledWith(
       { corporationId: "shell" },
       expect.objectContaining({ $set: expect.objectContaining({ corporationId: "survivor" }) })

@@ -91,6 +91,7 @@ import {
 } from "./corporationTurnPhases";
 import { getGameState } from "@/lib/gameState";
 import { unprotectedConstructionPropertyFilter } from "@/lib/corporations/securedConstructionProperty";
+import { requestConstructionFinance } from "@/lib/banking/constructionFinance";
 import { makeSeededRng } from "@/lib/events/substrate/rng";
 import { logger } from "../../observability/logger";
 import { recordAuditBulk } from "@/lib/audit/recordAudit";
@@ -639,6 +640,9 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     foundingCashWitnesses = [],
     reinvestmentCashWitnesses = [],
     manufacturingProductProjects: nppManufacturingProductProjects,
+    constructionFinanceRequests: nppConstructionFinanceRequests,
+    constructionFinanceCandidateCount: nppConstructionFinanceCandidateCount,
+    constructionFinanceBacklogCount: nppConstructionFinanceBacklogCount,
   } = await processNppCorporationDecisions(db, turn ?? 0, now, techTreesEnabled, {
     corporations: lookups.corporations,
     issuerBondsByCorpId: lookups.bondsByCorpId,
@@ -764,6 +768,50 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           foundingCashWitnesses,
           reinvestmentCashWitnesses
         );
+      },
+    });
+  }
+  let constructionFinanceFundedCount = 0;
+  let constructionFinancePendingCount = 0;
+  let constructionFinanceFailedCount = nppConstructionFinanceBacklogCount;
+  for (const candidate of nppConstructionFinanceRequests) {
+    const result = await requestConstructionFinance({
+      db,
+      enabled: true,
+      sector: candidate.sector,
+      corporation: candidate.corporation,
+      bankId: candidate.bankId,
+      requestId: `npp-${turn ?? 0}-${candidate.sector._id.toHexString()}`,
+      principal: candidate.principal,
+      termTurns: candidate.termTurns,
+      constructionCostLocal: candidate.costLocal,
+      collateralCostLocal: candidate.costLocal,
+      maximumCostLocal: candidate.costLocal,
+      order: candidate.order,
+      preloadedFundingContext: candidate.preloadedFundingContext,
+    });
+    if (!result.ok) {
+      constructionFinanceFailedCount += 1;
+      continue;
+    }
+    if (result.pending) constructionFinancePendingCount += 1;
+    else constructionFinanceFundedCount += 1;
+  }
+  if (nppConstructionFinanceCandidateCount > 0) {
+    corpAuditEntries.push({
+      source: "turn",
+      category: "corp",
+      action: "corp.npp_construction_finance",
+      phase: "corporationTurn",
+      subject: { type: "corpBatch", name: "NPP private-sector construction" },
+      outcome: "ok",
+      meta: {
+        candidates: nppConstructionFinanceCandidateCount,
+        attempted: nppConstructionFinanceRequests.length,
+        funded: constructionFinanceFundedCount,
+        pendingApproval: constructionFinancePendingCount,
+        deferredOrRejected: constructionFinanceFailedCount,
+        turn,
       },
     });
   }

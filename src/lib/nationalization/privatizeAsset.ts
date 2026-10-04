@@ -35,6 +35,11 @@ import { fetchSectorMarketSharePercent } from "@/lib/corporations/marketShare";
 import { pickOrCreateNppCeoForNewCorp } from "@/lib/corporations/subsidiaries/nppCeoSelection";
 import { getDefaultLegalStructureId } from "@/lib/corporations/legalStructure";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
+import {
+  hasProtectedConstructionProperty,
+  releaseConstructionPropertyTransition,
+  reserveSectorsForTransition,
+} from "@/lib/corporations/securedConstructionProperty";
 
 export interface CarveSelection {
   sectorId: ObjectId;
@@ -127,6 +132,9 @@ export async function privatizeAsset(
     const sector = await sectors.findOne({ _id: sel.sectorId });
     if (!sector || !sector.corporationId.equals(source._id)) {
       throw new Error("Sector is not owned by the source National Corporation");
+    }
+    if (hasProtectedConstructionProperty(sector)) {
+      throw new Error("Resolve secured construction before privatizing this sector");
     }
     if (
       sector.absorbedAtTurn != null &&
@@ -249,6 +257,18 @@ export async function privatizeAsset(
 
   const sequentialId = await getNextSequentialId(db, "corporation");
   const newCorpId = new ObjectId();
+  const transitionKeys = await reserveSectorsForTransition(
+    db,
+    selected.map(({ sector }) => sector),
+    "privatization_carve",
+    `privatize:${newCorpId.toHexString()}`
+  );
+  if (!transitionKeys) {
+    throw new Error("Resolve secured construction before privatizing these sectors");
+  }
+  const transitionKeyBySectorId = new Map(
+    selected.map(({ sector }, index) => [sector._id.toHexString(), transitionKeys[index]])
+  );
   const newCorp: Omit<Corporation, "_id"> = {
     name,
     type: firstSector.sectorType,
@@ -297,7 +317,10 @@ export async function privatizeAsset(
   //       removed rather than kept at 0 revenue. A partial source row keeps its
   //       `absorbedAtTurn` so the re-privatization cooldown still applies. ──
   let sectorsCarved = 0;
+  const deletedSourceSectorIds = new Set<string>();
   for (const { sector, fraction } of selected) {
+    const transitionKey = transitionKeyBySectorId.get(sector._id.toHexString());
+    if (!transitionKey) throw new Error("A secured sector reservation was lost");
     const keep = 1 - fraction;
     const keptRevenue = Math.round(sector.revenue * keep);
     // PLANTS-GATED: the two `revenue` writes below (the carved insert's
@@ -364,10 +387,16 @@ export async function privatizeAsset(
     const keptPlantIsEmpty =
       !plantsEnabled || (!(keptPlant.capitalStock > 0) && keptPlant.buildQueue.length === 0);
     if (keptRevenue <= 0 && keptPlantIsEmpty) {
-      await sectors.deleteOne({ _id: sector._id });
+      const deleted = await sectors.deleteOne({
+        _id: sector._id,
+        "constructionPropertyTransition.key": transitionKey,
+      });
+      if (deleted.deletedCount !== 1)
+        throw new Error("A secured sector changed during the privatization carve");
+      deletedSourceSectorIds.add(sector._id.toHexString());
     } else {
-      await sectors.updateOne(
-        { _id: sector._id },
+      const updated = await sectors.updateOne(
+        { _id: sector._id, "constructionPropertyTransition.key": transitionKey },
         {
           $set: {
             revenue: keptRevenue,
@@ -378,6 +407,8 @@ export async function privatizeAsset(
           },
         }
       );
+      if (updated.matchedCount !== 1)
+        throw new Error("A secured sector changed during the privatization carve");
     }
     sectorsCarved++;
   }
@@ -462,6 +493,18 @@ export async function privatizeAsset(
   }
 
   await corps.updateOne({ _id: source._id }, { $set: { updatedAt: now } });
+
+  await Promise.all(
+    selected
+      .filter(({ sector }) => !deletedSourceSectorIds.has(sector._id.toHexString()))
+      .map(({ sector }) =>
+        releaseConstructionPropertyTransition(
+          db,
+          sector._id,
+          transitionKeyBySectorId.get(sector._id.toHexString())!
+        )
+      )
+  );
 
   return {
     newCorporationId: newCorpId,

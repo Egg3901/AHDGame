@@ -108,6 +108,15 @@ export interface NppCorpDecision {
     costLocal: number;
     onlineTurn: number;
   }>;
+  /** Cash-ineligible private-sector reinvestment candidates for optional bank finance. */
+  constructionFinanceIntents?: Array<{
+    sector: CorporateSector;
+    order: SectorBuildOrder;
+    costLocal: number;
+    cashContributionLimitLocal: number;
+    priority: number;
+    fill: number;
+  }>;
   shortageCreditRequest?: {
     amountLocal: number;
     sectorType: CorporationType;

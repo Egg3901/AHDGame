@@ -35,7 +35,10 @@ import {
   type StrategySituation,
 } from "@/lib/turn/npp/corpStrategy";
 import { chooseNppStrategyRetool } from "@/lib/turn/npp/strategyRetooling";
-import { hasProtectedConstructionProperty } from "@/lib/corporations/securedConstructionProperty";
+import {
+  hasProtectedConstructionProperty,
+  unprotectedConstructionPropertyFilter,
+} from "@/lib/corporations/securedConstructionProperty";
 import { glutStaggerEligible } from "@/lib/turn/npp/cohort";
 import {
   analyzeSectorProfitability,
@@ -135,6 +138,14 @@ import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 import { getNppCashFloorAnchor } from "@/lib/turn/npp/nppCashReserve";
 import { loadNppBehaviorConfig } from "@/lib/turn/npp/behaviorConfig";
+import {
+  boundNppConstructionFinanceCandidates,
+  loadNppConstructionFundingPool,
+  NPP_CONSTRUCTION_FINANCE_TERM_TURNS,
+  selectNppConstructionFundingContext,
+  type NppConstructionFinanceCandidate,
+  type NppConstructionFinanceRequest,
+} from "@/lib/turn/npp/nppConstructionFinance";
 import { maybePushNppTechUnlock } from "@/lib/turn/npp/corpBehaviorConfig";
 import { corpDailyGrossRevenueLocalFromSectors } from "@/lib/corporations/dailyGrossRevenue";
 import type { TechUnlockLedgerInput } from "@/lib/corporations/techTree/techUnlockLedger";
@@ -222,6 +233,9 @@ export async function processNppCorporationDecisions(
   foundingCashWitnesses?: NppFoundingCashWitness[];
   reinvestmentCashWitnesses?: NppReinvestmentCashWitness[];
   manufacturingProductProjects: ManufacturingProductProject[];
+  constructionFinanceRequests: NppConstructionFinanceRequest[];
+  constructionFinanceCandidateCount: number;
+  constructionFinanceBacklogCount: number;
 }> {
   const nppCorps = preloaded
     ? preloaded.corporations.filter((corp) => corp.ceoType === "npp" && corp.suspended !== true)
@@ -250,6 +264,9 @@ export async function processNppCorporationDecisions(
       divestedSectorIds: allDivestedSectorIds,
       techLedger,
       manufacturingProductProjects: [],
+      constructionFinanceRequests: [],
+      constructionFinanceCandidateCount: 0,
+      constructionFinanceBacklogCount: 0,
     };
 
   const corpIds = nppCorps.map((c) => c._id);
@@ -417,6 +434,24 @@ export async function processNppCorporationDecisions(
       fxByCurrency.set(rate.currencyCode, rate.rate);
     }
   }
+  const { labourMode, retailExpansionPaused, ledgerShadow, bankingPolicy } =
+    await loadNppBehaviorConfig(db, turn);
+  const nppConstructionFinanceEnabled =
+    plants?.enabled === true &&
+    bankingPolicy.privateBanking &&
+    bankingPolicy.treasuryCashLedger &&
+    bankingPolicy.constructionFinance;
+  const constructionFundingPool = nppConstructionFinanceEnabled
+    ? await loadNppConstructionFundingPool({
+        db,
+        turn,
+        corporations: nppCorps,
+        policy: bankingPolicy,
+        eraUnitScale: plants?.eraUnitScale ?? 1,
+        fxByCurrency: fxByCurrency as ReadonlyMap<CurrencyCode, number>,
+      })
+    : null;
+  const constructionFinanceCandidates: NppConstructionFinanceCandidate[] = [];
 
   // ─── Debt service, loaded once for the cohort ─────────────────────────────
   // Same two maps `buildCorporationLookups` builds for the turn engine, and the
@@ -443,7 +478,6 @@ export async function processNppCorporationDecisions(
     strategyGate?.frontierEntryExperimentEnabled
   );
 
-  const { labourMode, retailExpansionPaused, ledgerShadow } = await loadNppBehaviorConfig(db, turn);
   const labourWagesEnabled = isLabourSystemMode(labourMode) && labourAtLeast(labourMode, "wages");
 
   for (const corp of nppCorps) {
@@ -509,6 +543,15 @@ export async function processNppCorporationDecisions(
           placementSignals
         ),
     });
+    if (nppConstructionFinanceEnabled && corpCurrency) {
+      for (const intent of decision.constructionFinanceIntents ?? []) {
+        constructionFinanceCandidates.push({
+          ...intent,
+          corporation: corp,
+          currency: corpCurrency,
+        });
+      }
+    }
     markMarketsActive(placementSignals, decision.newSectors);
     if (decision.entryDiagnostic) entryDiagnostics.push(decision.entryDiagnostic);
     // Cohort telemetry aggregate (credit-rewrite included); see capacityDecisionTelemetry.
@@ -577,6 +620,32 @@ export async function processNppCorporationDecisions(
     }
   }
 
+  const boundedConstructionFinance = nppConstructionFinanceEnabled
+    ? boundNppConstructionFinanceCandidates(constructionFinanceCandidates)
+    : { selected: [] as NppConstructionFinanceCandidate[], backlogCount: 0 };
+  const constructionFinanceRequests: NppConstructionFinanceRequest[] = [];
+  let constructionFinanceBacklogCount =
+    boundedConstructionFinance.backlogCount +
+    (nppConstructionFinanceEnabled && !constructionFundingPool
+      ? boundedConstructionFinance.selected.length
+      : 0);
+  if (constructionFundingPool) {
+    for (const candidate of boundedConstructionFinance.selected) {
+      const selected = selectNppConstructionFundingContext(constructionFundingPool, candidate);
+      if (!selected) {
+        constructionFinanceBacklogCount += 1;
+        continue;
+      }
+      constructionFinanceRequests.push({
+        ...candidate,
+        bankId: selected.bankId,
+        principal: selected.principal,
+        termTurns: NPP_CONSTRUCTION_FINANCE_TERM_TURNS,
+        preloadedFundingContext: selected.context,
+      });
+    }
+  }
+
   await drawFoundedCapacityFromPools(db, unownedDraws, {
     eraUnitScale: plants?.eraUnitScale ?? 1,
     now,
@@ -599,6 +668,9 @@ export async function processNppCorporationDecisions(
     divestedSectorIds: allDivestedSectorIds,
     techLedger,
     manufacturingProductProjects,
+    constructionFinanceRequests,
+    constructionFinanceCandidateCount: constructionFinanceCandidates.length,
+    constructionFinanceBacklogCount,
     ...(foundingCashWitnesses.length ? { foundingCashWitnesses } : {}),
     ...(reinvestmentCashWitnesses.length ? { reinvestmentCashWitnesses } : {}),
   };
@@ -626,6 +698,7 @@ export function makeNppCorpDecision(
   const divestedSectorIds: ObjectId[] = [];
   const unownedDraws: NonNullable<NppCorpDecision["unownedDraws"]> = [];
   const reinvestments: NonNullable<NppCorpDecision["reinvestments"]> = [];
+  const constructionFinanceIntents: NonNullable<NppCorpDecision["constructionFinanceIntents"]> = [];
   let shortageCreditRequest: NppCorpDecision["shortageCreditRequest"];
   let entryDiagnostic: NppCorpDecision["entryDiagnostic"];
 
@@ -1613,6 +1686,7 @@ export function makeNppCorpDecision(
         no_telemetry: !(produced > 0),
         fill_below_min: produced > 0 && fill < NPP_REINVEST_MIN_FILL,
         state_controlled: stateControlled.has(bucketKey(sector.stateId, sector.sectorType)),
+        property_unavailable: !!sector.forSale || hasProtectedConstructionProperty(sector),
       });
       if (preSizingGate) {
         observeReinvestCandidate(preSizingGate, sector, capitalStock, null, 0, null);
@@ -1908,7 +1982,28 @@ export function makeNppCorpDecision(
           ? cashLocal - costLocal >= effectiveCashFloor
           : costLocal <= Math.max(0, cashLocal) * NPP_REINVEST_MAINTENANCE_CASH_SHARE &&
             cashLocal - costLocal > 0;
+      const buildTurns = Math.max(1, CAPACITY_BUILD_TURNS(sector.sectorType));
+      const order: SectorBuildOrder = {
+        unitsOrdered: units,
+        strategyId: sector.strategyId ?? null,
+        costPaidAnchor: costAnchor,
+        startTurn: ctx.turn,
+        onlineTurn: ctx.turn + buildTurns,
+        smooth: true,
+      };
       if (!affordable) {
+        const cashContributionLimitLocal =
+          candidate.growthUnits > 0
+            ? Math.max(0, cashLocal - effectiveCashFloor)
+            : Math.max(0, Math.min(cashLocal, cashLocal * NPP_REINVEST_MAINTENANCE_CASH_SHARE));
+        constructionFinanceIntents.push({
+          sector,
+          order,
+          costLocal,
+          cashContributionLimitLocal,
+          priority: candidate.interventionPriority,
+          fill: candidate.fill,
+        });
         observePricedReinvestCandidate(
           "insufficient_cash",
           sector,
@@ -1922,15 +2017,6 @@ export function makeNppCorpDecision(
         continue;
       }
 
-      const buildTurns = Math.max(1, CAPACITY_BUILD_TURNS(sector.sectorType));
-      const order: SectorBuildOrder = {
-        unitsOrdered: units,
-        strategyId: sector.strategyId ?? null,
-        costPaidAnchor: costAnchor,
-        startTurn: ctx.turn,
-        onlineTurn: ctx.turn + buildTurns,
-        smooth: true,
-      };
       // ─── The queue write is a DELTA, never a whole-array `$set` ───────────
       //
       // `sector.buildQueue` is a snapshot read at the top of this turn phase.
@@ -1942,7 +2028,11 @@ export function makeNppCorpDecision(
       // only what this decision actually owns, and composes with both.
       // Same rule, same reason as `sectorTurn`'s C4 note.
       sectorUpdates.push({
-        filter: { _id: sector._id },
+        filter: {
+          _id: sector._id,
+          corporationId: corp._id,
+          ...unprotectedConstructionPropertyFilter(),
+        },
         update: {
           $set: { updatedAt: now },
           $push: { buildQueue: order },
@@ -2003,6 +2093,8 @@ export function makeNppCorpDecision(
     divestedSectorIds: divestedSectorIds.length > 0 ? divestedSectorIds : undefined,
     unownedDraws: unownedDraws.length > 0 ? unownedDraws : undefined,
     reinvestments: reinvestments.length > 0 ? reinvestments : undefined,
+    constructionFinanceIntents:
+      constructionFinanceIntents.length > 0 ? constructionFinanceIntents : undefined,
     shortageCreditRequest,
     entryDiagnostic,
     strategy: strategyDecision?.state,
