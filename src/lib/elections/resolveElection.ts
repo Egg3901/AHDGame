@@ -16,6 +16,8 @@ import { applyStandingAds } from "@/lib/campaignTargeting/standingAds";
 
 import { loadRegionalCampaignCells } from "@/lib/campaignTargeting/audience";
 import { isPrimaryEnded } from "@/lib/elections/phases";
+import { loadApportionment } from "./apportionment";
+import { parseSeatId } from "@/lib/seats/seatId";
 import type { Db, ObjectId as MongoObjectId } from "mongodb";
 import { ObjectId } from "mongodb";
 import type {
@@ -520,6 +522,29 @@ export async function resolveElections(
     }
   }
 
+  const regionIdsByCountry = new Map<Election["countryId"], Set<string>>();
+  for (const election of elections) {
+    const countryId = election.countryId ?? "US";
+    const localRegionId = election.seatId ? parseSeatId(election.seatId).localRegionId : undefined;
+    if (!localRegionId || election.electionType === "president") continue;
+    const ids = regionIdsByCountry.get(countryId) ?? new Set<string>();
+    ids.add(localRegionId);
+    regionIdsByCountry.set(countryId, ids);
+  }
+  const regionFilters = [...regionIdsByCountry].map(([countryId, ids]) => ({
+    countryId,
+    _id: { $in: [...ids] },
+  }));
+  const [sharedApportionment, localRegionStates] = await Promise.all([
+    loadApportionment(db, gameState?.preset, gameState?.currentYear),
+    regionFilters.length
+      ? db.collection<State>("states").find({ $or: regionFilters }).toArray()
+      : Promise.resolve([] as State[]),
+  ]);
+  const localRegionByCountryAndId = new Map(
+    localRegionStates.map((state) => [`${state.countryId ?? "US"}:${state._id}`, state])
+  );
+
   // ── Step 6: Build per-election deps and enrich ──────────────────────────────
   // _enrichElection() does its own internal DB query for myCharId in full view
   // (one query per election). In summary mode userId is effectively ignored
@@ -597,6 +622,12 @@ export async function resolveElections(
       const snapsLimited = isFull ? snapsForElection.slice(-72) : [];
 
       const deps: ElectionDeps = {
+        apportionment: sharedApportionment,
+        localRegionState: election.seatId
+          ? (localRegionByCountryAndId.get(
+              `${electionCountryId}:${parseSeatId(election.seatId).localRegionId}`
+            ) ?? null)
+          : null,
         campaignCells:
           campaignCellsByRegion.get(
             `${electionCountryId}:${election.state}${usesCampaignRules(election) ? "" : ":0"}`

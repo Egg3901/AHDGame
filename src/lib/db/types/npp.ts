@@ -30,6 +30,8 @@ export interface NPP {
   avatarUrl?: string;
   politicalInfluence: number;
   favorability: number;
+  /** Last corporation-turn editorial favorability receipt, for replay safety. */
+  mediaEditorialLastAppliedTurn?: number;
   policies: PolicyPositions;
   party: string;
   currentOffice: OfficeType | null;

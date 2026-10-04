@@ -5,6 +5,128 @@ import type { Bill, BillWhip, Character, ElectedOfficial, NPP } from "@/lib/db/t
 import { buildWhipDefianceSnapshot } from "./whipDefiance";
 
 describe("buildWhipDefianceSnapshot", () => {
+  it("loads cabinet nomination targets in one read for multiple whips", async () => {
+    const db = createMockDb();
+    const targetIds = [new ObjectId(), new ObjectId(), new ObjectId()];
+    const whips = targetIds.map((targetId) => ({
+      _id: new ObjectId(),
+      targetType: "cabinetNomination",
+      targetId,
+      chamber: "senate",
+      direction: "for",
+      issuedBy: "nationalParty",
+      countryId: "US",
+      partyId: "1",
+      audience: "npp",
+      createdAt: new Date("2026-04-29T12:00:00.000Z"),
+      updatedAt: new Date("2026-04-29T12:00:00.000Z"),
+    })) as unknown as BillWhip[];
+    db.collection("billWhips");
+    db.collection("cabinetNominations");
+    db.collectionMocks.billWhips!.find.mockReturnValue({
+      sort: () => ({ toArray: async () => whips }),
+    });
+    db.collectionMocks.cabinetNominations!.find.mockReturnValue({
+      toArray: async () =>
+        targetIds.map((targetId) => ({
+          _id: targetId,
+          status: "active",
+          votes: {},
+        })),
+    });
+
+    const scope = {
+      countryId: "US",
+      partyId: "1",
+      issuedBy: "nationalParty",
+    } as const;
+    const queriedSnapshot = await buildWhipDefianceSnapshot(db as unknown as Db, scope);
+    const preloadedSnapshot = await buildWhipDefianceSnapshot(
+      db as unknown as Db,
+      scope,
+      25,
+      whips
+    );
+    expect(preloadedSnapshot).toEqual(queriedSnapshot);
+
+    expect(db.collectionMocks.cabinetNominations!.find).toHaveBeenCalledTimes(2);
+    expect(db.collectionMocks.cabinetNominations!.findOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.cabinetNominations!.find.mock.calls[0][0]._id.$in).toHaveLength(3);
+    expect(db.collectionMocks.billWhips!.find).toHaveBeenCalledTimes(1);
+  });
+
+  it("batches nomination voters and officials across one national-party snapshot", async () => {
+    const db = createMockDb();
+    const voterId = new ObjectId();
+    const targetIds = [new ObjectId(), new ObjectId(), new ObjectId()];
+    const whips = targetIds.map((targetId, index) => ({
+      _id: new ObjectId(),
+      targetType: "cabinetNomination",
+      targetId,
+      chamber: "house",
+      direction: "for",
+      issuedBy: "nationalParty",
+      countryId: "US",
+      partyId: "1",
+      audience: "character",
+      mode: "soft",
+      createdAt: new Date(`2026-04-29T12:00:0${index}.000Z`),
+      updatedAt: new Date(`2026-04-29T12:00:0${index}.000Z`),
+    })) as unknown as BillWhip[];
+    db.collection("billWhips");
+    db.collection("cabinetNominations");
+    db.collection("characters");
+    db.collection("electedOfficials");
+    db.collection("caucusMemberships");
+    db.collectionMocks.billWhips!.find.mockReturnValue({
+      sort: () => ({ toArray: async () => whips }),
+    });
+    db.collectionMocks.cabinetNominations!.find.mockReturnValue({
+      toArray: async () =>
+        targetIds.map((targetId, index) => ({
+          _id: targetId,
+          status: "active",
+          nomineeCharacterName: `Nominee ${index}`,
+          votes: { [voterId.toString()]: "against" },
+        })),
+    });
+    db.collectionMocks.characters!.find.mockReturnValue({
+      project() {
+        return this;
+      },
+      toArray: async () => [{ _id: voterId, name: "Defiant Member", party: "1" }],
+    });
+    db.collectionMocks.electedOfficials!.find.mockReturnValue({
+      project() {
+        return this;
+      },
+      toArray: async () => [{ characterId: voterId, state: "CA", officeType: "house" }],
+    });
+
+    const snapshot = await buildWhipDefianceSnapshot(db as unknown as Db, {
+      countryId: "US",
+      partyId: "1",
+      issuedBy: "nationalParty",
+    });
+
+    expect(snapshot).toMatchObject({ activeCount: 3, playerCount: 3, nppCount: 0 });
+    expect(snapshot.players.map((item) => item.targetLabel).sort()).toEqual([
+      "Cabinet: Nominee 0",
+      "Cabinet: Nominee 1",
+      "Cabinet: Nominee 2",
+    ]);
+    expect(snapshot.players[0]).toMatchObject({
+      voterName: "Defiant Member",
+      voterState: "CA",
+      voterOffice: "house",
+      currentVoteLabel: "AGAINST",
+    });
+    expect(db.collectionMocks.cabinetNominations!.find).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.characters!.find).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.electedOfficials!.find).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.caucusMemberships!.find).not.toHaveBeenCalled();
+  });
+
   it("shows active player defiance for a national soft whip on a bill", async () => {
     const db = createMockDb();
     const whipId = new ObjectId();
