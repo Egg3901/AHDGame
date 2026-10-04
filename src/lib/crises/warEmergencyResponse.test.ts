@@ -82,7 +82,10 @@ describe("war emergency crisis responses", () => {
       expect.objectContaining({
         source: "war_emergency_crisis",
         responseId: "bank_guarantee",
-      })
+      }),
+      undefined,
+      false,
+      expect.stringMatching(/^war-emergency-treasury:/)
     );
     expect(dependencies.writeWarEmergencyMitigation).toHaveBeenCalledWith(
       db,

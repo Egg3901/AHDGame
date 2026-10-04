@@ -94,7 +94,8 @@ export async function supersedePendingEventForBroadcast(
   db: Db,
   instance: EventInstance,
   currentTurn: number,
-  preset?: string
+  preset?: string,
+  treasuryCashLedgerEnabled = false
 ): Promise<boolean> {
   const defaultOptionId = getDefaultOptionId(instance.kind);
   if (!defaultOptionId) {
@@ -108,7 +109,8 @@ export async function supersedePendingEventForBroadcast(
       "timeout",
       currentTurn,
       undefined,
-      preset
+      preset,
+      treasuryCashLedgerEnabled
     );
     return true;
   } catch (err) {

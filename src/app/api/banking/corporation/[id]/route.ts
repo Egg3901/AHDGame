@@ -1,3 +1,4 @@
+import { allowedPropOpeningAssets } from "@/lib/banking/rules/propAssets";
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
@@ -179,6 +180,9 @@ async function handleGET(_request: Request, { params }: RouteParams) {
         bankTreasuryEnabled: policy.bankTreasury,
         bankTreasury: null,
         bankPropForexFeesEnabled: policy.propForexFees,
+        ...(policy.advancedCharters
+          ? { propAssetOptions: allowedPropOpeningAssets(true, corporation.ceoType) }
+          : {}),
         visible: false,
         isCeo: false,
         isAdmin: auth.user.isAdmin === true,
@@ -469,6 +473,9 @@ async function handleGET(_request: Request, { params }: RouteParams) {
       bankTreasuryEnabled: policy.bankTreasury,
       bankTreasury,
       bankPropForexFeesEnabled: policy.propForexFees,
+      ...(policy.advancedCharters
+        ? { propAssetOptions: allowedPropOpeningAssets(true, corporation.ceoType) }
+        : {}),
       visible: true,
       isCeo,
       isAdmin,

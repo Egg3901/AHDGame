@@ -8,6 +8,25 @@ import type {
   WarEmergencyMitigationModifier,
 } from "@/lib/db/types/events";
 
+async function insertCountryModifier(
+  db: Db,
+  doc: CountryModifier,
+  durableEffectId?: ObjectId
+): Promise<void> {
+  const modifiers = getCountryModifiersCollection(db);
+  if (!durableEffectId) {
+    await modifiers.insertOne(doc);
+    return;
+  }
+  try {
+    await modifiers.updateOne({ _id: durableEffectId }, { $setOnInsert: doc }, { upsert: true });
+  } catch (error) {
+    if (!(error && typeof error === "object" && "code" in error && error.code === 11000)) {
+      throw error;
+    }
+  }
+}
+
 /**
  * Write a temporary `sectorDemandModifier` effect. Expires lazily by turn
  * number — `getActiveSectorDemandModifierPct` filters on `expiresAtTurn` at
@@ -24,10 +43,11 @@ export async function writeSectorDemandModifier(
     durationTurns: number;
     appliedAtTurn: number;
     sourceInstanceId?: ObjectId;
+    durableEffectId?: ObjectId;
   }
 ): Promise<void> {
   const doc: CountryModifier = {
-    _id: new ObjectId(),
+    _id: input.durableEffectId ?? new ObjectId(),
     countryId: input.countryId,
     kind: "sectorDemandModifier",
     sectorType: input.sectorType,
@@ -37,7 +57,7 @@ export async function writeSectorDemandModifier(
     sourceInstanceId: input.sourceInstanceId,
     createdAt: new Date(),
   };
-  await getCountryModifiersCollection(db).insertOne(doc);
+  await insertCountryModifier(db, doc, input.durableEffectId);
 }
 
 /** Write temporary demand for a sector's outputs, affecting its seller margin. */
@@ -50,10 +70,11 @@ export async function writeSectorOutputDemandModifier(
     durationTurns: number;
     appliedAtTurn: number;
     sourceInstanceId?: ObjectId;
+    durableEffectId?: ObjectId;
   }
 ): Promise<void> {
   const doc: CountryModifier = {
-    _id: new ObjectId(),
+    _id: input.durableEffectId ?? new ObjectId(),
     countryId: input.countryId,
     kind: "sectorOutputDemandModifier",
     sectorType: input.sectorType,
@@ -63,7 +84,7 @@ export async function writeSectorOutputDemandModifier(
     sourceInstanceId: input.sourceInstanceId,
     createdAt: new Date(),
   };
-  await getCountryModifiersCollection(db).insertOne(doc);
+  await insertCountryModifier(db, doc, input.durableEffectId);
 }
 
 /** Country measures can slow domestic crisis recurrence, never suppress it. */
@@ -75,10 +96,11 @@ export async function writeWarEmergencyMitigation(
     durationTurns: number;
     appliedAtTurn: number;
     sourceInstanceId?: ObjectId;
+    durableEffectId?: ObjectId;
   }
 ): Promise<void> {
   const doc: CountryModifier = {
-    _id: new ObjectId(),
+    _id: input.durableEffectId ?? new ObjectId(),
     countryId: input.countryId,
     kind: "warEmergencyMitigation",
     pct: Math.max(0, input.pct),
@@ -87,7 +109,7 @@ export async function writeWarEmergencyMitigation(
     sourceInstanceId: input.sourceInstanceId,
     createdAt: new Date(),
   };
-  await getCountryModifiersCollection(db).insertOne(doc);
+  await insertCountryModifier(db, doc, input.durableEffectId);
 }
 
 export const DEMOCRATIC_HEALTH_RELIEF_CAP_PCT = 75;
@@ -103,12 +125,13 @@ export async function writePresidentialHealthRelief(
     durationTurns: number;
     appliedAtTurn: number;
     sourceInstanceId?: ObjectId;
+    durableEffectId?: ObjectId;
   }
 ): Promise<void> {
   const pct = Math.min(DEMOCRATIC_HEALTH_RELIEF_CAP_PCT, Math.max(0, input.pct));
   if (pct === 0) return;
   const doc: CountryModifier = {
-    _id: new ObjectId(),
+    _id: input.durableEffectId ?? new ObjectId(),
     countryId: input.countryId,
     kind: "presidentialHealthRelief",
     partyId: input.partyId,
@@ -119,7 +142,7 @@ export async function writePresidentialHealthRelief(
     sourceInstanceId: input.sourceInstanceId,
     createdAt: new Date(),
   };
-  await getCountryModifiersCollection(db).insertOne(doc);
+  await insertCountryModifier(db, doc, input.durableEffectId);
 }
 
 /**

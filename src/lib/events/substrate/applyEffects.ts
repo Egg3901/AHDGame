@@ -1,7 +1,12 @@
 import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
-import { ObjectId } from "mongodb";
+import { createHash } from "node:crypto";
+import { ObjectId, type Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
-import { getSeedCurrencyCode } from "@/lib/constants/currencies";
+import {
+  COUNTRY_CURRENCY_MAP,
+  getSeedCurrencyCode,
+  type CurrencyCode,
+} from "@/lib/constants/currencies";
 import type { Character } from "@/lib/db/types/character";
 import type { ElectionCandidate } from "@/lib/db/types/election";
 import type { EventEffect } from "@/lib/db/types/events";
@@ -16,6 +21,14 @@ import { buildPersonalBalanceInc, getHomeCurrency } from "@/lib/currency/charact
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { creditTreasury, spendFromTreasury } from "@/lib/budget/treasurySpend";
 import { emitTx } from "@/lib/financialTxLog/emit";
+import { treasuryAnchorValuation } from "@/lib/budget/rules/treasuryAccrual";
+import { loadTreasuryCashContext } from "@/lib/nationalization/treasuryLedger";
+import {
+  resumeSettlement,
+  settleTransition,
+  type SettlementResult,
+} from "@/lib/banking/settlementJournal";
+import type { BankingTransition } from "@/lib/banking/rules/boundary";
 import {
   writeSectorDemandModifier,
   writeSectorOutputDemandModifier,
@@ -24,6 +37,60 @@ import {
 } from "./countryModifiers";
 import { applyCivilLibertiesDelta } from "@/lib/politicalMetrics/civilLiberties";
 import type { EventResolveContext } from "./types";
+
+function isCompletedSettlement(result: SettlementResult): boolean {
+  return result.status === "applied" || (result.status === "replayed" && !result.error);
+}
+
+function stableEventEffectId(instanceId: ObjectId, effectIndex: number): ObjectId {
+  return new ObjectId(
+    createHash("sha256")
+      .update(`${instanceId.toHexString()}:effect:${effectIndex}`)
+      .digest("hex")
+      .slice(0, 24)
+  );
+}
+
+function isValuedQuoteConflict(result: SettlementResult): boolean {
+  return (
+    result.status === "rejected" &&
+    result.error?.includes("already owns a different valued settlement quote") === true
+  );
+}
+
+function parseFundedEventQuote(
+  receipt: { event?: { meta?: Record<string, unknown> } },
+  receiptKey: string
+): { amountLocal: number; currencyCode: string; turn: number } {
+  const meta = receipt.event?.meta ?? {};
+  const amountLocal = Number(meta.amountLocal);
+  const currencyCode = meta.currencyCode;
+  const turn = Number(meta.turn);
+  if (
+    !Number.isFinite(amountLocal) ||
+    typeof currencyCode !== "string" ||
+    !Number.isInteger(turn)
+  ) {
+    throw new Error(`Funded Treasury event receipt ${receiptKey} has no frozen cash quote`);
+  }
+  return { amountLocal, currencyCode, turn };
+}
+
+async function resumeFrozenFundedEvent(
+  db: Db,
+  receiptKey: string
+): Promise<{ amountLocal: number; currencyCode: string; turn: number }> {
+  const resumed = await resumeSettlement(db, receiptKey);
+  if (!isCompletedSettlement(resumed)) {
+    throw new Error(resumed.error ?? `Funded Treasury event receipt ${receiptKey} is incomplete`);
+  }
+  const receipt = await db
+    .collection<{ _id: string; event?: { meta?: Record<string, unknown> } }>("bankMoneyMoves")
+    .findOne({ _id: receiptKey }, { projection: { _id: 1, event: 1 } });
+  if (!receipt)
+    throw new Error(`Funded Treasury event receipt ${receiptKey} disappeared during recovery`);
+  return parseFundedEventQuote(receipt, receiptKey);
+}
 
 function clampStat(value: number): number {
   return Math.max(0, Math.min(100, value));
@@ -49,10 +116,25 @@ async function applyCountryEffects(
     );
   }
 
-  for (const effect of effects) {
+  for (const [effectIndex, effect] of effects.entries()) {
+    const effectKey = `${ctx.instance._id.toHexString()}:${effectIndex}`;
     switch (effect.type) {
       case "treasuryDelta": {
         if (effect.deltaAnchor === 0) break;
+        if (ctx.treasuryCashLedgerEnabled) {
+          const receiptKey = `world-event-treasury:${ctx.instance._id.toHexString()}:${effectIndex}`;
+          await applyCountryTreasuryDelta(
+            ctx.db,
+            countryId,
+            ctx.currentTurn,
+            effect.deltaAnchor,
+            { kind: ctx.instance.kind, instanceId: ctx.instance._id.toHexString() },
+            ctx.preset,
+            true,
+            receiptKey
+          );
+          break;
+        }
         // Anchor ₳ is treated 1:1 with local currency here (matches the rest of
         // the substrate's `personalWealth` handling when forex is off; country
         // treasuries are already local-currency-denominated documents).
@@ -82,12 +164,25 @@ async function applyCountryEffects(
       }
       case "approvalDelta": {
         if (effect.delta === 0) break;
-        await ctx.db
-          .collection("governmentApprovals")
-          .updateOne(
-            { _id: countryId as unknown as ObjectId },
-            { $inc: { approvalRating: effect.delta } }
+        if (ctx.treasuryCashLedgerEnabled) {
+          await ctx.db.collection("governmentApprovals").updateOne(
+            {
+              _id: countryId as unknown as ObjectId,
+              appliedEventEffects: { $ne: effectKey },
+            },
+            {
+              $inc: { approvalRating: effect.delta },
+              $addToSet: { appliedEventEffects: effectKey },
+            }
           );
+        } else {
+          await ctx.db
+            .collection("governmentApprovals")
+            .updateOne(
+              { _id: countryId as unknown as ObjectId },
+              { $inc: { approvalRating: effect.delta } }
+            );
+        }
         break;
       }
       case "sectorDemandModifier": {
@@ -98,6 +193,9 @@ async function applyCountryEffects(
           durationTurns: effect.durationTurns,
           appliedAtTurn: ctx.currentTurn,
           sourceInstanceId: ctx.instance._id,
+          ...(ctx.treasuryCashLedgerEnabled
+            ? { durableEffectId: stableEventEffectId(ctx.instance._id, effectIndex) }
+            : {}),
         });
         break;
       }
@@ -109,11 +207,19 @@ async function applyCountryEffects(
           durationTurns: effect.durationTurns,
           appliedAtTurn: ctx.currentTurn,
           sourceInstanceId: ctx.instance._id,
+          ...(ctx.treasuryCashLedgerEnabled
+            ? { durableEffectId: stableEventEffectId(ctx.instance._id, effectIndex) }
+            : {}),
         });
         break;
       }
       case "democraticHealthDelta": {
-        await applyCivilLibertiesDelta(ctx.db, countryId, effect.delta);
+        await applyCivilLibertiesDelta(
+          ctx.db,
+          countryId,
+          effect.delta,
+          ctx.treasuryCashLedgerEnabled ? effectKey : undefined
+        );
         break;
       }
       case "presidentialHealthRelief": {
@@ -133,6 +239,9 @@ async function applyCountryEffects(
           durationTurns: effect.durationTurns,
           appliedAtTurn: ctx.currentTurn,
           sourceInstanceId: ctx.instance._id,
+          ...(ctx.treasuryCashLedgerEnabled
+            ? { durableEffectId: stableEventEffectId(ctx.instance._id, effectIndex) }
+            : {}),
         });
         break;
       }
@@ -143,11 +252,19 @@ async function applyCountryEffects(
           durationTurns: effect.durationTurns,
           appliedAtTurn: ctx.currentTurn,
           sourceInstanceId: ctx.instance._id,
+          ...(ctx.treasuryCashLedgerEnabled
+            ? { durableEffectId: stableEventEffectId(ctx.instance._id, effectIndex) }
+            : {}),
         });
         break;
       }
       case "civilLibertiesDelta": {
-        await applyCivilLibertiesDelta(ctx.db, countryId, effect.delta);
+        await applyCivilLibertiesDelta(
+          ctx.db,
+          countryId,
+          effect.delta,
+          ctx.treasuryCashLedgerEnabled ? effectKey : undefined
+        );
         break;
       }
       case "wireOnly":
@@ -173,14 +290,28 @@ async function applyCountryEffects(
  * host settlement as it does for bid-time escrow.
  */
 export async function applyCountryTreasuryDelta(
-  db: Parameters<typeof creditTreasury>[0],
+  db: Db,
   countryId: CountryId,
   currentTurn: number,
   deltaAnchor: number,
   meta: Record<string, unknown>,
-  preset?: string
+  preset?: string,
+  treasuryCashLedgerEnabled = false,
+  receiptKey?: string
 ): Promise<void> {
   if (deltaAnchor === 0) return;
+  if (treasuryCashLedgerEnabled) {
+    if (!receiptKey) throw new Error("Funded Treasury event cash requires a durable receipt key");
+    await applyFundedCountryTreasuryDelta(
+      db,
+      countryId,
+      currentTurn,
+      deltaAnchor,
+      receiptKey,
+      preset
+    );
+    return;
+  }
   const amountLocal = deltaAnchor;
   if (amountLocal > 0) {
     await creditTreasury(db, countryId, amountLocal);
@@ -199,6 +330,177 @@ export async function applyCountryTreasuryDelta(
     counterpartyType: "system",
     meta,
   });
+}
+
+async function applyFundedCountryTreasuryDelta(
+  db: Db,
+  countryId: CountryId,
+  currentTurn: number,
+  deltaAnchor: number,
+  receiptKey: string,
+  requestedPreset?: string
+): Promise<void> {
+  const journals = db.collection<{
+    _id: string;
+    event?: { meta?: Record<string, unknown> };
+  }>("bankMoneyMoves");
+  const existing = await journals.findOne(
+    { _id: receiptKey },
+    { projection: { _id: 1, event: 1 } }
+  );
+  if (existing) {
+    const resumed = await resumeSettlement(db, receiptKey);
+    if (!isCompletedSettlement(resumed)) {
+      throw new Error(resumed.error ?? `Funded Treasury event receipt ${receiptKey} is incomplete`);
+    }
+    const quote = parseFundedEventQuote(existing, receiptKey);
+    if (quote.amountLocal < 0) {
+      await emitFundedTreasurySpend(
+        db,
+        countryId,
+        quote.turn,
+        quote.amountLocal,
+        quote.currencyCode,
+        receiptKey
+      );
+    }
+    return;
+  }
+
+  const context = await loadTreasuryCashContext(db, currentTurn);
+  if (!context?.treasuryCashLedgerEnabled) {
+    throw new Error("Funded Treasury event cash requires the enabled Treasury cash ledger");
+  }
+  const currencyCode =
+    context.treasuryCurrencies.get(countryId) ??
+    COUNTRY_CURRENCY_MAP[countryId] ??
+    getSeedCurrencyCode(countryId, requestedPreset ?? context.preset);
+  const localPerAnchor = treasuryAnchorValuation({
+    countryId,
+    currencyCode,
+    preset: requestedPreset ?? context.preset,
+    observedRate: context.rates.get(currencyCode),
+  }).anchorRate;
+  const amountLocal = Math.abs(deltaAnchor) * localPerAnchor;
+  const isSpend = deltaAnchor < 0;
+  const valuation = { currencyCode, localPerAnchor };
+  const legs: BankingTransition["legs"] = isSpend
+    ? [
+        {
+          kind: "debit",
+          amount: amountLocal,
+          valuation,
+          collection: "federalBudget",
+          filter: { countryId, treasuryCashLocal: { $gte: amountLocal } },
+          path: "treasuryCashLocal",
+          note: "Fund an active national event cost from actual Treasury cash",
+        },
+        {
+          kind: "burn",
+          amount: amountLocal,
+          valuation,
+          note: "Settle the event cost paid outside the modeled Treasury",
+        },
+      ]
+    : [];
+  const transition: BankingTransition = {
+    key: receiptKey,
+    kind: isSpend ? "national_event_treasury_spend" : "national_event_analytical_revenue",
+    turn: currentTurn,
+    currency: currencyCode as CurrencyCode,
+    legs,
+    projections: [
+      {
+        collection: "federalBudget",
+        filter: { countryId },
+        update: {
+          $inc: { treasuryBalance: deltaAnchor * localPerAnchor },
+          $set: { updatedAt: new Date() },
+        },
+        note: isSpend
+          ? "Record the funded event cost in signed fiscal-position analytics"
+          : "Record analytical event revenue without creating spendable Treasury cash",
+      },
+    ],
+    event: {
+      kind: "monetary.executed",
+      command: isSpend ? "event.treasuryCashSpend" : "event.treasuryAnalyticalRevenue",
+      subjectType: "government",
+      subjectId: countryId,
+      amount: amountLocal,
+      meta: {
+        countryId,
+        turn: currentTurn,
+        anchorAmount: deltaAnchor,
+        amountLocal: isSpend ? -amountLocal : amountLocal,
+        currencyCode,
+        localPerAnchor,
+      },
+    },
+  };
+  const settled = await settleTransition(db, transition);
+  let settledQuote: { amountLocal: number; currencyCode: string; turn: number };
+  if (isCompletedSettlement(settled)) {
+    if (settled.status === "replayed") {
+      const receipt = await journals.findOne(
+        { _id: receiptKey },
+        { projection: { _id: 1, event: 1 } }
+      );
+      if (!receipt)
+        throw new Error(`Funded Treasury event receipt ${receiptKey} is missing after replay`);
+      settledQuote = parseFundedEventQuote(receipt, receiptKey);
+    } else {
+      settledQuote = {
+        amountLocal: isSpend ? -amountLocal : amountLocal,
+        currencyCode,
+        turn: currentTurn,
+      };
+    }
+  } else if (isValuedQuoteConflict(settled)) {
+    settledQuote = await resumeFrozenFundedEvent(db, receiptKey);
+  } else {
+    throw new Error(settled.error ?? `Funded Treasury event receipt ${receiptKey} is incomplete`);
+  }
+  if (settledQuote.amountLocal < 0) {
+    await emitFundedTreasurySpend(
+      db,
+      countryId,
+      settledQuote.turn,
+      settledQuote.amountLocal,
+      settledQuote.currencyCode,
+      receiptKey
+    );
+  }
+}
+
+async function emitFundedTreasurySpend(
+  db: Db,
+  countryId: CountryId,
+  turn: number,
+  amountLocal: number,
+  currencyCode: string,
+  receiptKey: string
+): Promise<void> {
+  const stableId = new ObjectId(
+    createHash("sha256").update(`${receiptKey}:financial-tx`).digest("hex").slice(0, 24)
+  );
+  await emitTx(
+    db,
+    {
+      type: "world_event_payout",
+      turn,
+      createdAt: new Date(),
+      subjectType: "government",
+      countryId,
+      subjectName: countryId,
+      amount: amountLocal,
+      currencyCode: currencyCode as CurrencyCode,
+      counterpartyType: "system",
+      meta: { kind: "funded_national_event_cost", receiptKey },
+    },
+    undefined,
+    { _id: stableId }
+  );
 }
 
 /** World Events v1 Phase 3 award-pass equivalent of the `approvalDelta` effect branch. */

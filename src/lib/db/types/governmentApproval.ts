@@ -28,6 +28,8 @@ export interface GovernmentApproval {
    * backward compatibility with historical documents.
    */
   source: "president_favorability" | "pm_favorability" | "aggregate";
+  /** Durable idempotency witnesses for funded country-event effect replay. */
+  appliedEventEffects?: string[];
   /** Turn-by-turn history (most recent last, capped at 20 entries) */
   history: Array<{
     turn: number;

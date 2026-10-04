@@ -179,6 +179,18 @@ export interface EventInstance {
   resolvedOptionId?: string;
   resolvedTierLabel?: string;
   resolveReason?: "player" | "timeout";
+  /** Frozen choice owner for country events with funded Treasury alternatives. */
+  resolutionClaim?: {
+    optionId: string;
+    reason: "player" | "timeout";
+    actorId?: string;
+    turn: number;
+    preset: string;
+    effectiveRoll: number;
+    tier: OutcomeTier;
+    statAdjustment?: { stat: string; label: string; delta: number };
+    claimedAt: Date;
+  };
   createdAt: Date;
   updatedAt: Date;
 }

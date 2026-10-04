@@ -22,7 +22,8 @@ export async function sweepExpired(
   db: Db,
   currentTurn: number,
   nowMs: number = Date.now(),
-  hooks?: ResolveEventHooks
+  hooks?: ResolveEventHooks,
+  treasuryCashLedgerEnabled = false
 ): Promise<SweepExpiredResult> {
   const coll = getEventInstancesCollection(db);
   const expired = await coll
@@ -54,7 +55,8 @@ export async function sweepExpired(
         "timeout",
         currentTurn,
         hooks,
-        preset
+        preset,
+        treasuryCashLedgerEnabled
       );
       swept.push(resolved);
     } catch (err) {
