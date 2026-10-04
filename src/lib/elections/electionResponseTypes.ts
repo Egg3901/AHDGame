@@ -10,6 +10,7 @@ import type {
   Campaign,
   StatePartyOrg,
   ElectionVoteTally,
+  State,
 } from "@/lib/db/types";
 import type { Apportionment } from "./apportionment";
 import type { CountryId } from "@/lib/constants/countries";

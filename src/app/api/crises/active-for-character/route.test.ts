@@ -8,6 +8,7 @@
 import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
+import type { CrisisLeaderResponse } from "@/lib/db/types";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
@@ -79,6 +80,7 @@ function makeCrisis() {
 }
 
 function makeInteraction() {
+  const leaderResponses: CrisisLeaderResponse[] = [];
   return {
     _id: new ObjectId(),
     crisisId,
@@ -90,13 +92,13 @@ function makeInteraction() {
     collectiveTarget: null,
     decisionDeadline: null,
     resolvedAt: null,
-    leaderResponses: [],
+    leaderResponses,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
 }
 
-function mockInteractions(...interactions: ReturnType<typeof makeInteraction>[]) {
+function mockInteractions(...interactions: unknown[]) {
   db.collectionMocks["crisisInteractions"]!.find.mockReturnValue({
     toArray: vi.fn().mockResolvedValue(interactions),
   });

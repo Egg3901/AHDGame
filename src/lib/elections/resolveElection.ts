@@ -522,7 +522,7 @@ export async function resolveElections(
     }
   }
 
-  const regionIdsByCountry = new Map<string, Set<string>>();
+  const regionIdsByCountry = new Map<Election["countryId"], Set<string>>();
   for (const election of elections) {
     const countryId = election.countryId ?? "US";
     const localRegionId = election.seatId ? parseSeatId(election.seatId).localRegionId : undefined;
