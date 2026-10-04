@@ -1,3 +1,4 @@
+import { loadInvestmentBondReference } from "@/lib/corporations/investment/bondReference";
 import { NextResponse } from "next/server";
 import { findMergedRegionMetrics } from "@/lib/macroMetrics/merge";
 import { ObjectId } from "mongodb";
@@ -981,6 +982,14 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
           sectorType === "extraction" &&
           Object.values(thisSectorMultipliers).some((m) => typeof m === "number" && m < 0.999),
       });
+    }
+
+    if (plants?.investment) {
+      plants.investment.bondReference = await loadInvestmentBondReference(
+        db,
+        resolveCorpLiquidCurrencyCode(corporation),
+        currentTurn
+      );
     }
 
     const payload: Record<string, unknown> = {
