@@ -29,6 +29,8 @@ export type SettleInsurancePremiumResult = {
   premiumDue: number;
   /** Cash debited during this invocation, for the caller's in-memory balance. */
   cashDebited: number;
+  /** Refreshed original-epoch cash after resuming a previously claimed receipt. */
+  cashReservesAfter?: number;
   /** Premium due beyond the bank's available cash. */
   shortfall: number;
   /** Whether the durable receipt applied its cash and exposure legs. */
@@ -39,7 +41,13 @@ export type FrozenInsurancePremiumReceipt = {
   _id: string;
   status?: string;
   error?: string;
-  legs?: { applied?: boolean }[];
+  legs?: {
+    applied?: boolean;
+    kind?: string;
+    collection?: string;
+    path?: string;
+    filter?: Record<string, unknown>;
+  }[];
   event?: {
     meta?: Record<string, unknown>;
   };
@@ -63,6 +71,11 @@ function quoteFromReceipt(receipt: FrozenInsurancePremiumReceipt) {
   const premiumDue = Number(meta.premiumDue);
   const premiumPaid = Number(meta.premiumPaid);
   const shortfall = Number(meta.shortfall);
+  const bankId = meta.bankId;
+  const charteredTurn = Number(meta.charteredTurn);
+  const currency = meta.currency;
+  const countryIdWasPresent = meta.countryIdWasPresent;
+  const countryId = meta.countryId;
   if (
     ![
       insuredDeposits,
@@ -72,14 +85,75 @@ function quoteFromReceipt(receipt: FrozenInsurancePremiumReceipt) {
       premiumDue,
       premiumPaid,
       shortfall,
+      charteredTurn,
     ].every(Number.isFinite) ||
+    typeof bankId !== "string" ||
+    typeof currency !== "string" ||
+    typeof countryIdWasPresent !== "boolean" ||
+    (countryIdWasPresent && countryId !== null && typeof countryId !== "string") ||
     premiumDue < 0 ||
     premiumPaid < 0 ||
     premiumPaid > premiumDue ||
     shortfall < 0
   )
     return null;
-  return { insuredDeposits, premiumDue, premiumPaid, shortfall };
+  return {
+    insuredDeposits,
+    premiumDue,
+    premiumPaid,
+    shortfall,
+  };
+}
+
+async function readOriginalCharterCash(
+  db: Db,
+  receipt: FrozenInsurancePremiumReceipt,
+  input: SettleInsurancePremiumInput
+): Promise<number> {
+  const meta = receipt.event?.meta;
+  if (
+    !quoteFromReceipt(receipt) ||
+    !meta ||
+    meta.bankId !== input.bankId.toString() ||
+    typeof meta.charteredTurn !== "number" ||
+    typeof meta.currency !== "string" ||
+    typeof meta.countryIdWasPresent !== "boolean"
+  ) {
+    throw new Error("Insurance premium retry has no valid original charter guard");
+  }
+  const countryFilter = meta.countryIdWasPresent
+    ? { countryId: meta.countryId }
+    : { countryId: { $exists: false } };
+  const originalDebit = receipt.legs?.find(
+    (leg) => leg.kind === "debit" && leg.collection === "corporations"
+  );
+  const frozenFilter = originalDebit?.filter;
+  if (
+    originalDebit &&
+    (!frozenFilter ||
+      originalDebit.path !== "bankCharter.cashReserves" ||
+      String(frozenFilter._id) !== input.bankId.toString() ||
+      frozenFilter["bankCharter.status"] !== "active" ||
+      frozenFilter["bankCharter.charteredTurn"] !== meta.charteredTurn ||
+      frozenFilter["bankCharter.currency"] !== meta.currency)
+  ) {
+    throw new Error("Insurance premium receipt's source-charter guard is malformed");
+  }
+  const bank = await db.collection("corporations").findOne(
+    frozenFilter ?? {
+      _id: input.bankId,
+      ...countryFilter,
+      "bankCharter.status": "active",
+      "bankCharter.charteredTurn": meta.charteredTurn,
+      "bankCharter.currency": meta.currency,
+    },
+    { projection: { "bankCharter.cashReserves": 1 } }
+  );
+  const cash = bank?.bankCharter?.cashReserves;
+  if (typeof cash !== "number" || !Number.isFinite(cash) || cash < 0) {
+    throw new Error("Original bank charter is unavailable for insurance premium retry");
+  }
+  return cash;
 }
 
 /**
@@ -115,6 +189,9 @@ export async function settleInsurancePremiumForTurn(
     return {
       ...quote,
       cashDebited: 0,
+      ...(quote.premiumPaid > 0
+        ? { cashReservesAfter: await readOriginalCharterCash(db, existing, input) }
+        : {}),
       applied: true,
     };
   }
@@ -218,6 +295,11 @@ export async function settleInsurancePremiumForTurn(
         premiumDue,
         premiumPaid,
         shortfall,
+        bankId: input.bankId.toString(),
+        charteredTurn: input.charteredTurn,
+        currency: input.currency,
+        countryIdWasPresent: input.countryId !== undefined,
+        ...(input.countryId !== undefined ? { countryId: input.countryId } : {}),
       },
     },
   });
@@ -239,22 +321,32 @@ export async function settleInsurancePremiumForTurn(
         resumed.error ?? "Concurrent insurance premium settlement is awaiting recovery"
       );
     }
-    return { ...quote, cashDebited: 0, applied: true };
+    return {
+      ...quote,
+      cashDebited: 0,
+      ...(quote.premiumPaid > 0
+        ? { cashReservesAfter: await readOriginalCharterCash(db, winner, input) }
+        : {}),
+      applied: true,
+    };
   }
 
   if (receipt.status !== "applied") {
     throw new Error(receipt.error ?? "Insurance premium settlement is awaiting recovery");
   }
 
-  const applied =
-    receipt.appliedLegs.length === (premiumPaid > 0 ? 2 : 0) &&
-    receipt.appliedProjections.length > 0;
+  if (
+    receipt.appliedLegs.length !== (premiumPaid > 0 ? 2 : 0) ||
+    receipt.appliedProjections.length === 0
+  ) {
+    throw new Error("Insurance premium receipt did not finish every frozen leg and projection");
+  }
   return {
     insuredDeposits: input.insuredDeposits,
     premiumPaid,
     premiumDue,
     cashDebited: receipt.appliedLegs.includes(0) ? premiumPaid : 0,
     shortfall,
-    applied,
+    applied: true,
   };
 }

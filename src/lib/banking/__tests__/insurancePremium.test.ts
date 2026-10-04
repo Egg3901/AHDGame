@@ -103,6 +103,7 @@ describe("insurance premium durable quote replay", () => {
       premiumPaid: originalPaid,
       premiumDue: originalPaid,
       cashDebited: 0,
+      cashReservesAfter: 0,
       shortfall: 0,
       applied: true,
     });
@@ -112,5 +113,48 @@ describe("insurance premium durable quote replay", () => {
     expect(fund.premiumsCollectedLifetime).toBe(originalPaid);
     expect(memory.collection("bankMoneyMoves").docs).toHaveLength(1);
     expect(frozen.legs.map((leg) => leg.amount)).toEqual([originalPaid, originalPaid]);
+  });
+
+  it("refreshes the original charter cash when retry applies the not-yet-landed debit", async () => {
+    const memory = world();
+    const faulty = withInjectedCrash(memory, {
+      collection: "corporations",
+      op: "updateOne",
+      onCall: 1,
+    });
+    await expect(settleInsurancePremiumForTurn(faulty.db, original)).rejects.toBeInstanceOf(
+      InjectedCrash
+    );
+    faulty.disarm();
+
+    const before = memory.collection("corporations").docs[0] as {
+      bankCharter: { cashReserves: number };
+    };
+    expect(before.bankCharter.cashReserves).toBe(500);
+    const frozen = memory.collection("bankMoneyMoves").docs[0] as {
+      event: { meta: { premiumPaid: number } };
+    };
+    const originalPaid = frozen.event.meta.premiumPaid;
+
+    const retry = await settleInsurancePremiumForTurn(memory as unknown as Db, {
+      ...original,
+      insuredDeposits: 0,
+      cashReserves: 500,
+    });
+
+    expect(retry).toEqual({
+      insuredDeposits: original.insuredDeposits,
+      premiumPaid: originalPaid,
+      premiumDue: originalPaid,
+      cashDebited: 0,
+      cashReservesAfter: 500 - originalPaid,
+      shortfall: 0,
+      applied: true,
+    });
+    expect(before.bankCharter.cashReserves).toBe(500 - originalPaid);
+    expect(
+      (memory.collection("depositInsuranceFunds").docs[0] as { balance: number }).balance
+    ).toBe(10 + originalPaid);
+    expect(memory.collection("bankMoneyMoves").docs).toHaveLength(1);
   });
 });
