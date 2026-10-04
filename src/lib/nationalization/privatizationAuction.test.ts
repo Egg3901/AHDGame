@@ -391,10 +391,12 @@ describe("reabsorbSpunOutCorp", () => {
   });
 
   it("moves sectors back, returns residual cash, dissolves the shell", async () => {
+    const firstSectorId = new ObjectId();
+    const secondSectorId = new ObjectId();
     const cursor = {
       toArray: vi.fn().mockResolvedValue([
-        { _id: new ObjectId(), corporationId: shellId, countryId: "US", sectorType: "energy" },
-        { _id: new ObjectId(), corporationId: shellId, countryId: "US", sectorType: "energy" },
+        { _id: firstSectorId, corporationId: shellId, countryId: "US", sectorType: "energy" },
+        { _id: secondSectorId, corporationId: shellId, countryId: "US", sectorType: "energy" },
       ]),
       sort: vi.fn().mockReturnThis(),
       project: vi.fn().mockReturnThis(),
@@ -412,9 +414,20 @@ describe("reabsorbSpunOutCorp", () => {
     );
 
     // Both energy sectors routed back to the primary, absorbedAtTurn re-stamped.
-    const upd = db.collectionMocks.corporateSectors.updateMany.mock.calls[0];
-    expect(upd[1].$set.corporationId).toEqual(primaryId);
-    expect(upd[1].$set.absorbedAtTurn).toBe(42);
+    const movedUpdates = db.collectionMocks.corporateSectors.updateOne.mock.calls.filter(
+      ([, update]) => update.$set?.corporationId?.toString() === primaryId.toString()
+    );
+    expect(movedUpdates).toHaveLength(2);
+    expect(movedUpdates.map(([filter]) => filter._id)).toEqual([firstSectorId, secondSectorId]);
+    for (const [filter, update] of movedUpdates) {
+      expect(filter).toEqual(
+        expect.objectContaining({
+          corporationId: shellId,
+          "constructionPropertyTransition.key": expect.any(String),
+        })
+      );
+      expect(update.$set.absorbedAtTurn).toBe(42);
+    }
     // Residual cash → primary.
     const corpUpd = db.collectionMocks.corporations.findOneAndUpdate.mock.calls.find(
       (c) => c[1].$inc?.liquidCapital === 500
