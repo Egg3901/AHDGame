@@ -288,6 +288,8 @@ function evalExpr(expr: unknown, doc: Doc, variables: Doc = {}): unknown {
     ? rawArgs.map((a) => evalExpr(a, doc, variables))
     : [evalExpr(rawArgs, doc, variables)];
   switch (op) {
+    case "$objectToArray":
+      return isPlainObject(args[0]) ? Object.entries(args[0]).map(([k, v]) => ({ k, v })) : [];
     case "$size":
       if (!Array.isArray(args[0])) throw new Error("inMemoryDb: expected array for $size");
       return args[0].length;
