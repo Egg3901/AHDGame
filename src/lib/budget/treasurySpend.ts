@@ -34,7 +34,7 @@ export interface FiscalImpact {
 export interface TreasurySpendWitness {
   flow: TreasuryCashFlow;
   /** Stable caller-owned identity for funded, exactly-once cash movement. */
-  key: string;
+  key?: string;
   /** The caller's module path, recorded as the entry's emit site. */
   site: string;
   ledger?: TreasuryCashOptions;

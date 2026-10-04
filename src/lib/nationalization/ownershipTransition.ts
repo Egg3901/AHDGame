@@ -1067,7 +1067,7 @@ export async function payShareholders(
       ledger
         ? {
             flow: "nationalization_buyout_float",
-            key: `nationalize-float:${target._id.toString()}:${params.consequence.turn}`,
+            key: `nationalize-float:${target._id.toString()}:${ledger.turn}`,
             ledger: ledger.treasury,
             passThroughCorpId: target._id.toString(),
           }

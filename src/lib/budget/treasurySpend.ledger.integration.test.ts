@@ -239,7 +239,7 @@ for (const native of [false, true]) {
         });
         expect(
           await db
-            .collection("bankMoneyMoves")
+            .collection<{ _id: string }>("bankMoneyMoves")
             .findOne({ _id: "treasury-spend:fixture-crisis-response:UK:option-a" })
         ).toMatchObject({
           status: "applied",
