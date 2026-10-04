@@ -32,6 +32,8 @@ export function emptyComponents(): MutableComponents {
     householdSavings: 0,
     externalBroadMoney: 0,
     bankReserves: 0,
+    centralBankForexRevenue: 0,
+    centralBankSpreadReserves: 0,
     bankVaultCash: 0,
     creditOutstanding: 0,
     sovereignBondsOutstanding: 0,
@@ -154,6 +156,8 @@ export interface BankMoneyFields {
   externalBroadMoney?: number;
   netMoneyCreatedLifetime?: number;
   reserveBalance?: number;
+  forexRevenue?: number;
+  spreadFeeReserveBalances?: Partial<Record<CurrencyCode, number>>;
 }
 
 /**
@@ -177,6 +181,13 @@ export function addCentralBankMoney(
     // out of M1/M2 by calculateMoneyAggregates ; counting it alongside deposits
     // would double-count base money.
     addComponent(byCurrency, currency, "bankReserves", bank.reserveBalance);
+    // These cash reserve pools are spendable for FX and reserve operations but
+    // remain central-bank assets, not public deposits. Preserve them as raw
+    // audit stocks without adding them to observed M1/M2.
+    addComponent(byCurrency, currency, "centralBankForexRevenue", bank.forexRevenue);
+    for (const [code, amount] of Object.entries(bank.spreadFeeReserveBalances ?? {})) {
+      addComponent(byCurrency, code as CurrencyCode, "centralBankSpreadReserves", amount);
+    }
   }
 }
 

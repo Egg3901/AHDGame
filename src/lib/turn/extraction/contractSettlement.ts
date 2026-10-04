@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { ObjectId, type Db } from "mongodb";
 import type { ExtractionContract } from "@/lib/db/types/extractionContract";
 import type { StateResourceCapacity } from "@/lib/db/types/stateResourceCapacity";
@@ -9,7 +10,7 @@ import { createNotifications } from "@/lib/notifications";
 import { getExtractionContractsCollection } from "@/lib/db/collections/extractionContracts";
 import { getStateResourceCapacityCollection } from "@/lib/db/collections/stateResourceCapacity";
 import { creditTreasury } from "@/lib/budget/treasurySpend";
-import { emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
+import { emitTx, emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
 import {
   loadFxRatesByCurrency,
   anchorToCorpLiquidCapital,
@@ -20,6 +21,14 @@ import { EXTRACTABLE_RESOURCES, COMMODITY_BASE_PRICES } from "@/lib/constants/co
 import type { ExtractableResource, CommodityType } from "@/lib/constants/commodities";
 import type { CountryId } from "@/lib/constants/countries";
 import { CONTRACT_DEFAULT_MISSED_PAYMENTS } from "@/lib/constants/prospecting";
+import { loadTreasuryCashContext } from "@/lib/nationalization/treasuryLedger";
+import { treasuryAnchorValuation } from "@/lib/budget/rules/treasuryAccrual";
+import {
+  resumeSettlement,
+  settleTransition,
+  type SettlementResult,
+} from "@/lib/banking/settlementJournal";
+import { oid, type BankingTransition } from "@/lib/banking/rules/boundary";
 
 export interface ContractSettlementResult {
   contractsSettled: number;
@@ -54,6 +63,150 @@ export function royaltyDueAnchor(
   return royaltyRatePerTurn * share * stateCapacityUnits * priceAnchor;
 }
 
+function stableRoyaltyLogId(key: string): ObjectId {
+  return new ObjectId(createHash("sha256").update(key).digest("hex").slice(0, 24));
+}
+
+interface FrozenRoyaltyQuote {
+  turn: number;
+  anchorAmount: number;
+  amountCorp: number;
+  sourceCurrency: CurrencyCode;
+  sourceLocalPerAnchor: number;
+  amountTreasury: number;
+  treasuryCurrency: CurrencyCode;
+  treasuryLocalPerAnchor: number;
+  metadata: {
+    contractId: string;
+    stateId: string;
+    resource: string;
+    grantedByLevel: string;
+  };
+}
+
+interface FundedRoyaltyReceipt {
+  _id: string;
+  turn?: number;
+  event?: { meta?: Record<string, unknown> };
+}
+
+function isCompletedSettlement(result: SettlementResult): boolean {
+  return result.status === "applied" || (result.status === "replayed" && !result.error);
+}
+
+function isValuedQuoteConflict(result: SettlementResult): boolean {
+  return (
+    result.status === "rejected" &&
+    result.error?.includes("already owns a different valued settlement quote") === true
+  );
+}
+
+function parseFrozenRoyaltyQuote(receipt: FundedRoyaltyReceipt): FrozenRoyaltyQuote {
+  const meta = receipt.event?.meta ?? {};
+  const numeric = [
+    receipt.turn,
+    meta.anchorAmount,
+    meta.amountCorp,
+    meta.sourceLocalPerAnchor,
+    meta.amountTreasury,
+    meta.treasuryLocalPerAnchor,
+  ].map(Number);
+  const [turn, anchorAmount, amountCorp, sourceRate, amountTreasury, treasuryRate] = numeric;
+  const sourceCurrency = meta.sourceCurrency;
+  const treasuryCurrency = meta.treasuryCurrency;
+  if (
+    numeric.some((value) => !Number.isFinite(value)) ||
+    !Number.isInteger(turn) ||
+    typeof sourceCurrency !== "string" ||
+    typeof treasuryCurrency !== "string"
+  ) {
+    throw new Error(`National royalty receipt ${receipt._id} is missing its frozen quote`);
+  }
+  return {
+    turn,
+    anchorAmount,
+    amountCorp,
+    sourceCurrency: sourceCurrency as CurrencyCode,
+    sourceLocalPerAnchor: sourceRate,
+    amountTreasury,
+    treasuryCurrency: treasuryCurrency as CurrencyCode,
+    treasuryLocalPerAnchor: treasuryRate,
+    metadata: {
+      contractId: typeof meta.contractId === "string" ? meta.contractId : receipt._id,
+      stateId: typeof meta.stateId === "string" ? meta.stateId : "",
+      resource: typeof meta.resource === "string" ? meta.resource : "",
+      grantedByLevel: typeof meta.grantedByLevel === "string" ? meta.grantedByLevel : "",
+    },
+  };
+}
+
+async function loadFundedRoyaltyReceipt(db: Db, key: string): Promise<FundedRoyaltyReceipt | null> {
+  return db
+    .collection<FundedRoyaltyReceipt>("bankMoneyMoves")
+    .findOne({ _id: key }, { projection: { _id: 1, turn: 1, event: 1 } });
+}
+
+async function resumeFrozenRoyaltyReceipt(db: Db, key: string): Promise<FrozenRoyaltyQuote> {
+  const resumed = await resumeSettlement(db, key);
+  if (!isCompletedSettlement(resumed)) {
+    throw new Error(resumed.error ?? `National royalty receipt ${key} is incomplete`);
+  }
+  const receipt = await loadFundedRoyaltyReceipt(db, key);
+  if (!receipt) throw new Error(`National royalty receipt ${key} disappeared during recovery`);
+  return parseFrozenRoyaltyQuote(receipt);
+}
+
+async function emitFundedRoyaltyLogs(
+  db: Db,
+  thresholds: Awaited<ReturnType<typeof loadTxThresholds>>,
+  contract: ExtractionContract,
+  corp: Corporation | undefined,
+  now: Date,
+  receiptKey: string,
+  quote: FrozenRoyaltyQuote
+): Promise<void> {
+  const sharedMeta = {
+    contractId: quote.metadata.contractId || contract._id.toString(),
+    stateId: quote.metadata.stateId || contract.stateId,
+    resource: quote.metadata.resource || contract.resource,
+    grantedByLevel: quote.metadata.grantedByLevel || contract.grantedByLevel,
+  };
+  await emitTx(
+    db,
+    {
+      type: "contract_royalty_payment",
+      turn: quote.turn,
+      createdAt: now,
+      subjectType: "corporation",
+      subjectId: contract.corporationId,
+      subjectName: corp?.name ?? "Corporation",
+      amount: -quote.amountCorp,
+      currencyCode: quote.sourceCurrency,
+      anchorAmount: -quote.anchorAmount,
+      meta: sharedMeta,
+    },
+    thresholds,
+    { _id: stableRoyaltyLogId(`${receiptKey}:payer`) }
+  );
+  await emitTx(
+    db,
+    {
+      type: "govt_royalty_receipt",
+      turn: quote.turn,
+      createdAt: now,
+      subjectType: "government",
+      countryId: contract.countryId,
+      subjectName: `${contract.countryId} Government`,
+      amount: quote.amountTreasury,
+      currencyCode: quote.treasuryCurrency,
+      anchorAmount: quote.anchorAmount,
+      meta: sharedMeta,
+    },
+    thresholds,
+    { _id: stableRoyaltyLogId(`${receiptKey}:treasury`) }
+  );
+}
+
 /**
  * Per-turn extraction-contract settlement (contract-issuance feature).
  *
@@ -70,7 +223,8 @@ export function royaltyDueAnchor(
 export async function settleExtractionContracts(
   db: Db,
   turn: number,
-  now: Date
+  now: Date,
+  treasuryCashLedgerEnabled = false
 ): Promise<ContractSettlementResult> {
   const result: ContractSettlementResult = {
     contractsSettled: 0,
@@ -107,10 +261,17 @@ export async function settleExtractionContracts(
     .toArray();
   if (activeContracts.length === 0) return result;
 
+  const treasuryCashContext = treasuryCashLedgerEnabled
+    ? await loadTreasuryCashContext(db, turn)
+    : null;
+  if (treasuryCashLedgerEnabled && !treasuryCashContext?.treasuryCashLedgerEnabled) {
+    throw new Error("Extraction royalties require the enabled Treasury cash ledger context");
+  }
+
   // Batch-load supporting data.
   const stateIds = [...new Set(activeContracts.map((c) => c.stateId))];
   const capCol = await getStateResourceCapacityCollection(db);
-  const [capDocs, priceDocs, fxByCurrency, thresholds] = await Promise.all([
+  const [capDocs, priceDocs, fxByCurrency, thresholds, stateBudgets] = await Promise.all([
     capCol.find({ stateId: { $in: stateIds } }).toArray(),
     db
       .collection<CommodityPrice>("commodityPrices")
@@ -118,11 +279,30 @@ export async function settleExtractionContracts(
       .toArray(),
     loadFxRatesByCurrency(db),
     loadTxThresholds(db),
+    treasuryCashLedgerEnabled
+      ? db
+          .collection<StateBudget>("stateBudgets")
+          .find({ _id: { $in: [...new Set(activeContracts.map((contract) => contract.stateId))] } })
+          .toArray()
+      : Promise.resolve([] as StateBudget[]),
   ]);
   const capByKey = new Map<string, StateResourceCapacity>();
   for (const doc of capDocs) capByKey.set(`${doc.stateId}|${doc.countryId}`, doc);
   const priceByCommodity = new Map<string, CommodityPrice>();
   for (const doc of priceDocs) priceByCommodity.set(doc.commodity, doc);
+  const stateBudgetKeys = new Set(
+    stateBudgets.map((budget) => `${budget._id}|${budget.countryId}`)
+  );
+  const royaltyReceiptKeys = treasuryCashLedgerEnabled
+    ? activeContracts.map((contract) => `extraction-royalty:${contract._id.toString()}:${turn}`)
+    : [];
+  const royaltyReceipts = treasuryCashLedgerEnabled
+    ? await db
+        .collection<FundedRoyaltyReceipt>("bankMoneyMoves")
+        .find({ _id: { $in: royaltyReceiptKeys } }, { projection: { _id: 1, turn: 1, event: 1 } })
+        .toArray()
+    : [];
+  const royaltyReceiptByKey = new Map(royaltyReceipts.map((receipt) => [receipt._id, receipt]));
 
   const corpIds = [...new Set(activeContracts.map((c) => c.corporationId.toString()))].map(
     (id) => new ObjectId(id)
@@ -133,7 +313,15 @@ export async function settleExtractionContracts(
       .collection<Corporation>("corporations")
       .find(
         { _id: { $in: corpIds } },
-        { projection: { userId: 1, name: 1, liquidCurrencyCode: 1, countryId: 1 } }
+        {
+          projection: {
+            userId: 1,
+            name: 1,
+            liquidCapital: 1,
+            liquidCurrencyCode: 1,
+            countryId: 1,
+          },
+        }
       )
       .toArray();
     for (const c of corps) corpById.set(c._id.toString(), c);
@@ -157,27 +345,66 @@ export async function settleExtractionContracts(
       continue;
     }
 
+    const receiptKey = `extraction-royalty:${contract._id.toString()}:${turn}`;
+    const priorRoyaltyReceipt = treasuryCashLedgerEnabled
+      ? royaltyReceiptByKey.get(receiptKey)
+      : undefined;
+    const fundedNational =
+      treasuryCashLedgerEnabled &&
+      (priorRoyaltyReceipt !== undefined ||
+        contract.grantedByLevel === "national" ||
+        !stateBudgetKeys.has(`${contract.stateId}|${contract.countryId}`));
+    if (priorRoyaltyReceipt) {
+      const resumed = await resumeFrozenRoyaltyReceipt(db, receiptKey);
+      await emitFundedRoyaltyLogs(
+        db,
+        thresholds,
+        contract,
+        corpById.get(contract.corporationId.toString()),
+        now,
+        receiptKey,
+        resumed
+      );
+      result.royaltiesPaid += 1;
+      result.totalRoyaltyAnchor += resumed.anchorAmount;
+      result.contractsSettled += 1;
+      continue;
+    }
+
     // Idempotency: a retried phase run must not double-charge. lastRoyaltyTurn
     // is stamped with every settlement outcome (paid AND missed) below.
     if (contract.lastRoyaltyTurn != null && contract.lastRoyaltyTurn >= turn) {
       continue;
     }
 
-    // Claim this contract before any debit. Two phase invocations that read the
-    // same active snapshot cannot both charge it for the same turn.
-    const settlementClaim = await contractsCol.updateOne(
-      {
-        _id: contract._id,
-        status: "active",
-        revokedTurn: { $exists: false },
-        $or: [{ lastRoyaltyTurn: { $lt: turn } }, { lastRoyaltyTurn: { $exists: false } }],
-      },
-      { $set: { lastRoyaltyTurn: turn, updatedAt: now } }
-    );
-    if (settlementClaim.matchedCount === 0) continue;
+    // Legacy state-credit outcomes keep their original claim path. Funded
+    // national outcomes stamp inside the durable settlement receipt instead.
+    if (!fundedNational) {
+      const settlementClaim = await contractsCol.updateOne(
+        {
+          _id: contract._id,
+          status: "active",
+          revokedTurn: { $exists: false },
+          $or: [{ lastRoyaltyTurn: { $lt: turn } }, { lastRoyaltyTurn: { $exists: false } }],
+        },
+        { $set: { lastRoyaltyTurn: turn, updatedAt: now } }
+      );
+      if (settlementClaim.matchedCount === 0) continue;
+    }
 
     const rate = contract.royaltyRatePerTurn ?? 0;
     if (rate <= 0) {
+      if (fundedNational) {
+        await contractsCol.updateOne(
+          {
+            _id: contract._id,
+            status: "active",
+            revokedTurn: { $exists: false },
+            $or: [{ lastRoyaltyTurn: { $lt: turn } }, { lastRoyaltyTurn: { $exists: false } }],
+          },
+          { $set: { lastRoyaltyTurn: turn, updatedAt: now } }
+        );
+      }
       result.contractsSettled += 1;
       continue;
     }
@@ -195,6 +422,17 @@ export async function settleExtractionContracts(
 
     const dueAnchor = royaltyDueAnchor(rate, contract.share, stateCapUnits, priceAnchor);
     if (dueAnchor <= 0) {
+      if (fundedNational) {
+        await contractsCol.updateOne(
+          {
+            _id: contract._id,
+            status: "active",
+            revokedTurn: { $exists: false },
+            $or: [{ lastRoyaltyTurn: { $lt: turn } }, { lastRoyaltyTurn: { $exists: false } }],
+          },
+          { $set: { lastRoyaltyTurn: turn, updatedAt: now } }
+        );
+      }
       result.contractsSettled += 1;
       continue;
     }
@@ -202,13 +440,199 @@ export async function settleExtractionContracts(
     const corp = corpById.get(contract.corporationId.toString());
     if (!corp) {
       // Corp vanished (dissolved); leave the contract for revoke/cleanup elsewhere.
+      if (fundedNational) {
+        await contractsCol.updateOne(
+          {
+            _id: contract._id,
+            status: "active",
+            revokedTurn: { $exists: false },
+            $or: [{ lastRoyaltyTurn: { $lt: turn } }, { lastRoyaltyTurn: { $exists: false } }],
+          },
+          { $set: { lastRoyaltyTurn: turn, updatedAt: now } }
+        );
+      }
       result.contractsSettled += 1;
       continue;
     }
 
     const corpCode = resolveCorpLiquidCurrencyCode(corp);
-    const corpFxRate = corpCode ? (fxByCurrency.get(corpCode) ?? 1) : 1;
+    const corpFxRate = corpCode
+      ? treasuryCashLedgerEnabled
+        ? treasuryAnchorValuation({
+            countryId: corp.countryId ?? contract.countryId,
+            currencyCode: corpCode,
+            preset: treasuryCashContext!.preset,
+            observedRate: fxByCurrency.get(corpCode),
+          }).anchorRate
+        : (fxByCurrency.get(corpCode) ?? 1)
+      : 1;
     const amountCorp = anchorToCorpLiquidCapital(dueAnchor, corp, corpFxRate);
+
+    if (fundedNational) {
+      const countryId = contract.countryId as CountryId;
+      const countryCurrency =
+        treasuryCashContext!.treasuryCurrencies.get(countryId) ??
+        (COUNTRY_CURRENCY_MAP[countryId] as CurrencyCode | undefined);
+      if (!countryCurrency) throw new Error(`Missing Treasury currency for ${countryId}`);
+      const treasuryRate = treasuryAnchorValuation({
+        countryId,
+        currencyCode: countryCurrency,
+        preset: treasuryCashContext!.preset,
+        observedRate: treasuryCashContext!.rates.get(countryCurrency),
+      }).anchorRate;
+      const amountTreasury = dueAnchor * treasuryRate;
+      const sourceCurrency = (corpCode ?? "USD") as CurrencyCode;
+      const sourceRate = corpCode ? corpFxRate : 1;
+      const receiptKey = `extraction-royalty:${contract._id.toString()}:${turn}`;
+
+      if ((corp.liquidCapital ?? 0) < amountCorp) {
+        const missed = (contract.missedPayments ?? 0) + 1;
+        const defaulted = missed >= CONTRACT_DEFAULT_MISSED_PAYMENTS;
+        const recordedMiss = await contractsCol.updateOne(
+          {
+            _id: contract._id,
+            status: "active",
+            revokedTurn: { $exists: false },
+            $or: [{ lastRoyaltyTurn: { $lt: turn } }, { lastRoyaltyTurn: { $exists: false } }],
+          },
+          {
+            $set: {
+              missedPayments: missed,
+              lastRoyaltyTurn: turn,
+              updatedAt: now,
+              ...(defaulted ? { status: "defaulted", revokedTurn: turn } : {}),
+            },
+          }
+        );
+        if (recordedMiss.matchedCount > 0) {
+          result.paymentsMissed += 1;
+          if (corp.userId) {
+            notifications.push(
+              contractNotification(
+                contract,
+                corp.userId,
+                defaulted ? "contract_defaulted" : "contract_royalty_missed",
+                { missedPayments: missed }
+              )
+            );
+          }
+          if (defaulted) result.contractsDefaulted += 1;
+          result.contractsSettled += 1;
+        }
+        continue;
+      }
+
+      const transition: BankingTransition = {
+        key: receiptKey,
+        kind: "extraction_contract_royalty",
+        turn,
+        currency: sourceCurrency,
+        legs: [
+          {
+            kind: "debit",
+            amount: amountCorp,
+            valuation: { currencyCode: sourceCurrency, localPerAnchor: sourceRate },
+            collection: "corporations",
+            filter: {
+              _id: oid(corp._id.toString()),
+              liquidCapital: { $gte: amountCorp },
+            },
+            path: "liquidCapital",
+            note: "Debit the royalty from actual corporation cash",
+          },
+          {
+            kind: "credit",
+            amount: amountTreasury,
+            valuation: { currencyCode: countryCurrency, localPerAnchor: treasuryRate },
+            collection: "federalBudget",
+            filter: { countryId },
+            path: "treasuryCashLocal",
+            note: "Credit payer-funded national royalty to spendable Treasury cash",
+          },
+        ],
+        projections: [
+          {
+            collection: "federalBudget",
+            filter: { countryId },
+            update: { $inc: { treasuryBalance: amountTreasury }, $set: { updatedAt: now } },
+            note: "Record funded royalty in signed fiscal-position analytics",
+          },
+          {
+            collection: "extractionContracts",
+            filter: {
+              _id: oid(contract._id.toString()),
+              status: "active",
+              revokedTurn: { $exists: false },
+            },
+            update: {
+              $set: {
+                lastRoyaltyTurn: turn,
+                missedPayments: 0,
+                updatedAt: now,
+              },
+            },
+            note: "Stamp the contract only after its funded national royalty is delivered",
+          },
+        ],
+        event: {
+          kind: "monetary.executed",
+          command: "turn.extractionContract.royalty",
+          subjectType: "corporation",
+          subjectId: corp._id.toString(),
+          amount: amountCorp,
+          meta: {
+            contractId: contract._id.toString(),
+            stateId: contract.stateId,
+            resource: contract.resource,
+            grantedByLevel: contract.grantedByLevel,
+            anchorAmount: dueAnchor,
+            amountCorp,
+            sourceCurrency,
+            sourceLocalPerAnchor: sourceRate,
+            amountTreasury,
+            treasuryCurrency: countryCurrency,
+            treasuryLocalPerAnchor: treasuryRate,
+          },
+        },
+      };
+      const settled = await settleTransition(db, transition);
+      let settledQuote: FrozenRoyaltyQuote;
+      if (isCompletedSettlement(settled)) {
+        if (settled.status === "replayed") {
+          const receipt = await loadFundedRoyaltyReceipt(db, receiptKey);
+          if (!receipt)
+            throw new Error(`National royalty receipt ${receiptKey} is missing after replay`);
+          settledQuote = parseFrozenRoyaltyQuote(receipt);
+        } else {
+          settledQuote = {
+            turn,
+            anchorAmount: dueAnchor,
+            amountCorp,
+            sourceCurrency,
+            sourceLocalPerAnchor: sourceRate,
+            amountTreasury,
+            treasuryCurrency: countryCurrency,
+            treasuryLocalPerAnchor: treasuryRate,
+            metadata: {
+              contractId: contract._id.toString(),
+              stateId: contract.stateId,
+              resource: contract.resource,
+              grantedByLevel: contract.grantedByLevel,
+            },
+          };
+        }
+      } else if (isValuedQuoteConflict(settled)) {
+        settledQuote = await resumeFrozenRoyaltyReceipt(db, receiptKey);
+      } else {
+        throw new Error(settled.error ?? `National royalty receipt ${receiptKey} is incomplete`);
+      }
+
+      await emitFundedRoyaltyLogs(db, thresholds, contract, corp, now, receiptKey, settledQuote);
+      result.royaltiesPaid += 1;
+      result.totalRoyaltyAnchor += settledQuote.anchorAmount;
+      result.contractsSettled += 1;
+      continue;
+    }
 
     // Atomic guarded debit: only succeeds if the corp can cover the payment.
     const debit = await db
