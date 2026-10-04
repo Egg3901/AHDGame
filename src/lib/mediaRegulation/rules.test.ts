@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   censorshipReachAvailability,
+  currentTurnDeliveredAdvertisingUnits,
   isFairnessDoctrineBroadcastOutlet,
   isFairnessDoctrineInEffect,
   isMediaOwnershipBillAvailable,
@@ -8,6 +9,36 @@ import {
 } from "./rules";
 
 describe("media regulation availability", () => {
+  it("counts current political reach from applied seller receipts, not planned units", () => {
+    expect(
+      currentTurnDeliveredAdvertisingUnits({
+        snapshotTurn: 12,
+        currentTurn: 12,
+        physicalSoldUnits: 80,
+        plannedPoliticalUnits: 20,
+        settledPoliticalUnits: 10,
+      })
+    ).toBe(70);
+    expect(
+      currentTurnDeliveredAdvertisingUnits({
+        snapshotTurn: 11,
+        currentTurn: 12,
+        physicalSoldUnits: 80,
+        plannedPoliticalUnits: 20,
+        settledPoliticalUnits: 10,
+      })
+    ).toBeNull();
+    expect(
+      currentTurnDeliveredAdvertisingUnits({
+        snapshotTurn: 12,
+        currentTurn: 12,
+        physicalSoldUnits: 80,
+        plannedPoliticalUnits: 20,
+        settledPoliticalUnits: 0,
+      })
+    ).toBe(60);
+  });
+
   it("ends the enacted US fairness doctrine at the 1987 repeal boundary", () => {
     expect(isFairnessDoctrineInEffect(1986, 2)).toBe(true);
     expect(isFairnessDoctrineInEffect(1987, 2)).toBe(false);

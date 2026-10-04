@@ -73,6 +73,16 @@ export interface IterationStampFields {
 }
 
 export interface GameState {
+  /**
+   * Snapshot of media regulation gates used by legislation endpoints that
+   * already read this document. Admin market configuration keeps it current so
+   * flag-off law pickers need no additional config query.
+   */
+  mediaRegulationSnapshot?: {
+    enabled: boolean;
+    marketSystemMode: import("@/lib/market/modes").MarketSystemMode;
+    commandEconomyEnabled: boolean;
+  };
   europeanIntegration?: import("@/lib/internationalOrganizations/europeanIntegration/rules").EuropeanIntegrationState;
 
   _id: string;

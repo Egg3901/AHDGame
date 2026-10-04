@@ -6,6 +6,7 @@ import { handleRouteError } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { createAdminLog } from "@/lib/adminLog";
 import type { GameConfig } from "@/lib/db/types";
+import type { GameState } from "@/lib/db/types/gameState";
 import {
   getMarketSystemMode,
   marketAtLeast,
@@ -75,6 +76,8 @@ const patchSchema = z.object({
   // Command-economy regime (P0 / command-lite). Default off; stamps audit
   // fields when toggled. Tolerance lever is 0 (full repression) → 1 (tolerated).
   commandEconomyEnabled: z.boolean().optional(),
+  /** Media regulation defaults off; mirrored into gameState for zero-read law gates. */
+  mediaRegulationEnabled: z.boolean().optional(),
   commandEconomySecondEconomyTolerance: z.number().min(0).max(1).optional(),
 });
 
@@ -109,6 +112,7 @@ export async function GET() {
           nppFragileMarketSupplyEnabled: 1,
           extractionOutputScaleEnabled: 1,
           commandEconomyEnabled: 1,
+          mediaRegulationEnabled: 1,
           commandEconomySecondEconomyTolerance: 1,
         },
       }
@@ -134,6 +138,7 @@ export async function GET() {
       nppFragileMarketSupplyEnabled: config?.nppFragileMarketSupplyEnabled === true,
       extractionOutputScaleEnabled: config?.extractionOutputScaleEnabled === true,
       commandEconomyEnabled: config?.commandEconomyEnabled === true,
+      mediaRegulationEnabled: config?.mediaRegulationEnabled === true,
       commandEconomySecondEconomyTolerance:
         typeof config?.commandEconomySecondEconomyTolerance === "number"
           ? config.commandEconomySecondEconomyTolerance
@@ -194,6 +199,7 @@ export async function PATCH(request: Request) {
       extractionOutputScaleEnabled,
       commandEconomyEnabled,
       commandEconomySecondEconomyTolerance,
+      mediaRegulationEnabled,
     } = parsed.data as {
       mode: MarketSystemMode;
       allowNonLive?: boolean;
@@ -225,6 +231,7 @@ export async function PATCH(request: Request) {
       extractionOutputScaleEnabled?: boolean;
       commandEconomyEnabled?: boolean;
       commandEconomySecondEconomyTolerance?: number;
+      mediaRegulationEnabled?: boolean;
     };
 
     // Server-side launch gate. MARKET_MODE_INFO[mode].live is the single source
@@ -250,7 +257,19 @@ export async function PATCH(request: Request) {
     }
     const gameConfig = db.collection<GameConfig>("gameConfig");
 
-    const priorMode = await getMarketSystemMode();
+    const existingConfig = await gameConfig.findOne(
+      { _id: "default" },
+      { projection: { marketSystemMode: 1, mediaRegulationEnabled: 1, commandEconomyEnabled: 1 } }
+    );
+    const priorMode = await getMarketSystemMode(existingConfig);
+    const effectiveMediaRegulationEnabled =
+      mediaRegulationEnabled ?? existingConfig?.mediaRegulationEnabled === true;
+    if (effectiveMediaRegulationEnabled && !marketAtLeast(mode, "clearing")) {
+      return NextResponse.json(
+        { error: "Media regulation requires the clearing market tier." },
+        { status: 400 }
+      );
+    }
     // Stamp the turn, not just the clock. See `marketSystemModeUpdatedTurn` in
     // the GameConfig type for why: the whole soak/rollback vocabulary is
     // turn-indexed, and a wall-clock timestamp cannot be mapped back to a turn
@@ -416,6 +435,8 @@ export async function PATCH(request: Request) {
     }
     if (typeof commandEconomySecondEconomyTolerance === "number")
       governorSet.commandEconomySecondEconomyTolerance = commandEconomySecondEconomyTolerance;
+    if (typeof mediaRegulationEnabled === "boolean")
+      governorSet.mediaRegulationEnabled = mediaRegulationEnabled;
 
     await gameConfig.updateOne(
       { _id: "default" },
@@ -431,6 +452,20 @@ export async function PATCH(request: Request) {
       { upsert: true }
     );
 
+    await db.collection<GameState>("gameState").updateOne(
+      { _id: "current" },
+      {
+        $set: {
+          mediaRegulationSnapshot: {
+            enabled: effectiveMediaRegulationEnabled,
+            marketSystemMode: mode,
+            commandEconomyEnabled:
+              commandEconomyEnabled ?? existingConfig?.commandEconomyEnabled === true,
+          },
+        },
+      }
+    );
+
     await createAdminLog({
       category: "system",
       action: mode === "off" ? "market_system_disabled" : "market_system_set",
@@ -444,7 +479,12 @@ export async function PATCH(request: Request) {
             ".",
     });
 
-    return NextResponse.json({ success: true, mode, priorMode });
+    return NextResponse.json({
+      success: true,
+      mode,
+      priorMode,
+      mediaRegulationEnabled: effectiveMediaRegulationEnabled,
+    });
   } catch (error) {
     return handleRouteError(error);
   }

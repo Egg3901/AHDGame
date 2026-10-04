@@ -963,6 +963,7 @@ export function processSector(
       clearingEnabled: market.clearingEnabled,
       clearing,
       clearingFactor,
+      currentTurn,
       clearingStartTurn,
       mothballed,
       sector,

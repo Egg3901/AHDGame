@@ -18,4 +18,6 @@ areas: [engine]
 - Federal ownership legislation unlocks above 65 percent national US delivered ad share; enacted audience-access limits use each state's prior delivered-ad budget.
 - State press metrics and the US Fairness Doctrine through 1986 bound broadcast outlet reach before commercial and funded political clearing.
 - Existing clearing and payout paths preserve physical output, buyer delivery, seller receipts, and political refunds.
+- Ownership bill availability now uses the latest completed clearing turn and counts political delivery only after its seller receipt is applied; unpaid plans do not count as reach.
+- Law routes read a mirrored regulation snapshot from game state, so a disabled feature adds no configuration or market-data query.
 - The audience-access limit can leave part of the prior audience budget unserved; it does not divest owners or guarantee a percentage of the smaller realized delivery total.

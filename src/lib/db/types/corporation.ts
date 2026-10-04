@@ -1055,6 +1055,8 @@ export interface CorporateSector {
    * selling. Only written when clearing ran.
    */
   soldByCommodity?: Partial<Record<string, number>>;
+  /** Turn whose clearing pass produced soldFraction and soldByCommodity. */
+  soldByCommodityTurn?: number;
   effectivePosture?: number;
   clearingStartTurn?: number | null;
   /**

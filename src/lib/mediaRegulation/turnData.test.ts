@@ -2,6 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 import { loadUSMediaOutletDelivery } from "./turnData";
 
+const politicalOrders = vi.hoisted(() => ({ load: vi.fn(async () => []) }));
+vi.mock("@/lib/politicalMedia/journal", () => ({
+  loadPoliticalMediaOrdersForClearing: politicalOrders.load,
+}));
+
 describe("loadUSMediaOutletDelivery", () => {
   it("projects ad production and sales with ledger scaling and the current transition turn", async () => {
     const toArray = vi.fn().mockResolvedValue([
@@ -82,6 +87,119 @@ describe("loadUSMediaOutletDelivery", () => {
     } as unknown as Db;
 
     const outlets = await loadUSMediaOutletDelivery(db);
+
+    expect(outlets[0].deliveredAdvertisingUnits).toBeNull();
+  });
+
+  it("counts current political allocations only after the matching seller receipt is applied", async () => {
+    politicalOrders.load.mockResolvedValue([
+      {
+        orderId: "paid-order",
+        identity: { orderId: "paid-order", targetStateId: "CA" },
+        status: "settled",
+        settlementPlan: {
+          plannedTurn: 12,
+          plannedUnits: 20,
+          sellers: [
+            {
+              allocationId: "paid-a",
+              sectorId: "sector-1",
+              corporationId: "corp-1",
+              units: 10,
+            },
+            {
+              allocationId: "unpaid-b",
+              sectorId: "sector-1",
+              corporationId: "corp-1",
+              units: 10,
+            },
+          ],
+        },
+      },
+    ] as never);
+    const sectorFind = vi.fn().mockReturnValue({
+      toArray: async () => [
+        {
+          _id: "sector-1",
+          stateId: "CA",
+          corporationId: { toString: () => "corp-1" },
+          sectorType: "media",
+          strategyId: "standard",
+          producedUnits: 100,
+          outputUnitsByCommodity: { advertising: 100 },
+          soldByCommodity: { advertising: 0.8 },
+          soldByCommodityTurn: 12,
+        },
+      ],
+    });
+    const corpFind = vi.fn().mockReturnValue({ toArray: async () => [] });
+    const receiptFind = vi.fn().mockReturnValue({
+      toArray: async () => [
+        {
+          kind: "political-media-seller-receipt",
+          status: "applied",
+          turn: 12,
+          politicalMediaOrderIdentity: {
+            orderId: "paid-order",
+            allocationId: "paid-a",
+            targetStateId: "CA",
+            sectorId: "sector-1",
+            corporationId: "corp-1",
+            units: 10,
+          },
+        },
+      ],
+    });
+    const db = {
+      collection: vi.fn((name: string) => {
+        if (name === "corporateSectors") return { find: sectorFind };
+        if (name === "corporations") return { find: corpFind };
+        return { find: receiptFind };
+      }),
+    } as unknown as Db;
+
+    const outlets = await loadUSMediaOutletDelivery(db, {
+      currentTurn: 12,
+      currentYear: 1991,
+      includeSettledPolitical: true,
+    });
+
+    expect(outlets[0].deliveredAdvertisingUnits).toBeCloseTo(70);
+    expect(receiptFind).toHaveBeenCalledWith(
+      { kind: "political-media-seller-receipt", status: "applied", turn: 12 },
+      { projection: expect.objectContaining({ politicalMediaOrderIdentity: 1 }) }
+    );
+  });
+
+  it("rejects a previous-turn sales snapshot for current-turn concentration", async () => {
+    politicalOrders.load.mockResolvedValue([]);
+    const db = {
+      collection: vi.fn((name: string) =>
+        name === "corporateSectors"
+          ? {
+              find: vi.fn().mockReturnValue({
+                toArray: async () => [
+                  {
+                    _id: "sector-1",
+                    stateId: "CA",
+                    corporationId: { toString: () => "corp-1" },
+                    sectorType: "media",
+                    strategyId: "standard",
+                    outputUnitsByCommodity: { advertising: 100 },
+                    soldByCommodity: { advertising: 0.9 },
+                    soldByCommodityTurn: 19,
+                  },
+                ],
+              }),
+            }
+          : { find: vi.fn().mockReturnValue({ toArray: async () => [] }) }
+      ),
+    } as unknown as Db;
+
+    const outlets = await loadUSMediaOutletDelivery(db, {
+      currentTurn: 20,
+      includeSettledPolitical: true,
+    });
 
     expect(outlets[0].deliveredAdvertisingUnits).toBeNull();
   });

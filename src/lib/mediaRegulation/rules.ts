@@ -29,6 +29,46 @@ export const MEDIA_AUDIENCE_ACCESS_LIMIT_BY_OPTION: readonly (number | null)[] =
 ];
 export const MEDIA_CONCENTRATION_BILL_TRIGGER = 0.65;
 
+/**
+ * Convert the sector clearing snapshot into actual current-turn audience
+ * delivery. Political allocations are already reflected in the sector's sold
+ * units, so remove every planned unit and restore only seller receipts that
+ * were durably applied. Unsettled plans never count as reach.
+ */
+export function currentTurnDeliveredAdvertisingUnits(input: {
+  snapshotTurn: number | null | undefined;
+  currentTurn: number | null | undefined;
+  physicalSoldUnits: number | null | undefined;
+  plannedPoliticalUnits: number;
+  settledPoliticalUnits: number;
+}): number | null {
+  const {
+    snapshotTurn,
+    currentTurn,
+    physicalSoldUnits,
+    plannedPoliticalUnits,
+    settledPoliticalUnits,
+  } = input;
+  if (
+    !Number.isSafeInteger(snapshotTurn) ||
+    !Number.isSafeInteger(currentTurn) ||
+    snapshotTurn !== currentTurn ||
+    typeof physicalSoldUnits !== "number" ||
+    !Number.isFinite(physicalSoldUnits) ||
+    physicalSoldUnits < 0 ||
+    !Number.isFinite(plannedPoliticalUnits) ||
+    plannedPoliticalUnits < 0 ||
+    !Number.isFinite(settledPoliticalUnits) ||
+    settledPoliticalUnits < 0
+  )
+    return null;
+
+  return (
+    Math.max(0, physicalSoldUnits - plannedPoliticalUnits) +
+    Math.min(plannedPoliticalUnits, settledPoliticalUnits)
+  );
+}
+
 /** The Fairness Doctrine applied to US broadcast media through its 1987 repeal. */
 export function isFairnessDoctrineInEffect(
   currentYear: number | null | undefined,

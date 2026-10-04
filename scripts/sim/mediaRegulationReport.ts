@@ -2,6 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import {
   censorshipReachAvailability,
+  currentTurnDeliveredAdvertisingUnits,
   isFairnessDoctrineInEffect,
   isMediaOwnershipBillAvailable,
   mediaAudienceAccessLimitUnitsByOutlet,
@@ -89,6 +90,34 @@ const fairnessEraCases = [1986, 1987].map((currentYear) => ({
   fairnessDoctrineInEffect: isFairnessDoctrineInEffect(currentYear, 2),
 }));
 
+const currentTurnPoliticalAttribution = {
+  physicalSoldUnits: 80,
+  plannedPoliticalUnits: 20,
+  appliedSellerReceiptUnits: 10,
+  unpaidPlannedUnits: 10,
+  measuredReachUnits: currentTurnDeliveredAdvertisingUnits({
+    snapshotTurn: 12,
+    currentTurn: 12,
+    physicalSoldUnits: 80,
+    plannedPoliticalUnits: 20,
+    settledPoliticalUnits: 10,
+  }),
+  reachWhenNoSellerReceiptHasApplied: currentTurnDeliveredAdvertisingUnits({
+    snapshotTurn: 12,
+    currentTurn: 12,
+    physicalSoldUnits: 80,
+    plannedPoliticalUnits: 20,
+    settledPoliticalUnits: 0,
+  }),
+  staleSnapshotReach: currentTurnDeliveredAdvertisingUnits({
+    snapshotTurn: 11,
+    currentTurn: 12,
+    physicalSoldUnits: 80,
+    plannedPoliticalUnits: 20,
+    settledPoliticalUnits: 10,
+  }),
+};
+
 const fresh1991RuleContext = {
   currentYear: 1991,
   representativePolicyOptionIndex: 3,
@@ -100,7 +129,7 @@ const fresh1991RuleContext = {
 const report = {
   title: "Media regulation advertising availability diagnostic",
   method:
-    "Runs the production media regulation rules against a measured prior-turn US advertising split and authored press metrics. This is a rule sensitivity report, not a world simulation or a 1991 seed target.",
+    "Runs production media regulation rules against a prior-turn audience budget and current-turn settled delivery attribution. This is a rule sensitivity report, not a world simulation or a 1991 seed target.",
   assumptions: {
     priorDeliveredAdvertisingUnitsByOutlet: { "network-a": 80, "network-b": 20 },
     currentTurnPhysicalAdvertisingUnits: { "network-a": 80, "network-b": 20 },
@@ -110,17 +139,32 @@ const report = {
     ownershipBillThresholdScope: "national US aggregate, with foreign delivery excluded",
     enactedAudienceAccessLimitScope:
       "each US state audience market; no ownership divestiture is modeled",
+    ownershipBillMeasurement:
+      "current-turn sector sold units less all planned political units, plus only applied seller receipt units",
   },
   audienceLimitCases,
   censorshipCases,
   ownershipTriggerCases,
   fairnessEraCases,
+  currentTurnPoliticalAttribution,
+  attributionReadBudget: {
+    flagOffAdditionalQueries: 0,
+    flagOnQueries: {
+      sectorAndOwnerLoads: 2,
+      currentTurnOrderPlans: 1,
+      appliedSellerReceipts: "1 only when a current-turn settlement plan has sellers",
+    },
+    sellerReceiptIndex: "bankMoneyMoves_politicalMedia_sellerReceiptTurn",
+  },
   fresh1991RuleContext,
   accounting: {
     deliveryIsBoundedBeforeCommercialAndFundedPoliticalClearing: true,
     noAdvertisingUnitsAreCreated: true,
     accessLimitUsesPriorAudienceBudgetNotPostLimitShare: true,
     unmeasuredHistoryDoesNotInventConcentration: true,
+    unpaidPoliticalPlansDoNotCountAsReach:
+      currentTurnPoliticalAttribution.reachWhenNoSellerReceiptHasApplied === 60,
+    staleDeliverySnapshotsFailClosed: currentTurnPoliticalAttribution.staleSnapshotReach === null,
     fundedPoliticalBuyerDebitEqualsSellerReceipt: audienceLimitCases.every(
       (scenario) => scenario.filledAgainstStrongPoliticalDemand.payoutMatchesDeliveredAnchor
     ),
