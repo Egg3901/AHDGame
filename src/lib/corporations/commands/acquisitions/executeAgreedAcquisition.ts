@@ -29,7 +29,11 @@ import { attachMergerRemedy } from "@/lib/corporations/mergerReview/lifecycle";
 import type { AcquisitionSettlement } from "@/lib/db/types/acquisitionSettlement";
 import type { MergerReview } from "@/lib/db/types/mergerReview";
 import { MERGER_REVIEWS } from "@/lib/corporations/mergerReview/gate";
-import { bankTransferConflict, transferBankCharterToAcquirer } from "@/lib/banking/transferCharter";
+import {
+  bankTransferConflict,
+  hasFundedSovereignEscrow,
+  transferBankCharterToAcquirer,
+} from "@/lib/banking/transferCharter";
 import { withCorpLock } from "@/lib/corporations/corpMoneyLock";
 import { buildAcquisitionPayoutPlan } from "./rules/acquisitionPayoutPlan";
 import {
@@ -155,7 +159,11 @@ async function runAgreedAcquisition(
   // settlement for this offer owns the run. (Identity compare mirrors
   // #2016's; the protocol itself is not duplicated here.)
   const bankConflict = bankTransferConflict(target, acquirer);
-  if (bankConflict && !(await isOwnInterruptedCharterClaim(db, offer, target, acquirer))) {
+  if (
+    bankConflict &&
+    (hasFundedSovereignEscrow(target) ||
+      !(await isOwnInterruptedCharterClaim(db, offer, target, acquirer)))
+  ) {
     return { ok: false, error: bankConflict, status: 400 };
   }
 

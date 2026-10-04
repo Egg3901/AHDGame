@@ -1,5 +1,5 @@
 import {
-  treasuryAccrualReceipt,
+  treasuryAccrualWithBankCouponReserve,
   treasuryAnchorValuation,
 } from "@/lib/budget/rules/treasuryAccrual";
 import { publishTreasuryAccrualReceipt } from "@/lib/budget/treasuryAccrualReceipt";
@@ -8,7 +8,9 @@ import { expireFinancialCrisisAusterity } from "@/lib/crises/financialCrisisBudg
 import { advanceTaxRatePhaseIn } from "@/lib/budget/taxRatePhaseIn";
 import { getDb } from "@/lib/mongodb";
 import type { FederalBudget, TreasuryAccrualReceipt } from "@/lib/db/types/budget";
+import type { Bond } from "@/lib/db/types/bond";
 import type { CentralBank } from "@/lib/db/types/centralBank";
+import type { GameConfig } from "@/lib/db/types/gameConfig";
 import type { GameState } from "@/lib/db/types/gameState";
 import type { CountryId } from "@/lib/constants/countries";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
@@ -18,6 +20,11 @@ import { getCentralBankScope } from "@/lib/centralBank/helpers";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import { getRegisteredCountryIdSet } from "@/lib/country/registeredCountries";
 import { enforcementTreasuryCostPerTurn } from "@/lib/unions/enforcementCosts";
+import {
+  bankCouponClaim,
+  bankCouponPlanForCountry,
+  settleBankSovereignClaims,
+} from "@/lib/banking/bankSovereignClaims";
 
 /**
  * Per-turn fiscal accrual (spec §4). For each country's federalBudget, move a
@@ -63,8 +70,8 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
 
   const [config, rates] = await Promise.all([
     db
-      .collection<{ _id: string; ledgerShadow?: boolean }>("gameConfig")
-      .findOne({ _id: "default" }, { projection: { ledgerShadow: 1 } }),
+      .collection<GameConfig>("gameConfig")
+      .findOne({ _id: "default" }, { projection: { ledgerShadow: 1, bankTreasuryEnabled: 1 } }),
     db
       .collection<{ currencyCode: string; rate: number }>("exchangeRates")
       .find({}, { projection: { currencyCode: 1, rate: 1 } })
@@ -72,6 +79,26 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
   ]);
   const rateByCurrency = new Map(rates.map((r) => [r.currencyCode, r.rate]));
   const ledgerShadow = config?.ledgerShadow === true;
+  const bankTreasuryEnabled = config?.bankTreasuryEnabled === true;
+  const sovereignBonds = bankTreasuryEnabled
+    ? await db
+        .collection<Bond>("bonds")
+        .find(
+          { issuerType: "sovereign", defaulted: { $ne: true } },
+          {
+            projection: {
+              _id: 1,
+              issuerType: 1,
+              countryId: 1,
+              currencyCode: 1,
+              couponRate: 1,
+              holders: 1,
+              defaulted: 1,
+            },
+          }
+        )
+        .toArray()
+    : [];
   function valuationFor(
     budget: FederalBudget
   ): Pick<TreasuryAccrualReceipt, "anchorRate" | "anchorRateSource" | "anchorRatePreset"> {
@@ -100,7 +127,12 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
     for (let attempt = 0; attempt < 4; attempt++) {
       if (b.treasuryAccrual) {
         await publishTreasuryAccrualReceipt(db, b, b.treasuryAccrual);
-        if (b.treasuryAccrual.turn >= _turn) break;
+        if (b.treasuryAccrual.turn >= _turn) {
+          if (b.bankSovereignClaims?.length) {
+            await settleBankSovereignClaims(db, b, _turn);
+          }
+          break;
+        }
       }
       // Invariant: every federalBudget carries a signed treasuryBalance (set at
       // creation + backfilled). If one is still null, heal it in place to zero so
@@ -144,7 +176,11 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
       );
       const currencyCode = resolveCountryCurrencyCode(b) ?? "USD";
       const valuation = valuationFor(b);
-      const receipt = treasuryAccrualReceipt({
+      const bankCouponPlan = bankTreasuryEnabled
+        ? bankCouponPlanForCountry(sovereignBonds, String(b.countryId ?? b._id), currencyCode)
+        : [];
+      const bankCouponAmount = bankCouponPlan.reduce((sum, plan) => sum + plan.amountLocal, 0);
+      const accrualInput = {
         turn: _turn,
         openingCash: current,
         currencyCode,
@@ -154,7 +190,37 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
         annualPrimarySpending: spendingTotal - debtInterest,
         debtService: debtServiceTurn,
         enforcement: enforcementCost,
-      });
+      };
+      const accrualReceipt = treasuryAccrualWithBankCouponReserve(accrualInput, bankCouponAmount);
+      const receipt: TreasuryAccrualReceipt = {
+        ...accrualReceipt,
+        ...(bankTreasuryEnabled
+          ? {
+              bankCouponPlan: bankCouponPlan.map(
+                ({ bankId, charteredTurn, amountLocal, bondIds }) => ({
+                  bankId,
+                  charteredTurn,
+                  amountLocal,
+                  bondIds,
+                })
+              ),
+            }
+          : {}),
+      };
+      const existingClaims = b.bankSovereignClaims ?? [];
+      const claimById = new Map(existingClaims.map((claim) => [claim.id, claim]));
+      for (const plan of bankCouponPlan) {
+        const claim = bankCouponClaim({
+          countryId: String(b.countryId ?? b._id),
+          currencyCode,
+          turn: _turn,
+          plan,
+          anchorRate: valuation.anchorRate ?? undefined,
+          ledgerShadow,
+        });
+        claimById.set(claim.id, claim);
+      }
+      const bankSovereignClaims = [...claimById.values()];
       const next = current + receipt.cashDelta;
 
       // Ticket #1102: walk any enacted tax-rate change one step toward its
@@ -189,6 +255,7 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
           $set: {
             treasuryBalance: next,
             treasuryAccrual: receipt,
+            ...(bankSovereignClaims.length > 0 ? { bankSovereignClaims } : {}),
             ...rampSet,
           },
           ...(Object.keys(rampUnset).length > 0 ? { $unset: rampUnset } : {}),
@@ -196,6 +263,13 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
       );
       if (applied.matchedCount === 1) {
         await publishTreasuryAccrualReceipt(db, b, receipt);
+        if (bankSovereignClaims.length > 0) {
+          await settleBankSovereignClaims(
+            db,
+            { _id: b._id, countryId: b.countryId, bankSovereignClaims },
+            _turn
+          );
+        }
         countriesProcessed += 1;
         break;
       }

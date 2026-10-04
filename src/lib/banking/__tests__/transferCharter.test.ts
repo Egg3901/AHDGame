@@ -319,5 +319,39 @@ describe("transferBankCharterToAcquirer", () => {
     expect(
       bankTransferConflict({ name: "T", bankCharter: makeCharter() }, { name: "A" })
     ).toBeNull();
+    expect(
+      bankTransferConflict(
+        {
+          name: "T",
+          bankSovereignEscrows: {
+            pending: {
+              bankId: "bank-id",
+              charteredTurn: 150,
+              currencyCode: "USD",
+              amountLocal: 20,
+              claimKind: "coupon",
+            },
+          },
+        },
+        { name: "A" }
+      )
+    ).toMatch(/funded sovereign bank payments remain unsettled/);
+    expect(
+      bankTransferConflict(
+        {
+          name: "T",
+          bankSovereignEscrows: {
+            settled: {
+              bankId: "bank-id",
+              charteredTurn: 150,
+              currencyCode: "USD",
+              amountLocal: 0,
+              claimKind: "coupon",
+            },
+          },
+        },
+        { name: "A" }
+      )
+    ).toBeNull();
   });
 });
