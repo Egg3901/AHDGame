@@ -48,6 +48,7 @@ import {
   applyProtectedProjection,
   bindProjectionTargets,
   invalidProjectionTarget,
+  isUpdateProjection,
 } from "./projectionSettlement";
 export { reviveObjectIds } from "./settlementEncoding";
 
@@ -160,7 +161,7 @@ export async function applyProjection(
       return { ok: false, error: error instanceof Error ? error.message : String(error) };
     }
   }
-  if (projection.update)
+  if (isUpdateProjection(projection))
     return { ok: false, error: "Update projections require durable journal publication" };
   return { ok: false, error: `projection "${projection.note}" has neither insert nor update` };
 }
@@ -433,13 +434,13 @@ async function finishProjections(
   for (let i = 0; i < records.length; i += 1) {
     const record = records[i];
     if (record?.appliedAt || record?.applied) {
-      if (record.projection.update)
+      if (isUpdateProjection(record.projection))
         await applyProtectedProjection(db, transition.key, i, record.projection);
       result.appliedProjections.push(i);
       continue;
     }
     const projection = record.projection;
-    if (projection.update && !record.receiptProtocol && !record.claimedAt) {
+    if (isUpdateProjection(projection) && !record.receiptProtocol && !record.claimedAt) {
       await journal.updateOne(
         {
           _id: transition.key,
@@ -471,7 +472,7 @@ async function finishProjections(
       continue;
     }
 
-    const outcome = projection.update
+    const outcome = isUpdateProjection(projection)
       ? await applyProtectedProjection(db, transition.key, i, projection)
       : await applyProjection(db, projection, projectionStamp(transition.key, i));
     if (!outcome.ok) {
@@ -489,7 +490,7 @@ async function finishProjections(
           $set: {
             status: "partial",
             error: outcome.error,
-            ...(!projection.update ? { [`projections.${i}.claimedAt`]: null } : {}),
+            ...(!isUpdateProjection(projection) ? { [`projections.${i}.claimedAt`]: null } : {}),
           },
         }
       );
@@ -498,7 +499,7 @@ async function finishProjections(
     result.appliedProjections.push(i);
     if (!("newlyApplied" in outcome) || outcome.newlyApplied)
       result.newlyAppliedProjections.push(i);
-    if (projection.update) continue;
+    if (isUpdateProjection(projection)) continue;
     await journal.updateOne(
       { _id: transition.key },
       {

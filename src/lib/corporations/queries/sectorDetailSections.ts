@@ -1246,6 +1246,7 @@ export interface SectorPlantsSection {
     bondReference?: import("@/lib/corporations/investment/rules").InvestmentBondReference | null;
   };
   buildQuote: {
+    financing?: import("@/lib/banking/rules/constructionRequest").ConstructionFinanceView;
     /** Base ₳ per unit at this era, before the multipliers below. */
     unitPriceAnchor: number;
     expansionMultiplier?: number;

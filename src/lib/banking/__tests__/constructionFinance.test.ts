@@ -14,6 +14,7 @@ import {
   rejectConstructionFinance,
 } from "../constructionFinance";
 
+import { cancelFinancedConstruction } from "../constructionCancellation";
 import { acceptLoan, rejectLoan } from "../loanApproval";
 vi.mock("@/lib/banking/auditEvents", () => ({ emitBankingAuditEvent: vi.fn() }));
 vi.mock("@/lib/currentTurn", () => ({ getCurrentTurn: vi.fn().mockResolvedValue(12) }));
@@ -106,6 +107,16 @@ function world(requireApproval = false) {
 
 beforeEach(() => vi.clearAllMocks());
 describe("construction request lifecycle", () => {
+  it("refuses APR drift before reserving the sector or moving cash", async () => {
+    const { request, memory } = world();
+    expect(await requestConstructionFinance({ ...request, maximumRatePercent: 4 })).toMatchObject({
+      ok: false,
+      error: "The lender's rate exceeds the reviewed quote",
+    });
+    expect(memory.collection("bankLoans").docs).toHaveLength(0);
+    expect(memory.collection("corporateSectors").docs[0].constructionFinancing).toBeUndefined();
+    expect(memory.collection("corporations").docs[0].liquidCapital).toBe(50_000);
+  });
   it("does not disburse a pending noncash construction request after the flag is disabled", async () => {
     const { request } = world(true);
     const requested = await requestConstructionFinance(request);
@@ -295,6 +306,112 @@ describe("construction request lifecycle", () => {
       ).toBe(50_000);
     }
   });
+
+  it.each(["none", "fee", "pool", "queue"])(
+    "settles native FX recipients and market headroom once after a %s interruption",
+    async (point) => {
+      const { request, memory } = world();
+      const poolId = new ObjectId();
+      memory.seed("centralBanks", [
+        { _id: "US", forexRevenue: 0 },
+        { _id: "UK", spreadFeeReserveBalances: { USD: 0 } },
+      ]);
+      memory.seed("unownedSectors", [
+        {
+          _id: poolId,
+          stateId: "GB_TEST",
+          countryId: "UK",
+          sectorType: "manufacturing",
+          industryModel: null,
+          headroomUnits: 250,
+          revenue: 250_000,
+        },
+      ]);
+      const financed = {
+        ...request,
+        constructionCostLocal: 100_500,
+        maximumCostLocal: 100_500,
+        buildContext: {
+          destinationCurrency: "GBP" as const,
+          bucket: { stateId: "GB_TEST", countryId: "UK", sectorType: "manufacturing" as const },
+          eraUnitScale: 1,
+        },
+      };
+      if (point !== "none") {
+        const fault = withInjectedCrash(memory, {
+          collection:
+            point === "fee"
+              ? "centralBanks"
+              : point === "pool"
+                ? "unownedSectors"
+                : "corporateSectors",
+          op: "updateOne",
+          onCall: 1,
+          afterWrite: true,
+          matches: (args) => {
+            const update = args[1] as {
+              $inc?: Record<string, unknown>;
+              $set?: Record<string, unknown>;
+            };
+            return point === "fee"
+              ? update.$inc?.forexRevenue === 125
+              : point === "pool"
+                ? Array.isArray(args[1])
+                : Array.isArray(update.$set?.buildQueue);
+          },
+        });
+        await expect(
+          requestConstructionFinance({ ...financed, db: fault.db })
+        ).rejects.toBeInstanceOf(InjectedCrash);
+      }
+      expect(await requestConstructionFinance(financed)).toMatchObject({
+        ok: true,
+        pending: false,
+      });
+      expect(
+        await requestConstructionFinance({ ...financed, constructionCostLocal: 900_000 })
+      ).toMatchObject({ ok: true, pending: false });
+      expect(memory.collection("centralBanks").docs).toMatchObject([
+        { forexRevenue: 125 },
+        { spreadFeeReserveBalances: { USD: 250 } },
+      ]);
+      expect(memory.collection("unownedSectors").docs[0].headroomUnits).toBe(150);
+      const sector = memory.collection("corporateSectors").docs[0];
+      expect(sector.buildQueue).toHaveLength(1);
+      expect(sector.constructionFinancing).toMatchObject({
+        escrowLocal: 0,
+        effectsPaid: true,
+        collateralCostLocal: 100_000,
+      });
+      expect(memory.collection("corporations").docs[0].liquidCapital).toBe(23_750);
+      expect(memory.collection("corporations").docs[1].bankConstructionFunding).toBeUndefined();
+      const cancelled = await cancelFinancedConstruction({
+        db: request.db,
+        enabled: true,
+        sectorId,
+        borrowerId,
+        turn: 12,
+      });
+      expect(cancelled).toMatchObject({ ok: true, principalRepaid: 75_000, ownerRefund: 0 });
+      expect(memory.collection("unownedSectors").docs[0].headroomUnits).toBe(250);
+      expect(
+        (
+          await cancelFinancedConstruction({
+            db: request.db,
+            enabled: true,
+            sectorId,
+            borrowerId,
+            turn: 100,
+          })
+        ).ok
+      ).toBe(true);
+      expect(memory.collection("unownedSectors").docs[0].headroomUnits).toBe(250);
+      expect(memory.collection("centralBanks").docs).toMatchObject([
+        { forexRevenue: 125 },
+        { spreadFeeReserveBalances: { USD: 250 } },
+      ]);
+    }
+  );
 
   it("performs no read or snapshot load when disabled", async () => {
     const { request, memory } = world();

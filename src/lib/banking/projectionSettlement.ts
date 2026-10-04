@@ -41,6 +41,9 @@ function reservedGuard(value: unknown): boolean {
       reservedGuard(child)
   );
 }
+export function isUpdateProjection(projection: TransitionProjection): boolean {
+  return Boolean(projection.update || projection.pipelineUpdate);
+}
 function hasStableTarget(projection: TransitionProjection): boolean {
   const id = reviveObjectIds(projection.filter)?._id;
   return typeof id === "string" || typeof id === "number" || id instanceof ObjectId;
@@ -53,7 +56,8 @@ export async function bindProjectionTargets(
 ): Promise<
   { projections: TransitionProjection[] } | { error: string; status?: "rejected" | "partial" }
 > {
-  if (!projections.some((p) => p.update && !hasStableTarget(p))) return { projections };
+  if (!projections.some((p) => isUpdateProjection(p) && !hasStableTarget(p)))
+    return { projections };
   const existing = await db
     .collection<Journal>(MONEY_MOVE_COLLECTION)
     .findOne({ _id: key }, { projection: { projections: 1, status: 1, error: 1 } });
@@ -69,7 +73,7 @@ export async function bindProjectionTargets(
     };
   if (existing?.projections) {
     const original = existing.projections.map((p) => p.projection);
-    if (original.some((p) => p.update && !hasStableTarget(p)))
+    if (original.some((p) => isUpdateProjection(p) && !hasStableTarget(p)))
       return {
         error: "Legacy projection selector has no frozen target; reconciliation is required",
         status: "partial",
@@ -78,7 +82,7 @@ export async function bindProjectionTargets(
   }
   const bound: TransitionProjection[] = [];
   for (const projection of projections) {
-    if (!projection.update || hasStableTarget(projection)) {
+    if (!isUpdateProjection(projection) || hasStableTarget(projection)) {
       bound.push(projection);
       continue;
     }
@@ -93,12 +97,29 @@ export async function bindProjectionTargets(
   return { projections: bound };
 }
 export function invalidProjectionTarget(projection: TransitionProjection): boolean {
-  if (!projection.update) return false;
+  if (!isUpdateProjection(projection)) return false;
+  if (projection.insert || (projection.update && projection.pipelineUpdate)) return true;
   const filter = reviveObjectIds(projection.filter) as Document | undefined;
   const id = filter?._id;
   if (!(typeof id === "string" || typeof id === "number" || id instanceof ObjectId)) return true;
   if (reservedGuard(filter)) return true;
-  return Object.entries(projection.update).some(
+  if (projection.pipelineUpdate) {
+    return (
+      projection.pipelineUpdate.length === 0 ||
+      projection.pipelineUpdate.some((stage) => {
+        const entries = Object.entries(stage);
+        if (entries.length !== 1 || entries[0][0] !== "$set") return true;
+        const fields = entries[0][1];
+        return (
+          !fields ||
+          typeof fields !== "object" ||
+          Array.isArray(fields) ||
+          Object.keys(fields).some(reserved)
+        );
+      })
+    );
+  }
+  return Object.entries(projection.update!).some(
     ([operator, fields]) =>
       !operator.startsWith("$") ||
       !fields ||
@@ -187,7 +208,8 @@ export async function applyProtectedProjection(
       invalidProjectionTarget(saved.projection)
     )
       return { ok: false, error: "Projection target differs from its original journal" };
-    const update = reviveObjectIds(saved.projection.update) as Document;
+    const update = reviveObjectIds(saved.projection.update) as Document | undefined;
+    const pipeline = reviveObjectIds(saved.projection.pipelineUpdate);
     const receipt = current?.pendingSettlementProjection;
     if (receipt) {
       await acknowledge(db, projection.collection, filter._id, receipt);
@@ -220,12 +242,28 @@ export async function applyProtectedProjection(
     const delivered: Receipt = { key, index, generation: revision + 1 };
     const write = await target.updateOne(
       { $and: [originalFilter!, guard] } as Filter<Target>,
-      {
-        ...update,
-        $inc: { ...update.$inc, [REVISION]: 1 },
-        $set: { ...update.$set, [RECEIPT]: delivered },
-        $push: { ...update.$push, settledKeys: { $each: [stamp], $slice: -SETTLED_KEYS_CAP } },
-      } as UpdateFilter<Target>
+      pipeline
+        ? [
+            ...pipeline,
+            {
+              $set: {
+                [REVISION]: revision + 1,
+                [RECEIPT]: { $literal: delivered },
+                settledKeys: {
+                  $slice: [
+                    { $concatArrays: [{ $ifNull: ["$settledKeys", []] }, { $literal: [stamp] }] },
+                    -SETTLED_KEYS_CAP,
+                  ],
+                },
+              },
+            },
+          ]
+        : ({
+            ...update,
+            $inc: { ...update?.$inc, [REVISION]: 1 },
+            $set: { ...update?.$set, [RECEIPT]: delivered },
+            $push: { ...update?.$push, settledKeys: { $each: [stamp], $slice: -SETTLED_KEYS_CAP } },
+          } as UpdateFilter<Target>)
     );
     if (write.matchedCount) {
       await acknowledge(db, projection.collection, filter._id, delivered);

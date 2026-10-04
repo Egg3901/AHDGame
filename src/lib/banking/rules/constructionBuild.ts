@@ -2,6 +2,17 @@ import type { SectorBuildOrder } from "@/lib/db/types/corporation";
 import { oid, type BankingTransition } from "./boundary";
 import { CAPACITY_BUILD_CANCEL_REFUND } from "@/lib/constants/capacityEconomy";
 
+export interface ConstructionBuildEffects {
+  transition: BankingTransition;
+  feeLocal: number;
+  pool: {
+    id: string;
+    bucket: import("@/lib/market/unownedPoolDraw").UnownedPoolBucket;
+    eraUnitScale: number;
+  };
+  quotedAt: Date;
+}
+
 /** A frozen, single-build claim. Only the settlement shell constructs this quote. */
 export interface ConstructionBuildClaim {
   claimId: string;
@@ -20,6 +31,8 @@ export interface ConstructionBuildClaim {
   /** Freeze the lender's approval policy and its noncash request before publication. */
   approvalRequired?: boolean;
   requestTransition?: BankingTransition;
+  effects?: ConstructionBuildEffects;
+  effectsPaid?: boolean;
   order: SectorBuildOrder;
   status: "awaiting_approval" | "funding" | "building" | "released" | "cancelled";
   escrowLocal: number;
@@ -139,13 +152,20 @@ export function constructionPaidBuildTransition(input: {
   queue: readonly SectorBuildOrder[];
 }): Result<{ transition: BankingTransition; guard: Record<string, unknown> }> {
   const { claim, sectorId, turn } = input;
+  const capex = claim.effects ? claim.collateralCostLocal : claim.constructionCostLocal;
   if (
     !input.enabled ||
     !isValidConstructionBuildClaim(claim) ||
     claim.status !== "funding" ||
     claim.borrowerContributionPaid !== true ||
     claim.loanFunded !== true ||
-    claim.escrowLocal < claim.constructionCostLocal ||
+    (claim.effects &&
+      (claim.effectsPaid !== true ||
+        !Number.isFinite(claim.effects.feeLocal) ||
+        claim.effects.feeLocal < 0 ||
+        Math.abs(claim.effects.feeLocal + claim.collateralCostLocal - claim.constructionCostLocal) >
+          1e-6)) ||
+    claim.escrowLocal < capex ||
     input.queue.length >= 20
   )
     return { ok: false, error: "Construction is not fully funded or the queue is full" };
@@ -169,7 +189,8 @@ export function constructionPaidBuildTransition(input: {
         "constructionFinancing.status": "funding",
         "constructionFinancing.borrowerContributionPaid": true,
         "constructionFinancing.loanFunded": true,
-        "constructionFinancing.escrowLocal": { $gte: claim.constructionCostLocal },
+        "constructionFinancing.escrowLocal": { $gte: capex },
+        ...(claim.effects ? { "constructionFinancing.effectsPaid": true } : {}),
         $or: [
           { buildQueue: [...input.queue] },
           ...(input.queue.length ? [] : [{ buildQueue: null }]),
@@ -186,17 +207,17 @@ export function constructionPaidBuildTransition(input: {
             collection: "corporateSectors",
             filter: identity,
             path: "constructionFinancing.escrowLocal",
-            amount: claim.constructionCostLocal,
+            amount: capex,
             note: "Spend only delivered construction cash",
           },
-          { kind: "burn", amount: claim.constructionCostLocal, note: "Paid construction capex" },
+          { kind: "burn", amount: capex, note: "Paid construction capex" },
         ],
         projections: [
           {
             collection: "corporateSectors",
             filter: identity,
             update: {
-              $inc: { "constructionFinancing.escrowLocal": -claim.constructionCostLocal },
+              $inc: { "constructionFinancing.escrowLocal": -capex },
               $set: {
                 buildQueue: [...input.queue, order],
                 "constructionFinancing.status": "building",

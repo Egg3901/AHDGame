@@ -189,9 +189,22 @@ export async function releaseCompletedConstructionFunding(
     claim.status !== "building" ||
     !claim.loanFunded ||
     !claim.borrowerContributionPaid ||
-    claim.escrowLocal !== 0
+    claim.escrowLocal !== 0 ||
+    !claim.order ||
+    !Number.isSafeInteger(claim.order.startTurn)
   )
     return false;
+  // Paid queue publication can precede acknowledgement of its atomic receipt.
+  // Finish that original receipt before another recovery may change the queue.
+  const paidKey = `construction:${claim.claimId}:paid:${claim.order.startTurn}`;
+  const paidJournal = await db
+    .collection<{ _id: string }>(MONEY_MOVE_COLLECTION)
+    .findOne({ _id: paidKey }, { projection: { _id: 1 } });
+  if (paidJournal) {
+    const paid = await resumeSettlement(db, paidKey);
+    if (paid.error || !["applied", "replayed"].includes(paid.status)) return false;
+  }
+  if (claim.effects && !claim.effectsPaid) return false;
   await releaseConstructionFundingLease(db, claim);
   await db.collection<BankLoan>("bankLoans").updateOne(
     {

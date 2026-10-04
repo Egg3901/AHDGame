@@ -97,6 +97,7 @@ describe("construction debt settlement ownership", () => {
           bankId: String(loan.bankCorporationId),
           charteredTurn: loan.charteredTurn,
           status: "building",
+          order: { unitsOrdered: 10, costPaidAnchor: 100, startTurn: 10, onlineTurn: 14 },
           escrowLocal: 0,
           loanFunded: true,
           borrowerContributionPaid: true,

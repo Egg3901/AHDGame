@@ -1,5 +1,6 @@
 import type { BankLoan } from "@/lib/db/types/bank";
 import type { SectorBuildOrder } from "@/lib/db/types/corporation";
+import { unownedPoolCredit } from "@/lib/market/unownedPoolDraw";
 import { deliveredFraction } from "@/lib/corporations/buildDelivery";
 import { CAPACITY_BUILD_CANCEL_REFUND } from "@/lib/constants/capacityEconomy";
 import { allocateConstructionCancellation } from "./constructionFinance";
@@ -19,6 +20,7 @@ export interface ConstructionCancellationQuote {
   nextStatus: BankLoan["status"];
   bookDelta: number;
   destination: "bank" | "insurance";
+  poolCredit?: TransitionProjection;
   completed?: boolean;
   cleanupCompleted?: boolean;
   aborted?: boolean;
@@ -31,6 +33,7 @@ export function quoteConstructionCancellation(input: {
   queue: readonly SectorBuildOrder[];
   turn: number;
   destination: ConstructionCancellationQuote["destination"];
+  now?: Date;
 }): ConstructionCancellationQuote | null {
   const { claim, loan, queue, turn } = input;
   const orderIndex = queue.findIndex(
@@ -39,7 +42,10 @@ export function quoteConstructionCancellation(input: {
   );
   if (
     orderIndex < 0 ||
-    claim.status !== "building" ||
+    !(
+      claim.status === "building" ||
+      (claim.status === "released" && loan.status === "repaid" && loan.outstanding === 0)
+    ) ||
     claim.escrowLocal !== 0 ||
     !claim.loanFunded ||
     !claim.borrowerContributionPaid ||
@@ -61,7 +67,26 @@ export function quoteConstructionCancellation(input: {
     loan.outstanding
   );
   const nextOutstanding = Math.max(0, loan.outstanding - repayPrincipal);
+  const pool = claim.effects?.pool;
+  const pipeline = pool
+    ? unownedPoolCredit(
+        pool.bucket,
+        queue[orderIndex].unitsOrdered * (1 - deliveredFraction(queue[orderIndex], turn)),
+        input.now ?? claim.effects!.quotedAt,
+        pool.eraUnitScale
+      )
+    : null;
   return {
+    ...(pipeline && pool
+      ? {
+          poolCredit: {
+            collection: "unownedSectors",
+            filter: { _id: oid(pool.id) },
+            pipelineUpdate: pipeline as Record<string, unknown>[],
+            note: "Return only the cancelled undelivered market claim once",
+          },
+        }
+      : {}),
     key: `construction:${claim.claimId}:cancel:${turn}`,
     turn,
     queueBefore: [...queue],
@@ -156,6 +181,7 @@ export function cancellationPayoutTransition(
       update: { $inc: { "bankCharter.totalLoans": quote.bookDelta } },
       note: "Reduce the original lender's live loan book by funded principal recovery",
     });
+  if (quote.poolCredit) projections.push(quote.poolCredit);
   projections.push({
     collection: "corporateSectors",
     filter: { ...sectorIdentity, "constructionFinancing.escrowLocal": 0 },

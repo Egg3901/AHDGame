@@ -16,6 +16,7 @@ import {
   acquireConstructionFundingLease,
   releaseConstructionFundingLease,
   abortUnfundedConstruction,
+  releaseCompletedConstructionFunding,
 } from "./constructionFundingLease";
 import { MONEY_MOVE_COLLECTION } from "./moneyMove";
 import { settleTransition, resumeSettlement, type SettlementResult } from "./settlementJournal";
@@ -53,15 +54,9 @@ export async function settleReservedConstruction(input: {
   )
     return { ok: false, error: "Construction claim ownership or currency changed" };
   if (claim.status === "building") {
-    await db.collection<BankLoan>("bankLoans").updateOne(
-      {
-        _id: new ObjectId(claim.loanId),
-        constructionSettlementOwner: `construction:${claim.claimId}:funding`,
-      },
-      { $unset: { constructionSettlementOwner: "" } }
-    );
-    await releaseConstructionFundingLease(db, claim);
-    return { ok: true };
+    return (await releaseCompletedConstructionFunding(db, claim))
+      ? { ok: true }
+      : { ok: false, error: "The paid construction receipt is pending acknowledgement" };
   }
 
   const loanId = new ObjectId(claim.loanId);
@@ -169,9 +164,26 @@ export async function settleReservedConstruction(input: {
   if (!sector || !paidClaim || paidClaim.claimId !== claim.claimId)
     return { ok: false, error: "The reserved construction claim changed" };
   if (paidClaim.status === "building") {
-    await releaseConstructionLoanLock(db, loan, lockKey);
-    await releaseConstructionFundingLease(db, claim);
-    return { ok: true };
+    return (await releaseCompletedConstructionFunding(db, paidClaim))
+      ? { ok: true }
+      : { ok: false, error: "The paid construction receipt is pending acknowledgement" };
+  }
+  if (paidClaim.effects && !paidClaim.effectsPaid) {
+    let effects = await settleTransition(db, paidClaim.effects.transition);
+    if (effects.status === "partial" || (effects.status === "replayed" && effects.error))
+      effects = await resumeSettlement(db, paidClaim.effects.transition.key);
+    if (!complete(effects))
+      return { ok: false, error: effects.error ?? "Construction effects are pending" };
+    const delivered = await sectors.findOne(
+      { _id: sectorId },
+      { projection: { constructionFinancing: 1 } }
+    );
+    if (
+      !delivered?.constructionFinancing ||
+      delivered.constructionFinancing.claimId !== claim.claimId
+    )
+      return { ok: false, error: "Construction effects changed ownership" };
+    Object.assign(paidClaim, delivered.constructionFinancing);
   }
   const paid = constructionPaidBuildTransition({
     enabled: true,

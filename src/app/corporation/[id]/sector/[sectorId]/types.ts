@@ -613,6 +613,7 @@ export interface PlantsData {
     bondReference?: import("@/lib/corporations/investment/rules").InvestmentBondReference | null;
   };
   buildQuote: {
+    financing?: import("@/lib/banking/rules/constructionRequest").ConstructionFinanceView;
     unitPriceAnchor: number;
     expansionMultiplier?: number;
     dominanceMultiplier: number;
