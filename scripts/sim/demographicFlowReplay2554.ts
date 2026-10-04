@@ -33,8 +33,10 @@ client.on("commandStarted", (event) => {
   if (["regionDemographics", "states", "macroMetrics"].includes(target)) targetWriteCommands++;
 });
 client.on("commandSucceeded", (event) => {
-  replyBytes += BSON.calculateObjectSize(event.reply);
-  const cursor = event.reply.cursor;
+  if (typeof event.reply !== "object" || event.reply === null) return;
+  const reply = event.reply as Record<string, unknown>;
+  replyBytes += BSON.calculateObjectSize(reply);
+  const cursor = reply.cursor as { firstBatch?: unknown[]; nextBatch?: unknown[] } | undefined;
   returnedDocuments += cursor?.firstBatch?.length ?? cursor?.nextBatch?.length ?? 0;
   if (["find", "aggregate", "getMore", "count", "distinct"].includes(event.commandName))
     readCommands++;

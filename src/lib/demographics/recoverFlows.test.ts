@@ -14,12 +14,12 @@ function fixture(journalAttemptStarted = true) {
     ...(journalAttemptStarted
       ? { demographicFlowAttempt: { worldEpochId: "recovery-world", turn: 8 } }
       : {}),
-  } as GameState;
+  };
   db.seed("gameState", [state]);
   db.seed("regionDemographics", [{ _id: "R1", ages: { male: [], female: [] } }]);
   db.seed("states", [{ _id: "R1", population: 100 }]);
   db.seed("macroMetrics", [{ _id: "R1" }]);
-  return { memory: db, db: db as unknown as Db, state };
+  return { memory: db, db: db as unknown as Db, state: state as GameState };
 }
 
 function plan() {
@@ -82,7 +82,9 @@ describe("population recovery before resumed context", () => {
 
     const applied = new Set(["demographicFlows"]);
     await recoverDemographicFlowsBeforeContext(f.db, f.state, applied);
-    const resumedSnapshot = await f.db.collection("states").findOne({ _id: "R1" });
+    const resumedSnapshot = await f.db
+      .collection<{ _id: string; population: number }>("states")
+      .findOne({ _id: "R1" });
     expect(resumedSnapshot?.population).toBe(120);
     expect(applied.has("demographicFlows")).toBe(true);
     expect(f.memory.collection("demographicFlowReceipts").docs[0].status).toBe("complete");

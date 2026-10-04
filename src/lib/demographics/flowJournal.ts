@@ -329,9 +329,13 @@ async function materializeReceipt(
     }));
 
   if (demographicOps.length)
-    await db.collection("regionDemographics").bulkWrite(demographicOps, { ordered: true });
-  if (stateOps.length) await db.collection("states").bulkWrite(stateOps, { ordered: true });
-  if (metricOps.length) await db.collection("macroMetrics").bulkWrite(metricOps, { ordered: true });
+    await db
+      .collection<StampedTarget>("regionDemographics")
+      .bulkWrite(demographicOps, { ordered: true });
+  if (stateOps.length)
+    await db.collection<StampedTarget>("states").bulkWrite(stateOps, { ordered: true });
+  if (metricOps.length)
+    await db.collection<StampedTarget>("macroMetrics").bulkWrite(metricOps, { ordered: true });
 
   const [confirmedDemographics, confirmedStates, confirmedMetrics] = await Promise.all([
     readTargetMap(db, "regionDemographics", regionIds),
