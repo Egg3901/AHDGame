@@ -228,7 +228,8 @@ describe("snapshotMoneySupply", () => {
 
     await snapshotMoneySupply(db as unknown as Db, 12);
 
-    const snapshot = db.collectionMocks[MONEY_SUPPLY_SNAPSHOTS_COLLECTION].replaceOne.mock.calls[0][1];
+    const snapshot =
+      db.collectionMocks[MONEY_SUPPLY_SNAPSHOTS_COLLECTION].replaceOne.mock.calls[0][1];
     expect(snapshot.corporateLiquid).toBe(100);
     expect(snapshot.bankVaultCash).toBe(320);
     const options = db.collectionMocks.corporations.find.mock.calls[0]?.[1] as {
@@ -260,7 +261,8 @@ describe("snapshotMoneySupply", () => {
     );
     db.collectionMocks.states.find.mockReturnValue(cursorWith([]));
     await snapshotMoneySupply(db as unknown as Db, 12);
-    const before = db.collectionMocks[MONEY_SUPPLY_SNAPSHOTS_COLLECTION].replaceOne.mock.calls[0][1];
+    const before =
+      db.collectionMocks[MONEY_SUPPLY_SNAPSHOTS_COLLECTION].replaceOne.mock.calls[0][1];
 
     db.collectionMocks.federalBudget.find.mockReturnValue(
       cursorWith([{ countryId: "US", currencyCode: "USD", treasuryCashLocal: 350 }])
@@ -303,7 +305,8 @@ describe("snapshotMoneySupply", () => {
     );
     db.collectionMocks.states.find.mockReturnValue(cursorWith([]));
     await snapshotMoneySupply(db as unknown as Db, 12);
-    const before = db.collectionMocks[MONEY_SUPPLY_SNAPSHOTS_COLLECTION].replaceOne.mock.calls[0][1];
+    const before =
+      db.collectionMocks[MONEY_SUPPLY_SNAPSHOTS_COLLECTION].replaceOne.mock.calls[0][1];
 
     db.collectionMocks.centralBanks.find.mockReturnValue(
       cursorWith([{ _id: "US", countryId: "US", externalBroadMoney: 0 }])
