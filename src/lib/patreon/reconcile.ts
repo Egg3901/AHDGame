@@ -92,6 +92,13 @@ export class PatreonReconcileLockBusyError extends Error {
   }
 }
 
+export class PatreonReconcileLockLostError extends Error {
+  constructor() {
+    super("Patreon reconciliation lost its apply lease");
+    this.name = "PatreonReconcileLockLostError";
+  }
+}
+
 function fingerprint(value: string): string {
   // A keyed digest prevents emails or provider IDs from being recovered by a
   // dictionary scan of the retry collection. The creator token is required
@@ -119,7 +126,11 @@ async function findUserForPatron(db: Db, patron: PatreonMemberRecord): Promise<U
   return patron.patreonUserId ? findUserByPatreonUserId(db, patron.patreonUserId) : null;
 }
 
-export async function runReconcile(db: Db, apply: boolean): Promise<ReconcileResult> {
+export async function runReconcile(
+  db: Db,
+  apply: boolean,
+  beforeApplyWrite?: () => Promise<void>
+): Promise<ReconcileResult> {
   const members = await listPatreonMembers();
   const now = Date.now();
 
@@ -172,11 +183,13 @@ export async function runReconcile(db: Db, apply: boolean): Promise<ReconcileRes
         to: patron.tier,
       });
       if (apply) {
+        await beforeApplyWrite?.();
         await applyPatreonStatus(db, {
           userId: user._id,
           tier: patron.tier,
-          expiresAt: null,
+          expiresAt: user.supporterProvider === "stripe" ? (user.patreonExpiresAt ?? null) : null,
           adsDisabledDefault: true,
+          provider: user.supporterProvider === "stripe" ? "stripe" : undefined,
           // Keep the explicit provider mapping used for this match.
           patreonUserId: patron.patreonUserId ?? user.patreonUserId,
         });
@@ -232,7 +245,10 @@ export async function runReconcile(db: Db, apply: boolean): Promise<ReconcileRes
     const exp = u.patreonExpiresAt ? new Date(u.patreonExpiresAt).getTime() : null;
     if (exp !== null && exp < now) {
       expired.push(entry);
-      if (apply) await clearExpiredPatreonBenefits(db, u._id);
+      if (apply) {
+        await beforeApplyWrite?.();
+        await clearExpiredPatreonBenefits(db, u._id);
+      }
       continue;
     }
 
@@ -240,7 +256,10 @@ export async function runReconcile(db: Db, apply: boolean): Promise<ReconcileRes
     // already counting down (expiresAt in the future means grace is running).
     if (exp === null) {
       toDerole.push(entry);
-      if (apply) await startPatreonGracePeriod(db, u._id);
+      if (apply) {
+        await beforeApplyWrite?.();
+        await startPatreonGracePeriod(db, u._id);
+      }
     }
   }
 
@@ -303,6 +322,18 @@ async function releaseApplyLock(db: Db, owner: string): Promise<void> {
     );
 }
 
+/** Extend the lease only while this run still owns an unexpired lock. */
+async function renewApplyLock(db: Db, owner: string): Promise<void> {
+  const now = new Date();
+  const result = await db
+    .collection<PatreonReconcileCronLock>("cronLocks")
+    .updateOne(
+      { _id: RECONCILE_LOCK_ID, owner, leaseUntil: { $gt: now } },
+      { $set: { leaseUntil: new Date(now.getTime() + RECONCILE_LOCK_MS) } }
+    );
+  if (result.matchedCount !== 1) throw new PatreonReconcileLockLostError();
+}
+
 async function persistUnmatchedAudit(
   db: Db,
   keys: ReconcileResult["auditKeys"],
@@ -358,8 +389,12 @@ export async function runPatreonReconcile(db: Db, apply: boolean): Promise<Recon
   let failed = false;
   try {
     if (owner) await acquireApplyLock(db, owner, startedAt);
-    const result = await runReconcile(db, apply);
-    if (apply) await persistUnmatchedAudit(db, result.auditKeys, runId, new Date());
+    const beforeApplyWrite = owner ? () => renewApplyLock(db, owner) : undefined;
+    const result = await runReconcile(db, apply, beforeApplyWrite);
+    if (apply) {
+      await beforeApplyWrite?.();
+      await persistUnmatchedAudit(db, result.auditKeys, runId, new Date());
+    }
     await audits.updateOne(
       { _id: runId },
       { $set: { status: "completed", completedAt: new Date(), counts: result.counts } }

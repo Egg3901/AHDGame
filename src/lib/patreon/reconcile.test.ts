@@ -102,4 +102,80 @@ describe("runPatreonReconcile audit and retry history", () => {
     const { listPatreonMembers } = await import("@/lib/patreon/members");
     expect(listPatreonMembers).not.toHaveBeenCalled();
   });
+
+  it("keeps Stripe ownership when a higher Patreon tier upgrades benefits, then protects it on lapse", async () => {
+    const { listPatreonMembers } = await import("@/lib/patreon/members");
+    const service = await import("@/lib/patreon/service");
+    const user = {
+      _id: { toString: () => "stripe-user" },
+      username: "player",
+      email: "player@example.com",
+      patreonTier: "supporter" as const,
+      supporterProvider: "stripe",
+      patreonUserId: "patron-1",
+      patreonExpiresAt: new Date(Date.now() + 60_000),
+    };
+    const stripeExpiry = user.patreonExpiresAt;
+    vi.mocked(service.findUserByPatreonUserId).mockResolvedValue(user as never);
+    vi.mocked(service.applyPatreonStatus).mockImplementation(async (_db, input) => {
+      user.patreonTier = input.tier;
+      user.supporterProvider = input.provider ?? "patreon";
+      user.patreonExpiresAt = input.expiresAt;
+    });
+    const users = db.collection("users");
+    vi.mocked(users.find).mockReturnValue({ toArray: vi.fn().mockResolvedValue([user]) } as never);
+    const { runPatreonReconcile } = await import("./reconcile");
+
+    vi.mocked(listPatreonMembers).mockResolvedValueOnce([
+      { patreonUserId: "patron-1", email: user.email, tier: "supporter-plus", active: true },
+    ]);
+    await runPatreonReconcile(db as unknown as Db, true);
+
+    expect(service.applyPatreonStatus).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({
+        tier: "supporter-plus",
+        provider: "stripe",
+        expiresAt: stripeExpiry,
+      })
+    );
+    expect(user.patreonExpiresAt).toEqual(stripeExpiry);
+
+    vi.mocked(listPatreonMembers).mockResolvedValueOnce([
+      { patreonUserId: "patron-1", email: user.email, tier: null, active: false },
+    ]);
+    await runPatreonReconcile(db as unknown as Db, true);
+
+    expect(user.supporterProvider).toBe("stripe");
+    expect(service.startPatreonGracePeriod).not.toHaveBeenCalled();
+    expect(service.clearExpiredPatreonBenefits).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when its apply lease expires before a benefit write", async () => {
+    const { listPatreonMembers } = await import("@/lib/patreon/members");
+    const service = await import("@/lib/patreon/service");
+    const user = {
+      _id: { toString: () => "patreon-user" },
+      username: "player",
+      email: "player@example.com",
+      patreonTier: null,
+      supporterProvider: null,
+      patreonUserId: "patron-1",
+    };
+    vi.mocked(listPatreonMembers).mockResolvedValue([
+      { patreonUserId: "patron-1", email: user.email, tier: "supporter", active: true },
+    ]);
+    vi.mocked(service.findUserByPatreonUserId).mockResolvedValue(user as never);
+    const locks = db.collection("cronLocks");
+    vi.mocked(locks.updateOne)
+      .mockResolvedValueOnce({ matchedCount: 1, modifiedCount: 1 } as never)
+      .mockResolvedValueOnce({ matchedCount: 0, modifiedCount: 0 } as never);
+
+    const { runPatreonReconcile } = await import("./reconcile");
+    await expect(runPatreonReconcile(db as unknown as Db, true)).rejects.toThrow(
+      "Patreon reconciliation lost its apply lease"
+    );
+    expect(service.applyPatreonStatus).not.toHaveBeenCalled();
+    expect(locks.updateOne).toHaveBeenCalledTimes(3); // acquire, failed renewal, owner-only release
+  });
 });
