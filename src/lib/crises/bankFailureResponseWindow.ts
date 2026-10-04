@@ -1,3 +1,8 @@
+/**
+ * Domestic bank stress opens a short response window when a bank turns red but stays solvent.
+ * The window offers the existing funded recapitalization, guarantee, and resolution actions.
+ * `ensureBankFailureResponseWindow` creates or resumes that choice for the bank's country.
+ */
 import type { Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { Crisis, CrisisTemplate } from "@/lib/db/types/crisis";
@@ -33,6 +38,13 @@ const RESPONSE_TEMPLATE: CrisisTemplate = {
         timeLimitMinutes: null,
         options: [
           {
+            optionId: "decline",
+            label: "Take no action",
+            description: "No public intervention is chosen before the response window closes.",
+            nextNodeId: "terminal",
+            effects: [],
+          },
+          {
             optionId: "recapitalize",
             label: "Recapitalize the banking system",
             description: "Commit 2% of GDP in funded public capital to eligible domestic banks.",
@@ -65,16 +77,21 @@ const RESPONSE_TEMPLATE: CrisisTemplate = {
       {
         nodeId: "terminal",
         type: "terminal",
-        title: "Response recorded",
-        description: "The funded bank response has been recorded.",
+        title: "Response window closed",
+        description: "The domestic bank response window is complete.",
         requiredRoles: ["any"],
         timeLimitMinutes: null,
-        outcomeMessage: "The domestic bank response has been recorded.",
+        outcomeMessage: "The domestic bank response window has closed.",
         outcomeEffects: [],
       },
     ],
   },
 };
+
+/** Return an isolated copy for consumers that need to inspect or test the choice tree. */
+export function getBankFailureResponseTemplate(): CrisisTemplate {
+  return structuredClone(RESPONSE_TEMPLATE);
+}
 
 export function bankFailureResponseEventId(bankId: string, charteredTurn: number): string {
   return `bank_failure_response:${bankId}:${charteredTurn}`;

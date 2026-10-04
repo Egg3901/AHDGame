@@ -24,9 +24,15 @@ let db: MockDb;
 beforeEach(() => {
   db = createMockDb();
   // Instantiate the collections the engine touches so we can stub them.
-  ["crisisInteractions", "crises", "states", "federalBudget", "parties"].forEach((c) =>
-    db.collection(c)
-  );
+  [
+    "crisisInteractions",
+    "crises",
+    "states",
+    "federalBudget",
+    "parties",
+    "corporations",
+    "bankMoneyMoves",
+  ].forEach((c) => db.collection(c));
   vi.clearAllMocks();
 });
 
@@ -522,6 +528,39 @@ describe("autoResolveCrisisInteraction", () => {
     expect(setArg.$set.resolutionOutcome).toBe("auto");
     expect(setArg.$set.currentNodeId).toBeNull();
     expect(setArg.$set.resolutionPath).toEqual(["decline", "terminal"]);
+  });
+
+  it("closes an unanswered domestic bank window without funding an intervention", async () => {
+    const { getBankFailureResponseTemplate } = await import("./bankFailureResponseWindow");
+    const template = getBankFailureResponseTemplate();
+    const crisis = {
+      ...makeCrisis(),
+      name: template.name,
+      interactionDefinition: template.interactionDefinition,
+    };
+    const interaction = makeInteraction({
+      crisisId: crisis._id,
+      decisionTree: template.interactionDefinition!.decisionTree,
+      currentNodeId: "response",
+    });
+    db.collectionMocks["crisisInteractions"]!.findOne.mockResolvedValue(interaction);
+    db.collectionMocks["crises"]!.findOne.mockResolvedValue(crisis);
+
+    await autoResolveCrisisInteraction(mdb(), interaction._id);
+
+    const setArg = db.collectionMocks["crisisInteractions"]!.updateOne.mock.calls.at(-1)?.[1] as {
+      $set: Record<string, unknown>;
+    };
+    expect(setArg.$set.resolutionOutcome).toBe("auto");
+    expect(setArg.$set.resolutionPath).toEqual(["decline", "terminal"]);
+    const terminal = template.interactionDefinition!.decisionTree.find(
+      (node) => node.nodeId === "terminal"
+    );
+    expect(terminal?.title).toBe("Response window closed");
+    expect(terminal?.outcomeMessage).toBe("The domestic bank response window has closed.");
+    expect(db.collectionMocks["federalBudget"]!.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks["corporations"]!.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks["bankMoneyMoves"]!.insertOne).not.toHaveBeenCalled();
   });
 });
 

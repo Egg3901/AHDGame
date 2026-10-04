@@ -49,8 +49,11 @@ describe("bank failure response window", () => {
     expect(params.currentTurn).toBe(1991);
     const node = params.template.interactionDefinition.decisionTree[0];
     expect(node.requiredRoles).toEqual(["headOfState", "financeMinister", "centralBankChair"]);
+    expect(node.options[0]?.optionId).toBe("decline");
     expect(
-      node.options.map((option: { action?: { response?: string } }) => option.action?.response)
+      node.options
+        .filter((option: { action?: { response?: string } }) => option.action)
+        .map((option: { action: { response?: string } }) => option.action.response)
     ).toEqual(["recapitalize", "guarantee", "resolve"]);
     expect(canCharacterInteract(node, ["any", "financeMinister"], "US")).toBe(true);
     expect(canCharacterInteract(node, ["any", "centralBankChair"], "US")).toBe(true);
