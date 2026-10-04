@@ -2,6 +2,7 @@ import type { MarketSystemMode } from "@/lib/market/featureFlag";
 import { marketAtLeast } from "@/lib/market/featureFlag";
 import type { SectorClearingResult } from "@/lib/market/clearing";
 import type { FreightClass } from "@/lib/logistics/freightClass";
+import type { EditorialPosition } from "@/lib/mediaEditorial/rules";
 import {
   MARKET_REALIZATION_DEVIATION_CAP,
   MARKET_REALIZATION_RAMP_TURNS,
@@ -47,6 +48,11 @@ export interface MarketContext {
   advertisingSellerDeliveredValueAnchorByCorpId?: ReadonlyMap<string, number>;
   /** Exact native-currency amounts reserved for funded political ad sellers. */
   politicalAdSellerPayoutLocalByCorpId?: ReadonlyMap<string, number>;
+  /** Delivered media outlets per audience state, normalized by local delivered units. */
+  editorialOutletsByState?: ReadonlyMap<
+    string,
+    readonly { corporationId: string; stance: EditorialPosition; audienceShare: number }[]
+  >;
   /**
    * Freight seam: per sector id, the share of its clearing offer (0..1) that
    * last turn's freight network could not place out of its host state, so the

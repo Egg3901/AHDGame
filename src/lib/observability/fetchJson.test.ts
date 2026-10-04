@@ -47,4 +47,30 @@ describe("fetchJson", () => {
       expect.objectContaining({ tags: expect.objectContaining({ phase: "network" }) })
     );
   });
+
+  it("does not capture a fetch canceled by its caller", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const abortError = new DOMException("The operation was aborted", "AbortError");
+    mockFetch(() => Promise.reject(abortError));
+
+    await expect(fetchJson("/api/x", { signal: controller.signal, feature: "test" })).rejects.toBe(
+      abortError
+    );
+    expect(captureException).not.toHaveBeenCalled();
+  });
+
+  it("still captures a timed out fetch", async () => {
+    const controller = new AbortController();
+    const timeoutError = new DOMException("The operation timed out", "TimeoutError");
+    Object.defineProperty(controller.signal, "reason", { value: timeoutError });
+    controller.abort();
+    const abortError = new DOMException("The operation was aborted", "AbortError");
+    mockFetch(() => Promise.reject(abortError));
+
+    await expect(fetchJson("/api/x", { signal: controller.signal, feature: "test" })).rejects.toBe(
+      abortError
+    );
+    expect(captureException).toHaveBeenCalledTimes(1);
+  });
 });

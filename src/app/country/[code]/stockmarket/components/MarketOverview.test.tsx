@@ -40,6 +40,7 @@ const candle = {
 
 describe("MarketOverview loading", () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
     createChart.mockReset();
     setCandleData.mockReset();
     setCompareData.mockReset();
@@ -89,6 +90,42 @@ describe("MarketOverview loading", () => {
     expect(createChart.mock.calls[0][1].timeScale.tickMarkFormatter(1000)).toBe("T10");
     expect(createChart.mock.calls[0][1].localization.timeFormatter(1000)).toBe("T10");
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("resolves color-mix theme tokens to colors accepted by the canvas chart", async () => {
+    const realGetComputedStyle = window.getComputedStyle.bind(window);
+    const realCreateElement = document.createElement.bind(document);
+    vi.spyOn(document, "createElement").mockImplementation((tagName: string) => {
+      const element = realCreateElement(tagName);
+      if (tagName === "span") {
+        Object.defineProperty(element, "style", { value: { color: "" }, configurable: true });
+      }
+      return element;
+    });
+    vi.spyOn(window, "getComputedStyle").mockImplementation((element: Element) => {
+      const style = realGetComputedStyle(element);
+      return new Proxy(style, {
+        get(target, key) {
+          if (element === document.documentElement && key === "getPropertyValue") {
+            return (name: string) =>
+              name === "--muted" ? "color-mix(in srgb, #e8e8ee 78%, #14141c)" : "#000000";
+          }
+          if (element !== document.documentElement && key === "color")
+            return "color(srgb 0.745 0.745 0.769)";
+          const value = Reflect.get(target, key, target);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise(() => {}))
+    );
+
+    render(<MarketOverview exchangeFilter="global" />);
+
+    await waitFor(() => expect(createChart).toHaveBeenCalledTimes(1));
+    expect(createChart.mock.calls[0][1].layout.textColor).toBe("rgba(190, 190, 196, 1)");
   });
 
   it("fits a newly selected range only after its own data arrives", async () => {

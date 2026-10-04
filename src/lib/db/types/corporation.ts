@@ -170,6 +170,8 @@ export interface Corporation {
    * at least one financial sector; one bank per corp. See src/lib/db/types/bank.ts.
    */
   bankCharter?: import("./bank").BankCharter;
+  /** Public media editorial position. Missing means neutral for legacy worlds. */
+  editorialStance?: { economic: number; social: number };
   /** Funded sovereign claims held outside the replaceable charter subdocument. */
   bankSovereignEscrows?: Record<
     string,

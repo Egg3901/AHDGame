@@ -59,6 +59,7 @@ import {
   DefaultedBondCrisisModal,
 } from "@/components/corporation/CorporationPageTabs";
 import { BankConsoleTab } from "./bank/BankConsoleTab";
+import { EditorialStancePanel } from "@/components/corporation/EditorialStancePanel";
 import type {
   CorporationDetail,
   CEO,
@@ -1072,21 +1073,34 @@ export default function CorporationDetailPage() {
             return (
               <div className="space-y-8">
                 {tab === "overview" && (
-                  <OverviewTab
-                    corporation={corporation}
-                    financials={financials}
-                    balanceSheet={balanceSheet}
-                    bondInfo={bondInfo}
-                    sectors={sectors}
-                    corpId={id}
-                    periodView={periodView}
-                    onPeriodViewChange={setPeriodView}
-                    onTabChange={setTab}
-                    financialFogOfWar={financialFogOfWar}
-                    isCeo={isCeo}
-                    myCharacterId={myCharacterId}
-                    onTrade={canTrade ? openTrade : undefined}
-                  />
+                  <div className="space-y-6">
+                    <OverviewTab
+                      corporation={corporation}
+                      financials={financials}
+                      balanceSheet={balanceSheet}
+                      bondInfo={bondInfo}
+                      sectors={sectors}
+                      corpId={id}
+                      periodView={periodView}
+                      onPeriodViewChange={setPeriodView}
+                      onTabChange={setTab}
+                      financialFogOfWar={financialFogOfWar}
+                      isCeo={isCeo}
+                      myCharacterId={myCharacterId}
+                      onTrade={canTrade ? openTrade : undefined}
+                    />
+                    {corporation.mediaEditorialEnabled === true &&
+                      (corporation.type === "media" ||
+                        corporation.secondaryType === "media" ||
+                        sectors.some((sector) => sector.sectorType === "media")) && (
+                        <EditorialStancePanel
+                          corporationId={id}
+                          stance={corporation.editorialStance}
+                          isCeo={isCeo}
+                          onSaved={() => void fetchCorporation()}
+                        />
+                      )}
+                  </div>
                 )}
 
                 {tab === "financials" && financials && (

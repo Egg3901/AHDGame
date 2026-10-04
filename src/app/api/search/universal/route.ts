@@ -126,6 +126,11 @@ async function handleGET(request: Request) {
     const query = searchParams.get("q")?.trim() || "";
     const isResultsPage = searchParams.get("view") === "page";
 
+    // BSON regex serialization rejects null bytes before MongoDB can run the query.
+    if (query.includes("\u0000")) {
+      return NextResponse.json({ error: "Query contains an invalid character" }, { status: 400 });
+    }
+
     // Return empty results for empty or too-short queries. A 1-character query
     // forces a near-full scan of every searched collection.
     if (query.length < 2) {

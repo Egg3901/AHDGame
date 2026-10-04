@@ -121,6 +121,9 @@ export interface CorporationDefenceView {
 }
 
 export interface CorporationDetail {
+  /** Public CEO-published position, exposed only while the world gate is on. */
+  editorialStance?: { economic: number; social: number };
+  mediaEditorialEnabled?: boolean;
   /**
    * True when this world runs `marketSystemMode >= "plants"` — sectors are
    * plants you BUILD, so every surface swaps its growth vocabulary for a

@@ -433,6 +433,20 @@ export async function getCrisisInteraction(
   return db.collection<CrisisInteraction>("crisisInteractions").findOne({ crisisId });
 }
 
+/** Load interactions for a set of crises in one query, keyed by crisis id. */
+export async function getCrisisInteractionsByCrisisId(
+  db: Db,
+  crisisIds: readonly ObjectId[]
+): Promise<Map<string, CrisisInteraction>> {
+  const uniqueIds = [...new Map(crisisIds.map((id) => [id.toString(), id])).values()];
+  if (uniqueIds.length === 0) return new Map();
+  const interactions = await db
+    .collection<CrisisInteraction>("crisisInteractions")
+    .find({ crisisId: { $in: uniqueIds } })
+    .toArray();
+  return new Map(interactions.map((interaction) => [interaction.crisisId.toString(), interaction]));
+}
+
 function deadlineForNode(node: CrisisDecisionNode | null): Date | null {
   if (node?.timeLimitMinutes) {
     return new Date(Date.now() + node.timeLimitMinutes * 60_000);

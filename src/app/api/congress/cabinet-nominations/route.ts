@@ -9,7 +9,7 @@ import { getAuthUser } from "@/lib/auth";
 import { handleRouteError } from "@/lib/api/errors";
 import type { CabinetNomination, ElectedOfficial, Character } from "@/lib/db/types";
 import { getCabinetPositionById } from "@/lib/constants";
-import { computeCabinetNominationTally } from "@/lib/congress/governmentVoteBreakdown";
+import { computeCabinetNominationTallies } from "@/lib/congress/governmentVoteBreakdown";
 
 // GET /api/congress/cabinet-nominations — Returns all active cabinet nominations with the current user's vote status.
 // Auth: public
@@ -42,33 +42,40 @@ export const GET = withNoStore(async function GET() {
     const isSenator = !!senatorOfficial;
     const myCharId = myCharacter?._id.toString();
 
-    const nominations = await Promise.all(
-      activeNominations.map(async (n) => {
-        const pos = getCabinetPositionById(n.positionId);
-        const myVote = myCharId ? (n.votes?.[myCharId] ?? null) : null;
-        // These are all active US nominations — recompute the seat-weighted
-        // tally so the list can never show more votes than senate seats.
-        const tally = await computeCabinetNominationTally(db, n.countryId ?? "US", n.votes);
-        return {
-          id: n._id.toString(),
-          positionId: n.positionId,
-          positionName: pos?.name ?? n.positionId,
-          nomineeCharacterId: n.nomineeCharacterId?.toString() ?? null,
-          nomineeNppId: n.nomineeNppId?.toString() ?? null,
-          nomineeMode: n.nomineeMode ?? "character",
-          nomineeCharacterName: n.nomineeCharacterName,
-          nomineeParty: n.nomineeParty,
-          proposedByPresidentName: n.proposedByPresidentName ?? "President",
-          status: n.status,
-          votesFor: tally.votesFor,
-          votesAgainst: tally.votesAgainst,
-          votesAbstain: tally.votesAbstain,
-          votingEndsAt: n.votingEndsAt?.toISOString() ?? null,
-          proposedAt: n.proposedAt?.toISOString() ?? new Date().toISOString(),
-          myVote,
-        };
-      })
+    const talliesById = await computeCabinetNominationTallies(
+      db,
+      "US",
+      activeNominations.map(({ _id, votes }) => ({ _id, votes }))
     );
+    const nominations = activeNominations.map((n) => {
+      const pos = getCabinetPositionById(n.positionId);
+      const myVote = myCharId ? (n.votes?.[myCharId] ?? null) : null;
+      // These are all active US nominations — recompute the seat-weighted
+      // tally so the list can never show more votes than senate seats.
+      const tally = talliesById.get(n._id.toString()) ?? {
+        votesFor: 0,
+        votesAgainst: 0,
+        votesAbstain: 0,
+      };
+      return {
+        id: n._id.toString(),
+        positionId: n.positionId,
+        positionName: pos?.name ?? n.positionId,
+        nomineeCharacterId: n.nomineeCharacterId?.toString() ?? null,
+        nomineeNppId: n.nomineeNppId?.toString() ?? null,
+        nomineeMode: n.nomineeMode ?? "character",
+        nomineeCharacterName: n.nomineeCharacterName,
+        nomineeParty: n.nomineeParty,
+        proposedByPresidentName: n.proposedByPresidentName ?? "President",
+        status: n.status,
+        votesFor: tally.votesFor,
+        votesAgainst: tally.votesAgainst,
+        votesAbstain: tally.votesAbstain,
+        votingEndsAt: n.votingEndsAt?.toISOString() ?? null,
+        proposedAt: n.proposedAt?.toISOString() ?? new Date().toISOString(),
+        myVote,
+      };
+    });
 
     return NextResponse.json({
       nominations,

@@ -20,6 +20,7 @@ vi.mock("@/lib/audit/recordAudit", () => ({ recordAudit: vi.fn(), recordAuditBul
 
 const START = 100;
 const PRINCIPAL = 9_600;
+const ORIGINATION_FEE = 96;
 const TERM = 8;
 
 function makeWorld(borrowerCash: number): {
@@ -122,8 +123,12 @@ describe("named loan lifecycle through the banking turn", () => {
       TERM
     );
     expect(originated.ok).toBe(true);
+    expect(theLoan(db)).toMatchObject({ principal: PRINCIPAL, originationFee: ORIGINATION_FEE });
     expect(money(db)).toBe(before);
-    expect(corp(db, bankId).bankCharter!.cashReserves).toBe(1_000_000 - PRINCIPAL);
+    expect(corp(db, bankId).bankCharter!.cashReserves).toBe(
+      1_000_000 - PRINCIPAL + ORIGINATION_FEE
+    );
+    expect(corp(db, borrowerId).liquidCapital).toBe(1_000_000 + PRINCIPAL - ORIGINATION_FEE);
 
     let paidInterest = 0;
     // Straight-line principal over the turns left in the term: the last
@@ -145,10 +150,16 @@ describe("named loan lifecycle through the banking turn", () => {
     expect(loan.status).toBe("repaid");
     expect(loan.outstanding).toBeCloseTo(0, 6);
     expect(corp(db, bankId).bankCharter!.totalLoans).toBeCloseTo(0, 6);
-    // The bank ends with its principal back plus every instalment's interest.
-    expect(corp(db, bankId).bankCharter!.cashReserves).toBeCloseTo(1_000_000 + paidInterest, 6);
+    // The bank retains the origination fee and receives every instalment's interest.
+    expect(corp(db, bankId).bankCharter!.cashReserves).toBeCloseTo(
+      1_000_000 + ORIGINATION_FEE + paidInterest,
+      6
+    );
     expect(paidInterest).toBeGreaterThan(0);
-    expect(corp(db, borrowerId).liquidCapital).toBeCloseTo(1_000_000 - paidInterest, 6);
+    expect(corp(db, borrowerId).liquidCapital).toBeCloseTo(
+      1_000_000 - ORIGINATION_FEE - paidInterest,
+      6
+    );
   });
 
   it("runs from application to write-off when the borrower cannot pay", async () => {
@@ -164,6 +175,9 @@ describe("named loan lifecycle through the banking turn", () => {
       TERM
     );
     expect(originated.ok).toBe(true);
+    expect(theLoan(db)).toMatchObject({ principal: PRINCIPAL, originationFee: ORIGINATION_FEE });
+    expect(money(db)).toBe(1_000_000);
+    expect(corp(db, borrowerId).liquidCapital).toBe(PRINCIPAL - ORIGINATION_FEE);
     // The borrower spends the proceeds at once.
     corp(db, borrowerId).liquidCapital = 0;
     const before = money(db);
@@ -184,7 +198,9 @@ describe("named loan lifecycle through the banking turn", () => {
     // A write-off destroys the asset, not cash: the world's money is unchanged
     // and the bank simply never gets its principal back.
     expect(money(db)).toBe(before);
-    expect(corp(db, bankId).bankCharter!.cashReserves).toBe(1_000_000 - PRINCIPAL);
+    expect(corp(db, bankId).bankCharter!.cashReserves).toBe(
+      1_000_000 - PRINCIPAL + ORIGINATION_FEE
+    );
 
     // A defaulted loan is not serviced again.
     const after = await processBankingTurn(db as unknown as Db, START + ARREARS_DEFAULT_TURNS + 1);
