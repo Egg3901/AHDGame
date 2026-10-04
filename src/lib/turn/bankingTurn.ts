@@ -31,7 +31,11 @@ import {
   getInsuredCap,
   sumInsuredPlayerDeposits,
 } from "@/lib/banking/insurance";
-import { settleInsurancePremiumForTurn } from "@/lib/banking/insurancePremium";
+import {
+  insurancePremiumReceiptKey,
+  settleInsurancePremiumForTurn,
+  type FrozenInsurancePremiumReceipt,
+} from "@/lib/banking/insurancePremium";
 import {
   ARREARS_DEFAULT_TURNS,
   MAX_NPC_FLOW_PER_TURN_FRACTION,
@@ -251,6 +255,21 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
     return savingsApyPercent(prime, inflation, centralBankPricing.depositBonusPercentPoints);
   };
 
+  // Current-turn premium claims are loaded in one bounded read so a retry can
+  // resume its frozen quote even when the latest exposure is zero. The same
+  // snapshot is shared by all bank calls below.
+  const premiumReceiptByKey = new Map<string, FrozenInsurancePremiumReceipt>();
+  if (depositTakers.length > 0) {
+    const premiumKeys = depositTakers.map((row) =>
+      insurancePremiumReceiptKey(row.corp._id, row.charter.charteredTurn ?? 0, turn)
+    );
+    const premiumReceipts = await db
+      .collection<FrozenInsurancePremiumReceipt>(MONEY_MOVE_COLLECTION)
+      .find({ _id: { $in: premiumKeys } })
+      .toArray();
+    for (const receipt of premiumReceipts) premiumReceiptByKey.set(receipt._id, receipt);
+  }
+
   // Competing deposit shares once per currency, among the deposit takers.
   const byCurrency = new Map<CurrencyCode, DepositTaker[]>();
   for (const row of depositTakers) {
@@ -291,6 +310,7 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
       {
         npcShareByBankId,
         cbById,
+        premiumReceiptByKey,
       },
       policy
     );
@@ -382,6 +402,7 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
 
 type BankPassCaches = {
   npcShareByBankId: Map<string, number>;
+  premiumReceiptByKey: Map<string, FrozenInsurancePremiumReceipt>;
   cbById: Map<
     string,
     Pick<CentralBank, "_id" | "primeRate" | "inflationHistory" | "externalBroadMoney">
@@ -827,21 +848,27 @@ async function processOneBank(
   const depositBaseForRatio = npcDeposits + playerCashDeposits;
   const reserveRatioActual = computeReserveRatioActual(cashReserves, depositBaseForRatio);
   const reserveRatioRequired = await getReserveRequirement(db, currency);
-  const premium = await settleInsurancePremiumForTurn(db, {
-    bankId: corp._id,
-    countryId: live.countryId,
-    charteredTurn: live.bankCharter.charteredTurn,
-    currency,
-    turn,
-    insuredDeposits,
-    cashReserves,
-    reserveRatioActual,
-    reserveRatioRequired,
-  });
+  const premium = await settleInsurancePremiumForTurn(
+    db,
+    {
+      bankId: corp._id,
+      countryId: live.countryId,
+      charteredTurn: live.bankCharter.charteredTurn,
+      currency,
+      turn,
+      insuredDeposits,
+      cashReserves,
+      reserveRatioActual,
+      reserveRatioRequired,
+    },
+    caches.premiumReceiptByKey.get(
+      insurancePremiumReceiptKey(corp._id, live.bankCharter.charteredTurn ?? 0, turn)
+    ) ?? null
+  );
   result.premiumShortfall += premium.shortfall;
+  cashReserves = Math.max(0, cashReserves - premium.cashDebited);
   if (premium.applied) {
-    cashReserves = Math.max(0, cashReserves - premium.paid);
-    result.insurancePremiumPaid += premium.paid;
+    result.insurancePremiumPaid += premium.premiumPaid;
   }
 
   stageDone("insurancePremium");
