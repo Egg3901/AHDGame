@@ -24,6 +24,54 @@ export function BankTreasuryPanel({
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const currency = overview.currency;
 
+  const subscribePrimary = async (offer: BankTreasuryPosition & { unsoldUnits: number }) => {
+    const count = Number(units);
+    if (!Number.isSafeInteger(count) || count <= 0 || count > offer.unsoldUnits) {
+      showToast("Choose a positive whole number within the available primary units.", "error");
+      return;
+    }
+    const maxCostLocal = Math.round(count * offer.askPerUnitLocal * 100) / 100;
+    if (
+      !window.confirm(
+        `Subscribe to ${count} ${offer.issuer} sovereign units for up to ${formatBankMoney(maxCostLocal, currency)}? These units mature in ${offer.remainingTurns} turns.`
+      )
+    )
+      return;
+    setBusyKey(`primary:${offer.bondId}`);
+    try {
+      const response = await fetch(`/api/corporations/${corporationId}/bank/treasury`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "subscribePrimary",
+          bondId: offer.bondId,
+          units: count,
+          maxCostLocal,
+          requestId: crypto.randomUUID(),
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok && response.status !== 202) {
+        showToast(result.error ?? "The sovereign subscription was refused.", "error");
+        return;
+      }
+      showToast(
+        result.status === "pending"
+          ? "The subscription is settling. Reload before placing another order."
+          : `Subscribed to ${result.units} sovereign units for ${formatBankMoney(result.amountLocal, currency)}.`,
+        result.status === "pending" ? "info" : "success"
+      );
+      await onChanged();
+    } catch {
+      showToast(
+        "Subscription status is uncertain. Reload before submitting another order.",
+        "error"
+      );
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
   const toggleSweep = async (enabled: boolean) => {
     setBusyKey("sweep");
     try {
@@ -151,6 +199,37 @@ export function BankTreasuryPanel({
           disabled={!canMutate || busyKey !== null}
         />
       </label>
+      {overview.primaryOffers && overview.primaryOffers.length > 0 && (
+        <section
+          className="mb-3 rounded border border-card-border p-2 text-xs"
+          aria-label="Sovereign primary offers"
+        >
+          <h3 className="font-medium">Sovereign primary offers</h3>
+          <p className="py-1 text-muted">
+            Subscriptions pay the issuing Treasury from vault cash. These holdings use the existing
+            equity limit and may have longer maturities than automatic bill purchases.
+          </p>
+          {overview.primaryOffers.map((offer) => (
+            <div key={offer.bondId} className="flex items-center justify-between gap-2 py-1">
+              <div>
+                {offer.issuer} · {offer.couponRate}% coupon · {offer.remainingTurns} turns
+                <div className="text-muted">
+                  {offer.unsoldUnits} available · {formatBankMoney(offer.askPerUnitLocal, currency)}{" "}
+                  per unit
+                </div>
+              </div>
+              <button
+                type="button"
+                className="rounded border border-card-border px-2 py-1 disabled:opacity-50"
+                disabled={!canMutate || busyKey !== null}
+                onClick={() => void subscribePrimary(offer)}
+              >
+                Subscribe
+              </button>
+            </div>
+          ))}
+        </section>
+      )}
       {overview.positions.length === 0 ? (
         <p className="py-2 text-xs text-muted">
           No same-currency sovereign bills are currently available.
