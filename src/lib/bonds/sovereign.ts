@@ -886,7 +886,8 @@ export async function settleSovereignBondMaturity(
     Bond,
     "countryId" | "couponRate" | "totalIssued" | "restructureHaircutPercent" | "currencyCode"
   >,
-  repaymentLocal = bond.totalIssued
+  repaymentLocal = bond.totalIssued,
+  bankRepaymentLocal = 0
 ): Promise<{ amountLocal: number; currencyCode: CurrencyCode } | null> {
   if (!bond.countryId) return null;
   const budgetId = getNationalBudgetId(bond.countryId);
@@ -898,6 +899,13 @@ export async function settleSovereignBondMaturity(
   }
   if (!Number.isFinite(repaymentLocal) || repaymentLocal < 0) {
     throw new Error("Sovereign maturity requires a finite nonnegative repayment");
+  }
+  if (
+    !Number.isFinite(bankRepaymentLocal) ||
+    bankRepaymentLocal < 0 ||
+    bankRepaymentLocal > repaymentLocal
+  ) {
+    throw new Error("Bank sovereign maturity share must be within the total repayment");
   }
 
   // Net exactly this bond's outstanding contribution (face minus any restructure
@@ -919,7 +927,9 @@ export async function settleSovereignBondMaturity(
     {
       // Rollover issuance credits this same treasury. Redemption must pay its
       // holders from cash as well as retiring the bond-owned debt stock.
-      $inc: { treasuryBalance: -repaymentLocal },
+      // Bank holders receive their exact share through the guarded settlement
+      // journal. This legacy debit remains responsible for every other holder.
+      $inc: { treasuryBalance: -(repaymentLocal - bankRepaymentLocal) },
       $set: {
         debt: budgetUpdate.debt,
         spending: budgetUpdate.spending,

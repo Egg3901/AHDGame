@@ -9,7 +9,7 @@ import { loadConversionQuoteContext } from "@/lib/currency/euro/quotes";
 import { roundedAggregateCredit } from "@/lib/bonds/rules/roundedAggregateCredit";
 import { getDb } from "@/lib/mongodb";
 import { ObjectId, type AnyBulkWriteOperation } from "mongodb";
-import type { Bond, Corporation, CentralBank, Character } from "@/lib/db/types";
+import type { Bond, Corporation, CentralBank, Character, FederalBudget } from "@/lib/db/types";
 import type { ImperialCharacter } from "@/lib/db/types/imperialCharacter";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import {
@@ -22,11 +22,16 @@ import {
   perTurnCouponPayment,
 } from "@/lib/constants/bonds";
 import {
+  getNationalBudgetId,
   getBondCountryId,
   isCorporateBond,
   issueScheduledSovereignBondSeries,
   settleSovereignBondMaturity,
 } from "@/lib/bonds/sovereign";
+import {
+  addBankMaturityClaims,
+  settleBankSovereignClaims,
+} from "@/lib/banking/bankSovereignClaims";
 import { buildPersonalBalanceBulkOp, getHomeCurrency } from "@/lib/currency/characterFunds";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { getGameState } from "@/lib/gameState";
@@ -522,6 +527,9 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
       } else if (holder.nppId) {
         // v3 autonomous NPP bondholder coupon to its separate investment account.
         addNppPayment(holder.nppId.toString(), paymentAnchor, bondCcy, "coupon");
+      } else if (holder.bankId) {
+        // TreasuryTurn owns this cash leg from its frozen opening-bond plan.
+        // This branch records no second bank credit.
       }
 
       totalCouponsPaid += paymentAnchor;
@@ -1194,21 +1202,54 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
             observedRate: poolLedgerContext.rates.get(bondCcy),
           })
         : undefined;
-      const settlement = await settleSovereignBondMaturity(db, bond, sovereignRepaymentLocal);
+      const budgetId = getNationalBudgetId(bond.countryId);
+      const bankMaturityClaims = await addBankMaturityClaims(db, {
+        budgetId,
+        countryId: bond.countryId,
+        currencyCode: bondCcy,
+        turn,
+        bond,
+        anchorRate: valuation?.anchorRate,
+        ledgerShadow: poolLedgerContext !== null,
+      });
+      const bankRepaymentLocal = bankMaturityClaims.reduce(
+        (sum, claim) => sum + claim.amountLocal,
+        0
+      );
+      const settlement = await settleSovereignBondMaturity(
+        db,
+        bond,
+        sovereignRepaymentLocal,
+        bankRepaymentLocal
+      );
       // Missing or concurrently removed budgets do not create phantom cash history.
       if (!settlement || settlement.amountLocal === 0) continue;
+      let bankMaturityPaidLocal = 0;
+      if (bankMaturityClaims.length > 0) {
+        const budgetWithClaims = await db
+          .collection<FederalBudget>("federalBudget")
+          .findOne({ _id: budgetId }, { projection: { countryId: 1, bankSovereignClaims: 1 } });
+        if (budgetWithClaims?.bankSovereignClaims?.length) {
+          const paid = await settleBankSovereignClaims(db, budgetWithClaims, turn);
+          bankMaturityPaidLocal = bankMaturityClaims
+            .filter((claim) => paid.paidClaimIds.includes(claim.id))
+            .reduce((sum, claim) => sum + claim.amountLocal, 0);
+        }
+      }
+      const treasuryCashPaidLocal =
+        settlement.amountLocal - bankRepaymentLocal + bankMaturityPaidLocal;
       txBondEntries.push({
         type: "gov_bond_maturity_payment",
         turn,
         createdAt: now,
         subjectType: "government",
         countryId: bond.countryId,
-        amount: -settlement.amountLocal,
+        amount: -treasuryCashPaidLocal,
         currencyCode: settlement.currencyCode,
-        ...(valuation ? { anchorAmount: -settlement.amountLocal / valuation.anchorRate } : {}),
+        ...(valuation ? { anchorAmount: -treasuryCashPaidLocal / valuation.anchorRate } : {}),
         meta: {
           bondId: String(bond._id),
-          units: sovereignTotalUnits,
+          units: treasuryCashPaidLocal / BOND_UNIT_FACE_VALUE,
           couponRate: bond.couponRate,
           treasuryCashMovement: true,
           ...(valuation ?? {}),

@@ -32,6 +32,16 @@ describe("sovereign maturity cash and debt", () => {
     expect(row.treasuryBalance).toBe(97000);
     expect(row.debt).toMatchObject({ principal: 0 });
   });
+  it("excludes the bank-held share for a separate guarded journal transfer", async () => {
+    const memory = setup();
+    expect(await settleSovereignBondMaturity(memory as unknown as Db, bond, 3000, 1200)).toEqual({
+      amountLocal: 3000,
+      currencyCode: "USD",
+    });
+    const row = memory.collection("federalBudget").docs[0];
+    expect(row.treasuryBalance).toBe(98_200);
+    expect(row.debt).toMatchObject({ principal: 0 });
+  });
   it("preserves full-face holder redemption while retiring haircut-adjusted debt", async () => {
     const memory = setup(100000, 1800);
     await settleSovereignBondMaturity(memory as unknown as Db, {
