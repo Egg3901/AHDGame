@@ -142,6 +142,7 @@ function simulate(scenario: Scenario) {
     heldUnits: 0,
   }));
   let poolCash = scenario.openingPoolCash ?? 0;
+  let poolTargetCash = poolCash > 0 ? conservativePoolCashSeed : 0;
   let poolCashInflow = 0;
   let poolCashSweep = 0;
   let treasuryCash = 0;
@@ -233,7 +234,7 @@ function simulate(scenario: Scenario) {
     const loansBefore = sumLoans(tranches);
     const bondMarkBefore = sovereignLots.reduce((sum, bond) => {
       if (bond.heldUnits <= 0 || bond.maturityTurn <= turn) return sum;
-      const quote = quoteSimBond(bond, turn, prime, poolCash);
+      const quote = quoteSimBond(bond, turn, prime, poolCash, poolTargetCash);
       return sum + Math.round(quote.bid * BOND_UNIT_FACE_VALUE * bond.heldUnits * 100) / 100;
     }, 0);
     const equityBefore = cash + loansBefore + bondMarkBefore - deposits;
@@ -308,7 +309,7 @@ function simulate(scenario: Scenario) {
         const remainingTurns = bond.maturityTurn - turn;
         if (remainingTurns <= 0 || remainingTurns > TURNS_PER_YEAR || bond.floatUnits <= 0)
           continue;
-        const quote = quoteSimBond(bond, turn, prime, poolCash);
+        const quote = quoteSimBond(bond, turn, prime, poolCash, poolTargetCash);
         const ask = Math.round(quote.ask * BOND_UNIT_FACE_VALUE * 100) / 100;
         if (!(ask > 0) || spendable < ask) continue;
         const holderCap = Math.floor(SOVEREIGN_BOND_HOLDER_CAP * bond.totalUnits);
@@ -330,7 +331,7 @@ function simulate(scenario: Scenario) {
           (a, b) => a.maturityTurn - b.maturityTurn || a.bondId.localeCompare(b.bondId)
         )) {
           if (shortfall <= 0 || bond.heldUnits <= 0 || bond.maturityTurn <= turn) continue;
-          const quote = quoteSimBond(bond, turn, prime, poolCash);
+          const quote = quoteSimBond(bond, turn, prime, poolCash, poolTargetCash);
           const bid = Math.round(quote.bid * BOND_UNIT_FACE_VALUE * 100) / 100;
           if (!(bid > 0)) continue;
           const units = Math.min(
@@ -371,6 +372,7 @@ function simulate(scenario: Scenario) {
       )
       .reduce((sum, bond) => sum + bond.totalUnits * BOND_UNIT_FACE_VALUE, 0);
     const poolTarget = Math.max(conservativePoolCashSeed, rolloverTarget);
+    poolTargetCash = poolTarget;
     const cashMoves = planPoolCashMoves({ cashLocal: poolCash, targetCashLocal: poolTarget });
     if (cashMoves.inflow > 0) {
       poolCash += cashMoves.inflow;
@@ -493,7 +495,7 @@ function simulate(scenario: Scenario) {
         heldBillMark: Math.round(
           sovereignLots.reduce((sum, bond) => {
             if (bond.heldUnits <= 0 || bond.maturityTurn <= turn) return sum;
-            const quote = quoteSimBond(bond, turn, prime, poolCash);
+            const quote = quoteSimBond(bond, turn, prime, poolCash, poolTargetCash);
             return sum + quote.bid * BOND_UNIT_FACE_VALUE * bond.heldUnits;
           }, 0)
         ),
@@ -517,7 +519,7 @@ function simulate(scenario: Scenario) {
   const finalSavingsApy = savingsApyPercent(primeAtEnd, scenario.inflation, 0);
   const endingBillMark = sovereignLots.reduce((sum, bond) => {
     if (bond.heldUnits <= 0) return sum;
-    const quote = quoteSimBond(bond, scenario.turns - 1, primeAtEnd, poolCash);
+    const quote = quoteSimBond(bond, scenario.turns - 1, primeAtEnd, poolCash, poolTargetCash);
     return sum + Math.round(quote.bid * BOND_UNIT_FACE_VALUE * bond.heldUnits * 100) / 100;
   }, 0);
   const unpaidMaturityClaims = pendingBankMaturities.reduce((sum, amount) => sum + amount, 0);
@@ -619,14 +621,20 @@ function sumLoans(tranches: Map<CreditBandId, { outstanding: number; rate: numbe
   return [...tranches.values()].reduce((sum, tranche) => sum + tranche.outstanding, 0);
 }
 
-function quoteSimBond(bond: SimBond, turn: number, prime: number, poolCash: number) {
+function quoteSimBond(
+  bond: SimBond,
+  turn: number,
+  prime: number,
+  poolCash: number,
+  targetCashLocal: number
+) {
   const remainingTurns = bond.maturityTurn - turn;
   const mid = calculateBondMarketPrice(bond.couponRate, prime, remainingTurns, false);
   return quoteBondPrices({
     marketPrice: mid,
     issuerType: "sovereign",
     cashLocal: poolCash,
-    targetCashLocal: conservativePoolCashSeed,
+    targetCashLocal,
     appetite: 1,
   });
 }
