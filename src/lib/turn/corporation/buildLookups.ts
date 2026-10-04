@@ -231,6 +231,7 @@ export async function buildCorporationLookups(
               : {
                   mediaProductDevelopmentReceiptV1: 0,
                   mediaProductAdvertisingReceiptV1: 0,
+                  mediaProductAdvertisingObligationsV1: 0,
                 }),
           },
         }

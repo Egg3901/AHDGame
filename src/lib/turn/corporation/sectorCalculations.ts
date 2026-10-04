@@ -6,7 +6,7 @@
  * (rdMoraleFactor, computeRdDemandFactor), and converts each sector from its host currency.
  */
 import type { AnyBulkWriteOperation, ObjectId } from "mongodb";
-import type { Bond, Corporation } from "@/lib/db/types";
+import type { Bond, Corporation, MediaProductAdvertisingObligationV1 } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { getLegalStructureForCorp } from "@/lib/corporations/legalStructure";
 import { getControllingCorporateParent } from "@/lib/corporations/corporateOwnership";
@@ -89,6 +89,7 @@ import {
   mediaProductAdvertisingReceiptAnchor,
   settledMediaAdvertisingAnchor,
 } from "@/lib/products/rules/mediaProductRules";
+import { createMediaProductAdvertisingObligation } from "@/lib/products/mediaProductAdvertisingSettlement";
 
 /** Primary commodities that proxy R&D conditions for each sector type. */
 const SECTOR_RD_COMMODITIES: Partial<Record<string, [string, string?]>> = {
@@ -188,8 +189,12 @@ export function processSectors(
 
   const corpOps: {
     updateOne: {
-      filter: { _id: ObjectId };
-      update: { $inc: Record<string, number>; $set: Record<string, unknown> };
+      filter: Record<string, unknown>;
+      update: {
+        $inc: Record<string, number>;
+        $set: Record<string, unknown>;
+        $push?: Record<string, unknown>;
+      };
     };
   }[] = [];
   const manufacturingDevelopmentCashOps: AnyBulkWriteOperation<Corporation>[] = [];
@@ -234,10 +239,18 @@ export function processSectors(
   const fundDividendAccruals: FundDividendAccrual[] = [];
   const equityPoolDividendAccruals: SectorCalculationsResult["equityPoolDividendAccruals"] = [];
   const marketingSpendAnchorByBuyerId = new Map<string, number>();
+  const mediaAdvertisingAnchorByBuyerId = new Map<string, number>();
+  const mediaAdvertisingObligationByBuyerId = new Map<
+    string,
+    MediaProductAdvertisingObligationV1
+  >();
   const advertisingSellerDeliveredValues = [
     ...(market.advertisingSellerDeliveredValueAnchorByCorpId ?? new Map()),
   ].filter(
     ([corpId, value]) => lookups.corpById.has(corpId) && Number.isFinite(value) && value > 0
+  );
+  const advertisingSellerCorpIds = new Set(
+    advertisingSellerDeliveredValues.map(([corpId]) => corpId)
   );
   const totalAdvertisingDeliveredValueAnchor = advertisingSellerDeliveredValues.reduce(
     (sum, [, value]) => sum + value,
@@ -1021,6 +1034,53 @@ export function processSectors(
     /** Placeholder until cross-holding iteration writes the real price into corpOps. */
     const placeholderSharePrice = Number.isFinite(corp.sharePrice) ? corp.sharePrice : 0.1;
 
+    const mediaAdvertisingAnchor =
+      activeMediaProductProject && Number.isSafeInteger(currentTurn)
+        ? mediaProductAdvertisingReceiptAnchor(
+            hourlyMarketing,
+            activeMediaProductProject.allocationShare
+          )
+        : 0;
+    const mediaAdvertisingTurn =
+      activeMediaProductProject && Number.isSafeInteger(currentTurn) ? currentTurn : undefined;
+    if (
+      activeMediaProductProject &&
+      mediaAdvertisingAnchor > 0 &&
+      mediaAdvertisingTurn !== undefined &&
+      totalAdvertisingDeliveredValueAnchor > 0
+    ) {
+      const currencyCode = resolvedHomeCurrency ?? "USD";
+      const sellerQuotes = advertisingSellerDeliveredValues.flatMap(([sellerId, value]) => {
+        const seller = lookups.corpById.get(sellerId);
+        if (!seller) return [];
+        return [
+          {
+            corporationId: sellerId,
+            deliveredValueAnchor: value,
+            currencyCode: resolveCorpLiquidCurrencyCode(seller) ?? "USD",
+            localPerAnchor: fxRateForCorpFromMap(seller, lookups.exchangeRatesByCurrency),
+          },
+        ];
+      });
+      const obligation = createMediaProductAdvertisingObligation({
+        projectId: activeMediaProductProject._id,
+        turn: mediaAdvertisingTurn,
+        amountAnchor: mediaAdvertisingAnchor,
+        buyerCurrencyCode: currencyCode,
+        buyerLocalPerAnchor: localFxRate,
+        sellers: sellerQuotes,
+      });
+      if (obligation) {
+        mediaAdvertisingAnchorByBuyerId.set(corpId, mediaAdvertisingAnchor);
+        mediaAdvertisingObligationByBuyerId.set(corpId, obligation);
+      }
+    }
+    const participatesInMediaAdSettlement =
+      lookups.mediaProductSlatesEnabled === true &&
+      (lookups.mediaProductDevelopmentByCorpId?.size ?? 0) > 0 &&
+      Number.isSafeInteger(currentTurn) &&
+      (marketingSpendAnchorByBuyerId.has(corpId) || advertisingSellerCorpIds.has(corpId));
+
     // Split escalation decay: reduce by 1 each turn (minimum 0)
     const currentEscalation = corp.splitEscalation ?? 0;
     const newEscalation = Math.max(0, currentEscalation - 1);
@@ -1131,7 +1191,12 @@ export function processSectors(
     // of liquidCapital and into shareEscrowBalance (escrow mode only).
     corpOps.push({
       updateOne: {
-        filter: { _id: corp._id },
+        filter: {
+          _id: corp._id,
+          ...(participatesInMediaAdSettlement
+            ? { advertisingMarketSettledTurnV1: { $ne: currentTurn } }
+            : {}),
+        },
         update: {
           $inc: {
             liquidCapital: (treasuryCashLedgerEnabled ? 0 : incomeForBalance) - escrowFundingMove,
@@ -1150,6 +1215,9 @@ export function processSectors(
             creditCompositeSnapshot: creditPack.creditRating.compositeScore,
             creditSnapshotTurn: currentTurn,
             creditRatingComponents: creditPack.creditRating.components,
+            ...(participatesInMediaAdSettlement
+              ? { advertisingMarketSettledTurnV1: currentTurn }
+              : {}),
             // Ticket #919: `shouldClearDividends` already zeroes THIS turn's payout
             // (see payoutDividendRate above) whenever net income dips negative for a
             // single turn — that's the correct, transient skip. Persisting
@@ -1161,6 +1229,14 @@ export function processSectors(
             ...(imfBailoutActive ? { dividendRate: 0, lastDividendChange: now } : {}),
             ...(shouldZeroCeoSalary || imfBailoutActive ? { ceoSalary: 0 } : {}),
           },
+          ...(mediaAdvertisingObligationByBuyerId.has(corpId)
+            ? {
+                $push: {
+                  mediaProductAdvertisingObligationsV1:
+                    mediaAdvertisingObligationByBuyerId.get(corpId),
+                },
+              }
+            : {}),
         },
       },
     });
@@ -1271,6 +1347,11 @@ export function processSectors(
       for (const [buyerId, spendAnchor] of marketingSpendAnchorByBuyerId) {
         const buyer = corpInfo(buyerId);
         if (!buyer) continue;
+        const deferredTitleAnchor = Math.min(
+          spendAnchor,
+          mediaAdvertisingAnchorByBuyerId.get(buyerId) ?? 0
+        );
+        const ordinarySpendAnchor = Math.max(0, spendAnchor - deferredTitleAnchor);
         let allocatedAnchor = 0;
         for (let i = 0; i < advertisingSellerDeliveredValues.length; i++) {
           const [sellerId, deliveredValueAnchor] = advertisingSellerDeliveredValues[i];
@@ -1278,9 +1359,10 @@ export function processSectors(
           if (!seller) continue;
           const amountAnchor =
             i === advertisingSellerDeliveredValues.length - 1
-              ? spendAnchor - allocatedAnchor
-              : spendAnchor * (deliveredValueAnchor / totalAdvertisingDeliveredValueAnchor);
+              ? ordinarySpendAnchor - allocatedAnchor
+              : ordinarySpendAnchor * (deliveredValueAnchor / totalAdvertisingDeliveredValueAnchor);
           allocatedAnchor += amountAnchor;
+          if (amountAnchor <= 0) continue;
           addCorpToCorpSettlement(
             marketingDeltasLocal,
             buyerId,
@@ -1325,60 +1407,6 @@ export function processSectors(
     for (let i = 0; i < lookups.corporations.length; i++) {
       const corp = lookups.corporations[i];
       const corpId = corp._id.toString();
-      const activeMediaProject = lookups.mediaProductSlatesEnabled
-        ? lookups.mediaProductDevelopmentByCorpId?.get(corpId)
-        : undefined;
-      const mediaAdvertisingAnchor = activeMediaProject
-        ? mediaProductAdvertisingReceiptAnchor(
-            marketingSpendAnchorByBuyerId.get(corpId) ?? 0,
-            activeMediaProject.allocationShare
-          )
-        : 0;
-      if (activeMediaProject && mediaAdvertisingAnchor > 0 && Number.isSafeInteger(currentTurn)) {
-        manufacturingDevelopmentCashOps.push({
-          updateOne: {
-            filter: {
-              _id: corp._id,
-              $or: [
-                { "mediaProductAdvertisingReceiptV1.turn": { $exists: false } },
-                { "mediaProductAdvertisingReceiptV1.turn": { $lt: currentTurn } },
-              ],
-              $expr: {
-                $and: [
-                  { $gte: [{ $ifNull: ["$liquidCapital", 0] }, 0] },
-                  {
-                    $eq: [
-                      {
-                        $size: {
-                          $filter: {
-                            input: {
-                              $objectToArray: {
-                                $ifNull: ["$operatingCashArrearsByCurrency", {}],
-                              },
-                            },
-                            as: "arrears",
-                            cond: { $gt: ["$$arrears.v", 0] },
-                          },
-                        },
-                      },
-                      0,
-                    ],
-                  },
-                ],
-              },
-            },
-            update: {
-              $set: {
-                mediaProductAdvertisingReceiptV1: {
-                  projectId: activeMediaProject._id,
-                  turn: currentTurn,
-                  amountAnchor: mediaAdvertisingAnchor,
-                },
-              },
-            },
-          },
-        } as AnyBulkWriteOperation<Corporation>);
-      }
       const delta = marketingDeltasLocal.get(corpId) ?? 0;
       if (delta === 0) continue;
       const update = corpOps[i].updateOne.update;

@@ -13,6 +13,7 @@ import {
 } from "@/lib/bonds/corporateCredit";
 import { ceoOwnershipFraction } from "@/lib/corporations/ceoOwnership";
 import { indexFundOwnershipFraction } from "@/lib/corporations/indexOwnership";
+import { settleMediaProductAdvertisingObligations } from "@/lib/products/mediaProductAdvertisingSettlement";
 import {
   corpCapitalToAnchor,
   fxRateForCorpFromMap,
@@ -40,6 +41,8 @@ export interface ManufacturingDevelopmentCashSettlementArgs {
   exchangeRatesByCurrency: Map<CurrencyCode, number>;
   bondsByCorpId: Map<string, Bond[]>;
   sectorsByCorp: Map<string, CorporateSector[]>;
+  /** Feature gate; disabled turns do not read or settle title advertising obligations. */
+  mediaProductSlatesEnabled?: boolean;
 }
 
 export interface OperatingThenDevelopmentCashArgs extends ManufacturingDevelopmentCashSettlementArgs {
@@ -52,26 +55,38 @@ export async function applyOperatingCashThenDevelopmentCash(
   args: OperatingThenDevelopmentCashArgs
 ): Promise<{ paidReceipts: number; paidAmountAnchor: number }> {
   await args.applyOperatingCashWrites();
-  return settleManufacturingDevelopmentCash(args);
+  const mediaAdvertisingIds = args.mediaProductSlatesEnabled
+    ? await settleMediaProductAdvertisingObligations(
+        args.db,
+        args.corporations.map((corp) => corp._id),
+        args.turn
+      )
+    : [];
+  return settleManufacturingDevelopmentCash(args, mediaAdvertisingIds);
 }
 
 /** Apply guarded product debits, then refresh affected snapshots from Mongo in one read. */
 export async function settleManufacturingDevelopmentCash(
-  args: ManufacturingDevelopmentCashSettlementArgs
+  args: ManufacturingDevelopmentCashSettlementArgs,
+  additionalCorporationIds: readonly ObjectId[] = []
 ): Promise<{ paidReceipts: number; paidAmountAnchor: number }> {
-  if (args.operations.length === 0) return { paidReceipts: 0, paidAmountAnchor: 0 };
-
   const corporationIds = args.operations.flatMap((operation) => {
     if (!("updateOne" in operation)) return [];
     const id = operation.updateOne.filter._id;
     return id instanceof ObjectId ? [id] : [];
   });
-  const uniqueIds = [...new Map(corporationIds.map((id) => [id.toString(), id])).values()];
+  const uniqueIds = [
+    ...new Map(
+      [...corporationIds, ...additionalCorporationIds].map((id) => [id.toString(), id])
+    ).values(),
+  ];
   if (uniqueIds.length === 0) return { paidReceipts: 0, paidAmountAnchor: 0 };
 
-  await args.db.collection<Corporation>("corporations").bulkWrite(args.operations, {
-    ordered: false,
-  });
+  if (args.operations.length > 0) {
+    await args.db.collection<Corporation>("corporations").bulkWrite(args.operations, {
+      ordered: false,
+    });
+  }
 
   const rows = (await args.db
     .collection<Corporation>("corporations")

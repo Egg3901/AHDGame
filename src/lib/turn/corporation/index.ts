@@ -854,6 +854,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       exchangeRatesByCurrency: lookups.exchangeRatesByCurrency,
       bondsByCorpId: lookups.bondsByCorpId,
       sectorsByCorp: lookups.sectorsByCorp,
+      mediaProductSlatesEnabled,
       applyOperatingCashWrites: async () => {
         if (corpOps.length === 0) return;
         // bulkWrite op array type does not satisfy AnyBulkWriteOperation narrowing, runtime shape is valid.

@@ -35,6 +35,21 @@ export interface Shareholder {
   superShares?: number;
 }
 
+export interface MediaProductAdvertisingObligationV1 {
+  projectId: string;
+  turn: number;
+  amountAnchor: number;
+  buyerAmountLocal: number;
+  buyerCurrencyCode: CurrencyCode;
+  buyerLocalPerAnchor: number;
+  sellerAllocations: Array<{
+    corporationId: string;
+    amountLocal: number;
+    currencyCode: CurrencyCode;
+    localPerAnchor: number;
+  }>;
+}
+
 export interface ShareOrder {
   _id: ObjectId;
   /** The corporation whose shares are being traded */
@@ -618,6 +633,10 @@ export interface Corporation {
   manufacturingProductDevelopmentReceiptV2?: ManufacturingDevelopmentCashReceiptV2;
   mediaProductDevelopmentReceiptV1?: MediaProductDevelopmentReceipt;
   mediaProductAdvertisingReceiptV1?: MediaProductAdvertisingReceipt;
+  /** Frozen original buyer quote, including seller allocations, until durable settlement completes. */
+  mediaProductAdvertisingObligationsV1?: MediaProductAdvertisingObligationV1[];
+  /** Idempotency stamp for a corporation participating in a media ad-market cash write. */
+  advertisingMarketSettledTurnV1?: number;
   mediaProductDevelopmentPaidTurnV1?: number;
   /** Idempotency stamp retained after its project-bound cash receipt is consumed. */
   manufacturingProductDevelopmentPaidTurnV2?: number;
