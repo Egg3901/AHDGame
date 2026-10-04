@@ -75,7 +75,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (instance.status !== "pending") {
       throw badRequest("This event has already been resolved.");
     }
-    if (Date.now() > instance.expiresAtRealtimeMs) {
+    if (Date.now() > instance.expiresAtRealtimeMs && !instance.resolutionClaim) {
       throw badRequest("This event has expired.");
     }
 
@@ -85,9 +85,12 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
     const selectedOption = handler.options.find((option) => option.id === parsed.data.optionId)!;
     const selectedTier = pickTier(selectedOption.outcomeTable, instance.roll);
-    const treasuryCashLedgerEnabled =
+    const hasFundedTreasuryEffect =
       instance.scope === "country" &&
-      selectedTier.effects.some((effect) => effect.type === "treasuryDelta")
+      selectedTier.effects.some((effect) => effect.type === "treasuryDelta");
+    const treasuryCashLedgerEnabled = instance.resolutionClaim
+      ? instance.scope === "country"
+      : hasFundedTreasuryEffect
         ? (
             await db
               .collection<{ _id: string; treasuryCashLedgerEnabled?: boolean }>("gameConfig")
@@ -128,7 +131,8 @@ export async function POST(request: Request, { params }: RouteParams) {
           },
         },
         undefined,
-        treasuryCashLedgerEnabled
+        treasuryCashLedgerEnabled,
+        character._id.toString()
       );
     } catch (error) {
       if (error instanceof EventNotResolvableError) {

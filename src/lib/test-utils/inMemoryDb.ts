@@ -428,6 +428,16 @@ function applyUpdate(doc: Doc, update: Update): void {
           setPath(doc, path, [...base, value]);
         }
       }
+    } else if (op === "$addToSet") {
+      for (const [path, value] of Object.entries(fields as Doc)) {
+        const current = getPath(doc, path);
+        const base = Array.isArray(current) ? [...current] : [];
+        const values = isPlainObject(value) && "$each" in value ? value.$each : [value];
+        for (const item of values as unknown[]) {
+          if (!base.some((existing) => sameValue(existing, item))) base.push(item);
+        }
+        setPath(doc, path, base);
+      }
     } else if (op === "$pull") {
       // Selector form only (`$pull: { path: { field: value } }`): drop every
       // array element matching ALL selector fields. Pulling an absent element

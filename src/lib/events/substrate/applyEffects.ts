@@ -42,6 +42,15 @@ function isCompletedSettlement(result: SettlementResult): boolean {
   return result.status === "applied" || (result.status === "replayed" && !result.error);
 }
 
+function stableEventEffectId(instanceId: ObjectId, effectIndex: number): ObjectId {
+  return new ObjectId(
+    createHash("sha256")
+      .update(`${instanceId.toHexString()}:effect:${effectIndex}`)
+      .digest("hex")
+      .slice(0, 24)
+  );
+}
+
 function isValuedQuoteConflict(result: SettlementResult): boolean {
   return (
     result.status === "rejected" &&
@@ -108,6 +117,7 @@ async function applyCountryEffects(
   }
 
   for (const [effectIndex, effect] of effects.entries()) {
+    const effectKey = `${ctx.instance._id.toHexString()}:${effectIndex}`;
     switch (effect.type) {
       case "treasuryDelta": {
         if (effect.deltaAnchor === 0) break;
@@ -154,12 +164,25 @@ async function applyCountryEffects(
       }
       case "approvalDelta": {
         if (effect.delta === 0) break;
-        await ctx.db
-          .collection("governmentApprovals")
-          .updateOne(
-            { _id: countryId as unknown as ObjectId },
-            { $inc: { approvalRating: effect.delta } }
+        if (ctx.treasuryCashLedgerEnabled) {
+          await ctx.db.collection("governmentApprovals").updateOne(
+            {
+              _id: countryId as unknown as ObjectId,
+              appliedEventEffects: { $ne: effectKey },
+            },
+            {
+              $inc: { approvalRating: effect.delta },
+              $addToSet: { appliedEventEffects: effectKey },
+            }
           );
+        } else {
+          await ctx.db
+            .collection("governmentApprovals")
+            .updateOne(
+              { _id: countryId as unknown as ObjectId },
+              { $inc: { approvalRating: effect.delta } }
+            );
+        }
         break;
       }
       case "sectorDemandModifier": {
@@ -170,6 +193,9 @@ async function applyCountryEffects(
           durationTurns: effect.durationTurns,
           appliedAtTurn: ctx.currentTurn,
           sourceInstanceId: ctx.instance._id,
+          ...(ctx.treasuryCashLedgerEnabled
+            ? { durableEffectId: stableEventEffectId(ctx.instance._id, effectIndex) }
+            : {}),
         });
         break;
       }
@@ -181,11 +207,19 @@ async function applyCountryEffects(
           durationTurns: effect.durationTurns,
           appliedAtTurn: ctx.currentTurn,
           sourceInstanceId: ctx.instance._id,
+          ...(ctx.treasuryCashLedgerEnabled
+            ? { durableEffectId: stableEventEffectId(ctx.instance._id, effectIndex) }
+            : {}),
         });
         break;
       }
       case "democraticHealthDelta": {
-        await applyCivilLibertiesDelta(ctx.db, countryId, effect.delta);
+        await applyCivilLibertiesDelta(
+          ctx.db,
+          countryId,
+          effect.delta,
+          ctx.treasuryCashLedgerEnabled ? effectKey : undefined
+        );
         break;
       }
       case "presidentialHealthRelief": {
@@ -205,6 +239,9 @@ async function applyCountryEffects(
           durationTurns: effect.durationTurns,
           appliedAtTurn: ctx.currentTurn,
           sourceInstanceId: ctx.instance._id,
+          ...(ctx.treasuryCashLedgerEnabled
+            ? { durableEffectId: stableEventEffectId(ctx.instance._id, effectIndex) }
+            : {}),
         });
         break;
       }
@@ -215,11 +252,19 @@ async function applyCountryEffects(
           durationTurns: effect.durationTurns,
           appliedAtTurn: ctx.currentTurn,
           sourceInstanceId: ctx.instance._id,
+          ...(ctx.treasuryCashLedgerEnabled
+            ? { durableEffectId: stableEventEffectId(ctx.instance._id, effectIndex) }
+            : {}),
         });
         break;
       }
       case "civilLibertiesDelta": {
-        await applyCivilLibertiesDelta(ctx.db, countryId, effect.delta);
+        await applyCivilLibertiesDelta(
+          ctx.db,
+          countryId,
+          effect.delta,
+          ctx.treasuryCashLedgerEnabled ? effectKey : undefined
+        );
         break;
       }
       case "wireOnly":

@@ -28,7 +28,8 @@ const clampMetric = (value: number): number => Math.max(0, Math.min(100, value))
 export async function applyCivilLibertiesDelta(
   db: Db,
   countryId: CountryId,
-  delta: number
+  delta: number,
+  eventEffectKey?: string
 ): Promise<number> {
   if (delta === 0) return 0;
   const docs = await db
@@ -36,6 +37,52 @@ export async function applyCivilLibertiesDelta(
     .find({ countryId })
     .toArray();
   if (docs.length === 0) return 0;
+
+  if (eventEffectKey) {
+    let applied = 0;
+    for (const initial of docs) {
+      for (let attempt = 0; attempt < 8; attempt++) {
+        const collection = db.collection<PoliticalMetricsDoc>("politicalMetrics");
+        const current = await collection.findOne({ _id: initial._id });
+        if (!current || current.appliedEventEffects?.includes(eventEffectKey)) break;
+
+        const values = { ...current.values };
+        const residuals = current.residuals ? { ...current.residuals } : undefined;
+        const set: Record<string, unknown> = { lastUpdated: new Date(), values };
+        const guard: Record<string, unknown> = {
+          _id: initial._id,
+          appliedEventEffects: { $ne: eventEffectKey },
+          values: current.values,
+          ...(current.residuals != null ? { residuals: current.residuals } : {}),
+        };
+        for (const metricId of DEMOCRATIC_HEALTH_METRIC_IDS) {
+          const previous = current.values[metricId];
+          if (typeof previous !== "number" || !Number.isFinite(previous)) continue;
+          const next = clampMetric(previous + delta);
+          values[metricId] = next;
+          if (residuals) {
+            const priorResidual = current.residuals[metricId] ?? 0;
+            residuals[metricId] = priorResidual + (next - previous);
+          }
+        }
+        if (residuals) set.residuals = residuals;
+        const update = await collection.updateOne(guard, {
+          $set: set,
+          $addToSet: { appliedEventEffects: eventEffectKey },
+        });
+        if (update.modifiedCount === 1) {
+          applied += 1;
+          break;
+        }
+        if (attempt === 7) {
+          throw new Error(
+            `Could not apply civil-liberties event effect ${eventEffectKey} to ${initial._id}`
+          );
+        }
+      }
+    }
+    return applied;
+  }
 
   const now = new Date();
   const operations = docs.map((doc) => {

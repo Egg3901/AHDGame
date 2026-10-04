@@ -177,7 +177,11 @@ describe("funded national extraction royalties", () => {
     );
     fault.disarm();
     expect(db.collection("bankMoneyMoves").docs[0]?.status).toBe("partial");
-    expect((db.collection("bankMoneyMoves").docs[0]?.legs as { applied: boolean }[]).map((leg) => leg.applied)).toEqual([false, false]);
+    expect(
+      (db.collection("bankMoneyMoves").docs[0]?.legs as { applied: boolean }[]).map(
+        (leg) => leg.applied
+      )
+    ).toEqual([false, false]);
     const { emitTx } = await import("@/lib/financialTxLog/emit");
     vi.clearAllMocks();
     const recoveryFault = withInjectedCrash(db, {
