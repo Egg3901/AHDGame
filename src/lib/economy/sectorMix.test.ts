@@ -246,4 +246,52 @@ describe("aggregateCountrySectorMix", () => {
     expect(automobiles.totalMarketAnchor).toBe(100_000);
     expect(automobiles.ownedPercent).toBe(100);
   });
+
+  it("keeps latent physical buckets for a model with no local owned or unowned row", async () => {
+    mockFind("states", [
+      { _id: "CA", countryId: "US", name: "California", gdp: 0 },
+      { _id: "TX", countryId: "US", name: "Texas", gdp: 0 },
+    ]);
+    mockFind("corporateSectors", [
+      {
+        _id: new ObjectId(),
+        corporationId: new ObjectId(),
+        countryId: "US",
+        stateId: "CA",
+        sectorType: "manufacturing",
+        industryModel: "vehicles",
+        revenue: 10_000,
+        capitalStock: 1,
+        operatingCapacityUnits: 1,
+        strategyId: "standard",
+        mothballed: false,
+      },
+    ]);
+    mockFind("unownedSectors", []);
+    mockFind("commodityPrices", [
+      {
+        commodity: "vehicles",
+        basePrice: 25_000,
+        globalPrice: 25_000,
+        globalSupply: 0,
+        globalDemand: 10,
+        nationalSupply: { US: 0 },
+        nationalDemand: { US: 10 },
+        stateSupply: { CA: 0, TX: 0 },
+        stateDemand: { CA: 0, TX: 10 },
+        turn: 1,
+      },
+    ]);
+    mockFind("corporations", []);
+    mockFind("exchangeRates", []);
+    db.collectionMocks.gameConfig!.findOne.mockResolvedValue({ marketSystemMode: "plants" });
+
+    const mix = await aggregateCountrySectorMix(db as unknown as Db, "US");
+    const manufacturing = mix.find((sector) => sector.type === "manufacturing")!;
+
+    // CA contributes one $50k nameplate. TX has no persisted market row, but
+    // its latent demand still expands the manufacturing market physically.
+    expect(manufacturing.totalMarketAnchor).toBeGreaterThan(50_000);
+    expect(manufacturing.ownedPercent).toBeLessThan(100);
+  });
 });

@@ -709,6 +709,16 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
   // not a world and everything after would seed on top of the damage.
   const guarded = <T>(name: string, fn: () => Promise<T>): Promise<T | null> =>
     options.run ? options.run.step("build", name, fn) : fn().then((v) => v as T | null);
+  const completeFreshVehicleSeed = async () => {
+    if (!freshVehicleSeed.enabled) return;
+    const requiredWritesSucceeded = !options.run || options.run.failures.length === 0;
+    if (!requiredWritesSucceeded) {
+      log(
+        `[manufacturing-vehicles] fresh seed remains incomplete because ${options.run!.failures.length} reset stage(s) failed`
+      );
+    }
+    await completeFresh1991VehicleModelSeed(db, requiredWritesSucceeded);
+  };
 
   log(seedOnly ? "Re-seeding reference data" : `Bootstrapping clean world (${mode})`);
 
@@ -960,7 +970,7 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
   );
 
   if (seedOnly) {
-    if (freshVehicleSeed.enabled) await completeFresh1991VehicleModelSeed(db);
+    await completeFreshVehicleSeed();
     log("Seed-only complete — skipped elections, officials, and game state init");
     return;
   }
@@ -1503,7 +1513,7 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
     unownedSectors: unownedSectorCount,
   };
 
-  if (freshVehicleSeed.enabled) await completeFresh1991VehicleModelSeed(db);
+  await completeFreshVehicleSeed();
 
   log("Bootstrap summary:");
   log(`- states: ${summary.states}`);

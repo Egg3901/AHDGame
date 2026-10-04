@@ -78,8 +78,12 @@ export async function prepareFresh1991VehicleModelSeed(
   return { enabled: true, ready: true, resumed: resumable, counts };
 }
 
-export async function completeFresh1991VehicleModelSeed(db: Db): Promise<void> {
-  await db.collection<GameConfig>("gameConfig").updateOne(
+export async function completeFresh1991VehicleModelSeed(
+  db: Db,
+  requiredWritesSucceeded = true
+): Promise<boolean> {
+  if (!requiredWritesSucceeded) return false;
+  const result = await db.collection<GameConfig>("gameConfig").updateOne(
     {
       _id: "default",
       "fresh1991VehicleModelSeed.schema": "manufacturing-vehicles-v1",
@@ -87,6 +91,7 @@ export async function completeFresh1991VehicleModelSeed(db: Db): Promise<void> {
     },
     { $set: { "fresh1991VehicleModelSeed.status": "complete" } }
   );
+  return result.matchedCount > 0;
 }
 
 /** Re-key only canonical rows created after the gate's empty-world preflight. */

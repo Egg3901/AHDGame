@@ -165,6 +165,19 @@ function outputRatesForSector(
   ).supply;
 }
 
+function indexBucketKeysByStateAndType(bucketKeys: Iterable<string>): Map<string, string[]> {
+  const byStateAndType = new Map<string, string[]>();
+  for (const bucketKey of bucketKeys) {
+    const modelSeparator = bucketKey.lastIndexOf("::");
+    if (modelSeparator < 0) continue;
+    const stateTypeKey = bucketKey.slice(0, modelSeparator);
+    const keys = byStateAndType.get(stateTypeKey);
+    if (keys) keys.push(bucketKey);
+    else byStateAndType.set(stateTypeKey, [bucketKey]);
+  }
+  return byStateAndType;
+}
+
 function storedCapacityUnits(sector: PlantsSectorMarketInput): number | null {
   for (const value of [sector.operatingCapacityUnits, sector.capitalStock]) {
     const capacity = finiteNonNegative(value);
@@ -524,15 +537,25 @@ export async function aggregateCountrySectorMix(
       })
     : null;
 
+  // Index each market bucket once. This also includes physical plant-market
+  // buckets created by latent commodity demand, which may have no owned or
+  // unowned row in that state.
+  const marketBucketKeys = new Set<string>([
+    ...ownedByBucket.keys(),
+    ...unownedByBucket.keys(),
+    ...(plantsMarket?.ownedByBucket.keys() ?? []),
+    ...(plantsMarket?.marketByBucket.keys() ?? []),
+  ]);
+  const bucketKeysByStateAndType = indexBucketKeysByStateAndType(marketBucketKeys);
+
   return CORPORATION_TYPES.map((type) => {
     let totalMarket = 0;
     let totalOwned = 0;
     let largest: { stateId: string; stateName: string; market: number } | null = null;
     for (const state of states) {
-      const matchingKeys = [
-        ...new Set([...ownedByBucket.keys(), ...unownedByBucket.keys()]),
-      ].filter((key) => key.startsWith(`${state._id}::${type}::`));
-      const keys = matchingKeys.length > 0 ? matchingKeys : [bucketKey(state._id, type)];
+      const keys = bucketKeysByStateAndType.get(`${state._id}::${type}`) ?? [
+        bucketKey(state._id, type),
+      ];
       let owned = keys.reduce((sum, key) => sum + (ownedByBucket.get(key) ?? 0), 0);
       const gdpFallback = gdpDerivedMarketAnchor(state.gdp ?? 0, countryId, preset);
       let market: number;

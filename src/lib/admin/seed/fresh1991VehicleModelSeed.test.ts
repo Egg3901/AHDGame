@@ -54,10 +54,16 @@ describe("fresh 1991 vehicle-model seed gate", () => {
         },
       },
     });
-    await completeFresh1991VehicleModelSeed(db);
+    await expect(completeFresh1991VehicleModelSeed(db)).resolves.toBe(true);
     expect(updates[1]?.update).toEqual({
       $set: { "fresh1991VehicleModelSeed.status": "complete" },
     });
+  });
+
+  it("keeps the marker in progress when required seed writes were skipped", async () => {
+    const { db, updates } = fakeDb();
+    await expect(completeFresh1991VehicleModelSeed(db, false)).resolves.toBe(false);
+    expect(updates).toEqual([]);
   });
 
   it("does not enable on other presets or without the explicit reference reset", async () => {
