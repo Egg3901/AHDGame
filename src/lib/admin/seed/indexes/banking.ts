@@ -1,6 +1,7 @@
 import type { Db } from "mongodb";
 import { ensureIndex } from "./helpers";
 import { MONEY_MOVE_COLLECTION } from "@/lib/banking/moneyMove";
+import { POLITICAL_MEDIA_ORDER_KIND } from "@/lib/politicalMedia/journal";
 
 /**
  * Indexes for the banking money-movement claim records.
@@ -29,6 +30,29 @@ export async function seedBankingIndexes(db: Db, log: (msg: string) => void) {
     MONEY_MOVE_COLLECTION,
     { status: 1, kind: 1, createdAt: 1 },
     { name: "bankMoneyMoves_status_kind_createdAt", background: true },
+    log
+  );
+
+  await ensureIndex(
+    db,
+    MONEY_MOVE_COLLECTION,
+    { kind: 1, status: 1, "politicalMediaOrder.status": 1 },
+    {
+      name: "bankMoneyMoves_politicalMedia_status",
+      background: true,
+      partialFilterExpression: { kind: POLITICAL_MEDIA_ORDER_KIND },
+    },
+    log
+  );
+  await ensureIndex(
+    db,
+    MONEY_MOVE_COLLECTION,
+    { kind: 1, status: 1, "politicalMediaOrder.settlementPlan.plannedTurn": 1 },
+    {
+      name: "bankMoneyMoves_politicalMedia_plannedTurn",
+      background: true,
+      partialFilterExpression: { kind: POLITICAL_MEDIA_ORDER_KIND },
+    },
     log
   );
 

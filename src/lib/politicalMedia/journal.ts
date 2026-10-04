@@ -13,6 +13,7 @@ import {
   type MoneyMoveResult,
 } from "@/lib/banking/moneyMove";
 import { AD_BONUS_CAP, adExposure, type TargetedAd } from "@/lib/campaignTargeting/rules";
+import { politicalMediaFillRatio } from "./rules";
 
 export const POLITICAL_MEDIA_ORDER_KIND = "political-media-order";
 export const POLITICAL_MEDIA_ESCROW_CURRENCY = "AHD";
@@ -339,16 +340,19 @@ export async function loadPoliticalMediaOrdersForClearing(
 ): Promise<PoliticalMediaOrderForClearing[]> {
   const rows = await db
     .collection<PoliticalMediaMoveRecord>(MONEY_MOVE_COLLECTION)
-    .find({
-      kind: POLITICAL_MEDIA_ORDER_KIND,
-      status: "applied",
-      $or: [
-        { "politicalMediaOrder.status": { $in: ["open", "settling"] } },
-        {
-          "politicalMediaOrder.settlementPlan.plannedTurn": currentTurn,
-        },
-      ],
-    })
+    .find(
+      {
+        kind: POLITICAL_MEDIA_ORDER_KIND,
+        status: "applied",
+        $or: [
+          { "politicalMediaOrder.status": { $in: ["open", "settling"] } },
+          {
+            "politicalMediaOrder.settlementPlan.plannedTurn": currentTurn,
+          },
+        ],
+      },
+      { projection: { _id: 1, kind: 1, status: 1, politicalMediaOrder: 1 } }
+    )
     .toArray();
   return rows.flatMap((row) => {
     const order = row.politicalMediaOrder;
@@ -584,9 +588,9 @@ export async function applyPoliticalMediaOrderEffect(db: Db, orderId: string): P
   const targetId = persistedId(effect.targetDocumentId, effect.targetDocumentIdIsObjectId);
   const targets = db.collection<Record<string, unknown>>(effect.targetCollection);
   const effectReceiptPath = `politicalMediaAppliedOrders.${orderId}`;
-  const fillRatio = Math.max(
-    0,
-    Math.min(1, order.settlementPlan.deliveredAnchor / order.identity.requestedAnchor)
+  const fillRatio = politicalMediaFillRatio(
+    order.settlementPlan.deliveredAnchor,
+    order.identity.requestedAnchor
   );
   if (effect.kind === "favorability") {
     if (!Number.isFinite(effect.amount) || !(effect.amount > 0)) return false;

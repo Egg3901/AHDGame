@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   allocatePoliticalAdOrders,
+  politicalMediaFillRatio,
   type PoliticalAdOrderDemand,
   type PoliticalAdSellerOffer,
 } from "./rules";
@@ -27,6 +28,13 @@ const seller = (overrides: Partial<PoliticalAdSellerOffer> = {}): PoliticalAdSel
 });
 
 describe("allocatePoliticalAdOrders", () => {
+  it("scales effects from delivered funded value only", () => {
+    expect(politicalMediaFillRatio(25, 100)).toBe(0.25);
+    expect(politicalMediaFillRatio(120, 100)).toBe(1);
+    expect(politicalMediaFillRatio(0, 100)).toBe(0);
+    expect(politicalMediaFillRatio(25, 0)).toBe(0);
+  });
+
   it("matches only unsold output in the requested state and conserves the order budget", () => {
     const result = allocatePoliticalAdOrders(
       [order()],

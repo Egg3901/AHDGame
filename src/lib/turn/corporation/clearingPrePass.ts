@@ -768,6 +768,7 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
         offers: adOffers,
         clearingBySectorId: market.clearingBySectorId ?? new Map(),
         clearingEnabled: market.clearingEnabled,
+        qualityPremiumEnabled: qualityPremiumPricingEnabled,
         turn: turn ?? 0,
       });
       market.clearingBySectorId = political.clearingBySectorId;

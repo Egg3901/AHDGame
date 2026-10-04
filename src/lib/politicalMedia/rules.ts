@@ -49,6 +49,18 @@ export interface PoliticalAdOrderAllocation {
 
 const compareText = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
+/** Fraction of the frozen requested anchor budget that actually cleared. */
+export function politicalMediaFillRatio(deliveredAnchor: number, requestedAnchor: number): number {
+  if (
+    !Number.isFinite(deliveredAnchor) ||
+    !Number.isFinite(requestedAnchor) ||
+    deliveredAnchor <= 0 ||
+    requestedAnchor <= 0
+  )
+    return 0;
+  return Math.max(0, Math.min(1, deliveredAnchor / requestedAnchor));
+}
+
 /**
  * Allocate funded political ad orders after commercial buyers. Matching stays
  * inside the exact country and state, then prefers the lowest ordinary offer

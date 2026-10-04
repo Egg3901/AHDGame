@@ -1,0 +1,76 @@
+{
+  "report": "issue-3103-political-ad-market",
+  "method": "production market allocator plus in-memory durable money-move journal",
+  "turn": 14,
+  "commercial": {
+    "offeredUnits": 30,
+    "commerciallySoldUnits": 12,
+    "residualUnits": 18,
+    "politicalUnitsDelivered": 18,
+    "residualUnitsRemaining": 0
+  },
+  "orders": [
+    {
+      "source": "advertise",
+      "requestedAnchor": 20,
+      "deliveredAnchor": 20,
+      "refundedAnchor": 0,
+      "paidEffectShare": 1,
+      "sellerNativeReceipt": 25
+    },
+    {
+      "source": "targeted_ad",
+      "requestedAnchor": 35,
+      "deliveredAnchor": 35,
+      "refundedAnchor": 0,
+      "paidEffectShare": 1,
+      "sellerNativeReceipt": 37
+    },
+    {
+      "source": "campaign_maintenance",
+      "requestedAnchor": 100,
+      "deliveredAnchor": 33,
+      "refundedAnchor": 67,
+      "paidEffectShare": 0.33,
+      "sellerNativeReceipt": 26.400000000000002
+    }
+  ],
+  "accounting": {
+    "allFundingPayoutAndRefundLegSetsBalanceAtFrozenAnchorRates": true,
+    "accountingErrors": [],
+    "measuredJournalCommands": 136,
+    "measuredJsonRequestAndResponseBytes": 165321,
+    "perOrder": [
+      {
+        "orderId": "advertise-1",
+        "observedCommands": 33,
+        "observedRequestAndResponseBytes": 42326
+      },
+      {
+        "orderId": "targeted-1",
+        "observedCommands": 47,
+        "observedRequestAndResponseBytes": 59478
+      },
+      {
+        "orderId": "campaign-1",
+        "observedCommands": 46,
+        "observedRequestAndResponseBytes": 52988
+      }
+    ],
+    "profilingNote": "Counts are calls through the in-memory Mongo-compatible driver; byte counts are JSON-encoded arguments and returned values, used as a deterministic payload-size proxy rather than BSON wire measurements."
+  },
+  "effects": {
+    "applyOnlyAfterSettlement": true,
+    "candidateFavorabilityAfterOrders": 41.33,
+    "targetedAdBonusAfterOrders": 0.25,
+    "sumPaidEffectShares": 2.33,
+    "unfundedOrRefundedShareApplied": 0
+  },
+  "phaseBudget": {
+    "corporationTurnMongoCommandBudget": 4500,
+    "observedPoliticalMediaMongoCompatibleCalls": 136,
+    "observedShareOfBudgetPercent": 3.02,
+    "budgetChanged": false,
+    "reason": "The sample covers three persisted orders and three seller allocations. Calls scale with durable orders and seller receipts, so higher-volume real-turn telemetry remains the qualification source. This in-memory command profile does not justify a budget change."
+  }
+}

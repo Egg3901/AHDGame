@@ -1,6 +1,7 @@
 import { TURNS_PER_DAY } from "@/lib/constants/corporations";
 import { commodityMixWeight, type CommodityType } from "@/lib/constants/commodities";
 import type { SectorClearingInput, SectorClearingResult } from "@/lib/market/clearing";
+import { costPlusPriceFactor } from "@/lib/market/costPlusPricing/rules";
 import { priceRealizationFactor } from "@/lib/market/priceRealization";
 import { qualityPremiumMultiplier } from "@/lib/market/clearing";
 import type { PoliticalMediaSettlementPlan } from "./journal";
@@ -45,6 +46,7 @@ export function settlePoliticalAdMarket(args: {
   offers: readonly PoliticalAdClearingOffer[];
   clearingBySectorId: ReadonlyMap<string, SectorClearingResult>;
   clearingEnabled: boolean;
+  qualityPremiumEnabled: boolean;
   turn: number;
 }): PoliticalAdMarketSettlement {
   const clearingBySectorId = new Map(args.clearingBySectorId);
@@ -107,13 +109,23 @@ export function settlePoliticalAdMarket(args: {
     )
       continue;
 
-    const priceLeg = priceRealizationFactor(offer.priceRatio);
     const posture = clearing?.effectivePosture ?? offer.input.posture ?? 0;
-    const effectivePosture =
-      posture > 0 && typeof offer.input.outputQuality === "number"
-        ? posture * qualityPremiumMultiplier(offer.input.outputQuality)
-        : posture;
-    const unitPriceAnchor = (offer.basePrice * priceLeg * (1 + effectivePosture)) / TURNS_PER_DAY;
+    const premiumMultiplier =
+      args.qualityPremiumEnabled && posture > 0 && typeof offer.input.outputQuality === "number"
+        ? qualityPremiumMultiplier(offer.input.outputQuality)
+        : 1;
+    const effectivePosture = posture > 0 ? posture * premiumMultiplier : posture;
+    const priceLeg = priceRealizationFactor(offer.priceRatio);
+    const commonOfferFactor =
+      typeof offer.input.inputCostIndex === "number"
+        ? costPlusPriceFactor(
+            offer.input.inputCostIndex,
+            posture,
+            offer.input.inputCostShare,
+            offer.input.fixedCostShare
+          )
+        : (1 + effectivePosture) * priceLeg;
+    const unitPriceAnchor = (offer.basePrice * commonOfferFactor) / TURNS_PER_DAY;
     if (!Number.isFinite(unitPriceAnchor) || !(unitPriceAnchor > 0)) continue;
 
     sellers.push({

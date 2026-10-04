@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { SectorClearingInput, SectorClearingResult } from "@/lib/market/clearing";
+import { costPlusPriceFactor } from "@/lib/market/costPlusPricing/rules";
+import { TURNS_PER_DAY } from "@/lib/constants/corporations";
 import { settlePoliticalAdMarket, type PoliticalAdClearingOffer } from "./market";
 
 const input: SectorClearingInput = {
@@ -44,6 +46,7 @@ describe("settlePoliticalAdMarket", () => {
       offers: [offer],
       clearingBySectorId: new Map([["sector-1", clearing]]),
       clearingEnabled: true,
+      qualityPremiumEnabled: true,
       turn: 12,
     });
 
@@ -77,6 +80,7 @@ describe("settlePoliticalAdMarket", () => {
       offers: [offer],
       clearingBySectorId,
       clearingEnabled: true,
+      qualityPremiumEnabled: true,
       turn: 12,
     });
     const disabled = settlePoliticalAdMarket({
@@ -84,6 +88,7 @@ describe("settlePoliticalAdMarket", () => {
       offers: [offer],
       clearingBySectorId,
       clearingEnabled: false,
+      qualityPremiumEnabled: true,
       turn: 12,
     });
 
@@ -127,6 +132,7 @@ describe("settlePoliticalAdMarket", () => {
       offers: [changedOffer],
       clearingBySectorId: new Map([["sector-1", clearing]]),
       clearingEnabled: true,
+      qualityPremiumEnabled: true,
       turn: 12,
     });
 
@@ -137,5 +143,42 @@ describe("settlePoliticalAdMarket", () => {
       soldByCommodity: { advertising: 1, entertainment_services: 0.5 },
     });
     expect(result.sellerPayoutLocalByCorpId.get("corp-1")).toBe(125);
+  });
+
+  it("uses the ordinary cost-plus quote and honors the quality pricing gate", () => {
+    const costPlusInput: SectorClearingInput = {
+      ...input,
+      inputCostIndex: 1.2,
+      inputCostShare: 0.8,
+      fixedCostShare: 0.2,
+      outputQuality: 100,
+      posture: 0.1,
+    };
+    const pricedOffer = {
+      ...offer,
+      input: costPlusInput,
+      clearing: { ...clearing, effectivePosture: 0.1 },
+      basePrice: 240,
+    };
+    const expected = (240 * costPlusPriceFactor(1.2, 0.1, 0.8, 0.2)) / TURNS_PER_DAY;
+    const result = settlePoliticalAdMarket({
+      orders: [
+        {
+          orderId: "cost-plus",
+          countryId: "US",
+          stateId: "CA",
+          createdTurn: 12,
+          budgetAnchor: expected * 2,
+        },
+      ],
+      offers: [pricedOffer],
+      clearingBySectorId: new Map([["sector-1", { ...clearing, effectivePosture: 0.1 }]]),
+      clearingEnabled: true,
+      qualityPremiumEnabled: false,
+      turn: 12,
+    });
+
+    expect(result.allocations[0]?.deliveredUnits).toBeCloseTo(2, 10);
+    expect(result.allocations[0]?.deliveredAnchor).toBeCloseTo(expected * 2, 10);
   });
 });

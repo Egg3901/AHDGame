@@ -61,6 +61,23 @@ const plan = {
 };
 
 describe("political media order journal", () => {
+  it("projects only order data when loading current and open orders", async () => {
+    const { memory, db } = setup();
+    expect((await fundPoliticalMediaOrder(db, funding())).status).toBe("applied");
+    const find = vi.spyOn(memory.collection("bankMoneyMoves"), "find");
+
+    await loadPoliticalMediaOrdersForClearing(db, 12);
+
+    expect(find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "political-media-order",
+        status: "applied",
+        $or: expect.any(Array),
+      }),
+      { projection: { _id: 1, kind: 1, status: 1, politicalMediaOrder: 1 } }
+    );
+  });
+
   it("funds once, pays exact seller receipt, and refunds unfilled escrow at frozen payer FX", async () => {
     const { memory, db } = setup();
 
@@ -152,6 +169,7 @@ describe("political media order journal", () => {
       ],
       clearingBySectorId: new Map([["media-sector", sectorClearing]]),
       clearingEnabled: true,
+      qualityPremiumEnabled: true,
       turn: 12,
     });
     expect(published.sellerPayoutLocalByCorpId.get("corp")).toBe(45);

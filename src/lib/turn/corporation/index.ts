@@ -677,11 +677,10 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
 
   if (politicalMediaMarketEnabled) {
     for (const order of politicalMediaOrders) {
-      if (!order.settlementPlan) {
-        const plan = plannedPoliticalMediaOrders.get(order.orderId);
-        if (!plan) continue;
-        await savePoliticalMediaSettlementPlan(db, order.orderId, plan);
-      }
+      // New plans were already durably saved before sector P&L writes. The
+      // loaded order is an opening snapshot, so do not issue the same plan
+      // read/CAS a second time after bulk writes.
+      if (!order.settlementPlan && !plannedPoliticalMediaOrders.has(order.orderId)) continue;
       await settlePoliticalMediaOrder(db, order.orderId, turn ?? 0);
       await applyPoliticalMediaOrderEffect(db, order.orderId);
     }
