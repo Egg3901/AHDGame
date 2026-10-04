@@ -69,6 +69,10 @@ export async function GET(request: Request, { params }: RouteParams) {
             marketSystemMode: 1,
             productLinesV2Enabled: 1,
             mediaOperatingModelsEnabled: 1,
+            mediaProductSlatesEnabled: 1,
+            brandLoyaltyEnabled: 1,
+            brandLoyaltySliceEnabled: 1,
+            qualityPremiumPricingEnabled: 1,
           },
         }
       ),
@@ -91,6 +95,13 @@ export async function GET(request: Request, { params }: RouteParams) {
     const { corporation } = resolved;
     const mediaEditorialEnabled = config?.mediaEditorialEnabled === true;
     const mediaOperatingModelsEnabled = config?.mediaOperatingModelsEnabled === true;
+    const mediaProductSlatesEnabled =
+      config?.mediaProductSlatesEnabled === true &&
+      mediaOperatingModelsEnabled &&
+      config.brandLoyaltyEnabled === true &&
+      config.brandLoyaltySliceEnabled === true &&
+      config.qualityPremiumPricingEnabled === true &&
+      marketAtLeast(await getMarketSystemMode(config), "clearing");
     const modViewEnabled =
       !authUser?.isAdmin &&
       authUser?.isModerator === true &&
@@ -173,6 +184,8 @@ export async function GET(request: Request, { params }: RouteParams) {
     (detail.corporation as Record<string, unknown>).mediaEditorialEnabled = mediaEditorialEnabled;
     (detail.corporation as Record<string, unknown>).mediaOperatingModelsEnabled =
       mediaOperatingModelsEnabled;
+    (detail.corporation as Record<string, unknown>).mediaProductSlatesEnabled =
+      mediaProductSlatesEnabled;
     if (mediaEditorialEnabled && hasMediaSector) {
       (detail.corporation as Record<string, unknown>).editorialStance =
         corporation.editorialStance ?? { economic: 0, social: 0 };
@@ -226,6 +239,7 @@ export async function GET(request: Request, { params }: RouteParams) {
           contractIssuanceEnabled,
           mediaEditorialEnabled,
           mediaOperatingModelsEnabled,
+          mediaProductSlatesEnabled,
           ...(mediaEditorialEnabled && hasMediaSector
             ? { editorialStance: corporation.editorialStance ?? { economic: 0, social: 0 } }
             : {}),

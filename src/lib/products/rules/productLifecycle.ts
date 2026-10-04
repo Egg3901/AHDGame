@@ -36,6 +36,8 @@ export interface ProductLifecycleReceipt {
   paidDevelopmentAnchor: number;
 }
 
+export type ProductLifecycleDurations = Partial<Record<ProductLifecycleStage, number>>;
+
 export interface ProductLifecycleProgress {
   stage: ProductLifecycleStage;
   stageStartedTurn: number;
@@ -63,6 +65,8 @@ export function advanceProductLifecycle(input: {
     elapsedThresholdTurns: number;
   };
   receipt: ProductLifecycleReceipt;
+  /** Optional product-kind cadence. Omitted values preserve industrial defaults. */
+  durations?: ProductLifecycleDurations;
 }): ProductLifecycleProgress | null {
   const { product, receipt } = input;
   const safeNonNegativeInteger = (value: number): boolean =>
@@ -116,7 +120,13 @@ export function advanceProductLifecycle(input: {
     }
   } else {
     const elapsedStageTurns = Math.max(0, receipt.turn - stageStartedTurn + 1);
-    const stageTurns = PRODUCT_LIFECYCLE_STAGE_TURNS[stage];
+    const configuredTurns = input.durations?.[stage];
+    const stageTurns =
+      typeof configuredTurns === "number" &&
+      Number.isSafeInteger(configuredTurns) &&
+      configuredTurns > 0
+        ? configuredTurns
+        : PRODUCT_LIFECYCLE_STAGE_TURNS[stage];
     const next = NEXT_STAGE[stage];
     if (stageTurns != null && next && elapsedStageTurns >= stageTurns) {
       stage = next;

@@ -62,7 +62,9 @@ describe("manufacturing development cash settlement", () => {
       "cash-and-receipt-read",
       "credit-snapshot",
     ]);
-    expect(bulkWrite).toHaveBeenNthCalledWith(1, developmentOps, { ordered: false });
+    expect(bulkWrite).toHaveBeenNthCalledWith(1, developmentOps, {
+      ordered: false,
+    });
     expect(result).toEqual({ paidReceipts: 1, paidAmountAnchor: 250 });
     expect(snapshots.map((item) => item.liquidCapital)).toEqual([750, 1_000]);
     expect(snapshots.map((item) => item.liquidCapitalAnchorAfterIncome)).toEqual([750, 1_000]);
@@ -70,7 +72,7 @@ describe("manufacturing development cash settlement", () => {
 
   const mongoUri = process.env.AHD_PRODUCT_DEVELOPMENT_MONGO_TEST_URI;
   it.skipIf(!mongoUri)(
-    "guards a concurrent cash loss and a retry after receipt consumption in Mongo",
+    "guards a concurrent cash loss and a retry after development receipt consumption in Mongo",
     async () => {
       const client = new MongoClient(mongoUri!);
       await client.connect();
@@ -86,7 +88,11 @@ describe("manufacturing development cash settlement", () => {
       ];
       try {
         await collection.insertMany([
-          { ...insufficientCorp, liquidCapital: 1_000 },
+          {
+            ...insufficientCorp,
+            liquidCapital: 1_000,
+            operatingCashArrearsByCurrency: { USD: 0 },
+          },
           { ...fundedCorp, liquidCapital: 1_000 },
         ]);
 
@@ -101,26 +107,33 @@ describe("manufacturing development cash settlement", () => {
           bondsByCorpId: new Map(),
           sectorsByCorp: new Map(),
           applyOperatingCashWrites: async () => {
-            await collection.updateOne({ _id: insufficientId }, { $inc: { liquidCapital: -800 } });
+            await collection.updateOne(
+              { _id: insufficientId },
+              {
+                $set: {
+                  liquidCapital: -50,
+                  operatingCashArrearsByCurrency: { USD: 50 },
+                },
+              }
+            );
           },
         });
 
         expect(first).toEqual({ paidReceipts: 1, paidAmountAnchor: 250 });
-        expect(firstSnapshots.map((item) => item.liquidCapital)).toEqual([200, 750]);
+        expect(firstSnapshots.map((item) => item.liquidCapital)).toEqual([-50, 750]);
         expect(
           await collection.findOne({
             _id: insufficientId,
             manufacturingProductDevelopmentReceiptV2: { $exists: true },
           })
         ).toBeNull();
-
         // Simulate a crash after the durable receipt was consumed. The per-turn
         // stamp still rejects a duplicate debit when the same request is retried.
         await collection.updateOne(
           { _id: fundedId },
           { $unset: { manufacturingProductDevelopmentReceiptV2: "" } }
         );
-        const retrySnapshots = [snapshot(insufficientId, 200), snapshot(fundedId, 750)];
+        const retrySnapshots = [snapshot(insufficientId, -50), snapshot(fundedId, 750)];
         const retry = await applyOperatingCashThenDevelopmentCash({
           db,
           operations: [operations[1]],
