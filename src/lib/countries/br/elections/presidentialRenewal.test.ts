@@ -89,7 +89,8 @@ beforeEach(async () => {
     .collection("electedOfficials")
     .updateOne.mockImplementation(
       async (filter: Filter<ElectedOfficial>, update: UpdateFilter<ElectedOfficial>) => {
-        if (filter.officeType === "president") president = { ...filter, ...update.$set };
+        if (filter.officeType === "president")
+          president = { officeType: "president", ...update.$set };
         return { matchedCount: 1, modifiedCount: 1 };
       }
     );
