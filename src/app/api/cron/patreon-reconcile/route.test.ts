@@ -58,7 +58,8 @@ describe("runReconcile", () => {
     ]);
     expect(service.applyPatreonStatus).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ userId, tier: "supporter", patreonUserId: "p1" })
+      expect.objectContaining({ userId, tier: "supporter", patreonUserId: "p1" }),
+      expect.objectContaining({ patreonTier: null })
     );
   });
 
@@ -120,7 +121,12 @@ describe("runReconcile", () => {
     expect(res.toDerole).toEqual([
       { username: "lapser", email: "lapsed@example.com", tier: "supporter" },
     ]);
-    expect(service.startPatreonGracePeriod).toHaveBeenCalledWith(expect.anything(), userId);
+    expect(service.startPatreonGracePeriod).toHaveBeenCalledWith(
+      expect.anything(),
+      userId,
+      expect.any(Date),
+      expect.objectContaining({ patreonTier: "supporter" })
+    );
   });
 
   it("NEVER deroles an AHD supporter absent from Patreon data", async () => {
@@ -173,7 +179,11 @@ describe("runReconcile", () => {
     const res = await runReconcile(db as unknown as Db, true);
 
     expect(res.expired).toHaveLength(1);
-    expect(service.clearExpiredPatreonBenefits).toHaveBeenCalledWith(expect.anything(), userId);
+    expect(service.clearExpiredPatreonBenefits).toHaveBeenCalledWith(
+      expect.anything(),
+      userId,
+      expect.objectContaining({ patreonUserId: "expired-patron" })
+    );
     // Expiry takes priority: not double-counted as a derole.
     expect(res.toDerole).toHaveLength(0);
   });
@@ -270,7 +280,8 @@ describe("runReconcile", () => {
     ]);
     expect(service.applyPatreonStatus).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ userId, tier: "supporter-plus" })
+      expect.objectContaining({ userId, tier: "supporter-plus" }),
+      expect.objectContaining({ supporterProvider: "stripe", patreonTier: "supporter" })
     );
   });
 

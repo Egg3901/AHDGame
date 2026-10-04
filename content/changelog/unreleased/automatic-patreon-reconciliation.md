@@ -19,3 +19,4 @@ areas: [backend]
 - Schedule reconciliation on the hosted background worker with a shared lock to prevent overlapping runs.
 - Record run outcomes and unmatched memberships for follow-up while preserving Stripe protections and requiring an exact linked Patreon identity.
 - Preserve Stripe ownership on Patreon upgrades and stop benefit writes if a reconciliation loses its shared lease.
+- Apply reconciliation changes only while the linked identity, provider, tier and expiry still match the observed supporter state. A newer subscription update is retried instead of overwritten.

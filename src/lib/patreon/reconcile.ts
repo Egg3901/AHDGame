@@ -4,7 +4,7 @@
  * pseudonymous retry history through `runPatreonReconcile`.
  */
 import { createHmac, randomUUID } from "node:crypto";
-import type { Db, Document } from "mongodb";
+import type { AnyBulkWriteOperation, Db, Document } from "mongodb";
 import type { PatreonTier, User } from "@/lib/db/types";
 import { listPatreonMembers, type PatreonMemberRecord } from "@/lib/patreon/members";
 import {
@@ -12,6 +12,7 @@ import {
   clearExpiredPatreonBenefits,
   findUserByPatreonUserId,
   startPatreonGracePeriod,
+  type SupporterStatusSnapshot,
 } from "@/lib/patreon/service";
 
 interface GrantEntry {
@@ -126,6 +127,15 @@ async function findUserForPatron(db: Db, patron: PatreonMemberRecord): Promise<U
   return patron.patreonUserId ? findUserByPatreonUserId(db, patron.patreonUserId) : null;
 }
 
+function supporterSnapshot(user: User): SupporterStatusSnapshot {
+  return {
+    supporterProvider: user.supporterProvider,
+    patreonUserId: user.patreonUserId,
+    patreonTier: user.patreonTier,
+    patreonExpiresAt: user.patreonExpiresAt,
+  };
+}
+
 export async function runReconcile(
   db: Db,
   apply: boolean,
@@ -184,15 +194,19 @@ export async function runReconcile(
       });
       if (apply) {
         await beforeApplyWrite?.();
-        await applyPatreonStatus(db, {
-          userId: user._id,
-          tier: patron.tier,
-          expiresAt: user.supporterProvider === "stripe" ? (user.patreonExpiresAt ?? null) : null,
-          adsDisabledDefault: true,
-          provider: user.supporterProvider === "stripe" ? "stripe" : undefined,
-          // Keep the explicit provider mapping used for this match.
-          patreonUserId: patron.patreonUserId ?? user.patreonUserId,
-        });
+        await applyPatreonStatus(
+          db,
+          {
+            userId: user._id,
+            tier: patron.tier,
+            expiresAt: user.supporterProvider === "stripe" ? (user.patreonExpiresAt ?? null) : null,
+            adsDisabledDefault: true,
+            provider: user.supporterProvider === "stripe" ? "stripe" : undefined,
+            // Keep the explicit provider mapping used for this match.
+            patreonUserId: patron.patreonUserId ?? user.patreonUserId,
+          },
+          supporterSnapshot(user)
+        );
       }
     }
   }
@@ -247,7 +261,7 @@ export async function runReconcile(
       expired.push(entry);
       if (apply) {
         await beforeApplyWrite?.();
-        await clearExpiredPatreonBenefits(db, u._id);
+        await clearExpiredPatreonBenefits(db, u._id, supporterSnapshot(u));
       }
       continue;
     }
@@ -258,7 +272,7 @@ export async function runReconcile(
       toDerole.push(entry);
       if (apply) {
         await beforeApplyWrite?.();
-        await startPatreonGracePeriod(db, u._id);
+        await startPatreonGracePeriod(db, u._id, new Date(now), supporterSnapshot(u));
       }
     }
   }
@@ -349,7 +363,7 @@ async function persistUnmatchedAudit(
       { kind, state: "open", _id: { $nin: currentIds } },
       { $set: { state: "resolved", resolvedAt: now } }
     );
-    const operations = keys
+    const operations: AnyBulkWriteOperation<UnmatchedAudit>[] = keys
       .filter((key) => key.kind === kind)
       .map((key) => ({
         updateOne: {
@@ -358,7 +372,7 @@ async function persistUnmatchedAudit(
             $set: {
               kind,
               fingerprint: key.fingerprint,
-              state: "open",
+              state: "open" as const,
               lastSeenAt: now,
               lastRunId: runId,
             },
