@@ -1,4 +1,4 @@
-import { ObjectId, type Db } from "mongodb";
+import { ObjectId } from "mongodb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Corporation } from "@/lib/db/types/corporation";
 import type { ExtractionContract } from "@/lib/db/types/extractionContract";
@@ -57,8 +57,12 @@ function setup() {
     offerExpiresTurn: TURN + 10,
     updatedAt: NOW,
   };
-  db.seed("extractionContracts", [contract]);
-  return { db, contract, corporation: db.collection("corporations").docs[0] as Corporation };
+  db.seed("extractionContracts", [contract as unknown as Record<string, unknown>]);
+  return {
+    db,
+    contract,
+    corporation: db.collection("corporations").docs[0] as unknown as Corporation,
+  };
 }
 
 describe("funded national contract signing fee", () => {
@@ -88,8 +92,9 @@ describe("funded national contract signing fee", () => {
       ).rejects.toThrow("crash after");
       fault.disarm();
 
-      const savedContract = db.collection("extractionContracts").docs[0] as ExtractionContract;
-      const retryCorp = db.collection("corporations").docs[0] as Corporation;
+      const savedContract = db.collection("extractionContracts")
+        .docs[0] as unknown as ExtractionContract;
+      const retryCorp = db.collection("corporations").docs[0] as unknown as Corporation;
       const retried = await acceptContractOffer(
         fault.db,
         savedContract,

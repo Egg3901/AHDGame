@@ -82,12 +82,18 @@ describe("corporate operating cash settlement", () => {
       treasuryCashLocal: 120,
       treasuryBalance: -30,
     });
-    expect(db.collection("bankMoneyMoves").docs).toEqual([
-      expect.objectContaining({
-        _id: `corp-operating-cash:4:${corpId.toHexString()}`,
-        status: "applied",
-      }),
-    ]);
+    expect(db.collection("bankMoneyMoves").docs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          _id: `corp-operating-cash:4:${corpId.toHexString()}:gross`,
+          status: "applied",
+        }),
+        expect.objectContaining({
+          _id: `corp-operating-cash:4:${corpId.toHexString()}:tax`,
+          status: "applied",
+        }),
+      ])
+    );
   });
 
   it("values split tax receipts in each native Treasury currency", async () => {
@@ -145,62 +151,348 @@ describe("corporate operating cash settlement", () => {
     expect(ukBudget?.treasuryBalance).toBeCloseTo(4.8);
   });
 
-  it.each([
-    ["payer debit", "corporations", "liquidCapital", -20],
-    ["Treasury credit", "federalBudget", "treasuryCashLocal", 20],
-  ])("replays a crash after the %s leg without recalculating or duplicating cash", async (
-    _label,
-    collection,
-    path,
-    amount
-  ) => {
+  it("records losses beyond current liquid funds as operating arrears", async () => {
     const db = createInMemoryDb();
-    const corpId = new ObjectId("650000000000000000000032");
+    const corpId = new ObjectId("650000000000000000000033");
+    db.seed("gameConfig", [{ _id: "default", treasuryCashLedgerEnabled: true }]);
+    db.seed("gameState", [{ _id: "current", currentTurn: 4, preset: "2019-default" }]);
+    db.seed("exchangeRates", [{ currencyCode: "USD", rate: 1 }]);
+    db.seed("federalBudget", []);
+    db.seed("corporations", [{ _id: corpId, liquidCapital: 5 }]);
+
+    await expect(
+      settleCorporateOperatingCash(
+        db as unknown as Db,
+        [
+          snapshot(corpId, {
+            operatingCashIncomeLocal: -100,
+            operatingCashCurrency: "USD",
+            operatingCashLocalPerAnchor: 1,
+            federalTaxByCountryAnchor: new Map(),
+          }),
+        ],
+        4,
+        new Date()
+      )
+    ).resolves.toBeUndefined();
+
+    // The former guard could abort corporationTurn for ordinary insolvency.
+    // Cash remains nonnegative and the unpaid loss is recorded as a payable.
+    expect(db.collection("corporations").docs[0]).toMatchObject({
+      liquidCapital: 0,
+      operatingCashArrearsByCurrency: { USD: 95 },
+    });
+    expect(db.collection("bankMoneyMoves").docs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          _id: `corp-operating-cash:4:${corpId.toHexString()}:gross`,
+          status: "applied",
+        }),
+      ])
+    );
+  });
+
+  it("records tax that cannot be withheld after an unfunded loss without aborting the turn", async () => {
+    const db = createInMemoryDb();
+    const corpId = new ObjectId("650000000000000000000035");
     db.seed("gameConfig", [{ _id: "default", treasuryCashLedgerEnabled: true }]);
     db.seed("gameState", [{ _id: "current", currentTurn: 4, preset: "2019-default" }]);
     db.seed("exchangeRates", [{ currencyCode: "USD", rate: 1 }]);
     db.seed("federalBudget", [
-      { _id: "US", countryId: "US", currencyCode: "USD", treasuryCashLocal: 100, treasuryBalance: 0 },
+      { _id: "US", countryId: "US", treasuryCashLocal: 0, treasuryBalance: 0 },
     ]);
-    db.seed("corporations", [{ _id: corpId, liquidCapital: 100 }]);
-    const original = snapshot(corpId, {
-      operatingCashIncomeLocal: 80,
-      operatingCashCurrency: "USD",
-      operatingCashLocalPerAnchor: 1,
-      federalTaxByCountryAnchor: new Map([["US", 20]]),
+    db.seed("corporations", [{ _id: corpId, liquidCapital: 5 }]);
+
+    await expect(
+      settleCorporateOperatingCash(
+        db as unknown as Db,
+        [
+          snapshot(corpId, {
+            operatingCashIncomeLocal: -100,
+            operatingCashCurrency: "USD",
+            operatingCashLocalPerAnchor: 1,
+            federalTaxByCountryAnchor: new Map([["US", 20]]),
+          }),
+        ],
+        4,
+        new Date()
+      )
+    ).resolves.toBeUndefined();
+
+    expect(db.collection("corporations").docs[0]).toMatchObject({
+      liquidCapital: 0,
+      operatingCashArrearsByCurrency: { USD: 75 },
+      federalTaxArrearsAnchorByCountry: { US: 20 },
     });
+    expect(db.collection("federalBudget").docs[0]).toMatchObject({
+      treasuryCashLocal: 0,
+      treasuryBalance: 0,
+    });
+  });
+
+  it("services prior operating arrears from later gross income and resumes a payment crash once", async () => {
+    const db = createInMemoryDb();
+    const corpId = new ObjectId("650000000000000000000036");
+    db.seed("gameConfig", [{ _id: "default", treasuryCashLedgerEnabled: true }]);
+    db.seed("gameState", [{ _id: "current", currentTurn: 1, preset: "2019-default" }]);
+    db.seed("exchangeRates", [{ currencyCode: "USD", rate: 1 }]);
+    db.seed("federalBudget", []);
+    db.seed("corporations", [{ _id: corpId, liquidCapital: 5 }]);
+
+    await settleCorporateOperatingCash(
+      db as unknown as Db,
+      [
+        snapshot(corpId, {
+          operatingCashIncomeLocal: -100,
+          operatingCashCurrency: "USD",
+          operatingCashLocalPerAnchor: 1,
+          federalTaxByCountryAnchor: new Map(),
+        }),
+      ],
+      1,
+      new Date()
+    );
+    expect(db.collection("corporations").docs[0]).toMatchObject({
+      liquidCapital: 0,
+      operatingCashArrearsByCurrency: { USD: 95 },
+      operatingCashArrearsLastTurnByCurrency: { USD: 1 },
+    });
+
     const fault = withInjectedCrash(db, {
-      collection,
+      collection: "corporations",
       op: "updateOne",
       afterWrite: true,
       onCall: 1,
       matches: (args) => {
         const update = args[1] as { $inc?: Record<string, number> };
-        return update.$inc?.[path] === amount;
+        return update.$inc?.liquidCapital === -95;
       },
     });
-
     await expect(
-      settleCorporateOperatingCash(fault.db, [original], 4, new Date())
+      settleCorporateOperatingCash(
+        fault.db,
+        [
+          snapshot(corpId, {
+            operatingCashIncomeLocal: 200,
+            operatingCashCurrency: "USD",
+            operatingCashLocalPerAnchor: 1,
+            federalTaxByCountryAnchor: new Map(),
+          }),
+        ],
+        2,
+        new Date()
+      )
     ).rejects.toThrow("crash after");
     fault.disarm();
-    // A turn retry may have recomputed operating income and tax. The claimed
-    // receipt must finish from the original per-country native-currency quote.
-    const recomputed = snapshot(corpId, {
-      operatingCashIncomeLocal: 5_000,
+
+    await settleCorporateOperatingCash(
+      fault.db,
+      [
+        snapshot(corpId, {
+          operatingCashIncomeLocal: 9_999,
+          operatingCashCurrency: "USD",
+          operatingCashLocalPerAnchor: 1,
+          federalTaxByCountryAnchor: new Map(),
+        }),
+      ],
+      2,
+      new Date()
+    );
+
+    expect(db.collection("corporations").docs[0]).toMatchObject({
+      liquidCapital: 105,
+      operatingCashArrearsByCurrency: { USD: 0 },
+      operatingCashArrearsLastTurnByCurrency: { USD: 2 },
+    });
+    expect(db.collection("bankMoneyMoves").docs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          _id: `corp-operating-arrears-settle:${corpId.toHexString()}:2`,
+          status: "applied",
+        }),
+      ])
+    );
+  });
+
+  it("delivers prior tax arrears from later gross cash and resumes the frozen Treasury receipt", async () => {
+    const db = createInMemoryDb();
+    const corpId = new ObjectId("650000000000000000000037");
+    db.seed("gameConfig", [{ _id: "default", treasuryCashLedgerEnabled: true }]);
+    db.seed("gameState", [{ _id: "current", currentTurn: 1, preset: "2019-default" }]);
+    db.seed("exchangeRates", [{ currencyCode: "USD", rate: 1 }]);
+    db.seed("federalBudget", [
+      { _id: "US", countryId: "US", treasuryCashLocal: 0, treasuryBalance: 0 },
+    ]);
+    db.seed("corporations", [{ _id: corpId, liquidCapital: 5 }]);
+
+    await settleCorporateOperatingCash(
+      db as unknown as Db,
+      [
+        snapshot(corpId, {
+          operatingCashIncomeLocal: -100,
+          operatingCashCurrency: "USD",
+          operatingCashLocalPerAnchor: 1,
+          federalTaxByCountryAnchor: new Map([["US", 20]]),
+        }),
+      ],
+      1,
+      new Date()
+    );
+    expect(db.collection("corporations").docs[0]).toMatchObject({
+      operatingCashArrearsByCurrency: { USD: 75 },
+      federalTaxArrearsAnchorByCountry: { US: 20 },
+    });
+
+    const fault = withInjectedCrash(db, {
+      collection: "federalBudget",
+      op: "updateOne",
+      afterWrite: true,
+      onCall: 1,
+      matches: (args) => {
+        const update = args[1] as { $inc?: Record<string, number> };
+        return update.$inc?.treasuryCashLocal === 20;
+      },
+    });
+    const laterIncome = snapshot(corpId, {
+      operatingCashIncomeLocal: 150,
       operatingCashCurrency: "USD",
       operatingCashLocalPerAnchor: 1,
-      federalTaxByCountryAnchor: new Map([["US", 900]]),
+      federalTaxByCountryAnchor: new Map(),
     });
-    await settleCorporateOperatingCash(fault.db, [recomputed], 4, new Date());
-    await settleCorporateOperatingCash(fault.db, [recomputed], 4, new Date());
+    await expect(
+      settleCorporateOperatingCash(fault.db, [laterIncome], 2, new Date())
+    ).rejects.toThrow("crash after");
+    fault.disarm();
 
-    expect(db.collection("corporations").docs[0]?.liquidCapital).toBe(180);
+    await settleCorporateOperatingCash(
+      fault.db,
+      [
+        snapshot(corpId, {
+          operatingCashIncomeLocal: 9_999,
+          operatingCashCurrency: "USD",
+          operatingCashLocalPerAnchor: 1,
+          federalTaxByCountryAnchor: new Map(),
+        }),
+      ],
+      2,
+      new Date()
+    );
+
+    expect(db.collection("corporations").docs[0]).toMatchObject({
+      liquidCapital: 55,
+      operatingCashArrearsByCurrency: { USD: 0 },
+      federalTaxArrearsAnchorByCountry: { US: 0 },
+      federalTaxArrearsLastTurnByCountry: { US: 2 },
+    });
     expect(db.collection("federalBudget").docs[0]).toMatchObject({
-      treasuryCashLocal: 120,
+      treasuryCashLocal: 20,
       treasuryBalance: 20,
     });
-    expect(db.collection("bankMoneyMoves").docs).toHaveLength(1);
-    expect(db.collection("bankMoneyMoves").docs[0]).toMatchObject({ status: "applied" });
+    expect(db.collection("bankMoneyMoves").docs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          _id: `corp-tax-arrears-settle:${corpId.toHexString()}:2`,
+          status: "applied",
+        }),
+      ])
+    );
   });
+
+  it("settles current turn operating cash after an earlier share escrow debit", async () => {
+    const db = createInMemoryDb();
+    const corpId = new ObjectId("650000000000000000000034");
+    db.seed("gameConfig", [{ _id: "default", treasuryCashLedgerEnabled: true }]);
+    db.seed("gameState", [{ _id: "current", currentTurn: 4, preset: "2019-default" }]);
+    db.seed("exchangeRates", [{ currencyCode: "USD", rate: 1 }]);
+    db.seed("federalBudget", [
+      { _id: "US", countryId: "US", treasuryCashLocal: 0, treasuryBalance: 0 },
+    ]);
+    // corporationTurn has already applied the 90-unit share escrow debit.
+    db.seed("corporations", [{ _id: corpId, liquidCapital: 10, shareEscrowBalance: 90 }]);
+
+    await settleCorporateOperatingCash(
+      db as unknown as Db,
+      [
+        snapshot(corpId, {
+          operatingCashIncomeLocal: 80,
+          operatingCashCurrency: "USD",
+          operatingCashLocalPerAnchor: 1,
+          federalTaxByCountryAnchor: new Map([["US", 20]]),
+        }),
+      ],
+      4,
+      new Date()
+    );
+
+    expect(db.collection("corporations").docs[0]).toMatchObject({
+      liquidCapital: 90,
+      shareEscrowBalance: 90,
+    });
+    expect(db.collection("federalBudget").docs[0]).toMatchObject({ treasuryCashLocal: 20 });
+  });
+
+  it.each([
+    ["payer debit", "corporations", "liquidCapital", -20],
+    ["Treasury credit", "federalBudget", "treasuryCashLocal", 20],
+  ])(
+    "replays a crash after the %s leg without recalculating or duplicating cash",
+    async (_label, collection, path, amount) => {
+      const db = createInMemoryDb();
+      const corpId = new ObjectId("650000000000000000000032");
+      db.seed("gameConfig", [{ _id: "default", treasuryCashLedgerEnabled: true }]);
+      db.seed("gameState", [{ _id: "current", currentTurn: 4, preset: "2019-default" }]);
+      db.seed("exchangeRates", [{ currencyCode: "USD", rate: 1 }]);
+      db.seed("federalBudget", [
+        {
+          _id: "US",
+          countryId: "US",
+          currencyCode: "USD",
+          treasuryCashLocal: 100,
+          treasuryBalance: 0,
+        },
+      ]);
+      db.seed("corporations", [{ _id: corpId, liquidCapital: 100 }]);
+      const original = snapshot(corpId, {
+        operatingCashIncomeLocal: 80,
+        operatingCashCurrency: "USD",
+        operatingCashLocalPerAnchor: 1,
+        federalTaxByCountryAnchor: new Map([["US", 20]]),
+      });
+      const fault = withInjectedCrash(db, {
+        collection,
+        op: "updateOne",
+        afterWrite: true,
+        onCall: 1,
+        matches: (args) => {
+          const update = args[1] as { $inc?: Record<string, number> };
+          return update.$inc?.[path] === amount;
+        },
+      });
+
+      await expect(
+        settleCorporateOperatingCash(fault.db, [original], 4, new Date())
+      ).rejects.toThrow("crash after");
+      fault.disarm();
+      // A turn retry may have recomputed operating income and tax. The claimed
+      // receipt must finish from the original per-country native-currency quote.
+      const recomputed = snapshot(corpId, {
+        operatingCashIncomeLocal: 5_000,
+        operatingCashCurrency: "USD",
+        operatingCashLocalPerAnchor: 1,
+        federalTaxByCountryAnchor: new Map([["US", 900]]),
+      });
+      await settleCorporateOperatingCash(fault.db, [recomputed], 4, new Date());
+      await settleCorporateOperatingCash(fault.db, [recomputed], 4, new Date());
+
+      expect(db.collection("corporations").docs[0]?.liquidCapital).toBe(180);
+      expect(db.collection("federalBudget").docs[0]).toMatchObject({
+        treasuryCashLocal: 120,
+        treasuryBalance: 20,
+      });
+      expect(db.collection("bankMoneyMoves").docs).toHaveLength(2);
+      expect(db.collection("bankMoneyMoves").docs).toEqual(
+        expect.arrayContaining([expect.objectContaining({ status: "applied" })])
+      );
+    }
+  );
 });

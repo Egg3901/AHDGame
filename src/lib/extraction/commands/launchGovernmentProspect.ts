@@ -14,7 +14,7 @@ import { spendFromTreasury } from "@/lib/budget/treasurySpend";
 import { emitTx } from "@/lib/financialTxLog/emit";
 import { loadTreasuryCashContext } from "@/lib/nationalization/treasuryLedger";
 import { settleTransition, resumeSettlement } from "@/lib/banking/settlementJournal";
-import { oid, type BankingTransition } from "@/lib/banking/rules/boundary";
+import type { BankingTransition } from "@/lib/banking/rules/boundary";
 import { treasuryAnchorValuation } from "@/lib/budget/rules/treasuryAccrual";
 import { isNationalIssuer, isStateIssuer } from "@/lib/extraction/contractIssuerAuth";
 import {
@@ -173,13 +173,15 @@ export async function launchGovernmentProspect(
     };
   }
 
-  const priorSuccessCount =
+  let priorSuccessCount =
     fundedClaim?.priorSuccessCount ??
     (await surveysCol.countDocuments({ stateId, resource, status: "succeeded" }));
-  const costAnchor = fundedClaim?.costAnchor ?? prospectCostAnchor(priorSuccessCount);
+  let costAnchor = fundedClaim?.costAnchor ?? prospectCostAnchor(priorSuccessCount);
   const countryCode = COUNTRY_CURRENCY_MAP[countryId] as CurrencyCode | undefined;
   const fxByCurrency = await loadFxRatesByCurrency(db);
-  let cashCurrency = fundedClaim?.currencyCode ?? countryCode ?? "USD";
+  let cashCurrency: CurrencyCode = (fundedClaim?.currencyCode ??
+    countryCode ??
+    "USD") as CurrencyCode;
   let fxRate = fundedClaim?.treasuryLocalPerAnchor ?? fxByCurrency.get(cashCurrency) ?? 1;
   let treasuryCashContext: Awaited<ReturnType<typeof loadTreasuryCashContext>> = null;
   if (fundedNationalCash && !fundedClaim) {
@@ -194,7 +196,7 @@ export async function launchGovernmentProspect(
       observedRate: treasuryCashContext.rates.get(cashCurrency) ?? fxByCurrency.get(cashCurrency),
     }).anchorRate;
   }
-  const costLocal = fundedClaim?.costLocal ?? Math.round(costAnchor * fxRate);
+  let costLocal = fundedClaim?.costLocal ?? Math.round(costAnchor * fxRate);
 
   if (fundedNationalCash) {
     if (!fundedClaim) {
@@ -255,6 +257,19 @@ export async function launchGovernmentProspect(
           fundedClaim = await surveysCol.findOne({ _id: fundedSurveyId });
           fundedPaymentKey = fundedClaim?.fundingKey;
         }
+      }
+      // The deterministic scope id serializes simultaneous launches, but a
+      // losing request may have priced the survey before it observed the
+      // winner's frozen claim. Always replace every economic input with the
+      // persisted winner's quote before creating or resuming its receipt.
+      if (fundedClaim) {
+        fundedSurveyId = fundedClaim._id;
+        fundedPaymentKey = fundedClaim.fundingKey;
+        priorSuccessCount = fundedClaim.priorSuccessCount ?? priorSuccessCount;
+        costAnchor = fundedClaim.costAnchor;
+        cashCurrency = (fundedClaim.currencyCode as CurrencyCode | undefined) ?? cashCurrency;
+        fxRate = fundedClaim.treasuryLocalPerAnchor ?? fxRate;
+        costLocal = fundedClaim.costLocal ?? Math.round(costAnchor * fxRate);
       }
     }
     if (!fundedPaymentKey || !fundedSurveyId || !fundedClaim)

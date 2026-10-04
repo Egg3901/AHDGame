@@ -17,6 +17,7 @@ import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import { MARKET_DISABLED, type MarketContext } from "@/lib/market/marketContext";
 import {
   computeCorporateCreditAtTurn,
+  corporateCashArrearsAnchor,
   sumCorporateSectorConstructionInProgress,
 } from "@/lib/bonds/corporateCredit";
 import { ceoOwnershipFraction } from "@/lib/corporations/ceoOwnership";
@@ -1039,6 +1040,11 @@ export function processSectors(
         corp._id,
         currentTurn
       ),
+      otherLiabilitiesAnchor: corporateCashArrearsAnchor({
+        operatingByCurrency: corp.operatingCashArrearsByCurrency,
+        federalTaxByCountryAnchor: corp.federalTaxArrearsAnchorByCountry,
+        fxByCurrency: lookups.exchangeRatesByCurrency,
+      }),
     });
 
     // Capture snapshot for history charts + credit time series
@@ -1297,6 +1303,11 @@ export function processSectors(
           corp._id,
           currentTurn
         ),
+        otherLiabilitiesAnchor: corporateCashArrearsAnchor({
+          operatingByCurrency: corp.operatingCashArrearsByCurrency,
+          federalTaxByCountryAnchor: corp.federalTaxArrearsAnchorByCountry,
+          fxByCurrency: lookups.exchangeRatesByCurrency,
+        }),
       });
       snapshot.creditComposite = creditPack.creditRating.compositeScore;
       snapshot.creditRating = creditPack.creditRating.rating;

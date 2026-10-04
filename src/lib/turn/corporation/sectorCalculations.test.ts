@@ -54,6 +54,7 @@ function getTotalPayment(map: Map<string, Map<CurrencyCode, number>>, charId: st
 
 vi.mock("@/lib/bonds/corporateCredit", () => ({
   sumCorporateSectorConstructionInProgress: vi.fn().mockReturnValue(0),
+  corporateCashArrearsAnchor: vi.fn().mockReturnValue(0),
   computeCorporateCreditAtTurn: vi.fn().mockReturnValue({
     creditRating: { rating: "BBB", compositeScore: 50 },
     totalDebt: 0,
@@ -101,13 +102,15 @@ vi.mock("@/lib/utils/productionPolicy", () => ({
 
 vi.mock("@/lib/constants/sectorStrategies", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/constants/sectorStrategies")>();
+  const mockEffectiveRates = vi.fn().mockReturnValue({
+    growthRate: 1,
+    profitMargin: 0,
+    isTransitioning: false,
+  });
   return {
     ...actual,
-    getEffectiveStrategyRates: vi.fn().mockReturnValue({
-      growthRate: 1,
-      profitMargin: 0,
-      isTransitioning: false,
-    }),
+    getEffectiveStrategyRates: mockEffectiveRates,
+    getEffectiveStrategyRatesForOperatingModel: mockEffectiveRates,
   };
 });
 
