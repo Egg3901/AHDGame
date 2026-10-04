@@ -102,7 +102,12 @@ export function settlePoliticalAdMarket(args: {
     const editorialAvailability = Number.isFinite(offer.input.editorialAdvertisingAvailability)
       ? Math.max(0, Math.min(1, offer.input.editorialAdvertisingAvailability!))
       : 1;
-    const availableUnits = offer.offeredUnits * editorialAvailability;
+    const productAvailability = Number.isFinite(
+      offer.input.offerAvailabilityByCommodity?.advertising
+    )
+      ? Math.max(0, Math.min(1, offer.input.offerAvailabilityByCommodity?.advertising ?? 1))
+      : 1;
+    const availableUnits = offer.offeredUnits * editorialAvailability * productAvailability;
     const commercialSoldUnits = offer.offeredUnits * Math.max(0, Math.min(1, soldFraction));
     const unsoldUnits = Math.max(
       0,

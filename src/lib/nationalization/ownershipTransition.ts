@@ -7,6 +7,7 @@ import type {
   Character,
   Corporation,
   CorporateSector,
+  IndexFund,
   State,
 } from "@/lib/db/types";
 import type { UnownedSector } from "@/lib/db/types/unownedSector";
@@ -18,6 +19,7 @@ import {
   corpLiquidCapitalToAnchor,
   getCorpFxRate,
   loadFxRatesByCurrency,
+  resolveCorpLiquidCurrencyCode,
   resolveSectorHostCurrencyCode,
   fxRateForSectorHostFromMap,
 } from "@/lib/currency/corporationCapital";
@@ -64,7 +66,11 @@ import {
 import { getGameState } from "@/lib/gameState";
 import { sumSectorBookValueAnchor } from "@/lib/corporations/sectorProfitBasis";
 import { readStateOwnershipConcentration, sociMultiplier } from "./concentration";
-import { creditTreasuryProceedsFromAnchor, debitTreasuryCompensation } from "./treasury";
+import {
+  creditTreasuryProceedsFromAnchor,
+  debitTreasuryCompensation,
+  settleFundedTreasuryCompensation,
+} from "./treasury";
 import {
   loadTreasuryCashContext,
   resolveTreasuryCashOptions,
@@ -79,7 +85,12 @@ import { applyNationalizationConsequences } from "./consequences/apply";
 import { recordNationalizationLedger } from "./ledger";
 import type { NationalizationMethod, NationalizationTrigger } from "./consequences/types";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
+import { treasuryAnchorValuation } from "@/lib/budget/rules/treasuryAccrual";
+import { writeGovBudgetLocal } from "@/lib/currency/govBudgetFields";
+import { resumeSettlement, settleTransition } from "@/lib/banking/settlementJournal";
+import type { BankingTransition, TransitionLeg } from "@/lib/banking/rules/boundary";
 import {
+  acquireConstructionPropertyTransition,
   hasProtectedConstructionProperty,
   releaseConstructionPropertyTransition,
   reserveSectorsForTransition,
@@ -132,7 +143,8 @@ async function absorbSectorIntoNatCorp(
   now: Date,
   transitionMultiplier: number,
   plantsEnabled: boolean,
-  transitionKey?: string
+  transitionKey?: string,
+  fundedOperationKey?: string
 ): Promise<ObjectId> {
   const sectors = db.collection<CorporateSector>("corporateSectors");
   // Prior-owner provenance — captured from the donor row BEFORE it is re-parented
@@ -239,6 +251,9 @@ async function absorbSectorIntoNatCorp(
       throw badRequest("The National Corporation holding became secured during the taking");
     const remove = await sectors.deleteOne({
       _id: sector._id,
+      ...(fundedOperationKey
+        ? { "pendingFundedNationalization.operationKey": fundedOperationKey }
+        : {}),
       ...(transitionKey
         ? { "constructionPropertyTransition.key": transitionKey }
         : unprotectedConstructionPropertyFilter()),
@@ -255,6 +270,9 @@ async function absorbSectorIntoNatCorp(
     const reparent = await sectors.updateOne(
       {
         _id: sector._id,
+        ...(fundedOperationKey
+          ? { "pendingFundedNationalization.operationKey": fundedOperationKey }
+          : {}),
         ...(transitionKey
           ? { "constructionPropertyTransition.key": transitionKey }
           : unprotectedConstructionPropertyFilter()),
@@ -279,6 +297,14 @@ async function absorbSectorIntoNatCorp(
           nationalizationProvenance: provenance,
           updatedAt: now,
         },
+        ...(fundedOperationKey
+          ? {
+              $unset: {
+                pendingFundedNationalization: "",
+                constructionPropertyTransition: "",
+              },
+            }
+          : {}),
       }
     );
     if (reparent.matchedCount !== 1)
@@ -639,9 +665,6 @@ export async function nationalizeSector(
 
   const sector = await sectors.findOne({ _id: params.sectorId });
   if (!sector) throw new Error("Sector not found");
-  if (hasProtectedConstructionProperty(sector)) {
-    throw badRequest("Resolve secured construction before nationalizing this sector");
-  }
 
   const donor = await corps.findOne({ _id: sector.corporationId });
   if (!donor) throw new Error("Donor corporation not found");
@@ -694,12 +717,81 @@ export async function nationalizeSector(
   // Debit the treasury BEFORE any mutation. The debit is unconditional — an
   // unaffordable payout pushes the treasury into the hole rather than blocking
   // the taking. Seizure (0 payout) moves nothing.
-  const compensationLedger = payoutAnchor > 0 ? await resolveTreasuryCashOptions(db) : undefined;
-  await debitTreasuryCompensation(db, params.countryId, payoutAnchor, fxByCurrency, now, {
-    flow: "nationalization_compensation",
-    key: `nationalize-sector:${params.countryId}:${sector._id.toString()}:${gameState?.currentTurn ?? 0}`,
-    ledger: compensationLedger,
-  });
+  const compensationKey = `nationalize-sector:${params.countryId}:${sector._id.toString()}:${gameState?.currentTurn ?? 0}`;
+  const compensationLedger = await resolveTreasuryCashOptions(db);
+  const ownsFundedReservation =
+    sector.constructionPropertyTransition?.key === compensationKey &&
+    sector.constructionPropertyTransition.kind === "nationalization";
+  if (
+    hasProtectedConstructionProperty(sector) &&
+    !sector.pendingFundedNationalization &&
+    !ownsFundedReservation
+  ) {
+    throw badRequest("Resolve secured construction before nationalizing this sector");
+  }
+  if (
+    sector.pendingFundedNationalization &&
+    (sector.pendingFundedNationalization.operationKey !== compensationKey ||
+      !compensationLedger?.context?.treasuryCashLedgerEnabled)
+  ) {
+    throw new Error("Funded nationalization retry requires its original Treasury cash mode");
+  }
+  if (ownsFundedReservation && !compensationLedger?.context?.treasuryCashLedgerEnabled) {
+    throw new Error("Funded nationalization retry requires its original Treasury cash mode");
+  }
+  if (compensationLedger?.context?.treasuryCashLedgerEnabled) {
+    if (
+      !(await acquireConstructionPropertyTransition(
+        db,
+        sector,
+        compensationKey,
+        "nationalization",
+        false,
+        true
+      ))
+    ) {
+      throw badRequest("Resolve secured construction before nationalizing this sector");
+    }
+    const reservation = await sectors.updateOne(
+      {
+        _id: sector._id,
+        corporationId: donor._id,
+        $or: [
+          { pendingFundedNationalization: { $exists: false } },
+          { pendingFundedNationalization: { operationKey: compensationKey } },
+        ],
+      },
+      { $set: { pendingFundedNationalization: { operationKey: compensationKey } } }
+    );
+    if ((reservation?.matchedCount ?? 0) !== 1)
+      throw new Error("Could not reserve the funded nationalization mode");
+  }
+  let fundedCompensationLocal: number | undefined;
+  let fundedCompensationNewlySettled = false;
+  let fundedTreasuryAmountLocal = 0;
+  let fundedPayoutAnchor: number | undefined;
+  if (compensationLedger?.context?.treasuryCashLedgerEnabled) {
+    const settled = await settleFundedTreasuryCompensation(db, {
+      countryId: params.countryId,
+      donor,
+      payoutAnchor,
+      fxByCurrency,
+      now,
+      key: compensationKey,
+      ledger: compensationLedger!,
+    });
+    fundedCompensationLocal = settled.donorAmountLocal;
+    fundedCompensationNewlySettled = settled.newlySettled;
+    fundedTreasuryAmountLocal = settled.treasuryAmountLocal;
+    fundedPayoutAnchor = settled.payoutAnchor;
+  } else {
+    await debitTreasuryCompensation(db, params.countryId, payoutAnchor, fxByCurrency, now, {
+      flow: "nationalization_compensation",
+      key: compensationKey,
+      ledger: compensationLedger,
+    });
+  }
+  const effectivePayoutAnchor = fundedPayoutAnchor ?? payoutAnchor;
 
   // Snapshot the SOCI escalation multiplier at taking time so the transition
   // shock is fixed to today's concentration, not retroactively deepened later.
@@ -723,18 +815,43 @@ export async function nationalizeSector(
     params.consequence.turn,
     now,
     transitionMultiplier,
-    plantsEnabled
+    plantsEnabled,
+    compensationLedger?.context?.treasuryCashLedgerEnabled ? compensationKey : undefined,
+    compensationLedger?.context?.treasuryCashLedgerEnabled ? compensationKey : undefined
   );
 
   // Credit the donor in its own currency (counterparty of the treasury debit).
   let compensationPaid = 0;
-  if (payoutAnchor > 0) {
-    compensationPaid = Math.round(anchorToCorpLiquidCapital(payoutAnchor, donor, donorFxRate));
-    const credited = await corps.updateOne(
-      { _id: donor._id },
-      { $inc: { liquidCapital: compensationPaid }, $set: { updatedAt: now } }
-    );
-    if ((credited?.matchedCount ?? 0) > 0) {
+  if (payoutAnchor > 0 || (fundedCompensationLocal ?? 0) > 0) {
+    compensationPaid =
+      fundedCompensationLocal ??
+      Math.round(anchorToCorpLiquidCapital(payoutAnchor, donor, donorFxRate));
+    if (fundedCompensationLocal === undefined) {
+      const credited = await corps.updateOne(
+        { _id: donor._id },
+        { $inc: { liquidCapital: compensationPaid }, $set: { updatedAt: now } }
+      );
+      if ((credited?.matchedCount ?? 0) > 0) {
+        await witnessTreasuryCash(db, compensationLedger, {
+          flow: "nationalization_compensation",
+          account: {
+            kind: "corporation",
+            corpId: donor._id.toString(),
+            currency: snapshotCorporationCurrency(donor),
+          },
+          amount: compensationPaid,
+          now,
+          site: "ownershipTransition:compensation",
+        });
+      }
+    } else if (fundedCompensationNewlySettled) {
+      await witnessTreasuryCash(db, compensationLedger, {
+        flow: "nationalization_compensation",
+        account: { kind: "government", countryId: params.countryId },
+        amount: -fundedTreasuryAmountLocal,
+        now,
+        site: "ownershipTransition:compensation",
+      });
       await witnessTreasuryCash(db, compensationLedger, {
         flow: "nationalization_compensation",
         account: {
@@ -757,7 +874,7 @@ export async function nationalizeSector(
     triggers: params.consequence.triggers,
     sectorTypes: [sector.sectorType],
     valuationAnchor,
-    compensationAnchor: payoutAnchor,
+    compensationAnchor: effectivePayoutAnchor,
     foreignOwnerCountryId: donor.countryId !== params.countryId ? donor.countryId : null,
     governingPartyId: params.consequence.governingPartyId ?? null,
     turn: params.consequence.turn,
@@ -774,7 +891,7 @@ export async function nationalizeSector(
       triggers: params.consequence.triggers,
       tier: params.tier,
       valuationAnchor,
-      compensationAnchor: payoutAnchor,
+      compensationAnchor: effectivePayoutAnchor,
       sectorTypes: [sector.sectorType],
       formerCorpName: donor.name,
       foreignOwnerCountryId: donor.countryId !== params.countryId ? donor.countryId : null,
@@ -829,15 +946,55 @@ export async function nationalizeWholeCorp(
     throw new Error("Cannot nationalize a state-owned corporation");
   }
 
+  const nationalizationOperationKey = `nationalize:${params.countryId}:${target._id.toHexString()}:${params.consequence.turn}`;
+  const buyoutKey = `nationalize-corporation:${params.countryId}:${target._id.toString()}:${params.consequence.turn}`;
+  const ledger: TreasuryCashOptions = { context: await loadTreasuryCashContext(db) };
+  const hasFundedNationalizationMarker =
+    target.pendingFundedNationalization?.operationKey === nationalizationOperationKey;
+  if (
+    (target.pendingFundedNationalization && !hasFundedNationalizationMarker) ||
+    (hasFundedNationalizationMarker && !ledger.context?.treasuryCashLedgerEnabled)
+  ) {
+    throw new Error("Funded nationalization retry requires Treasury cash");
+  }
+
   const targetSectors = await sectors.find({ corporationId: target._id }).toArray();
+  if (
+    !ledger.context?.treasuryCashLedgerEnabled &&
+    targetSectors.some(
+      (sector) => sector.constructionPropertyTransition?.kind === "nationalization"
+    )
+  ) {
+    throw new Error("Nationalization retry requires its original Treasury cash mode");
+  }
   const transitionKeys = await reserveSectorsForTransition(
     db,
     targetSectors,
     "nationalization",
-    `nationalize:${new ObjectId().toHexString()}`
+    nationalizationOperationKey,
+    true
   );
   if (!transitionKeys) {
     throw badRequest("Resolve secured construction before nationalizing this corporation");
+  }
+  if (ledger.context?.treasuryCashLedgerEnabled) {
+    const marker = await corps.updateOne(
+      {
+        _id: target._id,
+        $or: [
+          { pendingFundedNationalization: { $exists: false } },
+          { pendingFundedNationalization: { operationKey: nationalizationOperationKey } },
+        ],
+      },
+      {
+        $set: {
+          pendingFundedNationalization: { operationKey: nationalizationOperationKey },
+          updatedAt: now,
+        },
+      }
+    );
+    if ((marker?.matchedCount ?? 0) !== 1)
+      throw new Error("Could not reserve the funded nationalization mode");
   }
   const transitionKeyBySectorId = new Map(
     targetSectors.map((sector, index) => [sector._id.toHexString(), transitionKeys[index]])
@@ -925,25 +1082,33 @@ export async function nationalizeWholeCorp(
   // ── 2. Debit the treasury BEFORE any mutation. Unconditional — an unaffordable
   //       taking deepens the treasury's debt rather than being blocked. The pool
   //       passes through the seized corporation, where every holder row settles. ──
-  const ledger: TreasuryCashOptions = {
-    // The consequence turn is the clock on the executive route, so the context
-    // resolves the turn whose snapshot will hold this cash on every path.
-    context: await loadTreasuryCashContext(db),
-  };
-  await debitTreasuryCompensation(db, params.countryId, payoutPoolAnchor, fxByCurrency, now, {
-    flow: "nationalization_buyout_pool",
-    key: `nationalize-corporation:${params.countryId}:${target._id.toString()}:${params.consequence.turn}`,
-    ledger,
-    passThroughCorpId: target._id.toString(),
-  });
-
-  // ── 3. Pay shareholders pro-rata (counterparty of the treasury debit). ──
-  if (payoutPoolAnchor > 0) {
-    await payShareholders(db, target, payoutPoolAnchor, fxByCurrency, now, {
-      turn: ledger.context?.turn ?? params.consequence.turn,
-      kind: "nationalize_whole",
-      treasury: ledger,
+  if (ledger.context?.treasuryCashLedgerEnabled) {
+    await settleFundedWholeCorpShareholderPool(db, {
+      countryId: params.countryId,
+      target,
+      poolAnchor: payoutPoolAnchor,
+      fxByCurrency,
+      forexEnabled: await isForexEnabled(),
+      ledger,
+      key: buyoutKey,
+      now,
     });
+  } else {
+    await debitTreasuryCompensation(db, params.countryId, payoutPoolAnchor, fxByCurrency, now, {
+      flow: "nationalization_buyout_pool",
+      key: buyoutKey,
+      ledger,
+      passThroughCorpId: target._id.toString(),
+    });
+
+    // ── 3. Pay shareholders pro-rata (counterparty of the treasury debit). ──
+    if (payoutPoolAnchor > 0) {
+      await payShareholders(db, target, payoutPoolAnchor, fxByCurrency, now, {
+        turn: ledger.context?.turn ?? params.consequence.turn,
+        kind: "nationalize_whole",
+        treasury: ledger,
+      });
+    }
   }
 
   // ── 3b. Settle the dissolved corp's liquid cash (Bug #0775). The shell is
@@ -954,7 +1119,7 @@ export async function nationalizeWholeCorp(
   //       or a vacant seat routes all of it to the treasury. Conserves money:
   //       ceoSurplus + treasuryRecoup === liquidCapital always.
   const forexEnabled = await isForexEnabled();
-  if (liquidCapitalAnchor > 0) {
+  if (liquidCapitalAnchor > 0 || ledger.context?.treasuryCashLedgerEnabled) {
     const ceoChar =
       params.tier === "seizure" || target.ceoVacant || !target.ceoId
         ? null
@@ -962,31 +1127,47 @@ export async function nationalizeWholeCorp(
     const ceoSurplusAnchor = ceoChar ? Math.max(0, liquidCapitalAnchor - payoutPoolAnchor) : 0;
     const treasuryCashAnchor = liquidCapitalAnchor - ceoSurplusAnchor;
 
-    if (ceoChar && ceoSurplusAnchor > 0) {
-      const currency = getHomeCurrency(ceoChar, corpGameState?.preset);
-      const rate = fxByCurrency.get(currency as CurrencyCode) ?? 1;
-      const amt = Math.round(forexEnabled ? ceoSurplusAnchor * rate : ceoSurplusAnchor);
-      const credited = await db
-        .collection<Character>("characters")
-        .updateOne(
-          { _id: ceoChar._id },
-          { $inc: buildPersonalBalanceInc(amt, currency, forexEnabled), $set: { updatedAt: now } }
-        );
-      if ((credited?.matchedCount ?? 0) > 0) {
-        await witnessTreasuryCash(db, ledger, {
+    if (ledger.context?.treasuryCashLedgerEnabled) {
+      await settleFundedWholeCorpLiquidation(db, {
+        countryId: params.countryId,
+        target,
+        ceo: ceoChar,
+        ceoSurplusAnchor,
+        treasuryCashAnchor,
+        liquidCapitalAnchor,
+        fxByCurrency,
+        forexEnabled,
+        ledger,
+        key: buyoutKey,
+        now,
+      });
+    } else {
+      if (ceoChar && ceoSurplusAnchor > 0) {
+        const currency = getHomeCurrency(ceoChar, corpGameState?.preset);
+        const rate = fxByCurrency.get(currency as CurrencyCode) ?? 1;
+        const amt = Math.round(forexEnabled ? ceoSurplusAnchor * rate : ceoSurplusAnchor);
+        const credited = await db
+          .collection<Character>("characters")
+          .updateOne(
+            { _id: ceoChar._id },
+            { $inc: buildPersonalBalanceInc(amt, currency, forexEnabled), $set: { updatedAt: now } }
+          );
+        if ((credited?.matchedCount ?? 0) > 0) {
+          await witnessTreasuryCash(db, ledger, {
+            flow: "corporation_liquidation",
+            account: { kind: "character", characterId: ceoChar._id.toString(), currency },
+            amount: amt,
+            now,
+            site: "ownershipTransition:ceoSurplus",
+          });
+        }
+      }
+      if (treasuryCashAnchor > 0) {
+        await creditTreasuryProceedsFromAnchor(db, params.countryId, treasuryCashAnchor, now, {
           flow: "corporation_liquidation",
-          account: { kind: "character", characterId: ceoChar._id.toString(), currency },
-          amount: amt,
-          now,
-          site: "ownershipTransition:ceoSurplus",
+          ledger,
         });
       }
-    }
-    if (treasuryCashAnchor > 0) {
-      await creditTreasuryProceedsFromAnchor(db, params.countryId, treasuryCashAnchor, now, {
-        flow: "corporation_liquidation",
-        ledger,
-      });
     }
   }
 
@@ -1147,6 +1328,392 @@ export async function nationalizeWholeCorp(
  * bank reserve). Mirrors the bucket handling of the dissolution settlement so
  * no slice is silently dropped.
  */
+export async function settleFundedWholeCorpShareholderPool(
+  db: Db,
+  input: {
+    countryId: CountryId;
+    target: Corporation;
+    poolAnchor: number;
+    fxByCurrency: ReadonlyMap<CurrencyCode, number>;
+    forexEnabled: boolean;
+    ledger: TreasuryCashOptions;
+    key: string;
+    now: Date;
+  }
+): Promise<void> {
+  const context = input.ledger.context;
+  const settlementKey = `treasury-nationalization-buyout:${input.key}`;
+  const prior = await db
+    .collection<{ _id: string }>("bankMoneyMoves")
+    .findOne({ _id: settlementKey });
+  if (prior) {
+    const resumed = await resumeSettlement(db, settlementKey);
+    if (resumed.status !== "applied" && !(resumed.status === "replayed" && !resumed.error))
+      throw new Error(resumed.error ?? "Funded shareholder buyout is incomplete");
+    return;
+  }
+  if (!context?.treasuryCashLedgerEnabled) throw new Error("Funded buyout requires Treasury cash");
+
+  const allocation = allocateShareholderPool(input.target, input.poolAnchor, new Map());
+  const personalRows = allocation.characterRows.filter((row) => row.payout > 0);
+  const corpRows = allocation.corporationRows.filter((row) => row.payout > 0);
+  const fundRows = allocation.fundRows.filter((row) => row.payout > 0);
+  const floatPayout = allocation.publicFloatRow?.payout ?? 0;
+  const totalAnchor =
+    personalRows.reduce((sum, row) => sum + row.payout, 0) +
+    corpRows.reduce((sum, row) => sum + row.payout, 0) +
+    fundRows.reduce((sum, row) => sum + row.payout, 0) +
+    floatPayout;
+  if (!(totalAnchor > 0)) return;
+
+  const [personalDocs, imperialDocs, corpDocs, funds] = await Promise.all([
+    db
+      .collection<Character>("characters")
+      .find({
+        _id: {
+          $in: personalRows
+            .filter((row) => !row.isImperial)
+            .map((row) => new ObjectId(row.characterId)),
+        },
+      })
+      .toArray(),
+    db
+      .collection<ImperialCharacter>("imperialCharacters")
+      .find({
+        _id: {
+          $in: personalRows
+            .filter((row) => row.isImperial)
+            .map((row) => new ObjectId(row.characterId)),
+        },
+      })
+      .toArray(),
+    db
+      .collection<Corporation>("corporations")
+      .find({ _id: { $in: corpRows.map((row) => new ObjectId(row.corporationId)) } })
+      .toArray(),
+    db
+      .collection<IndexFund>("indexFunds")
+      .find({ _id: { $in: fundRows.map((row) => new ObjectId(row.fundId)) } })
+      .toArray(),
+  ]);
+  const personalById = new Map(
+    [...personalDocs, ...imperialDocs].map((doc) => [doc._id.toString(), doc])
+  );
+  const corpById = new Map(corpDocs.map((doc) => [doc._id.toString(), doc]));
+  const fundById = new Map(funds.map((doc) => [doc._id.toString(), doc]));
+  if (personalRows.some((row) => !personalById.has(row.characterId)))
+    throw new Error("Funded buyout shareholder is missing");
+  if (corpRows.some((row) => !corpById.has(row.corporationId)))
+    throw new Error("Funded buyout corporate shareholder is missing");
+  if (fundRows.some((row) => !fundById.has(row.fundId)))
+    throw new Error("Funded buyout index-fund shareholder is missing");
+
+  const treasuryCurrency =
+    context.treasuryCurrencies.get(input.countryId) ??
+    COUNTRY_CURRENCY_MAP[input.countryId] ??
+    "USD";
+  const treasuryRate = treasuryAnchorValuation({
+    countryId: input.countryId,
+    currencyCode: treasuryCurrency,
+    preset: context.preset,
+    observedRate: context.rates.get(treasuryCurrency),
+  }).anchorRate;
+  const treasuryLocal = Math.round(
+    writeGovBudgetLocal(totalAnchor, treasuryCurrency, treasuryRate)
+  );
+  if (!(treasuryLocal > 0))
+    throw new Error("Funded buyout rounded to a non-positive Treasury debit");
+  const budget = await db
+    .collection<{ countryId: string; currencyCode?: CurrencyCode | null }>("federalBudget")
+    .findOne({ countryId: input.countryId }, { projection: { countryId: 1, currencyCode: 1 } });
+  if (!budget) throw new Error("Funded buyout Treasury account is missing");
+  const treasuryFilter: Record<string, unknown> = { countryId: budget.countryId };
+  if (Object.prototype.hasOwnProperty.call(budget, "currencyCode"))
+    treasuryFilter.currencyCode =
+      budget.currencyCode === null ? { $type: 10 } : budget.currencyCode;
+  else treasuryFilter.currencyCode = { $exists: false };
+  const legs: TransitionLeg[] = [
+    {
+      kind: "debit",
+      amount: treasuryLocal,
+      valuation: { currencyCode: treasuryCurrency, localPerAnchor: treasuryLocal / totalAnchor },
+      collection: "federalBudget",
+      filter: { ...treasuryFilter, treasuryCashLocal: { $gte: treasuryLocal } },
+      path: "treasuryCashLocal",
+      note: "Fund whole-corporation nationalization shareholder pool",
+    },
+  ];
+  if (floatPayout > 0) {
+    const amount = Math.round(writeGovBudgetLocal(floatPayout, treasuryCurrency, treasuryRate));
+    legs.push({
+      kind: "credit",
+      amount,
+      valuation: { currencyCode: treasuryCurrency, localPerAnchor: amount / floatPayout },
+      collection: "federalBudget",
+      filter: treasuryFilter,
+      path: "treasuryCashLocal",
+      note: "Return the public-float shareholder allocation to Treasury",
+    });
+  }
+  const requireRate = (currency: CurrencyCode): number => {
+    const rate = input.fxByCurrency.get(currency);
+    if (rate === undefined || !Number.isFinite(rate) || rate <= 0)
+      throw new Error(`Missing funded buyout FX rate for ${currency}`);
+    return rate;
+  };
+  for (const row of personalRows) {
+    const holder = personalById.get(row.characterId)!;
+    const currency = getHomeCurrency(holder);
+    const local = input.forexEnabled ? row.payout * requireRate(currency) : row.payout;
+    const path = Object.keys(buildPersonalBalanceInc(1, currency, input.forexEnabled))[0]!;
+    const holderFilter: Record<string, unknown> = { _id: holder._id };
+    if (input.forexEnabled) holderFilter.countryId = holder.countryId;
+    legs.push({
+      kind: "credit",
+      amount: local,
+      valuation: {
+        currencyCode: input.forexEnabled ? currency : "USD",
+        localPerAnchor: local / row.payout,
+      },
+      collection: row.isImperial ? "imperialCharacters" : "characters",
+      filter: holderFilter,
+      path,
+      note: `Pay frozen personal shareholder ${row.characterId}`,
+    });
+  }
+  for (const row of corpRows) {
+    const holder = corpById.get(row.corporationId)!;
+    const currency = resolveCorpLiquidCurrencyCode(holder);
+    if (!currency)
+      throw new Error(`Missing funded buyout currency for corporation ${row.corporationId}`);
+    const rate = requireRate(currency);
+    const local = Math.round(anchorToCorpLiquidCapital(row.payout, holder, rate));
+    const filter: Record<string, unknown> = { _id: holder._id };
+    if (holder.liquidCurrencyCode == null || !String(holder.liquidCurrencyCode).trim()) {
+      filter.liquidCurrencyCode =
+        holder.liquidCurrencyCode === undefined
+          ? { $exists: false }
+          : holder.liquidCurrencyCode === null
+            ? { $type: 10 }
+            : holder.liquidCurrencyCode;
+      filter.countryId = holder.countryId === undefined ? { $exists: false } : holder.countryId;
+    } else {
+      filter.liquidCurrencyCode = holder.liquidCurrencyCode;
+    }
+    legs.push({
+      kind: "credit",
+      amount: local,
+      valuation: { currencyCode: currency, localPerAnchor: local / row.payout },
+      collection: "corporations",
+      filter,
+      path: "liquidCapital",
+      note: `Pay frozen corporate shareholder ${row.corporationId}`,
+    });
+  }
+  for (const row of fundRows) {
+    legs.push({
+      kind: "credit",
+      amount: row.payout,
+      valuation: { currencyCode: "USD", localPerAnchor: 1 },
+      collection: "indexFunds",
+      filter: {
+        _id: new ObjectId(row.fundId),
+        anchorCurrencyCode: fundById.get(row.fundId)!.anchorCurrencyCode,
+      },
+      path: "cashAnchor",
+      note: `Pay frozen index-fund shareholder ${row.fundId}`,
+    });
+  }
+  const projections = [
+    {
+      collection: "federalBudget",
+      filter: treasuryFilter,
+      update: {
+        $inc: {
+          treasuryBalance:
+            -treasuryLocal +
+            Math.round(writeGovBudgetLocal(floatPayout, treasuryCurrency, treasuryRate)),
+        },
+        $set: { updatedAt: input.now },
+      },
+      note: "Update signed fiscal position for funded shareholder buyout",
+    },
+  ];
+  const transition: BankingTransition = {
+    key: settlementKey,
+    kind: "nationalization_shareholder_pool",
+    turn: context.turn,
+    currency: treasuryCurrency,
+    retryCreditLegOnGuardFailure: true,
+    legs,
+    projections,
+    event: {
+      kind: "monetary.executed",
+      command: "nationalization.whole_corporation_buyout",
+      subjectType: "corporation",
+      subjectId: input.target._id.toString(),
+      amount: treasuryLocal,
+      meta: { flow: "nationalization_buyout_pool", holders: legs.length - 1 },
+    },
+  };
+  const settled = await settleTransition(db, transition);
+  if (settled.status !== "applied" && !(settled.status === "replayed" && !settled.error))
+    throw new Error(settled.error ?? "Funded shareholder buyout is incomplete");
+}
+
+async function settleFundedWholeCorpLiquidation(
+  db: Db,
+  input: {
+    countryId: CountryId;
+    target: Corporation;
+    ceo: Character | null;
+    ceoSurplusAnchor: number;
+    treasuryCashAnchor: number;
+    liquidCapitalAnchor: number;
+    fxByCurrency: ReadonlyMap<CurrencyCode, number>;
+    forexEnabled: boolean;
+    ledger: TreasuryCashOptions;
+    key: string;
+    now: Date;
+  }
+): Promise<void> {
+  const context = input.ledger.context;
+  const settlementKey = `treasury-nationalization-liquidation:${input.key}`;
+  if (await db.collection<{ _id: string }>("bankMoneyMoves").findOne({ _id: settlementKey })) {
+    const resumed = await resumeSettlement(db, settlementKey);
+    if (resumed.status !== "applied" && !(resumed.status === "replayed" && !resumed.error))
+      throw new Error(resumed.error ?? "Funded corporation liquidation is incomplete");
+    return;
+  }
+  if (!context?.treasuryCashLedgerEnabled)
+    throw new Error("Funded corporation liquidation requires Treasury cash");
+  if (!(input.liquidCapitalAnchor > 0)) return;
+
+  const sourceCurrency = resolveCorpLiquidCurrencyCode(input.target);
+  if (!sourceCurrency) throw new Error("Funded corporation liquidation has no source currency");
+  const sourceRate = input.fxByCurrency.get(sourceCurrency);
+  if (sourceRate === undefined || !Number.isFinite(sourceRate) || sourceRate <= 0)
+    throw new Error(`Missing funded liquidation FX rate for ${sourceCurrency}`);
+  const sourceLocal = input.target.liquidCapital;
+  if (!(sourceLocal > 0) || !Number.isFinite(sourceLocal))
+    throw new Error("Funded corporation liquidation has no valid source cash");
+  const legs: TransitionLeg[] = [
+    {
+      kind: "debit",
+      amount: sourceLocal,
+      valuation: {
+        currencyCode: sourceCurrency,
+        localPerAnchor: sourceLocal / input.liquidCapitalAnchor,
+      },
+      collection: "corporations",
+      filter: {
+        _id: input.target._id,
+        liquidCapital: { $gte: sourceLocal },
+        ...(input.target.liquidCurrencyCode === undefined
+          ? { liquidCurrencyCode: { $exists: false } }
+          : input.target.liquidCurrencyCode === null
+            ? { liquidCurrencyCode: { $type: 10 } }
+            : { liquidCurrencyCode: input.target.liquidCurrencyCode }),
+        ...(!input.target.liquidCurrencyCode || !String(input.target.liquidCurrencyCode).trim()
+          ? { countryId: input.target.countryId }
+          : {}),
+      },
+      path: "liquidCapital",
+      note: "Fund the dissolved corporation's frozen liquidation proceeds",
+    },
+  ];
+  if (input.ceo && input.ceoSurplusAnchor > 0) {
+    const currency = getHomeCurrency(input.ceo);
+    const rate = input.forexEnabled ? input.fxByCurrency.get(currency) : 1;
+    if (input.forexEnabled && (rate === undefined || !Number.isFinite(rate) || rate <= 0))
+      throw new Error(`Missing funded liquidation FX rate for CEO currency ${currency}`);
+    const local = input.forexEnabled ? input.ceoSurplusAnchor * rate! : input.ceoSurplusAnchor;
+    const path = Object.keys(buildPersonalBalanceInc(1, currency, input.forexEnabled))[0]!;
+    legs.push({
+      kind: "credit",
+      amount: local,
+      valuation: {
+        currencyCode: input.forexEnabled ? currency : "USD",
+        localPerAnchor: local / input.ceoSurplusAnchor,
+      },
+      collection: "characters",
+      filter: {
+        _id: input.ceo._id,
+        ...(input.forexEnabled ? { countryId: input.ceo.countryId } : {}),
+      },
+      path,
+      note: "Pay the frozen executive share of corporation liquidation cash",
+    });
+  }
+  const treasuryCurrency =
+    context.treasuryCurrencies.get(input.countryId) ??
+    COUNTRY_CURRENCY_MAP[input.countryId] ??
+    "USD";
+  const treasuryRate = treasuryAnchorValuation({
+    countryId: input.countryId,
+    currencyCode: treasuryCurrency,
+    preset: context.preset,
+    observedRate: context.rates.get(treasuryCurrency),
+  }).anchorRate;
+  const treasuryLocal = Math.round(
+    writeGovBudgetLocal(input.treasuryCashAnchor, treasuryCurrency, treasuryRate)
+  );
+  let treasuryFilter: Record<string, unknown> | undefined;
+  if (treasuryLocal > 0) {
+    const budget = await db
+      .collection<{ countryId: string; currencyCode?: CurrencyCode | null }>("federalBudget")
+      .findOne({ countryId: input.countryId }, { projection: { countryId: 1, currencyCode: 1 } });
+    if (!budget) throw new Error("Funded liquidation Treasury account is missing");
+    treasuryFilter = { countryId: budget.countryId };
+    if (Object.prototype.hasOwnProperty.call(budget, "currencyCode"))
+      treasuryFilter.currencyCode =
+        budget.currencyCode === null ? { $type: 10 } : budget.currencyCode;
+    else treasuryFilter.currencyCode = { $exists: false };
+    legs.push({
+      kind: "credit",
+      amount: treasuryLocal,
+      valuation: {
+        currencyCode: treasuryCurrency,
+        localPerAnchor: treasuryLocal / input.treasuryCashAnchor,
+      },
+      collection: "federalBudget",
+      filter: treasuryFilter,
+      path: "treasuryCashLocal",
+      note: "Return the frozen residual liquidation cash to Treasury",
+    });
+  }
+  const transition: BankingTransition = {
+    key: settlementKey,
+    kind: "nationalization_corporation_liquidation",
+    turn: context.turn,
+    currency: sourceCurrency,
+    legs,
+    retryCreditLegOnGuardFailure: true,
+    projections:
+      treasuryLocal > 0 && treasuryFilter
+        ? [
+            {
+              collection: "federalBudget",
+              filter: treasuryFilter,
+              update: { $inc: { treasuryBalance: treasuryLocal }, $set: { updatedAt: input.now } },
+              note: "Update signed fiscal position after funded liquidation proceeds",
+            },
+          ]
+        : [],
+    event: {
+      kind: "monetary.executed",
+      command: "nationalization.corporation_liquidation",
+      subjectType: "corporation",
+      subjectId: input.target._id.toString(),
+      amount: sourceLocal,
+      meta: { flow: "corporation_liquidation" },
+    },
+  };
+  const settled = await settleTransition(db, transition);
+  if (settled.status !== "applied" && !(settled.status === "replayed" && !settled.error))
+    throw new Error(settled.error ?? "Funded corporation liquidation is incomplete");
+}
+
 export async function payShareholders(
   db: Db,
   target: Corporation,

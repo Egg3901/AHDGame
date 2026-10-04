@@ -14,6 +14,7 @@ import type { MarketContext } from "@/lib/market/marketContext";
 import type { buildCorporationLookups } from "./buildLookups";
 import { buildManufacturedSectorOutput } from "@/lib/products/rules/manufacturingRules";
 import { eraScaledBasePrices } from "@/lib/constants/commodities";
+import type { MediaProductProject } from "@/lib/products/mediaProduct";
 
 type Lookups = Awaited<ReturnType<typeof buildCorporationLookups>>;
 
@@ -119,6 +120,55 @@ describe("runClearingPrePass with clearing enabled", () => {
     const market = { clearingEnabled: true, plantsEnabled: false } as MarketContext;
 
     expect(() => runClearingPrePass(makeInput({ lookups, market }))).not.toThrow();
+  });
+  it("does not read media product projects while their flag is off", () => {
+    const { lookups } = makeSectorWorld();
+    Object.defineProperty(lookups, "mediaProductProjectsBySectorId", {
+      get() {
+        throw new Error("disabled media product read");
+      },
+    });
+    const market = { clearingEnabled: true, plantsEnabled: true } as MarketContext;
+
+    expect(() => runClearingPrePass(makeInput({ lookups, market }))).not.toThrow();
+  });
+  it("applies live media title coverage to actual offers before commercial clearing", () => {
+    const { sector, lookups } = makeSectorWorld();
+    Object.assign(sector, {
+      sectorType: "media",
+      strategyId: "newspaper",
+      revenue: 100_000,
+      producedUnits: 100,
+    });
+    const project: MediaProductProject = {
+      _id: "project-1",
+      corporationId: "corp1",
+      sectorId: "sector1",
+      kindId: "newspaper_edition",
+      title: "Daily Record",
+      allocationShare: 0.5,
+      stage: "mature",
+      startedTurn: 1,
+      stageStartedTurn: 2,
+      developmentPaidAnchor: 10_000,
+      paidThresholdAnchor: 10_000,
+      elapsedDevelopmentTurns: 2,
+      elapsedThresholdTurns: 2,
+      developmentAdvertisingAnchor: 1_000,
+      developmentAdvertisingTurns: 2,
+    };
+    Object.assign(lookups, {
+      mediaProductSlatesEnabled: true,
+      mediaProductProjectsBySectorId: new Map([["sector1", [project]]]),
+      globalCommodityBalances: new Map([["advertising", { supply: 100, demand: 1_000 }]]),
+    });
+    const market = { clearingEnabled: true, plantsEnabled: true } as MarketContext;
+
+    runClearingPrePass(makeInput({ lookups, market }));
+
+    const clearing = market.clearingBySectorId?.get("sector1");
+    expect(clearing?.soldByCommodity?.advertising).toBeCloseTo(0.575);
+    expect(clearing?.deliveredUnitsByCommodity?.advertising).toBeCloseTo(5.75);
   });
   it("populates clearing results on the market and reports deterministic breaches", () => {
     const { lookups } = makeSectorWorld();
