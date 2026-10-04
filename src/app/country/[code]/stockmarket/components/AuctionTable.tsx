@@ -8,6 +8,7 @@ import { useActivePreset } from "@/contexts/RegisteredCountriesContext";
 import { bypassNextImageOptimization } from "@/lib/images/bypassImageOptimization";
 import { natMoney } from "@/components/national/natMoney";
 import type { AuctionListing } from "@/lib/nationalization/auctionListing";
+import { AUCTION_WINDOW_TURNS } from "@/lib/nationalization/constants";
 
 /**
  * Stock Market "Auctions" tab: one row per open privatization auction. Rows link
@@ -30,7 +31,7 @@ export function AuctionTable({
     return (
       <EmptyState
         title="No open auctions"
-        description="Privatized state assets put up for public auction appear here. Check back when a government carves a holding to the market."
+        description={`No government is selling a state-owned company by auction right now. An auction opens when a finance minister, or a passed privatization bill, sells a state holding to private buyers. Each auction runs for ${AUCTION_WINDOW_TURNS} turns and only residents of that country can bid.`}
       />
     );
   }
@@ -80,11 +81,11 @@ export function AuctionTable({
                         className="shrink-0 rounded-full border border-warning/30 bg-warning/10 px-1.5 py-0.5 text-[10px] font-medium text-warning"
                         title="The state keeps this share of control after privatization"
                       >
-                        Golden share {a.goldenSharePercent}%
+                        Golden share {Math.round(a.goldenSharePercent * 100)}%
                       </span>
                     )}
                   </div>
-                  <div className="truncate text-body-xs text-muted">
+                  <div className="text-body-xs text-muted">
                     <span className="capitalize">{a.leadSectorType.replace(/_/g, " ")}</span> · HQ{" "}
                     {a.hqStateName}
                     {a.sectors.length > 1 && (

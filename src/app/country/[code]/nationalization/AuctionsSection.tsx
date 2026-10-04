@@ -41,12 +41,17 @@ export function AuctionsSection({
     <section className="rounded-xl border border-card-border bg-card p-5">
       <h2 className="text-heading-sm font-semibold text-foreground">Open auctions</h2>
       <p className="mt-1 text-body-sm text-muted">
-        Privatization auctions for carved state assets. Bids are escrowed; raising replaces your
-        prior bid. Highest bid at close wins (above reserve), else the asset is re-absorbed. Only
-        residents of {countryName} may bid.
+        Privatization auctions for state holdings being sold to private buyers. Bids are held in
+        escrow, and raising replaces your earlier bid. The highest bid at or above the reserve wins
+        when the auction closes; otherwise the state keeps the company and every bid is refunded.
+        Only residents of {countryName} may bid.
       </p>
       {auctions.length === 0 ? (
-        <p className="mt-4 text-body-sm text-muted">No open auctions.</p>
+        <p className="mt-4 text-body-sm text-muted">
+          {countryName} has no state-owned company up for auction right now. An auction opens when
+          the finance minister, or a passed privatization bill, sells a state holding by auction.
+          Residents are notified when one opens.
+        </p>
       ) : (
         <div className="mt-4 space-y-3">
           {auctions.map((a) => (
