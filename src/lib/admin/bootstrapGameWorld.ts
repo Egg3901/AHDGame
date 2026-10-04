@@ -679,15 +679,15 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
   const log = options.log ?? (() => {});
   const { db } = options;
 
-  // The industry-model unique keys must land before any 1991 seed writer can
-  // create vehicle markets beside generic manufacturing. The migration is also
-  // part of the deploy registry; running it here covers reset/bootstrap flows
-  // where reference seeders run before the later, purpose-limited fund pass.
-  const industryModelMarketIndexes = MIGRATIONS.filter(
-    (migration) => migration.id === "2026-10-04-industry-model-market-indexes"
+  // Model and media-lane unique keys must exist before any seed writer creates
+  // overlapping market identities. These migrations also run at hosted startup.
+  const marketIdentityIndexes = MIGRATIONS.filter(
+    (migration) =>
+      migration.id === "2026-10-04-industry-model-market-indexes" ||
+      migration.id === "2026-10-04-media-discriminator-market-indexes"
   );
-  if (industryModelMarketIndexes.length > 0) {
-    await runMigrations(db, { migrations: industryModelMarketIndexes, dryRun: false });
+  if (marketIdentityIndexes.length > 0) {
+    await runMigrations(db, { migrations: marketIdentityIndexes, dryRun: false });
   }
 
   // This marker is opt-in only from resetAndBootstrapGameWorld. Its first call
