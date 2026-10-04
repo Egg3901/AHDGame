@@ -69,6 +69,7 @@ export default function SectorDetailPage() {
   const searchParams = useSearchParams();
   const [buildOpen, setBuildOpen] = useState(searchParams.get("build") === "1");
   const [capacityBusy, setCapacityBusy] = useState(false);
+  const [reviewStrategyId, setReviewStrategyId] = useState<string | null>(null);
   const [capacityMessage, setCapacityMessage] = useState("");
 
   const [state, dispatch] = useSectorPageState();
@@ -736,7 +737,10 @@ export default function SectorDetailPage() {
                     <RetoolHintBanner
                       hint={plants.retoolHint}
                       isCeo={isCeo}
-                      onOpenStrategy={() => setActiveTab("operations")}
+                      onOpenStrategy={(strategyId) => {
+                        setReviewStrategyId(strategyId);
+                        setActiveTab("operations");
+                      }}
                     />
                   )}
                   <PlantPanel
@@ -865,6 +869,8 @@ export default function SectorDetailPage() {
                 strategyUpdating={strategyUpdating}
                 cancelTransitionLoading={cancelTransitionLoading}
                 onStrategyChange={handleStrategyChange}
+                initialReviewStrategyId={reviewStrategyId}
+                onReviewComplete={() => setReviewStrategyId(null)}
                 onCancelTransition={handleCancelTransition}
                 stateResources={stateResources}
                 financials={financials}
