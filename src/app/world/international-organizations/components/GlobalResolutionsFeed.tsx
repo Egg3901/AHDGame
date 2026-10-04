@@ -24,6 +24,7 @@ const TYPE_LABEL: Record<OrganizationResolutionType, string> = {
   set_dues: "Dues change",
   set_posture: "Alert posture",
   fund_agency: "Agency funding",
+  declare_war: "Declaration of war",
   join_conflict: "Entry into a conflict",
 };
 
@@ -44,9 +45,7 @@ export function GlobalResolutionsFeed({
 
   return (
     <section className="space-y-3">
-      <h3 className="text-xs font-semibold uppercase tracking-widest text-muted">
-        Across all organizations
-      </h3>
+      <h3 className="text-sm font-semibold text-muted">Across all organizations</h3>
       {feed.length === 0 ? (
         <div className="rounded-xl border border-card-border bg-card p-5">
           <p className="text-sm text-muted">No resolutions across organizations.</p>

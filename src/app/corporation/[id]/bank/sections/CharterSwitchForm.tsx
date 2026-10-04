@@ -1,11 +1,11 @@
 "use client";
 
 import { useReducer } from "react";
-import { Button } from "@/components/ui";
 import type { BankCharterType } from "@/lib/db/types/bank";
 import type { ConsolePayload, ShowToast } from "../types";
 import { charterLabel, mergeState, turnsToHours } from "../lib/helpers";
-import { Eyebrow } from "../components/BankSection";
+import { SmallButton } from "@/components/corporation/dense/DenseKit";
+import { BankPanel } from "../components/BankSection";
 
 /** Retail and universal charters take deposits; investment charters do not. */
 function takesDeposits(type: BankCharterType): boolean {
@@ -18,7 +18,7 @@ function takesDeposits(type: BankCharterType): boolean {
  * which is fully authorized and money-safe server-side (`switchCharterType`):
  * moving to an investment charter returns the whole deposit book with
  * conservation, and a 24-turn cooldown then locks the type. This form only
- * surfaces that existing capability — the backend was reachable by no UI before,
+ * surfaces that existing capability; the backend was reachable by no UI before,
  * which is why a chartered CEO could not find the option (ticket 1069).
  */
 export function CharterSwitchForm({
@@ -95,55 +95,53 @@ export function CharterSwitchForm({
   };
 
   return (
-    <section className="rounded-xl border border-card-border bg-card p-5 space-y-4 max-w-xl">
-      <div>
-        <Eyebrow kind="ceoControl" />
-        <h3 className="text-base font-semibold text-foreground">Change charter type</h3>
-        <p className="mt-1 text-sm text-muted">
+    <BankPanel kind="ceoControl" title="Change charter type" className="max-w-2xl">
+      <div className="space-y-2 py-1.5">
+        <p className="text-xs text-muted">
           Change what kind of bank you run without re-chartering or re-posting capital. Switching to
           an investment charter returns your whole deposit book. A {turnsToHours(24)} cooldown
           applies after any switch.
         </p>
+
+        {options.length === 0 ? (
+          <p className="text-xs text-muted">
+            No other charter type is legal in this jurisdiction to switch to.
+          </p>
+        ) : (
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="flex flex-col gap-1 text-xs text-muted">
+              Switch to
+              <select
+                className="h-8 min-w-40 rounded-md border border-card-border bg-background px-2 text-[13px] text-foreground focus:border-foreground focus:outline-none"
+                value={type}
+                onChange={(e) => update({ type: e.target.value as BankCharterType })}
+                disabled={!canMutate || onCooldown}
+                aria-label="New charter type"
+              >
+                {options.map((t) => (
+                  <option key={t} value={t}>
+                    {charterLabel(t)}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {onCooldown ? (
+              <p className="pb-1.5 text-xs text-muted">
+                Charter type is locked for {turnsToHours(turnsRemaining)} after your last switch.
+              </p>
+            ) : canMutate ? (
+              <SmallButton tone="primary" onClick={() => void submit()} disabled={busy}>
+                {busy ? "Switching..." : `Switch to ${charterLabel(type)}`}
+              </SmallButton>
+            ) : (
+              <p className="pb-1.5 text-xs text-muted">
+                Only the bank&apos;s CEO can change the charter type.
+              </p>
+            )}
+          </div>
+        )}
       </div>
-
-      {options.length === 0 ? (
-        <p className="text-sm text-muted">
-          No other charter type is legal in this jurisdiction to switch to.
-        </p>
-      ) : (
-        <>
-          <label className="block space-y-1 text-xs text-muted">
-            Switch to
-            <select
-              className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm text-foreground"
-              value={type}
-              onChange={(e) => update({ type: e.target.value as BankCharterType })}
-              disabled={!canMutate || onCooldown}
-              aria-label="New charter type"
-            >
-              {options.map((t) => (
-                <option key={t} value={t}>
-                  {charterLabel(t)}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          {onCooldown ? (
-            <p className="text-sm text-muted">
-              Charter type is locked for {turnsToHours(turnsRemaining)} after your last switch.
-            </p>
-          ) : canMutate ? (
-            <Button type="button" onClick={() => void submit()} disabled={busy}>
-              {busy ? "Switching..." : `Switch to ${charterLabel(type)}`}
-            </Button>
-          ) : (
-            <p className="text-sm text-muted">
-              Only the bank&apos;s CEO can change the charter type.
-            </p>
-          )}
-        </>
-      )}
-    </section>
+    </BankPanel>
   );
 }

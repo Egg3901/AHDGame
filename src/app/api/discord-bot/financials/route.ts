@@ -119,7 +119,7 @@ export async function GET(request: Request) {
     });
     const f = detail.financials;
     // Headline net income mirrors the website: prefer engine-realized income
-    // when present, else the projected income (SummaryBand.tsx).
+    // when present, else the projected income (FinancialsTab.tsx).
     const netIncome = typeof f.realizedIncome === "number" ? f.realizedIncome : f.income;
 
     // State data

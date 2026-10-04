@@ -22,6 +22,7 @@ export type OrgBallotKind =
  */
 const UNANIMOUS_KINDS: ReadonlySet<OrgBallotKind> = new Set<OrgBallotKind>([
   "free_trade_agreement",
+  "declare_war",
   "join_conflict",
   "membership_proposal",
 ]);
@@ -35,7 +36,7 @@ export function requiresUnanimity(kind: OrgBallotKind): boolean {
  * Ballots that ask a member to consent to business it is NOT itself a party to,
  * and where withholding consent blocks the whole thing.
  *
- * These are the two that must be decided by the player-enabled roll alone. A
+ * These are the ballots that must be decided by the player-enabled roll alone. A
  * member that cannot reliably vote before a deadline is indistinguishable from
  * one that is refusing, so seating it here hands it a veto it never meant to
  * cast — which is how every Warsaw Pact admission became unwinnable (#1257).
@@ -48,7 +49,7 @@ export function requiresUnanimity(kind: OrgBallotKind): boolean {
  * ratify however much both sides wanted it.
  */
 export function ballotIsPlayerOnly(kind: OrgBallotKind): boolean {
-  return kind === "membership_proposal" || kind === "join_conflict";
+  return kind === "membership_proposal" || kind === "declare_war" || kind === "join_conflict";
 }
 
 /**
@@ -114,9 +115,9 @@ export interface ResolutionPassageInput {
  *
  * - `free_trade_agreement`: unanimous "yes" from every named party (an FTA binds
  *   only its parties; non-party members have no vote).
- * - `join_conflict`: unanimous "yes" from the whole voting roll. Calling a bloc
- *   into a war is the one resolution that spends a member's soldiers, so any
- *   member can refuse simply by not consenting.
+ * - `declare_war` / `join_conflict`: unanimous "yes" from the whole player voting
+ *   roll. Starting or entering a war spends member soldiers, so any player nation
+ *   can refuse simply by not consenting.
  * - all other types: more than half the voting roll voting "yes".
  *
  * Abstaining and never voting are non-approval in every case; only an active

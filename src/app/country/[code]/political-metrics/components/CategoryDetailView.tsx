@@ -7,6 +7,13 @@ import { CategoryIcon } from "./categoryIcons";
 import type { PMCategory } from "./CategoryCard";
 import { LeanChip } from "./LeanChip";
 import { LeanStrip } from "./LeanStrip";
+import {
+  EMPTY_SERIES,
+  categoryAtSnapshot,
+  deltaTextClass,
+  formatDelta,
+  movementSince,
+} from "./movement";
 import { StatusBadge } from "./StatusBadge";
 import { scoreTone } from "./tones";
 
@@ -22,8 +29,15 @@ const CATEGORY_ICONS: Record<string, string> = {
   defense: "shield",
 };
 
-/** v1 sort options — trend/severity/recency return with the dynamics sub-project. */
+/** v1 sort options. Trend, severity and recency return with the dynamics sub-project. */
 type SortKey = "lean" | "score" | "alpha";
+
+/** The list heading names the order the rows are actually in. */
+const SORT_HEADING: Record<SortKey, string> = {
+  lean: "Metrics · ideological order, L → R",
+  score: "Metrics · objective score, high to low",
+  alpha: "Metrics · alphabetical",
+};
 
 export function CategoryDetailView({
   data,
@@ -47,12 +61,15 @@ export function CategoryDetailView({
     else r.sort((a, b) => a.lean - b.lean);
     return r;
   }, [category.metrics, sort]);
+  const movement = movementSince(category.score, categoryAtSnapshot(category, 0));
 
   return (
     <section className="mt-4 flex flex-col gap-4">
       <div>
         <Button variant="ghost" size="sm" onClick={onBack}>
-          ← National overview
+          {data.scope === "region"
+            ? `← ${data.countryDisplayName} overview`
+            : "← National overview"}
         </Button>
       </div>
 
@@ -61,9 +78,7 @@ export function CategoryDetailView({
           <CategoryIcon icon={CATEGORY_ICONS[category.id] ?? "library"} className="h-6 w-6" />
         </span>
         <div className="min-w-[200px] flex-1">
-          <h2 className="font-display text-heading-lg font-bold text-foreground">
-            {category.displayName}
-          </h2>
+          <h2 className="text-heading-lg font-bold text-foreground">{category.displayName}</h2>
           <div className="mt-0.5 text-body-sm text-muted">
             {data.countryDisplayName} · seven metrics spanning the ideological range
           </div>
@@ -79,8 +94,21 @@ export function CategoryDetailView({
             </div>
           </div>
           <div className="text-body-sm text-muted">
-            <div className="font-mono text-body-xs uppercase tracking-wider">Movement</div>
-            <div className="mt-0.5 italic">series begins this campaign</div>
+            <div className="font-mono text-body-sm uppercase tracking-wider">
+              Movement · last {data.historyCadenceTurns} turns
+            </div>
+            {movement ? (
+              <div className="mt-0.5">
+                <span
+                  className={`text-body-lg font-bold tabular-nums ${deltaTextClass(movement.delta)}`}
+                >
+                  {formatDelta(movement.delta)}
+                </span>{" "}
+                from {Math.round(movement.from)}
+              </div>
+            ) : (
+              <div className="mt-0.5 italic">{EMPTY_SERIES}</div>
+            )}
           </div>
         </div>
       </div>
@@ -88,8 +116,8 @@ export function CategoryDetailView({
       <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,2.1fr)_minmax(250px,1fr)]">
         <div className="flex flex-col gap-2.5">
           <div className="flex items-center justify-between gap-2">
-            <span className="font-mono text-body-xs uppercase tracking-widest text-muted">
-              Metrics — ideological order, L → R
+            <span className="font-mono text-body-sm uppercase tracking-widest text-muted">
+              {SORT_HEADING[sort]}
             </span>
             <label className="flex items-center gap-2 text-body-sm text-muted">
               Sort
@@ -127,7 +155,7 @@ export function CategoryDetailView({
                   <div className="mt-0.5 text-body-sm leading-normal text-muted">
                     {m.description}
                   </div>
-                  <div className="mt-1.5 flex flex-wrap gap-3 text-body-xs text-muted">
+                  <div className="mt-1.5 flex flex-wrap gap-3 text-body-sm text-muted">
                     <span>
                       <span className="text-success">+</span> {m.pos[0]}
                     </span>
@@ -142,7 +170,7 @@ export function CategoryDetailView({
                   >
                     {Math.round(m.value)}
                   </div>
-                  <div className="mt-0.5 text-body-xs text-muted">{m.status}</div>
+                  <div className="mt-0.5 text-body-sm text-muted">{m.status}</div>
                 </div>
                 <span className="flex-shrink-0 text-muted">›</span>
               </div>
@@ -152,22 +180,22 @@ export function CategoryDetailView({
 
         <div className="flex flex-col gap-4">
           <div className="rounded-lg border border-card-border bg-card p-4 shadow-card">
-            <div className="mb-2.5 font-mono text-body-xs uppercase tracking-widest text-muted">
+            <div className="mb-2.5 font-mono text-body-sm uppercase tracking-widest text-muted">
               Ideological range
             </div>
             <LeanStrip metrics={category.metrics} onOpenMetric={onOpenMetric} size="lg" />
-            <div className="mt-1.5 flex justify-between text-body-xs text-muted">
+            <div className="mt-1.5 flex justify-between text-body-sm text-muted">
               <span>Strong Left</span>
               <span>Mixed</span>
               <span>Strong Right</span>
             </div>
-            <p className="mt-2.5 text-body-xs leading-normal text-muted">
+            <p className="mt-2.5 text-body-sm leading-normal text-muted">
               Position marks each metric&apos;s political association. Bar height and color mark its
-              objective performance — the two are independent.
+              objective performance. The two are independent.
             </p>
           </div>
           <div className="rounded-lg border border-card-border bg-card p-4 shadow-card">
-            <div className="mb-2.5 font-mono text-body-xs uppercase tracking-widest text-muted">
+            <div className="mb-2.5 font-mono text-body-sm uppercase tracking-widest text-muted">
               Active modifiers
             </div>
             {category.metrics.some((m) => m.modifiers.direction !== "flat") ? (
@@ -181,7 +209,7 @@ export function CategoryDetailView({
                         key={m.id}
                         type="button"
                         onClick={() => onOpenMetric(m.id)}
-                        className="flex cursor-pointer items-baseline justify-between gap-3 text-left text-body-xs transition-colors hover:text-foreground"
+                        className="flex cursor-pointer items-baseline justify-between gap-3 text-left text-body-sm transition-colors hover:text-foreground"
                       >
                         <span className="text-foreground">
                           <span
@@ -208,7 +236,7 @@ export function CategoryDetailView({
             )}
           </div>
           <div className="rounded-lg border border-card-border bg-card p-4 shadow-card">
-            <div className="mb-2.5 font-mono text-body-xs uppercase tracking-widest text-muted">
+            <div className="mb-2.5 font-mono text-body-sm uppercase tracking-widest text-muted">
               Relevant legislation
             </div>
             {category.metrics.some((m) => m.legislation?.primary) ? (
@@ -220,7 +248,7 @@ export function CategoryDetailView({
                       key={m.id}
                       type="button"
                       onClick={() => onOpenMetric(m.id)}
-                      className="flex cursor-pointer items-baseline justify-between gap-3 text-left text-body-xs transition-colors hover:text-foreground"
+                      className="flex cursor-pointer items-baseline justify-between gap-3 text-left text-body-sm transition-colors hover:text-foreground"
                     >
                       <span className="text-foreground">{m.legislation!.primary!.title}</span>
                       <span className="shrink-0 text-muted">
@@ -235,7 +263,9 @@ export function CategoryDetailView({
             )}
           </div>
           <Button variant="primary" onClick={onCompareCategory}>
-            Compare this category across countries →
+            {data.scope === "region"
+              ? "Compare this category across regions →"
+              : "Compare this category across countries →"}
           </Button>
         </div>
       </div>

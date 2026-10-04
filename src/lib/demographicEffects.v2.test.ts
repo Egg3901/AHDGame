@@ -855,13 +855,20 @@ describe("subtractDurableShifts", () => {
  */
 function setDeep(target: Record<string, unknown>, path: string, value: unknown): void {
   const parts = path.split(".");
-  let cur = target;
+  for (const part of parts) {
+    if (part === "__proto__" || part === "constructor" || part === "prototype") return;
+  }
+  let current = target;
   for (let i = 0; i < parts.length - 1; i++) {
     const key = parts[i];
-    if (typeof cur[key] !== "object" || cur[key] === null) cur[key] = {};
-    cur = cur[key] as Record<string, unknown>;
+    if (key === "__proto__" || key === "constructor" || key === "prototype") return;
+    const existing = current[key];
+    if (existing === null || typeof existing !== "object") {
+      current[key] = /^(0|[1-9]\d*)$/.test(parts[i + 1]) ? [] : {};
+    }
+    current = current[key] as Record<string, unknown>;
   }
-  cur[parts[parts.length - 1]] = value;
+  current[parts[parts.length - 1]] = value;
 }
 
 interface FakeBulkOp {

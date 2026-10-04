@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import type { CorporationType } from "@/lib/constants/corporations";
 import {
-  SECTOR_STRATEGIES,
+  getSectorStrategies,
+  getStrategy,
   STRATEGY_RETOOL_COST_FRACTION,
   type SectorStrategy,
 } from "@/lib/constants/sectorStrategies";
@@ -20,6 +21,7 @@ import { fetchJson } from "@/lib/observability/fetchJson";
 
 interface StrategyChangeConfirmProps {
   sectorType: CorporationType;
+  mediaOperatingModelsEnabled?: boolean;
   currentStrategyId: string;
   targetStrategyId: string;
   /** Sector revenue in the corp's liquidCurrencyCode (post-v0.2.6). */
@@ -89,6 +91,7 @@ function estimateCommodityMargin(
 
 export default function StrategyChangeConfirm({
   sectorType,
+  mediaOperatingModelsEnabled,
   currentStrategyId,
   targetStrategyId,
   dailyRevenue,
@@ -133,10 +136,10 @@ export default function StrategyChangeConfirm({
     };
   }, []);
 
-  const strategies = SECTOR_STRATEGIES[sectorType];
+  const strategies = getSectorStrategies(sectorType, mediaOperatingModelsEnabled === true);
   if (!strategies) return null;
 
-  const current = strategies.find((s) => s.id === currentStrategyId) as SectorStrategy | undefined;
+  const current = getStrategy(sectorType, currentStrategyId);
   const target = strategies.find((s) => s.id === targetStrategyId) as SectorStrategy | undefined;
   if (!current || !target) return null;
 
@@ -223,7 +226,7 @@ export default function StrategyChangeConfirm({
                     {supplyChanged ? (
                       <span>
                         <span className="text-muted">
-                          {oldSupply > 0 ? oldSupply.toFixed(2) : "—"}
+                          {oldSupply > 0 ? oldSupply.toFixed(2) : "0"}
                         </span>
                         <span className="text-muted/50 mx-0.5">→</span>
                         <span
@@ -235,20 +238,20 @@ export default function StrategyChangeConfirm({
                                 : "text-blue-400/60"
                           }
                         >
-                          {newSupply > 0 ? newSupply.toFixed(2) : "—"}
+                          {newSupply > 0 ? newSupply.toFixed(2) : "0"}
                         </span>
                       </span>
                     ) : oldSupply > 0 ? (
                       <span className="text-muted/50">{oldSupply.toFixed(2)}</span>
                     ) : (
-                      <span className="text-muted/30">—</span>
+                      <span className="text-muted/30">0</span>
                     )}
                   </td>
                   <td className="py-0.5 tabular-nums text-right pr-1.5">
                     {demandChanged ? (
                       <span>
                         <span className="text-muted">
-                          {oldDemand > 0 ? oldDemand.toFixed(2) : "—"}
+                          {oldDemand > 0 ? oldDemand.toFixed(2) : "0"}
                         </span>
                         <span className="text-muted/50 mx-0.5">→</span>
                         <span
@@ -260,13 +263,13 @@ export default function StrategyChangeConfirm({
                                 : "text-amber-400/60"
                           }
                         >
-                          {newDemand > 0 ? newDemand.toFixed(2) : "—"}
+                          {newDemand > 0 ? newDemand.toFixed(2) : "0"}
                         </span>
                       </span>
                     ) : oldDemand > 0 ? (
                       <span className="text-muted/50">{oldDemand.toFixed(2)}</span>
                     ) : (
-                      <span className="text-muted/30">—</span>
+                      <span className="text-muted/30">0</span>
                     )}
                   </td>
                   <td className="py-0.5 text-right">

@@ -5,7 +5,10 @@ import { requireBotToken } from "@/lib/api/requireBotToken";
 import { checkRateLimit, rateLimitResponse, BOT_FINANCIAL_LIMITS } from "@/lib/api/rateLimit";
 import type { Character, User, PoliticalParty, Corporation, ElectedOfficial } from "@/lib/db/types";
 import { COUNTRY_ORDER, type CountryId } from "@/lib/constants/countries";
-import { getHeadOfGovernmentCharacterId } from "@/lib/api/headOfGovernment";
+import {
+  getHeadOfGovernmentCharacterId,
+  getHeadOfGovernmentCharacterIds,
+} from "@/lib/api/headOfGovernment";
 import {
   corpLiquidCapitalToAnchor,
   fxRateForCorpFromMap,
@@ -361,11 +364,10 @@ export async function POST(request: Request) {
      * governmentFormations.pmCharacterId). Bounded to COUNTRY_ORDER, so no
      * per-character query fan-out.
      */
-    const hogCharIds = new Set<string>();
-    for (const c of COUNTRY_ORDER) {
-      const id = await getHeadOfGovernmentCharacterId(db, c);
-      if (id) hogCharIds.add(id.toString());
-    }
+    const headsOfGovernment = await getHeadOfGovernmentCharacterIds(db, COUNTRY_ORDER);
+    const hogCharIds = new Set(
+      [...headsOfGovernment.values()].filter((id) => id != null).map((id) => id.toString())
+    );
 
     const users = characters.map((char) => {
       const discordId = discordIdMap.get(char.userId.toString());

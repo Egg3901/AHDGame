@@ -1,13 +1,15 @@
 "use client";
 
 import { useReducer } from "react";
-import { Badge, Button, EmptyState, Input } from "@/components/ui";
+import { useTranslations } from "next-intl";
 import { formatBankMoney } from "@/components/banking/formatBankMoney";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { assessCapital, type BankBorrowings } from "@/lib/banking/capitalAdequacy";
 import type { ConsolePayload, OutlookPayload, ShowToast } from "../types";
 import { mergeState } from "../lib/helpers";
-import { Eyebrow } from "../components/BankSection";
+import { SmallButton, TableScroll, Td, Th } from "@/components/corporation/dense/DenseKit";
+import { allowedPropOpeningAssets } from "@/lib/banking/rules/propAssets";
+import { BankPanel } from "../components/BankSection";
 
 type PropAsset = "equity" | "bond" | "indexUnit" | "forex";
 
@@ -36,6 +38,7 @@ type PropBookState = {
   ref: string;
   units: string;
   busy: boolean;
+  quote: { fee: number; cost: number; proceeds: number } | null;
 };
 
 /**
@@ -50,11 +53,14 @@ export function PropBookPanel({
   currency,
   positions,
   markValue,
+  sovereignTreasuryMarkValue,
   cashReserves,
   totalLoans,
   borrowings,
   propLeverage,
   canMutate,
+  forexFeesEnabled = false,
+  assetOptions = allowedPropOpeningAssets(false, undefined),
   onChanged,
   showToast,
 }: {
@@ -62,26 +68,35 @@ export function PropBookPanel({
   currency: CurrencyCode;
   positions: NonNullable<ConsolePayload["charter"]>["propBook"];
   markValue: number;
+  sovereignTreasuryMarkValue: number;
   cashReserves: number;
   totalLoans: number;
   borrowings: BankBorrowings;
   /** Leverage against the cap, from the same module that enforces it. */
   propLeverage: OutlookPayload["propLeverage"];
   canMutate: boolean;
+  forexFeesEnabled?: boolean;
+  assetOptions?: readonly PropAsset[];
   onChanged: () => Promise<void>;
   showToast: ShowToast;
 }) {
-  const [{ asset, ref, units, busy }, updatePropState] = useReducer(mergeState<PropBookState>, {
-    asset: "equity",
-    ref: "",
-    units: "",
-    busy: false,
-  });
+  const t = useTranslations("corporations.propForexFees");
+  const [{ asset, ref, units, busy, quote }, updatePropState] = useReducer(
+    mergeState<PropBookState>,
+    {
+      asset: assetOptions[0] ?? "bond",
+      ref: "",
+      units: "",
+      busy: false,
+      quote: null,
+    }
+  );
 
   // Capital impact of the book as it stands: every unit of current value sits
   // in risk assets beside the loan book (capitalAdequacy.assessCapital).
   const position = assessCapital({
     cashReserves,
+    sovereignTreasuryMarkValue,
     totalLoans,
     borrowings,
     propBookMarkValue: markValue,
@@ -93,10 +108,38 @@ export function PropBookPanel({
       : null;
   const needsConfirm = leverageUsed != null && leverageUsed >= CONFIRM_LEVERAGE_FRACTION;
 
+  const requestQuote = async (position: { asset: PropAsset; ref: string; units: number }) => {
+    const response = await fetch(`/api/corporations/${corporationId}/bank/prop/positions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...position, quoteOnly: true }),
+    });
+    const result = (await response.json()) as {
+      error?: string;
+      fee: number;
+      cost: number;
+      proceeds: number;
+    };
+    if (!response.ok) {
+      showToast(result.error ?? t("unavailable"), "error");
+      return null;
+    }
+    return result;
+  };
+
   const open = async () => {
     const u = parseFloat(units);
     if (!ref.trim() || !(u > 0)) {
       showToast(`${REF_LABEL[asset]} and positive units are required`, "error");
+      return;
+    }
+    if (forexFeesEnabled && asset === "forex" && !quote) {
+      updatePropState({ busy: true });
+      try {
+        updatePropState({ quote: await requestQuote({ asset, ref: ref.trim(), units: u }) });
+      } finally {
+        updatePropState({ busy: false });
+      }
       return;
     }
     if (needsConfirm) {
@@ -110,24 +153,36 @@ export function PropBookPanel({
       const res = await fetch(`/api/corporations/${corporationId}/bank/prop/positions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ asset, ref: ref.trim(), units: u }),
+        body: JSON.stringify({
+          asset,
+          ref: ref.trim(),
+          units: u,
+          ...(forexFeesEnabled && asset === "forex" && quote ? { maxCost: quote.cost } : {}),
+        }),
       });
       const json = (await res.json().catch(() => ({}))) as {
         error?: string;
         cost?: number;
+        fee?: number;
         propBookMarkValue?: number;
       };
       if (!res.ok) {
+        updatePropState({ quote: null });
         showToast(json.error ?? "Could not open position", "error");
         return;
       }
       showToast(
-        json.cost != null
-          ? `Opened ${u} ${ref.trim()}: ${formatBankMoney(json.cost, currency)} left vault cash and now counts toward the leverage cap.`
-          : "Position opened: the purchase price left vault cash and now counts toward the leverage cap.",
+        json.fee != null && json.cost != null
+          ? t("opened", {
+              cost: formatBankMoney(json.cost, currency),
+              fee: formatBankMoney(json.fee, currency),
+            })
+          : json.cost != null
+            ? `Opened ${u} ${ref.trim()}: ${formatBankMoney(json.cost, currency)} left vault cash and now counts toward the leverage cap.`
+            : "Position opened: the purchase price left vault cash and now counts toward the leverage cap.",
         "success"
       );
-      updatePropState({ ref: "", units: "" });
+      updatePropState({ ref: "", units: "", quote: null });
       await onChanged();
     } finally {
       updatePropState({ busy: false });
@@ -137,10 +192,30 @@ export function PropBookPanel({
   const close = async (pos: (typeof positions)[number]) => {
     updatePropState({ busy: true });
     try {
+      let minimumProceeds: number | undefined;
+      if (forexFeesEnabled && pos.asset === "forex") {
+        const preview = await requestQuote({ asset: pos.asset, ref: pos.ref, units: pos.units });
+        if (!preview) return;
+        if (
+          !window.confirm(
+            t("closeQuote", {
+              proceeds: formatBankMoney(preview.proceeds, currency),
+              fee: formatBankMoney(preview.fee, currency),
+            })
+          )
+        )
+          return;
+        minimumProceeds = preview.proceeds;
+      }
       const res = await fetch(`/api/corporations/${corporationId}/bank/prop/positions`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ asset: pos.asset, ref: pos.ref, units: pos.units }),
+        body: JSON.stringify({
+          asset: pos.asset,
+          ref: pos.ref,
+          units: pos.units,
+          ...(minimumProceeds !== undefined ? { minProceeds: minimumProceeds } : {}),
+        }),
       });
       const json = (await res.json().catch(() => ({}))) as {
         error?: string;
@@ -163,139 +238,159 @@ export function PropBookPanel({
     }
   };
 
+  const inputClass =
+    "h-8 w-full rounded-md border border-card-border bg-background px-2 text-[13px] text-foreground placeholder:text-muted focus:border-foreground focus:outline-none";
+
   return (
-    <section className="space-y-3">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <div className="space-y-1">
-          <Eyebrow kind="ceoControl" />
-          <h3 className="text-base font-semibold text-foreground">
-            The bank&apos;s own investments
-          </h3>
-          <p className="text-xs text-muted">
-            Positions the bank holds for its own profit, marked to market every turn. Buying moves
-            vault cash into the market; the current value counts in risk assets beside the loan
-            book, so the capital ratio is {(position.capitalRatio * 100).toFixed(1)}% with this book
-            on it.
-          </p>
-        </div>
-        <p className="text-sm font-mono tabular-nums text-muted">
-          Current value {formatBankMoney(markValue, currency)}
-        </p>
-      </div>
-      {leverage && (
+    <BankPanel
+      kind="ceoControl"
+      title="The bank's own investments"
+      actions={
+        <span className="text-xs text-muted">
+          Current value{" "}
+          <span className="font-mono tabular-nums text-foreground">
+            {formatBankMoney(markValue, currency)}
+          </span>
+        </span>
+      }
+    >
+      <div className="space-y-1 py-1.5">
         <p className="text-xs text-muted">
-          Leverage{" "}
-          {leverage.markValue > 0 && leverage.equityBase > 0
-            ? `${((leverage.markValue / Math.max(1, leverage.equityBase)) * 100).toFixed(0)}% of equity`
-            : "unused"}{" "}
-          against a cap of {leverage.multiple}x equity (
-          {formatBankMoney(leverage.headroom, currency)} of headroom). Past the cap the bank is
-          force-liquidated, which lowers confidence.
+          Positions the bank holds for its own profit, marked to market every turn. Buying moves
+          vault cash into the market; the current value counts in risk assets beside the loan book,
+          so the capital ratio is{" "}
+          <span className="font-mono text-foreground">
+            {(position.capitalRatio * 100).toFixed(1)}%
+          </span>{" "}
+          with this book on it.
         </p>
-      )}
+        {leverage && (
+          <p className="text-xs text-muted">
+            Leverage{" "}
+            {leverage.markValue > 0 && leverage.equityBase > 0
+              ? `${((leverage.markValue / Math.max(1, leverage.equityBase)) * 100).toFixed(0)}% of equity`
+              : "unused"}{" "}
+            against a cap of {leverage.multiple}x equity (
+            {formatBankMoney(leverage.headroom, currency)} of headroom). Past the cap the bank is
+            force-liquidated, which lowers confidence.
+          </p>
+        )}
+      </div>
       {canMutate && (
-        <div className="rounded-xl border border-card-border bg-card p-4 grid gap-3 sm:grid-cols-4 max-w-3xl">
-          <label className="block space-y-1 text-xs text-muted">
-            Asset
-            <select
-              className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm text-foreground"
-              value={asset}
-              onChange={(e) => updatePropState({ asset: e.target.value as PropAsset })}
-              aria-label="Investment asset type"
-            >
-              <option value="equity">Equity</option>
-              <option value="bond">Bond</option>
-              <option value="indexUnit">Index unit</option>
-              <option value="forex">Forex</option>
-            </select>
-          </label>
-          <label className="block space-y-1 text-xs text-muted sm:col-span-2">
-            {REF_LABEL[asset]}
-            <Input
-              value={ref}
-              onChange={(e) => updatePropState({ ref: e.target.value })}
-              placeholder={REF_PLACEHOLDER[asset]}
-              aria-label={`Investment position ${REF_LABEL[asset].toLowerCase()}`}
-            />
-          </label>
-          <label className="block space-y-1 text-xs text-muted">
-            Units
-            <Input
-              value={units}
-              onChange={(e) => updatePropState({ units: e.target.value })}
-              inputMode="decimal"
-              aria-label="Investment position units"
-            />
-          </label>
-          <div className="sm:col-span-4 space-y-1">
-            <p className="text-[11px] text-muted">
-              Opening quotes units x market price out of vault cash
-              {leverage
-                ? `, with ${formatBankMoney(Math.max(0, leverage.headroom), currency)} of leverage headroom`
-                : ""}
-              .
-              {needsConfirm
-                ? " The book is past two thirds of its cap, so opening asks first."
-                : ""}
-            </p>
-            <Button type="button" onClick={() => void open()} disabled={busy}>
-              {busy ? "Working..." : "Open position"}
-            </Button>
+        <div className="space-y-1 pb-3 pt-1">
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="flex w-32 flex-col gap-1 text-xs text-muted">
+              Asset
+              <select
+                className={inputClass}
+                value={asset}
+                onChange={(e) =>
+                  updatePropState({ asset: e.target.value as PropAsset, quote: null })
+                }
+                aria-label="Investment asset type"
+              >
+                {assetOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {
+                      { equity: "Equity", bond: "Bond", indexUnit: "Index unit", forex: "Forex" }[
+                        option
+                      ]
+                    }
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex min-w-48 flex-1 flex-col gap-1 text-xs text-muted">
+              {REF_LABEL[asset]}
+              <input
+                value={ref}
+                onChange={(e) => updatePropState({ ref: e.target.value, quote: null })}
+                placeholder={REF_PLACEHOLDER[asset]}
+                aria-label={`Investment position ${REF_LABEL[asset].toLowerCase()}`}
+                className={inputClass}
+              />
+            </label>
+            <label className="flex w-28 flex-col gap-1 text-xs text-muted">
+              Units
+              <input
+                value={units}
+                onChange={(e) => updatePropState({ units: e.target.value, quote: null })}
+                inputMode="decimal"
+                aria-label="Investment position units"
+                className={`${inputClass} font-mono`}
+              />
+            </label>
+            <SmallButton tone="primary" onClick={() => void open()} disabled={busy}>
+              {busy
+                ? "Working..."
+                : forexFeesEnabled && asset === "forex"
+                  ? quote
+                    ? t("buy")
+                    : t("quote")
+                  : "Open position"}
+            </SmallButton>
           </div>
+          {forexFeesEnabled && asset === "forex" && (
+            <p className="text-xs text-muted">
+              {quote
+                ? t("preview", {
+                    cost: formatBankMoney(quote.cost, currency),
+                    fee: formatBankMoney(quote.fee, currency),
+                  })
+                : t("explanation")}
+            </p>
+          )}
+          <p className="text-[11px] text-muted">
+            Opening quotes units x market price out of vault cash
+            {leverage
+              ? `, with ${formatBankMoney(Math.max(0, leverage.headroom), currency)} of leverage headroom`
+              : ""}
+            .{needsConfirm ? " The book is past two thirds of its cap, so opening asks first." : ""}
+          </p>
         </div>
       )}
       {positions.length === 0 ? (
-        <EmptyState title="No investments" description="Open a position to start the book." />
+        <p className="py-1 text-xs text-muted">
+          No investments. Open a position to start the book.
+        </p>
       ) : (
-        <div className="overflow-x-auto overflow-hidden rounded-xl border border-card-border bg-card">
-          <table className="w-full text-sm min-w-[560px]">
+        <TableScroll>
+          <table className="w-full min-w-[560px] border-collapse">
             <thead>
-              <tr className="border-b border-card-border text-left text-[10px] uppercase tracking-widest text-muted">
-                <th className="px-4 py-3 font-semibold">Asset</th>
-                <th className="px-4 py-3 font-semibold">Reference</th>
-                <th className="px-4 py-3 font-semibold text-right">Units</th>
-                <th className="px-4 py-3 font-semibold text-right">Cost</th>
-                <th className="px-4 py-3 font-semibold text-right">Current value</th>
-                <th className="px-4 py-3 font-semibold" />
+              <tr>
+                <Th>Asset</Th>
+                <Th>Reference</Th>
+                <Th align="right">Units</Th>
+                <Th align="right">Cost</Th>
+                <Th align="right">Current value</Th>
+                <Th align="right">
+                  <span className="sr-only">Close</span>
+                </Th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-card-border">
+            <tbody>
               {positions.map((pos) => (
                 <tr key={`${pos.asset}:${pos.ref}`}>
-                  <td className="px-4 py-3">
-                    <Badge color="default" variant="subtle">
-                      {pos.asset}
-                    </Badge>
-                  </td>
-                  <td className="px-4 py-3 font-mono text-xs text-muted">{pos.ref}</td>
-                  <td className="px-4 py-3 text-right font-mono tabular-nums">
-                    {pos.units.toLocaleString()}
-                  </td>
-                  <td className="px-4 py-3 text-right font-mono tabular-nums">
-                    {formatBankMoney(pos.costBasis, currency)}
-                  </td>
-                  <td className="px-4 py-3 text-right font-mono tabular-nums">
-                    {pos.markValue != null ? formatBankMoney(pos.markValue, currency) : "-"}
-                  </td>
-                  <td className="px-4 py-3 text-right">
+                  <Td className="text-muted">{pos.asset}</Td>
+                  <Td className="font-mono text-xs text-foreground">{pos.ref}</Td>
+                  <Td align="right">{pos.units.toLocaleString("en-US")}</Td>
+                  <Td align="right">{formatBankMoney(pos.costBasis, currency)}</Td>
+                  <Td align="right">
+                    {pos.markValue != null ? formatBankMoney(pos.markValue, currency) : "n/a"}
+                  </Td>
+                  <Td align="right" numeric={false}>
                     {canMutate && (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="secondary"
-                        disabled={busy}
-                        onClick={() => void close(pos)}
-                      >
+                      <SmallButton disabled={busy} onClick={() => void close(pos)}>
                         Close
-                      </Button>
+                      </SmallButton>
                     )}
-                  </td>
+                  </Td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
+        </TableScroll>
       )}
-    </section>
+    </BankPanel>
   );
 }

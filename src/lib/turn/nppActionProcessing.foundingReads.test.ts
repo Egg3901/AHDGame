@@ -23,7 +23,7 @@ describe("foundNppCorporationsSurplus read budget", () => {
   it("batches the already-CEO exclusion and loads the blocked set once", async () => {
     const candidates = Array.from({ length: 300 }, () => ({
       _id: new ObjectId(),
-      countryId: "US",
+      countryId: "FR",
       party: "1",
       homeState: "CA",
       personality: { loyalty: 50, ambition: 70, stubbornness: 20 },
@@ -76,7 +76,14 @@ describe("foundNppCorporationsSurplus read budget", () => {
         }
         if (name === "gameState") return { findOne: gameStateFindOne };
         if (name === "federalBudget") return { find: fedBudgetFind };
-        if (name === "exchangeRates") return { find: () => ({ toArray: async () => [] }) };
+        if (name === "exchangeRates")
+          return {
+            find: () => ({
+              toArray: async () => [
+                { _id: "FR", countryId: "FR", currencyCode: "EUR", rate: 0.92 },
+              ],
+            }),
+          };
         return {
           find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
           findOne: vi.fn().mockResolvedValue(null),
@@ -93,11 +100,17 @@ describe("foundNppCorporationsSurplus read budget", () => {
         }) as never
     );
 
-    await foundNppCorporationsSurplus(db, 52, null);
+    await foundNppCorporationsSurplus(db, 52, null, "2027-default");
 
     const attempts = nppDebit.mock.calls.length;
     // Non-vacuous: the seeded stream must actually attempt foundings.
     expect(attempts).toBeGreaterThan(0);
+    // A 2027 French founder's fee uses the live EUR rate, not the obsolete
+    // FRF rate (or the missing-rate fallback of 1).
+    const firstDebitFilter = nppDebit.mock.calls[0][0] as {
+      nppInvestmentCashAnchor: { $gte: number };
+    };
+    expect(firstDebitFilter.nppInvestmentCashAnchor.$gte).toBeCloseTo(100_000 / 0.92, 2);
 
     // One batched already-CEO exclusion over the whole pool, not one findOne
     // per RNG-passing candidate.

@@ -1,6 +1,142 @@
-import { describe, expect, it } from "vitest";
-import { getEffectiveStrategyRates, SECTOR_STRATEGIES } from "./sectorStrategies";
+import { describe, expect, it, vi } from "vitest";
+import * as Sentry from "@sentry/nextjs";
+import type { Db } from "mongodb";
+import { checkPersistedSectorTypes } from "@/lib/corporations/checkPersistedSectorTypes";
+import {
+  getEffectiveStrategyRates,
+  getMediaOperatingModelStrategies,
+  getSectorStrategies,
+  getStrategy,
+  SECTOR_STRATEGIES,
+} from "./sectorStrategies";
 import { COMMODITY_TYPES } from "./commodities";
+import { MEDIA_OPERATING_MODELS } from "@/lib/mediaOperatingModels/catalog";
+
+vi.mock("@sentry/nextjs", () => ({ captureMessage: vi.fn() }));
+
+describe("startup sector type diagnostics", () => {
+  it("logs unknown type counts without changing persisted sectors", async () => {
+    const unknownTypes = [
+      { _id: "retired_sector", count: 3 },
+      { _id: null, count: 1 },
+    ];
+    const aggregate = vi.fn(() => ({ toArray: async () => unknownTypes }));
+    const collection = vi.fn(() => ({ aggregate }));
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await checkPersistedSectorTypes({ collection } as unknown as Db);
+      expect(collection).toHaveBeenCalledExactlyOnceWith("corporateSectors");
+      expect(log).toHaveBeenCalledExactlyOnceWith(
+        "[sector-types] unknown persisted types in corporateSectors:",
+        unknownTypes
+      );
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it("stays quiet when every persisted sector type is recognized", async () => {
+    const db = { collection: () => ({ aggregate: () => ({ toArray: async () => [] }) }) };
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await checkPersistedSectorTypes(db as unknown as Db);
+      expect(log).not.toHaveBeenCalled();
+    } finally {
+      log.mockRestore();
+    }
+  });
+});
+
+describe("unknown persisted sector types", () => {
+  it("uses empty rates and reports the type only once across repeated turn reads", () => {
+    vi.mocked(Sentry.captureMessage).mockClear();
+    const rates = getEffectiveStrategyRates("retired_sector", "legacy", null, null, 1065);
+    expect(rates).toEqual({ supply: {}, demand: {}, isTransitioning: false });
+    expect(getEffectiveStrategyRates("retired_sector", "legacy", null, null, 1066)).toEqual(rates);
+    expect(Sentry.captureMessage).toHaveBeenCalledExactlyOnceWith(
+      "Unknown persisted sector type: using inert strategy",
+      { level: "error", extra: { sectorType: "retired_sector" } }
+    );
+  });
+
+  it("handles unknown types during an active strategy transition", () => {
+    expect(getEffectiveStrategyRates("removed_sector", "new", "old", 1060, 1065)).toEqual({
+      supply: {},
+      demand: {},
+      isTransitioning: true,
+    });
+  });
+
+  it.each(["__proto__", "constructor", "toString"])("rejects inherited key %s", (sectorType) => {
+    expect(getEffectiveStrategyRates(sectorType, "standard", null, null, 1065)).toEqual({
+      supply: {},
+      demand: {},
+      isTransitioning: false,
+    });
+  });
+
+  it("preserves the first-strategy fallback for a known type with an unknown strategy", () => {
+    expect(getStrategy("media", "removed_strategy")).toBe(SECTOR_STRATEGIES.media[0]);
+  });
+});
+
+describe("media operating model strategies", () => {
+  it.each([
+    ["media", "newspaper", 0.5],
+    ["media", "cable_tv", 0.5],
+    ["media", "streaming_platform", 0.5],
+    ["entertainment", "film_studio", 0.6],
+    ["entertainment", "streaming_platform", 0.6],
+  ])("resolves active virtual strategy %s:%s through legacy readers", (sectorType, id, budget) => {
+    const strategy = getStrategy(sectorType, id);
+    expect(strategy.mediaOperatingModelId).toBe(id);
+    expect(Object.values(strategy.supply).reduce((sum, rate) => sum + (rate ?? 0), 0)).toBeCloseTo(
+      budget
+    );
+    expect(getEffectiveStrategyRates(sectorType, id, null, null, 500).supply).toEqual(
+      strategy.supply
+    );
+  });
+
+  it("keeps models out of the existing selectable strategy list unless the gate is on", () => {
+    expect(getSectorStrategies("media").some((strategy) => strategy.mediaOperatingModelId)).toBe(
+      false
+    );
+    expect(
+      getSectorStrategies("media", true).filter((strategy) => strategy.mediaOperatingModelId)
+    ).toEqual(getMediaOperatingModelStrategies("media"));
+  });
+
+  it("dual-reads a persisted model id even when the model selector gate is off", () => {
+    const streamingMedia = getMediaOperatingModelStrategies("media").find(
+      (strategy) => strategy.id === "streaming_platform"
+    )!;
+    expect(getSectorStrategies("media", false).map((strategy) => strategy.id)).not.toContain(
+      "streaming_platform"
+    );
+    expect(getEffectiveStrategyRates("media", "streaming_platform", null, null, 500)).toEqual({
+      supply: streamingMedia.supply,
+      demand: streamingMedia.demand,
+      isTransitioning: false,
+    });
+  });
+
+  it("uses the catalog's named existing input strategy for every lane recipe", () => {
+    for (const model of MEDIA_OPERATING_MODELS) {
+      for (const sectorType of model.sectorTypes) {
+        const recipe = model.recipes[sectorType]!;
+        const existingInput = SECTOR_STRATEGIES[sectorType].find(
+          (strategy) => strategy.id === recipe.inputStrategyId
+        )!;
+        const modelStrategy = getMediaOperatingModelStrategies(sectorType).find(
+          (strategy) => strategy.id === model.id
+        )!;
+
+        expect(modelStrategy.demand, `${sectorType}:${model.id}`).toEqual(existingInput.demand);
+      }
+    }
+  });
+});
 
 describe("persisted media and entertainment sectors", () => {
   it("resolves their existing strategies while the product rollout is withdrawn", () => {

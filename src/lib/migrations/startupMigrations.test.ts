@@ -28,6 +28,14 @@ describe("runRequiredStartupMigrations", () => {
       "2026-09-30-long-horizon-telemetry-indexes",
       "2026-09-30-apple-provider-identity-index",
       "2026-09-17-uk-dual-ministry-role-slot",
+      "2026-10-04-political-media-order-indexes",
+      "2026-10-04-bank-treasury-trade-indexes",
+      "2026-10-04-bank-prop-forex-fee-index",
+      "2026-10-04-bank-failure-politics-index",
+      "2026-10-04-industry-model-market-indexes",
+      "2026-10-04-media-discriminator-market-indexes",
+      "2026-10-04-construction-service-lease-index",
+      "2026-10-04-media-product-projects-v1-index",
     ]);
     expect(REQUIRED_STARTUP_MIGRATIONS.every((migration) => migration.idempotent)).toBe(true);
     expect(runMigrationsMock).toHaveBeenCalledWith(db, {

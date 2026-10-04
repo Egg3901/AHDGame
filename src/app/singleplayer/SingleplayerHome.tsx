@@ -122,9 +122,7 @@ export function SingleplayerHome({ status }: Props) {
 
         {status.hasWorld ? (
           <section className="mb-8 rounded border border-card-border bg-card-muted p-5">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
-              Current world
-            </h2>
+            <h2 className="text-sm font-semibold text-muted">Current world</h2>
             <dl className="mt-3 grid grid-cols-3 gap-4 text-sm">
               <div>
                 <dt className="text-muted">Era</dt>
@@ -153,7 +151,7 @@ export function SingleplayerHome({ status }: Props) {
         ) : null}
 
         <section className="rounded border border-card-border bg-card-muted p-5">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
+          <h2 className="text-sm font-semibold text-muted">
             {status.hasWorld ? "Start over" : "New game"}
           </h2>
 

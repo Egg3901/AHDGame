@@ -43,6 +43,7 @@ function getPath(doc: Doc, path: string): unknown {
   const parts = path.split(".");
   let current: unknown = doc;
   for (const part of parts) {
+    if (part === "__proto__" || part === "constructor" || part === "prototype") return undefined;
     if (typeof current !== "object" || current === null) return undefined;
     current = (current as Doc)[part];
   }
@@ -51,19 +52,27 @@ function getPath(doc: Doc, path: string): unknown {
 
 function setPath(doc: Doc, path: string, value: unknown): void {
   const parts = path.split(".");
-  let current: Doc = doc;
+  for (const part of parts) {
+    if (part === "__proto__" || part === "constructor" || part === "prototype") return;
+  }
+  let current = doc;
   for (let i = 0; i < parts.length - 1; i++) {
-    const existing = current[parts[i]];
-    if (typeof existing !== "object" || existing === null || Array.isArray(existing)) {
-      current[parts[i]] = {};
+    const key = parts[i];
+    if (key === "__proto__" || key === "constructor" || key === "prototype") return;
+    const existing = current[key];
+    if (existing === null || typeof existing !== "object") {
+      current[key] = /^(0|[1-9]\d*)$/.test(parts[i + 1]) ? [] : {};
     }
-    current = current[parts[i]] as Doc;
+    current = current[key] as Record<string, unknown>;
   }
   current[parts[parts.length - 1]] = value;
 }
 
 function deletePath(doc: Doc, path: string): void {
   const parts = path.split(".");
+  for (const part of parts) {
+    if (part === "__proto__" || part === "constructor" || part === "prototype") return;
+  }
   let current: unknown = doc;
   for (let i = 0; i < parts.length - 1; i++) {
     if (typeof current !== "object" || current === null) return;

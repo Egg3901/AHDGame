@@ -1,7 +1,9 @@
 import {
   ensureRegionalDelegateElections,
+  ensureRegionalGovernorElections,
   seatsFromRegionField,
 } from "@/lib/turn/perpetualElections/shared";
+import { brazilPresidentialRules } from "../rules/presidential";
 
 /**
  * Ensure every BR macro-region has an active/upcoming Câmara dos Deputados
@@ -53,6 +55,16 @@ export async function ensureBRSenateElections(now: Date, inFlightTurn?: number):
   );
 }
 
+/**
+ * The five modeled BR macroregions each have one synthetic executive office.
+ * Keep its election cycle live through the same canonical governor spawner as
+ * the other regional executives. These are game aggregate offices, not the
+ * governorships of Brazil's real federal states.
+ */
+export async function ensureBRGovernorElections(now: Date, inFlightTurn?: number): Promise<void> {
+  await ensureRegionalGovernorElections("BR", now, undefined, inFlightTurn);
+}
+
 // ─── Soviet Union: Supreme Soviet + republic soviets + First Secretaries ─────
 //
 // All four families are status-gated via `ruElectionsLive` (#3386): RU stays
@@ -62,3 +74,61 @@ export async function ensureBRSenateElections(now: Date, inFlightTurn?: number):
 // running the NPP brain re-elects the Supreme Soviet instead of freezing it.
 // They are ALSO era-gated (null ruSupremeSoviet/ruRepublicSoviet anchors under
 // 2019/1991 return no spawn from buildCanonicalSpawn).
+
+/** Keep Brazil's presidency renewing in autonomous background worlds too. */
+export async function ensureBRPresidentialElection(
+  now: Date,
+  inFlightTurn?: number
+): Promise<void> {
+  const { getDb } = await import("@/lib/mongodb");
+  const { countryElectionsLive } = await import("@/lib/turn/perpetualElections/shared");
+  const { isNppAutonomyActive } = await import("@/lib/nppAutonomy/featureFlag");
+  const { buildCanonicalSpawn, getCurrentTurnAndCtx, justResolvedInSameTurn } =
+    await import("@/lib/turn/perpetualElections/engine");
+  const { withCampaignRules } = await import("@/lib/campaignTargeting/rules");
+  const db = await getDb();
+  if (!(await countryElectionsLive(db, "BR")) && !(await isNppAutonomyActive(db, "BR"))) return;
+  const { currentTurn: persistedTurn, ctx } = await getCurrentTurnAndCtx(db);
+  const currentTurn = inFlightTurn ?? persistedTurn;
+  const races = db.collection<import("@/lib/db/types").Election>("elections");
+  if (
+    await races.findOne({
+      countryId: "BR",
+      electionType: "president",
+      status: { $in: ["active", "upcoming", "completed"] },
+    })
+  )
+    return;
+  const prev = await races.findOne(
+    { countryId: "BR", electionType: "president", status: "resolved" },
+    { sort: { endTurn: -1 } }
+  );
+  if (justResolvedInSameTurn(prev ?? undefined, now, currentTurn)) return;
+  const doc = buildCanonicalSpawn({
+    electionType: "president",
+    countryId: "BR",
+    state: "BR",
+    prev: prev ?? undefined,
+    currentTurn,
+    now,
+    fallbackTotalSeats: 1,
+    ctx,
+    openPrimaryImmediately: true,
+  });
+  if (!doc) return;
+  await races.updateOne(
+    {
+      countryId: "BR",
+      electionType: "president",
+      cycle: doc.cycle,
+      brazilPresidentialRound: { $ne: 2 },
+    },
+    {
+      $setOnInsert: withCampaignRules({
+        ...doc,
+        brazilPresidentialMode: brazilPresidentialRules(ctx.preset).mode,
+      }),
+    },
+    { upsert: true }
+  );
+}

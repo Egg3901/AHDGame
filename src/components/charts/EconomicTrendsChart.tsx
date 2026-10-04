@@ -117,7 +117,7 @@ export function EconomicTrendsChart({
       <div>
         {controls}
         <div className="flex h-24 items-center justify-center text-sm text-muted">
-          Not enough data yet — check back after the next turn.
+          Not enough data yet. Check back after the next turn.
         </div>
       </div>
     );

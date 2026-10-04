@@ -31,7 +31,11 @@
 
 import type { CorporationType } from "./corporations";
 import type { CountryId } from "./countries";
-import { getEffectiveStrategyRates, applyPlannedEconomyOutputMix } from "./sectorStrategies";
+import {
+  getEffectiveStrategyRatesForOperatingModel,
+  getOperatingSectorType,
+  applyPlannedEconomyOutputMix,
+} from "./sectorStrategies";
 import { getOutputMultiplier, getInputMultiplier } from "@/lib/utils/productionPolicy";
 import { TRADE_EMBARGO_EXPORT_LOSS_SHARE } from "@/lib/trade/constants";
 
@@ -1287,6 +1291,19 @@ export const COMMODITY_AGGREGATE_INPUT_CAP = 30;
 export const PLANTS_LEDGER_DEMAND_SUPPLY_CAP = 1.5;
 
 /**
+ * A caller's era demand calibration for one commodity, guarded so a missing,
+ * zero or non-finite value reads as 1 (no calibration). The supply caps divide
+ * by this, so it must never be 0.
+ */
+export function calibrationMultiplier(
+  demandCalibration: ((commodity: CommodityType) => number) | undefined,
+  commodity: CommodityType
+): number {
+  const m = demandCalibration?.(commodity);
+  return typeof m === "number" && Number.isFinite(m) && m > 0 ? m : 1;
+}
+
+/**
  * Aggregate ceiling on the blended output surplus modifier (percentage points).
  * Prevents diversified extraction from earning +40 net commodity margin simply
  * by selling into every scarce market at once. Focused strategies remain
@@ -1945,6 +1962,8 @@ export interface GdpGrowthData {
 export function computeRawSupplyDemand(
   sectors: {
     sectorType: string;
+    industryModel?: string | null;
+    mediaDiscriminator?: string | null;
     revenue: number;
     stateId: string;
     /** Optional owner used to attribute this sector's realized ledger supply. */
@@ -1976,6 +1995,8 @@ export function computeRawSupplyDemand(
      * derivation, so the first plants turn is unchanged.
      */
     producedUnits?: number | null;
+    /** Exact product output units, replacing the legacy mix split when present. */
+    outputUnitsByCommodity?: Partial<Record<CommodityType, number>>;
     /**
      * Share of this plant's output (0..1) shipped to a government arsenal under a defence
      * procurement contract. That output was already paid for per lot and does not also
@@ -2103,7 +2124,19 @@ export function computeRawSupplyDemand(
    * ledger and the book on literally the same table. Defaults to the modern
    * table, which is weight-identical, so every existing caller is unchanged.
    */
-  ledgerBasePrices: Record<CommodityType, number> = COMMODITY_BASE_PRICES
+  ledgerBasePrices: Record<CommodityType, number> = COMMODITY_BASE_PRICES,
+  /**
+   * Era demand calibration the caller applies to the finished demand ledger
+   * (`commodityDemandCalibration`), per commodity. The 1.5x cap below must
+   * bound the CALIBRATED demand, so it is divided by this multiplier here.
+   *
+   * Without it the two corrections stack: the cap pins raw demand at 1.5x
+   * supply and the calibration then multiplies that pinned figure, so a
+   * commodity calibrated below 2/3 (1953 energy and oil 0.55, iron 0.45) reads
+   * a permanent glut of 1/(1.5 x m) no matter how short it really is, and its
+   * producers can never sell out. Absent means 1 for every commodity.
+   */
+  demandCalibration?: (commodity: CommodityType) => number
 ): {
   global: Map<CommodityType, { supply: number; demand: number }>;
   byState: Map<string, Map<CommodityType, { supply: number; demand: number }>>;
@@ -2153,7 +2186,7 @@ export function computeRawSupplyDemand(
   };
   const outputDemandDeltasByState = new Map<string, Map<CommodityType, number>>();
   const recordOutputDemandDelta = (
-    sector: { countryId?: string; stateId: string },
+    sector: { countryId?: string; stateId: string; mediaDiscriminator?: string | null },
     sectorType: CorporationType,
     commodity: CommodityType,
     outputUnits: number
@@ -2178,7 +2211,11 @@ export function computeRawSupplyDemand(
   }
 
   for (const sector of sectors) {
-    const st = sector.sectorType as CorporationType;
+    const st = getOperatingSectorType(
+      sector.sectorType,
+      sector.industryModel,
+      sector.mediaDiscriminator
+    ) as CorporationType;
 
     // Ensure state map exists (no base stabilizer — state level is fully dynamic)
     if (!byState.has(sector.stateId)) {
@@ -2201,12 +2238,14 @@ export function computeRawSupplyDemand(
     const hasStrategy = sector.strategyId && sector.strategyId !== "standard";
     const strategyRates =
       hasStrategy || sector.transitionFromStrategyId
-        ? getEffectiveStrategyRates(
+        ? getEffectiveStrategyRatesForOperatingModel(
             st,
             sector.strategyId ?? "standard",
             sector.transitionFromStrategyId,
             sector.transitionStartTurn,
-            currentTurn ?? 0
+            currentTurn ?? 0,
+            sector.industryModel,
+            sector.mediaDiscriminator
           )
         : null;
 
@@ -2217,9 +2256,16 @@ export function computeRawSupplyDemand(
     const rawSupplyMix: Partial<Record<CommodityType, number>> = strategyRates
       ? strategyRates.supply
       : Object.fromEntries((SECTOR_SUPPLY[st] ?? []).map((f) => [f.commodity, f.rate]));
-    const supplyEntries = Object.entries(
+    const strategySupplyEntries = Object.entries(
       applyPlannedEconomyOutputMix(st, rawSupplyMix, sector.plannedEconomy === true)
     ) as [CommodityType, number][];
+    const supplyEntries = [...strategySupplyEntries];
+    if (plantsEnabled && sector.outputUnitsByCommodity) {
+      const existing = new Set(supplyEntries.map(([commodity]) => commodity));
+      for (const commodity of Object.keys(sector.outputUnitsByCommodity) as CommodityType[]) {
+        if (!existing.has(commodity)) supplyEntries.push([commodity, 0]);
+      }
+    }
 
     // ── Plants: real production replaces the revenue nameplate ────────────────
     // The nameplate derivation (revenue × rate / basePrice) is a PROXY for
@@ -2271,10 +2317,28 @@ export function computeRawSupplyDemand(
         : 1;
     const plantsSupplyRates: Partial<Record<CommodityType, number>> | null =
       plantsSupplyUnits != null ? Object.fromEntries(supplyEntries) : null;
+    const hasExactOutputMap = plantsEnabled && sector.outputUnitsByCommodity != null;
+    const exactOutputScale =
+      plantsSupplyScaledUnits({
+        producedUnits: 1,
+        isNatcorp: sector.isNatcorp === true,
+        embargoSupplyFactor: sector.embargoSupplyFactor,
+      }) ?? 1;
 
     for (const [commodity, rate] of supplyEntries) {
       // D12: a mothballed plant is cold — it supplies nothing to the world.
       if (plantsMothballed) continue;
+      if (hasExactOutputMap) {
+        const rawUnits = sector.outputUnitsByCommodity?.[commodity] ?? 0;
+        const units = Math.max(0, rawUnits) * exactOutputScale * militaryRetained;
+        if (units > 0) {
+          global.get(commodity)!.supply += units;
+          stateMap.get(commodity)!.supply += units;
+          recordCorporationSupply(sector.corporationId, commodity, units);
+          recordOutputDemandDelta(sector, st, commodity, units);
+        }
+        continue;
+      }
       if (plantsSupplyUnits != null && plantsSupplyRates) {
         // Canonical plants basis (issue #2054): the same chain the clearing
         // offer builds through, so the book and the ledger cannot sit in
@@ -2554,13 +2618,18 @@ export function computeRawSupplyDemand(
   // commodity below the pressure it already had before this change.
   if (demandUnscaled) {
     for (const [commodity, bal] of global) {
-      const cap = bal.supply * PLANTS_LEDGER_DEMAND_SUPPLY_CAP;
+      // The cap bounds demand AFTER the caller's era calibration, so a capped
+      // commodity reads exactly 1.5x supply once calibrated, like every
+      // uncalibrated one. Truncation is recorded in the same calibrated units
+      // as the demand it is read beside.
+      const calibration = calibrationMultiplier(demandCalibration, commodity);
+      const cap = (bal.supply * PLANTS_LEDGER_DEMAND_SUPPLY_CAP) / calibration;
       if (bal.demand <= cap) continue;
       const unscaled = getCommodityStabilizer(commodity) + (demandUnscaled.get(commodity) ?? 0);
       const target = Math.max(unscaled, cap);
       if (target >= bal.demand) continue;
       const factor = target / bal.demand;
-      demandTruncated.set(commodity, bal.demand - target);
+      demandTruncated.set(commodity, (bal.demand - target) * calibration);
       bal.demand = target;
       for (const stateMap of byState.values()) {
         const s = stateMap.get(commodity);

@@ -147,7 +147,7 @@ export function CandidateFile({
                 className="object-cover"
               />
             ) : (
-              <span className="flex h-full w-full items-center justify-center font-serif text-heading text-muted/70">
+              <span className="flex h-full w-full items-center justify-center text-heading text-muted/70">
                 {name.trim().charAt(0).toUpperCase() || "?"}
               </span>
             )}
@@ -162,7 +162,7 @@ export function CandidateFile({
         )}
 
         <p
-          className={`font-serif text-heading leading-tight ${
+          className={`text-heading leading-tight ${
             name ? "text-foreground" : "text-muted/60 italic"
           }`}
         >

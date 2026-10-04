@@ -30,7 +30,7 @@ export async function generateMetadata({
   if (!corp) return {};
 
   const title = `${corp.name} | A House Divided`;
-  const description = `${corp.name} — ${corp.type} corporation in ${corp.countryId}. Financials, sectors, shares, and bonds.`;
+  const description = `${corp.name}: ${corp.type} corporation in ${corp.countryId}. Financials, sectors, shares, and bonds.`;
   const url = `${getSiteUrl()}/corporation/${id}`;
   const image = corp.logoUrl || CDN_LOGO_URL;
 

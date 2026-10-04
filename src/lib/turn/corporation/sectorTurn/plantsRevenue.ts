@@ -29,6 +29,7 @@ import type { CommodityType } from "@/lib/constants/commodities";
 import type { ExtractableResource } from "@/lib/constants/commodities";
 import type { CorporationLookups } from "../types";
 import { computeContractProduction } from "../contractProduction";
+import { throttleSoldUnits } from "../demandThrottle";
 
 export interface PlantsRevenueInput {
   sector: Pick<
@@ -38,6 +39,7 @@ export interface PlantsRevenueInput {
     | "countryId"
     | "stateId"
     | "soldUnits"
+    | "soldByCommodity"
     | "producedUnits"
     | "capacityUtilization"
     | "militaryDivertedFraction"
@@ -50,6 +52,8 @@ export interface PlantsRevenueInput {
     "outputRateMult" | "priceRealizationBonus"
   >;
   plantsEnabled: boolean;
+  /** Explicit clearing quotes settle at their offered price without price bonuses or ramp blending. */
+  costPlusPricingEnabled?: boolean;
   mothballed: boolean;
   /** P1 nameplate units from the market-tier computation (non-plants base). */
   nameplateUnits: number;
@@ -88,6 +92,13 @@ export interface PlantsRevenueInput {
   privateBankingEnabled?: boolean;
   marketPlantsEnabled: boolean;
   contractProductionTargetBySectorId: MarketContext["contractProductionTargetBySectorId"];
+  /**
+   * Lagged price over base for one output in this sector's own market (state
+   * book for state-scoped outputs, else its reachable country book, else the
+   * world). Values each output leg when restating last turn's sales for the
+   * demand throttle. Absent reads the world ratio.
+   */
+  throttleLegPriceRatio?: (commodity: CommodityType) => number | null | undefined;
 }
 
 export interface CapacityBindingEvent {
@@ -167,6 +178,7 @@ export function resolvePlantsRevenue(input: PlantsRevenueInput): PlantsRevenueRe
     privateBankingEnabled,
     marketPlantsEnabled,
     contractProductionTargetBySectorId,
+    throttleLegPriceRatio,
   } = input;
 
   // Launch-safety governor: the clearing price/volume leg (clearingFactor)
@@ -178,14 +190,16 @@ export function resolvePlantsRevenue(input: PlantsRevenueInput): PlantsRevenueRe
   // (the deliberate capacity-decay gate for non-investment) still applies in
   // full. Off-mode this is the plain priceRealization path (clearingFactor 1).
   const clearingRevenueLeg = clearingEnabled
-    ? softenedMarketRealization(
-        computePriceRealization(strategySupply ?? {}, priceRatioByCommodity),
-        clearingFactor,
-        clearingStartTurn,
-        currentTurn,
-        governorCap,
-        governorRampTurns
-      )
+    ? input.costPlusPricingEnabled
+      ? clearingFactor
+      : softenedMarketRealization(
+          computePriceRealization(strategySupply ?? {}, priceRatioByCommodity),
+          clearingFactor,
+          clearingStartTurn,
+          currentTurn,
+          governorCap,
+          governorRampTurns
+        )
     : priceRealization;
   // Trade-exposure embargo: fraction of this sector's output that clears abroad,
   // from the prior turn's trade snapshot (same one-turn-lagged intensity the
@@ -339,8 +353,21 @@ export function resolvePlantsRevenue(input: PlantsRevenueInput): PlantsRevenueRe
       throughputFactor *
       plantsTechOutputMultiplier *
       labourOutputFactor,
-    priorSoldUnits:
-      sector.soldUnits == null ? sector.soldUnits : sector.soldUnits * priorProductionUnitRatio,
+    // Sales restated by what buyers paid for each output leg, so a mixed plant
+    // that sells out its valuable product is not cut for its glutted co-product
+    // (ticket 1370). Single-output sectors read `soldUnits` unchanged.
+    priorSoldUnits: (() => {
+      const sold = throttleSoldUnits({
+        producedUnits: sector.producedUnits,
+        soldUnits: sector.soldUnits,
+        soldByCommodity: sector.soldByCommodity,
+        supplyRates: strategySupply,
+        priceRatioFor: (commodity) =>
+          throttleLegPriceRatio?.(commodity as CommodityType) ??
+          priceRatioByCommodity.get(commodity as CommodityType),
+      });
+      return sold == null ? sold : sold * priorProductionUnitRatio;
+    })(),
     priorProducedUnits:
       sector.producedUnits == null
         ? sector.producedUnits
@@ -361,7 +388,9 @@ export function resolvePlantsRevenue(input: PlantsRevenueInput): PlantsRevenueRe
   // nameplate, the world supply ledger and idle upkeep) and NOT on the
   // clearing/priceRealization factor (which feeds the launch governor and
   // would clamp the bonus during the ramp).
-  const plantsTechPriceLeg = 1 + techEffects.priceRealizationBonus;
+  const plantsTechPriceLeg = input.costPlusPricingEnabled
+    ? 1
+    : 1 + techEffects.priceRealizationBonus;
   const plantsDerivedHourlyRevenue = plantsEnabled
     ? ((producedUnits * plantsMixPrice) / TURNS_PER_DAY) *
       clearingRevenueLeg *
@@ -394,14 +423,16 @@ export function resolvePlantsRevenue(input: PlantsRevenueInput): PlantsRevenueRe
   const marketHourlyRevenue = mothballed
     ? 0
     : plantsEnabled
-      ? softenedMarketRealizationAmount(
-          baselineHourlyRevenue * activeFraction,
-          plantsDerivedHourlyRevenue,
-          plantsStartTurn,
-          currentTurn,
-          governorCap,
-          governorRampTurns
-        )
+      ? input.costPlusPricingEnabled
+        ? plantsDerivedHourlyRevenue
+        : softenedMarketRealizationAmount(
+            baselineHourlyRevenue * activeFraction,
+            plantsDerivedHourlyRevenue,
+            plantsStartTurn,
+            currentTurn,
+            governorCap,
+            governorRampTurns
+          )
       : baselineHourlyRevenue;
   // Final realization leg: output shipped to a government arsenal under a defence contract
   // was already paid for per lot, and does not also get sold on the market. Without this the

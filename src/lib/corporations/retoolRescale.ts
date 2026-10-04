@@ -11,7 +11,7 @@
  * One helper, every path.
  */
 
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { CorporationType, MediaDiscriminator } from "@/lib/constants/corporations";
 import {
   capacityRescaleRatio,
   rescaleBuildQueueForStrategyChange,
@@ -19,9 +19,12 @@ import {
 import { rescaleOtherOpexAnchorForRetool } from "@/lib/corporations/physicalPnl";
 import { needsRetoolStockCatchup } from "@/lib/corporations/retooling/rules";
 import type { SectorBuildOrder } from "@/lib/db/types";
+import { seedPlantLedger } from "@/lib/corporations/plantLedger";
 
 export interface RetoolRescaleInput {
   sectorType: CorporationType;
+  industryModel?: string | null;
+  mediaDiscriminator?: MediaDiscriminator | null;
   fromStrategyId: string | null | undefined;
   toStrategyId: string | null | undefined;
   plantsEnabled: boolean;
@@ -32,6 +35,8 @@ export interface RetoolRescaleInput {
 
 export type RetoolRescaleSet = Partial<{
   capitalStock: number;
+  plantCount: number;
+  plantUnitRemainder: number;
   buildQueue: SectorBuildOrder[];
   otherOpexPerUnitAnchor: number;
   retoolRescaleApplied: boolean;
@@ -46,10 +51,25 @@ export function retoolRescaleFields(input: RetoolRescaleInput): RetoolRescaleSet
   if (!input.plantsEnabled) {
     return { retoolRescaleApplied: false };
   }
-  const ratio = capacityRescaleRatio(input.sectorType, input.fromStrategyId, input.toStrategyId);
+  const ratio = capacityRescaleRatio(
+    input.sectorType,
+    input.fromStrategyId,
+    input.toStrategyId,
+    input.industryModel,
+    input.mediaDiscriminator
+  );
   const out: RetoolRescaleSet = { retoolRescaleApplied: true };
   if (typeof input.capitalStock === "number" && Number.isFinite(input.capitalStock)) {
     out.capitalStock = input.capitalStock * ratio;
+    Object.assign(
+      out,
+      seedPlantLedger(
+        input.sectorType,
+        out.capitalStock,
+        input.industryModel,
+        input.mediaDiscriminator
+      )
+    );
   }
   if (Array.isArray(input.buildQueue) && input.buildQueue.length > 0) {
     out.buildQueue = rescaleBuildQueueForStrategyChange(input.buildQueue, ratio);
@@ -87,6 +107,8 @@ export function healAutoRetoolOpexAnchor(args: {
   transitionFromStrategyId?: string | null;
   strategyId?: string | null;
   sectorType: CorporationType;
+  industryModel?: string | null;
+  mediaDiscriminator?: MediaDiscriminator | null;
   retoolRescaleApplied?: boolean;
   otherOpexPerUnitAnchor?: number;
 }): { otherOpexPerUnitAnchor?: number; retoolRescaleApplied: true } | null {
@@ -96,7 +118,8 @@ export function healAutoRetoolOpexAnchor(args: {
   const ratio = capacityRescaleRatio(
     args.sectorType,
     args.transitionFromStrategyId,
-    args.strategyId
+    args.strategyId,
+    args.industryModel
   );
   const opex = rescaleOtherOpexAnchorForRetool(args.otherOpexPerUnitAnchor, ratio);
   if (opex == null) return { retoolRescaleApplied: true };
@@ -108,6 +131,8 @@ export interface RetoolStockBasisHealInput {
   plantsEnabled: boolean;
   isAutoRetool: boolean;
   sectorType: CorporationType;
+  industryModel?: string | null;
+  mediaDiscriminator?: MediaDiscriminator | null;
   strategyId?: string | null;
   transitionFromStrategyId?: string | null;
   transitionStartTurn?: number | null;
@@ -170,6 +195,8 @@ export function healRetoolStockBasis(
       transitionFromStrategyId: input.transitionFromStrategyId,
       strategyId: input.strategyId,
       sectorType: input.sectorType,
+      industryModel: input.industryModel,
+      mediaDiscriminator: input.mediaDiscriminator,
       retoolRescaleApplied: input.retoolRescaleApplied,
       otherOpexPerUnitAnchor: input.otherOpexPerUnitAnchor,
     });
@@ -178,7 +205,9 @@ export function healRetoolStockBasis(
   const ratio = capacityRescaleRatio(
     input.sectorType,
     input.transitionFromStrategyId,
-    input.strategyId
+    input.strategyId,
+    input.industryModel,
+    input.mediaDiscriminator
   );
   const out: RetoolStockBasisHeal = { retoolRescaleApplied: true };
   if (typeof input.capitalStock === "number" && Number.isFinite(input.capitalStock)) {

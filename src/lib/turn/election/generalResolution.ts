@@ -1,3 +1,11 @@
+/**
+ * Ordinary completed elections assign winners and advance their next cycle.
+ * resolveOneGeneralElection leaves bound Assembly ballots to cohort certification,
+ * which prevents a district from replacing Congress before chamber handover.
+ */
+import { isHu1991AssemblyCampaign } from "@/lib/countries/hu/rules/assemblyCampaign1991";
+import { isBgFoundingCampaign } from "@/lib/countries/bg/rules/foundingCampaign1990";
+import { isNativeRussianAssemblyElection } from "@/lib/countries/ru/rules/assemblyElection";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import type {
@@ -32,6 +40,7 @@ import {
 } from "@/lib/constants/countries";
 import { isExecutiveOffice } from "@/lib/elections/executiveOffice";
 import { spawnHouseElection, spawnCommonsElection } from "@/lib/turn/election/electionSpawning";
+import { countPrStv, validateRankedBallots } from "./rules/prStv";
 import { allocateSeats } from "@/lib/turn/election/seatAllocation";
 import { loadApportionment } from "@/lib/elections/apportionment";
 import { getUkCommonsSeats } from "@/lib/constants/states";
@@ -46,6 +55,8 @@ import { notifyGovernorOfSenateVacancy } from "@/lib/governors/senateVacancy";
 import { maybeApplyIndependenceDesireHook } from "@/lib/turn/election/independenceDesireHook";
 import { getExecutiveOfficeKeys } from "@/lib/elections/executiveOffice";
 import { getElectionMethod } from "@/lib/elections/electionMethod";
+import { bgDhondtSeats } from "@/lib/countries/bg/rules/ordinaryElection";
+import { allocateHuModernPeople } from "@/lib/countries/hu/rules/modernMandates2011";
 import type { ElectionNewsOutcome } from "./electionNotifications";
 import { voidDebateSessionsForElection } from "@/lib/debate/debateSessionLifecycle";
 import {
@@ -62,6 +73,10 @@ import {
 } from "./generalResolutionHelpers";
 import { logger } from "../../observability/logger";
 import { finishFinalizedElectionCleanup } from "./finalizedElectionCleanup";
+import { applyConversionVotePenalty, applyLegacySeatFloor } from "./conversionTerms";
+import { loadSurvivingPartyResolver } from "@/lib/parties/survivingParty";
+import { captureElectionWon } from "@/lib/analytics/electionAnalytics";
+import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
 
 export type { OneElectionResult } from "./generalResolutionHelpers";
 
@@ -97,8 +112,17 @@ export async function resolveOneGeneralElection(
   election: Election,
   tally: ElectionVoteTally | null | undefined,
   currentTurn: number,
-  now: Date
+  now: Date,
+  bgEligibleParties: ReadonlySet<string> | null = null,
+  huMixedCandidateSeats?: Readonly<Record<string, number>>,
+  bgOrdinaryCandidateSeats?: Readonly<Record<string, number>>
 ): Promise<OneElectionResult> {
+  if (
+    isNativeRussianAssemblyElection(election) ||
+    isHu1991AssemblyCampaign(election) ||
+    isBgFoundingCampaign(election)
+  )
+    return { resolved: false, newsOutcomes: [] };
   const newsOutcomes: ElectionNewsOutcome[] = [];
 
   // Atomic claim: prevent concurrent resolution from corrupting office data.
@@ -117,14 +141,70 @@ export async function resolveOneGeneralElection(
   }
 
   try {
+    if (
+      tally?.countingMethod === "pr_stv" &&
+      (election.countryId !== "IE" || !["dail", "localCouncil"].includes(election.electionType))
+    )
+      throw new Error("Ranked PR-STV is supported only for Irish Dail and local council races");
+    if (election.countryId === "BR" && election.electionType === "president") {
+      const { resolveBrazilPresidentialElection } =
+        await import("@/lib/countries/br/resolvePresidentialElection");
+      const resolved = await resolveBrazilPresidentialElection(
+        db,
+        election,
+        tally ?? null,
+        now,
+        currentTurn
+      );
+      if (resolved) {
+        await db
+          .collection<Election>("elections")
+          .updateOne({ _id: election._id }, { $set: { status: "resolved", updatedAt: now } });
+        await voidDebateSessionsForElection(db, election._id, now);
+      }
+      return { resolved, newsOutcomes: [] };
+    }
+    if (tally?.countingMethod === "pr_stv" && election.conversionTerms)
+      throw new Error(
+        "Ranked PR-STV does not support conversion vote penalties or reserved seat floors"
+      );
+    // BG changes from the 1991 transitional assembly to modern party-list PR.
+    // The base config is the 1979 single-party FPTP chamber, so read the live
+    // preset before method dispatch instead of silently using that default.
+    const bgPreset =
+      election.countryId === "BG"
+        ? (await (await getGameStateCollection(db)).findOne({ _id: "current" }))?.preset
+        : undefined;
+    if (election.countryId === "BG" && !bgPreset) {
+      throw new Error("Bulgaria election resolution requires the active preset");
+    }
+    const electionMethod = getElectionMethod(election.countryId, election.electionType, bgPreset);
+    if (
+      election.countryId === "BG" &&
+      election.electionType === "nationalAssembly" &&
+      bgPreset === "2027-default" &&
+      electionMethod !== "pr_hareQuota"
+    ) {
+      throw new Error("Bulgaria 2027 Assembly requires parliamentary proportional representation");
+    }
+    if (
+      election.countryId === "BG" &&
+      election.electionType === "nationalAssembly" &&
+      election.cycle >= 1 &&
+      bgPreset === "1991-default" &&
+      !tally?.finalized &&
+      !bgOrdinaryCandidateSeats
+    ) {
+      throw new Error("Bulgarian ordinary Assembly requires its frozen national allocation");
+    }
     // Phase 4: Sainte-Laguë chambers (DE Landtag) use proportional allocation
     // (5% Land-level threshold) instead of FPTP. Dispatch on the configured
     // method — `pr_sainteLague` is unique to the DE Landtag — before any other
     // logic runs.
-    if (getElectionMethod(election.countryId, election.electionType) === "pr_sainteLague") {
+    if (electionMethod === "pr_sainteLague") {
       const { resolveDELandtagElection } = await import("./germanyLandtag");
       if (!tally?.finalized) {
-        await resolveDELandtagElection(db, election, now);
+        await resolveDELandtagElection(db, election, now, currentTurn);
       }
       await db
         .collection<Election>("elections")
@@ -143,6 +223,23 @@ export async function resolveOneGeneralElection(
         );
       }
       return { resolved: true, newsOutcomes };
+    }
+
+    if (
+      election.countryId === "RU" &&
+      election.electionType === "president" &&
+      election.russianPresidentialRound
+    ) {
+      const { resolveRussianPresidentialElection } =
+        await import("@/lib/countries/ru/resolvePresidentialElection");
+      await resolveRussianPresidentialElection({
+        db,
+        electionId: election._id,
+        turn: currentTurn,
+        now,
+      });
+      await voidDebateSessionsForElection(db, election._id, now);
+      return { resolved: true, newsOutcomes: [] };
     }
 
     if (tally?.finalized && election.electionType !== "president") {
@@ -174,7 +271,7 @@ export async function resolveOneGeneralElection(
     if (!tally) {
       // No votes were recorded — clear stale officials / vacate single-seat
       // incumbents and open the next race. See resolveElectionWithNoTally.
-      return await resolveElectionWithNoTally(db, election, now);
+      return await resolveElectionWithNoTally(db, election, now, currentTurn);
     }
 
     // ── President: per-country resolution (US electoral college; NG/bespoke
@@ -188,8 +285,8 @@ export async function resolveOneGeneralElection(
         election.countryId != null &&
         COUNTRIES_WITH_BESPOKE_PRESIDENTIAL_ELECTIONS.has(election.countryId);
       const presidentResolved = bespoke
-        ? await resolveNGPresidentElection(db, election, tally, now)
-        : await resolvePresidentElection(db, election, tally, now);
+        ? await resolveNGPresidentElection(db, election, tally, now, currentTurn)
+        : await resolvePresidentElection(db, election, tally, now, currentTurn);
       if (presidentResolved) {
         await db
           .collection<Election>("elections")
@@ -205,6 +302,12 @@ export async function resolveOneGeneralElection(
     // Fallback: if totalVotes is empty but snapshots have data, recover from
     // the last snapshot's cumulativeVotes. This guards against any process
     // that clears totalVotes between the final accumulation and resolution.
+    const isPrStv = tally.countingMethod === "pr_stv";
+    if (isPrStv) {
+      if (election.countryId !== "IE" || !["dail", "localCouncil"].includes(election.electionType))
+        throw new Error("Ranked PR-STV is supported only for Irish Dail and local council races");
+      validateRankedBallots(tally.rankedBallots, tally.totalVotes);
+    }
     let effectiveVotes = tally.totalVotes;
     if (Object.keys(effectiveVotes).length === 0 && tally.turnSnapshots?.length > 0) {
       const lastSnapshot = tally.turnSnapshots[tally.turnSnapshots.length - 1];
@@ -220,11 +323,20 @@ export async function resolveOneGeneralElection(
     let totalVotesCast = Object.values(effectiveVotes).reduce((s, v) => s + v, 0);
 
     if (totalVotesCast === 0) {
+      if (isPrStv) throw new Error("PR-STV cannot resolve without cast ranked ballots");
       // Tally exists but zero votes were cast — finalize, withdraw candidates,
       // vacate stale seats and respawn. See resolveElectionWithZeroVotes.
-      return await resolveElectionWithZeroVotes(db, election, now);
+      return await resolveElectionWithZeroVotes(db, election, now, currentTurn);
     }
 
+    // Closed lists can seat a registered replacement with zero personal votes.
+    // Preserve that nominee in the candidate load and saved result, rather than
+    // discarding their national mandate because they had no tally key.
+    if (bgOrdinaryCandidateSeats)
+      effectiveVotes = {
+        ...Object.fromEntries(Object.keys(bgOrdinaryCandidateSeats).map((id) => [id, 0])),
+        ...effectiveVotes,
+      };
     const candidateIds = Object.keys(effectiveVotes);
     const candidates = await db
       .collection<ElectionCandidate>("electionCandidates")
@@ -233,6 +345,11 @@ export async function resolveOneGeneralElection(
         status: "active",
       })
       .toArray();
+
+    // A candidacy filed under a party that has since merged away counts for,
+    // and seats into, the party that absorbed it (ticket 1376).
+    const survivingParty = await loadSurvivingPartyResolver(db, election.countryId ?? "US");
+    for (const c of candidates) c.party = survivingParty(c.party) ?? c.party;
 
     const candidateMap = new Map(candidates.map((c) => [c._id.toString(), c]));
 
@@ -330,7 +447,7 @@ export async function resolveOneGeneralElection(
       console.warn(
         `[Turn] Election ${election._id} (${election.electionType}/${election.state}): ` +
           `${missingIds.length} candidate ID(s) in tally not found in electionCandidates — ` +
-          `votes discarded: ${missingIds.join(", ")}`
+          `${isPrStv ? "preferences transfer past unavailable candidates" : "votes discarded"}: ${missingIds.join(", ")}`
       );
     }
 
@@ -364,6 +481,18 @@ export async function resolveOneGeneralElection(
       );
     }
 
+    // First election after a forced one-party-state conversion: the former
+    // ruling party's votes take the conversion's penalty before ranking.
+    const penalizedVotes = applyConversionVotePenalty(
+      effectiveVotes,
+      (id) => candidateMap.get(id)?.party,
+      election.conversionTerms
+    );
+    if (penalizedVotes) {
+      effectiveVotes = penalizedVotes;
+      totalVotesCast = Object.values(effectiveVotes).reduce((s, v) => s + v, 0);
+    }
+
     // ── Defense-in-depth: never seat a hard-deleted character ────────────────
     // Account deletion (and admin force-delete) hard-removes the character doc
     // but can leave a dangling active candidacy behind. If such a candidacy
@@ -379,7 +508,18 @@ export async function resolveOneGeneralElection(
     if (candidateCharIds.length > 0) {
       const existingChars = await db
         .collection<Character>("characters")
-        .find({ _id: { $in: candidateCharIds } }, { projection: { _id: 1 } })
+        .find(
+          {
+            _id: { $in: candidateCharIds },
+            ...(bgOrdinaryCandidateSeats
+              ? {
+                  countryId: "BG",
+                  federationPendingResidenceId: { $exists: false },
+                }
+              : {}),
+          },
+          { projection: { _id: 1 } }
+        )
         .toArray();
       const existingCharIds = new Set(existingChars.map((c) => c._id.toString()));
       for (const c of candidates) {
@@ -404,7 +544,12 @@ export async function resolveOneGeneralElection(
       // `party` lets allocateSeats compute its minimum-share eligibility on the
       // PARTY aggregate share (same-party candidates pooled) instead of the
       // per-candidate share — see RankedCandidate.party.
-      .map((id) => ({ id, votes: effectiveVotes[id] ?? 0, party: candidateMap.get(id)?.party }))
+      .map((id) => ({
+        id,
+        votes: effectiveVotes[id] ?? 0,
+        party: candidateMap.get(id)?.party,
+        isNPP: candidateMap.get(id)?.isNPP,
+      }))
       .filter(({ id }) => candidateMap.has(id) && !ineligibleCandidateIds.has(id))
       .sort((a, b) => b.votes - a.votes);
 
@@ -418,9 +563,10 @@ export async function resolveOneGeneralElection(
     }
 
     if (ranked.length === 0) {
+      if (isPrStv) throw new Error("PR-STV cannot resolve without eligible candidates");
       // Every ranked candidate was dropped (missing docs / deleted characters)
       // — same cleanup as zero votes. See resolveElectionWithNoRankedCandidates.
-      return await resolveElectionWithNoRankedCandidates(db, election, now);
+      return await resolveElectionWithNoRankedCandidates(db, election, now, currentTurn);
     }
 
     const totalSeats = election.totalSeats ?? 1;
@@ -431,6 +577,7 @@ export async function resolveOneGeneralElection(
     // it allocateSeats always used the modern UK_COMMONS_SEATS (ticket #1058).
     let houseSeats: Record<string, number> | undefined;
     let commonsSeats: Record<string, number> | undefined;
+    let allocationMethod = election.allocationMethod;
     let gsForHouse: {
       preset?: string;
       redistrictingEnabled?: boolean;
@@ -445,6 +592,17 @@ export async function resolveOneGeneralElection(
       // election's own `totalSeats` for Alaska and Hawaii (#1190).
       houseSeats = (await loadApportionment(db, gsForHouse?.preset, gsForHouse?.currentYear))
         .houseSeats;
+    }
+
+    // Older Japan races predate the per-race snapshot. Resolve them against
+    // their world's era rules; newly spawned races keep their frozen method.
+    if (
+      !allocationMethod &&
+      election.countryId === "JP" &&
+      (election.electionType === "shugiin" || election.electionType === "snap_shugiin")
+    ) {
+      const gameState = await (await getGameStateCollection(db)).findOne({ _id: "current" });
+      allocationMethod = getElectionMethod("JP", election.electionType, gameState?.preset);
     }
 
     if (
@@ -508,22 +666,156 @@ export async function resolveOneGeneralElection(
           (await getCountryState(db, election.countryId)).governmentType
         )
       : null;
-    const { isMultiSeat, seatsEstimate, winners, losers } =
-      districted ??
-      allocateSeats(
-        election.electionType,
-        election.state,
-        totalSeats,
-        ranked,
-        totalVotesCast,
-        houseSeats,
-        // National Front chambers: the quota decides the party split, not the
-        // vote. Undefined for every non-bloc-list country, so their allocation
-        // is byte-identical.
-        runtimeBlocQuota?.shares,
-        commonsSeats,
-        election.countryId ?? "US"
-      );
+    const prStvResult = isPrStv
+      ? countPrStv(
+          ranked.map((c) => c.id),
+          totalSeats,
+          tally.rankedBallots!
+        )
+      : undefined;
+    if (prStvResult) {
+      const holders = ranked.map(({ id }) => {
+        const c = candidateMap.get(id)!;
+        return `${c.isNPP ? "npp" : "player"}:${c.isNPP ? c.nppId : c.characterId}`;
+      });
+      if (new Set(holders).size !== holders.length)
+        throw new Error("PR-STV requires distinct candidate holder identities");
+    }
+    const bgOrdinaryAllocation = bgOrdinaryCandidateSeats
+      ? (() => {
+          const seatsEstimate: Record<string, number> = { ...bgOrdinaryCandidateSeats };
+          const eligibleIds = new Set(ranked.map((row) => row.id));
+          for (const [id, seats] of Object.entries(seatsEstimate)) {
+            const candidate = candidateMap.get(id);
+            if (
+              !Number.isSafeInteger(seats) ||
+              seats < 0 ||
+              (seats > 0 && (!eligibleIds.has(id) || !candidate || (!candidate.isNPP && seats > 1)))
+            )
+              throw new Error("Bulgarian frozen allocation has an unavailable or invalid holder");
+          }
+          if (Object.values(seatsEstimate).reduce((sum, seats) => sum + seats, 0) !== totalSeats)
+            throw new Error("Bulgarian frozen allocation does not fill the regional capacity");
+          return {
+            isMultiSeat: true,
+            authoritativeSeats: totalSeats,
+            seatsEstimate,
+            winners: Object.entries(seatsEstimate).filter(([, seats]) => seats > 0) as [
+              string,
+              number,
+            ][],
+            losers: Object.entries(seatsEstimate)
+              .filter(([, seats]) => seats === 0)
+              .map(([id]) => id),
+          };
+        })()
+      : null;
+    const bgAllocation =
+      bgEligibleParties &&
+      election.countryId === "BG" &&
+      election.electionType === "nationalAssembly" &&
+      election.cycle === 1
+        ? (() => {
+            const seatsEstimate = bgDhondtSeats(
+              ranked.map((candidate) => {
+                const row = candidateMap.get(candidate.id);
+                if (!row?.party) throw new Error("Bulgaria list candidate has no party");
+                return {
+                  id: candidate.id,
+                  party: row.party,
+                  votes: candidate.votes,
+                  listOrder: row.enteredAt?.getTime() ?? 0,
+                };
+              }),
+              totalSeats,
+              bgEligibleParties
+            );
+            return {
+              isMultiSeat: true,
+              authoritativeSeats: totalSeats,
+              seatsEstimate,
+              winners: Object.entries(seatsEstimate).filter(([, seats]) => seats > 0) as [
+                string,
+                number,
+              ][],
+              losers: Object.entries(seatsEstimate)
+                .filter(([, seats]) => seats === 0)
+                .map(([id]) => id),
+            };
+          })()
+        : null;
+    const huAllocation = huMixedCandidateSeats
+      ? (() => {
+          const seatsEstimate: Record<string, number> = Object.fromEntries(
+            ranked.map((candidate) => [candidate.id, 0])
+          );
+          const wantedByParty: Record<string, number> = {};
+          for (const [candidateId, seats] of Object.entries(huMixedCandidateSeats)) {
+            const rawParty =
+              candidateMap.get(candidateId)?.party ?? tally.candidateParties[candidateId];
+            if (!rawParty) throw new Error("Hungary mixed mandate has no party");
+            const party = rawParty === "independent" ? `independent@${candidateId}` : rawParty;
+            wantedByParty[party] = (wantedByParty[party] ?? 0) + seats;
+          }
+          const assigned = allocateHuModernPeople({
+            quotas: wantedByParty,
+            people: ranked.map((candidate) => ({
+              id: candidate.id,
+              partyId:
+                candidate.party === "independent"
+                  ? `independent@${candidate.id}`
+                  : (candidate.party ?? ""),
+              votes: candidate.votes,
+              isNpc: candidateMap.get(candidate.id)?.isNPP === true,
+            })),
+          });
+          if (!assigned) throw new Error("Hungary modern mandate has insufficient viable people");
+          Object.assign(seatsEstimate, assigned);
+          return {
+            isMultiSeat: true,
+            authoritativeSeats: totalSeats,
+            seatsEstimate,
+            winners: Object.entries(seatsEstimate).filter(([, seats]) => seats > 0) as [
+              string,
+              number,
+            ][],
+            losers: Object.entries(seatsEstimate)
+              .filter(([, seats]) => seats === 0)
+              .map(([id]) => id),
+          };
+        })()
+      : null;
+    // The opt-in ranked count seats individual people, not aggregate seat blocks.
+    const { isMultiSeat, seatsEstimate, winners, losers } = prStvResult
+      ? {
+          isMultiSeat: true,
+          seatsEstimate: prStvResult.seats,
+          winners: prStvResult.elected.map((id): [string, number] => [id, 1]),
+          losers: ranked.filter((c) => !prStvResult.seats[c.id]).map((c) => c.id),
+        }
+      : (bgOrdinaryAllocation ??
+        bgAllocation ??
+        huAllocation ??
+        applyLegacySeatFloor(
+          districted ??
+            allocateSeats(
+              election.electionType,
+              election.state,
+              totalSeats,
+              ranked,
+              totalVotesCast,
+              houseSeats,
+              // National Front chambers: the quota decides the party split, not the
+              // vote. Undefined for every non-bloc-list country, so their allocation
+              // is byte-identical.
+              runtimeBlocQuota?.shares,
+              commonsSeats,
+              election.countryId ?? "US",
+              allocationMethod
+            ),
+          ranked,
+          election.conversionTerms
+        ));
 
     if (isMultiSeat) {
       if (isSpecialCommonsElection(election.electionType)) {
@@ -590,6 +882,14 @@ export async function resolveOneGeneralElection(
       }
     }
 
+    const officeAnalytics: Array<{
+      officeType: string;
+      transitionType: "gained" | "left" | "lost";
+      partyId: string;
+      careerStage: number;
+      nationId: string;
+    }> = [];
+
     // For generic single-seat elections, clear the incumbent's currentOffice if
     // they are not the winner. This includes incumbents who do not run again.
     const singleSeatTypes = ["governor", "senate", "uachtaran"];
@@ -635,6 +935,13 @@ export async function resolveOneGeneralElection(
                 { _id: incumbent.characterId, ...officeFilter },
                 { $set: { currentOffice: null, updatedAt: now } }
               );
+            officeAnalytics.push({
+              officeType: incumbent.officeType,
+              transitionType: "lost",
+              partyId: incumbent.party ?? "unknown",
+              careerStage: 0,
+              nationId: election.countryId ?? "US",
+            });
             console.log(
               `[Turn] Cleared currentOffice for character ${incumbent.characterName} ` +
                 `(${election.electionType}/${election.state}${election.senateClass ? ` Class ${election.senateClass}` : ""}) — did not win re-election`
@@ -690,8 +997,22 @@ export async function resolveOneGeneralElection(
     const nppLookup = new Map(prefetchedNpps.map((n) => [n._id.toString(), n]));
     const winnerNotifInputs: NotificationInput[] = [];
     const loserNotifInputs: NotificationInput[] = [];
+    const winnerAnalytics: Array<{
+      accountId?: string;
+      electionId: string;
+      electionType: string;
+      partyId: string;
+      seatCount: number;
+      voteSharePct: number;
+      marginPct: number;
+      incumbent: boolean;
+      nationId: string;
+      turn: number;
+      winnerOrdinal: number;
+    }> = [];
+    const rankedVotes = Object.entries(effectiveVotes).sort((a, b) => b[1] - a[1]);
 
-    for (const [candidateId, seats] of winners) {
+    for (const [winnerOrdinal, [candidateId, seats]] of winners.entries()) {
       const candidate = candidateMap.get(candidateId);
       if (!candidate) continue;
 
@@ -747,6 +1068,9 @@ export async function resolveOneGeneralElection(
           officeType = { type: "peoplesCongress", state: election.state, seatsHeld: seats };
           break;
         default:
+          // Persist the same country-specific office key used by the official
+          // row. A chamber key such as BG nationalAssembly is not itself the
+          // holder's assemblyDeputy office type.
           officeType = {
             type: officeKeyForElectionType(election.electionType, election.countryId),
             state: election.state,
@@ -859,6 +1183,15 @@ export async function resolveOneGeneralElection(
             ) {
               await notifyGovernorOfSenateVacancy(db, currentState, currentSenateClass);
             }
+            if (!getExecutiveOfficeKeys().has(currentOffice.type)) {
+              officeAnalytics.push({
+                officeType: currentOffice.type,
+                transitionType: "left",
+                partyId: char.party ?? "unknown",
+                careerStage: char.careerHistory?.length ?? 0,
+                nationId: election.countryId ?? "US",
+              });
+            }
             console.log(
               `[Turn] ${candidate.characterName} vacated ${currentOffice.type}${currentSenateClass ? ` Class ${currentSenateClass}` : ""} (${currentState}) for new ${officeType.type}${election.senateClass ? ` Class ${election.senateClass}` : ""} (${newState})`
             );
@@ -965,6 +1298,37 @@ export async function resolveOneGeneralElection(
       if (!candidate.isNPP) {
         const char = charLookup.get(candidate.characterId?.toString() ?? "");
         if (char) {
+          const winnerVotes = effectiveVotes[candidateId] ?? 0;
+          const runnerVotes = rankedVotes.find(([id]) => id !== candidateId)?.[1] ?? 0;
+          const officeKey = officeKeyForElectionType(election.electionType, election.countryId);
+          const incumbentOffice = char.currentOffice;
+          const incumbent =
+            !!incumbentOffice &&
+            incumbentOffice.type === officeKey &&
+            (!("state" in incumbentOffice) || incumbentOffice.state === election.state);
+          winnerAnalytics.push({
+            accountId: char.userId?.toString(),
+            electionId: election._id.toString(),
+            electionType: election.electionType,
+            partyId: candidate.party,
+            seatCount: seats,
+            voteSharePct: totalVotesCast > 0 ? (winnerVotes / totalVotesCast) * 100 : 0,
+            marginPct:
+              totalVotesCast > 0 ? ((winnerVotes - runnerVotes) / totalVotesCast) * 100 : 0,
+            incumbent,
+            nationId: election.countryId ?? "US",
+            turn: currentTurn,
+            winnerOrdinal,
+          });
+          if (!incumbent) {
+            officeAnalytics.push({
+              officeType: officeKey,
+              transitionType: "gained",
+              partyId: candidate.party,
+              careerStage: (char.careerHistory?.length ?? 0) + 1,
+              nationId: election.countryId ?? "US",
+            });
+          }
           const seatsLabel = isMultiSeat ? ` (${seats} seat${seats > 1 ? "s" : ""})` : "";
           const typeLabel =
             ELECTION_TYPE_SHORT_LABEL[election.electionType] ?? election.electionType;
@@ -1061,6 +1425,20 @@ export async function resolveOneGeneralElection(
         );
         const char = charLookup.get(candidate.characterId?.toString() ?? "");
         if (char) {
+          const heldOffice = char.currentOffice;
+          if (
+            heldOffice?.type ===
+              officeKeyForElectionType(election.electionType, election.countryId) &&
+            (!("state" in heldOffice) || heldOffice.state === election.state)
+          ) {
+            officeAnalytics.push({
+              officeType: heldOffice.type,
+              transitionType: "lost",
+              partyId: candidate.party,
+              careerStage: char.careerHistory?.length ?? 0,
+              nationId: election.countryId ?? "US",
+            });
+          }
           const typeLabel =
             ELECTION_TYPE_SHORT_LABEL[election.electionType] ?? election.electionType;
           loserNotifInputs.push({
@@ -1098,17 +1476,22 @@ export async function resolveOneGeneralElection(
             };
           }),
           resolvedTotalSeats: winners.reduce((sum, [, seats]) => sum + seats, 0),
-          resolutionPath: districted
-            ? "districted_house"
-            : runtimeBlocQuota
-              ? "bloc_list"
-              : election.countryId === "DE" &&
-                  (election.electionType === "bundestag" ||
-                    election.electionType === "snap_bundestag")
-                ? "ams_direct"
-                : isMultiSeat
-                  ? "hare_quota"
-                  : "single_winner",
+          ...(prStvResult ? { prStvResult } : {}),
+          resolutionPath: prStvResult
+            ? "pr_stv"
+            : bgOrdinaryAllocation
+              ? "bg_ordinary_national"
+              : districted
+                ? "districted_house"
+                : runtimeBlocQuota
+                  ? "bloc_list"
+                  : election.countryId === "DE" &&
+                      (election.electionType === "bundestag" ||
+                        election.electionType === "snap_bundestag")
+                    ? "ams_direct"
+                    : isMultiSeat
+                      ? "hare_quota"
+                      : "single_winner",
         },
       }
     );
@@ -1169,7 +1552,7 @@ export async function resolveOneGeneralElection(
       }
     }
 
-    updatePoliticianPagesAfterElection(
+    const politicianHistory = updatePoliticianPagesAfterElection(
       db,
       election,
       candidateIds,
@@ -1178,7 +1561,12 @@ export async function resolveOneGeneralElection(
       loserCandidateIds,
       seatsEstimate,
       now
-    ).catch((err) => logger.error("Turn", "Failed to update politician pages", err));
+    );
+    if (isPrStv) await politicianHistory;
+    else
+      politicianHistory.catch((err) =>
+        logger.error("Turn", "Failed to update politician pages", err)
+      );
 
     console.log(
       `[Turn] Election ${election._id} (${election.electionType}/${election.state}) resolved — ` +
@@ -1206,7 +1594,8 @@ export async function resolveOneGeneralElection(
         election.electionType,
         election.state,
         now,
-        getChamberClass(election)
+        getChamberClass(election),
+        { turn: currentTurn, nationId: election.countryId }
       );
     }
     // Spawn next cycle for election types with dedicated respawn functions
@@ -1220,6 +1609,48 @@ export async function resolveOneGeneralElection(
         { _id: election._id },
         { $set: { status: "resolved" satisfies ElectionStatus, updatedAt: now } }
       );
+    await Promise.all(
+      winnerAnalytics
+        .filter(
+          () =>
+            !(
+              election.countryId === "DE" &&
+              getElectionMethod(election.countryId, election.electionType) === "ams" &&
+              (election.electionType === "bundestag" || election.electionType === "snap_bundestag")
+            )
+        )
+        .map((winner) =>
+          captureElectionWon({
+            db,
+            accountId: winner.accountId,
+            electionId: winner.electionId,
+            electionType: winner.electionType,
+            partyId: winner.partyId,
+            seatCount: winner.seatCount,
+            voteSharePct: winner.voteSharePct,
+            marginPct: winner.marginPct,
+            incumbent: winner.incumbent,
+            nationId: winner.nationId,
+            turn: winner.turn,
+            winnerOrdinal: winner.winnerOrdinal,
+          })
+        )
+    );
+    await Promise.all(
+      officeAnalytics.map((transition) =>
+        captureOfficeTransition({
+          db,
+          officeType: transition.officeType,
+          transitionType: transition.transitionType,
+          partyId: transition.partyId,
+          selectionMethod: "election",
+          tenureTurns: 0,
+          careerStage: transition.careerStage,
+          nationId: transition.nationId,
+          turn: currentTurn,
+        })
+      )
+    );
     await voidDebateSessionsForElection(db, election._id, now);
 
     await reconcileGermanElection(db, election, now);
@@ -1256,18 +1687,31 @@ export async function resolveOneGeneralElection(
     // RU actions are DESTRUCTIVE (formation reset), so an explicit cycle guard
     // inside handleRuConvocationReset makes the trigger idempotent: only the
     // first resolver of a new cycle resets the government (spec §2.4).
-    if (election.countryId === "RU" && election.electionType === "supremeSovietDeputy") {
+    const regularRuType = election.electionType.startsWith("snap_")
+      ? election.electionType.slice(5)
+      : election.electionType;
+    if (
+      election.countryId === "RU" &&
+      [
+        "supremeSovietDeputy",
+        "unionCongressDeputy",
+        "congressDeputy",
+        "congressOfPeoplesDeputies",
+        "dumaDeputy",
+        "stateDuma",
+      ].includes(regularRuType)
+    ) {
       try {
         const remaining = await db.collection<Election>("elections").countDocuments({
           countryId: "RU",
-          electionType: "supremeSovietDeputy",
+          electionType: election.electionType,
           cycle: election.cycle,
-          status: { $ne: "resolved" satisfies ElectionStatus },
+          status: { $in: ["upcoming", "active", "completed"] satisfies ElectionStatus[] },
           _id: { $ne: election._id },
         });
         if (remaining === 0) {
           const { handleRuConvocationReset } = await import("@/lib/turn/ruConvocation");
-          await handleRuConvocationReset(db, election.cycle ?? 1, now);
+          await handleRuConvocationReset(db, election.cycle ?? 1, now, election.electionType);
         }
       } catch (err) {
         logger.error("Turn", `RU convocation trigger failed (cycle ${election.cycle})`, err);

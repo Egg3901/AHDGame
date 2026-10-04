@@ -38,12 +38,10 @@ function getCaucusRiskBadgeColor(riskLabel: PartyAnalyticsCaucusRiskItem["exitRi
 }
 
 function SectionHeader({
-  eyebrow,
   title,
   description,
   link,
 }: {
-  eyebrow: string;
   title: string;
   description: string;
   link?: PartyAnalyticsLink;
@@ -51,10 +49,7 @@ function SectionHeader({
   return (
     <div className="flex items-start justify-between gap-4">
       <div>
-        <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted">
-          {eyebrow}
-        </p>
-        <h2 className="mt-1 text-heading-sm font-semibold text-foreground">{title}</h2>
+        <h2 className="text-heading-sm font-semibold text-foreground">{title}</h2>
         <p className="mt-1 max-w-3xl text-sm leading-relaxed text-muted">{description}</p>
       </div>
       {link ? (
@@ -358,16 +353,14 @@ export function PartyAnalyticsTab({
     <div className="space-y-8">
       <div className="rounded-xl border border-card-border bg-card p-6">
         <SectionHeader
-          eyebrow="Analytics"
-          title="Party Command Center"
+          title="Party command center"
           description="Track where the party is growing, which NPPs look unstable, and where Slate coverage is breaking down. Every card links directly to the place leadership can go act on it."
         />
       </div>
 
       <section className="space-y-4">
         <SectionHeader
-          eyebrow="Org & Growth"
-          title="Expansion Watch"
+          title="Expansion watch"
           description="These cards surface where the party is strongest, where it still has the most room to build, and how quickly state organization is growing or shrinking each turn. Click any state row to jump straight into that state party page."
           link={data.links.stateParties}
         />
@@ -392,7 +385,7 @@ export function PartyAnalyticsTab({
             empty="No state organization data on file."
           />
           <div className="rounded-xl border border-card-border bg-card p-4">
-            <h3 className="text-sm font-semibold text-foreground">Growth Watch</h3>
+            <h3 className="text-sm font-semibold text-foreground">Growth watch</h3>
             <div className="mt-4 grid gap-4 lg:grid-cols-2">
               <div>
                 <p className="text-body-sm font-medium text-success">Growing</p>
@@ -425,8 +418,7 @@ export function PartyAnalyticsTab({
 
       <section className="space-y-4">
         <SectionHeader
-          eyebrow="Discipline & Compliance"
-          title="Whip Risk"
+          title="Whip risk"
           description="These summaries surface the NPPs most likely to ignore party direction, plus active whip defiance and caucus members drifting close to their chair-relationship exit threshold. Click any row to jump directly to that NPP profile."
           link={data.links.whipRoom}
         />
@@ -519,8 +511,7 @@ export function PartyAnalyticsTab({
 
       <section className="space-y-4">
         <SectionHeader
-          eyebrow="Caucus Health"
-          title="Bloc Stability"
+          title="Bloc stability"
           description="These cards show which caucuses are stable, where member churn or whip defiance is building, and which blocs have NPPs drifting close to their chair-relationship exit floor."
           link={data.links.caucuses}
         />
@@ -572,8 +563,7 @@ export function PartyAnalyticsTab({
 
       <section className="space-y-4">
         <SectionHeader
-          eyebrow="Slate & Race Coverage"
-          title="Election Bench Management"
+          title="Election bench management"
           description="This section summarizes whether the party is covering its live races, where slates are still unresolved, and where assignments already look shaky. Analytics drill-ins open the Slate tab already focused on the relevant state."
           link={data.links.slate}
         />

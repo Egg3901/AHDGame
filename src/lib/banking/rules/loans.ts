@@ -23,8 +23,11 @@ export const ARREARS_DEFAULT_TURNS = 8;
 /** Max fraction of the household target that can migrate or be lent each turn. */
 export const MAX_NPC_FLOW_PER_TURN_FRACTION = 0.025;
 
-/** Provisional - each pp of lending rate above this reference shrinks NPC volume. */
+/** Legacy reference for callers reading a pre-calibration loan quote. */
 export const NPC_LOAN_BOOK_RATE_REFERENCE_PERCENT = 4;
+
+/** Household demand starts tapering above prime plus this spread (pp). */
+export const NPC_LOAN_BOOK_REFERENCE_SPREAD_PP = 2;
 
 /** Provisional - volume sensitivity per pp above the rate reference. */
 export const NPC_LOAN_BOOK_RATE_SENSITIVITY = 0.08;
@@ -62,18 +65,25 @@ function clamp(value: number, min: number, max: number): number {
 /**
  * Pure NPC household loan-book math.
  *
- * volume = lendableDeposits * clamp(1 - (rate - RATE_REF) * SENS, VOL_MIN, VOL_MAX)
+ * Demand depends on the lending spread over prime plus two percentage points.
+ * Omitted prime preserves the legacy quote for older callers.
  * expectedDefaultRatePercent = clamp(BASE + max(0, rate - DEF_REF) * DEF_SENS, DEF_MIN, DEF_MAX)
  */
 export function computeNpcLoanBook(
   lendableDeposits: number,
-  lendingRatePercent: number
+  lendingRatePercent: number,
+  primeRatePercent?: number
 ): NpcLoanBook {
   const funding = Number.isFinite(lendableDeposits) && lendableDeposits > 0 ? lendableDeposits : 0;
   const rate = Number.isFinite(lendingRatePercent) ? lendingRatePercent : 0;
+  const referenceRate =
+    primeRatePercent === undefined
+      ? NPC_LOAN_BOOK_RATE_REFERENCE_PERCENT
+      : (Number.isFinite(primeRatePercent) ? primeRatePercent : 0) +
+        NPC_LOAN_BOOK_REFERENCE_SPREAD_PP;
 
   const volumeFactor = clamp(
-    1 - (rate - NPC_LOAN_BOOK_RATE_REFERENCE_PERCENT) * NPC_LOAN_BOOK_RATE_SENSITIVITY,
+    1 - (rate - referenceRate) * NPC_LOAN_BOOK_RATE_SENSITIVITY,
     NPC_LOAN_BOOK_VOLUME_FACTOR_MIN,
     NPC_LOAN_BOOK_VOLUME_FACTOR_MAX
   );

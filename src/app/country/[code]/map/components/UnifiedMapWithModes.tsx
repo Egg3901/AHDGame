@@ -215,7 +215,7 @@ export function UnifiedMapWithModes({
 
         <div className="grid gap-4 sm:gap-6 lg:grid-cols-3">
           <div className="rounded-xl border border-card-border bg-card p-4 sm:p-6 flex flex-col items-center gap-4">
-            <SectionLabel className="mb-4">Interactive Map</SectionLabel>
+            <SectionLabel className="mb-4">Interactive map</SectionLabel>
             <p className="text-xs text-muted -mt-2 mb-1">{modeConfig?.description}</p>
             <div
               className="w-full mx-auto"

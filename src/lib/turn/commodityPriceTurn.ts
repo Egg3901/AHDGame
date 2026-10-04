@@ -103,6 +103,7 @@ import {
   aggregateByCountry,
   applyGovernmentDemand,
   applyDemandCalibration,
+  demandCalibrationFor,
   buildStatesByCountry,
   collectHouseholdSignals,
 } from "./commodity/demandLegs";
@@ -154,6 +155,23 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   // those bonds age out — the 1-year window keeps demand stable across countries with
   // infrequent sovereign issuance (JP, CA, DE).
   const debtIssuanceWindowStart = Math.max(0, turn - 48);
+  const ledgerConfig = await db.collection<GameConfig>("gameConfig").findOne(
+    { _id: "default" },
+    {
+      projection: {
+        marketSystemMode: 1,
+        productLinesV2Enabled: 1,
+        commandEconomyEnabled: 1,
+        retailDemandTransitionStartTurn: 1,
+        retailDemandTransitionTurns: 1,
+        commodityNominalPriceIndex: 1,
+        commodityNominalPriceIndexTurn: 1,
+      },
+    }
+  );
+  const marketSystemMode = await getMarketSystemMode(ledgerConfig);
+  const plantsLedgerEnabled = marketAtLeast(marketSystemMode, "plants");
+  const productsEnabled = ledgerConfig?.productLinesV2Enabled === true && plantsLedgerEnabled;
 
   // Fetch all owned sectors, GDP growth data, corporations, central banks, states, and budgets in parallel
   const [
@@ -194,6 +212,13 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
             embargoExportExposure: 1,
             militaryDivertedFraction: 1,
             militaryDivertedTurn: 1,
+            ...(productsEnabled
+              ? {
+                  outputUnitsByCommodity: 1,
+                  outputAnchorByCommodity: 1,
+                  productQualityByCommodity: 1,
+                }
+              : {}),
           },
         }
       )
@@ -347,6 +372,9 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     }
   );
   const activePreset = presetState?.preset ?? "";
+  // One calibration lookup for the whole pass: the supply caps bound the
+  // calibrated demand and `applyDemandCalibration` applies it (ticket 1370).
+  const demandCalibration = demandCalibrationFor(activePreset);
   const ledgerCurrentYear = presetState?.currentYear ?? null;
   for (const code of Object.values(COUNTRY_CURRENCY_MAP) as CurrencyCode[]) {
     if (fxByCurrency.has(code)) continue;
@@ -357,18 +385,6 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   // produces state information rather than sold advertising. Safe to add: every
   // positional cursor the turn tests stub is already consumed by the parallel
   // block above, so reads from here on fall through to the catch-all.
-  const ledgerConfig = await db.collection<GameConfig>("gameConfig").findOne(
-    { _id: "default" },
-    {
-      projection: {
-        commandEconomyEnabled: 1,
-        retailDemandTransitionStartTurn: 1,
-        retailDemandTransitionTurns: 1,
-        commodityNominalPriceIndex: 1,
-        commodityNominalPriceIndexTurn: 1,
-      },
-    }
-  );
   const nominalIndices = resolveCommodityNominalIndices({
     index: ledgerConfig?.commodityNominalPriceIndex,
     lastTurn: ledgerConfig?.commodityNominalPriceIndexTurn,
@@ -410,8 +426,6 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
 
   // Plants tier: the world ledger reads real production instead of the revenue
   // nameplate. Resolved once and reused by the flow-ledger block below.
-  const marketSystemMode = await getMarketSystemMode();
-  const plantsLedgerEnabled = marketAtLeast(marketSystemMode, "plants");
   const ledgerEraUnitScale = await loadWorldEraUnitScale(db);
   // The WHOLE ledger runs on the era base-price table: unit conversions scale,
   // mix-weight ratios cancel, and computed price LEVELS land on the same era
@@ -541,7 +555,9 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     retailSelfLoopFactor,
     // Issue #2054: the same era table the clearing offer splits on, so the
     // measured-production mix split is weight-identical on both sides.
-    LEDGER_BASE_PRICES
+    LEDGER_BASE_PRICES,
+    // Ticket 1370: the 1.5x cap bounds CALIBRATED demand. See the parameter.
+    demandCalibration
   );
 
   // Plants-tier produced/sold units for the inventory advance (see module).
@@ -607,6 +623,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
           allCorporations,
           federalBudgets
         ),
+        demandCalibration,
       },
       global,
       byState,
@@ -656,6 +673,15 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     byCountry,
     byState
   );
+
+  // ── Era-aware demand calibration ──────────────────────────────────────
+  // Applied once, after the last demand generator and BEFORE freight sourcing,
+  // trade clearing and the reachable books, so every downstream book (the one
+  // the clearing engine settles on, the one read surfaces quote as buyers'
+  // room, and the commodityFlows record) carries the same corrected figure.
+  // It used to run after the books were built, so the books quoted demand
+  // 1/m too high for every calibrated commodity (ticket 1370).
+  applyDemandCalibration({ activePreset }, global, byCountry, byState);
 
   // ── Inter-country trade clearing + whole-market dampened convergence ──
   // (Ordering and influence-lever notes live with the original; the WTO/FTA /
@@ -790,12 +816,6 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   const appliedGlobalPrices = new Map<CommodityType, number>();
   const appliedStatePrices = new Map<CommodityType, Record<string, number>>();
   const appliedNationalPrices = new Map<CommodityType, Record<string, number>>();
-
-  // ── Era-aware demand calibration ──────────────────────────────────────
-  // Applied once, after every demand generator has contributed and before any
-  // price is computed, so the global, national and regional legs and the
-  // commodityFlows record all see the same corrected figure.
-  applyDemandCalibration({ activePreset }, global, byCountry, byState);
 
   // Lagged price ratios for producer cost pass-through (see module).
   const laggedRatios = buildLaggedRatios(

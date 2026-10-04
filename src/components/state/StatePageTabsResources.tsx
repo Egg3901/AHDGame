@@ -165,9 +165,7 @@ export function ResourcesTab({ stateId, countryId, isAdmin = false }: Props) {
 
       <section className="rounded-xl border border-card-border bg-card p-5 shadow-card">
         <div className="mb-4 flex items-center justify-between gap-2 flex-wrap">
-          <h3 className="text-sm font-semibold uppercase tracking-widest text-muted">
-            Resource Capacity
-          </h3>
+          <h3 className="text-sm font-semibold text-muted">Resource capacity</h3>
           {data.prospectingEnabled && canGovern && (
             <button
               onClick={() => setShowSurveyModal(true)}
@@ -297,9 +295,7 @@ export function ResourcesTab({ stateId, countryId, isAdmin = false }: Props) {
 
       <section className="rounded-xl border border-card-border bg-card p-5 shadow-card">
         <div className="mb-4 flex items-center justify-between gap-2 flex-wrap">
-          <h3 className="text-sm font-semibold uppercase tracking-widest text-muted">
-            Active Contracts
-          </h3>
+          <h3 className="text-sm font-semibold text-muted">Active contracts</h3>
           <div className="flex gap-2">
             {data.contractIssuanceEnabled && canGovern && (
               <button

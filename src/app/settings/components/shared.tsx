@@ -207,7 +207,7 @@ export function AccordionSection({
   return (
     <section
       id={id}
-      className={`scroll-mt-24 rounded-2xl border border-card-border bg-card/80 backdrop-blur-sm shadow-card overflow-hidden transition-shadow duration-200 ${
+      className={`scroll-mt-24 rounded-2xl border border-card-border bg-card shadow-card overflow-hidden transition-shadow duration-200 ${
         isOpen ? "shadow-lg" : ""
       } ${className}`}
     >

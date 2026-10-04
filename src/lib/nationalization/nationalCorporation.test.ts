@@ -99,6 +99,32 @@ describe("ensurePrimaryNationalCorporation", () => {
     expect(corp._id.toString()).toBe(insertedId.toString());
     expect(corp.countryOwnerId).toBe("CN");
   });
+
+  it("stamps EUR when creating a 2027 euro-member primary", async () => {
+    const insertedId = new ObjectId();
+    db.collectionMocks.corporations.find.mockReturnValue(cursorOf([]));
+    db.collectionMocks.corporations.insertOne.mockResolvedValue({ insertedId });
+    db.collection("gameState");
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ preset: "2027-default" });
+
+    await ensurePrimaryNationalCorporation(db as unknown as Db, "FR");
+
+    const insertedDoc = db.collectionMocks.corporations.insertOne.mock.calls[0][0];
+    expect(insertedDoc.liquidCurrencyCode).toBe("EUR");
+  });
+
+  it("keeps the era-blind code for non-2027 presets", async () => {
+    const insertedId = new ObjectId();
+    db.collectionMocks.corporations.find.mockReturnValue(cursorOf([]));
+    db.collectionMocks.corporations.insertOne.mockResolvedValue({ insertedId });
+    db.collection("gameState");
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ preset: "1991-default" });
+
+    await ensurePrimaryNationalCorporation(db as unknown as Db, "FR");
+
+    const insertedDoc = db.collectionMocks.corporations.insertOne.mock.calls[0][0];
+    expect(insertedDoc.liquidCurrencyCode).toBe("FRF");
+  });
 });
 
 describe("resolveNationalCorporationForSector", () => {
@@ -125,6 +151,29 @@ describe("resolveNationalCorporationForSector", () => {
     expect(db.collectionMocks.corporations.findOne).toHaveBeenCalledWith({
       countryOwnerId: "CN",
       assignedSectorTypes: "energy",
+    });
+  });
+
+  it("routes a manufacturing vehicle model through the legacy automobile split", async () => {
+    const splitId = new ObjectId();
+    db.collectionMocks.corporations.findOne.mockResolvedValue({
+      _id: splitId,
+      countryId: "CN",
+      countryOwnerId: "CN",
+      assignedSectorTypes: ["automobiles"],
+    });
+
+    const corp = await resolveNationalCorporationForSector(
+      db as unknown as Db,
+      "CN",
+      "manufacturing",
+      "vehicles"
+    );
+
+    expect(corp._id.toString()).toBe(splitId.toString());
+    expect(db.collectionMocks.corporations.findOne).toHaveBeenCalledWith({
+      countryOwnerId: "CN",
+      assignedSectorTypes: "automobiles",
     });
   });
 

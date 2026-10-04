@@ -453,6 +453,8 @@ export interface Crisis {
    *  economic/political systems don't block each other's "one active" guards.
    *  Absent on manually-created crises. */
   autoSource?: "disaster" | "condition" | "random";
+  /** Bounded automatic weather-disaster treasury charge, reconciled by crisis ID. */
+  autoDisasterFiscalCost?: number;
   // NEW: interaction definition
   interactionDefinition?: {
     decisionTree: CrisisDecisionNode[];

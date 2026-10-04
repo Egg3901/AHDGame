@@ -1,11 +1,23 @@
-import type { Db } from "mongodb";
+import {
+  organizationCashContext,
+  organizationLocalPerAnchor,
+  organizationTreasuryLocalPerAnchor,
+  settleOrganizationFundedCashMove,
+  withOrganizationCashBatch,
+  witnessOrganizationCash,
+} from "./cashLedger";
+import { ObjectId, type Db } from "mongodb";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { Bill, FederalBudget } from "@/lib/db/types";
 import { loadWorldPreset } from "@/lib/currency/gdpAnchorRate";
 import type { InternationalOrganizationProvision } from "@/lib/db/types/legislation";
 import { isMember, recordOrgHistoryEvent } from "@/lib/internationalOrganizations/service";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
-import { getOrganizationProposalsCollection } from "@/lib/db/collections";
+import {
+  getOrganizationFundsCollection,
+  getOrganizationProposalsCollection,
+} from "@/lib/db/collections";
 import {
   convertLocal,
   creditOrganizationFund,
@@ -29,7 +41,8 @@ import { resolveJoinApplication } from "./joinApplication";
 export async function applyOrgFundProvision(
   db: Db,
   countryId: CountryId,
-  p: InternationalOrganizationProvision
+  p: InternationalOrganizationProvision,
+  billId?: string
 ): Promise<void> {
   const amountLocal = p.amountLocal ?? 0;
   if (!(amountLocal > 0)) return;
@@ -44,16 +57,104 @@ export async function applyOrgFundProvision(
     );
     return;
   }
-  await db
-    .collection<FederalBudget>("federalBudget")
-    .updateOne(
-      { countryId },
-      { $inc: { treasuryBalance: -amountLocal }, $set: { updatedAt: new Date() } }
-    );
-  // Credit the fund in its (founding) currency, converted from the member's.
-  const fundCountry = await resolveOrgFundCurrencyCountry(db, p.organizationId);
-  const amountFund = convertLocal(countryId, fundCountry, amountLocal, await loadWorldPreset(db));
-  await creditOrganizationFund(db, p.organizationId, amountFund);
+  const context = await organizationCashContext(db, { turn });
+  const { fundCountry, amountFund } = await withOrganizationCashBatch(
+    db,
+    context,
+    async (batch) => {
+      if (batch?.treasuryCashLedgerEnabled) {
+        if (!billId) throw new Error("Funded organization provision requires its bill id");
+        const fundCountry = await resolveOrgFundCurrencyCountry(db, p.organizationId);
+        const treasuryRate = organizationTreasuryLocalPerAnchor(batch, countryId);
+        const fundRate = organizationLocalPerAnchor(batch, fundCountry);
+        const amountFund = (amountLocal / treasuryRate) * fundRate;
+        const fund = await getOrganizationFundsCollection(db);
+        await fund.updateOne(
+          { organizationId: p.organizationId },
+          {
+            $setOnInsert: {
+              _id: new ObjectId(),
+              organizationId: p.organizationId,
+              currencyCountryId: fundCountry,
+              balanceLocal: 0,
+            },
+          },
+          { upsert: true }
+        );
+        const result = await settleOrganizationFundedCashMove(db, batch, {
+          key: `organization-capitalization:${billId}`,
+          kind: "organization_capitalization",
+          source: {
+            collection: "federalBudget",
+            filter: { countryId, treasuryCashLocal: { $gte: amountLocal } },
+            path: "treasuryCashLocal",
+            amount: amountLocal,
+            currencyCode: batch.budgetCurrencies.get(countryId) ?? "USD",
+            localPerAnchor: treasuryRate,
+          },
+          destination: {
+            collection: "organizationFunds",
+            filter: { organizationId: p.organizationId },
+            path: "balanceLocal",
+            amount: amountFund,
+            currencyCode: COUNTRY_CURRENCY_MAP[fundCountry] ?? "USD",
+            localPerAnchor: fundRate,
+          },
+          sourceTreasuryCountry: countryId,
+          command: "organization.capitalize",
+        });
+        if (result.status !== "applied" && result.status !== "replayed") {
+          return { fundCountry, amountFund: 0 };
+        }
+        if (result.status === "applied") {
+          await witnessOrganizationCash(db, batch, {
+            kind: "government",
+            ref: countryId,
+            countryId,
+            amount: -amountLocal,
+            site: "capitalization_treasury",
+            now: new Date(),
+          });
+          await witnessOrganizationCash(db, batch, {
+            kind: "org",
+            ref: p.organizationId,
+            countryId: fundCountry,
+            amount: amountFund,
+            site: "capitalization_fund",
+            now: new Date(),
+          });
+        }
+        return { fundCountry, amountFund: result.status === "applied" ? amountFund : 0 };
+      }
+      const debit = await db
+        .collection<FederalBudget>("federalBudget")
+        .updateOne(
+          { countryId },
+          { $inc: { treasuryBalance: -amountLocal }, $set: { updatedAt: new Date() } }
+        );
+      if (debit.modifiedCount > 0) {
+        await witnessOrganizationCash(db, batch, {
+          kind: "government",
+          ref: countryId,
+          countryId,
+          amount: -amountLocal,
+          site: "capitalization_treasury",
+          now: new Date(),
+        });
+      }
+      // Credit the fund in its (founding) currency, converted from the member's.
+      const fundCountry = await resolveOrgFundCurrencyCountry(db, p.organizationId);
+      const amountFund = convertLocal(
+        countryId,
+        fundCountry,
+        amountLocal,
+        batch?.preset ?? (await loadWorldPreset(db))
+      );
+      await creditOrganizationFund(db, p.organizationId, amountFund, { context: batch });
+      return { fundCountry, amountFund };
+    }
+  );
+  if (!(amountFund > 0)) return;
   const fundCurrency = COUNTRY_CONFIGS[fundCountry]?.currencyCode ?? "USD";
   await recordOrgHistoryEvent(
     db,

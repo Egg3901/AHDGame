@@ -172,6 +172,8 @@ export interface Character {
   startingCountryId?: CountryId;
   name: string;
   homeState: string;
+  /** Protected until this resident chooses a playable home after federation succession. */
+  federationPendingResidenceId?: string;
   avatarUrl?: string;
   /** Wide banner image for profile hero (player-uploaded). */
   profileHeaderImageUrl?: string;
@@ -180,6 +182,8 @@ export interface Character {
   /** Party influence — accumulates per turn based on policy alignment and leadership. Floored at 0. */
   partyInfluence?: number;
   favorability: number;
+  /** Last corporation-turn editorial favorability receipt, for replay safety. */
+  mediaEditorialLastAppliedTurn?: number;
   infamy: number;
   /**
    * @deprecated Removed from the schema in cf-inconsistency-fix Phase 5.
@@ -228,6 +232,14 @@ export interface Character {
   };
   /** Pre-forex: lifetime interest credited to savingsOnHand */
   savingsInterestEarnedLifetime?: number;
+  /**
+   * Idempotency keys of standalone-fallback money-flow legs already applied
+   * to this character (see `src/lib/db/nonAtomicMoneyFlow.ts`). Each key is
+   * recorded in the SAME atomic write as its balance change, so a crashed
+   * and retried transfer applies at most once. Capped to the most recent
+   * entries server-side; absent on characters never touched by a keyed leg.
+   */
+  appliedMoneyFlowKeys?: string[];
   /** Tracks which currency savings accounts have been opened (for UX prompts). */
   savingsAccountsOpened?: Partial<Record<CurrencyCode, boolean>>;
   /** How foreign prices are displayed: asset's native currency, player's home, or internal unit */

@@ -74,7 +74,7 @@ export function GeneralElectionNoTallyPanel({
       <div className="rounded-xl border border-card-border bg-card overflow-hidden">
         <div className="px-4 py-2 sm:px-5 sm:py-2.5 flex items-center justify-between text-xs font-medium bg-info/10 border-b border-info/20 text-info">
           <span className="flex items-center gap-2">
-            <span className="h-1.5 w-1.5 rounded-full bg-info animate-pulse" />
+            <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
             General Election — Awaiting First Turn
           </span>
           <span className="text-muted font-normal">Vote counting begins next turn</span>

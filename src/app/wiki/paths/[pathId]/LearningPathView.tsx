@@ -12,9 +12,9 @@ interface PathProgress {
 }
 
 const DIFFICULTY_LABELS = {
-  beginner: { label: "Beginner", className: "text-success" },
-  intermediate: { label: "Intermediate", className: "text-warning" },
-  advanced: { label: "Advanced", className: "text-error" },
+  beginner: "Beginner",
+  intermediate: "Intermediate",
+  advanced: "Advanced",
 } as const;
 
 interface LearningPathViewProps {
@@ -59,16 +59,10 @@ export default function LearningPathView({ path, pathId }: LearningPathViewProps
 
       <div className="mb-8">
         <div className="flex items-center justify-between gap-4 mb-3">
-          <p className="section-label">Learning Path</p>
-          {diff && (
-            <span
-              className={`font-mono text-xs font-semibold uppercase tracking-[0.08em] ${diff.className}`}
-            >
-              {diff.label}
-            </span>
-          )}
+          <p className="section-label">Learning path</p>
+          {diff && <span className="text-xs font-medium text-muted">{diff}</span>}
         </div>
-        <h1 className="mb-2 font-serif text-3xl font-bold text-foreground">{path.title}</h1>
+        <h1 className="mb-2 text-3xl font-bold text-foreground">{path.title}</h1>
         <p className="mb-4 text-lg text-muted">{path.description}</p>
         <div className="flex items-center gap-4 font-mono text-sm text-muted">
           <span>{totalPages} pages</span>

@@ -19,6 +19,18 @@ import type {
   SeatState,
 } from "./types";
 
+function readResolvedMeeting(
+  value: unknown
+): { result: "passed" | "failed"; resolvedAtTurn: number } | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  if (!("result" in value) || !("resolvedAtTurn" in value)) return undefined;
+  const { result, resolvedAtTurn } = value;
+  if ((result !== "passed" && result !== "failed") || typeof resolvedAtTurn !== "number") {
+    return undefined;
+  }
+  return { result, resolvedAtTurn };
+}
+
 const NOW = 1_700_000_000_000;
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -164,14 +176,54 @@ describe("cadence", () => {
 });
 
 describe("vote window and deadlines", () => {
-  it("keeps a decided meeting open while a player ballot is pending", () => {
+  it("resolves an irreversible majority on the next turn despite a player no-show", () => {
     const state = baseState({ activeMeeting: nppMajorityMeeting(108), lastMeetingTurn: 108 });
     const decision = turnStart(state, 109);
     expect(decision.allowed).toBe(true);
     if (!decision.allowed) return;
-    expect(decision.next.activeMeeting?.status).toBe("voting");
-    expect(decision.transition.set.meetingHistoryAppend).toBeUndefined();
+    expect(decision.next.activeMeeting).toBeNull();
+    const resolved = readResolvedMeeting(decision.transition.set.meetingHistoryAppend);
+    expect(resolved?.result).toBe("passed");
+    expect(resolved?.resolvedAtTurn).toBe(109);
+    expect(decision.next.primeRate).toBe(5.5);
+    expect(decision.next.rateChangesThisTerm).toBe(1);
+  });
+
+  it("resolves an irreversible failure without waiting for a player no-show", () => {
+    const meeting = nppMajorityMeeting(108);
+    meeting.ballots = meeting.ballots.map((ballot, index) => ({
+      ...ballot,
+      vote: index < 4 ? "cut" : "hike",
+    }));
+    const decision = turnStart(baseState({ activeMeeting: meeting, lastMeetingTurn: 108 }), 109);
+    expect(decision.allowed).toBe(true);
+    if (!decision.allowed) return;
+    expect(decision.next.activeMeeting).toBeNull();
+    const resolved = readResolvedMeeting(decision.transition.set.meetingHistoryAppend);
+    expect(resolved?.result).toBe("failed");
     expect(decision.transition.set.primeRate).toBeUndefined();
+    expect(decision.next.rateChangesThisTerm).toBe(0);
+  });
+
+  it("preserves the full voting window when the missing player's ballot can decide the motion", () => {
+    const meeting = nppMajorityMeeting(108);
+    meeting.ballots = meeting.ballots.map((ballot, index) => ({
+      ...ballot,
+      vote: index < 3 ? "hike" : "cut",
+    }));
+    const state = baseState({ activeMeeting: meeting, lastMeetingTurn: 108 });
+    const pending = turnStart(state, 109);
+    expect(pending.allowed).toBe(true);
+    if (!pending.allowed) return;
+    expect(pending.next.activeMeeting?.status).toBe("voting");
+    expect(pending.transition.set.meetingHistoryAppend).toBeUndefined();
+    const deadline = turnStart(pending.next, 132);
+    expect(deadline.allowed).toBe(true);
+    if (!deadline.allowed) return;
+    expect(deadline.next.activeMeeting).toBeNull();
+    const resolved = readResolvedMeeting(deadline.transition.set.meetingHistoryAppend);
+    expect(resolved?.result).toBe("failed");
+    expect(deadline.transition.set.primeRate).toBeUndefined();
   });
 
   it("force-resolves at the deadline with the no-show abstaining", () => {
@@ -235,9 +287,14 @@ describe("vote window and deadlines", () => {
       ...usBoard(),
       seat("seat-8", { occupantType: "player", characterId: "char-other" }),
     ];
+    const meeting = nppMajorityMeeting(108);
+    meeting.ballots = meeting.ballots.map((ballot, index) => ({
+      ...ballot,
+      vote: index < 3 ? "hike" : "cut",
+    }));
     const state = baseState({
       board,
-      activeMeeting: nppMajorityMeeting(108),
+      activeMeeting: meeting,
       lastMeetingTurn: 108,
     });
     const decision = decideGovernance(
@@ -551,7 +608,12 @@ describe("seats and vacancies", () => {
 
 describe("replay and grid", () => {
   it("refuses the same ballot twice with an already reason", () => {
-    const state = baseState({ activeMeeting: nppMajorityMeeting(108), lastMeetingTurn: 108 });
+    const meeting = nppMajorityMeeting(108);
+    meeting.ballots = meeting.ballots.map((ballot, index) => ({
+      ...ballot,
+      vote: index < 3 ? "hike" : "cut",
+    }));
+    const state = baseState({ activeMeeting: meeting, lastMeetingTurn: 108 });
     const actor = {
       kind: "governor",
       seatId: "seat-1",

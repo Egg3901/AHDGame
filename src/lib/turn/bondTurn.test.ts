@@ -14,12 +14,21 @@ import { resetCorpFxRateCacheForTests } from "@/lib/currency/corporationCapital"
 // carries no per-test timeout, so no zombie can form. vi.mock is hoisted above
 // these imports, so every name below still resolves to its mock.
 import { processBondTurn } from "./bondTurn";
+import { processLegacyFederationServiceTurn } from "@/lib/world/succession/legacyServiceTurn";
+import { processContinuingFederationServiceTurn } from "@/lib/world/succession/continuingServiceTurn";
 import { getDb } from "@/lib/mongodb";
 import {
+  freezeFundedSovereignBondMaturityQuote,
   getBondCountryId,
   isCorporateBond,
   issueScheduledSovereignBondSeries,
+  settleFundedSovereignBondMaturity,
 } from "@/lib/bonds/sovereign";
+import {
+  addBankMaturityClaims,
+  settleBankSovereignClaims,
+} from "@/lib/banking/bankSovereignClaims";
+import { resumeSettlement } from "@/lib/banking/settlementJournal";
 import { emitTxBulk } from "@/lib/financialTxLog/emit";
 import { fireBondDefaultPulse } from "@/lib/corporations/sentimentEvents";
 import { createNotifications } from "@/lib/notifications";
@@ -30,13 +39,47 @@ import { executeCorporationBondRefinance } from "@/lib/bonds/executeCorporationB
 import { executeCorporationBondRestructure } from "@/lib/bonds/executeCorporationBondRestructure";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
+vi.mock("@/lib/world/succession/legacyServiceTurn", () => ({
+  processLegacyFederationServiceTurn: vi.fn().mockResolvedValue(0),
+}));
+vi.mock("@/lib/world/succession/continuingServiceTurn", () => ({
+  processContinuingFederationServiceTurn: vi.fn().mockResolvedValue(0),
+}));
 vi.mock("@/lib/bonds/sovereign", () => ({
+  getNationalBudgetId: vi.fn().mockReturnValue("federal"),
   getBondCountryId: vi.fn().mockReturnValue("US"),
   isCorporateBond: vi.fn((b: { isCorporate?: boolean }) => !!b.isCorporate),
   issueScheduledSovereignBondSeries: vi.fn().mockResolvedValue(undefined),
-  settleSovereignBondMaturity: vi.fn().mockResolvedValue(undefined),
+  freezeFundedSovereignBondMaturityQuote: vi.fn().mockResolvedValue({ id: "frozen" }),
+  settleFundedSovereignBondMaturity: vi.fn(async () => ({
+    status: "applied",
+    key: "sovereign-maturity:test:10",
+    appliedLegs: [],
+    appliedProjections: [],
+    newlyAppliedProjections: [],
+  })),
+  settleSovereignBondMaturity: vi.fn(async (_db, _bond, repaymentLocal: number) => ({
+    amountLocal: repaymentLocal,
+    currencyCode: "USD",
+  })),
 }));
-vi.mock("@/lib/constants/bonds", () => ({
+vi.mock("@/lib/banking/bankSovereignClaims", () => ({
+  addBankMaturityClaims: vi.fn().mockResolvedValue([]),
+  settleBankSovereignClaims: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("@/lib/banking/settlementJournal", () => ({
+  resumeSettlement: vi.fn(async (_db: unknown, key: string) => ({
+    status: "applied",
+    key,
+    appliedLegs: [],
+    appliedProjections: [],
+    newlyAppliedProjections: [],
+  })),
+}));
+vi.mock("@/lib/constants/bonds", async (importOriginal) => ({
+  // The real rule, so these tests exercise the same defaulted-bond skip as prod.
+  bondAccruesCoupon: (await importOriginal<typeof import("@/lib/constants/bonds")>())
+    .bondAccruesCoupon,
   BOND_DEFAULT_CREDIT_PENALTY_TURNS: 100,
   CORP_BOND_DUE_SOON_REMINDER_TURNS: [12, 4],
   calculateBondMarketPrice: vi.fn().mockReturnValue(1.02),
@@ -155,7 +198,7 @@ describe("processBondTurn", () => {
       makeCursor(query.issuedAtTurn === 10 ? [{ countryId: "US", totalIssued: 25_000 }] : [])
     );
 
-    const result = await processBondTurn(10, true);
+    const result = await processBondTurn(10, { captureSovereignCashProceeds: true });
 
     expect(result.sovereignCashProceedsByCountry).toEqual({ US: 25_000 });
     expect(result.sovereignDebtFaceIssuedByCountry).toEqual({ US: 25_000 });
@@ -167,6 +210,89 @@ describe("processBondTurn", () => {
       },
       { projection: { countryId: 1, totalIssued: 1 } }
     );
+  });
+
+  it("defers maturity while a funded bank treasury reservation is pending", async () => {
+    const bond = {
+      _id: new ObjectId(),
+      issuerType: "sovereign",
+      countryId: "US",
+      couponRate: 5,
+      maturityTurn: 10,
+      matured: false,
+      defaulted: false,
+      holders: [
+        {
+          bankId: new ObjectId(),
+          charteredTurn: 4,
+          bankTreasuryTradeId: "pending-funded-buy",
+          units: 5,
+        },
+      ],
+      publicFloat: 0,
+      corporationId: new ObjectId(),
+    };
+    mockBondFinds([bond], []);
+    db.collectionMocks["bondHistory"]!.aggregate.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+
+    const result = await processBondTurn(10);
+
+    expect(result.bondsMatured).toBe(0);
+    const writes = db.collectionMocks["bonds"]!.bulkWrite.mock.calls.flatMap(
+      ([ops]) => ops as Array<{ updateOne?: { update?: { $set?: Record<string, unknown> } } }>
+    );
+    expect(writes.some((op) => op.updateOne?.update?.$set?.matured === true)).toBe(false);
+  });
+
+  it("continues legacy bridge recovery when no active bonds remain", async () => {
+    db.collection("gameState");
+    db.collectionMocks["gameState"]!.findOne.mockResolvedValue({ preset: "1991-default" });
+    await processBondTurn(10);
+    expect(processLegacyFederationServiceTurn).toHaveBeenCalledWith(db, 10, expect.any(Date), []);
+    expect(processContinuingFederationServiceTurn).toHaveBeenCalledWith(
+      db,
+      10,
+      expect.any(Date),
+      []
+    );
+  });
+
+  it("stops creditor payouts when continuing successor funding fails", async () => {
+    db.collection("gameState");
+    db.collectionMocks["gameState"]!.findOne.mockResolvedValue({ preset: "1991-default" });
+    vi.mocked(processContinuingFederationServiceTurn).mockRejectedValueOnce(
+      new Error("continuing funding failed")
+    );
+    await expect(processBondTurn(10)).rejects.toThrow("continuing funding failed");
+    expect(db.collectionMocks["characters"]!.bulkWrite).not.toHaveBeenCalled();
+  });
+
+  it("stops creditor payouts when the legacy funding journal fails", async () => {
+    db.collection("gameState");
+    db.collectionMocks["gameState"]!.findOne.mockResolvedValue({ preset: "1991-default" });
+    const bond = {
+      _id: new ObjectId(),
+      issuerType: "sovereign",
+      countryId: "CS",
+      couponRate: 5,
+      maturityTurn: 100,
+      matured: false,
+      defaulted: false,
+      holders: [{ characterId: new ObjectId(), units: 5 }],
+      publicFloat: 0,
+      corporationId: new ObjectId(),
+    };
+    mockBondFinds([bond], []);
+    vi.mocked(processLegacyFederationServiceTurn).mockRejectedValueOnce(
+      new Error("funding failed")
+    );
+    await expect(processBondTurn(10)).rejects.toThrow("funding failed");
+    expect(processLegacyFederationServiceTurn).toHaveBeenCalledWith(db, 10, expect.any(Date), [
+      bond,
+    ]);
+    expect(db.collectionMocks["characters"]!.bulkWrite).not.toHaveBeenCalled();
   });
 
   it("processes coupon payments to character holders", async () => {
@@ -266,6 +392,100 @@ describe("processBondTurn", () => {
       }),
       expect.objectContaining({ upsert: true })
     );
+  });
+
+  it("does not eagerly retire or pay a funded sovereign maturity outside its receipt", async () => {
+    const bond = {
+      _id: new ObjectId(),
+      issuerType: "sovereign",
+      countryId: "US",
+      couponRate: 0,
+      maturityTurn: 10,
+      matured: false,
+      defaulted: false,
+      holders: [],
+      publicFloat: 3,
+      corporationId: new ObjectId(),
+      currencyCode: "USD" as const,
+    };
+    mockBondFinds([bond], [{ _id: bond._id, marketPrice: 1 }]);
+    db.collectionMocks["centralBanks"]!.find.mockReturnValue(
+      makeCursor([{ countryId: "US", primeRate: 2.75 }])
+    );
+    db.collectionMocks["bondHistory"]!.aggregate.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    db.collection("bondMarketPools");
+    db.collection("federalBudget");
+    db.collection("bankMoneyMoves");
+    db.collection("exchangeRates");
+    db.collectionMocks["exchangeRates"]!.find.mockReturnValue(
+      makeCursor([{ currencyCode: "USD", rate: 1 }])
+    );
+
+    const result = await processBondTurn(10, { treasuryCashLedgerEnabled: true });
+
+    expect(result.bondsMatured).toBe(1);
+    expect(settleFundedSovereignBondMaturity).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({ bond, dueTurn: 10, nonBankRepaymentLocal: 3_000 })
+    );
+    const writes = db.collectionMocks["bonds"]!.bulkWrite.mock.calls.flatMap(
+      ([ops]) => ops as Array<{ updateOne?: { update?: { $set?: Record<string, unknown> } } }>
+    );
+    expect(writes.some((op) => op.updateOne?.update?.$set?.matured === true)).toBe(false);
+  });
+
+  it("freezes sovereign holders before bank claims and resumes the exact partial receipt", async () => {
+    const bond = {
+      _id: new ObjectId(),
+      issuerType: "sovereign",
+      countryId: "US",
+      couponRate: 0,
+      maturityTurn: 10,
+      matured: false,
+      defaulted: false,
+      corporationId: new ObjectId(),
+      holders: [{ bankId: new ObjectId(), charteredTurn: 4, units: 1 }],
+      publicFloat: 1,
+      currencyCode: "USD" as const,
+    };
+    mockBondFinds([bond], [{ _id: bond._id, marketPrice: 1 }]);
+    db.collectionMocks["centralBanks"]!.find.mockReturnValue(
+      makeCursor([{ countryId: "US", primeRate: 2.75 }])
+    );
+    db.collectionMocks["bondHistory"]!.aggregate.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    db.collection("bondMarketPools");
+    db.collection("federalBudget");
+    db.collection("bankMoneyMoves");
+    db.collection("exchangeRates");
+    db.collectionMocks["exchangeRates"]!.find.mockReturnValue(
+      makeCursor([{ currencyCode: "USD", rate: 1 }])
+    );
+    vi.mocked(settleFundedSovereignBondMaturity).mockResolvedValueOnce({
+      status: "partial",
+      key: "sovereign-maturity:exact-receipt:payout",
+      appliedLegs: [],
+      appliedProjections: [],
+      newlyAppliedProjections: [],
+    });
+    db.collectionMocks["federalBudget"]!.findOne.mockResolvedValueOnce({
+      _id: "federal",
+      countryId: "US",
+      bankSovereignClaims: [{ kind: "maturity", bondId: bond._id.toHexString() }],
+    }).mockResolvedValueOnce({ _id: "federal", countryId: "US", bankSovereignClaims: [] });
+
+    await processBondTurn(10, { treasuryCashLedgerEnabled: true });
+
+    expect(
+      vi.mocked(freezeFundedSovereignBondMaturityQuote).mock.invocationCallOrder[0]
+    ).toBeLessThan(vi.mocked(addBankMaturityClaims).mock.invocationCallOrder[0]!);
+    expect(vi.mocked(addBankMaturityClaims).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(settleBankSovereignClaims).mock.invocationCallOrder[0]!
+    );
+    expect(resumeSettlement).toHaveBeenCalledWith(db, "sovereign-maturity:exact-receipt:payout");
   });
 
   it("processes coupon payments to NPP holders (v3)", async () => {
@@ -1346,7 +1566,7 @@ describe("processBondTurn", () => {
       toArray: vi.fn().mockResolvedValue([]),
     });
 
-    const result = await processBondTurn(10, true);
+    const result = await processBondTurn(10, { captureSovereignCashProceeds: true });
 
     expect(result.sovereignCouponPaidByCountry).toEqual({ US: 100 });
     expect(result.sovereignMaturityCashPaidByCountry).toEqual({ US: 10_000 });

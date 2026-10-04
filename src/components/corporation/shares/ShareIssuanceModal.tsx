@@ -53,6 +53,7 @@ export default function ShareIssuanceModal({
   const [ceoShares, setCeoShares] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [resultMessage, setResultMessage] = useState("");
   const [voteError, setVoteError] = useState("");
 
   const corpCurrency = (corporation.liquidCurrencyCode ?? "USD") as CurrencyCode;
@@ -118,6 +119,13 @@ export default function ShareIssuanceModal({
         const data = await res.json();
         if (!res.ok) {
           setError(data.error ?? "Failed to issue shares");
+          return;
+        }
+        if (typeof data.underwritingFeeLocal === "number") {
+          setResultMessage(
+            `Gross funded ${fmtLocalFull(data.grossPlacedLocal)}, underwriting fee ${fmtLocalFull(data.underwritingFeeLocal)}, net proceeds ${fmtLocalFull(data.issuerNetLocal)}.`
+          );
+          onSuccess();
           return;
         }
       } else {
@@ -264,7 +272,7 @@ export default function ShareIssuanceModal({
               <div>
                 <div className="mb-1.5 flex items-center justify-between">
                   <label className="text-xs text-muted">
-                    Issuance size —{" "}
+                    Issuance size:{" "}
                     <span className="text-foreground font-medium">{issuePercent.toFixed(1)}%</span>{" "}
                     of outstanding
                   </label>
@@ -339,7 +347,7 @@ export default function ShareIssuanceModal({
               <div>
                 <div className="mb-1.5 flex items-center justify-between">
                   <label className="text-xs text-muted">
-                    Shares to purchase —{" "}
+                    Shares to purchase:{" "}
                     <span className="text-foreground font-medium">
                       {ceoShares.toLocaleString("en-US")}
                     </span>{" "}
@@ -432,12 +440,17 @@ export default function ShareIssuanceModal({
           {/* Cooldown notice */}
           {issuanceOnCooldown && (
             <div className="rounded-lg border border-card-border bg-card-elevated/40 px-3 py-2.5 text-xs text-muted">
-              Issuance limited to once per 24 hours — available again in{" "}
+              Issuance limited to once per 24 hours. Available again in{" "}
               <span className="text-foreground font-medium">{cooldownHours}h</span>.
             </div>
           )}
 
           {error && <p className="text-xs text-error">{error}</p>}
+          {resultMessage && (
+            <p role="status" className="text-xs text-success">
+              {resultMessage}
+            </p>
+          )}
         </div>
 
         {/* ─── Footer ──────────────────────────────────────────────────────── */}

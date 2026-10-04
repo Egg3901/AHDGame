@@ -56,6 +56,7 @@ export interface ElectionResultSnapshot {
   /** President only: the majority threshold that actually governed the race. */
   evNeeded?: number;
   totalSeats: number;
+  ballotLabel?: string;
   candidates: ResultsCandidate[];
   units: ResultsUnit[];
   national: NationalResults | null;

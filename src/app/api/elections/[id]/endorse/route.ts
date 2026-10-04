@@ -177,6 +177,8 @@ export async function POST(request: Request, { params }: RouteParams) {
           if (activeEndorsement) {
             return NextResponse.json({
               success: true,
+              electionType: election.electionType,
+              phase: inPrimary ? "primary" : "general",
               endorsement: {
                 id: activeEndorsement._id.toString(),
                 candidateId: activeEndorsement.candidateId.toString(),
@@ -215,6 +217,8 @@ export async function POST(request: Request, { params }: RouteParams) {
 
       return NextResponse.json({
         success: true,
+        electionType: election.electionType,
+        phase: inPrimary ? "primary" : "general",
         endorsement: {
           id: endorsement._id.toString(),
           candidateId: candidate._id.toString(),
@@ -252,7 +256,8 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Election not found" }, { status: 404 });
     }
 
-    const electionObjectId = resolved.election._id;
+    const election = resolved.election;
+    const electionObjectId = election._id;
 
     const releaseEndorsementLock = await claimPlayerEndorsementLock(
       db,
@@ -346,6 +351,8 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       return NextResponse.json({
         success: true,
         withdrawn: result.modifiedCount,
+        electionType: election.electionType,
+        phase: "unknown",
       });
     } finally {
       await releaseEndorsementLock();

@@ -18,6 +18,7 @@ import { applyCrisisTradeSanctions } from "./sanctions/apply";
 import { russiaUkraineOutcome } from "./rules/russiaUkraineOutcome";
 import type { Db, Filter, ObjectId } from "mongodb";
 import type { FederalBudget } from "@/lib/db/types/budget";
+import type { GameConfig } from "@/lib/db/types/gameConfig";
 import type { GovernmentApproval } from "@/lib/db/types/governmentApproval";
 import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
 import type {
@@ -269,13 +270,18 @@ export async function campaignBriefForGlobalResponder(
   };
 }
 
+export interface PreparedGlobalResponseOption {
+  capability: CampaignCapabilitySnapshot;
+  treasuryCashLedgerEnabled?: boolean;
+}
+
 /** Re-read and enforce campaign requirements at command time. */
 export async function prepareGlobalResponseOption(
   db: Db,
   crisis: Pick<Crisis, "globalResponse">,
   countryId: string,
   option: CrisisDecisionOption
-): Promise<CampaignCapabilitySnapshot> {
+): Promise<PreparedGlobalResponseOption> {
   const definition = crisis.globalResponse;
   // A missing definition is a data fault, not a player error: leave it bare so
   // handleRouteError captures it.
@@ -290,9 +296,22 @@ export async function prepareGlobalResponseOption(
     // under the option. Typed so it reaches them as a 400, not a generic 500.
     throw badRequest(`National capacity is insufficient: ${assessment.reasons.join("; ")}`);
   }
-  await prepareFinancialCrisisBankResponse(db, countryId, option);
-  await prepareFinancialFiscalResponse(db, countryId, option);
-  return capability;
+  const cashLedgerAction =
+    option.action?.kind === "financialCrisisResponse" &&
+    ["recapitalize", "guarantee", "stimulus", "sovereign_support"].includes(option.action.response);
+  const cashLedgerEnabled = cashLedgerAction
+    ? (
+        await db
+          .collection<GameConfig>("gameConfig")
+          .findOne({ _id: "default" }, { projection: { treasuryCashLedgerEnabled: 1 } })
+      )?.treasuryCashLedgerEnabled === true
+    : undefined;
+  await prepareFinancialCrisisBankResponse(db, countryId, option, cashLedgerEnabled);
+  await prepareFinancialFiscalResponse(db, countryId, option, cashLedgerEnabled);
+  return {
+    capability,
+    ...(cashLedgerEnabled !== undefined ? { treasuryCashLedgerEnabled: cashLedgerEnabled } : {}),
+  };
 }
 
 export async function recordGlobalResponseCommitment(
@@ -431,7 +450,8 @@ export function selectGlobalResponseOutcome(
 export async function spendGlobalResponseCost(
   db: Db,
   countryId: string,
-  option: CrisisDecisionOption
+  option: CrisisDecisionOption,
+  receiptKey?: string
 ): Promise<number> {
   // The financial rescue journal owns both funding and recipient cash.
   if (option.action?.kind === "financialCrisisResponse") return 0;
@@ -444,7 +464,14 @@ export async function spendGlobalResponseCost(
     budget?.gdpSmoothed && budget.gdpSmoothed > 0 ? budget.gdpSmoothed : (budget?.gdp ?? 0);
   const amount = Math.max(0, Math.round(gdp * pct));
   if (amount > 0) {
-    await spendFromTreasury(db, countryId, amount, { resyncDerived: true });
+    await spendFromTreasury(db, countryId, amount, {
+      resyncDerived: true,
+      witness: {
+        flow: "crisis_response",
+        key: receiptKey ?? `global-response:${countryId}:${option.optionId}`,
+        site: "livingConflict/globalResponse",
+      },
+    });
   }
   return amount;
 }

@@ -1,7 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { unownedHeadroomUnitsPerAnchor } from "@/lib/market/unownedHeadroom";
 
 vi.mock("@/lib/currency/corporationCapital", () => ({
@@ -64,7 +65,7 @@ vi.mock("@/lib/financialTxLog/stampDeleted", () => ({
 // Treasury debit has its own unit tests; mock so orchestration tests stay focused.
 vi.mock("./treasury", () => ({
   debitTreasuryCompensation: vi.fn().mockResolvedValue(0),
-  creditTreasuryProceeds: vi.fn().mockResolvedValue(undefined),
+  creditTreasuryProceedsFromAnchor: vi.fn().mockResolvedValue(undefined),
 }));
 // NatCorp resolution/ensure have their own tests in nationalCorporation.test.ts.
 // Mock them here so the engine tests are decoupled from corporations.findOne
@@ -76,6 +77,12 @@ vi.mock("./nationalCorporation", () => ({
 
 let db: MockDb;
 
+// Load the orchestration graph before per-test mocks are populated. A slow cold
+// import must not leave a timed-out test running into the next test's fixtures.
+beforeAll(async () => {
+  await import("./ownershipTransition");
+}, 60_000);
+
 beforeEach(() => {
   vi.clearAllMocks();
   db = createMockDb();
@@ -85,6 +92,7 @@ beforeEach(() => {
   db.collection("bonds");
   db.collection("characters");
   db.collection("imperialCharacters");
+  db.collection("bankMoneyMoves");
 });
 
 function findCursor<T>(rows: T[]) {
@@ -145,7 +153,7 @@ describe("nationalizeSector", () => {
     expect(resolveNationalCorporationForSector).toHaveBeenCalledWith(db, "CN", "energy");
 
     const sectorUpdate = db.collectionMocks.corporateSectors.updateOne.mock.calls[0];
-    expect(sectorUpdate[0]).toEqual({ _id: sectorId });
+    expect(sectorUpdate[0]).toMatchObject({ _id: sectorId, $and: expect.any(Array) });
     expect(sectorUpdate[1].$set.corporationId).toEqual(natCorpId);
     // Transition revenue haircut (6M × 0.85) + nationalization anchor stamped.
     expect(sectorUpdate[1].$set.revenue).toBe(5_100_000);
@@ -200,6 +208,7 @@ describe("nationalizeSector", () => {
       (c) => JSON.stringify(c[0]) === JSON.stringify({ _id: donorId })
     );
     expect(donorUpdate).toBeUndefined();
+    expect(db.collectionMocks.bankMoneyMoves.findOne).not.toHaveBeenCalled();
   });
 
   // Regression for the multi-NatCorp "take the rest" invariant: once a sector type
@@ -282,7 +291,9 @@ describe("nationalizeSector", () => {
     expect(mergeUpdate![1].$set.nationalizedAtTurn).toBe(1);
 
     // The donor's taken row is folded in (deleted), not left re-parented.
-    expect(db.collectionMocks.corporateSectors.deleteOne).toHaveBeenCalledWith({ _id: sectorId });
+    expect(db.collectionMocks.corporateSectors.deleteOne).toHaveBeenCalledWith(
+      expect.objectContaining({ _id: sectorId, $and: expect.any(Array) })
+    );
     const reparent = db.collectionMocks.corporateSectors.updateOne.mock.calls.find((c) =>
       c[0]?._id?.equals?.(sectorId)
     );
@@ -309,7 +320,8 @@ describe("nationalizeSector", () => {
       "CN",
       20000, // valuation 4000 × fair × buyout premium (5)
       expect.anything(),
-      expect.any(Date)
+      expect.any(Date),
+      expect.objectContaining({ flow: "nationalization_compensation" })
     );
   });
 });
@@ -388,7 +400,10 @@ describe("nationalizeWholeCorp", () => {
     const sectorUpdate = db.collectionMocks.corporateSectors.updateOne.mock.calls.find(
       (c) => c[1]?.$set?.corporationId != null
     );
-    expect(sectorUpdate![0]).toEqual({ _id: sectorId });
+    expect(sectorUpdate![0]).toMatchObject({
+      _id: sectorId,
+      "constructionPropertyTransition.key": expect.stringContaining("nationalize:"),
+    });
     expect(sectorUpdate![1].$set.corporationId).toEqual(primaryId);
 
     // Bonds re-stamped to the primary (issuer continuity).
@@ -400,6 +415,72 @@ describe("nationalizeWholeCorp", () => {
     expect(result.nationalCorporationId).toEqual(primaryId);
     expect(result.sectorsAbsorbed).toBe(1);
     expect(result.bondsAssumed).toBe(1);
+
+    const reservation = db.collectionMocks.corporateSectors.updateOne.mock.calls.find(
+      (call) => call[1]?.$set?.constructionPropertyTransition
+    );
+    const reservationIndex = db.collectionMocks.corporateSectors.updateOne.mock.calls.findIndex(
+      (call) => call[1]?.$set?.constructionPropertyTransition
+    );
+    expect(reservation).toBeTruthy();
+    expect(
+      db.collectionMocks.corporateSectors.updateOne.mock.invocationCallOrder[reservationIndex]
+    ).toBeLessThan(
+      vi.mocked((await import("./treasury")).debitTreasuryCompensation).mock.invocationCallOrder[0]
+    );
+    expect(sectorUpdate![0]["constructionPropertyTransition.key"]).toBe(
+      reservation![1].$set.constructionPropertyTransition.key
+    );
+    expect(sectorUpdate![1].$unset).toBeUndefined();
+    const markerRelease = db.collectionMocks.corporateSectors.updateOne.mock.calls.find(
+      (call) => call[1]?.$unset && "constructionPropertyTransition" in call[1].$unset
+    );
+    const markerReleaseIndex = db.collectionMocks.corporateSectors.updateOne.mock.calls.findIndex(
+      (call) => call[1]?.$unset && "constructionPropertyTransition" in call[1].$unset
+    );
+    expect(markerRelease?.[0]).toMatchObject({
+      _id: sectorId,
+      "constructionPropertyTransition.key": reservation![1].$set.constructionPropertyTransition.key,
+    });
+    expect(
+      db.collectionMocks.corporateSectors.updateOne.mock.invocationCallOrder[markerReleaseIndex]
+    ).toBeGreaterThan(db.collectionMocks.corporations.deleteOne.mock.invocationCallOrder[0]);
+  });
+
+  it("does not pay for whole-corp taking when the sector reservation loses a claim race", async () => {
+    const primaryId = new ObjectId();
+    const targetId = new ObjectId();
+    await setupTarget({ primaryId, targetId });
+    db.collectionMocks.corporateSectors.find.mockReturnValue(
+      findCursor([
+        {
+          _id: new ObjectId(),
+          corporationId: targetId,
+          countryId: "CN",
+          stateId: "CN-HD",
+          sectorType: "energy",
+          revenue: 100,
+          profitMargin: 35,
+        },
+      ])
+    );
+    db.collectionMocks.corporateSectors.updateOne.mockResolvedValueOnce({
+      matchedCount: 0,
+      modifiedCount: 0,
+    } as never);
+
+    const { nationalizeWholeCorp } = await import("./ownershipTransition");
+    const { debitTreasuryCompensation } = await import("./treasury");
+    await expect(
+      nationalizeWholeCorp(db as unknown as Db, {
+        countryId: "CN",
+        corporationId: targetId,
+        tier: "fair",
+        consequence: CONSEQ,
+      })
+    ).rejects.toThrow(/secured construction/);
+    expect(debitTreasuryCompensation).not.toHaveBeenCalled();
+    expect(db.collectionMocks.corporations.deleteOne).not.toHaveBeenCalled();
   });
 
   // Bug #0775 follow-up: the dissolved shell's liquidCapital used to vanish. It must
@@ -415,7 +496,7 @@ describe("nationalizeWholeCorp", () => {
     vi.mocked(resolveNationalCorporationForSector).mockResolvedValue({ _id: primaryId } as never);
 
     const { nationalizeWholeCorp } = await import("./ownershipTransition");
-    const { creditTreasuryProceeds } = await import("./treasury");
+    const { creditTreasuryProceedsFromAnchor } = await import("./treasury");
     await nationalizeWholeCorp(db as unknown as Db, {
       countryId: "CN",
       corporationId: targetId,
@@ -425,7 +506,13 @@ describe("nationalizeWholeCorp", () => {
 
     // valuation = max(marketCap 2000, equity 500+4000) − 0 = 4500; payout = 4500 × 5 = 22500.
     // cash (500) ≤ payout ⇒ the state recoups all 500; CEO gets nothing.
-    expect(vi.mocked(creditTreasuryProceeds)).toHaveBeenCalledWith(db, "CN", 500, expect.any(Date));
+    expect(vi.mocked(creditTreasuryProceedsFromAnchor)).toHaveBeenCalledWith(
+      db,
+      "CN",
+      500,
+      expect.any(Date),
+      expect.objectContaining({ flow: "corporation_liquidation" })
+    );
     expect(db.collectionMocks.characters.updateOne).not.toHaveBeenCalled();
   });
 
@@ -462,7 +549,7 @@ describe("nationalizeWholeCorp", () => {
     vi.mocked(sumBondPrincipalAnchor).mockReturnValueOnce(9000);
 
     const { nationalizeWholeCorp } = await import("./ownershipTransition");
-    const { creditTreasuryProceeds } = await import("./treasury");
+    const { creditTreasuryProceedsFromAnchor } = await import("./treasury");
     await nationalizeWholeCorp(db as unknown as Db, {
       countryId: "CN",
       corporationId: targetId,
@@ -476,11 +563,12 @@ describe("nationalizeWholeCorp", () => {
       (c) => c[0]._id?.toString() === ceoId.toString()
     );
     expect(ceoPay?.[1].$inc.cashOnHand).toBe(5000);
-    expect(vi.mocked(creditTreasuryProceeds)).toHaveBeenCalledWith(
+    expect(vi.mocked(creditTreasuryProceedsFromAnchor)).toHaveBeenCalledWith(
       db,
       "CN",
       5000,
-      expect.any(Date)
+      expect.any(Date),
+      expect.objectContaining({ flow: "corporation_liquidation" })
     );
   });
 
@@ -512,7 +600,7 @@ describe("nationalizeWholeCorp", () => {
     db.collectionMocks.characters.findOne.mockResolvedValue({ _id: ceoId });
 
     const { nationalizeWholeCorp } = await import("./ownershipTransition");
-    const { creditTreasuryProceeds } = await import("./treasury");
+    const { creditTreasuryProceedsFromAnchor } = await import("./treasury");
     await nationalizeWholeCorp(db as unknown as Db, {
       countryId: "CN",
       corporationId: targetId,
@@ -521,11 +609,12 @@ describe("nationalizeWholeCorp", () => {
     });
 
     // Seizure pays shareholders nothing; the state takes the full cash, CEO gets none.
-    expect(vi.mocked(creditTreasuryProceeds)).toHaveBeenCalledWith(
+    expect(vi.mocked(creditTreasuryProceedsFromAnchor)).toHaveBeenCalledWith(
       db,
       "CN",
       8000,
-      expect.any(Date)
+      expect.any(Date),
+      expect.objectContaining({ flow: "corporation_liquidation" })
     );
     expect(db.collectionMocks.characters.updateOne).not.toHaveBeenCalled();
   });
@@ -625,7 +714,9 @@ describe("nationalizeWholeCorp", () => {
     // The released sector's region has changed hands: its stored country still
     // says JP, the state says PL.
     db.collection("states");
+    db.collection("unownedSectors");
     db.collectionMocks.states.findOne.mockResolvedValue({ _id: "JP-13", countryId: "PL" });
+    db.collectionMocks.unownedSectors.findOneAndUpdate.mockResolvedValue({ _id: new ObjectId() });
     const { nationalizeWholeCorp } = await import("./ownershipTransition");
     const result = await nationalizeWholeCorp(db as unknown as Db, {
       countryId: "CN",
@@ -638,7 +729,10 @@ describe("nationalizeWholeCorp", () => {
     const sectorUpdate = db.collectionMocks.corporateSectors.updateOne.mock.calls.find(
       (c) => c[1]?.$set?.corporationId != null
     );
-    expect(sectorUpdate![0]).toEqual({ _id: domesticSectorId });
+    expect(sectorUpdate![0]).toMatchObject({
+      _id: domesticSectorId,
+      "constructionPropertyTransition.key": expect.stringContaining("nationalize:"),
+    });
 
     // Foreign sector merged into the unowned market (₳-converted, by state+type)
     // and removed. This is an AGGREGATION PIPELINE update, not $inc +
@@ -647,16 +741,22 @@ describe("nationalizeWholeCorp", () => {
     // headroom backfill would start the field from 0 and understate the pool
     // permanently. $setOnInsert is unavailable inside a pipeline, hence the
     // $ifNull identity seeding.
-    const unownedUpsert = db.collectionMocks.unownedSectors.updateOne.mock.calls[0];
-    expect(unownedUpsert[0]).toEqual({ stateId: "JP-13", sectorType: "technology" });
-    expect(unownedUpsert[2]).toEqual({ upsert: true });
+    const unownedUpsert = db.collectionMocks.unownedSectors.findOneAndUpdate.mock.calls[0];
+    expect(unownedUpsert[0]).toEqual({
+      stateId: "JP-13",
+      sectorType: "technology",
+      mediaDiscriminator: null,
+    });
+    expect(unownedUpsert[2]).toEqual({ upsert: true, returnDocument: "before" });
 
     const pipeline = unownedUpsert[1] as Array<{ $set: Record<string, unknown> }>;
     expect(Array.isArray(pipeline)).toBe(true);
-    // Stage 1 adds the ₳ revenue onto whatever the pool already held.
-    expect(pipeline[0].$set.revenue).toEqual({
-      $add: [{ $ifNull: ["$revenue", 0] }, 2_000_000], // passthrough at rate 1
-    });
+    // Stage 1 records an idempotency receipt with the revenue delta. A retry
+    // recognizes the pending token and leaves the pool's current value alone.
+    expect(JSON.stringify(pipeline[0].$set.revenue)).toContain("2000000");
+    expect(JSON.stringify(pipeline[0].$set.recentCorporateSectorRestores)).toContain(
+      "pendingSourceDelete"
+    );
     expect(pipeline[0].$set.stateId).toEqual({ $ifNull: ["$stateId", "JP-13"] });
     // Ticket #1271: the pool row's country comes from the STATE, not from
     // whatever the released sector last stored. The state below says the region
@@ -668,9 +768,14 @@ describe("nationalizeWholeCorp", () => {
     const headroom = pipeline[1].$set.headroomUnits as { $multiply: [string, number] };
     expect(headroom.$multiply[0]).toBe("$revenue");
     expect(headroom.$multiply[1]).toBeCloseTo(unownedHeadroomUnitsPerAnchor("technology", 1), 10);
-    expect(db.collectionMocks.corporateSectors.deleteOne).toHaveBeenCalledWith({
+    const foreignDelete = db.collectionMocks.corporateSectors.deleteOne.mock.calls.find(
+      ([query]) => query?._id === foreignSectorId
+    );
+    expect(foreignDelete?.[0]).toMatchObject({
       _id: foreignSectorId,
+      "constructionPropertyTransition.key": expect.stringContaining("nationalize:"),
     });
+    expect(db.collectionMocks.unownedSectors.findOneAndUpdate).toHaveBeenCalledTimes(2);
 
     // Only the domestic sector counts as absorbed; the foreign one was divested.
     expect(result.sectorsAbsorbed).toBe(1);
@@ -794,9 +899,12 @@ describe("nationalizeWholeCorp", () => {
     expect(merge![1].$set.nationalizedAtTurn).toBe(1);
     expect(merge![1].$inc.workers).toBe(500);
     // …and the donor row is DELETED (not blind-re-parented onto a colliding key).
-    expect(db.collectionMocks.corporateSectors.deleteOne).toHaveBeenCalledWith({
-      _id: donorSectorId,
-    });
+    expect(db.collectionMocks.corporateSectors.deleteOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        _id: donorSectorId,
+        "constructionPropertyTransition.key": expect.stringContaining("nationalize:"),
+      })
+    );
     const blindReparent = db.collectionMocks.corporateSectors.updateOne.mock.calls.find(
       (c) => c[1]?.$set?.corporationId != null
     );
@@ -919,12 +1027,102 @@ describe("nationalizeWholeCorp", () => {
       avgCostPerShare: 150,
     });
 
-    // Verify that the National Corporation was credited with the value of the shares
+    // Shares only: the buyout pays the holders for them, so crediting their value
+    // to the National Corporation as cash too would create money (#3041).
     const creditCall = db.collectionMocks.corporations.updateOne.mock.calls.find(
       (c) => c[1]?.$inc?.liquidCapital != null && (c[0]?._id as ObjectId)?.equals(nationalCorpId)
     );
-    expect(creditCall).toBeTruthy();
-    // 100 shares * 200 CNY/share = 20,000 CNY
-    expect(creditCall![1].$inc.liquidCapital).toBe(20_000);
+    expect(creditCall).toBeUndefined();
+  });
+});
+
+describe("foreign sector release retry receipts", () => {
+  it("retains an owned pool receipt past seven days across another pool write and does not double-credit", async () => {
+    const memory = createInMemoryDb();
+    const now = new Date("2026-10-04T12:00:00.000Z");
+    const sectorId = new ObjectId();
+    const transitionKey = "nationalize:foreign-release:stable-operation";
+    const poolId = new ObjectId();
+    const sector = {
+      _id: sectorId,
+      corporationId: new ObjectId(),
+      countryId: "JP",
+      stateId: "JP-13",
+      sectorType: "technology",
+      revenue: 5,
+      constructionPropertyTransition: { key: transitionKey, kind: "nationalization" },
+    };
+    await memory.collection("states").insertOne({
+      _id: "JP-13",
+      countryId: "PL",
+    });
+    await memory.collection("corporateSectors").insertOne(sector);
+    await memory.collection("unownedSectors").insertOne({
+      _id: poolId,
+      stateId: "JP-13",
+      countryId: "PL",
+      sectorType: "technology",
+      revenue: 100,
+      headroomUnits: 100,
+      recentCorporateSectorRestores: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const corporateSectors = memory.collection("corporateSectors");
+    const deleteOne = vi
+      .spyOn(corporateSectors, "deleteOne")
+      .mockRejectedValueOnce(new Error("simulated interruption after pool credit"));
+    const { releaseForeignSectorToUnowned } = await import("./ownershipTransition");
+
+    await expect(
+      releaseForeignSectorToUnowned(
+        memory as unknown as Db,
+        sector as never,
+        "USD",
+        1,
+        now,
+        false,
+        1,
+        transitionKey
+      )
+    ).rejects.toThrow("simulated interruption");
+    const pool = memory.collection("unownedSectors");
+    const afterFirstAttempt = await pool.findOne({ _id: poolId });
+    expect(afterFirstAttempt?.revenue).toBe(105);
+    expect(afterFirstAttempt?.recentCorporateSectorRestores).toMatchObject([
+      {
+        sectorId: sectorId.toHexString(),
+        operationKey: transitionKey,
+        pendingSourceDelete: true,
+      },
+    ]);
+
+    // A separate market writer changes the same pool before this operation is
+    // retried after the regular receipt window has elapsed.
+    await pool.updateOne({ _id: poolId }, { $inc: { revenue: 17 } });
+    const retryAt = new Date(now.getTime() + 9 * 24 * 60 * 60 * 1000);
+    await releaseForeignSectorToUnowned(
+      memory as unknown as Db,
+      sector as never,
+      "USD",
+      1,
+      retryAt,
+      false,
+      1,
+      transitionKey
+    );
+
+    const afterRetry = await pool.findOne({ _id: poolId });
+    expect(afterRetry?.revenue).toBe(122);
+    expect(afterRetry?.recentCorporateSectorRestores).toMatchObject([
+      {
+        sectorId: sectorId.toHexString(),
+        operationKey: transitionKey,
+        pendingSourceDelete: false,
+      },
+    ]);
+    expect(await corporateSectors.findOne({ _id: sectorId })).toBeNull();
+    expect(deleteOne).toHaveBeenCalledTimes(2);
   });
 });

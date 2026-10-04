@@ -4,8 +4,15 @@
  * recovery worker; callers never reconstruct a second cash move after a crash.
  */
 import { createHash } from "node:crypto";
+import { resolveLedgerTurn } from "@/lib/ledger/ledgerTurn";
 import { ObjectId, type Db } from "mongodb";
-import type { CurrencyCode } from "@/lib/constants/currencies";
+import {
+  COUNTRY_CURRENCY_MAP,
+  FOREX_ACTIVE_COUNTRIES,
+  eraRateForCurrency,
+  type CurrencyCode,
+} from "@/lib/constants/currencies";
+import type { CountryId } from "@/lib/constants/countries";
 import type { TransitionProjection } from "@/lib/banking/rules/boundary";
 import { computeExpiresAtSync } from "@/lib/financialTxLog/expiresAt";
 import { DEFAULT_TURN_LENGTH_MINUTES } from "@/lib/db/types/financialTxLog";
@@ -15,24 +22,72 @@ import { sovereignPrimaryTransition, type SovereignPrimaryFunding } from "./rule
 
 export interface PrimaryAccountingContext {
   ledgerShadow: boolean;
+  treasuryCashLedgerEnabled?: boolean;
   turnLengthMinutes: number;
   rates: Map<string, number>;
+  /** World preset, for the authored era rate of a currency with no exchangeRates row. */
+  preset?: string;
+  /** The turn whose closing snapshot holds cash settled under this context (#3022). */
+  ledgerTurn?: number | null;
+}
+
+/**
+ * Rate for a sovereign primary placement. A live exchangeRates row wins. A
+ * country outside the forex system issuing in its own currency (the
+ * Warsaw-Pact currencies have no row by design) uses its authored era rate,
+ * the same rule treasury accrual applies, instead of failing the bond turn.
+ */
+export function primaryFinancingRate(
+  accounting: Pick<PrimaryAccountingContext, "rates" | "preset">,
+  countryId: string,
+  currency: string
+): number | undefined {
+  const observed = accounting.rates.get(currency);
+  if (observed !== undefined) return observed;
+  if (
+    !FOREX_ACTIVE_COUNTRIES.includes(countryId as CountryId) &&
+    COUNTRY_CURRENCY_MAP[countryId as CountryId] === currency
+  ) {
+    return eraRateForCurrency(currency as CurrencyCode, accounting.preset);
+  }
+  return undefined;
 }
 
 export async function loadPrimaryAccounting(db: Db): Promise<PrimaryAccountingContext> {
-  const [config, rates] = await Promise.all([
+  const [config, rates, gameState, ledgerTurn] = await Promise.all([
     db
-      .collection<{ _id: string; ledgerShadow?: boolean; turnLengthMinutes?: number }>("gameConfig")
-      .findOne({ _id: "default" }, { projection: { ledgerShadow: 1, turnLengthMinutes: 1 } }),
+      .collection<{
+        _id: string;
+        ledgerShadow?: boolean;
+        turnLengthMinutes?: number;
+        treasuryCashLedgerEnabled?: boolean;
+      }>("gameConfig")
+      .findOne(
+        { _id: "default" },
+        {
+          projection: {
+            ledgerShadow: 1,
+            turnLengthMinutes: 1,
+            treasuryCashLedgerEnabled: 1,
+          },
+        }
+      ),
     db
       .collection<{ currencyCode: string; rate: number }>("exchangeRates")
       .find({}, { projection: { currencyCode: 1, rate: 1 } })
       .toArray(),
+    db
+      .collection<{ _id: string; preset?: string }>("gameState")
+      .findOne({ _id: "current" }, { projection: { preset: 1 } }),
+    resolveLedgerTurn(db),
   ]);
   return {
     ledgerShadow: config?.ledgerShadow === true,
+    treasuryCashLedgerEnabled: config?.treasuryCashLedgerEnabled === true,
     turnLengthMinutes: config?.turnLengthMinutes ?? DEFAULT_TURN_LENGTH_MINUTES,
     rates: new Map(rates.map((r) => [r.currencyCode, r.rate])),
+    preset: gameState?.preset ?? "",
+    ledgerTurn,
   };
 }
 
@@ -54,15 +109,35 @@ export async function primarySettlementExists(db: Db, key: string): Promise<bool
   return true;
 }
 
+/**
+ * Which of `keys` already have a settlement record, in one read. Presence only:
+ * a caller still runs `primarySettlementExists` on a present key for its
+ * status check, so a record awaiting recovery throws exactly as before.
+ */
+export async function existingPrimarySettlementKeys(
+  db: Db,
+  keys: readonly string[]
+): Promise<Set<string>> {
+  if (keys.length === 0) return new Set();
+  const rows = await db
+    .collection<{ _id: string }>(MONEY_MOVE_COLLECTION)
+    .find({ _id: { $in: [...keys] } }, { projection: { _id: 1 } })
+    .toArray();
+  return new Set(rows.map((row) => String(row._id)));
+}
+
 export async function commitSovereignPrimary(
   db: Db,
   input: SovereignPrimaryFunding & { countryId: string; now: Date },
   projections: TransitionProjection[],
   accounting: PrimaryAccountingContext
 ): Promise<void> {
-  const transition = sovereignPrimaryTransition(input);
+  const transition = sovereignPrimaryTransition({
+    ...input,
+    treasuryCashLedgerEnabled: accounting.treasuryCashLedgerEnabled === true,
+  });
   transition.projections.push(...projections);
-  const observedRate = accounting.rates.get(input.currency);
+  const observedRate = primaryFinancingRate(accounting, input.countryId, input.currency);
   if (
     input.poolCash + input.monetaryCash > 0 &&
     (observedRate === undefined || !Number.isFinite(observedRate) || observedRate <= 0)
@@ -130,12 +205,43 @@ export async function commitSovereignPrimary(
       note: "Primary financing stock-flow witness",
       insert: {
         _id: primaryDocumentId(`${input.key}:ledger`),
-        turn: input.turn,
+        turn: accounting.ledgerTurn ?? input.turn,
         createdAt: input.now,
         txType: "gov_bond_issuance",
         legs,
         balanced: true,
         emitSite: "bonds/sovereignPrimarySettlement",
+      },
+    });
+  }
+  if (accounting.ledgerShadow && accounting.treasuryCashLedgerEnabled && input.poolCash > 0) {
+    const currency = input.currency as CurrencyCode;
+    transition.projections.push({
+      collection: "ledgerEntries",
+      note: "Funded treasury cash stock-flow witness",
+      insert: {
+        _id: primaryDocumentId(`${input.key}:treasury-cash-ledger`),
+        turn: accounting.ledgerTurn ?? input.turn,
+        createdAt: input.now,
+        txType: "gov_bond_issuance",
+        legs: [
+          {
+            account: `government_cash:${input.countryId}:${currency}`,
+            amount: input.poolCash,
+            currencyCode: currency,
+            anchorAmount: input.poolCash / rate,
+            role: "primary",
+          },
+          {
+            account: `bond_pool:${currency}:${currency}`,
+            amount: -input.poolCash,
+            currencyCode: currency,
+            anchorAmount: -input.poolCash / rate,
+            role: "contra",
+          },
+        ],
+        balanced: true,
+        emitSite: "bonds/sovereignPrimarySettlement:treasuryCash",
       },
     });
   }

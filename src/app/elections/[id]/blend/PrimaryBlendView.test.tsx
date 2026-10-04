@@ -1,6 +1,6 @@
 /** @vitest-environment happy-dom */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ElectionDetail } from "../components/ElectionDetailTypes";
 import type { PrimaryPartyDetail } from "@/lib/elections/dto/primaryPartyDetail";
 import { PrimaryBlendView } from "./PrimaryBlendView";
@@ -159,7 +159,7 @@ describe("PrimaryBlendView", () => {
     );
 
     render(<PrimaryBlendView election={election()} wire={[]} />);
-    screen.getAllByRole("button", { name: /Republican/ })[0].click();
+    fireEvent.click(screen.getAllByRole("button", { name: /Republican/ })[0]);
 
     await waitFor(() =>
       expect(
@@ -167,8 +167,10 @@ describe("PrimaryBlendView", () => {
       ).toBeGreaterThan(0)
     );
 
-    releaseFirst(null);
-    await new Promise((r) => setTimeout(r, 0));
+    await act(async () => {
+      releaseFirst(null);
+      await held;
+    });
 
     // The late party-1 response must not replace the board on screen.
     expect(screen.queryByRole("button", { name: "Iowa: First Filer won" })).toBeNull();

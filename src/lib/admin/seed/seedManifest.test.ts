@@ -24,6 +24,44 @@ const COLLECTIONS_DIR = join(process.cwd(), "src/lib/db/collections");
  * module declares must carry a manifest classification.
  */
 describe("seed manifest classification coverage", () => {
+  it("wipes funded bank-failure receipts with the world they belong to", () => {
+    expect(getCollectionCategory("bankFailurePoliticalEvents")).toBe("runtime");
+    expect(getRuntimeCollectionNames()).toContain("bankFailurePoliticalEvents");
+  });
+  it("resets the federation publication and protected-choice journals", () => {
+    for (const name of [
+      "russianConstitutionalProposals",
+      "russianPresidentialElectionResults",
+      "russianPresidentialOfficeArchives",
+      "russianDumaElectionResults",
+      "russianDumaRepeatOpenings",
+      "russianCouncilElectionOpenings",
+      "russianCouncilElectionResults",
+      "russianAssemblySeatings",
+      "russianDumaConvocations",
+      "russianCouncilFormationProposals",
+      "russianRegionalAuthorities",
+      "russianCouncilCompositionSeatings",
+      "russianAssemblyOfficeArchives",
+      "federationRelocations",
+      "federationPublicationPreparations",
+      "federationPreparedEffects",
+      "federationArchivedRegionRows",
+      "federationArchivedPoliticalRows",
+      "federationCustodyRecords",
+      "federationArchivedPublicCorporations",
+      "federationPublicCorporationRebases",
+      "federationPrivateFirmHolds",
+      "federationResidentHolds",
+      "federationFiscalAccounts",
+      "federationLegacyServiceTurns",
+      "federationContinuingServiceTurns",
+      "federationFacilityClaims",
+      "federationFacilityPaymentTurns",
+    ]) {
+      expect(getCollectionCategory(name)).toBe("runtime");
+    }
+  });
   const declared = readdirSync(COLLECTIONS_DIR)
     .filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts"))
     .flatMap((f) => {
@@ -60,12 +98,48 @@ describe("runtime lifecycle category determines reset selection", () => {
     "unionOrganizers",
     "bargainingCampaigns",
     "collectiveAgreements",
+    "manufacturingProductProjectsV2",
     "landeslisten",
+    "fundFloatSettlements",
+    "bg1991ListReplacements",
+    "bgGrandConstituencyByElections",
   ])("wipes %s instead of treating it as reference data", (name) => {
     expect(getCollectionCategory(name)).toBe("runtime");
     expect(getRuntimeCollectionNames()).toContain(name);
     expect(getReferenceCollectionNames()).not.toContain(name);
     expect(getPreservedCollectionNames()).not.toContain(name);
+  });
+
+  it.each([
+    // Wiki
+    "wikiPages",
+    "wikiTemplates",
+    "wikiReports",
+    "manualOfficeHistory",
+    "politicianOverrides",
+    "eventDefinitions",
+    // Accounts, sessions, bans
+    "users",
+    "unifiedSessions",
+    "bannedIps",
+    "userApiKeys",
+    "userSubscriptions",
+    // Identity and moderation evidence
+    "identityObservations",
+    "altLinks",
+    "altClusters",
+    "suspiciousCharacters",
+    "modAuditLog",
+    "adminLogs",
+    "playerMailReports",
+    "playerContentReports",
+    // Site analytics and staff tooling
+    "siteTrafficPageviews",
+    "codeQualitySnapshots",
+    "apiAccessLog",
+  ])("keeps cross-game collection %s out of the reset sweep", (name) => {
+    expect(getCollectionCategory(name)).toBe("preserved");
+    expect(getRuntimeCollectionNames()).not.toContain(name);
   });
 
   it("keeps actual world reference and account collections in their own lifecycle", () => {

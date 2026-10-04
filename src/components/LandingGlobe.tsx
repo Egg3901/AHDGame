@@ -12,6 +12,7 @@ import Image from "next/image";
 import { Badge, Skeleton } from "@/components/ui";
 import MapSVGContent, {
   BACKGROUND_LAYER_KEY,
+  BACKGROUND_MACRO_LAYER_KEY,
   type GlobeLayout,
 } from "@/app/world/components/MapSVGContent";
 import MapTooltip from "@/app/world/components/MapTooltip";
@@ -48,7 +49,11 @@ import {
   type HistoricalCrisisShowcaseEntry,
 } from "@/components/landing/historicalCrisisShowcase";
 import {
+  BACKGROUND_MACRO_COLOR,
+  backgroundMacroWireframeFill,
   buildTierLookup,
+  successorOwners,
+  type SuccessorProxies,
   isTierInteractive,
   tierWireframeFill,
   TIER_COLORS,
@@ -56,6 +61,17 @@ import {
   TIER_ORDER,
 } from "@/components/landing/countryTiers";
 import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
+import {
+  BROADCAST_GRATICULE_STROKE,
+  BROADCAST_SPHERE_FILL,
+  BROADCAST_SPHERE_STROKE,
+  BroadcastOverlay,
+  BroadcastUnderlay,
+  dissolvedStateGeometry,
+  useBroadcastGlobeLayers,
+} from "@/components/landing/broadcastGlobe";
+import type { BroadcastLanderConfig } from "@/components/landing/eraThemes";
+import { createGlobeFrame } from "@/components/landing/globeFastPaths";
 
 type LandingCountryAccess = Partial<
   Record<string, { enabledForPlayers: boolean; economyPreview: boolean; status: CountryStatus }>
@@ -80,6 +96,8 @@ const LANDING_MARKERS: Record<string, LandingMarkerGeo> = {
   UK: { label: "United Kingdom", lonLat: [-1.8, 52.6] },
   RU: { label: "USSR", lonLat: [37.6, 55.75] },
   DD: { label: "East Germany", lonLat: [12.6, 52.2] },
+  // Playable from 1991 on. Honshu, not the centroid, which sits in the sea.
+  JP: { label: "Japan", lonLat: [138.6, 36.4] },
 };
 // Marker declutter geometry (screen px): chips lift above their pin, cluster when
 // their pins fall within CLUSTER_DX, and stack ROW_H apart with leader lines.
@@ -96,6 +114,18 @@ const SHOWCASE_IDLE_MS = 12_000;
  */
 const FRAME_BUDGET_MS = 33;
 const LOW_POWER_FRAME_BUDGET_MS = 66;
+/**
+ * The idle spin waits this long after the globe loads, and then for an idle
+ * moment, so the first paint, hydration and the largest paint are not fighting
+ * a reprojection every frame. The globe is drawn, just still, until then.
+ */
+const SPIN_START_DELAY_MS = 2500;
+/** A spin frame slower than this, on average, drops the globe to half rate. */
+const SLOW_SPIN_FRAME_MS = 12;
+/** Spin frames averaged before deciding the device is slow. */
+const SLOW_SPIN_SAMPLE = 8;
+/** Path coordinates are written to a tenth of a viewBox unit, under half a pixel. */
+const PATH_DIGITS = 1;
 const SPIN_DEGREES_PER_FRAME = 0.12;
 const SHOWCASE_TRANSITION_MS = 1_500;
 const SHOWCASE_HOLD_MS = 4_200;
@@ -159,6 +189,11 @@ export function LandingGlobe({
   economicPowerFeatureIds,
   onShowcaseActiveChange,
   showcasePaused = false,
+  broadcast,
+  hideTierLegend = false,
+  markersFromSm = false,
+  backgroundMacroFeatureIds,
+  successorProxies,
 }: {
   gameDate?: string;
   theme?: "default" | "broadsheet";
@@ -218,6 +253,39 @@ export function LandingGlobe({
    * false, so normal behaviour resumes the moment the flag clears.
    */
   showcasePaused?: boolean;
+  /**
+   * The broadcast globe (the 1991 hero, see `components/landing/broadcastGlobe`):
+   * lit ocean, a dissolved state's borders, and satellites beaming down to the
+   * year's datelines. Absent keeps the plain or CRT look, which
+   * `wireframeColor` decides. Pass a stable reference; the era config is one.
+   */
+  broadcast?: Pick<
+    BroadcastLanderConfig,
+    "dissolvedStateFeatureIds" | "orbitLabel" | "ticker" | "showcase" | "showcaseBadge"
+  >;
+  /**
+   * Skip the bare-mode tier key in the corner, for a hero that draws its own
+   * (the broadcast lander sets its key above the drawer). Default false.
+   */
+  hideTierLegend?: boolean;
+  /**
+   * Drop the player-count chips below the `sm` breakpoint, for a hero whose
+   * copy fills a phone screen and would otherwise sit on top of them.
+   */
+  markersFromSm?: boolean;
+  /**
+   * Background Nations the preset simulates as macro aggregates, from
+   * `backgroundMacroFeatureIdsForPreset`. Drawn in their own colour instead of
+   * the grey of unsimulated land. Pass a stable reference.
+   */
+  backgroundMacroFeatureIds?: readonly string[];
+  /**
+   * Modern features drawn as a state the basemap has no shape for, from
+   * `successorProxiesForYear` (Czechoslovakia and Yugoslavia before their
+   * break-ups). They take the state's tier, tooltip and page. Pass a stable
+   * reference.
+   */
+  successorProxies?: SuccessorProxies;
 }) {
   const resolveCountryName = useCountryDisplayName();
   const isBroadsheet = theme === "broadsheet";
@@ -327,15 +395,44 @@ export function LandingGlobe({
             ISO_TO_COUNTRY_ID,
             countryAccess,
             battlegroundFeatureIds ?? [],
-            economicPowerFeatureIds ?? []
+            economicPowerFeatureIds ?? [],
+            successorProxies
           )
         : undefined,
-    [countryAccess, battlegroundFeatureIds, economicPowerFeatureIds]
+    [countryAccess, battlegroundFeatureIds, economicPowerFeatureIds, successorProxies]
+  );
+  // Proxy feature to the state it stands in for, for hover and click.
+  const proxyOwners = useMemo(
+    () => successorOwners(countryAccess, successorProxies ?? {}),
+    [countryAccess, successorProxies]
   );
   const tierLookupRef = useRef(tierLookup);
   tierLookupRef.current = tierLookup;
+  const backgroundMacroSet = useMemo(
+    () => (backgroundMacroFeatureIds?.length ? new Set(backgroundMacroFeatureIds) : undefined),
+    [backgroundMacroFeatureIds]
+  );
 
   const haloRef = useRef<SVGCircleElement>(null);
+
+  // Fixed for an era, so the callbacks and the frame loop below can close over
+  // it without being rebuilt.
+  const isBroadcast = broadcast !== undefined;
+  // The idle tour: an era's own events where it has them (1991), else the
+  // Cold War tour from 1953 on.
+  const showcase = broadcast?.showcase ?? HISTORICAL_CRISIS_SHOWCASE;
+  const {
+    bind: bindBroadcast,
+    geometry: dissolvedGeometryRef,
+    render: renderBroadcast,
+  } = useBroadcastGlobeLayers({
+    translate: LANDING_TRANSLATE,
+    globeRadius: LANDING_ORTHO_SCALE,
+    ticker: broadcast?.ticker,
+  });
+  // The loader keys on the roster's contents, so a fresh array of the same ids
+  // does not refetch the world.
+  const dissolvedKey = broadcast?.dissolvedStateFeatureIds.join(",") ?? "";
 
   const markInteraction = useCallback((at = performance.now()) => {
     lastInteractionRef.current = at;
@@ -366,6 +463,34 @@ export function LandingGlobe({
   const markerListRef = useRef(markerList);
   markerListRef.current = markerList;
 
+  // Rects read by the per-frame chip and card placement. Reading one right
+  // after a frame's path writes forces a synchronous layout every frame, so
+  // they are measured once and dropped on resize, scroll or new chip content.
+  const layoutCacheRef = useRef<{
+    svg?: DOMRect;
+    overlay?: DOMRect;
+    chip?: { width: number; height: number };
+    card?: { index: number; width: number; height: number };
+  }>({});
+  const invalidateLayout = useCallback(() => {
+    layoutCacheRef.current = {};
+  }, []);
+  const readRects = useCallback((svg: SVGSVGElement, overlay: HTMLDivElement) => {
+    const cache = layoutCacheRef.current;
+    cache.svg ??= svg.getBoundingClientRect();
+    cache.overlay ??= overlay.getBoundingClientRect();
+    return { sr: cache.svg, mr: cache.overlay };
+  }, []);
+  useEffect(invalidateLayout, [markerList, invalidateLayout]);
+  // Written only when it changes: rewriting it every frame restyles the overlay.
+  const leadersViewBoxRef = useRef("");
+  const setLeadersViewBox = useCallback((rect: DOMRect) => {
+    const viewBox = `0 0 ${rect.width} ${rect.height}`;
+    if (!leadersSvgRef.current || leadersViewBoxRef.current === viewBox) return;
+    leadersViewBoxRef.current = viewBox;
+    leadersSvgRef.current.setAttribute("viewBox", viewBox);
+  }, []);
+
   const updateMarkers = useCallback(() => {
     const d3 = d3Ref.current;
     const overlay = markersOverlayRef.current;
@@ -382,11 +507,8 @@ export function LandingGlobe({
       .rotate(rot)
       .clipAngle(90 + 1e-6);
 
-    const sr = svg.getBoundingClientRect();
-    const mr = overlay.getBoundingClientRect();
-    if (leadersSvgRef.current) {
-      leadersSvgRef.current.setAttribute("viewBox", `0 0 ${mr.width} ${mr.height}`);
-    }
+    const { sr, mr } = readRects(svg, overlay);
+    setLeadersViewBox(mr);
     const HALF = Math.PI / 2;
     const center: [number, number] = [-rot[0], -rot[1]];
     // The showcase card takes over the spotlight — fade the player-count
@@ -427,10 +549,14 @@ export function LandingGlobe({
 
     let cw = 112;
     let ch = 30;
-    const r0 = vis[0].chip.getBoundingClientRect();
-    if (r0.width) {
-      cw = r0.width;
-      ch = r0.height;
+    let chipSize = layoutCacheRef.current.chip;
+    if (!chipSize) {
+      const r0 = vis[0].chip.getBoundingClientRect();
+      if (r0.width) chipSize = layoutCacheRef.current.chip = { width: r0.width, height: r0.height };
+    }
+    if (chipSize) {
+      cw = chipSize.width;
+      ch = chipSize.height;
     }
     const vpLeft = cw / 2 + 6;
     const vpRight = window.innerWidth - cw / 2 - 6;
@@ -489,7 +615,7 @@ export function LandingGlobe({
         dot.style.opacity = String(v.op);
       }
     }
-  }, []);
+  }, [readRects, setLeadersViewBox]);
 
   // Historical-crisis showcase card: attached to its country like the
   // player-count chips above, via the same projection + leader line into
@@ -507,7 +633,7 @@ export function LandingGlobe({
     const dot = showcaseLeaderDotRef.current;
     if (!d3 || !svg || !overlay || !motion) return;
 
-    const entry = HISTORICAL_CRISIS_SHOWCASE[motion.index];
+    const entry = showcase[motion.index];
     const rot = rotationRef.current;
     const proj = d3
       .geoOrthographic()
@@ -516,14 +642,11 @@ export function LandingGlobe({
       .rotate(rot)
       .clipAngle(90 + 1e-6);
 
-    const sr = svg.getBoundingClientRect();
-    const mr = overlay.getBoundingClientRect();
+    const { sr, mr } = readRects(svg, overlay);
     // Belt-and-suspenders: updateMarkers() usually owns this, but it no-ops
     // when there are no player-count chips, which would otherwise leave this
     // unset on a markerless page.
-    if (leadersSvgRef.current) {
-      leadersSvgRef.current.setAttribute("viewBox", `0 0 ${mr.width} ${mr.height}`);
-    }
+    setLeadersViewBox(mr);
     const center: [number, number] = [-rot[0], -rot[1]];
     const visible = d3.geoDistance(entry.lonLat, center) < (Math.PI / 2) * 0.995;
     const pt = visible ? proj(entry.lonLat) : null;
@@ -541,9 +664,19 @@ export function LandingGlobe({
 
     const card = showcaseCardRef.current;
     if (!card) return;
-    const rect = card.getBoundingClientRect();
-    const cw = rect.width || 320;
-    const ch = rect.height || 170;
+    let cardSize = layoutCacheRef.current.card;
+    if (cardSize?.index !== motion.index) {
+      const rect = card.getBoundingClientRect();
+      cardSize = rect.width
+        ? (layoutCacheRef.current.card = {
+            index: motion.index,
+            width: rect.width,
+            height: rect.height,
+          })
+        : undefined;
+    }
+    const cw = cardSize?.width || 320;
+    const ch = cardSize?.height || 170;
     const gap = 24;
     const navClearance = 76;
     const above = py - gap - ch >= navClearance;
@@ -559,7 +692,7 @@ export function LandingGlobe({
       line.setAttribute("x2", String(px - mr.left));
       line.setAttribute("y2", String(py - mr.top));
     }
-  }, []);
+  }, [readRects, setLeadersViewBox, showcase]);
 
   const updateEnhancedOverlay = useCallback(() => {
     const d3 = d3Ref.current;
@@ -611,22 +744,28 @@ export function LandingGlobe({
       .rotate(rotationRef.current)
       .clipAngle(90 + 1e-6);
 
-    const pathGen = d3.geoPath(proj);
+    const pathGen = d3.geoPath(proj).digits(PATH_DIGITS);
+    const rotate = d3.geoRotation(rotationRef.current);
+    const frame = createGlobeFrame(rotate, LANDING_ORTHO_SCALE * z, LANDING_TRANSLATE, pathGen);
     const lookup = tierLookupRef.current;
-    // Background Nations are accumulated into ONE `d` string and written once,
-    // instead of ~150 individual setAttribute calls every animation frame.
+    // Background Nations are accumulated into ONE `d` string per layer (the
+    // macro-simulated ones and the rest) and written once, instead of ~150
+    // individual setAttribute calls every animation frame.
     let backgroundD = "";
+    let macroD = "";
     for (const feature of featuresRef.current) {
       const id = String(feature.id);
       const isBackground = lookup ? !isTierInteractive(lookup.get(id) ?? "background") : false;
       if (isBackground) {
-        const d = pathGen(feature);
-        if (d) backgroundD += d;
+        const d = frame.feature(feature);
+        if (!d) continue;
+        if (backgroundMacroSet?.has(id)) macroD += d;
+        else backgroundD += d;
         continue;
       }
       const el = pathRefsMap.current.get(id);
       if (!el) continue;
-      const d = pathGen(feature);
+      const d = frame.feature(feature);
       if (d) {
         el.setAttribute("d", d);
         el.style.opacity = "1";
@@ -644,11 +783,12 @@ export function LandingGlobe({
     if (lookup) {
       const backgroundEl = pathRefsMap.current.get(BACKGROUND_LAYER_KEY);
       if (backgroundEl) backgroundEl.setAttribute("d", backgroundD);
+      const macroEl = pathRefsMap.current.get(BACKGROUND_MACRO_LAYER_KEY);
+      if (macroEl) macroEl.setAttribute("d", macroD);
     }
 
     if (graticuleRef.current && graticuleDataRef.current) {
-      const gd = pathGen(graticuleDataRef.current);
-      if (gd) graticuleRef.current.setAttribute("d", gd);
+      graticuleRef.current.setAttribute("d", frame.lines(graticuleDataRef.current));
     }
 
     if (sphereRef.current) {
@@ -656,7 +796,7 @@ export function LandingGlobe({
     }
 
     if (warBorderPathRef.current && warBorderFeatureRef.current) {
-      const wd = pathGen(warBorderFeatureRef.current);
+      const wd = frame.feature(warBorderFeatureRef.current);
       if (wd) {
         warBorderPathRef.current.setAttribute("d", wd);
         warBorderPathRef.current.style.opacity = "1";
@@ -665,10 +805,27 @@ export function LandingGlobe({
       }
     }
 
+    if (isBroadcast) {
+      renderBroadcast({
+        rotate,
+        zoom: z,
+        now: performance.now(),
+        animate: !prefersReducedMotionRef.current,
+        beams: !showcaseMotionRef.current,
+        lines: frame.lines,
+      });
+    }
     if (enhancedRef.current) updateEnhancedOverlay();
     updateMarkers();
     updateShowcaseCard();
-  }, [updateEnhancedOverlay, updateMarkers, updateShowcaseCard]);
+  }, [
+    backgroundMacroSet,
+    isBroadcast,
+    renderBroadcast,
+    updateEnhancedOverlay,
+    updateMarkers,
+    updateShowcaseCard,
+  ]);
 
   const syncPathsState = useCallback(() => {
     const d3 = d3Ref.current;
@@ -682,14 +839,16 @@ export function LandingGlobe({
       .rotate(rotationRef.current)
       .clipAngle(90 + 1e-6);
 
-    const pathGen = d3.geoPath(proj);
+    const pathGen = d3.geoPath(proj).digits(PATH_DIGITS);
+    const rotate = d3.geoRotation(rotationRef.current);
+    const frame = createGlobeFrame(rotate, LANDING_ORTHO_SCALE * z, LANDING_TRANSLATE, pathGen);
     const newPaths = new Map<string, string | null>();
     for (const feature of featuresRef.current) {
-      newPaths.set(String(feature.id), pathGen(feature));
+      newPaths.set(String(feature.id), frame.feature(feature));
     }
 
     if (graticuleRef.current && graticuleDataRef.current) {
-      graticuleRef.current.setAttribute("d", pathGen(graticuleDataRef.current) || "");
+      graticuleRef.current.setAttribute("d", frame.lines(graticuleDataRef.current));
       graticuleRef.current.style.opacity = "0.3";
     }
     if (sphereRef.current) {
@@ -701,7 +860,7 @@ export function LandingGlobe({
     }
 
     if (warBorderPathRef.current && warBorderFeatureRef.current) {
-      const d = pathGen(warBorderFeatureRef.current);
+      const d = frame.feature(warBorderFeatureRef.current);
       if (d) {
         warBorderPathRef.current.setAttribute("d", d);
         warBorderPathRef.current.style.opacity = "1";
@@ -710,12 +869,22 @@ export function LandingGlobe({
       }
     }
 
+    if (isBroadcast) {
+      renderBroadcast({
+        rotate,
+        zoom: z,
+        now: performance.now(),
+        animate: !prefersReducedMotionRef.current,
+        beams: !showcaseMotionRef.current,
+        lines: frame.lines,
+      });
+    }
     if (enhancedRef.current) updateEnhancedOverlay();
     updateMarkers();
     updateShowcaseCard();
 
     setPaths(newPaths);
-  }, [updateEnhancedOverlay, updateMarkers, updateShowcaseCard]);
+  }, [isBroadcast, renderBroadcast, updateEnhancedOverlay, updateMarkers, updateShowcaseCard]);
 
   useEffect(() => {
     let cancelled = false;
@@ -742,6 +911,10 @@ export function LandingGlobe({
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const geojson = (topojson as any).feature(topo, topo.objects.countries);
+
+      dissolvedGeometryRef.current = dissolvedKey
+        ? dissolvedStateGeometry(topojson.mesh, topo, dissolvedKey.split(","))
+        : null;
 
       if (germanySplit) {
         const [pcMod, germanyGeo, eastBerlinGeo] = germanySplit;
@@ -805,7 +978,44 @@ export function LandingGlobe({
       if (autoRotateRef.current) cancelAnimationFrame(autoRotateRef.current);
       if (dragFrameRef.current) cancelAnimationFrame(dragFrameRef.current);
     };
-  }, [geoUrl, shouldSplitGermany]);
+  }, [geoUrl, shouldSplitGermany, dissolvedKey, dissolvedGeometryRef]);
+
+  // The idle spin holds until the page has settled (see SPIN_START_DELAY_MS).
+  // A drag or the showcase moves the globe before then as usual.
+  const spinReadyRef = useRef(false);
+  useEffect(() => {
+    if (!isLoaded || spinReadyRef.current) return;
+    let idleHandle = 0;
+    const timer = window.setTimeout(() => {
+      const start = () => {
+        spinReadyRef.current = true;
+      };
+      if ("requestIdleCallback" in window) {
+        idleHandle = window.requestIdleCallback(start, { timeout: SPIN_START_DELAY_MS });
+      } else {
+        start();
+      }
+    }, SPIN_START_DELAY_MS);
+    return () => {
+      window.clearTimeout(timer);
+      if (idleHandle) window.cancelIdleCallback(idleHandle);
+    };
+  }, [isLoaded]);
+
+  // Measured weak-device detection: the hints below miss a fast-cored but
+  // throttled or busy device, so the spin also times its own frames and drops
+  // to half rate when they run long.
+  const spinCostRef = useRef({ total: 0, frames: 0 });
+  const noteSpinFrameCost = useCallback((ms: number) => {
+    if (lowPowerRef.current) return;
+    const cost = spinCostRef.current;
+    cost.total += ms;
+    cost.frames += 1;
+    if (cost.frames < SLOW_SPIN_SAMPLE) return;
+    if (cost.total / cost.frames > SLOW_SPIN_FRAME_MS) setLowPower(true);
+    cost.total = 0;
+    cost.frames = 0;
+  }, []);
 
   // Weak-device detection, once on mount. Core count and device memory are the
   // only signals a browser gives before anything is rendered; both are coarse
@@ -871,7 +1081,7 @@ export function LandingGlobe({
     if (!isLoaded) return;
 
     const beginShowcaseEntry = (index: number, ts: number) => {
-      const entry = HISTORICAL_CRISIS_SHOWCASE[index];
+      const entry = showcase[index];
       const targetRotation: [number, number, number] = [-entry.lonLat[0], -entry.lonLat[1], 0];
       targetRotation[0] = nearestLongitudeRotation(rotationRef.current[0], targetRotation[0]);
       showcaseMotionRef.current = {
@@ -911,7 +1121,7 @@ export function LandingGlobe({
       } else if (showcaseMotion && !isDraggingRef.current) {
         const elapsed = ts - showcaseMotion.transitionStartedAt;
         if (elapsed >= SHOWCASE_TRANSITION_MS + SHOWCASE_HOLD_MS) {
-          beginShowcaseEntry((showcaseMotion.index + 1) % HISTORICAL_CRISIS_SHOWCASE.length, ts);
+          beginShowcaseEntry((showcaseMotion.index + 1) % showcase.length, ts);
         } else if (!showcaseMotion.settled && (!bare || ts - lastFrameRef.current >= frameBudget)) {
           lastFrameRef.current = ts;
           const progress = Math.min(1, elapsed / SHOWCASE_TRANSITION_MS);
@@ -929,7 +1139,12 @@ export function LandingGlobe({
           imperativeUpdate();
           if (progress === 1) showcaseMotion.settled = true;
         }
-      } else if (!isDraggingRef.current && !hoveredRef.current && isInViewRef.current) {
+      } else if (
+        spinReadyRef.current &&
+        !isDraggingRef.current &&
+        !hoveredRef.current &&
+        isInViewRef.current
+      ) {
         // Cap the background globe's frame rate to bound the d3 path budget.
         if (!bare || ts - lastFrameRef.current >= frameBudget) {
           lastFrameRef.current = ts;
@@ -938,7 +1153,30 @@ export function LandingGlobe({
             rotationRef.current[1],
             0,
           ];
+          const started = performance.now();
           imperativeUpdate();
+          noteSpinFrameCost(performance.now() - started);
+        }
+      }
+      // The broadcast globe's satellites and flourish keep moving while the
+      // globe is held still (a hover, a settled showcase card), on the same
+      // frame budget. A drag reprojects through imperativeUpdate instead.
+      if (
+        isBroadcast &&
+        isInViewRef.current &&
+        !isDraggingRef.current &&
+        ts - lastFrameRef.current >= frameBudget
+      ) {
+        lastFrameRef.current = ts;
+        const d3 = d3Ref.current;
+        if (d3) {
+          renderBroadcast({
+            rotate: d3.geoRotation(rotationRef.current),
+            zoom: zoomRef.current,
+            now: ts,
+            animate: !prefersReducedMotionRef.current,
+            beams: !showcaseMotionRef.current,
+          });
         }
       }
       autoRotateRef.current = requestAnimationFrame(spin);
@@ -948,7 +1186,19 @@ export function LandingGlobe({
     return () => {
       if (autoRotateRef.current) cancelAnimationFrame(autoRotateRef.current);
     };
-  }, [isLoaded, imperativeUpdate, syncPathsState, bare, enhanced, initialZoom, markInteraction]);
+  }, [
+    isLoaded,
+    imperativeUpdate,
+    syncPathsState,
+    bare,
+    enhanced,
+    initialZoom,
+    markInteraction,
+    noteSpinFrameCost,
+    isBroadcast,
+    renderBroadcast,
+    showcase,
+  ]);
 
   // Position markers once the globe is ready / counts change, and on resize.
   // While the globe rotates, the spin loop keeps them updated via imperativeUpdate.
@@ -959,15 +1209,19 @@ export function LandingGlobe({
       updateShowcaseCard();
     });
     const onResize = () => {
+      invalidateLayout();
       updateMarkers();
       updateShowcaseCard();
     };
     window.addEventListener("resize", onResize);
+    // Any scroll can move a globe that is not fixed, so its rects go stale.
+    window.addEventListener("scroll", invalidateLayout, { capture: true, passive: true });
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", onResize);
+      window.removeEventListener("scroll", invalidateLayout, { capture: true });
     };
-  }, [isLoaded, markerList, updateMarkers, updateShowcaseCard]);
+  }, [isLoaded, markerList, invalidateLayout, updateMarkers, updateShowcaseCard]);
 
   useEffect(() => {
     const el = cardRef.current;
@@ -1139,8 +1393,12 @@ export function LandingGlobe({
   const handleCountryClick = (id: string) => {
     markInteraction();
     if (navigationDisabled) return;
-    if (id.startsWith("bi:")) {
-      const owner = id.slice(3).split(":")[0] as CountryId;
+    // A region-overlay blob or a successor proxy opens its owning state.
+    const overlayOwner = id.startsWith("bi:")
+      ? (id.slice(3).split(":")[0] as CountryId)
+      : (proxyOwners.get(id) as CountryId | undefined);
+    if (overlayOwner) {
+      const owner = overlayOwner;
       const access = countryAccess?.[owner];
       if (!access) return;
       const availability = resolveCountryAvailability(owner, access);
@@ -1181,7 +1439,9 @@ export function LandingGlobe({
 
   const hoveredOverlayCountryId = hovered?.startsWith("bi:")
     ? (hovered.slice(3).split(":")[0] as CountryId)
-    : undefined;
+    : hovered
+      ? (proxyOwners.get(hovered) as CountryId | undefined)
+      : undefined;
   const hoveredMapped = hoveredOverlayCountryId
     ? {
         label: resolveCountryName(hoveredOverlayCountryId),
@@ -1238,10 +1498,7 @@ export function LandingGlobe({
       {gameDate && !isBroadsheet && !bare && (
         <div className="flex items-center gap-2 border-b border-card-border px-4 py-2.5 bg-card/80">
           {!hideLiveIndicator && (
-            <span className="relative flex h-1.5 w-1.5 shrink-0">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75" />
-              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-success" />
-            </span>
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-success" aria-hidden />
           )}
           <span className="text-xs font-semibold tracking-wide text-foreground">{gameDate}</span>
           {!hideLiveIndicator && (
@@ -1319,6 +1576,31 @@ export function LandingGlobe({
             onHover={setHovered}
             onTooltipClear={() => setTooltipPos(null)}
             onCountryClick={handleCountryClick}
+            backgroundMacroFeatureIds={backgroundMacroSet}
+            sphereFill={isBroadcast ? BROADCAST_SPHERE_FILL : undefined}
+            sphereStroke={isBroadcast ? BROADCAST_SPHERE_STROKE : undefined}
+            graticuleStroke={isBroadcast ? BROADCAST_GRATICULE_STROKE : undefined}
+            underlay={
+              broadcast ? (
+                <BroadcastUnderlay
+                  translate={LANDING_TRANSLATE}
+                  globeRadius={LANDING_ORTHO_SCALE}
+                  zoom={initialZoom ?? 1}
+                  bind={bindBroadcast}
+                />
+              ) : undefined
+            }
+            overlay={
+              broadcast ? (
+                <BroadcastOverlay
+                  translate={LANDING_TRANSLATE}
+                  globeRadius={LANDING_ORTHO_SCALE}
+                  zoom={initialZoom ?? 1}
+                  bind={bindBroadcast}
+                  orbitLabel={broadcast.orbitLabel}
+                />
+              ) : undefined
+            }
           />
         )}
 
@@ -1334,7 +1616,7 @@ export function LandingGlobe({
               aria-hidden="true"
             >
               {markerList.map((m) => (
-                <g key={m.id}>
+                <g key={m.id} className={markersFromSm ? "max-sm:hidden" : undefined}>
                   <line
                     ref={(el) => {
                       if (el) leaderLineRefsMap.current.set(m.id, el);
@@ -1380,7 +1662,9 @@ export function LandingGlobe({
                 ref={(el) => {
                   if (el) markerRefsMap.current.set(m.id, el);
                 }}
-                className="absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap text-center"
+                className={`absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap text-center ${
+                  markersFromSm ? "max-sm:hidden" : ""
+                }`}
                 style={{ left: 0, top: 0, opacity: 0, transition: "opacity 0.25s linear" }}
               >
                 <div className="flex flex-col gap-px rounded-[11px] border border-white/25 bg-white/10 px-3 py-1.5 shadow-[0_10px_24px_-10px_rgba(0,0,0,0.7),inset_0_1px_0_rgba(255,255,255,0.32)] backdrop-blur-md">
@@ -1440,7 +1724,7 @@ export function LandingGlobe({
           </div>
         </>
       ) : (
-        <div className="border-t border-card-border bg-card/50 p-4 backdrop-blur-sm">
+        <div className="border-t border-card-border bg-card p-4">
           <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-xs text-muted">
             {TIER_ORDER.map((tier) => (
               <TierLegendSwatch key={tier} tier={tier} />
@@ -1463,6 +1747,7 @@ export function LandingGlobe({
       {bare &&
         isLoaded &&
         tierLookup &&
+        !hideTierLegend &&
         typeof document !== "undefined" &&
         createPortal(
           <div
@@ -1475,9 +1760,16 @@ export function LandingGlobe({
                 <span
                   className="h-2.5 w-2.5 shrink-0 rounded-[3px]"
                   style={{
-                    background: wireframeColor
-                      ? tierWireframeFill(tier, wireframeColor)
-                      : TIER_COLORS[tier],
+                    // With a macro roster, "Background Nations" are the
+                    // simulated ones; unsimulated grey land goes unlabelled.
+                    background:
+                      tier === "background" && backgroundMacroSet
+                        ? wireframeColor
+                          ? backgroundMacroWireframeFill(wireframeColor)
+                          : BACKGROUND_MACRO_COLOR
+                        : wireframeColor
+                          ? tierWireframeFill(tier, wireframeColor)
+                          : TIER_COLORS[tier],
                     outline: wireframeColor ? `1px solid ${wireframeColor}` : undefined,
                   }}
                 />
@@ -1504,7 +1796,7 @@ export function LandingGlobe({
             aria-live="polite"
             aria-labelledby={`showcase-${showcaseEntry.id}`}
           >
-            <div className="overflow-hidden rounded-xl border border-card-border bg-card/90 shadow-2xl backdrop-blur-md">
+            <div className="overflow-hidden rounded-xl border border-card-border bg-card shadow-2xl">
               <div className="relative h-20 w-full overflow-hidden">
                 <Image
                   src={cdnStatic("landing", showcaseEntry.imageSlug ?? "newsroom")}
@@ -1524,7 +1816,7 @@ export function LandingGlobe({
               <div className="p-4 pt-3">
                 <div className="mb-2 flex items-center justify-between gap-3">
                   <Badge color="warning" variant="tag">
-                    Historical crisis
+                    {broadcast?.showcaseBadge ?? "Historical crisis"}
                   </Badge>
                   <span className="font-mono text-body-xs tabular-nums text-muted">
                     {showcaseEntry.year}

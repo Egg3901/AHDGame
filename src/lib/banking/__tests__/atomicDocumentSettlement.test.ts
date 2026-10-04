@@ -365,6 +365,113 @@ describe("explicit noncash central-bank bond exchange", () => {
   });
 });
 
+describe("guarded funded-bank inventory reservation", () => {
+  const bankId = new ObjectId("cccccccccccccccccccccccc");
+  const treasuryTrade = {
+    key: "bank-treasury:inventory-test:reserve",
+    kind: "bank_treasury_trade_reservation",
+    turn: 5,
+    currency: "USD",
+    legs: [],
+    projections: [
+      {
+        collection: "bonds",
+        filter: identity,
+        update: {
+          $set: {
+            holders: [
+              {
+                bankId,
+                charteredTurn: 20,
+                bankTreasuryLotId: "lot-a",
+                units: 2,
+              },
+              {
+                bankId,
+                charteredTurn: 20,
+                bankTreasuryLotId: "lot-a",
+                bankTreasuryTradeId: "inventory-test",
+                units: 1,
+              },
+            ],
+          },
+        },
+        note: "reserve one funded bank bond unit",
+      },
+    ],
+  } as unknown as BankingTransition;
+  const inventoryTarget = (holders: unknown[]) => ({
+    identity,
+    guard: { holders },
+    nonCashMode: "bank_treasury_inventory" as const,
+  });
+
+  it("applies one conserved whole-unit lot reservation", async () => {
+    const memory = createInMemoryDb();
+    const holders = [{ bankId, charteredTurn: 20, bankTreasuryLotId: "lot-a", units: 3 }];
+    memory.seed("bonds", [{ _id: id, holders }]);
+    const result = await settleAtomicDocumentTransition(
+      memory as unknown as Db,
+      treasuryTrade,
+      inventoryTarget(holders)
+    );
+    expect(result.status).toBe("applied");
+    const settledBond = memory.collection("bonds").docs[0] as unknown as {
+      holders: Array<{ units: number }>;
+    };
+    expect(settledBond.holders).toHaveLength(2);
+    expect(settledBond.holders.reduce((sum, holder) => sum + holder.units, 0)).toBe(3);
+  });
+
+  it.each(["minted trade units", "edited unrelated holder"])(
+    "rejects a reservation plan that %s",
+    async (misuse) => {
+      const memory = createInMemoryDb();
+      const unrelated = { characterId: new ObjectId(), units: 5 };
+      const holders = [
+        { bankId, charteredTurn: 20, bankTreasuryLotId: "lot-a", units: 3 },
+        ...(misuse === "edited unrelated holder" ? [unrelated] : []),
+      ];
+      memory.seed("bonds", [{ _id: id, holders }]);
+      const changed = structuredClone(treasuryTrade);
+      const projection = changed.projections[0];
+      const set = projection?.update?.$set as Record<string, unknown> | undefined;
+      if (!set) throw new Error("Expected a holder reservation projection");
+      set.holders =
+        misuse === "minted trade units"
+          ? [
+              holders[0],
+              {
+                bankId,
+                charteredTurn: 20,
+                bankTreasuryLotId: "lot-a",
+                bankTreasuryTradeId: "inventory-test",
+                units: 2,
+              },
+            ]
+          : [
+              { bankId, charteredTurn: 20, bankTreasuryLotId: "lot-a", units: 2 },
+              { ...unrelated, units: 4 },
+              {
+                bankId,
+                charteredTurn: 20,
+                bankTreasuryLotId: "lot-a",
+                bankTreasuryTradeId: "inventory-test",
+                units: 1,
+              },
+            ];
+      const result = await settleAtomicDocumentTransition(
+        memory as unknown as Db,
+        changed,
+        inventoryTarget(holders)
+      );
+      expect(result.status).toBe("rejected");
+      expect(memory.collection("bonds").docs[0]?.holders).toEqual(holders);
+      expect(memory.collection(MONEY_MOVE_COLLECTION).docs).toHaveLength(0);
+    }
+  );
+});
+
 describe("explicit central-bank reserve pool exchange", () => {
   function poolTransfer(): BankingTransition {
     return {

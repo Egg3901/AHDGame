@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { expectedRegionCount } from "@/lib/admin/seedDiagnostic/regionBundles";
+import { expectedRegionCount, regionBundleFor } from "@/lib/admin/seedDiagnostic/regionBundles";
 import { SHIPPING_PRESETS } from "@/lib/world/eraRoster";
 import type { CountryId } from "./countries";
 import { COUNTRY_READINESS_EXPECTATIONS } from "./countryReadinessExpectations";
@@ -39,10 +39,24 @@ describe("getReadinessExpectations", () => {
         const derived = getReadinessExpectations(id, preset)!;
         const eraRegions = expectedRegionCount(id, preset);
         const where = `${preset}/${id}`;
+        const demographicOffset = authored.regionCount - authored.demographicsCount;
+        const metricsOffset = authored.regionCount - authored.stateMetricsCount;
 
         expect(derived.regionCount, where).toBe(eraRegions ?? authored.regionCount);
-        expect(derived.demographicsCount, where).toBe(eraRegions ?? authored.demographicsCount);
-        expect(derived.stateMetricsCount, where).toBe(eraRegions ?? authored.stateMetricsCount);
+        expect(derived.demographicsCount, where).toBe(
+          preset === "1991-default" && id === "RU"
+            ? eraRegions
+            : eraRegions === null
+              ? authored.demographicsCount
+              : eraRegions - demographicOffset
+        );
+        expect(derived.stateMetricsCount, where).toBe(
+          preset === "1991-default" && id === "RU"
+            ? eraRegions
+            : eraRegions === null
+              ? authored.stateMetricsCount
+              : eraRegions - metricsOffset
+        );
 
         // Everything else is judgment, not a count, and passes through
         // untouched — except where SEAT_MIN_BY_PRESET records that an era's
@@ -56,11 +70,23 @@ describe("getReadinessExpectations", () => {
             ? "Expected ≥764 (512 Shugiin + 252 Sangiin, pre-1994 Diet)"
             : authored.seatNote
         );
-        expect(derived.nppMin, where).toBe(authored.nppMin);
-        expect(derived.officialMin, where).toBe(authored.officialMin);
-        expect(derived.statePartyOrgMin, where).toBe(authored.statePartyOrgMin);
+        const de2027 = preset === "2027-default" && id === "DE";
+        const de1991 = preset === "1991-default" && id === "DE";
+        const ru1991 = preset === "1991-default" && id === "RU";
+        expect(derived.nppMin, where).toBe(ru1991 ? 0 : de2027 || de1991 ? 177 : authored.nppMin);
+        expect(derived.officialMin, where).toBe(ru1991 ? 0 : authored.officialMin);
+        expect(derived.statePartyOrgMin, where).toBe(
+          de1991 ? 70 : de2027 ? 96 : authored.statePartyOrgMin
+        );
         expect(derived.legislationTypesMin, where).toBe(authored.legislationTypesMin);
-        expect(derived.stateMetricsFilter, where).toEqual(authored.stateMetricsFilter);
+        expect(derived.stateMetricsFilter, where).toEqual(
+          ru1991
+            ? {
+                countryId: id,
+                _id: { $in: regionBundleFor(id, preset)!.map((region) => region._id) },
+              }
+            : authored.stateMetricsFilter
+        );
       }
     }
   });
@@ -72,6 +98,13 @@ describe("getReadinessExpectations", () => {
     expect(getReadinessExpectations("DE", "1991-default")!.regionCount).toBe(16);
   });
 
+  it("requires demographics and metrics for every January 1991 Soviet region", () => {
+    const expectation = getReadinessExpectations("RU", "1991-default")!;
+    expect(expectation.regionCount).toBe(24);
+    expect(expectation.demographicsCount).toBe(expectation.regionCount);
+    expect(expectation.stateMetricsCount).toBe(expectation.regionCount);
+  });
+
   it("stops asserting the CPSU in a post-Soviet world", () => {
     // The defect this whole task exists for: RU passed partiesAuthored in 2019
     // by asserting a party whose seeds are gated to 1953 and 1979.
@@ -79,7 +112,12 @@ describe("getReadinessExpectations", () => {
     const modern = getReadinessExpectations("RU", "2019-default")!;
     expect(soviet.partyRoster).toContain("CPSU");
     expect(modern.partyRoster).not.toContain("CPSU");
-    expect(modern.partyMin).toBe(0);
+    expect(modern.partyMin).toBeGreaterThan(0);
+  });
+
+  it("does not require a Soviet one-party leader-confidence state in 1991 Russia", () => {
+    expect(getReadinessExpectations("RU", "1979-default")!.extras).toHaveLength(2);
+    expect(getReadinessExpectations("RU", "1991-default")!.extras).toHaveLength(1);
   });
 
   it("empties the roster for a country the era does not contain", () => {

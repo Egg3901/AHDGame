@@ -229,6 +229,47 @@ describe("Austria Tier-2 sphere-macro economy", () => {
       expect(db.collectionMocks.macroCountries!.updateOne).not.toHaveBeenCalled();
       expect(db.collectionMocks.macroCountries!.bulkWrite).toHaveBeenCalledTimes(1);
     });
+
+    it("does not double-seed 1991 federations or pre-sovereignty successors", async () => {
+      await seedMacroCountries(db as unknown as Db, "1991-default");
+      const seededIds = db.collectionMocks.macroCountries!.bulkWrite.mock.calls[0]![0].map(
+        (op: { replaceOne: { replacement: { entityId: string } } }) =>
+          op.replaceOne.replacement.entityId
+      );
+      for (const entityId of [
+        "RU",
+        "PL",
+        "CS",
+        "HU",
+        "RO",
+        "BG",
+        "YU",
+        "UKR",
+        "BLR",
+        "BAL",
+        "AM",
+        "AZ",
+        "EE",
+        "GE",
+        "KZ",
+        "KG",
+        "LV",
+        "LT",
+        "MD",
+        "TJ",
+        "TM",
+        "UZ",
+        "CZ2",
+        "SK",
+        "SI",
+        "HR",
+        "BA",
+        "MK",
+        "YF",
+      ]) {
+        expect(seededIds, entityId).not.toContain(entityId);
+      }
+    });
   });
 
   describe("admin diagnostics", () => {

@@ -11,7 +11,9 @@ vi.mock("@/lib/budget/publicEnterpriseRevenue", () => ({
     .fn()
     .mockResolvedValue({ plantsEnabled: false, currentTurn: null, rampTurns: 12 }),
 }));
-vi.mock("./treasury", () => ({ remitToTreasury: vi.fn().mockResolvedValue(0) }));
+vi.mock("./treasury", () => ({
+  remitToTreasury: vi.fn(async (_db: unknown, input: { amountLocal: number }) => input.amountLocal),
+}));
 vi.mock("@/lib/currency/corporationCapital", () => ({
   loadFxRatesByCurrency: vi.fn().mockResolvedValue(new Map()),
   resolveCorpLiquidCurrencyCode: vi.fn(() => "CNY"),
@@ -71,8 +73,9 @@ describe("processSoeRemittance", () => {
     // 1000 × (1 - 0.40) = 600 remitted; 400 stays in liquidCapital.
     expect(vi.mocked(remitToTreasury)).toHaveBeenCalledWith(
       db,
-      { countryId: "CN", corpId, amountLocal: 600 },
-      now
+      { countryId: "CN", corpId, amountLocal: 600, corpCurrency: "CNY" },
+      now,
+      undefined
     );
   });
 
@@ -88,8 +91,9 @@ describe("processSoeRemittance", () => {
 
     expect(vi.mocked(remitToTreasury)).toHaveBeenCalledWith(
       db,
-      { countryId: "CN", corpId, amountLocal: 250 },
-      now
+      { countryId: "CN", corpId, amountLocal: 250, corpCurrency: "CNY" },
+      now,
+      undefined
     );
   });
 
@@ -120,8 +124,9 @@ describe("processSoeRemittance", () => {
     // Remits only what's actually on hand (100), not the estimated 600.
     expect(vi.mocked(remitToTreasury)).toHaveBeenCalledWith(
       db,
-      { countryId: "CN", corpId, amountLocal: 100 },
-      now
+      { countryId: "CN", corpId, amountLocal: 100, corpCurrency: "CNY" },
+      now,
+      undefined
     );
   });
 
@@ -184,8 +189,9 @@ describe("processSoeRemittance", () => {
     // quantity `calculateCountryOwnedBudgetRevenue` books as the revenue line.
     expect(vi.mocked(remitToTreasury)).toHaveBeenCalledWith(
       db,
-      { countryId: "CN", corpId, amountLocal: 600 },
-      now
+      { countryId: "CN", corpId, amountLocal: 600, corpCurrency: "CNY" },
+      now,
+      undefined
     );
   });
 

@@ -18,6 +18,7 @@ import { isStateOwned, ensurePrimaryNationalCorporation } from "./nationalCorpor
 import { assertPrivateEnterprisePermitted } from "@/lib/economy/queries/privateEnterpriseGate";
 import { computeSpunOutShareStructure } from "./privatizationShares";
 import { creditTreasuryProceeds } from "./treasury";
+import { loadTreasuryCashContext } from "./treasuryLedger";
 import { applyPrivatizationConsequences } from "./consequences/apply";
 import { recordNationalizationLedger } from "./ledger";
 import { notifyCountryResidents } from "./privatizationNotifications";
@@ -34,6 +35,11 @@ import { fetchSectorMarketSharePercent } from "@/lib/corporations/marketShare";
 import { pickOrCreateNppCeoForNewCorp } from "@/lib/corporations/subsidiaries/nppCeoSelection";
 import { getDefaultLegalStructureId } from "@/lib/corporations/legalStructure";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
+import {
+  hasProtectedConstructionProperty,
+  releaseConstructionPropertyTransition,
+  reserveSectorsForTransition,
+} from "@/lib/corporations/securedConstructionProperty";
 
 export interface CarveSelection {
   sectorId: ObjectId;
@@ -127,6 +133,9 @@ export async function privatizeAsset(
     if (!sector || !sector.corporationId.equals(source._id)) {
       throw new Error("Sector is not owned by the source National Corporation");
     }
+    if (hasProtectedConstructionProperty(sector)) {
+      throw new Error("Resolve secured construction before privatizing this sector");
+    }
     if (
       sector.absorbedAtTurn != null &&
       params.turn - sector.absorbedAtTurn < REPRIVATIZE_COOLDOWN_TURNS
@@ -186,8 +195,12 @@ export async function privatizeAsset(
   let valuationAnchor = 0;
   for (const { sector, fraction } of selected) {
     const fullValueAnchor = plantsEnabled
-      ? sectorBookValueAnchor(sector, gameState?.currentYear, privatizeUnitScale) *
-        NATIONALIZATION_BOOK_PREMIUM
+      ? sectorBookValueAnchor(
+          sector,
+          gameState?.currentYear,
+          privatizeUnitScale,
+          gameState?.currentTurn
+        ) * NATIONALIZATION_BOOK_PREMIUM
       : computeSectorNpvSum([sector], primeMap, source, fxByCurrency);
     valuationAnchor += fullValueAnchor * fraction;
   }
@@ -244,6 +257,18 @@ export async function privatizeAsset(
 
   const sequentialId = await getNextSequentialId(db, "corporation");
   const newCorpId = new ObjectId();
+  const transitionKeys = await reserveSectorsForTransition(
+    db,
+    selected.map(({ sector }) => sector),
+    "privatization_carve",
+    `privatize:${newCorpId.toHexString()}`
+  );
+  if (!transitionKeys) {
+    throw new Error("Resolve secured construction before privatizing these sectors");
+  }
+  const transitionKeyBySectorId = new Map(
+    selected.map(({ sector }, index) => [sector._id.toHexString(), transitionKeys[index]])
+  );
   const newCorp: Omit<Corporation, "_id"> = {
     name,
     type: firstSector.sectorType,
@@ -292,7 +317,10 @@ export async function privatizeAsset(
   //       removed rather than kept at 0 revenue. A partial source row keeps its
   //       `absorbedAtTurn` so the re-privatization cooldown still applies. ──
   let sectorsCarved = 0;
+  const deletedSourceSectorIds = new Set<string>();
   for (const { sector, fraction } of selected) {
+    const transitionKey = transitionKeyBySectorId.get(sector._id.toHexString());
+    if (!transitionKey) throw new Error("A secured sector reservation was lost");
     const keep = 1 - fraction;
     const keptRevenue = Math.round(sector.revenue * keep);
     // PLANTS-GATED: the two `revenue` writes below (the carved insert's
@@ -313,9 +341,14 @@ export async function privatizeAsset(
     // `legacyRevenueShadow` restore point rides along in the same fold and is
     // split by the same fraction — without it the carved corp would land in the
     // rollback script's "no restore point, needs a human decision" bucket.
-    const openingPlantCount = Number.isInteger(sector.plantCount)
-      ? (sector.plantCount as number)
-      : seedPlantLedger(sector.sectorType, sector.capitalStock).plantCount;
+    const openingPlantCount = seedPlantLedger(
+      sector.sectorType,
+      sector.capitalStock,
+      sector.industryModel,
+      sector.mediaDiscriminator
+    ).plantCount;
+    // Split once and pass complementary counts to both rows. Rounding each leg
+    // independently could give both halves the sole small facility.
     const plantCountSplit = splitWholePlantCount(openingPlantCount, fraction);
     const carvedPlant = carveSectorPlantFields(sector, fraction, plantCountSplit.carved);
     const keptPlant = carveSectorPlantFields(sector, keep, plantCountSplit.kept);
@@ -325,6 +358,7 @@ export async function privatizeAsset(
       countryId: sector.countryId,
       stateId: sector.stateId,
       sectorType: sector.sectorType,
+      industryModel: sector.industryModel,
       targetGrowthRate: sector.targetGrowthRate,
       currentGrowthRate: sector.currentGrowthRate,
       currentGrowthCost: Math.round(sector.currentGrowthCost * fraction),
@@ -350,17 +384,20 @@ export async function privatizeAsset(
     // The condition wanted is "the remainder is empty". Below plants revenue is
     // the only quantity carried, so `keptRevenue <= 0` says that exactly and
     // this stays byte-identical. Under plants the remainder is empty only when
-    // no capacity, no CIP and no queued orders survive the split.
+    // no capacity and no queued orders survive the split.
     const keptPlantIsEmpty =
-      !plantsEnabled ||
-      (!(keptPlant.capitalStock > 0) &&
-        !(keptPlant.constructionInProgressAnchor > 0) &&
-        keptPlant.buildQueue.length === 0);
+      !plantsEnabled || (!(keptPlant.capitalStock > 0) && keptPlant.buildQueue.length === 0);
     if (keptRevenue <= 0 && keptPlantIsEmpty) {
-      await sectors.deleteOne({ _id: sector._id });
+      const deleted = await sectors.deleteOne({
+        _id: sector._id,
+        "constructionPropertyTransition.key": transitionKey,
+      });
+      if (deleted.deletedCount !== 1)
+        throw new Error("A secured sector changed during the privatization carve");
+      deletedSourceSectorIds.add(sector._id.toHexString());
     } else {
-      await sectors.updateOne(
-        { _id: sector._id },
+      const updated = await sectors.updateOne(
+        { _id: sector._id, "constructionPropertyTransition.key": transitionKey },
         {
           $set: {
             revenue: keptRevenue,
@@ -371,6 +408,8 @@ export async function privatizeAsset(
           },
         }
       );
+      if (updated.matchedCount !== 1)
+        throw new Error("A secured sector changed during the privatization carve");
     }
     sectorsCarved++;
   }
@@ -406,7 +445,13 @@ export async function privatizeAsset(
       metadata: { href: `/country/${params.countryId.toLowerCase()}/nationalization` },
     });
   } else {
-    await creditTreasuryProceeds(db, params.countryId, structure.proceedsLocal, now);
+    // No buyer pays for the float: the proceeds are an explicit, named mint.
+    await creditTreasuryProceeds(db, params.countryId, structure.proceedsLocal, now, {
+      flow: "privatization_ipo",
+      // The caller's turn is the clock on the executive route; the context resolves
+      // the turn whose snapshot will hold this cash on every path.
+      ledger: { context: await loadTreasuryCashContext(db) },
+    });
     proceedsLocal = structure.proceedsLocal;
     // Privatization politics (spec §12.1) — an IPO completes immediately. Auction
     // consequences fire at sale (the resolver), not here at open.
@@ -449,6 +494,18 @@ export async function privatizeAsset(
   }
 
   await corps.updateOne({ _id: source._id }, { $set: { updatedAt: now } });
+
+  await Promise.all(
+    selected
+      .filter(({ sector }) => !deletedSourceSectorIds.has(sector._id.toHexString()))
+      .map(({ sector }) =>
+        releaseConstructionPropertyTransition(
+          db,
+          sector._id,
+          transitionKeyBySectorId.get(sector._id.toHexString())!
+        )
+      )
+  );
 
   return {
     newCorporationId: newCorpId,

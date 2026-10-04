@@ -15,10 +15,12 @@ import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
 import { settleAtomicDocumentTransition } from "./atomicDocumentSettlement";
 import { oid } from "./rules/boundary";
 import { archiveCharter } from "@/lib/banking/charterHistory";
+import { loanCharterEpochFilter } from "@/lib/banking/loanEpoch";
 import { getLegalCharterTypes } from "@/lib/banking/separationLaw";
 import { freezeAccountsAt, returnDepositBook } from "@/lib/banking/depositBookReturn";
 import { lifecycleRefusal } from "@/lib/banking/rules/lifecycle";
 import { clampOffsets, getRateCorridors } from "@/lib/banking/regulationQ";
+import { startingBankOffsets } from "@/lib/banking/rules/rates";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { getCurrentTurn } from "@/lib/currentTurn";
 import { charterTypeMay } from "@/lib/banking/rules/capabilities";
@@ -160,6 +162,19 @@ export async function checkCharterEligibility(
   if (corporation.bankCharter?.status === "active") {
     reasons.push("Corporation already has an active bank charter");
   }
+  if (
+    corporation.bankCharter &&
+    corporation.bankCharter.status !== "active" &&
+    corporation.bankCharter.charteredTurn === (await getCurrentTurn(db))
+  ) {
+    reasons.push("A bank can be rechartered starting next turn");
+  }
+  if (
+    corporation.bankCharter?.status === "failed" &&
+    typeof corporation.bankCharter.depositorsResolvedTurn !== "number"
+  ) {
+    reasons.push("Resolve the failed bank estate before rechartering");
+  }
 
   // Bank / fund separation: a corporation that sponsors an index fund may not
   // also charter a bank. Creation-time only, so existing dual holders are
@@ -261,6 +276,12 @@ async function issueCharterInner(
   if (!corporation) {
     return { ok: false, reasons: ["Corporation not found"] };
   }
+  if (corporation.bankUnderwritingFunding) {
+    return {
+      ok: false,
+      reasons: ["Finish the funded underwriting placement before changing this bank"],
+    };
+  }
   const expectedSettledKeys = corporation.settledKeys ? [...corporation.settledKeys] : null;
 
   // skipFlagCheck is for SEED-TIME use only (NPC banks charter before the
@@ -286,15 +307,15 @@ async function issueCharterInner(
   if (prior && prior.status !== "active") {
     await archiveCharter(db, corporationId, prior, charteredTurn, "recharter");
   }
-  // Servicing continues for these named loans and NPC tranches after renewal.
-  // Use the same current/arrears book as the turn, not a stale charter counter;
-  // pending requests and terminal defaults/repaid loans are not funded exposure.
+  // Seed the counter from only this charter's current/arrears epoch, not a
+  // stale charter counter. Pending requests and terminal loans are not exposure.
   const survivingLoans = await db
     .collection<BankLoan>("bankLoans")
     .find(
       {
         bankCorporationId: corporationId,
         status: { $in: ["current", "arrears"] },
+        ...loanCharterEpochFilter(charteredTurn),
       },
       { projection: { outstanding: 1 } }
     )
@@ -304,10 +325,9 @@ async function issueCharterInner(
     0
   );
 
-  // Initial offsets must sit inside the era corridor; 0/0 is out of band in
-  // historical worlds (deposit ceiling below prime, lending floor above it).
+  // Start within the legal corridor with room for the CEO to move either way.
   const corridors = await getRateCorridors(db, getCountryIdForCurrency(currency));
-  const initialOffsets = clampOffsets({ depositOffset: 0, lendingOffset: 0 }, corridors);
+  const initialOffsets = startingBankOffsets(corridors);
 
   const charter: BankCharter = {
     type: requestedType,
@@ -365,7 +385,12 @@ async function issueCharterInner(
     },
     {
       identity,
-      guard: { bankCharter: prior === undefined ? { $exists: false } : prior },
+      guard: {
+        bankCharter: prior === undefined ? { $exists: false } : prior,
+        bankConstructionFunding: { $exists: false },
+        bankPrimaryFunding: { $exists: false },
+        bankUnderwritingFunding: { $exists: false },
+      },
       expectedSettledKeys,
     }
   );
@@ -459,6 +484,12 @@ async function revokeCharterInner(
   if (corporation.bankCharter?.status !== "active") {
     return { ok: false, error: "Corporation has no active bank charter" };
   }
+  if (corporation.bankUnderwritingFunding) {
+    return {
+      ok: false,
+      error: "Finish the funded underwriting placement before revoking this charter",
+    };
+  }
 
   const charter = corporation.bankCharter;
   const currentTurn = await getCurrentTurn(db);
@@ -473,8 +504,11 @@ async function revokeCharterInner(
   const claim = await db.collection<Corporation>("corporations").updateOne(
     {
       _id: corporationId,
+      bankUnderwritingFunding: { $exists: false },
       "bankCharter.status": "active",
       "bankCharter.resolutionClaimedTurn": { $exists: false },
+      bankConstructionFunding: { $exists: false },
+      bankPrimaryFunding: { $exists: false },
     },
     {
       $set: {
@@ -561,7 +595,8 @@ export type CharterSwitchBlocker =
   | "discount_window_outstanding"
   | "cb_margin_outstanding"
   /** The charter's lifecycle stage does not admit a switch (impaired, or not active). */
-  | "lifecycle_stage";
+  | "lifecycle_stage"
+  | "underwriting_settlement";
 
 export type CharterSwitchPreview = {
   allowed: boolean;
@@ -596,6 +631,7 @@ const SWITCH_BLOCKER_MESSAGE: Record<CharterSwitchBlocker, string> = {
   cb_margin_outstanding:
     "Repay the CB margin line first. Only investment and universal charters may carry margin debt.",
   lifecycle_stage: "An impaired bank may not change charter type. Restore its capital first.",
+  underwriting_settlement: "Finish the funded underwriting placement before changing this charter.",
 };
 
 function takesDeposits(type: BankCharterType): boolean {
@@ -631,6 +667,8 @@ export async function previewCharterSwitch(
       targetTakesDeposits: takesDeposits(targetType),
     };
   }
+
+  if (corporation.bankUnderwritingFunding) blockers.push("underwriting_settlement");
 
   if (charter.type === targetType) blockers.push("same_type");
 
@@ -799,7 +837,14 @@ async function switchCharterTypeInner(
   // the waterfall stops half way, because it would hide the hole.
 
   const updated = await db.collection<Corporation>("corporations").findOneAndUpdate(
-    { _id: corporationId, "bankCharter.status": "active", "bankCharter.type": charter.type },
+    {
+      _id: corporationId,
+      "bankCharter.status": "active",
+      "bankCharter.type": charter.type,
+      bankConstructionFunding: { $exists: false },
+      bankPrimaryFunding: { $exists: false },
+      bankUnderwritingFunding: { $exists: false },
+    },
     {
       $set: {
         "bankCharter.type": targetType,

@@ -9,11 +9,16 @@ import { validateElectoralLawProvision } from "@/lib/elections/electoralLaws";
 import type {
   EuropeanTreatyProvision,
   CentralBankIndependenceProvision,
+  EconomicSystemReformProvision,
   EuroAdoptionProvision,
   ElectoralLawProvision,
   ResetLawProvision,
 } from "@/lib/db/types/legislation";
 import { canLegislateBankIndependence } from "@/lib/centralBank/governance";
+import {
+  ECONOMIC_SYSTEM_TARGETS,
+  canLegislateEconomicSystem,
+} from "@/lib/economy/economicSystemReformRules";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import type { LegislationType, SubsidyProvision, EndSubsidyProvision } from "@/lib/db/types";
@@ -52,6 +57,9 @@ import { resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
 import { loadReviewedLawCatalog } from "@/lib/resetLegislation/loadReviewedCatalog";
 import type { ResetCountry } from "@/lib/resetLegislation/fundingOwner";
 import type { LawChoice } from "@/lib/resetLegislation/rules/eligibility";
+import { marketAtLeast } from "@/lib/market/featureFlag";
+import { isMediaOwnershipBillAvailable } from "@/lib/mediaRegulation/rules";
+import { loadUSMediaOutletDelivery } from "@/lib/mediaRegulation/turnData";
 
 // snapshotBillPolicyProvisions now lives in the shared provision-enrichment core
 // so the regional bill paths can call it too. Re-exported for existing importers.
@@ -90,6 +98,7 @@ export type ValidatedProvisions =
       unionLawProvisions: UnionLawProvision[];
       electoralLawProvisions: ElectoralLawProvision[];
       centralBankProvisions: CentralBankIndependenceProvision[];
+      economicSystemReformProvisions: EconomicSystemReformProvision[];
       euroAdoptionProvisions: EuroAdoptionProvision[];
       europeanTreatyProvisions: EuropeanTreatyProvision[];
       resetLawProvisions: ResetLawProvision[];
@@ -111,7 +120,7 @@ export async function validateBillProvisions(
 ): Promise<ValidatedProvisions> {
   const allowedDomains =
     CATEGORY_TO_POLICY_DOMAINS[category as keyof typeof CATEGORY_TO_POLICY_DOMAINS] ?? [];
-  const { year: eraYear } = await getEraContext(db);
+  const { year: eraYear, currentTurn, mediaRegulation } = await getEraContext(db);
   const validatedPolicyProvisions: ValidatedPolicyProvision[] = [];
   const validatedTariffProvisions: {
     type: "tariff";
@@ -127,6 +136,7 @@ export async function validateBillProvisions(
   const validatedElectoralLawProvisions: ElectoralLawProvision[] = [];
   const validatedCentralBankProvisions: CentralBankIndependenceProvision[] = [];
   const validatedLegislationTypes: LegislationType[] = [];
+  const validatedEconomicSystemReformProvisions: EconomicSystemReformProvision[] = [];
   const validatedEuroAdoptionProvisions: EuroAdoptionProvision[] = [];
   const validatedEuropeanTreatyProvisions: EuropeanTreatyProvision[] = [];
   const validatedResetLawProvisions: ResetLawProvision[] = [];
@@ -458,6 +468,52 @@ export async function validateBillProvisions(
       continue;
     }
 
+    // Economic system reform: a legislated target for the marketization dial.
+    // Economy bills only, one per bill, and only where the era began planned.
+    if (
+      "type" in (rawP as object) &&
+      (rawP as { type: unknown }).type === "economic_system_reform"
+    ) {
+      if (
+        !CENTRAL_BANK_INDEPENDENCE_BILL_CATEGORIES.has(
+          category as Parameters<typeof CENTRAL_BANK_INDEPENDENCE_BILL_CATEGORIES.has>[0]
+        )
+      ) {
+        return {
+          ok: false,
+          status: 400,
+          error: "Economic system reform can only be included in economy bills.",
+        };
+      }
+      const p = rawP as { type: "economic_system_reform"; target?: unknown };
+      if (!ECONOMIC_SYSTEM_TARGETS.includes(p.target as EconomicSystemReformProvision["target"])) {
+        return {
+          ok: false,
+          status: 400,
+          error: 'Economic system target must be "dual_track", "market" or "command".',
+        };
+      }
+      if (sourceCountry && !canLegislateEconomicSystem(sourceCountry)) {
+        return {
+          ok: false,
+          status: 400,
+          error: "Only countries with a planned economy can legislate their economic system.",
+        };
+      }
+      if (validatedEconomicSystemReformProvisions.length > 0) {
+        return {
+          ok: false,
+          status: 400,
+          error: "A bill can carry only one economic system reform.",
+        };
+      }
+      validatedEconomicSystemReformProvisions.push({
+        type: "economic_system_reform",
+        target: p.target as EconomicSystemReformProvision["target"],
+      });
+      continue;
+    }
+
     // Handle union-law provisions (v3 Phase 7b)
     if ("type" in (rawP as object) && (rawP as { type: unknown }).type === "union_law") {
       if (
@@ -589,6 +645,28 @@ export async function validateBillProvisions(
         error: "This legislation is not available in this era.",
       };
     }
+    if (sourceCountry === "US" && lt._id === "us_media_communications") {
+      const mediaRegulationEnabled =
+        mediaRegulation.enabled && marketAtLeast(mediaRegulation.marketSystemMode, "clearing");
+      if (
+        mediaRegulationEnabled &&
+        !isMediaOwnershipBillAvailable(
+          await loadUSMediaOutletDelivery(db, {
+            currentTurn,
+            currentYear: eraYear,
+            commandEconomyEnabled: mediaRegulation.commandEconomyEnabled,
+            includeSettledPolitical: true,
+          })
+        )
+      ) {
+        return {
+          ok: false,
+          status: 400,
+          error:
+            "Media ownership legislation is available only after measured outlet concentration exceeds 65%.",
+        };
+      }
+    }
     if (!allowedDomains.includes(lt.policyDomain)) {
       return {
         ok: false,
@@ -674,6 +752,7 @@ export async function validateBillProvisions(
     unionLawProvisions: validatedUnionLawProvisions,
     electoralLawProvisions: validatedElectoralLawProvisions,
     centralBankProvisions: validatedCentralBankProvisions,
+    economicSystemReformProvisions: validatedEconomicSystemReformProvisions,
     euroAdoptionProvisions: validatedEuroAdoptionProvisions,
     europeanTreatyProvisions: validatedEuropeanTreatyProvisions,
     resetLawProvisions: validatedResetLawProvisions,

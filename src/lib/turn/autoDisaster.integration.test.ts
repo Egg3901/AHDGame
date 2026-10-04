@@ -42,15 +42,19 @@ vi.mock("@/lib/countryAccess", () => ({
   getSimulatedCountryIds: vi.fn().mockResolvedValue(["BR"]),
 }));
 
-vi.mock("@/lib/bonds/corporateCredit", () => ({
-  sumCorporateSectorConstructionInProgress: vi.fn().mockReturnValue(0),
-  computeCorporateCreditAtTurn: vi.fn().mockReturnValue({
-    creditRating: { rating: "BBB", compositeScore: 50 },
-    totalDebt: 0,
-    totalEquity: 1_000_000,
-  }),
-  isCorporateIssuerBond: vi.fn().mockReturnValue(false),
-}));
+vi.mock("@/lib/bonds/corporateCredit", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/bonds/corporateCredit")>();
+  return {
+    ...actual,
+    sumCorporateSectorConstructionInProgress: vi.fn().mockReturnValue(0),
+    computeCorporateCreditAtTurn: vi.fn().mockReturnValue({
+      creditRating: { rating: "BBB", compositeScore: 50 },
+      totalDebt: 0,
+      totalEquity: 1_000_000,
+    }),
+    isCorporateIssuerBond: vi.fn().mockReturnValue(false),
+  };
+});
 
 vi.mock("@/lib/tariffs/tariffEffects", () => ({
   getForeignTariffMarginModifier: vi.fn().mockReturnValue(0),
@@ -245,6 +249,7 @@ describe("auto-disaster end-to-end: spawner → margin penalty → expiry", () =
     });
     db.collectionMocks["crises"]!.findOne.mockResolvedValue(null);
     db.collectionMocks["states"]!.find.mockReturnValue({
+      project: vi.fn().mockReturnThis(),
       toArray: vi
         .fn()
         .mockResolvedValue([{ _id: STATE_ID, countryId: COUNTRY_ID, regionType: "region" }]),
@@ -294,6 +299,7 @@ describe("auto-disaster end-to-end: spawner → margin penalty → expiry", () =
     });
     db.collectionMocks["crises"]!.findOne.mockResolvedValue(null);
     db.collectionMocks["states"]!.find.mockReturnValue({
+      project: vi.fn().mockReturnThis(),
       toArray: vi
         .fn()
         .mockResolvedValue([{ _id: STATE_ID, countryId: COUNTRY_ID, regionType: "region" }]),

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { PoliticalParty } from "@/lib/db/types";
-import { getPartyDetail } from "./partyDetail";
+import { getPartyDetail, loadPartyLeaders } from "./partyDetail";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/turn/currentTurn", () => ({ getCurrentTurn: vi.fn() }));
@@ -10,6 +10,49 @@ vi.mock("@/lib/turn/currentTurn", () => ({ getCurrentTurn: vi.fn() }));
 describe("getPartyDetail", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("batches officer character and ban-status reads", async () => {
+    const db = createMockDb();
+    const activeId = new ObjectId();
+    const bannedId = new ObjectId();
+    const activeUserId = new ObjectId();
+    const bannedUserId = new ObjectId();
+    db.collection("characters");
+    db.collection("users");
+    db.collectionMocks.characters!.find.mockReturnValue({
+      toArray: async () => [
+        {
+          _id: activeId,
+          userId: activeUserId,
+          sequentialId: 1,
+          name: "Active chair",
+          avatarUrl: null,
+        },
+        {
+          _id: bannedId,
+          userId: bannedUserId,
+          sequentialId: 2,
+          name: "Banned treasurer",
+          avatarUrl: null,
+        },
+      ],
+    });
+    db.collectionMocks.users!.find.mockReturnValue({
+      toArray: async () => [
+        { _id: activeUserId, isBanned: false },
+        { _id: bannedUserId, isBanned: true },
+      ],
+    });
+
+    const leaders = await loadPartyLeaders(db as unknown as Db, [activeId, activeId, bannedId]);
+
+    expect(leaders.size).toBe(1);
+    expect(leaders.get(activeId.toString())?.name).toBe("Active chair");
+    expect(leaders.has(bannedId.toString())).toBe(false);
+    expect(db.collectionMocks.characters!.find).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.users!.find).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.characters!.find.mock.calls[0][0]._id.$in).toHaveLength(2);
   });
 
   it("includes NPP home states when building the revenue estimate", async () => {

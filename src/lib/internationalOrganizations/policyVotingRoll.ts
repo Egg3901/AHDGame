@@ -14,9 +14,10 @@
  * competes against routine diplomacy for that slot, and a 24-turn window gives
  * each member only a handful of chances — a single busy cycle starves the vote
  * and the member "withholds consent" forever. Membership, FTAs and war entry
- * are unanimous ballots, so one silent member vetoes the bloc. Before any
- * unanimous tally closes, every autonomy-active member on the roll casts the
- * cooperative ballot the shadow-mode voter has always cast (see
+ * are unanimous ballots on this wider roll, so one silent member vetoes the
+ * bloc. War declarations use the separate player-only roll. Before any unanimous
+ * tally closes, every autonomy-active member on this roll casts the cooperative
+ * ballot the shadow-mode voter has always cast (see
  * castAutonomousOrgVotes): active mode is the same executive speaking with the
  * planner's voice instead of a fixed yes.
  */

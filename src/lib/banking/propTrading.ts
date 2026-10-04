@@ -13,13 +13,22 @@ import {
   resolveCorpLiquidCurrencyCode,
   shareTradeAnchorValue,
 } from "@/lib/currency/corporationCapital";
-import { isBankPropTradingEnabled } from "@/lib/banking/featureFlag";
 import { mayDistribute } from "./capitalAdequacy";
 import { getCashReserves } from "./bankCash";
 import { charterMay } from "@/lib/banking/rules/capabilities";
 import { settlePropBookChange } from "./propSettlement";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { escapeRegex } from "@/lib/utils/escapeRegex";
+import {
+  loadPropForexFeeQuote,
+  propForexFeeReceipt,
+  settlePendingPropForexFee,
+} from "./propForexFees";
+import { addPropForexVolume } from "./rules/propForexFees";
+import { loadBankingPolicy } from "./policy";
+import { allowedPropOpeningAssets } from "./rules/propAssets";
+import { savingsReadsAuthoritative } from "./rules/policy";
+import type { BalanceSheetOptions } from "./rules/balanceSheet";
 
 /**
  * Leverage math lives in the rules zone (`rules/propLeverage.ts`) so
@@ -48,7 +57,54 @@ export type OpenPositionInput = {
   asset: PropAsset;
   ref: string;
   units: number;
+  maxCost?: number;
+  minProceeds?: number;
 };
+
+/** Read-only cash preview; the execution checks the player's accepted cash bound. */
+export async function quoteForexPosition(
+  db: Db,
+  corporationId: ObjectId,
+  input: OpenPositionInput
+) {
+  const policy = await loadBankingPolicy(db);
+  if (!policy.propForexFees || input.asset !== "forex")
+    return { ok: false as const, error: "Forex fee quoting is not enabled" };
+  if (!Number.isFinite(input.units) || input.units <= 0)
+    return { ok: false as const, error: "Units must be positive" };
+  const corp = await db
+    .collection<Corporation>("corporations")
+    .findOne({ _id: corporationId }, { projection: { bankCharter: 1, bankPropForexVolume: 1 } });
+  if (!corp || !isPropCharter(corp.bankCharter))
+    return { ok: false as const, error: "No active investment charter" };
+  const currencyCode = corp.bankCharter.currency as CurrencyCode;
+  const foreign = input.ref.trim().toUpperCase();
+  if (!isCurrencyCode(foreign) || foreign === currencyCode)
+    return { ok: false as const, error: "Choose a foreign currency" };
+  try {
+    const quote = await loadPropForexFeeQuote(
+      db,
+      corp,
+      currencyCode,
+      foreign,
+      input.units,
+      await getCurrentTurn(db)
+    );
+    return {
+      ok: true as const,
+      fee: quote.feeLocal,
+      feeRate: quote.feeRate,
+      mark: quote.markLocal,
+      cost: quote.markLocal + quote.feeLocal,
+      proceeds: quote.markLocal - quote.feeLocal,
+    };
+  } catch (error) {
+    return {
+      ok: false as const,
+      error: error instanceof Error ? error.message : "Forex quote unavailable",
+    };
+  }
+}
 
 export type OpenPositionResult =
   | {
@@ -57,6 +113,7 @@ export type OpenPositionResult =
       cost: number;
       cashReserves: number;
       propBookMarkValue: number;
+      fee?: number;
     }
   | { ok: false; error: string };
 
@@ -67,6 +124,7 @@ export type ClosePositionResult =
       realizedPnl: number;
       cashReserves: number;
       propBookMarkValue: number;
+      fee?: number;
     }
   | { ok: false; error: string };
 
@@ -272,7 +330,8 @@ export async function openPosition(
   corporationId: ObjectId,
   input: OpenPositionInput
 ): Promise<OpenPositionResult> {
-  if (!(await isBankPropTradingEnabled())) {
+  const policy = await loadBankingPolicy(db);
+  if (!policy.propTrading) {
     return { ok: false, error: "Prop trading is not enabled" };
   }
   if (!Number.isFinite(input.units) || !(input.units > 0)) {
@@ -280,12 +339,35 @@ export async function openPosition(
   }
   if (!input.ref || typeof input.ref !== "string")
     return { ok: false, error: "Position ref is required" };
+  if (policy.advancedCharters && input.asset === "equity") {
+    const owner = await db
+      .collection<Corporation>("corporations")
+      .findOne({ _id: corporationId }, { projection: { ceoType: 1 } });
+    if (!owner) return { ok: false, error: "Corporation not found" };
+    if (!allowedPropOpeningAssets(true, owner.ceoType).includes(input.asset))
+      return {
+        ok: false,
+        error: "Player bank prop purchases are limited to bonds, index units and forex",
+      };
+  }
   const resolvedRef = await resolvePositionRef(db, input.asset, input.ref);
   if (!resolvedRef.ok) return resolvedRef;
   const positionInput = { ...input, ref: resolvedRef.ref };
 
-  const corp = await db.collection<Corporation>("corporations").findOne({ _id: corporationId });
+  if (policy.propForexFees && !(await settlePendingPropForexFee(db, corporationId)))
+    return { ok: false, error: "A previous forex fee is still settling" };
+  const corp = await db
+    .collection<Corporation>("corporations")
+    .findOne(
+      { _id: corporationId },
+      policy.propForexFees ? {} : { projection: { bankPropForexFee: 0, bankPropForexVolume: 0 } }
+    );
   if (!corp) return { ok: false, error: "Corporation not found" };
+  if (!allowedPropOpeningAssets(policy.advancedCharters, corp.ceoType).includes(input.asset))
+    return {
+      ok: false,
+      error: "Player bank prop purchases are limited to bonds, index units and forex",
+    };
   const charter = corp.bankCharter;
   if (!isPropCharter(charter)) {
     return {
@@ -308,14 +390,39 @@ export async function openPosition(
   }
 
   const homeCurrency = charter.currency as CurrencyCode;
-  const cost = await markPositionValue(
+  let markCost = await markPositionValue(
     db,
     { asset: positionInput.asset, ref: positionInput.ref, units: positionInput.units },
     homeCurrency
   );
-  if (!(cost > 0)) {
+  if (!(markCost > 0)) {
     return { ok: false, error: "Could not price position (missing market data)" };
   }
+  const turn = await getCurrentTurn(db);
+  let forexQuote: Awaited<ReturnType<typeof loadPropForexFeeQuote>> | undefined;
+  if (positionInput.asset === "forex" && policy.propForexFees) {
+    if (positionInput.ref === homeCurrency)
+      return { ok: false, error: "Choose a foreign currency" };
+    try {
+      forexQuote = await loadPropForexFeeQuote(
+        db,
+        corp,
+        homeCurrency,
+        positionInput.ref as CurrencyCode,
+        positionInput.units,
+        turn
+      );
+      markCost = forexQuote.markLocal;
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : "Forex quote unavailable",
+      };
+    }
+  }
+  const cost = markCost + (forexQuote?.feeLocal ?? 0);
+  if (input.maxCost !== undefined && cost > input.maxCost + 1e-9)
+    return { ok: false, error: "Cash quote changed; request a new quote" };
 
   const liquid = getCashReserves(corp.bankCharter);
   if (cost > liquid + 1e-9) {
@@ -333,7 +440,7 @@ export async function openPosition(
       ...prev,
       units: prev.units + positionInput.units,
       costBasis: prev.costBasis + cost,
-      markValue: (prev.markValue ?? prev.costBasis) + cost,
+      markValue: (prev.markValue ?? prev.costBasis) + markCost,
     };
   } else {
     nextBook.push({
@@ -341,13 +448,15 @@ export async function openPosition(
       ref: positionInput.ref,
       units: positionInput.units,
       costBasis: cost,
-      markValue: cost,
+      markValue: markCost,
     });
   }
 
   const nextMark = sumPositionMarks(nextBook);
   const nextLiquid = liquid - cost;
-  const equity = computePropEquityBase(nextLiquid, charter, nextMark);
+  const equity = computePropEquityBase(nextLiquid, charter, nextMark, {
+    playerDepositsAreLiabilities: savingsReadsAuthoritative(policy, homeCurrency),
+  });
   if (equity <= 0 || nextMark > PROP_LEVERAGE_MULTIPLE * equity + 1e-9) {
     return { ok: false, error: "Trade would breach prop leverage multiple" };
   }
@@ -367,10 +476,23 @@ export async function openPosition(
     charter,
     revision: corp.bankPropBookRevision,
     operation: "buy",
-    turn: await getCurrentTurn(db),
+    ...(policy.advancedCharters && input.asset === "equity"
+      ? { requiredCeoType: corp.ceoType }
+      : {}),
+    turn,
     cashDelta: -cost,
     nextBook,
     nextMark,
+    ...(forexQuote
+      ? {
+          forexFee: propForexFeeReceipt(forexQuote, homeCurrency, charter.charteredTurn, turn),
+          forexVolume: addPropForexVolume(
+            corp.bankPropForexVolume ?? [],
+            turn,
+            forexQuote.anchorAmount
+          ),
+        }
+      : {}),
     meta: { asset: positionInput.asset, ref: positionInput.ref, units: positionInput.units },
   });
   if (!updated.ok) return { ok: false, error: "Failed to settle purchase (capital moved)" };
@@ -382,6 +504,7 @@ export async function openPosition(
     ok: true,
     position,
     cost,
+    fee: forexQuote?.feeLocal,
     cashReserves: nextLiquid,
     propBookMarkValue: nextMark,
   };
@@ -396,14 +519,22 @@ export async function closePosition(
   corporationId: ObjectId,
   input: OpenPositionInput
 ): Promise<ClosePositionResult> {
-  if (!(await isBankPropTradingEnabled())) {
+  const policy = await loadBankingPolicy(db);
+  if (!policy.propTrading) {
     return { ok: false, error: "Prop trading is not enabled" };
   }
   if (!Number.isFinite(input.units) || !(input.units > 0)) {
     return { ok: false, error: "Units must be a positive number" };
   }
 
-  const corp = await db.collection<Corporation>("corporations").findOne({ _id: corporationId });
+  if (policy.propForexFees && !(await settlePendingPropForexFee(db, corporationId)))
+    return { ok: false, error: "A previous forex fee is still settling" };
+  const corp = await db
+    .collection<Corporation>("corporations")
+    .findOne(
+      { _id: corporationId },
+      policy.propForexFees ? {} : { projection: { bankPropForexFee: 0, bankPropForexVolume: 0 } }
+    );
   if (!corp) return { ok: false, error: "Corporation not found" };
   const charter = corp.bankCharter;
   if (!isPropCharter(charter)) {
@@ -422,11 +553,34 @@ export async function closePosition(
   }
 
   const homeCurrency = charter.currency as CurrencyCode;
-  const proceeds = await markPositionValue(
+  let grossProceeds = await markPositionValue(
     db,
     { asset: input.asset, ref: input.ref, units: input.units },
     homeCurrency
   );
+  const turn = await getCurrentTurn(db);
+  let forexQuote: Awaited<ReturnType<typeof loadPropForexFeeQuote>> | undefined;
+  if (input.asset === "forex" && policy.propForexFees) {
+    try {
+      forexQuote = await loadPropForexFeeQuote(
+        db,
+        corp,
+        homeCurrency,
+        input.ref as CurrencyCode,
+        input.units,
+        turn
+      );
+      grossProceeds = forexQuote.markLocal;
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : "Forex quote unavailable",
+      };
+    }
+  }
+  const proceeds = grossProceeds - (forexQuote?.feeLocal ?? 0);
+  if (input.minProceeds !== undefined && proceeds + 1e-9 < input.minProceeds)
+    return { ok: false, error: "Cash quote changed; request a new quote" };
   const fraction = input.units / held.units;
   const costReleased = held.costBasis * fraction;
   const realizedPnl = proceeds - costReleased;
@@ -440,7 +594,7 @@ export async function closePosition(
       ...prev,
       units: prev.units - input.units,
       costBasis: prev.costBasis - costReleased,
-      markValue: Math.max(0, (prev.markValue ?? prev.costBasis) - proceeds),
+      markValue: Math.max(0, (prev.markValue ?? prev.costBasis) - grossProceeds),
     };
   }
 
@@ -453,10 +607,20 @@ export async function closePosition(
     charter,
     revision: corp.bankPropBookRevision,
     operation: "sell",
-    turn: await getCurrentTurn(db),
+    turn,
     cashDelta: proceeds,
     nextBook,
     nextMark,
+    ...(forexQuote
+      ? {
+          forexFee: propForexFeeReceipt(forexQuote, homeCurrency, charter.charteredTurn, turn),
+          forexVolume: addPropForexVolume(
+            corp.bankPropForexVolume ?? [],
+            turn,
+            forexQuote.anchorAmount
+          ),
+        }
+      : {}),
     meta: { asset: input.asset, ref: input.ref, units: input.units },
   });
   if (!updated.ok) return { ok: false, error: "Failed to settle sale" };
@@ -464,6 +628,7 @@ export async function closePosition(
   return {
     ok: true,
     proceeds,
+    fee: forexQuote?.feeLocal,
     realizedPnl,
     cashReserves: nextLiquid,
     propBookMarkValue: nextMark,
@@ -483,9 +648,10 @@ export async function forceLiquidateToLeverageCap(
   marked: MarkBookResult,
   revision?: number,
   bankName?: string,
-  turn?: number
+  turn?: number,
+  options: BalanceSheetOptions = {}
 ): Promise<{ cashReserves: number; charter: BankCharter; forced: boolean; stale?: boolean }> {
-  const equity = computePropEquityBase(cashReserves, charter, marked.propBookMarkValue);
+  const equity = computePropEquityBase(cashReserves, charter, marked.propBookMarkValue, options);
   const cap = PROP_LEVERAGE_MULTIPLE * Math.max(0, equity);
   if (!(marked.propBookMarkValue > cap + 1e-9) || marked.propBookMarkValue <= 0) {
     return {

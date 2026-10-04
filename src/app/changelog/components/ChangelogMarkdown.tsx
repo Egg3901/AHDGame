@@ -79,7 +79,7 @@ export function ChangelogMarkdown({ content, compact = false }: ChangelogMarkdow
         },
         h2: ({ children }) =>
           compact ? (
-            <h3 className="mb-2 mt-4 text-sm font-bold uppercase tracking-wider text-foreground/80 first:mt-0">
+            <h3 className="mb-2 mt-4 text-sm font-bold text-foreground/80 first:mt-0">
               {children}
             </h3>
           ) : (

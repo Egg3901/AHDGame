@@ -74,7 +74,8 @@ interface NppWhipPanelProps {
   stateId?: string;
   // For both
   partyId: string;
-  partyColor: string;
+  /** No longer drawn: party color appears only as a swatch beside the name. */
+  partyColor?: string;
   isNational: boolean;
   // Country ID for national party API calls (e.g. "US", "UK")
   countryId?: string;
@@ -93,7 +94,6 @@ interface NppWhipPanelProps {
 export function NppWhipPanel({
   stateId,
   partyId,
-  partyColor,
   isNational,
   countryId,
   eligibleStates,
@@ -482,11 +482,10 @@ export function NppWhipPanel({
                   type="button"
                   onClick={() => setWhipMode(mode)}
                   className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
-                    active ? "text-black" : "text-muted hover:text-text"
+                    active ? "bg-card-elevated text-foreground" : "text-muted hover:text-foreground"
                   }`}
-                  style={active ? { backgroundColor: partyColor } : undefined}
                 >
-                  {mode === "soft" ? "Soft Bills" : "Hard Bills"}
+                  {mode === "soft" ? "Soft bills" : "Hard bills"}
                 </button>
               );
             })}
@@ -575,11 +574,7 @@ export function NppWhipPanel({
                             onClick={() => handleBillWhip(item.bill.id, chamberKey, "for")}
                             disabled={!whip.canWhip || whippingId === item.bill.id}
                             title={!whip.canWhip ? "Maximum whip attempts reached" : undefined}
-                            className="px-3 py-1.5 text-xs font-medium rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            style={{
-                              backgroundColor: whip.canWhip ? `${partyColor}20` : undefined,
-                              color: whip.canWhip ? partyColor : undefined,
-                            }}
+                            className="px-3 py-1.5 text-xs font-medium rounded-md border border-card-border bg-card hover:bg-muted/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             {whippingId === item.bill.id ? "Issuing..." : "Whip FOR"}
                           </button>
@@ -651,11 +646,7 @@ export function NppWhipPanel({
                             handleGovernmentVoteWhip(election.id, "for", "pmAppointmentVote")
                           }
                           disabled={!whip.canWhip || whippingId === `cv_${election.id}_for`}
-                          className="px-3 py-1.5 text-xs font-medium rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          style={{
-                            backgroundColor: whip.canWhip ? `${partyColor}20` : undefined,
-                            color: whip.canWhip ? partyColor : undefined,
-                          }}
+                          className="px-3 py-1.5 text-xs font-medium rounded-md border border-card-border bg-card hover:bg-muted/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           {whippingId === `cv_${election.id}_for` ? "Issuing..." : "Whip FOR"}
                         </button>
@@ -678,11 +669,7 @@ export function NppWhipPanel({
                             handleGovernmentVoteWhip(election.id, "for", "noConfidenceVote")
                           }
                           disabled={!whip.canWhip || whippingId === `cv_${election.id}_for`}
-                          className="px-3 py-1.5 text-xs font-medium rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          style={{
-                            backgroundColor: whip.canWhip ? `${partyColor}20` : undefined,
-                            color: whip.canWhip ? partyColor : undefined,
-                          }}
+                          className="px-3 py-1.5 text-xs font-medium rounded-md border border-card-border bg-card hover:bg-muted/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           {whippingId === `cv_${election.id}_for`
                             ? "Issuing..."
@@ -707,11 +694,7 @@ export function NppWhipPanel({
                             handleGovernmentVoteWhip(election.id, "for", "speakerVacateMotion")
                           }
                           disabled={!whip.canWhip || whippingId === `cv_${election.id}_for`}
-                          className="px-3 py-1.5 text-xs font-medium rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          style={{
-                            backgroundColor: whip.canWhip ? `${partyColor}20` : undefined,
-                            color: whip.canWhip ? partyColor : undefined,
-                          }}
+                          className="px-3 py-1.5 text-xs font-medium rounded-md border border-card-border bg-card hover:bg-muted/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           {whippingId === `cv_${election.id}_for`
                             ? "Issuing..."
@@ -741,11 +724,7 @@ export function NppWhipPanel({
                             )
                           }
                           disabled={!whip.canWhip || whippingId === `cv_${election.id}_for`}
-                          className="px-3 py-1.5 text-xs font-medium rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          style={{
-                            backgroundColor: whip.canWhip ? `${partyColor}20` : undefined,
-                            color: whip.canWhip ? partyColor : undefined,
-                          }}
+                          className="px-3 py-1.5 text-xs font-medium rounded-md border border-card-border bg-card hover:bg-muted/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           {whippingId === `cv_${election.id}_for`
                             ? "Issuing..."
@@ -787,12 +766,7 @@ export function NppWhipPanel({
                                     ? "Already whipped for this candidate"
                                     : undefined
                               }
-                              className="px-3 py-1.5 text-xs font-medium rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                              style={{
-                                backgroundColor:
-                                  whip.canWhip && !isWhipped ? `${partyColor}20` : undefined,
-                                color: whip.canWhip && !isWhipped ? partyColor : undefined,
-                              }}
+                              className="px-3 py-1.5 text-xs font-medium rounded-md border border-card-border bg-card hover:bg-muted/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               {whippingId === whipKey
                                 ? "Issuing..."
@@ -842,11 +816,7 @@ export function NppWhipPanel({
                       <button
                         onClick={() => handleCabinetWhip(item.id, "for")}
                         disabled={!whip.canWhip || whippingId === `cab_${item.id}_for`}
-                        className="px-3 py-1.5 text-xs font-medium rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        style={{
-                          backgroundColor: whip.canWhip ? `${partyColor}20` : undefined,
-                          color: whip.canWhip ? partyColor : undefined,
-                        }}
+                        className="px-3 py-1.5 text-xs font-medium rounded-md border border-card-border bg-card hover:bg-muted/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {whippingId === `cab_${item.id}_for` ? "Issuing..." : "Whip FOR"}
                       </button>

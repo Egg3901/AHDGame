@@ -1,0 +1,37 @@
+{
+  "issue": 3022,
+  "runtimeSource": "901ef2ad29b9a24b308ce72bc70c75513e009914",
+  "emissionRestamp": "711b93aa24b02c175ea0fbb4edbf15222a9020a3",
+  "rule": "every ledger entry is stamped with the turn whose closing snapshot holds its cash: the processing turn inside processTurn, otherwise gameState.currentTurn + 1",
+  "journalsCovered": [
+    "budget/treasuryReserveTransfer",
+    "moneySupply/monetaryOperationJournal",
+    "indexFunds/fundFloatTradePlan (trade and reversal)",
+    "indexFunds/queuedPayoutSettlement",
+    "indexFunds/playerCommandAudit",
+    "lineOfCredit/settlement",
+    "bonds/sovereignPrimarySettlement"
+  ],
+  "qualification": {
+    "acceptance": "wire between two snapshots: rows keep turn 0, entries land in turn 5, zero divergence",
+    "redWithBaseEmitter": "acceptance case fails (entries stay at turn 0)",
+    "nativeReplicaPassed": 216,
+    "broadSuites": {
+      "files": 1270,
+      "passed": 12976,
+      "failedPreExistingTimeouts": 2
+    },
+    "journalSuites": {
+      "files": 208,
+      "passed": 2006,
+      "failed": 0
+    },
+    "changedTypeScriptFiles": 22,
+    "scopedLint": "pass",
+    "scopedSemanticDiagnostics": "pass",
+    "formatting": "pass",
+    "architectureAuditBlocking": 0
+  },
+  "cost": "none inside a turn; one projected gameState read per emission batch or journal plan outside a turn",
+  "limits": ["No production database was reset or repaired."]
+}

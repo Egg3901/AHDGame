@@ -16,7 +16,7 @@ import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 import { sectorEconomicRevenue } from "@/lib/corporations/sectorRevenueBasis";
 import {
   sectorDailyProfitAnchor,
-  sumConstructionInProgressAnchor,
+  sectorConstructionInProgressAnchor,
   type SectorCapexFields,
 } from "@/lib/corporations/sectorProfitBasis";
 import { sumBondPrincipalAnchor, sumBondAnnualInterestAnchor } from "@/lib/bonds/bondPrincipalSum";
@@ -149,10 +149,13 @@ export function sumCorporateSectorAnnualRevenue(
  */
 export function sumCorporateSectorConstructionInProgress(
   sectors: readonly (CorporateSector & SectorCapexFields)[],
-  corporationId: ObjectId
+  corporationId: ObjectId,
+  currentTurn?: number | null
 ): number {
   const id = corporationId.toString();
-  return sumConstructionInProgressAnchor(sectors.filter((s) => s.corporationId.toString() === id));
+  return sectors
+    .filter((s) => s.corporationId.toString() === id)
+    .reduce((sum, sector) => sum + sectorConstructionInProgressAnchor(sector, currentTurn), 0);
 }
 
 export interface CorporateCreditComputationInput {
@@ -172,6 +175,8 @@ export interface CorporateCreditComputationInput {
    * Absent/0 for every pre-P3a corp.
    */
   constructionInProgressAnchor?: number;
+  /** Existing funded-cash operating/tax arrears, expressed in anchor units. */
+  otherLiabilitiesAnchor?: number;
   /** Full bond list — filtered internally to non-matured corporate bonds owned by `corporationId`. */
   bonds: Bond[] | undefined;
   corporationId: ObjectId;
@@ -206,6 +211,27 @@ export interface CorporateCreditComputationInput {
   fxByCurrency: ReadonlyMap<CurrencyCode, number>;
 }
 
+/** Normalize corporation cash arrears to anchor units for credit/equity scoring. */
+export function corporateCashArrearsAnchor(input: {
+  operatingByCurrency?: Readonly<Record<string, number | undefined>>;
+  federalTaxByCountryAnchor?: Readonly<Record<string, number | undefined>>;
+  fxByCurrency: ReadonlyMap<CurrencyCode, number>;
+}): number {
+  const operating = Object.entries(input.operatingByCurrency ?? {}).reduce<number>(
+    (sum, [currency, local]) => {
+      if (!(local && local > 0)) return sum;
+      const rate = input.fxByCurrency.get(currency as CurrencyCode) ?? 1;
+      return sum + local / (rate > 0 ? rate : 1);
+    },
+    0
+  );
+  const tax = Object.values(input.federalTaxByCountryAnchor ?? {}).reduce<number>(
+    (sum, amount) => sum + Math.max(0, amount ?? 0),
+    0
+  );
+  return operating + tax;
+}
+
 export function computeCorporateCreditAtTurn(input: CorporateCreditComputationInput) {
   // Filter to this corp's non-matured corporate bonds (sovereign bonds live on
   // gov budgets, not corp balance sheets).
@@ -216,12 +242,15 @@ export function computeCorporateCreditAtTurn(input: CorporateCreditComputationIn
   // Anchor-normalized sums so debt/equity and interest-coverage ratios inside
   // `calculateCreditScore` compare coherent units. Pre-fix this was a LOCAL sum
   // compared to ₳ equity — scored healthy non-USD corps as CCC.
-  const totalDebt = sumBondPrincipalAnchor(corpBonds, input.fxByCurrency);
+  const totalDebt =
+    sumBondPrincipalAnchor(corpBonds, input.fxByCurrency) +
+    Math.max(0, input.otherLiabilitiesAnchor ?? 0);
   const annualCouponObligations = sumBondAnnualInterestAnchor(corpBonds, input.fxByCurrency);
   const totalEquity =
     input.liquidCapitalAnchor +
     input.sectorNpv +
-    Math.max(0, input.constructionInProgressAnchor ?? 0);
+    Math.max(0, input.constructionInProgressAnchor ?? 0) -
+    Math.max(0, input.otherLiabilitiesAnchor ?? 0);
   const annualIncome = input.incomePerTurn * TURNS_PER_YEAR;
   const penaltyActive =
     input.bondDefaultCreditPenaltyUntilTurn != null &&

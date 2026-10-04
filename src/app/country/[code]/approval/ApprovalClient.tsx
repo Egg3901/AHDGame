@@ -187,9 +187,7 @@ export default function ApprovalClient({ initialMetrics, initialApproval }: Appr
             {/* Active Effects / Modifiers */}
             <div className="rounded-xl border border-card-border bg-card p-6 shadow-panel">
               <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
-                <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">
-                  Active Effects
-                </h2>
+                <h2 className="text-sm font-semibold text-muted">Active effects</h2>
                 {modifiers.length > 0 && (
                   <div className="flex gap-4 text-right text-xs">
                     <div>
@@ -237,7 +235,7 @@ export default function ApprovalClient({ initialMetrics, initialApproval }: Appr
             {/* Turn history */}
             {history.length > 0 && (
               <div className="rounded-xl border border-card-border bg-card p-6 shadow-panel">
-                <h2 className="text-xs font-semibold uppercase tracking-widest text-muted mb-4">
+                <h2 className="text-sm font-semibold text-muted mb-4">
                   History (last {history.length} turns)
                 </h2>
                 <div className="flex items-end gap-1 h-16">
@@ -264,8 +262,8 @@ export default function ApprovalClient({ initialMetrics, initialApproval }: Appr
             {/* State/region rankings */}
             {sortedStates.length > 0 && (
               <div className="rounded-xl border border-card-border bg-card p-6 shadow-panel">
-                <h2 className="text-xs font-semibold uppercase tracking-widest text-muted mb-4">
-                  {config.regionLabel} Rankings
+                <h2 className="text-sm font-semibold text-muted mb-4">
+                  {config.regionLabel} rankings
                 </h2>
                 <div className="space-y-1">
                   {sortedStates.map((s, i) => {

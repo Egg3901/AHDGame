@@ -51,6 +51,12 @@ import { getDecisionHandler } from "@/lib/onePartyState/decisionEvents/registry"
 // just the kind string and no buttons.
 import "@/lib/onePartyState/decisionEvents";
 import { isActionAvailable, type ReformActionId } from "@/lib/onePartyState/reformCooldowns";
+import {
+  CONVENTION_ELECTION_DELAYS,
+  CONVENTION_LEGACY_RESERVATION_MAX,
+  conventionDraftDefaults,
+  conventionTargetAllowlist,
+} from "@/lib/onePartyState/conventionRules";
 import { COUNTRY_CONFIGS as COUNTRY_CFGS_FOR_MOOD } from "@/lib/constants/countries";
 import { computePopularTurnDrift } from "@/lib/turn/popularLegitimacyTurn";
 import { collectEconomicSignalsForCountry } from "@/lib/turn/popularLegitimacyDriverCollectors";
@@ -222,7 +228,13 @@ export async function GET(request: Request, { params }: RouteParams) {
     // Wrapped in try/catch so MockDb-shaped tests that don't stub the
     // politicalParties collection still get the rest of the diagnostic
     // surface back instead of a 500.
-    let bannedParties: { sequentialId: number; name: string; abbreviation?: string }[] = [];
+    let bannedParties: {
+      sequentialId: number;
+      name: string;
+      abbreviation?: string;
+      /** Turn this party's own legalize cooldown ends, when it is still running. */
+      legalizeCooldownUntil?: number;
+    }[] = [];
     try {
       bannedParties = await db
         .collection<{ sequentialId: number; name: string; abbreviation?: string }>(
@@ -237,6 +249,14 @@ export async function GET(request: Request, { params }: RouteParams) {
         })
         .sort({ sequentialId: 1 })
         .toArray();
+      // legalizeParty cools down per party: mark the ones the picker must hold.
+      const legalizeUntil = runtime.reformCooldowns?.legalizeParty?.perPartyId ?? {};
+      bannedParties = bannedParties.map((p) => {
+        const until = legalizeUntil[p.sequentialId];
+        return typeof until === "number" && until > currentTurn
+          ? { ...p, legalizeCooldownUntil: until }
+          : p;
+      });
     } catch (err) {
       console.warn(`${countryId} banned-parties lookup skipped:`, err);
     }
@@ -321,6 +341,14 @@ export async function GET(request: Request, { params }: RouteParams) {
       activeDecision,
       convention: esc?.convention ?? null,
       conventionInProgress: esc?.conventionInProgress ?? false,
+      // What the draft form may offer, straight from the rules the draft
+      // route enforces.
+      conventionDraftOptions: {
+        targets: conventionTargetAllowlist(countryId),
+        electionDelays: [...CONVENTION_ELECTION_DELAYS],
+        legacyReservationMax: CONVENTION_LEGACY_RESERVATION_MAX,
+        defaults: conventionDraftDefaults(countryId),
+      },
       conversionPendingAtTurn: esc?.conversionPendingAtTurn ?? null,
       stage4Delay: esc?.stage4Delay ?? null,
       transitionHistory: (esc?.transitionHistory ?? []).slice(0, 10),

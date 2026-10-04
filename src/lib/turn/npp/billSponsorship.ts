@@ -67,6 +67,9 @@ import { isPolicyProvision, type BillStatus } from "@/lib/db/types/legislation";
 import { getLowerChamberOfficeType } from "@/lib/legislature/chamberOfficeType";
 import { getEraContext } from "@/lib/era/context";
 import { isLegislationTypeActive } from "@/lib/era/legislationCatalog";
+import { getMarketSystemMode, marketAtLeast } from "@/lib/market/featureFlag";
+import { isMediaOwnershipBillAvailable } from "@/lib/mediaRegulation/rules";
+import { loadUSMediaOutletDelivery } from "@/lib/mediaRegulation/turnData";
 import type { Bill } from "@/lib/db/types";
 import type { NPP } from "@/lib/db/types";
 
@@ -683,7 +686,10 @@ export async function processNppBillSponsorship(ctx: NPPContext): Promise<number
   const [cmdConfig, cmdGameState] = await Promise.all([
     db
       .collection<GameConfig>("gameConfig")
-      .findOne({ _id: "default" }, { projection: { commandEconomyEnabled: 1 } }),
+      .findOne(
+        { _id: "default" },
+        { projection: { commandEconomyEnabled: 1, mediaRegulationEnabled: 1, marketSystemMode: 1 } }
+      ),
     db.collection<GameState>("gameState").findOne(
       { _id: "current" },
       {
@@ -698,7 +704,22 @@ export async function processNppBillSponsorship(ctx: NPPContext): Promise<number
     ),
   ]);
   const commandEconomyEnabled = cmdConfig?.commandEconomyEnabled === true;
+  const mediaRegulationEnabled =
+    cmdConfig?.mediaRegulationEnabled === true &&
+    marketAtLeast(await getMarketSystemMode(cmdConfig), "clearing");
   const currentYear = cmdGameState?.currentYear;
+  const mediaOwnershipBillAvailable = mediaRegulationEnabled
+    ? isMediaOwnershipBillAvailable(
+        await loadUSMediaOutletDelivery(db, {
+          // This phase runs before the current turn's corporation clearing.
+          // The latest completed audience snapshot is from the prior turn.
+          currentTurn: Math.max(0, currentTurn - 1),
+          currentYear,
+          commandEconomyEnabled,
+          includeSettledPolitical: true,
+        })
+      )
+    : true;
   const europeanContext = cmdGameState?.europeanIntegration
     ? await loadEuropeanTreatyContext(db, currentTurn)
     : null;
@@ -829,6 +850,13 @@ export async function processNppBillSponsorship(ctx: NPPContext): Promise<number
       const planned = isPlannedEconomy(countryId, currentYear, commandEconomyEnabled);
       const legTypes = legTypesRaw.filter((lt) => {
         if (!isLegislationTypeActive(lt._id, eraYear)) return false;
+        if (
+          countryId === COUNTRY_CONFIGS.US.id &&
+          lt._id === "us_media_communications" &&
+          !mediaOwnershipBillAvailable
+        ) {
+          return false;
+        }
         if (planned && isMarketLiberalLegislationType(lt)) return false;
         return true;
       });

@@ -15,6 +15,7 @@ import {
   COMMODITY_BASE_PRICES,
   FINANCIAL_DEMAND_ISSUANCE_FRACTION,
   COMMODITY_TYPES,
+  NATCORP_COMMODITY_MULTIPLIER,
   COMMODITY_AGGREGATE_INPUT_CAP,
   COMMODITY_AGGREGATE_SURPLUS_CAP,
   BUILDING_MATERIALS_GDP_DEMAND_FRACTION,
@@ -946,6 +947,32 @@ describe("computeRawSupplyDemand — plants tier (real production, P3b)", () => 
     expect(totalSplit).toBeCloseTo(produced, 4);
   });
 
+  it("uses exact product output units and keeps normal market multipliers", () => {
+    const inputs = {
+      sectorType: "manufacturing",
+      revenue: 1_000_000,
+      stateId: "S1",
+      producedUnits: 500,
+      isNatcorp: true,
+      militaryDivertedFraction: 0.25,
+    };
+    const result = plants([
+      {
+        ...inputs,
+        outputUnitsByCommodity: { steel: 20, vehicles: 3 },
+      },
+    ]);
+    const state = result.byState.get("S1")!;
+    const unchangedInputs = plants([inputs]).byState.get("S1")!;
+
+    expect(state.get("steel")!.supply).toBeCloseTo(20 * NATCORP_COMMODITY_MULTIPLIER * 0.75, 6);
+    expect(state.get("vehicles")!.supply).toBeCloseTo(3 * NATCORP_COMMODITY_MULTIPLIER * 0.75, 6);
+    expect(state.get("building_materials")!.supply).toBe(0);
+    for (const [commodity, balance] of state) {
+      expect(balance.demand).toBeCloseTo(unchangedInputs.get(commodity)!.demand, 6);
+    }
+  });
+
   it("attributes the ledger's standard chemical mix to the owning corporation", () => {
     const produced = 1_000;
     const res = plants([
@@ -1228,5 +1255,30 @@ describe("computeRawSupplyDemand — defence output sold to the state", () => {
     expect(supplyOf(computeRawSupplyDemand([plant(4)]))).toBeCloseTo(0, 6);
     const none = supplyOf(computeRawSupplyDemand([plant()]));
     expect(supplyOf(computeRawSupplyDemand([plant(-3)]))).toBeCloseTo(none, 6);
+  });
+});
+
+describe("manufacturing vehicle ledger compatibility", () => {
+  it("keeps old automobile rows and model-aware manufacturing rows on the same recipes", () => {
+    const legacy = {
+      sectorType: "automobiles",
+      revenue: 125_000,
+      stateId: "MI",
+      strategyId: "ev",
+      transitionFromStrategyId: "standard",
+      transitionStartTurn: 100,
+    };
+    const converted = {
+      ...legacy,
+      sectorType: "manufacturing",
+      industryModel: "vehicles",
+    };
+
+    const oldLedger = computeRawSupplyDemand([legacy], undefined, undefined, 106);
+    const modeledLedger = computeRawSupplyDemand([converted], undefined, undefined, 106);
+    expect([...modeledLedger.byState.get("MI")!.entries()]).toEqual([
+      ...oldLedger.byState.get("MI")!.entries(),
+    ]);
+    expect([...modeledLedger.global.entries()]).toEqual([...oldLedger.global.entries()]);
   });
 });

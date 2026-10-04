@@ -20,7 +20,8 @@ import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { getCountryState } from "@/lib/countryState";
 import { getCountryLeaderStatesCollection } from "@/lib/db/collections/countryLeaderState";
-import { getHeadOfGovernmentCharacterId } from "@/lib/api/headOfGovernment";
+import { leaderStateIdentity, decisionLeaderReference } from "@/lib/government/leaderReference";
+import { getHeadOfGovernmentReference } from "@/lib/api/headOfGovernmentReference";
 import { adjustLeaderConfidence } from "@/lib/turn/rulingPartyConfidence";
 import { adjustPopularLegitimacy } from "@/lib/turn/popularLegitimacy";
 
@@ -56,12 +57,12 @@ export async function POST(request: Request, { params }: RouteParams) {
     // helper (governmentFormations → parliamentaryGovernments →
     // electedOfficials). Falls back to the legacy governingPartyId
     // lookup only when no head-of-government can be resolved at all.
-    const hogId = await getHeadOfGovernmentCharacterId(db, countryId);
+    const hogId = await getHeadOfGovernmentReference(db, countryId);
     const leaderColl = getCountryLeaderStatesCollection(db);
     let leaderState = hogId
-      ? await leaderColl.findOne({ countryId, leaderCharacterId: hogId })
+      ? await leaderColl.findOne({ countryId, ...leaderStateIdentity(hogId) })
       : null;
-    if (!leaderState && runtime.rulingPartyId !== null) {
+    if (!leaderState && !hogId && runtime.rulingPartyId !== null) {
       leaderState = await leaderColl.findOne({
         countryId,
         governingPartyId: String(runtime.rulingPartyId),
@@ -80,7 +81,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     // If no leader-state row exists yet, the underlying adjust* helpers
     // self-heal it via ensureLeaderStateExists. Compute the delta from
     // the current value (existing row, or INITIAL defaults if missing).
-    const targetCharacterId = leaderState?.leaderCharacterId ?? hogId!;
+    const targetCharacterId = hogId ?? decisionLeaderReference(leaderState!);
     if (parsed.data.scalar === "popularLegitimacy") {
       const current = leaderState?.popularLegitimacy ?? 75;
       const delta = parsed.data.value - current;

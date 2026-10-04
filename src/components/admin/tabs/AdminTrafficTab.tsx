@@ -13,6 +13,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { SectionLabel } from "@/components/ui/SectionLabel";
 
 type Resolution = "hour" | "day";
 
@@ -168,15 +169,6 @@ function countryFlag(code: string): string {
   return (
     String.fromCodePoint(base + code.toUpperCase().charCodeAt(0) - A) +
     String.fromCodePoint(base + code.toUpperCase().charCodeAt(1) - A)
-  );
-}
-
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="mb-3 flex items-center gap-2">
-      <span className="inline-block h-3.5 w-0.5 flex-shrink-0 rounded-full bg-primary" />
-      <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">{children}</h2>
-    </div>
   );
 }
 

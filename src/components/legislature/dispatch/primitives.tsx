@@ -5,21 +5,11 @@ import { renderInlineEmphasis } from "@/lib/utils/inlineEmphasis";
 import { dispatchStatusMeta, toneColor, posName } from "./status";
 import { VOTE_COLORS, type VoteCounts } from "./voteSeating";
 
+/** Small sentence-case label above a headline, such as a bill's category. */
 export function KickerLabel({ children }: { children: ReactNode }) {
-  return (
-    <span
-      className="font-mono"
-      style={{
-        fontSize: 10.5,
-        letterSpacing: "0.14em",
-        textTransform: "uppercase",
-        color: "var(--primary)",
-        fontWeight: 600,
-      }}
-    >
-      {children}
-    </span>
-  );
+  const text =
+    typeof children === "string" ? children.charAt(0).toUpperCase() + children.slice(1) : children;
+  return <span className="text-xs font-semibold text-muted">{text}</span>;
 }
 
 export function StatusPill({ status, size = "md" }: { status: string; size?: "sm" | "md" }) {
@@ -176,7 +166,7 @@ export function Panel({ title, children }: { title?: string; children: ReactNode
         <h3
           style={{
             margin: "0 0 14px",
-            fontFamily: "var(--font-fraunces)",
+            fontFamily: "var(--font-geist-sans)",
             fontSize: 17,
             fontWeight: 600,
             color: "var(--foreground)",
@@ -329,7 +319,7 @@ export function TheCountRail({
         <span
           className="tabular-nums"
           style={{
-            fontFamily: "var(--font-fraunces)",
+            fontFamily: "var(--font-geist-mono)",
             fontSize: 30,
             fontWeight: 600,
             color: "var(--success)",
@@ -341,7 +331,7 @@ export function TheCountRail({
         <span
           className="tabular-nums"
           style={{
-            fontFamily: "var(--font-fraunces)",
+            fontFamily: "var(--font-geist-mono)",
             fontSize: 30,
             fontWeight: 600,
             color: "var(--error)",

@@ -193,7 +193,7 @@ export default function PortfolioSellModal(props: PortfolioSellModalProps) {
                     <div className={`font-mono font-semibold ${pnlColor}`}>
                       {props.holding.unrealizedPnl !== null
                         ? `${props.holding.unrealizedPnl >= 0 ? "+" : ""}${formatAmount(norm(props.holding.unrealizedPnl, holdingCcy))}`
-                        : "—"}
+                        : "n/a"}
                       {props.holding.unrealizedPnlPct !== null && (
                         <span className="text-xs ml-1">
                           ({props.holding.unrealizedPnlPct >= 0 ? "+" : ""}

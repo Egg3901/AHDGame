@@ -23,9 +23,57 @@ import { createNotification } from "@/lib/notifications";
 import { logWireEvent, wireHeadlineCorpPrivatized } from "@/lib/wireEvent";
 import { resolveNationalCorporationForSector } from "./nationalCorporation";
 import { creditTreasuryProceeds } from "./treasury";
+import {
+  loadTreasuryCashContext,
+  witnessTreasuryCash,
+  type TreasuryCashFlow,
+  type TreasuryCashOptions,
+} from "./treasuryLedger";
+import { deleteDissolvedCorporation } from "./dissolvedCorporation";
+import { snapshotCorporationCurrency } from "@/lib/ledger/balanceSnapshot";
 import { applyPrivatizationConsequences } from "./consequences/apply";
 import { recordNationalizationLedger } from "./ledger";
 import { notifyCountryResidents } from "./privatizationNotifications";
+import {
+  releaseConstructionPropertyTransition,
+  reserveSectorsForTransition,
+} from "@/lib/corporations/securedConstructionProperty";
+
+/**
+ * Witness escrow cash that landed on a bidder: a bid moves it into escrow, and a
+ * refund or the winning amount moves it out, all under one escrow reason.
+ */
+async function witnessBidEscrow(
+  db: Db,
+  ledger: TreasuryCashOptions,
+  bid: Pick<AuctionBid, "characterId" | "corporationId" | "escrowCurrency">,
+  flow: Extract<TreasuryCashFlow, "privatization_bid_escrow" | "privatization_bid_refund">,
+  amount: number,
+  now: Date,
+  site: string
+): Promise<void> {
+  const account = bid.corporationId
+    ? {
+        kind: "corporation" as const,
+        corpId: bid.corporationId.toString(),
+        currency: bid.escrowCurrency,
+      }
+    : bid.characterId
+      ? {
+          kind: "character" as const,
+          characterId: bid.characterId.toString(),
+          currency: bid.escrowCurrency,
+        }
+      : null;
+  if (!account) return;
+  await witnessTreasuryCash(db, ledger, {
+    flow,
+    account,
+    amount,
+    now,
+    site: `privatizationAuction:${site}`,
+  });
+}
 
 export interface PlaceBidParams {
   auctionId: ObjectId;
@@ -93,12 +141,30 @@ export async function placeAuctionBid(db: Db, params: PlaceBidParams): Promise<v
   const myPrior = auction.bids.filter(isMine).reduce((sum, b) => sum + b.amount, 0);
   const outbid = auction.bids.filter((b) => !isMine(b));
   const additional = amount - myPrior;
+  const now = new Date();
+  // A bid is a request: its cash lands in the turn the clock is accumulating.
+  const ledger: TreasuryCashOptions = { context: await loadTreasuryCashContext(db) };
+  const bidder = isCorp
+    ? { corporationId: params.asCorporationId, escrowCurrency: currency }
+    : { characterId: params.characterId, escrowCurrency: currency };
 
   // Debit the added commitment FIRST (atomic, gated). If it fails the bid is
   // rejected and every standing escrow is left untouched.
   const refundSelf = async (): Promise<void> => {
-    if (isCorp) await refundCorpLiquidCapital(db, params.asCorporationId!, additional);
-    else await refundCharacterCash(db, params.characterId, currency, additional, forexEnabled);
+    const landed = isCorp
+      ? await refundCorpLiquidCapital(db, params.asCorporationId!, additional)
+      : await refundCharacterCash(db, params.characterId, currency, additional, forexEnabled);
+    if (landed) {
+      await witnessBidEscrow(
+        db,
+        ledger,
+        bidder,
+        "privatization_bid_refund",
+        additional,
+        now,
+        "lostRace"
+      );
+    }
   };
   if (isCorp) {
     const r = await atomicallyDebitCorpLiquidCapital(db, params.asCorporationId!, additional);
@@ -113,6 +179,7 @@ export async function placeAuctionBid(db: Db, params: PlaceBidParams): Promise<v
     );
     if (!r.ok) throw new Error(r.error);
   }
+  await witnessBidEscrow(db, ledger, bidder, "privatization_bid_escrow", -additional, now, "bid");
 
   const newBid: AuctionBid = {
     ...(isCorp ? { corporationId: params.asCorporationId } : { characterId: params.characterId }),
@@ -120,7 +187,6 @@ export async function placeAuctionBid(db: Db, params: PlaceBidParams): Promise<v
     escrowCurrency: currency,
     placedAtTurn: params.turn,
   };
-  const now = new Date();
   // Append-only history records every bid/raise (the `bids` array only keeps the
   // current leading escrow); display-only, escrow logic uses `bids`.
   const historyEntry: AuctionBidHistoryEntry = {
@@ -171,9 +237,14 @@ export async function placeAuctionBid(db: Db, params: PlaceBidParams): Promise<v
   // once (only the writer that flipped `bids` reaches here). Uses each bid's
   // stored escrowCurrency so a refund can't drift from how it was taken.
   for (const o of outbid) {
-    if (o.corporationId) await refundCorpLiquidCapital(db, o.corporationId, o.amount);
-    else if (o.characterId)
-      await refundCharacterCash(db, o.characterId, o.escrowCurrency, o.amount, forexEnabled);
+    const landed = o.corporationId
+      ? await refundCorpLiquidCapital(db, o.corporationId, o.amount)
+      : o.characterId
+        ? await refundCharacterCash(db, o.characterId, o.escrowCurrency, o.amount, forexEnabled)
+        : false;
+    if (landed) {
+      await witnessBidEscrow(db, ledger, o, "privatization_bid_refund", o.amount, now, "outbid");
+    }
   }
 }
 
@@ -189,17 +260,36 @@ export async function reabsorbSpunOutCorp(
   db: Db,
   shell: Corporation,
   primaryNationalCorporationId: ObjectId,
-  turn: number
+  turn: number,
+  ledger?: TreasuryCashOptions
 ): Promise<void> {
   const now = new Date();
   const sectors = db.collection<CorporateSector>("corporateSectors");
   const shellSectors = await sectors.find({ corporationId: shell._id }).toArray();
+  const transitionKeys = await reserveSectorsForTransition(
+    db,
+    shellSectors,
+    "privatization_reabsorption",
+    `reabsorb:${shell._id.toHexString()}:${turn}`
+  );
+  if (!transitionKeys)
+    throw new Error("Resolve secured construction before reabsorbing this corporation");
+  const transitionKeyBySectorId = new Map(
+    shellSectors.map((sector, index) => [sector._id.toHexString(), transitionKeys[index]])
+  );
 
   // Route each sector back to the NatCorp that owns its type.
   const destByType = new Map<string, ObjectId>();
   for (const s of shellSectors) {
     if (!destByType.has(s.sectorType)) {
-      const dest = await resolveNationalCorporationForSector(db, shell.countryId, s.sectorType);
+      const dest = s.industryModel
+        ? await resolveNationalCorporationForSector(
+            db,
+            shell.countryId,
+            s.sectorType,
+            s.industryModel
+          )
+        : await resolveNationalCorporationForSector(db, shell.countryId, s.sectorType);
       destByType.set(s.sectorType, dest._id);
     }
   }
@@ -209,20 +299,44 @@ export async function reabsorbSpunOutCorp(
     idsByDest.set(key, [...(idsByDest.get(key) ?? []), s._id]);
   }
   for (const [destKey, ids] of idsByDest) {
-    await sectors.updateMany(
-      { _id: { $in: ids } },
-      { $set: { corporationId: new ObjectId(destKey), absorbedAtTurn: turn, updatedAt: now } }
-    );
+    for (const sectorId of ids) {
+      const transitionKey = transitionKeyBySectorId.get(sectorId.toHexString());
+      if (!transitionKey) throw new Error("A secured sector reservation was lost");
+      const moved = await sectors.updateOne(
+        {
+          _id: sectorId,
+          corporationId: shell._id,
+          "constructionPropertyTransition.key": transitionKey,
+        },
+        { $set: { corporationId: new ObjectId(destKey), absorbedAtTurn: turn, updatedAt: now } }
+      );
+      if (moved.matchedCount !== 1)
+        throw new Error("A sector changed during the National Corporation reabsorption");
+    }
   }
 
   // Residual cash → the primary NatCorp (money conservation).
   if ((shell.liquidCapital ?? 0) > 0) {
-    await db
+    const primary = await db
       .collection<Corporation>("corporations")
-      .updateOne(
+      .findOneAndUpdate(
         { _id: primaryNationalCorporationId },
-        { $inc: { liquidCapital: shell.liquidCapital }, $set: { updatedAt: now } }
+        { $inc: { liquidCapital: shell.liquidCapital }, $set: { updatedAt: now } },
+        { projection: { liquidCurrencyCode: 1 } }
       );
+    if (primary) {
+      await witnessTreasuryCash(db, ledger, {
+        flow: "corporation_liquidation",
+        account: {
+          kind: "corporation",
+          corpId: primaryNationalCorporationId.toString(),
+          currency: snapshotCorporationCurrency(primary),
+        },
+        amount: shell.liquidCapital,
+        now,
+        site: "privatizationAuction:reabsorb",
+      });
+    }
   }
 
   // Dissolve the empty shell (no payout).
@@ -232,7 +346,22 @@ export async function reabsorbSpunOutCorp(
   // no surviving issuer is left with a holder entry pointing at the deleted shell.
   await releaseCorporationHeldBondsToFloat(db, shell._id, now);
   await stampSubjectDeleted(db, shell._id, { sequentialId: shell.sequentialId, deletedAt: now });
-  await db.collection<Corporation>("corporations").deleteOne({ _id: shell._id });
+  await deleteDissolvedCorporation(
+    db,
+    shell._id,
+    ledger,
+    now,
+    "privatizationAuction:dissolveShell"
+  );
+  await Promise.all(
+    shellSectors.map((sector) =>
+      releaseConstructionPropertyTransition(
+        db,
+        sector._id,
+        transitionKeyBySectorId.get(sector._id.toHexString())!
+      )
+    )
+  );
 }
 
 /**
@@ -279,10 +408,16 @@ export async function resolveNationalizationAuction(
   );
   if (claim.matchedCount === 0) return finalStatus; // a concurrent sweep already settled it
 
+  const ledger: TreasuryCashOptions = { context: await loadTreasuryCashContext(db, turn) };
   const refund = async (b: AuctionBid): Promise<void> => {
-    if (b.corporationId) await refundCorpLiquidCapital(db, b.corporationId, b.amount);
-    else if (b.characterId)
-      await refundCharacterCash(db, b.characterId, b.escrowCurrency, b.amount, forexEnabled);
+    const landed = b.corporationId
+      ? await refundCorpLiquidCapital(db, b.corporationId, b.amount)
+      : b.characterId
+        ? await refundCharacterCash(db, b.characterId, b.escrowCurrency, b.amount, forexEnabled)
+        : false;
+    if (landed) {
+      await witnessBidEscrow(db, ledger, b, "privatization_bid_refund", b.amount, now, "resolve");
+    }
   };
 
   const shell = await corps.findOne({ _id: auction.corporationId });
@@ -291,7 +426,7 @@ export async function resolveNationalizationAuction(
     // Pass-in (or the shell vanished): refund everyone; re-absorb if it still exists.
     for (const b of auction.bids) await refund(b);
     if (shell) {
-      await reabsorbSpunOutCorp(db, shell, auction.primaryNationalCorporationId, turn);
+      await reabsorbSpunOutCorp(db, shell, auction.primaryNationalCorporationId, turn, ledger);
       await notifyCountryResidents(db, auction.countryId, {
         type: "corp_privatization_resolved",
         title: "Auction passed in",
@@ -312,7 +447,10 @@ export async function resolveNationalizationAuction(
   }
 
   // The winner's escrow already left the bidder → credit the treasury that amount.
-  await creditTreasuryProceeds(db, auction.countryId, winner.amount, now);
+  await creditTreasuryProceeds(db, auction.countryId, winner.amount, now, {
+    flow: "privatization_auction_proceeds",
+    ledger,
+  });
 
   // Transfer the non-golden block from the state to the winner.
   const goldenShares = Math.round(shell.totalShares * auction.goldenSharePercent);

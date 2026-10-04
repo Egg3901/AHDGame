@@ -2,6 +2,11 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
+
+vi.mock("@/lib/analytics/officeTransitionAnalytics", () => ({
+  captureOfficeTransition: vi.fn().mockResolvedValue(undefined),
+}));
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/discordWebhooks", () => ({
@@ -181,9 +186,8 @@ describe("triggerSnapElection", () => {
 
     // Elections collection was queried for active/upcoming shugiin races to cancel.
     const findCalls = db.collectionMocks["elections"]!.find.mock.calls;
-    const cancelLookup = findCalls.find(
-      (c: unknown[]) =>
-        (c[0] as { electionType?: string; status?: { $in?: string[] } })?.electionType === "shugiin"
+    const cancelLookup = findCalls.find((c: unknown[]) =>
+      (c[0] as { electionType?: { $in?: string[] } })?.electionType?.$in?.includes("shugiin")
     );
     expect(cancelLookup).toBeDefined();
 
@@ -341,9 +345,20 @@ describe("triggerSnapElection", () => {
     expect(result.snapElectionType).toBe("snap_commons");
     const insertCall = db.collectionMocks["elections"]!.insertMany.mock.calls[0]?.[0];
     expect(insertCall[0].electionType).toBe("snap_commons");
+
+    // Dissolution lapses live by-elections along with the regular races, so
+    // none resolves on top of the delegation the snap elects.
+    const cancelLookup = db.collectionMocks["elections"]!.find.mock.calls.find((c: unknown[]) =>
+      (c[0] as { electionType?: { $in?: string[] } })?.electionType?.$in?.includes("commons")
+    );
+    expect((cancelLookup?.[0] as { electionType: { $in: string[] } }).electionType.$in).toEqual([
+      "commons",
+      "special_commons",
+    ]);
   });
 
   it("vacates the dissolved Commons before government cleanup", async () => {
+    vi.mocked(captureOfficeTransition).mockClear();
     const now = new Date("2026-09-28T12:00:00.000Z");
     setupMocks({
       currentTurn: 100,
@@ -361,6 +376,9 @@ describe("triggerSnapElection", () => {
       ],
     });
 
+    db.collection("characters").find = vi
+      .fn()
+      .mockReturnValue({ toArray: async () => [{ _id: new ObjectId(), party: "1" }] });
     await triggerSnapElection(db as unknown as Db, "UK", now, {
       reason: "pm-trigger",
     });
@@ -377,6 +395,16 @@ describe("triggerSnapElection", () => {
     expect(db.collectionMocks["npps"]!.updateMany).toHaveBeenCalledWith(
       { countryId: "UK", "currentOffice.type": "commons" },
       { $set: { currentOffice: null, updatedAt: now } }
+    );
+    expect(captureOfficeTransition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        officeType: "commons",
+        transitionType: "lost",
+        selectionMethod: "removal",
+        nationId: "UK",
+        turn: 100,
+        partyId: "1",
+      })
     );
 
     const { unformGovernmentAndVacatePM } = await import("@/lib/turn/parliamentaryGovernment");
@@ -626,6 +654,35 @@ describe("regime-change snaps", () => {
     });
     const inserted = db.collectionMocks["elections"]!.insertMany.mock.calls[0]?.[0];
     expect(inserted[0].imposedSnap).toBe(true);
+  });
+
+  it("stamps a conversion's terms on every race it spawns, and only then", async () => {
+    await setupFor(
+      "US",
+      [{ _id: "CA" }, { _id: "TX" }],
+      [
+        { state: "CA", totalSeats: 52 },
+        { state: "TX", totalSeats: 38 },
+      ]
+    );
+    const conversionTerms = { formerRulingPartyId: "1", legacyReservationPct: 20 };
+    await triggerSnapElection(db as unknown as Db, "US", new Date(), {
+      reason: "regime-change",
+      bypassLimits: true,
+      conversionTerms,
+    });
+    const inserted = db.collectionMocks["elections"]!.insertMany.mock.calls[0]?.[0] as {
+      conversionTerms?: unknown;
+    }[];
+    expect(inserted).toHaveLength(2);
+    for (const doc of inserted) expect(doc.conversionTerms).toEqual(conversionTerms);
+
+    await setupFor("UK", [{ _id: "ENG" }], [{ state: "ENG", totalSeats: 500 }]);
+    await triggerSnapElection(db as unknown as Db, "UK", new Date(), { reason: "pm-trigger" });
+    const plain = db.collectionMocks["elections"]!.insertMany.mock.calls[0]?.[0] as {
+      conversionTerms?: unknown;
+    }[];
+    expect(plain[0].conversionTerms).toBeUndefined();
   });
 
   it("does not stamp imposedSnap on a PM-triggered snap", async () => {

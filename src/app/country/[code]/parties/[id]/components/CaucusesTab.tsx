@@ -201,7 +201,7 @@ export function CaucusesTab({
                       />
                       <span className="truncate text-sm font-bold">{caucus.name}</span>
                     </div>
-                    <div className="text-[11px] text-muted">
+                    <div className="text-body-sm text-muted">
                       Chair {caucus.chairName ?? "Vacant"} | {caucus.memberCounts.total} members |
                       {" Tax "}
                       {caucus.taxRate}%

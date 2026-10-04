@@ -467,9 +467,7 @@ export default function SupremeCourtClient({ countryId }: { countryId: CountryId
               )}
 
               <section>
-                <h2 className="mb-4 text-sm font-semibold uppercase tracking-widest text-muted">
-                  The Bench
-                </h2>
+                <h2 className="mb-4 text-sm font-semibold text-muted">The bench</h2>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   {data.seats.length === 0 ? (
                     <div className="col-span-full rounded-xl border border-card-border bg-card p-6 text-center text-sm text-muted">

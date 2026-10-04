@@ -22,9 +22,9 @@ export async function generateMetadata({ params }: CategoryPageProps): Promise<M
 }
 
 const DIFFICULTY_LABELS = {
-  beginner: { label: "Beginner", className: "text-success" },
-  intermediate: { label: "Intermediate", className: "text-warning" },
-  advanced: { label: "Advanced", className: "text-error" },
+  beginner: "Beginner",
+  intermediate: "Intermediate",
+  advanced: "Advanced",
 } as const;
 
 export default async function CategoryPage({ params }: CategoryPageProps) {
@@ -50,7 +50,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
 
       <div className="mb-8">
         <p className="section-label mb-3">Category</p>
-        <h1 className="mb-2 font-serif text-3xl font-bold text-foreground">{category.name}</h1>
+        <h1 className="mb-2 text-3xl font-bold text-foreground">{category.name}</h1>
         <p className="text-lg text-muted">{category.description}</p>
       </div>
 
@@ -67,13 +67,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
                 <span className="font-medium text-foreground transition-colors group-hover:text-primary">
                   {page.title}
                 </span>
-                {diff && (
-                  <span
-                    className={`shrink-0 font-mono text-xs font-semibold uppercase tracking-[0.08em] ${diff.className}`}
-                  >
-                    {diff.label}
-                  </span>
-                )}
+                {diff && <span className="shrink-0 text-xs font-medium text-muted">{diff}</span>}
               </div>
               <p className="text-sm text-muted">{page.description}</p>
             </Link>

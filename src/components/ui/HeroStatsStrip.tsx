@@ -7,7 +7,7 @@ const VARIANT_SCROLL: Record<HeroStatsStripVariant, string> = {
   default:
     "flex items-stretch overflow-x-auto divide-x divide-card-border border-t border-card-border",
   overlay:
-    "flex items-stretch overflow-x-auto divide-x divide-card-border/50 border-t border-card-border bg-card/50 backdrop-blur-sm",
+    "flex items-stretch overflow-x-auto divide-x divide-card-border border-t border-card-border bg-card-muted",
 };
 
 /** Gap-px grid: tiles paint their own surface so long values wrap instead of colliding. */
@@ -15,7 +15,7 @@ const VARIANT_GRID: Record<HeroStatsStripVariant, string> = {
   default:
     "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-px border-t border-card-border bg-card-border [&>*]:min-w-0 [&>*]:bg-card",
   overlay:
-    "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-px border-t border-card-border bg-card-border/50 backdrop-blur-sm [&>*]:min-w-0 [&>*]:bg-card/60",
+    "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-px border-t border-card-border bg-card-border [&>*]:min-w-0 [&>*]:bg-card-muted",
 };
 
 export interface HeroStatsStripProps {

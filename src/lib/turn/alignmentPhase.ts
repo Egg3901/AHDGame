@@ -12,10 +12,19 @@
  * stacking on top of it. Finally snapshot the pre-drift shares, so the Ledger's
  * Trend column measures this turn's movement.
  */
+import {
+  loadOrganizationCashContext,
+  withOrganizationCashBatch,
+  type OrganizationCashContext,
+} from "@/lib/internationalOrganizations/cashLedger";
 import { ObjectId, type Db } from "mongodb";
 import { applyEraCrossing } from "@/lib/alignment/crossing";
 import { computeDrift, membershipPullForTurn } from "@/lib/alignment/drift";
 import { pointsForSpend, pullForPlay } from "@/lib/alignment/influence";
+import {
+  effectivePlayPoints,
+  type PlayContribution,
+} from "@/lib/alignment/rules/effectivePlayPoints";
 import { loadGdpUsdMillionsByEntity } from "@/lib/internationalOrganizations/entityGdp";
 import { GDP_MILLIONS_TO_USD } from "@/lib/constants/internationalOrganizations";
 import { closeDueCrises, openCrisisTargets, openDueCrises } from "@/lib/alignment/crisisTurn";
@@ -146,6 +155,18 @@ export async function processAlignmentTurn(
     };
   }
 
+  const cashContext = await loadOrganizationCashContext(db, currentTurn);
+  return withOrganizationCashBatch(db, cashContext, (batch) =>
+    processEnabledAlignmentTurn(db, currentTurn, gs, batch)
+  );
+}
+
+async function processEnabledAlignmentTurn(
+  db: Db,
+  currentTurn: number,
+  gs: GameState | null,
+  cashContext: OrganizationCashContext | null
+): Promise<AlignmentPhaseResult> {
   const year = (gs ? resolveGameYear(gs) : null) ?? new Date().getFullYear();
   const topology = await loadAlignmentTopology(db, year);
   const { poles } = topology;
@@ -291,14 +312,29 @@ export async function processAlignmentTurn(
    */
   const refundable = (playDoc: AlignmentPlay) => playDoc.source !== "aid";
 
-  const resolvePlay = async (playDoc: AlignmentPlay, appliedPoints: number) => {
+  const resolvePlay = async (
+    playDoc: AlignmentPlay,
+    appliedPoints: number,
+    effectivePoints = 0
+  ) => {
     const refunded = appliedPoints === 0 && refundable(playDoc) && playDoc.amountLocal > 0;
+    const effectivePoleId = channelFor(playDoc.organizationId)?.poleId;
     await playsCol.updateOne(
       { _id: playDoc._id },
-      { $set: { resolvedTurn: currentTurn, appliedPoints, refunded } }
+      {
+        $set: {
+          resolvedTurn: currentTurn,
+          appliedPoints,
+          effectivePoints,
+          refunded,
+          ...(effectivePoleId ? { effectivePoleId } : {}),
+        },
+      }
     );
     if (refunded) {
-      await creditOrganizationFund(db, playDoc.organizationId, playDoc.amountLocal);
+      await creditOrganizationFund(db, playDoc.organizationId, playDoc.amountLocal, {
+        context: cashContext,
+      });
       playsRefunded++;
     }
   };
@@ -435,6 +471,8 @@ export async function processAlignmentTurn(
     const targetPlays = playsByTarget.get(doc.entityId) ?? [];
     const targetGdpUsd = (targetGdpMillions.get(doc.entityId) ?? 0) * GDP_MILLIONS_TO_USD;
     const settled: Array<{ doc: AlignmentPlay; points: number }> = [];
+    const background = { ...pull };
+    const contributions: PlayContribution[] = [];
     for (const playDoc of targetPlays) {
       const channel = channelFor(playDoc.organizationId);
       if (!channel) {
@@ -464,6 +502,7 @@ export async function processAlignmentTurn(
       const points =
         pointsForSpend(playDoc.amountUsd, targetGdpUsd) * channel.weight * effectiveness;
       settled.push({ doc: playDoc, points });
+      contributions.push({ id: String(playDoc._id), poleId: channel.poleId, points });
     }
 
     // A flashpoint lifts the brake on its target — it grants nothing by itself,
@@ -480,11 +519,21 @@ export async function processAlignmentTurn(
     // command refuses a locked target up front, but drift no-ops this one, so
     // the play bought nothing and must not be stamped as though it had.
     const moved = leadFor(crossing.shares) < ALIGNMENT_GATES.locked;
+    const effective = effectivePlayPoints({
+      before: crossing.shares,
+      after: drifted,
+      background,
+      plays: contributions,
+    });
 
     for (const { doc: playDoc, points } of settled) {
       // The points this play contributed BEFORE the per-nation cap scaled the
       // combined vector — what it bought, not what survived the crowd.
-      await resolvePlay(playDoc, moved ? Math.round(points * 100) / 100 : 0);
+      await resolvePlay(
+        playDoc,
+        moved ? Math.round(points * 100) / 100 : 0,
+        effective.get(String(playDoc._id)) ?? 0
+      );
       playsResolved++;
     }
     playsByTarget.delete(doc.entityId);

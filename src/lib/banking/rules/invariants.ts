@@ -21,13 +21,15 @@
  * explicit doors in it can be checked with one sum.
  */
 
-export type ValueLegKind = "debit" | "credit" | "mint" | "burn";
+export type ValueLegKind = "debit" | "credit" | "mint" | "burn" | "asset";
 
 /** One side of a value movement, reduced to what the invariants need. */
 export interface ValueLeg {
   kind: ValueLegKind;
-  /** Positive magnitude. The sign is the kind's job, never the caller's. */
+  /** Positive magnitude in the balance's native currency. */
   amount: number;
+  /** Optional frozen conversion for cross-currency transfers. */
+  valuation?: { currencyCode: string; localPerAnchor: number };
   /** Opaque balance identity, e.g. `corporations:<hex>:bankCharter.cashReserves`. */
   account?: string;
 }
@@ -36,12 +38,42 @@ export interface ValueLeg {
 export const NET_TOLERANCE = 1e-6;
 
 export function legSign(kind: ValueLegKind): number {
+  if (kind === "asset") return 0;
   return kind === "debit" || kind === "mint" ? -1 : 1;
 }
 
 /** Legs must net to zero: every credit is somebody's debit, mint, or burn. */
-export function legsNet(legs: readonly Pick<ValueLeg, "kind" | "amount">[]): number {
-  return legs.reduce((sum, leg) => sum + legSign(leg.kind) * Math.max(0, leg.amount), 0);
+export function legsNet(legs: readonly Pick<ValueLeg, "kind" | "amount" | "valuation">[]): number {
+  return legs.reduce((sum, leg) => {
+    const value = leg.valuation ? leg.amount / leg.valuation.localPerAnchor : leg.amount;
+    return sum + legSign(leg.kind) * Math.max(0, value);
+  }, 0);
+}
+
+/** Validate a fully native or fully anchor-valued transfer without DB context. */
+export function moneyMoveValuationError(
+  legs: readonly Pick<ValueLeg, "kind" | "amount" | "valuation">[]
+): string | undefined {
+  const cashLegs = legs.filter((leg) => leg.kind !== "asset");
+  const hasValuation = cashLegs.some((leg) => leg.valuation !== undefined);
+  for (const leg of legs) {
+    if (!leg.valuation) {
+      if (leg.kind !== "asset" && hasValuation)
+        return "Cash transfer cannot mix valued and unvalued legs.";
+      continue;
+    }
+    {
+      const { currencyCode, localPerAnchor } = leg.valuation;
+      if (
+        typeof currencyCode !== "string" ||
+        currencyCode.trim().length === 0 ||
+        !Number.isFinite(localPerAnchor) ||
+        localPerAnchor <= 0
+      )
+        return "Leg valuation requires a currency code and positive finite anchor rate.";
+    }
+  }
+  return undefined;
 }
 
 export type BankingInvariantId =
@@ -119,14 +151,36 @@ export function checkBalancedTransfer(
 ): InvariantViolation[] {
   const out: InvariantViolation[] = [];
   legs.forEach((leg, i) => {
-    if (!Number.isFinite(leg.amount) || leg.amount < 0) {
+    if (
+      !Number.isFinite(leg.amount) ||
+      leg.amount < 0 ||
+      (leg.kind === "asset" && leg.amount !== 0)
+    ) {
       out.push({
         invariant: "balanced_transfer",
-        detail: `leg ${i} carries a non-finite or negative amount (${String(leg.amount)})`,
+        detail: `leg ${i} carries an invalid amount (${String(leg.amount)}); cash must be nonnegative and equity custody must carry zero`,
+        subject,
+      });
+    }
+    if (
+      leg.valuation &&
+      (typeof leg.valuation.currencyCode !== "string" ||
+        leg.valuation.currencyCode.trim().length === 0 ||
+        !Number.isFinite(leg.valuation.localPerAnchor) ||
+        leg.valuation.localPerAnchor <= 0)
+    ) {
+      out.push({
+        invariant: "balanced_transfer",
+        detail: `leg ${i} carries an invalid currency valuation`,
         subject,
       });
     }
   });
+  const valuationError = moneyMoveValuationError(legs);
+  if (valuationError) {
+    out.push({ invariant: "balanced_transfer", detail: valuationError, subject });
+    return out;
+  }
   const net = legsNet(legs);
   if (Math.abs(net) > NET_TOLERANCE) {
     out.push({

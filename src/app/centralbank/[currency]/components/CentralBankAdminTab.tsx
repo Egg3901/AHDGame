@@ -12,6 +12,7 @@ import { useCurrency } from "@/contexts/CurrencyContext";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
 import type { LocSnapshot } from "@/lib/lineOfCredit/buildSnapshot";
+import { CB_TH, CentralBankFigure, CentralBankSection } from "./CentralBankSection";
 
 interface BorrowerRow {
   characterId: string;
@@ -359,13 +360,11 @@ export function CentralBankAdminTab({ countryId }: Props) {
   };
 
   return (
-    <div className="space-y-8 pb-16">
+    <div className="space-y-12 pb-16">
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-xl border border-card-border bg-card p-5">
-          <h2 className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted">
-            Prime rate (admin)
-          </h2>
-          <p className="mb-4 text-xs text-muted">
+          <h2 className="mb-1 text-body-lg font-semibold text-foreground">Prime rate (admin)</h2>
+          <p className="mb-4 text-body-sm text-muted">
             Same effect as the chair control, and logged on the central bank history. You do not
             need to hold the chair seat.
           </p>
@@ -373,11 +372,11 @@ export function CentralBankAdminTab({ countryId }: Props) {
             <Skeleton className="h-32 w-full rounded-xl" />
           ) : (
             <>
-              <p className="text-3xl font-bold text-foreground tabular-nums">
+              <p className="text-heading-lg font-semibold tabular-nums text-foreground">
                 {primeRate.toFixed(2)}%
               </p>
               <div className="mt-4 space-y-3 border-t border-card-border pt-4">
-                <label className="text-xs font-medium text-muted">Set rate</label>
+                <label className="text-body-sm text-muted">Set rate</label>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
@@ -419,37 +418,31 @@ export function CentralBankAdminTab({ countryId }: Props) {
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
                   maxLength={200}
-                  className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted/50 focus:border-primary/50 focus:outline-none"
+                  className="w-full rounded-md border border-card-border bg-background px-3 py-2 text-body text-foreground placeholder:text-muted focus:border-primary/50 focus:outline-none"
                 />
                 <button
                   type="button"
                   onClick={() => void handleRateSubmit()}
                   disabled={submitting || pendingRate === null || pendingRate === primeRate}
-                  className="w-full rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+                  className="w-full rounded-md bg-primary px-4 py-2 text-body font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-40"
                 >
                   {submitting ? "Updating..." : "Apply rate"}
                 </button>
-                {rateError && <p className="text-xs text-error">{rateError}</p>}
+                {rateError && <p className="text-body-sm text-error">{rateError}</p>}
               </div>
             </>
           )}
         </div>
 
         <div className="rounded-xl border border-card-border bg-card p-5">
-          <h2 className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted">
-            Chair controls
-          </h2>
-          <p className="mb-4 text-xs text-muted">
+          <h2 className="mb-1 text-body-lg font-semibold text-foreground">Chair controls</h2>
+          <p className="mb-4 text-body-sm text-muted">
             When locked, the seated chair cannot change the prime rate from the Overview tab (you
             can still adjust it here).
           </p>
           <div className="flex flex-wrap items-center gap-3">
             <span
-              className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
-                chairLocked
-                  ? "bg-warning/15 text-warning border border-warning/30"
-                  : "bg-success/10 text-success border border-success/30"
-              }`}
+              className={`text-body font-medium ${chairLocked ? "text-warning" : "text-foreground"}`}
             >
               {chairLocked ? "Locked for chair" : "Chair may adjust"}
             </span>
@@ -466,20 +459,15 @@ export function CentralBankAdminTab({ countryId }: Props) {
                   : "Lock chair controls"}
             </Button>
           </div>
-          {lockError && <p className="mt-2 text-xs text-error">{lockError}</p>}
+          {lockError && <p className="mt-2 text-body-sm text-error">{lockError}</p>}
         </div>
       </div>
 
       {/* Deposit accounts */}
-      <div className="rounded-xl border border-card-border bg-card overflow-hidden shadow-sm">
-        <div className="border-b border-card-border bg-card-elevated px-4 py-3 flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2 className="text-sm font-semibold text-foreground">Deposit accounts</h2>
-            <p className="text-xs text-muted">
-              Savings accounts opened at this central bank ({currencyCode}). Click a row for ledger
-              and balances.
-            </p>
-          </div>
+      <CentralBankSection
+        title="Deposit accounts"
+        meta={`Savings accounts opened at this central bank (${currencyCode}). Click a row for ledger and balances.`}
+        action={
           <Button
             type="button"
             variant="ghost"
@@ -488,34 +476,40 @@ export function CentralBankAdminTab({ countryId }: Props) {
           >
             Refresh
           </Button>
-        </div>
-
+        }
+      >
         {savingsLoading && !savingsTracker ? (
-          <div className="p-6">
-            <Skeleton className="h-40 w-full rounded-xl" />
-          </div>
+          <Skeleton className="h-40 w-full rounded-xl" />
         ) : savingsError ? (
-          <div className="p-6 text-sm text-error">{savingsError}</div>
+          <p className="text-body text-error">{savingsError}</p>
         ) : !savingsTracker?.accounts.length ? (
-          <div className="p-6">
-            <EmptyState
-              title="No deposit accounts"
-              description="No opened savings in this currency."
-            />
-          </div>
+          <EmptyState
+            title="No deposit accounts"
+            description="No opened savings in this currency."
+          />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-card-elevated/40 text-[10px] font-semibold uppercase tracking-wider text-muted">
+            <table className="w-full text-left text-body">
+              <thead>
                 <tr>
-                  <th className="px-4 py-2">Account holder</th>
-                  <th className="px-4 py-2 text-right tabular-nums">Savings balance</th>
-                  <th className="px-4 py-2 text-right tabular-nums">Wallet ({currencyCode})</th>
-                  <th className="px-4 py-2 text-right tabular-nums">Pending interest</th>
-                  <th className="px-4 py-2 text-right tabular-nums">Lifetime interest</th>
+                  <th scope="col" className={CB_TH}>
+                    Account holder
+                  </th>
+                  <th scope="col" className={`${CB_TH} text-right`}>
+                    Savings balance
+                  </th>
+                  <th scope="col" className={`${CB_TH} text-right`}>
+                    Wallet ({currencyCode})
+                  </th>
+                  <th scope="col" className={`${CB_TH} text-right`}>
+                    Pending interest
+                  </th>
+                  <th scope="col" className={`${CB_TH} text-right`}>
+                    Lifetime interest
+                  </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-card-border/50">
+              <tbody className="divide-y divide-card-border/60">
                 {savingsTracker.accounts.map((a) => {
                   const isSelected =
                     selection?.kind === "deposit" && selection.characterId === a.characterId;
@@ -535,7 +529,7 @@ export function CentralBankAdminTab({ countryId }: Props) {
                         isSelected ? "bg-primary/10 ring-1 ring-inset ring-primary/30" : ""
                       }`}
                     >
-                      <td className="px-4 py-2">
+                      <td className="py-2 pr-4">
                         <div className="flex items-center gap-2">
                           <Avatar url={a.avatarUrl} name={a.name} size="h-8 w-8" />
                           <span className="font-medium text-foreground truncate max-w-[220px]">
@@ -543,16 +537,16 @@ export function CentralBankAdminTab({ countryId }: Props) {
                           </span>
                         </div>
                       </td>
-                      <td className="px-4 py-2 text-right tabular-nums">
+                      <td className="py-2 pr-4 text-right tabular-nums">
                         {formatNative(a.savingsBalanceFace, currencyCode as CurrencyCode)}
                       </td>
-                      <td className="px-4 py-2 text-right tabular-nums text-muted">
+                      <td className="py-2 pr-4 text-right tabular-nums text-muted">
                         {formatNative(a.walletBalanceFace, currencyCode as CurrencyCode)}
                       </td>
-                      <td className="px-4 py-2 text-right tabular-nums text-muted">
+                      <td className="py-2 pr-4 text-right tabular-nums text-muted">
                         {formatNative(a.pendingInterestFace, currencyCode as CurrencyCode)}
                       </td>
-                      <td className="px-4 py-2 text-right tabular-nums text-muted">
+                      <td className="py-2 pr-4 text-right tabular-nums text-muted">
                         {formatNative(a.lifetimeInterestEarnedFace, currencyCode as CurrencyCode)}
                       </td>
                     </tr>
@@ -562,17 +556,13 @@ export function CentralBankAdminTab({ countryId }: Props) {
             </table>
           </div>
         )}
-      </div>
+      </CentralBankSection>
 
       {/* Loan tracker */}
-      <div className="rounded-xl border border-card-border bg-card overflow-hidden shadow-sm">
-        <div className="border-b border-card-border bg-card-elevated px-4 py-3 flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2 className="text-sm font-semibold text-foreground">Loan accounts</h2>
-            <p className="text-xs text-muted">
-              Outstanding player loans in this currency. Click a row for the details and ledger.
-            </p>
-          </div>
+      <CentralBankSection
+        title="Loan accounts"
+        meta="Outstanding player loans in this currency. Click a row for the details and ledger."
+        action={
           <Button
             type="button"
             variant="ghost"
@@ -581,35 +571,43 @@ export function CentralBankAdminTab({ countryId }: Props) {
           >
             Refresh
           </Button>
-        </div>
-
+        }
+      >
         {trackerLoading && !tracker ? (
-          <div className="p-6">
-            <Skeleton className="h-40 w-full rounded-xl" />
-          </div>
+          <Skeleton className="h-40 w-full rounded-xl" />
         ) : trackerError ? (
-          <div className="p-6 text-sm text-error">{trackerError}</div>
+          <p className="text-body text-error">{trackerError}</p>
         ) : !tracker?.borrowers.length ? (
-          <div className="p-6">
-            <EmptyState
-              title="No loan accounts"
-              description="No loan balances or arrears in this currency."
-            />
-          </div>
+          <EmptyState
+            title="No loan accounts"
+            description="No loan balances or arrears in this currency."
+          />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-card-elevated/40 text-[10px] font-semibold uppercase tracking-wider text-muted">
+            <table className="w-full text-left text-body">
+              <thead>
                 <tr>
-                  <th className="px-4 py-2">Borrower</th>
-                  <th className="px-4 py-2 text-right tabular-nums">Outstanding</th>
-                  <th className="px-4 py-2 text-right tabular-nums">Credit limit</th>
-                  <th className="px-4 py-2 text-right">Utilization</th>
-                  <th className="px-4 py-2">Payment</th>
-                  <th className="px-4 py-2 text-right tabular-nums">Turns to repay</th>
+                  <th scope="col" className={CB_TH}>
+                    Borrower
+                  </th>
+                  <th scope="col" className={`${CB_TH} text-right`}>
+                    Outstanding
+                  </th>
+                  <th scope="col" className={`${CB_TH} text-right`}>
+                    Credit limit
+                  </th>
+                  <th scope="col" className={`${CB_TH} text-right`}>
+                    Utilization
+                  </th>
+                  <th scope="col" className={CB_TH}>
+                    Payment
+                  </th>
+                  <th scope="col" className={`${CB_TH} text-right`}>
+                    Turns to repay
+                  </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-card-border/50">
+              <tbody className="divide-y divide-card-border/60">
                 {tracker.borrowers.map((b) => {
                   const utilPct = (b.utilization * 100).toFixed(0);
                   const repayLabel =
@@ -623,7 +621,7 @@ export function CentralBankAdminTab({ countryId }: Props) {
                       ? "text-error"
                       : b.paymentStatus === "At risk"
                         ? "text-warning"
-                        : "text-success";
+                        : "text-foreground";
                   const isSelected =
                     selection?.kind === "loan" && selection.characterId === b.characterId;
                   return (
@@ -642,7 +640,7 @@ export function CentralBankAdminTab({ countryId }: Props) {
                         isSelected ? "bg-primary/10 ring-1 ring-inset ring-primary/30" : ""
                       }`}
                     >
-                      <td className="px-4 py-2">
+                      <td className="py-2 pr-4">
                         <div className="flex items-center gap-2">
                           <Avatar url={b.avatarUrl} name={b.name} size="h-8 w-8" />
                           <span className="font-medium text-foreground truncate max-w-[200px]">
@@ -650,18 +648,18 @@ export function CentralBankAdminTab({ countryId }: Props) {
                           </span>
                         </div>
                       </td>
-                      <td className="px-4 py-2 text-right tabular-nums">
+                      <td className="py-2 pr-4 text-right tabular-nums">
                         {formatAmount(b.outstandingInternal)}
                       </td>
-                      <td className="px-4 py-2 text-right tabular-nums">
+                      <td className="py-2 pr-4 text-right tabular-nums">
                         {b.creditLimitInternal > 0 ? formatAmount(b.creditLimitInternal) : "-"}
                       </td>
-                      <td className="px-4 py-2 text-right tabular-nums">{utilPct}%</td>
-                      <td className={`px-4 py-2 text-xs font-semibold ${statusClass}`}>
+                      <td className="py-2 pr-4 text-right tabular-nums">{utilPct}%</td>
+                      <td className={`py-2 pr-4 text-body-sm font-semibold ${statusClass}`}>
                         {b.paymentStatus}
                         {b.drawFrozen ? " · frozen" : ""}
                       </td>
-                      <td className="px-4 py-2 text-right text-muted tabular-nums">{repayLabel}</td>
+                      <td className="py-2 pr-4 text-right text-muted tabular-nums">{repayLabel}</td>
                     </tr>
                   );
                 })}
@@ -669,25 +667,19 @@ export function CentralBankAdminTab({ countryId }: Props) {
             </table>
           </div>
         )}
-        <p className="border-t border-card-border px-4 py-3 text-[11px] text-muted">
+        <p className="mt-3 max-w-3xl text-body-sm text-muted">
           Payment status compares next scheduled auto-pay to wallet balance in this currency
-          (Distressed = draws frozen). Turns to repay assumes ideal auto-pay each turn at current
-          rates. Real wallets may pay it off sooner or later.
+          (Distressed means draws are frozen). Turns to repay assumes ideal auto-pay each turn at
+          current rates. Real wallets may pay it off sooner or later.
         </p>
-      </div>
+      </CentralBankSection>
 
       {/* Account detail */}
       {selection && (
-        <div className="rounded-xl border border-card-border bg-card p-5 shadow-sm">
-          <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
-            <div>
-              <h2 className="text-sm font-semibold text-foreground">
-                {selection.kind === "deposit" ? "Deposit account" : "Loan account"}
-              </h2>
-              <p className="text-xs text-muted mt-0.5">
-                Admin view: the same data players see on Savings and Line of Credit, plus ledgers.
-              </p>
-            </div>
+        <CentralBankSection
+          title={selection.kind === "deposit" ? "Deposit account" : "Loan account"}
+          meta="Admin view: the same data players see on Savings and Line of credit, plus ledgers."
+          action={
             <div className="flex flex-wrap gap-2">
               <Button type="button" variant="ghost" onClick={() => refreshAll()}>
                 Refresh data
@@ -696,8 +688,8 @@ export function CentralBankAdminTab({ countryId }: Props) {
                 Close
               </Button>
             </div>
-          </div>
-
+          }
+        >
           {detailLoading && (
             <div className="space-y-3">
               <Skeleton className="h-24 w-full rounded-lg" />
@@ -705,7 +697,7 @@ export function CentralBankAdminTab({ countryId }: Props) {
             </div>
           )}
 
-          {detailError && <p className="text-sm text-error">{detailError}</p>}
+          {detailError && <p className="text-body text-error">{detailError}</p>}
 
           {!detailLoading && depositDetail && selection.kind === "deposit" && (
             <DepositDetailPanel detail={depositDetail} formatNative={formatNative} />
@@ -719,7 +711,7 @@ export function CentralBankAdminTab({ countryId }: Props) {
               onAdminAction={handleLoanAction}
             />
           )}
-        </div>
+        </CentralBankSection>
       )}
     </div>
   );
@@ -739,10 +731,13 @@ function DepositDetailPanel({
       <div className="flex flex-wrap items-center gap-3">
         <Avatar url={detail.character.avatarUrl} name={detail.character.name} size="h-10 w-10" />
         <div>
-          <Link href={href} className="text-base font-semibold text-foreground hover:text-primary">
+          <Link
+            href={href}
+            className="text-body-lg font-semibold text-foreground underline-offset-4 hover:underline"
+          >
             {detail.character.name}
           </Link>
-          <p className="text-xs text-muted">
+          <p className="text-body-sm text-muted">
             APY {detail.apyPercent.toFixed(2)}% (½ real rate · prime {detail.primeRate.toFixed(2)}%
             {(detail.centralBankDepositBonusPercentPoints ?? 0) > 0
               ? ` + CB bonus ${detail.centralBankDepositBonusPercentPoints?.toFixed(2)}%`
@@ -752,46 +747,54 @@ function DepositDetailPanel({
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-x-8 gap-y-4 lg:grid-cols-4">
         <StatBox label="Savings balance" value={formatNative(detail.savingsBalance, c)} />
         <StatBox label="Wallet (liquid)" value={formatNative(detail.liquidBalance, c)} />
         <StatBox label="Pending interest" value={formatNative(detail.pendingInterest, c)} />
         <StatBox label="Lifetime interest" value={formatNative(detail.lifetimeInterestEarned, c)} />
       </div>
-      <p className="text-[11px] text-muted">
+      <p className="text-body-sm text-muted">
         Est. accrual this turn: {formatNative(detail.estimatedAccrualThisTurn, c)} · Account opened:{" "}
         {detail.accountOpened ? "yes" : "no"}
       </p>
 
-      <div className="overflow-x-auto rounded-lg border border-card-border">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-card-elevated/40 text-[10px] font-semibold uppercase tracking-wider text-muted">
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-body">
+          <thead>
             <tr>
-              <th className="px-3 py-2">Type</th>
-              <th className="px-3 py-2 text-right">Amount</th>
-              <th className="px-3 py-2 text-right">Balance after</th>
-              <th className="px-3 py-2 text-right hidden sm:table-cell">Turn</th>
+              <th scope="col" className={CB_TH}>
+                Type
+              </th>
+              <th scope="col" className={`${CB_TH} text-right`}>
+                Amount
+              </th>
+              <th scope="col" className={`${CB_TH} text-right`}>
+                Balance after
+              </th>
+              <th scope="col" className={`${CB_TH} hidden text-right sm:table-cell`}>
+                Turn
+              </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-card-border/50">
+          <tbody className="divide-y divide-card-border/60">
             {detail.ledger.map((row, i) => (
               <tr key={`${row.createdAt}-${i}`}>
-                <td className="px-3 py-2">{formatSavingsLedgerType(row.type)}</td>
-                <td className="px-3 py-2 text-right tabular-nums">
+                <td className="py-2 pr-4">{formatSavingsLedgerType(row.type)}</td>
+                <td className="py-2 pr-4 text-right tabular-nums">
                   {formatNative(row.amount, row.currencyCode as CurrencyCode)}
                 </td>
-                <td className="px-3 py-2 text-right tabular-nums text-muted">
+                <td className="py-2 pr-4 text-right tabular-nums text-muted">
                   {formatNative(row.balanceAfter, row.currencyCode as CurrencyCode)}
                 </td>
-                <td className="px-3 py-2 text-right text-muted hidden sm:table-cell">
-                  {row.turn != null ? `T${row.turn}` : "-"}
+                <td className="py-2 pr-4 text-right text-muted hidden sm:table-cell">
+                  {row.turn != null ? row.turn : "-"}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <p className="text-[11px] text-muted text-center">
+      <p className="text-body-sm text-muted">
         The savings history chart uses portfolio snapshots. Open the player Savings tab for the
         graph.
       </p>
@@ -834,10 +837,13 @@ function LoanDetailPanel({
       <div className="flex flex-wrap items-center gap-3">
         <Avatar url={detail.character.avatarUrl} name={detail.character.name} size="h-10 w-10" />
         <div>
-          <Link href={href} className="text-base font-semibold text-foreground hover:text-primary">
+          <Link
+            href={href}
+            className="text-body-lg font-semibold text-foreground underline-offset-4 hover:underline"
+          >
             {detail.character.name}
           </Link>
-          <p className="text-xs text-muted">
+          <p className="text-body-sm text-muted">
             Effective {detail.effectiveRatePercent.toFixed(2)}% at this bank (prime{" "}
             {detail.primeRate.toFixed(2)}%
             {snap ? ` + spread ${snap.spreadPercentPoints.toFixed(2)}%` : ""}
@@ -849,13 +855,13 @@ function LoanDetailPanel({
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-x-8 gap-y-4 lg:grid-cols-4">
         <StatBox label="Principal" value={formatNative(detail.principalFace, c)} />
         <StatBox label="Arrears" value={formatNative(detail.arrearsFace, c)} />
         <StatBox
           label="Draws"
           value={detail.drawFrozen ? "Frozen" : "Active"}
-          valueClass={detail.drawFrozen ? "text-warning" : "text-success"}
+          valueClass={detail.drawFrozen ? "text-warning" : "text-foreground"}
         />
         {snap ? (
           <>
@@ -875,10 +881,8 @@ function LoanDetailPanel({
       </div>
 
       {(detail.arrearsFace > 0 || detail.drawFrozen) && (
-        <div className="rounded-lg border border-warning/30 bg-warning/5 p-4 space-y-3">
-          <p className="text-xs font-semibold text-warning uppercase tracking-wide">
-            Admin actions
-          </p>
+        <div className="space-y-3 border-t border-card-border pt-4">
+          <p className="text-body font-semibold text-foreground">Admin actions</p>
           <div className="flex flex-wrap gap-2">
             {detail.arrearsFace > 0 && (
               <Button
@@ -903,24 +907,38 @@ function LoanDetailPanel({
               </Button>
             )}
           </div>
-          {actionError && <p className="text-xs text-error">{actionError}</p>}
+          {actionError && <p className="text-body-sm text-error">{actionError}</p>}
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-lg border border-card-border">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-card-elevated/40 text-[10px] font-semibold uppercase tracking-wider text-muted">
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-body">
+          <thead>
             <tr>
-              <th className="px-3 py-2">Type</th>
-              <th className="px-3 py-2 text-right">Amount</th>
-              <th className="px-3 py-2 text-right hidden md:table-cell">Interest</th>
-              <th className="px-3 py-2 text-right hidden md:table-cell">Principal</th>
-              <th className="px-3 py-2 text-right">Principal after</th>
-              <th className="px-3 py-2 text-right">Arrears after</th>
-              <th className="px-3 py-2 text-right hidden sm:table-cell">Turn</th>
+              <th scope="col" className={CB_TH}>
+                Type
+              </th>
+              <th scope="col" className={`${CB_TH} text-right`}>
+                Amount
+              </th>
+              <th scope="col" className={`${CB_TH} hidden text-right md:table-cell`}>
+                Interest
+              </th>
+              <th scope="col" className={`${CB_TH} hidden text-right md:table-cell`}>
+                Principal
+              </th>
+              <th scope="col" className={`${CB_TH} text-right`}>
+                Principal after
+              </th>
+              <th scope="col" className={`${CB_TH} text-right`}>
+                Arrears after
+              </th>
+              <th scope="col" className={`${CB_TH} hidden text-right sm:table-cell`}>
+                Turn
+              </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-card-border/50">
+          <tbody className="divide-y divide-card-border/60">
             {detail.ledger.map((row, i) => {
               const cc = row.currencyCode as CurrencyCode;
               const isPayment = LOC_PAYMENT_TYPES.has(row.type);
@@ -930,25 +948,25 @@ function LoanDetailPanel({
                 (row.interestPortion !== undefined || row.principalPortion !== undefined);
               return (
                 <tr key={`${row.createdAt}-${i}`}>
-                  <td className="px-3 py-2">{formatLocLedgerType(row.type)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">
+                  <td className="py-2 pr-4">{formatLocLedgerType(row.type)}</td>
+                  <td className="py-2 pr-4 text-right tabular-nums">
                     {negate}
                     {formatNative(row.amount, cc)}
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums text-muted hidden md:table-cell">
+                  <td className="py-2 pr-4 text-right tabular-nums text-muted hidden md:table-cell">
                     {hasSplit ? formatNative(row.interestPortion ?? 0, cc) : "-"}
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums text-muted hidden md:table-cell">
+                  <td className="py-2 pr-4 text-right tabular-nums text-muted hidden md:table-cell">
                     {hasSplit ? formatNative(row.principalPortion ?? 0, cc) : "-"}
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums text-muted">
+                  <td className="py-2 pr-4 text-right tabular-nums text-muted">
                     {formatNative(row.balanceAfter, cc)}
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums text-muted">
+                  <td className="py-2 pr-4 text-right tabular-nums text-muted">
                     {formatNative(row.arrearsAfter, cc)}
                   </td>
-                  <td className="px-3 py-2 text-right text-muted hidden sm:table-cell">
-                    {row.turn != null ? `T${row.turn}` : "-"}
+                  <td className="py-2 pr-4 text-right text-muted hidden sm:table-cell">
+                    {row.turn != null ? row.turn : "-"}
                   </td>
                 </tr>
               );
@@ -969,14 +987,7 @@ function StatBox({
   value: string;
   valueClass?: string;
 }) {
-  return (
-    <div className="rounded-lg border border-card-border/60 bg-card-muted px-3 py-2">
-      <p className="text-[10px] uppercase tracking-wider text-muted font-semibold">{label}</p>
-      <p className={`mt-0.5 text-sm font-semibold tabular-nums ${valueClass ?? "text-foreground"}`}>
-        {value}
-      </p>
-    </div>
-  );
+  return <CentralBankFigure label={label} value={value} valueClassName={valueClass} />;
 }
 
 function turnsUntilLabel(n: number): string {

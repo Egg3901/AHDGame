@@ -4,6 +4,7 @@ import type { GameConfig } from "@/lib/db/types/gameConfig";
 import type { GovernmentFormation } from "@/lib/db/types/governmentFormation";
 import type { Corporation, CorporateSector, SoeState } from "@/lib/db/types/corporation";
 import type { CommodityFlow } from "@/lib/db/types/commodityFlow";
+import { economicReformPull } from "@/lib/economy/economicSystemReformRules";
 import {
   isPlannedEconomy,
   plannedShare,
@@ -45,6 +46,7 @@ import {
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { getRegisteredCountryIds } from "@/lib/country/registeredCountries";
 import { capacityPricePerUnit, CAPACITY_ANCHOR_YEAR } from "@/lib/constants/capacityEconomy";
+import { plantCapacityDeltaPipeline } from "@/lib/corporations/plantLedger";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 import {
   loadFxRatesByCurrency,
@@ -238,12 +240,19 @@ export async function processCommandEconomyTurn(
       typeof persisted === "number" && Number.isFinite(persisted)
         ? persisted
         : scheduledMarketizationLevel(countryId, currentYear);
-    if (level >= DUAL_TRACK_CEILING) continue;
+    // A market-band level with nothing persisted is just the schedule's answer
+    // and needs no entry. A PERSISTED market-band level must be hydrated: left
+    // out, the accessor falls back to the era schedule, and a country that
+    // reformed out of the plan (DD's schedule says command until 1990) would be
+    // read as command again and dragged back by the next turn's drift.
+    if (level >= DUAL_TRACK_CEILING && persisted == null) continue;
     hydration.push([countryId, level]);
   }
   hydrateStoredMarketizationLevels(hydration);
 
   let countriesUpdated = 0;
+  /** Countries the planned loop below moved this turn. */
+  const processedCountries = new Set<string>();
   for (const budget of budgets) {
     const countryId = budget.countryId;
     // Same registered gate as the hydration: an un-hydrated dissolved country
@@ -439,13 +448,18 @@ export async function processCommandEconomyTurn(
     // Gravity is exactly 0 while the level sits at its scheduled value and is
     // capped well below what the drivers can sustain, so it sets the DEFAULT
     // when nobody intervenes without ever railroading a determined government.
-    const gravity = marketizationGravity(
-      currentLevel,
-      scheduledMarketizationLevel(countryId, currentYear)
-    );
+    // A legislated economic system replaces the era schedule as the anchor:
+    // the dial ramps to the law's target, then rests there under weak gravity.
+    const reform = factors?.economicReform;
+    const reformPull = reform ? economicReformPull(currentLevel, reform) : null;
+    const gravity =
+      reformPull?.pull ??
+      marketizationGravity(currentLevel, scheduledMarketizationLevel(countryId, currentYear));
     const drift = marketizationDrift(pressure, soePerf, policyStance) + gravity;
     const nextLevel = driftMarketizationLevel(currentLevel, drift);
     setStoredMarketizationLevel(countryId, nextLevel);
+    processedCountries.add(countryId);
+    const reformReachedNow = reform != null && reform.reachedAtTurn == null && reformPull?.reached;
 
     await db.collection<FederalBudget>("federalBudget").updateOne(
       { _id: budget._id },
@@ -460,6 +474,7 @@ export async function processCommandEconomyTurn(
           "economicFactors.secondEconomyShare": secondEconomyShare,
           "economicFactors.wageGrowth": constrainedWageGrowth,
           "economicFactors.marketizationLevel": nextLevel,
+          ...(reformReachedNow ? { "economicFactors.economicReform.reachedAtTurn": _turn } : {}),
           "economicFactors.budgetSoftness": budgetSoftness,
           "economicFactors.governmentReformism": reformism,
           "economicFactors.internalRepression": internalRepression,
@@ -477,6 +492,35 @@ export async function processCommandEconomyTurn(
         ...(physicalGap == null
           ? { $unset: { "economicFactors.physicalDemandSupplyGapPct": "" } }
           : {}),
+      }
+    );
+    countriesUpdated += 1;
+  }
+
+  // Legislated reform outside the planned band: a market-band country still
+  // ramping up to a market target, or one legislating its way back to the
+  // plan. The planned loop skipped these (no plan machinery runs above the
+  // dual-track ceiling), so the law alone moves the dial. Once a counter-reform
+  // takes the level below the ceiling the planned loop picks it up next turn.
+  for (const budget of budgets) {
+    const countryId = budget.countryId;
+    const reform = budget.economicFactors?.economicReform;
+    if (!countryId || !reform || processedCountries.has(countryId)) continue;
+    if (!registeredForPlanning.has(countryId)) continue;
+    // Above the planned band there is no endogenous drift, so a reached law
+    // has nothing to correct.
+    if (reform.reachedAtTurn != null) continue;
+    const currentLevel = marketizationLevel(countryId, currentYear);
+    const { pull, reached } = economicReformPull(currentLevel, reform);
+    const nextLevel = driftMarketizationLevel(currentLevel, pull);
+    setStoredMarketizationLevel(countryId, nextLevel);
+    await db.collection<FederalBudget>("federalBudget").updateOne(
+      { _id: budget._id },
+      {
+        $set: {
+          "economicFactors.marketizationLevel": nextLevel,
+          ...(reached ? { "economicFactors.economicReform.reachedAtTurn": _turn } : {}),
+        },
       }
     );
     countriesUpdated += 1;
@@ -805,10 +849,13 @@ async function buildCapacityFromDirectedCredit(
       ops.push({
         updateOne: {
           filter: { _id: sector._id },
-          update: {
-            $inc: { capitalStock: unitsAdded },
-            $set: { capacityBookAnchor: priorBook + unitsAdded * unitPrice },
-          },
+          update: plantCapacityDeltaPipeline(
+            sector.sectorType,
+            unitsAdded,
+            { capacityBookAnchor: priorBook + unitsAdded * unitPrice },
+            sector.industryModel,
+            sector.mediaDiscriminator
+          ),
         },
       });
       // mixPrice (corp-local) = revenue / capitalStock under plants; a sector

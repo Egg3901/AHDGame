@@ -53,6 +53,10 @@ import {
 } from "@/lib/politicalStrength/buildOrgFunding";
 import { chargeOrgBuildFunds } from "@/lib/parties/commands/chargeOrgBuildFunds";
 import {
+  loadOrgBuildLedgerContext,
+  type OrgBuildLedgerContext,
+} from "@/lib/parties/orgBuildLedger";
+import {
   resolveAllOrgBuildSizeMultipliers,
   resolveOrgBuildSizeMultiplier,
 } from "@/lib/politicalStrength/orgBuildStateSize";
@@ -88,6 +92,8 @@ export interface NppBuildOrgSweepCache {
   shieldByPartyKey: Map<string, number>;
   /** Price multiplier per `${countryId}:${stateId}`. */
   sizeMultiplierByKey: Map<string, number>;
+  /** Accounting context for the sweep's treasury charges; absent loads per charge. */
+  orgBuildLedger?: OrgBuildLedgerContext | null;
 }
 
 export function partyCacheKey(countryId: CountryId, sequentialId: number | string): string {
@@ -115,6 +121,7 @@ export async function preloadNppBuildOrgSweepCache(
     sizeMultiplierByKey: new Map(),
   };
   if (countryIds.length === 0) return cache;
+  cache.orgBuildLedger = await loadOrgBuildLedgerContext(db);
 
   const partyDocs = await db
     .collection<PoliticalParty>("politicalParties")
@@ -380,7 +387,8 @@ export async function nppBuildPartyOrg(
       turn: currentTurn,
       now,
     },
-    db
+    db,
+    sweepCache ? { context: sweepCache.orgBuildLedger } : undefined
   );
   const fundedFraction = chargePrice > 0 ? clampFundedFraction(charged / chargePrice) : 1;
 

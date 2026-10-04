@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { CorporationLogo } from "@/components/corporation/CorporationLogo";
+import { SectionHeader } from "./ProfileMeters";
+import { PROFILE_LINK_CLASS } from "./profileStyles";
 
 export interface CeoCorporationCardProps {
   corporationName: string;
   corporationRouteId: string;
   logoUrl?: string;
-  brandColor?: string;
   isNationalEnterprise?: boolean;
 }
 
@@ -14,37 +15,30 @@ export function CeoCorporationCard({
   corporationName,
   corporationRouteId,
   logoUrl,
-  brandColor,
   isNationalEnterprise,
 }: CeoCorporationCardProps) {
   const t = useTranslations("profile.ceo");
   const href = `/corporation/${corporationRouteId}`;
 
   return (
-    <div className="rounded-xl border border-card-border bg-card p-4 shadow-card">
-      <h2 className="text-[11px] font-semibold uppercase tracking-widest text-muted mb-3">
-        {t("title")}
-      </h2>
+    <section>
+      <SectionHeader level="aside">{t("title")}</SectionHeader>
       <div className="flex gap-3">
-        <div
-          className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-card-border bg-card-elevated"
-          style={brandColor ? { borderColor: `${brandColor}55` } : undefined}
-        >
-          <CorporationLogo logoUrl={logoUrl} name={corporationName} fill className="rounded-lg" />
+        <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-md border border-card-border bg-card-elevated">
+          <CorporationLogo logoUrl={logoUrl} name={corporationName} fill className="rounded-md" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="font-medium text-foreground leading-snug break-words">{corporationName}</p>
+          <p className="break-words text-body-sm font-medium leading-snug text-foreground">
+            {corporationName}
+          </p>
           {isNationalEnterprise && (
-            <p className="mt-0.5 text-body-xs text-muted">{t("nationalEnterprise")}</p>
+            <p className="mt-0.5 text-body-sm text-muted">{t("nationalEnterprise")}</p>
           )}
-          <Link
-            href={href}
-            className="mt-2 inline-block text-body-sm font-medium text-primary hover:underline"
-          >
+          <Link href={href} className={`mt-1.5 inline-block text-body-sm ${PROFILE_LINK_CLASS}`}>
             {t("viewCorporation")}
           </Link>
         </div>
       </div>
-    </div>
+    </section>
   );
 }

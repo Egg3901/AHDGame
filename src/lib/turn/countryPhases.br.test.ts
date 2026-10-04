@@ -6,5 +6,6 @@ describe("COUNTRY_ELECTION_PHASES — BR registration", () => {
     const br = COUNTRY_ELECTION_PHASES.BR;
     expect(br, "BR must have a turn-phase entry").toBeDefined();
     expect(br?.some((p) => p.name === "brElections")).toBe(true);
+    expect(br?.some((p) => p.name === "brGovernorElections")).toBe(true);
   });
 });

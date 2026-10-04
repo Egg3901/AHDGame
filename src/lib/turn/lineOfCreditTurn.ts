@@ -1,4 +1,5 @@
-import type { Db } from "mongodb";
+import type { Db, ObjectId } from "mongodb";
+import { MONEY_MOVE_COLLECTION } from "@/lib/banking/moneyMove";
 import type { Character, CentralBank, Corporation } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { FOREX_ACTIVE_CURRENCIES, getCountryIdForCurrency } from "@/lib/constants/currencies";
@@ -18,7 +19,7 @@ import {
 import {
   settleLocPlan,
   loadLocSettlement,
-  resumeLocSettlement,
+  resumeLoadedLocSettlement,
   recoverPendingLoc,
 } from "@/lib/lineOfCredit/settlement";
 import {
@@ -29,6 +30,7 @@ import {
 import { loadBankingPolicy } from "@/lib/banking/policy";
 import { savingsReadsAuthoritative } from "@/lib/banking/rules/policy";
 import { loadCentralBankPricingAdjustment } from "@/lib/monetaryPolicy/centralBankPricing";
+import { getGameState } from "@/lib/gameState";
 
 const DEFAULT_PRIME = 2.5;
 
@@ -47,6 +49,55 @@ function hasLocActivity(loc: NonNullable<Character["lineOfCredit"]>): boolean {
     if ((b[c] ?? 0) > 0 || (a[c] ?? 0) > 0) return true;
   }
   return loc.drawFrozen === true;
+}
+
+type CorpComposite = Pick<Corporation, "creditCompositeSnapshot">;
+
+/**
+ * The CEO credit snapshot for every character about to be serviced, in one
+ * read instead of one `findOne({ ceoId, countryId })` each. This pass never
+ * creates or deletes a corporation or writes its `ceoId`, `countryId` or
+ * `creditCompositeSnapshot` (savings withdrawals from a private bank touch
+ * only its charter), so reading them before the loop returns what the loop
+ * would have read. Only an unambiguous answer is kept: a character with two
+ * matching corporations, or any shape `findOne` would match differently
+ * (array or non-ObjectId `ceoId`, non-string `countryId`), is left out and
+ * the loop falls back to its own `findOne`, which picks as it always did.
+ */
+async function loadCeoComposites(
+  db: Db,
+  chars: Array<Pick<Character, "_id" | "countryId">>
+): Promise<Map<string, CorpComposite | null>> {
+  const out = new Map<string, CorpComposite | null>();
+  if (chars.length === 0) return out;
+  const corps = await db
+    .collection<Corporation>("corporations")
+    .find(
+      { ceoId: { $in: chars.map((char) => char._id) } },
+      { projection: { ceoId: 1, countryId: 1, creditCompositeSnapshot: 1 } }
+    )
+    .toArray();
+  if (
+    corps.some(
+      (corp) =>
+        typeof corp.ceoId !== "object" ||
+        corp.ceoId === null ||
+        Array.isArray(corp.ceoId) ||
+        typeof (corp.ceoId as ObjectId).toHexString !== "function" ||
+        typeof corp.countryId !== "string"
+    )
+  )
+    return out;
+  for (const char of chars) {
+    if (typeof char.countryId !== "string") continue;
+    const matches = corps.filter(
+      (corp) =>
+        (corp.ceoId as ObjectId).toHexString() === char._id.toHexString() &&
+        corp.countryId === char.countryId
+    );
+    if (matches.length <= 1) out.set(char._id.toHexString(), matches[0] ?? null);
+  }
+  return out;
 }
 
 export async function processLineOfCreditTurn(
@@ -69,6 +120,7 @@ export async function processLineOfCreditTurn(
   // One policy read per turn, like every other banking-aware pass: a flag
   // flipped mid-turn must not split this pass between two models.
   const bankingPolicy = await loadBankingPolicy(db);
+  const gameState = await getGameState(db);
   const centralBankPricing = await loadCentralBankPricingAdjustment(db, turn);
   const rates = await loadExchangeRatesMap(db);
   const banks = await db
@@ -101,14 +153,41 @@ export async function processLineOfCreditTurn(
   let newlyUnfrozen = 0;
   let distressedAfterTurn = 0;
   const now = new Date();
+  // Which characters already have this turn's service record (a crashed or
+  // retried pass), in one read: the per-character check ran before the
+  // activity filter, so every credit-line holder paid a lookup that almost
+  // always found nothing. settleLocPlan still claims each key itself.
+  const startedKeys = new Set(
+    (
+      await db
+        .collection<{ _id: string; kind: string }>(MONEY_MOVE_COLLECTION)
+        .find(
+          {
+            _id: { $in: chars.map((char) => `loc:service:${turn}:${char._id}`) },
+            kind: "line_of_credit",
+          },
+          { projection: { _id: 1 } }
+        )
+        .toArray()
+    ).map((doc) => doc._id)
+  );
+  const composites = await loadCeoComposites(
+    db,
+    chars.filter(
+      (char) =>
+        !startedKeys.has(`loc:service:${turn}:${char._id}`) &&
+        char.lineOfCredit &&
+        hasLocActivity(char.lineOfCredit)
+    )
+  );
   for (const char of chars) {
-    const existing = await loadLocSettlement(db, `loc:service:${turn}:${char._id}`);
+    const serviceKey = `loc:service:${turn}:${char._id}`;
+    const existing = startedKeys.has(serviceKey) ? await loadLocSettlement(db, serviceKey) : null;
     if (existing) {
-      const resumed = await resumeLocSettlement(db, existing._id);
+      const resumed = await resumeLoadedLocSettlement(db, existing._id, existing);
       if (resumed.error) continue;
-      const stored = await loadLocSettlement(db, existing._id);
-      charactersProcessed += Number(stored!.locSettlement.effect.result.charactersProcessed ?? 0);
-      paymentsInternal += Number(stored!.locSettlement.effect.result.paymentsInternal ?? 0);
+      charactersProcessed += Number(resumed.result.charactersProcessed ?? 0);
+      paymentsInternal += Number(resumed.result.paymentsInternal ?? 0);
       continue;
     }
     const loc = char.lineOfCredit;
@@ -116,7 +195,7 @@ export async function processLineOfCreditTurn(
 
     const incomeInternal = currencyIncomeInternalByCharacterId.get(char._id.toString()) ?? 0;
 
-    const home = getHomeCurrency(char);
+    const home = getHomeCurrency(char, gameState?.preset);
     const rateHome = rates[home] ?? 1;
     const incomeHomeFace = fromInternalUnits(incomeInternal, rateHome);
     const incomeScore = incomeScoreFromPerTurnCurrency(incomeHomeFace);
@@ -130,12 +209,14 @@ export async function processLineOfCreditTurn(
       grossInternal > 0 ? locDebtForScore / grossInternal : locDebtForScore > 0 ? 1 : 0;
     const nwScore = netWorthScoreFromInternal(netInternal);
 
-    const corp = await db
-      .collection<Corporation>("corporations")
-      .findOne(
-        { ceoId: char._id, countryId: char.countryId },
-        { projection: { creditCompositeSnapshot: 1 } }
-      );
+    const corp = composites.has(char._id.toHexString())
+      ? composites.get(char._id.toHexString())
+      : await db
+          .collection<Corporation>("corporations")
+          .findOne(
+            { ceoId: char._id, countryId: char.countryId },
+            { projection: { creditCompositeSnapshot: 1 } }
+          );
 
     const primeHome = resolvePrime(home);
 
@@ -155,32 +236,47 @@ export async function processLineOfCreditTurn(
     const savings = Object.fromEntries(
       FOREX_ACTIVE_CURRENCIES.map((c) => [c, getSavingsBalance(char, c, forexEnabled)])
     );
-    const settled = await settleLocPlan(db, key, turn, {
-      characterId: char._id,
-      expectedLoc: loc,
-      expectedRevision:
-        (char as Character & { lineOfCreditRevision?: number }).lineOfCreditRevision ?? null,
-      request: { operation: "service", turn },
-      createdAt: now,
-      service: {
-        input: {
-          loc,
-          personal,
-          savings,
-          rates,
-          prime: Object.fromEntries(FOREX_ACTIVE_CURRENCIES.map((c) => [c, resolvePrime(c)])),
-          spread,
-          centralBankSpread: centralBankPricing.spreadHikePercentPoints,
-          incomeInternal,
+    // Either the batch read above or the per-key load found no record for
+    // this key, and this pass writes no other character's key.
+    const settled = await settleLocPlan(
+      db,
+      key,
+      turn,
+      {
+        characterId: char._id,
+        expectedLoc: loc,
+        expectedRevision:
+          (char as Character & { lineOfCreditRevision?: number }).lineOfCreditRevision ?? null,
+        request: { operation: "service", turn },
+        createdAt: now,
+        service: {
+          input: {
+            loc,
+            personal,
+            savings,
+            rates,
+            prime: Object.fromEntries(FOREX_ACTIVE_CURRENCIES.map((c) => [c, resolvePrime(c)])),
+            spread,
+            centralBankSpread: centralBankPricing.spreadHikePercentPoints,
+            incomeInternal,
+          },
+          authoritative: FOREX_ACTIVE_CURRENCIES.filter((c) =>
+            savingsReadsAuthoritative(bankingPolicy, c)
+          ),
+          home,
+          characterName: char.name,
         },
-        authoritative: FOREX_ACTIVE_CURRENCIES.filter((c) =>
-          savingsReadsAuthoritative(bankingPolicy, c)
-        ),
-        home,
-        characterName: char.name,
+        effect: {
+          walletInc: {},
+          reserves: [],
+          ledger: [],
+          transactions: [],
+          flows: [],
+          result: {},
+        },
       },
-      effect: { walletInc: {}, reserves: [], ledger: [], transactions: [], flows: [], result: {} },
-    });
+      { knownAbsent: true }
+    );
     if (settled.error) continue;
     charactersProcessed += Number(settled.result.charactersProcessed ?? 0);
     paymentsInternal += Number(settled.result.paymentsInternal ?? 0);

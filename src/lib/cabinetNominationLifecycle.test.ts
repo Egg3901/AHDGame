@@ -25,6 +25,9 @@ vi.mock("@/lib/notifications", () => ({ createNotifications: vi.fn() }));
 vi.mock("@/lib/congress/governmentVoteBreakdown", () => ({
   computeCabinetNominationTally: vi.fn(),
 }));
+vi.mock("@/lib/analytics/officeTransitionAnalytics", () => ({
+  captureOfficeTransition: vi.fn().mockResolvedValue(undefined),
+}));
 
 describe("processCabinetNominationLifecycle — holder seating", () => {
   let db: MockDb;
@@ -147,32 +150,100 @@ describe("processCabinetNominationLifecycle — holder seating", () => {
     expect(inserted.characterId).toBe(nomineeId);
   });
 
-  it("seats a confirmed NPP nominee as an NPP member with no character writes", async () => {
+  it.each(["US", "NG"])(
+    "seats a confirmed %s NPP nominee with matching telemetry nation",
+    async (countryId) => {
+      const nppId = new ObjectId();
+      const nomination = {
+        _id: new ObjectId(),
+        status: "active",
+        countryId,
+        positionId: "secretary_of_state",
+        nomineeCharacterId: null,
+        nomineeNppId: nppId,
+        nomineeMode: "npp",
+        nomineeCharacterName: "NPP Secretary",
+        nomineeParty: "1",
+        proposedByPresidentId: new ObjectId(),
+        votes: {},
+      };
+      db.collectionMocks.cabinetNominations.find.mockImplementation(
+        (query: Record<string, unknown>) => {
+          const orClause = (
+            query?.$or as Array<{ votingEndsOnTurn?: Record<string, unknown> }>
+          )?.[0]?.votingEndsOnTurn;
+          const isExpiredQuery = !!orClause && "$lte" in orClause;
+          return {
+            toArray: vi.fn().mockResolvedValue(isExpiredQuery ? [nomination] : []),
+          } as never;
+        }
+      );
+
+      const { computeCabinetNominationTally } =
+        await import("@/lib/congress/governmentVoteBreakdown");
+      vi.mocked(computeCabinetNominationTally).mockResolvedValue({
+        votesFor: 60,
+        votesAgainst: 40,
+        votesAbstain: 0,
+      } as never);
+
+      const { processCabinetNominationLifecycle } = await import("./cabinetNominationLifecycle");
+      await processCabinetNominationLifecycle(new Date(0));
+
+      const inserted = db.collectionMocks.cabinetMembers.insertOne.mock.calls[0][0];
+      expect(inserted.positionId).toBe("secretary_of_state");
+      expect(inserted.characterId).toBeNull();
+      expect(inserted.isNPP).toBe(true);
+      expect(inserted.nppId).toBe(nppId);
+      // No character-doc writes for an NPP nominee: no vacate-by-character, no career push.
+      expect(db.collectionMocks.cabinetMembers.deleteMany).not.toHaveBeenCalled();
+      expect(db.collectionMocks.characters.updateOne).not.toHaveBeenCalled();
+      const { captureOfficeTransition } = await import("@/lib/analytics/officeTransitionAnalytics");
+      expect(captureOfficeTransition).toHaveBeenCalledWith(
+        expect.objectContaining({
+          transitionType: "gained",
+          nationId: countryId,
+          officeType: countryId === "US" ? "usCabinet" : "parliamentaryCabinet",
+        })
+      );
+    }
+  );
+
+  it("does not emit an office transition when the same NPP is reconfirmed", async () => {
     const nppId = new ObjectId();
     const nomination = {
       _id: new ObjectId(),
       status: "active",
-      countryId: "US",
       positionId: "secretary_of_state",
       nomineeCharacterId: null,
       nomineeNppId: nppId,
       nomineeMode: "npp",
-      nomineeCharacterName: "NPP Secretary",
       nomineeParty: "1",
-      proposedByPresidentId: new ObjectId(),
       votes: {},
     };
     db.collectionMocks.cabinetNominations.find.mockImplementation(
-      (query: Record<string, unknown>) => {
-        const orClause = (query?.$or as Array<{ votingEndsOnTurn?: Record<string, unknown> }>)?.[0]
-          ?.votingEndsOnTurn;
-        const isExpiredQuery = !!orClause && "$lte" in orClause;
-        return {
-          toArray: vi.fn().mockResolvedValue(isExpiredQuery ? [nomination] : []),
-        } as never;
-      }
+      (query: Record<string, unknown>) =>
+        ({
+          toArray: vi
+            .fn()
+            .mockResolvedValue(
+              "$lte" in (query.$or as Array<{ votingEndsOnTurn: object }>)[0].votingEndsOnTurn
+                ? [nomination]
+                : []
+            ),
+        }) as never
     );
-
+    db.collectionMocks.cabinetMembers.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        {
+          _id: new ObjectId(),
+          countryId: "US",
+          positionId: nomination.positionId,
+          nppId: new ObjectId(nppId.toString()),
+          party: "1",
+        },
+      ]),
+    } as never);
     const { computeCabinetNominationTally } =
       await import("@/lib/congress/governmentVoteBreakdown");
     vi.mocked(computeCabinetNominationTally).mockResolvedValue({
@@ -180,18 +251,13 @@ describe("processCabinetNominationLifecycle — holder seating", () => {
       votesAgainst: 40,
       votesAbstain: 0,
     } as never);
-
     const { processCabinetNominationLifecycle } = await import("./cabinetNominationLifecycle");
     await processCabinetNominationLifecycle(new Date(0));
-
-    const inserted = db.collectionMocks.cabinetMembers.insertOne.mock.calls[0][0];
-    expect(inserted.positionId).toBe("secretary_of_state");
-    expect(inserted.characterId).toBeNull();
-    expect(inserted.isNPP).toBe(true);
-    expect(inserted.nppId).toBe(nppId);
-    // No character-doc writes for an NPP nominee: no vacate-by-character, no career push.
-    expect(db.collectionMocks.cabinetMembers.deleteMany).not.toHaveBeenCalled();
-    expect(db.collectionMocks.characters.updateOne).not.toHaveBeenCalled();
+    const { captureOfficeTransition } = await import("@/lib/analytics/officeTransitionAnalytics");
+    expect(captureOfficeTransition).not.toHaveBeenCalled();
+    expect(db.collectionMocks.cabinetMembers.find).toHaveBeenCalledWith(expect.anything(), {
+      projection: { countryId: 1, positionId: 1, characterId: 1, nppId: 1, party: 1 },
+    });
   });
 
   it("does not reset cooldowns when a nominee is rejected", async () => {

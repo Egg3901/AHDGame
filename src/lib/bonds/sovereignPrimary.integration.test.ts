@@ -77,6 +77,76 @@ function assertLedger(db: InMemoryDb) {
 }
 
 describe("sovereign primary settlement", () => {
+  it("credits funded Treasury cash only from pool cash in the durable issue receipt", async () => {
+    const db = world();
+    const beforePool = Number(pool(db).cashLocal);
+    await commitSovereignPrimary(
+      db as unknown as Db,
+      {
+        key: "funded-cash-ledger-test",
+        turn: TURN,
+        countryId: "US",
+        currency: "USD",
+        budgetId: "federal",
+        poolCash: 12_000,
+        monetaryCash: 0,
+        face: 12_000,
+        annualCoupon: 600,
+        now: NOW,
+      },
+      [],
+      {
+        ledgerShadow: true,
+        treasuryCashLedgerEnabled: true,
+        turnLengthMinutes: 60,
+        rates: new Map([["USD", 1]]),
+        ledgerTurn: TURN,
+      }
+    );
+
+    expect(Number(pool(db).cashLocal)).toBe(beforePool - 12_000);
+    expect(budget(db).treasuryBalance).toBe(12_100);
+    expect(budget(db).treasuryCashLocal).toBe(12_000);
+    expect(principal(db)).toBe(12_000);
+    const cashEntry = db
+      .collection("ledgerEntries")
+      .docs.find((entry) =>
+        (entry.legs as { account: string }[]).some((leg) =>
+          leg.account.startsWith("government_cash:")
+        )
+      );
+    expect(cashEntry?.legs).toEqual([
+      expect.objectContaining({ account: "government_cash:US:USD", amount: 12_000 }),
+      expect.objectContaining({ account: "bond_pool:USD:USD", amount: -12_000 }),
+    ]);
+
+    await commitSovereignPrimary(
+      db as unknown as Db,
+      {
+        key: "funded-cash-ledger-test",
+        turn: TURN,
+        countryId: "US",
+        currency: "USD",
+        budgetId: "federal",
+        poolCash: 12_000,
+        monetaryCash: 0,
+        face: 12_000,
+        annualCoupon: 600,
+        now: NOW,
+      },
+      [],
+      {
+        ledgerShadow: true,
+        treasuryCashLedgerEnabled: true,
+        turnLengthMinutes: 60,
+        rates: new Map([["USD", 1]]),
+        ledgerTurn: TURN,
+      }
+    );
+    expect(budget(db).treasuryCashLocal).toBe(12_000);
+    expect(Number(pool(db).cashLocal)).toBe(beforePool - 12_000);
+  });
+
   it("conserves funded scheduled cash and retries without another unit or debt", async () => {
     const db = world();
     const before = cash(db);
@@ -244,6 +314,56 @@ describe("sovereign primary settlement", () => {
     expect((await placeUnsoldBondUnits(db as unknown as Db, TURN, NOW)).unitsPlaced).toBe(0);
     expect(cash(db)).toBe(before);
     expect(principal(db)).toBe(9000);
+  });
+
+  it("checks settlement status only for placements already recorded, and still refuses a pending one", async () => {
+    const db = world(1_000_000);
+    const ids = [new ObjectId(), new ObjectId()];
+    db.seed(
+      "bonds",
+      ids.map((_id, index) => ({
+        _id,
+        issuerType: "sovereign",
+        countryId: "US",
+        currencyCode: "USD",
+        totalIssued: 0,
+        publicFloat: 0,
+        unsoldUnits: 500,
+        requestedUnits: 500,
+        couponRate: 5,
+        marketPrice: 1,
+        matured: false,
+        defaulted: false,
+        issuedAtTurn: TURN - 2 + index,
+      }))
+    );
+    const journal = db.collection("bankMoneyMoves");
+    const findOne = journal.findOne.bind(journal);
+    const statusChecks: unknown[] = [];
+    journal.findOne = (async (filter: Record<string, unknown>, options?: unknown) => {
+      const projection = (options as { projection?: Record<string, unknown> } | undefined)
+        ?.projection;
+      if (projection && "projectionsCompletedAt" in projection) statusChecks.push(filter._id);
+      return findOne(filter);
+    }) as typeof journal.findOne;
+
+    const first = await placeUnsoldBondUnits(db as unknown as Db, TURN, NOW);
+    expect(first.bondsTouched).toBe(2);
+    expect(statusChecks).toEqual([]);
+
+    // A retried turn: both keys are recorded, so each takes the status check.
+    expect((await placeUnsoldBondUnits(db as unknown as Db, TURN, NOW)).unitsPlaced).toBe(0);
+    expect(statusChecks).toHaveLength(2);
+
+    // A recorded placement awaiting recovery still stops the pass.
+    await journal.updateOne(
+      { _id: `sovereign-primary:placement:${ids[0]}:${TURN + 1}` },
+      { $set: { status: "pending" } },
+      { upsert: true }
+    );
+    await expect(placeUnsoldBondUnits(db as unknown as Db, TURN + 1, NOW)).rejects.toThrow(
+      /awaits settlement recovery/
+    );
   });
 
   it.each([

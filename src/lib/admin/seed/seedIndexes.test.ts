@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 import { seedIndexes } from "./seedIndexes";
+import { BOUNDED_NPC_CANDIDATE_GUARDS } from "./indexes/boundedNpcCandidates";
 
 vi.mock("@/lib/auth/providerIdentityIndexes", () => ({
   ensureProviderIdentityIndexes: vi.fn().mockResolvedValue([]),
@@ -17,13 +18,19 @@ function makeInterleavingDb(): { db: Db; createIndex: ReturnType<typeof vi.fn> }
     for (let i = 0; i < 5; i++) await Promise.resolve();
     return "ok";
   });
-  // seedCoreIndexes repairs duplicate corporateSectors before it can build the
-  // unique identity index. Report that index as already present so this
-  // ordering test does not drag the repair path in with it.
+  // The registered migration must have installed this key before core seed
+  // indexes run. Keep that prerequisite present in this index-order harness.
   const indexes = vi.fn().mockResolvedValue([
+    ...BOUNDED_NPC_CANDIDATE_GUARDS.map(([, key, options]) => ({ key, ...options })),
     {
-      name: "corporateSectors_corporationId_stateId_sectorType",
-      key: { corporationId: 1, stateId: 1, sectorType: 1 },
+      name: "corporateSectors_corporation_state_type_models_unique",
+      key: {
+        corporationId: 1,
+        stateId: 1,
+        sectorType: 1,
+        industryModel: 1,
+        mediaDiscriminator: 1,
+      },
       unique: true,
     },
   ]);
@@ -37,6 +44,7 @@ function makeInterleavingDb(): { db: Db; createIndex: ReturnType<typeof vi.fn> }
     collection: vi.fn().mockReturnValue({
       createIndex,
       indexes,
+      findOne: vi.fn().mockResolvedValue(null),
       find: vi.fn().mockReturnValue(cursor),
       aggregate: vi.fn().mockReturnValue(cursor),
     }),
@@ -70,6 +78,7 @@ const HEADERS = [
   "Watchlist indexes:",
   "Conflict indexes:",
   "Banking money-move indexes:",
+  "Money-flow receipt indexes:",
 ];
 
 describe("seedIndexes", () => {

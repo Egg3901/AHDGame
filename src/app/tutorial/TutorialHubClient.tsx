@@ -11,6 +11,7 @@ import {
   type TutorialChapterId,
   type TutorialPlan,
 } from "@/lib/onboarding/tutorialPlan";
+import { Button } from "@/components/ui/Button";
 import { startTutorial } from "@/components/tutorial/TutorialCoach";
 import { openTutorialChooser } from "@/components/tutorial/TutorialCoachMount";
 
@@ -84,13 +85,9 @@ export function TutorialHubClient() {
           >
             {t("hub.changePlan")}
           </button>
-          <button
-            type="button"
-            onClick={() => startTutorial()}
-            className="rounded-lg bg-gradient-to-r from-primary to-secondary px-4 py-2 text-sm font-semibold text-white shadow-glow-sm transition-shadow hover:shadow-glow"
-          >
+          <Button onClick={() => startTutorial()}>
             {resumeChapter ? t("hub.resume") : t("hub.runAll")}
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -113,7 +110,6 @@ export function TutorialHubClient() {
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
                   <h2 className="flex items-center gap-2 text-base font-semibold">
-                    <span aria-hidden>{chapter.icon}</span>
                     {t(chapter.title)}
                     {finished && (
                       <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-emerald-500">
@@ -121,7 +117,7 @@ export function TutorialHubClient() {
                       </span>
                     )}
                     {!finished && inPlan && (
-                      <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary">
+                      <span className="rounded-full border border-card-border px-2 py-0.5 text-[10px] font-medium text-muted">
                         {t("hub.inYourTour")}
                       </span>
                     )}

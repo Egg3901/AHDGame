@@ -3,8 +3,10 @@ import { ObjectId } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CorporationType } from "@/lib/constants/corporations";
-import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
+import { COUNTRY_CURRENCY_MAP, getSeedCurrencyCode } from "@/lib/constants/currencies";
+import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import { getNationalIdentity } from "@/lib/constants/nationalIdentity";
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 
 /** Canonical "is this a state-owned National Corporation" reader. */
 export function isStateOwned(
@@ -91,9 +93,24 @@ export async function ensurePrimaryNationalCorporation(
   const legacy = await corps.find({ countryOwnerId: countryId }).sort({ _id: 1 }).limit(1).next();
   if (legacy) return legacy;
 
+  // Preset-aware home currency: a 2027 euro member created here (fresh
+  // bootstrap race, merge, heal) stamps EUR like the seeded sovereign
+  // issuers. The preset load runs only on the create path — the
+  // primary-exists early return above adds no read. Every other preset
+  // resolves through the era-blind map, byte-identical to before. The
+  // preset is read inline (not via loadWorldPreset) to keep this
+  // widely-imported module off the heavy readiness-contract import chain.
+  const gameState = await db
+    .collection<{ _id: string; preset?: string | null }>("gameState")
+    .findOne({ _id: "current" }, { projection: { preset: 1 } });
+  const preset =
+    gameState?.preset && gameState.preset.trim().length > 0
+      ? gameState.preset
+      : DEFAULT_SEED_PRESET;
   const doc = buildNationalCorporationDoc(countryId, {
     isPrimaryNationalCorporation: true,
     assignedSectorTypes: [],
+    liquidCurrencyCode: getSeedCurrencyCode(countryId, preset),
   });
   const result = await corps.insertOne(doc as Corporation);
   return { ...(doc as Corporation), _id: result.insertedId };
@@ -108,11 +125,18 @@ export async function ensurePrimaryNationalCorporation(
 export async function resolveNationalCorporationForSector(
   db: Db,
   countryId: CountryId,
-  sectorType: CorporationType
+  sectorType: CorporationType,
+  industryModel?: Corporation["industryModel"],
+  mediaDiscriminator?: Corporation["mediaDiscriminator"]
 ): Promise<Corporation> {
+  const operatingSectorType = getOperatingSectorType(
+    sectorType,
+    industryModel,
+    mediaDiscriminator
+  ) as CorporationType;
   const secondary = await db
     .collection<Corporation>("corporations")
-    .findOne({ countryOwnerId: countryId, assignedSectorTypes: sectorType });
+    .findOne({ countryOwnerId: countryId, assignedSectorTypes: operatingSectorType });
   if (secondary) return secondary;
   return ensurePrimaryNationalCorporation(db, countryId);
 }

@@ -310,6 +310,47 @@ describe("turn phase registry", () => {
     expect(indexOf("electionTimers")).toBeLessThan(indexOf("electionResolution"));
   });
 
+  it("runs native1991 Assembly campaigns after seating and before generic election scheduling", async () => {
+    const adapter = getTurnPhaseRegistry().find(
+      (entry) => entry.key === "electionResolutionAndGovernment"
+    )!;
+    const called: string[] = [];
+    const runtime = {
+      runPhase: vi.fn(async (name: string) => {
+        called.push(name);
+        return name === "electionResolution" ? 0 : undefined;
+      }),
+      markPhaseSkipped: vi.fn(),
+    };
+    await adapter.execute(
+      {
+        db: {} as never,
+        gameNow: new Date(1000),
+        newTurn: 145,
+        gameState: { preset: "1991-default" },
+        phaseResults: {},
+      } as never,
+      runtime as never
+    );
+    expect(called.indexOf("russianAssemblyCampaigns")).toBeGreaterThan(
+      called.indexOf("parliamentaryGovernmentFormation")
+    );
+    expect(called.indexOf("russianCouncilComposition")).toBeGreaterThan(
+      called.indexOf("parliamentaryGovernmentFormation")
+    );
+    expect(called.indexOf("russianCouncilComposition")).toBeLessThan(
+      called.indexOf("russianAssemblyCampaigns")
+    );
+    expect(TURN_PHASE_NAMES).toContain("russianCouncilComposition");
+    expect(called.indexOf("russianAssemblyCampaigns")).toBeLessThan(
+      called.indexOf("parliamentaryGovernmentPhases")
+    );
+    expect(TURN_PHASE_NAMES).toContain("russianAssemblyCampaigns");
+    expect(TURN_PHASE_NAMES.indexOf("russianAssemblyCampaigns")).toBeLessThan(
+      TURN_PHASE_NAMES.indexOf("perpetualElections")
+    );
+  });
+
   // Office-state docs are created only at bootstrap/reset, so a regional
   // executive seated for a region added later (e.g. the Ireland build-out)
   // never gets a `governorOfficeState` row — its office AP reads `?? 0` and
@@ -494,5 +535,81 @@ describe("settlement phase registration", () => {
 
   it("carries the settlement phase into the derived TURN_PHASE_NAMES list", () => {
     expect(TURN_PHASE_NAMES).toContain("settlement");
+  });
+});
+
+// Phase overlaps that are safe because the paired phases touch disjoint state.
+// The stub resolves every phase on a macrotask and records start/end events, so
+// phases launched together record both starts before either end.
+describe("independent phase overlaps", () => {
+  function recordingRuntime() {
+    const events: string[] = [];
+    const runPhase = vi.fn(async (name: string) => {
+      events.push(`start:${name}`);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      events.push(`end:${name}`);
+      return null;
+    });
+    const markPhaseSkipped = vi.fn(async () => undefined);
+    const idx = (event: string) => {
+      const i = events.indexOf(event);
+      expect(i, `${event} must be recorded`).toBeGreaterThanOrEqual(0);
+      return i;
+    };
+    return { runtime: { runPhase, markPhaseSkipped } as never, idx };
+  }
+
+  function adapter(key: string) {
+    const found = getTurnPhaseRegistry().find((a) => a.key === key);
+    expect(found).toBeDefined();
+    return found!;
+  }
+
+  it("runs caucusTax with treasuryTurn, and both before nppFundGeneration", async () => {
+    const { runtime, idx } = recordingRuntime();
+    await adapter("resourceAndFinanceStart").execute(
+      {
+        characters: [],
+        config: { baseActionsPerTurn: 4 },
+        gameNow: new Date(),
+        stateMap: new Map(),
+        gameState: { corporationActionsPaused: false, forexEnabled: false },
+        newTurn: 5,
+        db: {} as never,
+        phaseResults: {} as Record<string, unknown>,
+        warnings: [],
+      } as never,
+      runtime
+    );
+
+    expect(idx("start:treasuryTurn")).toBeLessThan(idx("end:caucusTax"));
+    expect(idx("start:caucusTax")).toBeLessThan(idx("end:treasuryTurn"));
+    expect(idx("end:partyInfluenceTurn")).toBeLessThan(idx("start:caucusTax"));
+    expect(idx("end:corporationTurn")).toBeLessThan(idx("start:treasuryTurn"));
+    // Both $inc npps.funds: caucusTax must finish before nppFundGeneration.
+    expect(idx("end:caucusTax")).toBeLessThan(idx("start:nppFundGeneration"));
+    expect(idx("end:treasuryTurn")).toBeLessThan(idx("start:nppFundGeneration"));
+  });
+
+  it("runs nppBillSponsorship with generateChallengers, and both before nppBehavior", async () => {
+    const { runtime, idx } = recordingRuntime();
+    await adapter("demographicsAndPartySetup").execute(
+      {
+        stateMap: new Map(),
+        newTurn: 5,
+        gameNow: new Date(),
+        realNow: new Date(),
+        currentYear: 1960,
+        db: {} as never,
+        phaseResults: {} as Record<string, unknown>,
+      } as never,
+      runtime
+    );
+
+    expect(idx("start:generateChallengers")).toBeLessThan(idx("end:nppBillSponsorship"));
+    expect(idx("start:nppBillSponsorship")).toBeLessThan(idx("end:generateChallengers"));
+    expect(idx("end:governorLegislationQueue")).toBeLessThan(idx("start:nppBillSponsorship"));
+    expect(idx("end:nppBillSponsorship")).toBeLessThan(idx("start:nppBehavior"));
+    expect(idx("end:generateChallengers")).toBeLessThan(idx("start:nppBehavior"));
   });
 });

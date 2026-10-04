@@ -91,7 +91,7 @@ export function OpenFloorPanel({ openFloor }: { openFloor: DossierView["openFloo
       <h2 className="mb-2 font-mono text-body-xs font-bold tracking-wider text-success">
         ✎ THE OPEN FLOOR
       </h2>
-      <p className="font-mono text-body-xs leading-relaxed text-muted">
+      <p className="font-mono text-body-sm leading-relaxed text-muted">
         Every character in the world holds one 0.25× play of each kind, per turn, on the street and
         the Bundestag. {openFloor.characters.toLocaleString()}{" "}
         {openFloor.characters === 1 ? "character has" : "characters have"} taken a position this
@@ -108,7 +108,7 @@ export function OpenFloorPanel({ openFloor }: { openFloor: DossierView["openFloo
         it happens when the turn resolves.
       */}
       {openFloor.capped && (
-        <p className="mt-2 font-mono text-body-xs leading-relaxed text-warning">
+        <p className="mt-2 font-mono text-body-sm leading-relaxed text-warning">
           The floor asked for {openFloor.rawPoints >= 0 ? "+" : ""}
           {openFloor.rawPoints.toFixed(2)} and will be scaled to{" "}
           {openFloor.netPoints >= 0 ? "+" : ""}

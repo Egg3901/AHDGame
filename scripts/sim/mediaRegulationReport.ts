@@ -1,0 +1,291 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
+import {
+  censorshipReachAvailability,
+  currentTurnDeliveredAdvertisingUnits,
+  isFairnessDoctrineInEffect,
+  isMediaOwnershipBillAvailable,
+  MEDIA_AUDIENCE_ACCESS_LIMIT_BY_OPTION,
+} from "@/lib/mediaRegulation/rules";
+import { COMMODITY_TYPES, type CommodityType } from "@/lib/constants/commodities";
+import { computeClearingFactors, type SectorClearingInput } from "@/lib/market/clearing";
+import { settlePoliticalAdMarket } from "@/lib/politicalMedia/market";
+
+const outlets = [
+  { stateId: "CA", countryId: "US", corporationId: "network-a", deliveredAdvertisingUnits: 80 },
+  { stateId: "CA", countryId: "US", corporationId: "network-b", deliveredAdvertisingUnits: 20 },
+];
+
+const audienceLimitCases = MEDIA_AUDIENCE_ACCESS_LIMIT_BY_OPTION.map(
+  (shareCap, policyOptionIndex) => ({
+    policyOptionIndex,
+    shareCap,
+    filledAgainstStrongPoliticalDemand: clearFundedPoliticalResidual(1, 1, shareCap),
+  })
+);
+
+const censorshipCases = [
+  { name: "open press", pressFreedom: 100, stateMediaControl: 0 },
+  { name: "restricted press", pressFreedom: 50, stateMediaControl: 65 },
+  { name: "state controlled press", pressFreedom: 10, stateMediaControl: 100 },
+].map((state) => ({
+  ...state,
+  privateOutletAvailability: round(censorshipReachAvailability(state)),
+}));
+
+const ownershipTriggerCases = [
+  {
+    label: "at national threshold",
+    outlets: [
+      { stateId: "CA", countryId: "US", corporationId: "network-a", deliveredAdvertisingUnits: 65 },
+      { stateId: "CA", countryId: "US", corporationId: "network-b", deliveredAdvertisingUnits: 35 },
+    ],
+  },
+  {
+    label: "above national threshold",
+    outlets: [
+      { stateId: "CA", countryId: "US", corporationId: "network-a", deliveredAdvertisingUnits: 66 },
+      { stateId: "CA", countryId: "US", corporationId: "network-b", deliveredAdvertisingUnits: 34 },
+    ],
+  },
+  {
+    label: "one state is concentrated but national share is below threshold",
+    outlets: [
+      { stateId: "CA", countryId: "US", corporationId: "network-a", deliveredAdvertisingUnits: 66 },
+      { stateId: "CA", countryId: "US", corporationId: "network-b", deliveredAdvertisingUnits: 34 },
+      { stateId: "NY", countryId: "US", corporationId: "network-a", deliveredAdvertisingUnits: 10 },
+      { stateId: "NY", countryId: "US", corporationId: "network-b", deliveredAdvertisingUnits: 90 },
+    ],
+  },
+  {
+    label: "foreign output is excluded from US concentration",
+    outlets: [
+      { stateId: "CA", countryId: "US", corporationId: "network-a", deliveredAdvertisingUnits: 66 },
+      { stateId: "CA", countryId: "US", corporationId: "network-b", deliveredAdvertisingUnits: 34 },
+      {
+        stateId: "CN-11",
+        countryId: "CN",
+        corporationId: "network-a",
+        deliveredAdvertisingUnits: 1_000,
+      },
+    ],
+  },
+].map((scenario) => ({
+  label: scenario.label,
+  billAvailable: isMediaOwnershipBillAvailable(scenario.outlets),
+}));
+
+const fairnessEraCases = [1986, 1987].map((currentYear) => ({
+  currentYear,
+  regulatedPolicyOptionIndex: 2,
+  fairnessDoctrineInEffect: isFairnessDoctrineInEffect(currentYear, 2),
+}));
+
+const currentTurnPoliticalAttribution = {
+  physicalSoldUnits: 80,
+  plannedPoliticalUnits: 20,
+  appliedSellerReceiptUnits: 10,
+  unpaidPlannedUnits: 10,
+  measuredReachUnits: currentTurnDeliveredAdvertisingUnits({
+    snapshotTurn: 12,
+    currentTurn: 12,
+    physicalSoldUnits: 80,
+    plannedPoliticalUnits: 20,
+    settledPoliticalUnits: 10,
+  }),
+  reachWhenNoSellerReceiptHasApplied: currentTurnDeliveredAdvertisingUnits({
+    snapshotTurn: 12,
+    currentTurn: 12,
+    physicalSoldUnits: 80,
+    plannedPoliticalUnits: 20,
+    settledPoliticalUnits: 0,
+  }),
+  staleSnapshotReach: currentTurnDeliveredAdvertisingUnits({
+    snapshotTurn: 11,
+    currentTurn: 12,
+    physicalSoldUnits: 80,
+    plannedPoliticalUnits: 20,
+    settledPoliticalUnits: 10,
+  }),
+};
+
+const fresh1991RuleContext = {
+  currentYear: 1991,
+  representativePolicyOptionIndex: 3,
+  fairnessDoctrineInEffect: isFairnessDoctrineInEffect(1991, 2),
+  ownershipBillAvailableAtMeasured80To20Share: isMediaOwnershipBillAvailable(outlets),
+  finalDeliveredShareAtRepresentativeOption:
+    audienceLimitCases[3]?.filledAgainstStrongPoliticalDemand.largestFinalShare ?? 0,
+};
+
+const report = {
+  title: "Media regulation advertising availability diagnostic",
+  method:
+    "Runs production clearing and political residual rules against final normalized delivery and current-turn settled attribution. This is a rule sensitivity report, not a world simulation or a 1991 seed target.",
+  assumptions: {
+    currentTurnPhysicalAdvertisingUnits: { "network-a": 80, "network-b": 20 },
+    missingHistoryBehavior:
+      "ownership enforcement uses current clearing; bill eligibility fails closed on incomplete current-turn measurement",
+    audienceAccessLimitDefinition:
+      "each owner is bounded against final delivered state units; no positive delivery is feasible when too few owners satisfy the cap",
+    ownershipBillThresholdScope: "national US aggregate, with foreign delivery excluded",
+    enactedAudienceAccessLimitScope:
+      "each US state audience market; no ownership divestiture is modeled",
+    ownershipBillMeasurement:
+      "current-turn sector sold units less all planned political units, plus each matching applied seller receipt once by stable movement id",
+  },
+  audienceLimitCases,
+  censorshipCases,
+  ownershipTriggerCases,
+  fairnessEraCases,
+  currentTurnPoliticalAttribution,
+  attributionReadBudget: {
+    flagOffAdditionalQueries: 0,
+    flagOnQueries: {
+      sectorAndOwnerLoads: 2,
+      currentTurnOrderPlans: 1,
+      appliedSellerReceipts: "1 only when a current-turn settlement plan has sellers",
+    },
+    sellerReceiptIndex: "bankMoneyMoves_politicalMedia_sellerReceiptTurn",
+  },
+  fresh1991RuleContext,
+  accounting: {
+    finalCommercialFillsAndPoliticalResidualAreBoundedBeforeReceipts: true,
+    noAdvertisingUnitsAreCreated: true,
+    capUsesFinalDeliveredShare: true,
+    allFinalSharesMeetEnactedCap: audienceLimitCases.every(
+      (scenario) =>
+        scenario.shareCap == null ||
+        scenario.filledAgainstStrongPoliticalDemand.largestFinalShare <= scenario.shareCap + 1e-6
+    ),
+    unmeasuredHistoryDoesNotInventConcentration: true,
+    unpaidPoliticalPlansDoNotCountAsReach:
+      currentTurnPoliticalAttribution.reachWhenNoSellerReceiptHasApplied === 60,
+    staleDeliverySnapshotsFailClosed: currentTurnPoliticalAttribution.staleSnapshotReach === null,
+    fundedPoliticalBuyerDebitEqualsSellerReceipt: audienceLimitCases.every(
+      (scenario) => scenario.filledAgainstStrongPoliticalDemand.payoutMatchesDeliveredAnchor
+    ),
+    partialPoliticalFillRetainsUnfilledBudget: audienceLimitCases.every(
+      (scenario) => scenario.filledAgainstStrongPoliticalDemand.refundAnchor > 0
+    ),
+  },
+};
+
+async function main() {
+  const output = new URL("./mediaRegulationRules.report.json", import.meta.url);
+  await mkdir(dirname(output.pathname), { recursive: true });
+  await writeFile(output, `${JSON.stringify(report, null, 2)}\n`);
+}
+
+void main();
+
+function round(value: number): number {
+  return Math.round(value * 1_000_000) / 1_000_000;
+}
+
+function clearFundedPoliticalResidual(
+  networkAAvailability: number,
+  networkBAvailability: number,
+  shareCap: number | null = null
+) {
+  const mediaOwnership =
+    shareCap == null
+      ? undefined
+      : {
+          shareCap,
+          stateBySector: new Map([
+            ["network-a", "CA"],
+            ["network-b", "CA"],
+          ]),
+          corporationBySector: new Map([
+            ["network-a", "network-a"],
+            ["network-b", "network-b"],
+          ]),
+        };
+  const basePrices = Object.fromEntries(
+    COMMODITY_TYPES.map((commodity) => [commodity, 1])
+  ) as Record<CommodityType, number>;
+  const sectors: SectorClearingInput[] = [
+    {
+      sectorId: "network-a",
+      revenue: 80,
+      supplyRates: { advertising: 1 },
+      posture: 0,
+      editorialAdvertisingAvailability: networkAAvailability,
+    },
+    {
+      sectorId: "network-b",
+      revenue: 20,
+      supplyRates: { advertising: 1 },
+      posture: 0,
+      editorialAdvertisingAvailability: networkBAvailability,
+    },
+  ];
+  const clearingBySectorId = computeClearingFactors({
+    sectors,
+    mediaOwnership,
+    balances: new Map([["advertising", { supply: 100, demand: 50 }]]),
+    priceRatioByCommodity: new Map([["advertising", 1]]),
+    basePrices,
+    plantsEnabled: false,
+  });
+  const commercialUnits =
+    (clearingBySectorId.get("network-a")?.soldByCommodity?.advertising ?? 0) * 80 +
+    (clearingBySectorId.get("network-b")?.soldByCommodity?.advertising ?? 0) * 20;
+  const settlement = settlePoliticalAdMarket({
+    orders: [
+      {
+        orderId: "funded-political-order",
+        countryId: "US",
+        stateId: "CA",
+        createdTurn: 1,
+        budgetAnchor: 10_000,
+      },
+    ],
+    offers: sectors.map((input) => ({
+      input,
+      clearing: clearingBySectorId.get(input.sectorId),
+      corporationId: input.sectorId,
+      countryId: "US",
+      stateId: "CA",
+      basePrice: 1,
+      priceRatio: 1,
+      sellerCurrencyCode: "AHD",
+      sellerLocalPerAnchor: 1,
+      offeredUnits: input.sectorId === "network-a" ? 80 : 20,
+    })),
+    clearingBySectorId,
+    mediaOwnership,
+    clearingEnabled: true,
+    qualityPremiumEnabled: false,
+    turn: 1,
+  });
+  const politicalUnits = settlement.allocations[0]?.deliveredUnits ?? 0;
+  const availableUnits = 80 * networkAAvailability + 20 * networkBAvailability;
+  const allocation = settlement.allocations[0];
+  const deliveredAnchor = allocation?.deliveredAnchor ?? 0;
+  const sellerReceiptAnchor = [...settlement.sellerPayoutLocalByCorpId.values()].reduce(
+    (sum, amount) => sum + amount,
+    0
+  );
+  return {
+    largestFinalShare: (() => {
+      const a =
+        80 * (settlement.clearingBySectorId.get("network-a")?.soldByCommodity?.advertising ?? 0);
+      const b =
+        20 * (settlement.clearingBySectorId.get("network-b")?.soldByCommodity?.advertising ?? 0);
+      return a + b > 0 ? round(Math.max(a, b) / (a + b)) : 0;
+    })(),
+    rawProducedUnits: 100,
+    availableUnits: round(availableUnits),
+    commercialUnits: round(commercialUnits),
+    fundedPoliticalUnits: round(politicalUnits),
+    totalUnits: round(commercialUnits + politicalUnits),
+    remainingProducedUnits: round(Math.max(0, 100 - commercialUnits - politicalUnits)),
+    overflowUnits: round(Math.max(0, commercialUnits + politicalUnits - availableUnits)),
+    deliveredPoliticalAnchor: round(deliveredAnchor),
+    refundAnchor: round(allocation?.unfilledAnchor ?? 0),
+    sellerReceiptAnchor: round(sellerReceiptAnchor),
+    payoutMatchesDeliveredAnchor: Math.abs(deliveredAnchor - sellerReceiptAnchor) < 1e-6,
+  };
+}

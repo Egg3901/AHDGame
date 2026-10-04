@@ -8,7 +8,7 @@ import { fmtN } from "./orgForces";
 import { useTranslations } from "next-intl";
 
 const mono = "'IBM Plex Mono',monospace";
-const serif = "Lora,Georgia,serif";
+const headingFont = "var(--font-geist-sans),system-ui,sans-serif";
 
 const BAND_COLOR: Record<TensionBand, string> = {
   DETENTE: "#86d978",
@@ -193,7 +193,7 @@ export function TensionHeader({
           </div>
           <h1
             id="world-tension-title"
-            style={{ margin: "3px 0 0", font: `700 21px ${serif}`, color: "#f3f1ea" }}
+            style={{ margin: "3px 0 0", font: `700 21px ${headingFont}`, color: "#f3f1ea" }}
           >
             World tension
           </h1>
@@ -214,7 +214,9 @@ export function TensionHeader({
         >
           <div>
             <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
-              <span style={{ font: `700 42px/1 ${serif}`, color }}>{Math.round(tension)}</span>
+              <span style={{ font: `700 42px/1 ${headingFont}`, color }}>
+                {Math.round(tension)}
+              </span>
               <span style={{ font: `600 12px ${mono}`, letterSpacing: ".16em", color }}>
                 {band}
               </span>

@@ -34,7 +34,14 @@ interface MarketPositionPanelProps {
    * (ticket #1145, #1162). Absent under non-plants tiers, where there is no
    * unit-denominated capacity model to report.
    */
-  room?: { headroomUnits: number; demandGapUnits?: number } | null;
+  room?: {
+    headroomUnits: number;
+    demandGapUnits?: number;
+    /** This sector's own demand throttle bound last turn; its idle capacity fills buyers first. */
+    roomHeldByOwnIdle?: boolean;
+    /** Unowned pool over owned capacity plus that pool, percent. */
+    unclaimedSharePct?: number;
+  } | null;
 }
 
 /**
@@ -140,7 +147,7 @@ export default function MarketPositionPanel({
       <h2 className="mb-4 text-lg font-bold text-foreground">
         {compact
           ? "Market Position"
-          : `Market Position — ${sector.sectorLabel} in ${sector.stateName}`}
+          : `Market Position: ${sector.sectorLabel} in ${sector.stateName}`}
       </h2>
 
       <div
@@ -247,17 +254,19 @@ export default function MarketPositionPanel({
                   </span>
                 </Tooltip>
                 <span className="ml-auto tabular-nums font-medium text-foreground">
-                  {market.unownedPercent}%
+                  {room.unclaimedSharePct ?? market.unownedPercent}%
                 </span>
               </div>
               <div className="flex items-center gap-2">
                 <Tooltip
                   content={
-                    buyersRoomUnits > 0
-                      ? roomIsShareBound
-                        ? "Capacity you may still add here, limited by unclaimed share. Buyers exist for more than the market has left to claim."
-                        : "Capacity you may still add here, limited by unmet demand. Building past it produces units that go unsold."
-                      : "No unmet demand for this output right now, so a build would produce units nobody buys. Unclaimed share stays above zero because it counts market nobody has built into, not buyers waiting."
+                    room.roomHeldByOwnIdle
+                      ? "Your plants here are already running below capacity because sales set the pace. Output climbs about 15% a turn while buyers keep taking it, so new capacity would sit idle. Fill what you have first."
+                      : buyersRoomUnits > 0
+                        ? roomIsShareBound
+                          ? "Capacity you may still add here, limited by unclaimed share. Buyers exist for more than the market has left to claim."
+                          : "Capacity you may still add here, limited by unmet demand. Building past it produces units that go unsold."
+                        : "No unmet demand for this output right now, so a build would produce units nobody buys. Unclaimed share stays above zero because it counts market nobody has built into, not buyers waiting."
                   }
                 >
                   <span className="cursor-help border-b border-dashed border-card-border/70 text-muted">
@@ -297,7 +306,7 @@ export default function MarketPositionPanel({
               Your Revenue
             </span>
             <span className="text-sm font-bold tabular-nums text-success">
-              {financials ? fmtCorpSectorMoney(perTurn(financials.revenue)) : "—"}
+              {financials ? fmtCorpSectorMoney(perTurn(financials.revenue)) : "n/a"}
               <span className="text-[10px] font-normal text-muted">/turn</span>
             </span>
           </div>
@@ -320,8 +329,8 @@ export default function MarketPositionPanel({
       {(clearingEnabled || capitalEnabled) && (
         <p className="mt-3 border-t border-card-border/60 pt-2 text-[11px] leading-snug text-muted">
           {capitalEnabled
-            ? "Revenue — and therefore this sector's valuation and share price — is limited by how much your capacity produces and how much of it actually sells. "
-            : "Revenue — and therefore this sector's valuation and share price — reflects how much of your output actually sold this turn, not just your list price. "}
+            ? "Revenue (and therefore this sector's valuation and share price) is limited by how much your capacity produces and how much of it actually sells. "
+            : "Revenue (and therefore this sector's valuation and share price) reflects how much of your output actually sold this turn, not just your list price. "}
           See the {capitalEnabled ? "Capital and Pricing" : "Pricing"} panels for the drivers.
         </p>
       )}

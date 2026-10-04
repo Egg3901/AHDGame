@@ -6,7 +6,12 @@ import { handleRouteError } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { createAdminLog } from "@/lib/adminLog";
 import type { GameConfig } from "@/lib/db/types";
-import { getMarketSystemMode, type MarketSystemMode } from "@/lib/market/featureFlag";
+import type { GameState } from "@/lib/db/types/gameState";
+import {
+  getMarketSystemMode,
+  marketAtLeast,
+  type MarketSystemMode,
+} from "@/lib/market/featureFlag";
 import { MARKET_MODE_INFO, MARKET_MODE_ORDER } from "@/lib/market/modes";
 import { getCurrentTurn } from "@/lib/currentTurn";
 import {
@@ -43,6 +48,9 @@ const patchSchema = z.object({
   sectorQualityEnabled: z.boolean().optional(),
   // Package B: quality → premium pricing coupling (requires sectorQualityEnabled).
   qualityPremiumPricingEnabled: z.boolean().optional(),
+  productLinesV2Enabled: z.boolean().optional(),
+  mediaOperatingModelsEnabled: z.boolean().optional(),
+  mediaProductSlatesEnabled: z.boolean().optional(),
   supplyAgreementsEnabled: z.boolean().optional(),
   shortageResponsiveSourcingEnabled: z.boolean().optional(),
   intervention: economicInterventionPlanSchema.optional(),
@@ -70,6 +78,8 @@ const patchSchema = z.object({
   // Command-economy regime (P0 / command-lite). Default off; stamps audit
   // fields when toggled. Tolerance lever is 0 (full repression) → 1 (tolerated).
   commandEconomyEnabled: z.boolean().optional(),
+  /** Media regulation defaults off; mirrored into gameState for zero-read law gates. */
+  mediaRegulationEnabled: z.boolean().optional(),
   commandEconomySecondEconomyTolerance: z.number().min(0).max(1).optional(),
 });
 
@@ -93,6 +103,9 @@ export async function GET() {
           brandLoyaltySliceEnabled: 1,
           sectorQualityEnabled: 1,
           qualityPremiumPricingEnabled: 1,
+          productLinesV2Enabled: 1,
+          mediaOperatingModelsEnabled: 1,
+          mediaProductSlatesEnabled: 1,
           supplyAgreementsEnabled: 1,
           shortageResponsiveSourcingEnabled: 1,
           sovereignIssuanceConsolidationEnabled: 1,
@@ -103,6 +116,7 @@ export async function GET() {
           nppFragileMarketSupplyEnabled: 1,
           extractionOutputScaleEnabled: 1,
           commandEconomyEnabled: 1,
+          mediaRegulationEnabled: 1,
           commandEconomySecondEconomyTolerance: 1,
         },
       }
@@ -117,6 +131,9 @@ export async function GET() {
       brandLoyaltySliceEnabled: config?.brandLoyaltySliceEnabled === true,
       sectorQualityEnabled: config?.sectorQualityEnabled === true,
       qualityPremiumPricingEnabled: config?.qualityPremiumPricingEnabled === true,
+      productLinesV2Enabled: config?.productLinesV2Enabled === true,
+      mediaOperatingModelsEnabled: config?.mediaOperatingModelsEnabled === true,
+      mediaProductSlatesEnabled: config?.mediaProductSlatesEnabled === true,
       supplyAgreementsEnabled: config?.supplyAgreementsEnabled === true,
       shortageResponsiveSourcingEnabled: config?.shortageResponsiveSourcingEnabled === true,
       sovereignIssuanceConsolidationEnabled: config?.sovereignIssuanceConsolidationEnabled === true,
@@ -127,6 +144,7 @@ export async function GET() {
       nppFragileMarketSupplyEnabled: config?.nppFragileMarketSupplyEnabled === true,
       extractionOutputScaleEnabled: config?.extractionOutputScaleEnabled === true,
       commandEconomyEnabled: config?.commandEconomyEnabled === true,
+      mediaRegulationEnabled: config?.mediaRegulationEnabled === true,
       commandEconomySecondEconomyTolerance:
         typeof config?.commandEconomySecondEconomyTolerance === "number"
           ? config.commandEconomySecondEconomyTolerance
@@ -167,6 +185,9 @@ export async function PATCH(request: Request) {
       brandLoyaltySliceEnabled,
       sectorQualityEnabled,
       qualityPremiumPricingEnabled,
+      productLinesV2Enabled,
+      mediaOperatingModelsEnabled,
+      mediaProductSlatesEnabled,
       supplyAgreementsEnabled,
       shortageResponsiveSourcingEnabled,
       intervention,
@@ -186,6 +207,7 @@ export async function PATCH(request: Request) {
       extractionOutputScaleEnabled,
       commandEconomyEnabled,
       commandEconomySecondEconomyTolerance,
+      mediaRegulationEnabled,
     } = parsed.data as {
       mode: MarketSystemMode;
       allowNonLive?: boolean;
@@ -197,6 +219,9 @@ export async function PATCH(request: Request) {
       brandLoyaltySliceEnabled?: boolean;
       sectorQualityEnabled?: boolean;
       qualityPremiumPricingEnabled?: boolean;
+      productLinesV2Enabled?: boolean;
+      mediaOperatingModelsEnabled?: boolean;
+      mediaProductSlatesEnabled?: boolean;
       supplyAgreementsEnabled?: boolean;
       shortageResponsiveSourcingEnabled?: boolean;
       intervention?: EconomicInterventionPlan;
@@ -216,6 +241,7 @@ export async function PATCH(request: Request) {
       extractionOutputScaleEnabled?: boolean;
       commandEconomyEnabled?: boolean;
       commandEconomySecondEconomyTolerance?: number;
+      mediaRegulationEnabled?: boolean;
     };
 
     // Server-side launch gate. MARKET_MODE_INFO[mode].live is the single source
@@ -234,8 +260,68 @@ export async function PATCH(request: Request) {
 
     const db = await getDb();
     const gameConfig = db.collection<GameConfig>("gameConfig");
-
-    const priorMode = await getMarketSystemMode();
+    if (productLinesV2Enabled === true && !marketAtLeast(mode, "plants")) {
+      return NextResponse.json(
+        { error: "Product lines require the plants market tier." },
+        { status: 400 }
+      );
+    }
+    if (mediaProductSlatesEnabled === true && !marketAtLeast(mode, "clearing")) {
+      return NextResponse.json(
+        { error: "Media product slates require the clearing market tier." },
+        { status: 400 }
+      );
+    }
+    const existingConfig = await gameConfig.findOne(
+      { _id: "default" },
+      {
+        projection: {
+          marketSystemMode: 1,
+          mediaRegulationEnabled: 1,
+          commandEconomyEnabled: 1,
+          mediaOperatingModelsEnabled: 1,
+          mediaProductSlatesEnabled: 1,
+          brandLoyaltyEnabled: 1,
+          brandLoyaltySliceEnabled: 1,
+          qualityPremiumPricingEnabled: 1,
+        },
+      }
+    );
+    const effectiveMediaModelsEnabled =
+      mediaOperatingModelsEnabled ?? existingConfig?.mediaOperatingModelsEnabled === true;
+    const effectiveMediaProductSlatesEnabled =
+      mediaProductSlatesEnabled ?? existingConfig?.mediaProductSlatesEnabled === true;
+    if (effectiveMediaProductSlatesEnabled && !effectiveMediaModelsEnabled) {
+      return NextResponse.json(
+        { error: "Media product slates require media operating models." },
+        { status: 400 }
+      );
+    }
+    if (
+      (effectiveMediaProductSlatesEnabled &&
+        !(brandLoyaltyEnabled ?? existingConfig?.brandLoyaltyEnabled)) ||
+      (effectiveMediaProductSlatesEnabled &&
+        !(brandLoyaltySliceEnabled ?? existingConfig?.brandLoyaltySliceEnabled)) ||
+      (effectiveMediaProductSlatesEnabled &&
+        !(qualityPremiumPricingEnabled ?? existingConfig?.qualityPremiumPricingEnabled))
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Media product slates require brand loyalty, loyalty clearing, and quality pricing.",
+        },
+        { status: 400 }
+      );
+    }
+    const priorMode = await getMarketSystemMode(existingConfig);
+    const effectiveMediaRegulationEnabled =
+      mediaRegulationEnabled ?? existingConfig?.mediaRegulationEnabled === true;
+    if (effectiveMediaRegulationEnabled && !marketAtLeast(mode, "clearing")) {
+      return NextResponse.json(
+        { error: "Media regulation requires the clearing market tier." },
+        { status: 400 }
+      );
+    }
     // Stamp the turn, not just the clock. See `marketSystemModeUpdatedTurn` in
     // the GameConfig type for why: the whole soak/rollback vocabulary is
     // turn-indexed, and a wall-clock timestamp cannot be mapped back to a turn
@@ -348,6 +434,12 @@ export async function PATCH(request: Request) {
       governorSet.sectorQualityEnabled = sectorQualityEnabled;
     if (typeof qualityPremiumPricingEnabled === "boolean")
       governorSet.qualityPremiumPricingEnabled = qualityPremiumPricingEnabled;
+    if (typeof productLinesV2Enabled === "boolean")
+      governorSet.productLinesV2Enabled = productLinesV2Enabled;
+    if (typeof mediaOperatingModelsEnabled === "boolean")
+      governorSet.mediaOperatingModelsEnabled = mediaOperatingModelsEnabled;
+    if (typeof mediaProductSlatesEnabled === "boolean")
+      governorSet.mediaProductSlatesEnabled = mediaProductSlatesEnabled;
     if (typeof supplyAgreementsEnabled === "boolean")
       governorSet.supplyAgreementsEnabled = supplyAgreementsEnabled;
     if (typeof shortageResponsiveSourcingEnabled === "boolean") {
@@ -399,20 +491,87 @@ export async function PATCH(request: Request) {
     }
     if (typeof commandEconomySecondEconomyTolerance === "number")
       governorSet.commandEconomySecondEconomyTolerance = commandEconomySecondEconomyTolerance;
+    if (typeof mediaRegulationEnabled === "boolean")
+      governorSet.mediaRegulationEnabled = mediaRegulationEnabled;
 
-    await gameConfig.updateOne(
-      { _id: "default" },
-      {
-        $set: {
-          marketSystemMode: mode,
-          marketSystemModeUpdatedBy: auth.admin.username,
-          marketSystemModeUpdatedAt: new Date().toISOString(),
-          marketSystemModeUpdatedTurn: currentTurn,
-          ...governorSet,
+    const gameState = db.collection<GameState>("gameState");
+    const snapshot = (enabled: boolean) => ({
+      enabled,
+      marketSystemMode: mode,
+      commandEconomyEnabled:
+        commandEconomyEnabled ?? existingConfig?.commandEconomyEnabled === true,
+    });
+    const configUpdate = () => {
+      const guard: Record<string, unknown> = { _id: "default" };
+      if (effectiveMediaProductSlatesEnabled) {
+        if (mediaOperatingModelsEnabled !== true) guard.mediaOperatingModelsEnabled = true;
+        if (brandLoyaltyEnabled !== true) guard.brandLoyaltyEnabled = true;
+        if (brandLoyaltySliceEnabled !== true) guard.brandLoyaltySliceEnabled = true;
+        if (qualityPremiumPricingEnabled !== true) guard.qualityPremiumPricingEnabled = true;
+      }
+      return gameConfig.updateOne(
+        guard,
+        {
+          $set: {
+            marketSystemMode: mode,
+            marketSystemModeUpdatedBy: auth.admin.username,
+            marketSystemModeUpdatedAt: new Date().toISOString(),
+            marketSystemModeUpdatedTurn: currentTurn,
+            ...governorSet,
+          },
         },
-      },
-      { upsert: true }
-    );
+        { upsert: !effectiveMediaProductSlatesEnabled }
+      );
+    };
+    const snapshotUpdate = (enabled: boolean) =>
+      gameState.updateOne(
+        { _id: "current" },
+        { $set: { mediaRegulationSnapshot: snapshot(enabled) } }
+      );
+
+    if (typeof mediaRegulationEnabled === "boolean") {
+      try {
+        // Keep public law gates fail-off while the authoritative turn config
+        // and its zero-read route snapshot are synchronized.
+        await snapshotUpdate(false);
+        const configResult = await configUpdate();
+        if (effectiveMediaProductSlatesEnabled && configResult.matchedCount !== 1) {
+          await snapshotUpdate(false);
+          return NextResponse.json(
+            {
+              error:
+                "Media product prerequisites changed. Refresh and enable the required gates first.",
+            },
+            { status: 409 }
+          );
+        }
+        await snapshotUpdate(effectiveMediaRegulationEnabled);
+      } catch (error) {
+        // A partial mirror must never leave regulation half-enabled. Require
+        // a fresh synchronized admin activation after any write failure.
+        await Promise.allSettled([
+          gameConfig.updateOne(
+            { _id: "default" },
+            { $set: { mediaRegulationEnabled: false } },
+            { upsert: true }
+          ),
+          snapshotUpdate(false),
+        ]);
+        throw error;
+      }
+    } else {
+      const configResult = await configUpdate();
+      if (effectiveMediaProductSlatesEnabled && configResult.matchedCount !== 1) {
+        return NextResponse.json(
+          {
+            error:
+              "Media product prerequisites changed. Refresh and enable the required gates first.",
+          },
+          { status: 409 }
+        );
+      }
+      await snapshotUpdate(effectiveMediaRegulationEnabled);
+    }
 
     await createAdminLog({
       category: "system",
@@ -427,7 +586,12 @@ export async function PATCH(request: Request) {
             ".",
     });
 
-    return NextResponse.json({ success: true, mode, priorMode });
+    return NextResponse.json({
+      success: true,
+      mode,
+      priorMode,
+      mediaRegulationEnabled: effectiveMediaRegulationEnabled,
+    });
   } catch (error) {
     return handleRouteError(error);
   }

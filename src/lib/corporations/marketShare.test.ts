@@ -4,6 +4,7 @@ import {
   computeMarketSharePercent,
   gdpDerivedMarketAnchor,
   buildMarketShareBySectorId,
+  buildNationalDominanceShareBySectorId,
   sectorCapacityUnits,
   marketUnitsFromAnchor,
 } from "./marketShare";
@@ -140,6 +141,63 @@ describe("plants tier — unit-denominated market share", () => {
     const shares = build([sector("a", 0)], []);
     expect(shares.get("a")).toBe(0);
     expect(Number.isFinite(shares.get("a")!)).toBe(true);
+  });
+
+  it("separates generic media while joining canonical and legacy entertainment rows", () => {
+    const sectors = [
+      { ...sector("generic", 100), sectorType: "media", mediaDiscriminator: null },
+      { ...sector("canonical-ent", 100), sectorType: "media", mediaDiscriminator: "entertainment" },
+      { ...sector("legacy-ent", 100), sectorType: "entertainment" },
+    ] as unknown as CorporateSector[];
+    const shares = build(sectors, []);
+
+    expect(shares.get("generic")).toBe(100);
+    expect(shares.get("canonical-ent")).toBe(50);
+    expect(shares.get("legacy-ent")).toBe(50);
+  });
+});
+
+describe("national dominance share market identity", () => {
+  it("keeps media lanes distinct and treats legacy entertainment as its canonical lane", () => {
+    const nationalStateId = "US-CA";
+    const sectors = [
+      {
+        _id: "generic",
+        stateId: nationalStateId,
+        countryId: "US",
+        revenue: 100,
+        sectorType: "media",
+        mediaDiscriminator: null,
+        corporationId: "a",
+      },
+      {
+        _id: "canonical-ent",
+        stateId: nationalStateId,
+        countryId: "US",
+        revenue: 100,
+        sectorType: "media",
+        mediaDiscriminator: "entertainment",
+        corporationId: "b",
+      },
+      {
+        _id: "legacy-ent",
+        stateId: nationalStateId,
+        countryId: "US",
+        revenue: 100,
+        sectorType: "entertainment",
+        corporationId: "c",
+      },
+    ] as unknown as CorporateSector[];
+    const shares = buildNationalDominanceShareBySectorId({
+      sectors,
+      stateById: new Map([[nationalStateId, { _id: nationalStateId, gdp: 0, countryId: "US" }]]),
+      unownedSectors: [],
+      exchangeRatesByCurrency: new Map<CurrencyCode, number>([["USD" as CurrencyCode, 1]]),
+    });
+
+    expect(shares.get("generic")).toBe(100);
+    expect(shares.get("canonical-ent")).toBe(50);
+    expect(shares.get("legacy-ent")).toBe(50);
   });
 });
 

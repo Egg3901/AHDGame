@@ -50,7 +50,7 @@ function Row({
           : {}),
       }}
     >
-      <span style={{ fontFamily: FONT.serif, color: strong ? BLEND.ink : BLEND.muted }}>
+      <span style={{ fontFamily: FONT.sans, color: strong ? BLEND.ink : BLEND.muted }}>
         {label}
       </span>
       <span style={{ fontFamily: FONT.mono, color: color ?? BLEND.ink }}>{value}</span>
@@ -68,8 +68,7 @@ function Sparkline({ bars }: { bars: SparklineBarVM[] }) {
           marginTop: 18,
           paddingTop: 14,
           borderTop: `1px solid ${BLEND.hairlineStrong}`,
-          fontFamily: FONT.serif,
-          fontStyle: "italic",
+          fontFamily: FONT.sans,
           fontSize: 13,
           color: BLEND.mutedDim,
         }}
@@ -194,7 +193,7 @@ function ContributeBlock({
           {busy ? "SENDING" : "SEND"}
         </button>
       </div>
-      <div style={{ marginTop: 7, fontFamily: FONT.serif, fontSize: 13, color: BLEND.mutedDimmer }}>
+      <div style={{ marginTop: 7, fontFamily: FONT.sans, fontSize: 13, color: BLEND.mutedDimmer }}>
         {balanceLabel}
       </div>
     </div>
@@ -225,7 +224,7 @@ export function BlendMoneySection({
       <h2
         style={{
           margin: mobile ? "0 0 12px" : "0 0 16px",
-          fontFamily: FONT.serif,
+          fontFamily: FONT.sans,
           fontSize: mobile ? 20 : 23,
           fontWeight: 600,
         }}
@@ -263,7 +262,7 @@ export function BlendMoneySection({
       <h2
         style={{
           margin: mobile ? "0 0 12px" : "0 0 16px",
-          fontFamily: FONT.serif,
+          fontFamily: FONT.sans,
           fontSize: mobile ? 20 : 23,
           fontWeight: 600,
         }}
@@ -278,7 +277,7 @@ export function BlendMoneySection({
           { label: "Actions spent", value: String(money.cumulative.actionsSpent) },
         ].map((c) => (
           <div key={c.label}>
-            <div style={{ fontFamily: FONT.serif, fontSize: 13, color: BLEND.mutedDim }}>
+            <div style={{ fontFamily: FONT.sans, fontSize: 13, color: BLEND.mutedDim }}>
               {c.label}
             </div>
             <div style={{ marginTop: 3, fontFamily: FONT.mono, fontSize: 15 }}>{c.value}</div>
@@ -291,7 +290,7 @@ export function BlendMoneySection({
           <h2
             style={{
               margin: "24px 0 4px",
-              fontFamily: FONT.serif,
+              fontFamily: FONT.sans,
               fontSize: mobile ? 20 : 23,
               fontWeight: 600,
             }}
@@ -327,7 +326,7 @@ export function BlendMoneySection({
             <div
               style={{
                 marginTop: 10,
-                fontFamily: FONT.serif,
+                fontFamily: FONT.sans,
                 fontSize: 13,
                 color: BLEND.negative,
               }}

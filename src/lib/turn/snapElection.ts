@@ -3,7 +3,8 @@
  * the turn-phase auto-snap watcher.
  *
  * A snap election:
- *   1. Cancels active/upcoming regular lower-chamber elections for the country.
+ *   1. Cancels active/upcoming regular lower-chamber elections for the country,
+ *      plus live by-elections for that chamber (dissolution lapses them).
  *   2. Fails in-progress bills whose `currentChamber` is the country's lower
  *      chamber (via `failInProgressBills`). Upper-chamber bills, JP cabinet
  *      review, and enrolled bills are preserved — those chambers are not
@@ -25,7 +26,10 @@
  * preempt a pending VONC by calling snap.
  */
 
+import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
+import { flushServerPosthog } from "@/lib/analytics/serverPosthog";
 import { withCampaignRules } from "@/lib/campaignTargeting/rules";
+import { getElectionMethod } from "@/lib/elections/electionMethod";
 
 import type { Db } from "mongodb";
 import {
@@ -47,6 +51,7 @@ import {
 import { DEFAULT_DURATIONS } from "@/lib/turn/perpetualElections";
 import { sendCountryGameEvent, DISCORD_COLORS } from "@/lib/discordWebhooks";
 import { cycleAnchorContextFromGameState } from "@/lib/elections/cycleAnchorContext";
+import { byElectionTypesFor } from "@/lib/utils/electionLabels";
 import type {
   Character,
   ElectedOfficial,
@@ -78,6 +83,8 @@ export interface TriggerSnapOptions {
   bypassLimits?: boolean;
   /** Human-friendly name for Discord embed. Defaults to country config label. */
   actorName?: string;
+  /** Post-conversion terms stamped on every race this snap opens. */
+  conversionTerms?: Election["conversionTerms"];
 }
 
 export interface TriggerSnapResult {
@@ -103,8 +110,17 @@ export async function vacateDissolvedLowerChamber(
   db: Db,
   countryId: CountryId,
   lowerChamberKey: string,
-  now: Date
+  now: Date,
+  currentTurn = 0
 ): Promise<void> {
+  const departing = await db
+    .collection<Character>("characters")
+    .find(
+      { countryId, "currentOffice.type": lowerChamberKey },
+      { projection: { _id: 1, party: 1 } }
+    )
+    .toArray()
+    .catch(() => []);
   await db.collection<ElectedOfficial>("electedOfficials").deleteMany({
     officeType: lowerChamberKey,
     ...officialsCountryScope(countryId),
@@ -126,6 +142,20 @@ export async function vacateDissolvedLowerChamber(
       { $set: { currentOffice: null, updatedAt: now } }
     ),
   ]);
+  await Promise.all(
+    departing.map((character) =>
+      captureOfficeTransition({
+        db,
+        officeType: lowerChamberKey,
+        transitionType: "lost",
+        partyId: character.party ?? undefined,
+        selectionMethod: "removal",
+        nationId: countryId,
+        turn: currentTurn,
+      })
+    )
+  );
+  await flushServerPosthog();
 }
 
 export async function triggerSnapElection(
@@ -205,12 +235,16 @@ export async function triggerSnapElection(
   //    rows attached to them — leaving them `active` orphans the rows and
   //    blocks the same characters from being slated/entered into the snap race
   //    (see slate invitations / findBlockingActiveCandidacy guards).
+  //    Live by-elections for the chamber go too: the members they would seat
+  //    are dissolved below, and a by-election resolving after the snap would
+  //    seat on top of the full delegation the snap elects. The by-election
+  //    watcher reopens their vacancies, which the snap result then subsumes.
   const electionsToCancel = await db
     .collection<Election>("elections")
     .find(
       {
         countryId,
-        electionType: lowerChamberKey,
+        electionType: { $in: [lowerChamberKey, ...byElectionTypesFor(lowerChamberKey)] },
         status: { $in: ["active", "upcoming"] as ElectionStatus[] },
       },
       { projection: { _id: 1 } }
@@ -279,6 +313,7 @@ export async function triggerSnapElection(
       countryId,
       electionType: snapElectionType,
       state: regionId,
+      allocationMethod: getElectionMethod(countryId, snapElectionType, gameState?.preset),
       seatId: getSeatIdFromElection({
         countryId,
         electionType: lowerChamberKey,
@@ -292,6 +327,7 @@ export async function triggerSnapElection(
       // chamber is the settlement's business and rescheduling every future
       // election is not.
       ...(imposed && { imposedSnap: true }),
+      ...(opts.conversionTerms && { conversionTerms: opts.conversionTerms }),
       totalSeats: seatsByRegion.get(regionId) ?? 1,
       startTime: now,
       primaryEndTime: new Date(now.getTime() + snapDur.primaryDurationHours * 3_600_000),
@@ -315,7 +351,7 @@ export async function triggerSnapElection(
   // 4. Dissolution immediately ends every lower-chamber mandate. This must
   //    happen before government cleanup so cabinet members cannot be restored
   //    to seats that no longer exist.
-  await vacateDissolvedLowerChamber(db, countryId, lowerChamberKey, now);
+  await vacateDissolvedLowerChamber(db, countryId, lowerChamberKey, now, currentTurn);
 
   // 5. Increment counters. Auto-snap still increments so operators can see
   //    that an auto-snap fired; the only difference is that the limit was

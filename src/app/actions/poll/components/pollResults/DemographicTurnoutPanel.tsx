@@ -6,34 +6,29 @@ import type { DemographicTurnoutData } from "../../types";
 
 const DEMOGRAPHIC_SECTIONS: Array<{
   key: keyof DemographicTurnoutData;
-  icon: string;
   label: string;
   tooltip: string;
 }> = [
   {
     key: "race",
-    icon: "👥",
     label: "Race / Ethnicity",
     tooltip:
       "Estimated voter turnout and count by racial/ethnic group. Turnout rates are national baselines; population shares are state-specific.",
   },
   {
     key: "age",
-    icon: "📅",
     label: "Age Group",
     tooltip:
       "Older voters consistently turn out at higher rates. This affects which groups are larger in your state's modeled electorate.",
   },
   {
     key: "education",
-    icon: "🎓",
     label: "Education",
     tooltip:
       "College and graduate-degree holders vote at significantly higher rates, boosting groups like Secular Professionals and College Liberals.",
   },
   {
     key: "wealth",
-    icon: "💰",
     label: "Income",
     tooltip:
       "Higher-income voters have stronger turnout, lifting groups like Small Business and Secular Professionals in voter-weighted estimates.",
@@ -102,7 +97,7 @@ export function DemographicTurnoutPanel({
             state pop × group % × turnout rate.
           </div>
           <div className="divide-y divide-card-border/30">
-            {DEMOGRAPHIC_SECTIONS.map(({ key, icon, label, tooltip }) => {
+            {DEMOGRAPHIC_SECTIONS.map(({ key, label, tooltip }) => {
               const entries = demographicTurnout[key]
                 .slice()
                 .sort((a, b) => b.turnoutPop - a.turnoutPop);
@@ -110,7 +105,6 @@ export function DemographicTurnoutPanel({
               return (
                 <div key={key} className="px-5 py-4">
                   <div className="flex items-center gap-2 mb-2.5">
-                    <span>{icon}</span>
                     <Tooltip content={tooltip}>
                       <span className="text-sm font-semibold cursor-help">{label}</span>
                     </Tooltip>

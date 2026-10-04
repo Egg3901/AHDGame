@@ -8,6 +8,8 @@
  * The API is still the authority: this only decides what to show.
  */
 
+import { RU_1991_ECONOMIC_REGION_POPULATION } from "@/lib/countries/ru/data/ruPopulation1991";
+import { isRussianDumaNationalList } from "@/lib/countries/ru/rules/assemblyScope";
 import type { CharacterBasic, ElectionDisplay } from "@/lib/db/types";
 import {
   isElectionTypeEntryBlocked,
@@ -65,7 +67,14 @@ export function resolveEntryAction({
     !!character.countryId &&
     isNationwideDirectExecutiveElection(election.electionType, election.state, character.countryId);
 
-  if (!isHomeState && !isEligibleNationwideExecutive) return "none";
+  const isEligibleDumaList =
+    character.countryId === "RU" &&
+    Object.prototype.hasOwnProperty.call(RU_1991_ECONOMIC_REGION_POPULATION, character.homeState) &&
+    character.party !== "independent" &&
+    !!character.party &&
+    isRussianDumaNationalList(election);
+
+  if (!isHomeState && !isEligibleNationwideExecutive && !isEligibleDumaList) return "none";
   if (inAnyRace) return "none";
   if (primaryEnded) return "none";
 

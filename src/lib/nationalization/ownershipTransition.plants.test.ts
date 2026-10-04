@@ -21,6 +21,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { queueUndeliveredCost } from "@/lib/corporations/buildDelivery";
+import { unprotectedConstructionPropertyFilter } from "@/lib/corporations/securedConstructionProperty";
 import { NATIONALIZATION_REVENUE_HAIRCUT } from "./constants";
 
 const marketMode = { value: "capital" as string };
@@ -66,7 +68,7 @@ vi.mock("./nationalCorporation", () => ({
 }));
 vi.mock("./treasury", () => ({
   debitTreasuryCompensation: vi.fn().mockResolvedValue(0),
-  creditTreasuryProceeds: vi.fn().mockResolvedValue(undefined),
+  creditTreasuryProceedsFromAnchor: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("./consequences/apply", () => ({
   applyNationalizationConsequences: vi
@@ -199,12 +201,15 @@ describe("absorbSectorIntoNatCorp — merge branch", () => {
 
   it("below plants merges revenue and writes no plant field", async () => {
     const call = await run(survivor);
-    expect(call[0]).toEqual({ _id: survivorId });
+    expect(call[0]).toEqual({ _id: survivorId, ...unprotectedConstructionPropertyFilter() });
     expect(call[1].$inc!.revenue).toBe(Math.round(1_000_000 * KEEP));
     expect(call[1].$set).not.toHaveProperty("capitalStock");
     expect(call[1].$set).not.toHaveProperty("buildQueue");
     expect(call[1].$set).not.toHaveProperty("plantsStartTurn");
-    expect(db.collectionMocks.corporateSectors.deleteOne).toHaveBeenCalledWith({ _id: sectorId });
+    expect(db.collectionMocks.corporateSectors.deleteOne).toHaveBeenCalledWith({
+      _id: sectorId,
+      ...unprotectedConstructionPropertyFilter(),
+    });
   });
 
   it("under plants folds the donor's plant state into the survivor before deleting it", async () => {
@@ -214,9 +219,13 @@ describe("absorbSectorIntoNatCorp — merge branch", () => {
     // Capacity is CONSERVED across the merge, less the single deliberate haircut
     // sink: survivor 2000 + donor 1000 × 0.85.
     expect(set.capitalStock).toBe(2000 + 1000 * KEEP);
-    // CIP + both build orders transfer at full ₳ value, queue in landing order.
-    expect(set.constructionInProgressAnchor).toBe(50_000);
+    // Both orders transfer at full ₳ value, queue in landing order. Stored CIP
+    // is a sectorTurn-owned snapshot; the resulting queue remains its source.
+    expect(set).not.toHaveProperty("constructionInProgressAnchor");
     expect((set.buildQueue as { onlineTurn: number }[]).map((o) => o.onlineTurn)).toEqual([9, 20]);
+    expect(
+      queueUndeliveredCost(set.buildQueue as Parameters<typeof queueUndeliveredCost>[0], 5)
+    ).toBe(50_000);
     // Earlier ramp anchor wins — re-anchoring would re-clamp production the
     // donor had already ramped past.
     expect(set.plantsStartTurn).toBe(5);
@@ -225,6 +234,9 @@ describe("absorbSectorIntoNatCorp — merge branch", () => {
     // avoid a double count, it puts the donor's revenue nowhere in the world
     // for the turn until sectorTurn next restates the survivor.
     expect(call[1].$inc!.revenue).toBe(Math.round(1_000_000 * KEEP));
-    expect(db.collectionMocks.corporateSectors.deleteOne).toHaveBeenCalledWith({ _id: sectorId });
+    expect(db.collectionMocks.corporateSectors.deleteOne).toHaveBeenCalledWith({
+      _id: sectorId,
+      ...unprotectedConstructionPropertyFilter(),
+    });
   });
 });

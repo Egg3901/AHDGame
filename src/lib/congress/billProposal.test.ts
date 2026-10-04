@@ -10,6 +10,10 @@ beforeEach(() => {
   db.collection("legislationTypes");
   db.collection("statePolicies");
   db.collection("enactedLaws");
+  db.collection("gameState");
+  db.collection("gameConfig");
+  db.collection("corporateSectors");
+  db.collection("bankMoneyMoves");
 });
 
 describe("validateBillProvisions — embargo", () => {
@@ -110,6 +114,89 @@ describe("validateBillProvisions — embargo", () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.embargoProvisions[0]).toMatchObject({ mode: "block" });
+  });
+});
+
+describe("validateBillProvisions: media ownership availability", () => {
+  const provision = {
+    legislationTypeId: "us_media_communications",
+    policyOptionId: "media_ownership_cap",
+    effectDirection: 1,
+    economic: -1,
+  };
+
+  it("rejects ownership legislation until delivered concentration exceeds the trigger", async () => {
+    db.collectionMocks.legislationTypes.findOne.mockResolvedValue({
+      _id: "us_media_communications",
+      name: "Media and Communications Regulation Act",
+      policyDomain: "mediaInformation",
+      policyOptions: [],
+    });
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      _id: "current",
+      currentYear: 1991,
+      currentTurn: 12,
+      eraSystemEnabled: true,
+      mediaRegulationSnapshot: {
+        enabled: true,
+        marketSystemMode: "clearing",
+        commandEconomyEnabled: false,
+      },
+    });
+    db.collectionMocks.corporateSectors.find.mockReturnValue({
+      toArray: async () => [
+        {
+          _id: "sector-a",
+          stateId: "CA",
+          corporationId: { toString: () => "corp-a" },
+          sectorType: "media",
+          strategyId: "standard",
+          producedUnits: 100,
+          soldByCommodity: { advertising: 0.6 },
+          soldByCommodityTurn: 12,
+        },
+        {
+          _id: "sector-b",
+          stateId: "CA",
+          corporationId: { toString: () => "corp-b" },
+          sectorType: "media",
+          strategyId: "standard",
+          producedUnits: 100,
+          soldByCommodity: { advertising: 0.4 },
+          soldByCommodityTurn: 12,
+        },
+      ],
+    } as never);
+
+    const result = await validateBillProvisions(db as unknown as Db, [provision], "social", "US");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/exceeds 65%/);
+  });
+
+  it("does not load sector concentration data with regulation disabled", async () => {
+    db.collectionMocks.legislationTypes.findOne.mockResolvedValue({
+      _id: "us_media_communications",
+      name: "Media and Communications Regulation Act",
+      policyDomain: "mediaInformation",
+      policyOptions: [],
+    });
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      _id: "current",
+      mediaRegulationSnapshot: {
+        enabled: false,
+        marketSystemMode: "clearing",
+        commandEconomyEnabled: false,
+      },
+    });
+
+    const result = await validateBillProvisions(db as unknown as Db, [provision], "social", "US");
+
+    expect(result.ok).toBe(true);
+    expect(db.collectionMocks.corporateSectors.find).not.toHaveBeenCalled();
+    expect(db.collectionMocks.gameConfig.findOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.bankMoneyMoves.find).not.toHaveBeenCalled();
+    expect(db.collectionMocks.gameState.findOne).toHaveBeenCalledOnce();
   });
 });
 
@@ -410,5 +497,59 @@ it("rejects a national rate-setting independence proposal after euro accession",
     ok: false,
     status: 400,
     error: expect.stringContaining("shared institution"),
+  });
+});
+
+describe("economic system reform provisions", () => {
+  let reformDb: MockDb;
+  beforeEach(() => {
+    reformDb = createMockDb();
+  });
+
+  it("accepts a reform on an economy bill in a planned-era country", async () => {
+    const result = await validateBillProvisions(
+      reformDb as unknown as Db,
+      [{ type: "economic_system_reform", target: "market" }],
+      "economy",
+      "DD"
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.economicSystemReformProvisions).toEqual([
+        { type: "economic_system_reform", target: "market" },
+      ]);
+    }
+  });
+
+  it("refuses a market country", async () => {
+    const result = await validateBillProvisions(
+      reformDb as unknown as Db,
+      [{ type: "economic_system_reform", target: "command" }],
+      "economy",
+      "US"
+    );
+    expect(result).toMatchObject({ ok: false, status: 400 });
+  });
+
+  it("refuses other bill categories, unknown targets and duplicates", async () => {
+    for (const [provisions, category] of [
+      [[{ type: "economic_system_reform", target: "market" }], "social"],
+      [[{ type: "economic_system_reform", target: "anarchy" }], "economy"],
+      [
+        [
+          { type: "economic_system_reform", target: "market" },
+          { type: "economic_system_reform", target: "dual_track" },
+        ],
+        "economy",
+      ],
+    ] as const) {
+      const result = await validateBillProvisions(
+        reformDb as unknown as Db,
+        provisions as unknown as unknown[],
+        category,
+        "DD"
+      );
+      expect(result.ok).toBe(false);
+    }
   });
 });

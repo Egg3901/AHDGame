@@ -6,7 +6,8 @@ import { Tooltip } from "@/components/ui";
 import { formatBankMoney } from "@/components/banking/formatBankMoney";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { ConsolePayload } from "../types";
-import { Eyebrow } from "../components/BankSection";
+import { Td, Th } from "@/components/corporation/dense/DenseKit";
+import { BankPanel } from "../components/BankSection";
 
 /**
  * Every cap that can stop a player, with the rule and the numbers in it.
@@ -28,27 +29,30 @@ export function CapsPanel({ data }: { data: ConsolePayload }) {
   const currency = data.currency as CurrencyCode;
 
   return (
-    <section className="rounded-lg border border-card-border bg-card p-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <div className="space-y-1">
-          <Eyebrow kind="reference" />
-          <h3 className="text-sm font-semibold uppercase tracking-widest text-muted">
-            Your limits, and where they come from
-          </h3>
-        </div>
+    <BankPanel
+      kind="reference"
+      title="Your limits, and where they come from"
+      actions={
         <Link
           href="/wiki/private-banking"
-          className="text-xs text-accent underline underline-offset-2"
+          className="text-xs text-foreground underline decoration-card-border underline-offset-2 hover:decoration-foreground"
         >
           How banking works
         </Link>
-      </div>
-
-      <div className="mt-3 grid gap-3 sm:grid-cols-2">
-        {caps.map((cap) => (
-          <div key={cap.key} className="rounded border border-card-border/60 p-3">
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="text-xs uppercase tracking-widest text-muted">
+      }
+    >
+      <table className="w-full border-collapse">
+        <thead>
+          <tr>
+            <Th>Limit</Th>
+            <Th align="right">Value</Th>
+            <Th>What moves it</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {caps.map((cap) => (
+            <tr key={cap.key} className="align-top">
+              <Td className="text-foreground">
                 {cap.label}
                 <Tooltip
                   content={t("tooltips.capFormula", {
@@ -63,15 +67,15 @@ export function CapsPanel({ data }: { data: ConsolePayload }) {
                   })}
                   label={t("tooltips.capFormulaLabel", { label: cap.label })}
                 />
-              </span>
-              <span className="font-mono text-sm text-foreground">
-                {formatBankMoney(cap.value, currency)}
-              </span>
-            </div>
-            <p className="mt-2 text-[11px] text-muted">{cap.lever}</p>
-          </div>
-        ))}
-      </div>
-    </section>
+              </Td>
+              <Td align="right">{formatBankMoney(cap.value, currency)}</Td>
+              <Td wrap className="text-xs text-muted">
+                {cap.lever}
+              </Td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </BankPanel>
   );
 }

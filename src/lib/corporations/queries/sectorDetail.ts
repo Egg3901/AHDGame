@@ -1,3 +1,4 @@
+import { loadInvestmentBondReference } from "@/lib/corporations/investment/bondReference";
 import { NextResponse } from "next/server";
 import { findMergedRegionMetrics } from "@/lib/macroMetrics/merge";
 import { ObjectId } from "mongodb";
@@ -41,14 +42,21 @@ import type {
   MacroEconomicValues,
 } from "@/lib/constants/corporations";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
-import { type CommodityType } from "@/lib/constants/commodities";
+import { eraScaledBasePrices, type CommodityType } from "@/lib/constants/commodities";
 import { sectorDemandGapUnits } from "@/lib/market/sectorDemandGap";
 import { commodityDemandGap, isStateScopedCommodity } from "@/lib/market/commodityMarketScope";
 import { latentTopUpForCountry, latentTopUpForState } from "@/lib/market/latentShortageSignal";
 import { bookFor, loadReachableBooks } from "@/lib/trade/queries/loadReachableBooks";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CommodityPrice, GameConfig, GameState } from "@/lib/db/types";
-import { getEffectiveStrategyRates } from "@/lib/constants/sectorStrategies";
+import {
+  getEffectiveStrategyRatesForOperatingModel,
+  getOperatingSectorType,
+  getSectorStrategies,
+} from "@/lib/constants/sectorStrategies";
+import { computeRetoolHint } from "@/lib/corporations/retoolHint";
+import { applyExtractionResourceCapacityToSupply } from "@/lib/corporations/extractionResourceSupply";
+import { capacityRescaleRatio } from "@/lib/constants/capacityEconomy";
 import { STARTING_YEAR, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import {
   getCorpFxRate,
@@ -70,6 +78,7 @@ import {
 } from "@/lib/corporations/queries/extractionOpportunities";
 import type { ExtractableResource } from "@/lib/constants/commodities";
 import { buildSectorCommoditySections } from "@/lib/corporations/queries/sectorDetailCommodities";
+import { supportsCostPlusPricing, validCostPlusBasis } from "@/lib/market/costPlusPricing/rules";
 import { sectorEconomicRevenue } from "@/lib/corporations/sectorRevenueBasis";
 import { buildPolicyStackRows } from "@/lib/corporations/plantsPnlBasis";
 import {
@@ -90,7 +99,7 @@ import {
   buildNationalDominanceShareBySectorId,
   unownedHeadroomUnitsOf,
 } from "@/lib/corporations/marketShare";
-import { getSectorTechEffects } from "@/lib/constants/techTree";
+import { getSectorTechEffects, getStrategyAvailability } from "@/lib/constants/techTree";
 import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
 import { corpLiquidCapitalToAnchor } from "@/lib/currency/corporationCapital";
 import { corpToSectorCountrySpread } from "@/lib/currency/sectorFxSpread";
@@ -135,13 +144,43 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       return NextResponse.json({ error: "Invalid sector ID" }, { status: 400 });
     }
 
-    const sector = await db
-      .collection<CorporateSector>("corporateSectors")
-      .findOne({ _id: new ObjectId(sectorId), corporationId: corporation._id });
+    const governorConfig = await db.collection<GameConfig>("gameConfig").findOne(
+      { _id: "default" },
+      {
+        projection: {
+          marketGovernorCap: 1,
+          marketGovernorRampTurns: 1,
+          explicitPlantCostsEnabled: 1,
+          mediaEditorialEnabled: 1,
+          mediaOperatingModelsEnabled: 1,
+          privateBankingEnabled: 1,
+          bankConstructionFinanceEnabled: 1,
+          treasuryCashLedgerEnabled: 1,
+        },
+      }
+    );
+
+    const sector = await db.collection<CorporateSector>("corporateSectors").findOne(
+      { _id: new ObjectId(sectorId), corporationId: corporation._id },
+      {
+        projection:
+          governorConfig?.explicitPlantCostsEnabled === true
+            ? {}
+            : { pricingMode: 0, costPlusCostBasis: 0 },
+      }
+    );
 
     if (!sector) {
       return NextResponse.json({ error: "Sector not found" }, { status: 404 });
     }
+    const editorialStance =
+      governorConfig?.mediaEditorialEnabled === true && sector.sectorType === "media"
+        ? ((
+            await db
+              .collection<Corporation>("corporations")
+              .findOne({ _id: corporation._id }, { projection: { editorialStance: 1 } })
+          )?.editorialStance ?? { economic: 0, social: 0 })
+        : undefined;
 
     // Check if requesting user is CEO
     const user = await getAuthUser().catch(() => null);
@@ -355,12 +394,14 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         // kept for the existing wage-demand display, which predates rivals.
         // Which union actually represents THIS sector is a separate lookup
         // below, keyed on the sector's own `representingUnionId`.
-        db
-          .collection<Union>("unions")
-          .findOne(
-            { countryId: sectorCountryId, sectorType: sector.sectorType },
-            { projection: { name: 1, ownerId: 1, demandedWageLevel: 1, undergroundStrength: 1 } }
-          ),
+        db.collection<Union>("unions").findOne(
+          {
+            countryId: sectorCountryId,
+            sectorType: sector.sectorType,
+            industryModel: sector.industryModel ?? null,
+          },
+          { projection: { name: 1, ownerId: 1, demandedWageLevel: 1, undergroundStrength: 1 } }
+        ),
       ]);
 
     // Union dues v1: the union that actually holds this sector, which may be a
@@ -399,6 +440,8 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
                 stateId: 1,
                 countryId: 1,
                 sectorType: 1,
+                industryModel: 1,
+                mediaDiscriminator: 1,
                 revenue: 1,
               },
             }
@@ -406,7 +449,11 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
           .toArray(),
         db
           .collection<CorporateSector>("corporateSectors")
-          .find({ stateId: sector.stateId, sectorType: sector.sectorType })
+          .find({
+            stateId: sector.stateId,
+            sectorType: sector.sectorType,
+            industryModel: sector.industryModel ?? null,
+          })
           .toArray(),
       ]);
 
@@ -452,6 +499,8 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       db.collection<UnownedSector>("unownedSectors").findOne({
         stateId: sector.stateId,
         sectorType: sector.sectorType,
+        industryModel: sector.industryModel ?? null,
+        mediaDiscriminator: sector.mediaDiscriminator ?? null,
       }),
     ]);
     const corpByIdForLookup = new Map(corpsForLookup.map((c) => [c._id.toString(), c]));
@@ -462,7 +511,11 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
     const ftaCoverage = buildFtaCoverageLookup(allSectorsRaw, corpByIdForLookup, activeFtaPairs);
 
     // Extract raw state metric values for display context and modifier computation
-    const sectorType = sector.sectorType as CorporationType;
+    const sectorType = getOperatingSectorType(
+      sector.sectorType,
+      sector.industryModel,
+      sector.mediaDiscriminator
+    ) as CorporationType;
     const metrics: StateMetricValues = {
       fullMetrics: stateMetrics ?? null,
       unemploymentRate: stateMetrics?.economic?.unemploymentRate?.value ?? null,
@@ -544,15 +597,19 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       STARTING_YEAR + Math.floor((Math.max(1, currentTurn) - 1) / TURNS_PER_YEAR);
     const techCorpView = {
       type: corporation.type,
+      industryModel: corporation.industryModel,
+      mediaDiscriminator: corporation.mediaDiscriminator,
       unlockedTechNodeIds: corporation.unlockedTechNodeIds,
       techDecadeLane: corporation.techDecadeLane,
     };
-    const effectiveRates = getEffectiveStrategyRates(
+    const effectiveRates = getEffectiveStrategyRatesForOperatingModel(
       sectorType,
       sector.strategyId ?? "standard",
       sector.transitionFromStrategyId,
       sector.transitionStartTurn,
-      currentTurn
+      currentTurn,
+      sector.industryModel,
+      sector.mediaDiscriminator
     );
 
     // Extraction-only: resource capacity and per-resource multipliers ,
@@ -729,29 +786,42 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       // Same governor bounds the turn processor resolves (turn/corporation
       // index.ts), read from gameConfig, not gameState, so the "market support"
       // pill counts down against the ramp the engine is actually applying.
-      const governorConfig = await db
-        .collection<GameConfig>("gameConfig")
-        .findOne(
-          { _id: "default" },
-          { projection: { marketGovernorCap: 1, marketGovernorRampTurns: 1 } }
-        );
       const marketCtx = buildMarketContext(marketMode, {
         cap: governorConfig?.marketGovernorCap,
         rampTurns: governorConfig?.marketGovernorRampTurns,
       });
+      if (
+        pricing &&
+        governorConfig?.explicitPlantCostsEnabled === true &&
+        supportsCostPlusPricing(sector.sectorType)
+      ) {
+        pricing.costPlusEnabled = true;
+        pricing.costPlusReady = validCostPlusBasis(sector.costPlusCostBasis);
+        pricing.pricingMode = sector.pricingMode === "costPlus" ? "costPlus" : "market";
+      }
       const primeRate = await resolveCountryPrimeRate(db, sectorCountryId);
       const ceoAcumen =
         (ceo as { stats?: { businessAcumen?: number } } | null)?.stats?.businessAcumen ??
         NEUTRAL_STAT;
       const techBuildCostMultiplier = techTreesEnabled
-        ? getSectorTechEffects(techCorpView, corporation.type).growthCostMultiplier
+        ? getSectorTechEffects(
+            techCorpView,
+            sectorType,
+            sector.industryModel,
+            sector.mediaDiscriminator
+          ).growthCostMultiplier
         : 1;
       // Tech margin points ride `policyCredit` under plants like every other
       // non-physical modifier, and `computeAllMarginModifiers` does not carry
       // them, so name the row here rather than letting it fall into the scale
       // factor unlabelled (ticket 1122).
       const techMarginBonusPp = techTreesEnabled
-        ? getSectorTechEffects(techCorpView, corporation.type).marginBonusPp
+        ? getSectorTechEffects(
+            techCorpView,
+            sectorType,
+            sector.industryModel,
+            sector.mediaDiscriminator
+          ).marginBonusPp
         : 0;
       // The physical input bill: the same demand rows the Inputs panel renders,
       // priced at the BILLED unit price (base x realization factor, the price
@@ -792,6 +862,70 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         });
       });
 
+      // Ticket 1370 follow-up: when the plant is held back because the
+      // valuable part of its output is oversupplied, name the strategy whose
+      // output this market is short of. Advisory only. Prices and books are the
+      // sector's own market, the same ones the throttle and clearing read.
+      const marketRatioFor = (commodity: CommodityType): number | null => {
+        const doc = priceDocByCommodity.get(commodity);
+        if (!doc || !(doc.basePrice > 0)) return null;
+        const price = isStateScopedCommodity(commodity)
+          ? doc.statePrices?.[sector.stateId]
+          : (doc.reachablePrices?.[sectorCountryId] ?? doc.nationalPrices?.[sectorCountryId]);
+        const value = typeof price === "number" && price > 0 ? price : doc.globalPrice;
+        return typeof value === "number" && value > 0 ? value / doc.basePrice : null;
+      };
+      const marketBookFor = (commodity: CommodityType) => {
+        const doc = priceDocByCommodity.get(commodity);
+        if (!doc) return null;
+        if (isStateScopedCommodity(commodity)) {
+          return {
+            supply: doc.stateSupply?.[sector.stateId] ?? 0,
+            demand: doc.stateDemand?.[sector.stateId] ?? 0,
+          };
+        }
+        const supply = doc.nationalSupply?.[sectorCountryId];
+        const demand = doc.nationalDemand?.[sectorCountryId];
+        return typeof supply === "number" && typeof demand === "number"
+          ? { supply, demand }
+          : { supply: doc.globalSupply, demand: doc.globalDemand };
+      };
+      const retoolHint = computeRetoolHint({
+        currentStrategyId: sector.strategyId ?? "standard",
+        currentSupply: effectiveSupply,
+        soldByCommodity: sector.soldByCommodity,
+        demandThrottleFactor: sector.demandThrottleFactor,
+        mothballed: sector.mothballed === true,
+        isTransitioning: effectiveRates.isTransitioning,
+        producedUnits: sector.producedUnits,
+        capacityUnits: sector.operatingCapacityUnits ?? sector.capitalStock,
+        strategies: getSectorStrategies(
+          sectorType,
+          governorConfig?.mediaOperatingModelsEnabled === true,
+          sector.mediaDiscriminator
+        ),
+        isAvailable: (candidate) =>
+          !getStrategyAvailability(techCorpView, candidate, techCurrentYear, techTreesEnabled)
+            .locked,
+        supplyFor: (candidate) =>
+          applyExtractionResourceCapacityToSupply(
+            sectorType,
+            candidate.supply,
+            stateResources === undefined ? undefined : (stateResources ?? {})
+          ),
+        rescaleRatio: (toStrategyId) =>
+          capacityRescaleRatio(
+            sectorType,
+            sector.strategyId,
+            toStrategyId,
+            sector.industryModel,
+            sector.mediaDiscriminator
+          ),
+        priceRatioFor: marketRatioFor,
+        balanceFor: marketBookFor,
+        basePrices: eraScaledBasePrices(sectorDetailUnitScale),
+      });
+
       plants = buildSectorPlantsSection({
         sector,
         sectorType,
@@ -828,6 +962,15 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
           sectorDetailUnitScale
         ),
         demandGapUnits,
+        // Every producer's capacity in this cell (the focal sector included),
+        // so "Unclaimed share" reads the same pool `headroomUnits` measures.
+        retoolHint,
+        ownedCellCapacityUnits: siblingsSectors.reduce((sum, s) => {
+          const units = s.operatingCapacityUnits ?? s.capitalStock;
+          return (
+            sum + (typeof units === "number" && Number.isFinite(units) && units > 0 ? units : 0)
+          );
+        }, 0),
         workers: sector.workers ?? calculateWorkers(sectorRevenueAnchor, metrics.workforceSkill),
         investment: {
           overheadDailyAnchor:
@@ -896,6 +1039,41 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       });
     }
 
+    if (
+      plants &&
+      isCeo &&
+      governorConfig?.privateBankingEnabled === true &&
+      governorConfig.bankConstructionFinanceEnabled === true &&
+      governorConfig.treasuryCashLedgerEnabled === true &&
+      Number.isFinite(corporationFxRate) &&
+      corporationFxRate > 0
+    ) {
+      const currency = resolveCorpLiquidCurrencyCode(corporation);
+      if (currency)
+        plants.buildQuote.financing = {
+          corporationId: String(corporation._id),
+          currency,
+          localPerAnchor: corporationFxRate,
+          ...(sector.constructionFinancing?.status === "awaiting_approval" ||
+          sector.constructionFinancing?.status === "funding"
+            ? {
+                pendingRequest: {
+                  claimId: sector.constructionFinancing.claimId,
+                  status: sector.constructionFinancing.status,
+                },
+              }
+            : {}),
+        };
+    }
+
+    if (plants?.investment) {
+      plants.investment.bondReference = await loadInvestmentBondReference(
+        db,
+        resolveCorpLiquidCurrencyCode(corporation),
+        currentTurn
+      );
+    }
+
     const payload: Record<string, unknown> = {
       sector: {
         _id: sector._id,
@@ -907,7 +1085,11 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         countryId: sectorCountryId,
         stateName: state?.name ?? sector.stateId,
         sectorType: sector.sectorType,
-        sectorLabel: CORPORATION_TYPE_LABELS[sector.sectorType as CorporationType],
+        industryModel: sector.industryModel ?? null,
+        sectorLabel:
+          sector.sectorType === "manufacturing" && sector.industryModel === "vehicles"
+            ? "Vehicle manufacturing"
+            : CORPORATION_TYPE_LABELS[sectorType],
         displayName: sector.displayName ?? null,
         targetGrowthRate: sector.targetGrowthRate ?? 0,
         currentGrowthRate: sector.currentGrowthRate ?? sector.growthRate ?? 0,
@@ -965,6 +1147,8 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         forSale: sector.forSale
           ? {
               listedAt: sector.forSale.listedAt,
+              foreclosed: sector.forSale.foreclosed,
+              pledged: sector.forSale.pledged,
               priceAnchor: sector.forSale.priceAnchor,
               npvAnchor: sector.forSale.npvAnchor,
             }
@@ -986,6 +1170,9 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         // Drives the Prospect modal's success-odds / yield preview (corp-side
         // prospecting math is a pure function of rdScore).
         rdScore: corporation.rdScore ?? 0,
+        ...(governorConfig?.mediaEditorialEnabled === true && sector.sectorType === "media"
+          ? { mediaEditorialEnabled: true, editorialStance }
+          : {}),
       },
       ceo: ceo
         ? { name: ceo.name, sequentialId: ceo.sequentialId, avatarUrl: ceo.avatarUrl }
@@ -1047,6 +1234,8 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
           techCurrentYear,
           techCorpView,
           sectorType,
+          industryModel: sector.industryModel,
+          mediaDiscriminator: sector.mediaDiscriminator,
         }),
         profit: Math.round(sectorAmountInCorpCurrency(profit)),
         // Rates displayed to the player are whichever side (domestic/foreign) actually applies
@@ -1138,6 +1327,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         techCorpView,
         techCurrentYear,
         techTreesEnabled,
+        mediaOperatingModelsEnabled: governorConfig?.mediaOperatingModelsEnabled === true,
         shouldRedact,
         stateResources,
         strategyCapacityMultipliers,

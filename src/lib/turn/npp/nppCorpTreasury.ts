@@ -12,6 +12,7 @@
  * so a raid or plant build is still affordable tomorrow.
  */
 
+import { withBondPoolLedgerSnapshot } from "@/lib/bonds/marketPoolLedger";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import type { Bond, Corporation, CorporateSector, ExchangeRate } from "@/lib/db/types";
@@ -140,6 +141,10 @@ function resolveBondCurrency(bond: Bond, fallbackCountry: string | undefined): C
 }
 
 export async function processNppCorpTreasury(db: Db, turn: number, now: Date): Promise<number> {
+  return withBondPoolLedgerSnapshot(db, turn, () => runNppCorpTreasury(db, turn, now));
+}
+
+async function runNppCorpTreasury(db: Db, turn: number, now: Date): Promise<number> {
   const nppCorps = await db
     .collection<Corporation>("corporations")
     .find(

@@ -11,14 +11,14 @@
  * under depreciation. No reads or writes here, only the turn inputs.
  */
 import { activeCapacityFraction } from "@/lib/corporations/investment/rules";
-import { getStrategy } from "@/lib/constants/sectorStrategies";
+import { getStrategyForOperatingModel } from "@/lib/constants/sectorStrategies";
 import { seedCapitalStock } from "@/lib/market/capital";
 import { unitYieldForSupply } from "@/lib/constants/capacityEconomy";
 import type { CorporationType } from "@/lib/constants/corporations";
 import { COMMODITY_BASE_PRICES, type CommodityType } from "@/lib/constants/commodities";
 import type { CorporateSector, Corporation } from "@/lib/db/types";
 import { advanceCapitalStock } from "@/lib/market/capital";
-import { advanceSectorPlantLedger } from "@/lib/corporations/plantLedger";
+import { seedPlantLedger } from "@/lib/corporations/plantLedger";
 import { healRetoolStockBasis, type RetoolStockBasisHeal } from "@/lib/corporations/retoolRescale";
 import {
   retoolOperatingCapacityRatio,
@@ -37,6 +37,8 @@ export interface PlantsCapacityInput {
     | "transitionFromStrategyId"
     | "strategyId"
     | "sectorType"
+    | "industryModel"
+    | "mediaDiscriminator"
     | "transitionStartTurn"
     | "retoolRescaleApplied"
     | "operatingCapacityTurn"
@@ -64,7 +66,7 @@ export interface PlantsCapacityResult {
   mothballed: boolean;
   activeFraction: number;
   plantsBaseStock: number;
-  plantLedger: ReturnType<typeof advanceSectorPlantLedger> | null;
+  plantLedger: ReturnType<typeof seedPlantLedger> | null;
   plantsPrevStock: number;
   plantsOwnedCapacity: number;
   plantsCapacityDepreciationFactor: number;
@@ -125,6 +127,7 @@ export function computePlantsCapacity(input: PlantsCapacityInput): PlantsCapacit
     plantsEnabled: plantsEnabled && !embargoLegacyMothball,
     isAutoRetool: corp.ceoType === "npp" || sector.autoStrategyAdoptedAtTurn != null,
     sectorType: sector.sectorType as CorporationType,
+    industryModel: sector.industryModel,
     strategyId: sector.strategyId,
     transitionFromStrategyId: sector.transitionFromStrategyId,
     transitionStartTurn: sector.transitionStartTurn,
@@ -146,6 +149,8 @@ export function computePlantsCapacity(input: PlantsCapacityInput): PlantsCapacit
     healedOpex?.capitalStock != null ? Math.max(0, healedOpex.capitalStock) : storedCapacity;
   const retoolBasis = {
     sectorType: sector.sectorType,
+    industryModel: sector.industryModel,
+    mediaDiscriminator: sector.mediaDiscriminator,
     strategyId: sector.strategyId,
     transitionFromStrategyId: sector.transitionFromStrategyId,
     transitionStartTurn: sector.transitionStartTurn,
@@ -163,7 +168,11 @@ export function computePlantsCapacity(input: PlantsCapacityInput): PlantsCapacit
   // the destination recipe, so this is a no-op there.
   const flipSeedSupply =
     isFlipTurn && retoolCapacityRatio !== 1 && sector.transitionFromStrategyId
-      ? (getStrategy(sector.sectorType, sector.strategyId ?? "standard").supply ?? strategySupply)
+      ? (getStrategyForOperatingModel(
+          sector.sectorType,
+          sector.strategyId ?? "standard",
+          sector.industryModel
+        ).supply ?? strategySupply)
       : strategySupply;
 
   // D12: a mothballed sector's plants are cold — they produce nothing, offer
@@ -188,9 +197,6 @@ export function computePlantsCapacity(input: PlantsCapacityInput): PlantsCapacit
         )
       : workingCapacity
     : 0;
-  const plantLedger = plantsEnabled
-    ? advanceSectorPlantLedger(sector, plantsBaseStock, landedBuildUnits)
-    : null;
   const plantsPrevStock = plantsBaseStock + landedBuildUnits;
   const plantsOwnedCapacity = plantsEnabled
     ? advanceCapitalStock({
@@ -223,6 +229,14 @@ export function computePlantsCapacity(input: PlantsCapacityInput): PlantsCapacit
         currentGrowthRate: 0,
       })
     : 0;
+  const plantLedger = plantsEnabled
+    ? seedPlantLedger(
+        sector.sectorType,
+        plantsOwnedCapacity,
+        sector.industryModel,
+        sector.mediaDiscriminator
+      )
+    : null;
   // ─── P5: the PAID BASIS of that capacity ──────────────────────────────────
   //
   //   book_next = (book_prev + cash of the orders that just landed) × (the same

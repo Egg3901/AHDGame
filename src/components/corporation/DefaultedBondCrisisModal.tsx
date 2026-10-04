@@ -227,7 +227,7 @@ export default function DefaultedBondCrisisModal({
         </button>
 
         <h2 id="bond-default-title" className="text-heading-sm font-semibold text-error pr-10">
-          Bond default — action required
+          Bond default: action required
         </h2>
         <p className="mt-2 text-body-sm text-muted">
           Your corporation has defaulted on bond obligations. Credit rating is severely impaired
@@ -334,7 +334,7 @@ export default function DefaultedBondCrisisModal({
               <p className="text-muted text-body-xs mb-2">
                 Roll defaulted bondholders into a new {formatAmount(data.refinance.requiredFace)}{" "}
                 bond at par, clearing the default and restoring holders&apos; claim to face value.
-                This is a debt-for-debt swap — no cash is added to the corporation. Holders keep
+                This is a debt-for-debt swap. No cash is added to the corporation. Holders keep
                 their units (no payout), and the new bond carries the current (CCC-floored) coupon.
                 Still subject to 2× equity limits. Cooldown is waived for this emergency issuance.{" "}
                 <span className="text-muted">
@@ -411,7 +411,7 @@ export default function DefaultedBondCrisisModal({
                   </>
                 ) : (
                   <div className="text-warning">
-                    Not enough sector value to cover the default — even selling every sector raises
+                    Not enough sector value to cover the default: even selling every sector raises
                     only {formatAmount(data.restructure.totalSalvageAvailable)}. Use Dissolve &amp;
                     settle instead.
                   </div>
@@ -436,7 +436,7 @@ export default function DefaultedBondCrisisModal({
               <p className="text-muted text-body-xs mb-2">
                 Liquidate using liquid capital plus sector NPV. Bondholders are paid pro-rata up to
                 available assets; remaining assets are distributed to <em>all</em> shareholders
-                pro-rata by shares — characters to their cash, corporate equity holders to their
+                pro-rata by shares: characters to their cash, corporate equity holders to their
                 liquid capital, and the public float slice to the country&apos;s central bank
                 reserve. This cannot be undone.
               </p>

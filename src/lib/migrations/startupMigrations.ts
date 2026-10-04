@@ -1,4 +1,6 @@
+import { migration as bankFailurePoliticsIndex } from "./entries/2026-10-04-bank-failure-politics-index";
 import type { Db } from "mongodb";
+import { migration as bankPropForexFeeIndex } from "./entries/2026-10-04-bank-prop-forex-fee-index";
 import { migration as repairOrphanIndexFundState } from "./entries/2026-09-03-repair-orphan-index-fund-state";
 import { migration as equityMarketPools } from "./entries/2026-09-03-equity-market-pools";
 import { migration as providerIdentityIndexes } from "./entries/2026-09-10-provider-identity-indexes";
@@ -6,6 +8,12 @@ import { migration as centralBankPricingPhaseIn } from "./entries/2026-09-11-cen
 import { migration as longHorizonTelemetryIndexes } from "./entries/2026-09-30-long-horizon-telemetry-indexes";
 import { migration as appleProviderIdentityIndex } from "./entries/2026-09-30-apple-provider-identity-index";
 import { migration as ukDualMinistryRoleSlot } from "./entries/2026-09-17-uk-dual-ministry-role-slot";
+import { migration as politicalMediaOrderIndexes } from "./entries/2026-10-04-political-media-order-indexes";
+import { migration as bankTreasuryTradeIndexes } from "./entries/2026-10-04-bank-treasury-trade-indexes";
+import { migration as industryModelMarketIndexes } from "./entries/2026-10-04-industry-model-market-indexes";
+import { migration as mediaDiscriminatorMarketIndexes } from "./entries/2026-10-04-media-discriminator-market-indexes";
+import { migration as constructionServiceLeaseIndex } from "./entries/2026-10-04-construction-service-lease-index";
+import { migration as mediaProductProjectsV1Index } from "./entries/2026-10-04-media-product-projects-v1-index";
 import { runMigrations, type RunSummary } from "./runner";
 import type { Migration } from "./types";
 
@@ -34,6 +42,17 @@ export const REQUIRED_STARTUP_MIGRATIONS: readonly Migration[] = [
   // rejects that insert until this swap runs, so the DPM appointment failed
   // with a spurious conflict error on worlds that never ran it.
   ukDualMinistryRoleSlot,
+  // Existing saves need the political journal indexes before current-turn replay reads.
+  politicalMediaOrderIndexes,
+  bankTreasuryTradeIndexes,
+  bankPropForexFeeIndex,
+  bankFailurePoliticsIndex,
+  // Model-aware unique keys must be in place before a fresh canonical seed can
+  // create a vehicles market beside generic manufacturing.
+  industryModelMarketIndexes,
+  mediaDiscriminatorMarketIndexes,
+  constructionServiceLeaseIndex,
+  mediaProductProjectsV1Index,
 ];
 
 export async function runRequiredStartupMigrations(db: Db): Promise<RunSummary> {

@@ -5,6 +5,7 @@ import type { CommodityPriceRatioFn } from "./marketSignals";
 
 export function buildNppPriceSignals(priceByCommodity: ReadonlyMap<string, CommodityPrice>): {
   priceRatioOf: CommodityPriceRatioFn;
+  stateDemandOf: (commodity: CommodityType, stateId: string) => number | null;
   statePriceRatioOf: (commodity: CommodityType, stateId: string) => number | null;
 } {
   const priceRatioOf: CommodityPriceRatioFn = (commodity, countryId) => {
@@ -28,5 +29,9 @@ export function buildNppPriceSignals(priceByCommodity: ReadonlyMap<string, Commo
     return latentAwareStateRatio(doc, stateId, stored) ?? stored;
   };
 
-  return { priceRatioOf, statePriceRatioOf };
+  const stateDemandOf = (commodity: CommodityType, stateId: string): number | null => {
+    const value = priceByCommodity.get(commodity)?.stateDemand?.[stateId];
+    return typeof value === "number" && Number.isFinite(value) ? value : null;
+  };
+  return { priceRatioOf, statePriceRatioOf, stateDemandOf };
 }

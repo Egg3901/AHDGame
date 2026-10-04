@@ -13,7 +13,7 @@ import type { StateMapData } from "@/components/USAMapPaths";
 import { SLATE_REFUSAL_LABEL, isSlateFilingFailure } from "@/lib/slateRefusalReasons";
 import { formatSlateCapNote, type SlateAssignmentUsage } from "@/lib/slateAssignmentCap";
 import { AssignmentPicker } from "./SlateAssignmentPicker";
-import { formatSlateLabel } from "./slateFormatting";
+import { formatSlateLabel, formatSlateRaceTitle } from "./slateFormatting";
 
 const MapFallback = () => (
   <div className="h-full w-full animate-pulse rounded-md bg-card-elevated" />
@@ -245,31 +245,6 @@ function getAcceptanceChip(
   };
 }
 
-function formatSlateRaceTitle(
-  item: Pick<SlateOverviewItem, "electionType" | "senateClass" | "chamberClass">
-): string {
-  const baseLabel = formatSlateLabel(item.electionType);
-  const chamberClass = item.senateClass ?? item.chamberClass;
-  if (!chamberClass) {
-    return `${baseLabel} Race`;
-  }
-
-  return `${baseLabel} Race · Class ${toRomanNumeral(chamberClass)}`;
-}
-
-function toRomanNumeral(value: number): string {
-  switch (value) {
-    case 1:
-      return "I";
-    case 2:
-      return "II";
-    case 3:
-      return "III";
-    default:
-      return String(value);
-  }
-}
-
 function isPreTurnSlateAssignment(
   candidate: Pick<SlateCandidateRow, "invitedAt" | "respondedAt" | "filedAt">
 ): boolean {
@@ -410,7 +385,7 @@ export function SlateTab({
     <div className="space-y-4">
       {scopeState && (
         <div className="rounded-xl border border-card-border bg-card p-3 flex items-center gap-3 text-xs">
-          <span className="rounded-full border border-card-border px-2 py-0.5 uppercase tracking-wider text-muted">
+          <span className="rounded-full border border-card-border px-2 py-0.5 text-muted">
             Scope locked
           </span>
           <span className="text-muted">
@@ -529,7 +504,7 @@ function CountryMap({
       <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
         <div>
           <h3 className="text-sm font-semibold">Slate by state</h3>
-          <p className="text-[11px] text-muted mt-0.5">
+          <p className="text-body-sm text-muted mt-0.5">
             Hover for a breakdown; click to drill into races for that state.
           </p>
         </div>
@@ -615,14 +590,14 @@ function CountryMap({
         {renderMode !== "usa_paths" && hovered && hoveredEntry && (
           <div className="absolute top-2 right-2 rounded-lg border border-card-border bg-card p-3 shadow-lg pointer-events-none min-w-[200px]">
             <div className="text-sm font-bold mb-1">{hoveredEntry.name}</div>
-            <div className="space-y-0.5 text-[11px]">
+            <div className="space-y-0.5 text-body-sm">
               <RowKV k="Players" v={(hoveredPresence?.players ?? 0).toString()} />
               <RowKV k="NPPs" v={(hoveredPresence?.npps ?? 0).toString()} />
               <RowKV k="Slates" v={hovered.slateCount.toString()} />
               <RowKV k="Contested" v={hovered.contested.toString()} />
               <RowKV k="Filed" v={`${hovered.byStatus.filed} / ${hovered.slateCount}`} />
             </div>
-            <div className="text-[10px] text-primary mt-2">Click to Slate Races -&gt;</div>
+            <div className="text-body-sm text-primary mt-2">Click to slate races -&gt;</div>
           </div>
         )}
       </div>
@@ -646,7 +621,7 @@ function StateListSelector({
   }
   return (
     <div className="rounded-xl border border-card-border bg-card p-4 space-y-2">
-      <p className="text-[11px] uppercase tracking-widest text-muted">Select a state</p>
+      <p className="text-body-sm text-muted">Select a state</p>
       <div className="flex flex-wrap gap-2">
         {states.map((s) => {
           const agg = aggregateByState.get(s);
@@ -664,7 +639,7 @@ function StateListSelector({
             >
               {s.replace(/^.+_/, "")}
               {agg && agg.slateCount > 0 && (
-                <span className="ml-2 text-[10px] text-muted">{agg.slateCount}</span>
+                <span className="ml-2 text-body-sm text-muted">{agg.slateCount}</span>
               )}
             </button>
           );
@@ -782,12 +757,12 @@ function RaceSlatePanel({
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-semibold">{formatSlateRaceTitle(item)}</span>
             <span
-              className={`rounded-full border px-2 py-0.5 text-[10px] tracking-wider ${PRIORITY_COLOR[item.priority]}`}
+              className={`rounded-full border px-2 py-0.5 text-body-sm ${PRIORITY_COLOR[item.priority]}`}
             >
               {formatSlateLabel(item.priority)}
             </span>
           </div>
-          <p className="text-[11px] text-muted">
+          <p className="text-body-sm text-muted">
             {formatSlateLabel(item.electionStatus)} | Cycle {item.electionCycle ?? "-"}
             {item.electionPrimaryEndTime
               ? ` | Primary closes ${clock.formatAbsoluteDeadline(item.electionPrimaryEndTime)}`
@@ -871,21 +846,21 @@ function RaceSlatePanel({
                     >
                       {c.candidateName}
                     </Link>
-                    <span className="rounded-full border border-card-border px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-muted">
+                    <span className="rounded-full border border-card-border px-1.5 py-0.5 text-body-sm text-muted">
                       {c.candidateType === "npp" ? "NPP" : "Player"}
                     </span>
-                    <span className="text-[10px] text-muted">
+                    <span className="text-body-sm text-muted">
                       {c.homeState.replace(/^.+_/, "")}
                     </span>
                     {c.autoFilled && (
-                      <span className="rounded-full border border-card-border px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-muted">
+                      <span className="rounded-full border border-card-border px-1.5 py-0.5 text-body-sm text-muted">
                         Auto
                       </span>
                     )}
                   </div>
-                  <div className="text-[11px] text-muted flex flex-wrap items-center gap-2 mt-0.5">
+                  <div className="text-body-sm text-muted flex flex-wrap items-center gap-2 mt-0.5">
                     <span
-                      className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-wider ${acceptanceChip.className}`}
+                      className={`rounded-full border px-2 py-0.5 text-body-sm font-semibold ${acceptanceChip.className}`}
                     >
                       {acceptanceChip.label}
                     </span>
@@ -902,7 +877,7 @@ function RaceSlatePanel({
                   </div>
                 </div>
                 <span
-                  className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-wider ${statusClass}`}
+                  className={`rounded-full border px-2 py-0.5 text-body-sm font-semibold ${statusClass}`}
                 >
                   {statusLabel}
                 </span>
@@ -931,7 +906,7 @@ function RaceSlatePanel({
 
       {detail?.assignment && (
         <p
-          className={`text-[11px] ${
+          className={`text-body-sm ${
             detail.assignment.remaining === 0 ? "text-amber-300" : "text-muted"
           }`}
         >
@@ -940,7 +915,7 @@ function RaceSlatePanel({
       )}
 
       {detail && detail.candidates.some((c) => c.candidateType === "npp") && (
-        <p className="text-[11px] text-muted">
+        <p className="text-body-sm text-muted">
           Compliant NPPs (loyal, not overly stubborn) file automatically on the next turn; others
           decline. Assign through a State / Regional Chair for a small compliance bonus.
         </p>
@@ -1004,7 +979,7 @@ function WithdrawButton({
       type="button"
       disabled={pending}
       onClick={withdraw}
-      className="rounded-md border border-card-border bg-background px-2 py-1 text-[10px] text-muted hover:text-foreground disabled:opacity-50"
+      className="rounded-md border border-card-border bg-background px-2 py-1 text-body-sm text-muted hover:text-foreground disabled:opacity-50"
     >
       {pending ? "..." : "Withdraw"}
     </button>

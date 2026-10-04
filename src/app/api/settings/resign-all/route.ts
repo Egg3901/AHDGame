@@ -1,3 +1,4 @@
+import { flushServerPosthog } from "@/lib/analytics/serverPosthog";
 import { NextResponse } from "next/server";
 import { handleRouteError } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
@@ -18,6 +19,7 @@ export async function POST() {
 
     const db = await getDb();
     const result = await resignAllPositions(db, authResult.user.character);
+    await flushServerPosthog();
     return NextResponse.json({ success: true, ...result });
   } catch (error) {
     return handleRouteError(error);

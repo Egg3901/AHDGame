@@ -14,7 +14,7 @@
  */
 
 import type { Db, ObjectId } from "mongodb";
-import type { Bond, BondMarketPool, CentralBank, FederalBudget } from "@/lib/db/types";
+import type { Bond, BondMarketPool, CentralBank, Corporation, FederalBudget } from "@/lib/db/types";
 import type { CreditRating } from "@/lib/db/types/centralBank";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -38,11 +38,13 @@ import { getNationalBudgetId, refreshSovereignDebtTerms } from "@/lib/bonds/sove
 import { poolLiquidityAllocation } from "@/lib/moneySupply/rules/poolTarget";
 import {
   commitSovereignPrimary,
+  existingPrimarySettlementKeys,
   loadPrimaryAccounting,
   primarySettlementExists,
 } from "./sovereignPrimarySettlement";
 import { treasuryAdvanceMoneyDelta } from "@/lib/moneySupply/rules/assemble";
 import { ObjectId as MongoObjectId } from "mongodb";
+import { settlePrimaryUnderwritingFill } from "@/lib/banking/underwritingSettlement";
 
 /** Share of the pool's cash one corporate issue may take at issuance. */
 export const CORPORATE_PRIMARY_COMMIT_SHARE = 0.2;
@@ -213,6 +215,11 @@ export async function debitPoolForPrimary(
   return debit.ok ? amount : 0;
 }
 
+/** Settlement-journal key of one bond's sovereign placement in one turn. */
+export function sovereignPlacementKey(bondId: ObjectId, turn: number): string {
+  return `sovereign-primary:placement:${bondId}:${turn}`;
+}
+
 export interface PlacementResult {
   bondsTouched: number;
   unitsPlaced: number;
@@ -247,6 +254,49 @@ export async function placeUnsoldBondUnits(
   if (placing.length === 0) return result;
 
   const accounting = await loadPrimaryAccounting(db);
+  // Placement settlement keys are per bond per turn, and nothing but this
+  // bond's own iteration writes one while the turn runs, so a key absent now
+  // stays absent until its bond is reached. One read finds the ones already recorded (a retried turn); only
+  // those take the per-key status check, instead of every sovereign bond.
+  const recordedPlacementKeys = await existingPrimarySettlementKeys(
+    db,
+    placing
+      .filter((bond) => bond.issuerType === "sovereign" && bond.countryId)
+      .map((bond) => sovereignPlacementKey(bond._id, turn))
+  );
+  const underwrittenBonds = placing.filter(
+    (bond) =>
+      bond.issuerType !== "sovereign" && bond.primaryUnderwriting?.instrumentId?.equals(bond._id)
+  );
+  const bankIds = [
+    ...new Map(
+      underwrittenBonds.map((bond) => [
+        bond.primaryUnderwriting!.bankCorporationId.toHexString(),
+        bond.primaryUnderwriting!.bankCorporationId,
+      ])
+    ).values(),
+  ];
+  const issuerIds = [
+    ...new Map(
+      underwrittenBonds.map((bond) => [bond.corporationId.toHexString(), bond.corporationId])
+    ).values(),
+  ];
+  const [banks, issuers] = await Promise.all([
+    bankIds.length > 0
+      ? db
+          .collection<Corporation>("corporations")
+          .find({ _id: { $in: bankIds } }, { projection: { _id: 1, name: 1, bankCharter: 1 } })
+          .toArray()
+      : Promise.resolve([]),
+    issuerIds.length > 0
+      ? db
+          .collection<Corporation>("corporations")
+          .find({ _id: { $in: issuerIds } }, { projection: { _id: 1, name: 1 } })
+          .toArray()
+      : Promise.resolve([]),
+  ]);
+  const bankById = new Map(banks.map((bank) => [bank._id.toHexString(), bank]));
+  const issuerById = new Map(issuers.map((issuer) => [issuer._id.toHexString(), issuer]));
   const budgetByCurrency = new Map<CurrencyCode, number>();
   // The pool docs read for the budgets double as the quote snapshot for the
   // pass; each placement's debit is mirrored onto them so later quotes see it.
@@ -275,8 +325,8 @@ export async function placeUnsoldBondUnits(
     if (units <= 0) continue;
 
     if (bond.issuerType === "sovereign" && bond.countryId) {
-      const key = `sovereign-primary:placement:${bond._id}:${turn}`;
-      if (await primarySettlementExists(db, key)) continue;
+      const key = sovereignPlacementKey(bond._id, turn);
+      if (recordedPlacementKeys.has(key) && (await primarySettlementExists(db, key))) continue;
       const paid = Math.round(units * price * 100) / 100;
       await commitSovereignPrimary(
         db,
@@ -327,12 +377,51 @@ export async function placeUnsoldBondUnits(
       continue;
     }
 
-    const paid = await debitPoolForPrimary(db, currency, units, price, now);
-    if (paid <= 0) continue;
-    advanceBondPoolSnapshot(poolByCurrency, currency, -paid);
+    const paid = Math.round(units * price * 100) / 100;
+    const underwriting = bond.issuerType !== "sovereign" ? bond.primaryUnderwriting : undefined;
+    if (underwriting?.instrumentId?.equals(bond._id)) {
+      const bank = bankById.get(underwriting.bankCorporationId.toHexString());
+      const issuer = issuerById.get(bond.corporationId.toHexString());
+      if (!bank || !issuer) continue;
+      const face = units * BOND_UNIT_FACE_VALUE;
+      const settlement = await settlePrimaryUnderwritingFill(db, {
+        bank,
+        issuer: { _id: issuer._id, name: issuer.name },
+        issuerCurrencyCode: currency,
+        offer: underwriting,
+        instrumentId: bond._id,
+        grossPlacedLocal: paid,
+        turn,
+        now,
+        poolCollection: BOND_MARKET_POOLS_COLLECTION,
+        instrumentProjection: {
+          collection: "bonds",
+          filter: { _id: bond._id, unsoldUnits: { $gte: units } },
+          update: {
+            $inc: { unsoldUnits: -units, publicFloat: units, totalIssued: face },
+            $set: { updatedAt: now },
+          },
+          note: "Publish bond units only after the primary fill is funded",
+        },
+      });
+      if (settlement.status !== "applied" && settlement.status !== "replayed") continue;
+      advanceBondPoolSnapshot(poolByCurrency, currency, -paid);
+      budgetByCurrency.set(currency, budget - paid);
+      result.bondsTouched++;
+      result.unitsPlaced += units;
+      continue;
+    }
+    const debited = await debitPoolForPrimary(db, currency, units, price, now);
+    if (debited <= 0) continue;
+    const actualPaid = debited;
+    advanceBondPoolSnapshot(poolByCurrency, currency, -actualPaid);
     const face = units * BOND_UNIT_FACE_VALUE;
     const claim = await db.collection<Bond>("bonds").updateOne(
-      { _id: bond._id, unsoldUnits: { $gte: units } },
+      {
+        _id: bond._id,
+        unsoldUnits: { $gte: units },
+        sovereignMaturityClaim: { $exists: false },
+      },
       {
         $inc: { unsoldUnits: -units, publicFloat: units, totalIssued: face },
         $set: { updatedAt: now },
@@ -340,23 +429,24 @@ export async function placeUnsoldBondUnits(
     );
     if (claim.modifiedCount === 0) {
       // Someone else moved the units first; give the pool its cash back.
-      await db
-        .collection<BondMarketPool>(BOND_MARKET_POOLS_COLLECTION)
-        .updateOne(
-          { _id: currency },
-          { $inc: { cashLocal: paid, "lifetime.issuanceOut": -paid }, $set: { updatedAt: now } }
-        );
-      advanceBondPoolSnapshot(poolByCurrency, currency, paid);
+      await db.collection<BondMarketPool>(BOND_MARKET_POOLS_COLLECTION).updateOne(
+        { _id: currency },
+        {
+          $inc: { cashLocal: actualPaid, "lifetime.issuanceOut": -actualPaid },
+          $set: { updatedAt: now },
+        }
+      );
+      advanceBondPoolSnapshot(poolByCurrency, currency, actualPaid);
       continue;
     }
-    budget -= paid;
+    budget -= actualPaid;
     budgetByCurrency.set(currency, budget);
     result.bondsTouched++;
     result.unitsPlaced += units;
 
     const key = bond.corporationId.toString();
     const row = result.corporateProceedsByCorp.get(key) ?? { local: 0, currency };
-    row.local += paid;
+    row.local += actualPaid;
     result.corporateProceedsByCorp.set(key, row);
   }
   return result;
@@ -401,7 +491,7 @@ export async function monetizeUnsoldSovereignUnits(
   }
 ): Promise<boolean> {
   if (args.units <= 0) return false;
-  const key = `sovereign-primary:placement:${args.bondId}:${args.turn}`;
+  const key = sovereignPlacementKey(args.bondId, args.turn);
   if (await primarySettlementExists(db, key)) return true;
   const bond = await db.collection<Bond>("bonds").findOne({ _id: args.bondId });
   if (!bond?.countryId || args.units > (bond.unsoldUnits ?? 0)) return false;
@@ -430,7 +520,11 @@ export async function monetizeUnsoldSovereignUnits(
     [
       {
         collection: "bonds",
-        filter: { _id: bond._id, unsoldUnits: { $gte: args.units } },
+        filter: {
+          _id: bond._id,
+          unsoldUnits: { $gte: args.units },
+          sovereignMaturityClaim: { $exists: false },
+        },
         update: {
           $inc: { unsoldUnits: -args.units, centralBankHoldings: args.units, totalIssued: face },
           $set: {

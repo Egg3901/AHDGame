@@ -22,6 +22,7 @@
 import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
 
 import { ObjectId, type Db, type Filter } from "mongodb";
+import { randomUUID } from "node:crypto";
 import {
   ACTIONS,
   canPerformAction,
@@ -40,12 +41,13 @@ import type { ActionType, Character, State, ActionLog } from "@/lib/db/types";
 import { getGameState } from "@/lib/gameState";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { getPersonalBalance, getHomeCurrency } from "@/lib/currency/characterFunds";
-import { campaignLocalRate } from "@/lib/campaigns/campaignCurrency";
+import { campaignLocalRate, getCampaignCurrency } from "@/lib/campaigns/campaignCurrency";
 import { checkActionAchievements, checkFundsAchievements } from "@/lib/achievements/triggers";
 import { recordAuditBulk } from "@/lib/audit/recordAudit";
 import type { ActionAuditInput } from "@/lib/db/types/actionAuditLog";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
 import { resolveCampaignPriceLevel } from "@/lib/campaigns/rules/priceLevel";
+import { fundPoliticalMediaOrder } from "@/lib/politicalMedia/journal";
 
 function clampAddExpression(fieldPath: string, delta: number, min: number, max: number) {
   return {
@@ -112,11 +114,15 @@ export async function executeCharacterAction(
   const gameState = await getGameState();
   const gameConfig = await db
     .collection<GameConfig>("gameConfig")
-    .findOne({ _id: "default" }, { projection: { campaignEraPriceLevelEnabled: 1 } });
+    .findOne(
+      { _id: "default" },
+      { projection: { campaignEraPriceLevelEnabled: 1, politicalMediaMarketEnabled: 1 } }
+    );
   const priceLevel = resolveCampaignPriceLevel(
     gameConfig?.campaignEraPriceLevelEnabled,
     gameState?.preset
   );
+  const politicalMediaMarketEnabled = gameConfig?.politicalMediaMarketEnabled === true;
 
   // Block player actions while the game is paused/stopped. `isActive` is false only
   // on admin stop, auto-drift pause, or a pre-start world (turnSystem.ts) — it is not
@@ -129,13 +135,13 @@ export async function executeCharacterAction(
   }
 
   const campaignRates = await loadCampaignCurrencyRates(db);
-  const homeCurrency = getHomeCurrency(character);
+  const homeCurrency = getHomeCurrency(character, gameState?.preset);
   // Campaign funds are DECOUPLED from live forex: costs/effects convert anchor →
   // local at the frozen world-seeded currency basis (US ×1.0), never the live
   // exchangeRates. Every use of this rate below is a campaign-fund conversion;
   // personal cash (cashOnHandChange) is applied in local directly.
   const campaignRate = forexEnabled
-    ? campaignLocalRate(character.countryId ?? "US", campaignRates)
+    ? campaignLocalRate(character.countryId ?? "US", campaignRates, gameState?.preset)
     : 1;
   // Render action result messages in the player's LOCAL home currency (campaign
   // funds are stored in local; never surface anchor/₳). effect.fundsChange is
@@ -259,7 +265,7 @@ export async function executeCharacterAction(
         cashOnHandChange: -convertAmount,
         fundsChange: fundsChangeAnchor,
         infamyChange: infamy,
-        message: `Donated ${formatLocalFunds(convertAmount, homeCurrency)} personal funds — ${formatLocalFunds(convertedLocal, homeCurrency)} added to campaign coffers. +${infamy} Infamy.`,
+        message: `Donated ${formatLocalFunds(convertAmount, homeCurrency)} personal funds. ${formatLocalFunds(convertedLocal, homeCurrency)} added to campaign coffers. +${infamy} Infamy.`,
       };
     } else {
       effect = action.effect(current, state || undefined, {
@@ -270,6 +276,65 @@ export async function executeCharacterAction(
         priceLevel,
       });
     }
+
+    const actionFundsChange = effect.fundsChange ?? 0;
+    const actionFavorabilityChange = effect.favorabilityChange ?? 0;
+    let politicalMediaOrderId: string | undefined;
+    if (
+      actionType === "advertise" &&
+      politicalMediaMarketEnabled &&
+      state &&
+      actionFundsChange < 0 &&
+      actionFavorabilityChange > 0
+    ) {
+      politicalMediaOrderId = randomUUID();
+      const payerLocalPerAnchor = forexEnabled ? campaignRate : 1;
+      const payerCurrencyCode = forexEnabled
+        ? getCampaignCurrency(current.countryId ?? "US")
+        : homeCurrency;
+      const funding = await fundPoliticalMediaOrder(db, {
+        orderId: politicalMediaOrderId,
+        source: "advertise",
+        createdTurn: gameState?.currentTurn ?? 0,
+        countryId: current.countryId ?? "US",
+        targetStateId: state._id,
+        payer: {
+          collection: "characters",
+          documentId: current._id,
+          path: forexEnabled ? "currencyBalances.campaign" : "funds",
+          currencyCode: payerCurrencyCode,
+          localPerAnchor: payerLocalPerAnchor,
+          amountLocal: Math.abs(actionFundsChange) * payerLocalPerAnchor,
+          currentActions: current.actions ?? 0,
+          actionCost,
+        },
+        details: {
+          effect: {
+            kind: "favorability",
+            targetCollection: "characters",
+            targetDocumentId: current._id.toString(),
+            targetDocumentIdIsObjectId: current._id instanceof ObjectId,
+            amount: actionFavorabilityChange,
+          },
+          actionType,
+          characterId: current._id.toString(),
+        },
+      });
+      if (funding.status !== "applied") {
+        return {
+          ok: false,
+          error: "Your advertising funds or action points changed before the order was funded.",
+          status: 409,
+        };
+      }
+      effect = {
+        ...effect,
+        fundsChange: 0,
+        favorabilityChange: undefined,
+        message: "Advertising order funded. Favorability changes after media delivery.",
+      };
+    }
+    const effectiveActionCost = politicalMediaOrderId ? 0 : actionCost;
 
     // effect.fundsChange and effect.cashOnHandChange are in ANCHOR units.
     // Convert to LOCAL at the boundary so the filter + pipeline both
@@ -285,7 +350,7 @@ export async function executeCharacterAction(
       : 0;
     const updateFilter: Record<string, unknown> = {
       _id: current._id,
-      actions: { $gte: actionCost },
+      actions: { $gte: effectiveActionCost },
     };
     if (fundsChangeLocal < 0) {
       updateFilter[campaignFundsField] = { $gte: Math.abs(fundsChangeLocal) };
@@ -295,7 +360,7 @@ export async function executeCharacterAction(
     }
 
     const pipelineSet: Record<string, unknown> = {
-      actions: { $subtract: ["$actions", actionCost] },
+      actions: { $subtract: ["$actions", effectiveActionCost] },
       updatedAt: new Date(),
     };
     if (fundsChangeLocal !== 0) {
@@ -378,13 +443,14 @@ export async function executeCharacterAction(
         actionCost: actionCost,
         result: {
           success: true,
-          fundsChange: effect.fundsChange,
+          fundsChange: actionFundsChange,
           politicalInfluenceChange: effect.politicalInfluenceChange,
-          favorabilityChange: effect.favorabilityChange,
+          favorabilityChange: politicalMediaOrderId ? 0 : actionFavorabilityChange,
           infamyChange: effect.infamyChange,
           donorBaseLevelChange: effect.donorBaseLevelChange,
           cashOnHandChange: effect.cashOnHandChange,
           message: effect.message,
+          politicalMediaOrderId,
         },
         turn: gameState?.currentTurn || 0,
         createdAt: new Date(),
@@ -397,7 +463,7 @@ export async function executeCharacterAction(
       // from local stored balance + the original anchor fundsChange.
       const balanceLocal = current.currencyBalances?.campaign ?? current.funds ?? 0;
       const balanceAnchor = forexEnabled ? balanceLocal / campaignRate : balanceLocal;
-      const newFunds = balanceAnchor + (effect.fundsChange ?? 0);
+      const newFunds = balanceAnchor + actionFundsChange;
       const userOid = actor.userId;
       const [actionLogResult] = await Promise.all([
         db.collection("actionLogs").insertOne(actionLog),
@@ -415,18 +481,19 @@ export async function executeCharacterAction(
         category: "character",
         actor: { kind: "player", userId: userOid, characterId: current._id, name: actor.username },
         subject: { type: "character", id: current._id, name: current.name },
-        amount: effect.fundsChange || undefined,
-        currencyCode: (effect.fundsChange ?? 0) !== 0 ? homeCurrency : undefined,
+        amount: actionFundsChange || undefined,
+        currencyCode: actionFundsChange !== 0 ? homeCurrency : undefined,
         refs: { actionLogId: actionLogResult.insertedId },
         outcome: "ok",
         meta: {
           targetState: targetState || undefined,
           actionCost,
           politicalInfluenceChange: effect.politicalInfluenceChange,
-          favorabilityChange: effect.favorabilityChange,
+          favorabilityChange: politicalMediaOrderId ? 0 : actionFavorabilityChange,
           infamyChange: effect.infamyChange,
           donorBaseLevelChange: effect.donorBaseLevelChange,
           cashOnHandChange: effect.cashOnHandChange,
+          politicalMediaOrderId,
         },
       });
     }

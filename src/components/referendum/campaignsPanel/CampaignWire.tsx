@@ -37,9 +37,7 @@ export function CampaignWire({
 }) {
   return (
     <div className="rounded-2xl border border-card-border bg-card p-5 shadow-card">
-      <h2 className="mb-4 text-sm font-semibold uppercase tracking-widest text-muted">
-        Campaign wire
-      </h2>
+      <h2 className="mb-4 text-sm font-semibold text-muted">Campaign wire</h2>
       {events.length === 0 ? (
         <div className="text-[12.5px] font-bold text-muted">No campaign activity yet.</div>
       ) : (

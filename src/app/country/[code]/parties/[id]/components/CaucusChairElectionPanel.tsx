@@ -123,7 +123,7 @@ export function CaucusChairElectionPanel({
       <div className="rounded-lg border border-card-border bg-card p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h3 className="text-sm font-semibold">Caucus Chair Election</h3>
+            <h3 className="text-sm font-semibold">Caucus chair election</h3>
             <p className="mt-1 text-sm text-muted">
               {`${caucusName} runs its chair election on the same 96-turn cadence as the parent party's national leadership cycle.`}
             </p>
@@ -131,7 +131,7 @@ export function CaucusChairElectionPanel({
           <div className="text-right text-sm">
             {election?.status === "voting" ? (
               <>
-                <div className="text-[11px] uppercase tracking-widest text-muted">Closes in</div>
+                <div className="text-body-sm text-muted">Closes in</div>
                 <div
                   className={`font-bold tabular-nums ${
                     remainingTurns <= 12
@@ -146,7 +146,7 @@ export function CaucusChairElectionPanel({
               </>
             ) : (
               <>
-                <div className="text-[11px] uppercase tracking-widest text-muted">Status</div>
+                <div className="text-body-sm text-muted">Status</div>
                 <div className="font-semibold text-muted">
                   {election?.status ?? "No election yet"}
                 </div>
@@ -232,14 +232,14 @@ export function CaucusChairElectionPanel({
                       </Link>
                       {candidate.isCurrentHolder && (
                         <span
-                          className="shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium"
+                          className="shrink-0 rounded-full px-1.5 py-0.5 text-body-sm font-medium"
                           style={{ backgroundColor: `${caucusColor}20`, color: caucusColor }}
                         >
                           Incumbent
                         </span>
                       )}
                       {isMyVote && (
-                        <span className="shrink-0 text-[10px] font-medium text-success">
+                        <span className="shrink-0 text-body-sm font-medium text-success">
                           Your Vote
                         </span>
                       )}
@@ -247,7 +247,7 @@ export function CaucusChairElectionPanel({
                     <div className="flex shrink-0 items-center gap-2">
                       <div className="text-right">
                         <div className="text-sm font-bold tabular-nums">{candidate.voteCount}</div>
-                        <div className="text-[10px] text-muted">
+                        <div className="text-body-sm text-muted">
                           {election.totalVotes > 0 ? `${pct}%` : "—"}
                         </div>
                       </div>
@@ -278,7 +278,7 @@ export function CaucusChairElectionPanel({
             })}
           </div>
 
-          <div className="mt-4 flex items-center justify-between border-t border-card-border pt-3 text-[10px] text-muted">
+          <div className="mt-4 flex items-center justify-between border-t border-card-border pt-3 text-body-sm text-muted">
             <span>Total votes: {election.totalVotes}</span>
             <span>
               Turn {election.startTurn} → {election.endTurn}
@@ -286,7 +286,7 @@ export function CaucusChairElectionPanel({
           </div>
 
           {!data.canVote && election.status === "voting" && (
-            <p className="mt-3 rounded bg-background px-2 py-1.5 text-[10px] text-muted">
+            <p className="mt-3 rounded bg-background px-2 py-1.5 text-body-sm text-muted">
               Only active caucus members may vote or run in this election.
             </p>
           )}

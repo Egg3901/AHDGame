@@ -25,6 +25,15 @@ import { resolveFailedBankDepositors } from "@/lib/banking/insurance";
 import { revokeCharter } from "@/lib/banking/charter";
 import { countBankingEvent, recordBankingStage } from "@/lib/banking/telemetry";
 import { lifecycleStage } from "@/lib/banking/rules/lifecycle";
+import { recoverPropForexFees } from "./propForexFees";
+import { loadBankingPolicy } from "./policy";
+import type { BankingPolicySnapshot } from "./rules/policy";
+import { recoverConstructionServiceLeases } from "./constructionServiceLease";
+import { recoverConstructionAdmissions } from "./constructionAdmission";
+import { recoverConstructionFunding } from "./constructionFinance";
+import { recoverConstructionSales } from "./constructionSale";
+import { listDefaultedConstructionCollateral } from "./constructionForeclosure";
+import { recoverConstructionCancellations } from "./constructionCancellation";
 
 export interface BankingRecoverySummary {
   turn: number;
@@ -47,7 +56,8 @@ const MAX_RECORDS_PER_PASS = 200;
  */
 export async function recoverBankingSettlements(
   db: Db,
-  turn: number
+  turn: number,
+  preloadedPolicy?: BankingPolicySnapshot
 ): Promise<BankingRecoverySummary> {
   const started = Date.now();
   const summary: BankingRecoverySummary = {
@@ -57,6 +67,29 @@ export async function recoverBankingSettlements(
     estatesRecovered: [],
     estatesStillResolving: [],
   };
+  const policy = preloadedPolicy ?? (await loadBankingPolicy(db));
+  if (policy.constructionFinance) {
+    await recoverConstructionAdmissions(db, turn);
+    const sales = await recoverConstructionSales(db, turn);
+    for (const record of sales)
+      summary.stillPartial.push({ ...record, kind: "construction_secured_sale" });
+    const funding = await recoverConstructionFunding(db, turn);
+    for (const record of funding)
+      summary.stillPartial.push({ ...record, kind: "construction_funding" });
+    const cancellations = await recoverConstructionCancellations(db, turn);
+    for (const record of cancellations)
+      summary.stillPartial.push({ ...record, kind: "construction_principal_first_refund" });
+    const unfinished = await recoverConstructionServiceLeases(db, turn);
+    for (const record of unfinished) summary.stillPartial.push({ ...record, kind: "loan_service" });
+    await listDefaultedConstructionCollateral(db, turn);
+  }
+  const unfinishedForexFees = policy.propForexFees ? await recoverPropForexFees(db, turn) : [];
+  for (const bankId of unfinishedForexFees)
+    summary.stillPartial.push({
+      key: `bank.prop.forex.fee:${bankId}`,
+      kind: "bank.prop.forex.fee",
+      error: "Funded forex fee still awaiting settlement",
+    });
 
   // Estates first: their settlements are resumed inside the resolution
   // itself, under the estate's own claim, and a record the estate owns must

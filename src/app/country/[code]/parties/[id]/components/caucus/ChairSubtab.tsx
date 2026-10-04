@@ -313,11 +313,9 @@ export function ChairSubtab({
     <div className="space-y-4">
       {/* Settings */}
       <div className="space-y-3 rounded-lg border border-card-border bg-card p-5">
-        <h3 className="text-[11px] font-semibold uppercase tracking-widest text-muted">
-          Caucus settings
-        </h3>
+        <h3 className="text-sm font-semibold text-muted">Caucus settings</h3>
         <div className="grid gap-3 sm:grid-cols-2">
-          <label className="text-[11px] uppercase tracking-widest text-muted">
+          <label className="text-body-sm text-muted">
             Name
             <input
               value={name}
@@ -325,7 +323,7 @@ export function ChairSubtab({
               className="mt-1 w-full rounded-md border border-card-border bg-background px-3 py-2 text-sm normal-case tracking-normal"
             />
           </label>
-          <label className="text-[11px] uppercase tracking-widest text-muted">
+          <label className="text-body-sm text-muted">
             Color
             <div className="mt-1 flex items-center gap-2">
               <input
@@ -338,7 +336,7 @@ export function ChairSubtab({
             </div>
           </label>
         </div>
-        <label className="block text-[11px] uppercase tracking-widest text-muted">
+        <label className="block text-body-sm text-muted">
           Motto (optional)
           <input
             value={motto}
@@ -347,8 +345,8 @@ export function ChairSubtab({
             maxLength={120}
           />
         </label>
-        <label className="block text-[11px] uppercase tracking-widest text-muted">
-          Discord Invite
+        <label className="block text-body-sm text-muted">
+          Discord invite
           <input
             type="url"
             value={discordInviteUrl}
@@ -360,7 +358,7 @@ export function ChairSubtab({
             }`}
           />
         </label>
-        <label className="block text-[11px] uppercase tracking-widest text-muted">
+        <label className="block text-body-sm text-muted">
           Description
           <textarea
             value={description}
@@ -370,8 +368,8 @@ export function ChairSubtab({
             maxLength={500}
           />
         </label>
-        <label className="block text-[11px] uppercase tracking-widest text-muted">
-          Caucus Tax | {taxRate}% (capped at 5%)
+        <label className="block text-body-sm text-muted">
+          Caucus tax | {taxRate}% (capped at 5%)
           <div className="mt-3 w-full sm:w-1/2">
             <Slider
               min={0}
@@ -386,7 +384,7 @@ export function ChairSubtab({
             />
           </div>
         </label>
-        <p className={`text-[11px] ${hasDiscordValidationError ? "text-error" : "text-muted"}`}>
+        <p className={`text-body-sm ${hasDiscordValidationError ? "text-error" : "text-muted"}`}>
           {hasDiscordValidationError
             ? "Enter a valid Discord invite URL such as https://discord.gg/your-invite or https://discord.com/invite/your-invite."
             : "This invite appears in the caucus header for party members."}
@@ -407,9 +405,7 @@ export function ChairSubtab({
       <div className="space-y-3 rounded-lg border border-card-border bg-card p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h3 className="text-[11px] font-semibold uppercase tracking-widest text-muted">
-              Recruit NPP to Caucus
-            </h3>
+            <h3 className="text-sm font-semibold text-muted">Recruit NPP to caucus</h3>
             <p className="mt-2 text-sm text-muted">
               Caucus recruitment is gated by the Chair&apos;s relationship with that NPP.
               Relationship must be at least 60, and the caucus goes on a 12-hour cooldown after a
@@ -417,13 +413,13 @@ export function ChairSubtab({
             </p>
           </div>
           <span
-            className={`rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-wider ${recruitmentStatusChip.className}`}
+            className={`rounded-full border px-3 py-1 text-body-sm font-semibold ${recruitmentStatusChip.className}`}
           >
             {recruitmentStatusChip.label}
           </span>
         </div>
 
-        <label className="block text-[11px] uppercase tracking-widest text-muted">
+        <label className="block text-body-sm text-muted">
           NPP
           <select
             value={selectedRecruitNppId}
@@ -452,7 +448,7 @@ export function ChairSubtab({
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <div className="text-sm font-semibold">{selectedRecruitNpp.name}</div>
-                <div className="mt-1 text-[11px] text-muted">
+                <div className="mt-1 text-body-sm text-muted">
                   {selectedRecruitNpp.homeState}
                   {selectedRecruitNpp.currentOfficeLabel
                     ? ` | ${selectedRecruitNpp.currentOfficeLabel}`
@@ -461,19 +457,19 @@ export function ChairSubtab({
               </div>
               <div className="flex flex-wrap gap-2">
                 <span
-                  className={`rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wider ${selectedRelationshipBadge.className}`}
+                  className={`rounded-full border px-2 py-1 text-body-sm font-semibold ${selectedRelationshipBadge.className}`}
                 >
                   {selectedRelationshipBadge.label} {selectedRecruitNpp.relationshipScore}
                 </span>
                 <span
-                  className={`rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wider ${recruitStatusTone(selectedRecruitNpp.status)}`}
+                  className={`rounded-full border px-2 py-1 text-body-sm font-semibold ${recruitStatusTone(selectedRecruitNpp.status)}`}
                 >
                   {selectedRecruitNpp.statusLabel}
                 </span>
               </div>
             </div>
             {selectedRecruitNpp.cooldownUntil && (
-              <p className="mt-3 text-[11px] text-muted">
+              <p className="mt-3 text-body-sm text-muted">
                 Cooldown remaining: {formatHoursMinutes(selectedRecruitNpp.cooldownUntil)}
               </p>
             )}
@@ -500,13 +496,11 @@ export function ChairSubtab({
       {/* Fund transfers */}
       <div className="grid gap-4 xl:grid-cols-2">
         <div className="space-y-3 rounded-lg border border-card-border bg-card p-5">
-          <h3 className="text-[11px] font-semibold uppercase tracking-widest text-muted">
-            Send to Caucus Member
-          </h3>
+          <h3 className="text-sm font-semibold text-muted">Send to caucus member</h3>
           <p className="text-sm text-muted">
             Move caucus funds directly to an active player member&apos;s campaign account.
           </p>
-          <p className="text-[11px] text-muted">
+          <p className="text-body-sm text-muted">
             {/* Counted here rather than sent from the server, which is safe
                 ONLY because the caucus payload carries raw `chairId` /
                 `viceChairId` with no ban filtering, so it matches what the
@@ -529,7 +523,7 @@ export function ChairSubtab({
               ? `The ceiling is ${PAYOUT_CAP_MULTI_OFFICER_MULTIPLIER} times the base one while this caucus has both a Chair and a Vice-Chair seated.`
               : `Seating both a Chair and a Vice-Chair would raise it ${PAYOUT_CAP_MULTI_OFFICER_MULTIPLIER} times.`}
           </p>
-          <label className="block text-[11px] uppercase tracking-widest text-muted">
+          <label className="block text-body-sm text-muted">
             Member
             <select
               value={selectedMemberId}
@@ -550,7 +544,7 @@ export function ChairSubtab({
               )}
             </select>
           </label>
-          <label className="block text-[11px] uppercase tracking-widest text-muted">
+          <label className="block text-body-sm text-muted">
             Amount
             <input
               type="number"
@@ -562,7 +556,7 @@ export function ChairSubtab({
               className="mt-1 w-full rounded-md border border-card-border bg-background px-3 py-2 text-sm normal-case tracking-normal"
             />
           </label>
-          <div className="text-[11px] text-muted">
+          <div className="text-body-sm text-muted">
             Available: ${caucus.treasury.toLocaleString("en-US")} · Minimum: $1,000
           </div>
           <div className="flex justify-end">
@@ -583,13 +577,11 @@ export function ChairSubtab({
         </div>
 
         <div className="space-y-3 rounded-lg border border-card-border bg-card p-5">
-          <h3 className="text-[11px] font-semibold uppercase tracking-widest text-muted">
-            Transfer to National Party
-          </h3>
+          <h3 className="text-sm font-semibold text-muted">Transfer to national party</h3>
           <p className="text-sm text-muted">
             Return caucus treasury funds to the parent National Party treasury.
           </p>
-          <label className="block text-[11px] uppercase tracking-widest text-muted">
+          <label className="block text-body-sm text-muted">
             Amount
             <input
               type="number"
@@ -603,7 +595,7 @@ export function ChairSubtab({
               className="mt-1 w-full rounded-md border border-card-border bg-background px-3 py-2 text-sm normal-case tracking-normal"
             />
           </label>
-          <div className="text-[11px] text-muted">
+          <div className="text-body-sm text-muted">
             Available: ${caucus.treasury.toLocaleString("en-US")} · Minimum: $1,000
           </div>
           <div className="flex justify-end">
@@ -621,9 +613,7 @@ export function ChairSubtab({
 
       {/* Policy positions */}
       <div className="space-y-3 rounded-lg border border-card-border bg-card p-5">
-        <h3 className="text-[11px] font-semibold uppercase tracking-widest text-muted">
-          Key policy positions
-        </h3>
+        <h3 className="text-sm font-semibold text-muted">Key policy positions</h3>
         {detail.positions.length === 0 ? (
           <p className="text-sm italic text-muted">
             No positions yet - add the caucus&apos;s stated stances below.
@@ -636,7 +626,7 @@ export function ChairSubtab({
                 className="flex items-start gap-3 rounded border border-card-border bg-background/50 p-3"
               >
                 <span
-                  className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
+                  className={`shrink-0 rounded-full border px-2 py-0.5 text-body-sm font-semibold ${
                     position.weight === "core"
                       ? "border-red-500/40 bg-red-500/10 text-red-300"
                       : "border-card-border text-muted"
@@ -649,12 +639,12 @@ export function ChairSubtab({
                     {position.topic} <span className="text-muted">to</span>{" "}
                     <span className="text-primary">{position.stance}</span>
                   </div>
-                  {position.note && <p className="text-[11px] text-muted">{position.note}</p>}
+                  {position.note && <p className="text-body-sm text-muted">{position.note}</p>}
                 </div>
                 <button
                   type="button"
                   onClick={() => deletePosition(position.id)}
-                  className="rounded-md border border-red-500/40 bg-red-500/10 px-2 py-1 text-[10px] font-semibold text-red-300 transition-colors hover:bg-red-500/20"
+                  className="rounded-md border border-red-500/40 bg-red-500/10 px-2 py-1 text-body-sm font-semibold text-red-300 transition-colors hover:bg-red-500/20"
                 >
                   Remove
                 </button>
@@ -664,9 +654,7 @@ export function ChairSubtab({
         )}
 
         <div className="space-y-2 rounded-md border border-dashed border-card-border bg-background/40 p-3">
-          <div className="text-[11px] font-semibold uppercase tracking-widest text-muted">
-            Add new position
-          </div>
+          <div className="text-body-sm font-semibold text-muted">Add new position</div>
           <div className="grid gap-2 sm:grid-cols-2">
             <input
               value={newTopic}
@@ -697,7 +685,7 @@ export function ChairSubtab({
                   key={weight}
                   type="button"
                   onClick={() => dispatch({ type: "SET_NEW_WEIGHT", value: weight })}
-                  className={`rounded-md border px-3 py-1.5 text-xs font-semibold uppercase tracking-wider transition-colors ${
+                  className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${
                     newWeight === weight
                       ? "border-primary bg-primary/15 text-primary"
                       : "border-card-border text-muted hover:text-foreground"

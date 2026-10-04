@@ -15,14 +15,14 @@ export function DemocraticHealthBlock({
         <span style={{ fontFamily: FONT.mono, fontSize: 30, fontWeight: 500, color }}>
           {value.toFixed(1)}
         </span>
-        <span style={{ fontFamily: FONT.serif, fontSize: 14, color: BLEND.muted }}>
+        <span style={{ fontFamily: FONT.sans, fontSize: 14, color: BLEND.muted }}>
           / 100 · {data.label}
         </span>
       </div>
       <p
         style={{
           margin: "9px 0 0",
-          fontFamily: FONT.serif,
+          fontFamily: FONT.sans,
           fontSize: 13.5,
           lineHeight: 1.5,
           color: BLEND.muted,
@@ -53,19 +53,19 @@ export function DemocraticHealthBlock({
       </div>
       <div style={{ marginTop: 10, display: "grid", gap: 7 }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-          <span style={{ fontFamily: FONT.serif, fontSize: 13.5 }}>Ruling party drag</span>
+          <span style={{ fontFamily: FONT.sans, fontSize: 13.5 }}>Ruling party drag</span>
           <span style={{ fontFamily: FONT.mono, fontSize: 12, color: BLEND.negative }}>
             -{Math.max(0, data.partyPenaltyPct).toFixed(1)}%
           </span>
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-          <span style={{ fontFamily: FONT.serif, fontSize: 13.5 }}>Sitting President drag</span>
+          <span style={{ fontFamily: FONT.sans, fontSize: 13.5 }}>Sitting President drag</span>
           <span style={{ fontFamily: FONT.mono, fontSize: 12, color: BLEND.negative }}>
             -{Math.max(0, data.currentRulerPenaltyPct).toFixed(1)}%
           </span>
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-          <span style={{ fontFamily: FONT.serif, fontSize: 13.5 }}>Annual GDP growth drag</span>
+          <span style={{ fontFamily: FONT.sans, fontSize: 13.5 }}>Annual GDP growth drag</span>
           <span style={{ fontFamily: FONT.mono, fontSize: 12, color: BLEND.negative }}>
             -{Math.max(0, data.economicDragPctPoints).toFixed(2)} pts
           </span>
@@ -75,7 +75,7 @@ export function DemocraticHealthBlock({
         <p
           style={{
             margin: "9px 0 0",
-            fontFamily: FONT.serif,
+            fontFamily: FONT.sans,
             fontSize: 12.5,
             color: BLEND.mutedDim,
           }}
@@ -87,7 +87,7 @@ export function DemocraticHealthBlock({
         <p
           style={{
             margin: "9px 0 0",
-            fontFamily: FONT.serif,
+            fontFamily: FONT.sans,
             fontSize: 12.5,
             color: BLEND.mutedDim,
           }}

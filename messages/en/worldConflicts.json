@@ -3,7 +3,7 @@
     "tension": {
       "howWorldTensionWorksLabel": "How world tension works",
       "howWorldTensionWorksHelp": "Tension is a shared 0 to 100 measure. Tests, war declarations, and crisis outcomes move it immediately. Each turn it moves toward a pressure floor set by the Vietnam ladder, active crises, the wars on this board, and the world nuclear stockpile. Tension alone can reach DEFCON 2, but never DEFCON 1.",
-      "pressureFloorHelp": "One-off spikes fade. These standing pressures do not. The index cannot fall below this floor and cools 8 percent of the remaining gap each turn when it is above it.",
+      "pressureFloorHelp": "One-off spikes fade over time, but these standing pressures stay. The index cannot fall below this floor and cools 8 percent of the remaining gap each turn when it is above it.",
       "warsLabel": "WARS",
       "warsDetail": "{active, plural, one {# active} other {# active}}, {nuclear, plural, one {# nuclear} other {# nuclear}}",
       "warsHelp": "Every active war on the Conflicts board pushes the floor by its intensity. Any war with nuclear-armed countries on opposing sides guarantees a crisis-grade floor. Other wars are weighted by intensity."
@@ -17,6 +17,161 @@
       "pressure": "Background pressure",
       "decisions": "Open decisions",
       "commitments": "Public commitments"
+    },
+    "federationFinances": {
+      "title": "Federation settlement finances",
+      "accounting": "Amounts use the shared accounting unit. Original bonds retain their issuer and currency.",
+      "administration": "{source} settlement administration, turn {turn}",
+      "continuingIssuer": "{source} inherited debt settlement, turn {turn}",
+      "issuerOwnShare": "Issuer's inherited payment share",
+      "issuerCash": "Issuer cash after contributions",
+      "continuingRisk": "Unpaid contributions reduce successor stability and remain payable by that successor. New borrowing belongs to the continuing issuer. Ordinary sovereign payment rules still apply.",
+      "creditorDue": "Creditor payment due",
+      "overdraft": "Outstanding overdraft",
+      "cash": "Administration cash",
+      "successor": "Successor",
+      "contribution": "Contribution this turn",
+      "arrears": "Outstanding arrears",
+      "risk": "Unpaid contributions reduce successor stability. Later contributions repay the overdraft."
+    },
+    "federationDecisions": {
+      "assets": "Public financial asset shares",
+      "debt": "Public debt and cash-deficit shares",
+      "population": "Use live population shares",
+      "negotiated": "Propose negotiated shares",
+      "totalRequired": "Name every successor. Each allocation must total 100 percent.",
+      "percentLabel": "{entity} share (%)",
+      "share": "{entity}: {share}",
+      "consentStatus": "{entity}: {choice}",
+      "approved": "approved",
+      "rejected": "rejected",
+      "freshVote": "Revised terms require a new legislative vote and fresh consent from every successor. Previous approvals do not carry over."
+    },
+    "russianConstitution": {
+      "title": "Russian institutional decisions",
+      "separateDecisions": "Each institutional change requires its own parliamentary decision. Current officeholders remain until a lawful successor can take office.",
+      "presidency": "Presidency",
+      "federalAssembly": "Federal Assembly",
+      "presidencyHelp": "Authorize a direct presidential election without replacing the current legislature.",
+      "assemblyHelp": "Authorize elections for a 450-seat State Duma and 178-seat Federation Council without establishing a presidency.",
+      "threshold": "Approval requires two-thirds of the full chamber capacity of {seats} seats. Vacancies and abstentions do not reduce the threshold.",
+      "loadError": "Institutional decisions could not be loaded.",
+      "openError": "The institutional bill could not be opened.",
+      "billStatus": "The institutional bill is {status}.",
+      "viewBill": "View bill",
+      "revise": "Open a revised decision",
+      "open": "Open parliamentary decision",
+      "reasons": {
+        "before-date": "The historical decision date has not arrived.",
+        "awaiting-succession": "A ratified Soviet succession settlement is required first.",
+        "already-authorized": "This institutional decision has already been authorized.",
+        "no-legislature": "No active legislature can authorize this decision.",
+        "other-era": "This decision is unavailable in this era.",
+        "awaiting-assembly": "A seated Federal Assembly is required before changing Council formation."
+      },
+      "law1995": "Duma 1995 electoral law",
+      "law1995Help": "Include invalid ballots in the five-percent list threshold and use ballot receipt counts for district turnout. The parallel 225 constituency and 225 list seats remain. Existing campaigns and repeat ballots keep their frozen rules.",
+      "regionalHeads": "Regional heads in the Council",
+      "regionalDelegates": "Separate regional Council representatives",
+      "regionalHeadsHelp": "Let the executive head and legislative chair of each federal subject represent their region in the Council.",
+      "regionalDelegatesHelp": "Let regional executive and legislative authorities appoint separate Council representatives, whose mandates follow the appointing authority.",
+      "ordinaryThreshold": "Each chamber must approve by a majority of its full capacity. The lower chamber has {seats} seats. Ordinary enactment and veto rules still apply."
+    },
+    "hungarianElectoralReform": {
+      "title": "Hungarian 1994 electoral amendment",
+      "help": "Parliament may raise the list threshold from more than four percent to more than five percent, and allow three times the list seat capacity in filed nominees. The date opens the decision. Existing general ballots keep their rules.",
+      "threshold": "More than half the Assembly must attend; two-thirds of attending deputies must approve. Abstentions count as attendance.",
+      "loadError": "Could not load the electoral decision.",
+      "openError": "Could not open the electoral bill. Your office or the decision may have changed.",
+      "open": "Propose amendment",
+      "revise": "Propose revised amendment",
+      "viewBill": "View and vote on the bill",
+      "billStatus": "Bill status: {status}",
+      "reasons": {
+        "before-date": "This decision opens in January 1994.",
+        "other-era": "This decision is available in a 1991 world.",
+        "already-authorized": "Parliament has authorized this amendment.",
+        "modern-law-in-force": "The modern Assembly already has its electoral settlement.",
+        "no-legislature": "The current political settlement has no eligible parliamentary Assembly."
+      },
+      "npcReason": "The NPC government proposed this amendment because its party holds more than five percent of Assembly seats. Parliament still decides.",
+      "legislatorReason": "A deputy introduced this amendment for a parliamentary vote."
+    },
+    "hungarianElectoralReform2011": {
+      "title": "Hungarian 2011 electoral system",
+      "help": "Propose a parliamentary decision on a 199-seat Assembly with 106 constituency seats and 93 national-list seats. Approval applies to later untouched campaigns from January 2012; the sitting Assembly keeps its mandates until the new election is seated.",
+      "threshold": "Approval requires more than half of the 386 deputies attending and two-thirds of attending deputies voting for it. A date alone does not change the electoral system.",
+      "loadError": "Could not load the electoral decision.",
+      "openError": "Could not open the electoral bill. Your office or the decision may have changed.",
+      "open": "Propose amendment",
+      "revise": "Propose revised amendment",
+      "viewBill": "View and vote on the bill",
+      "billStatus": "Bill status: {status}",
+      "reasons": {
+        "before-date": "This decision opens in December 2011.",
+        "other-era": "This decision is available in a 1991 world.",
+        "already-authorized": "Parliament has authorized this amendment.",
+        "modern-law-in-force": "The modern Assembly already has its electoral settlement.",
+        "no-legislature": "The current political settlement has no eligible parliamentary Assembly."
+      },
+      "npcReason": "The NPC government introduced this decision with a two-thirds governing mandate. Deputies still vote on the bill.",
+      "legislatorReason": "A deputy introduced this amendment for a parliamentary vote."
+    },
+    "romanianElectoralReform1992": {
+      "title": "Romanian 1992 parliamentary framework",
+      "help": "Propose 341 deputy and 143 Senate mandates for later untouched campaigns. The sitting chambers retain their mandates until both replacement elections have resolved.",
+      "threshold": "Approval requires a majority of the full membership of each chamber, followed by presidential promulgation. A date alone does not change the chamber sizes.",
+      "loadError": "Could not load the electoral decision.",
+      "openError": "Could not open the electoral bill. Your office or the decision may have changed.",
+      "open": "Propose framework",
+      "revise": "Propose revised framework",
+      "viewBill": "View and vote on the bill",
+      "billStatus": "Bill status: {status}",
+      "reasons": {
+        "before-date": "This decision opens in July 1992.",
+        "other-era": "This decision is available in a 1991 world.",
+        "already-authorized": "Both chambers have enacted this framework.",
+        "existing-settlement": "The later Parliament already has its settlement.",
+        "no-legislature": "The current political settlement has no eligible Romanian Parliament."
+      },
+      "npcReason": "The NPC government introduced this decision with governing majorities in both chambers. Legislators still vote on the bill.",
+      "legislatorReason": "A legislator introduced this framework for parliamentary votes."
+    },
+    "bulgarianConstitution1991": {
+      "title": "Bulgarian 1991 constitution",
+      "help": "The July 1991 date opens a constituent decision. The government, President or 100 constituent deputies can introduce a draft. Adoption requires a separate vote; rejection retains the Grand Assembly.",
+      "threshold": "At least 267 of all 400 constituent deputies must vote for adoption.",
+      "loadError": "Could not load the electoral decision.",
+      "openError": "Could not open the electoral bill. Your office or the decision may have changed.",
+      "open": "Introduce the constitution draft",
+      "revise": "Introduce a revised draft",
+      "viewBill": "View and vote on the bill",
+      "billStatus": "Bill status: {status}",
+      "reasons": {
+        "before-date": "This decision opens in July 1991.",
+        "other-era": "This decision is available in a 1991 world.",
+        "already-authorized": "The constitution has been adopted. Untouched later campaigns can use the ordinary Assembly rules.",
+        "existing-settlement": "The ordinary Assembly is already seated; its existing settlement is preserved.",
+        "no-legislature": "The current political settlement has no eligible Bulgarian constituent Assembly."
+      },
+      "npcReason": "An autonomous government introduced this draft after finding a constituent majority.",
+      "legislatorReason": "The government or President introduced this draft.",
+      "endorse": "Endorse the collective draft",
+      "initiativeProgress": "Collective initiative: {support} of {required} required deputy signatures.",
+      "initiativeReason": "A quarter of constituent deputies endorsed this draft. NPC co-partisans decide whether to endorse using their existing party loyalty and stubbornness.",
+      "transitionLabel": "Transitional clause",
+      "dispositions": {
+        "dissolve": "Dissolve the Grand Assembly after adoption",
+        "continue": "Alternate draft: continue the 400 deputies until the original term ends"
+      },
+      "continuationHelp": "This alternate transitional draft retains the elected 400 deputies as an ordinary chamber until the original four-year term ends. A separate ordinary vote can dissolve it sooner. Adoption still requires 267 constituent votes.",
+      "dissolutionHelp": "The historical transitional draft dissolves the constituent chamber after adoption and opens a 240-seat election. Sitting deputies retain caretaker functions until their successors take office.",
+      "continuedDissolution": {
+        "title": "End the continued Assembly mandate",
+        "help": "This separate motion advances the 240-seat election under the adopted continuation clause. More than 200 of the 400 deputies must participate, and a majority present must support it. Recorded ballots keep their rules.",
+        "open": "Introduce the dissolution motion",
+        "revise": "Introduce a revised dissolution motion"
+      }
     }
   }
 }

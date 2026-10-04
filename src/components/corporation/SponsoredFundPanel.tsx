@@ -29,8 +29,12 @@ type SponsoredFund = {
   countryId: string | null;
 };
 
-const sponsoredFundHref = (f: SponsoredFund) =>
-  `/stockmarket/${f.scope === "global" || !f.countryId ? "global" : f.countryId.toLowerCase()}/fund/${f.slug}`;
+// The country segment comes from a form select and the slug from the API, so
+// both are encoded rather than trusted to stay URL-clean.
+const fundPageHref = (scope: string, countryId: string | null, slug: string) =>
+  `/stockmarket/${encodeURIComponent(scope === "global" || !countryId ? "global" : countryId.toLowerCase())}/fund/${encodeURIComponent(slug)}`;
+
+const sponsoredFundHref = (f: SponsoredFund) => fundPageHref(f.scope, f.countryId, f.slug);
 
 /**
  * Funds this corporation already sponsors. Before this, a chartered fund
@@ -59,19 +63,20 @@ function SponsoredFundList({ corpId, refreshKey }: { corpId: string; refreshKey:
   if (!funds || funds.length === 0) return null;
 
   return (
-    <div className="mb-4 rounded-lg border border-card-border bg-background p-3">
-      <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
+    <div className="mb-4">
+      <h4 className="mb-1 border-b border-card-border pb-1.5 text-sm font-semibold text-foreground">
         Funds this corporation sponsors
       </h4>
       <ul className="space-y-1.5">
         {funds.map((f) => (
           <li key={f.id} className="flex items-center justify-between gap-3 text-sm">
-            <Link href={sponsoredFundHref(f)} className="font-medium text-primary hover:underline">
+            <Link
+              href={sponsoredFundHref(f)}
+              className="font-medium text-foreground hover:underline"
+            >
               {f.name} <span className="font-mono text-xs text-muted">{f.ticker}</span>
             </Link>
-            <span className="font-mono text-[10px] uppercase tracking-wide text-muted">
-              {f.status === "active" ? f.kind : f.status}
-            </span>
+            <span className="text-xs text-muted">{f.status === "active" ? f.kind : f.status}</span>
           </li>
         ))}
       </ul>
@@ -158,14 +163,14 @@ export default function SponsoredFundPanel({ corpId }: { corpId: string }) {
     }
   }
 
-  const fundHref = chartered
-    ? `/stockmarket/${scope === "global" ? "global" : countryId.toLowerCase()}/fund/${chartered.slug}`
-    : "";
+  const fundHref = chartered ? fundPageHref(scope, countryId, chartered.slug) : "";
 
   return (
-    <section className="rounded-lg border border-card-border bg-card p-4">
+    <section className="min-w-0 space-y-2">
       <SponsoredFundList corpId={corpId} refreshKey={chartered?.slug ?? null} />
-      <h3 className="mb-2 text-sm font-semibold text-foreground">Charter a sponsored fund</h3>
+      <div className="flex min-h-8 items-baseline border-b border-card-border pb-1.5">
+        <h2 className="text-sm font-semibold text-foreground">Charter a sponsored fund</h2>
+      </div>
       <p className="mb-3 text-xs text-muted">
         Launch an index fund your corporation runs. You choose the scope and the fee; the index
         machinery picks and rebalances the constituents. Chartering costs a{" "}
@@ -178,7 +183,7 @@ export default function SponsoredFundPanel({ corpId }: { corpId: string }) {
       {chartered ? (
         <p className="text-xs font-semibold text-foreground">
           {chartered.ticker} is chartered and trading.{" "}
-          <Link href={fundHref} className="text-primary hover:underline">
+          <Link href={fundHref} className="text-foreground underline underline-offset-2">
             View the fund
           </Link>
         </p>
@@ -194,7 +199,7 @@ export default function SponsoredFundPanel({ corpId }: { corpId: string }) {
                 placeholder="e.g. Meridian National Index"
                 minLength={4}
                 maxLength={60}
-                className="mt-1 rounded-lg border border-card-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-primary focus:outline-none"
+                className="mt-1 h-7 rounded-md border border-card-border bg-background px-2 text-[13px] text-foreground placeholder:text-muted focus:border-foreground focus:outline-none"
                 required
               />
             </label>
@@ -206,7 +211,7 @@ export default function SponsoredFundPanel({ corpId }: { corpId: string }) {
                 onChange={(e) => setTicker(e.target.value.toUpperCase().replace(/[^A-Z]/g, ""))}
                 placeholder="MERX"
                 maxLength={8}
-                className="mt-1 w-28 rounded-lg border border-card-border bg-card px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted focus:border-primary focus:outline-none"
+                className="mt-1 h-7 w-28 rounded-md border border-card-border bg-background px-2 font-mono text-[13px] text-foreground placeholder:text-muted focus:border-foreground focus:outline-none"
                 required
               />
             </label>
@@ -218,7 +223,7 @@ export default function SponsoredFundPanel({ corpId }: { corpId: string }) {
               <select
                 value={scope}
                 onChange={(e) => setScope(e.target.value as "country" | "global")}
-                className="mt-1 rounded-lg border border-card-border bg-card px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+                className="mt-1 h-7 rounded-md border border-card-border bg-background px-2 text-[13px] text-foreground focus:border-foreground focus:outline-none"
               >
                 <option value="country">One country</option>
                 <option value="global">Global</option>
@@ -230,7 +235,7 @@ export default function SponsoredFundPanel({ corpId }: { corpId: string }) {
                 <select
                   value={countryId}
                   onChange={(e) => setCountryId(e.target.value)}
-                  className="mt-1 rounded-lg border border-card-border bg-card px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+                  className="mt-1 h-7 rounded-md border border-card-border bg-background px-2 text-[13px] text-foreground focus:border-foreground focus:outline-none"
                   required
                 >
                   <option value="">Pick a country…</option>
@@ -247,7 +252,7 @@ export default function SponsoredFundPanel({ corpId }: { corpId: string }) {
               <select
                 value={kind}
                 onChange={(e) => setKind(e.target.value as "broad" | "sector")}
-                className="mt-1 rounded-lg border border-card-border bg-card px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+                className="mt-1 h-7 rounded-md border border-card-border bg-background px-2 text-[13px] text-foreground focus:border-foreground focus:outline-none"
               >
                 <option value="broad">Broad market</option>
                 <option value="sector">One industry</option>
@@ -259,7 +264,7 @@ export default function SponsoredFundPanel({ corpId }: { corpId: string }) {
                 <select
                   value={sectorType}
                   onChange={(e) => setSectorType(e.target.value)}
-                  className="mt-1 rounded-lg border border-card-border bg-card px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+                  className="mt-1 h-7 rounded-md border border-card-border bg-background px-2 text-[13px] text-foreground focus:border-foreground focus:outline-none"
                   required
                 >
                   <option value="">Pick an industry…</option>
@@ -283,7 +288,7 @@ export default function SponsoredFundPanel({ corpId }: { corpId: string }) {
                 min={minPct}
                 max={maxPct}
                 step="0.01"
-                className="mt-1 w-32 rounded-lg border border-card-border bg-card px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+                className="mt-1 h-7 w-32 rounded-md border border-card-border bg-background px-2 text-[13px] text-foreground focus:border-foreground focus:outline-none"
                 required
               />
             </label>
@@ -295,14 +300,14 @@ export default function SponsoredFundPanel({ corpId }: { corpId: string }) {
                 onChange={(e) => setSeedCapital(e.target.value)}
                 min={FUND_MIN_SEED_CAPITAL_ANCHOR}
                 step="1000000"
-                className="mt-1 w-44 rounded-lg border border-card-border bg-card px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+                className="mt-1 h-7 w-44 rounded-md border border-card-border bg-background px-2 text-[13px] text-foreground focus:border-foreground focus:outline-none"
                 required
               />
             </label>
             <button
               type="submit"
               disabled={busy}
-              className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-primary/90 disabled:opacity-50"
+              className="inline-flex h-7 items-center rounded-md border border-primary bg-primary px-2.5 text-xs font-medium text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {busy ? "Chartering…" : `Charter for ${fmt(totalCost)}`}
             </button>

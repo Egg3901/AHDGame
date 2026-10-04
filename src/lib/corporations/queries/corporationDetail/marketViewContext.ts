@@ -92,10 +92,19 @@ export async function loadMarketViewContext(
   const corpBuckets = sectors.map((s) => ({
     stateId: s.stateId,
     sectorType: s.sectorType,
+    industryModel: s.industryModel ?? null,
+    mediaDiscriminator: s.mediaDiscriminator ?? null,
   }));
   const bucketFilter =
     corpBuckets.length > 0
-      ? { $or: corpBuckets.map((b) => ({ stateId: b.stateId, sectorType: b.sectorType })) }
+      ? {
+          $or: corpBuckets.map((b) => ({
+            stateId: b.stateId,
+            sectorType: b.sectorType,
+            industryModel: b.industryModel,
+            mediaDiscriminator: b.mediaDiscriminator,
+          })),
+        }
       : null;
 
   const [siblingSectors, unownedSectors] = bucketFilter

@@ -288,7 +288,7 @@ A bank holding exactly its required reserves pays the base rate. Thin reserves p
 
 **The insured cap.** Deposits are insured up to a per-depositor cap, anchored at **₳5,000,000** in modern USD reference terms and scaled to each currency and era the same way charter capital is. Balances above the cap are not the fund's problem.
 
-**When a bank fails.** The failed bank's remaining cash and posted capital form a recovery pool. Insured balances are kept whole; excess above the cap is paid pro rata from whatever recovery remains, and the unpaid part is a haircut the depositor eats. The bill for the kept balances is funded in strict order: recovery pool first, then the insurance fund, then a **Treasury backstop**. The backstop is unconditional and lands in the federal budget as a depositInsurance spending line, pushing the treasury into debt if it must. A country whose banks fail bigger than the fund pays for it in fiscal terms, in public.
+**When a bank fails.** The failed bank's remaining cash and posted capital form a recovery pool. Insured balances are kept whole; excess above the cap is paid pro rata from whatever recovery remains, and the unpaid part is a haircut the depositor eats. The bill for the kept balances is funded in strict order: recovery pool first, then the insurance fund, then available government treasury cash. If cash is short, the government issues bonds to the currency bond pool. The expense appears in the federal budget's depositInsurance line. If the pool cannot fund the needed bonds, the estate stays unresolved until funds are available.
 
 The Central Bank page's Insurance tab surfaces the fund: its balance, lifetime premiums collected, payouts, and how much the Treasury has ever been made to cover.
 

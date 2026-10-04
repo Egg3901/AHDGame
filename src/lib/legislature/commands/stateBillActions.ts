@@ -22,6 +22,7 @@ import { finalizeStateBillEnactment } from "@/lib/turn/billLifecycle/regionalEng
 import { generateBillSignedNews, generateBillVetoedNews } from "@/lib/news";
 import { isVotingDeadlinePassed } from "@/lib/legislature/billVotingWindow";
 import type { LegislatureCommandResult } from "@/lib/legislature/commands/types";
+import { captureBillStatusChanged } from "@/lib/analytics/billStatusAnalytics";
 
 const OVERRIDE_VOTING_HOURS = 24;
 
@@ -359,7 +360,25 @@ export async function takeStateBillGovernorAction(
 
     const gameState = await db.collection<GameState>("gameState").findOne({ _id: "current" });
     const currentTurn = gameState?.currentTurn ?? 1;
-    const outcome = await finalizeStateBillEnactment(db, bill, currentTurn);
+    await captureBillStatusChanged({
+      db,
+      billId: bill._id.toString(),
+      fromStatus: bill.status,
+      toStatus: "enacted",
+      scope: "regional",
+      chamber: "regional",
+      category: bill.category,
+      provisionFamily: bill.provisions?.[0]?.type,
+      voteMargin: bill.votesFor - bill.votesAgainst,
+      nationId: countryId,
+      turn: currentTurn,
+      iteration: gameState?.iteration,
+    });
+    const outcome = await finalizeStateBillEnactment(
+      db,
+      { ...bill, status: "enacted" },
+      currentTurn
+    );
     if (!outcome.enacted) {
       // Race safety net: the internal gate rejected between the pre-check above
       // and finalization. The bill is already marked failed with budgetRejection.
@@ -427,6 +446,20 @@ export async function takeStateBillGovernorAction(
       },
     }
   );
+
+  await captureBillStatusChanged({
+    db,
+    billId: bill._id.toString(),
+    fromStatus: bill.status,
+    toStatus: "veto_override",
+    scope: "regional",
+    chamber: "regional",
+    category: bill.category,
+    provisionFamily: bill.provisions?.[0]?.type,
+    nationId: countryId,
+    turn: vetoTurn,
+    iteration: vetoGameState?.iteration,
+  });
 
   if (bill.sponsorId) {
     const sponsor = await db

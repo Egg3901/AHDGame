@@ -131,6 +131,19 @@ describe("isMultiSeatRace", () => {
 });
 
 describe("hareQuota", () => {
+  it("shows a quota for Bulgaria's 2027 PR race but not its Cold War race", () => {
+    const race = houseRace({ countryId: "BG", electionType: "nationalAssembly", state: "BG31" });
+    expect(hareQuota(race, "BG", "2027-default")).toBe(10_000);
+    expect(hareQuota(race, "BG", "1991-default")).toBeNull();
+    expect(hareQuota(race, "BG", "1979-default")).toBeNull();
+    const [card] = buildBlendRegionCards({
+      ...baseInput,
+      countryId: "BG",
+      preset: "2027-default",
+      elections: [race],
+    });
+    expect(card?.standfirst).toContain("quota of 10,000");
+  });
   it("returns votes-per-seat for a Hare-quota race", () => {
     expect(hareQuota(houseRace(), "US")).toBe(10_000);
   });

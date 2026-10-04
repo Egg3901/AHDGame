@@ -85,11 +85,11 @@ export interface OrganizationSummary {
     status: OrganizationMembership["status"];
     joinedTurn: number;
     /**
-     * Whether this member casts a ballot ON AN ADMISSION OR A BLOC WAR ENTRY —
-     * the two ballots that ask a member to consent to someone else's business
-     * and let its silence block. Any entity may be a member; only player-enabled
-     * countries vote on these. Vote rosters MUST filter on this or they promise a
-     * ballot that can never arrive.
+     * Whether this member casts a ballot ON AN ADMISSION, A BLOC WAR DECLARATION,
+     * OR A BLOC WAR ENTRY — the ballots that ask a member to consent to someone
+     * else's business and let its silence block. Any entity may be a member; only
+     * player-enabled countries vote on these. Vote rosters MUST filter on this or
+     * they promise a ballot that can never arrive.
      */
     hasVote: boolean;
     /**
@@ -99,10 +99,10 @@ export interface OrganizationSummary {
      *
      * Wider than `hasVote`: in active mode it also covers modelled members run by
      * an NPP government. They are trusted here, where a silence merely costs a
-     * yes or is a party declining its own deal, and kept off an admission or an
-     * entry resolution, where a silence is a veto. Pick the field that matches
-     * the ballot you are rendering — showing a threshold the resolver will not
-     * apply is the whole of ticket #1257.
+     * yes or is a party declining its own deal, and kept off an admission,
+     * declaration, or entry resolution, where a silence is a veto. Pick the field
+     * that matches the ballot you are rendering — showing a threshold the
+     * resolver will not apply is the whole of ticket #1257.
      */
     hasPolicyVote: boolean;
     /**

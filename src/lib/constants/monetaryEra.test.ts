@@ -97,33 +97,23 @@ describe("getEraMonetaryBaseline", () => {
     }
   });
 
-  it("selects the era table by span of the CURRENT in-game year: <1971, <1979, <1991, <1999, then modern", () => {
-    // Era spans (current-year keying, 2026-07-17 correction): a year belongs
-    // to the era it is IN — 1953-era until 1971, 1971-era until 1979, 1979-era
-    // until 1991, 1991-era until 1999. Exact preset years (1953/1979/1991/1999+)
-    // resolve the same table the old seed-year windows did.
-    //
-    // The 1971 split was added because a 1953 world runs ~48 turns per in-game
-    // year, so a 1000-turn run reaches ~1973 — the whole post-Bretton-Woods
-    // period previously resolved 1953 anchors, i.e. Bretton-Woods price
-    // stability persisting years after the system it depended on ended.
+  it("preserves exact anchors and graduates between them", () => {
     expect(getEraMonetaryBaseline("IT", 1953)?.targetInflation).toBe(2.5);
-    expect(getEraMonetaryBaseline("IT", 1955)?.targetInflation).toBe(2.5); // still 1953 era
-    expect(getEraMonetaryBaseline("IT", 1970)?.targetInflation).toBe(2.5); // last 1953-era year
-    expect(getEraMonetaryBaseline("IT", 1971)?.targetInflation).toBe(9.0); // 1971 table
-    expect(getEraMonetaryBaseline("IT", 1978)?.targetInflation).toBe(9.0);
-    expect(getEraMonetaryBaseline("IT", 1979)?.targetInflation).toBe(15.0); // 1979 table
-    expect(getEraMonetaryBaseline("IT", 1990)?.targetInflation).toBe(15.0);
-    expect(getEraMonetaryBaseline("IT", 1991)?.targetInflation).toBe(5.5); // 1991 table
-    expect(getEraMonetaryBaseline("IT", 1998)?.targetInflation).toBe(5.5);
-    expect(getEraMonetaryBaseline("IT", 1999)).toBeUndefined(); // modern
+    expect(getEraMonetaryBaseline("IT", 1971)?.targetInflation).toBe(9);
+    expect(getEraMonetaryBaseline("IT", 1979)?.targetInflation).toBe(15);
+    expect(getEraMonetaryBaseline("IT", 1991)?.targetInflation).toBe(5.5);
+    expect(getEraMonetaryBaseline("IT", 1999)).toBeUndefined();
+    expect(getEraMonetaryBaseline("IT", 1962)?.targetInflation).toBeCloseTo(5.75);
+    expect(getEraMonetaryBaseline("IT", 1975)?.targetInflation).toBeCloseTo(12);
+    expect(getEraMonetaryBaseline("IT", 1985)?.targetInflation).toBeCloseTo(10.25);
+    expect(getEraMonetaryBaseline("IT", 1995)?.targetInflation).toBeCloseTo(10.25);
   });
 
   it("GRADUATION: a long-lived world re-keys its anchors as its clock advances", () => {
     // A 1953-default world over 70 in-game years of play:
-    expect(getEraMonetaryBaseline("IT", 1955)?.targetInflation).toBe(2.5); // 1953 anchors
-    expect(getEraMonetaryBaseline("IT", 1985)?.targetInflation).toBe(15.0); // 1979 anchors
-    expect(getEraMonetaryBaseline("IT", 1995)?.targetInflation).toBe(5.5); // 1991 anchors
+    expect(getEraMonetaryBaseline("IT", 1955)?.targetInflation).toBeCloseTo(2.5 + 6.5 / 9);
+    expect(getEraMonetaryBaseline("IT", 1985)?.targetInflation).toBeCloseTo(10.25);
+    expect(getEraMonetaryBaseline("IT", 1995)?.targetInflation).toBeCloseTo(10.25);
     expect(getEraMonetaryBaseline("IT", 2020)).toBeUndefined(); // modern
     // The live 1991-default world at in-game ~2015: modern anchors — its
     // pre-era-table (pre-2026-07-17) behavior.
@@ -248,5 +238,26 @@ describe("getEraTrendGdpGrowth", () => {
       expect(getEraTrendGdpGrowth(countryId, 2019)).toBeUndefined();
       expect(getEraTrendGdpGrowth(countryId, undefined)).toBeUndefined();
     }
+  });
+});
+
+describe("calibration boundary continuity", () => {
+  it.each([1953, 1971, 1979, 1991, 1999])("has no table switch at %s", (year) => {
+    for (const country of Object.keys(MONETARY_BASELINES) as CountryId[]) {
+      const baseline = (date: number) =>
+        getEraMonetaryBaseline(country, date) ?? MONETARY_BASELINES[country];
+      for (const key of ["targetInflation", "neutralPrimeRate"] as const) {
+        expect(baseline(year - 0.000001)[key]).toBeCloseTo(baseline(year)[key], 4);
+        expect(baseline(year + 0.000001)[key]).toBeCloseTo(baseline(year)[key], 4);
+      }
+      expect(getEraTrendGdpGrowth(country, year - 0.000001) ?? 2.5).toBeCloseTo(
+        getEraTrendGdpGrowth(country, year) ?? 2.5,
+        4
+      );
+    }
+  });
+  it("retains an absent growth override when both anchors delegate to live metrics", () => {
+    expect(getEraTrendGdpGrowth("US", 1995)).toBeUndefined();
+    expect(getEraTrendGdpGrowth("RU", 1998)).toBeCloseTo(1.5625);
   });
 });

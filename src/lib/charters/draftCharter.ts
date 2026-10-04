@@ -1,3 +1,8 @@
+/**
+ * Party founders draft an identity for three eligible human signatories.
+ * draftCharter protects existing names and abbreviations, while an explicit
+ * empty 1991 player start permits absent historical party identities.
+ */
 import type { Db, ObjectId } from "mongodb";
 import { ObjectId as ObjectIdCtor } from "mongodb";
 import type {
@@ -6,6 +11,7 @@ import type {
   PartyCharter,
   PartyCharterPlatform,
   PoliticalParty,
+  GameState,
 } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import { clampPlatform } from "./overtonGuardrails";
@@ -16,6 +22,8 @@ import { politicalParties as usParties } from "@/lib/seeds/reference/politicalPa
 import { ukParties } from "@/lib/seeds/uk/ukParties";
 import { deParties } from "@/lib/seeds/de/deParties";
 import { jpParties } from "@/lib/countries/jp/data/jpParties";
+import { getEnabledCountryIdsFromDb } from "@/lib/countryAccess";
+import { retainsDefaultPartyNameReservation } from "./rules/defaultNameReservation";
 
 /**
  * Names + abbreviations reserved for preset-gated default parties (e.g.
@@ -23,7 +31,8 @@ import { jpParties } from "@/lib/countries/jp/data/jpParties";
  * / PDS, "Reform UK" / RUK). Even when the gated default isn't currently
  * seeded for the active preset, the name is held back so a player can't
  * mint a custom party that would collide with the default on a future
- * preset switch (which would otherwise create a duplicate-name row when
+ * preset switch, except an explicit 1991 empty start in a player country
+ * (which would otherwise create a duplicate-name row when
  * `ensureDefaultParties` runs).
  */
 const PRESET_RESERVED_DEFAULTS: ReadonlyArray<{
@@ -195,21 +204,40 @@ export async function draftCharter(input: DraftCharterInput, db: Db): Promise<Dr
     return { ok: false, reason: "name-taken" };
   }
 
-  // Reject names/abbreviations reserved for preset-gated default parties,
-  // even when the gated default isn't currently seeded. Prevents the
-  // duplicate-name collision that would otherwise occur on a preset switch
-  // (when `ensureDefaultParties` re-introduces the gated default).
+  // Default reservations protect future preset identities. An explicit empty
+  // 1991 player start permits founders to create an absent historical identity;
+  // the live party and charter checks above still prevent duplicate names.
   const reservedConflict = PRESET_RESERVED_DEFAULTS.find(
     (r) =>
       r.countryId === input.countryId &&
       (r.name.toLowerCase() === input.proposedName.toLowerCase() ||
         r.abbreviation.toUpperCase() === upperAbbr)
   );
+  let reservationGame:
+    Pick<GameState, "preset" | "startingPartiesMode" | "currentTurn"> | null | undefined;
   if (reservedConflict) {
-    if (reservedConflict.abbreviation.toUpperCase() === upperAbbr) {
-      return { ok: false, reason: "abbreviation-taken" };
+    reservationGame = await db
+      .collection<GameState>("gameState")
+      .findOne(
+        { _id: "current" },
+        { projection: { preset: 1, startingPartiesMode: 1, currentTurn: 1 } }
+      );
+    const emptyStart =
+      reservationGame?.preset === "1991-default" && reservationGame.startingPartiesMode === "none";
+    const playerCountry =
+      emptyStart && (await getEnabledCountryIdsFromDb(db)).includes(input.countryId);
+    if (
+      retainsDefaultPartyNameReservation({
+        preset: reservationGame?.preset,
+        startingPartiesMode: reservationGame?.startingPartiesMode,
+        playerCountry,
+      })
+    ) {
+      if (reservedConflict.abbreviation.toUpperCase() === upperAbbr) {
+        return { ok: false, reason: "abbreviation-taken" };
+      }
+      return { ok: false, reason: "name-taken" };
     }
-    return { ok: false, reason: "name-taken" };
   }
 
   // F4 founding-cohort validation. Each pick's stateId must be either the
@@ -233,6 +261,7 @@ export async function draftCharter(input: DraftCharterInput, db: Db): Promise<Dr
   // injected; null when unavailable (legacy/test) → server falls back to the Date.
   const currentTurn =
     input.currentTurn ??
+    reservationGame?.currentTurn ??
     (
       await db
         .collection<{ _id: string; currentTurn?: number }>("gameState")

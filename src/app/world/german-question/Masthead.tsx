@@ -40,7 +40,7 @@ function Stat({ label, value, tone }: { label: string; value: string; tone: stri
   return (
     <div>
       <div className="font-mono text-body-xs font-semibold tracking-widest text-muted">{label}</div>
-      <div className={`font-serif text-display font-bold leading-tight ${tone}`}>{value}</div>
+      <div className={`text-display font-bold leading-tight ${tone}`}>{value}</div>
     </div>
   );
 }
@@ -67,7 +67,7 @@ export function Masthead({ view }: { view: DossierView }) {
           <p className="mb-1.5 font-mono text-body-xs font-semibold tracking-widest text-gold-muted">
             STANDING CRISIS · NO EXPIRY · GAME-WIDE
           </p>
-          <h1 className="font-serif text-display font-bold leading-none text-foreground">
+          <h1 className="text-display font-bold leading-none text-foreground">
             The German Question
           </h1>
           <p className="mt-2.5 max-w-[600px] text-pretty text-body leading-relaxed text-muted">
@@ -108,7 +108,7 @@ export function Masthead({ view }: { view: DossierView }) {
               BONN&apos;S OWN DRIFT · LAST TICK
             </div>
             <div className="mt-1.5 flex flex-wrap items-baseline gap-2">
-              <span className={`font-serif text-display font-bold leading-none ${driftTone}`}>
+              <span className={`text-display font-bold leading-none ${driftTone}`}>
                 {view.drift.last >= 0 ? "+" : ""}
                 {view.drift.last.toFixed(1)}
               </span>
@@ -132,7 +132,7 @@ export function Masthead({ view }: { view: DossierView }) {
             <div className="font-mono text-body-xs font-bold tracking-wider text-muted">
               NEXT TICK
             </div>
-            <div className="mt-1.5 font-serif text-heading-lg font-bold leading-none text-foreground">
+            <div className="mt-1.5 text-heading-lg font-bold leading-none text-foreground">
               {countdown ?? "—"}
             </div>
             <div className="mt-1 font-mono text-body-xs text-muted">

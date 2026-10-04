@@ -1,6 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { publicPageMetadata } from "@/lib/siteMetadata";
+import {
+  Callout,
+  SectionHeader,
+  SubHeader,
+  TableOfContents,
+} from "@/app/guides/_components/GuideBlocks";
 
 export const metadata: Metadata = publicPageMetadata({
   title: "Running for Office (UK & Japan) | A House Divided",
@@ -9,54 +15,18 @@ export const metadata: Metadata = publicPageMetadata({
   pathname: "/guides/running-for-office/intl",
 });
 
-function SectionHeader({ id, children }: { id: string; children: React.ReactNode }) {
-  return (
-    <h2
-      id={id}
-      className="scroll-mt-4 text-xl font-bold tracking-tight text-foreground border-l-4 border-primary/60 pl-3"
-    >
-      {children}
-    </h2>
-  );
-}
-
-function SubHeader({ children }: { children: React.ReactNode }) {
-  return <h3 className="font-semibold text-foreground">{children}</h3>;
-}
-
-function Callout({
-  children,
-  variant = "info",
-}: {
-  children: React.ReactNode;
-  variant?: "info" | "warn" | "tip";
-}) {
-  const colors = {
-    info: "border-primary/40 bg-primary/5",
-    warn: "border-amber-500/40 bg-amber-500/5",
-    tip: "border-emerald-500/40 bg-emerald-500/5",
-  };
-  return (
-    <div
-      className={`rounded-r-lg border-l-4 px-4 py-3 text-sm text-muted leading-relaxed ${colors[variant]}`}
-    >
-      {children}
-    </div>
-  );
-}
-
 const TOC_ITEMS = [
-  { id: "parliament-vs-president", label: "Parliamentary vs Presidential" },
-  { id: "shared-mechanics", label: "Shared Campaign Mechanics" },
-  { id: "uk-offices", label: "UK: Offices & Races" },
-  { id: "uk-electoral", label: "UK: Electoral System" },
-  { id: "uk-government", label: "UK: Government Formation" },
-  { id: "uk-tips", label: "UK: Strategy Tips" },
-  { id: "jp-offices", label: "Japan: Offices & Races" },
-  { id: "jp-electoral", label: "Japan: Electoral System" },
-  { id: "jp-snap", label: "Japan: Snap Elections" },
-  { id: "jp-cabinet", label: "Japan: Cabinet Bills" },
-  { id: "jp-tips", label: "Japan: Strategy Tips" },
+  { id: "parliament-vs-president", label: "Parliamentary vs presidential" },
+  { id: "shared-mechanics", label: "Shared campaign mechanics" },
+  { id: "uk-offices", label: "UK: offices & races" },
+  { id: "uk-electoral", label: "UK: electoral system" },
+  { id: "uk-government", label: "UK: government formation" },
+  { id: "uk-tips", label: "UK: strategy tips" },
+  { id: "jp-offices", label: "Japan: offices & races" },
+  { id: "jp-electoral", label: "Japan: electoral system" },
+  { id: "jp-snap", label: "Japan: snap elections" },
+  { id: "jp-cabinet", label: "Japan: cabinet bills" },
+  { id: "jp-tips", label: "Japan: strategy tips" },
 ];
 
 export default function RunningForOfficeIntlPage() {
@@ -89,24 +59,12 @@ export default function RunningForOfficeIntlPage() {
         </div>
 
         <div className="space-y-10">
-          {/* Table of Contents */}
-          <div className="rounded-xl border border-card-border bg-card p-5">
-            <p className="mb-3 text-xs font-bold uppercase tracking-wider text-muted">Contents</p>
-            <ol className="grid gap-y-1 gap-x-4 text-sm sm:grid-cols-2">
-              {TOC_ITEMS.map((item, i) => (
-                <li key={item.id}>
-                  <a href={`#${item.id}`} className="text-primary hover:underline">
-                    {i + 1}. {item.label}
-                  </a>
-                </li>
-              ))}
-            </ol>
-          </div>
+          <TableOfContents items={TOC_ITEMS} />
 
           {/* ── 1. Parliamentary vs Presidential ── */}
           <section className="space-y-4">
             <SectionHeader id="parliament-vs-president">
-              1. Parliamentary vs Presidential
+              1. Parliamentary vs presidential
             </SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               The UK and Japan use{" "}
@@ -160,7 +118,7 @@ export default function RunningForOfficeIntlPage() {
                 </tbody>
               </table>
             </div>
-            <Callout variant="info">
+            <Callout>
               This guide covers what is unique to UK and Japan. The underlying campaign mechanics
               (Political Influence, favorability, upgrades, and the vote formula) work the same as
               in the US. See the{" "}
@@ -173,7 +131,7 @@ export default function RunningForOfficeIntlPage() {
 
           {/* ── 2. Shared Campaign Mechanics ── */}
           <section className="space-y-4">
-            <SectionHeader id="shared-mechanics">2. Shared Campaign Mechanics</SectionHeader>
+            <SectionHeader id="shared-mechanics">2. Shared campaign mechanics</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Everything in the US guide applies here too: the vote formula (alignment × reach ×
               favorability × party org), campaign upgrades, Political Influence decay, fundraising
@@ -190,15 +148,13 @@ export default function RunningForOfficeIntlPage() {
 
           {/* ═══════════════════════════════ UK ═══════════════════════════════ */}
 
-          <div className="rounded-xl border border-card-border/60 bg-card/30 px-5 py-3">
-            <p className="text-xs font-bold uppercase tracking-wider text-primary">
-              United Kingdom
-            </p>
-          </div>
+          <p className="border-b border-card-border pb-2 text-sm font-semibold text-foreground">
+            United Kingdom
+          </p>
 
           {/* ── 3. UK Offices ── */}
           <section className="space-y-4">
-            <SectionHeader id="uk-offices">3. UK: Offices &amp; Races</SectionHeader>
+            <SectionHeader id="uk-offices">3. UK: offices &amp; races</SectionHeader>
             <div className="overflow-x-auto rounded-xl border border-card-border">
               <table className="w-full text-sm">
                 <thead>
@@ -235,10 +191,10 @@ export default function RunningForOfficeIntlPage() {
                 </tbody>
               </table>
             </div>
-            <Callout variant="warn">
-              <strong className="text-foreground">
-                Commons and Regional Council seats are mutually exclusive.
-              </strong>{" "}
+            <Callout
+              kind="warning"
+              label="Commons and Regional Council seats are mutually exclusive."
+            >
               If you win a seat in the House of Commons, your Regional Council seat is automatically
               vacated, and vice versa. Plan your career path before running; you cannot hold both.
             </Callout>
@@ -246,7 +202,7 @@ export default function RunningForOfficeIntlPage() {
 
           {/* ── 4. UK Electoral System ── */}
           <section className="space-y-4">
-            <SectionHeader id="uk-electoral">4. UK: Electoral System</SectionHeader>
+            <SectionHeader id="uk-electoral">4. UK: electoral system</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               UK Commons elections use{" "}
               <strong className="text-foreground">multi-seat proportional representation</strong>{" "}
@@ -255,9 +211,7 @@ export default function RunningForOfficeIntlPage() {
             </p>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="rounded-xl border border-card-border bg-card p-4 space-y-2">
-                <p className="text-xs font-bold uppercase tracking-wider text-muted">
-                  Seat allocation
-                </p>
+                <p className="text-sm font-semibold text-foreground">Seat allocation</p>
                 <ul className="space-y-1 text-sm text-muted">
                   <li>• England: 543 MPs</li>
                   <li>• Scotland: 57 MPs</li>
@@ -267,9 +221,7 @@ export default function RunningForOfficeIntlPage() {
                 </ul>
               </div>
               <div className="rounded-xl border border-card-border bg-card p-4 space-y-2">
-                <p className="text-xs font-bold uppercase tracking-wider text-muted">
-                  Eligibility threshold
-                </p>
+                <p className="text-sm font-semibold text-foreground">Eligibility threshold</p>
                 <ul className="space-y-1 text-sm text-muted">
                   <li>
                     • <strong className="text-foreground">20% minimum</strong> regional vote share
@@ -280,11 +232,11 @@ export default function RunningForOfficeIntlPage() {
                 </ul>
               </div>
             </div>
-            <Callout variant="warn">
-              <strong className="text-foreground">The 20% threshold is hard.</strong> A party
-              polling at 18% gets nothing. This creates a significant spoiler dynamic: small parties
-              that cannot clear 20% actively hurt the ideologically nearest larger party by bleeding
-              votes. In a tight multi-party race, coordinate with allied parties or you both lose.
+            <Callout kind="warning" label="The 20% threshold is hard.">
+              A party polling at 18% gets nothing. This creates a significant spoiler dynamic: small
+              parties that cannot clear 20% actively hurt the ideologically nearest larger party by
+              bleeding votes. In a tight multi-party race, coordinate with allied parties or you
+              both lose.
             </Callout>
             <SubHeader>Regional party dynamics</SubHeader>
             <p className="text-sm text-muted leading-relaxed">
@@ -298,7 +250,7 @@ export default function RunningForOfficeIntlPage() {
 
           {/* ── 5. UK Government Formation ── */}
           <section className="space-y-4">
-            <SectionHeader id="uk-government">5. UK: Government Formation</SectionHeader>
+            <SectionHeader id="uk-government">5. UK: government formation</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               After Commons elections resolve, seats are tallied across all four regions. The path
               to PM depends on how many seats your party controls.
@@ -348,8 +300,7 @@ export default function RunningForOfficeIntlPage() {
               government formation restarts from scratch. There is a 48-turn cooldown before another
               confidence vote can be called.
             </p>
-            <Callout variant="tip">
-              <strong className="text-foreground">Cabinet posts reset on every PM change.</strong>{" "}
+            <Callout kind="warning" label="Cabinet posts reset on every PM change.">
               When a new PM is appointed, the entire cabinet is dismissed and all pending
               nominations are withdrawn. If you hold a cabinet role, plan for this; your position is
               not stable between governments.
@@ -358,7 +309,7 @@ export default function RunningForOfficeIntlPage() {
 
           {/* ── 6. UK Tips ── */}
           <section className="space-y-4">
-            <SectionHeader id="uk-tips">6. UK: Strategy Tips</SectionHeader>
+            <SectionHeader id="uk-tips">6. UK: strategy tips</SectionHeader>
             <ul className="space-y-3 text-sm text-muted">
               {[
                 [
@@ -393,13 +344,13 @@ export default function RunningForOfficeIntlPage() {
 
           {/* ═══════════════════════════════ JAPAN ═══════════════════════════════ */}
 
-          <div className="rounded-xl border border-card-border/60 bg-card/30 px-5 py-3">
-            <p className="text-xs font-bold uppercase tracking-wider text-primary">Japan</p>
-          </div>
+          <p className="border-b border-card-border pb-2 text-sm font-semibold text-foreground">
+            Japan
+          </p>
 
           {/* ── 7. Japan Offices ── */}
           <section className="space-y-4">
-            <SectionHeader id="jp-offices">7. Japan: Offices &amp; Races</SectionHeader>
+            <SectionHeader id="jp-offices">7. Japan: offices &amp; races</SectionHeader>
             <div className="overflow-x-auto rounded-xl border border-card-border">
               <table className="w-full text-sm">
                 <thead>
@@ -437,7 +388,7 @@ export default function RunningForOfficeIntlPage() {
                 </tbody>
               </table>
             </div>
-            <Callout variant="info">
+            <Callout>
               Only the <strong className="text-foreground">Shugiin</strong> votes on PM formation.
               Governors are elected separately and have no role in national government formation.
               The Sangiin provides legislative continuity since it cannot be dissolved, but it has
@@ -447,7 +398,7 @@ export default function RunningForOfficeIntlPage() {
 
           {/* ── 8. Japan Electoral System ── */}
           <section className="space-y-4">
-            <SectionHeader id="jp-electoral">8. Japan: Electoral System</SectionHeader>
+            <SectionHeader id="jp-electoral">8. Japan: electoral system</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Both chambers use{" "}
               <strong className="text-foreground">multi-seat proportional representation</strong>{" "}
@@ -463,15 +414,11 @@ export default function RunningForOfficeIntlPage() {
             </p>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="rounded-xl border border-card-border bg-card p-4 space-y-2">
-                <p className="text-xs font-bold uppercase tracking-wider text-muted">
-                  Class 1 regions
-                </p>
+                <p className="text-sm font-semibold text-foreground">Class 1 regions</p>
                 <p className="text-sm text-muted">Hokkaido, Kanto, Kansai, Shikoku: 139 seats</p>
               </div>
               <div className="rounded-xl border border-card-border bg-card p-4 space-y-2">
-                <p className="text-xs font-bold uppercase tracking-wider text-muted">
-                  Class 2 regions
-                </p>
+                <p className="text-sm font-semibold text-foreground">Class 2 regions</p>
                 <p className="text-sm text-muted">
                   Tohoku, Chubu, Chugoku, Kyushu &amp; Okinawa: 109 seats
                 </p>
@@ -494,7 +441,7 @@ export default function RunningForOfficeIntlPage() {
 
           {/* ── 9. Snap Elections ── */}
           <section className="space-y-4">
-            <SectionHeader id="jp-snap">9. Japan: Snap Elections</SectionHeader>
+            <SectionHeader id="jp-snap">9. Japan: snap elections</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Japan&apos;s most distinctive mechanic: the sitting PM can dissolve the Shugiin and
               call a snap election at any time.
@@ -534,18 +481,14 @@ export default function RunningForOfficeIntlPage() {
                 </tbody>
               </table>
             </div>
-            <Callout variant="warn">
-              <strong className="text-foreground">
-                Snap elections kill all pending legislation.
-              </strong>{" "}
+            <Callout kind="warning" label="Snap elections kill all pending legislation.">
               Every Japan bill not yet finalized is cancelled when a snap is called. If your party
               has important bills in progress, be aware that a PM snap election can wipe them all
               overnight. The PM has strong incentive to call snaps when losing legislative control;
               anticipate this if you are in the opposition.
             </Callout>
-            <Callout variant="tip">
-              <strong className="text-foreground">Snap campaigns are short and brutal.</strong> At
-              48 hours, there is almost no time to build fundraising or run upgrades. Max PI and
+            <Callout label="Snap campaigns are short.">
+              At 48 hours, there is almost no time to build fundraising or run upgrades. Max PI and
               high favorability going into a snap election are your only real weapons. Keep both
               maintained between elections.
             </Callout>
@@ -553,7 +496,7 @@ export default function RunningForOfficeIntlPage() {
 
           {/* ── 10. Cabinet Bills ── */}
           <section className="space-y-4">
-            <SectionHeader id="jp-cabinet">10. Japan: Cabinet Bills</SectionHeader>
+            <SectionHeader id="jp-cabinet">10. Japan: cabinet bills</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Japan has an exclusive legislative pathway unavailable in any other country:{" "}
               <strong className="text-foreground">cabinet bills</strong>. The PM or any cabinet
@@ -562,9 +505,7 @@ export default function RunningForOfficeIntlPage() {
             </p>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="rounded-xl border border-card-border bg-card p-4 space-y-2">
-                <p className="text-xs font-bold uppercase tracking-wider text-muted">
-                  How it works
-                </p>
+                <p className="text-sm font-semibold text-foreground">How it works</p>
                 <ul className="space-y-1 text-sm text-muted">
                   <li>• PM or any cabinet member proposes a bill</li>
                   <li>• 24-hour cabinet review phase opens</li>
@@ -575,9 +516,7 @@ export default function RunningForOfficeIntlPage() {
                 </ul>
               </div>
               <div className="rounded-xl border border-card-border bg-card p-4 space-y-2">
-                <p className="text-xs font-bold uppercase tracking-wider text-muted">
-                  Why it matters
-                </p>
+                <p className="text-sm font-semibold text-foreground">Why it matters</p>
                 <ul className="space-y-1 text-sm text-muted">
                   <li>• Faster path for coalition-agreed legislation</li>
                   <li>• Bypasses open floor debate phase</li>
@@ -586,8 +525,7 @@ export default function RunningForOfficeIntlPage() {
                 </ul>
               </div>
             </div>
-            <Callout variant="info">
-              <strong className="text-foreground">Cabinet bills still go through the Diet.</strong>{" "}
+            <Callout label="Cabinet bills still go through the Diet.">
               Passing the cabinet review just clears the proposal phase; the bill then enters the
               normal Shugiin vote, then Sangiin. It is faster, not a shortcut around the full
               legislature.
@@ -596,7 +534,7 @@ export default function RunningForOfficeIntlPage() {
 
           {/* ── 11. Japan Tips ── */}
           <section className="space-y-4">
-            <SectionHeader id="jp-tips">11. Japan: Strategy Tips</SectionHeader>
+            <SectionHeader id="jp-tips">11. Japan: strategy tips</SectionHeader>
             <ul className="space-y-3 text-sm text-muted">
               {[
                 [

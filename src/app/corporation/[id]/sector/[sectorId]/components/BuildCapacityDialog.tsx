@@ -2,6 +2,11 @@
 
 import { useTranslations } from "next-intl";
 import InvestmentForecast from "./InvestmentForecast";
+import ConstructionFinanceControls from "./ConstructionFinanceControls";
+import type {
+  ConstructionFinanceChoice,
+  ConstructionFinanceRequest,
+} from "@/lib/banking/rules/constructionRequest";
 import { useMemo, useState } from "react";
 import { Modal, Button } from "@/components/ui";
 import { useCurrency } from "@/contexts/CurrencyContext";
@@ -27,7 +32,8 @@ interface BuildCapacityDialogProps {
   submitting: boolean;
   /** Server-side error text from the last attempt, or empty. */
   errorMessage: string;
-  onSubmit: (units: number) => void;
+  onWithdrawFinancing?: (claimId: string) => void;
+  onSubmit: (units: number, financing?: ConstructionFinanceRequest) => void;
 }
 
 /** Nobody builds this many at once; the cap only stops a stray paste locking the dialog. */
@@ -76,6 +82,7 @@ export default function BuildCapacityDialog({
   submitting,
   errorMessage,
   onSubmit,
+  onWithdrawFinancing,
 }: BuildCapacityDialogProps) {
   const t = useTranslations("corporations.sectorInvestment");
   const { formatAmount } = useCurrency();
@@ -87,6 +94,9 @@ export default function BuildCapacityDialog({
   // units. One facility = plantSizeUnits(type) units — see facilityQuantum.ts
   // for why a "power station" is not one ₳92/day unit.
   const [count, setCount] = useState(1);
+  const [financingChoice, setFinancingChoice] = useState<ConstructionFinanceChoice | null>(null);
+  // Drop stale consent before a reopened dialog can submit the previous quote.
+  if (!open && financingChoice !== null) setFinancingChoice(null);
   // Raw text while the field is focused. Without it, clamping on every keystroke
   // means the field can never be empty, so a player cannot clear "1" and type
   // "250" - the leading digit keeps getting eaten.
@@ -146,8 +156,15 @@ export default function BuildCapacityDialog({
   // buyers have no unmet demand, and the player can act on the difference.
   const noShareLeft = plants.headroomUnits < 1;
   const blockedByMothball = plants.mothballed;
+  const affordable = financingChoice
+    ? financingChoice.affordable && !!financingChoice.request
+    : preview.affordable;
   const canSubmit =
-    !submitting && !blockedByMothball && preview.safeCount > 0 && preview.affordable;
+    !q.financing?.pendingRequest &&
+    !submitting &&
+    !blockedByMothball &&
+    preview.safeCount > 0 &&
+    affordable;
 
   return (
     <Modal
@@ -341,14 +358,14 @@ export default function BuildCapacityDialog({
               </dt>
               <dd
                 className={`text-heading-sm font-bold tabular-nums ${
-                  preview.affordable ? "text-foreground" : "text-error"
+                  affordable ? "text-foreground" : "text-error"
                 }`}
               >
                 {money(preview.total)}
               </dd>
             </div>
           </dl>
-          {!preview.affordable && (
+          {!affordable && (
             <p className="mt-2 flex gap-2 rounded-md border border-error/30 bg-error/10 p-2 text-body-sm text-error">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
               <span>
@@ -421,6 +438,14 @@ export default function BuildCapacityDialog({
                   {fmtUnits(preview.safeCount)}. Expect the extra output to go unsold, or to be
                   taken from a rival.
                 </>
+              ) : plants.roomHeldByOwnIdle ? (
+                // The plant is held below capacity by its own sales, so the
+                // market gap is not room for new capacity yet (ticket 1370).
+                <>
+                  Your {sites} here already run below capacity because sales set the pace. Output
+                  climbs about 15% a turn while buyers keep taking it, so new capacity would sit
+                  idle until that catches up. Fill what you have before building more.
+                </>
               ) : noShareLeft ? (
                 // Two very different reasons the room is zero, and saying
                 // "oversupplied" for both is what made a fully-claimed market
@@ -432,7 +457,7 @@ export default function BuildCapacityDialog({
                 </>
               ) : (
                 <>
-                  The market for what this sector makes is oversupplied — buyers are already taking
+                  The market for what this sector makes is oversupplied: buyers are already taking
                   all they need. Unclaimed share can still read above zero, because that counts
                   market nobody has built into rather than buyers waiting. Expect extra output to go
                   unsold unless you win share from a rival on price.
@@ -448,6 +473,18 @@ export default function BuildCapacityDialog({
           </p>
         </div>
 
+        {open && q.financing && (
+          <ConstructionFinanceControls
+            view={q.financing}
+            totalAnchor={preview.total}
+            constructionAnchor={preview.construction}
+            cashAnchor={q.corpCapitalAnchor}
+            onChange={setFinancingChoice}
+            busy={submitting}
+            onWithdraw={onWithdrawFinancing}
+          />
+        )}
+
         {errorMessage && (
           <p className="rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-body-sm text-error">
             {errorMessage}
@@ -460,7 +497,7 @@ export default function BuildCapacityDialog({
           </Button>
           <Button
             variant="primary"
-            onClick={() => onSubmit(preview.safeUnits)}
+            onClick={() => onSubmit(preview.safeUnits, financingChoice?.request ?? undefined)}
             disabled={!canSubmit}
             isLoading={submitting}
           >

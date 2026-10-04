@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { EmptyState } from "@/components/ui";
 import type { PartyData } from "./types";
 import { getOfficeLabel } from "@/lib/utils/politics";
+import { PARTY_SECTION_HEADING_CLASS } from "@/components/party/partyPageStyles";
 
 type RosterFilter = "all" | "player" | "npp";
 
@@ -26,11 +27,13 @@ export function MembersPanel({ party }: { party: PartyData }) {
   const nppCount = party.members.length - playerCount;
 
   return (
-    <div className="rounded-xl border border-card-border bg-card overflow-hidden shadow-sm">
-      <div className="border-b border-card-border px-6 py-4 flex flex-wrap items-center gap-3 justify-between">
-        <div className="flex items-center gap-3">
-          <h3 className="font-bold text-lg">Party Members</h3>
-          <span className="rounded-full bg-card-elevated px-2.5 py-1 text-xs font-medium text-muted">
+    <section aria-labelledby="party-members-title">
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h2 id="party-members-title" className={PARTY_SECTION_HEADING_CLASS}>
+            Party members
+          </h2>
+          <span className="text-body-sm text-muted">
             {filteredMembers.length} of {party.members.length}
           </span>
         </div>
@@ -40,10 +43,10 @@ export function MembersPanel({ party }: { party: PartyData }) {
             placeholder="Search by name…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="rounded-md border border-card-border bg-background px-3 py-1.5 text-xs"
+            className="rounded-md border border-card-border bg-background px-3 py-1.5 text-body"
           />
           <div
-            className="flex rounded-md border border-card-border overflow-hidden text-xs"
+            className="flex overflow-hidden rounded-md border border-card-border text-body"
             role="tablist"
             aria-label="Filter roster"
           >
@@ -70,7 +73,7 @@ export function MembersPanel({ party }: { party: PartyData }) {
       </div>
 
       {filteredMembers.length === 0 ? (
-        <div className="p-6">
+        <div className="border-y border-card-border py-6">
           <EmptyState
             title={party.members.length === 0 ? "No members yet" : "No matching members"}
             description={
@@ -82,17 +85,17 @@ export function MembersPanel({ party }: { party: PartyData }) {
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-body">
             <thead>
-              <tr className="border-b border-card-border bg-card-muted/30 text-left text-xs uppercase tracking-wider text-muted/70">
-                <th className="px-6 py-3 font-semibold">Name</th>
-                <th className="px-6 py-3 font-semibold">Home State</th>
-                <th className="px-6 py-3 font-semibold">Office</th>
-                <th className="px-6 py-3 font-semibold">Role</th>
-                <th className="px-6 py-3 font-semibold">Party Influence</th>
+              <tr className="border-y border-card-border text-left text-body-sm text-muted">
+                <th className="py-2.5 pr-6 font-medium">Name</th>
+                <th className="px-6 py-2.5 font-medium">Home state</th>
+                <th className="px-6 py-2.5 font-medium">Office</th>
+                <th className="px-6 py-2.5 font-medium">Role</th>
+                <th className="py-2.5 pl-6 text-right font-medium">Party influence</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-card-border bg-card">
+            <tbody className="divide-y divide-card-border border-b border-card-border">
               {filteredMembers.map((m) => {
                 const isCampaigner = !m.isNPP && party.campaigners.some((c) => c.id === m.id);
                 const role =
@@ -108,50 +111,41 @@ export function MembersPanel({ party }: { party: PartyData }) {
                 return (
                   <tr
                     key={m.isNPP ? `npp-${m.id}` : m.id}
-                    className="group transition-colors hover:bg-card-elevated/50"
+                    className="transition-colors hover:bg-card-elevated/50"
                   >
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
+                    <td className="py-3 pr-6">
+                      <div className="flex items-baseline gap-2">
                         <Link
                           href={
                             m.isNPP
                               ? `/politicians/npp/${m.sequentialId ?? m.id}`
                               : `/character/${m.sequentialId ?? m.id}`
                           }
-                          className="font-medium text-foreground hover:text-primary hover:underline"
+                          className="font-medium text-foreground hover:underline"
                         >
                           {m.name}
                         </Link>
-                        {m.isNPP && (
-                          <span className="rounded-full border border-card-border bg-card-muted px-1.5 py-0.5 text-[10px] font-medium text-muted">
-                            NPP
-                          </span>
-                        )}
+                        {m.isNPP && <span className="text-body-sm text-muted">NPP</span>}
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-muted">{m.homeState}</td>
-                    <td className="px-6 py-4">
+                    <td className="px-6 py-3 text-muted">{m.homeState}</td>
+                    <td className="px-6 py-3">
                       {m.currentOffice ? (
-                        <span className="inline-flex items-center rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
+                        <span className="text-foreground">
                           {getOfficeLabel(m.currentOffice, party.countryId)}
                         </span>
                       ) : (
                         <span className="text-muted/50">—</span>
                       )}
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-6 py-3">
                       {role ? (
-                        <span
-                          className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide shadow-sm"
-                          style={{ backgroundColor: `${party.color}20`, color: party.color }}
-                        >
-                          {role}
-                        </span>
+                        <span className="font-semibold text-foreground">{role}</span>
                       ) : (
-                        <span className="text-muted text-xs">Member</span>
+                        <span className="text-muted">Member</span>
                       )}
                     </td>
-                    <td className="px-6 py-4 tabular-nums text-sm">
+                    <td className="py-3 pl-6 text-right tabular-nums">
                       {m.isNPP ? (
                         <span className="text-muted/50">—</span>
                       ) : (
@@ -165,7 +159,7 @@ export function MembersPanel({ party }: { party: PartyData }) {
           </table>
         </div>
       )}
-    </div>
+    </section>
   );
 }
 
@@ -191,7 +185,7 @@ function FilterButton({
       }`}
     >
       {label}
-      <span className="ml-1.5 text-[10px] text-muted">{count}</span>
+      <span className="ml-1.5 text-body-sm tabular-nums text-muted">{count}</span>
     </button>
   );
 }

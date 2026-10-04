@@ -7,7 +7,7 @@ import { processEquityMarketPoolTurn } from "@/lib/equities/marketPoolTurn";
 import { processBondMarketPoolTurn } from "@/lib/bonds/marketPoolTurn";
 
 vi.mock("@/lib/sovereignDefault/snapshotLoader", () => ({
-  loadCountrySovereignSnapshot: vi.fn().mockResolvedValue(null),
+  loadCountrySovereignSnapshots: vi.fn().mockResolvedValue(new Map()),
 }));
 
 describe("market liquidity across money accounting changes", () => {

@@ -41,13 +41,20 @@ async function getTreasuryBalance(db: Db, countryId: string): Promise<number> {
 }
 
 /** Debit `amount` (country-local) from the national treasury. Treasury may go negative. */
-async function debitTreasury(db: Db, countryId: string, amount: number): Promise<void> {
-  await db
-    .collection<FederalBudget>("federalBudget")
-    .updateOne(
-      { countryId: countryId as FederalBudget["countryId"] },
-      { $inc: { treasuryBalance: -amount }, $set: { updatedAt: new Date() } }
-    );
+async function debitTreasury(
+  db: Db,
+  countryId: string,
+  amount: number,
+  receiptKey: string
+): Promise<void> {
+  await spendFromTreasury(db, countryId, amount, {
+    resyncDerived: true,
+    witness: {
+      flow: "crisis_response",
+      key: receiptKey,
+      site: "crises/interactionEngine",
+    },
+  });
 }
 
 /**
@@ -422,6 +429,20 @@ export async function getCrisisInteraction(
   return db.collection<CrisisInteraction>("crisisInteractions").findOne({ crisisId });
 }
 
+/** Load interactions for a set of crises in one query, keyed by crisis id. */
+export async function getCrisisInteractionsByCrisisId(
+  db: Db,
+  crisisIds: readonly ObjectId[]
+): Promise<Map<string, CrisisInteraction>> {
+  const uniqueIds = [...new Map(crisisIds.map((id) => [id.toString(), id])).values()];
+  if (uniqueIds.length === 0) return new Map();
+  const interactions = await db
+    .collection<CrisisInteraction>("crisisInteractions")
+    .find({ crisisId: { $in: uniqueIds } })
+    .toArray();
+  return new Map(interactions.map((interaction) => [interaction.crisisId.toString(), interaction]));
+}
+
 function deadlineForNode(node: CrisisDecisionNode | null): Date | null {
   if (node?.timeLimitMinutes) {
     return new Date(Date.now() + node.timeLimitMinutes * 60_000);
@@ -485,9 +506,10 @@ export async function submitCrisisDecision(
 
     const already = (interaction.leaderResponses ?? []).some((r) => r.countryId === countryId);
     if (already) throw conflict("Your country has already responded to this crisis");
-    const capabilitySnapshot = crisis.globalResponse
+    const preparedGlobalResponse = crisis.globalResponse
       ? await prepareGlobalResponseOption(db, crisis, countryId, option)
       : undefined;
+    const capabilitySnapshot = preparedGlobalResponse?.capability;
 
     if (option.requiredBudget) {
       const treasury = await getTreasuryBalance(db, countryId);
@@ -538,9 +560,19 @@ export async function submitCrisisDecision(
     interaction.leaderResponses = [...(interaction.leaderResponses ?? []), response];
 
     if (option.requiredBudget) {
-      await debitTreasury(db, countryId, option.requiredBudget);
+      await debitTreasury(
+        db,
+        countryId,
+        option.requiredBudget,
+        `crisis-budget:${interactionId.toString()}:${countryId}:${optionId}`
+      );
     }
-    await spendGlobalResponseCost(db, countryId, option);
+    await spendGlobalResponseCost(
+      db,
+      countryId,
+      option,
+      `global-response:${interactionId.toString()}:${countryId}:${optionId}`
+    );
 
     if (option.effects.length > 0) {
       await applyEffectsForCountry(db, countryId, option.effects);
@@ -560,6 +592,7 @@ export async function submitCrisisDecision(
         characterId,
         countryId,
         currentTurn: gameState?.currentTurn ?? crisis.startTurn,
+        treasuryCashLedgerEnabled: preparedGlobalResponse?.treasuryCashLedgerEnabled,
       });
     }
     if (option.campaignCommitment) {
@@ -595,6 +628,11 @@ export async function submitCrisisDecision(
       }
       await spendFromTreasury(db, countryId, option.collectiveContribution, {
         resyncDerived: true,
+        witness: {
+          flow: "crisis_response",
+          key: `crisis-collective:${interaction._id.toString()}:${characterId.toString()}:${optionId}`,
+          site: "crises/interactionEngine",
+        },
       });
 
       interaction.contributors.push({
@@ -639,16 +677,8 @@ export async function submitCrisisDecision(
     const option = currentNode.options?.find((o) => o.optionId === optionId);
     if (!option) throw badRequest("Invalid option");
 
-    if (option.requiredBudget) {
-      const treasury = await getTreasuryBalance(db, countryId);
-      if (treasury < option.requiredBudget) {
-        throw badRequest(
-          `Insufficient funds. Required: ${option.requiredBudget}, Available: ${treasury}`
-        );
-      }
-      await debitTreasury(db, countryId, option.requiredBudget);
-    }
-
+    // Every check runs before any money moves: a rejected choice must not cost
+    // the treasury its budget.
     if (option.requiredApproval) {
       const approvalDoc = await db
         .collection("governmentApprovals")
@@ -659,6 +689,21 @@ export async function submitCrisisDecision(
           `Insufficient approval. Required: ${option.requiredApproval}, Current: ${approval}`
         );
       }
+    }
+
+    if (option.requiredBudget) {
+      const treasury = await getTreasuryBalance(db, countryId);
+      if (treasury < option.requiredBudget) {
+        throw badRequest(
+          `Insufficient funds. Required: ${option.requiredBudget}, Available: ${treasury}`
+        );
+      }
+      await debitTreasury(
+        db,
+        countryId,
+        option.requiredBudget,
+        `crisis-budget:${interactionId.toString()}:${countryId}:${optionId}`
+      );
     }
 
     appliedEffects = option.effects;

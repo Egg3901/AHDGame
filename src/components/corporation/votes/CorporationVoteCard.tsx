@@ -5,6 +5,7 @@ import { useAbortableEffectFetch } from "@/hooks/useAbortableEffectFetch";
 import type { CorporationVote } from "@/lib/db/types/corporationVote";
 import { LEGAL_STRUCTURES } from "@/lib/constants/legalStructures";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
+import { InlineStatus, SmallButton } from "../dense/DenseKit";
 
 interface VotingIdentity {
   kind: "character" | "corporation";
@@ -67,17 +68,17 @@ function proposalSummary(vote: CorporationVote): string {
 function typeLabel(type: CorporationVote["type"]): string {
   switch (type) {
     case "governance_change":
-      return "Restructuring Vote";
+      return "Restructuring";
     case "dissolution":
-      return "Dissolution Vote";
+      return "Dissolution";
     case "relocation":
-      return "Relocation Vote";
+      return "Relocation";
     case "share_issuance":
-      return "Share Issuance Vote";
+      return "Share issuance";
     case "adopt_supershares":
-      return "Supershare Vote";
+      return "Supershares";
     case "ticker_change":
-      return "Ticker Change Vote";
+      return "Ticker change";
   }
 }
 
@@ -212,7 +213,7 @@ export function CorporationVoteCard({
     }
   }
 
-  if (!vote) return <div className="h-36 animate-pulse rounded-lg bg-muted" />;
+  if (!vote) return <div className="h-16 animate-pulse border-b border-card-border/60" />;
 
   const eligibleVotes = totalVotingPower ?? totalShares;
   const myVotingPower = viewerVotingPower ?? viewerShares;
@@ -234,263 +235,187 @@ export function CorporationVoteCard({
   // Check if the viewer's character already voted (for the "Voted YES/NO" display)
   const myCharVote = vote.votes.find((v) => v.characterId?.toString() === viewerCharacterId)?.vote;
 
-  const statusBg =
+  const statusTone =
     vote.status === "passed"
-      ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300"
+      ? "text-success"
       : vote.status === "failed"
-        ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300"
-        : vote.status === "cancelled"
-          ? "bg-muted text-muted-foreground"
-          : "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300";
+        ? "text-error"
+        : "text-muted";
 
   return (
-    <div className="rounded-xl border bg-card p-5 space-y-4 shadow-sm">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
-              {typeLabel(vote.type)}
-            </span>
-            <span
-              className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${statusBg}`}
-            >
-              {vote.status}
-            </span>
-          </div>
-          <p className="font-semibold text-sm">{proposalSummary(vote)}</p>
-        </div>
+    <div className="space-y-2 border-b border-card-border/60 py-2.5">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+        <p className="text-[13px] font-medium text-foreground">
+          {typeLabel(vote.type)}: {proposalSummary(vote)}
+        </p>
+        <span className={`text-xs ${statusTone}`}>
+          {vote.status === "open"
+            ? turnsRemaining > 0
+              ? `Open, ${turnsRemaining} turn${turnsRemaining !== 1 ? "s" : ""} left`
+              : "Closing"
+            : vote.status.charAt(0).toUpperCase() + vote.status.slice(1)}
+        </span>
       </div>
 
-      {/* Progress bar */}
-      <div className="space-y-1.5">
-        <div className="relative h-4 overflow-hidden rounded-full bg-muted">
+      <div className="space-y-1">
+        <div
+          className="relative h-1.5 overflow-hidden rounded-sm bg-card-elevated"
+          role="img"
+          aria-label={`Yes ${yesPct.toFixed(1)}%, no ${noPct.toFixed(1)}%, needs ${thresholdPct}%`}
+        >
           <div
-            className="absolute left-0 top-0 h-full bg-green-500 transition-all duration-500"
+            className="absolute left-0 top-0 h-full bg-success"
             style={{ width: `${yesPct}%` }}
           />
           <div
-            className="absolute top-0 h-full bg-red-500 transition-all duration-500"
+            className="absolute top-0 h-full bg-error"
             style={{ left: `${yesPct}%`, width: `${noPct}%` }}
           />
-          {/* Threshold marker */}
           <div
-            className="absolute top-0 h-full w-0.5 bg-foreground/70 z-10"
+            className="absolute top-0 h-full w-px bg-foreground"
             style={{ left: `${Math.min(thresholdPct, 100)}%` }}
           />
         </div>
-        <div className="flex justify-between text-xs">
-          <span className="font-semibold text-green-600">
-            {yesShares.toLocaleString("en-US")} YES ({yesPct.toFixed(1)}%)
+        <div className="flex flex-wrap justify-between gap-x-4 text-xs tabular-nums">
+          <span className="text-success">
+            Yes {yesShares.toLocaleString("en-US")} ({yesPct.toFixed(1)}%)
           </span>
-          <span className="text-muted-foreground">
-            {notVotedShares.toLocaleString("en-US")} abstained
+          <span className="text-error">
+            No {noShares.toLocaleString("en-US")} ({noPct.toFixed(1)}%)
           </span>
-          <span className="font-semibold text-red-600">
-            {noShares.toLocaleString("en-US")} NO ({noPct.toFixed(1)}%)
+          <span className="text-muted">Abstained {notVotedShares.toLocaleString("en-US")}</span>
+          <span className="text-muted">
+            Needs {requiredShares.toLocaleString("en-US")} yes ({thresholdPct}%)
           </span>
         </div>
-        <p className="text-center text-xs text-muted-foreground">
-          Needs {requiredShares.toLocaleString("en-US")} YES ({thresholdPct}% of all votes) to pass
-        </p>
       </div>
 
-      {/* Status footer */}
       {vote.status === "open" && (
-        <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span>
-            {turnsRemaining > 0
-              ? `${turnsRemaining} turn${turnsRemaining !== 1 ? "s" : ""} remaining`
-              : "Closing…"}
-          </span>
-          <span>
+        <div className="space-y-2">
+          <p className="text-xs text-muted">
             You hold {viewerShares.toLocaleString("en-US")} shares
             {myVotingPower !== viewerShares
               ? ` (${myVotingPower.toLocaleString("en-US")} votes)`
               : ""}
-            {myCharVote ? ` · Voted ${myCharVote.toUpperCase()}` : ""}
-          </span>
-        </div>
-      )}
+            {myCharVote ? `. You voted ${myCharVote}.` : "."}
+          </p>
 
-      {/* Voting controls */}
-      {vote.status === "open" && (
-        <div className="space-y-3">
-          {/* Identity selector — shown when user has multiple voting identities */}
           {identities.length > 1 && (
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Vote as
-              </label>
-              <div className="flex flex-wrap gap-1.5">
-                {identities.map((ident) => {
-                  const isSelected = ident.id === selectedIdentityId;
-                  const isDisabled = ident.hasVoted;
-                  return (
-                    <button
-                      key={ident.id}
-                      type="button"
-                      disabled={isDisabled}
-                      onClick={() => setSelectedIdentityId(ident.id)}
-                      className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all border ${
-                        isSelected
-                          ? "bg-primary text-primary-foreground border-primary shadow-sm"
-                          : isDisabled
-                            ? "bg-muted text-muted-foreground border-muted line-through cursor-not-allowed"
-                            : "bg-card text-foreground border-card-border hover:border-primary/50 hover:bg-card-elevated"
-                      }`}
-                    >
-                      <span className="flex items-center gap-1.5">
-                        {ident.kind === "character" ? (
-                          <svg className="w-3 h-3" viewBox="0 0 16 16" fill="currentColor">
-                            <path d="M8 8a3 3 0 100-6 3 3 0 000 6zm-5 6a5 5 0 0110 0H3z" />
-                          </svg>
-                        ) : (
-                          <svg className="w-3 h-3" viewBox="0 0 16 16" fill="currentColor">
-                            <path d="M2 3a1 1 0 011-1h2.586a1 1 0 01.707.293l1.414 1.414a1 1 0 00.707.293H13a1 1 0 011 1v7a1 1 0 01-1 1H3a1 1 0 01-1-1V3z" />
-                          </svg>
-                        )}
-                        {ident.name}
-                        <span className="text-[10px] opacity-70">
-                          ({ident.votingPower.toLocaleString("en-US")} votes)
-                        </span>
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+            <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted">
+              Vote as
+              {identities.map((ident) => {
+                const isSelected = ident.id === selectedIdentityId;
+                return (
+                  <button
+                    key={ident.id}
+                    type="button"
+                    disabled={ident.hasVoted}
+                    onClick={() => setSelectedIdentityId(ident.id)}
+                    aria-pressed={isSelected}
+                    className={`h-7 rounded-md border px-2 text-xs transition-colors disabled:cursor-not-allowed disabled:line-through disabled:opacity-50 ${
+                      isSelected
+                        ? "border-foreground bg-foreground font-medium text-background"
+                        : "border-card-border text-foreground hover:bg-card-elevated"
+                    }`}
+                  >
+                    {ident.name} ({ident.votingPower.toLocaleString("en-US")})
+                  </button>
+                );
+              })}
             </div>
           )}
 
-          {/* Single identity — show inline */}
           {identities.length === 1 &&
             selectedIdentity &&
             selectedIdentity.kind === "corporation" && (
-              <p className="text-xs text-muted-foreground">
-                Voting as{" "}
-                <span className="font-medium text-foreground">{selectedIdentity.name}</span> (
+              <p className="text-xs text-muted">
+                Voting as <span className="text-foreground">{selectedIdentity.name}</span> (
                 {selectedIdentity.votingPower.toLocaleString("en-US")} votes)
               </p>
             )}
 
-          {/* Vote buttons */}
-          {canVote && (
-            <div className="flex gap-2">
-              <button
-                onClick={() => castVote("yes")}
-                disabled={loading}
-                className="flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition-all bg-green-100 text-green-800 hover:bg-green-200 active:scale-[0.98] dark:bg-green-900/30 dark:text-green-300 dark:hover:bg-green-900/50"
-              >
-                ✓ Yes
-              </button>
-              <button
-                onClick={() => castVote("no")}
-                disabled={loading}
-                className="flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition-all bg-red-100 text-red-800 hover:bg-red-200 active:scale-[0.98] dark:bg-red-900/30 dark:text-red-300 dark:hover:bg-red-900/50"
-              >
-                ✗ No
-              </button>
-            </div>
-          )}
+          <div className="flex flex-wrap items-center gap-1.5">
+            {canVote && (
+              <>
+                <SmallButton onClick={() => castVote("yes")} disabled={loading}>
+                  Vote yes
+                </SmallButton>
+                <SmallButton onClick={() => castVote("no")} disabled={loading}>
+                  Vote no
+                </SmallButton>
+              </>
+            )}
+            {!canVote && identities.length > 0 && identities.every((i) => i.hasVoted) && (
+              <span className="text-xs text-muted">You have voted on this proposal.</span>
+            )}
+            {!canVote && identities.length === 0 && directableFunds.length === 0 && !isCeo && (
+              <span className="text-xs text-muted">You hold no shares in this corporation.</span>
+            )}
+            {isCeo && (
+              <SmallButton tone="danger" onClick={cancelVote} disabled={loading}>
+                Cancel vote
+              </SmallButton>
+            )}
+          </div>
 
-          {!canVote && identities.length > 0 && identities.every((i) => i.hasVoted) && (
-            <p className="text-xs text-muted-foreground italic">
-              You have already voted on this proposal.
-            </p>
-          )}
-
-          {!canVote && identities.length === 0 && directableFunds.length === 0 && !isCeo && (
-            <p className="text-xs text-muted-foreground">You hold no shares in this corporation.</p>
-          )}
-
-          {/* Fund stewardship: instruct the funds you control */}
           {directableFunds.length > 0 && (
-            <div className="space-y-2 rounded-lg border border-card-border bg-card-elevated/50 p-3">
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Funds you direct
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  You control enough units to instruct how these funds vote their shares. An
-                  uninstructed fund votes with the majority cast by everyone else, or abstains if
-                  there is no majority.
-                </p>
-              </div>
-              {directableFunds.map((fund) => (
-                <div
-                  key={fund.fundId}
-                  className="flex flex-wrap items-center justify-between gap-2 border-t border-card-border pt-2 first:border-t-0 first:pt-0"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-xs font-medium">
-                      {fund.name}
-                      {fund.tickerSymbol ? (
-                        <span className="ml-1 text-muted-foreground">{fund.tickerSymbol}</span>
-                      ) : null}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground">
-                      {fund.votingPower.toLocaleString("en-US")} votes ·{" "}
-                      {(fund.unitShare * 100).toFixed(0)}% of units yours
-                    </p>
-                  </div>
-                  <div className="flex gap-1.5">
-                    <button
-                      type="button"
-                      disabled={loading}
-                      onClick={() => directFund(fund.fundId, "yes")}
-                      className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-all ${
-                        fund.instruction === "yes"
-                          ? "bg-green-600 text-white"
-                          : "bg-green-100 text-green-800 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-300"
-                      }`}
-                    >
-                      Yes
-                    </button>
-                    <button
-                      type="button"
-                      disabled={loading}
-                      onClick={() => directFund(fund.fundId, "no")}
-                      className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-all ${
-                        fund.instruction === "no"
-                          ? "bg-red-600 text-white"
-                          : "bg-red-100 text-red-800 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-300"
-                      }`}
-                    >
-                      No
-                    </button>
-                    {fund.instruction && (
-                      <button
-                        type="button"
-                        disabled={loading}
-                        onClick={() => directFund(fund.fundId, null)}
-                        className="rounded-lg border border-card-border px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground"
-                      >
-                        Withdraw
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
+            <div className="space-y-1">
+              <p className="text-xs text-muted">
+                Funds you direct. An uninstructed fund votes with the majority of everyone else, or
+                abstains when there is none.
+              </p>
+              <table className="w-full border-collapse">
+                <tbody>
+                  {directableFunds.map((fund) => (
+                    <tr key={fund.fundId}>
+                      <td className="border-b border-card-border/60 py-1.5 pr-2 text-xs text-foreground">
+                        {fund.name}
+                        {fund.tickerSymbol ? (
+                          <span className="ml-1 text-muted">{fund.tickerSymbol}</span>
+                        ) : null}
+                        <span className="ml-2 tabular-nums text-muted">
+                          {fund.votingPower.toLocaleString("en-US")} votes,{" "}
+                          {(fund.unitShare * 100).toFixed(0)}% of units yours
+                        </span>
+                      </td>
+                      <td className="border-b border-card-border/60 py-1.5 text-right">
+                        <span className="inline-flex gap-1">
+                          <SmallButton
+                            disabled={loading}
+                            onClick={() => directFund(fund.fundId, "yes")}
+                            className={
+                              fund.instruction === "yes" ? "border-success text-success" : ""
+                            }
+                          >
+                            Yes
+                          </SmallButton>
+                          <SmallButton
+                            disabled={loading}
+                            onClick={() => directFund(fund.fundId, "no")}
+                            className={fund.instruction === "no" ? "border-error text-error" : ""}
+                          >
+                            No
+                          </SmallButton>
+                          {fund.instruction && (
+                            <SmallButton
+                              disabled={loading}
+                              onClick={() => directFund(fund.fundId, null)}
+                            >
+                              Withdraw
+                            </SmallButton>
+                          )}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          )}
-
-          {isCeo && (
-            <button
-              onClick={cancelVote}
-              disabled={loading}
-              className="w-full rounded-lg border border-card-border px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:border-destructive/30 transition-colors"
-            >
-              Cancel Vote
-            </button>
           )}
         </div>
       )}
 
-      {error && (
-        <p className="text-xs font-medium text-red-600 bg-red-50 dark:bg-red-950/30 rounded-lg px-3 py-2">
-          {error}
-        </p>
-      )}
+      <InlineStatus message={error} tone="error" />
     </div>
   );
 }

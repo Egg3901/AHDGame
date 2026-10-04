@@ -13,6 +13,10 @@ import {
   readSectorPlantFields,
   type SectorPlantFieldsUpdate,
 } from "@/lib/corporations/sectorTransferCapex";
+import {
+  reserveSectorsForTransition,
+  releaseConstructionPropertyTransition,
+} from "@/lib/corporations/securedConstructionProperty";
 
 export interface NormalizedSectorSummary {
   sectorId: string;
@@ -25,6 +29,7 @@ export interface MergedSectorSummary {
   corporationId: string;
   stateId: string;
   sectorType: string;
+  industryModel?: string | null;
   count: number;
 }
 
@@ -82,6 +87,18 @@ export async function normalizeAndMergeCorporateSectors(
     if (group.length < 2) continue;
 
     const [keeper, ...duplicates] = group;
+    const transitionKeys = await reserveSectorsForTransition(
+      db,
+      group,
+      "duplicate_repair",
+      `duplicate:${keeper._id.toHexString()}`
+    );
+    // A duplicate group with a live lender pledge is not repairable by deleting
+    // a row. Leave the whole group intact for an explicit secured settlement.
+    if (!transitionKeys) continue;
+    const keyById = new Map(
+      group.map((sector, index) => [sector._id.toString(), transitionKeys[index]])
+    );
     const combinedRevenue = group.reduce((sum, sector) => sum + sector.revenue, 0);
     const combinedWorkers = group.reduce((sum, sector) => sum + sector.workers, 0);
     const weightedMargin =
@@ -147,8 +164,11 @@ export async function normalizeAndMergeCorporateSectors(
           )
       : null;
 
-    await db.collection<CorporateSector>("corporateSectors").updateOne(
-      { _id: keeper._id },
+    const keeperWrite = await db.collection<CorporateSector>("corporateSectors").updateOne(
+      {
+        _id: keeper._id,
+        "constructionPropertyTransition.key": keyById.get(keeper._id.toString()),
+      },
       {
         $set: {
           countryId: getSectorOperatingCountryId(keeper, stateCountryByStateId),
@@ -162,15 +182,33 @@ export async function normalizeAndMergeCorporateSectors(
         },
       }
     );
+    if (keeperWrite.matchedCount !== 1) {
+      await Promise.all(
+        group.map((sector) =>
+          releaseConstructionPropertyTransition(db, sector._id, keyById.get(sector._id.toString())!)
+        )
+      );
+      continue;
+    }
 
-    await db.collection<CorporateSector>("corporateSectors").deleteMany({
-      _id: { $in: duplicates.map((sector) => sector._id) },
+    const deleteResult = await db.collection<CorporateSector>("corporateSectors").deleteMany({
+      $or: duplicates.map((sector) => ({
+        _id: sector._id,
+        "constructionPropertyTransition.key": keyById.get(sector._id.toString()),
+      })),
     });
+    if (deleteResult.deletedCount !== duplicates.length) continue;
+    await releaseConstructionPropertyTransition(
+      db,
+      keeper._id,
+      keyById.get(keeper._id.toString())!
+    );
 
     mergedGroups.push({
       corporationId: keeper.corporationId.toString(),
       stateId: keeper.stateId,
       sectorType: keeper.sectorType,
+      industryModel: keeper.industryModel ?? null,
       count: group.length,
     });
   }

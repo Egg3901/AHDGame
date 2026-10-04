@@ -13,6 +13,7 @@ import { useAuthMe } from "@/contexts/AuthDataContext";
 import { buildClientStatusUrl } from "@/lib/statusBar/clientStatusRequest";
 import { Navbar } from "./Navbar";
 import { ExperimentalNavbar } from "./ExperimentalNavbar";
+import { Wordmark } from "./Wordmark";
 import { NavbarTopFlair } from "./NavbarTopFlair";
 import { FeedbackModal } from "./FeedbackModal";
 import { isChromeHiddenPath, isLightweightLayoutPath } from "@/lib/constants/layoutPaths";
@@ -238,11 +239,14 @@ export function NavbarWrapper({
   initialPageCountry,
   singleplayer = false,
   clientShell = false,
+  typedWordmark = false,
 }: {
   singleplayer?: boolean;
   clientShell?: boolean;
   displayMode?: "focused" | "classic";
   initialPageCountry?: CountryId | null;
+  /** Type the site name in on load, in mono (1991 worlds). */
+  typedWordmark?: boolean;
 }) {
   const t = useTranslations("nav");
   const pathname = usePathname();
@@ -458,10 +462,20 @@ export function NavbarWrapper({
   useEffect(() => {
     if (useLightweightNav || isExcludedPath) return;
     if (authBootstrapLoading || !navData) return;
+    // Character stats are per user; a signed-out visitor would only get a 401.
+    // Singleplayer has no account user and always has its local character.
+    if (!navData.user && !singleplayer) return;
     if (statusLoadedRef.current) return;
     statusLoadedRef.current = true;
     void fetchStatusData(navData.user?.statusBarLayout);
-  }, [authBootstrapLoading, fetchStatusData, isExcludedPath, navData, useLightweightNav]);
+  }, [
+    authBootstrapLoading,
+    fetchStatusData,
+    isExcludedPath,
+    navData,
+    singleplayer,
+    useLightweightNav,
+  ]);
 
   useEffect(() => {
     if (useLightweightNav || isExcludedPath) return;
@@ -567,13 +581,17 @@ export function NavbarWrapper({
             <div className="flex items-center gap-2">
               <Image
                 src={CDN_LOGO_URL}
+                priority
                 unoptimized
                 alt="A House Divided Logo"
                 width={40}
                 height={40}
                 className="object-contain"
               />
-              <span className="text-lg font-semibold tracking-tight">A House Divided</span>
+              <Wordmark
+                typed={typedWordmark}
+                className={`text-lg font-semibold tracking-tight ${typedWordmark ? "font-mono" : ""}`}
+              />
             </div>
             <div className="hidden md:block h-4 w-32 animate-pulse rounded bg-card-border" />
             <div className="md:hidden h-9 w-9 animate-pulse rounded-lg bg-card-border" />
@@ -585,6 +603,7 @@ export function NavbarWrapper({
             <ExperimentalNavbar
               navigationVariant={navigationVariant}
               clientShell={clientShell}
+              typedWordmark={typedWordmark}
               user={
                 state.user ?? (singleplayer ? { username: "Admin", singleplayer: true } : undefined)
               }
@@ -614,6 +633,7 @@ export function NavbarWrapper({
           ) : (
             <Navbar
               clientShell={clientShell}
+              typedWordmark={typedWordmark}
               user={
                 useLightweightNav
                   ? undefined

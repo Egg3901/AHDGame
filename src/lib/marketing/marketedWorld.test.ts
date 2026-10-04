@@ -93,7 +93,7 @@ describe("marketedWorld", () => {
     const world = fallbackMarketedWorld(1953);
     const resolved = resolveEraCopy(ERA_CONFIGS["1953"].worldSectionDek, world);
     expect(resolved).not.toContain("{playableCount}");
-    expect(resolved).toContain("Four are open to players");
+    expect(resolved).toContain("Four of these nations are open to players");
   });
 
   it("resolves every era's world dek without leaving a placeholder", () => {

@@ -103,7 +103,10 @@ export async function applyGroupLossRelief(
         if (localAmount <= 0) continue;
 
         await creditCorpLiquidCapital(db, corp._id, localAmount);
-        await debitTreasury(db, allocation.countryId as CountryId, localAmount, now);
+        await debitTreasury(db, allocation.countryId as CountryId, localAmount, now, {
+          flow: "group_loss_relief",
+          key: `group-relief:${currentTurn}:${corp._id.toString()}`,
+        });
         await emitTx(db, {
           type: "corp_group_relief",
           turn: currentTurn,

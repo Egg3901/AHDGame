@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { getMessageStyle, resolveElectionYear } from "@/lib/utils/formatters";
 import { useElectionActions } from "@/hooks/useElectionActions";
+import { useActivePreset } from "@/contexts/RegisteredCountriesContext";
 import type { ElectionDisplay, CharacterBasic, GameStateDisplay } from "@/lib/db/types";
 import type { ElectionResponse } from "@/lib/elections/resolveElection";
 import { partiesApiUrl, countryElectionsUrl } from "@/lib/urls";
@@ -78,6 +79,7 @@ export function StateElections({
   const [elections, setElections] = useState<ElectionDisplay[]>([]);
   const [character, setCharacter] = useState<CharacterBasic | null>(null);
   const [_gameState, setGameState] = useState<GameStateDisplay | null>(null);
+  const activePreset = useActivePreset();
   const [parties, setParties] = useState<PartyInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -370,11 +372,12 @@ export function StateElections({
     for (const election of ballot) {
       titleById[election.id] = electionRaceTitle(election, electionGameYear(election));
       hrefById[election.id] = buildElectionHref(election);
-      quotaByElectionId[election.id] = hareQuota(election, countryId as CountryId);
+      quotaByElectionId[election.id] = hareQuota(election, countryId as CountryId, activePreset);
     }
     const cards = buildBlendRegionCards({
       elections: ballot,
       countryId: countryId as CountryId,
+      preset: activePreset,
       regionName: stateName,
       regionCode: stateId,
       parties: partyLookup,
@@ -392,6 +395,7 @@ export function StateElections({
     presidentialElections,
     stateElectionsList,
     countryId,
+    activePreset,
     stateName,
     stateId,
     partyLookup,
@@ -520,9 +524,7 @@ export function StateElections({
         {!isParliamentary && presidentialElections.length > 0 && (
           <div className="mt-4 pt-4 border-t border-card-border/60">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-muted uppercase tracking-wide">
-                Presidential Race
-              </h3>
+              <h3 className="text-sm font-semibold text-muted">Presidential race</h3>
               {/* There is no per-county presidential breakdown until the
                   general, so the link would open a map of redistributed
                   national numbers. */}

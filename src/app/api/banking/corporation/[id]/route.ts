@@ -1,3 +1,4 @@
+import { allowedPropOpeningAssets } from "@/lib/banking/rules/propAssets";
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
@@ -36,6 +37,7 @@ import { bankBalanceSheet, explainBankCaps } from "@/lib/banking/balanceSheet";
 import { buildBankOutlook } from "@/lib/banking/outlook";
 import { isDepositTakingCharter } from "@/lib/banking/charterKinds";
 import { getCurrentTurn } from "@/lib/currentTurn";
+import { getBankTreasuryOverview } from "@/lib/banking/bankTreasury";
 import {
   CREDIT_BANDS,
   DEFAULT_LENDING_PROFILE,
@@ -149,7 +151,10 @@ async function handleGET(_request: Request, { params }: RouteParams) {
 
     const { id } = await params;
     const db = await getDb();
-    const resolved = await resolveCorporation(db, id);
+    const resolved = await resolveCorporation(db, id, {
+      bankPropForexFee: 0,
+      bankPropForexVolume: 0,
+    });
     if (!resolved.ok) return resolved.response;
     const { corporation } = resolved;
 
@@ -172,6 +177,16 @@ async function handleGET(_request: Request, { params }: RouteParams) {
       return NextResponse.json({
         privateBankingEnabled: privateEnabled,
         bankPropTradingEnabled: propTradingEnabled,
+        primaryUnderwritingEnabled: policy.primaryUnderwriting === true,
+        ...(policy.primaryUnderwriting
+          ? { underwritingReceipts: corporation.bankUnderwritingReceipts ?? [] }
+          : {}),
+        bankTreasuryEnabled: policy.bankTreasury,
+        bankTreasury: null,
+        bankPropForexFeesEnabled: policy.propForexFees,
+        ...(policy.advancedCharters
+          ? { propAssetOptions: allowedPropOpeningAssets(true, corporation.ceoType) }
+          : {}),
         visible: false,
         isCeo: false,
         isAdmin: auth.user.isAdmin === true,
@@ -207,6 +222,10 @@ async function handleGET(_request: Request, { params }: RouteParams) {
     const currency = (charter?.currency ??
       resolveCorpLiquidCurrencyCode(corporation) ??
       "USD") as CurrencyCode;
+    const bankTreasury =
+      policy.bankTreasury && hasActiveCharter && charter
+        ? await getBankTreasuryOverview(db, corporation._id, policy, currentTurn)
+        : null;
     const countryId = getCountryIdForCurrency(currency);
     const legalTypes = await getLegalCharterTypes(db, countryId);
     // Per type: an investment charter posts a fraction of the retail bar,
@@ -455,6 +474,16 @@ async function handleGET(_request: Request, { params }: RouteParams) {
     return NextResponse.json({
       privateBankingEnabled: privateEnabled,
       bankPropTradingEnabled: propTradingEnabled,
+      primaryUnderwritingEnabled: policy.primaryUnderwriting === true,
+      ...(policy.primaryUnderwriting
+        ? { underwritingReceipts: corporation.bankUnderwritingReceipts ?? [] }
+        : {}),
+      bankTreasuryEnabled: policy.bankTreasury,
+      bankTreasury,
+      bankPropForexFeesEnabled: policy.propForexFees,
+      ...(policy.advancedCharters
+        ? { propAssetOptions: allowedPropOpeningAssets(true, corporation.ceoType) }
+        : {}),
       visible: true,
       isCeo,
       isAdmin,
@@ -519,6 +548,7 @@ async function handleGET(_request: Request, { params }: RouteParams) {
               bookEquity: sheet ? sheet.bookEquity : null,
               fundingCapacity: householdTargetInputs?.fundingCapacity ?? null,
               cashReserves: getCashReserves(charter),
+              sovereignTreasuryMarkValue: charter.sovereignTreasuryMarkValue ?? 0,
               lastBankingIncome: charter.lastBankingIncome ?? 0,
               lastBankingIncomeTurn: charter.lastBankingIncomeTurn ?? null,
               // Per-turn split behind the net: magnitudes in charter currency,
@@ -527,6 +557,8 @@ async function handleGET(_request: Request, { params }: RouteParams) {
               // so the console can always do arithmetic.
               lastBankingDepositInterest: charter.lastBankingDepositInterest ?? 0,
               lastBankingLoanInterest: charter.lastBankingLoanInterest ?? 0,
+              lastBankingLoanOriginationFees: charter.lastBankingLoanOriginationFees ?? 0,
+              loanOriginationFeesLifetime: charter.loanOriginationFeesLifetime ?? 0,
               lastBankingInterbankInterestPaid: charter.lastBankingInterbankInterestPaid ?? 0,
               lastBankingInterbankInterestReceived:
                 charter.lastBankingInterbankInterestReceived ?? 0,

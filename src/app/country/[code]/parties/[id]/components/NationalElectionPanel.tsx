@@ -21,7 +21,6 @@ function formatCooldownLabel(ms: number): string {
 export function NationalElectionPanel({
   election,
   position,
-  partyColor,
   partyId,
   country,
   canVote,
@@ -36,7 +35,8 @@ export function NationalElectionPanel({
 }: {
   election: NationalElectionEntry | null;
   position: NationalPosition;
-  partyColor: string;
+  /** No longer drawn: party color appears only as a swatch beside the name. */
+  partyColor?: string;
   partyId: string;
   country: string;
   canVote: boolean;
@@ -93,21 +93,12 @@ export function NationalElectionPanel({
   return (
     <div className="group rounded-xl border border-card-border bg-card overflow-hidden shadow-sm transition-all hover:shadow-md hover:border-card-border/80">
       <div className="relative border-b border-card-border/50 bg-card-muted/30 px-5 py-4">
-        {/* Color accent strip */}
-        <div
-          className="absolute left-0 top-0 bottom-0 w-1"
-          style={{ backgroundColor: partyColor }}
-        />
-
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <h3 className="font-bold text-base text-foreground">{label} Election</h3>
+              <h3 className="font-bold text-base text-foreground">{label} election</h3>
               {isVoting && (
-                <span
-                  className="animate-pulse h-2 w-2 rounded-full bg-red-500"
-                  title="Voting in progress"
-                />
+                <span className="h-2 w-2 rounded-full bg-red-500" title="Voting in progress" />
               )}
             </div>
             <p className="text-xs text-muted max-w-[85%] leading-relaxed">
@@ -118,11 +109,9 @@ export function NationalElectionPanel({
           <div className="shrink-0 text-right">
             {isVoting ? (
               <div className="flex flex-col items-end">
-                <span className="text-[10px] uppercase tracking-wider font-semibold text-muted/70">
-                  Time Remaining
-                </span>
+                <span className="text-body-sm font-medium text-muted">Time remaining</span>
                 <span
-                  className={`font-mono text-lg font-bold tabular-nums leading-none mt-1 ${
+                  className={`text-lg font-bold tabular-nums leading-none mt-1 ${
                     remaining <= 12
                       ? "text-red-400"
                       : remaining <= 24
@@ -196,8 +185,7 @@ export function NationalElectionPanel({
                       ? "Withdraw from your other candidacy first"
                       : undefined
                 }
-                className="inline-flex items-center justify-center rounded-lg px-4 py-2 text-xs font-bold text-white shadow-sm transition-all hover:opacity-90 hover:shadow disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
-                style={{ backgroundColor: partyColor }}
+                className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {loading ? "Processing..." : cooldownActive ? cooldownLabel : `Run for ${label}`}
               </button>
@@ -211,7 +199,7 @@ export function NationalElectionPanel({
                 disabled={loading}
                 className="inline-flex items-center justify-center rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-xs font-bold text-red-400 transition-colors hover:bg-red-500/20 disabled:opacity-50"
               >
-                {loading ? "Processing..." : "Withdraw Campaign"}
+                {loading ? "Processing..." : "Withdraw campaign"}
               </button>
             )}
           </div>
@@ -227,15 +215,15 @@ export function NationalElectionPanel({
         )}
 
         <div>
-          <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted flex items-center gap-2">
+          <h4 className="mb-3 text-xs font-semibold text-muted flex items-center gap-2">
             Candidates
-            <span className="rounded-full bg-card-elevated px-1.5 py-0.5 text-[10px] text-muted-foreground">
+            <span className="rounded-full bg-card-elevated px-1.5 py-0.5 text-body-sm text-muted-foreground">
               {election.candidates.length}
             </span>
             {useInfluence && (
               <span
-                className="rounded-full bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-medium text-blue-400"
-                title="Influence Weighted Voting"
+                className="text-body-sm font-normal text-muted"
+                title="Influence weighted voting"
               >
                 Influence committed
               </span>
@@ -265,18 +253,14 @@ export function NationalElectionPanel({
                     key={c.id}
                     className={`relative overflow-hidden rounded-xl border bg-card-elevated/30 p-3 transition-all ${
                       isMyVote
-                        ? "border-2 shadow-sm"
+                        ? "border-2 border-foreground/50"
                         : "border-card-border hover:border-card-border/80"
                     }`}
-                    style={isMyVote ? { borderColor: partyColor } : {}}
                   >
                     {/* Progress bar background */}
                     <div
-                      className="absolute bottom-0 left-0 top-0 bg-primary/5 transition-all duration-500"
-                      style={{
-                        width: `${pct}%`,
-                        backgroundColor: isMyVote ? `${partyColor}10` : undefined,
-                      }}
+                      className="absolute bottom-0 left-0 top-0 bg-foreground/5 transition-all duration-500"
+                      style={{ width: `${pct}%` }}
                     />
 
                     <div className="relative flex items-center justify-between gap-3">
@@ -289,10 +273,7 @@ export function NationalElectionPanel({
                             {c.characterName}
                           </Link>
                           {c.isCurrentHolder && (
-                            <span
-                              className="inline-flex shrink-0 items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider shadow-sm"
-                              style={{ backgroundColor: `${partyColor}20`, color: partyColor }}
-                            >
+                            <span className="inline-flex shrink-0 items-center text-body-sm text-muted">
                               Incumbent
                             </span>
                           )}
@@ -323,7 +304,7 @@ export function NationalElectionPanel({
                           <div className="text-lg font-bold tabular-nums leading-none">
                             {displayVoteCount}
                           </div>
-                          <div className="text-[10px] font-medium text-muted mt-0.5">
+                          <div className="text-body-sm font-medium text-muted mt-0.5">
                             {election.totalVotes > 0 ? `${pct}%` : "—"}
                           </div>
                         </div>

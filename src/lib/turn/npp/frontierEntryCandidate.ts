@@ -16,12 +16,16 @@
  */
 import {
   frontierEntryCohortKey,
+  frontierPacingOpportunity,
   frontierEntryControllerKey,
   frontierEntryExperimentEnabledFrom,
   isFrontierEntryRelaxableReason,
   recordFrontierEntry,
   type FrontierEntryRelaxableReason,
 } from "@/lib/economy/frontierEntryExperiment";
+import { SECTOR_SUPPLY } from "@/lib/constants/commodities";
+import { bucketKey } from "@/lib/nationalization/stateControlledBuckets";
+import type { PlacementSignals } from "./marketSignals";
 import type { Corporation } from "@/lib/db/types";
 import type { UnownedSector } from "@/lib/db/types/unownedSector";
 import type { NppMarketEntryDiagnostic } from "@/lib/db/types/marketFormation";
@@ -66,7 +70,7 @@ export interface FrontierCandidate {
   target: UnownedSector;
   cohortKey: string;
   controllerKey: string;
-  relaxedReason: FrontierEntryRelaxableReason;
+  relaxedReason: FrontierEntryRelaxableReason | "cohort_ineligible";
 }
 
 function controllerKeyOf(corp: Corporation): string {
@@ -84,9 +88,11 @@ function controllerKeyOf(corp: Corporation): string {
  * one priced evaluation through the SAME founding block: the same real quote,
  * the same post-floor affordability, the same headroom/size/per-turn-cap
  * gates, the same cash debit and unowned-pool draw. Only the relaxable
- * reasons qualify, so state-controlled, glutted, retail-paused,
- * cohort-staggered, cap-rejected, and candidate-less rejections never reach
- * here, and the priced affordability inside stays binding: an override never
+ * reasons and the measured-use pacing opportunity qualify. State-controlled, glutted, retail-paused,
+ * cap-rejected, and candidate-less rejections never reach
+ * here. A profitable, uncovered positive-use candidate outside the ordinary
+ * stagger may use the bounded experiment slot. Priced affordability stays
+ * binding: an override never
  * funds a plant the corp cannot pay for.
  *
  * Slot check only at this stage: the founding block prices the quote, and a
@@ -105,7 +111,7 @@ function controllerKeyOf(corp: Corporation): string {
  *
  * The funnel reason names the FIRST failing gate, so a relaxable reason does
  * not prove the later gates passed: an unprofitable corp may also be
- * cohort-staggered, logistics-capped, retail-paused, or glutted. Re-verify
+ * logistics-capped, retail-paused, or glutted. Re-verify
  * every non-expectational pre-pricing gate explicitly, mirroring the
  * diagnostic inputs. Anything failing here keeps its own reason and never
  * reaches the priced block. (The per-turn cap needs no check here: the
@@ -117,19 +123,37 @@ export function evaluateFrontierCandidate(args: {
   candidate: UnownedSector | null;
   diagnostic: NppMarketEntryDiagnostic | undefined;
   gates: FrontierCandidateGates;
+  placementSignals?: PlacementSignals;
 }): FrontierCandidate | null {
   const { turnState, corp, candidate, diagnostic, gates } = args;
   if (turnState?.enabled !== true) return null;
   if (candidate == null || diagnostic == null) return null;
-  const relaxedReason = isFrontierEntryRelaxableReason(diagnostic.reason)
-    ? diagnostic.reason
-    : null;
+  const pacingOpportunity = frontierPacingOpportunity({
+    reason: diagnostic.reason,
+    uncoveredMarket:
+      args.placementSignals?.activeMarketBuckets != null &&
+      !args.placementSignals.activeMarketBuckets.has(
+        bucketKey(candidate.stateId, candidate.sectorType)
+      ),
+    positiveLocalUse: (SECTOR_SUPPLY[candidate.sectorType] ?? []).some(({ commodity, rate }) => {
+      const demand = args.placementSignals?.stateDemandOf?.(commodity, candidate.stateId);
+      return rate > 0 && typeof demand === "number" && Number.isFinite(demand) && demand > 0;
+    }),
+    profitable: diagnostic.profitable,
+    marginPct: diagnostic.marginPct,
+    marginFloorPct: diagnostic.marginFloorPct,
+  });
+  const relaxedReason = pacingOpportunity
+    ? "cohort_ineligible"
+    : isFrontierEntryRelaxableReason(diagnostic.reason)
+      ? diagnostic.reason
+      : null;
   if (relaxedReason == null) return null;
   const gatesHold =
     candidate != null &&
     gates.allowExpansion &&
     gates.hasLogisticsCapacity &&
-    gates.marketEntryEligible &&
+    (gates.marketEntryEligible || pacingOpportunity) &&
     !gates.retailBlocked &&
     !gates.targetGlutted;
   if (!gatesHold) return null;

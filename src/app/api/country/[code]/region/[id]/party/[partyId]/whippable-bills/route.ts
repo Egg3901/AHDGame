@@ -1,3 +1,5 @@
+import { loadRuntimeCountryOffices } from "@/lib/countries/runtimeOffices";
+import { getVotingUpperChamberKey } from "@/lib/countries/rules/officeLayout";
 import { NextResponse } from "next/server";
 import { handleRouteError } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
@@ -10,7 +12,6 @@ import {
 } from "@/lib/db/partyLookup";
 import {
   COUNTRY_CONFIGS,
-  getCountryConfig,
   getSubNationalLegislatureKey,
   type CountryId,
 } from "@/lib/constants/countries";
@@ -92,10 +93,8 @@ export async function GET(_request: Request, { params }: RouteParams) {
         { [turnField]: { $exists: false }, [dateField]: { $gt: now } },
       ],
     });
-    const config = getCountryConfig(countryId);
-    const upperChamber = config.upperElectionSystem
-      ? (config.legislature.upperChamber?.key ?? null)
-      : null;
+    const { config } = await loadRuntimeCountryOffices(db, countryId);
+    const upperChamber = getVotingUpperChamberKey(config);
     const lowerChamber = config.legislature.lowerChamber.key;
     const subNationalChamber = getSubNationalLegislatureKey(countryId);
     const federalChamberKeys = upperChamber ? [upperChamber, lowerChamber] : [lowerChamber];
@@ -104,7 +103,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     // "npc" → "npcDelegate"; identity elsewhere). Querying the raw chamber key
     // matched no CN delegates, hiding CN federal bills from the state whip panel.
     const officeTypeByChamberKey = new Map(
-      chamberKeys.map((key) => [key, getOfficeTypeForChamber(countryId, key)])
+      chamberKeys.map((key) => [key, getOfficeTypeForChamber(countryId, key, undefined, config)])
     );
 
     const federalBillCountryFilter = {
@@ -229,7 +228,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
 
     for (const bill of activeFederalBills) {
       const activeChambers =
-        bill.status === "veto_override"
+        bill.status === "veto_override" || bill.status === "active_both"
           ? federalChamberKeys
           : bill.currentChamber && federalChamberKeys.includes(bill.currentChamber)
             ? [bill.currentChamber]

@@ -85,7 +85,7 @@ export function OrgMasthead({
         <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center">
           <Seal identity={identity} size={76} />
           <div className="min-w-0 flex-1">
-            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted">
+            <div className="text-body-sm font-medium text-muted">
               {identity.group}
               {identity.hq !== "—" && ` · HQ ${identity.hq}`}
               {identity.founded > 0 && ` · est. ${identity.founded}`}

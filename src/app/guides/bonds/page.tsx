@@ -1,6 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { publicPageMetadata } from "@/lib/siteMetadata";
+import {
+  Callout,
+  FormulaBlock,
+  SectionHeader,
+  SubHeader,
+  TableOfContents,
+  Tag,
+} from "@/app/guides/_components/GuideBlocks";
 
 export const metadata: Metadata = publicPageMetadata({
   title: "Bonds Guide | A House Divided",
@@ -9,81 +17,16 @@ export const metadata: Metadata = publicPageMetadata({
   pathname: "/guides/bonds",
 });
 
-function SectionHeader({ id, children }: { id: string; children: React.ReactNode }) {
-  return (
-    <h2
-      id={id}
-      className="scroll-mt-4 text-xl font-bold tracking-tight text-foreground border-l-4 border-primary/60 pl-3"
-    >
-      {children}
-    </h2>
-  );
-}
-
-function SubHeader({ children }: { children: React.ReactNode }) {
-  return <h3 className="font-semibold text-foreground">{children}</h3>;
-}
-
-function Callout({
-  children,
-  variant = "info",
-}: {
-  children: React.ReactNode;
-  variant?: "info" | "warn" | "tip";
-}) {
-  const colors = {
-    info: "border-primary/40 bg-primary/5",
-    warn: "border-amber-500/40 bg-amber-500/5",
-    tip: "border-emerald-500/40 bg-emerald-500/5",
-  };
-  return (
-    <div
-      className={`rounded-r-lg border-l-4 px-4 py-3 text-sm text-muted leading-relaxed ${colors[variant]}`}
-    >
-      {children}
-    </div>
-  );
-}
-
-function FormulaBlock({ children }: { children: React.ReactNode }) {
-  return (
-    <pre className="overflow-x-auto rounded-lg border border-card-border bg-background px-4 py-3 font-mono text-xs text-foreground/80 leading-relaxed whitespace-pre-wrap">
-      {children}
-    </pre>
-  );
-}
-
-function Tag({
-  children,
-  variant,
-}: {
-  children: React.ReactNode;
-  variant: "positive" | "negative" | "neutral";
-}) {
-  const colors = {
-    positive: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-    negative: "bg-red-500/10 text-red-400 border-red-500/20",
-    neutral: "bg-primary/10 text-primary border-primary/20",
-  };
-  return (
-    <span
-      className={`inline-flex items-center rounded border px-1.5 py-0.5 font-mono text-xs font-semibold ${colors[variant]}`}
-    >
-      {children}
-    </span>
-  );
-}
-
 const TOC_ITEMS = [
-  { id: "what-is-a-bond", label: "What Is a Bond?" },
-  { id: "sovereign-bonds", label: "Sovereign Bonds" },
-  { id: "corporate-bonds", label: "Corporate Bonds" },
-  { id: "price-rate", label: "The Price/Rate Relationship" },
-  { id: "sovereign-ratings", label: "Sovereign Credit Ratings" },
-  { id: "corporate-ratings", label: "Corporate Credit Ratings" },
-  { id: "defaults", label: "Defaults & Recovery" },
-  { id: "buying-bonds", label: "How to Evaluate a Bond" },
-  { id: "tips", label: "Quick Tips" },
+  { id: "what-is-a-bond", label: "What is a bond?" },
+  { id: "sovereign-bonds", label: "Sovereign bonds" },
+  { id: "corporate-bonds", label: "Corporate bonds" },
+  { id: "price-rate", label: "The price/rate relationship" },
+  { id: "sovereign-ratings", label: "Sovereign credit ratings" },
+  { id: "corporate-ratings", label: "Corporate credit ratings" },
+  { id: "defaults", label: "Defaults & recovery" },
+  { id: "buying-bonds", label: "How to evaluate a bond" },
+  { id: "tips", label: "Quick tips" },
 ];
 
 export default function BondsGuidePage() {
@@ -102,28 +45,16 @@ export default function BondsGuidePage() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold tracking-tight">Bonds</h1>
           <p className="mt-2 text-sm text-muted">
-            How bonds work - from the basics through credit ratings, defaults, and strategy
+            How bonds work, from the basics through credit ratings, defaults, and strategy
           </p>
         </div>
 
         <div className="space-y-10">
-          {/* Table of Contents */}
-          <div className="rounded-xl border border-card-border bg-card p-5">
-            <p className="mb-3 text-xs font-bold uppercase tracking-wider text-muted">Contents</p>
-            <ol className="grid gap-y-1 gap-x-4 text-sm sm:grid-cols-2">
-              {TOC_ITEMS.map((item, i) => (
-                <li key={item.id}>
-                  <a href={`#${item.id}`} className="text-primary hover:underline">
-                    {i + 1}. {item.label}
-                  </a>
-                </li>
-              ))}
-            </ol>
-          </div>
+          <TableOfContents items={TOC_ITEMS} />
 
           {/* ── 1. What Is a Bond ── */}
           <section className="space-y-4">
-            <SectionHeader id="what-is-a-bond">1. What Is a Bond?</SectionHeader>
+            <SectionHeader id="what-is-a-bond">1. What is a bond?</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               A bond is a loan. You lend money to a government or corporation; in return they pay
               you a fixed interest rate (the <strong className="text-foreground">coupon</strong>)
@@ -132,7 +63,7 @@ export default function BondsGuidePage() {
             <div className="grid gap-4 sm:grid-cols-3">
               {[
                 {
-                  term: "Face Value",
+                  term: "Face value",
                   def: "The principal amount - $1,000 per bond unit. This is what you receive back at maturity.",
                 },
                 {
@@ -148,16 +79,13 @@ export default function BondsGuidePage() {
                   key={term}
                   className="rounded-xl border border-card-border bg-card p-4 space-y-1.5"
                 >
-                  <p className="text-xs font-bold uppercase tracking-wider text-muted">{term}</p>
+                  <p className="text-sm font-semibold text-foreground">{term}</p>
                   <p className="text-sm text-muted leading-relaxed">{def}</p>
                 </div>
               ))}
             </div>
-            <Callout variant="info">
-              <strong className="text-foreground">
-                Coupon income vs. market price are separate.
-              </strong>{" "}
-              Your coupon payment never changes - it is locked in at issuance. What changes is what
+            <Callout label="Coupon income vs. market price are separate.">
+              Your coupon payment never changes; it is locked in at issuance. What changes is what
               someone would pay you if you wanted to sell the bond early. These two values move
               independently of each other.
             </Callout>
@@ -165,10 +93,10 @@ export default function BondsGuidePage() {
 
           {/* ── 2. Sovereign Bonds ── */}
           <section className="space-y-4">
-            <SectionHeader id="sovereign-bonds">2. Sovereign Bonds</SectionHeader>
+            <SectionHeader id="sovereign-bonds">2. Sovereign bonds</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Sovereign bonds are issued by national governments to finance their budget deficit.
-              They are the safest bonds in the game - governments cannot default.
+              They are the safest bonds in the game: governments cannot default.
             </p>
             <SubHeader>How they are issued</SubHeader>
             <p className="text-sm text-muted leading-relaxed">
@@ -190,7 +118,7 @@ export default function BondsGuidePage() {
                     ["Face value", "$1,000 per unit"],
                     ["Coupon rate", "Equal to the country's central bank prime rate at issuance"],
                     ["Maturity", "48 turns (1 game year)"],
-                    ["Default risk", "None - sovereign bonds are guaranteed"],
+                    ["Default risk", "None. Sovereign bonds are guaranteed"],
                     ["Issuance schedule", "Quarterly (every 12 turns), only when deficit > 0"],
                   ].map(([p, v]) => (
                     <tr key={p}>
@@ -203,26 +131,25 @@ export default function BondsGuidePage() {
             </div>
             <SubHeader>What the coupon pays you</SubHeader>
             <p className="text-sm text-muted leading-relaxed">
-              A bond issued when the prime rate is 5% pays a 5% annual coupon - that is{" "}
+              A bond issued when the prime rate is 5% pays a 5% annual coupon, which is{" "}
               <strong className="text-foreground">$50 per year per $1,000 bond</strong>, paid
               proportionally each turn. The coupon is fixed at issuance and never changes for the
               life of that bond, even if the prime rate moves later.
             </p>
-            <Callout variant="tip">
-              <strong className="text-foreground">No credit risk, but currency risk exists.</strong>{" "}
+            <Callout label="No credit risk, but currency risk exists.">
               Sovereign bonds pay out in the issuing country&apos;s currency. A US bond pays USD, a
               UK bond pays GBP, a Japan bond pays JPY. If your home currency strengthens against the
-              issuing country&apos;s currency while you hold the bond, your effective return falls -
+              issuing country&apos;s currency while you hold the bond, your effective return falls,
               and vice versa.
             </Callout>
           </section>
 
           {/* ── 3. Corporate Bonds ── */}
           <section className="space-y-4">
-            <SectionHeader id="corporate-bonds">3. Corporate Bonds</SectionHeader>
+            <SectionHeader id="corporate-bonds">3. Corporate bonds</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Corporate bonds are issued by player-founded corporations to raise capital. They work
-              the same as sovereign bonds - fixed coupon, fixed maturity, tradeable on the market -
+              the same as sovereign bonds (fixed coupon, fixed maturity, tradeable on the market),
               but they carry <strong className="text-foreground">default risk</strong>. A
               corporation that runs out of cash cannot pay its bondholders.
             </p>
@@ -298,25 +225,23 @@ export default function BondsGuidePage() {
               turns). Bonds issued earlier at shorter maturities remain on the books until they
               mature.
             </p>
-            <Callout variant="warn">
-              <strong className="text-foreground">Issuing is borrowing, not income.</strong> The
-              corporation receives the whole face value in cash on the turn it issues, pays the
+            <Callout kind="warning" label="Issuing is borrowing, not income.">
+              The corporation receives the whole face value in cash on the turn it issues, pays the
               coupon every turn after that, and then repays the whole face value in one payment on
               the maturity turn. Nothing amortizes along the way, so the cash has to be there on
               that turn. Every unit issued is charged for, including units still sitting on the
               public float that nobody bought.
             </Callout>
-            <Callout variant="warn">
-              <strong className="text-foreground">The coupon locks at issuance.</strong> If a
-              company issues a BBB bond today and later falls to CCC, the coupon rate on that
-              existing bond does not change - but the market price will fall to compensate for the
+            <Callout label="The coupon locks at issuance.">
+              If a company issues a BBB bond today and later falls to CCC, the coupon rate on that
+              existing bond does not change, but the market price will fall to compensate for the
               increased risk. New bonds issued after the downgrade will carry the higher CCC spread.
             </Callout>
           </section>
 
           {/* ── 4. Price / Rate Relationship ── */}
           <section className="space-y-4">
-            <SectionHeader id="price-rate">4. The Price/Rate Relationship</SectionHeader>
+            <SectionHeader id="price-rate">4. The price/rate relationship</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               This is the most important mechanic to understand. Bond market prices and interest
               rates always move in <strong className="text-foreground">opposite directions</strong>.
@@ -344,9 +269,9 @@ Key insight: prices and rates still move in opposite directions.
 When rates rise, existing bonds lose value. When rates fall, they gain.
 As maturity approaches, price always pulls back toward $1,000 (face value).
 
-Example - sovereign bond, coupon locked at 5%, 1 year remaining:
-  Prime rate rises to 8%:   price ≈ $972   (modest loss - near maturity)
-  Prime rate falls to 2.5%: price ≈ $1,024  (modest gain - near maturity)
+Example: sovereign bond, coupon locked at 5%, 1 year remaining:
+  Prime rate rises to 8%:   price ≈ $972   (modest loss, near maturity)
+  Prime rate falls to 2.5%: price ≈ $1,024  (modest gain, near maturity)
 
 The further from maturity, the bigger the price swing for the same rate change.`}</FormulaBlock>
             <div className="overflow-x-auto rounded-xl border border-card-border">
@@ -369,7 +294,7 @@ The further from maturity, the bigger the price swing for the same rate change.`
                       <Tag key="r" variant="negative">
                         Prices fall
                       </Tag>,
-                      "Wait. Buy when rates peak - you lock in high coupons before cuts begin.",
+                      "Wait. Buy when rates peak, so you lock in high coupons before cuts begin.",
                     ],
                     [
                       "Rates at peak",
@@ -398,10 +323,7 @@ The further from maturity, the bigger the price swing for the same rate change.`
                 </tbody>
               </table>
             </div>
-            <Callout variant="info">
-              <strong className="text-foreground">
-                Holding to maturity removes price risk entirely.
-              </strong>{" "}
+            <Callout label="Holding to maturity removes price risk entirely.">
               If you buy a bond and hold it until it matures, you always receive exactly face value
               ($1,000) back, regardless of what the market price did in between. Price volatility
               only matters if you plan to sell early.
@@ -410,7 +332,7 @@ The further from maturity, the bigger the price swing for the same rate change.`
 
           {/* ── 5. Sovereign Ratings ── */}
           <section className="space-y-4">
-            <SectionHeader id="sovereign-ratings">5. Sovereign Credit Ratings</SectionHeader>
+            <SectionHeader id="sovereign-ratings">5. Sovereign credit ratings</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Sovereign bonds are guaranteed against default, but the country&apos;s
               <strong className="text-foreground"> credit rating</strong> still matters - it
@@ -435,7 +357,7 @@ The further from maturity, the bigger the price swing for the same rate change.`
                   {[
                     ["≤ 60%", "AAA", "2%", "Low coupons, but safest value store"],
                     ["≤ 80%", "AA", "2.5%", "Near-best; minimal premium"],
-                    ["≤ 100%", "A", "3.5%", "Solid - most healthy economies sit here"],
+                    ["≤ 100%", "A", "3.5%", "Solid; most healthy economies sit here"],
                     ["≤ 120%", "BBB", "5%", "Notable risk premium; decent income"],
                     ["≤ 150%", "BB", "7%", "Elevated risk; high coupons but fiscal strain"],
                     ["> 150%", "B", "10%", "Distressed; very high coupons but severe fiscal risk"],
@@ -450,8 +372,7 @@ The further from maturity, the bigger the price swing for the same rate change.`
                 </tbody>
               </table>
             </div>
-            <Callout variant="tip">
-              <strong className="text-foreground">Fiscal deterioration is a buying signal.</strong>{" "}
+            <Callout label="Fiscal deterioration is a buying signal.">
               When a country&apos;s debt-to-GDP is rising, new bonds are issued at higher coupon
               rates. If you believe a future government will restore fiscal discipline (cutting
               rates), buying those high-coupon bonds early means you lock in premium income that
@@ -461,11 +382,11 @@ The further from maturity, the bigger the price swing for the same rate change.`
 
           {/* ── 6. Corporate Ratings ── */}
           <section className="space-y-4">
-            <SectionHeader id="corporate-ratings">6. Corporate Credit Ratings</SectionHeader>
+            <SectionHeader id="corporate-ratings">6. Corporate credit ratings</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Corporate credit ratings are calculated from four financial components. The score
               updates every turn, so a corporation&apos;s rating can improve or deteriorate over
-              time - and so can the market price of its bonds.
+              time, and so can the market price of its bonds.
             </p>
             <div className="overflow-x-auto rounded-xl border border-card-border">
               <table className="w-full text-sm">
@@ -522,12 +443,11 @@ The further from maturity, the bigger the price swing for the same rate change.`
               wild single-turn swings. A company cannot jump from AAA to CCC in one turn, but
               sustained losses will steadily drag a rating down.
             </p>
-            <Callout variant="warn">
-              <strong className="text-foreground">
-                Corporate bonds have two risk levers sovereign bonds do not: credit risk and CEO
-                risk.
-              </strong>{" "}
-              A CEO can raise their salary, slash dividends, or take on more debt - all of which can
+            <Callout
+              kind="warning"
+              label="Corporate bonds have two risk levers sovereign bonds do not: credit risk and CEO risk."
+            >
+              A CEO can raise their salary, slash dividends, or take on more debt, all of which can
               deteriorate the credit rating. Before buying a corporate bond, assess the CEO&apos;s
               track record, not just the current snapshot.
             </Callout>
@@ -535,13 +455,13 @@ The further from maturity, the bigger the price swing for the same rate change.`
 
           {/* ── 7. Defaults ── */}
           <section className="space-y-4">
-            <SectionHeader id="defaults">7. Defaults &amp; Recovery</SectionHeader>
+            <SectionHeader id="defaults">7. Defaults &amp; recovery</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               A corporate bond defaults when the corporation&apos;s{" "}
               <strong className="text-foreground">cash (liquid capital) goes negative</strong> after
               paying its coupon obligations{" "}
               <strong className="text-foreground">and any face value falling due that turn</strong>,
-              and its assets could not cover the debt. This is the only trigger - a company can have
+              and its assets could not cover the debt. This is the only trigger: a company can have
               a bad credit rating without defaulting as long as it can still make payments. Maturity
               is the dangerous one: the coupon is a trickle, and the face value lands in a single
               turn.
@@ -622,11 +542,8 @@ The further from maturity, the bigger the price swing for the same rate change.`
                 </tbody>
               </table>
             </div>
-            <Callout variant="tip">
-              <strong className="text-foreground">
-                Defaulted bonds at $0.10 can be a speculative bet.
-              </strong>{" "}
-              If you believe a corporation will recover - new CEO, better margins, reduced debt -
+            <Callout label="Defaulted bonds at $0.10 can be a speculative bet.">
+              If you believe a corporation will recover (new CEO, better margins, reduced debt),
               buying defaulted bonds at 10 cents on the dollar means a 10× return on principal
               recovery. High risk, high reward.
             </Callout>
@@ -634,7 +551,7 @@ The further from maturity, the bigger the price swing for the same rate change.`
 
           {/* ── 8. How to Evaluate a Bond ── */}
           <section className="space-y-4">
-            <SectionHeader id="buying-bonds">8. How to Evaluate a Bond</SectionHeader>
+            <SectionHeader id="buying-bonds">8. How to evaluate a bond</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               The questions to ask before buying, in order:
             </p>
@@ -676,7 +593,7 @@ The further from maturity, the bigger the price swing for the same rate change.`
 
           {/* ── 9. Quick Tips ── */}
           <section className="space-y-4">
-            <SectionHeader id="tips">9. Quick Tips</SectionHeader>
+            <SectionHeader id="tips">9. Quick tips</SectionHeader>
             <div className="grid gap-3 sm:grid-cols-2">
               {[
                 [
@@ -708,7 +625,7 @@ The further from maturity, the bigger the price swing for the same rate change.`
                   key={title}
                   className="rounded-xl border border-card-border bg-card p-4 space-y-1.5"
                 >
-                  <p className="text-xs font-bold uppercase tracking-wider text-muted">{title}</p>
+                  <p className="text-sm font-semibold text-foreground">{title}</p>
                   <p className="text-sm text-muted leading-relaxed">{body}</p>
                 </div>
               ))}

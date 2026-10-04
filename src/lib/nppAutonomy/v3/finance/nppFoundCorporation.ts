@@ -64,7 +64,8 @@ export async function nppFoundCorporation(
    * sweep's own load); falls back to the on-demand lookup when omitted so
    * every other caller keeps the defence-in-depth check.
    */
-  blockedCountries?: ReadonlySet<CountryId>
+  blockedCountries?: ReadonlySet<CountryId>,
+  preset?: string
 ): Promise<NppFoundCorporationResult> {
   if (!npp.homeState) {
     return { ok: false, reason: "NPP has no home state to headquarter a corporation in." };
@@ -94,16 +95,15 @@ export async function nppFoundCorporation(
 
   // Founding is real-economy → charge the personal forex account, not campaign
   // `funds`. Fee is quoted LOCAL; convert at the FX boundary.
-  const rate = homeRate ?? (await nppHomeFxRate(db, npp.countryId));
+  const rate = homeRate ?? (await nppHomeFxRate(db, npp.countryId, undefined, preset));
   const foundingFeeAnchor = localToAnchor(foundingFeeLocal, rate);
   const now = new Date();
-  const deducted = await db
-    .collection<NPP>("npps")
-    .findOneAndUpdate(
-      { _id: npp._id, nppInvestmentCashAnchor: { $gte: foundingFeeAnchor } },
-      { $inc: { nppInvestmentCashAnchor: -foundingFeeAnchor }, $set: { updatedAt: now } },
-      { returnDocument: "after" }
-    );
+  const deducted = await db.collection<NPP>("npps").findOneAndUpdate(
+    { _id: npp._id, nppInvestmentCashAnchor: { $gte: foundingFeeAnchor } },
+    { $inc: { nppInvestmentCashAnchor: -foundingFeeAnchor }, $set: { updatedAt: now } },
+    // Only the balance is read back; an NPP document is ~28 KB.
+    { returnDocument: "after", projection: { nppInvestmentCashAnchor: 1 } }
+  );
   if (!deducted) {
     return { ok: false, reason: "Insufficient investment capital to found a corporation." };
   }

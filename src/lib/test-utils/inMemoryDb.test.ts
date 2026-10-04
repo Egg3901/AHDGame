@@ -1,7 +1,81 @@
 import { describe, expect, it } from "vitest";
 import { createInMemoryDb } from "./inMemoryDb";
+import { plantCapacityDeltaPipeline } from "@/lib/corporations/plantLedger";
+import { plantSizeUnits } from "@/lib/constants/facilityQuantum";
 
 describe("inMemoryDb document paths", () => {
+  it("applies real capacity pipelines and derives the ledger from the updated stock", async () => {
+    const db = createInMemoryDb();
+    const quantum = plantSizeUnits("manufacturing");
+    db.seed("sectors", [{ _id: "plant", capitalStock: quantum * 1.5 }]);
+    await db
+      .collection("sectors")
+      .updateOne({ _id: "plant" }, plantCapacityDeltaPipeline("manufacturing", quantum * 1.25));
+    expect(db.collection("sectors").docs[0]).toMatchObject({
+      capitalStock: quantum * 2.75,
+      plantCount: 2,
+      plantUnitRemainder: quantum * 0.75,
+    });
+    await db
+      .collection("sectors")
+      .updateOne({ _id: "plant" }, plantCapacityDeltaPipeline("manufacturing", -quantum * 2));
+    expect(db.collection("sectors").docs[0]).toMatchObject({
+      capitalStock: quantum * 0.75,
+      plantCount: 1,
+      plantUnitRemainder: 0,
+    });
+    await db
+      .collection("sectors")
+      .updateOne({ _id: "plant" }, plantCapacityDeltaPipeline("manufacturing", -quantum));
+    expect(db.collection("sectors").docs[0]).toMatchObject({
+      capitalStock: 0,
+      plantCount: 0,
+      plantUnitRemainder: 0,
+    });
+  });
+  it("evaluates only the selected conditional branch", async () => {
+    const db = createInMemoryDb();
+    db.seed("ratios", [{ _id: "zero", divisor: 0 }]);
+    await db.collection("ratios").updateOne({ _id: "zero" }, [
+      {
+        $set: {
+          ratio: { $cond: [{ $eq: ["$divisor", 0] }, null, { $divide: [1, "$divisor"] }] },
+        },
+      },
+    ]);
+    expect(db.collection("ratios").docs[0].ratio).toBeNull();
+  });
+  it("sorts a find cursor before limiting the latest revision", async () => {
+    const db = createInMemoryDb();
+    db.seed("revisions", [
+      { _id: "first", source: "CS", revision: 1 },
+      { _id: "other", source: "YU", revision: 9 },
+      { _id: "latest", source: "CS", revision: 3 },
+      { _id: "second", source: "CS", revision: 2 },
+    ]);
+    expect(
+      await db
+        .collection("revisions")
+        .find({ source: "CS" })
+        .sort({ revision: -1 })
+        .limit(1)
+        .toArray()
+    ).toEqual([{ _id: "latest", source: "CS", revision: 3 }]);
+  });
+  it("sorts equal dates by the next key and keeps missing values below dates", async () => {
+    const db = createInMemoryDb();
+    db.seed("events", [
+      { _id: "later-tie", at: new Date(10), sequence: 2 },
+      { _id: "missing", sequence: 0 },
+      { _id: "earlier-tie", at: new Date(10), sequence: 1 },
+      { _id: "newest", at: new Date(20), sequence: 3 },
+    ]);
+    expect(
+      (await db.collection("events").find({}).sort({ at: -1, sequence: 1 }).toArray()).map(
+        (row) => row._id
+      )
+    ).toEqual(["newest", "earlier-tie", "later-tie", "missing"]);
+  });
   it("applies ordinary nested updates", async () => {
     const db = createInMemoryDb();
     db.seed("items", [{ _id: "one", nested: { value: 1 } }]);
@@ -143,6 +217,40 @@ describe("inMemoryDb — driver surface used by bootstrapGameWorld", () => {
 });
 
 describe("inMemoryDb — query and update operators", () => {
+  it("matches null and missing fields like Mongo equality, $eq, $in, and $ne", async () => {
+    const db = createInMemoryDb();
+    const coll = db.collection("items");
+    coll.docs.push(
+      { _id: "null", value: null },
+      { _id: "missing" },
+      { _id: "text", value: "present" },
+      { _id: "empty-array", value: [] },
+      { _id: "array-with-null", value: ["present", null] },
+      { _id: "array-without-null", value: ["present"] }
+    );
+
+    expect((await coll.find({ value: null }).toArray()).map((row) => row._id)).toEqual([
+      "null",
+      "missing",
+      "array-with-null",
+    ]);
+    expect((await coll.find({ value: { $eq: null } }).toArray()).map((row) => row._id)).toEqual([
+      "null",
+      "missing",
+      "array-with-null",
+    ]);
+    expect((await coll.find({ value: { $in: [null] } }).toArray()).map((row) => row._id)).toEqual([
+      "null",
+      "missing",
+      "array-with-null",
+    ]);
+    expect((await coll.find({ value: { $ne: null } }).toArray()).map((row) => row._id)).toEqual([
+      "text",
+      "empty-array",
+      "array-without-null",
+    ]);
+  });
+
   it("$regex matches strings, honouring $options: 'i'", async () => {
     const db = createInMemoryDb();
     db.seed("parties", [
@@ -248,6 +356,7 @@ describe("bulkWrite update/delete many", () => {
     ]);
 
     expect(res.modifiedCount).toBe(2);
+    expect(res.matchedCount).toBe(2);
     expect(await coll.countDocuments({ representingUnionId: "u1" })).toBe(2);
     expect(await coll.countDocuments({ representingUnionId: null })).toBe(1);
   });
@@ -297,4 +406,37 @@ describe("bulkWrite update/delete many", () => {
       .toArray();
     expect(rows.map((r) => r.turn)).toEqual([10, 2]);
   });
+});
+
+it("reports only newly inserted bulk ids on mixed upsert and replay", async () => {
+  const db = createInMemoryDb();
+  db.seed("history", [{ _id: "existing", amount: 10 }]);
+  const operations = [
+    {
+      updateOne: {
+        filter: { _id: "existing" },
+        update: { $setOnInsert: { amount: 999 } },
+        upsert: true,
+      },
+    },
+    {
+      updateOne: {
+        filter: { _id: "build" },
+        update: { $setOnInsert: { amount: -20 } },
+        upsert: true,
+      },
+    },
+    { updateOne: { filter: { _id: "absent-no-upsert" }, update: { $set: { amount: 5 } } } },
+    { replaceOne: { filter: { _id: "replacement" }, replacement: { amount: -30 }, upsert: true } },
+  ];
+  const first = await db.collection("history").bulkWrite(operations);
+  expect(first.upsertedIds).toEqual({ 1: "build", 3: "replacement" });
+  expect(first.upsertedCount).toBe(2);
+  expect(first.matchedCount).toBe(1);
+  expect(first.modifiedCount).toBe(1);
+  const replay = await db.collection("history").bulkWrite(operations);
+  expect(replay.upsertedIds).toEqual({});
+  expect(replay.upsertedCount).toBe(0);
+  expect(await db.collection("history").countDocuments()).toBe(3);
+  expect(await db.collection("history").findOne({ _id: "existing" })).toMatchObject({ amount: 10 });
 });

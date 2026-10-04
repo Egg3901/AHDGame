@@ -37,10 +37,17 @@ export async function fetchJson<T = unknown>(
   try {
     res = await fetch(input, rest);
   } catch (err) {
-    captureClientException(err, {
-      tags: { kind: "fetch", phase: "network", feature },
-      extra: { url: input },
-    });
+    const expectedAbort =
+      err instanceof Error &&
+      err.name === "AbortError" &&
+      rest.signal?.aborted === true &&
+      rest.signal.reason?.name !== "TimeoutError";
+    if (!expectedAbort) {
+      captureClientException(err, {
+        tags: { kind: "fetch", phase: "network", feature },
+        extra: { url: input },
+      });
+    }
     throw err;
   }
 

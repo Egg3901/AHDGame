@@ -65,7 +65,7 @@ export function TreasurySuppressionControl({
   const groupsForSupCat = targetableDemos.filter((d) => d.category === suppressionForm.category);
 
   return (
-    <div className="px-6 py-5 border-b border-card-border/40 border-l-[3px] border-l-error/40">
+    <div className="px-6 py-5 border-b border-card-border/40">
       <div className="flex items-center gap-2 mb-1">
         <svg
           className="h-4 w-4 text-error"
@@ -80,11 +80,9 @@ export function TreasurySuppressionControl({
             d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"
           />
         </svg>
-        <div className="text-xs font-semibold uppercase tracking-wide text-muted">
-          Voter Suppression
-        </div>
+        <div className="text-xs font-semibold text-muted">Voter suppression</div>
       </div>
-      <p className="text-[11px] text-muted/60 mb-3 ml-6">
+      <p className="text-body-sm text-muted mb-3 ml-6">
         Nationwide dirty tricks. Suppress opponent turnout across all {regionCount} {regionWord}.
       </p>
 

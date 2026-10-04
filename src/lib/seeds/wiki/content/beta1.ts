@@ -1,6 +1,6 @@
-export const beta1Content = `**Iterations:** *Alpha 1 (not documented)*  ·  **Beta 1** *(concluded)*  ·  [[Beta 2]] *(concluded)*
+export const beta1Content = `**Iterations:** *Alpha 1 (not documented)*  ·  **Beta 1** *(concluded)*  ·  [[Beta 2]] *(concluded)*  ·  [[Iteration 1]] *(ongoing)*
 
-*Alpha 1 ran before this wiki existed and was not documented; Beta 1 is the article you are reading, preserved as it was written at the close of the iteration; [[Beta 2]] followed it and has also concluded. The live world is a later iteration, shown in-game as 1.0.*
+*Alpha 1 ran before this wiki existed and was not documented; Beta 1 is the article you are reading, preserved as it was written at the close of the iteration; [[Beta 2]] followed it and has also concluded. [[Iteration 1]] follows the current live world.*
 
 ---
 

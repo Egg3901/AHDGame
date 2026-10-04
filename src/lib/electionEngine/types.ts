@@ -423,6 +423,17 @@ export interface AppealWeightTrace {
 }
 
 export interface AccumulateVoteTurnPreload {
+  /**
+   * The phase's Db handle (#2695). `getDb()` returns a new Db object per call,
+   * so per-Db caches (country state) only hit when callers share one handle.
+   */
+  db?: import("mongodb").Db;
+  /**
+   * Incumbent seat share per election id, precomputed for the whole vote turn
+   * from resolved history (#2695). Absent entries fall back to the per-election
+   * read.
+   */
+  incumbentSeatShareByElection?: Map<string, Map<string, number>>;
   /** gameState.preset — selects the era-correct census bundle for Layer-1 turnout derivation. */
   preset?: string;
   /**

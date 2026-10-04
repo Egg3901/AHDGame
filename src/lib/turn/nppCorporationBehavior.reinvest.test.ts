@@ -139,6 +139,12 @@ function queueWrites(decision: ReturnType<typeof makeNppCorpDecision>) {
   for (const w of writes) {
     expect(w.update.$set).not.toHaveProperty("buildQueue");
     expect(w.update.$set).not.toHaveProperty("constructionInProgressAnchor");
+    expect(w.filter.corporationId).toBeDefined();
+    expect(w.filter.$and?.[0]).toEqual({ constructionPropertyTransition: { $exists: false } });
+    expect(w.filter.$and?.[1]?.$or?.[0]).toEqual({ constructionFinancing: { $exists: false } });
+    expect(w.filter.$and?.[1]?.$or?.[1]?.$and?.[0]).toEqual({
+      "constructionFinancing.status": { $in: ["released", "cancelled"] },
+    });
   }
   return writes;
 }
@@ -212,11 +218,9 @@ describe("NPP capacity reinvestment — a selling-out, fully-utilized plant grow
     expect(order.onlineTurn).toBe(TURN + CAPACITY_BUILD_TURNS("manufacturing"));
     expect(order.costPaidAnchor).toBeGreaterThan(0);
 
-    // CIP moves by exactly what this order costs — an increment, so it composes
-    // with the turn processor's own CIP decrement for orders that landed.
-    expect(writes[0].update.$inc!.constructionInProgressAnchor).toBe(
-      Math.round(order.costPaidAnchor)
-    );
+    // CIP has one writer in sectorTurn, which derives it from this queue.
+    expect(writes[0].update.$inc?.constructionInProgressAnchor).toBeUndefined();
+    expect(writes[0].update.$set).not.toHaveProperty("constructionInProgressAnchor");
 
     // Charged, and above the cash floor. The charge is a delta now, not an
     // absolute balance write (ticket #1260).
@@ -579,6 +583,53 @@ describe("NPP capacity reinvestment — the two cash rails", () => {
       [pool({ headroomUnits: 0, revenue: 0 })]
     );
     expect(queueWrites(decision)).toHaveLength(0);
+  });
+
+  it("exposes a priced NPP finance intent without writing an unfunded order or cash debit", () => {
+    const cost = maintenanceCost();
+    const c = corp({ liquidCapital: cost * 3 });
+    const decision = decide(c, [maintOnly()], [pool({ headroomUnits: 0, revenue: 0 })]);
+
+    expect(queueWrites(decision)).toHaveLength(0);
+    expect(decision.reinvestments).toBeUndefined();
+    expect(decision.liquidCapitalDelta).toBe(0);
+    expect(decision.constructionFinanceIntents).toHaveLength(1);
+    expect(decision.constructionFinanceIntents?.[0]).toMatchObject({
+      costLocal: expect.any(Number),
+      order: { startTurn: TURN },
+      cashContributionLimitLocal: c.liquidCapital * 0.25,
+      growthUnits: 0,
+    });
+  });
+
+  it.each<[string, Partial<CorporateSector>]>([
+    [
+      "a listed sector",
+      { forSale: { listedAt: new Date(), priceAnchor: 1_000, npvAnchor: 1_000 } },
+    ],
+    ["a property transition", { constructionPropertyTransition: { key: "sale-1", kind: "sale" } }],
+    [
+      "an active construction claim",
+      {
+        constructionFinancing: {
+          status: "awaiting_approval",
+          escrowLocal: 0,
+          fundingCleanupCompleted: false,
+        } as CorporateSector["constructionFinancing"],
+      },
+    ],
+  ])("does not spend or queue a build on %s", (_label, property) => {
+    const decision = decide(corp(), [sector(property)], [pool()]);
+
+    expect(queueWrites(decision)).toHaveLength(0);
+    expect(decision.reinvestments).toBeUndefined();
+    expect(decision.constructionFinanceIntents).toBeUndefined();
+    expect(decision.liquidCapitalDelta).toBe(0);
+    expect(
+      decision.capacityObservations?.some(
+        (observation) => observation.outcome === "property_unavailable"
+      )
+    ).toBe(true);
   });
 
   it("drops an unaffordable growth leg but still funds maintenance", () => {

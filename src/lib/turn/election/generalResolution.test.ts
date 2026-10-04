@@ -13,6 +13,7 @@ import { resolveOneGeneralElection } from "./generalResolution";
 import type { Db } from "mongodb";
 import type { Election, ElectionVoteTally } from "@/lib/db/types";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { resolveOneGeneralElection as resolveBulgarianElection } from "./generalResolution";
 
 // ── Module mocks ─────────────────────────────────────────────────────────────
 
@@ -41,6 +42,10 @@ vi.mock("@/lib/achievements", () => ({
 }));
 vi.mock("@/lib/achievements/triggers", () => ({
   checkElectionWinAchievements: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("@/lib/turn/ruConvocation", () => ({
+  handleRuConvocationReset: vi.fn().mockResolvedValue(undefined),
 }));
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -148,6 +153,210 @@ beforeEach(async () => {
 // ── resolveOneGeneralElection ─────────────────────────────────────────────────
 
 describe("resolveOneGeneralElection", () => {
+  it("does not claim or seat a bound Duma ballot through the single-race resolver", async () => {
+    const election = makeElection({
+      countryId: "RU",
+      electionType: "dumaDeputy",
+      status: "completed",
+      russianDumaRound: {
+        cohortId: new ObjectId(),
+        mandateSinceTurn: 129,
+        tier: "constituency",
+        registeredVoters: 100,
+      },
+    });
+    expect(
+      await resolveBulgarianElection(db as unknown as Db, election, undefined, 141, NOW)
+    ).toEqual({ resolved: false, newsOutcomes: [] });
+    expect(db.collectionMocks.elections!.updateOne).not.toHaveBeenCalled();
+  });
+  it("does not claim or seat a bound Council ballot through the single-race resolver", async () => {
+    const election = makeElection({
+      countryId: "RU",
+      electionType: "federationCouncilMember",
+      status: "completed",
+      russianCouncilRound: {
+        cohortId: new ObjectId(),
+        mandateSinceTurn: 129,
+        registeredVoters: 100,
+        districtNumber: 1,
+      },
+    });
+    expect(
+      await resolveBulgarianElection(db as unknown as Db, election, undefined, 141, NOW)
+    ).toEqual({ resolved: false, newsOutcomes: [] });
+    expect(db.collectionMocks.elections!.updateOne).not.toHaveBeenCalled();
+  });
+  it.each([1, 2])(
+    "seats the frozen Bulgarian national allocation in ordinary cycle %s",
+    async (cycle) => {
+      const election = makeElection({
+        countryId: "BG",
+        electionType: "nationalAssembly",
+        state: "BG_SOF",
+        cycle,
+        electionYear: cycle === 1 ? 1991 : 1995,
+        totalSeats: 5,
+        status: "completed",
+      });
+      const ids = [new ObjectId(), new ObjectId(), new ObjectId()];
+      const votes = [100, 80, 30];
+      const parties = ["A", "B", "C"];
+      const candidates = ids.map((id, index) => {
+        const candidate = makeCandidate(election._id, {
+          characterId: id,
+          party: parties[index],
+          isNPP: index > 0,
+          nppId: index > 0 ? id : undefined,
+        });
+        candidate._id = id;
+        return candidate;
+      });
+      const tally = makeTally(
+        election._id,
+        Object.fromEntries(ids.map((id, index) => [id.toString(), votes[index]]))
+      );
+      db.collectionMocks.electionCandidates!.find.mockReturnValue(makeCursor(candidates));
+      db.collectionMocks.characters!.find.mockReturnValue(
+        makeCursor(ids.map((id) => ({ _id: id, userId: new ObjectId() })))
+      );
+      db.collectionMocks.npps!.find.mockReturnValue(
+        makeCursor(ids.slice(1).map((id) => ({ _id: id, retiredAt: null })))
+      );
+      db.collection("countryState");
+      db.collection("gameState");
+      db.collectionMocks.gameState!.findOne.mockResolvedValue({
+        _id: "current",
+        preset: "1991-default",
+      });
+      db.collectionMocks.countryState!.findOne.mockResolvedValue({
+        _id: "BG",
+        governmentType: "parliamentaryRepublic",
+      });
+
+      await resolveBulgarianElection(
+        db as unknown as Db,
+        election,
+        tally,
+        CURRENT_TURN,
+        NOW,
+        null,
+        undefined,
+        { [ids[0].toHexString()]: 1, [ids[1].toHexString()]: 4, [ids[2].toHexString()]: 0 }
+      );
+      const officials = db.collectionMocks.electedOfficials!.insertOne.mock.calls.map(
+        (call) => call[0] as { party: string; seatsHeld: number }
+      );
+      expect(officials.map(({ party, seatsHeld }) => [party, seatsHeld])).toEqual([
+        ["A", 1],
+        ["B", 4],
+      ]);
+    }
+  );
+
+  it("seats a 2027 Bulgarian regional race by proportional Hare allocation", async () => {
+    const election = makeElection({
+      countryId: "BG",
+      electionType: "nationalAssembly",
+      state: "BG31",
+      cycle: 1,
+      electionYear: 2030,
+      totalSeats: 5,
+      status: "completed",
+    });
+    const ids = [new ObjectId(), new ObjectId(), new ObjectId()];
+    const votes = [100, 60, 45];
+    const parties = ["A", "B", "C"];
+    const candidates = ids.map((id, index) => {
+      const candidate = makeCandidate(election._id, { characterId: id, party: parties[index] });
+      candidate._id = id;
+      return candidate;
+    });
+    const tally = makeTally(
+      election._id,
+      Object.fromEntries(ids.map((id, index) => [id.toString(), votes[index]]))
+    );
+    db.collectionMocks.electionCandidates!.find.mockReturnValue(makeCursor(candidates));
+    db.collectionMocks.characters!.find.mockReturnValue(
+      makeCursor(ids.map((id) => ({ _id: id, userId: new ObjectId() })))
+    );
+    db.collection("gameState");
+    db.collectionMocks.gameState!.findOne.mockResolvedValue({
+      _id: "current",
+      preset: "2027-default",
+    });
+
+    await resolveBulgarianElection(db as unknown as Db, election, tally, CURRENT_TURN, NOW);
+    const officials = db.collectionMocks.electedOfficials!.insertOne.mock.calls.map(
+      (call) => call[0] as { party: string; seatsHeld: number }
+    );
+    expect(officials.map(({ party, seatsHeld }) => [party, seatsHeld])).toEqual([
+      ["A", 2],
+      ["B", 2],
+      ["C", 1],
+    ]);
+  });
+
+  it.each([true, false])(
+    "seats Hungarian bounded NPC mandates and rejects multiple player seats (NPC: %s)",
+    async (isNpc) => {
+      const election = makeElection({
+        countryId: "HU",
+        electionType: "nationalAssembly",
+        state: "HU_BUD",
+        cycle: 6,
+        electionYear: 2014,
+        totalSeats: 8,
+        status: "completed",
+      });
+      const ids = [new ObjectId(), new ObjectId()];
+      const candidates = ids.map((id, index) => {
+        const candidate = makeCandidate(election._id, {
+          characterId: id,
+          isNPP: index === 0 && isNpc,
+          party: index === 0 ? "A" : "B",
+        });
+        candidate._id = id;
+        return candidate;
+      });
+      const tally = makeTally(election._id, {
+        [ids[0].toString()]: 100,
+        [ids[1].toString()]: 100,
+      });
+      db.collectionMocks.electionCandidates!.find.mockReturnValue(makeCursor(candidates));
+      db.collectionMocks.characters!.find.mockReturnValue(
+        makeCursor(ids.map((id) => ({ _id: id, userId: new ObjectId() })))
+      );
+      const resolution = resolveBulgarianElection(
+        db as unknown as Db,
+        election,
+        tally,
+        CURRENT_TURN,
+        NOW,
+        null,
+        {
+          [ids[0].toString()]: 7,
+          [ids[1].toString()]: 1,
+        }
+      );
+      if (!isNpc) {
+        await expect(resolution).rejects.toThrow(
+          "Hungary modern mandate has insufficient viable people"
+        );
+        expect(db.collectionMocks.electedOfficials!.insertOne).not.toHaveBeenCalled();
+        return;
+      }
+      await resolution;
+      const officials = db.collectionMocks.electedOfficials!.insertOne.mock.calls.map(
+        (call) => call[0] as { party: string; seatsHeld: number }
+      );
+      expect(officials.map(({ party, seatsHeld }) => [party, seatsHeld])).toEqual([
+        ["A", 7],
+        ["B", 1],
+      ]);
+    }
+  );
+
   // ── Edge case: already-finalized tally ──────────────────────────────────────
 
   it("recovers gracefully when tally is already finalized — marks election resolved without re-writing officials", async () => {
@@ -181,7 +390,7 @@ describe("resolveOneGeneralElection", () => {
     const tally = makeTally(election._id, {}, { finalized: true, executiveSeatingPending: true });
     const { resolvePresidentElection } = await import("./presidentResolution");
     await resolveOneGeneralElection(db as unknown as Db, election, tally, CURRENT_TURN, NOW);
-    expect(resolvePresidentElection).toHaveBeenCalledWith(db, election, tally, NOW);
+    expect(resolvePresidentElection).toHaveBeenCalledWith(db, election, tally, NOW, CURRENT_TURN);
     expect(db.collectionMocks.electionCandidates!.updateMany).not.toHaveBeenCalled();
   });
 
@@ -660,6 +869,50 @@ describe("resolveOneGeneralElection", () => {
     expect(result.resolved).toBe(true);
     expect(db.collectionMocks["npps"]!.updateOne).not.toHaveBeenCalled();
     expect(db.collectionMocks["electedOfficials"]!.insertOne).not.toHaveBeenCalled();
+  });
+
+  it("seats a candidacy filed under a since-merged party into the party that absorbed it (ticket 1376)", async () => {
+    const election = makeElection({ electionType: "senate", state: "OH" });
+    const nppId = new ObjectId();
+    const candidate = makeCandidate(election._id, {
+      isNPP: true,
+      nppId,
+      party: "4",
+      characterName: "Andre Ferguson",
+    });
+    const tally = makeTally(election._id, { [candidate._id.toString()]: 1_000 });
+    const fpusaId = new ObjectId();
+    const cupId = new ObjectId();
+
+    db.collectionMocks["electionCandidates"]!.find.mockReturnValue(makeCursor([candidate]));
+    db.collectionMocks["npps"]!.find.mockReturnValue(
+      makeCursor([{ _id: nppId, retiredAt: null, currentOffice: null }])
+    );
+    db.collection("politicalParties");
+    db.collectionMocks["politicalParties"]!.find.mockImplementation(
+      (filter: Record<string, unknown>) =>
+        makeCursor(
+          "mergedIntoPartyId" in filter
+            ? [{ _id: fpusaId, sequentialId: 4, mergedIntoPartyId: cupId }]
+            : [{ _id: cupId, sequentialId: 5 }]
+        )
+    );
+
+    const result = await resolveOneGeneralElection(
+      db as unknown as Db,
+      election,
+      tally,
+      CURRENT_TURN,
+      NOW
+    );
+
+    expect(result.resolved).toBe(true);
+    const nppSet = db.collectionMocks["npps"]!.updateOne.mock.calls.find(
+      (c) => c[0]?._id?.toString() === nppId.toString() && c[1]?.$set?.currentOffice
+    );
+    expect(nppSet?.[1].$set.party).toBe("5");
+    const official = db.collectionMocks["electedOfficials"]!.insertOne.mock.calls[0]?.[0];
+    expect(official).toMatchObject({ party: "5", nppId });
   });
 
   it("winner notification is sent to the winning character's user", async () => {
@@ -1251,6 +1504,49 @@ describe("resolveOneGeneralElection", () => {
     }
   );
 
+  it.each([
+    "supremeSovietDeputy",
+    "unionCongressDeputy",
+    "congressDeputy",
+    "stateDuma",
+    "snap_stateDuma",
+  ])("passes the actual Russian %s cycle to the constitution-aware reset", async (electionType) => {
+    const election = makeElection({
+      countryId: "RU",
+      electionType,
+      state: "RU_WEST",
+      cycle: 4,
+      totalSeats: 1,
+    });
+    const id = new ObjectId();
+    const candidate = makeCandidate(election._id, { characterId: id, party: "2" });
+    const tally = makeTally(election._id, { [candidate._id.toString()]: 100 });
+    db.collectionMocks.electionCandidates!.find.mockReturnValue(makeCursor([candidate]));
+    db.collectionMocks.characters!.find.mockReturnValue(
+      makeCursor([{ _id: id, userId: new ObjectId(), currentOffice: null }])
+    );
+    db.collection("countryState");
+    db.collectionMocks.countryState!.findOne.mockResolvedValue({
+      _id: "RU",
+      governmentType: "parliamentaryRepublic",
+      rulingPartyId: null,
+      opsVoteMultipliers: null,
+      hasLeaderConfidenceModel: false,
+    });
+    db.collectionMocks.elections!.countDocuments.mockResolvedValue(0);
+    await resolveBulgarianElection(db as unknown as Db, election, tally, CURRENT_TURN, NOW);
+    const { handleRuConvocationReset } = await import("@/lib/turn/ruConvocation");
+    expect(handleRuConvocationReset).toHaveBeenCalledWith(db, 4, NOW, electionType);
+    expect(db.collectionMocks.elections!.countDocuments).toHaveBeenCalledWith(
+      expect.objectContaining({
+        countryId: "RU",
+        electionType,
+        cycle: 4,
+        status: { $in: ["upcoming", "active", "completed"] },
+      })
+    );
+  });
+
   // ── President: delegates to resolvePresidentElection ────────────────────
 
   it("president election delegates to resolvePresidentElection and marks election resolved", async () => {
@@ -1266,7 +1562,7 @@ describe("resolveOneGeneralElection", () => {
     );
 
     const { resolvePresidentElection } = await import("@/lib/turn/election/presidentResolution");
-    expect(resolvePresidentElection).toHaveBeenCalledWith(db, election, tally, NOW);
+    expect(resolvePresidentElection).toHaveBeenCalledWith(db, election, tally, NOW, CURRENT_TURN);
     expect(result.resolved).toBe(true);
 
     // Election marked resolved

@@ -5,12 +5,18 @@ import type { UnownedSector } from "@/lib/db/types/unownedSector";
 import type { CommodityType } from "@/lib/constants/commodities";
 import type { CountryId } from "@/lib/constants/countries";
 
-const us = (sectorType: string, stateId: string, revenue = 100_000): UnownedSector =>
+const us = (
+  sectorType: string,
+  stateId: string,
+  revenue = 100_000,
+  industryModel?: string
+): UnownedSector =>
   ({
     _id: new ObjectId(),
     stateId,
     countryId: "US" as CountryId,
     sectorType: sectorType as UnownedSector["sectorType"],
+    ...(industryModel ? { industryModel } : {}),
     revenue,
     headroomUnits: revenue,
   }) as UnownedSector;
@@ -252,6 +258,41 @@ describe("empty-market coverage treatment", () => {
     const signals = { preferEmptyMarkets: true, activeMarketBuckets: new Set<string>() };
     markMarketsActive(signals, [us("logistics", "AZ")]);
     expect(signals.activeMarketBuckets).toContain("AZ:logistics");
+  });
+
+  it("matches a manufacturing vehicle corporation to its model-specific market", () => {
+    const pool = new Map([
+      ["US", [us("manufacturing", "MI", 10_000_000), us("manufacturing", "MI", 1, "vehicles")]],
+    ]);
+    const pick = findBestUnownedSector(
+      "US",
+      "MI",
+      "manufacturing",
+      null,
+      new Set(),
+      pool,
+      new Set(),
+      ratios({}),
+      false,
+      1,
+      undefined,
+      undefined,
+      undefined,
+      "vehicles"
+    );
+
+    expect(pick?.industryModel).toBe("vehicles");
+  });
+
+  it("marks modelled and generic manufacturing as distinct active markets", () => {
+    const signals = { activeMarketBuckets: new Set<string>() };
+    markMarketsActive(signals, [
+      us("manufacturing", "MI"),
+      us("manufacturing", "MI", 1, "vehicles"),
+    ]);
+    expect(signals.activeMarketBuckets).toEqual(
+      new Set(["MI:manufacturing", "MI:manufacturing:vehicles"])
+    );
   });
 
   it("reports which filter bound when no candidate survives", () => {

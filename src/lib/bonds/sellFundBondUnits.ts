@@ -89,12 +89,14 @@ export async function sellFundBondHoldingsForCash(
 
     const debit = await debitBondPoolGated(db, currency, proceedsLocal, "salesOut", now);
     if (!debit.ok) continue;
-    const release = await db
-      .collection<Bond>("bonds")
-      .updateOne(
-        { _id: bond._id, holders: { $elemMatch: { fundId: fund._id, units: { $gte: units } } } },
-        { $inc: { "holders.$.units": -units, publicFloat: units }, $set: { updatedAt: now } }
-      );
+    const release = await db.collection<Bond>("bonds").updateOne(
+      {
+        _id: bond._id,
+        sovereignMaturityClaim: { $exists: false },
+        holders: { $elemMatch: { fundId: fund._id, units: { $gte: units } } },
+      },
+      { $inc: { "holders.$.units": -units, publicFloat: units }, $set: { updatedAt: now } }
+    );
     if (release.modifiedCount === 0) {
       await refundBondPoolDebit(db, currency, proceedsLocal, "salesOut", now);
       continue;

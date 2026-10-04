@@ -26,15 +26,14 @@ interface TierConfig {
     | "tierSelector.house"
     | "tierSelector.governor"
     | "tierSelector.stateSenate";
-  icon: string;
 }
 
 const TIERS: TierConfig[] = [
-  { id: "president", labelKey: "tierSelector.president", icon: "🇺🇸" },
-  { id: "senate", labelKey: "tierSelector.senate", icon: "🏛" },
-  { id: "house", labelKey: "tierSelector.house", icon: "📍" },
-  { id: "governor", labelKey: "tierSelector.governor", icon: "🏰" },
-  { id: "stateSenate", labelKey: "tierSelector.stateSenate", icon: "🏢" },
+  { id: "president", labelKey: "tierSelector.president" },
+  { id: "senate", labelKey: "tierSelector.senate" },
+  { id: "house", labelKey: "tierSelector.house" },
+  { id: "governor", labelKey: "tierSelector.governor" },
+  { id: "stateSenate", labelKey: "tierSelector.stateSenate" },
 ];
 
 export function TierSelector({
@@ -86,7 +85,6 @@ export function TierSelector({
             style={accentStyle}
             title={label}
           >
-            <span aria-hidden="true">{tier.icon}</span>
             <span>{label}</span>
           </button>
         );

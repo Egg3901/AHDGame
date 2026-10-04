@@ -15,6 +15,7 @@
  * purge events recorded against the country are folded in and marked
  * processed once consumed.
  */
+import { governmentLeaderReference, leaderStateId } from "@/lib/government/leaderReference";
 
 import type { Db } from "mongodb";
 import { getDb } from "@/lib/mongodb";
@@ -50,17 +51,45 @@ import { getCountryState } from "@/lib/countryState";
 import { getCountryStateCollection } from "@/lib/db/collections/countryState";
 import { runBillLifecycle } from "@/lib/turn/billLifecycle/engine";
 import { buildOnePartyBillConfig } from "@/lib/turn/billLifecycle/configs/oneParty";
+import {
+  BG_1991_PROPOSALS_COLLECTION,
+  type Bg1991ConstitutionalProposal,
+} from "@/lib/countries/bg/constitutionalProposals1991";
+import { BG_CONTINUED_ASSEMBLY_DISSOLUTION_ID } from "@/lib/countries/bg/assemblyDissolution1991";
+import {
+  passesBgConstitution1991,
+  passesBgContinuedAssemblyDissolution,
+  bg1991ConstituentDisposition,
+} from "@/lib/countries/bg/rules/constitutionalDecision1991";
+import { buildConfiguredCountryBillLifecycle } from "@/lib/turn/billLifecycle/configs/configuredCountry";
+import type { CountryGameState } from "@/lib/db/types/gameState";
+import {
+  RO_1992_PROPOSALS_COLLECTION,
+  type Ro1992ElectoralProposal,
+} from "@/lib/countries/ro/electoralProposals1992";
+import { passesRoElectoralAmendment } from "@/lib/countries/ro/rules/electoralDecision1992";
+import { passesHuElectoralAmendment } from "@/lib/countries/hu/rules/electoralLaw";
+import {
+  HU_1994_PROPOSALS_COLLECTION,
+  type Hu1994ElectoralProposal,
+} from "@/lib/countries/hu/electoralProposals1994";
+
+import {
+  HU_2011_PROPOSALS_COLLECTION,
+  type Hu2011ElectoralProposal,
+} from "@/lib/countries/hu/electoralProposals2011";
+
+const DEMOCRATIC_1991_COUNTRIES: readonly CountryId[] = ["PL", "CS", "HU", "RO", "BG", "YU"];
 
 /**
- * Process expired lower-chamber bills for a single one-party country.
- * This is the per-country entry point used by the COUNTRY_BILL_PHASES
- * registry — each one-party country (today: CN) registers its own
- * binding to this function.
+ * Process the registry's one-party countries and their authored democratic
+ * 1991 counterparts. Democratic countries use their configured chamber graph
+ * without one-party confidence or regime drift.
  *
  * Runtime gating: reads governmentType from the countryState collection,
  * not COUNTRY_CONFIGS, so a country that has been converted out of
- * onePartyState (Stage-4 collapse / convention ratification) stops
- * processing immediately.
+ * onePartyState (Stage-4 collapse / convention ratification) keeps its existing
+ * stop guard unless this is one of the six democratic 1991 configurations.
  */
 export async function processOnePartyBillLifecycleForCountry(
   countryId: CountryId,
@@ -69,15 +98,128 @@ export async function processOnePartyBillLifecycleForCountry(
   if (!COUNTRY_CONFIGS[countryId]) return { enacted: 0, failed: 0 };
   const db = await getDb();
   const runtime = await getCountryState(db, countryId);
-  if (runtime.governmentType !== "onePartyState") {
-    return { enacted: 0, failed: 0 };
-  }
   const gameState = await getGameState();
   const currentTurn = gameState?.currentTurn ?? 1;
+  const preset = typeof gameState?.preset === "string" ? gameState.preset : undefined;
+  if (runtime.governmentType !== "onePartyState") {
+    // These registry entries also host the democratic 1991 institutions.
+    // Other converted one-party countries keep their existing conversion guard.
+    if (preset === "1991-default" && DEMOCRATIC_1991_COUNTRIES.includes(countryId)) {
+      const state = await db
+        .collection<CountryGameState>("countryGameStates")
+        .findOne({ _id: countryId }, { projection: { dissolvedTurn: 1 } });
+      if (state?.dissolvedTurn != null) return { enacted: 0, failed: 0 };
+      const lifecycle = buildConfiguredCountryBillLifecycle(countryId, preset);
+      if (countryId === "HU") {
+        const proposals = await Promise.all([
+          db
+            .collection<Hu1994ElectoralProposal>(HU_1994_PROPOSALS_COLLECTION)
+            .findOne(
+              { _id: "1991-default:hu-electoral:threshold1994", status: "open" },
+              { projection: { billId: 1, revision: 1 } }
+            ),
+          db
+            .collection<Hu2011ElectoralProposal>(HU_2011_PROPOSALS_COLLECTION)
+            .findOne(
+              { _id: "1991-default:hu-electoral:system2011", status: "open" },
+              { projection: { billId: 1, revision: 1 } }
+            ),
+        ]);
+        for (const stage of lifecycle.stages) {
+          if (stage.kind !== "chamberVote") continue;
+          stage.passCheck = (bill, totals) => {
+            const mandate = bill.hungarianElectoralMandate;
+            if (!mandate) return undefined;
+            const proposal = proposals[mandate.kind === "threshold1994" ? 0 : 1];
+            return Boolean(
+              proposal &&
+              proposal.billId.equals(bill._id) &&
+              mandate.proposalId === proposal._id &&
+              mandate.revision === proposal.revision &&
+              (mandate.kind === "threshold1994" || mandate.kind === "system2011") &&
+              passesHuElectoralAmendment(totals, 386)
+            );
+          };
+        }
+      }
+      if (countryId === "BG") {
+        const proposals = await db
+          .collection<Bg1991ConstitutionalProposal>(BG_1991_PROPOSALS_COLLECTION)
+          .find(
+            {
+              _id: {
+                $in: [
+                  "1991-default:bg-constitutional:constitution1991",
+                  BG_CONTINUED_ASSEMBLY_DISSOLUTION_ID,
+                ],
+              },
+              status: "open",
+            },
+            { projection: { billId: 1, revision: 1, capacity: 1, disposition: 1 } }
+          )
+          .toArray();
+        for (const stage of lifecycle.stages)
+          if (stage.kind === "chamberVote")
+            stage.passCheck = (bill, totals) => {
+              const mandate = bill.bulgarianConstitutionalMandate;
+              if (!mandate) return undefined;
+              const proposal = proposals.find((row) => row._id === mandate.proposalId);
+              if (
+                !proposal ||
+                proposal.capacity !== 400 ||
+                !proposal.billId.equals(bill._id) ||
+                mandate.revision !== proposal.revision ||
+                bg1991ConstituentDisposition(mandate.disposition) !==
+                  bg1991ConstituentDisposition(proposal.disposition)
+              )
+                return false;
+              return mandate.kind === "dissolution1991"
+                ? proposal._id === BG_CONTINUED_ASSEMBLY_DISSOLUTION_ID &&
+                    passesBgContinuedAssemblyDissolution(totals, 400)
+                : mandate.kind === "constitution1991" &&
+                    proposal._id === "1991-default:bg-constitutional:constitution1991" &&
+                    passesBgConstitution1991(totals, 400);
+            };
+      }
+      if (countryId === "RO") {
+        const proposal = await db
+          .collection<Ro1992ElectoralProposal>(RO_1992_PROPOSALS_COLLECTION)
+          .findOne(
+            { _id: "1991-default:ro-electoral:parliament1992", status: "open" },
+            { projection: { billId: 1, revision: 1, capacities: 1 } }
+          );
+        for (const stage of lifecycle.stages)
+          if (stage.kind === "chamberVote") {
+            stage.passCheck = (bill, totals) => {
+              const mandate = bill.romanianElectoralMandate;
+              if (!mandate) return undefined;
+              return Boolean(
+                proposal &&
+                proposal.billId.equals(bill._id) &&
+                mandate.proposalId === proposal._id &&
+                mandate.revision === proposal.revision &&
+                mandate.kind === "parliament1992" &&
+                passesRoElectoralAmendment(
+                  totals,
+                  stage.officeTypeFor(bill) === "senator"
+                    ? proposal.capacities.senate
+                    : proposal.capacities.deputies
+                )
+              );
+            };
+          }
+      }
+      const result = await runBillLifecycle(db, lifecycle, now, currentTurn);
+      return {
+        enacted: result.transitionedTo.signed ?? 0,
+        failed: result.transitionedTo.failed ?? 0,
+      };
+    }
+    return { enacted: 0, failed: 0 };
+  }
   // Era-resolved, not the flat table: legislature SHAPE is preset-dependent, and this
   // config decides `upperKey` — and therefore `originChambers`, which every stage's
   // expired-filter scopes on.
-  const preset = typeof gameState?.preset === "string" ? gameState.preset : undefined;
   const config = getCountryConfig(countryId, preset);
   return processCountryBills(db, config, now, currentTurn, preset);
 }
@@ -137,8 +279,9 @@ async function processCountryBills(
   // ever installed via installNewLeader) bypasses every regime tick
   // silently. ensureLeaderStateExists is a no-op when the row exists.
   const gov = await getGovernmentFormationsCollection(db).findOne({ _id: countryId });
-  if (gov?.pmCharacterId) {
-    await ensureLeaderStateExists(db, countryId, gov.pmCharacterId, currentTurn).catch((err) =>
+  const leader = governmentLeaderReference(gov);
+  if (leader) {
+    await ensureLeaderStateExists(db, countryId, leader, currentTurn).catch((err) =>
       console.error(`${countryId} leader-state self-heal on per-turn tick failed:`, err)
     );
   }
@@ -201,11 +344,11 @@ async function processCountryEscalation(
   currentTurn: number
 ): Promise<void> {
   const gov = await getGovernmentFormationsCollection(db).findOne({ _id: countryId });
-  if (!gov?.pmCharacterId) return;
+  const leader = governmentLeaderReference(gov);
+  if (!leader) return;
 
   const leaderState = await getCountryLeaderStatesCollection(db).findOne({
-    countryId,
-    leaderCharacterId: gov.pmCharacterId,
+    _id: leaderStateId(countryId, leader),
   });
   if (!leaderState) return;
 
@@ -214,7 +357,7 @@ async function processCountryEscalation(
     countryId,
     popularLegitimacy: leaderState.popularLegitimacy ?? INITIAL_POPULAR_LEGITIMACY,
     partyConfidence: leaderState.partyConfidence,
-    rulingLeaderCharacterId: gov.pmCharacterId,
+    rulingLeaderCharacterId: leader,
     currentTurn,
   });
 }
@@ -239,7 +382,8 @@ async function processCountryPopularDrift(
 
   // Need the current leader to write the per-leader scalar
   const gov = await getGovernmentFormationsCollection(db).findOne({ _id: countryId });
-  if (!gov?.pmCharacterId) return;
+  const leader = governmentLeaderReference(gov);
+  if (!leader) return;
 
   const purgeColl = db.collection<PurgeEvent>("rulingPartyPurgeEvents");
   const pendingPurges = await purgeColl.find({ countryId, processed: false }).toArray();
@@ -256,7 +400,7 @@ async function processCountryPopularDrift(
   await processPopularLegitimacyTurn({
     db,
     countryId,
-    leaderCharacterId: gov.pmCharacterId,
+    leaderCharacterId: leader,
     currentTurn,
     economic,
     purges: mapPurgeEventsToInput(pendingPurges),
@@ -306,12 +450,8 @@ async function processCountryConfidenceDrift(
 export const processCNBillLifecycle = (now: Date) =>
   processOnePartyBillLifecycleForCountry("CN", now);
 
-/**
- * RU registry binding — the one-party lifecycle with the crossover branch
- * active (RU is bicameral with a contested upper chamber, D8/D9).
- */
-export const processRUBillLifecycle = (now: Date) =>
-  processOnePartyBillLifecycleForCountry("RU", now);
+/** Compatibility export; the Russian shell selects its active constitution. */
+export { processRUBillLifecycle } from "./ruBillLifecycle";
 
 /**
  * DD registry binding — the GDR Volkskammer one-party lifecycle (unicameral,

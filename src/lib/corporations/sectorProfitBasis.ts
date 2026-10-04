@@ -28,9 +28,11 @@ import {
   capacityPricePerUnit,
   revenuePerCapacityUnitForStrategy,
 } from "@/lib/constants/capacityEconomy";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { CorporationType, MediaDiscriminator } from "@/lib/constants/corporations";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import type { SectorBuildOrder } from "@/lib/db/types";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
+import { queueUndeliveredCost } from "@/lib/corporations/buildDelivery";
 import { sectorEconomicRevenue } from "@/lib/corporations/sectorRevenueBasis";
 
 /** Margin used when a sector doc predates `profitMargin` being written. */
@@ -205,6 +207,8 @@ export function sectorDailyProfitAnchor(
 export function sectorEconomicScale(
   sector: {
     sectorType: CorporationType;
+    industryModel?: string | null;
+    mediaDiscriminator?: MediaDiscriminator | null;
     revenue?: number | null;
     capitalStock?: number | null;
     strategyId?: string | null;
@@ -223,7 +227,14 @@ export function sectorEconomicScale(
       : 0;
   if (!(stock > 0)) return revenue;
   const nameplate =
-    stock * revenuePerCapacityUnitForStrategy(sector.sectorType, sector.strategyId, unitScale);
+    stock *
+    revenuePerCapacityUnitForStrategy(
+      sector.sectorType,
+      sector.strategyId,
+      unitScale,
+      sector.industryModel,
+      sector.mediaDiscriminator
+    );
   return Number.isFinite(nameplate) ? Math.max(revenue, nameplate) : revenue;
 }
 
@@ -245,10 +256,21 @@ export function sectorEconomicScale(
 export interface SectorCapexFields {
   /** Outstanding capitalized build spend on this sector, in ₳. */
   constructionInProgressAnchor?: number | null;
+  /** Included when the caller already loaded the sector's build queue. */
+  buildQueue?: SectorBuildOrder[] | null;
 }
 
 /** Outstanding CIP for one sector, in ₳. Absent/negative/non-finite ⇒ 0. */
-export function sectorConstructionInProgressAnchor(sector: SectorCapexFields): number {
+export function sectorConstructionInProgressAnchor(
+  sector: SectorCapexFields,
+  currentTurn?: number | null
+): number {
+  if (currentTurn != null) {
+    return Math.max(
+      0,
+      queueUndeliveredCost(Array.isArray(sector.buildQueue) ? sector.buildQueue : [], currentTurn)
+    );
+  }
   const v = sector.constructionInProgressAnchor;
   return typeof v === "number" && Number.isFinite(v) && v > 0 ? v : 0;
 }
@@ -267,6 +289,8 @@ export function sumConstructionInProgressAnchor(
 /** The sector fields the book-value basis reads. */
 export interface SectorBookValueInput extends SectorCapexFields {
   sectorType: CorporationType;
+  industryModel?: string | null;
+  mediaDiscriminator?: MediaDiscriminator | null;
   /**
    * Production method the capacity runs. Capacity is priced at the RPU of the
    * product it makes, so the list-price fallback below must read the same
@@ -290,7 +314,13 @@ export interface SectorBookValueInput extends SectorCapexFields {
  * returns for a row that has no basis recorded.
  */
 export function sectorCapacityListValueAnchor(
-  sector: { sectorType: CorporationType; strategyId?: string | null; capitalStock?: number | null },
+  sector: {
+    sectorType: CorporationType;
+    industryModel?: string | null;
+    mediaDiscriminator?: MediaDiscriminator | null;
+    strategyId?: string | null;
+    capitalStock?: number | null;
+  },
   year: number | null | undefined,
   unitScale: number
 ): number {
@@ -304,7 +334,9 @@ export function sectorCapacityListValueAnchor(
     sector.sectorType,
     typeof year === "number" && Number.isFinite(year) ? year : Number.NaN,
     unitScale,
-    sector.strategyId ?? null
+    sector.strategyId ?? null,
+    sector.industryModel,
+    sector.mediaDiscriminator
   );
   return capacity * pricePerUnit;
 }
@@ -364,11 +396,12 @@ export function sectorCapacityBookAnchor(
 export function sectorBookValueAnchor(
   sector: SectorBookValueInput,
   year: number | null | undefined,
-  unitScale: number
+  unitScale: number,
+  currentTurn?: number | null
 ): number {
   return (
     sectorCapacityBookAnchor(sector, year, unitScale) * BOOK_DEPRECIATION_FACTOR +
-    sectorConstructionInProgressAnchor(sector)
+    sectorConstructionInProgressAnchor(sector, currentTurn)
   );
 }
 
@@ -376,9 +409,10 @@ export function sectorBookValueAnchor(
 export function sumSectorBookValueAnchor(
   sectors: readonly SectorBookValueInput[] | undefined | null,
   year: number | null | undefined,
-  unitScale: number
+  unitScale: number,
+  currentTurn?: number | null
 ): number {
   let total = 0;
-  for (const s of sectors ?? []) total += sectorBookValueAnchor(s, year, unitScale);
+  for (const s of sectors ?? []) total += sectorBookValueAnchor(s, year, unitScale, currentTurn);
   return total;
 }

@@ -152,6 +152,7 @@ export function sectorCompensationValuationAnchor(
   options: {
     plantsEnabled: boolean;
     currentYear?: number | null;
+    currentTurn?: number | null;
     fraction?: number;
     /** The world's era unit-basis scale (`getEraUnitScale(preset)`). */
     eraUnitScale: number;
@@ -159,7 +160,7 @@ export function sectorCompensationValuationAnchor(
 ): number {
   const fraction = options.fraction ?? 1;
   const base = options.plantsEnabled
-    ? sectorBookValueAnchor(sector, options.currentYear, options.eraUnitScale)
+    ? sectorBookValueAnchor(sector, options.currentYear, options.eraUnitScale, options.currentTurn)
     : npvAnchor;
   return base * fraction;
 }

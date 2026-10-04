@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Skeleton } from "@/components/ui";
-import { InfoTooltip } from "@/components/InfoTooltip";
-import { Meter } from "@/components/corporation/market/MarketPrimitives";
+import { DenseSection, KVList, KVRow, Td, Th } from "./dense/DenseKit";
+import { DenseLineChart } from "./dense/DenseLineChart";
 import { INDEX_INCLUSION_THRESHOLD } from "@/lib/corporations/indexOwnership";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import {
@@ -76,12 +76,6 @@ function tierScoreRangeLabel(tierIndex: number): string {
   return `${min}-${prevMin - 1}`;
 }
 
-function compositeFillClass(score: number): string {
-  if (score >= 70) return "bg-success";
-  if (score >= 40) return "bg-warning";
-  return "bg-error";
-}
-
 function improvementHint(
   compositeScore: number,
   rating: string,
@@ -100,10 +94,6 @@ function improvementHint(
   return `Roughly ${need} more composite point${need === 1 ? "" : "s"} to reach ${better} (threshold ${threshold}).`;
 }
 
-const CHART_W = 560;
-const CHART_H = 140;
-const C_PAD = 36;
-
 function CreditCompositeChart({ points }: { points: CorpHistoryPoint[] }) {
   const creditPts = points.filter(
     (p): p is CorpHistoryPoint & { creditComposite: number } =>
@@ -111,81 +101,32 @@ function CreditCompositeChart({ points }: { points: CorpHistoryPoint[] }) {
   );
   if (creditPts.length < 2) {
     return (
-      <p className="text-xs text-muted">
+      <p className="py-2 text-xs text-muted">
         Composite history appears after at least two hourly turns with credit snapshots saved.
       </p>
     );
   }
-
-  const minTurn = Math.min(...creditPts.map((p) => p.turn));
-  const maxTurn = Math.max(...creditPts.map((p) => p.turn));
-  const spanT = Math.max(1, maxTurn - minTurn);
-  const innerW = CHART_W - C_PAD * 2;
-  const innerH = CHART_H - C_PAD * 2;
-
-  const pathD = creditPts
-    .map((p, i) => {
-      const x = C_PAD + ((p.turn - minTurn) / spanT) * innerW;
-      const y = C_PAD + innerH - (p.creditComposite / 100) * innerH;
-      return `${i === 0 ? "M" : "L"} ${x.toFixed(1)} ${y.toFixed(1)}`;
-    })
-    .join(" ");
-
-  const last = creditPts[creditPts.length - 1];
-
   return (
-    <div className="w-full overflow-x-auto">
-      <svg
-        viewBox={`0 0 ${CHART_W} ${CHART_H}`}
-        className="w-full max-w-full h-auto text-foreground"
-        role="img"
-        aria-label="Composite credit score over time"
-      >
-        <rect
-          x={C_PAD}
-          y={C_PAD}
-          width={innerW}
-          height={innerH}
-          className="fill-card-muted/40 stroke-card-border"
-          strokeWidth={1}
-          rx={4}
-        />
-        {[0, 25, 50, 75, 100].map((g) => {
-          const y = C_PAD + innerH - (g / 100) * innerH;
-          return (
-            <g key={g}>
-              <line
-                x1={C_PAD}
-                y1={y}
-                x2={C_PAD + innerW}
-                y2={y}
-                className="stroke-card-border/60"
-                strokeWidth={1}
-                strokeDasharray="4 4"
-              />
-              <text x={4} y={y + 4} className="fill-muted text-[9px] tabular-nums">
-                {g}
-              </text>
-            </g>
-          );
-        })}
-        <path
-          d={pathD}
-          className="stroke-primary fill-none"
-          strokeWidth={2}
-          strokeLinejoin="round"
-        />
-        <text
-          x={CHART_W - 4}
-          y={14}
-          textAnchor="end"
-          className="fill-muted text-[9px] tabular-nums"
-        >
-          Turn {last.turn} · {last.creditComposite}
-          {last.creditRating ? ` (${last.creditRating})` : ""}
-        </text>
-      </svg>
-    </div>
+    <DenseLineChart
+      turns={creditPts.map((p) => p.turn)}
+      series={[
+        {
+          label: "Composite",
+          values: creditPts.map((p) => p.creditComposite),
+          tone: "text-foreground",
+        },
+      ]}
+      domain={[0, 100]}
+      height={180}
+      formatTick={(v) => v.toFixed(0)}
+      ariaLabel="Composite credit score over time"
+      tooltip={(i) => (
+        <div className="font-mono tabular-nums text-foreground">
+          {creditPts[i].creditComposite}/100
+          {creditPts[i].creditRating ? ` ${creditPts[i].creditRating}` : ""}
+        </div>
+      )}
+    />
   );
 }
 
@@ -203,7 +144,7 @@ function WhatIfDebtPanel({
   // (native), but creditDiagnostics.totalEquity / bondInfo.totalDebt / coupon
   // obligations are all anchor-denominated (server uses liquidCapitalAnchor in
   // computeCorporateCreditAtTurn). Convert once to anchor so this panel's math
-  // — npv, newEquity, the slider bounds — operates in a single unit.
+  // (npv, newEquity, the slider bounds) operates in a single unit.
   const liqAnchor = toInternalFrom(
     corporation.liquidCapital,
     corporation.liquidCurrencyCode as Parameters<typeof toInternalFrom>[1]
@@ -259,19 +200,17 @@ function WhatIfDebtPanel({
   if (!bondInfo.creditDiagnostics || !whatIf) return null;
 
   return (
-    <div className="rounded-xl border border-card-border bg-card p-5 sm:p-6">
-      <h3 className="text-sm font-bold uppercase tracking-widest text-muted mb-2">What-if debt</h3>
-      <p className="text-xs text-muted mb-4 max-w-prose">
-        Simulates raising or repaying face value at your <strong>current</strong> average coupon for
-        proportional interest, and moves cash one-for-one with debt. Simplified: it ignores issuance
-        fees.
-      </p>
-      <div className="space-y-3">
+    <DenseSection title="What-if debt" meta="simplified, ignores issuance fees">
+      <div className="space-y-2 py-1">
+        <p className="text-xs text-muted">
+          Raise or repay face value at your current average coupon. Cash moves one for one with the
+          debt.
+        </p>
         <div className="flex flex-wrap items-center gap-3">
-          <label htmlFor="credit-debt-delta" className="text-xs font-semibold text-muted">
-            Δ Debt (face value)
+          <label htmlFor="credit-debt-delta" className="text-xs text-muted">
+            Change in debt
           </label>
-          <span className="text-sm tabular-nums font-medium text-foreground">
+          <span className="font-mono text-[13px] tabular-nums text-foreground">
             {clampedDebtDelta >= 0 ? "+" : ""}
             {formatAmount(clampedDebtDelta)}
           </span>
@@ -289,45 +228,31 @@ function WhatIfDebtPanel({
           />
         ) : (
           <p className="text-xs text-muted">
-            No range to explore. You have no debt and no room to issue more against what the company
-            is worth, or your debt is already at the cap.
+            No range to explore: no debt to repay and no room to issue more, or debt is at the cap.
           </p>
         )}
-        <div className="flex flex-wrap justify-between gap-2 text-[11px] text-muted tabular-nums">
+        <div className="flex flex-wrap justify-between gap-2 font-mono text-[11px] tabular-nums text-muted">
           <span>Repay up to {formatAmount(bondInfo.totalDebt)}</span>
           <span>
-            Issue up to ~{formatAmount(debtSliderBounds.max)} (
+            Issue up to {formatAmount(debtSliderBounds.max)} (
             {bondInfo.issuanceLimitedBy === "exitEquity"
-              ? "capped by what you could realize by selling up"
+              ? "what you could realize by selling up"
               : bondInfo.issuanceLimitedBy === "perIssuance"
                 ? "per-issuance cap"
                 : "equity headroom"}
             )
           </span>
         </div>
-        <div className="rounded-lg border border-card-border bg-card-elevated/50 px-4 py-3 flex flex-wrap gap-6 items-baseline">
-          <div>
-            <p className="text-[10px] font-semibold uppercase text-muted">Simulated rating</p>
-            <p className="text-2xl font-black tabular-nums text-foreground">{whatIf.rating}</p>
-          </div>
-          <div>
-            <p className="text-[10px] font-semibold uppercase text-muted">Simulated composite</p>
-            <p className="text-xl font-bold tabular-nums text-foreground">
-              {whatIf.compositeScore}
-              <span className="text-sm text-muted">/100</span>
-            </p>
-          </div>
-          <div>
-            <p className="text-[10px] font-semibold uppercase text-muted">
-              Implied new-issue coupon
-            </p>
-            <p className="text-xl font-bold tabular-nums text-foreground">
-              {getBondCouponRate(bondInfo.creditRating.primeRate, whatIf.rating).toFixed(2)}%
-            </p>
-          </div>
-        </div>
+        <KVList>
+          <KVRow label="Simulated rating" value={whatIf.rating} />
+          <KVRow label="Simulated composite" value={`${whatIf.compositeScore}/100`} />
+          <KVRow
+            label="New-issue coupon"
+            value={`${getBondCouponRate(bondInfo.creditRating.primeRate, whatIf.rating).toFixed(2)}%`}
+          />
+        </KVList>
       </div>
-    </div>
+    </DenseSection>
   );
 }
 
@@ -380,533 +305,338 @@ export default function CreditRatingTab({
     };
   }, [corpId, modViewEnabled]);
 
+  if (bondLoading) {
+    return (
+      <div className="space-y-2">
+        <Skeleton className="h-4 w-32" />
+        <Skeleton className="h-32 w-full" />
+      </div>
+    );
+  }
+
+  if (!bondInfo?.creditRating) {
+    return (
+      <p className="border-y border-card-border py-2 text-xs text-muted">
+        Credit rating data not available.{" "}
+        <a href="#corp-bonds" className="text-foreground underline underline-offset-2">
+          Bonds {bondsArrow}
+        </a>
+      </p>
+    );
+  }
+
+  const cr = bondInfo.creditRating;
+  const cd = bondInfo.creditDiagnostics;
+  const hint =
+    improvementHint(
+      cr.compositeScore,
+      cr.rating,
+      Boolean(bondInfo.bondDefaultCreditPenalty?.active)
+    ) ??
+    (CREDIT_RATINGS.indexOf(cr.rating as CreditRating) === 0 ? "At the top published tier." : null);
+
   return (
-    <div className="space-y-6">
-      {bondLoading ? (
-        <div className="rounded-xl border border-card-border bg-card p-6">
-          <Skeleton className="h-8 w-32 mb-4" />
-          <Skeleton className="h-40 w-full" />
-        </div>
-      ) : bondInfo?.creditRating ? (
-        <>
-          {bondInfo.bondDefaultCreditPenalty?.active && (
-            <div
-              className="rounded-xl border border-error/35 bg-error/10 px-4 py-3 text-sm"
-              role="status"
+    <div className="grid gap-x-8 gap-y-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="min-w-0 space-y-6">
+        {bondInfo.bondDefaultCreditPenalty?.active && (
+          <p role="status" className="border-y border-error/40 py-2 text-xs text-foreground">
+            <span className="font-semibold text-error">Default penalty.</span> The rating is held at
+            CCC after a bond default
+            {bondInfo.bondDefaultCreditPenalty.untilTurn != null
+              ? ` until turn ${bondInfo.bondDefaultCreditPenalty.untilTurn}`
+              : ""}
+            .
+          </p>
+        )}
+
+        <DenseSection
+          title="Credit rating"
+          meta="recalculated each turn"
+          actions={
+            <a
+              href="#corp-bonds"
+              className="text-xs text-foreground underline decoration-card-border underline-offset-2 hover:decoration-foreground"
             >
-              <p className="font-semibold text-error">Default credit penalty active</p>
-              <p className="text-muted mt-1 text-xs leading-relaxed">
-                Rating is floored at <span className="font-medium text-foreground">CCC</span> after
-                a bond default.
-                {bondInfo.bondDefaultCreditPenalty.untilTurn != null && (
-                  <>
-                    {" "}
-                    Penalty clears after turn{" "}
-                    <span className="tabular-nums font-medium text-foreground">
-                      {bondInfo.bondDefaultCreditPenalty.untilTurn}
-                    </span>
-                    .
-                  </>
-                )}
-              </p>
-            </div>
-          )}
-
-          {/* Rating overview */}
-          <div className="rounded-xl border border-card-border bg-card p-5 sm:p-6">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-5">
-              <div>
-                <h2 className="text-lg font-bold text-foreground">Credit rating</h2>
-                <p className="text-xs text-muted mt-0.5 max-w-prose">
-                  Letter grade and composite score are recalculated each turn from leverage,
-                  coverage, profitability, and liquidity.
-                </p>
-                {corporation.indexOwnershipPercent != null &&
-                  corporation.indexOwnershipPercent > 0 && (
-                    <p className="text-xs mt-1.5">
-                      <span className="text-muted">Index funds hold </span>
-                      <span className="font-semibold tabular-nums text-foreground">
-                        {corporation.indexOwnershipPercent}%
-                      </span>
-                      <span className="text-muted"> of shares. </span>
-                      {corporation.indexInclusionActive ? (
-                        <span className="font-semibold text-success">
-                          Rating upgraded one notch for index inclusion.
-                        </span>
-                      ) : (
-                        <span className="text-muted">
-                          Reaching {Math.round(INDEX_INCLUSION_THRESHOLD * 100)}% earns a one-notch
-                          upgrade.
-                        </span>
-                      )}
-                    </p>
-                  )}
-              </div>
-              <a
-                href="#corp-bonds"
-                className="text-sm font-semibold text-primary hover:underline shrink-0 self-start"
-              >
-                Bonds &amp; issuance {bondsArrow}
-              </a>
-            </div>
-
-            <div className="flex flex-col gap-6 lg:flex-row lg:gap-8">
-              {/* Left column — rating, composite, coupon, gauge */}
-              <div className="space-y-6 lg:flex-[2] lg:min-w-0">
-                <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:gap-8">
-                  <div
-                    className={`text-5xl sm:text-6xl font-black tabular-nums tracking-tight ${
-                      bondInfo.creditRating.compositeScore >= 70
+              Bonds and issuance {bondsArrow}
+            </a>
+          }
+        >
+          <div className="grid gap-x-8 sm:grid-cols-2">
+            <KVList>
+              <KVRow
+                label="Rating"
+                value={
+                  <span
+                    className={
+                      cr.compositeScore >= 70
                         ? "text-success"
-                        : bondInfo.creditRating.compositeScore >= 40
+                        : cr.compositeScore >= 40
                           ? "text-warning"
                           : "text-error"
-                    }`}
+                    }
                   >
-                    {bondInfo.creditRating.rating}
-                  </div>
-
-                  <div className="flex flex-1 flex-col sm:flex-row sm:flex-wrap gap-4 sm:gap-8 min-w-0">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-muted">
-                        <InfoTooltip
-                          trigger={
-                            <span className="cursor-help border-b border-dotted border-muted/50">
-                              Composite
-                            </span>
-                          }
-                          width={260}
-                        >
-                          <p className="text-muted text-sm">
-                            One score out of 100, built from four parts:{" "}
-                            {Math.round(CREDIT_RATING_WEIGHTS.debtToEquity * 100)}% debt,{" "}
-                            {Math.round(CREDIT_RATING_WEIGHTS.interestCoverage * 100)}% interest
-                            cover, {Math.round(CREDIT_RATING_WEIGHTS.profitability * 100)}% profit,{" "}
-                            {Math.round(CREDIT_RATING_WEIGHTS.liquidity * 100)}% cash. It sets the
-                            letter grade shown below.
-                          </p>
-                        </InfoTooltip>
-                      </p>
-                      <p className="text-2xl font-bold tabular-nums text-foreground mt-0.5">
-                        {bondInfo.creditRating.compositeScore}
-                        <span className="text-base font-semibold text-muted">/100</span>
-                      </p>
-                    </div>
-
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-muted">
-                        <InfoTooltip
-                          trigger={
-                            <span className="cursor-help border-b border-dotted border-muted/50">
-                              Coupon (new issues)
-                            </span>
-                          }
-                          width={240}
-                        >
-                          <p className="text-muted text-sm">
-                            Annual coupon rate for newly issued bonds at this rating: prime plus the
-                            fixed spread for your tier.
-                          </p>
-                        </InfoTooltip>
-                      </p>
-                      <p className="text-2xl font-bold tabular-nums text-foreground mt-0.5">
-                        {bondInfo.creditRating.effectiveCouponRate.toFixed(2)}%
-                      </p>
-                      <p className="text-xs text-muted mt-0.5 tabular-nums">
-                        Prime {bondInfo.creditRating.primeRate.toFixed(2)}% +{" "}
-                        {CREDIT_RATING_SPREADS[
-                          bondInfo.creditRating.rating as CreditRating
-                        ].toFixed(2)}
-                        % tier + {CORPORATE_BOND_SPREAD_PREMIUM.toFixed(2)}% corporate
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Composite gauge */}
-                <div className="space-y-2">
-                  <div className="flex justify-between text-[10px] font-semibold uppercase tracking-wider text-muted">
-                    <span>Composite scale</span>
-                    <span className="tabular-nums">0-100</span>
-                  </div>
-                  <div className="relative h-3 rounded-full bg-card-muted border border-card-border/80 overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all ${compositeFillClass(bondInfo.creditRating.compositeScore)}`}
-                      style={{
-                        width: `${Math.min(100, Math.max(0, bondInfo.creditRating.compositeScore))}%`,
-                      }}
-                    />
-                    {CREDIT_RATING_THRESHOLDS.slice(0, -1).map(([threshold]) => (
-                      <div
-                        key={threshold}
-                        className="absolute top-0 bottom-0 w-px bg-foreground/15 pointer-events-none"
-                        style={{ left: `${threshold}%` }}
-                        title={`Tier threshold ${threshold}`}
-                      />
-                    ))}
-                  </div>
-                  {(() => {
-                    const hint = improvementHint(
-                      bondInfo.creditRating.compositeScore,
-                      bondInfo.creditRating.rating,
-                      Boolean(bondInfo.bondDefaultCreditPenalty?.active)
-                    );
-                    const atTop =
-                      CREDIT_RATINGS.indexOf(bondInfo.creditRating.rating as CreditRating) === 0;
-                    const line = hint ?? (atTop ? "You are at the top published tier." : null);
-                    return line ? <p className="text-xs text-muted">{line}</p> : null;
-                  })()}
-                </div>
-              </div>
-
-              {/* Divider */}
-              <div className="hidden w-px self-stretch bg-card-border lg:block" />
-
-              {/* Right column — composite components (subscores), inline with the rating */}
-              <div className="lg:flex-[3] lg:min-w-0">
-                <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-muted">
-                  Composite components
-                </p>
-                <div className="space-y-3">
-                  {(
-                    Object.keys(CREDIT_RATING_WEIGHTS) as (keyof typeof CREDIT_RATING_WEIGHTS)[]
-                  ).map((key) => {
-                    const value = bondInfo.creditRating.components[key];
-                    const weight = CREDIT_RATING_WEIGHTS[key];
-                    const copy = COMPONENT_COPY[key];
-                    const cd = bondInfo.creditDiagnostics;
-                    const detail =
-                      key === "debtToEquity"
-                        ? cd?.debtToEquityRatio != null
-                          ? `${cd.debtToEquityRatio.toFixed(2)}× debt / equity`
-                          : null
-                        : key === "interestCoverage"
-                          ? cd?.interestCoverageRatio != null
-                            ? `${cd.interestCoverageRatio.toFixed(1)}× income / coupons`
-                            : cd && cd.annualCouponObligations <= 0
-                              ? "No coupon burden"
-                              : null
-                          : key === "profitability"
-                            ? cd && cd.totalEquity > 0
-                              ? `${((cd.annualIncome / cd.totalEquity) * 100).toFixed(1)}% return on equity`
-                              : null
-                            : `${formatAmount(liquidCapitalAnchor)} cash on hand`;
-                    return (
-                      <div key={key}>
-                        <div className="flex items-center justify-between gap-2 text-[12px]">
-                          <InfoTooltip
-                            trigger={
-                              <span className="cursor-help text-foreground">
-                                {copy.label}{" "}
-                                <span className="text-muted">
-                                  · {Math.round(weight * 100)}% weight
-                                </span>
-                              </span>
-                            }
-                            width={260}
+                    {cr.rating}
+                  </span>
+                }
+              />
+              <KVRow
+                label="Composite"
+                value={`${cr.compositeScore}/100`}
+                title={`Built from ${Math.round(CREDIT_RATING_WEIGHTS.debtToEquity * 100)}% debt, ${Math.round(CREDIT_RATING_WEIGHTS.interestCoverage * 100)}% interest cover, ${Math.round(CREDIT_RATING_WEIGHTS.profitability * 100)}% profit and ${Math.round(CREDIT_RATING_WEIGHTS.liquidity * 100)}% cash.`}
+              />
+            </KVList>
+            <KVList>
+              <KVRow
+                label="Coupon on new issues"
+                value={`${cr.effectiveCouponRate.toFixed(2)}%`}
+                hint={`prime ${cr.primeRate.toFixed(2)} + ${CREDIT_RATING_SPREADS[cr.rating as CreditRating].toFixed(2)} + ${CORPORATE_BOND_SPREAD_PREMIUM.toFixed(2)}`}
+                title="Prime, plus your tier's spread, plus the corporate premium."
+              />
+              {corporation.indexOwnershipPercent != null &&
+                corporation.indexOwnershipPercent > 0 && (
+                  <KVRow
+                    label="Index funds hold"
+                    value={`${corporation.indexOwnershipPercent}%`}
+                    hint={
+                      corporation.indexInclusionActive
+                        ? "one-notch upgrade"
+                        : `${Math.round(INDEX_INCLUSION_THRESHOLD * 100)}% earns a notch`
+                    }
+                  />
+                )}
+            </KVList>
+          </div>
+          {hint && <p className="pt-1.5 text-xs text-muted">{hint}</p>}
+          <table className="mt-2 w-full border-collapse">
+            <thead>
+              <tr>
+                <Th>Component</Th>
+                <Th align="right">Weight</Th>
+                <Th align="right">Score</Th>
+                <Th className="hidden sm:table-cell">Basis</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {(Object.keys(CREDIT_RATING_WEIGHTS) as (keyof typeof CREDIT_RATING_WEIGHTS)[]).map(
+                (key) => {
+                  const value = cr.components[key];
+                  const copy = COMPONENT_COPY[key];
+                  const detail =
+                    key === "debtToEquity"
+                      ? cd?.debtToEquityRatio != null
+                        ? `${cd.debtToEquityRatio.toFixed(2)}x debt to equity`
+                        : null
+                      : key === "interestCoverage"
+                        ? cd?.interestCoverageRatio != null
+                          ? `${cd.interestCoverageRatio.toFixed(1)}x income over coupons`
+                          : cd && cd.annualCouponObligations <= 0
+                            ? "No coupon burden"
+                            : null
+                        : key === "profitability"
+                          ? cd && cd.totalEquity > 0
+                            ? `${((cd.annualIncome / cd.totalEquity) * 100).toFixed(1)}% return on equity`
+                            : null
+                          : `${formatAmount(liquidCapitalAnchor)} cash on hand`;
+                  return (
+                    <tr key={key}>
+                      <Td className="text-foreground" title={copy.hint}>
+                        {copy.label}
+                      </Td>
+                      <Td align="right" className="text-muted">
+                        {Math.round(CREDIT_RATING_WEIGHTS[key] * 100)}%
+                      </Td>
+                      <Td align="right">
+                        <span className="inline-flex items-center gap-2">
+                          {value}
+                          <span
+                            aria-hidden
+                            className="hidden h-1 w-12 overflow-hidden rounded-sm bg-card-elevated sm:inline-block"
                           >
-                            <p className="text-muted text-sm">{copy.hint}</p>
-                          </InfoTooltip>
-                          <span className="shrink-0 font-semibold tabular-nums text-foreground">
-                            {value}
-                            <span className="text-muted">/100</span>
+                            <span
+                              className="block h-full bg-foreground/60"
+                              style={{ width: `${Math.min(100, Math.max(0, value))}%` }}
+                            />
                           </span>
-                        </div>
-                        <div className="mt-1">
-                          <Meter
-                            value={value}
-                            tone={value >= 75 ? "up" : value >= 55 ? "brand" : "warning"}
-                            height={6}
-                          />
-                        </div>
-                        {detail && <p className="mt-1 text-[11px] text-muted">{detail}</p>}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          </div>
+                        </span>
+                      </Td>
+                      <Td className="hidden text-xs text-muted sm:table-cell">{detail ?? ""}</Td>
+                    </tr>
+                  );
+                }
+              )}
+            </tbody>
+          </table>
+        </DenseSection>
 
-          {/* Indicative coupon by duration — the prototype's coupon curve */}
-          {bondInfo.creditRating.couponRatesByDuration && (
-            <div className="rounded-xl border border-card-border bg-card p-5 sm:p-6">
-              <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-sm font-bold uppercase tracking-widest text-muted">
-                  Indicative coupon by duration
-                </h3>
-                <span className="text-xs text-muted">at {bondInfo.creditRating.rating}</span>
-              </div>
-              <div className="grid grid-cols-3 gap-3">
+        {cr.couponRatesByDuration && (
+          <DenseSection title="Coupon by maturity" meta={`at ${cr.rating}`}>
+            <table className="w-full max-w-md border-collapse">
+              <thead>
+                <tr>
+                  <Th>Maturity</Th>
+                  <Th align="right">Turns</Th>
+                  <Th align="right">Coupon</Th>
+                </tr>
+              </thead>
+              <tbody>
                 {([96, 240, 336] as const).map((turns) => (
-                  <div
-                    key={turns}
-                    className="rounded-lg border border-card-border bg-card-elevated/40 p-3 text-center"
-                  >
-                    <div className="text-[10px] font-semibold uppercase tracking-wider text-muted">
-                      {Math.round(turns / 48)}-yr <span className="text-muted/60">({turns}t)</span>
-                    </div>
-                    <div className="mt-1 font-mono text-xl font-bold tabular-nums text-primary">
-                      {(
-                        bondInfo.creditRating.couponRatesByDuration[turns] ??
-                        bondInfo.creditRating.effectiveCouponRate
-                      ).toFixed(2)}
-                      %
-                    </div>
-                  </div>
+                  <tr key={turns}>
+                    <Td className="text-foreground">{Math.round(turns / 48)} years</Td>
+                    <Td align="right" className="text-muted">
+                      {turns}
+                    </Td>
+                    <Td align="right">
+                      {(cr.couponRatesByDuration[turns] ?? cr.effectiveCouponRate).toFixed(2)}%
+                    </Td>
+                  </tr>
                 ))}
-              </div>
-              <p className="mt-3 text-[11px] text-muted">
-                Coupon for newly issued bonds at each maturity, set by your rating. Issue bonds in
-                the{" "}
-                <a href="#corp-bonds" className="text-primary hover:underline">
-                  bonds section {bondsArrow}
-                </a>
-                .
-              </p>
-            </div>
-          )}
+              </tbody>
+            </table>
+          </DenseSection>
+        )}
 
-          {/* Composite / rating history */}
-          <div className="rounded-xl border border-card-border bg-card p-5 sm:p-6">
-            <h3 className="text-sm font-bold uppercase tracking-widest text-muted mb-2">History</h3>
-            <p className="text-xs text-muted mb-4 max-w-prose">
-              End-of-turn composite score (and letter grade in the chart label) from saved
-              corporation history. Tier changes also hit the{" "}
-              <Link href="/news" className="text-primary hover:underline">
-                wire
-              </Link>{" "}
-              and your in-app notifications. There is no email for this.
-            </p>
-            <CreditCompositeChart points={history} />
-          </div>
+        <DenseSection title="History" meta="end-of-turn composite">
+          <p className="py-1 text-xs text-muted">
+            Tier changes also go out on the{" "}
+            <Link href="/news" className="text-foreground underline underline-offset-2">
+              wire
+            </Link>{" "}
+            and in your notifications.
+          </p>
+          <CreditCompositeChart points={history} />
+        </DenseSection>
 
-          {bondInfo.creditDiagnostics && (
-            <WhatIfDebtPanel
-              key={`whatif-${bondInfo.totalDebt}-${bondInfo.creditDiagnostics.totalEquity}`}
-              bondInfo={bondInfo}
-              corporation={corporation}
+        {cd && (
+          <WhatIfDebtPanel
+            key={`whatif-${bondInfo.totalDebt}-${cd.totalEquity}`}
+            bondInfo={bondInfo}
+            corporation={corporation}
+          />
+        )}
+      </div>
+
+      <aside className="min-w-0 space-y-6">
+        <DenseSection title="Balance sheet context">
+          <KVList>
+            <KVRow label="Outstanding debt" value={formatAmount(bondInfo.totalDebt)} />
+            <KVRow label="Liquid capital" value={formatAmount(liquidCapitalAnchor)} />
+            <KVRow
+              label="Active bond issues"
+              value={bondInfo.bonds.filter((b) => !b.matured && !b.defaulted).length}
             />
-          )}
+            {cd && (
+              <>
+                <KVRow
+                  label="Book equity"
+                  value={formatAmount(cd.totalEquity)}
+                  title="Cash plus the estimated worth of working sectors: what the score measures debt and profit against."
+                />
+                <KVRow label="Annual income (est.)" value={formatAmount(cd.annualIncome)} />
+                <KVRow label="Annual coupons" value={formatAmount(cd.annualCouponObligations)} />
+                <KVRow
+                  label="Debt to equity"
+                  value={cd.debtToEquityRatio != null ? cd.debtToEquityRatio.toFixed(2) : "n/a"}
+                />
+                <KVRow
+                  label="Coverage"
+                  value={
+                    cd.interestCoverageRatio != null
+                      ? `${cd.interestCoverageRatio.toFixed(2)}x`
+                      : cd.annualCouponObligations <= 0
+                        ? "No coupons"
+                        : "n/a"
+                  }
+                  title="Estimated annual income over annual coupons."
+                />
+              </>
+            )}
+          </KVList>
+        </DenseSection>
 
-          {/* Peer benchmarks */}
-          {peerStats && (
-            <div className="rounded-xl border border-card-border bg-card p-5 sm:p-6">
-              <h3 className="text-sm font-bold uppercase tracking-widest text-muted mb-2">
-                Peer context
-              </h3>
-              <p className="text-xs text-muted mb-4">
-                Averages use other corporations in the same country (and same sector type) with a
-                stored credit snapshot from the hourly turn processor.
+        {peerStats && (
+          <DenseSection title="Peers" meta="rated corporations">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr>
+                  <Th />
+                  <Th align="right">Country</Th>
+                  <Th align="right">Sector</Th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <Td className="text-muted">Peers</Td>
+                  <Td align="right">{peerStats.countryPeers?.n ?? "n/a"}</Td>
+                  <Td align="right">{peerStats.sectorPeers?.n ?? "n/a"}</Td>
+                </tr>
+                <tr>
+                  <Td className="text-muted">Avg composite</Td>
+                  <Td align="right">{peerStats.countryPeers?.avgComposite ?? "n/a"}</Td>
+                  <Td align="right">{peerStats.sectorPeers?.avgComposite ?? "n/a"}</Td>
+                </tr>
+                <tr>
+                  <Td className="text-muted">Avg new-issue coupon</Td>
+                  <Td align="right">
+                    {peerStats.countryPeers
+                      ? `${peerStats.countryPeers.avgNewIssueCouponPct.toFixed(2)}%`
+                      : "n/a"}
+                  </Td>
+                  <Td align="right">
+                    {peerStats.sectorPeers
+                      ? `${peerStats.sectorPeers.avgNewIssueCouponPct.toFixed(2)}%`
+                      : "n/a"}
+                  </Td>
+                </tr>
+              </tbody>
+            </table>
+            {typeof peerStats.you.composite === "number" && peerStats.countryPeers && (
+              <p className="pt-1.5 text-xs text-muted">
+                You are{" "}
+                <span className="font-mono text-foreground">
+                  {(peerStats.you.composite - peerStats.countryPeers.avgComposite).toFixed(1)}
+                </span>{" "}
+                points from the country average.
               </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                <div className="rounded-lg border border-card-border/80 bg-card-elevated/30 p-3">
-                  <p className="text-xs font-semibold text-muted mb-2">Same country</p>
-                  {peerStats.countryPeers ? (
-                    <ul className="space-y-1 text-muted text-xs">
-                      <li className="flex justify-between gap-2">
-                        <span>Peers (n)</span>
-                        <span className="tabular-nums text-foreground">
-                          {peerStats.countryPeers.n}
-                        </span>
-                      </li>
-                      <li className="flex justify-between gap-2">
-                        <span>Avg composite</span>
-                        <span className="tabular-nums text-foreground">
-                          {peerStats.countryPeers.avgComposite}
-                        </span>
-                      </li>
-                      <li className="flex justify-between gap-2">
-                        <span>Avg new-issue coupon @ prime</span>
-                        <span className="tabular-nums text-foreground">
-                          {peerStats.countryPeers.avgNewIssueCouponPct.toFixed(2)}%
-                        </span>
-                      </li>
-                    </ul>
-                  ) : (
-                    <p className="text-xs text-muted">No other rated peers in this country yet.</p>
-                  )}
-                </div>
-                <div className="rounded-lg border border-card-border/80 bg-card-elevated/30 p-3">
-                  <p className="text-xs font-semibold text-muted mb-2">Same sector type</p>
-                  {peerStats.sectorPeers ? (
-                    <ul className="space-y-1 text-muted text-xs">
-                      <li className="flex justify-between gap-2">
-                        <span>Peers (n)</span>
-                        <span className="tabular-nums text-foreground">
-                          {peerStats.sectorPeers.n}
-                        </span>
-                      </li>
-                      <li className="flex justify-between gap-2">
-                        <span>Avg composite</span>
-                        <span className="tabular-nums text-foreground">
-                          {peerStats.sectorPeers.avgComposite}
-                        </span>
-                      </li>
-                      <li className="flex justify-between gap-2">
-                        <span>Avg new-issue coupon @ prime</span>
-                        <span className="tabular-nums text-foreground">
-                          {peerStats.sectorPeers.avgNewIssueCouponPct.toFixed(2)}%
-                        </span>
-                      </li>
-                    </ul>
-                  ) : (
-                    <p className="text-xs text-muted">No rated peers with this sector type yet.</p>
-                  )}
-                </div>
-              </div>
-              {typeof peerStats.you.composite === "number" && peerStats.countryPeers && (
-                <p className="text-[11px] text-muted mt-3">
-                  You are{" "}
-                  <span className="font-medium text-foreground tabular-nums">
-                    {(peerStats.you.composite - peerStats.countryPeers.avgComposite).toFixed(1)}
-                  </span>{" "}
-                  pts vs country average composite.
-                </p>
-              )}
-            </div>
-          )}
+            )}
+          </DenseSection>
+        )}
 
-          {/* Diagnostics + debt summary */}
-          <div className="rounded-xl border border-card-border bg-card p-5 sm:p-6">
-            <h3 className="text-sm font-bold uppercase tracking-widest text-muted mb-4">
-              Balance sheet context
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-              <div className="flex justify-between gap-4 rounded-lg border border-card-border/80 bg-card-elevated/30 px-3 py-2.5">
-                <span className="text-muted">Outstanding debt</span>
-                <span className="font-medium tabular-nums text-right">
-                  {formatAmount(bondInfo.totalDebt)}
-                </span>
-              </div>
-              <div className="flex justify-between gap-4 rounded-lg border border-card-border/80 bg-card-elevated/30 px-3 py-2.5">
-                <span className="text-muted">Liquid capital</span>
-                <span className="font-medium tabular-nums text-right">
-                  {formatAmount(liquidCapitalAnchor)}
-                </span>
-              </div>
-              <div className="flex justify-between gap-4 rounded-lg border border-card-border/80 bg-card-elevated/30 px-3 py-2.5">
-                <span className="text-muted">Active bond issues</span>
-                <span className="font-medium tabular-nums text-right">
-                  {bondInfo.bonds.filter((b) => !b.matured && !b.defaulted).length}
-                </span>
-              </div>
-              {bondInfo.creditDiagnostics && (
-                <>
-                  <div className="flex justify-between gap-4 rounded-lg border border-card-border/80 bg-card-elevated/30 px-3 py-2.5">
-                    <InfoTooltip
-                      trigger={
-                        <span className="text-muted cursor-help border-b border-dotted border-muted/40">
-                          Book equity
-                        </span>
-                      }
-                      width={240}
-                    >
-                      <p className="text-muted text-sm">
-                        Cash on hand plus what your working sectors are estimated to be worth. This
-                        is the value the credit score compares your debt and profit against.
-                      </p>
-                    </InfoTooltip>
-                    <span className="font-medium tabular-nums text-right">
-                      {formatAmount(bondInfo.creditDiagnostics.totalEquity)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-4 rounded-lg border border-card-border/80 bg-card-elevated/30 px-3 py-2.5">
-                    <span className="text-muted">Annual income (est.)</span>
-                    <span className="font-medium tabular-nums text-right">
-                      {formatAmount(bondInfo.creditDiagnostics.annualIncome)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-4 rounded-lg border border-card-border/80 bg-card-elevated/30 px-3 py-2.5">
-                    <span className="text-muted">Annual coupon obligations</span>
-                    <span className="font-medium tabular-nums text-right">
-                      {formatAmount(bondInfo.creditDiagnostics.annualCouponObligations)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-4 rounded-lg border border-card-border/80 bg-card-elevated/30 px-3 py-2.5">
-                    <span className="text-muted">Debt / equity</span>
-                    <span className="font-medium tabular-nums text-right">
-                      {bondInfo.creditDiagnostics.debtToEquityRatio != null
-                        ? bondInfo.creditDiagnostics.debtToEquityRatio.toFixed(2)
-                        : "—"}
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-4 rounded-lg border border-card-border/80 bg-card-elevated/30 px-3 py-2.5 sm:col-span-2">
-                    <span className="text-muted">Income / coupons (coverage)</span>
-                    <span className="font-medium tabular-nums text-right">
-                      {bondInfo.creditDiagnostics.interestCoverageRatio != null
-                        ? `${bondInfo.creditDiagnostics.interestCoverageRatio.toFixed(2)}×`
-                        : bondInfo.creditDiagnostics.annualCouponObligations <= 0
-                          ? "No coupon burden"
-                          : "—"}
-                    </span>
-                  </div>
-                </>
-              )}
-            </div>
-
-            <details className="group mt-4 rounded-lg border border-card-border/60 bg-card-muted/20 px-3 py-2 text-xs text-muted">
-              <summary className="cursor-pointer font-semibold text-foreground flex items-center gap-2 list-none [&::-webkit-details-marker]:hidden">
-                <span
-                  className="select-none text-muted transition-transform duration-200 group-open:rotate-90"
-                  aria-hidden
-                >
-                  ▸
-                </span>
-                How the engine uses these numbers
-              </summary>
-              <ul className="mt-2 space-y-1.5 pl-4 list-disc marker:text-muted">
-                <li>Debt-to-equity compares outstanding bonds to book equity.</li>
-                <li>Coverage compares estimated annual income to annual coupon cash flows.</li>
-                <li>Profitability scores return on that same equity figure.</li>
-                <li>Liquidity compares cash on hand to annual coupons.</li>
-              </ul>
-            </details>
-          </div>
-
-          {/* Rating scale */}
-          <div className="rounded-xl border border-card-border bg-card p-5 sm:p-6">
-            <h3 className="text-sm font-bold uppercase tracking-widest text-muted mb-3">
-              Published scale
-            </h3>
-            <p className="text-xs text-muted mb-4 max-w-prose">
-              Composite thresholds; figures show total coupon add-on vs. prime (rating tier +{" "}
-              {CORPORATE_BOND_SPREAD_PREMIUM.toFixed(1)}% corporate premium). Higher tiers mean
-              cheaper new debt.
-            </p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2">
-              {CREDIT_RATING_THRESHOLDS.map(([_, grade], i) => (
-                <div
-                  key={grade}
-                  className={`rounded-lg p-2.5 border text-center ${
-                    grade === bondInfo.creditRating.rating
-                      ? "border-primary bg-primary/10 text-primary font-bold ring-1 ring-primary/20"
-                      : "border-card-border text-muted"
-                  }`}
-                >
-                  <div className="text-sm font-bold tabular-nums">{grade}</div>
-                  <div className="text-[10px] text-muted mt-1 tabular-nums leading-tight">
-                    {tierScoreRangeLabel(i)}
-                  </div>
-                  <div className="text-[10px] mt-1 tabular-nums text-foreground/80">
-                    +{(CREDIT_RATING_SPREADS[grade] + CORPORATE_BOND_SPREAD_PREMIUM).toFixed(1)}%
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </>
-      ) : (
-        <div className="rounded-xl border border-card-border bg-card p-8 text-center space-y-3">
-          <p className="text-muted">Credit rating data not available.</p>
-          <a
-            href="#corp-bonds"
-            className="inline-block text-sm font-semibold text-primary hover:underline"
-          >
-            Jump to bonds {bondsArrow}
-          </a>
-        </div>
-      )}
+        <DenseSection title="Rating scale" meta="coupon add-on over prime">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr>
+                <Th>Rating</Th>
+                <Th align="right">Composite</Th>
+                <Th align="right">Add-on</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {CREDIT_RATING_THRESHOLDS.map(([, grade], i) => {
+                const current = grade === cr.rating;
+                return (
+                  <tr
+                    key={grade}
+                    className={current ? "bg-card-elevated/60 font-semibold" : undefined}
+                  >
+                    <Td className={current ? "text-foreground" : "text-muted"}>
+                      {grade}
+                      {current && (
+                        <span className="ml-1.5 text-[11px] font-normal text-muted">you</span>
+                      )}
+                    </Td>
+                    <Td align="right" className={current ? "text-foreground" : "text-muted"}>
+                      {tierScoreRangeLabel(i)}
+                    </Td>
+                    <Td align="right" className={current ? "text-foreground" : "text-muted"}>
+                      +{(CREDIT_RATING_SPREADS[grade] + CORPORATE_BOND_SPREAD_PREMIUM).toFixed(1)}%
+                    </Td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </DenseSection>
+      </aside>
     </div>
   );
 }

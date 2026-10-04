@@ -1,6 +1,7 @@
 import type { CorporationType } from "@/lib/constants/corporations";
 import type { StateMetricMarginContribution } from "@/lib/corporations/stateMetricMarginTypes";
 import type { PlantSectorSplitQuote } from "@/lib/corporations/plantSectorSplit";
+import type { RetoolHint } from "@/lib/corporations/retoolHint";
 
 export interface SectorData {
   _id: string;
@@ -55,6 +56,8 @@ export interface SectorData {
   createdAt: string;
   /** Active for-sale listing, null when not on the secondary market */
   forSale?: {
+    foreclosed?: boolean;
+    pledged?: boolean;
     listedAt: string;
     /** Asking price in ₳ (anchor) */
     priceAnchor: number;
@@ -64,6 +67,8 @@ export interface SectorData {
 }
 
 export interface CorporationRef {
+  mediaEditorialEnabled?: boolean;
+  editorialStance?: { economic: number; social: number };
   _id: string;
   sequentialId?: number;
   name: string;
@@ -209,6 +214,9 @@ export interface CapitalData {
 }
 
 export interface PricingData {
+  costPlusEnabled?: boolean;
+  costPlusReady?: boolean;
+  pricingMode?: "market" | "costPlus";
   /** CEO-posted posture (−0.2…0.2) or null = automatic. */
   posture: number | null;
   /** Posture actually used last turn (auto sectors included). */
@@ -590,6 +598,12 @@ export interface PlantsData {
    * share, NOT demand, optional because payloads predating the split omit it.
    */
   demandGapUnits?: number;
+  /** This sector's own demand throttle bound last turn, so its room to build reads 0. */
+  roomHeldByOwnIdle?: boolean;
+  /** Unowned pool over owned capacity plus that pool, percent. */
+  unclaimedSharePct?: number;
+  /** Strategy suggestion when the valuable output is oversupplied. Absent on older payloads. */
+  retoolHint?: RetoolHint | null;
   currentTurn: number;
   activeCapacityPercent?: number;
   capacityRecovery?: { coldUpkeepFraction: number; coldUpkeepDailyAnchor: number };
@@ -598,8 +612,10 @@ export interface PlantsData {
     taxRatePercent: number;
     freightNetCostDailyAnchor?: number;
     inventoryRevenueDailyAnchor?: number;
+    bondReference?: import("@/lib/corporations/investment/rules").InvestmentBondReference | null;
   };
   buildQuote: {
+    financing?: import("@/lib/banking/rules/constructionRequest").ConstructionFinanceView;
     unitPriceAnchor: number;
     expansionMultiplier?: number;
     dominanceMultiplier: number;

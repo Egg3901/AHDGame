@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { conditionalJson } from "@/lib/api/conditionalJson";
 import { getDb } from "@/lib/mongodb";
 import { handleRouteError } from "@/lib/api/errors";
 import type { StockExchangeSnapshot } from "@/lib/db/types";
@@ -31,26 +32,24 @@ export async function GET(request: Request) {
     if (!snapshot) {
       // Fallback: return empty listings if snapshot doesn't exist yet
       // (e.g., before first turn processing after deployment)
-      return NextResponse.json({
+      return conditionalJson(request, {
         exchange: exchange.toUpperCase(),
         exchangeName: getExchangeLabel(exchange),
         listings: [],
         unlistedPrivateCount: 0,
         turn: 0,
+        asOf: null,
       });
     }
 
-    const response = NextResponse.json({
+    return conditionalJson(request, {
       exchange: exchange.toUpperCase(),
       exchangeName: snapshot.exchangeName,
       listings: snapshot.listings,
       unlistedPrivateCount: snapshot.unlistedPrivateCount ?? 0,
       turn: snapshot.turn,
+      asOf: snapshot.createdAt,
     });
-
-    // Short CDN TTL: snapshots refresh every 5m between turns; keep edge fresher than the old hourly model.
-    response.headers.set("Cache-Control", "s-maxage=120, stale-while-revalidate=300, no-transform");
-    return response;
   } catch (error) {
     return handleRouteError(error);
   }

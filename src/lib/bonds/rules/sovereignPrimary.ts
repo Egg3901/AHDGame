@@ -16,6 +16,8 @@ export interface SovereignPrimaryFunding {
   centralBankId?: string;
   face: number;
   annualCoupon: number;
+  /** Route funded pool proceeds to the separately tracked spendable cash stock. */
+  treasuryCashLedgerEnabled?: boolean;
 }
 
 export function sovereignPrimaryTransition(input: SovereignPrimaryFunding): BankingTransition {
@@ -24,6 +26,9 @@ export function sovereignPrimaryTransition(input: SovereignPrimaryFunding): Bank
   }
   if (input.monetaryCash > 0 && !input.centralBankId) {
     throw new Error("Monetary financing requires a central bank");
+  }
+  if (input.treasuryCashLedgerEnabled && input.monetaryCash > 0) {
+    throw new Error("Funded Treasury cash cannot use monetary financing");
   }
   if (input.face > 0 !== input.poolCash + input.monetaryCash > 0) {
     throw new Error("Sovereign face must have a funding source");
@@ -42,7 +47,7 @@ export function sovereignPrimaryTransition(input: SovereignPrimaryFunding): Bank
       kind: "debit",
       amount: input.poolCash,
       collection: "bondMarketPools",
-      filter: { _id: input.currency },
+      filter: { _id: input.currency, cashLocal: { $gte: input.poolCash } },
       path: "cashLocal",
       note: "Primary buyer pays issuer",
     });
@@ -73,10 +78,10 @@ export function sovereignPrimaryTransition(input: SovereignPrimaryFunding): Bank
   if (cash > 0) {
     transition.legs.push({
       kind: "credit",
-      amount: cash,
+      amount: input.treasuryCashLedgerEnabled ? input.poolCash : cash,
       collection: "federalBudget",
       filter: { _id: input.budgetId },
-      path: "treasuryBalance",
+      path: input.treasuryCashLedgerEnabled ? "treasuryCashLocal" : "treasuryBalance",
       note: "Issuer receives funded proceeds",
     });
     transition.projections.push({
@@ -84,6 +89,7 @@ export function sovereignPrimaryTransition(input: SovereignPrimaryFunding): Bank
       filter: { _id: input.budgetId },
       update: {
         $inc: {
+          ...(input.treasuryCashLedgerEnabled ? { treasuryBalance: cash } : {}),
           "debt.principal": input.face,
           "spending.debtInterest": input.annualCoupon,
           "spending.total": input.annualCoupon,

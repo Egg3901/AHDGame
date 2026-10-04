@@ -1,3 +1,4 @@
+import { quoteLoanOrigination } from "@/lib/banking/rules/loanFees";
 import { resumeTreasuryReserveTransfers } from "@/lib/budget/treasuryReserveTransfer";
 /**
  * Private banking each turn. processBankingTurn moves household deposits,
@@ -17,6 +18,7 @@ import { getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { loadBankingPolicy, type BankingPolicySnapshot } from "@/lib/banking/policy";
+import { processBankTreasuryTurn } from "@/lib/banking/bankTreasury";
 import { savingsReadsAuthoritative } from "@/lib/banking/rules/policy";
 import { recoverBankingSettlements } from "@/lib/banking/recovery";
 import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
@@ -38,7 +40,15 @@ import {
   fundedNpcFlowDelta,
   perTurnInterest,
 } from "@/lib/banking/rules/loans";
-import { loanServiceTransition } from "@/lib/banking/rules/loanServicing";
+import { loanServiceTransition, loanServiceKey } from "@/lib/banking/rules/loanServicing";
+import {
+  acquireConstructionLoanLock,
+  releaseConstructionLoanLock,
+} from "@/lib/banking/constructionLoanLock";
+import {
+  acquireConstructionServiceLease,
+  releaseConstructionServiceLease,
+} from "@/lib/banking/constructionServiceLease";
 import {
   facilityInterestTransition,
   facilityInterestAmounts,
@@ -68,6 +78,7 @@ import { isDepositTakingCharter, isNamedLendingCharter } from "@/lib/banking/cha
 import { charterCapabilities, charterMay } from "@/lib/banking/rules/capabilities";
 import { getCashReserves, bankEquity } from "@/lib/banking/bankCash";
 import { processDeadBankLoans } from "@/lib/banking/deadBankLoans";
+import { loanCharterEpoch, loanCharterEpochFilter } from "@/lib/banking/loanEpoch";
 import { turnMoveKey, type MoneyTarget } from "@/lib/banking/moneyMove";
 import {
   DEFAULT_LENDING_PROFILE,
@@ -175,7 +186,7 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
   // Finish last turn's unfinished business before any new flow: a settlement
   // that crashed between two legs, an estate claimed and never settled. Doing
   // it first means nothing below builds on money still in flight.
-  const recovered = await recoverBankingSettlements(db, turn);
+  const recovered = await recoverBankingSettlements(db, turn, policy);
   const recovery = {
     resumedSettlements: recovered.resumedSettlements.length,
     stillPartial: recovered.stillPartial.length,
@@ -303,6 +314,13 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
   // lost out when the bank failed.
   const deadBankStarted = Date.now();
   const deadBankResult = await processDeadBankLoans(db, turn, async (loan, bank, target) => {
+    if (loan.borrowerType === "npcBulk") {
+      const recovered = await serviceDeadNpcBulkLoan(db, turn, loan, bank.currency, target);
+      summary.loanInterestCollected += recovered.interest;
+      summary.loanPrincipalRepaid += recovered.principal;
+      summary.defaultsWrittenOff += recovered.writtenOff;
+      return { collected: recovered.collected };
+    }
     const serviced = await servicePlayerLoan(
       db,
       turn,
@@ -326,6 +344,12 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
     serviceInterbankAndCbMargin(db, turn, summary, policy.propTrading, cbById)
   );
 
+  if (policy.bankTreasury) {
+    await timedBankingStage(db, turn, "bankTreasury", async () => {
+      await processBankTreasuryTurn(db, turn, policy);
+    });
+  }
+
   // What this pass leaves behind for the repair queue. Reported on the turn
   // summary so a half-applied move shows up in phase results the same turn,
   // not when somebody thinks to open the admin page.
@@ -345,6 +369,7 @@ type BankPassCaches = {
 };
 
 type BankPassResult = {
+  loanOriginationFeesCollected: number;
   depositInterestPaid: number;
   depositInterestShortfall: number;
   loanInterestCollected: number;
@@ -368,6 +393,7 @@ async function processOneBank(
   const currency = charter.currency as CurrencyCode;
   const bankIdHex = corp._id.toString();
   const result: BankPassResult = {
+    loanOriginationFeesCollected: 0,
     depositInterestPaid: 0,
     depositInterestShortfall: 0,
     loanInterestCollected: 0,
@@ -840,7 +866,7 @@ async function processOneBank(
   stageDone("insurancePremium");
 
   // (d) Named loan servicing. Shared with the loan-book-only pass below.
-  const namedBook = await serviceNamedLoanBook(db, turn, corp, currency);
+  const namedBook = await serviceNamedLoanBook(db, turn, corp, currency, charter.charteredTurn);
   result.loanInterestCollected += namedBook.interestCollected;
   result.loanPrincipalRepaid += namedBook.principalRepaid;
   result.defaultsWrittenOff += namedBook.writtenOff;
@@ -858,10 +884,12 @@ async function processOneBank(
     db,
     turn,
     corp._id,
+    charter.charteredTurn,
     currency,
     rates.lendingRatePercent,
     {
       loanFundingCapacity,
+      primeRatePercent: cb?.primeRate ?? 0,
       cashReserves,
       totalLoans,
       cbDocId,
@@ -874,6 +902,7 @@ async function processOneBank(
   cashReserves = bulkResult.cashReserves;
   totalLoans = bulkResult.totalLoans;
   result.loanInterestCollected += bulkResult.interestCollected;
+  result.loanOriginationFeesCollected += bulkResult.feesCollected;
   result.defaultsWrittenOff += bulkResult.writtenOff;
   result.npcBulkShortfall += bulkResult.shortfall;
 
@@ -902,11 +931,11 @@ async function processOneBank(
         // ledgers each turn and are not balances anyone can claim.
         "bankCharter.npcDeposits": npcDeposits,
         "bankCharter.totalDeposits": totalDeposits,
-        "bankCharter.totalLoans": totalLoans,
         "bankCharter.depositCeiling": depositCeiling,
         "bankCharter.lastBankingTurn": turn,
         "bankCharter.lastBankingIncome":
-          result.loanInterestCollected -
+          result.loanInterestCollected +
+          result.loanOriginationFeesCollected -
           result.depositInterestPaid -
           result.insurancePremiumPaid -
           result.defaultsWrittenOff,
@@ -917,6 +946,7 @@ async function processOneBank(
         // net and their own lines below, starting from zero here.
         "bankCharter.lastBankingDepositInterest": result.depositInterestPaid,
         "bankCharter.lastBankingLoanInterest": result.loanInterestCollected,
+        "bankCharter.lastBankingLoanOriginationFees": result.loanOriginationFeesCollected,
         "bankCharter.lastBankingInterbankInterestPaid": 0,
         "bankCharter.lastBankingInterbankInterestReceived": 0,
         "bankCharter.lastBankingFacilityInterest": 0,
@@ -928,7 +958,8 @@ async function processOneBank(
   );
 
   result.bankingIncome =
-    result.loanInterestCollected -
+    result.loanInterestCollected +
+    result.loanOriginationFeesCollected -
     result.depositInterestPaid -
     result.insurancePremiumPaid -
     result.defaultsWrittenOff;
@@ -957,7 +988,8 @@ async function serviceNamedLoanBook(
   db: Db,
   turn: number,
   corp: Pick<Corporation, "_id" | "name">,
-  currency: CurrencyCode
+  currency: CurrencyCode,
+  charteredTurn: number
 ): Promise<LoanServiceResult> {
   const total: LoanServiceResult = {
     interestCollected: 0,
@@ -973,6 +1005,7 @@ async function serviceNamedLoanBook(
       borrowerType: { $in: ["character", "corporation"] },
       status: { $in: ["current", "arrears"] },
       lastProcessedTurn: { $ne: turn },
+      ...loanCharterEpochFilter(charteredTurn),
     })
     .toArray();
 
@@ -983,18 +1016,26 @@ async function serviceNamedLoanBook(
     list.push(loan);
     loansByBorrower.set(key, list);
   }
+  const serviceBorrower = async (borrowerLoans: typeof loans) => {
+    for (const loan of borrowerLoans) {
+      const loanResult = await servicePlayerLoan(db, turn, corp._id, loan, currency, corp.name);
+      total.interestCollected += loanResult.interestCollected;
+      total.principalRepaid += loanResult.principalRepaid;
+      total.writtenOff += loanResult.writtenOff;
+      total.bankCredit += loanResult.bankCredit;
+      total.totalLoansDelta += loanResult.totalLoansDelta;
+    }
+  };
+  const borrowerGroups = [...loansByBorrower.values()];
   await Promise.all(
-    [...loansByBorrower.values()].map(async (borrowerLoans) => {
-      for (const loan of borrowerLoans) {
-        const loanResult = await servicePlayerLoan(db, turn, corp._id, loan, currency, corp.name);
-        total.interestCollected += loanResult.interestCollected;
-        total.principalRepaid += loanResult.principalRepaid;
-        total.writtenOff += loanResult.writtenOff;
-        total.bankCredit += loanResult.bankCredit;
-        total.totalLoansDelta += loanResult.totalLoansDelta;
-      }
-    })
+    borrowerGroups
+      .filter((group) => !group.some((loan) => loan.constructionCollateral))
+      .map(serviceBorrower)
   );
+  // Construction receipts hold one lender epoch. Keep their borrower groups
+  // serial so parallel admission cannot repeatedly starve all but one loan.
+  for (const group of borrowerGroups)
+    if (group.some((loan) => loan.constructionCollateral)) await serviceBorrower(group);
   return total;
 }
 
@@ -1021,9 +1062,8 @@ async function processLoanBookOnlyBank(
 
   const currency = charter.currency as CurrencyCode;
   const serviced = await timedBankingStage(db, turn, "loanServicing", () =>
-    serviceNamedLoanBook(db, turn, corp, currency)
+    serviceNamedLoanBook(db, turn, corp, currency, charter.charteredTurn)
   );
-  const totalLoans = Math.max(0, Math.max(0, charter.totalLoans ?? 0) + serviced.totalLoansDelta);
 
   await db.collection<Corporation>("corporations").updateOne(
     {
@@ -1036,9 +1076,9 @@ async function processLoanBookOnlyBank(
     },
     {
       $set: {
-        // Cash moved through the money primitive inside servicing; only the
-        // derived aggregate and the idempotency stamp are written here.
-        "bankCharter.totalLoans": totalLoans,
+        // Cash and the loan book moved through their original receipts. An
+        // end-of-pass snapshot must not overwrite a concurrent origination,
+        // repayment or collateral recovery.
         "bankCharter.lastBankingTurn": turn,
         "bankCharter.lastBankingIncome": serviced.interestCollected - serviced.writtenOff,
         "bankCharter.lastBankingIncomeTurn": turn,
@@ -1086,6 +1126,44 @@ async function servicePlayerLoan(
     totalLoansDelta: 0,
   };
   if (loan.lastProcessedTurn === turn) return empty;
+  if (loan.constructionCollateral) {
+    const owned = await acquireConstructionLoanLock(
+      db,
+      loan,
+      loanServiceKey(String(loan._id), turn)
+    );
+    if (!owned) return empty;
+    loan = owned;
+    if (!["current", "arrears"].includes(loan.status) || loan.lastProcessedTurn === turn) {
+      await releaseConstructionLoanLock(db, loan, loanServiceKey(String(loan._id), turn));
+      return empty;
+    }
+  }
+  const serviceKey = loanServiceKey(String(loan._id), turn);
+  const holdBankEpoch =
+    !!loan.constructionCollateral &&
+    creditTarget.collection === "corporations" &&
+    creditTarget.path === "bankCharter.cashReserves";
+  if (holdBankEpoch) {
+    if (!(await acquireConstructionServiceLease(db, loan, serviceKey, turn))) {
+      await releaseConstructionLoanLock(db, loan, serviceKey);
+      return empty;
+    }
+    creditTarget = {
+      ...creditTarget,
+      filter: {
+        ...creditTarget.filter,
+        "bankCharter.charteredTurn": loan.charteredTurn,
+        "bankConstructionFunding.kind": "servicing",
+        "bankConstructionFunding.service.key": serviceKey,
+      },
+    };
+  }
+  const releaseService = async () => {
+    if (holdBankEpoch)
+      await releaseConstructionServiceLease(db, bankCorporationId, loan._id, serviceKey);
+    else await releaseConstructionLoanLock(db, loan, serviceKey);
+  };
 
   // The decision is pure; the transition carries the borrower's debit, the
   // lender's credit and the loan-document update guarded on the turn stamp.
@@ -1106,11 +1184,19 @@ async function servicePlayerLoan(
     bankId: bankCorporationId.toString(),
   });
   if (decision.outcome === "closed") {
-    await settleTransition(db, transition);
+    const closed = await settleTransition(db, transition);
+    if (!closed.error && ["applied", "replayed"].includes(closed.status)) await releaseService();
     return empty;
   }
 
   const settled = await settleTransition(db, transition);
+  if (
+    (!settled.error && ["applied", "replayed"].includes(settled.status)) ||
+    (settled.status === "rejected" &&
+      settled.appliedLegs.length === 0 &&
+      settled.appliedProjections.length === 0)
+  )
+    await releaseService();
   if (settled.status === "rejected") return empty;
   const moneyLanded =
     transition.legs.length > 0 && settled.appliedLegs.length === transition.legs.length;
@@ -1196,6 +1282,7 @@ async function readBorrowerAvailable(
 }
 
 type NpcBulkState = {
+  primeRatePercent: number;
   /** Total lending capacity from deposits after the reserve requirement. */
   loanFundingCapacity: number;
   cashReserves: number;
@@ -1213,6 +1300,7 @@ type NpcBulkResult = {
   cashReserves: number;
   totalLoans: number;
   interestCollected: number;
+  feesCollected: number;
   writtenOff: number;
   shortfall: number;
 };
@@ -1243,17 +1331,19 @@ async function serviceNpcBulkBook(
   db: Db,
   turn: number,
   bankCorporationId: ObjectId,
+  charteredTurn: number,
   currency: CurrencyCode,
   lendingRatePercent: number,
   state: NpcBulkState
 ): Promise<NpcBulkResult> {
   const bankIdHex = bankCorporationId.toString();
-  const settlementKey = turnMoveKey("npc-book-settlement", bankIdHex, turn);
+  const settlementKey = turnMoveKey("npc-book-settlement", `${bankIdHex}:${charteredTurn}`, turn);
   const recorded = await db
     .collection<{
       _id: string;
       legs: TransitionLeg[];
       projections?: { projection: TransitionProjection }[];
+      event?: { meta?: { originationFees?: number; interestPaid?: number; writtenOff?: number } };
     }>(MONEY_MOVE_COLLECTION)
     .findOne({ _id: settlementKey });
   if (recorded) {
@@ -1279,7 +1369,13 @@ async function serviceNpcBulkBook(
       db
         .collection<BankLoan>("bankLoans")
         .aggregate<{ total: number }>([
-          { $match: { bankCorporationId, status: { $in: ["current", "arrears"] } } },
+          {
+            $match: {
+              bankCorporationId,
+              status: { $in: ["current", "arrears"] },
+              ...loanCharterEpochFilter(charteredTurn),
+            },
+          },
           { $group: { _id: null, total: { $sum: "$outstanding" } } },
         ])
         .toArray(),
@@ -1288,17 +1384,33 @@ async function serviceNpcBulkBook(
         .findOne({ _id: state.cbDocId }, { projection: { externalBroadMoney: 1 } }),
     ]);
     if (state.cb && pool) state.cb.externalBroadMoney = pool.externalBroadMoney;
+    // New journals freeze the original income split with their claim. Older
+    // fee receipts can still recover the fee from the protected book memo.
+    const recordedFee =
+      recorded.projections?.reduce((sum, row) => {
+        const increment =
+          row.projection.collection === "corporations" ? row.projection.update?.$inc : null;
+        const value =
+          increment !== null &&
+          typeof increment === "object" &&
+          "bankCharter.loanOriginationFeesLifetime" in increment
+            ? increment["bankCharter.loanOriginationFeesLifetime"]
+            : 0;
+        return sum + (typeof value === "number" && Number.isFinite(value) ? value : 0);
+      }, 0) ?? 0;
     return {
       cashReserves: getCashReserves(bank?.bankCharter),
       totalLoans: loans[0]?.total ?? 0,
-      interestCollected: 0,
-      writtenOff: 0,
+      interestCollected: recorded.event?.meta?.interestPaid ?? 0,
+      feesCollected: recorded.event?.meta?.originationFees ?? recordedFee,
+      writtenOff: recorded.event?.meta?.writtenOff ?? 0,
       shortfall: 0,
     };
   }
   let { cashReserves, totalLoans } = state;
   let creditedToPool = 0;
   let interestCollected = 0;
+  let feesCollected = 0;
   let writtenOff = 0;
   let shortfall = 0;
 
@@ -1308,13 +1420,14 @@ async function serviceNpcBulkBook(
       bankCorporationId,
       borrowerType: "npcBulk",
       status: { $in: ["current", "arrears"] },
+      ...loanCharterEpochFilter(charteredTurn),
     })
     .toArray();
 
   // Idempotency: the whole book is stamped together, so one processed tranche
   // means the pass already ran for this bank this turn.
   if (existing.some((loan) => loan.lastProcessedTurn === turn)) {
-    return { cashReserves, totalLoans, interestCollected, writtenOff, shortfall };
+    return { cashReserves, totalLoans, interestCollected, feesCollected, writtenOff, shortfall };
   }
 
   const currentTotal = existing.reduce((sum, loan) => sum + Math.max(0, loan.outstanding ?? 0), 0);
@@ -1344,6 +1457,7 @@ async function serviceNpcBulkBook(
   // price still moves volume, it just moves it per band now instead of across
   // the whole book at once.
   const targets = bandOriginationTargets({
+    primeRatePercent: state.primeRatePercent,
     fundingCapacity: npcFundingCapacity,
     lendingRatePercent,
     profile: state.lendingProfile,
@@ -1390,9 +1504,12 @@ async function serviceNpcBulkBook(
     });
     // Principal changes only by what the payer can actually deliver. In
     // particular a winding-down household book cannot repay an empty pool.
-    cashReserves -= adjust;
-    creditedToPool += adjust;
-    poolAvailable += adjust;
+    const fee = adjust > 0 ? quoteLoanOrigination(adjust, currency).originationFee : 0;
+    const fundedCash = adjust - fee;
+    cashReserves -= fundedCash;
+    creditedToPool += fundedCash;
+    poolAvailable += fundedCash;
+    feesCollected += fee;
 
     const nextOutstandingBeforeYield = Math.max(0, current + adjust);
     if (nextOutstandingBeforeYield <= 0 && current <= 0) continue;
@@ -1430,6 +1547,7 @@ async function serviceNpcBulkBook(
         filter: { _id: oid(tranche.loan._id.toString()) },
         update: {
           $set: {
+            charteredTurn,
             outstanding: afterDefaults,
             principal: Math.max(tranche.loan.principal ?? 0, afterDefaults),
             ratePercent: tranche.ratePercent,
@@ -1445,6 +1563,7 @@ async function serviceNpcBulkBook(
         insert: {
           _id: oid(new ObjectId().toString()),
           bankCorporationId: oid(bankIdHex),
+          charteredTurn,
           currency,
           borrowerType: "npcBulk",
           creditBand: tranche.band,
@@ -1465,7 +1584,14 @@ async function serviceNpcBulkBook(
     bookProjections.push({
       collection: "corporations",
       filter: { _id: oid(bankIdHex) },
-      update: { $inc: { "bankCharter.totalLoans": totalLoans - state.totalLoans } },
+      update: {
+        $inc: {
+          "bankCharter.totalLoans": totalLoans - state.totalLoans,
+          ...(feesCollected > 0
+            ? { "bankCharter.loanOriginationFeesLifetime": feesCollected }
+            : {}),
+        },
+      },
       note: "the cached loan total follows the household book",
     });
     // Principal and interest share one net cash transfer and one recorded
@@ -1504,7 +1630,12 @@ async function serviceNpcBulkBook(
         kind: "loan.paid",
         command: "bank.household.service",
         amount: interestFromPool,
-        meta: { tranches: work.length, interestPaid: interestFromPool, writtenOff },
+        meta: {
+          tranches: work.length,
+          interestPaid: interestFromPool,
+          originationFees: feesCollected,
+          writtenOff,
+        },
       },
     });
     if (settled.status === "partial" || settled.status === "rejected" || settled.error) {
@@ -1536,7 +1667,95 @@ async function serviceNpcBulkBook(
     });
   }
 
-  return { cashReserves, totalLoans, interestCollected, writtenOff, shortfall };
+  return { cashReserves, totalLoans, interestCollected, feesCollected, writtenOff, shortfall };
+}
+
+async function serviceDeadNpcBulkLoan(
+  db: Db,
+  turn: number,
+  loan: BankLoan,
+  currency: CurrencyCode,
+  creditTarget: MoneyTarget
+): Promise<{ collected: number; interest: number; principal: number; writtenOff: number }> {
+  const empty = { collected: 0, interest: 0, principal: 0, writtenOff: 0 };
+  if (loan.lastProcessedTurn === turn) return empty;
+
+  const cbDocId = getBankId(getCountryIdForCurrency(currency));
+  const cb = await db
+    .collection<CentralBank>("centralBanks")
+    .findOne({ _id: cbDocId }, { projection: { externalBroadMoney: 1 } });
+  const pool = Math.max(0, cb?.externalBroadMoney ?? 0);
+  const current = Math.max(0, loan.outstanding ?? 0);
+  const principalDelta = fundedNpcFlowDelta(current, 0, {
+    cashReserves: 0,
+    requiredReserves: 0,
+    householdPool: pool,
+  });
+  const principal = Math.min(current, Math.max(0, -principalDelta));
+  const afterPrincipal = Math.max(0, current - principal);
+  const interestDue = perTurnInterest(afterPrincipal, loan.ratePercent, currency);
+  const interest = Math.min(interestDue, Math.max(0, pool - principal));
+  const defaultRate = getCreditBand(loan.creditBand).defaultRatePercent;
+  const writtenOff = Math.min(
+    afterPrincipal,
+    (afterPrincipal * (defaultRate / 100)) / TURNS_PER_YEAR
+  );
+  const outstanding = Math.max(0, afterPrincipal - writtenOff);
+  const collected = principal + interest;
+  const key = `npc-loan-service:${loan._id.toString()}:${turn}`;
+  const settled = await settleTransition(db, {
+    key,
+    kind: "npc_loan_service",
+    turn,
+    currency,
+    legs:
+      collected > 0
+        ? [
+            {
+              kind: "debit",
+              amount: collected,
+              collection: "centralBanks",
+              filter: { _id: cbDocId, externalBroadMoney: { $gte: collected } },
+              path: "externalBroadMoney",
+              note: "NPC household repayment leaves the central bank household pool",
+            },
+            {
+              kind: "credit",
+              amount: collected,
+              collection: creditTarget.collection,
+              filter: creditTarget.filter,
+              path: creditTarget.path,
+              note: creditTarget.note,
+            },
+          ]
+        : [],
+    projections: [
+      {
+        collection: "bankLoans",
+        filter: { _id: loan._id, lastProcessedTurn: { $ne: turn } },
+        update: {
+          $set: {
+            outstanding,
+            principal: Math.max(loan.principal ?? 0, outstanding),
+            status: outstanding <= 0 ? "repaid" : "current",
+            lastProcessedTurn: turn,
+          },
+        },
+        note: "the resolved charter's household tranche follows its repayment",
+      },
+    ],
+    event: {
+      kind: "loan.paid",
+      command: "bank.household.service",
+      amount: collected,
+      meta: { borrowerType: "npcBulk", charteredTurn: loanCharterEpoch(loan) },
+    },
+  });
+  if (settled.status === "partial" || settled.status === "rejected" || settled.error) {
+    throw new Error(settled.error ?? "Resolved household loan recovery could not settle");
+  }
+  if (settled.status === "replayed") return empty;
+  return { collected, interest, principal, writtenOff };
 }
 
 /**

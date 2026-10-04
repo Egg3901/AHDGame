@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
+import { RunningMateSelector } from "./RunningMateSelector";
 import { PartyLogo } from "@/components/PartyLogo";
 import { Card } from "@/components/ui";
 import { PartySection } from "./ElectionDetailComponents";
@@ -131,6 +132,22 @@ export function PrimaryPhaseView({
         </div>
       )}
 
+      {election.countryId === "RU" &&
+        election.electionType === "president" &&
+        localInPrimary &&
+        !localIsEnded &&
+        (() => {
+          const mine = election.allCandidates.find((candidate) => candidate.isYou);
+          return mine ? (
+            <RunningMateSelector
+              electionId={electionId}
+              currentRunningMateCharacterId={mine.runningMateCharacterId ?? null}
+              currentRunningMateName={mine.runningMateName ?? null}
+              onSuccess={onRemoveSuccess}
+            />
+          ) : null;
+        })()}
+
       {selected && (
         <PartySection
           key={selected.partyId}
@@ -141,7 +158,7 @@ export function PrimaryPhaseView({
           electionId={electionId}
           isEnded={localIsEnded}
           onRemoveSuccess={onRemoveSuccess}
-          isPresident={election.electionType === "president"}
+          isPresident={election.countryId !== "RU" && election.electionType === "president"}
           advancingCount={advancingCount}
         />
       )}

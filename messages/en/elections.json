@@ -1,5 +1,13 @@
 {
   "elections": {
+    "mergerNppWarning": {
+      "title": "Merger warning: excess incoming NPPs are permanently deleted",
+      "priority": "The target party survives and keeps ALL of its existing NPPs, even if already above either limit. Only NPPs from the absorbed party can be deleted.",
+      "regional": "Incoming active NPPs must fit the remaining slots in their home region: 2 below 30% Org, 3 from 30% to below 40%, 4 from 40% to below 50%, and 5 at 50% or more. This uses the surviving party's Org after adding half the absorbed party's Org, rounded down.",
+      "national": "They must also fit the combined party's national limit: 5 NPPs per active player, up to 25. An active player is a non-banned member with at least 2 qualifying game actions in the last 14 days. Members of both parties count after the merger. If the surviving roster already meets or exceeds this limit, ALL incoming active NPPs are deleted; existing NPPs stay.",
+      "selection": "Regional limits apply first, then the national limit. Incoming NPPs are retained by highest political influence, then favorability, then stable ID order. Retired NPPs transfer without consuming slots. Limits are checked when the merger takes effect, so the outcome can change while voting is open.",
+      "consequence": "Deleted NPPs are not made independent or retired. Their elected-office and candidacy records are removed and their campaigns are archived. Holding office does not protect an incoming NPP."
+    },
     "error": {
       "description": "The elections page couldn't load. This may be a temporary issue.",
       "backToElections": "Back to Elections",
@@ -165,7 +173,7 @@
       "fullElectionNight": "Full election night →"
     },
     "primaryCalendar": {
-      "title": "Primary Calendar",
+      "title": "Primary calendar",
       "subtitle": "Past contests show winner; future shows wave timing",
       "empty": "No primary calendar data yet. The wave schedule populates once the primary enters its stagger window.",
       "voted": "Voted",
@@ -206,8 +214,8 @@
       "standingDescription": "Use targeted ads at any time. Target your home state, or choose another state while running for president.",
       "backToActions": "Back to Actions",
       "loadCharacterFailed": "Could not load your character. Refresh to try again.",
-      "actionTagline": "Reach your coalition",
-      "actionFlavor": "Build a temporary bonus with aligned voter groups in your home state. Presidential candidates can target other states.",
+      "actionTagline": "Vote bonus with groups you choose",
+      "actionFlavor": "Targets voter groups in your home state, and presidential candidates can target other states. The bonus is larger with groups that share your positions and halves every 24 turns.",
       "actionCost": "Fixed cost per action",
       "actionEffect": "Immediate group bonus, capped at 25%",
       "actionImageAlt": "Street advertising and campaign hoardings",
@@ -365,6 +373,50 @@
           "defense": "Defense & diplomacy"
         }
       }
+    },
+    "russianPresidential": {
+      "title": "Russian presidential ballot",
+      "winner": "{name} wins the certified ballot.",
+      "runoff": "No candidate won. A fresh ballot decides between the two finalists.",
+      "repeat": "This ballot elected nobody. A new election opens for filing.",
+      "counting": "Votes are accumulating. No winner is certified yet.",
+      "participation": "{participants, number} participants out of {registered, number} registered voters.",
+      "rules": "A valid election requires at least 50% turnout. The first round requires a majority of participating voters.",
+      "votes": "{votes, number} votes ({share}%)",
+      "endorse": "Endorse",
+      "withdrawEndorsement": "Withdraw endorsement",
+      "supportCampaign": "Support campaign",
+      "runningMate": "Vice-presidential nominee: {name}"
+    },
+    "huModernByElection": {
+      "description": "Constituency by-election: {district}. One seat for the remaining Assembly term."
+    },
+    "hu1991": {
+      "constituencyLabel": "Your constituency",
+      "automatic": "Assign an available constituency in my region",
+      "constituency": "{county}, constituency {number}",
+      "filingNote": "You can win one seat. Constituency winners leave the territorial and national lists."
+    },
+    "huListVacancies": {
+      "title": "Vacant Assembly list seats",
+      "description": "Choose a replacement from your party’s original list. The seat keeps its party, district and remaining term.",
+      "choose": "Choose a filed nominee",
+      "designate": "Designate deputy",
+      "loading": "Loading list vacancies…",
+      "empty": "Your party has no vacant list seats.",
+      "exhausted": "No available nominee remains on this original list.",
+      "success": "Replacement deputy seated.",
+      "error": "Could not update the list mandate.",
+      "seat": "{tier} list: {district}",
+      "territorial": "Territorial",
+      "national": "National",
+      "nominee": "{name} (list position {position})"
+    },
+    "bgFounding": {
+      "constituencyLabel": "Grand Assembly constituency",
+      "automatic": "Assign an available constituency in my region",
+      "constituency": "{area}, constituency {number}",
+      "filingNote": "You may contest one constituency and appear on one party list. You can hold only one seat. Constituency runoffs use a new ballot; party-list results remain fixed."
     }
   }
 }

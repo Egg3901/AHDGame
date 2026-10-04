@@ -1,3 +1,4 @@
+import { buildNppElectionEligiblePartyKeys } from "@/lib/parties/antiAbuseGuards";
 import { getDb } from "@/lib/mongodb";
 import type {
   Election,
@@ -62,6 +63,11 @@ const CONTESTABLE_QUALIFICATION_FAMILIES = [
   "sangiin",
   "president",
   "regionalCouncil",
+  // The 1991 successor parliaments have no incumbent supply at opening.
+  "nationalAssembly",
+  "sejm",
+  "senat",
+  "chamberOfDeputies",
 ] as const;
 
 /** All election types this phase files a floor candidate into. */
@@ -175,8 +181,23 @@ export async function processChallengerGeneration(now: Date): Promise<number> {
   // generator and the party-fielding gate.
   const partyDocs = await db
     .collection<PoliticalParty>("politicalParties")
-    .find({ isDefault: true }, { projection: { sequentialId: 1, countryId: 1 } })
+    .find(
+      { defunct: { $ne: true }, regimeStatus: { $ne: "banned" } },
+      {
+        projection: {
+          sequentialId: 1,
+          countryId: 1,
+          isDefault: 1,
+          tier: 1,
+          createdTurn: 1,
+          nppElectionMatureAtTurn: 1,
+          createdAt: 1,
+        },
+      }
+    )
     .toArray();
+  const eligibleKeys = buildNppElectionEligiblePartyKeys(partyDocs, now, currentTurn);
+  const defaultsByCountry = new Map<string, number>();
   const majorsByCountry = new Map<string, string[]>();
   for (const p of partyDocs) {
     const cty = String(p.countryId ?? "US");
@@ -184,7 +205,10 @@ export async function processChallengerGeneration(now: Date): Promise<number> {
     // Founding: field the country's WHOLE default roster so the chamber it
     // seats reflects the era's real party system. Steady state: top-2 only,
     // which is all a single-seat race needs to become a contest.
-    if (founding || list.length < 2) {
+    const defaultCount = defaultsByCountry.get(cty) ?? 0;
+    if (!eligibleKeys.has(`${cty}:${p.sequentialId}`)) continue;
+    if (!p.isDefault || founding || defaultCount < 2) {
+      if (p.isDefault) defaultsByCountry.set(cty, defaultCount + 1);
       list.push(String(p.sequentialId));
       majorsByCountry.set(cty, list);
     }
@@ -239,16 +263,19 @@ export async function processChallengerGeneration(now: Date): Promise<number> {
   // statePartyOrg presence + org (for the challenger's quality bonus).
   const spoRows = await db
     .collection<StatePartyOrg>("statePartyOrg")
-    .find({}, { projection: { stateId: 1, partyId: 1, hasPresence: 1, organization: 1 } })
+    .find(
+      {},
+      { projection: { countryId: 1, stateId: 1, partyId: 1, hasPresence: 1, organization: 1 } }
+    )
     .toArray();
   const spoByKey = new Map<string, { hasPresence?: boolean; organization?: number }>();
   const statesWithOrg = new Set<string>();
   for (const r of spoRows) {
-    spoByKey.set(`${r.stateId}:${r.partyId}`, {
+    spoByKey.set(`${r.countryId ?? "US"}:${r.stateId}:${r.partyId}`, {
       hasPresence: r.hasPresence,
       organization: r.organization,
     });
-    statesWithOrg.add(r.stateId);
+    statesWithOrg.add(`${r.countryId ?? "US"}:${r.stateId}`);
   }
 
   let filed = 0;
@@ -261,8 +288,20 @@ export async function processChallengerGeneration(now: Date): Promise<number> {
     for (const party of countryParties) {
       if (filed >= MAX_CHALLENGERS_PER_TURN) break;
       if (hasCandidate.has(`${String(primary._id)}_${party}`)) continue; // party already contesting
-      const spo = spoByKey.get(`${state}:${party}`);
-      if (!canPartyFieldInState(spo, statesWithOrg.has(state), party)) continue; // regional presence
+      const spo = spoByKey.get(`${country}:${state}:${party}`);
+      const partyDoc = partyDocs.find(
+        (p) => String(p.countryId ?? "US") === country && String(p.sequentialId) === party
+      );
+      if (!partyDoc?.isDefault) {
+        const nationalPresence =
+          state === country &&
+          spoRows.some(
+            (row) => row.countryId === country && row.partyId === party && row.hasPresence
+          );
+        if (!spo?.hasPresence && !nationalPresence) continue;
+      }
+
+      if (!canPartyFieldInState(spo, statesWithOrg.has(`${country}:${state}`), party)) continue; // regional presence
 
       // Reuse a free NPP from this (country,party,state) bucket if available,
       // else generate one. Either way it becomes this primary's challenger.
@@ -315,7 +354,12 @@ export async function processChallengerGeneration(now: Date): Promise<number> {
     // default party. This also covers national executive races, whose state is
     // the country code and therefore has no statePartyOrg row by design.
     if (founding && !raceHasCandidate && filed < MAX_CHALLENGERS_PER_TURN) {
-      const party = countryParties[0];
+      const party = countryParties.find((id) =>
+        partyDocs.some(
+          (p) =>
+            p.isDefault && String(p.countryId ?? "US") === country && String(p.sequentialId) === id
+        )
+      );
       if (party) {
         const bucket = `${country}:${party}:${state}`;
         let npp = freeByBucket.get(bucket)?.pop();

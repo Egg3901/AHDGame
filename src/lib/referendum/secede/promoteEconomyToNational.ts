@@ -154,7 +154,7 @@ export async function promoteEconomyToNational(
     await db.collection<Bond>("bonds").bulkWrite(
       sourceBonds.map((bond) => ({
         updateOne: {
-          filter: { _id: bond._id },
+          filter: { _id: bond._id, sovereignMaturityClaim: { $exists: false } },
           update: {
             $set: {
               totalIssued: (bond.totalIssued ?? 0) * (1 - weight),

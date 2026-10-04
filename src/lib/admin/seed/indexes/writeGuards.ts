@@ -1,5 +1,6 @@
 import type { Db } from "mongodb";
 import { ensureIndex } from "./helpers";
+import { ensureBoundedNpcCandidateGuards } from "./boundedNpcCandidates";
 import { ELECTION_WRITE_GUARD_INDEXES, GOVERNANCE_WRITE_GUARD_INDEXES } from "./writeGuardSpecs";
 
 /**
@@ -21,6 +22,7 @@ import { ELECTION_WRITE_GUARD_INDEXES, GOVERNANCE_WRITE_GUARD_INDEXES } from "./
  */
 export async function seedWriteGuardIndexes(db: Db, log: (msg: string) => void) {
   log("Election write-guard indexes:");
+  await ensureBoundedNpcCandidateGuards(db);
   for (const [collection, keys, options] of ELECTION_WRITE_GUARD_INDEXES) {
     await ensureIndex(db, collection, keys, options, log);
   }

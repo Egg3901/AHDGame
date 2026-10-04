@@ -21,6 +21,7 @@ import {
 import type { CorporationLookups } from "./types";
 import { processSector, type SectorTurnEnv } from "./sectorTurn";
 import { applySectorTurnOps } from "./applySectorTurnOps";
+import { mergeSectorPlantFields } from "@/lib/corporations/sectorTransferCapex";
 
 /**
  * P3a (buildable sectors): the build queue, mothballing (D12), idle upkeep and
@@ -240,6 +241,56 @@ describe("plants build queue — landing", () => {
     expect((doc.buildQueue as SectorBuildOrder[]).map((o) => o.onlineTurn)).toEqual([1001]);
   });
 
+  it("reconciles CIP from the remaining queue and clamps an empty queue to zero", () => {
+    const { update, doc } = run(
+      "plants",
+      makeSector({
+        capitalStock: 5_000,
+        plantsStartTurn: 900,
+        buildQueue: [],
+        constructionInProgressAnchor: 125_000,
+      }),
+      1000
+    );
+
+    expect(update.constructionInProgressAnchor).toBe(0);
+    expect(doc.constructionInProgressAnchor).toBe(0);
+  });
+
+  it("reconciles a transferred and merged queue from its orders", () => {
+    const transferred = mergeSectorPlantFields(
+      {
+        capitalStock: 5_000,
+        buildQueue: [order({ costPaidAnchor: 300_000, onlineTurn: 1040 })],
+      },
+      {
+        capitalStock: 2_000,
+        buildQueue: [
+          order({
+            costPaidAnchor: 600_000,
+            startTurn: 900,
+            onlineTurn: 1100,
+            smooth: true,
+          }),
+        ],
+      }
+    );
+    expect(transferred).not.toHaveProperty("constructionInProgressAnchor");
+    const { doc } = run(
+      "plants",
+      makeSector({
+        capitalStock: transferred.capitalStock,
+        plantsStartTurn: 900,
+        buildQueue: transferred.buildQueue,
+        constructionInProgressAnchor: 3_000_000,
+      }),
+      1000
+    );
+
+    expect(doc.buildQueue).toEqual(transferred.buildQueue);
+    expect(doc.constructionInProgressAnchor).toBe(600_000);
+  });
+
   it("does not touch the queue outside plants mode", () => {
     const { update } = run(
       "capital",
@@ -284,15 +335,10 @@ describe("plants build queue — smooth (per-turn) delivery", () => {
     );
     // The order stays in the queue — it is only partly built.
     expect((doc.buildQueue as SectorBuildOrder[]).length).toBe(1);
-    // CIP falls by this turn's slice of cost, not the whole order.
-    const cipSlice = ord.costPaidAnchor / BUILD_TURNS;
-    expect(doc.constructionInProgressAnchor as number).toBeCloseTo(
-      ord.costPaidAnchor - cipSlice,
-      0
-    );
+    expect(doc.constructionInProgressAnchor as number).toBeCloseTo(ord.costPaidAnchor * 0.5, 0);
   });
 
-  it("emits an $inc but no $pull while a smooth order is mid-build", () => {
+  it("sets queue-derived CIP but no $pull while a smooth order is mid-build", () => {
     const env = makeEnv("plants", 900 + Math.floor(BUILD_TURNS / 2));
     processSector(
       env,
@@ -309,7 +355,8 @@ describe("plants build queue — smooth (per-turn) delivery", () => {
     );
     const u = (env.sectorOps[0] as { updateOne: { update: TurnUpdate } }).updateOne.update;
     expect(u.$pull).toBeUndefined();
-    expect(u.$inc?.constructionInProgressAnchor).toBeLessThan(0);
+    expect(u.$set?.constructionInProgressAnchor).toBe(240_000);
+    expect(u.$inc?.constructionInProgressAnchor).toBeUndefined();
   });
 
   it("lands and drops the order on its online turn", () => {
@@ -375,9 +422,9 @@ describe("plants — growth-ramp flip conversion", () => {
     // which is exactly what costPaidAnchor 0 buys.
     expect(queue[0].costPaidAnchor).toBe(0);
     expect(queue[0].onlineTurn).toBe(1000 + CAPACITY_BUILD_TURNS("manufacturing", true));
-    // A free order adds nothing to CIP, so the turn emits no $inc at all.
+    // A free order adds nothing to CIP, so the queue-derived total is zero.
     expect(doc.constructionInProgressAnchor ?? 0).toBe(0);
-    expect(update.constructionInProgressAnchor).toBeUndefined();
+    expect(update.constructionInProgressAnchor).toBe(0);
   });
 
   it("retires the vestigial growth fields under plants", () => {
@@ -698,11 +745,11 @@ describe("plants — idle-capacity upkeep", () => {
  * not help: the command had already written and succeeded — it was the TURN
  * that clobbered, and the turn wrote unconditionally.
  *
- * The fix is that the turn only writes the delta it owns: `$pull` the orders
- * that landed (`onlineTurn <= currentTurn`, a predicate a fresh order can never
- * match) and `$inc` CIP by the amount those orders released. These tests apply
- * a command write to the document BETWEEN `processSector` and the bulkWrite and
- * assert the order survives with CIP intact.
+ * The turn writes only the queue delta it owns: `$pull` orders that landed
+ * (`onlineTurn <= currentTurn`, a predicate a fresh order can never match).
+ * CIP is a separate single-writer reconciliation from the turn's queue view.
+ * These tests apply a command write between `processSector` and the bulkWrite
+ * and assert the order survives, then verify a later turn derives its CIP.
  */
 describe("plants build queue — a command racing the turn (C4)", () => {
   const landed = order({ unitsOrdered: 1_200, costPaidAnchor: 500_000, onlineTurn: 1000 });
@@ -714,13 +761,12 @@ describe("plants build queue — a command racing the turn (C4)", () => {
       constructionInProgressAnchor: 500_000,
     });
 
-  /** What `buildCapacity` writes: append the order, restate CIP absolutely. */
+  /** What `buildCapacity` writes: append the order; the turn owns CIP. */
   function commandPlaceOrder(doc: Record<string, unknown>, o: SectorBuildOrder) {
     const queue = [...((doc.buildQueue as SectorBuildOrder[]) ?? []), o];
     return {
       ...doc,
       buildQueue: queue,
-      constructionInProgressAnchor: Math.round(queue.reduce((sum, q) => sum + q.costPaidAnchor, 0)),
     };
   }
 
@@ -738,7 +784,10 @@ describe("plants build queue — a command racing the turn (C4)", () => {
       onlineTurn: 1000 + BUILD_TURNS,
     };
     const live = commandPlaceOrder(sector as unknown as Record<string, unknown>, fresh);
-    expect(live.constructionInProgressAnchor).toBe(1_400_000);
+    expect(live).toMatchObject({
+      buildQueue: [...(sector.buildQueue as SectorBuildOrder[]), fresh],
+      constructionInProgressAnchor: sector.constructionInProgressAnchor,
+    });
 
     const after = applySectorOps(live, env);
 
@@ -746,8 +795,20 @@ describe("plants build queue — a command racing the turn (C4)", () => {
     expect(after.buildQueue).toEqual([fresh]);
     // …the landed one is gone…
     expect((after.buildQueue as SectorBuildOrder[]).some((o) => o.onlineTurn <= 1000)).toBe(false);
-    // …and CIP holds exactly the fresh order's cost: 1.4m − the 500k released.
-    expect(after.constructionInProgressAnchor).toBe(900_000);
+    // The current snapshot releases the due order. The next turn sees the
+    // concurrent order and reconciles its remaining cost.
+    expect(after.constructionInProgressAnchor).toBe(0);
+    const next = run(
+      "plants",
+      makeSector({
+        capitalStock: Number(after.capitalStock),
+        plantsStartTurn: 900,
+        buildQueue: after.buildQueue as SectorBuildOrder[],
+        constructionInProgressAnchor: Number(after.constructionInProgressAnchor),
+      }),
+      1001
+    );
+    expect(next.doc.constructionInProgressAnchor).toBe(900_000);
   });
 
   it("never emits a whole-array buildQueue $set", () => {
@@ -756,11 +817,11 @@ describe("plants build queue — a command racing the turn (C4)", () => {
     for (const op of env.sectorOps) {
       const u = (op as unknown as { updateOne: { update: TurnUpdate } }).updateOne.update;
       expect(u.$set?.buildQueue).toBeUndefined();
-      expect(u.$set?.constructionInProgressAnchor).toBeUndefined();
+      expect(u.$set?.constructionInProgressAnchor).toBe(0);
     }
   });
 
-  it("leaves a concurrent CANCEL's result intact (CIP moves by delta, not restatement)", () => {
+  it("reconciles CIP on the next turn after a concurrent CANCEL", () => {
     // Two outstanding orders plus one landing; the CEO cancels one outstanding
     // order mid-turn.
     const outA = order({ unitsOrdered: 100, costPaidAnchor: 200_000, onlineTurn: 1100 });
@@ -774,19 +835,28 @@ describe("plants build queue — a command racing the turn (C4)", () => {
     const env = makeEnv("plants", 1000);
     processSector(env, makeCorp(), sector, 1, undefined, 1);
 
-    // Command cancels outA and restates CIP over what IT read.
+    // Command cancels outA. CIP remains turn-owned.
     const live = {
       ...(sector as unknown as Record<string, unknown>),
       buildQueue: [landed, outB],
-      constructionInProgressAnchor: 800_000,
     };
     const after = applySectorOps(live, env);
     expect(after.buildQueue).toEqual([outB]);
-    // 800k − the 500k the landing order released.
-    expect(after.constructionInProgressAnchor).toBe(300_000);
+    expect(after.constructionInProgressAnchor).toBe(500_000);
+    const next = run(
+      "plants",
+      makeSector({
+        capitalStock: Number(after.capitalStock),
+        plantsStartTurn: 900,
+        buildQueue: after.buildQueue as SectorBuildOrder[],
+        constructionInProgressAnchor: Number(after.constructionInProgressAnchor),
+      }),
+      1001
+    );
+    expect(next.doc.constructionInProgressAnchor).toBe(300_000);
   });
 
-  it("emits no queue ops at all when nothing landed", () => {
+  it("reconciles CIP when nothing landed", () => {
     const env = makeEnv("plants", 1000);
     processSector(
       env,
@@ -805,6 +875,7 @@ describe("plants build queue — a command racing the turn (C4)", () => {
       const u = (op as unknown as { updateOne: { update: TurnUpdate } }).updateOne.update;
       expect(u.$pull).toBeUndefined();
       expect(u.$inc).toBeUndefined();
+      expect(u.$set?.constructionInProgressAnchor).toBe(500_000);
     }
   });
 });

@@ -55,7 +55,7 @@ export function PositionMapView() {
   useAbortableEffectFetch(
     async (signal) => {
       const response = await fetch(
-        `/api/admin/position-editor/preset?era=${era}&country=${country}`,
+        `/api/admin/position-editor/preset?era=${encodeURIComponent(era)}&country=${encodeURIComponent(country)}`,
         { signal }
       );
       const d = await response.json();
@@ -151,7 +151,7 @@ export function PositionMapView() {
     <div className="mx-auto max-w-7xl px-4 pb-16 sm:px-6">
       <div className="flex flex-col gap-3 border-b border-card-border py-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="font-serif text-2xl text-foreground">Position Editor</h1>
+          <h1 className="text-2xl text-foreground">Position Editor</h1>
           <p className="mt-0.5 text-sm text-muted">
             Author Layer-1 demographic positions, turnout, and archetype composition by state.
           </p>
@@ -214,7 +214,7 @@ export function PositionMapView() {
           <div>
             {selected ? (
               <div className="sticky top-4 rounded-xl border border-card-border bg-card p-4 shadow-card">
-                <h2 className="font-serif text-lg text-foreground">{selected.stateId}</h2>
+                <h2 className="text-lg text-foreground">{selected.stateId}</h2>
                 <div className="mt-3 space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted">Economic</span>
@@ -242,7 +242,9 @@ export function PositionMapView() {
                   </div>
                 </div>
                 <Link
-                  href={`/admin/position-editor/${country}/${selected.stateId}?era=${era}`}
+                  // Era and country come from picker values (DOM text), so every
+                  // part of the URL is encoded rather than trusted.
+                  href={`/admin/position-editor/${encodeURIComponent(country)}/${encodeURIComponent(selected.stateId)}?era=${encodeURIComponent(era)}`}
                   className="mt-4 block rounded-lg bg-primary px-3 py-2 text-center text-sm font-semibold text-white transition-colors hover:bg-primary-dark"
                 >
                   Edit state demographics →

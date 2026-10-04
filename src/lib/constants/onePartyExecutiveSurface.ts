@@ -76,7 +76,7 @@ const SURFACES: Partial<Record<CountryId, OnePartyExecutiveSurface>> = {
     oppositionNote: "The leader of the largest opposition party in the NPC.",
     seatsPanel: { title: "NPC seats by party", emptyText: "No NPC delegates elected yet." },
     confidencePanel: {
-      title: "Ruling-Party Confidence",
+      title: "Ruling-party confidence",
       description:
         "Internal CPC confidence in the Premier. Drifts each turn from enacted-bill alignment with the party's priority profile and any recorded purge events.",
     },
@@ -111,7 +111,7 @@ const SURFACES: Partial<Record<CountryId, OnePartyExecutiveSurface>> = {
       emptyText: "No Supreme Soviet deputies elected yet.",
     },
     confidencePanel: {
-      title: "Ruling-Party Confidence",
+      title: "Ruling-party confidence",
       description:
         "Internal CPSU confidence in the Premier. Drifts each turn from enacted-bill alignment with the party's priority profile and any recorded purge events.",
     },
@@ -150,7 +150,7 @@ const SURFACES: Partial<Record<CountryId, OnePartyExecutiveSurface>> = {
       emptyText: "No Volkskammer deputies elected yet.",
     },
     confidencePanel: {
-      title: "Ruling-Party Confidence",
+      title: "Ruling-party confidence",
       description:
         "Internal SED confidence in the General Secretary. Drifts each turn from enacted-bill alignment with the party's priority profile and any recorded purge events.",
     },
@@ -203,7 +203,7 @@ export function getOnePartyExecutiveSurface(countryId: CountryId): OnePartyExecu
       emptyText: `No ${chamberShort} delegates elected yet.`,
     },
     confidencePanel: {
-      title: "Ruling-Party Confidence",
+      title: "Ruling-party confidence",
       description:
         "Internal ruling-party confidence in the head of government. Drifts each turn from enacted-bill alignment with the party's priority profile and any recorded purge events.",
     },

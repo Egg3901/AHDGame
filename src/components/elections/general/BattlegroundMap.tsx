@@ -123,9 +123,7 @@ export function BattlegroundMap({
   return (
     <div className="rounded-xl border border-card-border bg-card p-3 sm:p-6 overflow-hidden shadow-panel">
       <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">
-          {t("battleground.title")}
-        </h3>
+        <h3 className="text-sm font-semibold text-muted">{t("battleground.title")}</h3>
         <span className="text-[10px] uppercase tracking-wider text-muted">
           {t("battleground.subtitle")}
         </span>

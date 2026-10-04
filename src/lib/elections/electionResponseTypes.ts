@@ -10,7 +10,9 @@ import type {
   Campaign,
   StatePartyOrg,
   ElectionVoteTally,
+  State,
 } from "@/lib/db/types";
+import type { Apportionment } from "./apportionment";
 import type { CountryId } from "@/lib/constants/countries";
 import type {
   ContingentElectionDisplay,
@@ -42,6 +44,7 @@ export interface SnapshotEntry {
 }
 
 export interface GeneralVotesData {
+  russianPresidentialResult?: ElectionVoteTally["russianPresidentialResult"];
   totalVotes: Record<string, number>;
   candidateNames: Record<string, string>;
   candidateParties: Record<string, string>;
@@ -105,8 +108,21 @@ export interface ElectionResponse {
   id: string;
   seatId: string | null;
   electionType: string;
+  allocationMethod?: import("@/lib/constants/countries").ElectionMethod;
   state: string;
   countryId: string;
+  bulgarianFoundingRound?: {
+    ruleVersion: "parallel-1990-v1";
+    round: 1 | 2;
+    newNominationDistrictIds?: string[];
+  };
+  hungarianModernAssembly?: { ruleVersion: "mixed-2011-v1" };
+  hungarianAssemblyRound?: {
+    ruleVersion: "mixed-1989-v1";
+    round: 1 | 2;
+    vacancyDistrictIds?: string[];
+  };
+  russianDumaRound?: { cohortId: string; mandateSinceTurn: number; tier: "constituency" | "list" };
   senateClass: number | null;
   chamberClass: number | null;
   cycle: number;
@@ -381,6 +397,10 @@ export interface ElectionDeps {
   latestPrimarySnapshot: PrimarySnapshot | null;
   /** Current officeholder for single-seat races. Null for multi-seat or no holder. */
   incumbent: { name: string; partyId: string } | null;
+  /** Shared list-view data; undefined preserves the single-election loader. */
+  apportionment?: Apportionment;
+  /** Preloaded local region for list enrichment; null means it was not found. */
+  localRegionState?: State | null;
 }
 
 // ---------------------------------------------------------------------------

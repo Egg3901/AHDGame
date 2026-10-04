@@ -31,6 +31,7 @@ describe("reserveBondUnitsForHolder", () => {
         marketPrice: 0.95,
         maturityTurn: 1129,
         defaulted: false,
+        sovereignMaturityClaim: { $exists: false },
       });
     }
   });

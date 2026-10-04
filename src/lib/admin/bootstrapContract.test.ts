@@ -136,9 +136,9 @@ describe("bootstrap contract: sovereign issuer corporations", () => {
       expect(entry.corporation.legalStructure).toBeTruthy();
       expect(entry.corporation.liquidCurrencyCode).toBeTruthy();
       // The sovereign corp's denomination should match its country.
-      const map = (await import("@/lib/constants/currencies")).COUNTRY_CURRENCY_MAP;
+      const { getSeedCurrencyCode } = await import("@/lib/constants/currencies");
       expect(entry.corporation.liquidCurrencyCode).toBe(
-        map[entry.corporation.countryId as keyof typeof map]
+        getSeedCurrencyCode(entry.corporation.countryId!, "2019-default")
       );
     }
   });
@@ -195,6 +195,28 @@ describe("bootstrap contract: seed manifest", () => {
     expect(source.slice(start, end)).toContain("force: forceIndexFundBootstrap");
   });
 
+  it("rebuilds market identity indexes after reset even when migration markers survive", () => {
+    const source = fs.readFileSync(
+      path.resolve(process.cwd(), "src/lib/admin/bootstrapGameWorld.ts"),
+      "utf8"
+    );
+    const start = source.indexOf("const marketIdentityIndexes = MIGRATIONS.filter");
+    const end = source.indexOf(
+      "// This marker is opt-in only from resetAndBootstrapGameWorld",
+      start
+    );
+    const block = source.slice(start, end);
+    expect(start).toBeGreaterThan(-1);
+    expect(block).toContain('migration.id === "2026-10-04-media-discriminator-market-indexes"');
+    expect(block).toContain("only: marketIdentityIndexes.map((migration) => migration.id)");
+    expect(block).toContain("force: true");
+    // It runs before hard-reference seeding writes corporateSectors and
+    // unownedSectors, after resetGameWorld may have dropped those collections.
+    expect(source.indexOf("const marketIdentityIndexes = MIGRATIONS.filter")).toBeLessThan(
+      source.indexOf("await seedAllCountryData(db, resetReference, log, preset, options.run)")
+    );
+  });
+
   it("findUnclassifiedCollections flags unknown collections", async () => {
     const { findUnclassifiedCollections } = await import("@/lib/admin/seed/seedManifest");
     expect(findUnclassifiedCollections(["states", "elections", "users"])).toEqual([]);
@@ -208,44 +230,39 @@ describe("bootstrap contract: seed manifest", () => {
     // collection added in code but never classified, which then silently
     // survives resets. (Constant-held names — `collection(SOME_CONST)` — aren't
     // scanned; classify those manually when introduced.)
-    const fs = await import("node:fs/promises");
-    const path = await import("node:path");
     const { findUnclassifiedCollections } = await import("@/lib/admin/seed/seedManifest");
 
     const srcDir = path.resolve(__dirname, "../../../src");
     const re = /collection(?:<[^>]*>)?\(\s*"([a-zA-Z][a-zA-Z0-9]*)"\s*\)/g;
     const names = new Set<string>();
 
-    async function walk(dir: string): Promise<void> {
-      const entries = await fs.readdir(dir, { withFileTypes: true });
+    // Keep this read-only scan in its test worker. Serial asynchronous reads
+    // compete with Vite's transforms for the shared filesystem thread pool.
+    function walk(dir: string): void {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
       for (const entry of entries) {
         const full = path.join(dir, entry.name);
         if (entry.isDirectory()) {
-          await walk(full);
+          walk(full);
           continue;
         }
         if (!entry.name.endsWith(".ts") && !entry.name.endsWith(".tsx")) continue;
         if (entry.name.includes(".test.")) continue;
-        const text = await fs.readFile(full, "utf8");
+        const text = fs.readFileSync(full, "utf8");
         let match: RegExpExecArray | null;
         while ((match = re.exec(text)) !== null) {
           names.add(match[1]);
         }
       }
     }
-    await walk(srcDir);
+    walk(srcDir);
 
     const unclassified = findUnclassifiedCollections([...names]);
     expect(
       unclassified,
       `unclassified collections found in src (add them to seedManifest.ts): ${unclassified.join(", ")}`
     ).toEqual([]);
-    // Reads and regex-scans every .ts/.tsx file under src from disk: ~2s alone,
-    // but up to ~15s under full-suite parallel I/O, which is right on vitest's
-    // default budget. Past it the case fails as a TIMEOUT masquerading as a drift
-    // failure, so it gets an explicit, generous one and fails only for the reason
-    // it exists to catch. (Both branches hit this independently and added the
-    // same 60s budget; this comment is the two explanations merged.)
+    // Retain the explicit scan budget and the complete source-tree inventory.
   }, 60_000);
 });
 

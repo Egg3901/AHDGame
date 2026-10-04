@@ -11,6 +11,12 @@ export const TURN_HOT_PATH_INDEXES: ReadonlyArray<{
   { collection: "corporationHistory", key: { turn: 1 }, name: "corporationHistory_turn" },
   { collection: "portfolioHistory", key: { characterId: 1 }, name: "portfolioHistory_characterId" },
   { collection: "bondHistory", key: { bondId: 1 }, name: "bondHistory_bondId" },
+  // Serves the bond turn's per-bond prior-interest lookup as a DISTINCT_SCAN.
+  {
+    collection: "bondHistory",
+    key: { bondId: 1, totalInterestPaid: -1 },
+    name: "bondHistory_bondId_totalInterestPaid",
+  },
   { collection: "shareOrders", key: { status: 1 }, name: "shareOrders_status" },
   {
     collection: "currencyOrders",

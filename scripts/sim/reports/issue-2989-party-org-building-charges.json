@@ -1,0 +1,36 @@
+{
+  "issue": 2989,
+  "runtimeSource": "0e17894c2062e164e580c6684b4d0f187f55a11c",
+  "runtimeFiles": [
+    "src/lib/parties/commands/chargeOrgBuildFunds.ts",
+    "src/lib/parties/orgBuildLedger.ts",
+    "src/lib/nppAutonomy/v3/party/nppBuildOrg.ts",
+    "src/lib/ledger/balanceSnapshot.ts",
+    "src/lib/ledger/deriveFromTx.ts",
+    "src/lib/db/types/financialTxLog.ts",
+    "src/lib/financialTxLog/types-extended.ts"
+  ],
+  "reproduction": {
+    "turns": [4, 8, 12],
+    "statePartyFindings": { "4": 61, "8": 64, "12": 64 },
+    "matchedToOrgBuildingCharge": "every finding within 1% on turns 8 and 12 at snapshot rates; turn 4 matches at that turn's rate"
+  },
+  "qualification": {
+    "integrationCases": 9,
+    "nativeMongoCases": 4,
+    "memoryCases": 4,
+    "sweepCacheCase": 1,
+    "redWithoutWitness": "three cash cases fail with one divergence each",
+    "focusedSuites": { "files": 15, "passed": 189, "skipped": 4, "failed": 0 },
+    "changedTypeScriptFiles": 9,
+    "scopedLint": "pass",
+    "scopedSemanticDiagnostics": "pass",
+    "formatting": "pass",
+    "architectureAuditBlocking": 0
+  },
+  "limits": [
+    "Native fixtures qualify the charge boundary, not the whole world.",
+    "This does not clear #968 or the global cash gate in #2159.",
+    "No production database was reset or repaired."
+  ]
+}

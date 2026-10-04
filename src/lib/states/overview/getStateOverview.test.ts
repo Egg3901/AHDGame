@@ -11,6 +11,8 @@ function matches(doc: Doc, query: Doc): boolean {
       const arr = (val as { $in: unknown[] }).$in;
       const docVal = doc[key];
       if (!arr.some((v) => v === docVal)) return false;
+    } else if (val && typeof val === "object" && "$ne" in val) {
+      if (doc[key] === (val as { $ne: unknown }).$ne) return false;
     } else if (doc[key] !== val) {
       return false;
     }
@@ -91,6 +93,60 @@ describe("getStateOverview", () => {
     expect(result.partyOrg[0].id).toBe("dem");
     expect(result.partyOrg[0].abbr).toBe("DEM");
     expect(result.unaffiliatedPct).toBe(13); // 100 - 42 - 41 - 4
+  });
+
+  it("excludes merged-away parties from both Org and Reg pools", async () => {
+    const db = makeStubDb({
+      statePartyOrg: [
+        {
+          _id: "SCO_lab",
+          countryId: "UK",
+          stateId: "SCO",
+          partyId: "1",
+          organization: 58.5,
+          registration: 71.1,
+        },
+        {
+          _id: "SCO_lib",
+          countryId: "UK",
+          stateId: "SCO",
+          partyId: "6",
+          organization: 6.4,
+          registration: 6.5,
+        },
+      ],
+      politicalParties: [
+        {
+          _id: "lab-oid",
+          sequentialId: 1,
+          countryId: "UK",
+          name: "Labour Party",
+          abbreviation: "LAB",
+          color: "#dc143c",
+        },
+        {
+          _id: "lib-oid",
+          sequentialId: 6,
+          countryId: "UK",
+          name: "Liberal Party",
+          abbreviation: "LIB",
+          color: "#fbbf24",
+          isDefunct: true,
+        },
+      ],
+      states: [{ _id: "SCO", countryId: "UK", name: "Scotland", gdp: 3_000_000_000 }],
+      stateRegistrationPool: [
+        { _id: "UK_SCO", countryId: "UK", stateId: "SCO", independent: 0, unregistered: 0 },
+      ],
+      electedOfficials: [],
+      elections: [],
+    });
+
+    const result = await getStateOverview(db as never, { countryId: "UK", stateId: "SCO" });
+
+    expect(result.partyOrg.map((party) => party.id)).toEqual(["1"]);
+    expect(result.registrationPool.parties.map((party) => party.id)).toEqual(["1"]);
+    expect(result.unaffiliatedPct).toBe(41.5);
   });
 
   it("marks Reg as derived placeholder until Phase 1.5/2 backfill", async () => {

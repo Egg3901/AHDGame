@@ -23,6 +23,8 @@ export type CountryLedger = Map<string, Map<CommodityType, CommodityBalance>>;
  */
 export interface SectorLedgerRow {
   sectorType: string;
+  industryModel?: string | null;
+  mediaDiscriminator?: string | null;
   revenue: number;
   stateId: string;
   sectorId: string;
@@ -35,6 +37,14 @@ export interface SectorLedgerRow {
   countryId?: string;
   plannedEconomy?: boolean;
   producedUnits?: number | null;
+  /** Exact product output units before NatCorp and embargo market scaling. */
+  outputUnitsByCommodity?: Partial<Record<CommodityType, number>>;
+  /** Nominal output anchor by commodity, used to value exact inventory units. */
+  outputAnchorByCommodity?: Partial<Record<CommodityType, number>>;
+  /** Current bounded product quality by output commodity. */
+  productQualityByCommodity?: Partial<Record<CommodityType, number>>;
+  /** Exact per-commodity clearing fractions for the same output map. */
+  soldByCommodity?: Partial<Record<string, number>>;
   militaryDivertedFraction?: number;
   soldUnits?: number | null;
   capacityUnits?: number | null;

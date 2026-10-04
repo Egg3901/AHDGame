@@ -162,9 +162,7 @@ export default function BondDetailPage({ params }: { params: Promise<{ id: strin
 
         {/* ─── Bond Details ────────────────────────────────────────────── */}
         <div className="rounded-xl border border-card-border bg-card p-5">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted mb-4">
-            Bond Details
-          </h2>
+          <h2 className="text-sm font-semibold text-muted mb-4">Bond details</h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-8 gap-y-3 text-sm">
             {[
               // Bond money fields (totalIssued, perTurnCoupon, totalInterestPaid)

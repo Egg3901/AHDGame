@@ -77,7 +77,7 @@ function props(): ActionCardProps {
 }
 
 describe.each([
-  { label: "full", Card: ActionCard, confirm: "Confirm Donation", execute: "Yes, donate" },
+  { label: "full", Card: ActionCard, confirm: "Confirm donation", execute: "Yes, donate" },
   { label: "compact", Card: ActionCardCompact, confirm: "Go", execute: /inf, sure\?/ },
 ])("$label donation currency", ({ Card, confirm, execute }) => {
   it("displays marks, bounds the actual local balance and submits local ledger units", async () => {

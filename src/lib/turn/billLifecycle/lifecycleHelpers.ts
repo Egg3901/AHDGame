@@ -131,6 +131,74 @@ export async function notifyChambersVoteOpen(
   );
 }
 
+/** Notify the voting chambers for several newly opened bills with bounded reads. */
+export async function notifyBillsVoteOpen(
+  db: LifecycleDb,
+  openings: Array<{ bill: Bill; chamberType: string }>
+): Promise<void> {
+  if (openings.length === 0) return;
+  const chamberFilters = [
+    ...new Map(
+      openings.map(({ bill, chamberType }) => [
+        `${bill.countryId ?? "US"}:${chamberType}`,
+        { countryId: bill.countryId ?? "US", officeType: chamberType },
+      ])
+    ).values(),
+  ];
+  const officials = await db
+    .collection<ElectedOfficial>("electedOfficials")
+    .find({
+      $or: chamberFilters,
+      characterId: { $ne: null },
+      isNPP: { $ne: true },
+    })
+    .toArray();
+  const characterIds = [
+    ...new Map(
+      officials
+        .map((official) => official.characterId)
+        .filter((id): id is ObjectId => id instanceof ObjectId)
+        .map((id) => [id.toString(), id])
+    ).values(),
+  ];
+  const characters = await db
+    .collection<Character>("characters")
+    .find({ _id: { $in: characterIds } }, { projection: { _id: 1, userId: 1 } })
+    .toArray();
+  const characterById = new Map(
+    characters.map((character) => [character._id.toString(), character])
+  );
+
+  await createNotifications(
+    openings.flatMap(({ bill, chamberType }) => {
+      const recipients = officials.filter(
+        (official) =>
+          official.countryId === (bill.countryId ?? "US") && official.officeType === chamberType
+      );
+      const chamberName = chamberNameForOfficeType(bill.countryId ?? "US", chamberType);
+      return recipients.flatMap((official) => {
+        const character = official.characterId
+          ? characterById.get(official.characterId.toString())
+          : undefined;
+        return character?.userId
+          ? [
+              {
+                userId: character.userId,
+                type: "bill_vote_open" as const,
+                title: "Vote Now Open",
+                message: `Voting on "${bill.title}" is now open in the ${chamberName}.`,
+                metadata: {
+                  billId: bill._id.toString(),
+                  recipientCharacterId: character._id.toString(),
+                },
+              },
+            ]
+          : [];
+      });
+    })
+  );
+}
+
 /** Notify the sponsor (and co-sponsors) of a bill outcome. */
 export async function notifySponsor(
   db: LifecycleDb,

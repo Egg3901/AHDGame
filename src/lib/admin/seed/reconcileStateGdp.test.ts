@@ -55,6 +55,7 @@ import { trRegions } from "@/lib/seeds/tr/trRegions";
 import { grRegions } from "@/lib/seeds/gr/grRegions";
 import { atRegions } from "@/lib/seeds/at/atRegions";
 import { fiRegions } from "@/lib/seeds/fi/fiRegions";
+import { modernRegions2019 } from "@/lib/seeds/reference/modernRegions2019";
 
 type Row = Pick<State, "_id" | "countryId" | "gdp">;
 
@@ -107,6 +108,11 @@ function authoredRows(preset: "1953-default" | "2019-default"): Row[] {
     ...grRegions,
     ...atRegions,
     ...fiRegions,
+    ...modernRegions2019("RU"),
+    ...modernRegions2019("PL"),
+    ...modernRegions2019("HU"),
+    ...modernRegions2019("RO"),
+    ...modernRegions2019("BG"),
   ];
 }
 

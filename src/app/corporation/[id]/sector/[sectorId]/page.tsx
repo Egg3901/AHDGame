@@ -28,9 +28,11 @@ import PricingPanel from "./sections/PricingPanel";
 import CapitalPanel from "./sections/CapitalPanel";
 import MarketRewardBanner from "./sections/MarketRewardBanner";
 import StrandedPlantBanner from "./sections/StrandedPlantBanner";
+import RetoolHintBanner from "./sections/RetoolHintBanner";
 import InventoryPanel from "./sections/InventoryPanel";
 import UnionBustingPanel from "./sections/UnionBustingPanel";
 import { OrganizeSectorAction } from "@/components/unions/OrganizeSectorAction";
+import { EditorialStancePanel } from "@/components/corporation/EditorialStancePanel";
 import ManagementPanel from "./sections/ManagementPanel";
 import AbandonPanel from "./sections/AbandonPanel";
 import ForSalePanel from "./sections/ForSalePanel";
@@ -68,6 +70,7 @@ export default function SectorDetailPage() {
   const searchParams = useSearchParams();
   const [buildOpen, setBuildOpen] = useState(searchParams.get("build") === "1");
   const [capacityBusy, setCapacityBusy] = useState(false);
+  const [reviewStrategyId, setReviewStrategyId] = useState<string | null>(null);
   const [capacityMessage, setCapacityMessage] = useState("");
 
   const [state, dispatch] = useSectorPageState();
@@ -684,6 +687,13 @@ export default function SectorDetailPage() {
           corpHref={corpHref}
           stateHref={stateHref}
         />
+        {corporation?.mediaEditorialEnabled === true && sector?.sectorType === "media" && (
+          <EditorialStancePanel
+            corporationId={corpId}
+            stance={corporation.editorialStance}
+            isCeo={false}
+          />
+        )}
 
         <div className="sticky top-0 z-20 mb-6 -mx-4 border-y border-card-border bg-background/95 px-4 py-2 shadow-sm backdrop-blur sm:mx-0 sm:rounded-xl sm:border sm:bg-card/95">
           <div className="flex gap-1 overflow-x-auto" role="tablist" aria-label="Sector workspace">
@@ -731,6 +741,16 @@ export default function SectorDetailPage() {
                   plants this branch never runs and the page is unchanged. */}
               {plantsEnabled && plants && (
                 <>
+                  {plants.retoolHint && (
+                    <RetoolHintBanner
+                      hint={plants.retoolHint}
+                      isCeo={isCeo}
+                      onOpenStrategy={(strategyId) => {
+                        setReviewStrategyId(strategyId);
+                        setActiveTab("operations");
+                      }}
+                    />
+                  )}
                   <PlantPanel
                     plants={plants}
                     marketSupplies={commodities?.supplies ?? []}
@@ -786,7 +806,12 @@ export default function SectorDetailPage() {
                 clearingEnabled={!!pricing}
                 room={
                   plants
-                    ? { headroomUnits: plants.headroomUnits, demandGapUnits: plants.demandGapUnits }
+                    ? {
+                        headroomUnits: plants.headroomUnits,
+                        demandGapUnits: plants.demandGapUnits,
+                        roomHeldByOwnIdle: plants.roomHeldByOwnIdle,
+                        unclaimedSharePct: plants.unclaimedSharePct,
+                      }
                     : null
                 }
                 compact
@@ -852,11 +877,14 @@ export default function SectorDetailPage() {
                 strategyUpdating={strategyUpdating}
                 cancelTransitionLoading={cancelTransitionLoading}
                 onStrategyChange={handleStrategyChange}
+                initialReviewStrategyId={reviewStrategyId}
+                onReviewComplete={() => setReviewStrategyId(null)}
                 onCancelTransition={handleCancelTransition}
                 stateResources={stateResources}
                 financials={financials}
                 margins={margins}
                 plantsCapacityUnits={plantsEnabled ? (plants?.capacityUnits ?? null) : null}
+                suggestedStrategyId={plants?.retoolHint?.suggestedStrategyId ?? null}
               />
             )}
 
@@ -942,7 +970,12 @@ export default function SectorDetailPage() {
               clearingEnabled={!!pricing}
               room={
                 plants
-                  ? { headroomUnits: plants.headroomUnits, demandGapUnits: plants.demandGapUnits }
+                  ? {
+                      headroomUnits: plants.headroomUnits,
+                      demandGapUnits: plants.demandGapUnits,
+                      roomHeldByOwnIdle: plants.roomHeldByOwnIdle,
+                      unclaimedSharePct: plants.unclaimedSharePct,
+                    }
                   : null
               }
             />
@@ -1103,7 +1136,12 @@ export default function SectorDetailPage() {
             sectorLabel={sector.displayName || sector.sectorLabel}
             submitting={capacityBusy}
             errorMessage={capacityMessage}
-            onSubmit={(units) => runCapacityAction({ action: "build", units })}
+            onWithdrawFinancing={(claimId) =>
+              void runCapacityAction({ action: "withdraw_financing", claimId })
+            }
+            onSubmit={(units, financing) =>
+              runCapacityAction({ action: "build", units, ...(financing ? { financing } : {}) })
+            }
           />
         )}
       </main>

@@ -32,6 +32,7 @@ export const DEFAULT_PHASE_ROUND_TRIP_BUDGET = 500;
  * See DEAD_WEIGHT_PLAN_AUDIT.md section 8 for counts and sample caveats.
  */
 export const PHASE_ROUND_TRIP_BUDGETS: Readonly<Record<string, number>> = {
+  russianCouncilComposition: 100,
   corporationTurn: 4500,
   ministerialOrders: 2000,
   indexFunds: 18000,
@@ -41,6 +42,12 @@ export const PHASE_ROUND_TRIP_BUDGETS: Readonly<Record<string, number>> = {
   approvalSnapshot: 1500,
   nppGovernmentPhases: 1000,
   bondTurn: 1000,
+  // At most three 1991 federation applications; real Mongo volume fixtures cap
+  // one application at 20 commands, with headroom for all three and cursors.
+  federationFacilityCompensation: 75,
+  // Native two-chamber Mongo qualification: first opening/admission <=70,
+  // both failed-poll repeats 81 commands, and settled replay <=4.
+  russianAssemblyCampaigns: 100,
   nppBillSponsorship: 800,
   nppBehavior: 800,
   fiscalBaseGrowth: 800,

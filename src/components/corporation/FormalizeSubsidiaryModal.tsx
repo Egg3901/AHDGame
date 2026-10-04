@@ -69,7 +69,7 @@ export function FormalizeSubsidiaryModal({
         <p className="text-xs text-muted">
           {corporationName} stays a separate corporation with its own sectors, share price, and
           shareholders. As parent CEO you may appoint its CEO, inject capital, and set a dividend
-          floor — but its day-to-day is run by a different CEO.
+          floor, but its day-to-day is run by a different CEO.
         </p>
         {err && <p className="text-xs text-error">{err}</p>}
         <div className="flex justify-end gap-2">

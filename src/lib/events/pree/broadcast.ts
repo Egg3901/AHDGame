@@ -93,14 +93,25 @@ export async function markBroadcastFired(db: Db, kind: string, currentTurn: numb
 export async function supersedePendingEventForBroadcast(
   db: Db,
   instance: EventInstance,
-  currentTurn: number
+  currentTurn: number,
+  preset?: string,
+  treasuryCashLedgerEnabled = false
 ): Promise<boolean> {
   const defaultOptionId = getDefaultOptionId(instance.kind);
   if (!defaultOptionId) {
     return false;
   }
   try {
-    await resolveEvent(db, instance._id, defaultOptionId, "timeout", currentTurn);
+    await resolveEvent(
+      db,
+      instance._id,
+      defaultOptionId,
+      "timeout",
+      currentTurn,
+      undefined,
+      preset,
+      treasuryCashLedgerEnabled
+    );
     return true;
   } catch (err) {
     // Already resolved concurrently — the slot is free, offer can proceed.

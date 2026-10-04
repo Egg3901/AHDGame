@@ -177,7 +177,7 @@ export default function MarketMoneyPanel({
         <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
           <UnitTile
             label="Selling"
-            value={truth.soldFraction != null ? `${fmtPct(truth.soldFraction)} of output` : "—"}
+            value={truth.soldFraction != null ? `${fmtPct(truth.soldFraction)} of output` : "n/a"}
             tone={
               truth.soldFraction == null
                 ? "muted"
@@ -204,7 +204,7 @@ export default function MarketMoneyPanel({
             value={
               truth.receivedPerUnitAnchor != null && truth.costPerUnitAnchor != null
                 ? `revenue ${unitMoney(truth.receivedPerUnitAnchor)}, cost ${unitMoney(truth.costPerUnitAnchor)}`
-                : "—"
+                : "n/a"
             }
             tone={
               truth.receivedPerUnitAnchor != null &&
@@ -407,7 +407,7 @@ export default function MarketMoneyPanel({
           />
           <DetailRow
             label="Operating profit / unit produced"
-            value={pnl.profitPerUnitAnchor == null ? "—" : unitMoney(pnl.profitPerUnitAnchor)}
+            value={pnl.profitPerUnitAnchor == null ? "n/a" : unitMoney(pnl.profitPerUnitAnchor)}
           />
           <DetailRow
             label="Of which disasters and one-off events"

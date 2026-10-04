@@ -3,8 +3,6 @@ import { Suspense } from "react";
 import { RegionPageSkeleton, RegionTabsSkeleton } from "./RegionPageSkeleton";
 import { notFound } from "next/navigation";
 import { getDb } from "@/lib/mongodb";
-import Image from "next/image";
-import Link from "next/link";
 import type { State, PoliticalParty, GameState, GameConfig } from "@/lib/db/types";
 import {
   canonicalRegionId,
@@ -25,18 +23,13 @@ import { isRegionalConditionsOverviewEnabled } from "@/lib/states/conditions/fea
 import { formatPopulation, formatGDP } from "@/lib/utils/formatters";
 import { getCurrencyPrefix } from "@/lib/utils/budgetCalculations";
 import { getRegionCensusData } from "@/lib/seeds/regionCensusData";
-import { regionUrl as buildRegionUrl, regionApprovalUrl } from "@/lib/urls";
-import { ApprovalTooltip } from "@/components/ApprovalTooltip";
-import { PositionBadges } from "@/components/PositionBadges";
+import { regionUrl as buildRegionUrl, regionApprovalUrl, countryUrl } from "@/lib/urls";
 import { StatePageTabs } from "@/components/StatePageTabs";
+import { RegionHeader } from "@/components/state/RegionHeader";
 import { getBucketProfileForRegion } from "@/lib/demographics/bucketProfile";
 import { STATE_FLAGS, getStateDescriptor, STATE_MOTTOS } from "@/lib/constants";
 import { IE_REGION_CONSTITUENT_COUNCILS } from "@/lib/constants/ireland";
 import { resolveRegionBannerImage } from "@/lib/constants/regionBanner";
-import BackButton from "@/components/BackButton";
-import { HeroImage } from "@/components/HeroImage";
-import { RelocateButton } from "@/components/RelocateButton";
-import { RegionDropdown } from "@/components/RegionDropdown";
 import UKRegionClient from "@/app/uk/region/[regionId]/UKRegionClient";
 import { getStateOverview } from "@/lib/states/overview/getStateOverview";
 import { getStateRegLedger } from "@/lib/states/overview/getStateRegLedger";
@@ -526,260 +519,47 @@ async function renderGenericRegion(countryId: CountryId, regionCode: string) {
 
   return (
     <div className="min-h-screen bg-background">
-      <main className="mx-auto max-w-7xl min-w-0 overflow-x-hidden px-6 sm:px-8 lg:px-12 py-12 sm:py-16 space-y-12">
-        {/* Hero header with title overlay and stats strip */}
-        {/* No `overflow-hidden` here: it would clip the RegionDropdown menu (#915).
-            Corner-rounding is instead applied to the masthead (top) and stat
-            strip (bottom) so the card still reads as one rounded panel. */}
-        <header className="relative rounded-2xl border border-card-border bg-card shadow-lg">
-          {/* Hero masthead — banner image fades into a theme-token coloration
-              gradient (mirrors the Cabinet Office hero). */}
-          <div
-            className="relative rounded-t-2xl px-5 pb-5 pt-4 sm:px-7 sm:pt-5"
-            style={{
-              background:
-                "radial-gradient(120% 150% at 0% 0%, color-mix(in srgb, var(--primary) 16%, transparent) 0%, transparent 44%), linear-gradient(135deg, color-mix(in srgb, var(--card) 90%, var(--primary)) 0%, var(--card) 55%, var(--background) 100%)",
-            }}
-          >
-            {/* Decorative art (banner wash + watermark) is clipped by its own
-                wrapper so the masthead itself keeps no `overflow-hidden` — that
-                clip was hiding the RegionDropdown menu (#915). */}
-            <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-t-2xl">
-              {/* banner photo, faded into the coloration gradient (like the Cabinet
-                  Office hero): the gradient is the container background and the
-                  photo is a faint wash above it. */}
-              {(() => {
-                const bannerSrc = resolveRegionBannerImage(countryId, state._id, state.bannerImage);
-                return bannerSrc ? (
-                  <HeroImage
-                    src={bannerSrc}
-                    alt={state.name}
-                    fill
-                    className="object-cover object-center opacity-30"
-                    sizes="(max-width: 1280px) 100vw, 1280px"
-                    priority
-                  />
-                ) : null;
-              })()}
-              {/* giant faded region-abbreviation watermark */}
-              <div
-                aria-hidden
-                className="absolute -right-3 -top-10 select-none font-black leading-none"
-                style={{
-                  fontSize: 190,
-                  color: "color-mix(in srgb, var(--foreground) 6%, transparent)",
-                }}
-              >
-                {state._id}
-              </div>
-            </div>
-
-            <div className="relative">
-              {/* top-row controls */}
-              <div className="mb-4 flex items-center justify-between gap-2">
-                <BackButton iconOnly />
-                <div className="flex items-center gap-2">
-                  <RelocateButton
-                    targetStateId={state._id}
-                    targetName={state.name}
-                    userHomeState={userData?.character?.homeState}
-                    userCountryId={userData?.character?.countryId}
-                    targetCountryId={countryId}
-                    redirectPath={regionUrl}
-                  />
-                  <RegionDropdown
-                    regionId={state._id}
-                    regionName={state.name}
-                    regionCountryId={countryId}
-                    currentParty={currentParty}
-                  />
-                </div>
-              </div>
-
-              {/* identity row: flag icon + eyebrow/title/subtitle + lean */}
-              <div className="flex items-center gap-4">
-                {STATE_FLAGS[state._id] && (
-                  <Image
-                    src={`/api/flags/${state._id}`}
-                    alt={`${state.name} flag`}
-                    width={64}
-                    height={46}
-                    className="shrink-0 rounded-md object-cover shadow"
-                    unoptimized
-                  />
-                )}
-                <div className="min-w-0 flex-1">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary/80">
-                    {countryConfig.name} · {countryConfig.regionLabel} Profile
-                  </p>
-                  <h1
-                    data-coach="nav-region"
-                    className="mt-1 truncate text-2xl font-bold leading-tight tracking-tight text-foreground sm:text-3xl"
-                  >
-                    {state.name}
-                  </h1>
-                  <p className="mt-0.5 text-sm italic text-muted">
-                    {getStateDescriptor(state._id, countryConfig.regionLabel)}
-                  </p>
-                </div>
-                {calculatedLeans && (
-                  <div className="hidden shrink-0 text-right sm:block">
-                    <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-primary/70">
-                      Political Lean
-                    </p>
-                    <div className="mt-1 flex justify-end">
-                      <PositionBadges
-                        economic={calculatedLeans.economicLean}
-                        social={calculatedLeans.socialLean}
-                        mode="lean"
-                        align="items-end"
-                        countryId={countryId}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* accent divider rule */}
-          <div
-            aria-hidden
-            className="h-0.5"
-            style={{
-              background:
-                "linear-gradient(90deg, transparent, var(--primary) 16%, color-mix(in srgb, var(--primary) 55%, white) 50%, var(--primary) 84%, transparent)",
-              opacity: 0.85,
-            }}
-          />
-
-          {/* Fused stat strip — responsive grid (2-col mobile, 4-col sm, 6-col lg).
-              No horizontal scroll; wraps naturally on narrow viewports. */}
-          <div className="grid grid-cols-2 gap-px bg-card-border rounded-b-2xl overflow-hidden sm:flex sm:items-stretch sm:gap-0 sm:divide-x sm:divide-y-0 sm:bg-card">
-            {/* Population */}
-            <div className="flex flex-col bg-card px-4 py-3">
-              <span className="text-[9px] font-medium uppercase tracking-widest text-muted">
-                Population
-              </span>
-              <span className="text-sm font-bold tabular-nums">
-                {formatPopulation(state.population)}
-              </span>
-            </div>
-
-            {/* GDP */}
-            <div className="flex flex-col bg-card px-4 py-3">
-              <span className="text-[9px] font-medium uppercase tracking-widest text-muted">
-                GDP
-              </span>
-              <span className="text-sm font-bold tabular-nums">
-                {formatGDP(state.gdp, getCurrencyPrefix(countryId))}
-              </span>
-            </div>
-
-            {/* House/Lower Chamber Districts */}
-            <div className="flex flex-col bg-card px-4 py-3">
-              <span className="text-[9px] font-medium uppercase tracking-widest text-muted">
-                {countryConfig.legislature?.lowerChamber?.shortName ?? "House"} Dists.
-              </span>
-              <span className="text-sm font-bold tabular-nums">{state.houseDistricts}</span>
-            </div>
-
-            {/* Political Lean */}
-            {calculatedLeans && (
-              <div className="flex flex-col gap-1 bg-card px-4 py-3">
-                <span className="text-[9px] font-medium uppercase tracking-widest text-muted">
-                  Political Lean
-                </span>
-                <PositionBadges
-                  economic={calculatedLeans.economicLean}
-                  social={calculatedLeans.socialLean}
-                  mode="lean"
-                  align="items-start"
-                  countryId={countryId}
-                />
-              </div>
-            )}
-
-            {/* Government Approval */}
-            <div className="flex flex-col bg-card px-4 py-3">
-              <span className="text-[9px] font-medium uppercase tracking-widest text-muted">
-                Gov. Approval
-              </span>
-              <span className="text-sm font-bold tabular-nums">
-                {governmentApproval != null ? (
-                  <span
-                    className={
-                      governmentApproval >= 50
-                        ? "text-success"
-                        : governmentApproval >= 40
-                          ? "text-warning"
-                          : "text-error"
-                    }
-                  >
-                    <ApprovalTooltip
-                      approval={governmentApproval}
-                      baseApproval={approvalBaseScore ?? governmentApproval}
-                      modifiers={approvalModifiers}
-                      href={regionApprovalUrl(countryId, stateId)}
-                    />
-                  </span>
-                ) : (
-                  <span className="text-muted">—</span>
-                )}
-              </span>
-            </div>
-
-            {/* Regional chief executive — Governor (US/JP), Minister-President (DE), etc. */}
-            <div className="flex flex-col bg-card px-4 py-3 sm:col-span-2 lg:col-span-1">
-              <span className="text-[9px] font-medium uppercase tracking-widest text-muted">
-                {regionalExecutiveLabel}
-              </span>
-              <span className="mt-0.5 flex items-center gap-2 text-sm font-bold tabular-nums">
-                {serializedGovernor && (serializedGovernor.characterId || serializedGovernor.nppId)
-                  ? (serializedGovernor.characterName ?? "Unknown")
-                  : "Vacant"}
-                {(officeCanManage || userData?.isAdmin) && (
-                  <Link
-                    href={`${regionUrl}/office`}
-                    className="inline-flex items-center rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-medium text-primary transition-colors hover:bg-primary/25"
-                  >
-                    Office →
-                  </Link>
-                )}
-              </span>
-            </div>
-
-            {/* State motto (US only) */}
-            {STATE_MOTTOS[state._id] && (
-              <div className="flex flex-col bg-card px-4 py-3 col-span-2 sm:col-span-2 lg:col-span-1">
-                <span className="text-[9px] font-medium uppercase tracking-widest text-muted">
-                  Motto
-                </span>
-                <span
-                  className="mt-0.5 truncate text-sm font-medium italic text-foreground"
-                  title={STATE_MOTTOS[state._id]}
-                >
-                  {STATE_MOTTOS[state._id]}
-                </span>
-              </div>
-            )}
-
-            {/* IE constituent councils — §3.1 Option C flavor (no game-state impact). */}
-            {countryId === "IE" && IE_REGION_CONSTITUENT_COUNCILS[state._id] && (
-              <div className="flex flex-col bg-card px-4 py-3 col-span-2 sm:col-span-2 lg:col-span-2">
-                <span className="text-[9px] font-medium uppercase tracking-widest text-muted">
-                  Comprising
-                </span>
-                <span
-                  className="mt-0.5 text-xs text-muted"
-                  title={IE_REGION_CONSTITUENT_COUNCILS[state._id].join(", ")}
-                >
-                  {IE_REGION_CONSTITUENT_COUNCILS[state._id].join(" · ")}
-                </span>
-              </div>
-            )}
-          </div>
-        </header>
+      <main className="mx-auto max-w-7xl min-w-0 overflow-x-hidden px-4 sm:px-8 lg:px-12 py-8 sm:py-12 space-y-10">
+        <RegionHeader
+          regionId={state._id}
+          regionName={state.name}
+          countryId={countryId}
+          countryName={countryConfig.name}
+          countryHref={countryUrl(countryId)}
+          regionHref={regionUrl}
+          descriptor={getStateDescriptor(state._id, countryConfig.regionLabel)}
+          flagSrc={STATE_FLAGS[state._id] ? `/api/flags/${state._id}` : null}
+          bannerSrc={resolveRegionBannerImage(countryId, state._id, state.bannerImage) ?? null}
+          population={formatPopulation(state.population)}
+          gdp={formatGDP(state.gdp, getCurrencyPrefix(countryId))}
+          districts={{
+            label: `${countryConfig.legislature?.lowerChamber?.shortName ?? "House"} districts`,
+            count: state.houseDistricts,
+          }}
+          leans={calculatedLeans}
+          approval={
+            governmentApproval != null
+              ? {
+                  value: governmentApproval,
+                  base: approvalBaseScore ?? governmentApproval,
+                  modifiers: approvalModifiers,
+                  href: regionApprovalUrl(countryId, stateId),
+                }
+              : null
+          }
+          executiveLabel={regionalExecutiveLabel}
+          executive={serializedGovernor}
+          officeHref={officeCanManage || userData?.isAdmin ? `${regionUrl}/office` : null}
+          motto={STATE_MOTTOS[state._id] ?? null}
+          comprising={
+            countryId === "IE" ? (IE_REGION_CONSTITUENT_COUNCILS[state._id] ?? null) : null
+          }
+          relocate={{
+            userHomeState: userData?.character?.homeState,
+            userCountryId: userData?.character?.countryId,
+          }}
+          currentParty={currentParty}
+        />
 
         {/* Tabbed Content */}
         <Suspense fallback={<RegionTabsSkeleton />}>

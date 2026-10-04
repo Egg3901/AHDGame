@@ -12,11 +12,7 @@ import {
   assertPrivateEnterprisePermitted,
   isPrivateEnterpriseBlocked,
 } from "@/lib/economy/queries/privateEnterpriseGate";
-import {
-  getGdpAnchorRate,
-  loadWorldEraUnitScale,
-  loadWorldPreset,
-} from "@/lib/currency/gdpAnchorRate";
+import { loadWorldEraUnitScale, loadWorldPreset } from "@/lib/currency/gdpAnchorRate";
 import { getEraFounderShares, getEraNominalScale } from "@/lib/constants/sectorSeedEra";
 import { autoGrantedNodeIds } from "@/lib/constants/techTree";
 import { resolveGameYear } from "@/lib/era/era";
@@ -24,14 +20,17 @@ import { getStartingYearForPreset } from "@/lib/constants/turnTime";
 import {
   CORPORATION_TYPES,
   type CorporationType,
+  type ManufacturingIndustryModel,
   DEFAULT_SHARE_PRICE,
   CEO_INITIAL_SHARES,
   DEFAULT_PROFIT_MARGIN,
   DEFAULT_SECTOR_STARTING_REVENUE,
   DEFAULT_SECTOR_STARTING_WORKERS,
 } from "@/lib/constants/corporations";
-import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
+import { COUNTRY_CURRENCY_MAP, getSeedCurrencyCode } from "@/lib/constants/currencies";
 import {
+  anchorToCorpCapital,
+  getCurrencyFxRate,
   getSectorHostFxRate,
   resolveSectorHostCurrencyCode,
 } from "@/lib/currency/corporationCapital";
@@ -39,17 +38,20 @@ import { writeCorpEconomicLocal } from "@/lib/currency/corpEconomyFields";
 import { getNextSequentialId } from "@/lib/db/sequentialId";
 import { randomBrandColor } from "@/lib/corporations/brandColor";
 import { computeUnownedSeedRevenue } from "@/lib/admin/seed/seedUnownedSectors";
+import { seedPlantLedger } from "@/lib/corporations/plantLedger";
 import { createNPP } from "@/lib/npp/generator";
 import {
   generateTickerSymbol,
   insertCorporationWithTickerRetry,
 } from "@/lib/corporations/tickerSymbol";
+import { witnessCorporationStartingGrant } from "@/lib/corporations/startingGrantLedger";
 import {
   computeUnownedHeadroomUnits,
   unownedHeadroomUnitsPerAnchor,
 } from "@/lib/market/unownedHeadroom";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { capacityRescaleRatio } from "@/lib/constants/capacityEconomy";
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
 import { US_NPP_CAPITAL_STATE } from "@/lib/countries/us/geographyFacts";
 import { UK_NPP_CAPITAL_STATE } from "@/lib/countries/uk/geographyFacts";
@@ -138,6 +140,7 @@ export interface SpawnNppCorporationInput {
   name: string;
   /** Sector type — determines which unowned market it captures from */
   type: CorporationType;
+  industryModel?: ManufacturingIndustryModel | null;
   /** Country where the corporation is headquartered */
   countryId: CountryId;
   /** State code where the corporation is headquartered and operates */
@@ -233,6 +236,7 @@ export interface SpawnNppCorporationResult {
   sequentialId: number;
   name: string;
   type: CorporationType;
+  industryModel?: ManufacturingIndustryModel | null;
   countryId: CountryId;
   headquartersState: string;
   /** In the corp's local currency (`liquidCurrencyCode`), as persisted. */
@@ -279,6 +283,7 @@ export async function spawnNppCorporation(
     tickerSymbol: customTicker,
     nppPartyId,
   } = input;
+  const industryModel = input.industryModel ?? null;
 
   // A planned economy has no private sector to spawn into. Throws rather than
   // returning a sentinel because every caller already handles a throw:
@@ -304,7 +309,7 @@ export async function spawnNppCorporation(
   const boundedPool = input.limitToUnownedPool
     ? await db
         .collection("unownedSectors")
-        .findOne({ stateId: headquartersState, sectorType: type })
+        .findOne({ stateId: headquartersState, sectorType: type, industryModel })
     : null;
   // Reject before allocating an NPP CEO or corporation when the sim pool is
   // exhausted. The regular admin spawn path retains its historical floor.
@@ -314,7 +319,7 @@ export async function spawnNppCorporation(
         typeof boundedPool.headroomUnits === "number" && Number.isFinite(boundedPool.headroomUnits)
           ? Math.floor(
               Math.max(0, boundedPool.headroomUnits) /
-                unownedHeadroomUnitsPerAnchor(type, eraUnitScale)
+                unownedHeadroomUnitsPerAnchor(type, eraUnitScale, industryModel)
             )
           : boundedPool.revenue
       )
@@ -325,8 +330,10 @@ export async function spawnNppCorporation(
     );
   }
 
-  // Get currency for the country
-  const currencyCode = COUNTRY_CURRENCY_MAP[countryId];
+  // Get currency for the country (preset-aware: 2027 euro members spawn EUR corps)
+  const spawnPreset = await loadWorldPreset(db);
+  const currencyCode =
+    getSeedCurrencyCode(countryId, spawnPreset) ?? COUNTRY_CURRENCY_MAP[countryId];
   if (!currencyCode) {
     throw new Error(`No currency configured for country "${countryId}"`);
   }
@@ -359,13 +366,16 @@ export async function spawnNppCorporation(
   //     countries (JP, NG, BR) are not seeded with tiny local books. A flat 2M
   //     LOCAL left e.g. JP corps at ~19k ₳ vs UK/US at ~2M — an ~800x
   //     cross-nation gap that also kept those corps below the nominal cash
-  //     floors gating expansion. See balance audit (2026-07-21).
+  //     floors gating expansion. See balance audit (2026-07-21). Converted at
+  //     the world's market rate, the same rate the cash is valued at: the GDP
+  //     normalization factor differs from it wherever authored GDP is not at
+  //     the era's market rate (1991 NG, PL, BG; 1953 JP, IT), see #2985.
   //  2. ERA: ₳2,000,000 is a MODERN absolute (refs #3778 §3). 1953 nominal GDP
   //     is ~70x smaller, so the unscaled default handed a fresh NPP corp more
   //     cash than several 1953 regional sector markets put together. Deflating
   //     by the era's nominal scale keeps the founding book the same share of
   //     the economy it is in a 2019 world. No-op for every modern preset.
-  const preset = await loadWorldPreset(db);
+  const preset = spawnPreset;
   const techGameState = await db.collection<GameState>("gameState").findOne(
     { _id: "current" },
     {
@@ -379,13 +389,19 @@ export async function spawnNppCorporation(
   );
   const techGrantIds =
     techGameState?.sectorTechTreesEnabled === true
-      ? autoGrantedNodeIds(type, resolveGameYear(techGameState) ?? getStartingYearForPreset(preset))
+      ? autoGrantedNodeIds(
+          getOperatingSectorType(type, industryModel) as CorporationType,
+          resolveGameYear(techGameState) ?? getStartingYearForPreset(preset)
+        )
       : [];
   const startingCapital =
     customCapital ??
     Math.round(
-      (NPP_DEFAULT_STARTING_CAPITAL_ANCHOR * getEraNominalScale(preset)) /
-        getGdpAnchorRate(countryId, preset)
+      anchorToCorpCapital(
+        NPP_DEFAULT_STARTING_CAPITAL_ANCHOR * getEraNominalScale(preset),
+        currencyCode,
+        await getCurrencyFxRate(db, currencyCode)
+      )
     );
 
   // Determine starting revenue: use custom, or derive from unowned market.
@@ -406,7 +422,7 @@ export async function spawnNppCorporation(
       boundedPool ??
       (await db
         .collection("unownedSectors")
-        .findOne({ stateId: headquartersState, sectorType: type }));
+        .findOne({ stateId: headquartersState, sectorType: type, industryModel }));
     if (unowned?.revenue) {
       startingRevenue = Math.round(unowned.revenue * 0.25);
     } else {
@@ -414,7 +430,7 @@ export async function spawnNppCorporation(
         gdp: state.gdp,
         countryId,
         stateId: headquartersState,
-        sectorType: type,
+        sectorType: getOperatingSectorType(type, industryModel),
         preset,
       });
     }
@@ -452,6 +468,7 @@ export async function spawnNppCorporation(
     name,
     tickerSymbol,
     type,
+    ...(industryModel ? { industryModel } : {}),
     ceoId: npp._id,
     ceoType: "npp",
     ceoVacant: false,
@@ -484,6 +501,13 @@ export async function spawnNppCorporation(
   };
 
   await insertCorporationWithTickerRetry(db, corpDoc as Corporation);
+  await witnessCorporationStartingGrant(db, {
+    corporationId: corpId,
+    amountLocal: startingCapital,
+    currencyCode,
+    turn: input.foundedAtTurn,
+    now,
+  });
 
   // ─── Plants: the founding sector is GRANTED capacity, not a revenue line ──
   //
@@ -499,11 +523,11 @@ export async function spawnNppCorporation(
   // ₳/day to units/day.
   const plantsEnabled = marketAtLeast(await getMarketSystemModeForDb(db), "plants");
   const startingCapacityUnitsStandard = plantsEnabled
-    ? computeUnownedHeadroomUnits(type, startingRevenue, eraUnitScale)
+    ? computeUnownedHeadroomUnits(type, startingRevenue, eraUnitScale, industryModel)
     : 0;
   const startingCapacityUnits = plantsEnabled
     ? startingCapacityUnitsStandard *
-      capacityRescaleRatio(type, "standard", input.initialStrategyId)
+      capacityRescaleRatio(type, "standard", input.initialStrategyId, industryModel)
     : 0;
 
   // ─── Currency: `corporateSectors.revenue` is stored in the sector's HOST-state
@@ -536,6 +560,7 @@ export async function spawnNppCorporation(
     countryId,
     stateId: headquartersState,
     sectorType: type,
+    ...(industryModel ? { industryModel } : {}),
     // Plants births grow via build orders, never via the growth slider.
     targetGrowthRate: plantsEnabled ? 0 : 3, // Moderate growth
     currentGrowthRate: 0,
@@ -550,6 +575,7 @@ export async function spawnNppCorporation(
     ...(plantsEnabled
       ? {
           capitalStock: startingCapacityUnits,
+          ...seedPlantLedger(type, startingCapacityUnits, industryModel),
           // Born under plants — never needs the flip-turn migration.
           plantsStartTurn: input.foundedAtTurn ?? 0,
         }
@@ -563,7 +589,7 @@ export async function spawnNppCorporation(
     boundedPool ??
     (await db
       .collection("unownedSectors")
-      .findOne({ stateId: headquartersState, sectorType: type }));
+      .findOne({ stateId: headquartersState, sectorType: type, industryModel }));
   if (unownedSector) {
     const captureAmount = startingRevenue;
     const newRevenue = Math.max(0, unownedSector.revenue - captureAmount);
@@ -602,6 +628,7 @@ export async function spawnNppCorporation(
     sequentialId,
     name,
     type,
+    ...(industryModel ? { industryModel } : {}),
     countryId,
     headquartersState,
     startingCapital,
@@ -623,6 +650,11 @@ export async function batchSpawnNppCorporations(
   options?: {
     /** Specific sector types to spawn (default: all 17) */
     sectorTypes?: CorporationType[];
+    /** Explicit model identities, used by fresh model-aware seeds. */
+    sectorMarkets?: Array<{
+      type: CorporationType;
+      industryModel?: ManufacturingIndustryModel | null;
+    }>;
     /** Starting capital per corp (default: 2M local currency) */
     startingCapital?: number;
     /** HQ state (default: country capital from NPP_CAPITAL_STATES) */
@@ -659,18 +691,23 @@ export async function batchSpawnNppCorporations(
 
   const hqState = options?.headquartersState ?? defaultHq;
 
-  const sectorTypes = options?.sectorTypes ?? [...CORPORATION_TYPES];
+  const sectorMarkets: Array<{
+    type: CorporationType;
+    industryModel?: ManufacturingIndustryModel | null;
+  }> =
+    options?.sectorMarkets ??
+    (options?.sectorTypes ?? [...CORPORATION_TYPES]).map((type) => ({ type }));
   const perSectorCount = Math.max(1, Math.floor(options?.perSectorCount ?? 1));
   const results: SpawnNppCorporationResult[] = [];
 
-  for (const type of sectorTypes) {
+  for (const { type, industryModel } of sectorMarkets) {
     for (let i = 0; i < perSectorCount; i++) {
       // Generate a thematic name based on sector and country — passing the
       // growing results list (including same-sector prior spawns this loop)
       // keeps names distinct across all perSectorCount competitors.
       const name = generateNppCorpName(
         countryId,
-        type,
+        getOperatingSectorType(type, industryModel) as CorporationType,
         results.map((r) => r.name)
       );
 
@@ -678,6 +715,7 @@ export async function batchSpawnNppCorporations(
         const result = await spawnNppCorporation(db, {
           name,
           type,
+          industryModel,
           countryId,
           headquartersState: hqState,
           startingCapital: options?.startingCapital,

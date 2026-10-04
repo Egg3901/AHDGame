@@ -47,8 +47,14 @@ export async function GET(request: Request) {
                   as: "mailArr",
                 },
               },
-              { $addFields: { mail: { $arrayElemAt: ["$mailArr", 0] } } },
-              { $unset: "mailArr" },
+              // Fall back to the report's snapshot once the live message is
+              // gone (world reset, or deleted by both sides).
+              {
+                $addFields: {
+                  mail: { $ifNull: [{ $arrayElemAt: ["$mailArr", 0] }, "$mailSnapshot"] },
+                },
+              },
+              { $unset: ["mailArr", "mailSnapshot"] },
             ],
             totalCount: [{ $count: "count" }],
           },

@@ -16,8 +16,9 @@
  */
 
 import type { Db } from "mongodb";
-import { findMergedRegionMetrics, findMergedRegionMetricsMany } from "@/lib/macroMetrics/merge";
+import { findMergedRegionMetrics } from "@/lib/macroMetrics/merge";
 import type { CountryId } from "@/lib/constants/countries";
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import type {
   Election,
   ElectionCandidate,
@@ -126,7 +127,10 @@ export async function getStateOverview(
   for (const p of parties) partyBySequentialId.set(String(p.sequentialId), p);
 
   // Build the per-party rows.
-  const partyOrg: PartyOrgRow[] = partyOrgRows.map((row) => {
+  const activePartyOrgRows = partyOrgRows.filter(
+    (row) => partyBySequentialId.get(row.partyId)?.isDefunct !== true
+  );
+  const partyOrg: PartyOrgRow[] = activePartyOrgRows.map((row) => {
     const party = partyBySequentialId.get(row.partyId);
     const abbr = party?.abbreviation ?? row.partyId.toUpperCase();
     return {
@@ -156,7 +160,7 @@ export async function getStateOverview(
   // regSource reflects whether the *top* party has a real Reg field — that's
   // what the KPI strip displays. A tiny third party having a real value
   // doesn't make the headline number "real" if the headline party doesn't.
-  const topRow = top ? partyOrgRows.find((r) => r.partyId === top.id) : undefined;
+  const topRow = top ? activePartyOrgRows.find((r) => r.partyId === top.id) : undefined;
   const regSource: "field" | "derived" = topRow?.registration != null ? "field" : "derived";
 
   const gdp = stateDoc?.gdp ?? 0;
@@ -233,7 +237,7 @@ function buildTopSectors(
   const cache = stateDoc?.topSectorsCache;
   if (cache && cache.sectors.length > 0) {
     return cache.sectors.map((s) => ({
-      id: s.sectorType,
+      id: getOperatingSectorType(s.sectorType, s.industryModel, s.mediaDiscriminator),
       share: 0,
       specializationBonus: s.specializationBonus,
     }));

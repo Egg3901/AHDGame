@@ -5,6 +5,7 @@ import {
   forecast,
   buildEnemy,
   resolvePvpBattle,
+  softenRetreatUnit,
   battleForecast,
   supplyState,
   generalOfForTest,
@@ -682,6 +683,29 @@ describe("retreat (break off)", () => {
     expect(r.attacker.loss).toBe(summed);
     // The side that did NOT break keeps its unsoftened total, also self-consistent.
     expect(r.defender.loss).toBe(r.defender.unitResults.reduce((s, u) => s + u.casualties, 0));
+  });
+
+  it("softens equipment and readiness losses for the side that breaks off", () => {
+    const softened = softenRetreatUnit(
+      {
+        id: "u1",
+        name: "Division",
+        role: "frontline",
+        dom: "ground",
+        type: "Infantry Division",
+        casualties: 100,
+        readiness: 50,
+        materiel: 5,
+        xp: 12,
+        promo: false,
+      },
+      70
+    );
+
+    expect(softened.casualties).toBe(60);
+    expect(softened.readiness).toBe(58);
+    expect(softened.materiel).toBe(3);
+    expect(softened.xp).toBe(12);
   });
 
   it("an even matchup that never breaks records no retreat", () => {

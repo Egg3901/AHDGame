@@ -53,6 +53,46 @@ export async function seedSettlementIndexes(db: Db, log: (msg: string) => void) 
 
   await ensureIndex(
     db,
+    "russianPresidentialOfficeArchives",
+    { electionId: 1 },
+    { name: "russianPresidentialOfficeArchives_election" },
+    log
+  );
+
+  await ensureIndex(
+    db,
+    "russianPresidentialElectionResults",
+    { preset: 1, resolvedOnTurn: -1 },
+    { name: "russianPresidentialElectionResults_preset_turn" },
+    log
+  );
+
+  await ensureIndex(
+    db,
+    "russianConstitutionalProposals",
+    { preset: 1, status: 1 },
+    { name: "russianConstitutionalProposals_preset_status" },
+    log
+  );
+
+  await ensureIndex(
+    db,
+    "federationContinuingServiceTurns",
+    { applicationId: 1, turn: -1 },
+    { name: "federationContinuingServiceTurns_application_turn" },
+    log
+  );
+
+  await ensureIndex(
+    db,
+    "federationLegacyServiceTurns",
+    { applicationId: 1, turn: -1 },
+    { name: "federationLegacyServiceTurns_application_turn" },
+    log
+  );
+
+  await ensureIndex(
+    db,
     "settlementPlays",
     { crisisId: 1, resolvedTurn: 1 },
     { name: "settlementPlays_crisis_resolved" },

@@ -1,3 +1,12 @@
+import {
+  organizationCashContext,
+  organizationLocalPerAnchor,
+  organizationTreasuryLocalPerAnchor,
+  settleOrganizationFundedCashMove,
+  withOrganizationCashBatch,
+  witnessOrganizationCash,
+  type OrganizationCashOptions,
+} from "./cashLedger";
 /**
  * Tribute — what a member pays when it has no vote.
  *
@@ -31,6 +40,7 @@
  */
 import { ObjectId, type Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
+import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { getGdpAnchorRate, loadWorldPreset } from "@/lib/currency/gdpAnchorRate";
 import {
   DEFAULT_ORG_DUES_RATE_ANNUAL,
@@ -60,7 +70,8 @@ const EMPTY: TributeResult = { collectedLocal: 0, payers: 0, minted: 0 };
 export async function chargeOrganizationTribute(
   db: Db,
   organizationId: string,
-  access?: AccessTable
+  access?: AccessTable,
+  options?: OrganizationCashOptions
 ): Promise<TributeResult> {
   // Cheapest gate first: only the two armed blocs levy tribute at all, so every
   // other organisation costs one lookup rather than a database read.
@@ -77,91 +88,198 @@ export async function chargeOrganizationTribute(
   const payers = await tributeMembers(db, organizationId, access);
   if (payers.length === 0) return { ...EMPTY };
 
-  const gdpByEntity = await loadGdpUsdMillionsByEntity(db, payers);
+  // Reuse the preset already loaded above. Besides avoiding a second
+  // `gameState` round trip, this keeps GDP normalization and the tribute scope
+  // on one coherent era snapshot for the whole charge.
+  const gdpByEntity = await loadGdpUsdMillionsByEntity(db, payers, preset);
   if (gdpByEntity.size === 0) return { ...EMPTY };
 
-  const { currencyCountryId } = await getOrganizationFund(
-    db,
-    organizationId as InternationalOrganizationId
-  );
-  const fundRate = getGdpAnchorRate(currencyCountryId, preset);
-  const budget = db.collection<FederalBudget>("federalBudget");
-  const now = new Date();
+  const context = await organizationCashContext(db, options);
+  return withOrganizationCashBatch(db, context, async (batch) => {
+    const { currencyCountryId } = await getOrganizationFund(
+      db,
+      organizationId as InternationalOrganizationId
+    );
+    const fundRate = getGdpAnchorRate(currencyCountryId, preset);
+    const budget = db.collection<FederalBudget>("federalBudget");
+    const now = new Date();
 
-  // One read for the whole roll rather than one per payer: this runs inside a
-  // per-organisation sweep every turn, so a findOne here would fan out to a
-  // round-trip per membership across the whole world.
-  const treasuries = new Map(
-    (await budget.find({ countryId: { $in: payers as CountryId[] } }).toArray()).map((row) => [
-      row.countryId as string,
-      row,
-    ])
-  );
+    // One read for the whole roll rather than one per payer: this runs inside a
+    // per-organisation sweep every turn, so a findOne here would fan out to a
+    // round-trip per membership across the whole world.
+    const treasuries = new Map(
+      (
+        await budget
+          .find({ countryId: { $in: payers as CountryId[] } }, { projection: { countryId: 1 } })
+          .toArray()
+      ).map((row) => [row.countryId as string, row])
+    );
 
-  let collectedLocal = 0;
-  let minted = 0;
-  let paid = 0;
-
-  for (const payer of payers) {
-    // Absent from the map means "no economic data", which is not the same as a
-    // GDP of zero — an entity we cannot price is skipped, not charged nothing.
-    const gdpUsdMillions = gdpByEntity.get(payer);
-    if (gdpUsdMillions === undefined || !(gdpUsdMillions > 0)) continue;
-
-    const owedUsd = (gdpUsdMillions * GDP_MILLIONS_TO_USD * rateAnnual) / ORG_DUES_TURNS_PER_YEAR;
-    if (!(owedUsd > 0)) continue;
-
-    const fundCredit = Math.round(owedUsd / fundRate);
-    if (fundCredit <= 0) continue;
-
-    // A row at all, not a solvent one: its absence is what marks an entity the
-    // game does not model a treasury for, whose tribute has to be minted.
-    const treasury = treasuries.get(payer);
-    if (treasury) {
-      const payerRate = getGdpAnchorRate(payer as CountryId, preset);
-      const owedLocal = Math.round(owedUsd / payerRate);
-      // Charged whatever the treasury's sign, exactly as dues are.
-      //
-      // This used to be floored at solvency — "never push a treasury negative"
-      // — which sounded prudent and made the whole system inert. A treasury
-      // balance is a SIGNED cash position where negative simply means national
-      // debt, and in 1953 every priced NATO member is in debt (France at
-      // -$4.2tn). Under the floor not one member ever paid, so tribute
-      // collected nothing at all. A state meets its obligations by borrowing;
-      // the consequences of that debt are modelled by debt-to-GDP, the credit
-      // rating and sovereign default, not by an alliance declining to invoice.
-      await budget.updateOne(
-        { countryId: payer as CountryId },
-        { $inc: { treasuryBalance: -owedLocal }, $set: { updatedAt: now } }
+    let collectedLocal = 0;
+    let minted = 0;
+    let paid = 0;
+    const fundedCash = batch?.treasuryCashLedgerEnabled === true;
+    if (fundedCash) {
+      await getOrganizationFundsCollection(db).then((col) =>
+        col.updateOne(
+          { organizationId: organizationId as InternationalOrganizationId },
+          {
+            $setOnInsert: {
+              _id: new ObjectId(),
+              organizationId: organizationId as InternationalOrganizationId,
+              balanceLocal: 0,
+              currencyCountryId,
+              duesRateAnnual: DEFAULT_ORG_DUES_RATE_ANNUAL,
+            },
+          },
+          { upsert: true }
+        )
       );
-    } else {
-      minted += fundCredit;
     }
 
-    collectedLocal += fundCredit;
-    paid++;
-  }
+    for (const payer of payers) {
+      // Absent from the map means "no economic data", which is not the same as a
+      // GDP of zero — an entity we cannot price is skipped, not charged nothing.
+      const gdpUsdMillions = gdpByEntity.get(payer);
+      if (gdpUsdMillions === undefined || !(gdpUsdMillions > 0)) continue;
 
-  if (collectedLocal > 0) {
-    const col = await getOrganizationFundsCollection(db);
-    await col.updateOne(
-      { organizationId: organizationId as InternationalOrganizationId },
-      {
-        $inc: { balanceLocal: collectedLocal },
-        $set: { updatedAt: now },
-        $setOnInsert: {
-          _id: new ObjectId(),
-          organizationId: organizationId as InternationalOrganizationId,
-          currencyCountryId,
-          // If tribute is what first creates the fund row, it still has to carry
-          // a dues rate — the voting members' levy is a separate lever and must
-          // not be left undefined by the order the two happen to run in.
-          duesRateAnnual: DEFAULT_ORG_DUES_RATE_ANNUAL,
+      const owedUsd = (gdpUsdMillions * GDP_MILLIONS_TO_USD * rateAnnual) / ORG_DUES_TURNS_PER_YEAR;
+      if (!(owedUsd > 0)) continue;
+
+      const fundCredit = Math.round(owedUsd / fundRate);
+      if (fundCredit <= 0) continue;
+
+      // A row at all, not a solvent one: its absence is what marks an entity the
+      // game does not model a treasury for, whose tribute has to be minted.
+      const treasury = treasuries.get(payer);
+      if (fundedCash && batch) {
+        if (!treasury) continue;
+        const payerRate = organizationTreasuryLocalPerAnchor(batch, payer as CountryId);
+        const owedLocal = Math.round(owedUsd / payerRate);
+        if (owedLocal <= 0) continue;
+        const fundRate = organizationLocalPerAnchor(batch, currencyCountryId);
+        const fundedAmount = (owedLocal / payerRate) * fundRate;
+        const result = await settleOrganizationFundedCashMove(db, batch, {
+          key: `organization-tribute:${batch.turn}:${organizationId}:${payer}`,
+          kind: "organization_tribute",
+          source: {
+            collection: "federalBudget",
+            filter: { countryId: payer, treasuryCashLocal: { $gte: owedLocal } },
+            path: "treasuryCashLocal",
+            amount: owedLocal,
+            currencyCode:
+              batch.budgetCurrencies.get(payer) ??
+              COUNTRY_CURRENCY_MAP[payer as CountryId] ??
+              "USD",
+            localPerAnchor: payerRate,
+          },
+          destination: {
+            collection: "organizationFunds",
+            filter: { organizationId: organizationId as InternationalOrganizationId },
+            path: "balanceLocal",
+            amount: fundedAmount,
+            currencyCode: COUNTRY_CURRENCY_MAP[currencyCountryId] ?? "USD",
+            localPerAnchor: fundRate,
+          },
+          sourceTreasuryCountry: payer as CountryId,
+          command: "organization.tribute.collect",
+        });
+        if (result.status !== "applied") continue;
+        collectedLocal += fundedAmount;
+        paid++;
+        if (result.status === "applied") {
+          await witnessOrganizationCash(db, batch, {
+            kind: "government",
+            ref: payer,
+            countryId: payer as CountryId,
+            amount: -owedLocal,
+            site: "tribute_treasury",
+            now,
+          });
+          await witnessOrganizationCash(db, batch, {
+            kind: "org",
+            ref: organizationId,
+            countryId: currencyCountryId,
+            amount: fundedAmount,
+            site: "tribute_fund",
+            now,
+          });
+        }
+      } else if (treasury) {
+        const payerRate = getGdpAnchorRate(payer as CountryId, preset);
+        const owedLocal = Math.round(owedUsd / payerRate);
+        // Charged whatever the treasury's sign, exactly as dues are.
+        //
+        // This used to be floored at solvency — "never push a treasury negative"
+        // — which sounded prudent and made the whole system inert. A treasury
+        // balance is a SIGNED cash position where negative simply means national
+        // debt, and in 1953 every priced NATO member is in debt (France at
+        // -$4.2tn). Under the floor not one member ever paid, so tribute
+        // collected nothing at all. A state meets its obligations by borrowing;
+        // the consequences of that debt are modelled by debt-to-GDP, the credit
+        // rating and sovereign default, not by an alliance declining to invoice.
+        const debit = await budget.updateOne(
+          { countryId: payer as CountryId },
+          { $inc: { treasuryBalance: -owedLocal }, $set: { updatedAt: now } }
+        );
+        if (debit.modifiedCount > 0) {
+          await witnessOrganizationCash(db, batch, {
+            kind: "government",
+            ref: payer,
+            countryId: payer as CountryId,
+            amount: -owedLocal,
+            site: "tribute_treasury",
+            now,
+          });
+        }
+      } else {
+        minted += fundCredit;
+      }
+
+      collectedLocal += fundCredit;
+      paid++;
+    }
+
+    if (!fundedCash && collectedLocal > 0) {
+      const col = await getOrganizationFundsCollection(db);
+      const credit = await col.updateOne(
+        { organizationId: organizationId as InternationalOrganizationId },
+        {
+          $inc: { balanceLocal: collectedLocal },
+          $set: { updatedAt: now },
+          $setOnInsert: {
+            _id: new ObjectId(),
+            organizationId: organizationId as InternationalOrganizationId,
+            currencyCountryId,
+            // If tribute is what first creates the fund row, it still has to carry
+            // a dues rate — the voting members' levy is a separate lever and must
+            // not be left undefined by the order the two happen to run in.
+            duesRateAnnual: DEFAULT_ORG_DUES_RATE_ANNUAL,
+          },
         },
-      },
-      { upsert: true }
-    );
-  }
+        { upsert: true }
+      );
+      if (credit.modifiedCount > 0 || credit.upsertedCount > 0) {
+        await witnessOrganizationCash(db, batch, {
+          kind: "org",
+          ref: organizationId,
+          countryId: currencyCountryId,
+          amount: collectedLocal - minted,
+          site: "tribute_fund",
+          now,
+        });
+        await witnessOrganizationCash(db, batch, {
+          kind: "org",
+          ref: organizationId,
+          countryId: currencyCountryId,
+          amount: minted,
+          site: "tribute_mint",
+          now,
+          modeledTribute: true,
+        });
+      }
+    }
 
-  return { collectedLocal, payers: paid, minted };
+    return { collectedLocal, payers: paid, minted };
+  });
 }

@@ -1,0 +1,269 @@
+{
+  "title": "Media operating-model production rules",
+  "inputs": "Checked-in strategy/catalog constants only; no database, seed mutation, or world simulation.",
+  "year": 1991,
+  "nominalOutputRule": "Model output rates are value shares of the existing standard nominal output budget.",
+  "inputCostRule": "Each model keeps the demand rates of its named existing sector-strategy input basket.",
+  "selectionRule": "Existing tech unlock and paid retool command are required; models are not seed grants.",
+  "politicalReachRule": "Only completed seller allocations contribute political attention; an unsettled plan contributes zero.",
+  "models": [
+    {
+      "lane": "media",
+      "id": "newspaper",
+      "model": "Newspaper",
+      "availableFromYear": 1900,
+      "currentTech": {
+        "decade": "1940",
+        "nodeName": "Wartime Press Partnerships"
+      },
+      "baselineOutputValueBudget": 0.5,
+      "modelOutputValueBudget": 0.5,
+      "outputRates": {
+        "advertising": 0.5
+      },
+      "inputRates": {
+        "software": 0.15,
+        "electronics": 0.1,
+        "consulting_services": 0.06,
+        "real_estate_services": 0.03
+      },
+      "capacityRescaleRatio": 1,
+      "capacityValuePreserved": true,
+      "buildQueuePaidValuePreserved": true,
+      "sharesRecomposeToBaselineBudget": true,
+      "eligibleIn1991": true,
+      "seedDefaultUsesStandard": true,
+      "costsUseExistingInputBasket": true
+    },
+    {
+      "lane": "media",
+      "id": "radio_network",
+      "model": "Radio Network",
+      "availableFromYear": 1920,
+      "currentTech": {
+        "decade": "1940",
+        "nodeName": "Radio Network Dominance"
+      },
+      "baselineOutputValueBudget": 0.5,
+      "modelOutputValueBudget": 0.5,
+      "outputRates": {
+        "advertising": 0.5
+      },
+      "inputRates": {
+        "electronics": 0.15,
+        "energy": 0.1
+      },
+      "capacityRescaleRatio": 1,
+      "capacityValuePreserved": true,
+      "buildQueuePaidValuePreserved": true,
+      "sharesRecomposeToBaselineBudget": true,
+      "eligibleIn1991": true,
+      "seedDefaultUsesStandard": true,
+      "costsUseExistingInputBasket": true
+    },
+    {
+      "lane": "media",
+      "id": "broadcast_tv",
+      "model": "Broadcast Television",
+      "availableFromYear": 1950,
+      "currentTech": {
+        "decade": "1950",
+        "nodeName": "Television Broadcasting"
+      },
+      "baselineOutputValueBudget": 0.5,
+      "modelOutputValueBudget": 0.5,
+      "outputRates": {
+        "advertising": 0.5
+      },
+      "inputRates": {
+        "electronics": 0.15,
+        "energy": 0.1
+      },
+      "capacityRescaleRatio": 1,
+      "capacityValuePreserved": true,
+      "buildQueuePaidValuePreserved": true,
+      "sharesRecomposeToBaselineBudget": true,
+      "eligibleIn1991": true,
+      "seedDefaultUsesStandard": true,
+      "costsUseExistingInputBasket": true
+    },
+    {
+      "lane": "media",
+      "id": "cable_tv",
+      "model": "Cable Television",
+      "availableFromYear": 1980,
+      "currentTech": {
+        "decade": "1989",
+        "nodeName": "Cable Syndication"
+      },
+      "baselineOutputValueBudget": 0.5,
+      "modelOutputValueBudget": 0.5,
+      "outputRates": {
+        "advertising": 0.25,
+        "entertainment_services": 0.25
+      },
+      "inputRates": {
+        "software": 0.15,
+        "network_services": 0.12,
+        "energy": 0.08
+      },
+      "capacityRescaleRatio": 0.625,
+      "capacityValuePreserved": true,
+      "buildQueuePaidValuePreserved": true,
+      "sharesRecomposeToBaselineBudget": true,
+      "eligibleIn1991": true,
+      "seedDefaultUsesStandard": true,
+      "costsUseExistingInputBasket": true
+    },
+    {
+      "lane": "media",
+      "id": "publishing_house",
+      "model": "Publishing House",
+      "availableFromYear": 1900,
+      "currentTech": {
+        "decade": "1950",
+        "nodeName": "Magazine Publishing Scale"
+      },
+      "baselineOutputValueBudget": 0.5,
+      "modelOutputValueBudget": 0.5,
+      "outputRates": {
+        "advertising": 0.25,
+        "entertainment_services": 0.25
+      },
+      "inputRates": {
+        "software": 0.15,
+        "electronics": 0.1,
+        "consulting_services": 0.06,
+        "real_estate_services": 0.03
+      },
+      "capacityRescaleRatio": 0.625,
+      "capacityValuePreserved": true,
+      "buildQueuePaidValuePreserved": true,
+      "sharesRecomposeToBaselineBudget": true,
+      "eligibleIn1991": true,
+      "seedDefaultUsesStandard": true,
+      "costsUseExistingInputBasket": true
+    },
+    {
+      "lane": "media",
+      "id": "streaming_platform",
+      "model": "Streaming Platform",
+      "availableFromYear": 2005,
+      "currentTech": {
+        "decade": "2009",
+        "nodeName": "Streaming Platforms"
+      },
+      "baselineOutputValueBudget": 0.5,
+      "modelOutputValueBudget": 0.5,
+      "outputRates": {
+        "advertising": 0.25,
+        "entertainment_services": 0.25
+      },
+      "inputRates": {
+        "software": 0.15,
+        "network_services": 0.12,
+        "energy": 0.08
+      },
+      "capacityRescaleRatio": 0.625,
+      "capacityValuePreserved": true,
+      "buildQueuePaidValuePreserved": true,
+      "sharesRecomposeToBaselineBudget": true,
+      "eligibleIn1991": false,
+      "seedDefaultUsesStandard": true,
+      "costsUseExistingInputBasket": true
+    },
+    {
+      "lane": "entertainment",
+      "id": "film_studio",
+      "model": "Film Studio",
+      "availableFromYear": 1910,
+      "currentTech": {
+        "decade": "1940",
+        "nodeName": "Hollywood Studio System"
+      },
+      "baselineOutputValueBudget": 0.6,
+      "modelOutputValueBudget": 0.6,
+      "outputRates": {
+        "entertainment_services": 0.6
+      },
+      "inputRates": {
+        "software": 0.15,
+        "electronics": 0.1,
+        "energy": 0.06,
+        "real_estate_services": 0.03
+      },
+      "capacityRescaleRatio": 0.5,
+      "capacityValuePreserved": true,
+      "buildQueuePaidValuePreserved": true,
+      "sharesRecomposeToBaselineBudget": true,
+      "eligibleIn1991": true,
+      "seedDefaultUsesStandard": true,
+      "costsUseExistingInputBasket": true
+    },
+    {
+      "lane": "entertainment",
+      "id": "music_label",
+      "model": "Music Label",
+      "availableFromYear": 1950,
+      "currentTech": {
+        "decade": "1950",
+        "nodeName": "Record Labels"
+      },
+      "baselineOutputValueBudget": 0.6,
+      "modelOutputValueBudget": 0.6,
+      "outputRates": {
+        "entertainment_services": 0.6
+      },
+      "inputRates": {
+        "software": 0.15,
+        "electronics": 0.1,
+        "energy": 0.06,
+        "real_estate_services": 0.03
+      },
+      "capacityRescaleRatio": 0.5,
+      "capacityValuePreserved": true,
+      "buildQueuePaidValuePreserved": true,
+      "sharesRecomposeToBaselineBudget": true,
+      "eligibleIn1991": true,
+      "seedDefaultUsesStandard": true,
+      "costsUseExistingInputBasket": true
+    },
+    {
+      "lane": "entertainment",
+      "id": "streaming_platform",
+      "model": "Streaming Platform",
+      "availableFromYear": 2005,
+      "currentTech": {
+        "decade": "2009",
+        "nodeName": "Streaming Distribution"
+      },
+      "baselineOutputValueBudget": 0.6,
+      "modelOutputValueBudget": 0.6,
+      "outputRates": {
+        "advertising": 0.18,
+        "entertainment_services": 0.42
+      },
+      "inputRates": {
+        "software": 0.2,
+        "energy": 0.1,
+        "real_estate_services": 0.02
+      },
+      "capacityRescaleRatio": 0.95,
+      "capacityValuePreserved": true,
+      "buildQueuePaidValuePreserved": true,
+      "sharesRecomposeToBaselineBudget": true,
+      "eligibleIn1991": false,
+      "seedDefaultUsesStandard": true,
+      "costsUseExistingInputBasket": true
+    }
+  ],
+  "reachExample": {
+    "commercialUnits": 100,
+    "settledPoliticalUnits": 40,
+    "unsettledPoliticalUnitsExcluded": 60,
+    "resultingAudienceShares": {
+      "outlet": 0.714286,
+      "political-outlet": 0.285714
+    }
+  }
+}

@@ -3,6 +3,14 @@ import { governanceStyleFlavor } from "@/lib/governanceStyle/flavor";
 import type { GovernanceStyleAxis, GovernanceStyleScore } from "@/lib/governanceStyle/score";
 import { scoreTone } from "./tones";
 
+const MINUS = "\u2212";
+
+/** A penalty as a signed figure. A zero penalty reads "0.0", never a negative zero. */
+function penaltyFigure(value: number): string {
+  const rounded = value.toFixed(1);
+  return Number(rounded) === 0 ? "0.0" : `${MINUS}${rounded}`;
+}
+
 function BalanceRail({
   description,
   axis,
@@ -24,12 +32,10 @@ function BalanceRail({
     <div>
       <div className="flex items-end justify-between gap-4">
         <div>
-          <div className="font-mono text-body-xs uppercase tracking-[0.18em] text-muted">
+          <div className="font-mono text-body-sm uppercase tracking-[0.18em] text-muted">
             {description}
           </div>
-          <div className={`mt-1 font-display text-heading font-semibold ${accentClass}`}>
-            {axis.label}
-          </div>
+          <div className={`mt-1 text-heading font-semibold ${accentClass}`}>{axis.label}</div>
         </div>
         <div className="font-mono text-heading-lg font-semibold tabular-nums text-foreground">
           {Math.round(axis.value)}
@@ -48,7 +54,7 @@ function BalanceRail({
             <span className="sr-only">{axis.label}</span>
           </span>
         </div>
-        <div className="mt-2 flex justify-between font-mono text-[10px] uppercase tracking-[0.14em] text-muted">
+        <div className="mt-2 flex justify-between font-mono text-body-sm uppercase tracking-[0.14em] text-muted">
           <span>{low}</span>
           <span>{high}</span>
         </div>
@@ -102,73 +108,75 @@ function PowerBalance({ competition }: { competition: DemocraticCompetition }) {
     <div className="border-t border-card-border bg-background/30 px-4 py-4 sm:px-5">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <div className="font-mono text-body-xs uppercase tracking-[0.18em] text-muted">
+          <div className="font-mono text-body-sm uppercase tracking-[0.18em] text-muted">
             Balance of power
           </div>
           <p className="mt-1 text-body-sm text-muted">
             Concentrated control can hollow out an otherwise healthy democracy over time.
           </p>
         </div>
-        <div className="rounded-full border border-card-border bg-card px-3 py-1 font-mono text-body-xs tabular-nums text-muted">
-          {competition.penalty > 0 ? `−${competition.penalty.toFixed(1)} health` : "No pressure"}
+        <div className="rounded-full border border-card-border bg-card px-3 py-1 font-mono text-body-sm tabular-nums text-muted">
+          {Number(competition.penalty.toFixed(1)) > 0
+            ? `${penaltyFigure(competition.penalty)} health`
+            : "No pressure"}
         </div>
       </div>
 
       <div className="mt-4 grid gap-px overflow-hidden rounded-md border border-card-border bg-card-border sm:grid-cols-2 xl:grid-cols-5">
         <div className="bg-card px-3 py-3">
-          <div className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted">
+          <div className="font-mono text-body-sm uppercase tracking-[0.15em] text-muted">
             Chambers
           </div>
           <div className="mt-1 text-body-lg font-semibold tabular-nums text-foreground">
             {competition.dominantSeatShare.toFixed(1)}%
           </div>
-          <div className="mt-1 text-body-xs text-muted">Largest party across {chamberScope}</div>
+          <div className="mt-1 text-body-sm text-muted">Largest party across {chamberScope}</div>
         </div>
         <div className="bg-card px-3 py-3">
-          <div className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted">
+          <div className="font-mono text-body-sm uppercase tracking-[0.15em] text-muted">
             Government
           </div>
           <div className="mt-1 text-body-lg font-semibold text-foreground">
             {governmentStatus(competition)}
           </div>
-          <div className="mt-1 text-body-xs text-muted">Executive and legislature status</div>
+          <div className="mt-1 text-body-sm text-muted">Executive and legislature status</div>
         </div>
         <div className="bg-card px-3 py-3">
-          <div className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted">
+          <div className="font-mono text-body-sm uppercase tracking-[0.15em] text-muted">
             Continuity
           </div>
           <div className="mt-1 text-body-lg font-semibold text-foreground">
             {continuityStatus(competition)}
           </div>
-          <div className="mt-1 text-body-xs text-muted">Same governing settlement</div>
+          <div className="mt-1 text-body-sm text-muted">Same governing settlement</div>
         </div>
         <div className="bg-card px-3 py-3">
-          <div className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted">Court</div>
+          <div className="font-mono text-body-sm uppercase tracking-[0.15em] text-muted">Court</div>
           <div className="mt-1 text-body-lg font-semibold tabular-nums text-foreground">
             {competition.courtSeated >= 5 ? `${competition.courtDominantShare.toFixed(1)}%` : "n/a"}
           </div>
-          <div className="mt-1 text-body-xs text-muted">
+          <div className="mt-1 text-body-sm text-muted">
             {competition.courtSeated >= 5
               ? courtComposition(competition)
               : "Too few justices seated to score concentration"}
           </div>
         </div>
         <div className="bg-card px-3 py-3">
-          <div className="font-mono text-[10px] uppercase tracking-[0.15em] text-muted">
+          <div className="font-mono text-body-sm uppercase tracking-[0.15em] text-muted">
             Institutional cost
           </div>
           <div className="mt-1 text-body-lg font-semibold tabular-nums text-foreground">
-            −{competition.penalty.toFixed(1)}
+            {penaltyFigure(competition.penalty)}
           </div>
-          <div className="mt-1 text-body-xs text-muted">Democratic-health pressure</div>
+          <div className="mt-1 text-body-sm text-muted">Democratic-health pressure</div>
         </div>
       </div>
 
-      <p className="mt-3 text-body-xs leading-relaxed text-muted">
-        Chamber margins: −{competition.seatMarginPenalty.toFixed(1)}. Legislative continuity: −
-        {competition.legislativeContinuityPenalty.toFixed(1)}. Executive continuity: −
-        {competition.executiveContinuityPenalty.toFixed(1)}. Court concentration: −
-        {competition.courtPenalty.toFixed(1)}.
+      <p className="mt-3 text-body-sm leading-relaxed text-muted">
+        Chamber margins: {penaltyFigure(competition.seatMarginPenalty)}. Legislative continuity:{" "}
+        {penaltyFigure(competition.legislativeContinuityPenalty)}. Executive continuity:{" "}
+        {penaltyFigure(competition.executiveContinuityPenalty)}. Court concentration:{" "}
+        {penaltyFigure(competition.courtPenalty)}.
       </p>
     </div>
   );
@@ -195,28 +203,29 @@ export function GovernanceStyleCard({
       className="overflow-hidden rounded-xl border border-card-border bg-card shadow-card"
       aria-labelledby="governance-style-heading"
     >
-      <div className="relative overflow-hidden border-b border-card-border bg-gradient-to-br from-primary/15 via-card to-secondary/10 px-4 py-5 sm:px-5">
-        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold/80 to-transparent" />
-        <div className="relative grid gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(420px,1.1fr)] lg:items-end">
+      <div className="relative overflow-hidden border-b border-card-border px-4 py-5 sm:px-5">
+        {/* Top-aligned: bottom alignment pushed the headline down beside the
+            taller rail panel and left the card's top-left corner empty. */}
+        <div className="relative grid gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(420px,1.1fr)] lg:items-start">
           <div>
-            <div className="flex flex-wrap items-center gap-2 font-mono text-body-xs uppercase tracking-[0.18em] text-muted">
+            <div className="flex flex-wrap items-center gap-2 font-mono text-body-sm uppercase tracking-[0.18em] text-muted">
               <span>National spirit</span>
               <span className="h-1 w-1 rounded-full bg-gold" />
               <span>Liberal democracy</span>
             </div>
             <h2
               id="governance-style-heading"
-              className="mt-3 font-display text-heading-lg font-bold leading-tight text-foreground"
+              className="mt-3 text-heading-lg font-bold leading-tight text-foreground"
             >
               {flavor.headline}
             </h2>
             <p className="mt-2 max-w-xl text-body text-muted">{flavor.institutionalSigns[0]}</p>
             <div className="mt-4 flex flex-wrap gap-2">
-              <span className="rounded-full border border-card-border bg-card/80 px-3 py-1 font-mono text-body-xs text-muted">
+              <span className="rounded-full border border-card-border bg-card/80 px-3 py-1 font-mono text-body-sm text-muted">
                 Political character: {flavor.politicalHeadline}
               </span>
               <span
-                className={`rounded-full border border-card-border bg-card/80 px-3 py-1 font-mono text-body-xs ${healthTone.text}`}
+                className={`rounded-full border border-card-border bg-card/80 px-3 py-1 font-mono text-body-sm ${healthTone.text}`}
               >
                 {score.democraticHealth.label}
               </span>
@@ -248,14 +257,14 @@ export function GovernanceStyleCard({
 
       {score.competition && <PowerBalance competition={score.competition} />}
       {score.competition && scopeNote && (
-        <p className="border-t border-card-border px-4 py-2.5 text-body-xs text-muted sm:px-5">
+        <p className="border-t border-card-border px-4 py-2.5 text-body-sm text-muted sm:px-5">
           {scopeNote}
         </p>
       )}
 
       <div className="grid gap-4 px-4 py-4 sm:px-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.72fr)]">
         <div>
-          <div className="font-mono text-body-xs uppercase tracking-[0.18em] text-muted">
+          <div className="font-mono text-body-sm uppercase tracking-[0.18em] text-muted">
             The institutional assessment
           </div>
           <p className="mt-2 text-body-sm leading-relaxed text-muted">
@@ -263,7 +272,7 @@ export function GovernanceStyleCard({
           </p>
         </div>
         <div className="rounded-md border border-card-border bg-background/30 p-3">
-          <div className="font-mono text-body-xs uppercase tracking-[0.18em] text-muted">
+          <div className="font-mono text-body-sm uppercase tracking-[0.18em] text-muted">
             What this means
           </div>
           <p className="mt-2 text-body-sm leading-relaxed text-muted">

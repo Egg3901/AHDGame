@@ -1,5 +1,14 @@
 import type { ObjectId } from "mongodb";
-import type { CorporationType } from "../../constants/corporations";
+import type { ManufacturingDevelopmentCashReceiptV2 } from "@/lib/products/manufacturingProject";
+import type {
+  MediaProductAdvertisingReceipt,
+  MediaProductDevelopmentReceipt,
+} from "@/lib/products/mediaProduct";
+import type {
+  CorporationType,
+  ManufacturingIndustryModel,
+  MediaDiscriminator,
+} from "../../constants/corporations";
 import type { CountryId } from "../../constants/countries";
 import type { CurrencyCode } from "../../constants/currencies";
 import type { ExtractableResource } from "../../constants/commodities";
@@ -24,6 +33,21 @@ export interface Shareholder {
    * votable amount is `min(superShares, shares)`, see lib/corporations/superShares.
    */
   superShares?: number;
+}
+
+export interface MediaProductAdvertisingObligationV1 {
+  projectId: string;
+  turn: number;
+  amountAnchor: number;
+  buyerAmountLocal: number;
+  buyerCurrencyCode: CurrencyCode;
+  buyerLocalPerAnchor: number;
+  sellerAllocations: Array<{
+    corporationId: string;
+    amountLocal: number;
+    currencyCode: CurrencyCode;
+    localPerAnchor: number;
+  }>;
 }
 
 export interface ShareOrder {
@@ -67,6 +91,13 @@ export interface ShareOrder {
    */
   escrowAnchor?: number;
   status: "open" | "filled" | "cancelled";
+  /**
+   * Idempotency key of the latest fill attempt stamped atomically by the
+   * order-claim write (issue #1672). Lets the next fill on this order resume
+   * a crashed attempt's audit rows instead of leaving them missing. Restored
+   * alongside the claim snapshot when a live attempt compensates.
+   */
+  lastShareFillKey?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -152,6 +183,10 @@ export interface Corporation {
   tickerSymbol?: string;
   description?: string;
   type: CorporationType;
+  /** Specialized model identity when the primary type is manufacturing. */
+  industryModel?: ManufacturingIndustryModel | null;
+  /** Preserves entertainment's legacy operating identity inside media. */
+  mediaDiscriminator?: MediaDiscriminator | null;
   /** Optional secondary sector focus, halves sector match bonus, doubles base sprawl threshold */
   secondaryType?: CorporationType | null;
   /** Turn when primary/secondary type was last switched (for penalty duration) */
@@ -163,8 +198,98 @@ export interface Corporation {
    * at least one financial sector; one bank per corp. See src/lib/db/types/bank.ts.
    */
   bankCharter?: import("./bank").BankCharter;
+  /** Actual primary cash debit holds its epoch until debt and holdings publish. */
+  bankPrimaryFunding?: { tradeId: string; charteredTurn: number };
+  /** Holds an originating epoch until construction cash and its loan book settle. */
+  bankConstructionFunding?: {
+    loanId: string;
+    charteredTurn: number;
+    kind: "funding" | "aborting" | "returning" | "servicing" | "recovery";
+    /** Written with the actual vault debit, never from a quote or cached book. */
+    disbursed: boolean;
+    service?: { key: string; turn: number; sectorId?: string };
+    depositReturn?: {
+      cause: "failure" | "revocation" | "admin_unwind" | "charter_switch";
+      turn: number;
+      releaseResidualToOwner: boolean;
+    };
+  };
+  /** Issuer-selected primary-market underwriter for future issues. */
+  primaryUnderwritingMandate?: import("@/lib/banking/underwritingTypes").PrimaryUnderwritingMandate;
+  /** Frozen unpaid founding IPO plan. The corporation remains private until its journal publishes it. */
+  foundingIpoUnderwritingPending?: {
+    offer: import("@/lib/banking/underwritingTypes").PrimaryUnderwritingOffer & {
+      instrumentId: ObjectId;
+    };
+    grossPlacedLocal: number;
+    turn: number;
+    instrumentProjection: import("@/lib/banking/rules/boundary").TransitionProjection;
+  } | null;
+  /** Original-epoch lease held only while a funded underwriting claim is settling. */
+  bankUnderwritingFunding?: {
+    key: string;
+    issuerCorporationId: ObjectId;
+    instrumentType: "equity" | "corporate_bond";
+    instrumentId?: ObjectId;
+    charteredTurn: number;
+    offer: import("@/lib/banking/underwritingTypes").PrimaryUnderwritingOffer;
+    currencyCode: CurrencyCode;
+    grossLocal: number;
+    feeLocal: number;
+    issuerNetLocal: number;
+    turn: number;
+    issuerName: string;
+    poolCollection: "equityMarketPools" | "bondMarketPools";
+    instrumentProjection: import("@/lib/banking/rules/boundary").TransitionProjection;
+  };
+  /** Cumulative fees from actually funded primary placements, by native currency. */
+  bankUnderwritingIncomeByCurrency?: Partial<Record<CurrencyCode, number>>;
+  /** Bounded issuer-readable receipts for funded primary underwriting fees. */
+  bankUnderwritingReceipts?: Array<{
+    key: string;
+    issuerCorporationId: ObjectId;
+    issuerName: string;
+    instrumentType: "equity" | "corporate_bond";
+    instrumentId?: ObjectId;
+    currencyCode: CurrencyCode;
+    grossPlacedLocal: number;
+    feeLocal: number;
+    issuerNetLocal: number;
+    turn: number;
+    charteredTurn: number;
+  }>;
+  /** Public media editorial position. Missing means neutral for legacy worlds. */
+  editorialStance?: { economic: number; social: number };
+  /** Funded sale proceeds held here until delivered to the matching charter or insurer. */
+  bankTreasuryEscrows?: Record<
+    string,
+    {
+      bankId: string;
+      charteredTurn: number;
+      currencyCode: CurrencyCode;
+      amountLocal: number;
+      tradeId: string;
+    }
+  >;
+  /** Funded sovereign claims held outside the replaceable charter subdocument. */
+  bankSovereignEscrows?: Record<
+    string,
+    {
+      bankId: string;
+      charteredTurn: number;
+      currencyCode: CurrencyCode;
+      amountLocal: number;
+      claimKind: "coupon" | "maturity";
+    }
+  >;
   /** Monotonic generation for atomic proprietary book settlement. */
   bankPropBookRevision?: number;
+  /** Bank-level rolling forex volume survives charter replacement. */
+  bankPropForexVolume?: import("@/lib/banking/rules/propForexFees").PropForexVolume[];
+  /** Fees reserved with a prop trade, delivered from the original cash quote. */
+  bankPropForexFee?: import("@/lib/banking/rules/propForexFees").PropForexFeeReceipt & {
+    amountLocal: number;
+  };
   /**
    * Crash-recovery plan for an in-flight bank-charter transfer
    * (transferCharter.ts, issue #2014). Stamped on the absorbed shell before
@@ -232,7 +357,19 @@ export interface Corporation {
   /** State code where corporation is headquartered */
   headquartersState: string;
   /** Cash on hand */
+  /** Atomic audit key written with an NPP founding debit; observer publication uses this stamp. */
+  nppFoundingCashWitnessKey?: string;
+  /** Atomic admission key for landed NPP capacity-build cash history. */
+  nppReinvestmentCashWitnessKey?: string;
   liquidCapital: number;
+  /** Unfunded realized operating costs by native liquid currency. */
+  operatingCashArrearsByCurrency?: Partial<Record<CurrencyCode, number>>;
+  /** Latest turn that added an operating payable for each currency. */
+  operatingCashArrearsLastTurnByCurrency?: Partial<Record<CurrencyCode, number>>;
+  /** Unpaid federal withholding liabilities in anchor units by country. */
+  federalTaxArrearsAnchorByCountry?: Partial<Record<CountryId, number>>;
+  /** Latest turn that added a tax payable for each country. */
+  federalTaxArrearsLastTurnByCountry?: Partial<Record<CountryId, number>>;
   /**
    * Currency denomination of liquidCapital.
    * Set during forex migration to the corp's home currency.
@@ -327,6 +464,7 @@ export interface Corporation {
     issuedUpfront?: boolean;
     createdAtTurn: number;
     initialPriceLocal: number;
+    underwriting?: import("@/lib/banking/underwritingTypes").PrimaryUnderwritingOffer;
   };
   /** Dividend payout rate (0, 100%). Income × this % is distributed to shareholders each turn. */
   dividendRate?: number;
@@ -383,6 +521,8 @@ export interface Corporation {
   suspended?: boolean;
   /** Turn after which suspension ends (informational, admin must manually resume) */
   suspendedUntilTurn?: number;
+  /** Protected until the owner chooses a playable headquarters after a federation split. */
+  federationPendingHeadquartersId?: string;
   /** Character being offered the CEO position (pending acceptance) */
   pendingCeoCharacterId?: ObjectId;
   /**
@@ -437,6 +577,8 @@ export interface Corporation {
   ownershipState?: "private" | "stateOwned";
   /** Turn this corp was last nationalized. Powers the re-nationalization cooldown (P4+). */
   nationalizedAtTurn?: number;
+  /** Stable mode marker for an interrupted funded whole-corporation taking. */
+  pendingFundedNationalization?: { operationKey: string };
   /**
    * Turn this corp was spun out of a National Corporation (privatization). Powers
    * the re-nationalization cooldown (spec §13.4). Distinct from `lastPrivatizationTurn`
@@ -536,6 +678,17 @@ export interface Corporation {
    * into corporationHistory. Absent until quality pillars (Package B) are live.
    */
   averageQuality?: number;
+  /** Project-bound cash receipt written beside the R&D cash debit while product lines v2 is on. */
+  manufacturingProductDevelopmentReceiptV2?: ManufacturingDevelopmentCashReceiptV2;
+  mediaProductDevelopmentReceiptV1?: MediaProductDevelopmentReceipt;
+  mediaProductAdvertisingReceiptV1?: MediaProductAdvertisingReceipt;
+  /** Frozen original buyer quote, including seller allocations, until durable settlement completes. */
+  mediaProductAdvertisingObligationsV1?: MediaProductAdvertisingObligationV1[];
+  /** Idempotency stamp for a corporation participating in a media ad-market cash write. */
+  advertisingMarketSettledTurnV1?: number;
+  mediaProductDevelopmentPaidTurnV1?: number;
+  /** Idempotency stamp retained after its project-bound cash receipt is consumed. */
+  manufacturingProductDevelopmentPaidTurnV2?: number;
   creditRatingComponents?: {
     debtToEquity: number;
     interestCoverage: number;
@@ -716,6 +869,9 @@ export interface SectorBuildOrder {
    * `src/lib/corporations/buildDelivery.ts`.
    */
   smooth?: boolean;
+  /** Paid, secured construction loan. Absent on ordinary cash-funded orders. */
+  constructionLoanId?: string;
+  constructionClaimId?: string;
 }
 
 export interface CorporateSector {
@@ -725,6 +881,10 @@ export interface CorporateSector {
   countryId: CountryId;
   stateId: string;
   sectorType: CorporationType;
+  /** Optional production model for a specialized manufacturing industry. */
+  industryModel?: ManufacturingIndustryModel | null;
+  /** Preserves entertainment's legacy operating lane inside canonical media. */
+  mediaDiscriminator?: MediaDiscriminator | null;
   /** Optional CEO-defined display name for this specific sector instance */
   displayName?: string;
   /** Player-set target growth rate (% per game year, 48 turns, e.g. 1.5) */
@@ -759,6 +919,21 @@ export interface CorporateSector {
    * Display/telemetry only, never read back into the economy.
    */
   producedUnits?: number;
+  /** Exact output units per commodity for an active manufactured product. */
+  outputUnitsByCommodity?: Partial<Record<string, number>>;
+  /** Nominal output anchor per commodity for the same measured production. */
+  outputAnchorByCommodity?: Partial<Record<string, number>>;
+  /** Current bounded product quality by output commodity. */
+  productQualityByCommodity?: Partial<Record<string, number>>;
+  /** Project-owned output from one clearing offer, distinct from baseline recipe output. */
+  productLineProjectId?: string;
+  /** Turn whose physical project offer and commodity fills were settled. */
+  productLineOutputTurn?: number;
+  productLineOutputUnitsByCommodity?: Partial<Record<string, number>>;
+  productLineSoldUnitsByCommodity?: Partial<Record<string, number>>;
+  productLineQualityByCommodity?: Partial<Record<string, number>>;
+  /** Raw operating-capacity basis used for the measured product output snapshot. */
+  productOutputCapacityUnits?: number;
   /**
    * Plants-tier telemetry: the deliberate market-demand run-rate multiplier
    * applied to this sector's production last turn. 1 means no demand cap;
@@ -978,6 +1153,14 @@ export interface CorporateSector {
    * anchors the fade-in ramp.
    */
   pricingPosture?: number | null;
+  /** Optional industrial input-indexed pricing; ignored while explicit plant costs are off. */
+  pricingMode?: "market" | "costPlus";
+  /** Last producing turn's actual operating costs per nominal output value. */
+  costPlusCostBasis?: {
+    inputCostShare: number;
+    fixedCostShare: number;
+    turn: number;
+  };
   clearingFactor?: number;
   soldFraction?: number;
   /**
@@ -987,6 +1170,11 @@ export interface CorporateSector {
    * selling. Only written when clearing ran.
    */
   soldByCommodity?: Partial<Record<string, number>>;
+  /** Turn whose clearing pass produced soldFraction and soldByCommodity. */
+  soldByCommodityTurn?: number;
+  /** Exact units from that clearing pass; absent for legacy or recording-off turns. */
+  soldUnitsByCommodity?: Partial<Record<string, number>>;
+  soldUnitsByCommodityTurn?: number;
   effectivePosture?: number;
   clearingStartTurn?: number | null;
   /**
@@ -1065,6 +1253,12 @@ export interface CorporateSector {
    * written outside plants mode.
    */
   buildQueue?: SectorBuildOrder[];
+  /** Frozen funded build claim and its cash escrow; absent on legacy sectors. */
+  constructionFinancing?: import("@/lib/banking/rules/constructionBuild").ConstructionBuildClaim;
+  /** A durable owner mutation excludes new construction claims until completion. */
+  constructionPropertyTransition?: { key: string; kind: string };
+  /** Stable mode marker for an interrupted funded single-sector nationalization. */
+  pendingFundedNationalization?: { operationKey: string };
   /**
    * Plants tier (P3a): construction in progress, in ₳ (anchor), the sum of
    * `costPaidAnchor` across the outstanding `buildQueue` orders (D10).
@@ -1164,6 +1358,10 @@ export interface CorporateSector {
    * fallback.
    */
   plantsPnl?: {
+    /** Absent on older snapshots, which use the legacy residual. */
+    costModel?: "legacyResidual" | "explicit";
+    /** Positive plant services within otherOpex, never an additional bill. */
+    plantOverhead?: number;
     /**
      * Realized revenue the P&L was assembled against, inventory sell-down
      * included. Equals the persisted `realizedRevenue` exactly.
@@ -1386,6 +1584,8 @@ export interface CorporateSector {
    * if margins shift before purchase.
    */
   forSale?: {
+    foreclosed?: boolean;
+    pledged?: boolean;
     /** When the listing was created */
     listedAt: Date;
     /**

@@ -19,7 +19,8 @@ vi.mock("@/lib/constants/historicalSeats", () => ({
   getPresetById: vi.fn().mockReturnValue({ deleteDefaultParties: true }),
 }));
 
-vi.mock("@/lib/seeds/ensureDefaultParties", () => ({
+vi.mock("@/lib/seeds/ensureDefaultParties", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/seeds/ensureDefaultParties")>()),
   ensureDefaultParties: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -75,6 +76,63 @@ describe("finalizeResetGameWorld", () => {
     expect(db.collectionMocks.politicalParties.deleteMany).not.toHaveBeenCalledWith({});
     expect(db.collectionMocks.governmentFormations.deleteMany).not.toHaveBeenCalledWith({});
     expect(db.collectionMocks.electionCandidates.deleteMany).not.toHaveBeenCalledWith({});
+  });
+
+  it("fills missing region caches after restoring the new world's demographic defaults", async () => {
+    const demo = {
+      _id: "JP_TEST",
+      countryId: "JP",
+      categoryWeights: { jp: 100 },
+      groups: { voters: { population: 100, turnout: 60, economicLean: -2, socialLean: 3 } },
+    };
+    for (const name of [
+      "demographicDefaults",
+      "stateDemographics",
+      "states",
+      "demographicCategories",
+    ])
+      db.collection(name);
+    db.collectionMocks.demographicDefaults.find().toArray.mockResolvedValue([demo]);
+    db.collectionMocks.stateDemographics.find().toArray.mockResolvedValue([demo]);
+    db.collectionMocks.states
+      .find()
+      .toArray.mockResolvedValue([{ _id: "JP_TEST", countryId: "JP" }]);
+    db.collectionMocks.demographicCategories.find().toArray.mockResolvedValue([
+      {
+        _id: "jp",
+        groups: [{ id: "voters", defaultEconomicLean: -2, defaultSocialLean: 3 }],
+        defaultWeight: 100,
+      },
+    ]);
+    const result = await finalizeResetGameWorld(db as never, {
+      preset: "1991-default",
+      teardown: TEARDOWN,
+      deleteProfiles: true,
+    });
+    expect(result.demographicsReset).toBe(1);
+    expect(db.collectionMocks.states.bulkWrite).toHaveBeenCalledWith(
+      [
+        {
+          updateOne: {
+            filter: { _id: "JP_TEST", countryId: "JP" },
+            update: {
+              $set: {
+                cachedEconomicLean: -2,
+                cachedSocialLean: 3,
+                demographicsLastUpdated: expect.any(Date),
+              },
+            },
+          },
+        },
+      ],
+      { ordered: false }
+    );
+    expect(db.collectionMocks.stateDemographics.updateOne.mock.invocationCallOrder[0]).toBeLessThan(
+      db.collectionMocks.states.bulkWrite.mock.invocationCallOrder[0]
+    );
+    expect(result.finalizeLog).toContain(
+      "Regional leans: 1 filled; 0 missing demographics; 0 missing weighted categories"
+    );
   });
 
   it("seeds an IMF Corp placeholder after corp wipe", async () => {

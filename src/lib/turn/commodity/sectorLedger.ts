@@ -20,7 +20,7 @@ import {
 } from "@/lib/constants/commodities";
 import { isPlannedEconomy } from "@/lib/constants/commandEconomy";
 import { plannedEconomyMediaSupplyFactor } from "@/lib/constants/sectorStrategies";
-import { getEffectiveStrategyRates } from "@/lib/constants/sectorStrategies";
+import { getEffectiveStrategyRatesForOperatingModel } from "@/lib/constants/sectorStrategies";
 import type { CorporationType } from "@/lib/constants/corporations";
 import { impliedOutputUnits } from "@/lib/market/capital";
 import { realizedOutputFraction } from "@/lib/extraction/realizedOutputFraction";
@@ -107,6 +107,8 @@ export function buildSectorRows(inputs: SectorRowInputs): SectorLedgerRow[] {
       );
     return {
       sectorType: s.sectorType,
+      industryModel: s.industryModel,
+      mediaDiscriminator: s.mediaDiscriminator,
       revenue: readCorpEconomicAnchor(s.revenue, hostCurrencyCode, hostFxRate),
       stateId: s.stateId,
       sectorId: s._id.toString(),
@@ -127,6 +129,10 @@ export function buildSectorRows(inputs: SectorRowInputs): SectorLedgerRow[] {
         ledgerCommandEconomyEnabled
       ),
       producedUnits: typeof s.producedUnits === "number" ? s.producedUnits : null,
+      outputUnitsByCommodity: s.outputUnitsByCommodity,
+      outputAnchorByCommodity: s.outputAnchorByCommodity,
+      productQualityByCommodity: s.productQualityByCommodity,
+      soldByCommodity: s.soldByCommodity,
       // Output shipped to a state arsenal under a defence contract does not
       // also reach the market. Resolved for staleness here because this is
       // where the turn is known; the ledger itself only multiplies.
@@ -212,12 +218,14 @@ export function buildExtractionRevenueInputs(
     const hasStrategy = sector.strategyId && sector.strategyId !== "standard";
     const strategyRates =
       hasStrategy || sector.transitionFromStrategyId
-        ? getEffectiveStrategyRates(
+        ? getEffectiveStrategyRatesForOperatingModel(
             "extraction",
             sector.strategyId ?? "standard",
             sector.transitionFromStrategyId,
             sector.transitionStartTurn,
-            turn
+            turn,
+            sector.industryModel,
+            sector.mediaDiscriminator
           )
         : null;
 
@@ -287,12 +295,14 @@ export function accumulatePlantsUnits(
   for (const sector of sectorData) {
     if (sector.sectorType === "extraction" || sector.mothballed) continue;
     if (typeof sector.producedUnits !== "number") continue;
-    const rates = getEffectiveStrategyRates(
-      sector.sectorType as Parameters<typeof getEffectiveStrategyRates>[0],
+    const rates = getEffectiveStrategyRatesForOperatingModel(
+      sector.sectorType,
       sector.strategyId ?? "standard",
       sector.transitionFromStrategyId,
       sector.transitionStartTurn,
-      turn
+      turn,
+      sector.industryModel,
+      sector.mediaDiscriminator
     );
     const supplyRates = rates.supply ?? {};
     // Same legs the ledger applies on top of producedUnits (natcorpScale x
@@ -307,6 +317,26 @@ export function accumulatePlantsUnits(
       isNatcorp: sector.isNatcorp,
       embargoSupplyFactor: sector.embargoSupplyFactor,
     };
+    if (sector.outputUnitsByCommodity) {
+      const productScale = plantsSupplyScaledUnits({ ...scaleArgs, producedUnits: 1 }) ?? 1;
+      for (const [commodity, rawProduced] of Object.entries(sector.outputUnitsByCommodity) as [
+        CommodityType,
+        number,
+      ][]) {
+        if (!Number.isFinite(rawProduced) || rawProduced <= 0) continue;
+        const producedExact = rawProduced * productScale;
+        const soldFraction = sector.soldByCommodity?.[commodity];
+        const soldUnits =
+          typeof soldFraction === "number" && Number.isFinite(soldFraction)
+            ? producedExact * Math.max(0, Math.min(1, soldFraction))
+            : 0;
+        const entry = plantsUnitsByCommodity.get(commodity) ?? { produced: 0, sold: 0 };
+        entry.produced += producedExact;
+        entry.sold += soldUnits;
+        plantsUnitsByCommodity.set(commodity, entry);
+      }
+      continue;
+    }
     const produced =
       plantsSupplyScaledUnits({ ...scaleArgs, producedUnits: sector.producedUnits }) ?? 0;
     const sold =

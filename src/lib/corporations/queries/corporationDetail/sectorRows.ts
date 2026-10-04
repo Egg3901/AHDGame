@@ -38,6 +38,7 @@ import {
 } from "@/lib/corporations/realizedGrowth";
 import { computeFillRate, fillRateBand } from "@/lib/corporations/financialFogOfWar";
 import { summarizeBuildQueue } from "@/lib/corporations/sectorBuildQueue";
+import { queueUndeliveredCost } from "@/lib/corporations/buildDelivery";
 import { readPlantsPnl } from "@/lib/corporations/plantsPnlBasis";
 import { seedPlantLedger } from "@/lib/corporations/plantLedger";
 import {
@@ -55,11 +56,13 @@ import { evaluateModifiers } from "@/lib/utils/approvalModifiers";
 import { resolveGameYear } from "@/lib/era/era";
 import { buildFlatMetrics } from "@/lib/utils/governmentApproval";
 import {
-  getEffectiveStrategyRates,
+  getEffectiveStrategyRatesForOperatingModel,
+  getOperatingSectorType,
   STRATEGY_TRANSITION_MARGIN_PENALTY,
   STRATEGY_TRANSITION_TURNS,
 } from "@/lib/constants/sectorStrategies";
 import { applyExtractionResourceCapacityToSupply } from "@/lib/corporations/extractionResourceSupply";
+import { plantsNetMarginPct } from "@/lib/corporations/rules/netMargin";
 
 export function getEmptyStateMetricValues(): StateMetricValues {
   return {
@@ -148,6 +151,25 @@ export interface SectorRowContext {
   tariffLookups: { blendPresenceKeys: Set<string>; ftaCoverage: FtaCoverage };
   stateCtx: StateViewContext;
   marketCtx: MarketViewContext;
+  /**
+   * The viewer is this corporation's CEO. Gates the sector levers only the
+   * CEO can set (posted-price posture, wage level): a rival reading them off
+   * the payload would see a competitor's pricing and pay stance for free.
+   */
+  viewerIsCeo?: boolean;
+}
+
+/**
+ * The sector levers only the CEO can set, for the CEO Office operations table.
+ * Empty for every other viewer: a rival reading them off the payload would see
+ * a competitor's posted-price posture and pay stance for free.
+ */
+export function ceoSectorLevers(
+  sector: Pick<CorporateSector, "pricingPosture" | "wageLevel">,
+  viewerIsCeo: boolean
+): { pricingPosture?: number | null; wageLevel?: number } {
+  if (!viewerIsCeo) return {};
+  return { pricingPosture: sector.pricingPosture ?? null, wageLevel: sector.wageLevel ?? 1 };
 }
 
 export interface SectorFinancialTotals {
@@ -190,6 +212,7 @@ export function buildSectorDetails(ctx: SectorRowContext) {
     tariffLookups,
     stateCtx,
     marketCtx,
+    viewerIsCeo = false,
   } = ctx;
   const { allTariffs, activeFtaPairs, activeSubsidies } = tariffs;
   const { blendPresenceKeys, ftaCoverage } = tariffLookups;
@@ -217,6 +240,8 @@ export function buildSectorDetails(ctx: SectorRowContext) {
 
   const techCorpView = {
     type: corporation.type,
+    industryModel: corporation.industryModel,
+    mediaDiscriminator: corporation.mediaDiscriminator,
     unlockedTechNodeIds: corporation.unlockedTechNodeIds,
     techDecadeLane: corporation.techDecadeLane,
   };
@@ -242,7 +267,11 @@ export function buildSectorDetails(ctx: SectorRowContext) {
   let totalUnitsOnOrder = 0;
 
   const sectorDetails = sectors.map((sector) => {
-    const st = sector.sectorType as CorporationType;
+    const st = getOperatingSectorType(
+      sector.sectorType,
+      sector.industryModel,
+      sector.mediaDiscriminator
+    ) as CorporationType;
     const metrics = stateMetricsMap.get(sector.stateId) ?? getEmptyStateMetricValues();
 
     const stateBalances = rawStateBalances.get(sector.stateId) ?? new Map();
@@ -261,12 +290,14 @@ export function buildSectorDetails(ctx: SectorRowContext) {
       national: Math.round(nationalWeight * 10000) / 100,
       local: Math.round(localWeight * 10000) / 100,
     };
-    const sectorEffectiveRates = getEffectiveStrategyRates(
+    const sectorEffectiveRates = getEffectiveStrategyRatesForOperatingModel(
       st,
       sector.strategyId ?? "standard",
       sector.transitionFromStrategyId,
       sector.transitionStartTurn,
-      currentTurn
+      currentTurn,
+      sector.industryModel,
+      sector.mediaDiscriminator
     );
     const effectiveSupply = applyExtractionResourceCapacityToSupply(
       st,
@@ -373,7 +404,11 @@ export function buildSectorDetails(ctx: SectorRowContext) {
       metrics,
       commodityMod,
       homeLocationBonus,
-      corporation.type,
+      getOperatingSectorType(
+        corporation.type,
+        corporation.industryModel,
+        corporation.mediaDiscriminator
+      ) as CorporationType,
       sectors.length,
       macroEcon,
       corporation.logisticsStrength ?? 0,
@@ -447,8 +482,14 @@ export function buildSectorDetails(ctx: SectorRowContext) {
         );
     const techEffects =
       currentYear != null
-        ? getSectorTechEffectsForYear(techCorpView, st, currentYear)
-        : getSectorTechEffects(techCorpView, st);
+        ? getSectorTechEffectsForYear(
+            techCorpView,
+            st,
+            currentYear,
+            sector.industryModel,
+            sector.mediaDiscriminator
+          )
+        : getSectorTechEffects(techCorpView, st, sector.industryModel, sector.mediaDiscriminator);
     const techMarginBonus = techEffects.marginBonusPp;
     const stackMargin = softCapEffectiveMargin(
       mods.effective + soeEfficiency + expropriationRisk + techMarginBonus
@@ -586,16 +627,26 @@ export function buildSectorDetails(ctx: SectorRowContext) {
       plantsMode && Number.isInteger(sector.plantCount) && (sector.plantCount ?? 0) >= 0
         ? (sector.plantCount as number)
         : plantsMode
-          ? seedPlantLedger(sector.sectorType, sector.capitalStock).plantCount
+          ? seedPlantLedger(
+              sector.sectorType,
+              sector.capitalStock,
+              sector.industryModel,
+              sector.mediaDiscriminator
+            ).plantCount
           : null;
     const producedUnits =
       plantsMode && Number.isFinite(sector.producedUnits) ? (sector.producedUnits as number) : null;
     const soldUnits =
       plantsMode && Number.isFinite(sector.soldUnits) ? (sector.soldUnits as number) : null;
-    const constructionInProgressAnchor =
-      plantsMode && Number.isFinite(sector.constructionInProgressAnchor)
-        ? (sector.constructionInProgressAnchor as number)
-        : null;
+    const constructionInProgressAnchor = plantsMode
+      ? Math.max(
+          0,
+          queueUndeliveredCost(
+            Array.isArray(sector.buildQueue) ? sector.buildQueue : [],
+            currentTurn
+          )
+        )
+      : null;
     const buildQueueSummary = plantsMode
       ? summarizeBuildQueue(sector.buildQueue, currentTurn)
       : null;
@@ -617,17 +668,22 @@ export function buildSectorDetails(ctx: SectorRowContext) {
         ? sector.deliveryLimitedFreightClass
         : null;
     const mothballed = plantsMode ? sector.mothballed === true : false;
-    // Fill-adjusted margin (ticket #1027 family): realized profit over the full
-    // cost bill, not over sold revenue. `effectiveProfitMargin` divides by the
-    // revenue the SOLD units earned, so a plants sector selling 15% of its
-    // output displays a fat positive margin while it loses money. Profit here
-    // already nets the whole bill, so profit / cost is the honest ratio and it
-    // reconciles with the profit figure shown on the same row. Plants only:
-    // below plants there is no produced-vs-sold split for the margin to lie
-    // about. Presentation only, never read back into the economy.
-    const sectorTotalCost = maintenance + sectorGrowthCostLocal;
+    // Net margin (ticket #1027 family): realized profit over realized revenue,
+    // with the whole bill, unsold output included, already netted out of
+    // profit. `effectiveProfitMargin` divides by the revenue the SOLD units
+    // earned, so a plants sector selling 15% of its output displays a fat
+    // positive margin while it loses money. Plants only: below plants there is
+    // no produced-vs-sold split for the margin to lie about. Presentation only,
+    // never read back into the economy. Rules: `plantsNetMarginPct`.
+    const sectorNetMargin = plantsMode
+      ? plantsNetMarginPct({
+          profit,
+          revenue: financialRevenue,
+          totalCost: maintenance + sectorGrowthCostLocal,
+        })
+      : null;
     const fillAdjustedMarginPct =
-      plantsMode && sectorTotalCost > 0 ? Math.round((profit / sectorTotalCost) * 1000) / 10 : null;
+      sectorNetMargin == null ? null : Math.round(sectorNetMargin * 10) / 10;
 
     if (plantsMode) {
       totalCapacityUnits += capacityUnits ?? 0;
@@ -647,7 +703,11 @@ export function buildSectorDetails(ctx: SectorRowContext) {
       countryId: sector.countryId,
       stateName: stateNameMap.get(sector.stateId) ?? sector.stateId,
       sectorType: sector.sectorType,
-      sectorLabel: CORPORATION_TYPE_LABELS[sector.sectorType as CorporationType],
+      industryModel: sector.industryModel ?? null,
+      sectorLabel:
+        sector.sectorType === "manufacturing" && sector.industryModel === "vehicles"
+          ? "Vehicle manufacturing"
+          : CORPORATION_TYPE_LABELS[st],
       displayName: sector.displayName ?? null,
       targetGrowthRate:
         sector.targetGrowthRate ?? sector.currentGrowthRate ?? sector.growthRate ?? 0,
@@ -691,9 +751,12 @@ export function buildSectorDetails(ctx: SectorRowContext) {
       isReversing: sector.isReversing ?? false,
       productionPolicy: sector.productionPolicy ?? 0,
       productionPolicyLevel: sector.productionPolicyLevel ?? 0,
+      ...ceoSectorLevers(sector, viewerIsCeo),
       forSale: sector.forSale
         ? {
             listedAt: sector.forSale.listedAt,
+            foreclosed: sector.forSale.foreclosed,
+            pledged: sector.forSale.pledged,
             priceAnchor: sector.forSale.priceAnchor,
             npvAnchor: sector.forSale.npvAnchor,
           }

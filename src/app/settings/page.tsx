@@ -34,6 +34,7 @@ import { CampaignSongSection } from "./components/CampaignSongSection";
 import { PoliticsSection } from "./components/PoliticsSection";
 import { AppearanceSection } from "./components/AppearanceSection";
 import { SecuritySection } from "./components/SecuritySection";
+import { BlockedPlayersSection } from "./components/BlockedPlayersSection";
 import { DangerZoneSection } from "./components/DangerZoneSection";
 import { ReferralsSection } from "./components/ReferralsSection";
 import { SupporterPerksSection } from "./components/SupporterPerksSection";
@@ -532,7 +533,10 @@ export function SettingsPageContent() {
         return <RetiredCharactersSection />;
       case "security":
         return (
-          <SecuritySection hasPassword={hasPassword} onPasswordSet={() => setHasPassword(true)} />
+          <>
+            <SecuritySection hasPassword={hasPassword} onPasswordSet={() => setHasPassword(true)} />
+            <BlockedPlayersSection />
+          </>
         );
       case "danger":
         return <DangerZoneSection onAccountDeleted={() => router.push("/")} />;
@@ -916,7 +920,7 @@ export function SettingsPageContent() {
                     <section
                       key={bucket.id}
                       id={`settings-${bucket.id}`}
-                      className="scroll-mt-40 overflow-hidden rounded-3xl border border-card-border bg-card/75 shadow-sm backdrop-blur-sm"
+                      className="scroll-mt-40 overflow-hidden rounded-3xl border border-card-border bg-card shadow-sm"
                     >
                       <div className="border-b border-card-border bg-gradient-to-r from-primary/[0.08] via-transparent to-transparent px-5 py-5 md:px-7">
                         <div className="flex items-start gap-4">

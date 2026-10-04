@@ -9,7 +9,14 @@ import { loadConversionQuoteContext } from "@/lib/currency/euro/quotes";
 import { roundedAggregateCredit } from "@/lib/bonds/rules/roundedAggregateCredit";
 import { getDb } from "@/lib/mongodb";
 import { ObjectId, type AnyBulkWriteOperation } from "mongodb";
-import type { Bond, Corporation, CentralBank, Character, NPP } from "@/lib/db/types";
+import type {
+  Bond,
+  Corporation,
+  CentralBank,
+  Character,
+  FederalBudget,
+  GameConfig,
+} from "@/lib/db/types";
 import type { ImperialCharacter } from "@/lib/db/types/imperialCharacter";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import {
@@ -17,16 +24,28 @@ import {
   CORP_BOND_DUE_SOON_REMINDER_TURNS,
   calculateBondMarketPrice,
   calculateCreditScore,
+  bondAccruesCoupon,
   getBondCouponRate,
   perTurnCouponPayment,
 } from "@/lib/constants/bonds";
 import {
+  getNationalBudgetId,
   getBondCountryId,
   isCorporateBond,
   issueScheduledSovereignBondSeries,
+  freezeFundedSovereignBondMaturityQuote,
+  settleFundedSovereignBondMaturity,
   settleSovereignBondMaturity,
 } from "@/lib/bonds/sovereign";
-import { buildPersonalBalanceBulkOp, getHomeCurrency } from "@/lib/currency/characterFunds";
+import {
+  addBankMaturityClaims,
+  settleBankSovereignClaims,
+} from "@/lib/banking/bankSovereignClaims";
+import {
+  buildPersonalBalanceBulkOp,
+  buildPersonalBalanceInc,
+  getHomeCurrency,
+} from "@/lib/currency/characterFunds";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { getGameState } from "@/lib/gameState";
 import {
@@ -60,11 +79,17 @@ import {
 import { emitBondTurnLedger, snapshotBondHistory, type PartialTxEntry } from "./bondTurnLedger";
 import { autoResolveLingeringDefaults } from "./bondTurnAutoResolve";
 import { applyQePriceSupport } from "@/lib/moneySupply/quantitativeEasing";
+import { loadBondPoolLedgerContext, withBondPoolLedgerBatch } from "@/lib/bonds/marketPoolLedger";
 import { bondPoolCurrency, creditBondPool } from "@/lib/bonds/marketPool";
 import { processBondMarketPoolTurn } from "@/lib/bonds/marketPoolTurn";
 import { placeUnsoldBondUnits, settlePlacementProceeds } from "@/lib/bonds/primaryMarket";
 import { sovereignIssuanceFlowsByCountry } from "@/lib/resetFinance/rules/sovereignProceeds";
 import { sovereignBondOutstanding } from "@/lib/bonds/sovereignPrincipal";
+import { payNppBondReturns, type NppBondReturns } from "./nppBondCash";
+import { treasuryAnchorValuation } from "@/lib/budget/rules/treasuryAccrual";
+import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
+import { roundSavingsAmount } from "@/lib/currency/savingsInterest";
+import { resumeSettlement } from "@/lib/banking/settlementJournal";
 
 export interface BondTurnResult {
   bondsProcessed: number;
@@ -96,7 +121,9 @@ export interface BondTurnResult {
  */
 export async function processBondTurn(
   turn: number,
-  captureSovereignCashProceeds = false
+  config?: Pick<GameConfig, "treasuryCashLedgerEnabled"> & {
+    captureSovereignCashProceeds?: boolean;
+  }
 ): Promise<BondTurnResult> {
   const db = await getDb();
   const steps = substepMarker();
@@ -107,6 +134,7 @@ export async function processBondTurn(
   // treated differently.
   const gameState = await getGameState(db);
   const corporationActionsPaused = gameState?.corporationActionsPaused === true;
+  const captureSovereignCashProceeds = config?.captureSovereignCashProceeds === true;
 
   await db
     .collection("corporations")
@@ -141,7 +169,22 @@ export async function processBondTurn(
   }
   // Size each currency's bond market pool, let savings flow toward its target,
   // and refresh its appetite for each sovereign issuer before anyone trades.
-  await processBondMarketPoolTurn(db, turn, now);
+  const poolLedgerContext = await loadBondPoolLedgerContext(db, turn);
+  // Funded Treasury cash needs a currency valuation even when shadow-ledger
+  // publication is off. Keep this additional read strictly behind its flag.
+  const treasuryCashRates =
+    config?.treasuryCashLedgerEnabled === true && !poolLedgerContext
+      ? new Map(
+          (
+            await db
+              .collection<{ currencyCode: string; rate: number }>("exchangeRates")
+              .find({}, { projection: { currencyCode: 1, rate: 1 } })
+              .toArray()
+          ).map((rate) => [rate.currencyCode, rate.rate])
+        )
+      : null;
+  const authoritativeRates = poolLedgerContext?.rates ?? treasuryCashRates;
+  await processBondMarketPoolTurn(db, turn, now, poolLedgerContext);
   steps.mark("marketPools");
   await processSovereignImfFacilityPayments(db, turn);
   steps.mark("imfPayments");
@@ -156,6 +199,18 @@ export async function processBondTurn(
   steps.mark("sovereignLegislative");
 
   const activeBonds = await db.collection<Bond>("bonds").find({ matured: false }).toArray();
+
+  // Fund the exact holder snapshot this bond turn will pay. A funding failure
+  // stops this payout phase before any creditor credits can escape its journal.
+  // Recovery of an earlier bridge continues even after the last bond matures.
+  if (gameState?.preset === "1991-default") {
+    const { processLegacyFederationServiceTurn } =
+      await import("@/lib/world/succession/legacyServiceTurn");
+    await processLegacyFederationServiceTurn(db, turn, now, activeBonds);
+    const { processContinuingFederationServiceTurn } =
+      await import("@/lib/world/succession/continuingServiceTurn");
+    await processContinuingFederationServiceTurn(db, turn, now, activeBonds);
+  }
 
   if (activeBonds.length === 0) {
     const flows = captureSovereignCashProceeds
@@ -295,11 +350,21 @@ export async function processBondTurn(
   // v3 autonomous NPP bondholders: coupon/maturity are INVESTMENT returns, so
   // they accumulate in ₳ (anchor) and credit the personal forex account
   // (`nppInvestmentCashAnchor`) — NOT the campaign war chest. No LoC garnish /
-  // tx-log / national accounting (mirrors the NPP investment-account isolation).
+  // national accounting (mirrors the NPP investment-account isolation).
   const nppPaymentsAnchor = new Map<string, number>(); // nppId -> coupon/maturity (₳)
-  function addNppPayment(nppIdStr: string, amountAnchor: number, _bondCurrency: CurrencyCode) {
+  const nppReturnKinds = new Map<string, NppBondReturns>();
+  function addNppPayment(
+    nppIdStr: string,
+    amountAnchor: number,
+    _bondCurrency: CurrencyCode,
+    kind: "coupon" | "maturity"
+  ) {
     if (amountAnchor <= 0) return;
     nppPaymentsAnchor.set(nppIdStr, (nppPaymentsAnchor.get(nppIdStr) ?? 0) + amountAnchor);
+    const returns = nppReturnKinds.get(nppIdStr) ?? { total: 0, coupon: 0, maturity: 0 };
+    returns.total = nppPaymentsAnchor.get(nppIdStr)!;
+    returns[kind] += amountAnchor;
+    nppReturnKinds.set(nppIdStr, returns);
   }
   const corpPayments = new Map<string, number>(); // corporationId (holder) -> coupon amount (₳)
   const corpCouponCosts = new Map<string, number>(); // corporationId (issuer) -> total coupon cost (₳)
@@ -311,6 +376,20 @@ export async function processBondTurn(
   const corpMaturityIncome = new Map<string, number>(); // holder corp -> face value (₳)
   const corpMaturityCost = new Map<string, number>(); // issuer corp -> face value (₳)
   const bondMaturityFlows: BondMaturityFlow[] = [];
+  // Read-only due classification is separate from bond.matured/receipt state.
+  // It preserves the pre-default ordering while funded payout is retried under
+  // one due-turn receipt and the bond stays active until every holder is paid.
+  const sovereignMaturityCandidateIds = new Set(
+    activeBonds
+      .filter(
+        (bond) =>
+          !isCorporateBond(bond) &&
+          bond.issuerType === "sovereign" &&
+          !bond.defaulted &&
+          turn >= bond.maturityTurn
+      )
+      .map((bond) => bond._id.toHexString())
+  );
   const bondOps: {
     updateOne: { filter: Record<string, unknown>; update: Record<string, unknown> };
   }[] = [];
@@ -376,7 +455,10 @@ export async function processBondTurn(
 
   // ── Phase 1: Coupon payments ──────────────────────────────────────────────
   for (const bond of activeBonds) {
-    if (bond.defaulted) continue;
+    if (!bondAccruesCoupon(bond)) continue;
+    // Funded sovereign coupon claims are paid or retained as arrears by
+    // TreasuryTurn. Do not run the legacy unfunded holder and pool credits.
+    if (config?.treasuryCashLedgerEnabled === true && bond.issuerType === "sovereign") continue;
 
     // `perTurnCouponPayment(rate, BOND_UNIT_FACE_VALUE)` returns the coupon in
     // the bond's LOCAL currency (`bond.currencyCode`, post-Task-18B). Downstream
@@ -545,8 +627,11 @@ export async function processBondTurn(
           },
         });
       } else if (holder.nppId) {
-        // v3 autonomous NPP bondholder coupon (home-currency only, no tx-log).
-        addNppPayment(holder.nppId.toString(), paymentAnchor, bondCcy);
+        // v3 autonomous NPP bondholder coupon to its separate investment account.
+        addNppPayment(holder.nppId.toString(), paymentAnchor, bondCcy, "coupon");
+      } else if (holder.bankId) {
+        // TreasuryTurn owns this cash leg from its frozen opening-bond plan.
+        // This branch records no second bank credit.
       }
 
       totalCouponsPaid += paymentAnchor;
@@ -633,6 +718,14 @@ export async function processBondTurn(
     // in Phase 5 since they don't participate in the corp default check.
     for (const holder of bond.holders) {
       if (!holder.corporationId) continue;
+      // With the funded cash ledger enabled, sovereign maturity income is
+      // delivered by its frozen per-bond receipt below. Do not optimistically
+      // credit it before that receipt's Treasury debit has landed.
+      if (
+        config?.treasuryCashLedgerEnabled === true &&
+        sovereignMaturityCandidateIds.has(bond._id.toHexString())
+      )
+        continue;
       const creditAnchor = holder.units * faceValueUnitAnchor;
       if (creditAnchor <= 0) continue;
       const key = holder.corporationId.toString();
@@ -854,6 +947,12 @@ export async function processBondTurn(
     }
 
     if (isMatured && !bond.defaulted) {
+      // A journaled bank treasury buy/sale has already reserved units out of
+      // publicFloat or a bank lot. Treasury recovery runs later in BankingTurn;
+      // redeeming this snapshot first would clear the pending inventory before
+      // its funded cash leg can settle. Keep the bond live and retry maturity
+      // on the next turn after the durable trade receipt resolves.
+      if (bond.holders?.some((holder) => holder.bankTreasuryTradeId)) continue;
       // Auto-redeem at maturity: Phase 5 (below) returns face value to every
       // holder from the in-memory `bond.holders` snapshot captured here, then
       // we clear the holdings so the redeemed position does NOT linger. Before
@@ -865,6 +964,14 @@ export async function processBondTurn(
       // the redemption clean and idempotent (the bond leaves `activeBonds`
       // next turn via the `matured: false` filter, so it is never paid twice).
       maturedBonds.push(bond);
+      if (
+        config?.treasuryCashLedgerEnabled === true &&
+        sovereignMaturityCandidateIds.has(bond._id.toHexString())
+      ) {
+        // The per-bond receipt applies retirement last, after cash and holder
+        // legs. Never queue an eager bulk retirement for this path.
+        continue;
+      }
       bondOps.push({
         updateOne: {
           filter: { _id: bond._id },
@@ -1005,6 +1112,310 @@ export async function processBondTurn(
 
   // ── Phase 5: Settle matured bonds ─────────────────────────────────────────
   for (const bond of maturedBonds) {
+    if (
+      config?.treasuryCashLedgerEnabled === true &&
+      sovereignMaturityCandidateIds.has(bond._id.toHexString()) &&
+      bond.countryId
+    ) {
+      const bondCcy = resolveBondCurrency(bond);
+      const budgetId = getNationalBudgetId(bond.countryId);
+      const treasuryValuation = treasuryAnchorValuation({
+        countryId: bond.countryId,
+        currencyCode: bondCcy,
+        preset: gameState?.preset ?? DEFAULT_SEED_PRESET,
+        observedRate: authoritativeRates?.get(bondCcy),
+      });
+      if (!treasuryValuation || !(treasuryValuation.anchorRate > 0)) continue;
+
+      const bankUnits = (bond.holders ?? []).reduce(
+        (sum, holder) =>
+          sum +
+          (holder.bankId && Number.isSafeInteger(holder.charteredTurn)
+            ? Math.max(0, holder.units)
+            : 0),
+        0
+      );
+      const bankAmountLocal = roundSavingsAmount(bankUnits * BOND_UNIT_FACE_VALUE, bondCcy);
+      const totalUnits =
+        (bond.holders ?? []).reduce((sum, holder) => sum + Math.max(0, holder.units), 0) +
+        Math.max(0, bond.publicFloat) +
+        Math.max(0, bond.centralBankHoldings ?? 0);
+      const totalRepaymentLocal = totalUnits * BOND_UNIT_FACE_VALUE;
+      const nonBankRepaymentLocal = Math.max(0, totalRepaymentLocal - bankAmountLocal);
+
+      const holderLegs: Array<{
+        collection: string;
+        filter: Record<string, unknown>;
+        path: string;
+        amount: number;
+        currencyCode: CurrencyCode;
+        localPerAnchor: number;
+        note: string;
+      }> = [];
+      const maturityEntries: PartialTxEntry[] = [];
+      const addHolderLeg = (
+        collection: string,
+        id: ObjectId | string,
+        path: string,
+        amount: number,
+        currencyCode: CurrencyCode,
+        localPerAnchor: number,
+        note: string
+      ) => {
+        if (!(amount > 0)) return;
+        holderLegs.push({
+          collection,
+          filter: { _id: id },
+          path,
+          amount,
+          currencyCode,
+          localPerAnchor,
+          note,
+        });
+      };
+      const bondFxRate = fxByCurrency.get(bondCcy) ?? 1;
+      for (const holder of bond.holders ?? []) {
+        if (!(holder.units > 0) || holder.bankId) continue;
+        const faceAnchor =
+          holder.units * corpCapitalToAnchor(BOND_UNIT_FACE_VALUE, bondCcy, bondFxRate);
+        if (holder.characterId) {
+          const personalPath = Object.keys(buildPersonalBalanceInc(1, bondCcy, forexEnabled))[0]!;
+          addHolderLeg(
+            "characters",
+            holder.characterId,
+            personalPath,
+            holder.units * BOND_UNIT_FACE_VALUE,
+            bondCcy,
+            bondFxRate,
+            "Pay matured sovereign bond to character"
+          );
+          maturityEntries.push({
+            type: "bond_maturity",
+            turn,
+            createdAt: now,
+            subjectType: "character",
+            subjectId: holder.characterId,
+            charId: holder.characterId.toHexString(),
+            amount: holder.units * BOND_UNIT_FACE_VALUE,
+            currencyCode: bondCcy,
+            meta: {
+              bondId: bond._id.toHexString(),
+              units: holder.units,
+              couponRate: bond.couponRate,
+            },
+          });
+        } else if (holder.imperialCharacterId) {
+          const personalPath = Object.keys(buildPersonalBalanceInc(1, bondCcy, forexEnabled))[0]!;
+          addHolderLeg(
+            "imperialCharacters",
+            holder.imperialCharacterId,
+            personalPath,
+            holder.units * BOND_UNIT_FACE_VALUE,
+            bondCcy,
+            bondFxRate,
+            "Pay matured sovereign bond to imperial character"
+          );
+          maturityEntries.push({
+            type: "bond_maturity",
+            turn,
+            createdAt: now,
+            subjectType: "character",
+            subjectId: holder.imperialCharacterId,
+            charId: holder.imperialCharacterId.toHexString(),
+            isImperial: true,
+            amount: holder.units * BOND_UNIT_FACE_VALUE,
+            currencyCode: bondCcy,
+            meta: {
+              bondId: bond._id.toHexString(),
+              units: holder.units,
+              couponRate: bond.couponRate,
+              imperial: true,
+            },
+          });
+        } else if (holder.corporationId) {
+          const holderCorp = corpMap.get(holder.corporationId.toHexString());
+          const holderCurrency = (resolveCorpLiquidCurrencyCode(holderCorp) ??
+            "USD") as CurrencyCode;
+          const holderFxRate = fxRateForCorpFromMap(holderCorp, fxByCurrency);
+          const localAmount = anchorToCorpCapital(faceAnchor, holderCurrency, holderFxRate);
+          addHolderLeg(
+            "corporations",
+            holder.corporationId,
+            "liquidCapital",
+            localAmount,
+            holderCurrency,
+            holderFxRate,
+            "Pay matured sovereign bond to corporation"
+          );
+          maturityEntries.push({
+            type: "bond_maturity",
+            turn,
+            createdAt: now,
+            subjectType: "corporation",
+            subjectId: holder.corporationId,
+            amount: localAmount,
+            currencyCode: holderCurrency,
+            meta: {
+              bondId: bond._id.toHexString(),
+              units: holder.units,
+              couponRate: bond.couponRate,
+            },
+          });
+        } else if (holder.fundId) {
+          addHolderLeg(
+            "indexFunds",
+            holder.fundId,
+            "cashAnchor",
+            faceAnchor,
+            "USD",
+            1,
+            "Pay matured sovereign bond to investment fund"
+          );
+          maturityEntries.push({
+            type: "bond_maturity",
+            turn,
+            createdAt: now,
+            subjectType: "fund",
+            subjectId: holder.fundId,
+            amount: faceAnchor,
+            anchorAmount: faceAnchor,
+            currencyCode: fundLedgerCurrency(holder.fundId.toHexString()) ?? "USD",
+            meta: {
+              bondId: bond._id.toHexString(),
+              units: holder.units,
+              couponRate: bond.couponRate,
+            },
+          });
+        } else if (holder.nppId) {
+          addHolderLeg(
+            "npps",
+            holder.nppId,
+            "nppInvestmentCashAnchor",
+            faceAnchor,
+            "USD",
+            1,
+            "Pay matured sovereign bond to NPP investment account"
+          );
+        }
+      }
+      if (bond.publicFloat > 0) {
+        addHolderLeg(
+          "bondMarketPools",
+          bondPoolCurrency(bond),
+          "cashLocal",
+          bond.publicFloat * BOND_UNIT_FACE_VALUE,
+          bondCcy,
+          bondFxRate,
+          "Redeem public sovereign bond float to its funded pool"
+        );
+      }
+      if ((bond.centralBankHoldings ?? 0) > 0) {
+        addHolderLeg(
+          "centralBanks",
+          bond.countryId,
+          "reserveBalance",
+          (bond.centralBankHoldings ?? 0) * BOND_UNIT_FACE_VALUE,
+          bondCcy,
+          bondFxRate,
+          "Redeem central-bank sovereign holdings to reserves"
+        );
+      }
+
+      // Lock the bond-owned due quote before creating or paying bank claims.
+      // A short Treasury can leave those claims pending across turns, so the
+      // holder snapshot must already be immutable during that interval.
+      await freezeFundedSovereignBondMaturityQuote(db, {
+        bond,
+        dueTurn: bond.maturityTurn,
+        currencyCode: bondCcy,
+        treasuryLocalPerAnchor: treasuryValuation.anchorRate,
+        nonBankRepaymentLocal,
+        holderLegs,
+        now,
+      });
+
+      const newClaims = await addBankMaturityClaims(db, {
+        budgetId,
+        countryId: bond.countryId,
+        currencyCode: bondCcy,
+        turn,
+        bond,
+        anchorRate: treasuryValuation.anchorRate,
+        treasuryCashLedgerEnabled: true,
+      });
+      let budgetWithClaims = await db
+        .collection<FederalBudget>("federalBudget")
+        .findOne(
+          { _id: budgetId },
+          { projection: { _id: 1, countryId: 1, bankSovereignClaims: 1 } }
+        );
+      if (budgetWithClaims?.bankSovereignClaims?.length) {
+        const dueClaims = budgetWithClaims.bankSovereignClaims.filter(
+          (claim) => claim.kind === "maturity" && claim.bondId === bond._id.toHexString()
+        );
+        if (dueClaims.length > 0) {
+          await settleBankSovereignClaims(db, budgetWithClaims, turn);
+          budgetWithClaims = await db
+            .collection<FederalBudget>("federalBudget")
+            .findOne(
+              { _id: budgetId },
+              { projection: { _id: 1, countryId: 1, bankSovereignClaims: 1 } }
+            );
+          if (
+            budgetWithClaims?.bankSovereignClaims?.some(
+              (claim) => claim.kind === "maturity" && claim.bondId === bond._id.toHexString()
+            )
+          )
+            continue;
+        }
+      }
+      // Claims returned by this attempt or removed by an earlier completed
+      // receipt both represent bank lots already paid from funded Treasury cash.
+      void newClaims;
+
+      let fundedSettlement = await settleFundedSovereignBondMaturity(db, {
+        bond,
+        turn,
+        dueTurn: bond.maturityTurn,
+        currencyCode: bondCcy,
+        treasuryLocalPerAnchor: treasuryValuation.anchorRate,
+        nonBankRepaymentLocal,
+        holderLegs,
+        now,
+      });
+      if (
+        fundedSettlement?.status === "partial" ||
+        (fundedSettlement?.status === "replayed" && fundedSettlement.error)
+      )
+        fundedSettlement = await resumeSettlement(db, fundedSettlement.key);
+      if (
+        !fundedSettlement ||
+        (fundedSettlement.status !== "applied" &&
+          !(fundedSettlement.status === "replayed" && !fundedSettlement.error))
+      )
+        continue;
+
+      txBondEntries.push(...maturityEntries);
+      txBondEntries.push({
+        type: "gov_bond_maturity_payment",
+        turn,
+        createdAt: now,
+        subjectType: "government",
+        countryId: bond.countryId,
+        amount: -nonBankRepaymentLocal,
+        currencyCode: bondCcy,
+        anchorAmount: -nonBankRepaymentLocal / treasuryValuation.anchorRate,
+        meta: {
+          bondId: bond._id.toHexString(),
+          units: nonBankRepaymentLocal / BOND_UNIT_FACE_VALUE,
+          couponRate: bond.couponRate,
+          treasuryCashMovement: true,
+          ...treasuryValuation,
+        },
+      });
+      bondsMatured++;
+      continue;
+    }
     // `units × BOND_UNIT_FACE_VALUE` produces LOCAL (bond.currencyCode per
     // Task-18B). Normalize LOCAL → ₳ once per bond so both holder payouts
     // (addCharPayment re-multiplies by the bond's own FX) and issuer repayment
@@ -1139,7 +1550,7 @@ export async function processBondTurn(
         });
       } else if (holder.nppId) {
         // v3 autonomous NPP bondholder maturity face-value return.
-        addNppPayment(holder.nppId.toString(), faceValueReturnAnchor, bondCcy);
+        addNppPayment(holder.nppId.toString(), faceValueReturnAnchor, bondCcy, "maturity");
       }
     }
 
@@ -1200,11 +1611,6 @@ export async function processBondTurn(
         });
       }
     } else if (bond.countryId) {
-      await settleSovereignBondMaturity(db, bond);
-      // Government-side ledger row: pairs with the holder-side bond_maturity
-      // rows above so a sovereign bond's principal repayment is double-entry
-      // visible. settleSovereignBondMaturity adjusts federal-budget debt but
-      // doesn't track the cash event in financialTxLog itself.
       const sovereignTotalUnits =
         bond.holders.reduce((sum, h) => sum + h.units, 0) +
         bond.publicFloat +
@@ -1214,9 +1620,56 @@ export async function processBondTurn(
       // bondCcy — do NOT FX-convert here. Compare to the corporate-bond branch
       // above which uses `repaymentLocal` (already issuer-local-converted).
       const sovereignRepaymentLocal = sovereignTotalUnits * BOND_UNIT_FACE_VALUE;
+      // Use the authoritative treasury snapshot valuation, including historical
+      // budget-only rates. Validate before the cash operation lands.
+      const valuation = poolLedgerContext
+        ? treasuryAnchorValuation({
+            countryId: bond.countryId,
+            currencyCode: bondCcy,
+            preset: gameState?.preset ?? DEFAULT_SEED_PRESET,
+            observedRate: authoritativeRates?.get(bondCcy),
+          })
+        : undefined;
+      const budgetId = getNationalBudgetId(bond.countryId);
+      const bankMaturityClaims = await addBankMaturityClaims(db, {
+        budgetId,
+        countryId: bond.countryId,
+        currencyCode: bondCcy,
+        turn,
+        bond,
+        anchorRate: valuation?.anchorRate,
+        ledgerShadow: poolLedgerContext !== null,
+        treasuryCashLedgerEnabled: config?.treasuryCashLedgerEnabled === true,
+      });
+      const bankRepaymentLocal = bankMaturityClaims.reduce(
+        (sum, claim) => sum + claim.amountLocal,
+        0
+      );
+      const settlement = await settleSovereignBondMaturity(
+        db,
+        bond,
+        sovereignRepaymentLocal,
+        bankRepaymentLocal
+      );
+      // Missing or concurrently removed budgets do not create phantom cash history.
+      if (!settlement || settlement.amountLocal === 0) continue;
+      let bankMaturityPaidLocal = 0;
+      if (bankMaturityClaims.length > 0) {
+        const budgetWithClaims = await db
+          .collection<FederalBudget>("federalBudget")
+          .findOne({ _id: budgetId }, { projection: { countryId: 1, bankSovereignClaims: 1 } });
+        if (budgetWithClaims?.bankSovereignClaims?.length) {
+          const paid = await settleBankSovereignClaims(db, budgetWithClaims, turn);
+          bankMaturityPaidLocal = bankMaturityClaims
+            .filter((claim) => paid.paidClaimIds.includes(claim.id))
+            .reduce((sum, claim) => sum + claim.amountLocal, 0);
+        }
+      }
+      const treasuryCashPaidLocal =
+        settlement.amountLocal - bankRepaymentLocal + bankMaturityPaidLocal;
       sovereignMaturityCashPaidByCountry.set(
         bond.countryId,
-        (sovereignMaturityCashPaidByCountry.get(bond.countryId) ?? 0) + sovereignRepaymentLocal
+        (sovereignMaturityCashPaidByCountry.get(bond.countryId) ?? 0) + treasuryCashPaidLocal
       );
       sovereignDebtFaceRetiredByCountry.set(
         bond.countryId,
@@ -1235,12 +1688,15 @@ export async function processBondTurn(
         createdAt: now,
         subjectType: "government",
         countryId: bond.countryId,
-        amount: -sovereignRepaymentLocal,
-        currencyCode: bondCcy,
+        amount: -treasuryCashPaidLocal,
+        currencyCode: settlement.currencyCode,
+        ...(valuation ? { anchorAmount: -treasuryCashPaidLocal / valuation.anchorRate } : {}),
         meta: {
           bondId: String(bond._id),
-          units: sovereignTotalUnits,
+          units: treasuryCashPaidLocal / BOND_UNIT_FACE_VALUE,
           couponRate: bond.couponRate,
+          treasuryCashMovement: true,
+          ...(valuation ?? {}),
         },
       });
     }
@@ -1251,10 +1707,16 @@ export async function processBondTurn(
     await db.collection("bonds").bulkWrite(bondOps);
   }
 
-  for (const [currency, credit] of poolCreditsLocal) {
-    await creditBondPool(db, currency, credit.couponsIn, "couponsIn", now);
-    await creditBondPool(db, currency, credit.maturitiesIn, "maturitiesIn", now);
-  }
+  await withBondPoolLedgerBatch(db, poolLedgerContext, async (batch) => {
+    for (const [currency, credit] of poolCreditsLocal) {
+      await creditBondPool(db, currency, credit.couponsIn, "couponsIn", now, {
+        ledgerContext: batch,
+      });
+      await creditBondPool(db, currency, credit.maturitiesIn, "maturitiesIn", now, {
+        ledgerContext: batch,
+      });
+    }
+  });
 
   if (fundPaymentsAnchor.size > 0) {
     const fundPaymentOps = [...fundPaymentsAnchor]
@@ -1278,16 +1740,7 @@ export async function processBondTurn(
   // NOT campaign funds. Isolated bulkWrite — no LoC garnish / national
   // accounting (mirrors the NPP investment-account isolation).
   if (nppPaymentsAnchor.size > 0) {
-    const nppOps = [...nppPaymentsAnchor.entries()].map(([nppIdStr, amountAnchor]) => ({
-      updateOne: {
-        filter: { _id: new ObjectId(nppIdStr) },
-        update: {
-          $inc: { nppInvestmentCashAnchor: Math.round(amountAnchor * 100) / 100 },
-          $set: { updatedAt: now },
-        },
-      },
-    }));
-    if (nppOps.length > 0) await db.collection<NPP>("npps").bulkWrite(nppOps);
+    await payNppBondReturns(db, nppReturnKinds, turn, now);
   }
 
   // Pay character coupon income (in the bond's issuing country currency).

@@ -1,8 +1,16 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render as renderUi, screen } from "@testing-library/react";
+import { NextIntlClientProvider } from "next-intl";
+import messages from "../../../../../messages/en/worldOrganizations.json";
 import type { OrgInfluenceView } from "@/lib/alignment/queries/orgInfluence";
 import { InfluenceTab } from "./InfluenceTab";
+const render = (ui: React.ReactNode) =>
+  renderUi(
+    <NextIntlClientProvider locale="en" messages={messages}>
+      {ui}
+    </NextIntlClientProvider>
+  );
 
 const BASE: OrgInfluenceView = {
   enabled: true,
@@ -26,6 +34,8 @@ const BASE: OrgInfluenceView = {
       resistsAtHalfStrength: true,
       pointCostLocal: 300_000_000,
       turnCapCostLocal: 1_500_000_000,
+      playMaxPoints: 5,
+      playCapCostLocal: 1_500_000_000,
       shares: { WEST: 30, EAST: 50 },
       nonAligned: 20,
       topPoleId: "EAST" as const,
@@ -46,6 +56,8 @@ const BASE: OrgInfluenceView = {
       resistsAtHalfStrength: false,
       pointCostLocal: 60_000_000,
       turnCapCostLocal: 300_000_000,
+      playMaxPoints: 10,
+      playCapCostLocal: 600_000_000,
       shares: { WEST: 30, EAST: 50 },
       nonAligned: 20,
       topPoleId: "EAST" as const,
@@ -124,7 +136,7 @@ describe("InfluenceTab", () => {
               amountLocal: 9e8,
               turn: 4,
               resolvedTurn: 5,
-              appliedPoints: 3,
+              effectivePoints: 3,
               refunded: false,
             },
             {
@@ -134,7 +146,7 @@ describe("InfluenceTab", () => {
               amountLocal: 1e8,
               turn: 6,
               resolvedTurn: null,
-              appliedPoints: null,
+              effectivePoints: null,
               refunded: false,
             },
           ],
@@ -144,7 +156,7 @@ describe("InfluenceTab", () => {
         onChange={() => {}}
       />
     );
-    expect(screen.getByText("3 pts")).toBeTruthy();
+    expect(screen.getByText("3.00 pts")).toBeTruthy();
     expect(screen.getByText("pending")).toBeTruthy();
   });
 
@@ -163,7 +175,7 @@ describe("InfluenceTab", () => {
               amountLocal: 2.5e8,
               turn: 4,
               resolvedTurn: 5,
-              appliedPoints: 0,
+              effectivePoints: 0,
               refunded: true,
             },
           ],
@@ -174,7 +186,34 @@ describe("InfluenceTab", () => {
       />
     );
     expect(screen.getByText("refunded")).toBeTruthy();
-    expect(screen.queryByText("0 pts")).toBeNull();
+    expect(screen.queryByText("0.00 pts")).toBeNull();
+  });
+
+  it("distinguishes a legacy unknown result from an effective zero", () => {
+    render(
+      <InfluenceTab
+        view={{
+          ...BASE,
+          recent: [null, 0].map((effectivePoints) => ({
+            targetEntityId: "YU",
+            targetName: "Yugoslavia",
+            sponsorCountryId: "US",
+            amountLocal: 1e8,
+            turn: 4,
+            resolvedTurn: 5,
+            effectivePoints,
+            refunded: false,
+          })),
+        }}
+        orgId="NATO"
+        viewerCountryId="US"
+        onChange={() => {}}
+      />
+    );
+    expect(screen.getByText("Not recorded")).toBeTruthy();
+    expect(screen.getByText("0.00 pts")).toBeTruthy();
+    expect(screen.queryByText("pending")).toBeNull();
+    expect(screen.queryByText("refunded")).toBeNull();
   });
 
   it("shows a member that pays tribute as a member without a vote", () => {

@@ -28,6 +28,7 @@ export async function abandonTechDecade(
 ): Promise<AbandonTechDecadeResult> {
   const corpView = {
     type: corporation.type,
+    industryModel: corporation.industryModel,
     unlockedTechNodeIds: corporation.unlockedTechNodeIds,
     techDecadeLane: corporation.techDecadeLane,
   };

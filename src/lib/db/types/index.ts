@@ -117,6 +117,7 @@ export type {
   GovernmentStatus,
   GovernmentFormationType,
 } from "./parliamentaryGovernment";
+export type { GovernmentFormation } from "./governmentFormation";
 export type { GovernmentApproval } from "./governmentApproval";
 export type { StateApprovalHistory } from "./stateApproval";
 export type {
@@ -152,6 +153,7 @@ export type {
   SectorBuildOrder,
   ShareOrder,
   Shareholder,
+  MediaProductAdvertisingObligationV1,
   SoeMandate,
   CeoTenure,
 } from "./corporation";
@@ -262,7 +264,13 @@ export type {
   CoalitionJoinRequest,
   CoalitionDisbandVote,
 } from "./coalition";
-export type { PlayerMail, PlayerMailReport } from "./playerMail";
+export type {
+  PlayerMail,
+  PlayerMailReport,
+  PlayerContentReport,
+  PlayerReportReason,
+  PlayerReportContext,
+} from "./playerMail";
 export type { UKCabinetCooldown } from "./ukCabinetCooldown";
 export type {
   UkCommonsVacancy,

@@ -8,6 +8,7 @@ import { ElectionLog } from "@/components/ElectionLog";
 import { PartyOrgManager } from "@/components/PartyOrgManager";
 import { SubTabBar } from "./SubTabBar";
 import { SubNavLayout } from "./SubNavLayout";
+import { SectionLabel } from "@/components/ui/SectionLabel";
 
 const PartyElectionsPanel = dynamic(
   () =>
@@ -54,15 +55,6 @@ export function AdminPoliticsTab({ activeSub, onSubChange }: AdminPoliticsTabPro
   );
 }
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex items-center gap-2 mb-4">
-      <span className="inline-block h-3.5 w-0.5 rounded-full bg-primary flex-shrink-0" />
-      <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">{children}</h2>
-    </div>
-  );
-}
-
 const PrimaryProjectionDebugger = dynamic(
   () =>
     import("@/components/admin/elections/PrimaryProjectionDebugger").then((m) => ({
@@ -89,17 +81,17 @@ function ElectionsSubContent() {
       {innerSub === "manage" && (
         <div className="space-y-10">
           <section>
-            <SectionLabel>Officials</SectionLabel>
+            <SectionLabel className="mb-4">Officials</SectionLabel>
             <OfficialsManager />
           </section>
 
           <section>
-            <SectionLabel>Election Continuity</SectionLabel>
+            <SectionLabel className="mb-4">Election continuity</SectionLabel>
             <ElectionRestartPanel />
           </section>
 
           <section>
-            <SectionLabel>Timers & Schedule</SectionLabel>
+            <SectionLabel className="mb-4">Timers and schedule</SectionLabel>
             <ElectionsManageTab />
           </section>
         </div>
@@ -108,7 +100,7 @@ function ElectionsSubContent() {
       {innerSub === "primary-debug" && (
         <div className="space-y-6">
           <section>
-            <SectionLabel>Presidential Primary Projection</SectionLabel>
+            <SectionLabel className="mb-4">Presidential primary projection</SectionLabel>
             <PrimaryProjectionDebugger />
           </section>
         </div>

@@ -84,6 +84,18 @@ export async function getMailReportDetail(
     messages = candidates.filter((m) => normalizeMailSubject(m.subject) === subjectKey);
   } else if (anchorMail) {
     messages = [anchorMail];
+  } else if (report.mailSnapshot) {
+    // The live message is gone: a world reset dropped it, or both sides
+    // deleted it. Show what was reported, marked deleted.
+    messages = [
+      {
+        _id: report.mailId,
+        ...report.mailSnapshot,
+        read: true,
+        deletedByRecipient: true,
+        deletedBySender: true,
+      },
+    ];
   }
 
   return {
@@ -97,7 +109,7 @@ export async function getMailReportDetail(
       createdAt: report.createdAt.toISOString(),
     },
     reporterUsername: reporter?.username ?? null,
-    subject: anchorMail?.subject ?? null,
+    subject: anchorMail?.subject ?? report.mailSnapshot?.subject ?? null,
     messages: messages.map((m) => serializeMessage(m, report.mailId)),
   };
 }

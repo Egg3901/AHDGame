@@ -7,7 +7,7 @@ import { BLEND, FONT } from "./tokens";
  * Form and callout primitives for the Blend treatment.
  *
  * Blend has no rounded cards and no Tailwind tokens: controls are hairline
- * rectangles, labels are letterspaced mono, prose is Lora. These are shared so
+ * rectangles, labels are letterspaced mono, prose is sans. These are shared so
  * every panel on a Blend screen agrees rather than each restyling by hand.
  */
 
@@ -109,7 +109,7 @@ const NOTE_COLOR: Record<BlendNoteTone, string> = {
   positive: BLEND.positive,
 };
 
-/** A left-ruled callout, Blend's replacement for a tinted card. */
+/** A callout on a faint ground, Blend's replacement for a tinted card. The tone colors the text. */
 export function BlendNote({
   tone = "muted",
   children,
@@ -122,9 +122,8 @@ export function BlendNote({
     <div
       style={{
         padding: "11px 14px",
-        borderLeft: `2px solid ${color}`,
         background: "rgba(255,255,255,.02)",
-        fontFamily: FONT.serif,
+        fontFamily: FONT.sans,
         fontSize: 13.5,
         lineHeight: 1.55,
         color: tone === "muted" ? BLEND.muted : color,
@@ -149,7 +148,7 @@ export function BlendSubPanel({ title, children }: { title?: string; children: R
         <div
           style={{
             marginBottom: 8,
-            fontFamily: FONT.serif,
+            fontFamily: FONT.sans,
             fontSize: 16,
             fontWeight: 600,
           }}
@@ -168,7 +167,7 @@ export function BlendProse({ children }: { children: ReactNode }) {
     <p
       style={{
         margin: "0 0 12px",
-        fontFamily: FONT.serif,
+        fontFamily: FONT.sans,
         fontSize: 13.5,
         lineHeight: 1.55,
         color: BLEND.muted,

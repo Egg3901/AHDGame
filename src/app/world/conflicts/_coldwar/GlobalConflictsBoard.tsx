@@ -8,9 +8,10 @@ import { CW_ROUTES } from "./routes";
 import { ClassificationStrip } from "./ClassificationStrip";
 import { WorldBlocMap } from "./WorldBlocMap";
 import { ColdWarHelp } from "./TensionHeader";
+import { controlSplitDisplay } from "../controlDisplay";
 
 const mono = "'IBM Plex Mono',monospace";
-const serif = "Lora,Georgia,serif";
+const headingFont = "var(--font-geist-sans),system-ui,sans-serif";
 
 /** Global Conflicts — "Conflicts of <in-game year>". Faithful port of the design page. */
 export function GlobalConflictsBoard({ year, conflicts }: { year: number; conflicts: Conflict[] }) {
@@ -72,7 +73,7 @@ export function GlobalConflictsBoard({ year, conflicts }: { year: number; confli
             <h1
               style={{
                 margin: 0,
-                fontFamily: serif,
+                fontFamily: headingFont,
                 fontWeight: 700,
                 fontSize: 34,
                 lineHeight: 1,
@@ -123,7 +124,7 @@ export function GlobalConflictsBoard({ year, conflicts }: { year: number; confli
               <div
                 style={{
                   marginTop: 6,
-                  fontFamily: serif,
+                  fontFamily: headingFont,
                   fontWeight: 700,
                   fontSize: 18,
                   lineHeight: 1.05,
@@ -156,7 +157,7 @@ export function GlobalConflictsBoard({ year, conflicts }: { year: number; confli
               <div
                 style={{
                   marginTop: 6,
-                  fontFamily: serif,
+                  fontFamily: headingFont,
                   fontWeight: 700,
                   fontSize: 18,
                   lineHeight: 1.05,
@@ -192,7 +193,7 @@ export function GlobalConflictsBoard({ year, conflicts }: { year: number; confli
               <div
                 style={{
                   marginTop: 6,
-                  fontFamily: serif,
+                  fontFamily: headingFont,
                   fontWeight: 700,
                   fontSize: 24,
                   lineHeight: 1,
@@ -228,7 +229,7 @@ export function GlobalConflictsBoard({ year, conflicts }: { year: number; confli
               <div
                 style={{
                   marginTop: 6,
-                  fontFamily: serif,
+                  fontFamily: headingFont,
                   fontWeight: 700,
                   fontSize: 24,
                   lineHeight: 1,
@@ -592,7 +593,7 @@ export function GlobalConflictsBoard({ year, conflicts }: { year: number; confli
                     {c.lean != null && (
                       <div
                         data-lean-bar
-                        title={`Bloc balance: ${Math.round(c.lean)}% toward the eastern-backed side. This is derived from territorial control, not world tension.`}
+                        title={`Bloc balance: ${controlSplitDisplay(c.lean).sideB}% toward the eastern-backed side. This is derived from territorial control, not world tension.`}
                         style={{
                           position: "relative",
                           height: 9,

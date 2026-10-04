@@ -9,7 +9,7 @@ export interface RegionValue {
 }
 
 /**
- * Per-region breakdown for one metric — the storage is per-region, national is
+ * Per-region breakdown for one metric. The storage is per-region, national is
  * the population-weighted mean, and this panel shows the spread honestly.
  */
 export function RegionBreakdown({
@@ -22,12 +22,12 @@ export function RegionBreakdown({
   const sorted = [...regions].sort((a, b) => b.value - a.value);
   return (
     <div className="rounded-lg border border-card-border bg-card p-4 shadow-card">
-      <div className="mb-3 font-mono text-body-xs uppercase tracking-widest text-muted">
+      <div className="mb-3 font-mono text-body-sm uppercase tracking-widest text-muted">
         Regional breakdown
       </div>
       <table className="w-full border-collapse">
         <thead>
-          <tr className="text-left font-mono text-body-xs uppercase tracking-wider text-muted">
+          <tr className="text-left font-mono text-body-sm uppercase tracking-wider text-muted">
             <th className="pb-2 font-medium">Region</th>
             <th className="pb-2 font-medium">Score</th>
             <th className="pb-2 text-right font-medium">vs national</th>

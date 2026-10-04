@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { InfoTooltip } from "@/components/InfoTooltip";
 import { GOUGE_JUMP, CONSISTENCY_BAND } from "@/lib/market/brandLoyalty";
 import type { PricingData } from "../types";
@@ -30,12 +31,16 @@ export default function PricingPanel({
   isCeo,
   pricing,
 }: PricingPanelProps) {
+  const costPlusText = useTranslations("corporations.costPlusPricing");
   const [draft, setDraft] = useState<number | null>(pricing.posture);
+  const [pricingMode, setPricingMode] = useState<"market" | "costPlus">(
+    pricing.pricingMode ?? "market"
+  );
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [isError, setIsError] = useState(false);
 
-  const save = async (value: number | null) => {
+  const save = async (value: number | null, mode: "market" | "costPlus" = pricingMode) => {
     setSaving(true);
     setMessage("");
     setIsError(false);
@@ -43,19 +48,29 @@ export default function PricingPanel({
       const res = await fetch(`/api/corporations/${corporationId}/sectors/${sectorId}/pricing`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pricingPosture: value }),
+        body: JSON.stringify({
+          pricingPosture: value,
+          ...(pricing.costPlusEnabled ? { pricingMode: mode } : {}),
+        }),
       });
-      const data = (await res.json()) as { error?: string; pricingPosture?: number | null };
+      const data = (await res.json()) as {
+        error?: string;
+        pricingPosture?: number | null;
+        pricingMode?: "market" | "costPlus";
+      };
       if (!res.ok) {
         setIsError(true);
         setMessage(data.error || "Failed to update pricing");
         return;
       }
       setDraft(data.pricingPosture ?? null);
+      setPricingMode(data.pricingMode ?? mode);
       setMessage(
         data.pricingPosture == null
           ? "Pricing set to automatic."
-          : `Posted price set to ${postureLabel(data.pricingPosture)} vs market.`
+          : mode === "costPlus"
+            ? costPlusText("saved", { markup: `${Math.round(data.pricingPosture * 100)}%` })
+            : `Posted price set to ${postureLabel(data.pricingPosture)} vs market.`
       );
     } catch {
       setIsError(true);
@@ -101,15 +116,40 @@ export default function PricingPanel({
               Share of this sector&apos;s output that found a buyer last turn, blended across every
               commodity it makes and weighted by output rate. Cheaper sellers fill first. A sector
               with two outputs can sell one out completely and the other hardly at all and still
-              land in the middle here — see Commodity Flows for the per-output rates.
+              land in the middle here. See Commodity Flows for the per-output rates.
             </p>
           </InfoTooltip>
         )}
       </div>
       <p className="text-xs text-muted mb-4">
-        Your posted price relative to the market. Demand fills the cheapest sellers first — undercut
-        to sell out ahead of rivals, or skim for margin and risk holding unsold output.
+        {pricingMode === "costPlus"
+          ? costPlusText("explanation")
+          : "Your posted price relative to the market. Demand fills the cheapest sellers first. Undercut to sell out ahead of rivals, or skim for margin and risk holding unsold output."}
       </p>
+
+      {pricing.costPlusEnabled && (
+        <div className="flex gap-2 mb-3" aria-label="Pricing basis">
+          <button
+            type="button"
+            disabled={!isCeo || saving}
+            onClick={() => void save(draft, "market")}
+            aria-pressed={pricingMode === "market"}
+            className="rounded-lg border border-card-border px-3 py-1.5 text-xs disabled:opacity-50"
+          >
+            {costPlusText("marketMode")}
+          </button>
+          <button
+            type="button"
+            disabled={!isCeo || saving || !pricing.costPlusReady}
+            title={pricing.costPlusReady ? undefined : costPlusText("notReady")}
+            onClick={() => void save(draft ?? 0.1, "costPlus")}
+            aria-pressed={pricingMode === "costPlus"}
+            className="rounded-lg border border-card-border px-3 py-1.5 text-xs disabled:opacity-50"
+          >
+            {costPlusText("costPlusMode")}
+          </button>
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-1.5 mb-3">
         {POSTURE_STEPS.map((p) => {
@@ -124,7 +164,7 @@ export default function PricingPanel({
                 p < 0
                   ? "Undercut the market: thinner margin per unit, but your order book fills first."
                   : p > 0
-                    ? "Premium: more revenue per unit sold, but you sell last — in a glut this output can go unsold."
+                    ? "Premium: more revenue per unit sold, but you sell last, so in a glut this output can go unsold."
                     : "Sell at the market price."
               }
               className={`rounded-lg border px-3 py-1.5 text-xs font-medium tabular-nums transition-colors disabled:opacity-50 ${
@@ -140,7 +180,7 @@ export default function PricingPanel({
         <button
           type="button"
           disabled={!isCeo || saving || draft === null}
-          onClick={() => void save(null)}
+          onClick={() => void save(null, "market")}
           title="Let the sector position itself: skim mild premiums into shortages, undercut into gluts."
           className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 ${
             draft === null
@@ -202,7 +242,7 @@ export default function PricingPanel({
                 : "text-error"
           }`}
         >
-          {pricing.clearingFactor == null ? "—" : `×${pricing.clearingFactor.toFixed(2)}`}
+          {pricing.clearingFactor == null ? "n/a" : `×${pricing.clearingFactor.toFixed(2)}`}
         </span>
       </div>
 

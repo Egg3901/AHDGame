@@ -38,10 +38,7 @@ export function PrimaryCard({
   const voteTotal = candidates.reduce((sum, c) => sum + c.percentage, 0) || 1;
 
   return (
-    <div
-      className="rounded-lg border border-card-border bg-card overflow-hidden"
-      style={{ borderLeftWidth: 3, borderLeftColor: partyColor }}
-    >
+    <div className="rounded-lg border border-card-border bg-card overflow-hidden">
       {/* Party Header */}
       <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-card-border/60 bg-card-muted/30">
         <div className="flex items-center gap-2 min-w-0">
@@ -51,9 +48,7 @@ export function PrimaryCard({
             countryId={countryId}
             size="h-4 w-4"
           />
-          <span className="text-xs font-semibold truncate" style={{ color: partyColor }}>
-            {partyName}
-          </span>
+          <span className="text-xs font-semibold truncate">{partyName}</span>
         </div>
         {isUncontested && (
           <span className="text-[10px] text-muted italic shrink-0">
@@ -98,7 +93,6 @@ export function PrimaryCard({
                   className={`tabular-nums text-xs shrink-0 ${
                     candidate.isLeader && !isUncontested ? "font-bold" : "font-medium text-muted"
                   }`}
-                  style={candidate.isLeader && !isUncontested ? { color: partyColor } : undefined}
                 >
                   {candidate.percentage.toFixed(1)}%
                 </span>

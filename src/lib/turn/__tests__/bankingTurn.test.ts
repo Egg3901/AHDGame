@@ -458,6 +458,74 @@ describe("processBankingTurn", () => {
     expect(characterState.savings).toBe(savBefore);
   });
 
+  it.each(["current", "legacy"])(
+    "recovers %s household fee funding after cash moves but tranche insertion fails",
+    async (format) => {
+      db.collectionMocks.bankLoans!.insertOne.mockRejectedValueOnce(
+        new Error("tranche write interrupted")
+      );
+      const first = await processBankingTurn(db as unknown as Db, TURN).catch(() => undefined);
+      expect(first?.banksProcessed ?? 0).toBe(0);
+      const vaultAfterInterrupted = liveCorp.bankCharter!.cashReserves;
+      const poolAfterInterrupted = cbState.externalBroadMoney;
+      expect(loans).toHaveLength(0);
+      if (format === "legacy") {
+        const read = db.collectionMocks.bankMoneyMoves!.findOne.getMockImplementation()!;
+        db.collectionMocks.bankMoneyMoves!.findOne.mockImplementation(async (...args) => {
+          const record = await read(...args);
+          if (record) delete record.event;
+          return record;
+        });
+      }
+      const retry = await processBankingTurn(db as unknown as Db, TURN);
+      expect(retry.banksProcessed).toBe(1);
+      expect(liveCorp.bankCharter!.cashReserves).toBeCloseTo(vaultAfterInterrupted!, 6);
+      expect(cbState.externalBroadMoney).toBeCloseTo(poolAfterInterrupted, 6);
+      const fee = liveCorp.bankCharter!.loanOriginationFeesLifetime ?? 0;
+      expect(fee).toBeGreaterThan(0);
+      expect(liveCorp.bankCharter!.lastBankingLoanOriginationFees).toBe(fee);
+      expect(loans.length).toBeGreaterThan(0);
+      await processBankingTurn(db as unknown as Db, TURN);
+      expect(liveCorp.bankCharter!.loanOriginationFeesLifetime).toBe(fee);
+    }
+  );
+
+  it("charges no new household fee when an empty pool cannot repay a winding-down book", async () => {
+    cbState.externalBroadMoney = 0;
+    db.collectionMocks.centralBanks!.find.mockReturnValue(
+      findCursor([
+        {
+          _id: "US",
+          primeRate: cbState.primeRate,
+          inflationHistory: [{ turn: 1, rate: 0 }],
+          externalBroadMoney: 0,
+          bankReserveRequirement: 0.1,
+        },
+      ])
+    );
+    liveCorp.bankCharter!.npcDeposits = 0;
+    liveCorp.bankCharter!.cashReserves = 0;
+    characterState.savings = 0;
+    liveCorp.bankCharter!.totalLoans = 20_000;
+    loans.push({
+      _id: new ObjectId(),
+      bankCorporationId: bankId,
+      charteredTurn: 1,
+      currency: "USD",
+      borrowerType: "npcBulk",
+      principal: 20_000,
+      outstanding: 20_000,
+      ratePercent: 5,
+      originatedTurn: TURN - 1,
+      termTurns: 48,
+      status: "current",
+    });
+    await processBankingTurn(db as unknown as Db, TURN);
+    expect(liveCorp.bankCharter!.lastBankingLoanOriginationFees).toBe(0);
+    expect(liveCorp.bankCharter!.loanOriginationFeesLifetime ?? 0).toBe(0);
+    expect(cbState.externalBroadMoney).toBe(0);
+  });
+
   it("conserves deposit interest: character + npc credits == bank cash debit (net of premium)", async () => {
     // Disable NPC flow by setting npcDeposits already at a stable target-ish
     // and give the bank enough cash. Use depositOffset so rate is known.
@@ -659,8 +727,11 @@ describe("processBankingTurn", () => {
       .filter((loan) => loan.borrowerType === "npcBulk")
       .reduce((sum, loan) => sum + (loan.outstanding ?? 0), 0);
     const principalLent = npcLoanOutstanding + summary.defaultsWrittenOff;
+    const fees = liveCorp.bankCharter!.lastBankingLoanOriginationFees ?? 0;
+    expect(fees).toBeGreaterThan(0);
+    expect(liveCorp.bankCharter!.loanOriginationFeesLifetime).toBe(fees);
     expect(broadBefore - broadAfter).toBeCloseTo(
-      summary.npcDepositDelta + summary.loanInterestCollected - principalLent,
+      summary.npcDepositDelta + summary.loanInterestCollected - principalLent + fees,
       5
     );
     // npcDeposits also receives deposit interest after the flow, so final stock

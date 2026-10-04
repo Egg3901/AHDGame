@@ -15,16 +15,31 @@
  * entry point; it is not registered in `src/lib/cron.ts`.
  */
 
+import { withBondPoolLedgerSnapshot } from "@/lib/bonds/marketPoolLedger";
+import { recoverAllQueuedPayouts } from "./queuedPayoutSettlement";
+import {
+  claimFundFloatPlan,
+  recoverAllFundFloatSettlements,
+  settleFundFloatPlan,
+  type SettlementFund,
+} from "./fundFloatSettlement";
+import {
+  prepareFundFloatTrade,
+  loadFloatAuditContext,
+  type FloatAuditContext,
+} from "./fundFloatTradePlan";
+import { processQueuedRedemptions } from "./processQueuedRedemptions";
+export { processQueuedRedemptions } from "./processQueuedRedemptions";
+import { assertTransactionSupportAtBoot } from "@/lib/db/transactionSupport";
 import { substepMarker } from "@/lib/observability/phaseSubsteps";
 import { ObjectId } from "mongodb";
-import type { ClientSession, Db, UpdateFilter } from "mongodb";
+import type { Db } from "mongodb";
 import type {
   Corporation,
   ExchangeRate,
   GameConfig,
   IndexFund,
   IndexFundHolding,
-  IndexFundRedemptionQueueEntry,
   IndexFundTargetConstituent,
 } from "@/lib/db/types";
 import { isIndexFundsEnabled, INDEX_FUNDS_DISABLED_MESSAGE } from "@/lib/indexFunds/featureFlag";
@@ -36,34 +51,19 @@ import {
   updateFundNav,
   updateFundConstituents,
   updateFundHoldings,
-  listPendingRedemptions,
-  insertFundTransaction,
   insertFundSnapshot,
   setFundStatus,
-  FUND_REDEMPTION_QUEUE_COLLECTION,
   insertFundTransactionsBulk,
+  insertFundTransaction,
 } from "@/lib/indexFunds/fundQueries";
-import {
-  calculateBackingRatio,
-  quoteCashOnlyRedemption,
-  proRataRedemptionCashShare,
-} from "@/lib/indexFunds/unitAccounting";
+import { calculateBackingRatio } from "@/lib/indexFunds/unitAccounting";
 import {
   buildIndexFundTargetConstituents,
   type IndexFundCandidate,
 } from "@/lib/indexFunds/constituents";
 import { describeFailure } from "./listingStandards";
 import { loadActiveWaiverIds, resolveDueListingPetitions } from "./petitions/service";
-import { creditSharesToFund } from "@/lib/corporations/shareholderOps";
-import {
-  isOrderFlowPriceEligible,
-  resolveShareExecutionPrice,
-} from "@/lib/corporations/marketExecution";
-import {
-  applyFloatBuyCredit,
-  type FloatBuyCreditReceipt,
-} from "@/lib/corporations/shareEscrowSettlement";
-import { recordShareTrade } from "@/lib/corporations/shareTradeHistory";
+import { resolveShareExecutionPrice } from "@/lib/corporations/marketExecution";
 import {
   sellFundHoldingsForRedemptionCash,
   sellFundHoldingShares,
@@ -80,14 +80,9 @@ import {
   sumFundBondHoldingsByFundId,
   sumFundBondHoldingsValueAnchor,
 } from "@/lib/bonds/fundBondHoldings";
-import { sellFundBondHoldingsForCash } from "@/lib/bonds/sellFundBondUnits";
 import { getAllFundDefinitions } from "@/lib/indexFunds/fundDefinitions";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
-import { buildPersonalBalanceInc, loadCharacterFxRate } from "@/lib/currency/characterFunds";
-import {
-  corpLiquidCapitalToAnchor,
-  resolveCorpLiquidCurrencyCode,
-} from "@/lib/currency/corporationCapital";
+import { corpLiquidCapitalToAnchor } from "@/lib/currency/corporationCapital";
 import {
   holdingsNeedMarkToMarketRefresh,
   refreshFundHoldingsMarkToMarket,
@@ -101,16 +96,10 @@ import {
 } from "@/lib/indexFunds/fundCrossRebalancing";
 import { findRemovedConstituentHoldings } from "@/lib/indexFunds/fundConstituentLifecycle";
 import { writeOffDeadConstituentHoldings } from "@/lib/indexFunds/fundHoldingWriteOff";
-import {
-  redemptionEntryStatusAfterPayout,
-  remainingRedemptionUnits,
-} from "@/lib/indexFunds/fundRedemptionQueue";
-import { logIndexFundRedeem, resolveIndexFundHolder } from "@/lib/indexFunds/fundTxLog";
-import { emitTx, emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
+import { loadTxThresholds } from "@/lib/financialTxLog/emit";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { loadFxRatesByCurrency } from "@/lib/currency/corporationCapital";
 import { loadTurnLengthMinutes } from "@/lib/financialTxLog/expiresAt";
-import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
 import { TURNS_PER_DAY, MS_PER_TURN } from "@/lib/constants/turnTime";
 import { placeFundShareBuyOrder, cancelFundShareOrder } from "@/lib/indexFunds/fundShareOrders";
 import {
@@ -118,7 +107,7 @@ import {
   INDEX_FUND_BID_MAX_OPEN_TURNS,
 } from "@/lib/indexFunds/fundBidPolicy";
 import { fxRateForCorpFromMap } from "@/lib/currency/corporationCapital";
-import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
+import { type CurrencyCode } from "@/lib/constants/currencies";
 import type { EquityMarketPool, IndexFundTransaction } from "@/lib/db/types";
 import type { ShareOrder } from "@/lib/db/types";
 import {
@@ -126,13 +115,7 @@ import {
   loadQueuedRedemptionUnitsByFundId,
 } from "@/lib/indexFunds/fundValuation";
 import { refreshEquityLiquidityFacility } from "@/lib/indexFunds/equityLiquidityFacility";
-import {
-  equityPoolCurrency,
-  loadEquityPoolsByCurrency,
-  loadEquityQuote,
-} from "@/lib/equities/marketPool";
-import { EQUITY_MARKET_POOLS_COLLECTION } from "@/lib/db/types/equityMarketPool";
-import { getShareBuybackMode } from "@/lib/corporations/shareBuybackMode";
+import { loadEquityPoolsByCurrency, loadEquityQuote } from "@/lib/equities/marketPool";
 import { boundedParallelMap } from "@/lib/indexFunds/boundedParallelMap";
 
 // ── Types ─────────────────────────────────────────────────────────────
@@ -220,6 +203,7 @@ const INDEX_FUND_CORP_PROJECTION = {
   _id: 1,
   countryId: 1,
   type: 1,
+  mediaDiscriminator: 1,
   secondaryType: 1,
   sharePrice: 1,
   fundamentalSharePrice: 1,
@@ -272,46 +256,6 @@ async function applyMarkToMarketIfNeeded(
 
 // ── Cash helpers for public-float buys ────────────────────────────────
 
-async function atomicallyDebitFundCashAnchor(
-  db: Db,
-  fundId: IndexFund["_id"],
-  amountAnchor: number,
-  options?: { session?: ClientSession }
-): Promise<Pick<IndexFund, "_id" | "cashAnchor" | "holdings"> | null> {
-  if (!Number.isFinite(amountAnchor) || amountAnchor <= 0) return null;
-
-  return db.collection<IndexFund>("indexFunds").findOneAndUpdate(
-    { _id: fundId, cashAnchor: { $gte: amountAnchor } },
-    { $inc: { cashAnchor: -amountAnchor }, $set: { updatedAt: new Date() } },
-    {
-      returnDocument: "after",
-      projection: { _id: 1, cashAnchor: 1, holdings: 1 },
-      ...(options?.session ? { session: options.session } : {}),
-    }
-  );
-}
-
-async function refundFundCashAnchor(
-  db: Db,
-  fundId: IndexFund["_id"],
-  amountAnchor: number,
-  options?: { session?: ClientSession }
-): Promise<void> {
-  if (!Number.isFinite(amountAnchor) || amountAnchor <= 0) return;
-  const result = await db
-    .collection<IndexFund>("indexFunds")
-    .updateOne(
-      { _id: fundId },
-      { $inc: { cashAnchor: amountAnchor }, $set: { updatedAt: new Date() } },
-      options?.session ? { session: options.session } : undefined
-    );
-  if (result.matchedCount !== 1) {
-    throw new Error("Failed to restore fund cash after public-float buy failure");
-  }
-}
-
-// ── Pass 2 / Pass 3b cadence (financial-day boundary) ─────────────────
-
 export function shouldRebalanceIndexFundConstituents(
   currentTurn: number,
   targetConstituentsLength: number
@@ -341,348 +285,57 @@ export function shouldRunCrossFundRebalancing(currentTurn: number): boolean {
  *
  * Debits `shares × sharePriceAnchor` from the fund's `cashAnchor`, credits the
  * shares to the fund, applies the issuer-side float credit, updates holdings,
- * inserts a `public_float_buy` transaction, and fires a `recordShareTrade`
- * side-effect. All writes are wrapped in `runWithOptionalTransaction` so they
- * are atomic on a replica set and individually guarded on standalone mongod.
- *
- * Returns `{ ok: true, sharesBought, anchorSpent }` on success or
- * `{ ok: false, sharesBought: 0, anchorSpent: 0 }` when the debit or credit
- * guard fails (e.g. insufficient cash or float already sold).
+ * freezes the original cash, custody and receipts before settlement. Protected
+ * target receipts allow interrupted standalone and replica-set calls to resume.
+ * Guarded refusal returns ok=false only after its proven effects are reversed.
  */
-/**
- * Shared state for a pass that executes many buys: the pool table read once,
- * and completed audit rows collected for one post-loop insert. Without it a
- * buy is self-contained and inserts its own audit row.
- */
+/** Shared pool and audit inputs for a pass that executes many buys. */
 export interface FundShareBuyBatch {
+  audit?: FloatAuditContext;
+  expectedGeneration?: number;
   /** Mutable: each credited buy advances the snapshot's cash so later quotes see it. */
   pools?: Map<CurrencyCode, EquityMarketPool>;
-  /** Post-loop evidence for completed buys. The caller inserts the batch once. */
-  txSink?: Omit<IndexFundTransaction, "_id">[];
-  /** Fund-subject ledger rows collected per buy and flushed after the pass. */
-  ledgerSink?: Parameters<typeof emitTxBulk>[1];
-}
-
-async function reverseFloatBuyCredit(
-  db: Db,
-  corp: EligibleCorpRow,
-  amountLocal: number,
-  pools?: Map<CurrencyCode, EquityMarketPool>,
-  receipt?: FloatBuyCreditReceipt
-): Promise<void> {
-  const currency = equityPoolCurrency(corp);
-  const snapshot = pools?.get(currency);
-  if (receipt && receipt.issuerShares > 0) {
-    if (receipt.poolCreditLocal > 0) {
-      const poolRollback = await db
-        .collection<EquityMarketPool>(EQUITY_MARKET_POOLS_COLLECTION)
-        .updateOne(
-          { _id: currency, cashLocal: { $gte: receipt.poolCreditLocal } },
-          {
-            $inc: {
-              cashLocal: -receipt.poolCreditLocal,
-              "lifetime.purchasesIn": -receipt.poolCreditLocal,
-            },
-            $set: { updatedAt: new Date() },
-          }
-        );
-      if (poolRollback.matchedCount !== 1)
-        throw new Error("Failed to reverse equity-pool buy credit");
-      if (snapshot)
-        snapshot.cashLocal = Math.max(0, (snapshot.cashLocal ?? 0) - receipt.poolCreditLocal);
-    }
-    const issuerRollback = await db.collection<Corporation>("corporations").updateOne(
-      { _id: corp._id },
-      {
-        $inc: {
-          "pendingShareIssuance.remainingShares": receipt.issuerShares,
-          liquidCapital: -receipt.issuerCreditLocal,
-          shareIssuanceProceeds: -receipt.issuerCreditLocal,
-        },
-        $set: { updatedAt: new Date() },
-      }
-    );
-    if (issuerRollback.matchedCount !== 1) throw new Error("Failed to reverse IPO buy credit");
-    return;
-  }
-  const poolExists = pools
-    ? snapshot !== undefined
-    : Boolean(
-        await db
-          .collection<EquityMarketPool>(EQUITY_MARKET_POOLS_COLLECTION)
-          .findOne({ _id: currency }, { projection: { _id: 1 } })
-      );
-
-  if (poolExists) {
-    const amount = Math.round(amountLocal * 100) / 100;
-    const result = await db.collection<EquityMarketPool>(EQUITY_MARKET_POOLS_COLLECTION).updateOne(
-      { _id: currency, cashLocal: { $gte: amount } },
-      {
-        $inc: { cashLocal: -amount, "lifetime.purchasesIn": -amount },
-        $set: { updatedAt: new Date() },
-      }
-    );
-    if (result.matchedCount !== 1) throw new Error("Failed to reverse equity-pool buy credit");
-    if (snapshot) snapshot.cashLocal = Math.max(0, (snapshot.cashLocal ?? 0) - amount);
-    return;
-  }
-
-  const increment =
-    getShareBuybackMode(corp) === "escrow"
-      ? { shareEscrowBalance: -amountLocal }
-      : { liquidCapital: -amountLocal, shareIssuanceProceeds: -amountLocal };
-  const result = await db
-    .collection<Corporation>("corporations")
-    .updateOne({ _id: corp._id }, { $inc: increment, $set: { updatedAt: new Date() } });
-  if (result.matchedCount !== 1) throw new Error("Failed to reverse issuer buy credit");
-}
-
-async function reverseFundShareCredit(
-  db: Db,
-  corp: EligibleCorpRow,
-  fundId: IndexFund["_id"],
-  shares: number,
-  orderFlowBuyValue: number,
-  previous: { shares: number; avgCostPerShare?: number } | undefined
-): Promise<void> {
-  const expectedShares = (previous?.shares ?? 0) + shares;
-  const update = (previous
-    ? {
-        $inc: {
-          "shareholders.$.shares": -shares,
-          publicFloat: shares,
-          ...(orderFlowBuyValue > 0 ? { orderFlowWindowBuyValue: -orderFlowBuyValue } : {}),
-        },
-        $set: {
-          ...(previous.avgCostPerShare !== undefined
-            ? { "shareholders.$.avgCostPerShare": previous.avgCostPerShare }
-            : {}),
-          updatedAt: new Date(),
-        },
-        ...(previous.avgCostPerShare === undefined
-          ? { $unset: { "shareholders.$.avgCostPerShare": "" } }
-          : {}),
-      }
-    : {
-        $pull: { shareholders: { fundId, shares: expectedShares } },
-        $inc: {
-          publicFloat: shares,
-          ...(orderFlowBuyValue > 0 ? { orderFlowWindowBuyValue: -orderFlowBuyValue } : {}),
-        },
-        $set: { updatedAt: new Date() },
-      }) as unknown as UpdateFilter<Corporation>;
-  const result = await db.collection<Corporation>("corporations").updateOne(
-    {
-      _id: corp._id,
-      shareholders: { $elemMatch: { fundId, shares: expectedShares } },
-    },
-    update
-  );
-  if (result.matchedCount !== 1) throw new Error("Failed to reverse fund share credit");
 }
 
 export async function executeFundShareBuy(
   db: Db,
-  fund: IndexFund,
+  fund: SettlementFund,
   corp: EligibleCorpRow,
   shares: number,
   referencePriceAnchor: number,
   currentTurn: number,
   batch?: FundShareBuyBatch
 ): Promise<{ ok: boolean; sharesBought: number; anchorSpent: number }> {
-  const quote = await loadEquityQuote(db, corp, { pools: batch?.pools });
+  const expectedGeneration = batch?.expectedGeneration ?? fund.floatSettlementGeneration ?? 0;
+  const pools = batch?.pools ?? (await loadEquityPoolsByCurrency(db));
+  const quote = await loadEquityQuote(db, corp, { pools });
   const executionPrice = quote.askPriceLocal;
-  // The caller already loaded the fund's anchor-currency reference price in a
-  // batch. Preserve that FX conversion and apply only the market-maker spread.
   const executionPriceAnchor =
     quote.mid > 0 ? referencePriceAnchor * (executionPrice / quote.mid) : referencePriceAnchor;
   const actualCost = shares * executionPriceAnchor;
-  const actualIssuerCreditLocal = shares * executionPrice;
-  const orderFlowEligible = isOrderFlowPriceEligible(corp.publicFloat ?? 0, corp.totalShares);
-
-  // Runs both inside a transaction (replica set) and as sequential writes
-  // (standalone mongod) — every step is individually guarded/refunded.
-  const applyPurchase = async (
-    session?: ClientSession,
-    compensateStandaloneFailure = false
-  ): Promise<boolean> => {
-    const sessionOpts = session ? { session } : undefined;
-    let debitedFund: Pick<IndexFund, "_id" | "cashAnchor" | "holdings"> | null = null;
-    let shareCreditApplied = false;
-    let issuerCreditApplied = false;
-    let floatBuyCreditReceipt: FloatBuyCreditReceipt | undefined;
-    let holdingsUpdated = false;
-    let purchasedHoldings: IndexFundHolding[] | undefined;
-    const shareholderSnapshot = await db
-      .collection<Corporation>("corporations")
-      .findOne({ _id: corp._id }, { projection: { shareholders: 1 }, ...sessionOpts });
-    const previousShareholder = shareholderSnapshot?.shareholders?.find(
-      (holder) => holder.fundId?.toString() === fund._id.toString()
-    );
-
-    try {
-      debitedFund = await atomicallyDebitFundCashAnchor(db, fund._id, actualCost, sessionOpts);
-      if (!debitedFund) return false;
-
-      const creditOk = await creditSharesToFund(
-        db,
-        corp._id,
-        fund._id,
-        shares,
-        executionPrice,
-        {
-          $inc: {
-            publicFloat: -shares,
-            ...(orderFlowEligible ? { orderFlowWindowBuyValue: actualIssuerCreditLocal } : {}),
-          },
-          $set: { updatedAt: new Date() },
-        },
-        {
-          guardFilter: { publicFloat: { $gte: shares } },
-          knownShareholders: shareholderSnapshot?.shareholders,
-          ...(session ? { session } : {}),
-        }
-      );
-
-      if (!creditOk) {
-        await refundFundCashAnchor(db, fund._id, actualCost, sessionOpts);
-        return false;
-      }
-      shareCreditApplied = true;
-
-      floatBuyCreditReceipt = await applyFloatBuyCredit(db, corp, actualIssuerCreditLocal, {
-        ...sessionOpts,
-        pools: batch?.pools,
-        sharesBought: shares,
-      });
-      issuerCreditApplied = true;
-
-      purchasedHoldings = updateHoldingAfterPurchase(
-        debitedFund.holdings ?? [],
-        corp._id,
-        shares,
-        executionPriceAnchor
-      );
-      await updateFundHoldings(db, fund._id, purchasedHoldings, sessionOpts);
-      holdingsUpdated = true;
-
-      const now = new Date();
-      const tx = {
-        fundId: fund._id,
-        kind: "public_float_buy" as const,
-        corporationId: corp._id,
-        shares,
-        navAnchor: executionPriceAnchor,
-        amountAnchor: actualCost,
-        createdAt: now,
-      };
-      if (batch?.txSink) batch.txSink.push(tx);
-      else await insertFundTransaction(db, tx, sessionOpts);
-
-      const ledgerRow = {
-        type: "stock_trade_buy" as const,
-        turn: currentTurn,
-        createdAt: now,
-        subjectType: "fund" as const,
-        subjectId: fund._id,
-        subjectName: fund.name,
-        amount: -actualCost,
-        anchorAmount: -actualCost,
-        currencyCode: fund.anchorCurrencyCode,
-        counterpartyType: "system" as const,
-        counterpartyName: "Public float",
-        meta: {
-          corporationId: corp._id.toString(),
-          shares,
-          pricePerShareAnchor: executionPriceAnchor,
-          source: "fund-cron-float-buy",
-        },
-      };
-      if (batch) (batch.ledgerSink ??= []).push(ledgerRow);
-      else await emitTx(db, ledgerRow);
-
-      return true;
-    } catch (error) {
-      if (!compensateStandaloneFailure || !debitedFund) throw error;
-      const debitedSnapshot = debitedFund;
-      const compensationErrors: unknown[] = [];
-      const compensate = async (revert: () => Promise<void>) => {
-        try {
-          await revert();
-        } catch (compensationError) {
-          compensationErrors.push(compensationError);
-        }
-      };
-      if (holdingsUpdated && purchasedHoldings) {
-        await compensate(async () => {
-          const holdingsRollback = await db
-            .collection<IndexFund>("indexFunds")
-            .updateOne(
-              { _id: fund._id, holdings: purchasedHoldings },
-              { $set: { holdings: debitedSnapshot.holdings ?? [], updatedAt: new Date() } }
-            );
-          if (holdingsRollback.matchedCount !== 1) {
-            throw new Error("Failed to reverse fund holdings update");
-          }
-        });
-      }
-      if (issuerCreditApplied) {
-        await compensate(async () => {
-          await reverseFloatBuyCredit(
-            db,
-            corp,
-            actualIssuerCreditLocal,
-            batch?.pools,
-            floatBuyCreditReceipt
-          );
-        });
-      }
-      if (shareCreditApplied) {
-        await compensate(async () => {
-          await reverseFundShareCredit(
-            db,
-            corp,
-            fund._id,
-            shares,
-            orderFlowEligible ? actualIssuerCreditLocal : 0,
-            previousShareholder
-          );
-        });
-      }
-      await compensate(async () => {
-        await refundFundCashAnchor(db, fund._id, actualCost);
-      });
-      if (compensationErrors.length > 0) {
-        throw new AggregateError(
-          [error, ...compensationErrors],
-          `Index fund public-float buy failed and ${compensationErrors.length} compensation step(s) were incomplete`
-        );
-      }
-      throw error;
-    }
-  };
-
-  const purchaseApplied = await runWithOptionalTransaction(
-    (session) => applyPurchase(session),
-    () => applyPurchase(undefined, true)
-  );
-
-  if (!purchaseApplied) {
-    return { ok: false, sharesBought: 0, anchorSpent: 0 };
-  }
-
-  void recordShareTrade(db, {
-    corporationId: corp._id,
-    kind: "market_buy",
-    turn: currentTurn,
+  const audit = batch?.audit ?? (await loadFloatAuditContext(db));
+  const prepared = await prepareFundFloatTrade(db, {
+    fund,
+    corp,
+    direction: "buy",
     shares,
-    pricePerShareAnchor: executionPriceAnchor,
-    from: null,
-    to: { name: `${fund.name} (index fund)` },
-    corpCurrencyCode: resolveCorpLiquidCurrencyCode(corp) ?? undefined,
-    note: "Index fund public-float absorption",
+    priceLocal: executionPrice,
+    priceAnchor: executionPriceAnchor,
+    amountAnchor: actualCost,
+    turn: currentTurn,
+    pools,
+    audit,
+    expectedGeneration,
+    holdingsAfter: (holdings) =>
+      updateHoldingAfterPurchase(holdings, corp._id, shares, executionPriceAnchor),
   });
-
+  if (!prepared || !(await claimFundFloatPlan(db, prepared.fund, prepared.plan)))
+    return { ok: false, sharesBought: 0, anchorSpent: 0 };
+  if (batch) batch.expectedGeneration = (prepared.fund.floatSettlementGeneration ?? 0) + 1;
+  if (!(await settleFundFloatPlan(db, fund._id, prepared.plan)))
+    return { ok: false, sharesBought: 0, anchorSpent: 0 };
+  const pool = pools.get(prepared.currency);
+  if (pool) pool.cashLocal += prepared.poolDelta;
   return { ok: true, sharesBought: shares, anchorSpent: actualCost };
 }
 
@@ -706,38 +359,37 @@ export async function rebalanceFundToTarget(
   });
 
   let sells = 0;
+  const audit =
+    plan.sells.length + plan.buys.length > 0 ? await loadFloatAuditContext(db) : undefined;
+  const pools =
+    plan.sells.length + plan.buys.length > 0 ? await loadEquityPoolsByCurrency(db) : undefined;
   const sellInputs =
     plan.sells.length > 0
-      ? await Promise.all([loadFxRatesByCurrency(db), getCurrentTurn(db), loadTxThresholds(db)])
+      ? await Promise.all([loadFxRatesByCurrency(db), getCurrentTurn(db)])
       : undefined;
-  // Sells first so freed cash funds the buys.
   for (const leg of plan.sells) {
     const refreshed = (await getFundById(db, fund._id)) ?? fund;
     const res = await sellFundHoldingShares(db, refreshed, leg.corporationId, leg.shares, {
       note: "Rebalance: trim overweight",
       fxByCurrency: sellInputs?.[0],
       turn: sellInputs?.[1],
-      thresholds: sellInputs?.[2],
+      audit,
+      pools,
     });
     if (res.sharesSold > 0) sells++;
   }
 
   let buys = 0;
   const corpMap = new Map(corps.map((c) => [c._id.toString(), c]));
-  // One pool read and one transaction insert for the whole buy pass. The
-  // buy reads the fund's live cash and holdings from its own atomic debit, so
-  // the per-buy fund re-read this loop used to do bought nothing: on the
-  // rebalance day (every 24 turns) that was ~550 of ~5,000 round trips.
-  const buyBatch: FundShareBuyBatch = {
-    pools: plan.buys.length > 0 ? await loadEquityPoolsByCurrency(db) : undefined,
-    txSink: [],
-  };
+  // Quotes share pool and audit inputs. Each original settlement owns its durable receipts.
+  const buyFund = sells > 0 ? ((await getFundById(db, fund._id)) ?? fund) : fund;
+  const buyBatch: FundShareBuyBatch = { pools, audit };
   for (const leg of plan.buys) {
     const corp = corpMap.get(leg.corporationId.toString());
     if (!corp) continue;
     const res = await executeFundShareBuy(
       db,
-      fund,
+      buyFund,
       corp,
       leg.shares,
       leg.sharePriceAnchor,
@@ -746,11 +398,6 @@ export async function rebalanceFundToTarget(
     );
     if (res.ok) buys++;
   }
-  await insertFundTransactionsBulk(db, buyBatch.txSink ?? []);
-  if (buyBatch.ledgerSink && buyBatch.ledgerSink.length > 0) {
-    await emitTxBulk(db, buyBatch.ledgerSink, await loadTxThresholds(db));
-  }
-
   // Place/refresh standing premium bids for residual deficit not satisfiable from float.
   let bidsPlaced = 0;
   let bidsCancelled = 0;
@@ -1011,360 +658,6 @@ export async function rebalanceConstituents(
 
 // ── Pass 3c: Process queued redemptions ───────────────────────────────
 
-export async function processQueuedRedemptions(
-  db: Db,
-  fund: IndexFund,
-  forexEnabled: boolean,
-  currentTurn: number
-): Promise<number> {
-  const pending = await listPendingRedemptions(db, fund._id);
-  if (pending.length === 0) return 0;
-
-  // #992 tranche 6: one batched NPP lookup for the pass so each NPP
-  // redemption below can be denominated in the NPP home currency (the
-  // npp:<id>:<homeCurrency> snapshot key) without a per-entry read.
-  const nppCurrencyById = new Map<string, CurrencyCode>();
-  const queuedNppObjectIds = pending.flatMap((e) => (e.nppId ? [e.nppId] : []));
-  if (queuedNppObjectIds.length > 0) {
-    const nppDocs = await db
-      .collection<{ _id: ObjectId; countryId?: string }>("npps")
-      .find({ _id: { $in: queuedNppObjectIds } })
-      .project({ countryId: 1 })
-      .toArray();
-    for (const doc of nppDocs) {
-      const cur = COUNTRY_CURRENCY_MAP[doc.countryId as keyof typeof COUNTRY_CURRENCY_MAP] ?? "USD";
-      nppCurrencyById.set(doc._id.toString(), cur);
-    }
-  }
-
-  // Wallet credits are in the fund's native currency; the ₳ → native multiplier
-  // is stamped on each queue entry at request time (entry.redeemFxRate, ticket
-  // #857 grandfather) — 1 for pre-fix legacy units, the fund rate for post-fix
-  // units. Fund `cashAnchor` and NPP investment cash stay in ₳. We still gate on
-  // rate availability so a momentary outage defers rather than risks a bad payout.
-  if (forexEnabled) {
-    const fxResult = await loadCharacterFxRate(db, fund.anchorCurrencyCode);
-    if (!fxResult.ok) {
-      // Rate unavailable — defer payouts to a later cycle.
-      console.warn(
-        `[indexfund-cron] deferring ${pending.length} queued redemption(s) for ${fund.slug}: FX rate for ${fund.anchorCurrencyCode} unavailable`
-      );
-      return 0;
-    }
-  }
-
-  let paid = 0;
-  let fundState = fund;
-  let availableCash = fund.cashAnchor;
-  // #992 tranche 6: thresholds for the bond-sale ledger rows below, loaded
-  // at most once per redemption pass and only when a bond sale actually runs.
-  let bondSaleThresholds: Awaited<ReturnType<typeof loadTxThresholds>> | undefined;
-
-  // Units still unserved in this pass. Decremented as each entry is handled so
-  // the share is measured against who is still waiting, not the original queue.
-  let unservedUnits = pending.reduce((sum, e) => sum + Math.max(0, e.units ?? 0), 0);
-
-  for (const pendingEntry of pending) {
-    // Claim before any fund debit or holder credit. If a later write fails, a
-    // processing row is quarantined for manual reconciliation instead of being
-    // paid a second time on the next turn. Automatic replay is unsafe because a
-    // crash can occur on either side of the holder credit.
-    const entry = await db
-      .collection<IndexFundRedemptionQueueEntry>(FUND_REDEMPTION_QUEUE_COLLECTION)
-      .findOneAndUpdate(
-        {
-          _id: pendingEntry._id,
-          status: pendingEntry.status,
-          units: pendingEntry.units,
-          paidAmountAnchor: pendingEntry.paidAmountAnchor,
-        },
-        { $set: { status: "processing", processingStartedAt: new Date(), updatedAt: new Date() } },
-        { returnDocument: "before" }
-      );
-    if (!entry) continue;
-    const restoreQueueClaim = async () => {
-      await db
-        .collection<IndexFundRedemptionQueueEntry>(FUND_REDEMPTION_QUEUE_COLLECTION)
-        .updateOne(
-          { _id: entry._id, status: "processing" },
-          {
-            $set: { status: entry.status, updatedAt: new Date() },
-            $unset: { processingStartedAt: "" },
-          }
-        );
-    };
-
-    const unitsRemaining = remainingRedemptionUnits(entry);
-    if (unitsRemaining <= 0) {
-      await db
-        .collection<IndexFundRedemptionQueueEntry>(FUND_REDEMPTION_QUEUE_COLLECTION)
-        .updateOne(
-          { _id: entry._id, status: "processing" },
-          {
-            $set: { status: "paid", updatedAt: new Date() },
-            $unset: { processingStartedAt: "" },
-          }
-        );
-      continue;
-    }
-
-    // Forward pricing. The payout is struck at the fund's CURRENT NAV, never at
-    // `requestedNavAnchor` (kept only as the record of what was quoted at
-    // request). Honouring a locked price across many turns is what let one
-    // GLB50 holder draw 2.46B out of a fund whose assets were falling under
-    // them, because their claim stayed fixed in cash terms while everyone
-    // else's shrank. A real open-end fund forward-prices for exactly this
-    // reason: a redemption spanning several valuation points gets each point's
-    // NAV, so the redeemer carries the market like every other holder.
-    const redemptionNav = fundState.quotedNav;
-    if (!Number.isFinite(redemptionNav) || redemptionNav <= 0) {
-      await restoreQueueClaim();
-      break;
-    }
-
-    const entryObligation = unitsRemaining * redemptionNav;
-    if (availableCash < entryObligation && fundState.holdings.length > 0) {
-      await sellFundHoldingsForRedemptionCash(db, fundState, entryObligation - availableCash, {
-        note: "Queued redemption liquidity",
-      });
-      fundState = (await getFundById(db, fund._id)) ?? fundState;
-      availableCash = fundState.cashAnchor;
-    }
-    // Bonds are the next line of liquidity: sold to the market pool at its
-    // bid, as far as the pool can pay. The only line for a bond fund.
-    if (availableCash < entryObligation) {
-      bondSaleThresholds ??= await loadTxThresholds(db);
-      const bondSale = await sellFundBondHoldingsForCash(
-        db,
-        fundState,
-        entryObligation - availableCash,
-        new Date(),
-        { turn: currentTurn, thresholds: bondSaleThresholds }
-      );
-      if (bondSale.proceedsAnchor > 0) {
-        fundState = (await getFundById(db, fund._id)) ?? fundState;
-        availableCash = fundState.cashAnchor;
-      }
-    }
-
-    if (availableCash <= 0) {
-      await restoreQueueClaim();
-      break;
-    }
-
-    // Pro-rata gate: never let one entry consume the book while others wait.
-    // Measured against cash available now, after any liquidation above.
-    const cashForThisEntry = proRataRedemptionCashShare({
-      entryUnits: unitsRemaining,
-      unservedUnits,
-      availableCashAnchor: availableCash,
-    });
-    unservedUnits = Math.max(0, unservedUnits - unitsRemaining);
-
-    const quote = quoteCashOnlyRedemption({
-      quotedNav: redemptionNav,
-      requestedUnits: unitsRemaining,
-      cashAnchor: cashForThisEntry,
-    });
-
-    if (quote.redeemableUnits <= 0) {
-      // This entry's pro-rata slice will not buy a whole unit. That says
-      // nothing about the next entry, and the genuinely-out-of-cash case
-      // already broke out above, so move on rather than starving the queue.
-      await restoreQueueClaim();
-      continue;
-    }
-
-    const paidAmount = quote.paidAmountAnchor;
-    // Native-currency equivalent for personal wallet credits (₳ × blended rate).
-    // Absent redeemFxRate = pre-fix queue row → credit rate-free (× 1), matching
-    // what the holder was owed under the old symmetric-scale code (no windfall).
-    const redeemFxRate = entry.redeemFxRate ?? 1;
-    const paidNative = forexEnabled ? paidAmount * redeemFxRate : paidAmount;
-
-    // New queue rows burned units at request time; legacy rows burn as they pay.
-    const shouldBurnUnitsNow = entry.unitsBurnedAtRequest !== true;
-    const debitFilter: Record<string, unknown> = {
-      _id: fund._id,
-      cashAnchor: { $gte: paidAmount },
-    };
-    const debitInc: Record<string, number> = { cashAnchor: -paidAmount };
-    if (shouldBurnUnitsNow) {
-      debitFilter.unitSupply = { $gte: quote.redeemableUnits };
-      debitInc.unitSupply = -quote.redeemableUnits;
-    }
-
-    // Guarded debit: only pay out if the fund still holds enough cash. Legacy
-    // queued rows also require supply because their units were not burned yet.
-    const debitResult = await db.collection<IndexFund>("indexFunds").updateOne(debitFilter, {
-      $inc: debitInc,
-      $set: { updatedAt: new Date() },
-    });
-    if (debitResult.matchedCount === 0) {
-      await restoreQueueClaim();
-      break;
-    }
-    availableCash -= paidAmount;
-
-    if (entry.characterId) {
-      const inc = buildPersonalBalanceInc(paidNative, fundState.anchorCurrencyCode, forexEnabled);
-      const creditResult = await db
-        .collection("characters")
-        .updateOne({ _id: entry.characterId }, { $inc: inc, $set: { updatedAt: new Date() } });
-      if (creditResult.matchedCount === 0) {
-        // Character gone — refund the fund cash and skip this entry
-        await db.collection<IndexFund>("indexFunds").updateOne(
-          { _id: fund._id },
-          {
-            $inc: {
-              cashAnchor: paidAmount,
-              ...(shouldBurnUnitsNow ? { unitSupply: quote.redeemableUnits } : {}),
-            },
-          }
-        );
-        await restoreQueueClaim();
-        continue;
-      }
-    } else if (entry.imperialCharacterId) {
-      const inc = buildPersonalBalanceInc(paidNative, fundState.anchorCurrencyCode, forexEnabled);
-      const creditResult = await db
-        .collection("imperialCharacters")
-        .updateOne(
-          { _id: entry.imperialCharacterId },
-          { $inc: inc, $set: { updatedAt: new Date() } }
-        );
-      if (creditResult.matchedCount === 0) {
-        await db.collection<IndexFund>("indexFunds").updateOne(
-          { _id: fund._id },
-          {
-            $inc: {
-              cashAnchor: paidAmount,
-              ...(shouldBurnUnitsNow ? { unitSupply: quote.redeemableUnits } : {}),
-            },
-          }
-        );
-        await restoreQueueClaim();
-        continue;
-      }
-    } else if (entry.nppId) {
-      const creditResult = await db.collection("npps").updateOne(
-        { _id: entry.nppId },
-        {
-          $inc: { nppInvestmentCashAnchor: paidAmount },
-          $set: { updatedAt: new Date() },
-        }
-      );
-      if (creditResult.matchedCount === 0) {
-        await db.collection<IndexFund>("indexFunds").updateOne(
-          { _id: fund._id },
-          {
-            $inc: {
-              cashAnchor: paidAmount,
-              ...(shouldBurnUnitsNow ? { unitSupply: quote.redeemableUnits } : {}),
-            },
-          }
-        );
-        await restoreQueueClaim();
-        continue;
-      }
-    } else {
-      await db.collection<IndexFund>("indexFunds").updateOne(
-        { _id: fund._id },
-        {
-          $inc: {
-            cashAnchor: paidAmount,
-            ...(shouldBurnUnitsNow ? { unitSupply: quote.redeemableUnits } : {}),
-          },
-        }
-      );
-      await restoreQueueClaim();
-      continue;
-    }
-
-    const remainingAfterPay = quote.queuedUnits;
-    await db.collection<IndexFundRedemptionQueueEntry>(FUND_REDEMPTION_QUEUE_COLLECTION).updateOne(
-      { _id: entry._id, status: "processing" },
-      {
-        $set: {
-          status: redemptionEntryStatusAfterPayout(remainingAfterPay),
-          paidAmountAnchor: (entry.paidAmountAnchor ?? 0) + paidAmount,
-          units: remainingAfterPay,
-          requestedAmountAnchor: remainingAfterPay * redemptionNav,
-          updatedAt: new Date(),
-        },
-        $unset: { processingStartedAt: "" },
-      }
-    );
-
-    await insertFundTransaction(db, {
-      fundId: fund._id,
-      kind: "redemption",
-      holderKind: entry.holderKind,
-      characterId: entry.characterId,
-      imperialCharacterId: entry.imperialCharacterId,
-      nppId: entry.nppId,
-      units: quote.redeemableUnits,
-      navAnchor: redemptionNav,
-      amountAnchor: paidAmount,
-      note: "Paid from queued redemption",
-      createdAt: new Date(),
-    });
-
-    // #992 tranche 6: the NPP credit above moved nppInvestmentCashAnchor, and
-    // unlike the character/imperial legs (which logIndexFundRedeem evidences)
-    // it had no ledger row, so every queue-paid NPP redemption read as an
-    // unexplained NPP inflow. One npp-subject index_fund_redeem row per paid
-    // NPP entry, denominated in the NPP home currency from the batched lookup
-    // with the ₳ value stated outright. The shadow ledger mirrors the fund
-    // cash side off meta when the currencies match (same convention as the
-    // NPP subscribe rows); a cross-currency pair stays single-sided under
-    // fund_redemption, never guessed. Emitted here, after the queue row and
-    // the fund transaction both landed, so a retry can never double-book it.
-    if (entry.nppId) {
-      const nppCurrency = nppCurrencyById.get(entry.nppId.toString()) ?? "USD";
-      await emitTx(db, {
-        type: "index_fund_redeem",
-        turn: currentTurn,
-        createdAt: new Date(),
-        subjectType: "npp",
-        subjectId: entry.nppId,
-        subjectName: `NPP ${entry.nppId.toString()}`,
-        amount: paidAmount,
-        anchorAmount: paidAmount,
-        currencyCode: nppCurrency,
-        counterpartyType: "system",
-        counterpartyName: fund.name,
-        meta: {
-          fundId: fund._id.toString(),
-          fundCurrency: fund.anchorCurrencyCode,
-          units: quote.redeemableUnits,
-          source: "cron_queue",
-        },
-      });
-    }
-
-    if (entry.holderKind === "character" || entry.holderKind === "imperial_character") {
-      const holder = await resolveIndexFundHolder(db, entry);
-      if (holder) {
-        void logIndexFundRedeem(db, {
-          fund: fundState,
-          holder,
-          units: quote.redeemableUnits,
-          navAnchor: redemptionNav,
-          amountAnchor: paidAmount,
-          source: "cron_queue",
-          queuedRemainder: remainingAfterPay,
-          turn: currentTurn,
-        });
-      }
-    }
-
-    paid++;
-  }
-
-  return paid;
-}
-
 // ── Main engine ───────────────────────────────────────────────────────
 
 /**
@@ -1380,6 +673,10 @@ export async function runIndexFundCron(
   db: Db,
   options?: { currentTurn?: number }
 ): Promise<FundCronResult> {
+  return withBondPoolLedgerSnapshot(db, options?.currentTurn, () => runFundCron(db, options));
+}
+
+async function runFundCron(db: Db, options?: { currentTurn?: number }): Promise<FundCronResult> {
   const result: FundCronResult = {
     fundsProcessed: 0,
     navUpdates: 0,
@@ -1420,6 +717,17 @@ export async function runIndexFundCron(
         `Equity liquidity cleanup: ${err instanceof Error ? err.message : String(err)}`
       );
     }
+    return result;
+  }
+
+  try {
+    await recoverAllFundFloatSettlements(db);
+    result.redemptionsPaid += (await recoverAllQueuedPayouts(db, currentTurn)).recovered;
+  } catch (error) {
+    result.errors.push(
+      `Fund settlement recovery: ${error instanceof Error ? error.message : String(error)}`
+    );
+    // Do not reprice or trade against a fund whose original payout is incomplete.
     return result;
   }
 
@@ -1485,10 +793,14 @@ export async function runIndexFundCron(
   const initialBondPrincipalByFundId = await sumFundBondHoldingsByFundId(db, funds, exchangeRates);
   // #992 tranche 6: one thresholds read for every bond-reserve purchase row
   // this turn; threaded through each deploy so N funds share it.
-  const [bondDeployThresholds, bondDeployTurnLengthMinutes] = await Promise.all([
-    loadTxThresholds(db),
-    loadTurnLengthMinutes(db),
-  ]);
+  const [bondDeployThresholds, bondDeployTurnLengthMinutes, bondSettleInTransaction] =
+    await Promise.all([
+      loadTxThresholds(db),
+      loadTurnLengthMinutes(db),
+      // A replica set settles each fund's bond pass in one transaction; a
+      // standalone server (singleplayer, sandboxes) keeps per-purchase writes.
+      assertTransactionSupportAtBoot().catch(() => false),
+    ]);
 
   // Pass 1a: mark holdings and recompute NAV. Each task only writes its own
   // fund document, so bounded concurrency is safe and removes the serial
@@ -1626,6 +938,7 @@ export async function runIndexFundCron(
             turn: currentTurn,
             thresholds: bondDeployThresholds,
             turnLengthMinutes: bondDeployTurnLengthMinutes,
+            settleInTransaction: bondSettleInTransaction,
           }
         );
         if (bondDeploy.deployedAnchor > 0) {
@@ -1805,7 +1118,7 @@ export async function runIndexFundCron(
 
       const hasQueuedRedemptions = queuedUnitsByFundId.has(fund._id.toString());
       const paidRedemptions = hasQueuedRedemptions
-        ? await processQueuedRedemptions(db, refreshedFund, forexEnabled, currentTurn)
+        ? await processQueuedRedemptions(db, refreshedFund, forexEnabled, currentTurn, true)
         : 0;
       result.redemptionsPaid += paidRedemptions;
 

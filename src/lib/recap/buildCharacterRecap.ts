@@ -12,6 +12,9 @@ import type {
 export interface RankPosition {
   rank: number;
   total: number;
+  /** characterId directly above / below on the same board, when known. */
+  aboveId?: string | null;
+  belowId?: string | null;
 }
 
 /**

@@ -22,6 +22,7 @@ function retail(overrides: Partial<BankCharterSnapshot> = {}): BankCharterSnapsh
     type: "retail",
     status: "active",
     currency: "USD",
+    charteredTurn: 1,
     postedCapital: 1_000_000,
     cashReserves: 1_000_000,
     npcDeposits: 4_000_000,
@@ -206,15 +207,21 @@ describe("named loan origination", () => {
     const { transition } = decision;
     expect(transition.key).toBe(`named_loan_origination:${BANK}:${LOAN}`);
     expect(transition.legs.map((l) => [l.kind, l.amount, l.collection, l.path])).toEqual([
-      ["debit", 100_000, "corporations", "bankCharter.cashReserves"],
-      ["credit", 100_000, "corporations", "liquidCapital"],
+      ["debit", 99_000, "corporations", "bankCharter.cashReserves"],
+      ["credit", 99_000, "corporations", "liquidCapital"],
     ]);
     expect(transition.projections[0]).toMatchObject({
       collection: "bankLoans",
-      insert: { status: "current", principal: 100_000, ratePercent: 6, termTurns: 48 },
+      insert: {
+        status: "current",
+        principal: 100_000,
+        originationFee: 1_000,
+        ratePercent: 6,
+        termTurns: 48,
+      },
     });
     expect(transition.projections[1].update).toEqual({
-      $inc: { "bankCharter.totalLoans": 100_000 },
+      $inc: { "bankCharter.totalLoans": 100_000, "bankCharter.loanOriginationFeesLifetime": 1_000 },
     });
     expect(decision.derived).toMatchObject({ ratePercent: 6, pending: false });
   });
@@ -359,6 +366,32 @@ describe("pending loan decisions", () => {
       update: { $set: { status: "current", decisionTurn: 200 } },
     });
     expect(decision.transition.event.kind).toBe("loan.approved");
+  });
+
+  it("honors the original pending quote when funding and keeps contractual debt", () => {
+    const decision = balanced(
+      decide({
+        type: "disburse_pending_loan",
+        loanId: LOAN,
+        borrower: {
+          type: "corporation",
+          id: OTHER,
+          blocked: false,
+          incomePerTurn: 200_000,
+          committedPaymentPerTurn: 0,
+          currencyMatches: true,
+        },
+        termTurns: 48,
+        ratePercent: 5,
+        principal: 50_000,
+        originationFee: 500,
+      })
+    );
+    expect(decision.transition.legs.map((leg) => leg.amount)).toEqual([49_500, 49_500]);
+    expect(decision.transition.projections[1].update).toEqual({
+      $inc: { "bankCharter.totalLoans": 50_000, "bankCharter.loanOriginationFeesLifetime": 500 },
+    });
+    expect(decision.derived).toMatchObject({ originationFee: 500, proceeds: 49_500 });
   });
 
   it("re-checks headroom and the blacklist at decision time", () => {

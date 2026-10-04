@@ -57,6 +57,12 @@ export interface MoneySupplyComponents {
   bankDeposits: number;
   /** A bank asset/capacity measure. Reported separately; never double-counted in M1/M2. */
   bankReserves: number;
+  /** Central-bank forex income held as cash, reported separately and excluded from M1/M2. */
+  centralBankForexRevenue?: number;
+  /** Foreign-currency central-bank spread reserves, reported raw and excluded from M1/M2. */
+  centralBankSpreadReserves?: number;
+  /** Raw bank vault and durable cash-escrow stock, excluded from M1/M2 reserve backing. */
+  bankVaultCash?: number;
   creditOutstanding: number;
   sovereignBondsOutstanding: number;
   centralBankBondHoldings: number;

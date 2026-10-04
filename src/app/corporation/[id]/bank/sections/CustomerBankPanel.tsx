@@ -5,6 +5,8 @@ import Link from "next/link";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { formatRatePercent } from "@/components/banking/formatBankMoney";
 import type { ShowToast } from "../types";
+import { SmallButton } from "@/components/corporation/dense/DenseKit";
+import { BankPanel } from "../components/BankSection";
 
 /**
  * Customer-facing actions on a bank's own page: deposit into this bank, or open
@@ -86,56 +88,58 @@ export function CustomerBankPanel({
     return null;
   }
 
-  const inputClass =
-    "w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm font-mono tabular-nums focus:border-accent focus:outline-none";
-  const btnClass =
-    "rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50";
-
   return (
-    <section id="customer-banking" className="grid scroll-mt-6 gap-4 sm:grid-cols-2">
-      <div id="customer-deposit" className="rounded-xl border border-card-border bg-card p-4">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h3 className="text-sm font-semibold text-foreground">Deposit savings at {bankName}</h3>
-          {depositRatePercent != null && (
-            <span className="font-mono text-xs font-semibold tabular-nums text-success">
-              {formatRatePercent(depositRatePercent)} deposit rate
-            </span>
-          )}
-        </div>
-        <p className="mt-1 mb-3 text-xs text-muted">
-          Moves your {currency} savings to this bank, so it earns this bank&apos;s deposit rate. You
-          hold one bank per currency, so this moves your whole {currency} savings here.
-        </p>
-        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-          <input
-            type="number"
-            inputMode="decimal"
-            min="0"
-            value={depositAmount}
-            onChange={(e) => setDepositAmount(e.target.value)}
-            placeholder={`Amount (${currency})`}
-            aria-label={`Deposit amount in ${currency}`}
-            className={inputClass}
-          />
-          <button type="button" disabled={busy} onClick={() => void deposit()} className={btnClass}>
-            {busy ? "…" : "Deposit"}
-          </button>
-        </div>
-      </div>
+    <section id="customer-banking" className="scroll-mt-6">
+      <BankPanel title={`Bank with ${bankName}`} meta="as a customer">
+        <div className="grid gap-x-8 gap-y-4 py-1.5 md:grid-cols-2">
+          <div id="customer-deposit" className="min-w-0 space-y-1.5">
+            <p className="text-xs text-muted">
+              <span className="font-medium text-foreground">Deposit savings</span>
+              {depositRatePercent != null && (
+                <>
+                  {" "}
+                  at{" "}
+                  <span className="font-mono text-success">
+                    {formatRatePercent(depositRatePercent)}
+                  </span>
+                </>
+              )}
+              . Moves your {currency} savings to this bank, so it earns this bank&apos;s deposit
+              rate. You hold one bank per currency, so this moves your whole {currency} savings
+              here.
+            </p>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                inputMode="decimal"
+                min="0"
+                value={depositAmount}
+                onChange={(e) => setDepositAmount(e.target.value)}
+                placeholder={`Amount (${currency})`}
+                aria-label={`Deposit amount in ${currency}`}
+                className="h-8 w-48 rounded-md border border-card-border bg-background px-2 font-mono text-[13px] text-foreground placeholder:text-muted focus:border-foreground focus:outline-none"
+              />
+              <SmallButton tone="primary" disabled={busy} onClick={() => void deposit()}>
+                {busy ? "…" : "Deposit"}
+              </SmallButton>
+            </div>
+          </div>
 
-      <div id="customer-loan" className="rounded-xl border border-card-border bg-card p-4">
-        <h3 className="text-sm font-semibold text-foreground">Apply for a loan from {bankName}</h3>
-        <p className="mt-1 mb-3 text-xs text-muted">
-          Review a personal or corporation loan in the banking hub. It shows the quoted rate,
-          destination, payment estimate, maximum, and approval status before you submit.
-        </p>
-        <Link
-          href="/banking"
-          className="inline-flex rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground transition-opacity hover:opacity-90"
-        >
-          Review loan terms
-        </Link>
-      </div>
+          <div id="customer-loan" className="min-w-0 space-y-1.5">
+            <p className="text-xs text-muted">
+              <span className="font-medium text-foreground">Borrow from {bankName}</span>. Review a
+              personal or corporation loan in the banking hub. It shows the quoted rate,
+              destination, payment estimate, maximum, and approval status before you submit.
+            </p>
+            <Link
+              href="/banking"
+              className="inline-flex h-7 items-center rounded-md border border-card-border px-2.5 text-xs font-medium text-foreground hover:bg-card-elevated"
+            >
+              Review loan terms
+            </Link>
+          </div>
+        </div>
+      </BankPanel>
     </section>
   );
 }

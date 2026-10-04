@@ -13,7 +13,13 @@ import {
   redactPrivateCorporation,
   redactPrivateSectorRow,
 } from "@/lib/corporations/redaction";
-import type { CorporationPrivatizationVote, Corporation, CorporationHistory } from "@/lib/db/types";
+import type {
+  CorporationPrivatizationVote,
+  Corporation,
+  CorporationHistory,
+  WikiPage,
+} from "@/lib/db/types";
+import { corporationWikiSlug } from "@/lib/wiki/playerPages";
 import {
   booksAreExposed,
   getFogFactor,
@@ -30,6 +36,7 @@ import type { GameConfig } from "@/lib/db/types/gameConfig";
 import { FINANCIAL_DISTRESS_GRACE_TURNS } from "@/lib/nationalization/constants";
 import { isContractIssuanceEnabled } from "@/lib/extraction/featureFlag";
 import { buildCorpNationalizationThreat } from "@/lib/nationalization/corpNationalizationThreat";
+import { marketAtLeast, getMarketSystemMode } from "@/lib/market/featureFlag";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -52,12 +59,23 @@ export async function GET(request: Request, { params }: RouteParams) {
       // Private supply-agreements gate — a governor-set gameConfig flag ("default"
       // doc), surfaced on the corp payload so the CEO panel can show/hide without
       // an extra round-trip.
-      db
-        .collection<GameConfig>("gameConfig")
-        .findOne(
-          { _id: "default" },
-          { projection: { supplyAgreementsEnabled: 1, contractIssuanceEnabled: 1 } }
-        ),
+      db.collection<GameConfig>("gameConfig").findOne(
+        { _id: "default" },
+        {
+          projection: {
+            supplyAgreementsEnabled: 1,
+            contractIssuanceEnabled: 1,
+            mediaEditorialEnabled: 1,
+            marketSystemMode: 1,
+            productLinesV2Enabled: 1,
+            mediaOperatingModelsEnabled: 1,
+            mediaProductSlatesEnabled: 1,
+            brandLoyaltyEnabled: 1,
+            brandLoyaltySliceEnabled: 1,
+            qualityPremiumPricingEnabled: 1,
+          },
+        }
+      ),
       resolveCorporation(db, id),
       getAuthUser().catch(() => null),
     ]);
@@ -69,9 +87,21 @@ export async function GET(request: Request, { params }: RouteParams) {
     // Extraction-contract gate — surfaced on the corp payload so the Contracts
     // tab (offers / active contracts) can show/hide without an extra round-trip.
     const contractIssuanceEnabled = await isContractIssuanceEnabled(config);
+    const productLinesV2Enabled =
+      config?.productLinesV2Enabled === true &&
+      marketAtLeast(await getMarketSystemMode(config), "plants");
 
     if (!resolved.ok) return resolved.response;
     const { corporation } = resolved;
+    const mediaEditorialEnabled = config?.mediaEditorialEnabled === true;
+    const mediaOperatingModelsEnabled = config?.mediaOperatingModelsEnabled === true;
+    const mediaProductSlatesEnabled =
+      config?.mediaProductSlatesEnabled === true &&
+      mediaOperatingModelsEnabled &&
+      config.brandLoyaltyEnabled === true &&
+      config.brandLoyaltySliceEnabled === true &&
+      config.qualityPremiumPricingEnabled === true &&
+      marketAtLeast(await getMarketSystemMode(config), "clearing");
     const modViewEnabled =
       !authUser?.isAdmin &&
       authUser?.isModerator === true &&
@@ -82,6 +112,19 @@ export async function GET(request: Request, { params }: RouteParams) {
       currentTurn,
       viewerUserId: authUser?.userId ?? null,
     })) as Record<string, unknown>;
+    const hasMediaSector =
+      corporation.type === "media" ||
+      corporation.secondaryType === "media" ||
+      (Array.isArray(detail.sectors) &&
+        (detail.sectors as Array<{ sectorType?: string }>).some(
+          (sector) => sector.sectorType === "media"
+        ));
+    if (mediaEditorialEnabled && hasMediaSector) {
+      const editorial = await db
+        .collection<Corporation>("corporations")
+        .findOne({ _id: corporation._id }, { projection: { editorialStance: 1 } });
+      if (editorial?.editorialStance) corporation.editorialStance = editorial.editorialStance;
+    }
 
     // Surface any open privatization vote so the corp page can mount the panel.
     // Must be nested inside `corporation` — the page sets state from data.corporation,
@@ -93,6 +136,22 @@ export async function GET(request: Request, { params }: RouteParams) {
     const openPrivatizationVoteId = openVote?._id?.toString() ?? null;
     (detail.corporation as Record<string, unknown>).openPrivatizationVoteId =
       openPrivatizationVoteId;
+
+    // Wiki-link gate (#2347): the hero links to `/wiki/corp-<sequentialId>`,
+    // but that page only renders PUBLISHED, non-private pages — anything else
+    // is a Not Found. Surface availability so the hero can hide the link (or
+    // offer the CEO the create flow) instead of linking into a 404.
+    const wikiSlug =
+      corporation.sequentialId != null ? corporationWikiSlug(corporation.sequentialId) : null;
+    const wikiPagePublished = wikiSlug
+      ? (await db
+          .collection<WikiPage>("wikiPages")
+          .findOne(
+            { slug: wikiSlug, status: "published", private: { $ne: true } },
+            { projection: { _id: 1 } }
+          )) != null
+      : false;
+    (detail.corporation as Record<string, unknown>).wikiPagePublished = wikiPagePublished;
 
     // Public nationalization-risk surface (player corps only). Derived from the
     // financial-distress clock; intentionally NOT redacted/fogged so the at-risk
@@ -122,6 +181,16 @@ export async function GET(request: Request, { params }: RouteParams) {
       supplyAgreementsEnabled;
     (detail.corporation as Record<string, unknown>).contractIssuanceEnabled =
       contractIssuanceEnabled;
+    (detail.corporation as Record<string, unknown>).mediaEditorialEnabled = mediaEditorialEnabled;
+    (detail.corporation as Record<string, unknown>).mediaOperatingModelsEnabled =
+      mediaOperatingModelsEnabled;
+    (detail.corporation as Record<string, unknown>).mediaProductSlatesEnabled =
+      mediaProductSlatesEnabled;
+    if (mediaEditorialEnabled && hasMediaSector) {
+      (detail.corporation as Record<string, unknown>).editorialStance =
+        corporation.editorialStance ?? { economic: 0, social: 0 };
+    }
+    (detail.corporation as Record<string, unknown>).productLinesV2Enabled = productLinesV2Enabled;
 
     let redact = shouldRedactCorporation(
       corporation,
@@ -168,6 +237,12 @@ export async function GET(request: Request, { params }: RouteParams) {
           techTreesEnabled,
           supplyAgreementsEnabled,
           contractIssuanceEnabled,
+          mediaEditorialEnabled,
+          mediaOperatingModelsEnabled,
+          mediaProductSlatesEnabled,
+          ...(mediaEditorialEnabled && hasMediaSector
+            ? { editorialStance: corporation.editorialStance ?? { economic: 0, social: 0 } }
+            : {}),
         },
         ceo: detail.ceo,
         ceoIsInactive: detail.ceoIsInactive,

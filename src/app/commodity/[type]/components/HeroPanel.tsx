@@ -94,7 +94,7 @@ export default function HeroPanel({
             <div className="flex items-center gap-2 flex-wrap justify-end">
               <button
                 onClick={() => onSelectExchange(null)}
-                className={`rounded-lg backdrop-blur-sm border px-3 py-1 text-xs font-bold transition-colors ${
+                className={`rounded-lg border px-3 py-1 text-xs font-bold transition-colors ${
                   activeCountry === null
                     ? "bg-white/20 border-white/40 text-white"
                     : "bg-black/50 border-white/10 text-white/80 hover:text-white"
@@ -106,7 +106,7 @@ export default function HeroPanel({
                 <button
                   key={countryId}
                   onClick={() => onSelectExchange(countryId)}
-                  className={`rounded-lg backdrop-blur-sm border px-3 py-1 text-xs font-bold transition-colors ${
+                  className={`rounded-lg border px-3 py-1 text-xs font-bold transition-colors ${
                     activeCountry === countryId
                       ? "bg-white/20 border-white/40 text-white"
                       : "bg-black/50 border-white/10 text-white/80 hover:text-white"

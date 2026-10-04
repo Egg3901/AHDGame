@@ -15,15 +15,52 @@ export function getSectorOperatingCountryId(
   return stateCountryByStateId.get(sector.stateId) ?? sector.countryId;
 }
 
+type SectorLaneClause = Pick<CorporateSector, "sectorType"> & {
+  industryModel: CorporateSector["industryModel"] | null;
+  mediaDiscriminator?: CorporateSector["mediaDiscriminator"] | null;
+};
+
+/** Lane criteria apply to owned sectors and their unowned market buckets. */
+export type SectorLaneQuery = SectorLaneClause | { $or: SectorLaneClause[] };
+
+export function getCorporateSectorLaneQuery(
+  sector: Pick<CorporateSector, "sectorType" | "industryModel" | "mediaDiscriminator">
+): SectorLaneQuery {
+  if (sector.sectorType === "entertainment" || sector.mediaDiscriminator === "entertainment") {
+    return {
+      $or: [
+        { sectorType: "media", industryModel: null, mediaDiscriminator: "entertainment" },
+        { sectorType: "entertainment", industryModel: null },
+      ],
+    };
+  }
+  return {
+    sectorType: sector.sectorType,
+    industryModel: sector.industryModel ?? null,
+    mediaDiscriminator: sector.mediaDiscriminator ?? null,
+  };
+}
+
 export function getCorporateSectorLocationKey(
-  sector: Pick<CorporateSector, "corporationId" | "stateId" | "sectorType" | "countryId">,
+  sector: Pick<
+    CorporateSector,
+    | "corporationId"
+    | "stateId"
+    | "sectorType"
+    | "industryModel"
+    | "mediaDiscriminator"
+    | "countryId"
+  >,
   stateCountryByStateId: ReadonlyMap<string, CountryId>
 ): string {
+  const legacyEntertainment = sector.sectorType === "entertainment";
   return [
     sector.corporationId.toString(),
     getSectorOperatingCountryId(sector, stateCountryByStateId),
     sector.stateId,
-    sector.sectorType,
+    legacyEntertainment ? "media" : sector.sectorType,
+    legacyEntertainment ? "" : (sector.industryModel ?? ""),
+    legacyEntertainment ? "entertainment" : (sector.mediaDiscriminator ?? ""),
   ].join(":");
 }
 
@@ -32,7 +69,11 @@ export function isCorporateSectorDuplicateKey(error: unknown): error is MongoSer
     error instanceof MongoServerError &&
     error.code === 11000 &&
     (!!error.keyPattern?.corporationId ||
-      /\bcorporationId_1_stateId_1_sectorType_1\b/.test(error.message) ||
-      /\bcorporateSectors_corporationId_stateId_sectorType\b/.test(error.message))
+      /\bcorporationId_1_stateId_1_sectorType_1(?:_industryModel_1)?(?:_mediaDiscriminator_1)?\b/.test(
+        error.message
+      ) ||
+      /\bcorporateSectors_corporationId_stateId_sectorType(?:_industryModel)?(?:_mediaDiscriminator)?\b/.test(
+        error.message
+      ))
   );
 }

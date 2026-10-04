@@ -55,9 +55,7 @@ export function StrategicSectorPanel({
 
   return (
     <div className="rounded-xl border border-gold/30 bg-gold/5 p-5">
-      <h3 className="text-body-sm font-semibold uppercase tracking-wide text-gold">
-        Strategic sectors
-      </h3>
+      <h3 className="text-body-sm font-semibold text-gold">Strategic sectors</h3>
       <p className="mt-1 text-body-xs text-muted">
         Designating a sector type arms the strategic nationalization trigger for corporations in it.{" "}
         <span className="text-gold/80">
@@ -112,7 +110,7 @@ export function StrategicSectorPanel({
       </div>
 
       {atCap && (
-        <p className="mt-2 text-body-xs text-muted">
+        <p className="mt-2 text-body-sm text-muted">
           Maximum of {MAX_STRATEGIC_SECTOR_DESIGNATIONS} strategic sectors reached — remove one to
           add another.
         </p>

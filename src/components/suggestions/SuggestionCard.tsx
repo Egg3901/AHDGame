@@ -240,7 +240,7 @@ export function SuggestionCard({
         )}
 
         {impactPreview && !isMerged && (
-          <p className="mt-2 line-clamp-2 border-l-2 border-primary/40 pl-2 text-xs text-muted">
+          <p className="mt-2 line-clamp-2 text-xs text-muted">
             <span className="font-medium text-foreground/70">Impact: </span>
             {impactPreview}
           </p>

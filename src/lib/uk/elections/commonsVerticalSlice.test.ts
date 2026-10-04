@@ -9,9 +9,16 @@
  * module here drags the full country-phase chain, so it stays out of this
  * focused file.
  */
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId } from "mongodb";
 import { createFakeCommonsDb } from "./commonsTestDb";
+import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
+
+vi.mock("@/lib/analytics/officeTransitionAnalytics", () => ({
+  captureOfficeTransition: vi.fn().mockResolvedValue(undefined),
+}));
+
+beforeEach(() => vi.mocked(captureOfficeTransition).mockClear());
 
 const NOW = new Date("2026-09-01T12:00:00Z");
 const TURN = 500;
@@ -109,6 +116,16 @@ describe("commons seat commands", () => {
     fake.seed("electedOfficials", [commonsSeat(character._id as ObjectId)]);
     fake.seed("gameState", [{ _id: "current", currentTurn: TURN }]);
     const result = await resignCommonsSeat(fake.db, character as never, NOW);
+    expect(captureOfficeTransition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        officeType: "commons",
+        transitionType: "left",
+        selectionMethod: "resignation",
+        nationId: "UK",
+        turn: TURN,
+        flush: true,
+      })
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     const rows = fake.read<Record<string, unknown>>("electedOfficials");
@@ -145,6 +162,16 @@ describe("commons seat commands", () => {
     fake.seed("electedOfficials", [commonsSeat(character._id as ObjectId)]);
     fake.seed("gameState", [{ _id: "current", currentTurn: TURN }]);
     const result = await defectCommonsSeat(fake.db, character as never, "2", NOW);
+    expect(captureOfficeTransition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        officeType: "commons",
+        transitionType: "left",
+        selectionMethod: "resignation",
+        nationId: "UK",
+        turn: TURN,
+        flush: true,
+      })
+    );
     expect(result.ok).toBe(true);
     expect(fake.read<Record<string, unknown>>("characters")[0].party).toBe("2");
     expect(fake.read<Record<string, unknown>>("ukCommonsVacancies")[0].reason).toBe("defection");

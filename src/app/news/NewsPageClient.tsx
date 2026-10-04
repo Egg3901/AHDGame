@@ -110,7 +110,7 @@ export function NewsPageClient({
                         setComposerMode("text");
                         setComposerFeedType("advertisement");
                       }}
-                      className="flex items-center gap-1.5 rounded-lg border border-amber-400/50 bg-amber-500/15 px-3 py-2 text-sm font-semibold text-amber-100 shadow-md backdrop-blur-sm transition-colors hover:bg-amber-500/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-black/40"
+                      className="flex items-center gap-1.5 rounded-lg border border-amber-400/50 bg-amber-500/15 px-3 py-2 text-sm font-semibold text-amber-100 shadow-md transition-colors hover:bg-amber-500/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-black/40"
                     >
                       Place ad
                     </button>
@@ -174,7 +174,7 @@ export function NewsPageClient({
             <div className="space-y-2">
               {/* Toggle row */}
               <div className="flex items-center justify-between">
-                <div className="flex rounded-lg border border-white/20 bg-black/40 backdrop-blur-sm p-0.5 text-xs font-medium">
+                <div className="flex rounded-lg border border-white/20 bg-black/70 p-0.5 text-xs font-medium">
                   <button
                     type="button"
                     onClick={() => setComposerMode("text")}

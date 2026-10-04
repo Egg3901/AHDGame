@@ -6,6 +6,9 @@ import { ALL_COUNTRY_IDS } from "@/lib/constants/countries";
 import { isPoliticalApprovalCountry } from "@/lib/politicalLegislation/politicalApprovalProvider";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
+vi.mock("@/lib/db/runWithOptionalTransaction", () => ({
+  runWithOptionalTransaction: (body: (session: object) => Promise<unknown>) => body({}),
+}));
 
 function cursorReturning(docs: unknown[]) {
   return {
@@ -290,8 +293,9 @@ describe("processMinisterialOrders political-metric contribution snapshot", () =
     db.collectionMocks.cabinetSettings!.find.mockReturnValue(cursorReturning([]));
     db.collection("cabinetEstates");
     db.collectionMocks.cabinetEstates!.find.mockImplementation(
-      (filter?: { countryId?: string; positionId?: string }) => {
-        if (filter?.countryId === "US" && filter?.positionId === "attorney_general") {
+      (filter?: { countryId?: { $in?: string[] }; positionId?: string }) => {
+        // One estates read for every seat, scoped to the estate countries.
+        if (filter?.countryId?.$in?.includes("US") && filter.positionId === undefined) {
           return cursorReturning([
             {
               countryId: "US",
@@ -331,6 +335,8 @@ describe("processMinisterialOrders political-metric contribution snapshot", () =
     // National standing effects (military, tier) may also touch order.safety;
     // the Field Office must be an EXTRA on CA, not a country-wide copy.
     expect(set.regional.CA["order.safety"]).toBeGreaterThan(set.contribution["order.safety"] ?? 0);
+    // Every estate seat is served by that single read, not one read per seat.
+    expect(db.collectionMocks.cabinetEstates!.find).toHaveBeenCalledTimes(1);
   });
 
   it("never snapshots a non-pipeline country (pipeline countries may persist empty)", async () => {

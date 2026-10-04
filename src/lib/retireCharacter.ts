@@ -1,7 +1,15 @@
+import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
 import { closeCharacterSavings } from "@/lib/savings/closeCharacterSavings";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
-import type { PoliticalParty, ExchangeRate } from "@/lib/db/types";
+import type {
+  PoliticalParty,
+  ExchangeRate,
+  GameState,
+  ElectedOfficial,
+  CabinetMember,
+  CentralBank,
+} from "@/lib/db/types";
 import type { Character } from "@/lib/db/types/character";
 import type { Corporation } from "@/lib/db/types/corporation";
 import type { Bond } from "@/lib/db/types/bond";
@@ -220,6 +228,26 @@ export async function retireCharacter(
           .toArray()
       : [];
 
+  // Read only office facts before retirement removes the holder references.
+  // Batch by collection; telemetry failures never affect the retirement.
+  const telemetryOffices = await Promise.all([
+    db
+      .collection<GameState>("gameState")
+      .findOne({ _id: "current" }, { projection: { currentTurn: 1, iteration: 1 } }),
+    db
+      .collection<ElectedOfficial>("electedOfficials")
+      .find({ characterId }, { projection: { officeType: 1, countryId: 1, party: 1 } })
+      .toArray(),
+    db
+      .collection<CabinetMember>("cabinetMembers")
+      .find({ characterId }, { projection: { countryId: 1, party: 1 } })
+      .toArray(),
+    db
+      .collection<CentralBank>("centralBanks")
+      .find({ chairCharacterId: characterId }, { projection: { countryId: 1 } })
+      .toArray(),
+  ]).catch(() => null);
+
   await db.collection("electedOfficials").updateMany(
     { characterId },
     {
@@ -249,7 +277,7 @@ export async function retireCharacter(
   const forexEnabled = await isForexEnabled();
   const ceoCorps = await db
     .collection<Corporation>("corporations")
-    .find({ ceoId: characterId }, { projection: { _id: 1 } })
+    .find({ ceoId: characterId }, { projection: { _id: 1, countryId: 1 } })
     .toArray();
   const ceoCorpIds = ceoCorps.map((corp) => corp._id);
 
@@ -452,7 +480,9 @@ export async function retireCharacter(
     deletedAt: now,
   });
 
-  await db.collection<Character>("characters").deleteOne({ _id: characterId });
+  const retiredCharacterResult = await db
+    .collection<Character>("characters")
+    .deleteOne({ _id: characterId });
 
   await db.collection("users").updateOne(
     { _id: userId },
@@ -465,4 +495,61 @@ export async function retireCharacter(
       $inc: { activeCharacterCount: -1 },
     }
   );
+  if (retiredCharacterResult.deletedCount > 0 && telemetryOffices) {
+    const [state, officials, cabinet, banks] = telemetryOffices;
+    const selectionMethod = reason === "player_deleted" ? "resignation" : "removal";
+    const transitionType = reason === "player_deleted" ? "left" : "lost";
+    const offices: Array<{ officeType: string; nationId: string; partyId?: string }> = [
+      ...officials.map((official) => ({
+        officeType: official.officeType,
+        nationId: official.countryId ?? character.countryId,
+        partyId: official.party ?? character.party,
+      })),
+      ...cabinet.map((member) => ({
+        officeType:
+          member.countryId === "US"
+            ? "usCabinet"
+            : member.countryId === "UK"
+              ? "ukCabinet"
+              : member.countryId === "DE"
+                ? "deCabinet"
+                : "parliamentaryCabinet",
+        nationId: member.countryId,
+        partyId: member.party ?? character.party,
+      })),
+      ...banks.map((bank) => ({
+        officeType: "centralBankChair",
+        nationId: bank.countryId,
+        partyId: character.party,
+      })),
+      ...ceoCorps.map((corp) => ({
+        officeType: "ceo",
+        nationId: corp.countryId ?? character.countryId,
+        partyId: character.party,
+      })),
+    ];
+    if (
+      character.currentOffice &&
+      !offices.some((office) => office.officeType === character.currentOffice?.type)
+    ) {
+      offices.push({
+        officeType: character.currentOffice.type,
+        nationId: character.countryId,
+        partyId: character.party,
+      });
+    }
+    await Promise.all(
+      offices.map((office) =>
+        captureOfficeTransition({
+          db,
+          ...office,
+          transitionType,
+          selectionMethod,
+          careerStage: character.careerHistory?.length ?? 0,
+          turn: state?.currentTurn ?? 0,
+          iteration: opts?.iteration ?? state?.iteration,
+        }).catch(() => undefined)
+      )
+    );
+  }
 }

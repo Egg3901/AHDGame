@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ClassificationStrip } from "../_coldwar/ClassificationStrip";
 import { MIL_COLOR, MIL_FONT } from "../military/theme";
+import { controlSplitDisplay } from "../controlDisplay";
 import {
   COUNTRY_COMMAND_FLAVOR,
   DEFAULT_COMMAND_FLAVOR,
@@ -17,7 +18,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import { useTheaterState } from "./useTheaterState";
 
 const mono = MIL_FONT.mono;
-const serif = MIL_FONT.serif;
+const headingFont = MIL_FONT.heading;
 const FR = "#3b82f6"; // friendly
 const FRS = "#7ba3ec";
 const FRL = "#9cc0f5";
@@ -133,7 +134,7 @@ export function SituationBoardClient({
               <h1
                 style={{
                   margin: "6px 0 0",
-                  fontFamily: serif,
+                  fontFamily: headingFont,
                   fontSize: 34,
                   fontWeight: 700,
                   color: C.acc,
@@ -182,7 +183,7 @@ export function SituationBoardClient({
               </div>
               <div
                 style={{
-                  fontFamily: serif,
+                  fontFamily: headingFont,
                   fontSize: 28,
                   fontWeight: 700,
                   color: "#fff",
@@ -309,7 +310,7 @@ export function SituationBoardClient({
             >
               <div
                 style={{
-                  fontFamily: serif,
+                  fontFamily: headingFont,
                   fontSize: 20,
                   fontWeight: 700,
                   color: "#f3f1ea",
@@ -342,8 +343,7 @@ export function SituationBoardClient({
               {conflicts.map((conflict) => {
                 const committedPower = state.committed[conflict.id] ?? 0;
                 const maxCommitment = Math.max(0, total - (deployed - committedPower));
-                const sideBControl = Math.max(0, Math.min(100, Math.round(conflict.control)));
-                const sideAControl = 100 - sideBControl;
+                const controlDisplay = controlSplitDisplay(conflict.control);
 
                 return (
                   <section
@@ -366,7 +366,7 @@ export function SituationBoardClient({
                       <div>
                         <Link
                           href={`/world/conflicts/${conflict.conflictId}`}
-                          style={{ color: "#f3f1ea", fontFamily: serif, fontWeight: 700 }}
+                          style={{ color: "#f3f1ea", fontFamily: headingFont, fontWeight: 700 }}
                         >
                           {conflict.name}
                         </Link>
@@ -377,7 +377,8 @@ export function SituationBoardClient({
                             color: MIL_COLOR.textMuted,
                           }}
                         >
-                          {conflict.sideA} {sideAControl}% / {conflict.sideB} {sideBControl}%
+                          {conflict.sideA} {controlDisplay.sideA}% / {conflict.sideB}{" "}
+                          {controlDisplay.sideB}%
                         </div>
                       </div>
                       <span

@@ -2,6 +2,8 @@ import type { CountryGeography } from "../contract";
 import { huRegionCensusData1953 } from "@/lib/seeds/hu/huRegionCensusData1953";
 import { huRegions } from "./data/huRegions";
 import { huRegions1953 } from "./data/huRegions1953";
+import { huRegions1991 } from "./data/huRegions1991";
+import { huRegions2027 } from "./data/huRegions2027";
 import {
   HU_ADJACENCY_MAP,
   HU_CONTINENT,
@@ -46,7 +48,9 @@ const populationAnchors = {};
 const regionBundles = {
   "1953-default": huRegions1953,
   "1979-default": huRegions,
+  "1991-default": huRegions1991,
   "2019-default": huRegions,
+  "2027-default": huRegions2027,
 };
 
 export const HU_GEOGRAPHY: CountryGeography = {

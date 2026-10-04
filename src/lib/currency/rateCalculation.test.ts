@@ -5,6 +5,7 @@ import {
   applyDrift,
   computeVolumePressure,
   applyVolumePressure,
+  breadthFactor,
   applyNoise,
   applyCyclePressure,
   clampRate,
@@ -195,6 +196,11 @@ describe("applyDrift", () => {
 });
 
 describe("computeVolumePressure", () => {
+  // Organic flow: half the 5% cap at ₳1B net, weighted 0.05 against macro.
+  // Intervention: the original linear channel, weighted 0.2.
+  const ORGANIC_MAX = 0.05 * 0.05;
+  const COMBINED_MAX = 0.05 * 0.2;
+
   it("returns 0 when buy equals sell", () => {
     expect(computeVolumePressure({ buyVolume24: 1000, sellVolume24: 1000 })).toBe(0);
   });
@@ -203,31 +209,97 @@ describe("computeVolumePressure", () => {
     expect(computeVolumePressure(zeroVolume)).toBe(0);
   });
 
-  it("positive net volume produces positive pressure", () => {
-    // net = 10000, rawPressure = 10000 * 0.0001 = 1.0 -> capped at 0.05
-    const pressure = computeVolumePressure({ buyVolume24: 10000, sellVolume24: 0 });
-    expect(pressure).toBe(0.05);
+  it("barely registers everyday conversions", () => {
+    // ₳10,000 of net buying used to saturate the cap. Now it is noise.
+    const pressure = computeVolumePressure({ buyVolume24: 10_000, sellVolume24: 0 });
+    expect(pressure).toBeGreaterThan(0);
+    expect(pressure).toBeLessThan(1e-7);
   });
 
-  it("negative net volume produces negative pressure", () => {
-    const pressure = computeVolumePressure({ buyVolume24: 0, sellVolume24: 10000 });
-    expect(pressure).toBe(-0.05);
+  it("is half the organic maximum at ₳1B of broad net buying", () => {
+    const pressure = computeVolumePressure({
+      buyVolume24: 1_000_000_000,
+      sellVolume24: 0,
+      effectiveTraders: 5,
+    });
+    expect(pressure).toBeCloseTo(ORGANIC_MAX / 2, 8);
   });
 
-  it("small volume stays under cap", () => {
-    // net = 100, rawPressure = 100 * 0.0001 = 0.01
-    const pressure = computeVolumePressure({ buyVolume24: 200, sellVolume24: 100 });
-    expect(pressure).toBeCloseTo(0.01, 6);
+  it("is symmetric for net selling", () => {
+    const pressure = computeVolumePressure({
+      buyVolume24: 0,
+      sellVolume24: 1_000_000_000,
+      effectiveTraders: 5,
+    });
+    expect(pressure).toBeCloseTo(-ORGANIC_MAX / 2, 8);
   });
 
-  it("caps at +5%", () => {
-    const pressure = computeVolumePressure({ buyVolume24: 1000000, sellVolume24: 0 });
-    expect(pressure).toBe(0.05);
+  it("never exceeds the organic maximum, however large the flow", () => {
+    const pressure = computeVolumePressure({ buyVolume24: 1e15, sellVolume24: 0 });
+    expect(pressure).toBeLessThanOrEqual(ORGANIC_MAX);
+    expect(pressure).toBeGreaterThan(ORGANIC_MAX * 0.99);
   });
 
-  it("caps at -5%", () => {
-    const pressure = computeVolumePressure({ buyVolume24: 0, sellVolume24: 1000000 });
-    expect(pressure).toBe(-0.05);
+  it("gives one holder moving a fortune a fifth of the push (FX loop, ticket 1364)", () => {
+    const broad = computeVolumePressure({
+      buyVolume24: 400_000_000_000,
+      sellVolume24: 0,
+      effectiveTraders: 5,
+    });
+    const lone = computeVolumePressure({
+      buyVolume24: 400_000_000_000,
+      sellVolume24: 0,
+      effectiveTraders: 1,
+    });
+    expect(lone).toBeCloseTo(broad / 5, 10);
+    // About 0.05% a turn: nowhere near the 1% a turn the loop rode.
+    expect(lone).toBeLessThan(0.0006);
+  });
+
+  it("keeps the intervention channel at its original strength", () => {
+    // Synthetic ₳10,000 * 0.0001 = 1.0 -> capped 0.05, weighted 0.2.
+    expect(computeVolumePressure({ ...zeroVolume, syntheticNet: 10_000 })).toBeCloseTo(
+      COMBINED_MAX,
+      10
+    );
+    expect(computeVolumePressure({ ...zeroVolume, syntheticNet: -10_000 })).toBeCloseTo(
+      -COMBINED_MAX,
+      10
+    );
+  });
+
+  it("lets intervention outweigh an opposing traded flow", () => {
+    const pressure = computeVolumePressure({
+      buyVolume24: 0,
+      sellVolume24: 400_000_000_000,
+      effectiveTraders: 5,
+      syntheticNet: 10_000,
+    });
+    expect(pressure).toBeGreaterThan(0);
+  });
+
+  it("never exceeds what intervention alone could do", () => {
+    const pressure = computeVolumePressure({
+      buyVolume24: 1e15,
+      sellVolume24: 0,
+      effectiveTraders: 50,
+      syntheticNet: 1e9,
+    });
+    expect(pressure).toBeCloseTo(COMBINED_MAX, 10);
+  });
+});
+
+describe("breadthFactor", () => {
+  it("treats unknown breadth as full strength", () => {
+    expect(breadthFactor(undefined)).toBe(1);
+  });
+
+  it("scales from a fifth for one trader to full at five", () => {
+    expect(breadthFactor(1)).toBeCloseTo(0.2, 10);
+    expect(breadthFactor(2.5)).toBeCloseTo(0.5, 10);
+    expect(breadthFactor(5)).toBe(1);
+    expect(breadthFactor(40)).toBe(1);
+    expect(breadthFactor(0.1)).toBeCloseTo(0.2, 10);
   });
 });
 
@@ -237,9 +309,14 @@ describe("applyVolumePressure", () => {
   });
 
   it("decreases rate with net buying (buying strengthens currency)", () => {
-    // net = 100, pressure = 0.01, rate = 1.0 * (1 - 0.01) = 0.99
-    const result = applyVolumePressure(1.0, { buyVolume24: 200, sellVolume24: 100 });
-    expect(result).toBeCloseTo(0.99, 4);
+    const volumes: VolumeInputs = {
+      buyVolume24: 1_000_000_000,
+      sellVolume24: 0,
+      effectiveTraders: 5,
+    };
+    const result = applyVolumePressure(1.0, volumes);
+    expect(result).toBeCloseTo(1 - computeVolumePressure(volumes), 10);
+    expect(result).toBeLessThan(1);
   });
 });
 
@@ -318,11 +395,11 @@ describe("computeRateUpdate (full pipeline)", () => {
   });
 
   it("includes volume pressure in result", () => {
-    const volumes: VolumeInputs = { buyVolume24: 200, sellVolume24: 100 };
+    // Intervention-strength push: synthetic 10,000 -> 0.05 cap * 0.2 weight = 0.01.
+    const volumes: VolumeInputs = { buyVolume24: 0, sellVolume24: 0, syntheticNet: 10_000 };
     const result = computeRateUpdate(1.0, 1.0, "US", neutralUS, volumes, 0);
-    expect(result.volumePressure).toBeCloseTo(0.01, 6);
-    // Volume pressure (0.01) weighted at 20% → rate = 1.0 * (1 - 0.01 * 0.2) = 0.998
-    expect(result.rate).toBeCloseTo(0.998, 3);
+    expect(result.volumePressure).toBeCloseTo(0.01, 10);
+    expect(result.rate).toBeCloseTo(0.99, 6);
   });
 
   it("handles JPY-scale values", () => {
@@ -339,15 +416,18 @@ describe("computeRateUpdate (full pipeline)", () => {
     expect(result.rate).toBeCloseTo(1.006, 4);
   });
 
-  it("macro weakness plus net selling pressure compounds depreciation (capped volume)", () => {
+  it("macro weakness plus net selling pressure compounds depreciation", () => {
     const macro: MacroInputs = { ...neutralUS, inflationRate: 6.0 }; // weaker macro
-    const heavySell: VolumeInputs = { buyVolume24: 0, sellVolume24: 500_000 }; // pressure -> -0.05 cap
+    const heavySell: VolumeInputs = {
+      buyVolume24: 0,
+      sellVolume24: 1_000_000_000,
+      effectiveTraders: 5,
+    };
     const result = computeRateUpdate(1.0, 1.0, "US", macro, heavySell, 0);
-    expect(result.volumePressure).toBe(-0.05);
-    // Selling (negative pressure) → rate * (1 - (-0.05) * 0.2) = rate * 1.01 → compounds depreciation
+    // Half the organic maximum: 0.05 * 0.05 / 2, negative for selling.
+    expect(result.volumePressure).toBeCloseTo(-0.00125, 10);
     const driftOnly = applyDrift(1.0, computeMacroTarget(1.0, macro, "US"));
-    const withVol = driftOnly * (1 - -0.05 * 0.2);
-    expect(result.rate).toBeCloseTo(withVol, 4);
+    expect(result.rate).toBeCloseTo(driftOnly * (1 + 0.00125), 8);
   });
 
   it("simulated year of drift toward inflation-weakened target moves rate materially", () => {
@@ -487,9 +567,9 @@ describe("era-aware monetary baselines (current in-game year)", () => {
 
   it("GRADUATION: baselines re-key as a world's clock advances through the eras", () => {
     // A 1953-default world later in its life:
-    expect(resolveMonetaryBaseline("IT", 1955).targetInflation).toBe(2.5); // 1953 era
-    expect(resolveMonetaryBaseline("IT", 1985).targetInflation).toBe(15.0); // 1979 era
-    expect(resolveMonetaryBaseline("IT", 1995).targetInflation).toBe(5.5); // 1991 era
+    expect(resolveMonetaryBaseline("IT", 1955).targetInflation).toBeCloseTo(2.5 + 6.5 / 9);
+    expect(resolveMonetaryBaseline("IT", 1985).targetInflation).toBeCloseTo(10.25);
+    expect(resolveMonetaryBaseline("IT", 1995).targetInflation).toBeCloseTo(10.25);
     expect(resolveMonetaryBaseline("IT", 2020).targetInflation).toBe(15.0); // modern
     // The live 1991-default world at in-game ~2015 is judged against the
     // MODERN baselines — identical to its pre-era-table FX behavior.

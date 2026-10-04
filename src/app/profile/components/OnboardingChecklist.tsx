@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useTranslations, useLocale } from "next-intl";
 import { Button } from "@/components/ui/Button";
+import { currencySymbolSep } from "@/lib/currency/symbolSep";
 import { usePostHogVariant } from "@/lib/analytics/usePostHogVariant";
 import { captureProductEvent } from "@/lib/analytics/capture";
 
@@ -19,8 +20,9 @@ export interface OnboardingChecklistProps {
   steps: OnboardingChecklistCardStep[];
   completedCount: number;
   total: number;
-  /** Anchor-denominated (₳) completion reward. */
+  /** Completion reward in the currency actually credited on claim. */
   rewardAmount: number;
+  rewardSymbol: string;
 }
 
 /**
@@ -35,6 +37,7 @@ export function OnboardingChecklist({
   completedCount,
   total,
   rewardAmount,
+  rewardSymbol,
 }: OnboardingChecklistProps) {
   const t = useTranslations("profile.onboarding");
   const { variant, ready } = usePostHogVariant("onboarding-checklist");
@@ -57,7 +60,7 @@ export function OnboardingChecklist({
 
   const allComplete = completedCount === total;
   const progressPct = total > 0 ? Math.round((completedCount / total) * 100) : 0;
-  const rewardLabel = `₳${rewardAmount.toLocaleString(locale)}`;
+  const rewardLabel = `${rewardSymbol}${currencySymbolSep(rewardSymbol)}${rewardAmount.toLocaleString(locale)}`;
 
   async function handleDismiss() {
     setDismissing(true);
@@ -98,10 +101,7 @@ export function OnboardingChecklist({
   }
 
   return (
-    <section
-      aria-label={t("checklistAria")}
-      className="rounded-lg border border-card-border bg-card shadow-card"
-    >
+    <section aria-label={t("checklistAria")} className="rounded-md border border-card-border">
       {/* Header */}
       <div className="flex items-center justify-between gap-3 px-4 pt-3">
         <div className="flex items-baseline gap-2 min-w-0">
@@ -121,11 +121,8 @@ export function OnboardingChecklist({
       </div>
 
       {/* Progress bar */}
-      <div className="mx-4 mt-2 h-1 rounded-full bg-track overflow-hidden">
-        <div
-          className="h-full rounded-full bg-primary transition-all"
-          style={{ width: `${progressPct}%` }}
-        />
+      <div className="mx-4 mt-2 h-1 overflow-hidden bg-card-border/60">
+        <div className="h-full bg-foreground/60" style={{ width: `${progressPct}%` }} />
       </div>
 
       {/* Steps */}
@@ -135,7 +132,7 @@ export function OnboardingChecklist({
             {step.done ? (
               <span
                 aria-hidden
-                className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-success/15 text-success text-body-xs font-bold"
+                className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-card-border text-foreground text-body-xs font-bold"
               >
                 ✓
               </span>
@@ -157,7 +154,7 @@ export function OnboardingChecklist({
                 <>
                   <Link
                     href={step.link}
-                    className="text-body-sm font-medium text-foreground hover:text-primary transition-colors"
+                    className="text-body-sm font-medium text-foreground underline-offset-4 hover:underline"
                   >
                     {step.title}
                     <span aria-hidden className="ml-1 text-muted">

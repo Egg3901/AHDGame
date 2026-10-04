@@ -28,10 +28,14 @@ import { adjustPopularLegitimacy } from "@/lib/turn/popularLegitimacy";
 import { recordCountryEvent } from "@/lib/turn/history/recordCountryEvent";
 import { ensureInitialEscalationState } from "@/lib/turn/regimeEscalationTurn";
 import { triggerSystemConversion } from "./systemConversion";
-
-const DRAFT_PHASE_TURNS = 48;
-const VALID_ELECTION_DELAYS = [12, 24, 48] as const;
-type ValidElectionDelay = (typeof VALID_ELECTION_DELAYS)[number];
+import {
+  CONVENTION_DRAFT_PHASE_TURNS as DRAFT_PHASE_TURNS,
+  CONVENTION_ELECTION_DELAYS as VALID_ELECTION_DELAYS,
+  CONVENTION_LEGACY_RESERVATION_MAX,
+  conventionDraftDefaults,
+  conventionTargetAllowlist,
+  type ConventionElectionDelay as ValidElectionDelay,
+} from "./conventionRules";
 
 const ANNOUNCE_POPULAR_BUMP = 15;
 const ANNOUNCE_INTRA_COST = -10;
@@ -82,8 +86,7 @@ export async function announceConvention(
           phase: "announced",
           announcedAtTurn: currentTurn,
           draftDeadlineTurn: currentTurn + DRAFT_PHASE_TURNS,
-          legacyReservation: cfg.legacyReservationDefault ?? 20,
-          electionDelayTurns: cfg.electionDelayDefault ?? 24,
+          ...conventionDraftDefaults(countryId),
         },
         conventionInProgress: true,
         updatedAt: new Date(),
@@ -148,13 +151,11 @@ export async function submitConventionDraft(
   const cfg = COUNTRY_CONFIGS[countryId];
   if (!cfg) throw new Error(`submitConventionDraft: unknown country ${countryId}`);
 
-  const allowlist =
-    cfg.collapseTargetAllowlist ?? (cfg.collapseTargetSystem ? [cfg.collapseTargetSystem] : []);
-  if (!allowlist.includes(draft.targetSystem)) {
+  if (!conventionTargetAllowlist(countryId).includes(draft.targetSystem)) {
     throw new Error(`targetSystem "${draft.targetSystem}" not in ${countryId} allowlist`);
   }
-  if (draft.legacyReservation < 0 || draft.legacyReservation > 35) {
-    throw new Error("legacyReservation must be between 0 and 35");
+  if (draft.legacyReservation < 0 || draft.legacyReservation > CONVENTION_LEGACY_RESERVATION_MAX) {
+    throw new Error(`legacyReservation must be between 0 and ${CONVENTION_LEGACY_RESERVATION_MAX}`);
   }
   if (!VALID_ELECTION_DELAYS.includes(draft.electionDelayTurns)) {
     throw new Error("electionDelayTurns must be 12, 24, or 48");

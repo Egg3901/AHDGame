@@ -57,7 +57,7 @@ export const CORP_TABS: CorpTab[] = [
     id: "commodities",
     label: "Commodities",
     tooltip:
-      "What this corporation produces and consumes each turn — flows, stockpiles, and regional breakdown",
+      "What this corporation produces and consumes each turn: flows, stockpiles, and regional breakdown",
     icon: (
       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path
@@ -118,7 +118,7 @@ export const CORP_TABS: CorpTab[] = [
     id: "snapshot",
     label: "Snapshot",
     tooltip:
-      "Compare any two turns side by side — revenue, net income, market cap, share price, and cash",
+      "Compare any two turns side by side: revenue, net income, market cap, share price, and cash",
     icon: (
       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path
@@ -133,7 +133,7 @@ export const CORP_TABS: CorpTab[] = [
   {
     id: "tech",
     label: "Tech",
-    tooltip: "Decade-gated R&D tech tree — spend R&D points to unlock sector bonuses",
+    tooltip: "Decade-gated R&D tech tree. Spend R&D points to unlock sector bonuses",
     icon: (
       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path
@@ -197,7 +197,7 @@ export const STRUCTURE_TAB: CorpTab = {
   id: "structure",
   label: "Structure",
   tooltip:
-    "Parent and subsidiary relationships — spin off a subsidiary, formalize, and private supply agreements",
+    "Parent and subsidiary relationships: spin off a subsidiary, formalize, and private supply agreements",
   icon: (
     <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
       <path

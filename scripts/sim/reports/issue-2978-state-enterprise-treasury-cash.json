@@ -1,0 +1,92 @@
+{
+  "issue": 2978,
+  "runtimeSource": "ce11cde42570471b9e55a10cb232c4c626c1f243",
+  "runtimeFiles": [
+    "src/lib/nationalization/treasury.ts",
+    "src/lib/nationalization/treasuryLedger.ts",
+    "src/lib/nationalization/soeOperations.ts",
+    "src/lib/nationalization/soeRemittance.ts",
+    "src/lib/turn/corporation/soeBackingSweep.ts",
+    "src/lib/turn/corporation/index.ts",
+    "src/lib/ledger/balanceSnapshot.ts",
+    "src/lib/ledger/deriveFromTx.ts",
+    "src/lib/db/types/financialTxLog.ts",
+    "src/lib/financialTxLog/types-extended.ts",
+    "src/app/api/country/[code]/national-corporation/[id]/treasury-draw/route.ts"
+  ],
+  "reproduction": {
+    "fixture": "native Mongo, GBP rate 0.5, ledger shadow on",
+    "remittance": {
+      "amountLocal": 150000,
+      "corporationAnchorDelta": -300000,
+      "treasuryAnchorDelta": 300000,
+      "ledgerDelta": 0,
+      "uninstrumented": true
+    },
+    "capexGrant": {
+      "grantAnchor": 30000,
+      "treasuryAnchorDelta": -30000,
+      "ledgerDelta": 0,
+      "uninstrumented": true
+    },
+    "worldSignature": "UK primary national corporation ledger above cash by about 155,000 GBP per turn; UK treasury cash above ledger; constant 29,409 GBP difference equal to the capex grant"
+  },
+  "qualification": {
+    "integrationCases": 16,
+    "nativeMongoCases": 8,
+    "memoryCases": 8,
+    "nativeFixture": "isolated local replica set, synthetic namespaces only",
+    "controls": [
+      "remittance nets under one reason at the processing turn",
+      "CEO draw into a USD enterprise from a GBP treasury reconciles both currencies",
+      "loss backing through the actual operations pass reconciles both legs",
+      "state capex grant sinks into the plant it buys",
+      "missing enterprise or treasury publishes only landed legs",
+      "disabled shadow accounting keeps cash outcomes and writes no ledger rows",
+      "landed cash is published when later phase work fails",
+      "actual corporation sweep witnesses backing at the processing turn"
+    ],
+    "focusedSuites": {
+      "files": 115,
+      "passed": 1148,
+      "skipped": 8,
+      "failed": 0
+    },
+    "changedTypeScriptFiles": 15,
+    "scopedLint": "pass",
+    "scopedSemanticDiagnostics": "pass",
+    "formatting": "pass",
+    "architectureAuditBlocking": 0
+  },
+  "cost": {
+    "corporationTurnReads": "one configuration read; three projected reads when shadow accounting is on",
+    "corporationTurnInserts": "at most one batched ledger insert",
+    "playerDraw": "same reads and one insert",
+    "perEnterpriseQueries": 0
+  },
+  "callerAudit": {
+    "alreadyWitnessed": [
+      "spin-off fee",
+      "charter fund fee",
+      "corporation-creation confidence premium",
+      "index petitions",
+      "ownership-transition float buyout"
+    ],
+    "trackedIn2983": [
+      "nationalizeSectorWide compensation",
+      "ownershipTransition compensation (two sites)",
+      "ownershipTransition proceeds",
+      "group relief",
+      "privatizeAsset proceeds",
+      "privatization auction proceeds",
+      "merger review fine",
+      "transfer pricing assessment"
+    ]
+  },
+  "limits": [
+    "Native fixtures qualify the state-enterprise boundary, not the whole world.",
+    "This does not clear #968 or the global cash gate in #2159.",
+    "No production database was reset or repaired.",
+    "No formula, monetary amount or reconciliation tolerance changed."
+  ]
+}

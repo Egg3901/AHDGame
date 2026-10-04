@@ -87,7 +87,7 @@ export function BlendLedger({
       <h2
         style={{
           margin: mobile ? "0 0 8px" : "0 0 10px",
-          fontFamily: FONT.serif,
+          fontFamily: FONT.sans,
           fontSize: mobile ? 20 : 23,
           fontWeight: 600,
         }}
@@ -145,8 +145,7 @@ export function BlendLedger({
         <p
           style={{
             margin: 0,
-            fontFamily: FONT.serif,
-            fontStyle: "italic",
+            fontFamily: FONT.sans,
             fontSize: 14,
             color: BLEND.mutedDim,
           }}
@@ -163,7 +162,7 @@ export function BlendLedger({
                 style={{ padding: "11px 0", borderBottom: "1px solid rgba(42,42,61,.6)" }}
               >
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                  <span style={{ fontFamily: FONT.serif, fontSize: 14.5 }}>{r.name}</span>
+                  <span style={{ fontFamily: FONT.sans, fontSize: 14.5 }}>{r.name}</span>
                   <span
                     style={{
                       fontFamily: FONT.mono,
@@ -191,7 +190,7 @@ export function BlendLedger({
                 <span style={{ fontFamily: FONT.mono, fontSize: 10.5, color: BLEND.mutedDimmer }}>
                   {r.kindLabel}
                 </span>
-                <span style={{ fontFamily: FONT.serif, fontSize: 15 }}>{r.name}</span>
+                <span style={{ fontFamily: FONT.sans, fontSize: 15 }}>{r.name}</span>
               </div>
             )
           )
@@ -202,7 +201,7 @@ export function BlendLedger({
                 style={{ padding: "11px 0", borderBottom: "1px solid rgba(42,42,61,.6)" }}
               >
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                  <span style={{ fontFamily: FONT.serif, fontSize: 14.5 }}>{r.label}</span>
+                  <span style={{ fontFamily: FONT.sans, fontSize: 14.5 }}>{r.label}</span>
                   <span
                     style={{
                       fontFamily: FONT.mono,
@@ -228,8 +227,7 @@ export function BlendLedger({
                   <div
                     style={{
                       marginTop: 3,
-                      fontFamily: FONT.serif,
-                      fontStyle: "italic",
+                      fontFamily: FONT.sans,
                       fontSize: 12,
                       color: BLEND.caution,
                     }}
@@ -253,14 +251,13 @@ export function BlendLedger({
                 <span style={{ fontFamily: FONT.mono, fontSize: 10.5, color: BLEND.mutedDimmer }}>
                   {r.turnTag}
                 </span>
-                <span style={{ fontFamily: FONT.serif, fontSize: 15 }}>
+                <span style={{ fontFamily: FONT.sans, fontSize: 15 }}>
                   {r.label}
                   {r.reason ? (
                     <span
                       style={{
                         display: "block",
                         marginTop: 2,
-                        fontStyle: "italic",
                         fontSize: 13,
                         color: BLEND.caution,
                       }}

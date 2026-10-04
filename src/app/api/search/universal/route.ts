@@ -126,6 +126,11 @@ async function handleGET(request: Request) {
     const query = searchParams.get("q")?.trim() || "";
     const isResultsPage = searchParams.get("view") === "page";
 
+    // BSON regex serialization rejects null bytes before MongoDB can run the query.
+    if (query.includes("\u0000")) {
+      return NextResponse.json({ error: "Query contains an invalid character" }, { status: 400 });
+    }
+
     // Return empty results for empty or too-short queries. A 1-character query
     // forces a near-full scan of every searched collection.
     if (query.length < 2) {
@@ -193,7 +198,6 @@ async function handleGET(request: Request) {
           title: character.name,
           subtitle: `${character.party} · ${character.homeState}`,
           href: `/character/${character.sequentialId ?? character._id.toString()}`,
-          icon: "👤",
         });
       }
     }
@@ -244,7 +248,6 @@ async function handleGET(request: Request) {
             title: character.name,
             subtitle: `${character.party} · ${character.homeState}`,
             href: `/character/${character.sequentialId ?? character._id.toString()}`,
-            icon: "👤",
           });
         }
       }
@@ -274,7 +277,6 @@ async function handleGET(request: Request) {
           title: target.title,
           subtitle: target.subtitle,
           href: target.href,
-          icon: "🏛️",
         });
       }
     }
@@ -321,7 +323,6 @@ async function handleGET(request: Request) {
           title: electionTitle,
           subtitle: electionSubtitle,
           href: `/elections/${election._id.toString()}`,
-          icon: "🗳️",
         });
       }
     }
@@ -360,7 +361,6 @@ async function handleGET(request: Request) {
         title: corp.name,
         subtitle: `${corp.type} · ${ceoName ? `CEO: ${ceoName}` : corp.headquartersState}`,
         href: `/corporation/${corp.sequentialId ?? corp._id.toString()}`,
-        icon: "🏢",
       });
     }
 
@@ -381,7 +381,6 @@ async function handleGET(request: Request) {
         title: bill.title,
         subtitle: `${statusLabel} · Sponsor: ${bill.sponsorName}`,
         href: `/congress/bills/${bill._id.toString()}`,
-        icon: "📜",
       });
     }
 
@@ -406,7 +405,6 @@ async function handleGET(request: Request) {
         title: bill.title,
         subtitle: `${statusLabel} · ${bill.stateId || "State"} · Sponsor: ${bill.sponsorName}`,
         href: `/country/us/region/${bill.stateId || "national"}/legislature/bills/${bill._id.toString()}`,
-        icon: "📜",
       });
     }
 
@@ -495,7 +493,6 @@ async function handleGET(request: Request) {
           ? `${legislation.name} option · ${countryName} · propose in the legislature`
           : `Proposable law · ${countryName} · propose in the legislature`,
         href: scope === "us" ? "/congress" : legislatureUrl(countryId),
-        icon: "📜",
       });
     }
 
@@ -527,7 +524,6 @@ async function handleGET(request: Request) {
           title: page.title,
           subtitle: page.description || "Wiki page",
           href: `/wiki/${page.slug}`,
-          icon: "📄",
         });
       }
 
@@ -544,7 +540,6 @@ async function handleGET(request: Request) {
             title: page.title,
             subtitle: page.description,
             href: page.href,
-            icon: "📄",
           });
         }
       }
@@ -567,7 +562,6 @@ async function handleGET(request: Request) {
         title: COMMODITY_LABELS[commodityType],
         subtitle: "Market & price data",
         href: `/commodity/${commodityType}`,
-        icon: "📦",
       });
     }
 
@@ -612,7 +606,6 @@ async function handleGET(request: Request) {
         title: `${name} (${currencyCode})`,
         subtitle: countryName,
         href: `/forex/global?filter=${currencyCode}`,
-        icon: "💱",
       });
     }
 
@@ -634,7 +627,6 @@ async function handleGET(request: Request) {
           title: cconfig.name,
           subtitle: "National Overview",
           href: countryPageMap[cid],
-          icon: "🌍",
         });
       }
     }
@@ -700,7 +692,6 @@ async function handleGET(request: Request) {
           title: sname,
           subtitle: "US State",
           href: `/country/us/region/${abbr}`,
-          icon: "📍",
         });
       }
     }
@@ -718,7 +709,6 @@ async function handleGET(request: Request) {
             title: region.name,
             subtitle: "UK Region",
             href: `/country/uk/region/${region.id}`,
-            icon: "📍",
           });
         }
       }
@@ -737,7 +727,6 @@ async function handleGET(request: Request) {
             title: region.name,
             subtitle: "Japan Region",
             href: `/country/jp/region/${region.id}`,
-            icon: "📍",
           });
         }
       }
@@ -771,7 +760,6 @@ async function handleGET(request: Request) {
             title: sname,
             subtitle: "German State",
             href: `/country/de/region/${abbr}`,
-            icon: "📍",
           });
         }
       }
@@ -808,7 +796,6 @@ async function handleGET(request: Request) {
           title: `${corpName} Bond`,
           subtitle: `${BOND_MATURITY_LABELS[bond.maturityTurns]} · ${bond.currencyCode || "₳"}${(bond.faceValue / 1000).toFixed(1)}K`,
           href: `/bond/${bond._id.toString()}`,
-          icon: "📊",
         });
       }
     }
@@ -831,7 +818,6 @@ async function handleGET(request: Request) {
         title: npp.name,
         subtitle: `${npp.party} · ${npp.homeState} · NPP`,
         href: `/politicians/npp/${npp._id.toString()}`,
-        icon: "👤",
       });
     }
 
@@ -840,15 +826,13 @@ async function handleGET(request: Request) {
       const adminTabs: Array<{
         name: string;
         label: string;
-        icon: string;
         subtabs?: Array<{ name: string; label: string }>;
       }> = [
-        { name: "dashboard", label: "Dashboard", icon: "📊" },
-        { name: "traffic", label: "Traffic", icon: "📈" },
+        { name: "dashboard", label: "Dashboard" },
+        { name: "traffic", label: "Traffic" },
         {
           name: "politics",
           label: "Politics",
-          icon: "🏛️",
           subtabs: [
             { name: "elections", label: "Elections" },
             { name: "parties", label: "Parties" },
@@ -859,7 +843,6 @@ async function handleGET(request: Request) {
         {
           name: "economy",
           label: "Economy",
-          icon: "💰",
           subtabs: [
             { name: "central-banks", label: "Central Banks" },
             { name: "stock-market", label: "Stock Market" },
@@ -875,7 +858,6 @@ async function handleGET(request: Request) {
         {
           name: "world",
           label: "World",
-          icon: "🌍",
           subtabs: [
             { name: "demographics", label: "Demographics" },
             { name: "npps", label: "NPPs" },
@@ -887,7 +869,6 @@ async function handleGET(request: Request) {
         {
           name: "players",
           label: "Players",
-          icon: "👥",
           subtabs: [
             { name: "users", label: "Users" },
             { name: "resources", label: "Resources" },
@@ -904,7 +885,6 @@ async function handleGET(request: Request) {
         {
           name: "content",
           label: "Content",
-          icon: "📄",
           subtabs: [
             { name: "wiki", label: "Wiki" },
             { name: "wiki-review", label: "Wiki Review" },
@@ -914,7 +894,6 @@ async function handleGET(request: Request) {
         {
           name: "support",
           label: "Support",
-          icon: "🆘",
           subtabs: [
             { name: "suggestions", label: "Suggestions" },
             { name: "feedback", label: "Feedback" },
@@ -927,7 +906,6 @@ async function handleGET(request: Request) {
         {
           name: "system",
           label: "System",
-          icon: "⚙️",
           subtabs: [
             { name: "seed", label: "Seed" },
             { name: "universal-seeder", label: "Universal Seeder" },
@@ -952,7 +930,6 @@ async function handleGET(request: Request) {
             title: tab.label,
             subtitle: "Admin Panel",
             href: `/admin?tab=${tab.name}`,
-            icon: tab.icon,
           });
         }
 
@@ -969,7 +946,6 @@ async function handleGET(request: Request) {
                 title: subtab.label,
                 subtitle: `${tab.label}`,
                 href: `/admin?tab=${tab.name}&sub=${subtab.name}`,
-                icon: tab.icon,
               });
             }
           }

@@ -1,4 +1,5 @@
 import type { ObjectId } from "mongodb";
+import type { RankedBallot, PrStvResult } from "@/lib/turn/election/rules/prStv";
 import type { DemocraticHealthElectionSnapshot } from "@/lib/electionEngine/democraticHealth";
 import type { FactorLedgerSnapshot } from "@/lib/electionEngine/factorLedger";
 
@@ -9,6 +10,12 @@ export interface VoteTurnSnapshot {
   sharesPct: Record<string, number>;
   /** Multi-seat races only (house, stateSenate, commons, …): Hamilton seat projection at this turn. */
   seatsEstimate?: Record<string, number>;
+  /** Native Council snapshots count valid voters separately from candidate marks. */
+  russianCouncilBallot?: {
+    registeredVoters: number;
+    validBallots: number;
+    againstAllVotes: number;
+  };
 }
 
 /** Stored when primary resolves — canonical primary results for wiki/history. */
@@ -35,19 +42,64 @@ export interface ResolvedSeatHolder {
 }
 
 export interface ElectionVoteTally {
+  brazilPresidentialResult?: import("@/lib/countries/br/rules/presidential").BrazilPresidentialDecision;
   _id: ObjectId;
   electionId: ObjectId;
   state: string;
+  /** Explicit opt-in; absent tallies retain the country's existing allocator. */
+  countingMethod?: "pr_stv";
+  /** Original cast ballots, including preferences for subsequently unavailable candidates. */
+  rankedBallots?: RankedBallot[];
+  rankedPreferenceModel?: "same_party_then_policy_distance_v1";
+  /** Frozen executed count; absent on historical and non-STV results. */
+  prStvResult?: PrStvResult;
   totalVotes: Record<string, number>;
+  /** HU post-2014: districtId -> candidateId -> constituency ballots. */
+  huConstituencyVotes?: Record<string, Record<string, number>>;
+  /** HU post-2014: partyId -> separate national-list ballots. */
+  huListVotes?: Record<string, number>;
+  /** HU post-2014: districtId -> partyId -> active nominee candidateId. */
+  huDistrictSlate?: Record<string, Record<string, string>>;
   candidateNames: Record<string, string>;
   candidateParties: Record<string, string>;
+  /** Candidate kind at ballot time for bounded SNTV slate projections. */
+  candidateIsNPP?: Record<string, boolean>;
   turnSnapshots: VoteTurnSnapshot[];
   finalized: boolean;
+  /** Native first-Duma valid against-all ballots and certification outcome. */
+  russianDumaBallot?: {
+    invalidBallots?: number;
+    issuedBallots?: number;
+    againstAllVotes: number;
+    invalidated?: boolean;
+    outcome?: "elected" | "repeat";
+    certifiedCohortId?: ObjectId;
+  };
+  /** Native Council candidate marks may total up to twice valid participation. */
+  russianCouncilBallot?: {
+    registeredVoters: number;
+    validBallots: number;
+    againstAllVotes: number;
+    registrationOrderByCandidate: Record<string, number>;
+    invalidated?: boolean;
+    outcome?: "elected" | "repeat";
+    certifiedCohortId?: ObjectId;
+  };
+  /** Counted Bulgarian list votes survive withdrawals; seats require a national count. */
+  bgOrdinaryBallot?: true;
+  /** Native Hungarian marks survive withdrawal while statutory counts remain pending. */
+  hungarianAssemblyBallot?: true;
+  /** Bulgarian founding marks survive withdrawal until native certification. */
+  bulgarianFoundingBallot?: true;
   seatsEstimate?: Record<string, number>;
   /** Actual non-presidential resolver receipt. Absent on historical tallies. */
   resolutionPath?:
+    | "pr_stv"
     | "single_winner"
     | "hare_quota"
+    | "bg_ordinary_national"
+    | "bg_founding_parallel"
+    | "hu_statutory_mixed"
     | "districted_house"
     | "bloc_list"
     | "sainte_lague"
@@ -91,6 +143,14 @@ export interface ElectionVoteTally {
   electoralVotesByCandidate?: Record<string, number>;
   /** President only: how the race was resolved when finalized */
   resolutionMode?: "majority" | "contingent" | "contingent_deadlock";
+  /** Russia counts popular ballots; no electoral votes are invented for display. */
+  russianPresidentialResult?: {
+    outcome: "won" | "runoff" | "repeat";
+    winnerCandidateId?: string;
+    round: 1 | 2;
+    registeredVoters: number;
+    participants: number;
+  };
   /** President only: House/Senate contingent vote breakdown when no EV majority */
   contingentResult?: {
     eligiblePresidentCandidateIds: string[];

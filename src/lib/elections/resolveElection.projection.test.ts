@@ -183,6 +183,19 @@ describe("issue #2168 summary projections", () => {
     expect(bytes).toBeGreaterThan(20_000);
   });
 
+  it("shares apportionment and local-region reads across list elections", async () => {
+    const { db, election } = setupSummaryWorld();
+    const elections = [
+      { ...election, seatId: "US-senate-CA-1" },
+      { ...election, _id: new ObjectId(), state: "NY", seatId: "US-senate-NY-2" },
+    ];
+
+    await resolveElections(db as unknown as Db, elections, { view: "summary", userId: null });
+
+    expect(db.collectionMocks.states!.find).toHaveBeenCalledTimes(2); // apportionment + batched race regions
+    expect(db.collectionMocks.states!.findOne).not.toHaveBeenCalled();
+  });
+
   it("resolveElections summary omits policies.domainPositions from every NPP read", async () => {
     const { db, election } = setupSummaryWorld();
     await resolveElections(db as unknown as Db, [election], {
@@ -297,5 +310,37 @@ describe("issue #2168 summary projections", () => {
       ([filter]) => filter && "_id" in (filter as object)
     );
     expect(batchCall?.[1]?.projection ?? null).toBeNull();
+  });
+});
+
+describe("Hungarian modern election response", () => {
+  it("retains the district-filing rule for the full client response without exposing authorization metadata", async () => {
+    const db = createMockDb();
+    const election = makeElection({
+      countryId: "HU",
+      electionType: "general",
+      state: "HU",
+      status: "upcoming",
+      startTurn: 20,
+      hungarianModernAssembly: {
+        ruleVersion: "mixed-2011-v1",
+        authorizedOnTurn: 10,
+        reason: "parliamentary_decision",
+      },
+    });
+    db.collection("elections").findOne.mockResolvedValue(election);
+    db.collection("gameState").findOne.mockResolvedValue({
+      _id: "current",
+      preset: "1991",
+      currentYear: 2014,
+      currentTurn: 10,
+      isActive: true,
+    });
+    const [response] = await resolveElections(db as unknown as Db, [election], {
+      view: "full",
+      userId: null,
+    });
+    expect(response.countryId).toBe("HU");
+    expect(response.hungarianModernAssembly).toEqual({ ruleVersion: "mixed-2011-v1" });
   });
 });

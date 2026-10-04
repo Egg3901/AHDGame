@@ -13,7 +13,7 @@ export function StatusBadge({
   const tone = scoreTone(score);
   return (
     <span
-      className={`inline-block whitespace-nowrap rounded border px-1.5 py-0.5 font-mono text-body-xs font-bold tracking-wide ${tone.border} ${tone.text} ${className ?? ""}`}
+      className={`inline-block whitespace-nowrap rounded border px-1.5 py-0.5 font-mono text-body-sm font-bold tracking-wide ${tone.border} ${tone.text} ${className ?? ""}`}
     >
       {label}
     </span>

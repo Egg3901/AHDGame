@@ -24,7 +24,7 @@ export default function CommodityMapLegend({
     const stops = getReachableLegendStops();
     const gradient = `linear-gradient(to right, ${stops.map((s) => s.color).join(", ")})`;
     return (
-      <div className="flex items-center gap-2 bg-card/90 backdrop-blur-md px-3 py-2 rounded-lg border border-card-border shadow-sm">
+      <div className="flex items-center gap-2 bg-card px-3 py-2 rounded-lg border border-card-border shadow-sm">
         <span className="text-[10px] font-semibold text-muted uppercase tracking-wider whitespace-nowrap">
           Reachable
         </span>
@@ -68,7 +68,7 @@ export default function CommodityMapLegend({
     mode === "price" ? "(price)" : mode === "capacity" ? `(${unit}/turn)` : `(${unit}/day)`;
 
   return (
-    <div className="flex items-center gap-2 bg-card/90 backdrop-blur-md px-3 py-2 rounded-lg border border-card-border shadow-sm">
+    <div className="flex items-center gap-2 bg-card px-3 py-2 rounded-lg border border-card-border shadow-sm">
       <span className="text-[10px] font-semibold text-muted uppercase tracking-wider whitespace-nowrap">
         {modeLabel}
       </span>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { partyApiUrl } from "@/lib/urls";
 import { getPartyRoleLabel } from "@/lib/parties/partyRoleLabels";
+import { MergerNppWarning } from "./MergerNppWarning";
 
 type ProposalType =
   | "rename"
@@ -273,7 +274,7 @@ export function CreateProposalForm({
   return (
     <div className="rounded-xl border border-card-border bg-card p-5 space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold">New Proposal</h3>
+        <h3 className="text-sm font-semibold">New proposal</h3>
         <button onClick={() => setOpen(false)} className="text-xs text-muted hover:text-foreground">
           Cancel
         </button>
@@ -504,9 +505,7 @@ export function CreateProposalForm({
               >
                 <div className="font-medium">
                   {opt.label}
-                  {isCurrent && (
-                    <span className="ml-2 text-[10px] uppercase tracking-wider">current</span>
-                  )}
+                  {isCurrent && <span className="ml-2 text-body-sm">current</span>}
                 </div>
                 <div className="text-muted mt-0.5">{opt.description}</div>
               </button>
@@ -542,6 +541,9 @@ export function CreateProposalForm({
           <p className="text-xs text-muted mt-1">
             Both committees must pass for the merge to take effect.
           </p>
+          <div className="mt-3">
+            <MergerNppWarning />
+          </div>
         </div>
       )}
 

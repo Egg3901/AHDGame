@@ -49,9 +49,11 @@ export async function loadCorporationDetailView(args: {
 
   const refDataPromise = getTurnReferenceData(db, currentTurn);
   const equityQuotePromise = loadEquityQuote(db, corporation);
-  const bankingPolicyPromise = corporation.bankCharter
-    ? loadBankingPolicy(db)
-    : Promise.resolve(null);
+  const viewerOwnsCorporation = !!viewerUserId && corporation.userId?.toString() === viewerUserId;
+  const bankingPolicyPromise =
+    corporation.bankCharter || viewerOwnsCorporation
+      ? loadBankingPolicy(db)
+      : Promise.resolve(null);
 
   const [openListingsForInvariant, openSellOrdersForInvariant] = await Promise.all([
     db
@@ -157,6 +159,11 @@ export async function loadCorporationDetailView(args: {
       tariffLookups: { blendPresenceKeys, ftaCoverage },
       stateCtx,
       marketCtx,
+      // Same test the CEO-only routes apply (requireCeo).
+      viewerIsCeo:
+        !!viewerUserId &&
+        corporation.ceoVacant !== true &&
+        corporation.userId?.toString() === viewerUserId,
     });
 
   const portfolio = await loadPortfolioHoldings(db, corporation, currentTurn, fxByCurrency);
@@ -216,6 +223,7 @@ export async function loadCorporationDetailView(args: {
   const physical = buildPhysicalPnl(plantsMode, physicalRollups, sectorDetails.length);
 
   const equityQuote = await equityQuotePromise;
+  const underwritingPolicy = await bankingPolicyPromise;
 
   return {
     corporation: {
@@ -236,13 +244,32 @@ export async function loadCorporationDetailView(args: {
       tickerSymbol: corporation.tickerSymbol ?? undefined,
       description: corporation.description,
       type: corporation.type,
+      industryModel: corporation.industryModel ?? null,
       countryId: corporation.countryId,
       secondaryType: corporation.secondaryType ?? null,
       typeSwitchCooldownUntilTurn: corporation.typeSwitchCooldownUntilTurn ?? null,
       typeSwitchTurn: corporation.typeSwitchTurn ?? null,
       currentTurn,
-      typeLabel: CORPORATION_TYPE_LABELS[corporation.type],
+      ...(viewerOwnsCorporation
+        ? {
+            primaryUnderwritingEnabled: underwritingPolicy?.primaryUnderwriting === true,
+            primaryUnderwritingMandate: corporation.primaryUnderwritingMandate
+              ? {
+                  bankCorporationId:
+                    corporation.primaryUnderwritingMandate.bankCorporationId.toHexString(),
+                  charteredTurn: corporation.primaryUnderwritingMandate.charteredTurn,
+                  currencyCode: corporation.primaryUnderwritingMandate.currencyCode,
+                  feeRate: corporation.primaryUnderwritingMandate.feeRate,
+                }
+              : null,
+          }
+        : {}),
+      typeLabel:
+        corporation.type === "manufacturing" && corporation.industryModel === "vehicles"
+          ? "Vehicle manufacturing"
+          : CORPORATION_TYPE_LABELS[corporation.type],
       headquartersState: corporation.headquartersState,
+      federationPendingHeadquartersId: corporation.federationPendingHeadquartersId,
       headquartersStateName:
         stateNameMap.get(corporation.headquartersState) ?? corporation.headquartersState,
       liquidCapital: Math.round(corporation.liquidCapital),

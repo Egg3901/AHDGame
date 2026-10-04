@@ -16,6 +16,7 @@ import {
   ensureJPCouncillorElections,
   ensureDEElections,
   ensureBRElections,
+  ensureBRGovernorElections,
   ensureNGElections,
   ensureIEElections,
   ensureIEUachtaranElections,
@@ -54,6 +55,16 @@ import { seedHistoricalOfficials, seedFromSeats } from "@/lib/npp/seedHistorical
 import { getPresetSeats } from "@/lib/constants/historicalSeats";
 import { initializeOfficials } from "@/lib/admin/bootstrap/initializeOfficials";
 import { shouldSeedHistoricalOfficials } from "@/lib/admin/seed/historicalSeedGate";
+import {
+  completeFresh1991VehicleModelSeed,
+  convertFresh1991AutomobileSeedRows,
+  prepareFresh1991VehicleModelSeed,
+} from "@/lib/admin/seed/fresh1991VehicleModelSeed";
+import {
+  completeFresh1991MediaTaxonomySeed,
+  convertFresh1991MediaTaxonomyRows,
+  prepareFresh1991MediaTaxonomySeed,
+} from "@/lib/admin/seed/fresh1991MediaTaxonomySeed";
 import {
   seedStatePolicies,
   seedBudgets,
@@ -205,6 +216,10 @@ import { seedEasternBlocCountry, seedEasternBlocBudget } from "@/lib/admin/seed/
 import { seedEasternBlocStatePartyOrg } from "@/lib/admin/seed/seedEasternBlocStatePartyOrg";
 import { seedCountryGameStates } from "@/lib/admin/seed/seedCountryGameStates";
 import { seedMacroCountries } from "@/lib/world/macro";
+import {
+  FEDERATION_SETTLEMENT_APPLICATIONS_COLLECTION,
+  WORLD_ENTITY_STATES_COLLECTION,
+} from "@/lib/world/succession/runtimeEntities";
 import { getHuSeedConfig } from "@/lib/seeds/hu/huSeed";
 import { getPlSeedConfig } from "@/lib/seeds/pl/plSeed";
 import { getRoSeedConfig } from "@/lib/seeds/ro/roSeed";
@@ -256,6 +271,10 @@ export interface BootstrapOptions {
   preset?: string;
   skipRegionalCouncil?: boolean;
   resetReference?: boolean;
+  /** Internal, reset-wrapper-only opt-in for the fresh 1991 vehicle seed. */
+  fresh1991VehicleModelSeed?: boolean;
+  /** Internal, reset-wrapper-only opt-in for the fresh 1991 media taxonomy seed. */
+  fresh1991MediaTaxonomySeed?: boolean;
   /** If true, only run seeders — skip election spawning, official seeding, and game state init */
   seedOnly?: boolean;
   /**
@@ -547,9 +566,81 @@ export async function seedAllCountryData(
       // one-party each and share this one.
       await seedEasternBlocStatePartyOrg(db, resetReference, log, preset);
     })(),
+    pack(async (log) => {
+      if (preset !== "2027-default") return;
+      const {
+        seedHURegions,
+        seedHUParties,
+        seedHUDemographics,
+        seedHUStateMetrics,
+        seedHUBaselines,
+        seedHUStatePartyOrg,
+        seedHUGovernmentFormation,
+      } = await import("./seed/seedHU");
+      await seedHURegions(db, resetReference, log, preset);
+      await seedHUParties(db, log, preset);
+      await seedHUDemographics(db, resetReference, log, preset);
+      await seedHUStateMetrics(db, resetReference, log, preset);
+      await seedHUBaselines(db, resetReference, log, preset);
+      await seedHUStatePartyOrg(db, resetReference, log, preset);
+      await seedHUGovernmentFormation(db, log, preset);
+    })(),
+    // Modern PL, RO, RU and BG political substrate (2027-default only). The Cold-War
+    // one-party block above self-guards on isEasternBlocEra, and the 1991
+    // successor seeders below self-guard on preset, so this pack only runs
+    // where neither does. Scoped to each country's rows throughout.
+    pack(async (log) => {
+      if (preset !== "2027-default") return;
+      const { seedModernTransitionCountry } = await import("./seed/seedModernTransitionCountries");
+      await seedModernTransitionCountry(db, resetReference, log, preset, "PL");
+      await seedModernTransitionCountry(db, resetReference, log, preset, "RO");
+      await seedModernTransitionCountry(db, resetReference, log, preset, "RU");
+      const { seedBG2027 } = await import("./seed/seedBG2027");
+      await seedBG2027(db, resetReference, log, preset);
+    })(),
+    pack(async (log) => {
+      if (preset !== "2019-default") return;
+      const { seedModern2019 } = await import("./seed/seedModern2019");
+      await seedModern2019(db, resetReference, log, preset);
+    })(),
   ]);
 
   for (const buffer of packBuffers) for (const line of buffer) log(line);
+
+  const { seedSuccessorRegions1991 } = await import("./seed/seedSuccessorRegions1991");
+  await seedSuccessorRegions1991(db, resetReference, preset, log);
+
+  const { seedSuccessorMetrics1991 } = await import("./seed/seedSuccessorMetrics1991");
+  await seedSuccessorMetrics1991(db, resetReference, preset, log);
+
+  const { seedSuccessorDemographics1991 } = await import("./seed/seedSuccessorDemographics1991");
+  await seedSuccessorDemographics1991(db, resetReference, preset, log);
+
+  const { seedSuccessorParties1991 } = await import("./seed/seedSuccessorParties1991");
+  await seedSuccessorParties1991(db, preset, log);
+
+  const { seedSuccessorStatePartyOrg1991 } = await import("./seed/seedSuccessorStatePartyOrg1991");
+  await seedSuccessorStatePartyOrg1991(db, resetReference, preset, log);
+
+  // HU's 1991 successor institutions are parliamentary. Seed their pending
+  // formation after the successor party roster, not in the 2027 HU pack above.
+  if (preset === "1991-default") {
+    const { seedHUGovernmentFormation } = await import("./seed/seedHU");
+    await seedHUGovernmentFormation(db, log, preset);
+    const { seedCSGovernmentFormation1991 } = await import("./seed/seedCSGovernmentFormation1991");
+    await seedCSGovernmentFormation1991(db, log, preset);
+    const { seedBGGovernmentFormation1991 } = await import("./seed/seedBGGovernmentFormation1991");
+    await seedBGGovernmentFormation1991(db, log, preset);
+    const { seedROGovernmentFormation1991 } = await import("./seed/seedROGovernmentFormation1991");
+    await seedROGovernmentFormation1991(db, log, preset);
+  }
+
+  const { ensureDemographicBaselines } = await import("./seed/ensureDemographicBaselines");
+  await ensureDemographicBaselines(db, log);
+
+  const { reconcileModernRegionPopulation } =
+    await import("./seed/reconcileModernRegionPopulation");
+  await reconcileModernRegionPopulation(db, preset, log);
 
   // Stand up the per-region age/sex cohort vectors (the demographic SSOT the turn
   // engine evolves) and stamp turn-0 derived population metrics (sexRatio /
@@ -591,9 +682,43 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
   const noStartingParties = startingParties === "none";
   const globallyVacant = preset === "2019-no-parties";
   if (noStartingParties && !globallyVacant) mode = "historical";
-  const preIteration = !noStartingParties && (options.preIteration ?? false);
+  const preIteration = options.preIteration ?? false;
   const log = options.log ?? (() => {});
   const { db } = options;
+
+  // Model and media-lane unique keys must exist before any seed writer creates
+  // overlapping market identities. These migrations also run at hosted startup.
+  const marketIdentityIndexes = MIGRATIONS.filter(
+    (migration) => migration.id === "2026-10-04-media-discriminator-market-indexes"
+  );
+  if (marketIdentityIndexes.length > 0) {
+    // Reset drops the runtime market collections (and their indexes) but keeps
+    // migrationsRun markers. Rebuild these idempotent, metadata-only indexes on
+    // every bootstrap instead of trusting the historical marker to mean the
+    // current collection still exists.
+    await runMigrations(db, {
+      migrations: marketIdentityIndexes,
+      dryRun: false,
+      only: marketIdentityIndexes.map((migration) => migration.id),
+      force: true,
+    });
+  }
+
+  // This marker is opt-in only from resetAndBootstrapGameWorld. Its first call
+  // requires an empty economic world, so an existing save can never be healed
+  // or converted by a routine bootstrap/reseed.
+  const freshVehicleSeed = await prepareFresh1991VehicleModelSeed(db, {
+    enabled: options.fresh1991VehicleModelSeed === true,
+    preset,
+    resetReference,
+    dryRun: false,
+  });
+  const freshMediaTaxonomySeed = await prepareFresh1991MediaTaxonomySeed(db, {
+    enabled: options.fresh1991MediaTaxonomySeed === true,
+    preset,
+    resetReference,
+    dryRun: false,
+  });
 
   // Contain a RECOVERABLE block. Without a run record this is a bare call, so
   // direct callers are unaffected.
@@ -604,6 +729,26 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
   // not a world and everything after would seed on top of the damage.
   const guarded = <T>(name: string, fn: () => Promise<T>): Promise<T | null> =>
     options.run ? options.run.step("build", name, fn) : fn().then((v) => v as T | null);
+  const completeFreshVehicleSeed = async () => {
+    if (!freshVehicleSeed.enabled) return;
+    const requiredWritesSucceeded = !options.run || options.run.failures.length === 0;
+    if (!requiredWritesSucceeded) {
+      log(
+        `[manufacturing-vehicles] fresh seed remains incomplete because ${options.run!.failures.length} reset stage(s) failed`
+      );
+    }
+    await completeFresh1991VehicleModelSeed(db, requiredWritesSucceeded);
+  };
+  const completeFreshMediaTaxonomySeed = async () => {
+    if (!freshMediaTaxonomySeed.enabled) return;
+    const requiredWritesSucceeded = !options.run || options.run.failures.length === 0;
+    if (!requiredWritesSucceeded) {
+      log(
+        `[media-taxonomy] fresh seed remains incomplete because ${options.run!.failures.length} reset stage(s) failed`
+      );
+    }
+    await completeFresh1991MediaTaxonomySeed(db, requiredWritesSucceeded);
+  };
 
   log(seedOnly ? "Re-seeding reference data" : `Bootstrapping clean world (${mode})`);
 
@@ -647,7 +792,9 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
   await seedDeBudgets(db, resetReference, log, preset);
   await seedBrBudgets(db, resetReference, log, preset);
   await seedCnBudgets(db, resetReference, log, preset);
-  await seedRuBudgets(db, resetReference, log, preset);
+  // The legacy RU seeder constructs Soviet SOEs. The 2019 democratic fiscal
+  // pack below owns the modern RU budget and sovereign issuer instead.
+  if (preset !== "2019-default") await seedRuBudgets(db, resetReference, log, preset);
   await seedFrBudgets(db, resetReference, log, preset);
   await seedItBudgets(db, resetReference, log, preset);
   await seedEsBudgets(db, resetReference, log, preset);
@@ -657,6 +804,13 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
   await seedAtBudgets(db, resetReference, log, preset);
   await seedFiBudgets(db, resetReference, log, preset);
   await seedDdBudgets(db, resetReference, log, preset);
+
+  if (freshVehicleSeed.enabled) {
+    const converted = await convertFresh1991AutomobileSeedRows(db, { dryRun: false });
+    log(
+      `[manufacturing-vehicles] fresh seed re-keyed ${converted.corporations} corporations and ${converted.sectors} sectors`
+    );
+  }
 
   // Warsaw-Pact BUDGETS. The countries themselves are seeded in
   // `seedAllCountryData` with every other country pack; only their budgets live
@@ -675,6 +829,20 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
       );
     }
   }
+
+  const { seedSuccessorBudgets1991 } = await import("./seed/seedSuccessorBudgets1991");
+  await guarded("seedSuccessorBudgets1991", () =>
+    seedSuccessorBudgets1991(db, resetReference, preset, log)
+  );
+  const { seedModernBudgets2019 } = await import("./seed/seedModernBudgets2019");
+  await guarded("seedModernBudgets2019", () =>
+    seedModernBudgets2019(db, resetReference, preset, log)
+  );
+  const { seedModernTransitionBudgets2027 } =
+    await import("./seed/seedModernTransitionBudgets2027");
+  await guarded("seedModernTransitionBudgets2027", () =>
+    seedModernTransitionBudgets2027(db, resetReference, preset, log)
+  );
 
   // Every command-economy seeder above reads `commandEconomyEnabled` itself and
   // falls back to the legacy single-corp shape via a silent `return` or an empty
@@ -717,6 +885,8 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
   // rather than an orphaned principal with zero instruments (#3370 P3).
   await guarded("seedSovereignBondInstruments", () => seedSovereignBondInstruments(db, log, 0));
   await seedCountryGameStates(db, preset, getStartingYearForPreset(preset), log);
+  await db.collection(WORLD_ENTITY_STATES_COLLECTION).deleteMany({});
+  await db.collection(FEDERATION_SETTLEMENT_APPLICATIONS_COLLECTION).deleteMany({});
   await seedMacroCountries(db, preset, log);
   await reconcileSignedTariffBills(db);
 
@@ -738,7 +908,9 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
   // world leaves the $setOnInsert market docs frozen at the old scale (the
   // 2026-05 1991-reset bug). A soft idempotent fill (resetReference=false)
   // stays insert-only so any captured pools on a live world are preserved.
-  await guarded("seedUnownedSectors", () => seedUnownedSectors(db, log, 1, preset, resetReference));
+  await guarded("seedUnownedSectors", () =>
+    seedUnownedSectors(db, log, 1, preset, resetReference, undefined, freshVehicleSeed.enabled)
+  );
   await guarded("seedUnions", () => seedUnions(db, log, preset, resetReference));
   await seedIndexes(db, log);
   await seedCountyMapData(log);
@@ -782,9 +954,23 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
   // worlds are populated too — corps are economic, not political.
   await guarded("seedNppCorporations", async () => {
     const { seedNppCorporations } = await import("@/lib/admin/seed/seedNppCorporations");
-    const r = await seedNppCorporations(db, preset, getStartingYearForPreset(preset), log);
+    const r = await seedNppCorporations(
+      db,
+      preset,
+      getStartingYearForPreset(preset),
+      log,
+      freshVehicleSeed.enabled
+    );
     log(`NPP corporations seeded: ${r.totalSpawned} corps`);
   });
+
+  if (freshMediaTaxonomySeed.enabled) {
+    const converted = await convertFresh1991MediaTaxonomyRows(db, { dryRun: false });
+    log(
+      `[media-taxonomy] fresh seed canonicalized ${converted.corporations} corporations, ` +
+        `${converted.corporateSectors} sectors, ${converted.unownedSectors} markets, and ${converted.unions} unions`
+    );
+  }
 
   // NPC retail banks: NPP financial corps + real issueCharter path. After
   // seedNppCorporations / seedForex so HQ states, FX, and capital maths work.
@@ -801,6 +987,13 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
     );
   });
 
+  // Currency unions are applied only after every budget, bond, corporation and
+  // wallet seed has written its authored legacy denomination. This one pass
+  // preserves anchor value while making the selected era internally coherent.
+  await guarded("applyEraCurrencyTopology", async () => {
+    const { applyEraCurrencyTopology } = await import("@/lib/admin/seed/applyEraCurrencyTopology");
+    await applyEraCurrencyTopology(db, preset, log);
+  });
   if (noStartingParties && seedOnly) {
     await clearStartingPolitics(db, preset);
     log("Cleared starting politics; economic NPP ownership retained with independent affiliation");
@@ -810,11 +1003,13 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
     { _id: "current" },
     {
       $set: { startingPartiesMode: startingParties },
-      ...(noStartingParties ? { $unset: { preIteration: "" as const } } : {}),
+      ...(noStartingParties && !preIteration ? { $unset: { preIteration: "" as const } } : {}),
     }
   );
 
   if (seedOnly) {
+    await completeFreshVehicleSeed();
+    await completeFreshMediaTaxonomySeed();
     log("Seed-only complete — skipped elections, officials, and game state init");
     return;
   }
@@ -990,7 +1185,7 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
 
     // Formation docs must follow the executive seed so the Premier / President
     // NPP exists to link (RU starts FORMED; BR links the seeded PTB president).
-    await seedRUGovernmentFormation(db, log);
+    await seedRUGovernmentFormation(db, log, preset);
     await seedBRGovernmentFormation(db, log);
   }
 
@@ -1048,6 +1243,11 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
           `${ukRoster.nppsCreated} NPPs, ${ukRoster.officialsCreated} officials`
       );
     }
+    if (preset === "1991-default") {
+      const { seed1991FederationLegislatures } =
+        await import("./seed/seed1991FederationLegislatures");
+      await seed1991FederationLegislatures(db, preset, preIteration ? "priors" : "winners", log);
+    }
   }
 
   // Seed governorOfficeState rows for every regional executive seat so the
@@ -1094,6 +1294,7 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
           },
           async () => {
             await ensureBRElections(now);
+            await ensureBRGovernorElections(now);
           },
           async () => {
             await ensureNGElections(now);
@@ -1155,7 +1356,9 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
   // re-runs this every turn; seeding it here makes a freshly bootstrapped world
   // correct before turn 1 fires, rather than showing "Vacant" until the first tick.
   const { syncAllPartyChairHeadsOfState } = await import("@/lib/turn/partyChairHeadOfState");
-  const chairHosResults = globallyVacant ? [] : await syncAllPartyChairHeadsOfState(db, now);
+  const chairHosResults = globallyVacant
+    ? []
+    : await syncAllPartyChairHeadsOfState(db, now, preset);
   const seated = chairHosResults.filter((r) => r.action !== "noop");
   log(
     `Party-chair head-of-state sync (bootstrap): ${seated.length}/${chairHosResults.length} seated ` +
@@ -1306,6 +1509,24 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
 
   if (noStartingParties) await clearStartingPolitics(db, preset);
 
+  // Only a genuinely fresh historical world receives this candidate bench.
+  // Reference refreshes and existing live worlds retain their actor population.
+  if (
+    !globallyVacant &&
+    !preIteration &&
+    shouldSeedHistoricalOfficials({
+      mode,
+      preIteration,
+      preExistingOfficials: preExistingOfficialsCount,
+      preExistingNpps: preExistingNppsCount,
+    })
+  ) {
+    const { seedModernPartyBench } = await import("@/lib/npp/seedModernPartyBench");
+    await seedModernPartyBench(db, preset, log);
+    const { seedModernOpeningCandidates } = await import("@/lib/npp/seedModernOpeningCandidates");
+    await seedModernOpeningCandidates(db, preset, now, log);
+  }
+
   const [
     stateCount,
     seatCount,
@@ -1330,6 +1551,9 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
     partyBudget: partyBudgetCount,
     unownedSectors: unownedSectorCount,
   };
+
+  await completeFreshVehicleSeed();
+  await completeFreshMediaTaxonomySeed();
 
   log("Bootstrap summary:");
   log(`- states: ${summary.states}`);

@@ -4,11 +4,15 @@ import { ObjectId, type Db } from "mongodb";
 import { buildTxDocs, loadTxThresholds, loadAnchorRateMap } from "@/lib/financialTxLog/emit";
 import { loadTurnLengthMinutes } from "@/lib/financialTxLog/expiresAt";
 import type { TxInput } from "@/lib/financialTxLog/emit";
+import type { Corporation } from "@/lib/db/types/corporation";
 import type { BankCharter, PropPosition } from "@/lib/db/types/bank";
 import { settleAtomicDocumentTransition } from "./atomicDocumentSettlement";
 import { propSettlementTransition } from "./rules/propSettlement";
 import { oid } from "./rules/boundary";
 import { emitBankingAuditEvent } from "./auditEvents";
+import type { PropForexFeeReceipt, PropForexVolume } from "./rules/propForexFees";
+import { settlePendingPropForexFee } from "./propForexFees";
+import { logWarning } from "@/lib/utils/errorLog";
 
 export async function settlePropBookChange(
   db: Db,
@@ -18,11 +22,14 @@ export async function settlePropBookChange(
     meta?: Record<string, string | number>;
     charter: BankCharter;
     revision?: number;
+    requiredCeoType?: Corporation["ceoType"];
     operation: string;
     turn: number;
     cashDelta: number;
     nextBook: PropPosition[];
     nextMark: number;
+    forexFee?: PropForexFeeReceipt;
+    forexVolume?: PropForexVolume[];
   }
 ): Promise<{ ok: boolean; replayed: boolean; key: string }> {
   const revision = input.revision ?? 0;
@@ -32,9 +39,12 @@ export async function settlePropBookChange(
     .update(
       JSON.stringify({
         operation: input.operation,
+        requiredCeoType: input.requiredCeoType,
         cashDelta: input.cashDelta,
         nextBook: input.nextBook,
         nextMark: input.nextMark,
+        forexFee: input.forexFee,
+        forexVolume: input.forexVolume,
       })
     )
     .digest("hex")
@@ -42,8 +52,10 @@ export async function settlePropBookChange(
   const key = `bank.prop:${input.bankId.toHexString()}:${revision}:${digest}`;
   const identity = { _id: oid(input.bankId.toHexString()) };
   const guard = {
+    ...(input.requiredCeoType ? { ceoType: input.requiredCeoType } : {}),
     bankCharter: input.charter,
     bankPropBookRevision: input.revision === undefined ? { $exists: false } : input.revision,
+    ...(input.forexFee ? { bankPropForexFee: { $exists: false } } : {}),
   };
   const transition = propSettlementTransition({
     ...input,
@@ -52,6 +64,7 @@ export async function settlePropBookChange(
     currency: input.charter.currency,
     nextRevision: revision + 1,
     now: new Date(),
+    ...(input.forexFee ? { forexFee: { ...input.forexFee, key: `${key}:forex-fee` } } : {}),
   });
   if (input.cashDelta === 0) {
     // An unpriced/zero-value book cleanup moves no money. Preserve its existing
@@ -72,7 +85,12 @@ export async function settlePropBookChange(
     currencyCode: input.charter.currency,
     counterpartyType: "system",
     counterpartyName: "Prop book",
-    meta: { ...input.meta, bankVaultMovement: true, settlementKey: key },
+    meta: {
+      ...input.meta,
+      bankVaultMovement: true,
+      settlementKey: key,
+      ...(input.forexFee ? { forexFee: input.forexFee.feeLocal } : {}),
+    },
   };
   const [thresholds, cadence, rates] = await Promise.all([
     loadTxThresholds(db),
@@ -94,6 +112,18 @@ export async function settlePropBookChange(
   });
   const result = await settleAtomicDocumentTransition(db, transition, { identity, guard });
   const ok = !result.error && (result.status === "applied" || result.status === "replayed");
+  // A funded trade is final even if a downstream fee leg needs recovery.
+  // Its escrow remains outside the replaceable charter and blocks another trade.
+  if (ok && input.forexFee?.feeLocal) {
+    try {
+      await settlePendingPropForexFee(db, input.bankId);
+    } catch (error) {
+      logWarning("Funded forex fee awaits recovery", {
+        component: "BankPropTrading",
+        metadata: { settlementKey: key, error: String(error) },
+      });
+    }
+  }
   emitBankingAuditEvent(
     {
       ...transition.event,

@@ -5,7 +5,7 @@ import type { UnownedSector } from "@/lib/db/types";
 import { getCountryConfig } from "@/lib/constants/countries";
 import type { CountryId } from "@/lib/constants/countries";
 import { CORPORATION_TYPES } from "@/lib/constants/corporations";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { CorporationType, ManufacturingIndustryModel } from "@/lib/constants/corporations";
 import {
   MODERN_MIN_UNOWNED_SECTOR_REVENUE,
   getEraUnitScale,
@@ -134,7 +134,9 @@ export async function seedUnownedSectors(
   // For a live world with captured sectors, use the 1991-recompute heal script.
   refresh = false,
   /** Route (state, sectorType) buckets to the National Corporation instead of unowned. */
-  redirectToNatCorpBuckets?: ReadonlySet<string>
+  redirectToNatCorpBuckets?: ReadonlySet<string>,
+  /** Fresh 1991 only: seed the automobile recipe under manufacturing/vehicles. */
+  vehicleModelSeed = false
 ) {
   const states = await db
     .collection<State>("states")
@@ -145,27 +147,49 @@ export async function seedUnownedSectors(
   let inserted = 0;
   let redirected = 0;
   const ops: AnyBulkWriteOperation<UnownedSector>[] = [];
+  const sectorMarkets: Array<{
+    sectorType: CorporationType;
+    recipeType: CorporationType;
+    industryModel: ManufacturingIndustryModel | null;
+  }> = CORPORATION_TYPES.filter(
+    (sectorType) => !(vehicleModelSeed && sectorType === "automobiles")
+  ).map((sectorType) => ({
+    sectorType,
+    recipeType: sectorType,
+    industryModel: null,
+  }));
+  if (vehicleModelSeed) {
+    sectorMarkets.push({
+      sectorType: "manufacturing",
+      recipeType: "automobiles",
+      industryModel: "vehicles",
+    });
+  }
 
   // Indexes FIRST, not after the loop. The upserts below filter on
-  // {stateId, sectorType}; with the index built afterwards every one of them is
+  // {stateId, sectorType, industryModel}; with the index built afterwards every one of them is
   // a collection scan over a collection growing to ~3,800 docs (~7.4M document
   // examinations). That was invisible while each upsert cost a ~15ms round trip,
   // but the batched write below removes the latency the scan was hiding behind.
   await db
     .collection("unownedSectors")
-    .createIndex({ stateId: 1, sectorType: 1 }, { unique: true });
+    .createIndex(
+      { stateId: 1, sectorType: 1, industryModel: 1, mediaDiscriminator: 1 },
+      { name: "unowned_state_type_models_unique", unique: true, background: true }
+    );
   await db.collection("unownedSectors").createIndex({ countryId: 1 });
 
   for (const state of states) {
     const countryId = state.countryId;
 
-    for (const sectorType of CORPORATION_TYPES) {
-      const bucket = bucketKey(state._id as string, sectorType);
+    for (const market of sectorMarkets) {
+      const { sectorType, recipeType, industryModel } = market;
+      const bucket = bucketKey(state._id as string, sectorType, industryModel);
       const seedRevenue = computeUnownedSeedRevenue({
         gdp: state.gdp,
         countryId: countryId as CountryId,
         stateId: state._id as string,
-        sectorType,
+        sectorType: recipeType,
         preset,
         boostMultiplier,
       });
@@ -175,6 +199,7 @@ export async function seedUnownedSectors(
           countryId: countryId as CountryId,
           stateId: state._id as string,
           sectorType: sectorType as CorporationType,
+          industryModel,
           revenueDelta: seedRevenue,
         });
         if (result !== "noop") redirected++;
@@ -186,6 +211,7 @@ export async function seedUnownedSectors(
         _id: new ObjectId(),
         stateId: state._id as string,
         sectorType,
+        industryModel,
         createdAt: now,
       };
       // Batched (this branch) AND carrying the derived headroom field
@@ -197,11 +223,16 @@ export async function seedUnownedSectors(
       const headroomUnits = computeUnownedHeadroomUnits(
         sectorType as CorporationType,
         seedRevenue,
-        getEraUnitScale(preset)
+        getEraUnitScale(preset),
+        industryModel
       );
       ops.push({
         updateOne: {
-          filter: { stateId: state._id as string, sectorType },
+          filter: {
+            stateId: state._id as string,
+            sectorType,
+            industryModel,
+          },
           update: refresh
             ? {
                 $set: { revenue: seedRevenue, headroomUnits, countryId, updatedAt: now },
@@ -234,7 +265,7 @@ export async function seedUnownedSectors(
 
   const redirectNote = redirected > 0 ? `, routed ${redirected} to national corporations` : "";
   log(
-    `Seeded ${inserted} unowned sector docs (${states.length} states × ${CORPORATION_TYPES.length} types${redirectNote})`
+    `Seeded ${inserted} unowned sector docs (${states.length} states × ${sectorMarkets.length} market models${redirectNote})`
   );
 
   // Command economies seed SOEs at full market size, then this seeder also

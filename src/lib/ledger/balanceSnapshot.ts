@@ -1,3 +1,5 @@
+import { organizationFundCountry } from "@/lib/internationalOrganizations/cashLedger";
+import type { CountryId } from "@/lib/constants/countries";
 import { treasuryAnchorValuation } from "@/lib/budget/rules/treasuryAccrual";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import * as Sentry from "@sentry/nextjs";
@@ -54,11 +56,17 @@ function add(balances: Record<string, number>, account: string, anchor: number):
   balances[account] = (balances[account] ?? 0) + anchor;
 }
 
-export async function collectBalances(db: Db): Promise<Record<string, number>> {
-  return (await collectBalanceState(db)).balances;
+export async function collectBalances(
+  db: Db,
+  opts: { treasuryCashLedgerEnabled?: boolean } = {}
+): Promise<Record<string, number>> {
+  return (await collectBalanceState(db, opts.treasuryCashLedgerEnabled === true)).balances;
 }
 
-async function collectBalanceState(db: Db): Promise<{
+async function collectBalanceState(
+  db: Db,
+  treasuryCashLedgerEnabled = false
+): Promise<{
   balances: Record<string, number>;
   anchorRates: Record<string, number>;
   accountValuations: NonNullable<BalanceSnapshot["accountValuations"]>;
@@ -116,6 +124,41 @@ async function collectBalanceState(db: Db): Promise<{
     }
   }
 
+  // Organization funds use balanceLocal, the same authoritative native cash
+  // field as M2. balanceUsd remains a legacy UI fallback, never copied/minted here.
+  const customFounders = new Map(
+    (
+      await db
+        .collection<{ id: string; foundingMembers?: CountryId[] }>(
+          "customInternationalOrganizations"
+        )
+        .find({}, { projection: { id: 1, foundingMembers: 1 } })
+        .toArray()
+    ).map((row) => [row.id, row.foundingMembers?.[0] ?? "US"])
+  );
+  const organizationFunds = db.collection<{
+    organizationId: string;
+    currencyCountryId?: CountryId;
+    balanceLocal?: number;
+  }>("organizationFunds");
+  for await (const fund of organizationFunds.find(
+    {},
+    { projection: { organizationId: 1, currencyCountryId: 1, balanceLocal: 1 } }
+  )) {
+    if (typeof fund.balanceLocal !== "number") continue;
+    const country = organizationFundCountry(
+      fund.organizationId,
+      fund.currencyCountryId,
+      customFounders
+    );
+    const currency = countryCurrency(country);
+    add(
+      balances,
+      accountId("org", fund.organizationId, currency),
+      toAnchor(fund.balanceLocal, currency, rates)
+    );
+  }
+
   // --- Corporations: liquidCapital -------------------------------------------
   const corps = db.collection<{
     _id: ObjectId;
@@ -125,7 +168,7 @@ async function collectBalanceState(db: Db): Promise<{
   const corpCursor = corps.find({}, { projection: { liquidCapital: 1, liquidCurrencyCode: 1 } });
   for await (const corp of corpCursor) {
     if (typeof corp.liquidCapital !== "number") continue;
-    const cur = corp.liquidCurrencyCode ?? "USD";
+    const cur = snapshotCorporationCurrency(corp);
     add(
       balances,
       accountId("corporation", corp._id.toString(), cur),
@@ -155,15 +198,23 @@ async function collectBalanceState(db: Db): Promise<{
   const budgets = db.collection<{
     countryId?: string;
     treasuryBalance?: number;
+    treasuryCashLocal?: number;
     currencyCode?: CurrencyCode;
   }>("federalBudget");
   const budgetCursor = budgets.find(
     {},
-    { projection: { countryId: 1, treasuryBalance: 1, currencyCode: 1 } }
+    {
+      projection: {
+        countryId: 1,
+        treasuryBalance: 1,
+        currencyCode: 1,
+        ...(treasuryCashLedgerEnabled ? { treasuryCashLocal: 1 } : {}),
+      },
+    }
   );
   for await (const b of budgetCursor) {
     if (typeof b.treasuryBalance !== "number" || !b.countryId) continue;
-    const cur = b.currencyCode ?? countryCurrency(b.countryId);
+    const cur = snapshotTreasuryCurrency(b);
     const account = accountId("government", b.countryId, cur);
     const valuation = treasuryAnchorValuation({
       countryId: b.countryId,
@@ -175,6 +226,14 @@ async function collectBalanceState(db: Db): Promise<{
     // a budget-only authored valuation is not an exchangeRates trading quote.
     accountValuations[account] = valuation;
     add(balances, account, b.treasuryBalance / valuation.anchorRate);
+    if (treasuryCashLedgerEnabled && typeof b.treasuryCashLocal === "number") {
+      add(
+        balances,
+        accountId("government_cash", b.countryId, cur),
+        b.treasuryCashLocal / valuation.anchorRate
+      );
+      accountValuations[accountId("government_cash", b.countryId, cur)] = valuation;
+    }
   }
 
   // --- NPP investment cash (anchor-backed) -------------------------------
@@ -267,12 +326,37 @@ async function collectBalanceState(db: Db): Promise<{
  * pensionBenefits.ts, nppFundGeneration.ts), so the snapshot must use the same
  * map or leg and snapshot keys diverge by currency segment.
  */
+/** Currency of a `state_party:` account, backed by statePartyOrg.treasury. */
+export function snapshotStatePartyCurrency(countryId?: string): CurrencyCode {
+  return mapCurrency(countryId);
+}
+
+/** Currency of a national `party:` account, backed by politicalParties.treasury. */
+export function snapshotPartyCurrency(countryId?: string): CurrencyCode {
+  return countryCurrency(countryId);
+}
+
 function mapCurrency(countryId?: string): CurrencyCode {
   if (countryId) {
     const cur = (COUNTRY_CURRENCY_MAP as Record<string, CurrencyCode>)[countryId];
     if (cur) return cur;
   }
   return "USD";
+}
+
+/** Currency of a corporation's `corporation:` account; writers witnessing liquidCapital must match. */
+export function snapshotCorporationCurrency(corp: {
+  liquidCurrencyCode?: CurrencyCode;
+}): CurrencyCode {
+  return corp.liquidCurrencyCode ?? "USD";
+}
+
+/** Currency of a country's `government:` account, backed by federalBudget.treasuryBalance. */
+export function snapshotTreasuryCurrency(budget: {
+  countryId?: string;
+  currencyCode?: CurrencyCode;
+}): CurrencyCode {
+  return budget.currencyCode ?? countryCurrency(budget.countryId);
 }
 
 function countryCurrency(countryId?: string): CurrencyCode {
@@ -289,10 +373,13 @@ function countryCurrency(countryId?: string): CurrencyCode {
 export async function writeBalanceSnapshot(
   db: Db,
   turn: number,
-  opts: { rebaselined?: boolean } = {}
+  opts: { rebaselined?: boolean; treasuryCashLedgerEnabled?: boolean } = {}
 ): Promise<number> {
   try {
-    const { balances, anchorRates, accountValuations } = await collectBalanceState(db);
+    const { balances, anchorRates, accountValuations } = await collectBalanceState(
+      db,
+      opts.treasuryCashLedgerEnabled === true
+    );
     const doc: BalanceSnapshot = {
       _id: new ObjectId(),
       turn,
@@ -318,9 +405,16 @@ export async function writeBalanceSnapshot(
  * currency. Reconciliation uses this checkpoint to separate cash movement
  * from the valuation change caused by forexTurn.
  */
-export async function writePreForexBalanceCheckpoint(db: Db, turn: number): Promise<number> {
+export async function writePreForexBalanceCheckpoint(
+  db: Db,
+  turn: number,
+  opts: { treasuryCashLedgerEnabled?: boolean } = {}
+): Promise<number> {
   try {
-    const { balances, anchorRates, accountValuations } = await collectBalanceState(db);
+    const { balances, anchorRates, accountValuations } = await collectBalanceState(
+      db,
+      opts.treasuryCashLedgerEnabled === true
+    );
     const doc: BalanceSnapshot = {
       _id: new ObjectId(),
       turn,

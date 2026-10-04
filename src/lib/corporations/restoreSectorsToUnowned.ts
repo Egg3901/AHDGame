@@ -16,6 +16,7 @@ import {
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { revenuePerCapacityUnitForStrategy } from "@/lib/constants/capacityEconomy";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
+import { reserveSectorsForRestore } from "@/lib/corporations/securedConstructionProperty";
 
 const RESTORE_IDEMPOTENCY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -28,7 +29,16 @@ export interface RestoreSectorsToUnownedResult {
 
 type RestorableSector = Pick<
   CorporateSector,
-  "_id" | "corporationId" | "countryId" | "stateId" | "sectorType" | "revenue"
+  | "_id"
+  | "corporationId"
+  | "countryId"
+  | "stateId"
+  | "sectorType"
+  | "industryModel"
+  | "mediaDiscriminator"
+  | "revenue"
+  | "constructionFinancing"
+  | "constructionPropertyTransition"
 > &
   Partial<Pick<CorporateSector, "capitalStock" | "strategyId" | "buildQueue">>;
 
@@ -37,6 +47,8 @@ interface RestorableSectorDelta {
   stateId: string;
   countryId: CorporateSector["countryId"];
   sectorType: CorporateSector["sectorType"];
+  industryModel: CorporateSector["industryModel"];
+  mediaDiscriminator: CorporateSector["mediaDiscriminator"];
   revenue: number;
   /** Capacity units returned to the pool (plants only; 0 otherwise). */
   units: number;
@@ -117,6 +129,14 @@ export async function restoreSectorsToUnowned(
 
   const deltas: RestorableSectorDelta[] = [];
 
+  // Secure every row before crediting its market pool. The marker closes the
+  // otherwise unsafe interval between a snapshot read and the pool credit:
+  // construction claim installation refuses marked rows, and retrying this
+  // restore may reacquire its deterministic per-sector token.
+  if (!(await reserveSectorsForRestore(db, sectors))) {
+    throw new Error("restoreSectorsToUnowned: secured construction property cannot be disposed");
+  }
+
   for (const sector of sectors) {
     const owningCorporation = corporationById.get(sector.corporationId.toString());
     if (!owningCorporation) {
@@ -167,9 +187,16 @@ export async function restoreSectorsToUnowned(
         revenuePerCapacityUnitForStrategy(
           sector.sectorType as CorporationType,
           sector.strategyId,
-          eraUnitScale
+          eraUnitScale,
+          sector.industryModel,
+          sector.mediaDiscriminator
         ) *
-        unownedHeadroomUnitsPerAnchor(sector.sectorType as CorporationType, eraUnitScale)
+        unownedHeadroomUnitsPerAnchor(
+          sector.sectorType as CorporationType,
+          eraUnitScale,
+          sector.industryModel,
+          sector.mediaDiscriminator
+        )
       : 0;
 
     if (plantsEnabled ? units > 0 : revenue > 0) {
@@ -179,6 +206,8 @@ export async function restoreSectorsToUnowned(
           sector.countryId) as RestorableSectorDelta["countryId"],
         stateId: sector.stateId,
         sectorType: sector.sectorType,
+        industryModel: sector.industryModel,
+        mediaDiscriminator: sector.mediaDiscriminator,
         revenue,
         units,
       });
@@ -193,7 +222,9 @@ export async function restoreSectorsToUnowned(
     const restoreToken = delta.sectorId.toString();
     const unitsPerAnchor = unownedHeadroomUnitsPerAnchor(
       delta.sectorType as CorporationType,
-      eraUnitScale
+      eraUnitScale,
+      delta.industryModel,
+      delta.mediaDiscriminator
     );
     const anchorPerUnit = unitsPerAnchor > 0 ? 1 / unitsPerAnchor : 0;
     const creditField = unownedPoolLeadingField(plantsEnabled);
@@ -203,16 +234,30 @@ export async function restoreSectorsToUnowned(
     const creditBaseExpr = unownedPoolCreditBaseExpr(
       delta.sectorType as CorporationType,
       plantsEnabled,
-      eraUnitScale
+      eraUnitScale,
+      delta.industryModel
     );
     const before = await db.collection<UnownedSector>("unownedSectors").findOneAndUpdate(
-      { stateId: delta.stateId, sectorType: delta.sectorType },
+      {
+        stateId: delta.stateId,
+        sectorType: delta.sectorType,
+        ...(delta.industryModel != null || delta.sectorType === "manufacturing"
+          ? { industryModel: delta.industryModel ?? null }
+          : {}),
+        mediaDiscriminator: delta.mediaDiscriminator ?? null,
+      },
       [
         {
           $set: {
             stateId: { $ifNull: ["$stateId", delta.stateId] },
             countryId: { $ifNull: ["$countryId", delta.countryId] },
             sectorType: { $ifNull: ["$sectorType", delta.sectorType] },
+            ...(delta.industryModel != null || delta.sectorType === "manufacturing"
+              ? { industryModel: { $ifNull: ["$industryModel", delta.industryModel ?? null] } }
+              : {}),
+            mediaDiscriminator: {
+              $ifNull: ["$mediaDiscriminator", delta.mediaDiscriminator ?? null],
+            },
             createdAt: { $ifNull: ["$createdAt", now] },
             updatedAt: now,
             // The credited field is the AUTHORITATIVE one for the tier:
@@ -226,7 +271,12 @@ export async function restoreSectorsToUnowned(
                     $filter: {
                       input: { $ifNull: ["$recentCorporateSectorRestores", []] },
                       as: "restore",
-                      cond: { $gte: ["$$restore.restoredAt", retryWindowStart] },
+                      cond: {
+                        $or: [
+                          { $eq: ["$$restore.pendingSourceDelete", true] },
+                          { $gte: ["$$restore.restoredAt", retryWindowStart] },
+                        ],
+                      },
                     },
                   },
                 },
@@ -259,7 +309,12 @@ export async function restoreSectorsToUnowned(
                     $filter: {
                       input: { $ifNull: ["$recentCorporateSectorRestores", []] },
                       as: "restore",
-                      cond: { $gte: ["$$restore.restoredAt", retryWindowStart] },
+                      cond: {
+                        $or: [
+                          { $eq: ["$$restore.pendingSourceDelete", true] },
+                          { $gte: ["$$restore.restoredAt", retryWindowStart] },
+                        ],
+                      },
                     },
                   },
                 },
@@ -302,7 +357,9 @@ export async function restoreSectorsToUnowned(
           $set: unownedPoolTrailingSet(
             delta.sectorType as CorporationType,
             plantsEnabled,
-            eraUnitScale
+            eraUnitScale,
+            delta.industryModel,
+            delta.mediaDiscriminator
           ),
         },
       ],
@@ -313,7 +370,8 @@ export async function restoreSectorsToUnowned(
       before?.recentCorporateSectorRestores?.some(
         (restore) =>
           restore.sectorId === restoreToken &&
-          restore.restoredAt.getTime() >= retryWindowStart.getTime()
+          (restore.pendingSourceDelete === true ||
+            restore.restoredAt.getTime() >= retryWindowStart.getTime())
       ) ?? false;
     if (!alreadyRestored) {
       // Under plants the ₳ figure callers report is the NAMEPLATE value of the
@@ -324,9 +382,10 @@ export async function restoreSectorsToUnowned(
   }
 
   const sectorIds = sectors.map((sector) => sector._id);
-  const deleteResult = await db
-    .collection<CorporateSector>("corporateSectors")
-    .deleteMany({ _id: { $in: sectorIds } });
+  const deleteResult = await db.collection<CorporateSector>("corporateSectors").deleteMany({
+    _id: { $in: sectorIds },
+    "constructionPropertyTransition.kind": "restore",
+  });
   if (deleteResult.deletedCount !== sectorIds.length) {
     const remaining = await db
       .collection<CorporateSector>("corporateSectors")

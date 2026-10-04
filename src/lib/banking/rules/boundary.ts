@@ -15,6 +15,7 @@
  */
 
 import type { BankCharter } from "@/lib/db/types/bank";
+import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { BankingPolicySnapshot } from "@/lib/banking/rules/policy";
 import type { CapabilityDenial, CapabilityKey } from "@/lib/banking/rules/capabilities";
 import type { ValueLegKind } from "@/lib/banking/rules/invariants";
@@ -27,6 +28,7 @@ export type BankCharterSnapshot = Pick<
   | "type"
   | "status"
   | "currency"
+  | "charteredTurn"
   | "postedCapital"
   | "cashReserves"
   | "npcDeposits"
@@ -41,6 +43,7 @@ export type BankCharterSnapshot = Pick<
   | "cbMarginArrears"
   | "interbankDebt"
   | "propBookMarkValue"
+  | "sovereignTreasuryMarkValue"
   | "capitalStanding"
   | "warningBand"
   | "undercapitalizedSinceTurn"
@@ -59,7 +62,7 @@ export interface BankingSnapshot {
   policy: BankingPolicySnapshot;
   /** Bank corporation id, hex. */
   bankId: string;
-  currency: string;
+  currency: CurrencyCode;
   charter: BankCharterSnapshot | null;
   /** The holding company's own treasury, outside the ring fence. */
   corporationLiquidCapital: number;
@@ -117,6 +120,7 @@ export type BankCommand =
       loanId: string;
       borrower: BorrowerSnapshot;
       principal: number;
+      originationFee?: number;
       ratePercent: number;
       termTurns: number;
     }
@@ -164,6 +168,8 @@ export function oid(hex: string): OidRef {
 export interface TransitionLeg {
   kind: ValueLegKind;
   amount: number;
+  /** Frozen native-currency value used to balance cross-currency transfers. */
+  valuation?: { currencyCode: string; localPerAnchor: number };
   collection?: string;
   filter?: Record<string, unknown>;
   path?: string;
@@ -182,6 +188,8 @@ export interface TransitionProjection {
   filter?: Record<string, unknown>;
   /** Mongo-style update operators for an update. */
   update?: Record<string, unknown>;
+  /** Ordered noncash $set stages, published with the same durable target receipt. */
+  pipelineUpdate?: Record<string, unknown>[];
   /** The whole document for an insert. */
   insert?: Record<string, unknown>;
   note: string;
@@ -205,6 +213,8 @@ export interface BankingTransition {
   turn: number;
   currency: string;
   legs: TransitionLeg[];
+  /** Retry a guarded credit leg from this frozen receipt after its target becomes eligible. */
+  retryCreditLegOnGuardFailure?: boolean;
   projections: TransitionProjection[];
   event: TransitionEvent;
 }

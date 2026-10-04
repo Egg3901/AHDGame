@@ -17,6 +17,10 @@ import {
   SETTLEMENT_SEATS,
 } from "@/lib/constants/settlementCrisis";
 import { spendFromTreasury } from "@/lib/budget/treasurySpend";
+import {
+  loadTreasuryCashContext,
+  withTreasuryCashBatch,
+} from "@/lib/nationalization/treasuryLedger";
 import { applyCountryApprovalDelta } from "@/lib/events/substrate/applyEffects";
 
 export interface MobilisationResult {
@@ -34,10 +38,21 @@ export interface MobilisationResult {
  */
 export async function levyMobilisation(
   db: Db,
-  params: { armed: boolean }
+  params: { armed: boolean; turn?: number }
 ): Promise<MobilisationResult> {
   if (!params.armed) return { countriesLevied: 0, totalLocalSpent: 0 };
+  // One witness context and one ledger batch for every seat's levy.
+  const context = await loadTreasuryCashContext(db, params.turn);
+  return withTreasuryCashBatch(db, context, (ledger) =>
+    levySeats(db, ledger, params.turn ?? ledger.context?.turn ?? 0)
+  );
+}
 
+async function levySeats(
+  db: Db,
+  ledger: Parameters<Parameters<typeof withTreasuryCashBatch>[2]>[0],
+  turn: number
+): Promise<MobilisationResult> {
   let countriesLevied = 0;
   let totalLocalSpent = 0;
 
@@ -59,7 +74,14 @@ export async function levyMobilisation(
     if (balance <= 0) continue;
     const amount = Math.round(balance * MOBILISATION_TREASURY_SHARE);
     if (amount <= 0) continue;
-    await spendFromTreasury(db, countryId, amount);
+    await spendFromTreasury(db, countryId, amount, {
+      witness: {
+        flow: "settlement_mobilisation",
+        key: `settlement-mobilisation:${turn}:${countryId}`,
+        site: "settlement/mobilisation",
+        ledger,
+      },
+    });
     totalLocalSpent += amount;
   }
 

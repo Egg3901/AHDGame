@@ -18,13 +18,14 @@ import {
   tallyOverrideByChamber,
   type ChamberSeatMap,
 } from "@/lib/congress/vetoOverrideTally";
-import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
+import { getCountryConfig, type CountryId, type GovernmentType } from "@/lib/constants/countries";
 import {
   billHasDeclareWar,
   billHasNatPrivProvision,
   getBillPassRule,
   meetsBillPassRule,
 } from "@/lib/congress/billPassRule";
+import { buildNationalBillCountryScopeFilter } from "@/lib/legislature/nationalBillScope";
 import { billRequiresExecutiveAction } from "@/lib/internationalOrganizations/withdrawalBills";
 import { recordAudit } from "@/lib/audit/recordAudit";
 import { applyLegislationEffect } from "@/lib/legislationEffects";
@@ -51,6 +52,7 @@ import type {
   SponsorNotifier,
   VoteTotals,
 } from "./types";
+import { captureBillStatusChanged } from "@/lib/analytics/billStatusAnalytics";
 
 export interface BillLifecycleResult {
   billsProcessed: number;
@@ -63,11 +65,37 @@ export interface BillLifecycleResult {
   transitionedTo: Record<string, number>;
 }
 
+type BillStatusTransition = { bill: Bill; fromStatus: string; toStatus: string; turn: number };
+const billStatusTransitions = new WeakMap<BillLifecycleResult, BillStatusTransition[]>();
+
 const HOUR_MS = 60 * 60 * 1000;
 
+/** Preserve recognized legacy country scopes without sharing joint ballots. */
+function billCountryScope(config: BillLifecycleConfig): Record<string, unknown> {
+  if (config.country === "UK") return buildNationalBillCountryScopeFilter("UK");
+  if (config.country === "US")
+    return {
+      $or: [
+        { countryId: "US" },
+        { countryId: { $exists: false }, stateId: { $not: { $regex: "^uk_" } } },
+        { countryId: { $type: "null" }, stateId: { $not: { $regex: "^uk_" } } },
+      ],
+    };
+  return { countryId: config.country };
+}
+
 /** Record a successful transition into `status` (for dispatcher-derived counters). */
-function recordTransition(result: BillLifecycleResult, status: string): void {
+function recordTransition(
+  result: BillLifecycleResult,
+  status: string,
+  bill?: Bill,
+  fromStatus?: string,
+  turn?: number
+): void {
   result.transitionedTo[status] = (result.transitionedTo[status] ?? 0) + 1;
+  if (bill && fromStatus && Number.isInteger(turn)) {
+    billStatusTransitions.get(result)?.push({ bill, fromStatus, toStatus: status, turn: turn! });
+  }
 }
 
 /** Resolve the sponsor notifier for a config (per-country override or the US default). */
@@ -80,13 +108,14 @@ async function evaluatePassRule(
   db: Db,
   bill: Bill,
   rule: PassRule,
-  totals: VoteTotals
+  totals: VoteTotals,
+  governmentType?: GovernmentType
 ): Promise<boolean> {
   // Nationalize/privatize bills, and war declarations, need a two-thirds
   // supermajority of votes cast; that bar already exceeds Senate cloture, so it
   // supersedes the filibuster.
   const { rule: baseRule } = getBillPassRule(
-    getCountryConfig((bill.countryId ?? "US") as CountryId).governmentType,
+    governmentType ?? getCountryConfig((bill.countryId ?? "US") as CountryId).governmentType,
     billHasNatPrivProvision(bill.provisions),
     billHasDeclareWar(bill.provisions)
   );
@@ -136,6 +165,7 @@ export async function runBillLifecycle(
     enactedCategories: [],
     transitionedTo: {},
   };
+  billStatusTransitions.set(result, []);
   // Legislation freeze: skip the whole phase while this country's government is
   // still forming (e.g. UK S#17 — no bills resolve during a pending government).
   if (config.skipWhenGovPending) {
@@ -153,9 +183,14 @@ export async function runBillLifecycle(
   if (config.activateProposed && firstChamber) {
     const proposed = await db
       .collection<Bill>("bills")
-      .find({ status: "proposed", originChamber: { $in: config.originChambers } })
+      .find({
+        $and: [billCountryScope(config)],
+        status: "proposed",
+        originChamber: { $in: config.originChambers },
+      } as Filter<Bill>)
       .toArray();
-    for (const bill of proposed) {
+    for (const storedBill of proposed) {
+      const bill = { ...storedBill, countryId: storedBill.countryId ?? config.country };
       const chamberType = firstChamber.officeTypeFor(bill);
       // Activation is a plain update (matches the legacy processor); the atomic
       // claim guards the vote-closing transitions, not this idempotent step.
@@ -173,7 +208,7 @@ export async function runBillLifecycle(
         }
       );
       await notifyChambersVoteOpen(db, { ...bill, currentChamber: chamberType }, chamberType);
-      recordTransition(result, "active");
+      recordTransition(result, "active", bill, "proposed", currentTurn);
       result.billsProcessed++;
     }
   }
@@ -216,6 +251,22 @@ export async function runBillLifecycle(
     }
   }
 
+  for (const transition of billStatusTransitions.get(result) ?? []) {
+    await captureBillStatusChanged({
+      db,
+      billId: transition.bill._id.toString(),
+      fromStatus: transition.fromStatus,
+      toStatus: transition.toStatus,
+      scope: "national",
+      chamber: transition.bill.currentChamber ?? transition.bill.originChamber,
+      category: transition.bill.category,
+      provisionFamily: transition.bill.provisions?.[0]?.type,
+      voteMargin: transition.bill.votesFor - transition.bill.votesAgainst,
+      nationId: transition.bill.countryId ?? config.country,
+      turn: transition.turn,
+    });
+  }
+  billStatusTransitions.delete(result);
   return result;
 }
 
@@ -228,6 +279,7 @@ async function closeOverrideStage(
   result: BillLifecycleResult
 ): Promise<void> {
   const expiredFilter: Record<string, unknown> = {
+    $and: [billCountryScope(config)],
     status: stage.status,
     $or: [
       { overrideVotingEndsOnTurn: { $lte: currentTurn } },
@@ -268,7 +320,8 @@ async function closeOverrideStage(
     return data;
   };
 
-  for (const bill of expired) {
+  for (const storedBill of expired) {
+    const bill = { ...storedBill, countryId: storedBill.countryId ?? config.country };
     const seatData = await getSeatData(bill.countryId ?? "US");
     const tally = tallyOverrideByChamber(bill.vetoOverrideVotes, seatData);
     // Freeze the per-chamber override display so a later election cannot recompute
@@ -307,7 +360,7 @@ async function closeOverrideStage(
         await awardLawmakerAchievementForSponsor(bill);
         await resolveNotifier(config)(db, bill, "signed");
         if (bill.category) result.enactedCategories.push(bill.category);
-        recordTransition(result, "signed");
+        recordTransition(result, "signed", bill, stage.status, currentTurn);
         result.billsProcessed++;
         result.billsPassed++;
       }
@@ -339,7 +392,7 @@ async function closeOverrideStage(
           outcome: "ok",
         });
         await resolveNotifier(config)(db, bill, "failed");
-        recordTransition(result, "override_failed");
+        recordTransition(result, "override_failed", bill, stage.status, currentTurn);
         result.billsProcessed++;
         result.billsFailed++;
       }
@@ -358,6 +411,7 @@ async function closeExecutiveStage(
   // The active sign/veto is driven by the executive-action API endpoint; the
   // engine only handles the deadline expiring — pocket-sign into law.
   const expiredFilter: Record<string, unknown> = {
+    $and: [billCountryScope(config)],
     status: stage.status,
     $or: [
       { presidentActionDeadlineOnTurn: { $lte: currentTurn } },
@@ -373,7 +427,8 @@ async function closeExecutiveStage(
     .find(expiredFilter as Filter<Bill>)
     .toArray();
 
-  for (const bill of expired) {
+  for (const storedBill of expired) {
+    const bill = { ...storedBill, countryId: storedBill.countryId ?? config.country };
     const enacted = await claimStatusTransition(
       db,
       "bills",
@@ -397,7 +452,7 @@ async function closeExecutiveStage(
     await resolveNotifier(config)(db, bill, "signed");
     await awardLawmakerAchievementForSponsor(bill);
     if (bill.category) result.enactedCategories.push(bill.category);
-    recordTransition(result, "signed");
+    recordTransition(result, "signed", bill, stage.status, currentTurn);
     result.billsProcessed++;
     result.billsPassed++;
   }
@@ -417,6 +472,7 @@ async function closeChamberVoteStage(
     stage.voteField === "otherChamberVotes" ? "otherChamberVotingEndsAt" : "votingEndsAt";
 
   const expiredFilter: Record<string, unknown> = {
+    $and: [billCountryScope(config)],
     status: stage.status,
     $or: [
       { [onTurnField]: { $lte: currentTurn } },
@@ -430,8 +486,9 @@ async function closeChamberVoteStage(
     .toArray();
 
   for (const claimedBill of expired) {
-    const bill =
+    const storedBill =
       (await db.collection<Bill>("bills").findOne({ _id: claimedBill._id })) ?? claimedBill;
+    const bill = { ...storedBill, countryId: storedBill.countryId ?? config.country };
     const officeType = stage.officeTypeFor(bill);
     const res = await resolvePhaseVotes(
       db,
@@ -440,7 +497,9 @@ async function closeChamberVoteStage(
       currentTurn
     );
     const fields = tallyFields(stage.voteField, res);
-    const passed = await evaluatePassRule(db, bill, stage.passRule, res.totals);
+    const passed =
+      stage.passCheck?.(bill, res.totals) ??
+      (await evaluatePassRule(db, bill, stage.passRule, res.totals, config.governmentType));
 
     if (!passed) {
       // Bill-dependent reject routing (JP Sangiin: sangiin-origin fails; else the
@@ -487,7 +546,7 @@ async function closeChamberVoteStage(
           outcome: "ok",
         });
         await resolveNotifier(config)(db, bill, "failed");
-        recordTransition(result, "failed");
+        recordTransition(result, "failed", bill, stage.status, currentTurn);
         result.billsProcessed++;
         result.billsFailed++;
       }
@@ -548,7 +607,8 @@ async function closeChamberVoteStage(
       if (
         nextStage.windowHours === 0 ||
         config.lordsRevisionFlavor != null ||
-        (stage.execActionCheckOnPass && !billRequiresExecutiveAction(bill))
+        (stage.execActionCheckOnPass &&
+          !billRequiresExecutiveAction(bill, config.hasPresidentialExecutive))
       ) {
         await enterSigned(
           db,
@@ -669,7 +729,7 @@ async function enterChamberVoteStage(
     await notifyChambersVoteOpen(db, { ...bill, currentChamber: nextChamber }, nextChamber);
     // A config status string is always a real bill status.
     await resolveNotifier(config)(db, bill, targetStage.status as Bill["status"]);
-    recordTransition(result, targetStage.status);
+    recordTransition(result, targetStage.status, bill, passingStage.status, currentTurn);
     result.billsProcessed++;
     result.billsPassed++;
   }
@@ -713,7 +773,7 @@ async function enterLordsRevisionHold(
   if (!claimed) return;
 
   await resolveNotifier(config)(db, bill, "enrolled");
-  recordTransition(result, "enrolled");
+  recordTransition(result, "enrolled", bill, bill.status, currentTurn);
   result.billsProcessed++;
   result.billsPassed++;
 
@@ -749,6 +809,7 @@ async function closeConcurrentVoteStage(
   const expiredFilter: Record<string, unknown> = {
     status: stage.status,
     $and: [
+      billCountryScope(config),
       {
         $or: [
           { votingEndsOnTurn: { $lte: currentTurn } },
@@ -774,8 +835,9 @@ async function closeConcurrentVoteStage(
     .toArray();
 
   for (const claimedBill of expired) {
-    const bill =
+    const storedBill =
       (await db.collection<Bill>("bills").findOne({ _id: claimedBill._id })) ?? claimedBill;
+    const bill = { ...storedBill, countryId: storedBill.countryId ?? config.country };
     const ctx = {
       currentChamber: bill.currentChamber ?? "",
       countryId: bill.countryId,
@@ -787,7 +849,8 @@ async function closeConcurrentVoteStage(
     // — it bundles Senate cloture, which a concurrent bill never faces (the filibuster
     // route refuses these outright).
     const { rule } = getBillPassRule(
-      getCountryConfig((bill.countryId ?? "US") as CountryId, preset).governmentType,
+      config.governmentType ??
+        getCountryConfig((bill.countryId ?? "US") as CountryId, preset).governmentType,
       billHasNatPrivProvision(bill.provisions),
       billHasDeclareWar(bill.provisions)
     );
@@ -817,7 +880,7 @@ async function closeConcurrentVoteStage(
       );
       if (claimed) {
         await resolveNotifier(config)(db, bill, "failed");
-        recordTransition(result, "failed");
+        recordTransition(result, "failed", bill, stage.status, currentTurn);
         result.billsProcessed++;
         result.billsFailed++;
       }
@@ -830,7 +893,11 @@ async function closeConcurrentVoteStage(
     const execStage = config.stages.find(
       (s): s is ExecutiveActionStage => s.kind === "executiveAction"
     );
-    if (stage.execActionCheckOnPass && execStage && billRequiresExecutiveAction(bill)) {
+    if (
+      stage.execActionCheckOnPass &&
+      execStage &&
+      billRequiresExecutiveAction(bill, config.hasPresidentialExecutive)
+    ) {
       await enterExecutive(db, bill, execStage, "votes", fields, now, currentTurn, result);
       continue;
     }
@@ -884,7 +951,7 @@ async function enterExecutive(
     // notifier applies. Parliamentary countries enact via enterSigned instead.
     await defaultNotifySponsor(db, bill, "enrolled");
     await notifyPresidentBillAwaitingSignature(db, bill);
-    recordTransition(result, "enrolled");
+    recordTransition(result, "enrolled", bill, bill.status, currentTurn);
     result.billsProcessed++;
     result.billsPassed++;
   }
@@ -921,7 +988,7 @@ async function enterSigned(
   await resolveNotifier(config)(db, bill, "signed");
   await awardLawmakerAchievementForSponsor(bill);
   if (bill.category) result.enactedCategories.push(bill.category);
-  recordTransition(result, "signed");
+  recordTransition(result, "signed", bill, fromStatus, currentTurn);
   result.billsProcessed++;
   result.billsPassed++;
 }

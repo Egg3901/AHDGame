@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
+import { Button } from "@/components/ui/Button";
 import { INTEREST_CHAPTERS } from "@/lib/tutorial/chapters";
 import {
   TUTORIAL_INTERESTS,
@@ -25,25 +26,21 @@ import {
 /** Message keys under "tutorial" for each experience card. */
 const EXPERIENCES: Array<{
   value: TutorialExperience;
-  icon: string;
   title: string;
   blurb: string;
 }> = [
   {
     value: "new",
-    icon: "🌱",
     title: "welcome.experienceNewTitle",
     blurb: "welcome.experienceNewBlurb",
   },
   {
     value: "returning",
-    icon: "🔁",
     title: "welcome.experienceReturningTitle",
     blurb: "welcome.experienceReturningBlurb",
   },
   {
     value: "skip",
-    icon: "⏭️",
     title: "welcome.experienceSkipTitle",
     blurb: "welcome.experienceSkipBlurb",
   },
@@ -116,9 +113,8 @@ export function TutorialWelcome({ characterName, onConfirm, onDismiss }: Tutoria
     <div className="fixed inset-0 z-[200] overflow-y-auto bg-background/95 backdrop-blur-sm">
       <div className="mx-auto flex min-h-full max-w-3xl flex-col justify-center px-4 py-10 sm:px-6">
         <div className="rounded-2xl border border-card-border bg-card/70 shadow-card">
-          <div className="relative rounded-t-2xl px-6 pt-6 pb-2 sm:px-8">
-            <div className="absolute inset-x-0 top-0 h-[2px] rounded-t-2xl bg-gradient-to-r from-primary/60 via-secondary/40 to-transparent" />
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-primary">
+          <div className="rounded-t-2xl px-6 pt-6 pb-2 sm:px-8">
+            <p className="text-xs font-semibold text-muted">
               {t("welcome.stepProgress", { panel })}
             </p>
             <h1 className="mt-1 text-2xl font-bold">
@@ -146,10 +142,7 @@ export function TutorialWelcome({ characterName, onConfirm, onDismiss }: Tutoria
                   }}
                   className="rounded-xl border border-card-border bg-card/40 p-4 text-left transition-colors hover:border-primary/60 hover:bg-primary/5 disabled:opacity-60"
                 >
-                  <span className="text-2xl" aria-hidden>
-                    {opt.icon}
-                  </span>
-                  <span className="mt-2 block text-sm font-semibold">{t(opt.title)}</span>
+                  <span className="block text-sm font-semibold">{t(opt.title)}</span>
                   <span className="mt-1 block text-xs leading-relaxed text-muted">
                     {t(opt.blurb)}
                   </span>
@@ -169,8 +162,8 @@ export function TutorialWelcome({ characterName, onConfirm, onDismiss }: Tutoria
                 }`}
               >
                 <span className="flex flex-wrap items-center gap-2 text-sm font-semibold">
-                  <span aria-hidden>⭐</span> {t("welcome.allOfIt")}
-                  <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary">
+                  {t("welcome.allOfIt")}
+                  <span className="rounded-full border border-card-border px-2 py-0.5 text-[10px] font-medium text-muted">
                     {t("welcome.mostPlayers")}
                   </span>
                   <span className="ml-auto text-[10px] uppercase tracking-wide text-muted">
@@ -197,12 +190,7 @@ export function TutorialWelcome({ characterName, onConfirm, onDismiss }: Tutoria
                       }`}
                     >
                       <span className="flex items-baseline justify-between gap-2">
-                        <span className="text-sm font-semibold">
-                          <span className="mr-1.5" aria-hidden>
-                            {chapter.icon}
-                          </span>
-                          {t(chapter.title)}
-                        </span>
+                        <span className="text-sm font-semibold">{t(chapter.title)}</span>
                         <span className="shrink-0 text-[10px] uppercase tracking-wide text-muted">
                           {t("welcome.minutesShort", { minutes: chapter.estimatedMinutes })}
                         </span>
@@ -230,16 +218,14 @@ export function TutorialWelcome({ characterName, onConfirm, onDismiss }: Tutoria
                   >
                     {t("welcome.back")}
                   </button>
-                  <button
-                    type="button"
+                  <Button
                     disabled={saving || interests.length === 0 || experience === null}
                     onClick={() =>
                       experience && void confirm({ experience, interests: [...interests] })
                     }
-                    className="rounded-lg bg-gradient-to-r from-primary to-secondary px-5 py-2 text-sm font-semibold text-white shadow-glow-sm transition-shadow hover:shadow-glow disabled:opacity-50 disabled:shadow-none"
                   >
                     {saving ? t("welcome.starting") : t("welcome.start")}
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>

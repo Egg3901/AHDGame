@@ -41,10 +41,16 @@ describe("splitOffSectorType", () => {
     vi.mocked(ensurePrimaryNationalCorporation).mockResolvedValue({ _id: primaryId } as never);
     db.collectionMocks.corporations.insertOne.mockResolvedValue({ insertedId: newId });
     // Country NatCorp set = primary only (before the new corp).
-    db.collectionMocks.corporations.find.mockReturnValue(
-      findCursor([{ _id: primaryId }, { _id: newId }])
+    db.collectionMocks.corporations.find.mockReturnValue(findCursor([{ _id: primaryId }]));
+    db.collectionMocks.corporateSectors.find.mockReturnValue(
+      findCursor(
+        [0, 1, 2].map(() => ({
+          _id: new ObjectId(),
+          corporationId: primaryId,
+          sectorType: "energy",
+        }))
+      )
     );
-    db.collectionMocks.corporateSectors.updateMany.mockResolvedValue({ modifiedCount: 3 });
 
     const { splitOffSectorType } = await import("./restructure");
     const result = await splitOffSectorType(db as unknown as Db, {
@@ -62,10 +68,11 @@ describe("splitOffSectorType", () => {
     expect(insertedDoc.assignedSectorTypes).toEqual(["energy"]);
 
     // Sectors moved from the OTHER natcorps (not the new one) and filtered by type.
-    const move = db.collectionMocks.corporateSectors.updateMany.mock.calls[0];
-    expect(move[0].sectorType).toBe("energy");
-    expect(move[0].corporationId.$in.map(String)).toEqual([primaryId.toString()]);
-    expect(move[1].$set.corporationId).toEqual(newId);
+    const moves = db.collectionMocks.corporateSectors.updateOne.mock.calls.filter(
+      (call) => call[1]?.$set?.corporationId
+    );
+    expect(moves).toHaveLength(3);
+    expect(moves.every((move) => move[1].$set.corporationId.equals(newId))).toBe(true);
   });
 
   it("stamps the split-off with the sector type it operates, not the financial default", async () => {
@@ -82,7 +89,7 @@ describe("splitOffSectorType", () => {
     db.collectionMocks.corporations.find.mockReturnValue(
       findCursor([{ _id: primaryId }, { _id: newId }])
     );
-    db.collectionMocks.corporateSectors.updateMany.mockResolvedValue({ modifiedCount: 0 });
+    db.collectionMocks.corporateSectors.find.mockReturnValue(findCursor([]));
 
     const { splitOffSectorType } = await import("./restructure");
     await splitOffSectorType(db as unknown as Db, {
@@ -160,7 +167,11 @@ describe("mergeBackSectorType", () => {
       _id: primaryId,
       isPrimaryNationalCorporation: true,
     } as never);
-    db.collectionMocks.corporateSectors.updateMany.mockResolvedValue({ modifiedCount: 2 });
+    db.collectionMocks.corporateSectors.find.mockReturnValue(
+      findCursor(
+        [0, 1].map(() => ({ _id: new ObjectId(), corporationId: splitId, sectorType: "energy" }))
+      )
+    );
 
     const { mergeBackSectorType } = await import("./restructure");
     const result = await mergeBackSectorType(db as unknown as Db, {
@@ -172,9 +183,11 @@ describe("mergeBackSectorType", () => {
     expect(result.dissolvedNationalCorporationId).toEqual(splitId);
     expect(result.sectorsMoved).toBe(2);
 
-    const move = db.collectionMocks.corporateSectors.updateMany.mock.calls[0];
-    expect(move[0]).toEqual({ corporationId: splitId });
-    expect(move[1].$set.corporationId).toEqual(primaryId);
+    const moves = db.collectionMocks.corporateSectors.updateOne.mock.calls.filter(
+      (call) => call[1]?.$set?.corporationId === primaryId
+    );
+    expect(moves).toHaveLength(2);
+    expect(moves.every((move) => move[0].corporationId === splitId)).toBe(true);
 
     // Primary keeps empty assignedSectorTypes (remainder) — no $addToSet on it.
     expect(db.collectionMocks.corporations.updateOne).not.toHaveBeenCalled();

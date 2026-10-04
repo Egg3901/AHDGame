@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useReducer } from "react";
-import { EmptyState, Skeleton } from "@/components/ui";
+import { Skeleton } from "@/components/ui";
 import { useToast } from "@/contexts/ToastContext";
 import type { ConsolePayload } from "./types";
 import { mergeState } from "./lib/helpers";
@@ -54,23 +54,27 @@ export function BankConsoleTab({ corporationId, isCeo }: Props) {
 
   if (loading && !data) {
     return (
-      <div className="space-y-4">
-        <Skeleton className="h-24 w-full rounded-xl" />
-        <Skeleton className="h-48 w-full rounded-xl" />
+      <div className="space-y-2">
+        <Skeleton className="h-4 w-48" />
+        <Skeleton className="h-40 w-full" />
       </div>
     );
   }
 
   if (error || !data) {
-    return <EmptyState title="Bank console unavailable" description={error ?? undefined} />;
+    return (
+      <p role="alert" className="py-2 text-xs text-error">
+        Bank console unavailable{error ? `: ${error}` : "."}
+      </p>
+    );
   }
 
   if (!data.visible) {
     return (
-      <EmptyState
-        title="No bank console"
-        description="Own a financial sector to charter a bank, or open a corp that already holds a charter."
-      />
+      <p className="py-2 text-xs text-muted">
+        No bank console. Own a financial sector to charter a bank, or open a corporation that
+        already holds a charter.
+      </p>
     );
   }
 
@@ -86,11 +90,11 @@ export function BankConsoleTab({ corporationId, isCeo }: Props) {
       : "Bank actions are paused while private banking is frozen.";
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {!data.privateBankingEnabled && (
-        <div className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
+        <p role="status" className="text-xs text-warning">
           Private banking is frozen. You can view this console, but bank actions are disabled.
-        </div>
+        </p>
       )}
 
       {data.charter ? (
@@ -102,6 +106,39 @@ export function BankConsoleTab({ corporationId, isCeo }: Props) {
             showToast={showToast}
           />
           <CapsPanel data={data} />
+          {data.primaryUnderwritingEnabled && (
+            <section className="space-y-3 rounded-lg border border-border bg-surface p-4">
+              <div>
+                <h3 className="text-sm font-semibold">Funded underwriting receipts</h3>
+                <p className="mt-1 text-xs text-muted">
+                  Fees are recorded only after the market pays for equity or corporate bond units.
+                </p>
+              </div>
+              {data.underwritingReceipts?.length ? (
+                <ul className="divide-y divide-border">
+                  {[...data.underwritingReceipts].reverse().map((receipt) => (
+                    <li
+                      key={receipt.key}
+                      className="flex flex-wrap justify-between gap-x-4 gap-y-1 py-2 text-xs"
+                    >
+                      <span>
+                        {receipt.issuerName} ·{" "}
+                        {receipt.instrumentType === "equity" ? "Shares" : "Corporate bond"} · T
+                        {receipt.turn}
+                      </span>
+                      <span className="tabular-nums">
+                        Gross{" "}
+                        {formatUnderwritingMoney(receipt.grossPlacedLocal, receipt.currencyCode)}
+                        {" · "}fee {formatUnderwritingMoney(receipt.feeLocal, receipt.currencyCode)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-muted">No funded placements yet.</p>
+              )}
+            </section>
+          )}
         </>
       ) : (
         <CharterIssueForm
@@ -114,4 +151,16 @@ export function BankConsoleTab({ corporationId, isCeo }: Props) {
       )}
     </div>
   );
+}
+
+function formatUnderwritingMoney(amount: number, currencyCode: string): string {
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: currencyCode,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  } catch {
+    return `${currencyCode} ${amount.toLocaleString()}`;
+  }
 }

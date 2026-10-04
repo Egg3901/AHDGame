@@ -8,6 +8,7 @@ import { computeUnownedHeadroomUnits } from "@/lib/market/unownedHeadroom";
 import { ceoArchetypeModifiers } from "@/lib/turn/ceoArchetype";
 import { bucketKey } from "@/lib/nationalization/stateControlledBuckets";
 import { makeNppCorpDecision, type NppPlantsContext } from "../nppCorporationBehavior";
+import type { PlacementSignals } from "./marketSignals";
 import type { NppCorpDecisionContext } from "./corpDecisionTypes";
 
 const TURN = 400;
@@ -119,6 +120,7 @@ function decide(args: {
   ordinaryEntryEligible?: boolean;
   retailExpansionPaused?: boolean;
   usePlants?: boolean;
+  placementSignals?: PlacementSignals;
 }) {
   const ctx: NppCorpDecisionContext = {
     corp: args.corporation,
@@ -144,11 +146,111 @@ function decide(args: {
     args.stateControlled ?? new Set<string>(),
     args.prices ?? balancedPrices,
     args.usePlants === false ? undefined : plants,
-    undefined
+    args.placementSignals
   );
 }
 
 describe("frontier entry experiment turn path", () => {
+  it("uses the bounded experiment slot for a profitable uncovered positive-use cell outside the ordinary stagger", () => {
+    const corporation = corp(1_000_000_000_000, { _id: new ObjectId("000000000000000000000001") });
+    const sectors = profitableSectors(corporation._id);
+    const placementSignals: PlacementSignals = {
+      activeMarketBuckets: new Set(sectors.map((s) => bucketKey(s.stateId, s.sectorType))),
+      stateDemandOf: () => 100,
+    };
+    const off = decide({ corporation, sectors, ordinaryEntryEligible: false, placementSignals });
+    expect(off.entryDiagnostic?.reason).toBe("cohort_ineligible");
+    expect(off.newSectors).toBeUndefined();
+    const on = decide({
+      corporation,
+      sectors,
+      ordinaryEntryEligible: false,
+      placementSignals,
+      frontierEntry: frontierOn(),
+    });
+    expect(on.newSectors).toHaveLength(1);
+    expect(on.entryDiagnostic?.frontierExperiment?.relaxedReason).toBe("cohort_ineligible");
+    expect(on.entryDiagnostic?.foundingCostLocal).toBeGreaterThan(0);
+    expect(on.liquidCapitalDelta).toBeLessThan(0);
+  });
+
+  it.each([null, 0, -1, NaN, Infinity])(
+    "keeps the ordinary stagger for unavailable or nonpositive local use %s",
+    (demand) => {
+      const corporation = corp();
+      const sectors = profitableSectors(corporation._id);
+      const on = decide({
+        corporation,
+        sectors,
+        ordinaryEntryEligible: false,
+        placementSignals: { activeMarketBuckets: new Set(), stateDemandOf: () => demand },
+        frontierEntry: frontierOn(),
+      });
+      expect(on.newSectors).toBeUndefined();
+      expect(on.entryDiagnostic?.reason).toBe("cohort_ineligible");
+    }
+  );
+
+  it("keeps the stagger for covered markets, missing coverage and unprofitable firms", () => {
+    const corporation = corp();
+    for (const activeMarketBuckets of [undefined, new Set([bucketKey("NY", "manufacturing")])]) {
+      const on = decide({
+        corporation,
+        sectors: profitableSectors(corporation._id),
+        ordinaryEntryEligible: false,
+        placementSignals: { activeMarketBuckets, stateDemandOf: () => 100 },
+        frontierEntry: frontierOn(),
+      });
+      expect(on.newSectors).toBeUndefined();
+    }
+    const losing = decide({
+      corporation,
+      sectors: losingSectors(corporation._id),
+      ordinaryEntryEligible: false,
+      placementSignals: { activeMarketBuckets: new Set(), stateDemandOf: () => 100 },
+      frontierEntry: frontierOn(),
+    });
+    expect(losing.newSectors).toBeUndefined();
+    expect(losing.entryDiagnostic?.reason).toBe("unprofitable");
+  });
+
+  it("prices stagger overrides, preserves cash floors and caps later experimental entrants", () => {
+    const state = frontierOn();
+    const placementSignals: PlacementSignals = {
+      activeMarketBuckets: new Set(),
+      stateDemandOf: () => 100,
+    };
+    const poor = corp(1);
+    const rejected = decide({
+      corporation: poor,
+      sectors: profitableSectors(poor._id),
+      ordinaryEntryEligible: false,
+      placementSignals,
+      frontierEntry: state,
+    });
+    expect(rejected.newSectors).toBeUndefined();
+    expect(state.enteredCohorts.size).toBe(0);
+    const funded = corp();
+    const placed = decide({
+      corporation: funded,
+      sectors: profitableSectors(funded._id),
+      ordinaryEntryEligible: false,
+      placementSignals,
+      frontierEntry: state,
+    });
+    expect(placed.newSectors).toHaveLength(1);
+    const later = corp();
+    const capped = decide({
+      corporation: later,
+      sectors: profitableSectors(later._id),
+      ordinaryEntryEligible: false,
+      placementSignals,
+      frontierEntry: state,
+    });
+    expect(capped.newSectors).toBeUndefined();
+    expect(capped.entryDiagnostic?.reason).toBe("cohort_ineligible");
+  });
+
   it("is byte-equivalent with the flag off, disabled, or slot-taken", () => {
     const corporation = corp();
     const shared = profitableSectors(corporation._id);

@@ -92,8 +92,8 @@ export async function POST() {
     }, FOREX_MIGRATION_HEARTBEAT_MS);
 
     try {
-      const migrationResult = await migrateCharacterBalances(db);
       const preset = await getGameStatePresetOrDefault(db);
+      const migrationResult = await migrateCharacterBalances(db, preset);
       await seedExchangeRates(db, preset);
       const corpMigrationResult = await migrateCorporationLiquidCapital(db);
       await updateCentralBanks(db, preset);

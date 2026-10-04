@@ -1,0 +1,112 @@
+{
+  "issue": 2967,
+  "runtimeSource": "7410494e38d9709d1c59b17cf05e9d406e95622e",
+  "runtimeFiles": [
+    "src/lib/bonds/marketPool.ts",
+    "src/lib/bonds/marketPoolLedger.ts",
+    "src/lib/bonds/purchaseBondUnitsForFund.ts",
+    "src/lib/indexFunds/fundBondReserve.ts",
+    "src/lib/indexFunds/fundCron.ts",
+    "src/lib/turn/npp/nppCorpTreasury.ts",
+    "src/lib/turn/nppActionProcessing.ts",
+    "src/app/api/bonds/[bondId]/sell/route.ts"
+  ],
+  "testFiles": [
+    "src/lib/bonds/marketPool.secondary.integration.test.ts",
+    "src/lib/bonds/marketPool.ledger.integration.test.ts",
+    "src/app/api/bonds/[bondId]/sell/route.test.ts",
+    "src/app/api/bonds/__tests__/bond-buy-ceo-conflict.test.ts",
+    "src/app/api/bonds/__tests__/buy-atomic-debit.integration.test.ts"
+  ],
+  "reproduction": {
+    "fixture": "native Mongo, EUR rate 2, secondary purchase credit of 100 EUR",
+    "poolCashDelta": {
+      "native": 100,
+      "anchor": 50
+    },
+    "poolLedgerDelta": 0,
+    "stockDivergence": -50,
+    "uninstrumented": true,
+    "upkeepInflowControl": "reconciles with zero divergences"
+  },
+  "qualification": {
+    "secondaryIntegrationCases": 28,
+    "nativeMongoCases": 17,
+    "memoryCases": 10,
+    "skippedMemoryCases": 1,
+    "skippedReason": "memory store does not model stamped array filters; native twin passes",
+    "nativeFixture": "isolated local replica set, synthetic namespaces only",
+    "controls": [
+      "USD and GBP purchases and sales record rounded amounts with zero stock divergence, green trial balance and no unattributed entries",
+      "stamped debit and refund net to zero once; duplicate and missing-target refunds publish nothing",
+      "partial fills witness only moved cash; refused and zero writes record nothing",
+      "actual NPP and fund buyers reconcile against the pool in USD and GBP",
+      "transactional fund batches commit cash, holdings and pool witnesses together; outer aborts roll all back in USD and GBP",
+      "simultaneous worlds and currencies stay isolated; finished phases are never reused",
+      "landed cash is published when later phase work fails",
+      "disabled shadow accounting preserves cash outcomes and writes no ledger rows"
+    ],
+    "focusedSuites": {
+      "files": 33,
+      "passed": 372,
+      "skipped": 19,
+      "failed": 0
+    },
+    "nativeRun": {
+      "files": 12,
+      "passed": 152,
+      "skipped": 1,
+      "failed": 0
+    },
+    "changedTypeScriptFiles": 13,
+    "scopedLint": "pass",
+    "scopedSemanticDiagnostics": "pass",
+    "formatting": "pass"
+  },
+  "interruptedRunDiagnosis": {
+    "failedCases": [
+      "refuses a sale the market pool cannot pay for and says how much it can take",
+      "refunds the pool when the payout fails after the pool was debited"
+    ],
+    "cause": "route imported inside the first case's 15 second budget; on a loaded host the import outlasted it and the still-running request consumed the next case's one-shot bond fixture",
+    "baseRuntimeReproduces": true,
+    "fix": "route tests import the route at collection time",
+    "verifiedBudgetMs": 1000
+  },
+  "performance": {
+    "profiledSource": "9340a70111167b6a721fdb91f96644e9948e1353",
+    "baselineSource": "6f8b083beffbc79b8c9974b80d93dbd19d6d56a6",
+    "profiledSourceDifference": "formatting only, plus the rebase onto #2968 and #2974; neither changes the profiled path",
+    "fixtures": [
+      {
+        "credits": 0,
+        "commands": [0, 0],
+        "responseBsonBytes": [0, 0],
+        "cash": 10000,
+        "divergences": [0, 0]
+      },
+      {
+        "credits": 1,
+        "commands": [1, 4],
+        "responseBsonBytes": [35, 419],
+        "cash": 10100,
+        "divergences": [1, 0]
+      },
+      {
+        "credits": 8,
+        "commands": [8, 11],
+        "responseBsonBytes": [280, 664],
+        "cash": 10800,
+        "divergences": [1, 0]
+      }
+    ],
+    "addedCostPerActivePhase": "two metadata reads and one batched ledger insert",
+    "idlePhaseExtraCommands": 0
+  },
+  "limits": [
+    "Native fixtures qualify the secondary trade boundary, not the whole world.",
+    "This does not clear #968 or the global cash gate in #2159.",
+    "No production database was reset or repaired.",
+    "No formula, monetary amount or reconciliation tolerance changed."
+  ]
+}

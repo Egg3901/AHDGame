@@ -29,7 +29,7 @@ export function LeanStrip({
   const barW = size === "lg" ? "w-3" : "w-2";
   return (
     <div className="flex items-end gap-1.5" aria-label="Ideological range, left to right">
-      <span className="self-end font-mono text-body-xs leading-relaxed text-muted">L</span>
+      <span className="self-end font-mono text-body-sm leading-relaxed text-muted">L</span>
       {metrics.map((m) => {
         const h = Math.max(2, Math.round((m.value / 100) * trackH));
         const tone = scoreTone(m.value);
@@ -41,7 +41,7 @@ export function LeanStrip({
               e.stopPropagation();
               onOpenMetric(m.id);
             }}
-            title={`${m.displayName} — score ${Math.round(m.value)} (${m.status}) · lean ${m.leanLabel}`}
+            title={`${m.displayName}: score ${Math.round(m.value)} (${m.status}) · lean ${m.leanLabel}`}
             aria-label={`${m.displayName}, score ${Math.round(m.value)}, ${m.status}, lean ${m.leanLabel}`}
             className="flex cursor-pointer items-end border-0 bg-transparent p-0"
           >
@@ -54,7 +54,7 @@ export function LeanStrip({
           </button>
         );
       })}
-      <span className="self-end font-mono text-body-xs leading-relaxed text-muted">R</span>
+      <span className="self-end font-mono text-body-sm leading-relaxed text-muted">R</span>
     </div>
   );
 }

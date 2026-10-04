@@ -50,7 +50,7 @@ export function CommitteeProposalsSection({
   return (
     <div className="rounded-xl border border-card-border bg-card p-6 space-y-5">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Committee Proposals</h2>
+        <h2 className="text-lg font-semibold">Committee proposals</h2>
         {canPropose && (
           <CreateProposalForm
             country={country}
@@ -66,9 +66,7 @@ export function CommitteeProposalsSection({
       {/* Open proposals from this party */}
       {data && data.openProposals.length > 0 && (
         <div className="space-y-3">
-          <h3 className="text-xs font-semibold text-muted uppercase tracking-wider">
-            Open Proposals
-          </h3>
+          <h3 className="text-sm font-semibold text-muted">Open proposals</h3>
           {data.openProposals.map((p) => (
             <ProposalCard
               key={p.id}
@@ -86,9 +84,7 @@ export function CommitteeProposalsSection({
       {/* Incoming merge proposals targeting this party */}
       {data && data.incomingMergeProposals.length > 0 && (
         <div className="space-y-3">
-          <h3 className="text-xs font-semibold text-muted uppercase tracking-wider">
-            Incoming Merge Proposals
-          </h3>
+          <h3 className="text-sm font-semibold text-muted">Incoming merge proposals</h3>
           <p className="text-xs text-muted">
             Another party has proposed to merge into yours. Your committee can vote to accept or
             decline.

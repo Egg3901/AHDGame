@@ -1,4 +1,5 @@
 import {
+  calibrationMultiplier,
   eraScaledBasePrices,
   demographicWealthMultiplier,
   type CommodityType,
@@ -102,8 +103,9 @@ export const PLANTS_HOUSEHOLD_SUPPLY_CAP = 1.5;
  * Consumer basket weights over the commodities households actually buy (finished
  * goods + consumer services + the abstract `retail` bucket for general
  * merchandise). Raw extractables and pure-B2B inputs (ordnance, fertilizers) are
- * excluded. Weights are relative — they are renormalised per state after the
- * wealth-tier (Engel) shift — so they need not sum to exactly 1.
+ * excluded, including advertising inventory, which is a business input rather
+ * than a household purchase. Weights are relative and are renormalised per
+ * state after the wealth-tier (Engel) shift, so they need not sum to exactly 1.
  */
 export const HOUSEHOLD_CONSUMER_BASKET: Partial<Record<CommodityType, number>> = {
   food: 0.2,
@@ -119,7 +121,6 @@ export const HOUSEHOLD_CONSUMER_BASKET: Partial<Record<CommodityType, number>> =
   entertainment_services: 0.05,
   software: 0.03,
   freight: 0.03,
-  advertising: 0.02,
   consulting_services: 0.02,
   building_materials: 0.02,
   plastics: 0.01,
@@ -224,6 +225,13 @@ export interface HouseholdConsumptionInput {
    * the map (never priced) is left unclamped.
    */
   priorGlobalSupply?: Map<CommodityType, number>;
+  /**
+   * The era demand calibration the caller applies after every demand leg
+   * (`commodityDemandCalibration`). The supply clamp bounds CALIBRATED demand,
+   * so it divides the cap by this; see `computeRawSupplyDemand`'s parameter of
+   * the same name for why the two corrections must not stack. Absent means 1.
+   */
+  demandCalibration?: (commodity: CommodityType) => number;
 }
 
 export interface HouseholdConsumptionResult {
@@ -276,6 +284,7 @@ export function computeHouseholdConsumption(
     eraUnitScale = 1,
     plantsUnitScale = 1,
     priorGlobalSupply,
+    demandCalibration,
   } = input;
   const basePrices = eraScaledBasePrices(eraUnitScale);
   const unitScale = plantsUnitScale > 0 ? plantsUnitScale : 1;
@@ -355,10 +364,13 @@ export function computeHouseholdConsumption(
     for (const [commodity, total] of global) {
       const supply = priorGlobalSupply.get(commodity);
       if (!(typeof supply === "number" && supply > 0)) continue;
-      const cap = supply * PLANTS_HOUSEHOLD_SUPPLY_CAP;
+      // Bounds calibrated demand: divide by the calibration the caller applies
+      // later, and record the truncation in those same calibrated units.
+      const calibration = calibrationMultiplier(demandCalibration, commodity);
+      const cap = (supply * PLANTS_HOUSEHOLD_SUPPLY_CAP) / calibration;
       if (total <= cap) continue;
       const factor = cap / total;
-      truncated.set(commodity, total - cap);
+      truncated.set(commodity, (total - cap) * calibration);
       global.set(commodity, cap);
       for (const contrib of byState.values()) {
         const v = contrib.get(commodity);

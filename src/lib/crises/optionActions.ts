@@ -75,6 +75,8 @@ export interface CrisisActionContext {
   countryId: string;
   /** The turn the decision was submitted on (for lifecycle/deadline math). */
   currentTurn: number;
+  /** Frozen funding policy for a preflighted treasury intervention. */
+  treasuryCashLedgerEnabled?: boolean;
 }
 
 /** Human-readable sector label (steel is produced by the "manufacturing" sector). */
@@ -754,7 +756,15 @@ async function vietnamSupport(ctx: CrisisActionContext): Promise<void> {
     gdp > 0 ? computeAidOutcome(pctGdp, gdp) : { amountLocal: 0, senderEffects: [] };
 
   if (amountLocal > 0) {
-    await spendFromTreasury(db, ctx.countryId as CountryId, amountLocal, { resyncDerived: true });
+    await spendFromTreasury(db, ctx.countryId as CountryId, amountLocal, {
+      resyncDerived: true,
+      witness: {
+        flow: "crisis_response",
+        key: `vietnam-support:${ctx.crisis._id.toString()}:${ctx.countryId}:${ctx.currentTurn}:${ctx.characterId.toString()}`,
+        site: "crises/optionActions",
+        treasuryCashLedgerEnabled: ctx.treasuryCashLedgerEnabled,
+      },
+    });
   }
 
   const gameState = await getGameState(db);

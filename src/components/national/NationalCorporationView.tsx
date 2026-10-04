@@ -6,7 +6,6 @@ import Link from "next/link";
 import { Skeleton } from "@/components/ui";
 import BackButton from "@/components/BackButton";
 import type { CountryId } from "@/lib/constants/countries";
-import type { NationalRole } from "./AuthoritySeal";
 import type { NationalCorporationViewModel } from "@/lib/nationalization/nationalCorporationView";
 import { NationalMasthead } from "./NationalMasthead";
 import { HeroStatsStrip } from "./HeroStatsStrip";
@@ -23,6 +22,9 @@ import { StrategicSectorPanel } from "./official/StrategicSectorPanel";
 
 type NatTabId =
   "overview" | "mandates" | "holdings" | "register" | "operations" | "nationalize" | "privatize";
+
+/** `official` unlocks the state-authority action tabs; `public` is the read-only view. */
+type NationalRole = "public" | "official";
 
 export interface NatOfficialActions {
   corpId: string;
@@ -164,7 +166,6 @@ export function NationalCorporationView({ corpId }: { corpId: string }) {
 
       <NationalMasthead
         country={vm.countryId as CountryId}
-        role={role}
         statStrip={<HeroStatsStrip stats={vm.stats} currency={vm.currency} />}
         divisionName={vm.isPrimary ? undefined : vm.name}
       >

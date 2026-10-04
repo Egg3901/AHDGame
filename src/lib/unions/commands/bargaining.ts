@@ -202,12 +202,53 @@ export function mandateFromLocals(args: {
 }
 
 /** Shared campaign opening used by authorized players and autonomous NPPs. */
+/**
+ * Per-phase memo for the reads that depend only on country or state (#2690).
+ * The NPP union phase opens many campaigns per turn and writes none of the
+ * macro, budget, state or config documents these come from, so one read per
+ * country (or state set) serves the whole phase. Player commands pass none.
+ */
+export type BargainingReadCache = Map<string, Promise<unknown>>;
+
+function memoRead<T>(
+  cache: BargainingReadCache | undefined,
+  key: string,
+  read: () => Promise<T>
+): Promise<T> {
+  if (!cache) return read();
+  const hit = cache.get(key) as Promise<T> | undefined;
+  if (hit) return hit;
+  const pending = read();
+  cache.set(key, pending);
+  return pending;
+}
+
+/** Cost of living for a set of locals, memoized per phase on their state set. */
+function memoCostOfLiving(
+  db: Db,
+  locals: readonly Pick<CorporateSector, "stateId">[],
+  cache: BargainingReadCache | undefined
+): Promise<Map<string, number>> {
+  const states = [
+    ...new Set(
+      locals
+        .map((s) => s.stateId)
+        .filter(Boolean)
+        .map(String)
+    ),
+  ]
+    .sort()
+    .join(",");
+  return memoRead(cache, `col:${states}`, () => costOfLivingByState(db, locals));
+}
+
 export async function openBargainingCampaignFromLiveConditions(
   db: Db,
   union: Union,
   employerCorporationId: string,
   terms: BargainingTerms,
-  currentTurn: number
+  currentTurn: number,
+  readCache?: BargainingReadCache
 ): Promise<UnionActionResult> {
   if (!ObjectId.isValid(employerCorporationId)) {
     return { ok: false, status: 400, error: "Invalid employer corporation ID." };
@@ -237,7 +278,9 @@ export async function openBargainingCampaignFromLiveConditions(
       status: "active",
       expiresAtTurn: { $gt: currentTurn },
     }),
-    bargainingMacroInputs(db, union.countryId),
+    memoRead(readCache, `macro:${union.countryId}`, () =>
+      bargainingMacroInputs(db, union.countryId)
+    ),
     db.collection<BargainingCampaign>("bargainingCampaigns").findOne(
       {
         unionId: union._id,
@@ -283,7 +326,7 @@ export async function openBargainingCampaignFromLiveConditions(
     treasury: union.treasury,
     laborTightness: macro.laborTightness,
     lawSupport: macro.lawSupport,
-    costOfLivingByState: await costOfLivingByState(db, sectors),
+    costOfLivingByState: await memoCostOfLiving(db, sectors, readCache),
   });
   const now = new Date();
   const campaign = openBargainingCampaign({
@@ -595,7 +638,8 @@ export async function persistUnionBargainingEscalation(
   db: Db,
   union: Union,
   campaign: BargainingCampaign,
-  currentTurn: number
+  currentTurn: number,
+  readCache?: BargainingReadCache
 ): Promise<UnionActionResult> {
   const now = new Date();
   const sectors = await db
@@ -616,8 +660,10 @@ export async function persistUnionBargainingEscalation(
   // keep calling strikes, and gives no credit to one that organized during the
   // dispute.
   const [macro, colByState] = await Promise.all([
-    bargainingMacroInputs(db, union.countryId),
-    costOfLivingByState(db, sectors),
+    memoRead(readCache, `macro:${union.countryId}`, () =>
+      bargainingMacroInputs(db, union.countryId)
+    ),
+    memoCostOfLiving(db, sectors, readCache),
   ]);
   const liveMandate = mandateFromLocals({
     locals: sectors,

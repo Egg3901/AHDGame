@@ -1,3 +1,7 @@
+import {
+  withServerTurnAnalytics,
+  markServerTurnAnalyticsCommitted,
+} from "@/lib/analytics/serverPosthog";
 import * as Sentry from "@sentry/nextjs";
 import { randomUUID } from "node:crypto";
 import { getDb } from "@/lib/mongodb";
@@ -22,8 +26,7 @@ import {
   ensureUKElections,
   ensureUKRegionalCouncilElections,
 } from "@/lib/turn/perpetualElections";
-import { STARTING_YEAR, MS_PER_TURN } from "@/lib/constants/turnTime";
-import { yearOfTurn } from "@/lib/utils/gameDate";
+import { STARTING_YEAR } from "@/lib/constants/turnTime";
 import { DEFAULT_GAME_STATE_FLAGS } from "@/lib/seeds/reference/featureFlagDefaults";
 import { DEFAULT_CYCLE_ANCHOR_CONTEXT } from "@/lib/elections/cycleAnchorContext";
 import { seedUnownedSectors } from "@/lib/admin/seed/seedUnownedSectors";
@@ -49,11 +52,13 @@ import {
 import { createTurnPhaseRuntime } from "@/simulation/engine/turnPhaseRuntime";
 import { buildTurnExecutionContext } from "@/simulation/engine/turnExecutionContext";
 import { getTurnPhaseRegistry } from "@/simulation/phases/turnPhaseRegistry";
+import { runWithLedgerTurn } from "@/lib/ledger/ledgerTurn";
 import { getSimTurnPhasePredicate } from "@/simulation/phases/simTurnProfiles";
 import {
   combinePhasePredicates,
   getSingleplayerPhasePredicate,
 } from "@/simulation/phases/singleplayerPhases";
+import { runPostTurnIntegrityScans } from "@/lib/turn/postTurnScans";
 import { getAnomalyScanCadencePredicate } from "@/simulation/phases/anomalyScanCadence";
 import { isSingleplayer } from "@/lib/singleplayer";
 import { reconcileFederalBudgetInvariants } from "@/lib/budget/budgetInvariants";
@@ -219,7 +224,11 @@ interface CrashedTurnRecovery {
   appliedPhases: Set<string>;
 }
 
-export async function processTurn(
+export function processTurn(options: Parameters<typeof processTurnImpl>[0] = {}) {
+  return withServerTurnAnalytics(() => processTurnImpl(options));
+}
+
+async function processTurnImpl(
   options: {
     /** Sandbox tooling hook. Production callers omit it. */
     onPhaseCompleted?: (phase: CompletedTurnPhaseObservation) => Promise<void>;
@@ -557,9 +566,12 @@ export async function processTurn(
       timestamp: new Date().toISOString(),
     });
 
-    for (const adapter of getTurnPhaseRegistry()) {
-      await adapter.execute(context, runtime);
-    }
+    // Ledger entries emitted by the phases land in this turn without a clock read.
+    await runWithLedgerTurn(context.newTurn, async () => {
+      for (const adapter of getTurnPhaseRegistry()) {
+        await adapter.execute(context, runtime);
+      }
+    });
 
     // Reconciles, never throws. `federalBudget.surplus` and `debt.principal` are
     // caches of an expression, and both drift intra-year on the live world even
@@ -621,6 +633,7 @@ export async function processTurn(
       }
     );
     localTurnLockHeld = false;
+    markServerTurnAnalyticsCommitted({ emit: !localSingleplayer && config?.simSandbox !== true });
 
     invalidateGameTimeCache();
     invalidateGameStateCache();
@@ -634,6 +647,7 @@ export async function processTurn(
       durationMs: Date.now() - startTime,
       success: completion.success,
       warnings,
+      health: lastHealth,
       phaseStatuses,
       phases: context.phaseResults,
       createdAt: context.realNow,
@@ -641,6 +655,11 @@ export async function processTurn(
     if (!localSingleplayer) {
       await db.collection<TurnLog>("turnLogs").insertOne(turnLog as TurnLog);
       turnLogWritten = true;
+      // Anti-abuse scans run after the commit, never holding up the turn
+      // (#2694). Results land on this turn log under postTurnScans.
+      void runPostTurnIntegrityScans(db, context.newTurn).catch((err) =>
+        console.warn("[post-turn] integrity scans failed to start", err)
+      );
     }
 
     emit({
@@ -712,6 +731,7 @@ export async function processTurn(
         void captureTurnPosthog({
           db,
           turn: context.newTurn,
+          iteration: activeIteration,
           durationMs,
           phaseStatuses,
           errorCount: lastHealth?.errorCount ?? 0,
@@ -810,6 +830,7 @@ export async function processTurn(
           durationMs: Date.now() - startTime,
           success: false,
           warnings: [...warnings],
+          health: lastHealth,
           phaseStatuses: finalizedPhaseStatuses,
           phases: phaseResultsForFailure,
           createdAt: failureTime,

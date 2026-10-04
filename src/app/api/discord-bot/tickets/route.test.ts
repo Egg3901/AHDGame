@@ -4,6 +4,7 @@ import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/api/requireBotToken", () => ({ requireBotToken: vi.fn(() => true) }));
+vi.mock("@/lib/ticketCounter", () => ({ getNextTicketNumber: vi.fn(() => Promise.resolve(1001)) }));
 
 describe("PATCH /api/discord-bot/tickets", () => {
   let db: MockDb;
@@ -338,5 +339,104 @@ describe("PATCH /api/discord-bot/tickets", () => {
         $set: expect.not.objectContaining({ "resolution.message": expect.anything() }),
       })
     );
+  });
+});
+
+describe("POST /api/discord-bot/tickets filing context", () => {
+  let db: MockDb;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    db = createMockDb();
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+    db.collection("tickets");
+    db.collection("users");
+    db.collection("characters");
+    db.collection("corporations");
+  });
+
+  function post(body: Record<string, unknown>) {
+    return new Request("https://example.com/api/discord-bot/tickets", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  }
+
+  it("returns context questions and persists a versioned request for an unlinked reporter", async () => {
+    const { POST } = await import("./route");
+    const { creationContextKey } = await import("@/lib/tickets/contextNeeds");
+    const response = await POST(
+      post({
+        category: "bug",
+        title: "Market page broken",
+        description: "The market screen does not load.",
+        discordUserId: "ctx-test-unlinked-1",
+      })
+    );
+
+    expect(response.status).toBe(200);
+    const created = (await response.json()) as {
+      ticketNumber: number;
+      contextNeeded: string[];
+      contextKey: string | null;
+      contextQuestions: string[];
+    };
+    expect(created.ticketNumber).toBe(1001);
+    expect(created.contextNeeded).toEqual(["discord", "page"]);
+    expect(created.contextKey).toBe(creationContextKey(["discord", "page"]));
+    expect(created.contextQuestions).toHaveLength(2);
+    expect(db.collectionMocks.tickets.insertOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contextRequest: expect.objectContaining({
+          version: 1,
+          needed: ["discord", "page"],
+          generatedBy: "creation-deterministic",
+        }),
+      })
+    );
+  });
+
+  it("returns no needs for a linked reporter whose corporation resolved", async () => {
+    db.collectionMocks.users.findOne.mockResolvedValue({ _id: "user-1", username: "tester" });
+    db.collectionMocks.characters.findOne.mockResolvedValue({ name: "Hero", sequentialId: 5 });
+    db.collectionMocks.corporations.findOne.mockResolvedValue({
+      name: "Acme",
+      tickerSymbol: "ACME",
+      sequentialId: 9,
+    });
+    const { POST } = await import("./route");
+    const response = await POST(
+      post({
+        category: "gameplay",
+        title: "Question about elections",
+        description: "How do elections work?",
+        discordUserId: "ctx-test-linked-1",
+      })
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      contextNeeded: [],
+      contextKey: null,
+      contextQuestions: [],
+    });
+  });
+
+  it("still requires the bot token", async () => {
+    const { requireBotToken } = await import("@/lib/api/requireBotToken");
+    vi.mocked(requireBotToken).mockReturnValueOnce(false);
+    const { POST } = await import("./route");
+    const response = await POST(
+      post({ category: "bug", title: "x", description: "y", discordUserId: "ctx-test-auth-1" })
+    );
+    expect(response.status).toBe(401);
+  });
+
+  it("still rejects invalid bodies with Zod", async () => {
+    const { POST } = await import("./route");
+    const response = await POST(post({ category: "bug", description: "missing title" }));
+    expect(response.status).toBe(400);
   });
 });

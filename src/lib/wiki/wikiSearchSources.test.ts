@@ -66,7 +66,6 @@ describe("getNonPageWikiSearchCandidates", () => {
         title: "Your First Term",
         description: "Run for office and win.",
         difficulty: "beginner",
-        icon: "🎓",
         estimatedTime: "20 min",
         pages: [],
       },

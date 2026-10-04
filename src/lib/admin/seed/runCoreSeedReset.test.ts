@@ -88,6 +88,10 @@ describe("reset adopts the reference market tier", () => {
     expect(topUp.$setOnInsert).toEqual({
       marketSystemMode: referenceGameConfig.marketSystemMode,
       campaignEraPriceLevelEnabled: true,
+      privateBankingEnabled: true,
+      bankPropTradingEnabled: true,
+      playerAdvancedBankChartersEnabled: true,
+      bankPropForexFeesEnabled: true,
     });
   });
 

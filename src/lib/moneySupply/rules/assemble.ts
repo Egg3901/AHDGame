@@ -1,4 +1,8 @@
-import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
+import {
+  COUNTRY_CURRENCY_MAP,
+  getSeedCurrencyCode,
+  type CurrencyCode,
+} from "@/lib/constants/currencies";
 import type { CountryId } from "@/lib/constants/countries";
 import { NATIONAL_SCOPE, NATIONAL_SCOPE_IDS } from "@/lib/constants/nationalScope";
 import {
@@ -28,6 +32,9 @@ export function emptyComponents(): MutableComponents {
     householdSavings: 0,
     externalBroadMoney: 0,
     bankReserves: 0,
+    centralBankForexRevenue: 0,
+    centralBankSpreadReserves: 0,
+    bankVaultCash: 0,
     creditOutstanding: 0,
     sovereignBondsOutstanding: 0,
     centralBankBondHoldings: 0,
@@ -36,8 +43,10 @@ export function emptyComponents(): MutableComponents {
   };
 }
 
-export function homeCurrency(countryId: CountryId): CurrencyCode {
-  return COUNTRY_CURRENCY_MAP[countryId] ?? "USD";
+export function homeCurrency(countryId: CountryId, preset?: string): CurrencyCode {
+  return preset
+    ? getSeedCurrencyCode(countryId, preset)
+    : (COUNTRY_CURRENCY_MAP[countryId] ?? "USD");
 }
 
 export function addComponent(
@@ -66,6 +75,12 @@ export function addComponent(
 export function governmentLiquidFromTreasury(treasuryBalance: unknown): number {
   if (typeof treasuryBalance !== "number" || !Number.isFinite(treasuryBalance)) return 0;
   return Math.max(0, treasuryBalance);
+}
+
+/** Funded Treasury cash is a nonnegative stock and never inherits signed fiscal position. */
+export function governmentLiquidFromSpendableCash(treasuryCashLocal: unknown): number {
+  if (typeof treasuryCashLocal !== "number" || !Number.isFinite(treasuryCashLocal)) return 0;
+  return Math.max(0, treasuryCashLocal);
 }
 
 /** Fiscal advances first cancel a signed deficit, then add spendable cash. */
@@ -100,7 +115,8 @@ export interface MedianIncomeDoc {
 export function addHouseholdMoneyFromDemography(
   byCurrency: Map<CurrencyCode, MutableComponents>,
   states: DemographicState[],
-  medianIncomeDocs: MedianIncomeDoc[]
+  medianIncomeDocs: MedianIncomeDoc[],
+  preset?: string
 ): void {
   const incomeByStateId = new Map<string, number>();
   const incomeByCountry = new Map<string, number>();
@@ -119,7 +135,7 @@ export function addHouseholdMoneyFromDemography(
     if (!income) continue;
     const households = st.population / PERSONS_PER_HOUSEHOLD;
     const annualIncome = households * income;
-    const currency = homeCurrency(st.countryId as CountryId);
+    const currency = homeCurrency(st.countryId as CountryId, preset);
     addComponent(
       byCurrency,
       currency,
@@ -140,6 +156,8 @@ export interface BankMoneyFields {
   externalBroadMoney?: number;
   netMoneyCreatedLifetime?: number;
   reserveBalance?: number;
+  forexRevenue?: number;
+  spreadFeeReserveBalances?: Partial<Record<CurrencyCode, number>>;
 }
 
 /**
@@ -148,10 +166,11 @@ export interface BankMoneyFields {
  */
 export function addCentralBankMoney(
   byCurrency: Map<CurrencyCode, MutableComponents>,
-  banks: BankMoneyFields[]
+  banks: BankMoneyFields[],
+  preset?: string
 ): void {
   for (const bank of banks) {
-    const currency = homeCurrency(bank.countryId);
+    const currency = homeCurrency(bank.countryId, preset);
     addComponent(
       byCurrency,
       currency,
@@ -162,6 +181,64 @@ export function addCentralBankMoney(
     // out of M1/M2 by calculateMoneyAggregates ; counting it alongside deposits
     // would double-count base money.
     addComponent(byCurrency, currency, "bankReserves", bank.reserveBalance);
+    // These cash reserve pools are spendable for FX and reserve operations but
+    // remain central-bank assets, not public deposits. Preserve them as raw
+    // audit stocks without adding them to observed M1/M2.
+    addComponent(byCurrency, currency, "centralBankForexRevenue", bank.forexRevenue);
+    for (const [code, amount] of Object.entries(bank.spreadFeeReserveBalances ?? {})) {
+      addComponent(byCurrency, code as CurrencyCode, "centralBankSpreadReserves", amount);
+    }
+  }
+}
+
+export interface FundedBankCashFields {
+  bankCharter?: { currency?: string; cashReserves?: number };
+  bankTreasuryEscrows?: Record<string, { currencyCode?: string; amountLocal?: number }>;
+  bankSovereignEscrows?: Record<string, { currencyCode?: string; amountLocal?: number }>;
+  bankPropForexFee?: { currencyCode?: string; amountLocal?: number };
+}
+
+/**
+ * Record real cash held by bank charters or durable delivery escrows as a raw
+ * audit stock. Bank vault cash is reserve backing already represented by
+ * deposits in observed M2, so it must not be added to corporate liquid money.
+ * Securities, loans, and charter posted-capital memos are not cash. Escrows
+ * remain cash while payout waits for epoch-safe delivery.
+ */
+export function addFundedBankCash(
+  byCurrency: Map<CurrencyCode, MutableComponents>,
+  banks: FundedBankCashFields[]
+): void {
+  for (const bank of banks) {
+    const charterCurrency = bank.bankCharter?.currency as CurrencyCode | undefined;
+    if (charterCurrency) {
+      addComponent(byCurrency, charterCurrency, "bankVaultCash", bank.bankCharter?.cashReserves);
+    }
+    for (const escrow of Object.values(bank.bankTreasuryEscrows ?? {})) {
+      if (escrow.currencyCode)
+        addComponent(
+          byCurrency,
+          escrow.currencyCode as CurrencyCode,
+          "bankVaultCash",
+          escrow.amountLocal
+        );
+    }
+    for (const escrow of Object.values(bank.bankSovereignEscrows ?? {})) {
+      if (escrow.currencyCode)
+        addComponent(
+          byCurrency,
+          escrow.currencyCode as CurrencyCode,
+          "bankVaultCash",
+          escrow.amountLocal
+        );
+    }
+    if (bank.bankPropForexFee?.currencyCode)
+      addComponent(
+        byCurrency,
+        bank.bankPropForexFee.currencyCode as CurrencyCode,
+        "bankVaultCash",
+        bank.bankPropForexFee.amountLocal
+      );
   }
 }
 

@@ -27,7 +27,14 @@ export interface MaintenanceStatusSnapshot {
 /** Paths reachable to everyone (including non-admins) while maintenance is on.
  *  Shared between src/proxy.ts (primary gate) and src/app/layout.tsx (defense
  *  in depth) so the two enforcement points cannot drift apart. */
-export const MAINTENANCE_PUBLIC_PATHS: readonly string[] = ["/", "/login"];
+export const MAINTENANCE_PUBLIC_PATHS: readonly string[] = [
+  "/",
+  "/login",
+  // Crawler files. Redirected to /maintenance they read as an invalid
+  // robots.txt and a missing sitemap for the whole down-window.
+  "/robots.txt",
+  "/sitemap.xml",
+];
 
 /** Path prefixes whose subtrees stay reachable during maintenance, in addition
  *  to the public paths above. Matched by `isMaintenanceBypassPath` below as the

@@ -30,12 +30,19 @@ import {
 import { computeSectorImpliedUnits } from "@/lib/market/unownedHeadroom";
 import { CAPACITY_ANCHOR_YEAR, capacityPricePerUnit } from "@/lib/constants/capacityEconomy";
 import { getGameState } from "@/lib/gameState";
-import { debitTreasuryCompensation } from "./treasury";
+import { debitTreasuryCompensation, settleFundedTreasuryCompensation } from "./treasury";
+import { resolveTreasuryCashOptions, witnessTreasuryCash } from "./treasuryLedger";
+import { snapshotCorporationCurrency } from "@/lib/ledger/balanceSnapshot";
 import { applyNationalizationConsequences } from "./consequences/apply";
 import { recordNationalizationLedger } from "./ledger";
 import type { CompensationTier } from "./constants";
 import { NATIONALIZATION_REVENUE_HAIRCUT } from "./constants";
 import type { TransitionConsequenceInput } from "./ownershipTransition";
+import {
+  acquireConstructionPropertyTransition,
+  hasProtectedConstructionProperty,
+  releaseConstructionPropertyTransition,
+} from "@/lib/corporations/securedConstructionProperty";
 
 // Re-export the client-safe scope definitions so existing consumers that import
 // `SectorScope` / `SECTOR_SCOPE_LABELS` from this engine module keep working,
@@ -43,11 +50,14 @@ import type { TransitionConsequenceInput } from "./ownershipTransition";
 import { SECTOR_SCOPE_LABELS, type SectorScope } from "./sectorScope";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 import { seedPlantLedger, splitWholePlantCount } from "@/lib/corporations/plantLedger";
+import { getCorporateSectorLaneQuery } from "@/lib/corporations/sectorLocation";
 export { SECTOR_SCOPE_LABELS, type SectorScope };
 
 export interface NationalizeSectorWideParams {
   countryId: CountryId;
   sectorType: CorporationType;
+  industryModel?: Corporation["industryModel"];
+  mediaDiscriminator?: Corporation["mediaDiscriminator"];
   /** Fraction carved from each in-scope holder, 0 < f ≤ 1. */
   carveFraction: number;
   scope: SectorScope;
@@ -89,7 +99,18 @@ export async function nationalizeSectorWide(
 
   const sectors = db.collection<CorporateSector>("corporateSectors");
   const corps = db.collection<Corporation>("corporations");
-  const dest = await resolveNationalCorporationForSector(db, params.countryId, params.sectorType);
+  const sectorLane = getCorporateSectorLaneQuery({
+    sectorType: params.sectorType,
+    industryModel: params.industryModel,
+    mediaDiscriminator: params.mediaDiscriminator,
+  });
+  const dest = await resolveNationalCorporationForSector(
+    db,
+    params.countryId,
+    params.sectorType,
+    params.industryModel,
+    params.mediaDiscriminator
+  );
   // Snapshot the SOCI escalation multiplier at taking time so the transition
   // shock is fixed to today's concentration, not retroactively deepened later.
   const transitionMultiplier = sociMultiplier(
@@ -140,7 +161,6 @@ export async function nationalizeSectorWide(
     plantUnitRemainder: 0,
     capacityBookAnchor: 0,
     buildQueue: [],
-    constructionInProgressAnchor: 0,
     mothballed: survivor ? identitySectorPlantFields(survivor).mothballed : false,
     ...(survivor?.activeCapacityPercent == null
       ? {}
@@ -184,16 +204,14 @@ export async function nationalizeSectorWide(
     // revenue IS the only quantity that moves, so `revenueAnchor <= 0` still
     // expresses that exactly and the behaviour is byte-identical. Under plants
     // the transferable substance is the plant state, so admit any donor carrying
-    // capacity, construction in progress, or queued build orders even at zero
+    // capacity or queued build orders even at zero
     // revenue. `mothballed` / `plantsStartTurn` alone are deliberately NOT
     // enough — they are history flags, not substance, and admitting on them
     // would create empty NatCorp rows.
     const plantHasSubstance =
       plantsEnabled &&
       incomingPlant != null &&
-      (incomingPlant.capitalStock > 0 ||
-        incomingPlant.constructionInProgressAnchor > 0 ||
-        incomingPlant.buildQueue.length > 0);
+      (incomingPlant.capitalStock > 0 || incomingPlant.buildQueue.length > 0);
     if (revenueAnchor <= 0 && !plantHasSubstance) return;
     // Transition revenue haircut: the state acquires a disrupted slice worth 15%
     // less than the carved value (compensation above is paid on the full value).
@@ -239,8 +257,8 @@ export async function nationalizeSectorWide(
     // the branch below.
     const existing = await sectors.findOne({
       corporationId: dest._id,
-      sectorType: params.sectorType,
       stateId,
+      ...sectorLane,
     });
     let plantIn: SectorPlantFieldsUpdate | null = null;
     if (plantsEnabled) {
@@ -253,6 +271,10 @@ export async function nationalizeSectorWide(
             haircutAnchor,
             null,
             sweepEraUnitScale
+          ),
+          ...seedPlantLedger(
+            params.sectorType,
+            computeSectorImpliedUnits(params.sectorType, haircutAnchor, null, sweepEraUnitScale)
           ),
           // Capacity derived from an ₳ nameplate rather than transferred with a
           // recorded basis (the unowned pool, or a legacy row). Priced at LIST,
@@ -284,8 +306,9 @@ export async function nationalizeSectorWide(
           $inc: { revenue: transferRevenue, workers, currentGrowthCost: transferGrowthCost },
           $set: {
             // MERGE shape: the slice is folded into a row the NatCorp already
-            // operates. `mergeSectorPlantFields` sums capacity and CIP,
-            // concatenates the build queues in landing order, ANDs `mothballed`
+            // operates. `mergeSectorPlantFields` sums capacity and concatenates
+            // build queues in landing order. CIP is derived from those queues.
+            // The helper ANDs `mothballed`
             // and keeps the EARLIER ramp anchor — without it the survivor's own
             // plant state would be untouched and the seized units lost.
             ...(plantIn ? mergeSectorPlantFields(readSectorPlantFields(existing), plantIn) : {}),
@@ -304,6 +327,8 @@ export async function nationalizeSectorWide(
         countryId: params.countryId,
         stateId,
         sectorType: params.sectorType,
+        ...(params.industryModel ? { industryModel: params.industryModel } : {}),
+        ...(params.mediaDiscriminator ? { mediaDiscriminator: params.mediaDiscriminator } : {}),
         revenue: transferRevenue,
         // CREATE shape: the carved plant state IS the new row's plant state.
         // `plantsStartTurn` rides across from the donor rather than being reset —
@@ -334,7 +359,7 @@ export async function nationalizeSectorWide(
   // ── 1. Corp-held pool (scope: all | corporations) ──
   if (params.scope !== "unowned") {
     const corpSectors = await sectors
-      .find({ countryId: params.countryId, sectorType: params.sectorType })
+      .find({ countryId: params.countryId, ...sectorLane })
       .toArray();
     // Cache donor corps so each is loaded once.
     const donorById = new Map<string, Corporation | null>();
@@ -353,6 +378,31 @@ export async function nationalizeSectorWide(
       // Respect the re-nationalization cooldown (spec §13.4) the whole-corp path
       // honors — a just-privatized corp's holdings can't be swept straight back.
       if (isWithinRenationalizeCooldown(donor, params.consequence.turn)) continue;
+      const transitionKey = `nationalize-sector-wide:${params.consequence.turn}:${sec._id.toHexString()}`;
+      const compensationKey = `nationalize-sector-wide:${params.countryId}:${sec._id.toString()}:${params.consequence.turn}`;
+      let compensationLedger: Awaited<ReturnType<typeof resolveTreasuryCashOptions>> | undefined;
+      if (sec.pendingFundedNationalization) {
+        compensationLedger = await resolveTreasuryCashOptions(db);
+        if (
+          sec.pendingFundedNationalization.operationKey !== compensationKey ||
+          !compensationLedger?.context?.treasuryCashLedgerEnabled
+        ) {
+          throw new Error("Funded nationalization retry requires its original Treasury cash mode");
+        }
+      }
+      const alreadyOwnsTransition = sec.constructionPropertyTransition?.key === transitionKey;
+      if (hasProtectedConstructionProperty(sec) && !alreadyOwnsTransition) continue;
+      if (
+        !(await acquireConstructionPropertyTransition(
+          db,
+          sec,
+          transitionKey,
+          "nationalize_sector_wide",
+          false,
+          true
+        ))
+      )
+        continue;
       const donorCurrency = donor.liquidCurrencyCode ?? "USD";
       const donorRate = fxByCurrency.get(donorCurrency) ?? 1;
 
@@ -370,18 +420,95 @@ export async function nationalizeSectorWide(
         {
           plantsEnabled,
           currentYear: sweepCurrentYear,
+          currentTurn: params.consequence.turn,
           fraction: f,
           eraUnitScale: sweepEraUnitScale,
         }
       );
       const payoutAnchor = applyTier(valuationAnchor, params.tier, { plantsEnabled });
-      await debitTreasuryCompensation(db, params.countryId, payoutAnchor, fxByCurrency, now);
-      if (payoutAnchor > 0) {
-        const compLocal = Math.round(anchorToCorpLiquidCapital(payoutAnchor, donor, donorRate));
-        await corps.updateOne(
-          { _id: donor._id },
-          { $inc: { liquidCapital: compLocal }, $set: { updatedAt: now } }
-        );
+      compensationLedger ??= await resolveTreasuryCashOptions(db);
+      let fundedCompensationLocal: number | undefined;
+      let fundedCompensationNewlySettled = false;
+      let fundedTreasuryAmountLocal = 0;
+      let fundedPayoutAnchor: number | undefined;
+      if (compensationLedger?.context?.treasuryCashLedgerEnabled) {
+        if (!sec.pendingFundedNationalization) {
+          const reservation = await sectors.updateOne(
+            {
+              _id: sec._id,
+              corporationId: sec.corporationId,
+              $or: [
+                { pendingFundedNationalization: { $exists: false } },
+                { pendingFundedNationalization: { operationKey: compensationKey } },
+              ],
+            },
+            { $set: { pendingFundedNationalization: { operationKey: compensationKey } } }
+          );
+          if ((reservation?.matchedCount ?? 0) !== 1)
+            throw new Error("Could not reserve the funded nationalization mode");
+        }
+        const settled = await settleFundedTreasuryCompensation(db, {
+          countryId: params.countryId,
+          donor,
+          payoutAnchor,
+          fxByCurrency,
+          now,
+          key: compensationKey,
+          ledger: compensationLedger!,
+        });
+        fundedCompensationLocal = settled.donorAmountLocal;
+        fundedCompensationNewlySettled = settled.newlySettled;
+        fundedTreasuryAmountLocal = settled.treasuryAmountLocal;
+        fundedPayoutAnchor = settled.payoutAnchor;
+      } else {
+        await debitTreasuryCompensation(db, params.countryId, payoutAnchor, fxByCurrency, now, {
+          flow: "nationalization_compensation",
+          key: compensationKey,
+          ledger: compensationLedger,
+        });
+      }
+      if (payoutAnchor > 0 || (fundedCompensationLocal ?? 0) > 0) {
+        const compLocal =
+          fundedCompensationLocal ??
+          Math.round(anchorToCorpLiquidCapital(payoutAnchor, donor, donorRate));
+        if (fundedCompensationLocal === undefined) {
+          const credited = await corps.updateOne(
+            { _id: donor._id },
+            { $inc: { liquidCapital: compLocal }, $set: { updatedAt: now } }
+          );
+          if ((credited?.matchedCount ?? 0) > 0) {
+            await witnessTreasuryCash(db, compensationLedger, {
+              flow: "nationalization_compensation",
+              account: {
+                kind: "corporation",
+                corpId: donor._id.toString(),
+                currency: snapshotCorporationCurrency(donor),
+              },
+              amount: compLocal,
+              now,
+              site: "nationalizeSectorWide:compensation",
+            });
+          }
+        } else if (fundedCompensationNewlySettled) {
+          await witnessTreasuryCash(db, compensationLedger, {
+            flow: "nationalization_compensation",
+            account: { kind: "government", countryId: params.countryId },
+            amount: -fundedTreasuryAmountLocal,
+            now,
+            site: "nationalizeSectorWide:compensation",
+          });
+          await witnessTreasuryCash(db, compensationLedger, {
+            flow: "nationalization_compensation",
+            account: {
+              kind: "corporation",
+              corpId: donor._id.toString(),
+              currency: snapshotCorporationCurrency(donor),
+            },
+            amount: compLocal,
+            now,
+            site: "nationalizeSectorWide:compensation",
+          });
+        }
       }
 
       // Carve the slice into the NatCorp; shrink/remove the donor row. The donor
@@ -405,15 +532,20 @@ export async function nationalizeSectorWide(
         resolveSectorHostCurrencyCode(sec, donor),
         fxRateForSectorHostFromMap(sec, donor, fxByCurrency)
       );
-      const openingPlantCount = Number.isInteger(sec.plantCount)
-        ? (sec.plantCount as number)
-        : seedPlantLedger(sec.sectorType, sec.capitalStock).plantCount;
+      const openingPlantCount = seedPlantLedger(
+        sec.sectorType,
+        sec.capitalStock,
+        sec.industryModel,
+        sec.mediaDiscriminator
+      ).plantCount;
+      // Compute the whole-facility split once so donor and state counts are
+      // complementary, including a one-facility sub-quantum holding.
       const plantCountSplit = splitWholePlantCount(openingPlantCount, f);
       // PLANTS — the capacity leg of the carve. Below plants this is null and
       // both writes below are byte identical to the pre-P3b behaviour.
       //
       // `carveSectorPlantFields(sec, f)` is the same slicer the privatization
-      // spin-out uses: capacity, CIP and each build order scale by `f`, while
+      // spin-out uses: capacity and each build order scale by `f`, while
       // `mothballed` / `plantsStartTurn` are copied (they describe the plant's
       // history, which both halves inherit).
       //
@@ -444,6 +576,12 @@ export async function nationalizeSectorWide(
             return {
               ...sliced,
               capitalStock: sliced.capitalStock * (1 - NATIONALIZATION_REVENUE_HAIRCUT),
+              ...seedPlantLedger(
+                sec.sectorType,
+                sliced.capitalStock * (1 - NATIONALIZATION_REVENUE_HAIRCUT),
+                sec.industryModel,
+                sec.mediaDiscriminator
+              ),
               // P5: the paid basis takes the SAME haircut as the capacity it
               // prices, so the per-unit basis is invariant across the taking.
               capacityBookAnchor: sliced.capacityBookAnchor * (1 - NATIONALIZATION_REVENUE_HAIRCUT),
@@ -462,14 +600,29 @@ export async function nationalizeSectorWide(
         carvedPlant
       );
       if (f >= 1) {
-        await sectors.deleteOne({ _id: sec._id });
+        const removed = await sectors.deleteOne({
+          _id: sec._id,
+          corporationId: sec.corporationId,
+          "constructionPropertyTransition.key": transitionKey,
+          ...(compensationLedger?.context?.treasuryCashLedgerEnabled
+            ? { "pendingFundedNationalization.operationKey": compensationKey }
+            : {}),
+        });
+        if (removed.deletedCount !== 1) continue;
       } else {
-        await sectors.updateOne(
-          { _id: sec._id },
+        const shrunk = await sectors.updateOne(
+          {
+            _id: sec._id,
+            corporationId: sec.corporationId,
+            "constructionPropertyTransition.key": transitionKey,
+            ...(compensationLedger?.context?.treasuryCashLedgerEnabled
+              ? { "pendingFundedNationalization.operationKey": compensationKey }
+              : {}),
+          },
           {
             $set: {
               // The donor keeps the COMPLEMENT of what was carved — `1 − f` of
-              // capacity, CIP and every build order — so total capacity is
+              // capacity and every build order, so total capacity is
               // conserved across the taking up to the single deliberate haircut
               // sink applied above. Without this the donor's `capitalStock` would
               // be untouched and the next tick would restate its revenue back to
@@ -482,10 +635,22 @@ export async function nationalizeSectorWide(
               currentGrowthCost: Math.round((sec.currentGrowthCost ?? 0) * (1 - f)),
               updatedAt: now,
             },
+            ...(compensationLedger?.context?.treasuryCashLedgerEnabled
+              ? {
+                  $unset: {
+                    pendingFundedNationalization: "",
+                    constructionPropertyTransition: "",
+                  },
+                }
+              : {}),
           }
         );
+        if (shrunk.matchedCount !== 1) continue;
       }
-      totalPayoutAnchor += payoutAnchor;
+      if (f < 1 && !compensationLedger?.context?.treasuryCashLedgerEnabled) {
+        await releaseConstructionPropertyTransition(db, sec._id, transitionKey);
+      }
+      totalPayoutAnchor += fundedPayoutAnchor ?? payoutAnchor;
       sectorsCarved += 1;
       affectedCorpIds.add(donorKey);
     }
@@ -495,7 +660,7 @@ export async function nationalizeSectorWide(
   if (params.scope !== "corporations") {
     const unowned = await db
       .collection<UnownedSector>("unownedSectors")
-      .find({ countryId: params.countryId, sectorType: params.sectorType })
+      .find({ countryId: params.countryId, ...sectorLane })
       .toArray();
     for (const u of unowned) {
       // unownedSectors.revenue is ₳-native (Task 9) — already an anchor, so pass
@@ -542,9 +707,7 @@ export async function nationalizeSectorWide(
   // captured revenue. Without this, a take below the ceiling leaves a permanent
   // "unowned" gap the state alone could never close.
   if (params.scope !== "corporations") {
-    const natSectors = await sectors
-      .find({ corporationId: dest._id, sectorType: params.sectorType })
-      .toArray();
+    const natSectors = await sectors.find({ corporationId: dest._id, ...sectorLane }).toArray();
     if (natSectors.length > 0) {
       const stateIds = [...new Set(natSectors.map((s) => s.stateId))];
       const [stateDocs, remainingUnowned, preset] = await Promise.all([
@@ -556,7 +719,7 @@ export async function nationalizeSectorWide(
           .collection<UnownedSector>("unownedSectors")
           .find({
             countryId: params.countryId,
-            sectorType: params.sectorType,
+            ...sectorLane,
             stateId: { $in: stateIds },
           })
           .toArray(),
@@ -613,6 +776,14 @@ export async function nationalizeSectorWide(
               ...(captureUnits > 0 ? { capitalStock: captureUnits } : {}),
             },
             $set: {
+              ...(captureUnits > 0
+                ? seedPlantLedger(
+                    params.sectorType,
+                    (ns.capitalStock ?? 0) + captureUnits,
+                    params.industryModel,
+                    params.mediaDiscriminator
+                  )
+                : {}),
               nationalizedAtTurn: params.consequence.turn,
               nationalizationTransitionMultiplier: transitionMultiplier,
               sectorNationalizationScope: params.scope,

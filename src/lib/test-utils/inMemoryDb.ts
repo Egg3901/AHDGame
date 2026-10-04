@@ -137,6 +137,9 @@ function sameValue(a: unknown, b: unknown): boolean {
  * `{ tags: { $ne: "x" } }` does not.
  */
 function equalsAny(value: unknown, operand: unknown): boolean {
+  // Mongo equality against null also matches a missing field. This applies to
+  // scalar equality and to the equality members consumed by $eq and $in.
+  if (value === undefined && operand === null) return true;
   if (Array.isArray(value) && !Array.isArray(operand)) {
     return value.some((item) => sameValue(item, operand));
   }
@@ -228,14 +231,83 @@ function matchesCondition(value: unknown, condition: unknown): boolean {
 }
 
 /** Tiny aggregation-expression evaluator, enough for the `$expr` guards. */
-function evalExpr(expr: unknown, doc: Doc): unknown {
+function evalExpr(expr: unknown, doc: Doc, variables: Doc = {}): unknown {
+  if (typeof expr === "string" && expr.startsWith("$$")) return getPath(variables, expr.slice(2));
   if (typeof expr === "string" && expr.startsWith("$")) return getPath(doc, expr.slice(1));
+  if (Array.isArray(expr)) return expr.map((item) => evalExpr(item, doc, variables));
   if (!isPlainObject(expr)) return expr;
-  const [op, rawArgs] = Object.entries(expr)[0];
+  const entry = Object.entries(expr)[0];
+  if (!entry) return expr;
+  const [op, rawArgs] = entry;
+  if (op === "$literal") return rawArgs;
+  if (op === "$cond" && Array.isArray(rawArgs)) {
+    return evalExpr(rawArgs[evalExpr(rawArgs[0], doc, variables) ? 1 : 2], doc, variables);
+  }
+  if (op === "$map" && isPlainObject(rawArgs)) {
+    const rows = evalExpr(rawArgs.input, doc, variables);
+    if (!Array.isArray(rows)) throw new Error("inMemoryDb: expected array for $map");
+    const variable = typeof rawArgs.as === "string" ? rawArgs.as : "this";
+    return rows.map((row) => evalExpr(rawArgs.in, doc, { ...variables, [variable]: row }));
+  }
+  if (op === "$filter" && isPlainObject(rawArgs)) {
+    const rows = evalExpr(rawArgs.input, doc, variables);
+    if (!Array.isArray(rows)) throw new Error("inMemoryDb: expected array for $filter");
+    const variable = typeof rawArgs.as === "string" ? rawArgs.as : "this";
+    return rows.filter((row) =>
+      Boolean(evalExpr(rawArgs.cond, doc, { ...variables, [variable]: row }))
+    );
+  }
+  if (op === "$let" && isPlainObject(rawArgs)) {
+    const vars = isPlainObject(rawArgs.vars) ? rawArgs.vars : {};
+    const scoped = { ...variables };
+    for (const [name, expression] of Object.entries(vars)) {
+      scoped[name] = evalExpr(expression, doc, variables);
+    }
+    return evalExpr(rawArgs.in, doc, scoped);
+  }
+  if (op === "$mergeObjects") {
+    const parts = Array.isArray(rawArgs) ? rawArgs : [rawArgs];
+    return parts.reduce<Doc>(
+      (merged, value) => ({ ...merged, ...(evalExpr(value, doc, variables) as Doc) }),
+      {}
+    );
+  }
+  if (!op.startsWith("$")) {
+    return Object.fromEntries(
+      Object.entries(expr).map(([key, value]) => [key, evalExpr(value, doc, variables)])
+    );
+  }
+  if (op === "$unsetField" && isPlainObject(rawArgs)) {
+    const value = evalExpr(rawArgs.input, doc, variables);
+    const field = evalExpr(rawArgs.field, doc, variables);
+    if (!isPlainObject(value) || typeof field !== "string")
+      throw new Error("inMemoryDb: invalid $unsetField input");
+    const next = { ...value };
+    delete next[field];
+    return next;
+  }
   const args = Array.isArray(rawArgs)
-    ? rawArgs.map((a) => evalExpr(a, doc))
-    : [evalExpr(rawArgs, doc)];
+    ? rawArgs.map((a) => evalExpr(a, doc, variables))
+    : [evalExpr(rawArgs, doc, variables)];
   switch (op) {
+    case "$objectToArray":
+      return isPlainObject(args[0]) ? Object.entries(args[0]).map(([k, v]) => ({ k, v })) : [];
+    case "$size":
+      if (!Array.isArray(args[0])) throw new Error("inMemoryDb: expected array for $size");
+      return args[0].length;
+    case "$concatArrays":
+      if (args.some((arg) => !Array.isArray(arg))) throw new Error("inMemoryDb: expected arrays");
+      return args.flat();
+    case "$slice": {
+      if (!Array.isArray(args[0])) throw new Error("inMemoryDb: expected an array to slice");
+      if (args.length === 2) {
+        const n = args[1] as number;
+        return n < 0 ? args[0].slice(n) : args[0].slice(0, n);
+      }
+      return args[0].slice(args[1] as number, (args[1] as number) + (args[2] as number));
+    }
+    case "$toString":
+      return args[0] === undefined || args[0] === null ? null : String(args[0]);
     case "$and":
       return args.every(Boolean);
     case "$or":
@@ -250,18 +322,27 @@ function evalExpr(expr: unknown, doc: Doc): unknown {
       return (args[0] as number) < (args[1] as number);
     case "$eq":
       return sameValue(args[0], args[1]);
+    case "$in":
+      return Array.isArray(args[1]) && args[1].some((value) => sameValue(value, args[0]));
     case "$add":
       return args.reduce((sum: number, a) => sum + ((a as number) ?? 0), 0);
     case "$subtract":
       return ((args[0] as number) ?? 0) - ((args[1] as number) ?? 0);
     case "$multiply":
       return args.reduce((prod: number, a) => prod * ((a as number) ?? 0), 1);
+    case "$divide":
+      if (args[1] === 0) throw new Error("inMemoryDb: division by zero");
+      return args[0] == null || args[1] == null ? null : (args[0] as number) / (args[1] as number);
+    case "$floor":
+      return args[0] == null ? null : Math.floor(args[0] as number);
     case "$max":
       return Math.max(...args.map((a) => (a as number) ?? 0));
     case "$min":
       return Math.min(...args.map((a) => (a as number) ?? 0));
     case "$ifNull":
       return args[0] === undefined || args[0] === null ? args[1] : args[0];
+    case "$abs":
+      return typeof args[0] === "number" ? Math.abs(args[0]) : null;
     default:
       throw new Error(`inMemoryDb: unsupported expression operator ${op}`);
   }
@@ -314,6 +395,62 @@ function matchesFilter(doc: Doc, filter: Doc): boolean {
   });
 }
 
+/**
+ * Resolve the positional `$` in update paths (`holders.$.units`) to the index
+ * of the first array element the filter matched, as the server does. Only the
+ * dotted form (`holders.fundId`) and `$elemMatch` on the array are supported;
+ * anything else throws rather than silently writing the wrong element.
+ */
+function resolvePositional(doc: Doc, update: Update, filter: Doc | undefined): Update {
+  if (Array.isArray(update)) return update;
+  const needs = Object.values(update).some(
+    (fields) => isPlainObject(fields) && Object.keys(fields).some((k) => /\.\$(\.|$)/.test(k))
+  );
+  if (!needs) return update;
+  const indexFor = (arrayPath: string): number => {
+    const array = getPath(doc, arrayPath);
+    if (!Array.isArray(array))
+      throw new Error(`inMemoryDb: positional "${arrayPath}" is not an array`);
+    const prefix = `${arrayPath}.`;
+    const conditions: Doc = {};
+    const collect = (row: Doc): void => {
+      for (const [key, condition] of Object.entries(row)) {
+        if (key === "$and" && Array.isArray(condition)) {
+          for (const branch of condition) if (isPlainObject(branch)) collect(branch);
+        } else if (key.startsWith(prefix)) {
+          conditions[key.slice(prefix.length)] = condition;
+        } else if (key === arrayPath && isPlainObject(condition) && "$elemMatch" in condition) {
+          Object.assign(conditions, (condition as { $elemMatch: Doc }).$elemMatch);
+        }
+      }
+    };
+    collect(filter ?? {});
+    if (Object.keys(conditions).length === 0) {
+      throw new Error(`inMemoryDb: positional "${arrayPath}.$" needs a filter on that array`);
+    }
+    const index = array.findIndex(
+      (element) => isContainer(element) && matchesFilter(element as Doc, conditions)
+    );
+    if (index < 0) throw new Error(`inMemoryDb: positional "${arrayPath}.$" matched no element`);
+    return index;
+  };
+  const resolved: Doc = {};
+  for (const [op, fields] of Object.entries(update)) {
+    if (!isPlainObject(fields)) {
+      resolved[op] = fields;
+      continue;
+    }
+    const next: Doc = {};
+    for (const [path, value] of Object.entries(fields)) {
+      const match = /^(.*?)\.\$(\.|$)/.exec(path);
+      next[match ? path.replace(`${match[1]}.$`, `${match[1]}.${indexFor(match[1])}`) : path] =
+        value;
+    }
+    resolved[op] = next;
+  }
+  return resolved as Update;
+}
+
 function applyUpdate(doc: Doc, update: Update): void {
   if (Array.isArray(update)) {
     for (const stage of update) {
@@ -321,9 +458,11 @@ function applyUpdate(doc: Doc, update: Update): void {
       if (entries.length !== 1 || entries[0][0] !== "$set") {
         throw new Error(`inMemoryDb: unsupported update pipeline stage ${entries[0]?.[0]}`);
       }
-      for (const [path, expression] of Object.entries(entries[0][1] as Doc)) {
-        setPath(doc, path, evalExpr(expression, doc));
-      }
+      // Mongo expressions in one stage all see the document before that stage.
+      const values = Object.entries(entries[0][1] as Doc).map(
+        ([path, expression]) => [path, evalExpr(expression, doc)] as const
+      );
+      for (const [path, value] of values) setPath(doc, path, value);
     }
     return;
   }
@@ -359,6 +498,16 @@ function applyUpdate(doc: Doc, update: Update): void {
         } else {
           setPath(doc, path, [...base, value]);
         }
+      }
+    } else if (op === "$addToSet") {
+      for (const [path, value] of Object.entries(fields as Doc)) {
+        const current = getPath(doc, path);
+        const base = Array.isArray(current) ? [...current] : [];
+        const values = isPlainObject(value) && "$each" in value ? value.$each : [value];
+        for (const item of values as unknown[]) {
+          if (!base.some((existing) => sameValue(existing, item))) base.push(item);
+        }
+        setPath(doc, path, base);
       }
     } else if (op === "$pull") {
       // Selector form only (`$pull: { path: { field: value } }`): drop every
@@ -461,7 +610,27 @@ class InMemoryCollection {
     let rows = this.docs.filter((d) => matchesFilter(d, filter)).map(clone);
     const cursor = {
       project: () => cursor,
-      sort: () => cursor,
+      sort: (spec: Record<string, number>) => {
+        rows.sort((a, b) => {
+          for (const [field, direction] of Object.entries(spec)) {
+            const comparable = (value: unknown): number | string | null | undefined =>
+              value instanceof Date
+                ? value.getTime()
+                : value instanceof ObjectId
+                  ? value.toHexString()
+                  : (value as number | string | null | undefined);
+            const av = comparable(getPath(a, field));
+            const bv = comparable(getPath(b, field));
+            if (av === bv || (av == null && bv == null)) continue;
+            const order = direction < 0 ? -1 : 1;
+            if (av == null) return -order;
+            if (bv == null) return order;
+            return (av < bv ? -1 : 1) * order;
+          }
+          return 0;
+        });
+        return cursor;
+      },
       limit: (n: number) => {
         rows = rows.slice(0, n);
         return cursor;
@@ -492,16 +661,27 @@ class InMemoryCollection {
     return { insertedId: id };
   }
 
-  async insertMany(docs: Doc[]): Promise<{ insertedCount: number }> {
-    for (const doc of docs) await this.insertOne(doc);
-    return { insertedCount: docs.length };
+  async insertMany(docs: Doc[]): Promise<{
+    insertedCount: number;
+    insertedIds: Record<number, unknown>;
+  }> {
+    const insertedIds: Record<number, unknown> = {};
+    for (const [index, doc] of docs.entries()) {
+      insertedIds[index] = (await this.insertOne(doc)).insertedId;
+    }
+    return { insertedCount: docs.length, insertedIds };
   }
 
   async updateOne(
     filter: Doc,
     update: Update,
     options: { upsert?: boolean } = {}
-  ): Promise<{ matchedCount: number; modifiedCount: number; upsertedCount: number }> {
+  ): Promise<{
+    matchedCount: number;
+    modifiedCount: number;
+    upsertedCount: number;
+    upsertedId?: unknown;
+  }> {
     const target = this.docs.find((d) => matchesFilter(d, filter));
     if (!target) {
       if (options.upsert) {
@@ -516,11 +696,11 @@ class InMemoryCollection {
             : {}),
         });
         this.docs.push(seed);
-        return { matchedCount: 0, modifiedCount: 0, upsertedCount: 1 };
+        return { matchedCount: 0, modifiedCount: 0, upsertedCount: 1, upsertedId: seed._id };
       }
       return { matchedCount: 0, modifiedCount: 0, upsertedCount: 0 };
     }
-    applyUpdate(target, update);
+    applyUpdate(target, resolvePositional(target, update, filter));
     return { matchedCount: 1, modifiedCount: 1, upsertedCount: 0 };
   }
 
@@ -529,7 +709,7 @@ class InMemoryCollection {
     update: Update
   ): Promise<{ matchedCount: number; modifiedCount: number }> {
     const targets = this.docs.filter((d) => matchesFilter(d, filter));
-    for (const doc of targets) applyUpdate(doc, update);
+    for (const doc of targets) applyUpdate(doc, resolvePositional(doc, update, filter));
     return { matchedCount: targets.length, modifiedCount: targets.length };
   }
 
@@ -558,7 +738,7 @@ class InMemoryCollection {
       return options.returnDocument === "before" ? null : clone(seed);
     }
     const before = clone(target);
-    applyUpdate(target, update);
+    applyUpdate(target, resolvePositional(target, update, filter));
     return options.returnDocument === "before" ? before : clone(target);
   }
 
@@ -566,12 +746,18 @@ class InMemoryCollection {
     filter: Doc,
     replacement: Doc,
     options: { upsert?: boolean } = {}
-  ): Promise<{ matchedCount: number; modifiedCount: number; upsertedCount: number }> {
+  ): Promise<{
+    matchedCount: number;
+    modifiedCount: number;
+    upsertedCount: number;
+    upsertedId?: unknown;
+  }> {
     const index = this.docs.findIndex((d) => matchesFilter(d, filter));
     if (index < 0) {
       if (!options.upsert) return { matchedCount: 0, modifiedCount: 0, upsertedCount: 0 };
-      this.docs.push({ ...seedFromFilter(filter), ...clone(replacement) });
-      return { matchedCount: 0, modifiedCount: 0, upsertedCount: 1 };
+      const inserted = { ...seedFromFilter(filter), ...clone(replacement) };
+      this.docs.push(inserted);
+      return { matchedCount: 0, modifiedCount: 0, upsertedCount: 1, upsertedId: inserted._id };
     }
     // A replace keeps `_id` and discards every other previous field — unlike
     // `$set`, which merges.
@@ -614,9 +800,17 @@ class InMemoryCollection {
     return this.docs.filter((d) => matchesFilter(d, filter)).length;
   }
 
-  async bulkWrite(ops: Doc[]): Promise<{ modifiedCount: number }> {
+  async bulkWrite(ops: Doc[]): Promise<{
+    matchedCount: number;
+    modifiedCount: number;
+    upsertedCount: number;
+    upsertedIds: Record<number, unknown>;
+  }> {
+    let matched = 0;
     let modified = 0;
-    for (const op of ops) {
+    let upserted = 0;
+    const upsertedIds: Record<number, unknown> = {};
+    for (const [index, op] of ops.entries()) {
       if (op.updateOne) {
         const { filter, update, upsert } = op.updateOne as {
           filter: Doc;
@@ -624,7 +818,10 @@ class InMemoryCollection {
           upsert?: boolean;
         };
         const res = await this.updateOne(filter, update, { upsert });
+        matched += res.matchedCount;
         modified += res.modifiedCount;
+        upserted += res.upsertedCount;
+        if (res.upsertedCount) upsertedIds[index] = res.upsertedId;
       } else if (op.insertOne) {
         await this.insertOne((op.insertOne as { document: Doc }).document);
       } else if (op.replaceOne) {
@@ -634,10 +831,14 @@ class InMemoryCollection {
           upsert?: boolean;
         };
         const res = await this.replaceOne(filter, replacement, { upsert });
+        matched += res.matchedCount;
         modified += res.modifiedCount;
+        upserted += res.upsertedCount;
+        if (res.upsertedCount) upsertedIds[index] = res.upsertedId;
       } else if (op.updateMany) {
         const { filter, update } = op.updateMany as { filter: Doc; update: Update };
         const res = await this.updateMany(filter, update);
+        matched += res.matchedCount;
         modified += res.modifiedCount;
       } else if (op.deleteMany) {
         const { filter } = op.deleteMany as { filter: Doc };
@@ -652,7 +853,7 @@ class InMemoryCollection {
         throw new Error(`inMemoryDb: unsupported bulk op ${Object.keys(op).join(",")}`);
       }
     }
-    return { modifiedCount: modified };
+    return { matchedCount: matched, modifiedCount: modified, upsertedCount: upserted, upsertedIds };
   }
 
   /**
@@ -689,7 +890,13 @@ class InMemoryCollection {
                   ? null
                   : typeof idSpec === "string" && idSpec.startsWith("$")
                     ? getPath(row, idSpec.slice(1))
-                    : idSpec;
+                    : isPlainObject(idSpec) && !Object.keys(idSpec).some((k) => k.startsWith("$"))
+                      ? Object.fromEntries(
+                          Object.entries(idSpec).map(([k, v]) => [k, evalExpr(v, row)])
+                        )
+                      : isPlainObject(idSpec)
+                        ? evalExpr(idSpec, row)
+                        : idSpec;
               const key = JSON.stringify(id === undefined ? null : id);
               let group = groups.get(key);
               if (!group) {
@@ -709,7 +916,9 @@ class InMemoryCollection {
                 const value =
                   typeof operand === "string" && operand.startsWith("$")
                     ? getPath(row, operand.slice(1))
-                    : operand;
+                    : isPlainObject(operand)
+                      ? evalExpr(operand, row)
+                      : operand;
                 const n = typeof value === "number" && Number.isFinite(value) ? value : 0;
                 switch (accOp) {
                   case "$sum":
@@ -755,6 +964,25 @@ class InMemoryCollection {
             });
             break;
           }
+          case "$unwind": {
+            // String form only: one row per array element, rows without an
+            // array (or with an empty one) dropped, as the server does.
+            const unwindSpec = stage[op] as unknown;
+            if (typeof unwindSpec !== "string" || !unwindSpec.startsWith("$")) {
+              throw new Error("inMemoryDb: only the string form of $unwind is supported");
+            }
+            const path = unwindSpec.slice(1);
+            rows = rows.flatMap((row) => {
+              const value = getPath(row, path);
+              if (!Array.isArray(value)) return [];
+              return value.map((element) => {
+                const copy = clone(row);
+                setPath(copy, path, element);
+                return copy;
+              });
+            });
+            break;
+          }
           case "$project":
             rows = rows.map((row) => {
               const out: Doc = {};
@@ -778,8 +1006,11 @@ class InMemoryCollection {
             const entries = Object.entries(spec) as Array<[string, number]>;
             rows = [...rows].sort((a, b) => {
               for (const [field, dir] of entries) {
-                const av = getPath(a, field) as number | string;
-                const bv = getPath(b, field) as number | string;
+                // ObjectIds compare by value, so equal ids fall through to the next key.
+                const sortable = (value: unknown) =>
+                  value instanceof ObjectId ? value.toHexString() : value;
+                const av = sortable(getPath(a, field)) as number | string;
+                const bv = sortable(getPath(b, field)) as number | string;
                 if (av === bv) continue;
                 if (av === undefined) return 1;
                 if (bv === undefined) return -1;
@@ -856,7 +1087,15 @@ class InMemoryCollection {
     const before = this.indexDescriptions.length;
     this.indexDescriptions = this.indexDescriptions.filter((index) => index.name !== name);
     if (this.indexDescriptions.length === before) {
-      throw new Error(`index not found with name [${name}]`);
+      const error = new Error(`index not found with name [${name}]`) as Error & {
+        code: number;
+        codeName: string;
+      };
+      // Match MongoDB's IndexNotFound error so migrations can distinguish an
+      // idempotent drop from a real failure.
+      error.code = 27;
+      error.codeName = "IndexNotFound";
+      throw error;
     }
   }
 }

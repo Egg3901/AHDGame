@@ -223,9 +223,9 @@ describe("ParliamentaryCabinetClient", () => {
 
     fireEvent.click(screen.getByText("Admin"));
     expect(screen.getByTestId("cabinet-admin-tab")).toBeTruthy();
-    expect(screen.getByText("Direct Appointment (Admin)")).toBeTruthy();
+    expect(screen.getByText("Direct appointment (admin)")).toBeTruthy();
     // Overview content is hidden while the admin tab is active.
-    expect(screen.queryByText("Cabinet Positions")).toBeNull();
+    expect(screen.queryByText("Cabinet positions")).toBeNull();
   });
 
   it("hits the correct executive API URL for the country", async () => {

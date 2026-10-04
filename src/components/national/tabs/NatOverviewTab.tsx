@@ -355,7 +355,7 @@ export function NatOverviewTab({
               tone={confTone}
             />
           </div>
-          <p className="mt-2.5 text-body-xs text-muted">
+          <p className="mt-2.5 text-body-sm text-muted">
             A decaying national signal: it feeds expropriation-risk margins, the sovereign borrowing
             premium, and new-corp founding costs. Fair-value buyouts barely move it; seizures cut
             deep.

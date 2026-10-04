@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import type { CorporationDetail } from "../CorporationPageTypes";
+import { InlineStatus, SmallButton } from "../dense/DenseKit";
+import { GovernanceRow } from "./GovernanceRow";
 
 export function TickerChangeCard({
   corporation,
@@ -80,61 +82,48 @@ export function TickerChangeCard({
     }
   }
 
+  const changed = ticker !== "" && ticker !== corporation.tickerSymbol;
+
   return (
-    <div className="rounded-xl border border-card-border bg-card p-6">
-      <h2 className="text-lg font-bold text-foreground mb-2">Stock Ticker</h2>
-      <p className="text-sm text-muted mb-4">
-        {corporation.tickerSymbol ? (
-          <>
-            Current ticker: <strong>{corporation.tickerSymbol}</strong>. Change it to a new 1–5
-            letter symbol.
-          </>
-        ) : (
-          "Set a 1–5 letter stock ticker symbol for this corporation."
-        )}
-      </p>
-      {error && (
-        <div className="rounded-lg border border-error/30 bg-error/10 p-3 text-sm text-error mb-3">
-          {error}
-        </div>
-      )}
-      {success && (
-        <div className="rounded-lg border border-success/30 bg-success/10 p-3 text-sm text-success mb-3">
-          {success}
-        </div>
-      )}
-      <div className="flex items-end gap-3">
-        <div className="flex-1 max-w-[160px]">
-          <label className="block text-sm font-medium text-foreground mb-1">New Ticker</label>
+    <GovernanceRow
+      label="Ticker"
+      summary={corporation.tickerSymbol ?? "Not set"}
+      actionLabel="Change"
+    >
+      <div className="space-y-1.5">
+        <p className="text-xs text-muted">
+          1 to 5 letters.{" "}
+          {corporation.isPrivate
+            ? "Takes effect at once."
+            : "Public corporations change it by shareholder vote."}
+        </p>
+        <div className="flex items-center gap-1.5">
           <input
             type="text"
             value={ticker}
             onChange={(e) => handleTickerInput(e.target.value)}
             placeholder="e.g. ACME"
             maxLength={5}
-            className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm font-mono uppercase tracking-widest focus:border-primary/60 focus:outline-none"
+            aria-label="New ticker"
+            className="h-7 w-28 rounded-md border border-card-border bg-background px-2 text-[13px] uppercase tracking-wide text-foreground focus:border-foreground focus:outline-none"
           />
+          <SmallButton
+            tone="primary"
+            disabled={submitting || !changed}
+            onClick={corporation.isPrivate ? handleChange : handlePropose}
+          >
+            {submitting
+              ? corporation.isPrivate
+                ? "Saving"
+                : "Proposing"
+              : corporation.isPrivate
+                ? "Change ticker"
+                : "Propose vote"}
+          </SmallButton>
         </div>
-        {ticker &&
-          ticker !== corporation.tickerSymbol &&
-          (corporation.isPrivate ? (
-            <button
-              onClick={handleChange}
-              disabled={submitting}
-              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 transition-colors disabled:opacity-50"
-            >
-              {submitting ? "Saving…" : "Change Ticker"}
-            </button>
-          ) : (
-            <button
-              onClick={handlePropose}
-              disabled={submitting}
-              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 transition-colors disabled:opacity-50"
-            >
-              {submitting ? "Proposing…" : "Propose Ticker Change (shareholder vote)"}
-            </button>
-          ))}
+        <InlineStatus message={error} tone="error" />
+        <InlineStatus message={success} tone="success" />
       </div>
-    </div>
+    </GovernanceRow>
   );
 }

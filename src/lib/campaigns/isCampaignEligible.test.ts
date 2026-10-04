@@ -4,6 +4,24 @@ import { isCampaignEligibleElection } from "./isCampaignEligible";
 
 describe("isCampaignEligibleElection — Phase 5.5 eligibility matrix", () => {
   describe("Presidential path (unchanged from pre-Phase-5.5)", () => {
+    it("enables only a valid bound Russian popular ballot through the runtime seam", () => {
+      const election = {
+        countryId: "RU" as const,
+        electionType: "president" as const,
+        russianPresidentialRound: {
+          round: 1 as const,
+          mandateSinceTurn: 72,
+          registeredVoters: 100,
+        },
+      };
+      expect(isCampaignEligibleElection(election)).toBe(true);
+      expect(
+        isCampaignEligibleElection({
+          ...election,
+          russianPresidentialRound: { ...election.russianPresidentialRound, registeredVoters: 0 },
+        })
+      ).toBe(false);
+    });
     it("returns true for US presidential elections", () => {
       expect(isCampaignEligibleElection({ countryId: "US", electionType: "president" })).toBe(true);
     });

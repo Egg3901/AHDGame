@@ -1,6 +1,5 @@
 "use client";
 
-import { InfoTooltip } from "@/components/InfoTooltip";
 import { MIN_GROWTH_RATE, MAX_GROWTH_RATE } from "@/lib/constants/corporations";
 import {
   MONEY_PERIOD_HELP,
@@ -9,282 +8,189 @@ import {
 } from "@/lib/constants/moneyTimescale";
 import { GROWTH_HORIZON_SENTENCE } from "./SectorRowComponents";
 import { CAPACITY_UNIT_LABEL } from "./plantsPresentation";
+import type { SectorSortKey, SortDir } from "./sectorSortUtils";
 
 export const SECTOR_TABLE_GRID =
-  "grid-cols-[minmax(160px,1.2fr)_minmax(120px,1fr)_minmax(140px,1.5fr)_140px_78px_80px_55px_70px_50px_40px]";
+  "grid-cols-[minmax(220px,1.8fr)_minmax(120px,1fr)_minmax(72px,0.6fr)_150px_64px_88px_64px_88px_64px_44px]";
 
 /**
- * Plants-tier grid: nine columns instead of ten.
- *
- * Growth Target and Active Rate are gone (the slider does not build capacity
- * under plants) and Capacity + Fill take their place. Capacity gets the widest
- * of the numeric columns because it carries a second line — the build queue
- * badge — and a wrapped badge is the first thing that makes a dense table look
- * broken.
+ * Plants-tier grid: capacity, sites and fill replace the growth columns (the
+ * slider does not build capacity under plants), and the net margin gets its
+ * own column instead of a second line under profit.
  */
 export const PLANTS_SECTOR_TABLE_GRID =
-  "grid-cols-[minmax(160px,1.2fr)_minmax(120px,1fr)_minmax(140px,1.5fr)_112px_72px_86px_86px_56px_40px]";
+  "grid-cols-[minmax(220px,1.8fr)_minmax(120px,1fr)_minmax(72px,0.6fr)_80px_56px_64px_88px_88px_88px_64px_44px]";
 
 /** The grid template for the given world. */
 export function sectorTableGrid(plantsMode: boolean): string {
   return plantsMode ? PLANTS_SECTOR_TABLE_GRID : SECTOR_TABLE_GRID;
 }
 
-export function SectorTableHeader({
-  timeScale,
-  plantsMode = false,
-}: {
-  timeScale: MoneyPeriod;
-  plantsMode?: boolean;
-}) {
-  if (plantsMode) return <PlantsSectorTableHeader timeScale={timeScale} />;
-  return (
-    <div
-      className={`hidden lg:grid ${SECTOR_TABLE_GRID} gap-x-3 px-6 py-2 border-b border-card-border text-[10px] font-bold uppercase tracking-widest text-muted`}
-    >
-      <InfoTooltip
-        trigger={
-          <span className="cursor-help border-b border-dotted border-muted/30">Location</span>
-        }
-        width={200}
-      >
-        <p className="font-semibold text-foreground mb-1">Location</p>
-        <p className="text-muted">State where this sector operates and its industry type.</p>
-      </InfoTooltip>
-      <InfoTooltip
-        trigger={
-          <span className="cursor-help border-b border-dotted border-muted/30">Strategy</span>
-        }
-        width={220}
-      >
-        <p className="font-semibold text-foreground mb-1">Strategy</p>
-        <p className="text-muted">
-          Active operating strategy. CEO can switch specializations to change commodity
-          inputs/outputs.
-        </p>
-      </InfoTooltip>
-      <InfoTooltip
-        trigger={<span className="cursor-help border-b border-dotted border-muted/30">Status</span>}
-        width={220}
-      >
-        <p className="font-semibold text-foreground mb-1">Status</p>
-        <p className="text-muted">
-          Shows active transitions, reversals, or cooldown timers. Strategy changes take 12 turns
-          with a 24-turn cooldown.
-        </p>
-      </InfoTooltip>
-      <InfoTooltip
-        trigger={
-          <span className="cursor-help border-b border-dotted border-muted/30">Growth Target</span>
-        }
-        width={220}
-      >
-        <p className="font-semibold text-foreground mb-1">Growth Target</p>
-        <p className="text-muted">
-          {GROWTH_HORIZON_SENTENCE} Allowed range: {MIN_GROWTH_RATE}% to {MAX_GROWTH_RATE}%.
-        </p>
-      </InfoTooltip>
-      <InfoTooltip
-        trigger={
-          <span className="cursor-help border-b border-dotted border-muted/30 ml-auto whitespace-nowrap">
-            Active Rate
-          </span>
-        }
-        width={220}
-      >
-        <p className="font-semibold text-foreground mb-1">Active Rate</p>
-        <p className="text-muted">
-          The growth rate actually applied this turn. It trends toward the target by 0.5pp per turn,
-          so revenue and growth cost adjust gradually.
-        </p>
-      </InfoTooltip>
-      <InfoTooltip
-        trigger={
-          <span className="cursor-help border-b border-dotted border-muted/30 ml-auto whitespace-nowrap">
-            Rev
-          </span>
-        }
-        width={200}
-      >
-        <p className="font-semibold text-foreground mb-1">
-          Revenue ({MONEY_PERIOD_LABEL[timeScale]})
-        </p>
-        <p className="text-muted">
-          Revenue actually earned, after production policy, commodity prices, throughput and
-          capacity are applied to your nameplate market share. This is the figure Margin and Profit
-          are computed from. Hover a value for the full nameplate → profit chain.
-        </p>
-        <p className="mt-1 text-muted">{MONEY_PERIOD_HELP}</p>
-      </InfoTooltip>
-      <InfoTooltip
-        trigger={
-          <span className="cursor-help border-b border-dotted border-muted/30 ml-auto whitespace-nowrap">
-            Margin
-          </span>
-        }
-        width={220}
-      >
-        <p className="font-semibold text-foreground mb-1">Effective Margin</p>
-        <p className="text-muted">
-          Base margin + state modifiers + commodity effects + home location bonus. Open sector
-          detail for full breakdown.
-        </p>
-      </InfoTooltip>
-      <InfoTooltip
-        trigger={
-          <span className="cursor-help border-b border-dotted border-muted/30 ml-auto whitespace-nowrap">
-            Profit
-          </span>
-        }
-        width={200}
-      >
-        <p className="font-semibold text-foreground mb-1">Net Profit</p>
-        <p className="text-muted">
-          Revenue (the realized figure in the Rev column) × effective margin − growth cost. Does not
-          include corporate-level overhead (marketing, logistics, CEO salary, taxes).
-        </p>
-      </InfoTooltip>
-      <InfoTooltip
-        trigger={
-          <span className="cursor-help border-b border-dotted border-muted/30 ml-auto">Jobs</span>
-        }
-        width={180}
-      >
-        <p className="font-semibold text-foreground mb-1">Workforce</p>
-        <p className="text-muted">Employees in this sector. Provides jobs to the state economy.</p>
-      </InfoTooltip>
-      <span></span>
-    </div>
-  );
+interface Column {
+  label: string;
+  /** Column explanation, shown on hover. */
+  help: string;
+  sortKey?: SectorSortKey;
+  align?: "left" | "right";
+}
+
+function columnsFor(plantsMode: boolean, timeScale: MoneyPeriod): Column[] {
+  const period = MONEY_PERIOD_LABEL[timeScale].toLowerCase();
+  const head: Column[] = [
+    {
+      label: "Location",
+      help: "State where this sector operates, and its industry type.",
+      sortKey: "location",
+    },
+    {
+      label: "Strategy",
+      help: plantsMode
+        ? "Active operating strategy. Changing it retools the plants, which rescales their capacity to the new output mix."
+        : "Active operating strategy. The CEO can switch specializations to change commodity inputs and outputs.",
+    },
+    {
+      label: "Status",
+      help: plantsMode
+        ? "Transitions, cooldowns, and whether the plants are mothballed or still under construction."
+        : "Active transitions, reversals and cooldowns. Strategy changes take 12 turns with a 24-turn cooldown.",
+    },
+  ];
+  const tail: Column[] = [
+    {
+      label: "Profit",
+      help: plantsMode
+        ? "Revenue times effective margin, less upkeep. Does not include corporate overhead (marketing, logistics, CEO salary, taxes)."
+        : "Revenue (the realized figure in the Revenue column) times effective margin, less growth cost. Does not include corporate overhead (marketing, logistics, CEO salary, taxes).",
+      sortKey: "profit",
+      align: "right",
+    },
+    {
+      label: "Jobs",
+      help: "Employees in this sector. Provides jobs to the state economy.",
+      sortKey: "workers",
+      align: "right",
+    },
+  ];
+  if (plantsMode) {
+    return [
+      ...head,
+      {
+        label: "Capacity",
+        help: `What these plants can make in one financial day, in ${CAPACITY_UNIT_LABEL}. This is what you buy when you build. Capacity already paid for and under construction shows under the figure. Always per day: the period toggle rescales money only.`,
+        sortKey: "capacity",
+        align: "right",
+      },
+      {
+        label: "Sites",
+        help: "Number of facilities the capacity is spread across.",
+        align: "right",
+      },
+      {
+        label: "Fill",
+        help: "Share of what these plants produced that actually sold. Low fill means paying to run capacity that earns nothing. For corporations you do not run, this is a broad band instead of the exact figure.",
+        sortKey: "fill",
+        align: "right",
+      },
+      {
+        label: "Revenue",
+        help: `What the units you sold were worth, ${period}. Under plants revenue is derived from capacity, output and sales. ${MONEY_PERIOD_HELP}`,
+        sortKey: "revenue",
+        align: "right",
+      },
+      {
+        label: "Net margin",
+        help: "Profit over revenue, after paying for everything made, unsold units included. The effective margin counts only units that sold.",
+        sortKey: "margin",
+        align: "right",
+      },
+      ...tail,
+    ];
+  }
+  return [
+    ...head,
+    {
+      label: "Growth target",
+      help: `${GROWTH_HORIZON_SENTENCE} Allowed range: ${MIN_GROWTH_RATE}% to ${MAX_GROWTH_RATE}%.`,
+      sortKey: "growthRate",
+      align: "right",
+    },
+    {
+      label: "Active",
+      help: "The growth rate actually applied this turn, per day. It trends toward the target by 0.5pp per turn, so revenue and growth cost adjust gradually.",
+      align: "right",
+    },
+    {
+      label: "Revenue",
+      help: `Revenue actually earned, ${period}, after production policy, commodity prices, throughput and capacity are applied to your nameplate market share. Margin and profit are computed from it. Hover a value for the full chain. ${MONEY_PERIOD_HELP}`,
+      sortKey: "revenue",
+      align: "right",
+    },
+    {
+      label: "Margin",
+      help: "Effective margin: base margin plus state modifiers, commodity effects and the home location bonus. Open a sector for the full breakdown.",
+      sortKey: "margin",
+      align: "right",
+    },
+    ...tail,
+  ];
 }
 
 /**
- * Plants-tier header.
- *
- * The vocabulary change is the point: this world's CEO does not set a growth
- * rate, they buy plants. So the table leads with what those plants can make and
- * how much of it is finding a buyer, and revenue becomes the RESULT of those
- * two rather than an input the player tunes.
+ * Column headings for the sector table. A heading with a sort key is a button:
+ * clicking it sorts by that column, clicking again reverses the order.
  */
-function PlantsSectorTableHeader({ timeScale }: { timeScale: MoneyPeriod }) {
+export function SectorTableHeader({
+  timeScale,
+  plantsMode = false,
+  sortKey,
+  sortDir,
+  onSort,
+}: {
+  timeScale: MoneyPeriod;
+  plantsMode?: boolean;
+  sortKey?: SectorSortKey;
+  sortDir?: SortDir;
+  onSort?: (key: SectorSortKey) => void;
+}) {
+  const columns = columnsFor(plantsMode, timeScale);
   return (
     <div
-      className={`hidden lg:grid ${PLANTS_SECTOR_TABLE_GRID} gap-x-3 px-6 py-2 border-b border-card-border text-[10px] font-bold uppercase tracking-widest text-muted`}
+      role="row"
+      className={`hidden lg:grid ${sectorTableGrid(plantsMode)} items-end gap-x-3 border-b border-card-border px-2 py-1.5 text-[11px] font-medium text-muted`}
     >
-      <InfoTooltip
-        trigger={
-          <span className="cursor-help border-b border-dotted border-muted/30">Location</span>
-        }
-        width={200}
-      >
-        <p className="font-semibold text-foreground mb-1">Location</p>
-        <p className="text-muted">
-          State where a sector&apos;s facilities operate and their industry type.
-        </p>
-      </InfoTooltip>
-      <InfoTooltip
-        trigger={
-          <span className="cursor-help border-b border-dotted border-muted/30">Strategy</span>
-        }
-        width={220}
-      >
-        <p className="font-semibold text-foreground mb-1">Strategy</p>
-        <p className="text-muted">
-          Active operating strategy. Changing it retools the plants, which rescales their capacity
-          to the new output mix.
-        </p>
-      </InfoTooltip>
-      <InfoTooltip
-        trigger={<span className="cursor-help border-b border-dotted border-muted/30">Status</span>}
-        width={220}
-      >
-        <p className="font-semibold text-foreground mb-1">Status</p>
-        <p className="text-muted">
-          Transitions, cooldowns, and whether the plants are mothballed or still under construction.
-        </p>
-      </InfoTooltip>
-      <InfoTooltip
-        trigger={
-          <span className="cursor-help border-b border-dotted border-muted/30 ml-auto whitespace-nowrap">
-            Capacity
+      {columns.map((col) => {
+        const active = col.sortKey != null && col.sortKey === sortKey;
+        const right = col.align === "right";
+        return (
+          <span
+            key={col.label}
+            role="columnheader"
+            aria-sort={active ? (sortDir === "asc" ? "ascending" : "descending") : undefined}
+            className={`min-w-0 truncate ${right ? "text-right" : ""}`}
+            title={col.help}
+          >
+            {col.sortKey && onSort ? (
+              <button
+                type="button"
+                onClick={() => onSort(col.sortKey!)}
+                className={`inline-flex items-center gap-1 hover:text-foreground ${
+                  right ? "flex-row-reverse" : ""
+                } ${active ? "text-foreground" : ""}`}
+              >
+                <span>{col.label}</span>
+                <span aria-hidden className="w-2 text-[9px]">
+                  {active ? (sortDir === "asc" ? "▲" : "▼") : ""}
+                </span>
+              </button>
+            ) : (
+              col.label
+            )}
           </span>
-        }
-        width={230}
-      >
-        <p className="font-semibold text-foreground mb-1">Capacity ({CAPACITY_UNIT_LABEL})</p>
-        <p className="text-muted">
-          What these plants can make in one financial day, in output units. This is what you buy
-          when you build. The line under the number is how many plants that capacity is spread
-          across. A blue badge below is capacity you have already paid for that is still under
-          construction, with the turns until it comes online.
-        </p>
-        <p className="mt-1 text-muted">
-          Always shown per day. The per-turn and yearly toggle rescales the money columns only, so
-          capacity does not move when you switch it.
-        </p>
-      </InfoTooltip>
-      <InfoTooltip
-        trigger={
-          <span className="cursor-help border-b border-dotted border-muted/30 ml-auto whitespace-nowrap">
-            Fill
-          </span>
-        }
-        width={240}
-      >
-        <p className="font-semibold text-foreground mb-1">Fill rate</p>
-        <p className="text-muted">
-          The share of what these plants produced that actually sold. Low fill means you are making
-          units nobody is buying: you are paying to run capacity that earns nothing.
-        </p>
-        <p className="mt-1 text-muted">
-          For corporations you do not run, this shows a broad band instead of the exact figure.
-        </p>
-      </InfoTooltip>
-      <InfoTooltip
-        trigger={
-          <span className="cursor-help border-b border-dotted border-muted/30 ml-auto whitespace-nowrap">
-            Revenue
-          </span>
-        }
-        width={230}
-      >
-        <p className="font-semibold text-foreground mb-1">
-          Revenue ({MONEY_PERIOD_LABEL[timeScale]})
-        </p>
-        <p className="text-muted">
-          What the units you sold were worth. Under plants there is only one revenue figure: it is
-          derived from capacity, output and sales rather than tracked separately, so there is no
-          nameplate figure to reconcile against.
-        </p>
-        <p className="mt-1 text-muted">{MONEY_PERIOD_HELP}</p>
-      </InfoTooltip>
-      <InfoTooltip
-        trigger={
-          <span className="cursor-help border-b border-dotted border-muted/30 ml-auto whitespace-nowrap">
-            Profit
-          </span>
-        }
-        width={220}
-      >
-        <p className="font-semibold text-foreground mb-1">Net Profit</p>
-        <p className="text-muted">
-          Revenue × effective margin, less upkeep. The margin is shown under the figure so the
-          arithmetic is checkable on the row. Does not include corporate overhead (marketing,
-          logistics, CEO salary, taxes).
-        </p>
-      </InfoTooltip>
-      <InfoTooltip
-        trigger={
-          <span className="cursor-help border-b border-dotted border-muted/30 ml-auto">Jobs</span>
-        }
-        width={180}
-      >
-        <p className="font-semibold text-foreground mb-1">Workforce</p>
-        <p className="text-muted">
-          Employees in a sector&apos;s facilities. Provides jobs to the state economy.
-        </p>
-      </InfoTooltip>
-      <span></span>
+        );
+      })}
+      <span role="columnheader" className="sr-only">
+        Actions
+      </span>
     </div>
   );
 }

@@ -1,8 +1,11 @@
+import { buyListedSector } from "./buyListedSector";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { queueUndeliveredCost } from "@/lib/corporations/buildDelivery";
 
+vi.mock("@/lib/banking/constructionSale", () => ({ buySecuredConstructionProperty: vi.fn() }));
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/api/requireAuth", () => ({ requireBasicAuth: vi.fn() }));
 vi.mock("@/lib/api/corporations/resolveQuery", () => ({ resolveCorporation: vi.fn() }));
@@ -111,7 +114,6 @@ describe("buyListedSector — transaction log types", () => {
     db.collectionMocks.corporateSectors.updateOne.mockResolvedValue({ matchedCount: 1 });
     db.collectionMocks.corporations.updateOne.mockResolvedValue({ matchedCount: 1 });
 
-    const { buyListedSector } = await import("./buyListedSector");
     const res = await buyListedSector(makeRequest(), { params });
     expect(res.status).toBe(200);
 
@@ -144,7 +146,6 @@ describe("buyListedSector — transaction log types", () => {
     db.collectionMocks.corporateSectors.deleteOne.mockResolvedValue({ deletedCount: 1 });
     db.collectionMocks.corporations.updateOne.mockResolvedValue({ matchedCount: 1 });
 
-    const { buyListedSector } = await import("./buyListedSector");
     const res = await buyListedSector(makeRequest(), { params });
     expect(res.status).toBe(200);
 
@@ -186,7 +187,6 @@ describe("buyListedSector — mid-build transfer moves the queue (P3b)", () => {
     db.collectionMocks.corporateSectors.updateOne.mockResolvedValue({ matchedCount: 1 });
     db.collectionMocks.corporations.updateOne.mockResolvedValue({ matchedCount: 1 });
 
-    const { buyListedSector } = await import("./buyListedSector");
     expect((await buyListedSector(makeRequest(), { params })).status).toBe(200);
 
     const transferUpdate = db.collectionMocks.corporateSectors.updateOne.mock.calls[0][1];
@@ -197,7 +197,7 @@ describe("buyListedSector — mid-build transfer moves the queue (P3b)", () => {
     expect(transferUpdate.$set).not.toHaveProperty("constructionInProgressAnchor");
   });
 
-  it("merge path: capacity, build queue and CIP are folded into the survivor, not destroyed", async () => {
+  it("merge path: capacity and build queue are folded into the survivor", async () => {
     await wireCommonMocks();
 
     const existingBuyerSector = {
@@ -222,7 +222,6 @@ describe("buyListedSector — mid-build transfer moves the queue (P3b)", () => {
     db.collectionMocks.corporateSectors.deleteOne.mockResolvedValue({ deletedCount: 1 });
     db.collectionMocks.corporations.updateOne.mockResolvedValue({ matchedCount: 1 });
 
-    const { buyListedSector } = await import("./buyListedSector");
     expect((await buyListedSector(makeRequest(), { params })).status).toBe(200);
 
     // The merge update is the one that targets the surviving buyer sector.
@@ -240,16 +239,63 @@ describe("buyListedSector — mid-build transfer moves the queue (P3b)", () => {
     expect((merged.buildQueue as { onlineTurn: number }[]).map((o) => o.onlineTurn)).toEqual([
       30, 34,
     ]);
-    // ₳ CIP summed, NOT re-denominated through either corp's currency.
-    expect(merged.constructionInProgressAnchor).toBe(5_000_000);
+    // CIP has one writer: it is derived from the preserved queue, not stored by
+    // the ownership-transfer command.
+    expect(merged).not.toHaveProperty("constructionInProgressAnchor");
     expect(
       (merged.buildQueue as { costPaidAnchor: number }[]).map((o) => o.costPaidAnchor)
     ).toEqual([4_000_000, 1_000_000]);
+    expect(
+      queueUndeliveredCost(merged.buildQueue as Parameters<typeof queueUndeliveredCost>[0], 5)
+    ).toBe(5_000_000);
     // Ramp anchor keeps the earlier turn so the governor does not restart.
     expect(merged.plantsStartTurn).toBe(12);
     // And the purchased doc is the one deleted.
-    expect(db.collectionMocks.corporateSectors.deleteOne).toHaveBeenCalledWith({
-      _id: sectorId,
+    expect(db.collectionMocks.corporateSectors.deleteOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        _id: sectorId,
+        $and: expect.any(Array),
+      })
+    );
+  });
+});
+
+describe("secured sale command routing", () => {
+  it("routes a pledged site through funded recovery before generic property guards or debits", async () => {
+    vi.clearAllMocks();
+    db = createMockDb();
+    db.collection("corporations");
+    db.collection("corporateSectors");
+    db.collection("states");
+    await wireCommonMocks();
+    db.collectionMocks.corporateSectors.findOne.mockResolvedValueOnce({
+      ...sectorBase,
+      constructionFinancing: {
+        borrowerId: String(sellerId),
+        currency: "USD",
+        status: "building",
+        loanFunded: true,
+        escrowLocal: 0,
+      },
     });
+    const { buySecuredConstructionProperty } = await import("@/lib/banking/constructionSale");
+    vi.mocked(buySecuredConstructionProperty).mockResolvedValue({
+      ok: true,
+      quote: {
+        priceAnchor: 1000,
+        buyerCostLocal: 1000,
+        ownerProceeds: 250,
+        buyerCurrency: "USD",
+        principalRepaid: 750,
+      },
+    } as never);
+    const result = await buyListedSector(makeRequest(), { params });
+    expect(result.status).toBe(200);
+    expect(buySecuredConstructionProperty).toHaveBeenCalledWith(
+      expect.objectContaining({ borrowerId: sellerId, buyerId, sectorId })
+    );
+    const { atomicallyDebitCorpLiquidCapital } =
+      await import("@/lib/financialTxLog/atomicCashGuard");
+    expect(atomicallyDebitCorpLiquidCapital).not.toHaveBeenCalled();
   });
 });

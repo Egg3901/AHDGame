@@ -99,12 +99,37 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
+    if (election.countryId === "RU" && election.russianPresidentialRound) {
+      const game = await db
+        .collection<{ _id: string; currentTurn: number }>("gameState")
+        .findOne({ _id: "current" }, { projection: { currentTurn: 1 } });
+      if (
+        myCandidate.russianTicketLocked ||
+        election.russianPresidentialRound.round === 2 ||
+        !Number.isSafeInteger(game?.currentTurn) ||
+        !Number.isSafeInteger(election.primaryEndTurn) ||
+        game!.currentTurn >= election.primaryEndTurn!
+      )
+        return NextResponse.json(
+          {
+            error: "The registered Russian presidential ticket cannot change after filing closes.",
+          },
+          { status: 409 }
+        );
+    }
+
     if (runningMateId === null || runningMateId === undefined || runningMateId === "") {
-      await db
-        .collection<ElectionCandidate>("electionCandidates")
-        .updateOne(
-          { _id: myCandidate._id },
-          { $unset: { runningMateId: "" }, $set: { updatedAt: new Date() } }
+      const changed = await db.collection<ElectionCandidate>("electionCandidates").updateOne(
+        {
+          _id: myCandidate._id,
+          ...(election.russianPresidentialRound ? { russianTicketLocked: { $ne: true } } : {}),
+        },
+        { $unset: { runningMateId: "" }, $set: { updatedAt: new Date() } }
+      );
+      if (election.russianPresidentialRound && changed.matchedCount !== 1)
+        return NextResponse.json(
+          { error: "The Russian ticket was locked while you were editing it." },
+          { status: 409 }
         );
       return NextResponse.json({
         success: true,
@@ -139,7 +164,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (!runningMateChar) {
       return NextResponse.json({ error: "Running mate character not found" }, { status: 404 });
     }
-    if (!runningMateChar.userId) {
+    if (!runningMateChar.userId || runningMateChar.federationPendingResidenceId !== undefined) {
       return NextResponse.json(
         { error: "That character is not eligible to be selected as running mate" },
         { status: 400 }
@@ -200,16 +225,24 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
-    await db
-      .collection<ElectionCandidate>("electionCandidates")
-      .updateOne(
-        { _id: myCandidate._id },
-        { $set: { runningMateId: runningMateObjectId, updatedAt: new Date() } }
-      );
+    const changed = await db.collection<ElectionCandidate>("electionCandidates").updateOne(
+      {
+        _id: myCandidate._id,
+        ...(election.russianPresidentialRound ? { russianTicketLocked: { $ne: true } } : {}),
+      },
+      { $set: { runningMateId: runningMateObjectId, updatedAt: new Date() } }
+    );
 
+    if (election.russianPresidentialRound && changed.matchedCount !== 1)
+      return NextResponse.json(
+        { error: "The Russian ticket was locked while you were editing it." },
+        { status: 409 }
+      );
     return NextResponse.json({
       success: true,
       message: `${runningMateChar.name} is now your running mate.`,
+      electionType: election.electionType,
+      phase: "general",
     });
   } catch (error) {
     return handleRouteError(error);

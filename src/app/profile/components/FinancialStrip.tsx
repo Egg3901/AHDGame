@@ -8,22 +8,7 @@ import { type CurrencyCode, CURRENCY_SYMBOLS } from "@/lib/constants/currencies"
 import { formatCurrencyFaceAmount } from "@/lib/currency/formatCurrencyFaceAmount";
 import { formatCompactNumber } from "@/lib/utils/formatters";
 import { InfoTooltip } from "@/components/InfoTooltip";
-
-const INFO_ICON = (
-  <svg
-    className="inline-block h-3 w-3 ml-1 text-muted/50 pointer-events-none"
-    fill="none"
-    viewBox="0 0 24 24"
-    stroke="currentColor"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={2}
-      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-    />
-  </svg>
-);
+import { PROFILE_LINK_CLASS } from "./profileStyles";
 
 type FinancesT = ReturnType<typeof useTranslations>;
 
@@ -109,8 +94,8 @@ function DonorPanel({
   const mult = donorIncome.influenceMultiplier;
   const hasBoost = mult > 1.005;
   return (
-    <div className="border-t border-card-border bg-card-elevated/30 px-5 py-3">
-      <div className="space-y-1.5 text-xs">
+    <div className="border-t border-card-border/60 py-3">
+      <div className="space-y-1.5 text-body-sm">
         <div className="flex justify-between">
           <span className="text-muted">{t("passiveIncome")}</span>
           <span className="text-success tabular-nums">
@@ -126,7 +111,7 @@ function DonorPanel({
         {hasBoost && (
           <div className="flex justify-between">
             <span className="text-muted">{t("influenceBonus")}</span>
-            <span className="text-primary tabular-nums font-semibold">{mult.toFixed(2)}x</span>
+            <span className="text-foreground tabular-nums font-semibold">{mult.toFixed(2)}x</span>
           </div>
         )}
         <div className="flex justify-between pt-1.5 border-t border-card-border">
@@ -151,8 +136,8 @@ function CampaignPanel({
   t: FinancesT;
 }) {
   return (
-    <div className="border-t border-card-border bg-card-elevated/30 px-5 py-3">
-      <div className="space-y-1.5 text-xs">
+    <div className="border-t border-card-border/60 py-3">
+      <div className="space-y-1.5 text-body-sm">
         <div className="flex justify-between">
           <span className="text-muted">
             {t("baseGen", { tier: campaignIncome.populationTier })}
@@ -270,8 +255,8 @@ function CashPanel({
   const gridCols = isHomeMode ? "2.5rem 1fr auto auto" : "2.5rem 1fr auto";
 
   return (
-    <div className="border-t border-card-border bg-card-elevated/30 px-5 py-3">
-      <div className="space-y-1.5 text-xs">
+    <div className="border-t border-card-border/60 py-3">
+      <div className="space-y-1.5 text-body-sm">
         {/* Per-currency wallet entries — CSS grid for consistent column alignment */}
         {forexCurrencies.length > 0 && (
           <div className="grid gap-x-3 gap-y-1.5" style={{ gridTemplateColumns: gridCols }}>
@@ -305,7 +290,7 @@ function CashPanel({
                   </span>,
                   <span
                     key={`${code}-h`}
-                    className="tabular-nums text-right text-primary/70 self-center"
+                    className="tabular-nums text-right text-muted self-center"
                   >
                     ≈{formatAmountChip(liquidAnchor + savingsAnchor)}
                   </span>,
@@ -382,14 +367,8 @@ function CashPanel({
         )}
 
         <div className="pt-1.5">
-          <Link
-            href={portfolioHref}
-            className="text-xs text-primary hover:underline inline-flex items-center gap-1"
-          >
+          <Link href={portfolioHref} className={PROFILE_LINK_CLASS}>
             {t("viewPortfolio")}
-            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
           </Link>
         </div>
       </div>
@@ -433,272 +412,181 @@ export function FinancialStrip({
         )
       : cashOnHand;
 
-  // Base cell style — applied to every cell
-  const cell =
-    "flex items-center justify-between px-4 py-3 transition-colors duration-150 hover:bg-card-elevated/40 active:bg-card-elevated/60";
+  const donorTooltip = (breakdownHint: string) => (
+    <p className="text-muted">
+      {t("donorTooltip")}
+      {donorIncome && ` ${t(breakdownHint)}`}
+    </p>
+  );
+  const campaignTooltip = (breakdownHint: string) => (
+    <p className="text-muted">
+      {t("campaignTooltip")}
+      {campaignIncome && ` ${t(breakdownHint)}`}
+    </p>
+  );
+  const personalTooltip = (breakdownHint: string) => (
+    <>
+      <p className="text-muted">
+        {t("personalTooltip")}
+        {personalIncome && ` ${t(breakdownHint)}`}
+      </p>
+      <Link href={portfolioHref} className={`mt-2 inline-block text-body-sm ${PROFILE_LINK_CLASS}`}>
+        {t("viewWallet")}
+      </Link>
+    </>
+  );
+
+  const donorValue = (
+    <span className="text-heading font-semibold tabular-nums text-foreground">
+      {t("level", { level: donorLevel })}
+      <span className="ml-1 text-body font-normal text-muted">/ {maxDonorLevel}</span>
+    </span>
+  );
+  const campaignValue = (
+    <span className="text-heading font-semibold tabular-nums text-foreground">
+      {formatCurrencyFaceAmount(campaignFunds, currencyCode)}
+    </span>
+  );
+  const personalValue = (
+    <span className="text-heading font-semibold tabular-nums text-foreground">
+      {formatAmountChip(personalCashAnchor, currencyCode)}
+    </span>
+  );
+
+  const donorPanel = panel === "donor" && donorIncome && (
+    <DonorPanel
+      donorIncome={donorIncome}
+      formatFull={formatFull}
+      currencyCode={currencyCode}
+      t={t}
+    />
+  );
+  const campaignPanel = panel === "campaign" && campaignIncome && (
+    <CampaignPanel campaignIncome={campaignIncome} formatCampaignFull={formatCampaignFull} t={t} />
+  );
+  const cashPanel = panel === "cash" && personalIncome && (
+    <CashPanel
+      personalIncome={personalIncome}
+      formatFull={formatFull}
+      formatAmountChip={formatAmountChip}
+      toInternalFrom={toInternalFrom}
+      currencyCode={currencyCode}
+      displayCurrencyPreference={displayCurrencyPreference}
+      portfolioHref={portfolioHref}
+      locale={locale}
+      t={t}
+    />
+  );
 
   return (
-    <div className="border-t border-card-border">
-      {/* ── Mobile layout: stacked cells with inline panels ── */}
-      <div className="sm:hidden">
-        {/* Donor Network */}
-        <div
-          className={`${cell} border-b border-card-border${donorIncome ? " cursor-pointer select-none" : ""}`}
-          onClick={donorIncome ? () => toggle("donor") : undefined}
-          aria-expanded={panel === "donor"}
-        >
-          <InfoTooltip
-            trigger={
-              <span className="text-[11px] text-muted font-medium">
-                {t("donorNetwork")}
-                {INFO_ICON}
-                {donorIncome && (
-                  <span className="ml-1 text-[9px] text-primary/60">
-                    {panel === "donor" ? "\u25B2" : "\u25BC"}
-                  </span>
-                )}
-              </span>
-            }
-          >
-            <p className="text-muted">
-              {t("donorTooltip")}
-              {donorIncome && ` ${t("tapIncomeBreakdown")}`}
-            </p>
-          </InfoTooltip>
-          <span className="text-sm font-bold tabular-nums text-success">
-            {t("level", { level: donorLevel })}
-            <span className="text-[10px] text-muted font-normal ml-1">/ {maxDonorLevel}</span>
-          </span>
-        </div>
-        {/* Donor panel — directly under donor cell on mobile */}
-        {panel === "donor" && donorIncome && (
-          <DonorPanel
-            donorIncome={donorIncome}
-            formatFull={formatFull}
-            currencyCode={currencyCode}
-            t={t}
-          />
-        )}
-
-        {/* Campaign Funds */}
-        <div
-          className={`${cell} border-b border-card-border${campaignIncome ? " cursor-pointer select-none" : ""}`}
-          onClick={campaignIncome ? () => toggle("campaign") : undefined}
-          aria-expanded={panel === "campaign"}
-        >
-          <InfoTooltip
-            trigger={
-              <span className="text-[11px] text-muted font-medium">
-                {t("campaignCash")}
-                {INFO_ICON}
-                {campaignIncome && (
-                  <span className="ml-1 text-[9px] text-primary/60">
-                    {panel === "campaign" ? "\u25B2" : "\u25BC"}
-                  </span>
-                )}
-              </span>
-            }
-          >
-            <p className="text-muted">
-              {t("campaignTooltip")}
-              {campaignIncome && ` ${t("tapHourlyBreakdown")}`}
-            </p>
-          </InfoTooltip>
-          <span className="text-sm font-bold tabular-nums">
-            {formatCurrencyFaceAmount(campaignFunds, currencyCode)}
-          </span>
-        </div>
-        {/* Campaign panel — directly under campaign cell on mobile */}
-        {panel === "campaign" && campaignIncome && (
-          <CampaignPanel
-            campaignIncome={campaignIncome}
-            formatCampaignFull={formatCampaignFull}
-            t={t}
-          />
-        )}
-
-        {/* Cash on Hand */}
-        <div
-          className={`${cell}${personalIncome ? " cursor-pointer select-none" : ""}`}
-          onClick={personalIncome ? () => toggle("cash") : undefined}
-          aria-expanded={panel === "cash"}
-        >
-          <InfoTooltip
-            trigger={
-              <span className="text-[11px] text-muted font-medium">
-                {t("personalCash")}
-                {INFO_ICON}
-                {personalIncome && (
-                  <span className="ml-1 text-[9px] text-primary/60">
-                    {panel === "cash" ? "\u25B2" : "\u25BC"}
-                  </span>
-                )}
-              </span>
-            }
-          >
-            <>
-              <p className="text-muted">
-                {t("personalTooltip")}
-                {personalIncome && ` ${t("tapHourlyBreakdown")}`}
-              </p>
-              <Link
-                href={portfolioHref}
-                className="mt-2 inline-block text-xs text-primary hover:underline"
-              >
-                {t("viewWallet")}
-              </Link>
-            </>
-          </InfoTooltip>
-          <span className="text-sm font-bold tabular-nums">
-            {formatAmountChip(personalCashAnchor, currencyCode)}
-          </span>
-        </div>
-        {/* Cash panel — directly under cash cell on mobile */}
-        {panel === "cash" && personalIncome && (
-          <CashPanel
-            personalIncome={personalIncome}
-            formatFull={formatFull}
-            formatAmountChip={formatAmountChip}
-            toInternalFrom={toInternalFrom}
-            currencyCode={currencyCode}
-            displayCurrencyPreference={displayCurrencyPreference}
-            portfolioHref={portfolioHref}
-            locale={locale}
-            t={t}
-          />
-        )}
+    <div>
+      {/* Mobile: figures stacked, each breakdown directly under its figure */}
+      <div className="space-y-2 sm:hidden">
+        <Figure
+          label={t("donorNetwork")}
+          tooltip={donorTooltip("tapIncomeBreakdown")}
+          expandable={!!donorIncome}
+          open={panel === "donor"}
+          onToggle={() => toggle("donor")}
+          value={donorValue}
+        />
+        {donorPanel}
+        <Figure
+          label={t("campaignCash")}
+          tooltip={campaignTooltip("tapHourlyBreakdown")}
+          expandable={!!campaignIncome}
+          open={panel === "campaign"}
+          onToggle={() => toggle("campaign")}
+          value={campaignValue}
+        />
+        {campaignPanel}
+        <Figure
+          label={t("personalCash")}
+          tooltip={personalTooltip("tapHourlyBreakdown")}
+          expandable={!!personalIncome}
+          open={panel === "cash"}
+          onToggle={() => toggle("cash")}
+          value={personalValue}
+        />
+        {cashPanel}
       </div>
 
-      {/* ── Desktop layout: 3-column grid with panels below ── */}
+      {/* Desktop: three figures side by side, the open breakdown below them */}
       <div className="hidden sm:block">
-        <div className="grid grid-cols-3">
-          {/* Donor Network */}
-          <div
-            className={`${cell} border-r border-card-border${donorIncome ? " cursor-pointer select-none" : ""}`}
-            onClick={donorIncome ? () => toggle("donor") : undefined}
-            aria-expanded={panel === "donor"}
-          >
-            <InfoTooltip
-              trigger={
-                <span className="text-[11px] text-muted font-medium">
-                  {t("donorNetwork")}
-                  {INFO_ICON}
-                  {donorIncome && (
-                    <span className="ml-1 text-[9px] text-primary/60">
-                      {panel === "donor" ? "\u25B2" : "\u25BC"}
-                    </span>
-                  )}
-                </span>
-              }
-            >
-              <p className="text-muted">
-                {t("donorTooltip")}
-                {donorIncome && ` ${t("clickIncomeBreakdown")}`}
-              </p>
-            </InfoTooltip>
-            <span className="text-sm font-bold tabular-nums text-success">
-              {t("level", { level: donorLevel })}
-              <span className="text-[10px] text-muted font-normal ml-1">/ {maxDonorLevel}</span>
-            </span>
-          </div>
-
-          {/* Campaign Funds */}
-          <div
-            className={`${cell} border-r border-card-border${campaignIncome ? " cursor-pointer select-none" : ""}`}
-            onClick={campaignIncome ? () => toggle("campaign") : undefined}
-            aria-expanded={panel === "campaign"}
-          >
-            <InfoTooltip
-              trigger={
-                <span className="text-[11px] text-muted font-medium">
-                  {t("campaignCash")}
-                  {INFO_ICON}
-                  {campaignIncome && (
-                    <span className="ml-1 text-[9px] text-primary/60">
-                      {panel === "campaign" ? "\u25B2" : "\u25BC"}
-                    </span>
-                  )}
-                </span>
-              }
-            >
-              <p className="text-muted">
-                {t("campaignTooltip")}
-                {campaignIncome && ` ${t("clickHourlyBreakdown")}`}
-              </p>
-            </InfoTooltip>
-            <span className="text-sm font-bold tabular-nums">
-              {formatCurrencyFaceAmount(campaignFunds, currencyCode)}
-            </span>
-          </div>
-
-          {/* Cash on Hand */}
-          <div
-            className={`${cell}${personalIncome ? " cursor-pointer select-none" : ""}`}
-            onClick={personalIncome ? () => toggle("cash") : undefined}
-            aria-expanded={panel === "cash"}
-          >
-            <InfoTooltip
-              trigger={
-                <span className="text-[11px] text-muted font-medium">
-                  {t("personalCash")}
-                  {INFO_ICON}
-                  {personalIncome && (
-                    <span className="ml-1 text-[9px] text-primary/60">
-                      {panel === "cash" ? "\u25B2" : "\u25BC"}
-                    </span>
-                  )}
-                </span>
-              }
-            >
-              <>
-                <p className="text-muted">
-                  {t("personalTooltip")}
-                  {personalIncome && ` ${t("clickHourlyBreakdown")}`}
-                </p>
-                <Link
-                  href={portfolioHref}
-                  className="mt-2 inline-block text-xs text-primary hover:underline"
-                >
-                  {t("viewWallet")}
-                </Link>
-              </>
-            </InfoTooltip>
-            <span className="text-sm font-bold tabular-nums">
-              {formatAmountChip(personalCashAnchor, currencyCode)}
-            </span>
-          </div>
+        <div className="grid grid-cols-3 gap-6">
+          <Figure
+            label={t("donorNetwork")}
+            tooltip={donorTooltip("clickIncomeBreakdown")}
+            expandable={!!donorIncome}
+            open={panel === "donor"}
+            onToggle={() => toggle("donor")}
+            value={donorValue}
+          />
+          <Figure
+            label={t("campaignCash")}
+            tooltip={campaignTooltip("clickHourlyBreakdown")}
+            expandable={!!campaignIncome}
+            open={panel === "campaign"}
+            onToggle={() => toggle("campaign")}
+            value={campaignValue}
+          />
+          <Figure
+            label={t("personalCash")}
+            tooltip={personalTooltip("clickHourlyBreakdown")}
+            expandable={!!personalIncome}
+            open={panel === "cash"}
+            onToggle={() => toggle("cash")}
+            value={personalValue}
+          />
         </div>
-
-        {/* Panels span full width below the grid on desktop */}
-        {panel === "donor" && donorIncome && (
-          <DonorPanel
-            donorIncome={donorIncome}
-            formatFull={formatFull}
-            currencyCode={currencyCode}
-            t={t}
-          />
-        )}
-        {panel === "campaign" && campaignIncome && (
-          <CampaignPanel
-            campaignIncome={campaignIncome}
-            formatCampaignFull={formatCampaignFull}
-            t={t}
-          />
-        )}
-        {panel === "cash" && personalIncome && (
-          <CashPanel
-            personalIncome={personalIncome}
-            formatFull={formatFull}
-            formatAmountChip={formatAmountChip}
-            toInternalFrom={toInternalFrom}
-            currencyCode={currencyCode}
-            displayCurrencyPreference={displayCurrencyPreference}
-            portfolioHref={portfolioHref}
-            locale={locale}
-            t={t}
-          />
-        )}
+        {donorPanel}
+        {campaignPanel}
+        {cashPanel}
       </div>
+    </div>
+  );
+}
+
+/**
+ * One finance figure: a small muted label above the amount. When a breakdown
+ * exists the whole figure toggles it; the label keeps its explanatory tooltip.
+ */
+function Figure({
+  label,
+  tooltip,
+  expandable,
+  open,
+  onToggle,
+  value,
+}: {
+  label: string;
+  tooltip: React.ReactNode;
+  expandable: boolean;
+  open: boolean;
+  onToggle: () => void;
+  value: React.ReactNode;
+}) {
+  return (
+    <div
+      className={`flex flex-col items-start gap-0.5 py-1${expandable ? " cursor-pointer select-none" : ""}`}
+      onClick={expandable ? onToggle : undefined}
+      aria-expanded={open}
+    >
+      <InfoTooltip
+        trigger={
+          <span className="text-body-sm text-muted">
+            {label}
+            {expandable && (
+              <span aria-hidden className="ml-1.5 text-body-xs">
+                {open ? "\u25B2" : "\u25BC"}
+              </span>
+            )}
+          </span>
+        }
+      >
+        {tooltip}
+      </InfoTooltip>
+      {value}
     </div>
   );
 }

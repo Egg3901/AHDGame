@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * The Blend detail count: serif candidate rows that expand to show the
+ * The Blend detail count: candidate rows that expand to show the
  * arithmetic behind the seat figure.
  *
  * Expanding is the point of this panel. "REP takes 9 of 19" is an assertion;
@@ -56,7 +56,7 @@ export function BlendDetailTally({ model, renderEndorse, hrefFor }: BlendDetailT
                 aria-hidden
               />
               <div className="min-w-0 flex-1">
-                <div className="truncate font-serif text-xl font-semibold tracking-tight text-foreground">
+                <div className="truncate text-xl font-semibold tracking-tight text-foreground">
                   {row.name}
                   {row.isYou && <span className="text-muted"> (you)</span>}
                 </div>
@@ -68,7 +68,7 @@ export function BlendDetailTally({ model, renderEndorse, hrefFor }: BlendDetailT
 
               <div className="w-[92px] shrink-0 text-right">
                 <div
-                  className="font-serif text-2xl font-bold tabular-nums tracking-tight"
+                  className="text-2xl font-bold tabular-nums tracking-tight"
                   style={{ color: row.color }}
                 >
                   {row.pctStr}%
@@ -78,7 +78,7 @@ export function BlendDetailTally({ model, renderEndorse, hrefFor }: BlendDetailT
 
               {model.showSeatCol && (
                 <div className="w-[72px] shrink-0 border-l border-card-border pl-3.5 text-right">
-                  <div className="font-serif text-2xl font-bold tabular-nums text-foreground">
+                  <div className="text-2xl font-bold tabular-nums text-foreground">
                     {row.seatsCell}
                   </div>
                   <div className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-muted">
@@ -89,7 +89,7 @@ export function BlendDetailTally({ model, renderEndorse, hrefFor }: BlendDetailT
 
               {row.isWinner && !model.showSeatCol && (
                 <div className="w-[72px] shrink-0 border-l border-card-border pl-3.5 text-right">
-                  <div className="font-serif text-2xl leading-tight text-warning">★</div>
+                  <div className="text-2xl leading-tight text-warning">★</div>
                   <div className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-warning">
                     Elected
                   </div>
@@ -105,7 +105,7 @@ export function BlendDetailTally({ model, renderEndorse, hrefFor }: BlendDetailT
                 6px up. No need for a second keyframe. */}
             {isOpen && (
               <div className="animate-[fadeIn_.18s_ease-out] px-4 pb-4 pl-9">
-                <p className="mb-3.5 max-w-[640px] font-serif text-base leading-relaxed text-foreground/80">
+                <p className="mb-3.5 max-w-[640px] text-base leading-relaxed text-foreground/80">
                   {row.mathNote}
                 </p>
                 <div className="flex flex-wrap gap-6">
@@ -115,7 +115,7 @@ export function BlendDetailTally({ model, renderEndorse, hrefFor }: BlendDetailT
                         {m.key}
                       </div>
                       <div
-                        className="font-serif text-lg font-bold tabular-nums"
+                        className="text-lg font-bold tabular-nums"
                         style={m.color ? { color: m.color } : undefined}
                       >
                         {m.value}
@@ -125,10 +125,7 @@ export function BlendDetailTally({ model, renderEndorse, hrefFor }: BlendDetailT
                 </div>
                 <div className="mt-3 flex flex-wrap items-center gap-3">
                   {href && (
-                    <Link
-                      href={href}
-                      className="font-serif text-sm italic text-primary hover:underline"
-                    >
+                    <Link href={href} className="text-sm text-primary hover:underline">
                       View profile &rarr;
                     </Link>
                   )}

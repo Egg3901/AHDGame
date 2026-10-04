@@ -272,7 +272,7 @@ function LegacyProposeStateBillModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 overflow-y-auto py-8">
       <div className="w-full max-w-lg rounded-2xl border border-card-border bg-card p-6 space-y-5 shadow-modal my-auto">
         <div className="flex items-center justify-between">
-          <h2 className="font-display text-lg font-semibold">
+          <h2 className="text-lg font-semibold">
             {adminOverride
               ? `Propose ${billScope} Bill (Admin)`
               : `Propose ${billScope} Legislation`}

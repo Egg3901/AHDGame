@@ -4,7 +4,7 @@ import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { handleRouteError } from "@/lib/api/errors";
 import {
-  getCrisisInteraction,
+  getCrisisInteractionsByCrisisId,
   canCharacterInteract,
   resolveCharacterRoles,
   isMultiResponderNode,
@@ -103,11 +103,18 @@ export async function GET(request: Request) {
       return !!stateId && crisis.regionIds.includes(stateId);
     };
 
+    // The interaction is keyed by crisis; fetch them as one bounded batch so
+    // a crisis-heavy actions feed does not issue one round trip per card.
+    const interactionByCrisisId = await getCrisisInteractionsByCrisisId(
+      db,
+      crises.filter((crisis) => crisis.interactionDefinition).map((crisis) => crisis._id)
+    );
+
     // Enrich with interaction data
     const enriched: ActiveCrisisForCharacter[] = await Promise.all(
       crises.map(async (crisis: Crisis) => {
         const interaction = crisis.interactionDefinition
-          ? await getCrisisInteraction(db, crisis._id)
+          ? (interactionByCrisisId.get(crisis._id.toString()) ?? null)
           : null;
 
         const storedCurrentNode = interaction

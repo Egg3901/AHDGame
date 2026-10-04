@@ -1,5 +1,18 @@
 import type { ObjectId } from "mongodb";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import type { BondHolder } from "@/lib/db/types/bond";
+
+export type BankTreasuryHolderSnapshot = Omit<
+  BondHolder,
+  "characterId" | "imperialCharacterId" | "corporationId" | "fundId" | "nppId" | "bankId"
+> & {
+  characterId?: string;
+  imperialCharacterId?: string;
+  corporationId?: string;
+  fundId?: string;
+  nppId?: string;
+  bankId?: string;
+};
 
 /**
  * Private banking (1.1). A corporation owning at least one `financial` sector
@@ -23,6 +36,14 @@ export interface BankCharter {
   status: BankCharterStatus;
   currency: CurrencyCode;
   charteredTurn: number;
+  /** CEO may sweep vault cash above the funded-liquidity floor into short sovereign bills. */
+  sovereignTreasuryAutoSweep?: boolean;
+  /** Conservative executable-bid mark for this charter epoch's sovereign treasury book. */
+  sovereignTreasuryMarkValue?: number;
+  /** Turn the executable-bid treasury mark was last refreshed. */
+  lastTreasuryMarkTurn?: number;
+  /** Idempotency key for the automatic sweep at the end of a banking turn. */
+  lastTreasurySweepTurn?: number;
   /** Capital posted at charter; absorbs losses before depositors do. */
   postedCapital: number;
   /** Cumulative taxpayer capital delivered through funded financial-crisis rescues. */
@@ -139,6 +160,10 @@ export interface BankCharter {
   lastBankingDepositInterest?: number;
   /** Loan interest collected from the named + household books (income). */
   lastBankingLoanInterest?: number;
+  /** Fees earned on new household principal in this banking pass. */
+  lastBankingLoanOriginationFees?: number;
+  /** Named and household origination fees earned by this charter epoch. */
+  loanOriginationFeesLifetime?: number;
   /** Interbank interest paid as borrower (expense). Landed after the main pass. */
   lastBankingInterbankInterestPaid?: number;
   /** Interbank interest received as lender (income). Landed after the main pass. */
@@ -222,6 +247,46 @@ export interface BankCharter {
   lastSupervisionTurn?: number;
 }
 
+/** Frozen intent and replay identity for one funded bank treasury trade. */
+export interface BankTreasuryTradeReceipt {
+  _id: string;
+  bankId: ObjectId;
+  charteredTurn: number;
+  bondId: ObjectId;
+  currency: CurrencyCode;
+  side: "buy" | "sell";
+  /** Primary offers reserve unissued units and pay the government directly. */
+  primary?: {
+    countryId: import("@/lib/constants/countries").CountryId;
+    budgetId: string;
+    annualCoupon: number;
+    markPerUnitLocal: number;
+    maxCostLocal: number;
+    localPerAnchor: number;
+    ledgerShadow: boolean;
+    ledgerTurn: number;
+    /** Financial quote guards, preserved with the actual accepted primary intent. */
+    balanceGuard: Record<string, unknown>;
+    cashReservesAtQuote: number;
+  };
+  /** Original whole-unit request before cash and pool-depth clamps. */
+  requestedUnits: number;
+  /** Frozen source lots reserved by a multi-lot sale. */
+  allocations?: Array<{ lotId: string; units: number }>;
+  /** Exact holder array observed when sale pricing and source lots were frozen. */
+  holderSnapshot?: BankTreasuryHolderSnapshot[];
+  units: number;
+  pricePerUnitLocal: number;
+  amountLocal: number;
+  turn: number;
+  /** A failed-estate sale that must finish before depositor resolution closes. */
+  resolutionSale?: true;
+  status: "open" | "completed" | "rejected";
+  createdAt: Date;
+  updatedAt: Date;
+  error?: string;
+}
+
 /**
  * Collection: bankCharterHistory. Snapshot of a charter sub-doc when it leaves
  * active use (revoke, failure, or overwrite on recharter).
@@ -238,6 +303,8 @@ export interface BankCharterHistoryEntry {
 export interface BankLoan {
   _id: ObjectId;
   bankCorporationId: ObjectId;
+  /** Charter epoch that originated this loan. Legacy values use originatedTurn until backfilled. */
+  charteredTurn?: number;
   currency: CurrencyCode;
   borrowerType: "corporation" | "character" | "npcBulk";
   borrowerId?: ObjectId;
@@ -252,7 +319,11 @@ export interface BankLoan {
    */
   creditBand?: import("@/lib/banking/creditBands").CreditBandId;
   principal: number;
+  /** Quoted fee withheld from named-loan proceeds. Absent legacy requests pay no fee. */
+  originationFee?: number;
   outstanding: number;
+  /** Actual cash principal recovered from pledged property or build refunds. */
+  collateralRecoveredLocal?: number;
   ratePercent: number;
   originatedTurn: number;
   /** Contract length in turns (required for named player loans). */
@@ -274,6 +345,17 @@ export interface BankLoan {
   arrearsTurns?: number;
   /** Idempotency key for turn processing — standalone Mongo has no transactions. */
   lastProcessedTurn?: number;
+  /** Lender decision lock for a reserved construction claim, before any cash moves. */
+  constructionDecision?: "approve" | "reject";
+  /** One stable cash receipt owns debt quoting until its projections finish. */
+  constructionSettlementOwner?: string;
+  /** Sector pledge attached to a paid build, with principal capped by new construction cost. */
+  constructionCollateral?: {
+    claimId: string;
+    sectorId: ObjectId;
+    quotedCostLocal: number;
+    constructionCostLocal: number;
+  };
 }
 
 /** Collection: depositInsuranceFunds. One per currency; premium-funded, Treasury backstop. */

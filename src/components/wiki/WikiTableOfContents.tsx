@@ -32,7 +32,7 @@ export function WikiTableOfContents({
         >
           <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h7" />
         </svg>
-        <h2 className="text-xs font-semibold uppercase tracking-[0.1em] text-muted">Contents</h2>
+        <h2 className="text-sm font-semibold text-muted">Contents</h2>
       </div>
       <ul className="space-y-1.5 text-sm">
         {headings.map((h) => (

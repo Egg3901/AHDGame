@@ -1,12 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import type { OverviewViewModel } from "@/lib/states/overview/types";
 import { formatGDP } from "@/lib/utils/formatters";
 import { getCurrencyPrefix } from "@/lib/utils/budgetCalculations";
 import { CORPORATION_TYPE_LABELS, type CorporationType } from "@/lib/constants/corporations";
 
 /**
- * Economy summary card for the State Overview tab.
+ * Economy summary for the State Overview tab's side column.
  *
  * GDP comes straight from `State.gdp` (stored in millions of the country's
  * currency; `formatGDP` handles the unit and `getCurrencyPrefix` the
@@ -16,77 +17,91 @@ import { CORPORATION_TYPE_LABELS, type CorporationType } from "@/lib/constants/c
  * falling back to `sectorSpecializations.{primary, secondary}` when
  * the cache is empty.
  *
- * Each sector tagged with `specializationBonus` shows a small "+10pp"
- * (primary) or "+5pp" (secondary) chip — the regional margin bonus the
+ * Each sector tagged with `specializationBonus` shows "+10pp margin"
+ * (primary) or "+5pp margin" (secondary): the regional margin bonus the
  * state grants corps of that type.
  *
  * `gdpDeltaPct` is still a placeholder (Phase 2+).
  */
-export function EconomySummary({ vm }: { vm: OverviewViewModel }) {
+export function EconomySummary({
+  vm,
+  economyHref,
+}: {
+  vm: OverviewViewModel;
+  economyHref: string;
+}) {
   const { economy } = vm;
   const delta = economy.gdpDeltaPct;
   const showDelta = delta !== 0;
 
   return (
-    <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card)] p-4 shadow-sm">
-      <div className="text-[10px] uppercase tracking-wider text-[var(--muted)]">Economy</div>
-
-      <div className="mt-2 text-2xl font-bold tabular-nums">
-        {economy.gdp > 0 ? formatGDP(economy.gdp, getCurrencyPrefix(vm.countryId)) : "—"}
-      </div>
-      {showDelta && (
-        <div
-          className={
-            "mt-1 text-xs tabular-nums " + (delta >= 0 ? "text-emerald-500" : "text-rose-500")
-          }
-        >
-          {delta >= 0 ? "+" : ""}
-          {delta.toFixed(1)}% recent
-        </div>
-      )}
-
-      <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+    <section
+      aria-labelledby="overview-economy-title"
+      className="rounded-xl border border-card-border bg-card p-5 sm:p-6"
+    >
+      <h2 id="overview-economy-title" className="text-heading-sm font-semibold text-foreground">
+        Economy
+      </h2>
+      <dl className="mt-3 space-y-3">
         <div>
-          <div className="text-[10px] uppercase tracking-wider text-[var(--muted)]">
-            Unemployment
-          </div>
-          <div className="font-semibold tabular-nums">
-            {economy.unemployment > 0 ? `${economy.unemployment.toFixed(1)}%` : "—"}
-          </div>
+          <dt className="text-body-sm text-muted">Gross state product</dt>
+          <dd className="flex items-baseline gap-2">
+            <span className="text-heading-lg font-semibold tabular-nums text-foreground">
+              {economy.gdp > 0 ? formatGDP(economy.gdp, getCurrencyPrefix(vm.countryId)) : "None"}
+            </span>
+            {showDelta && (
+              <span
+                className={`text-body-sm tabular-nums ${delta >= 0 ? "text-success" : "text-error"}`}
+              >
+                {delta >= 0 ? "+" : ""}
+                {delta.toFixed(1)}% recent
+              </span>
+            )}
+          </dd>
         </div>
-        <div>
-          <div className="text-[10px] uppercase tracking-wider text-[var(--muted)]">
-            Top sectors
-          </div>
-          {economy.topSectors.length > 0 ? (
-            <ul className="mt-0.5 space-y-0.5 font-semibold">
-              {economy.topSectors.map((s) => (
-                <li key={s.id} className="flex items-center gap-1.5">
-                  <span>{CORPORATION_TYPE_LABELS[s.id as CorporationType] ?? s.id}</span>
-                  {s.specializationBonus === "primary" && (
-                    <span
-                      className="rounded-sm bg-emerald-500/15 px-1 py-px text-[9px] font-bold uppercase tracking-wider text-emerald-500"
-                      title="State primary specialization: +10pp regional margin bonus"
-                    >
-                      +10pp
-                    </span>
-                  )}
-                  {s.specializationBonus === "secondary" && (
-                    <span
-                      className="rounded-sm bg-sky-500/15 px-1 py-px text-[9px] font-bold uppercase tracking-wider text-sky-500"
-                      title="State secondary specialization: +5pp regional margin bonus"
-                    >
-                      +5pp
-                    </span>
-                  )}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div className="font-semibold">—</div>
-          )}
+        <div className="flex items-baseline justify-between gap-3 border-t border-card-border pt-3">
+          <dt className="text-body text-muted">Unemployment</dt>
+          <dd className="text-body font-medium tabular-nums text-foreground">
+            {economy.unemployment > 0 ? `${economy.unemployment.toFixed(1)}%` : "No data"}
+          </dd>
         </div>
-      </div>
-    </div>
+        <div className="border-t border-card-border pt-3">
+          <dt className="text-body text-muted">Top sectors</dt>
+          <dd>
+            {economy.topSectors.length > 0 ? (
+              <ul className="mt-1.5 space-y-1">
+                {economy.topSectors.map((s) => (
+                  <li key={s.id} className="flex items-baseline justify-between gap-3 text-body">
+                    <span className="font-medium text-foreground">
+                      {CORPORATION_TYPE_LABELS[s.id as CorporationType] ?? s.id}
+                    </span>
+                    {s.specializationBonus && (
+                      <span
+                        className="text-body-sm font-medium text-success"
+                        title={
+                          s.specializationBonus === "primary"
+                            ? "State primary specialization: +10pp regional margin bonus"
+                            : "State secondary specialization: +5pp regional margin bonus"
+                        }
+                      >
+                        {s.specializationBonus === "primary" ? "+10pp margin" : "+5pp margin"}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <span className="text-body text-muted">No sector data yet.</span>
+            )}
+          </dd>
+        </div>
+      </dl>
+      <Link
+        href={economyHref}
+        className="mt-4 inline-block text-body font-medium text-foreground underline decoration-card-border underline-offset-4 hover:decoration-foreground"
+      >
+        Sectors, budget and resources
+      </Link>
+    </section>
   );
 }

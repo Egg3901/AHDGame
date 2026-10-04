@@ -6,11 +6,7 @@ import {
 } from "@/lib/db/collections/governmentFormation";
 import { checkAppointmentEligibility, tallySeatsByParty } from "@/lib/turn/parliamentaryGovernment";
 import { getParliamentaryCountryConfig } from "@/lib/government/parliamentaryCountry";
-import {
-  getLowerChamberOfficeType,
-  getJointSittingOfficeTypes,
-} from "@/lib/legislature/chamberOfficeType";
-import { getCountryConfig } from "@/lib/constants/countries";
+import { loadRuntimeCountryOffices } from "@/lib/countries/runtimeOffices";
 import { ObjectId, type Db } from "mongodb";
 import type { Character, ElectedOfficial, NPP, PoliticalParty } from "@/lib/db/types";
 import type {
@@ -31,6 +27,7 @@ export async function getPmAppointmentCandidates(
 ): Promise<{ candidates: PmAppointmentCandidateView[]; callerHasActiveVote: boolean }> {
   // Validates the country has a parliamentary config (throws otherwise).
   getParliamentaryCountryConfig(countryId);
+  const offices = await loadRuntimeCountryOffices(db, countryId);
   const govFormation = await getGovernmentFormationsCollection(db).findOne({ _id: countryId });
   if (!govFormation) {
     throw badRequest("PM appointment is only available when government formation is pending");
@@ -84,7 +81,7 @@ export async function getPmAppointmentCandidates(
         }
   );
 
-  const lowerChamberKey = getLowerChamberOfficeType(countryId);
+  const lowerChamberKey = offices.lowerOfficeType;
   const qualifyingPartyIdStrings = eligibility.qualifyingPartyIds.map(String);
   const lowerChamberMPs = await db
     .collection<ElectedOfficial>("electedOfficials")
@@ -141,7 +138,8 @@ export async function getHosAppointmentCandidates(
   characterId: ObjectId
 ): Promise<{ candidates: PmAppointmentCandidateView[]; callerHasActiveVote: boolean }> {
   getParliamentaryCountryConfig(countryId);
-  const config = getCountryConfig(countryId);
+  const offices = await loadRuntimeCountryOffices(db, countryId);
+  const config = offices.config;
   if (config.headOfStateSelection !== "legislatureAppointment") {
     throw badRequest("This country's head of state is not appointed by the legislature");
   }
@@ -188,7 +186,7 @@ export async function getHosAppointmentCandidates(
     .collection<ElectedOfficial>("electedOfficials")
     .find({
       countryId,
-      officeType: { $in: getJointSittingOfficeTypes(countryId) },
+      officeType: { $in: offices.jointSittingOfficeTypes },
       party: { $in: qualifyingPartyIdStrings },
     })
     .toArray();
@@ -294,7 +292,7 @@ export async function getPmAppointmentVoteView(
     nomineeMode: voteDoc.nomineeMode ?? "character",
     nomineeName: voteDoc.nomineeName,
     nomineePartyId: voteDoc.nomineePartyId,
-    nominatedByCharacterId: voteDoc.nominatedByCharacterId.toString(),
+    nominatedByCharacterId: voteDoc.nominatedByCharacterId?.toString() ?? null,
     formationType: voteDoc.formationType,
     coalitionId: voteDoc.coalitionId,
     coalitionPartyIds: voteDoc.coalitionPartyIds,

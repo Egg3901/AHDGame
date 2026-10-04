@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
+import { previewEffectivePlay } from "@/lib/alignment/rules/previewEffectivePlay";
 import { POLE_TEXT, ShareBar } from "@/components/alignment/ShareBar";
 import type { InfluenceTarget, OrgInfluenceView } from "@/lib/alignment/queries/orgInfluence";
 import { formatShare, roundToShareGrid } from "@/lib/alignment/normalize";
@@ -30,6 +32,7 @@ interface Props {
  * put it somewhere it does not mean.
  */
 export function NationDossier({ view, target, orgId, viewerCountryId, onCommitted }: Props) {
+  const t = useTranslations("worldOrganizations.influence");
   // Costs are informational — what a nation would take — so they read in the
   // viewer's currency. The commit input below deliberately does not: the route
   // takes `amountLocal` in the FUND's currency, and a field that accepted one
@@ -38,11 +41,11 @@ export function NationDossier({ view, target, orgId, viewerCountryId, onCommitte
 
   const modifiers: string[] = [];
   if (target.resistsAtHalfStrength) {
-    modifiers.push("Genuinely uncommitted — it absorbs pushes at half strength.");
+    modifiers.push("Genuinely uncommitted, so it absorbs pushes at half strength.");
   }
   if (target.crisis) {
     modifiers.push(
-      `Flashpoint open for ${target.crisis.turnsRemaining} more turns — the movement ceiling here is raised to ${target.crisis.movementCap}.`
+      `Flashpoint open for ${target.crisis.turnsRemaining} more turns. The movement ceiling here is raised to ${target.crisis.movementCap}.`
     );
   }
   for (const org of target.sanctionedBy) {
@@ -55,6 +58,7 @@ export function NationDossier({ view, target, orgId, viewerCountryId, onCommitte
 
   const intel = view.rivalIntel[target.entityId] ?? [];
   const canAct = viewerCountryId != null && target.pointCostLocal != null;
+  const turnCap = turnCapFor(target);
 
   return (
     <section
@@ -84,11 +88,11 @@ export function NationDossier({ view, target, orgId, viewerCountryId, onCommitte
             {view.remainderLabel} {formatShare(target.nonAligned)}
           </span>
         </div>
-        <p className="text-body-xs text-muted">
+        <p className="text-body-sm text-muted">
           {view.channel?.poleLabel} is yours here, at {formatShare(target.ourShare)}
           {pointsToGate > 0
-            ? ` — ${formatShare(pointsToGate)} short of the ${view.joinShare} it takes to join.`
-            : ` — already past the ${view.joinShare} it takes to join.`}{" "}
+            ? `, ${formatShare(pointsToGate)} short of the ${view.joinShare} it takes to join.`
+            : `, already past the ${view.joinShare} it takes to join.`}{" "}
           A member that falls to {view.leaveShare} and stays there leaves the bloc.
         </p>
         {/* Over the gate is only the first step. The turn engine makes a nation
@@ -96,7 +100,7 @@ export function NationDossier({ view, target, orgId, viewerCountryId, onCommitte
             members vote — so a share past 60 that has not "joined" is working as
             designed, not stuck. This line is where a player sees the clock. */}
         {target.joinCountdown && (
-          <p className="text-body-xs text-muted">
+          <p className="text-body-sm text-muted">
             {target.joinCountdown.turnsToApply > 0 ? (
               <>
                 It has held above the {view.joinShare} for{" "}
@@ -113,7 +117,7 @@ export function NationDossier({ view, target, orgId, viewerCountryId, onCommitte
             ) : (
               <>
                 It has held above the {view.joinShare} for the full {view.sustainTurns} turns and is
-                applying to join — the members&rsquo; vote now decides.
+                applying to join. The members&rsquo; vote now decides.
               </>
             )}
           </p>
@@ -136,16 +140,17 @@ export function NationDossier({ view, target, orgId, viewerCountryId, onCommitte
       <div data-testid="rival-intel" className="space-y-1">
         <h4 className="text-body-xs uppercase tracking-wide text-muted">Rival activity</h4>
         {intel.length === 0 ? (
-          <p className="text-body-sm text-muted">No rival has moved here recently.</p>
+          <p className="text-body-sm text-muted">{t("noRivals")}</p>
         ) : (
           intel.map((e, i) => (
             <p key={`${e.poleLabel}-${i}`} className="text-body-sm text-foreground">
-              <span className={POLE_TEXT[e.accentToken]}>{e.poleLabel}</span> landed{" "}
-              {e.pointsLanded} here{" "}
-              {e.turnsAgo === 0
-                ? "this turn"
-                : `${e.turnsAgo} turn${e.turnsAgo === 1 ? "" : "s"} ago`}
-              .
+              <span className={POLE_TEXT[e.accentToken]}>
+                {t(e.pointsLanded == null ? "rivalUnknown" : "rivalGain", {
+                  pole: e.poleLabel,
+                  points: formatShare(e.pointsLanded ?? 0),
+                  when: e.turnsAgo === 0 ? t("thisTurn") : t("turnsAgo", { count: e.turnsAgo }),
+                })}
+              </span>
             </p>
           ))
         )}
@@ -158,19 +163,11 @@ export function NationDossier({ view, target, orgId, viewerCountryId, onCommitte
         </p>
       ) : (
         <p className="text-body-xs text-muted">
-          {target.name} costs{" "}
-          <span className="font-mono tabular-nums text-foreground">
-            {fundAmount(target.pointCostLocal)}
-          </span>{" "}
-          a point.{" "}
-          {target.resistsAtHalfStrength
-            ? "That is twice the usual tenth of a percent of its economy, because of the resistance noted above."
-            : "That is a tenth of a percent of its economy."}{" "}
-          Moving it as far as a turn allows costs{" "}
-          <span className="font-mono tabular-nums text-foreground">
-            {fundAmount(target.turnCapCostLocal ?? 0)}
-          </span>
-          ; beyond that the money buys nothing more this turn unless a rival is pushing back.
+          {t("pricing", {
+            nation: target.name,
+            cap: turnCap,
+            spend: fundAmount(target.playCapCostLocal ?? 0),
+          })}
         </p>
       )}
 
@@ -185,6 +182,11 @@ export function NationDossier({ view, target, orgId, viewerCountryId, onCommitte
       )}
     </section>
   );
+}
+
+/** The most this nation can move in one turn: raised while a flashpoint is open. */
+function turnCapFor(target: InfluenceTarget): number {
+  return target.crisis?.movementCap ?? PER_NATION_TURN_CAP;
 }
 
 /**
@@ -207,6 +209,7 @@ function CommitPlayForm({
   const [amount, setAmount] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const t = useTranslations("worldOrganizations.influence");
 
   // Everything below is in the FUND's own currency, never the viewer's. The
   // costs stated above this form read in the viewer's preferred currency, so
@@ -221,19 +224,37 @@ function CommitPlayForm({
   const typed = parseMoneyAmountInput(amount);
   const pointCost = target.pointCostLocal ?? 0;
   const hasPreview = typed > 0 && pointCost > 0;
-  // pointCostLocal already carries the non-aligned resistance, so this is points
-  // actually landed, not list price. The per-nation cap bounds the whole nation's
-  // turn, so anything past it is the ceiling talking, not this play.
+  // The quote carries resistance but not channel strength, strain, opposition,
+  // the turn ceiling or normalization. Never display this intermediate pressure.
+  // One play is capped before anything else, so
+  // past playMaxPoints the money buys nothing even against a rival (ticket #1371).
+  // The turn limit is different: it bounds what is left after opposing pushes
+  // cancel, so points past it still count when a rival pushes back.
   const rawPoints = hasPreview ? typed / pointCost : 0;
-  const cappedPoints = Math.min(rawPoints, PER_NATION_TURN_CAP);
-  const overCap = rawPoints > PER_NATION_TURN_CAP;
+  const playPoints = Math.min(rawPoints, target.playMaxPoints);
+  const overPlayCap = rawPoints > target.playMaxPoints;
+  const turnCap = turnCapFor(target);
+  const strength = (view.channel?.weight ?? 1) * (view.blocStress?.effectiveness ?? 1);
+  const overTurnCap = !overPlayCap && playPoints * strength > turnCap;
+  const effectivePoints = view.channel
+    ? previewEffectivePlay({
+        shares: { shares: target.shares, nonAligned: target.nonAligned },
+        poles: view.poles.map((pole) => pole.id),
+        poleId: view.channel.poleId,
+        amountLocal: typed,
+        pointCostLocal: pointCost,
+        playMaxPoints: target.playMaxPoints,
+        resistsAtHalfStrength: target.resistsAtHalfStrength,
+        weight: view.channel.weight,
+        effectiveness: view.blocStress?.effectiveness ?? 1,
+        turnCap,
+      })
+    : 0;
   const overBalance = typed > view.fundBalanceLocal;
-  // The smallest spend that lands a storable movement — one grid step (0.01),
-  // priced at this nation's per-point cost. A play below it resolves to zero and
-  // is refunded, so the commit path refuses it and this is what the player must
-  // reach instead (ticket #1213).
+  // Preserve the existing form minimum. It is not a guarantee of movement:
+  // strain, normalization and opposing pressure can still leave zero gain.
   const minSpendLocal = pointCost > 0 ? Math.ceil(pointCost * MIN_PLAY_POINTS) : 0;
-  const buysNothing = hasPreview && roundToShareGrid(cappedPoints) < MIN_PLAY_POINTS;
+  const buysNothing = hasPreview && roundToShareGrid(playPoints) < MIN_PLAY_POINTS;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -243,9 +264,7 @@ function CommitPlayForm({
       return;
     }
     if (buysNothing) {
-      setError(
-        `That buys nothing. Spend at least ${inFundCurrency(minSpendLocal)} to move ${target.name} by ${formatShare(MIN_PLAY_POINTS)}.`
-      );
+      setError(t("minimumSpend", { spend: inFundCurrency(minSpendLocal) }));
       return;
     }
     setSubmitting(true);
@@ -306,36 +325,30 @@ function CommitPlayForm({
         </button>
       </div>
 
-      <p className="text-body-xs text-muted">
+      <p className="text-body-sm text-muted">
         Shorthand works here: 4.0M means 4,000,000, and the full number is fine too.
       </p>
 
       {hasPreview && (
-        <p className={`text-body-xs ${buysNothing ? "text-warning" : "text-muted"}`}>
-          Buys{" "}
-          <span className="font-mono tabular-nums text-foreground">
-            {formatShare(roundToShareGrid(cappedPoints))}
-          </span>{" "}
-          points at {inFundCurrency(pointCost)} each.{" "}
+        <p className={`text-body-sm ${buysNothing ? "text-warning" : "text-muted"}`}>
+          {t("preview", { points: formatShare(effectivePoints) })}{" "}
           {buysNothing
-            ? `That is too little to move ${target.name} at all — spend at least ${inFundCurrency(minSpendLocal)} to shift it by ${formatShare(MIN_PLAY_POINTS)}.`
-            : overCap
-              ? `Past the ${PER_NATION_TURN_CAP}-point ceiling for one turn — the rest buys nothing unless a rival pushes back.`
-              : "One point is one share of this nation's alignment."}
+            ? t("minimumSpend", { spend: inFundCurrency(minSpendLocal) })
+            : overPlayCap
+              ? t("overPlay", { spend: inFundCurrency(target.playCapCostLocal ?? 0) })
+              : overTurnCap
+                ? t("overTurn", { cap: turnCap })
+                : null}
         </p>
       )}
 
       {overBalance && (
-        <p className="text-body-xs text-warning">
+        <p className="text-body-sm text-warning">
           That is more than the fund holds. The play will be refused.
         </p>
       )}
 
-      <p className="text-body-xs text-muted">
-        The fund is debited now; the nation moves when the turn processes, and the points bought
-        appear under Recent plays. A play that lands on a nation which locks before then is refunded
-        in full.
-      </p>
+      <p className="text-body-xs text-muted">{t("settlement")}</p>
 
       {error && <p className="text-body-sm text-error">{error}</p>}
     </form>

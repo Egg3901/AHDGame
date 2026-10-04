@@ -166,11 +166,21 @@ export async function processFinancialCrisisGuarantees(
           amount: available,
           collection: "federalBudget",
           filter: { _id: treasuryId, countryId: guarantee.countryId },
-          path: "treasuryBalance",
+          path: policy.treasuryCashLedger ? "treasuryCashLocal" : "treasuryBalance",
           note: "Return unused coverage to its funding treasury",
         },
       ],
       projections: [
+        ...(policy.treasuryCashLedger
+          ? [
+              {
+                collection: "federalBudget",
+                filter: { _id: treasuryId, countryId: guarantee.countryId },
+                update: { $inc: { treasuryBalance: available } },
+                note: "Keep the signed fiscal position aligned with refunded escrow",
+              },
+            ]
+          : []),
         {
           collection: "bankGuarantees",
           filter: { _id: guarantee._id },

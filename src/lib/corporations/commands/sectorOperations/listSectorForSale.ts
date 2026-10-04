@@ -55,6 +55,17 @@ export async function listSectorForSale(_request: Request, { params }: RoutePara
     if (!sector) {
       return NextResponse.json({ error: "Sector not found" }, { status: 404 });
     }
+    if (
+      sector.constructionPropertyTransition ||
+      sector.constructionFinancing?.foreclosure ||
+      (sector.constructionFinancing &&
+        (!["building", "released", "cancelled"].includes(sector.constructionFinancing.status) ||
+          sector.constructionFinancing.escrowLocal > 0))
+    )
+      return NextResponse.json(
+        { error: "Finish the site's pending construction or secured recovery before listing." },
+        { status: 409 }
+      );
 
     if (sector.forSale) {
       return NextResponse.json({ error: "Sector is already listed for sale" }, { status: 400 });
@@ -89,6 +100,15 @@ export async function listSectorForSale(_request: Request, { params }: RoutePara
     // asking price agrees with the corp valuation instead of trailing it.
     // Below the boost window the multiplier is 1 (legacy quote).
     const listingTurn = gameState?.currentTurn ?? null;
+    const abortedSale = sector.constructionFinancing?.sale?.aborted === true;
+    if (
+      abortedSale &&
+      (listingTurn === null || sector.constructionFinancing!.sale!.turn >= listingTurn)
+    )
+      return NextResponse.json(
+        { error: "Retry a refused secured sale after the next turn." },
+        { status: 409 }
+      );
     const valuation = computeSectorListingValuation(
       sector,
       corporation,
@@ -98,6 +118,7 @@ export async function listSectorForSale(_request: Request, { params }: RoutePara
         ? {
             sector,
             currentYear: gameState?.currentYear,
+            currentTurn: listingTurn,
             eraUnitScale: await loadWorldEraUnitScale(db),
           }
         : undefined,
@@ -116,19 +137,34 @@ export async function listSectorForSale(_request: Request, { params }: RoutePara
     }
 
     const now = new Date();
-    await db.collection<CorporateSector>("corporateSectors").updateOne(
-      { _id: sector._id, corporationId: corporation._id },
+    const listed = await db.collection<CorporateSector>("corporateSectors").updateOne(
+      {
+        _id: sector._id,
+        corporationId: corporation._id,
+        constructionPropertyTransition: { $exists: false },
+        "constructionFinancing.foreclosure": { $exists: false },
+        ...(abortedSale
+          ? { "constructionFinancing.sale.key": sector.constructionFinancing!.sale!.key }
+          : {}),
+      },
       {
         $set: {
           forSale: {
+            pledged: sector.constructionFinancing?.loanFunded === true,
             listedAt: now,
             priceAnchor: valuation.priceAnchor,
             npvAnchor: valuation.npvAnchor,
           },
           updatedAt: now,
         },
+        ...(abortedSale ? { $unset: { "constructionFinancing.sale": "" } } : {}),
       }
     );
+    if (listed.matchedCount === 0)
+      return NextResponse.json(
+        { error: "The site's owner or secured recovery changed." },
+        { status: 409 }
+      );
 
     return NextResponse.json({
       success: true,

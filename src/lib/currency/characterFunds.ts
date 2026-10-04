@@ -1,7 +1,8 @@
 import type { Db, ObjectId } from "mongodb";
 import type { Character, ExchangeRate } from "@/lib/db/types";
+import type { CountryId } from "@/lib/constants/countries";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
+import { COUNTRY_CURRENCY_MAP, getSeedCurrencyCode } from "@/lib/constants/currencies";
 
 /**
  * Minimum fields needed for personal wealth operations.
@@ -163,8 +164,14 @@ export function getLifetimeInterestEarnedInCurrency(
 
 /**
  * Get the home currency for a character based on their countryId.
+ * Preset-aware: a 2027-default run resolves euro members to EUR (the
+ * denomination their balances were migrated into); an omitted preset keeps
+ * the legacy era-blind map behavior.
  */
-export function getHomeCurrency(character: PersonalWealthHolder): CurrencyCode {
+export function getHomeCurrency(character: PersonalWealthHolder, preset?: string): CurrencyCode {
+  if (preset !== undefined) {
+    return getSeedCurrencyCode(character.countryId as CountryId, preset);
+  }
   return (COUNTRY_CURRENCY_MAP[character.countryId as keyof typeof COUNTRY_CURRENCY_MAP] ??
     "USD") as CurrencyCode;
 }

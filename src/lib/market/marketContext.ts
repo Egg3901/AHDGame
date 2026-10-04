@@ -2,6 +2,7 @@ import type { MarketSystemMode } from "@/lib/market/featureFlag";
 import { marketAtLeast } from "@/lib/market/featureFlag";
 import type { SectorClearingResult } from "@/lib/market/clearing";
 import type { FreightClass } from "@/lib/logistics/freightClass";
+import type { EditorialPosition } from "@/lib/mediaEditorial/rules";
 import {
   MARKET_REALIZATION_DEVIATION_CAP,
   MARKET_REALIZATION_RAMP_TURNS,
@@ -26,6 +27,16 @@ export interface MarketContext {
    * instead of capacity merely haircutting a compounding revenue nameplate.
    */
   plantsEnabled: boolean;
+  /** Default off: explicit positive overhead replaces the margin residual. */
+  explicitPlantCostsEnabled?: boolean;
+  /** Default off: ownership limits and censorship constrain media delivery. */
+  mediaRegulationEnabled?: boolean;
+  /** Default off: enacted pre-repeal US fairness doctrine affects outlet reach. */
+  mediaFairnessDoctrineEnabled?: boolean;
+  /** Existing editorial-market gate, threaded to distinguish it from the law. */
+  mediaEditorialEnabled?: boolean;
+  /** Selected US media communications policy option, read only while gated on. */
+  mediaRegulationPolicyOptionIndex?: number;
   /**
    * Pre-pass clearing results per sector id (computed in the corp-phase entry
    * from lagged balances). Absent entries mean "no outputs" → factor 1.
@@ -43,6 +54,18 @@ export interface MarketContext {
    * actually delivered at their reachable clearing price.
    */
   advertisingSellerDeliveredValueAnchorByCorpId?: ReadonlyMap<string, number>;
+  /** Exact native-currency amounts reserved for funded political ad sellers. */
+  politicalAdSellerPayoutLocalByCorpId?: ReadonlyMap<string, number>;
+  /** Delivered media outlets per audience state, normalized by local delivered units. */
+  editorialOutletsByState?: ReadonlyMap<
+    string,
+    readonly {
+      corporationId: string;
+      stance: EditorialPosition;
+      audienceShare: number;
+      attentionUnits?: number;
+    }[]
+  >;
   /**
    * Freight seam: per sector id, the share of its clearing offer (0..1) that
    * last turn's freight network could not place out of its host state, so the

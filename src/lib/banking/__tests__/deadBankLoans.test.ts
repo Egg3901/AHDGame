@@ -20,6 +20,7 @@
 import { describe, expect, it } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createInMemoryDb, type InMemoryDb } from "@/lib/test-utils/inMemoryDb";
+import type { Corporation } from "@/lib/db/types";
 import {
   findDeadBanksWithLoans,
   processDeadBankLoans,
@@ -113,6 +114,17 @@ describe("loans owed to a bank that no longer exists", () => {
     expect(closed.collection).toBe("depositInsuranceFunds");
     expect(closed.filter).toEqual({ _id: "USD" });
     expect(closed.path).toBe("balance");
+
+    const archivedOpen = recoveryTargetFor({
+      corporationId: OPEN_ESTATE,
+      name: "Archived failed bank",
+      currency: "USD",
+      resolved: false,
+      historyId: new ObjectId(),
+    });
+    expect(archivedOpen.collection).toBe("depositInsuranceFunds");
+    expect(archivedOpen.filter).toEqual({ _id: "USD" });
+    expect(archivedOpen.path).toBe("balance");
   });
 
   it("services every dead bank's book and reports the two destinations apart", async () => {
@@ -169,5 +181,74 @@ describe("loans owed to a bank that no longer exists", () => {
       recoveredToEstate: 0,
       recoveredToInsurer: 0,
     });
+  });
+
+  it("services a resolved prior epoch after recharter and sends recovery to insurance", async () => {
+    const db = createInMemoryDb();
+    const recharteredBank = new ObjectId();
+    const priorCharter = {
+      ...charter("failed", { depositorsResolvedTurn: 20 }),
+      charteredTurn: 1,
+      cashReserves: 500,
+    };
+    db.seed("corporations", [
+      {
+        _id: recharteredBank,
+        name: "Rechartered Bank",
+        countryId: "US",
+        bankCharter: charter("active", { charteredTurn: 30, cashReserves: 900 }),
+      },
+    ]);
+    db.seed("bankCharterHistory", [
+      {
+        _id: new ObjectId(),
+        corporationId: recharteredBank,
+        charter: priorCharter,
+        archivedTurn: 20,
+        reason: "recharter",
+      },
+      {
+        _id: new ObjectId(),
+        corporationId: recharteredBank,
+        charter: charter("active", { charteredTurn: 1 }),
+        archivedTurn: 10,
+        reason: "recharter",
+      },
+    ]);
+    db.seed("depositInsuranceFunds", [{ _id: "USD", balance: 40 }]);
+    db.seed("bankLoans", [
+      loan(recharteredBank, { charteredTurn: 1 }),
+      loan(recharteredBank, { charteredTurn: 30 }),
+      // Untagged persisted loans use the originated turn during rollout.
+      loan(recharteredBank, { originatedTurn: 2 }),
+      // A loan originated in the same turn the prior charter failed stays in its epoch.
+      loan(recharteredBank, { originatedTurn: 20 }),
+    ]);
+
+    const summary = await processDeadBankLoans(
+      db as unknown as Db,
+      55,
+      async (currentLoan, bank, target) => {
+        expect(bank.charteredTurn).toBe(1);
+        expect(target.collection).toBe("depositInsuranceFunds");
+        await db.collection("depositInsuranceFunds").updateOne(target.filter, {
+          $inc: { balance: 100 },
+        });
+        await db
+          .collection("bankLoans")
+          .updateOne(
+            { _id: currentLoan._id },
+            { $set: { lastProcessedTurn: 55, status: "repaid", outstanding: 0 } }
+          );
+        return { collected: 100 };
+      }
+    );
+
+    expect(summary.loansServiced).toBe(3);
+    expect(summary.recoveredToInsurer).toBe(300);
+    expect(db.collection("depositInsuranceFunds").docs[0].balance).toBe(340);
+    expect(
+      (db.collection("corporations").docs[0] as unknown as Corporation).bankCharter?.cashReserves
+    ).toBe(900);
   });
 });

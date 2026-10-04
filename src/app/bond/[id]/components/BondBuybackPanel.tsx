@@ -71,9 +71,7 @@ export function BondBuybackPanel({
 
   return (
     <div className="rounded-xl border border-card-border bg-card p-5">
-      <h2 className="text-sm font-semibold uppercase tracking-wider text-muted mb-4">
-        Retire Debt
-      </h2>
+      <h2 className="text-sm font-semibold text-muted mb-4">Retire debt</h2>
       <p className="text-xs text-muted mb-4">
         Buy back bond units from investors to reduce outstanding debt.
         {bond.defaulted && (

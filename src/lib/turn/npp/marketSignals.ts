@@ -10,13 +10,14 @@
 
 import type { Corporation, CorporateSector } from "@/lib/db/types";
 import type { UnownedSector } from "@/lib/db/types/unownedSector";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { CorporationType, ManufacturingIndustryModel } from "@/lib/constants/corporations";
 import type { CountryId } from "@/lib/constants/countries";
 import { adjacentStates } from "@/lib/constants/stateAdjacency";
 import { unownedHeadroomUnitsOf } from "@/lib/corporations/marketShare";
 import { foundingStarterUnits } from "@/lib/corporations/foundingPlant";
 import { bucketKey } from "@/lib/nationalization/stateControlledBuckets";
 import { SECTOR_SUPPLY, type CommodityType } from "@/lib/constants/commodities";
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import { clampProductionPolicy } from "@/lib/utils/productionPolicy";
 
 // Macro-aware production policy (SP5). A +33% price premium saturates to the
@@ -101,6 +102,8 @@ export type CommodityPriceRatioFn = (commodity: CommodityType, countryId: string
  * without the data (tests, hasEnterableHeadroom) degrade to country scope.
  */
 export interface PlacementSignals {
+  /** Finite calibrated gross local demand; absent observations stay unknown. */
+  stateDemandOf?: (commodity: CommodityType, stateId: string) => number | null;
   /** currentPrice/basePrice for a commodity in a STATE; null falls back to the
    *  country-scope ratio for that commodity. */
   statePriceRatioOf?: (commodity: CommodityType, stateId: string) => number | null;
@@ -125,16 +128,30 @@ export function buildActiveMarketBuckets(sectors: readonly CorporateSector[]): S
   return new Set(
     sectors
       .filter((sector) => sector.mothballed !== true)
-      .map((sector) => bucketKey(sector.stateId, sector.sectorType))
+      .map((sector) =>
+        bucketKey(
+          sector.stateId,
+          sector.sectorType,
+          sector.industryModel,
+          sector.mediaDiscriminator
+        )
+      )
   );
 }
 
 export function markMarketsActive(
   signals: PlacementSignals,
-  sectors: readonly Pick<CorporateSector, "stateId" | "sectorType">[] | undefined
+  sectors:
+    | readonly Pick<
+        CorporateSector,
+        "stateId" | "sectorType" | "industryModel" | "mediaDiscriminator"
+      >[]
+    | undefined
 ): void {
   for (const sector of sectors ?? []) {
-    signals.activeMarketBuckets?.add(bucketKey(sector.stateId, sector.sectorType));
+    signals.activeMarketBuckets?.add(
+      bucketKey(sector.stateId, sector.sectorType, sector.industryModel, sector.mediaDiscriminator)
+    );
   }
 }
 
@@ -196,14 +213,20 @@ export function hasEnterableHeadroom(
       corp.headquartersState,
       corp.type,
       corp.secondaryType,
-      new Set(sectors.map((sec) => bucketKey(sec.stateId, sec.sectorType))),
+      new Set(
+        sectors.map((sec) =>
+          bucketKey(sec.stateId, sec.sectorType, sec.industryModel, sec.mediaDiscriminator)
+        )
+      ),
       unownedByCountry,
       stateControlled,
       () => null,
       plantsEnabled,
       eraUnitScale,
       undefined,
-      frontier
+      frontier,
+      undefined,
+      corp.industryModel
     ) !== null
   );
 }
@@ -244,7 +267,8 @@ export function findBestUnownedSector(
   eraUnitScale: number = 1,
   signals?: PlacementSignals,
   preferredStateIds?: ReadonlySet<string>,
-  stats?: CandidateExclusionStats
+  stats?: CandidateExclusionStats,
+  primaryIndustryModel?: string | null
 ): UnownedSector | null {
   const countryUnowned = unownedByCountry.get(countryId);
   if (!countryUnowned || countryUnowned.length === 0) return null;
@@ -260,7 +284,8 @@ export function findBestUnownedSector(
           us.sectorType as CorporationType,
           us.headroomUnits,
           us.revenue,
-          eraUnitScale
+          eraUnitScale,
+          us.industryModel
         )
       : us.revenue;
 
@@ -287,7 +312,11 @@ export function findBestUnownedSector(
     stats.depositExcluded = 0;
   }
   for (const us of countryUnowned) {
-    if (existingBuckets.has(bucketKey(us.stateId, us.sectorType))) {
+    if (
+      existingBuckets.has(
+        bucketKey(us.stateId, us.sectorType, us.industryModel, us.mediaDiscriminator)
+      )
+    ) {
       if (stats) stats.occupiedExcluded! += 1;
       continue;
     }
@@ -298,7 +327,11 @@ export function findBestUnownedSector(
       }
       continue;
     }
-    if (stateControlled.has(bucketKey(us.stateId, us.sectorType))) {
+    if (
+      stateControlled.has(
+        bucketKey(us.stateId, us.sectorType, us.industryModel, us.mediaDiscriminator)
+      )
+    ) {
       if (stats) stats.stateControlledExcluded! += 1;
       continue;
     }
@@ -321,12 +354,23 @@ export function findBestUnownedSector(
     signals?.preferEmptyMarkets && activeMarketBuckets
       ? rankedCandidates.filter(
           (candidate) =>
-            !activeMarketBuckets.has(bucketKey(candidate.stateId, candidate.sectorType)) &&
+            !activeMarketBuckets.has(
+              bucketKey(
+                candidate.stateId,
+                candidate.sectorType,
+                candidate.industryModel,
+                candidate.mediaDiscriminator
+              )
+            ) &&
             // Extraction is deposit-gated (candidacy above), not unit-sized, so
             // it bypasses the demand-headroom facility-size floor.
             (candidate.sectorType === "extraction" ||
               !plantsEnabled ||
-              sizeOf(candidate) >= foundingStarterUnits(candidate.sectorType as CorporationType))
+              sizeOf(candidate) >=
+                foundingStarterUnits(
+                  candidate.sectorType as CorporationType,
+                  candidate.industryModel as ManufacturingIndustryModel | null | undefined
+                ))
         )
       : [];
   const entryCandidates = uncoveredCandidates.length > 0 ? uncoveredCandidates : rankedCandidates;
@@ -335,10 +379,18 @@ export function findBestUnownedSector(
   // otherwise. This is what routes a founding to the state that is actually
   // starved instead of treating every state in the country as one market.
   const shortageOf = (c: UnownedSector) =>
-    sectorShortageScore(c.sectorType as CorporationType, countryId, (commodity, cid) => {
-      const stateRatio = signals?.statePriceRatioOf?.(commodity, c.stateId);
-      return stateRatio ?? priceRatioOf(commodity, cid);
-    });
+    sectorShortageScore(
+      getOperatingSectorType(
+        c.sectorType,
+        c.industryModel,
+        c.mediaDiscriminator
+      ) as CorporationType,
+      countryId,
+      (commodity, cid) => {
+        const stateRatio = signals?.statePriceRatioOf?.(commodity, c.stateId);
+        return stateRatio ?? priceRatioOf(commodity, cid);
+      }
+    );
   const score = (c: UnownedSector) => {
     // Extraction ranks on deposit x shortage (via marketSizeOf); demand-side
     // sectors on demand-headroom x shortage.
@@ -353,7 +405,11 @@ export function findBestUnownedSector(
   const fragileScore = (c: UnownedSector): number => {
     if (signals?.fragileMarketCountryEligible?.(c.countryId) === false) return 0;
     const commodity = fragileMarketCommodityForSector(
-      c.sectorType as CorporationType,
+      getOperatingSectorType(
+        c.sectorType,
+        c.industryModel,
+        c.mediaDiscriminator
+      ) as CorporationType,
       c.countryId,
       candidatePriceRatioOf(c)
     );
@@ -370,7 +426,15 @@ export function findBestUnownedSector(
   // override gates on the peak so freight at 2.0x triggers logistics even
   // though consulting is at base.
   const peakShortageOf = (c: UnownedSector): number =>
-    sectorPeakShortageScore(c.sectorType as CorporationType, countryId, priceRatioOf);
+    sectorPeakShortageScore(
+      getOperatingSectorType(
+        c.sectorType,
+        c.industryModel,
+        c.mediaDiscriminator
+      ) as CorporationType,
+      countryId,
+      priceRatioOf
+    );
   // Highest market-weighted score wins; the HQ state gets a score bonus, not
   // the old unconditional first pick (see HQ_STATE_SCORE_BONUS).
   const best = (list: UnownedSector[]) => list.sort((a, b) => score(b) - score(a))[0];
@@ -396,7 +460,10 @@ export function findBestUnownedSector(
   if (critical.length > 0) return critical.sort((a, b) => score(b) - score(a))[0];
 
   // Tier 1: primary type match
-  const primaryMatch = entryCandidates.filter((c) => c.sectorType === primaryType);
+  const primaryMatch = entryCandidates.filter(
+    (c) =>
+      c.sectorType === primaryType && (c.industryModel ?? null) === (primaryIndustryModel ?? null)
+  );
   if (primaryMatch.length > 0) return best(primaryMatch);
 
   // Tier 2: secondary type match

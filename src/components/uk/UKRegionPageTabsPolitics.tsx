@@ -47,7 +47,7 @@ function MPCard({ mp, isVacant }: { mp: SerializedMP; isVacant: boolean }) {
   const seatsHeld = mp.seatsHeld ?? 1;
 
   return (
-    <div className="relative flex flex-col items-center overflow-hidden rounded-xl border border-card-border bg-card px-3 pb-4 pt-1 transition-colors card-hover hover:border-primary/30 hover:bg-card-elevated">
+    <div className="relative flex flex-col items-center overflow-hidden rounded-xl border border-card-border bg-card px-3 pb-4 pt-1 transition-colors hover:border-primary/30 hover:bg-card-elevated">
       {/* Party-color top accent */}
       {!isVacant && partyColor && (
         <div className="absolute inset-x-0 top-0 h-[3px]" style={{ backgroundColor: partyColor }} />
@@ -195,9 +195,7 @@ export function UKRegionPageTabsPolitics({
           const socThumbColor = soc < -0.1 ? "#2dd4bf" : soc > 0.1 ? "#f59e0b" : "#a1a1aa";
           return (
             <div className="rounded-xl border border-card-border bg-card p-5">
-              <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted">
-                Political Lean
-              </h2>
+              <h2 className="mb-4 text-sm font-semibold text-muted">Political lean</h2>
               <div className="grid grid-cols-2 gap-5">
                 {/* Economic axis */}
                 <div className="space-y-3">

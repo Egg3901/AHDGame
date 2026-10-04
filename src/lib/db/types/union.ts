@@ -1,6 +1,6 @@
 import type { ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { CorporationType, MediaDiscriminator } from "@/lib/constants/corporations";
 import type { UnionServiceId } from "@/lib/unions/unionServices";
 
 /**
@@ -46,6 +46,10 @@ export interface Union {
   _id: ObjectId;
   countryId: CountryId;
   sectorType: CorporationType;
+  /** Optional model identity; absent/null keeps legacy and generic unions readable. */
+  industryModel?: string | null;
+  /** Separates the former entertainment lane within canonical media. */
+  mediaDiscriminator?: MediaDiscriminator | null;
   /** Era-appropriate seeded display name (historical where possible, generic fallback). */
   name: string;
   /**

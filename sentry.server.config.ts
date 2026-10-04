@@ -5,6 +5,7 @@
 import * as Sentry from "@sentry/nextjs";
 import { scrubPushRequest } from "@/lib/nativePush/telemetry";
 import { scrubSentryEvent } from "@/lib/observability/scrubSentryEvent";
+import { isNextRenderStreamDisconnect } from "@/lib/observability/sentryFilters";
 
 // RAILWAY_ENVIRONMENT_NAME is injected on all Railway deployments.
 // Disabling locally prevents MongoParseError / MONGODB_URI-missing noise flooding the dashboard.
@@ -20,7 +21,8 @@ Sentry.init({
   // Deploy identifier (full git SHA) injected via next.config.ts. Ties every
   // event to a specific build and matches uploaded source-map artifacts.
   release: process.env.SENTRY_RELEASE,
-  environment: process.env.RAILWAY_ENVIRONMENT_NAME || process.env.NODE_ENV,
+  environment:
+    process.env.SENTRY_ENVIRONMENT || process.env.RAILWAY_ENVIRONMENT_NAME || process.env.NODE_ENV,
 
   // Define how likely traces are sampled. Adjust this value in production, or use tracesSampler for greater control.
   tracesSampleRate: isProduction ? 0.1 : 1,
@@ -47,6 +49,7 @@ Sentry.init({
 
   beforeSend(event) {
     scrubPushRequest(event);
+    if (isNextRenderStreamDisconnect(event)) return null;
     const value = event.exception?.values?.[0];
     const frames = value?.stacktrace?.frames ?? [];
     const hasAppFrame = frames.some((f) => f.in_app === true);

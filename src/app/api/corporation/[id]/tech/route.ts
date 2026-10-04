@@ -13,6 +13,7 @@ import { handleRouteError } from "@/lib/api/errors";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import { getGameState } from "@/lib/gameState";
 import { getAuthUser } from "@/lib/auth";
+import type { Corporation } from "@/lib/db/types";
 import { shouldRedactCorporation } from "@/lib/corporations/redaction";
 import { isSectorTechTreesEnabled } from "@/lib/corporations/techTree/featureFlag";
 import {
@@ -22,7 +23,7 @@ import {
 } from "@/lib/constants/corporations";
 import { calculateCorpStrengthProjection } from "@/lib/corporations/strengthProjection";
 import { getCorpFxRate } from "@/lib/currency/corporationCapital";
-import { SECTOR_STRATEGIES } from "@/lib/constants/sectorStrategies";
+import { SECTOR_STRATEGIES, getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import {
   TECH_DECADES,
   TECH_TREE,
@@ -81,16 +82,21 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const startingYear = gameState?.startingYear ?? STARTING_YEAR;
     const currentYear =
       gameState?.currentYear ?? startingYear + Math.floor((currentTurn - 1) / TURNS_PER_YEAR);
+    const operatingSectorType = getOperatingSectorType(
+      corporation.type,
+      corporation.industryModel
+    ) as Corporation["type"];
 
     const corpView: TechCorpView = {
       type: corporation.type,
+      industryModel: corporation.industryModel,
       unlockedTechNodeIds: corporation.unlockedTechNodeIds,
       techDecadeLane: corporation.techDecadeLane,
     };
     const unlocked = new Set(corporation.unlockedTechNodeIds ?? []);
     const passedDecades = new Set(getPassedDecadeIds(currentYear));
     const strategyNameById = new Map(
-      (SECTOR_STRATEGIES[corporation.type] ?? []).map((s) => [s.id, s.name])
+      (SECTOR_STRATEGIES[operatingSectorType] ?? []).map((s) => [s.id, s.name])
     );
 
     // Daily gross revenue → per-node cash cost. Null when redacted.
@@ -114,7 +120,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
       lane: TechLane
     ) => {
       const isPastDecade = passedDecades.has(decadeId);
-      return getDecadeLaneNodes(corporation.type, decadeId, lane).map((node) => {
+      return getDecadeLaneNodes(operatingSectorType, decadeId, lane).map((node) => {
         const owned = unlocked.has(node.id);
         const cashCost = techNodeCashCost(node, dailyGrossRevenue ?? 0);
         // Past decades have both lanes auto-granted — no lane commitment applies.
@@ -122,7 +128,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
         const prereqIds = getNodePrereqIds(node);
         const prereqMet = prereqIds.length === 0 || prereqIds.some((id) => unlocked.has(id));
         // v3: owning a rival specialization locks this node for the decade.
-        const pathLocked = getExclusiveRivalIds(corporation.type, node).some((id) =>
+        const pathLocked = getExclusiveRivalIds(operatingSectorType, node).some((id) =>
           unlocked.has(id)
         );
         const strategyEffect = node.effects.find((e) => e.kind === "unlockStrategy");
@@ -159,7 +165,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
             prereqMet &&
             (rdScore ?? 0) >= node.cost &&
             (liquidCapital ?? 0) >= cashCost,
-          image: tierImageUrl(lane, corporation.type, decadeId),
+          image: tierImageUrl(lane, operatingSectorType, decadeId),
         };
       });
     };
@@ -184,10 +190,10 @@ export async function GET(_request: Request, { params }: RouteParams) {
 
     // Headline margin = the effective bonus on the corp's PRIMARY sector
     // (Corporate-lane scaled + Sector-lane full), which is the strongest case.
-    const agg = redact ? null : getSectorTechEffects(corpView, corporation.type);
+    const agg = redact ? null : getSectorTechEffects(corpView, operatingSectorType);
 
     // ── Tech overview metrics ──────────────────────────────────────────────
-    const totalNodes = (TECH_TREE[corporation.type] ?? []).length;
+    const totalNodes = (TECH_TREE[operatingSectorType] ?? []).length;
     const techsUnlocked = redact ? 0 : (corporation.unlockedTechNodeIds ?? []).length;
     // Nodes the CEO could unlock right now (affordable across every visible lane).
     const unlockableCount = redact
@@ -230,7 +236,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     };
     let rdDemandFactor: number | null = null;
     if (!redact) {
-      const [sc1, sc2] = SECTOR_RD_COMS[corporation.type] ?? [];
+      const [sc1, sc2] = SECTOR_RD_COMS[operatingSectorType] ?? [];
       const comTypes = Array.from(
         new Set(["software", "consulting_services", sc1, sc2].filter(Boolean) as string[])
       );
@@ -265,8 +271,8 @@ export async function GET(_request: Request, { params }: RouteParams) {
 
     return NextResponse.json({
       enabled: true,
-      sectorType: corporation.type,
-      sectorLabel: CORPORATION_TYPE_LABELS[corporation.type] ?? corporation.type,
+      sectorType: operatingSectorType,
+      sectorLabel: CORPORATION_TYPE_LABELS[operatingSectorType] ?? operatingSectorType,
       currencyCode: corporation.liquidCurrencyCode ?? "USD",
       currentYear,
       currentDecadeId: getDecadeForYear(currentYear).id,

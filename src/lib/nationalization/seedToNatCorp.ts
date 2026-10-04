@@ -3,6 +3,7 @@ import { ObjectId } from "mongodb";
 import type { CorporateSector, UnownedSector } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CorporationType } from "@/lib/constants/corporations";
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import { resolveNationalCorporationForSector } from "./nationalCorporation";
 import { writeCorpEconomicLocal } from "@/lib/currency/corpEconomyFields";
 import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
@@ -15,6 +16,7 @@ import {
   mergeSectorPlantFields,
   readSectorPlantFields,
 } from "@/lib/corporations/sectorTransferCapex";
+import { seedPlantLedger } from "@/lib/corporations/plantLedger";
 
 const DEFAULT_PROFIT_MARGIN = 20;
 const DEFAULT_GROWTH_RATE = 1;
@@ -23,11 +25,20 @@ const DEFAULT_GROWTH_RATE = 1;
  * Load FX rate for a country's currency. Used by {@link incrementNatCorpSectorRevenue}
  * to convert ₳-denominated seed revenue into the natcorp's local currency before
  * persisting — corporateSectors.revenue is stored in liquidCurrencyCode units.
+ *
+ * Country-scoped, not currency-scoped: post-eurozone several countries share
+ * EUR, so a `{ currencyCode }` query can return another country's row (and a
+ * 2027 legacy code matches no row at all, silently falling back to rate 1).
+ * The seeded row carries `countryId`, which is unique per country.
  */
 async function loadFxRateForCountry(
   db: Db,
   countryId: CountryId
 ): Promise<{ code: CurrencyCode | undefined; rate: number }> {
+  const direct = await db.collection<ExchangeRate>("exchangeRates").findOne({ countryId });
+  if (direct && direct.rate > 0) {
+    return { code: direct.currencyCode, rate: direct.rate };
+  }
   const code = COUNTRY_CURRENCY_MAP[countryId];
   if (!code) return { code: undefined, rate: 1 };
   const doc = await db.collection<ExchangeRate>("exchangeRates").findOne({ currencyCode: code });
@@ -44,6 +55,8 @@ export async function incrementNatCorpSectorRevenue(
     countryId: CountryId;
     stateId: string;
     sectorType: CorporationType;
+    industryModel?: CorporateSector["industryModel"];
+    mediaDiscriminator?: CorporateSector["mediaDiscriminator"];
     revenueDelta: number;
   }
 ): Promise<"inc" | "insert" | "noop"> {
@@ -51,7 +64,18 @@ export async function incrementNatCorpSectorRevenue(
   if (revenueDeltaAnchor <= 0) return "noop";
 
   const now = new Date();
-  const corp = await resolveNationalCorporationForSector(db, params.countryId, params.sectorType);
+  const operatingType = getOperatingSectorType(
+    params.sectorType,
+    params.industryModel,
+    params.mediaDiscriminator
+  ) as CorporationType;
+  const corp = await resolveNationalCorporationForSector(
+    db,
+    params.countryId,
+    operatingType,
+    params.industryModel,
+    params.mediaDiscriminator
+  );
 
   // Convert ₳-denominated seed revenue into the natcorp's local currency before
   // persisting. corporateSectors.revenue is stored in liquidCurrencyCode units;
@@ -97,7 +121,9 @@ export async function incrementNatCorpSectorRevenue(
         params.sectorType,
         revenueDeltaAnchor,
         null,
-        await (await import("@/lib/currency/gdpAnchorRate")).loadWorldEraUnitScale(db)
+        await (await import("@/lib/currency/gdpAnchorRate")).loadWorldEraUnitScale(db),
+        params.industryModel,
+        params.mediaDiscriminator
       )
     : 0;
 
@@ -106,6 +132,8 @@ export async function incrementNatCorpSectorRevenue(
     corporationId: corp._id,
     stateId: params.stateId,
     sectorType: params.sectorType,
+    industryModel: params.industryModel ?? null,
+    mediaDiscriminator: params.mediaDiscriminator ?? null,
   });
 
   if (existing) {
@@ -116,7 +144,17 @@ export async function incrementNatCorpSectorRevenue(
           revenue: revenueDeltaLocal,
           ...(capacityUnitsDelta > 0 ? { capitalStock: capacityUnitsDelta } : {}),
         },
-        $set: { updatedAt: now },
+        $set: {
+          ...(capacityUnitsDelta > 0
+            ? seedPlantLedger(
+                params.sectorType,
+                (existing.capitalStock ?? 0) + capacityUnitsDelta,
+                params.industryModel,
+                params.mediaDiscriminator
+              )
+            : {}),
+          updatedAt: now,
+        },
       }
     );
     return "inc";
@@ -128,8 +166,18 @@ export async function incrementNatCorpSectorRevenue(
     countryId: params.countryId,
     stateId: params.stateId,
     sectorType: params.sectorType,
+    ...(params.industryModel ? { industryModel: params.industryModel } : {}),
+    ...(params.mediaDiscriminator ? { mediaDiscriminator: params.mediaDiscriminator } : {}),
     revenue: revenueDeltaLocal,
     ...(capacityUnitsDelta > 0 ? { capitalStock: capacityUnitsDelta } : {}),
+    ...(capacityUnitsDelta > 0
+      ? seedPlantLedger(
+          params.sectorType,
+          capacityUnitsDelta,
+          params.industryModel,
+          params.mediaDiscriminator
+        )
+      : {}),
     workers: 0,
     profitMargin: DEFAULT_PROFIT_MARGIN,
     targetGrowthRate: DEFAULT_GROWTH_RATE,
@@ -144,7 +192,16 @@ export async function incrementNatCorpSectorRevenue(
 /** Move an unowned doc's revenue into the National Corporation and delete the doc. */
 export async function absorbUnownedDocIntoNatCorp(
   db: Db,
-  doc: Pick<UnownedSector, "_id" | "stateId" | "sectorType" | "countryId" | "revenue">,
+  doc: Pick<
+    UnownedSector,
+    | "_id"
+    | "stateId"
+    | "sectorType"
+    | "industryModel"
+    | "mediaDiscriminator"
+    | "countryId"
+    | "revenue"
+  >,
   opts?: { revenueOverride?: number; dryRun?: boolean }
 ): Promise<number> {
   const revenue = Math.round(opts?.revenueOverride ?? doc.revenue ?? 0);
@@ -160,6 +217,8 @@ export async function absorbUnownedDocIntoNatCorp(
       countryId: doc.countryId,
       stateId: doc.stateId,
       sectorType: doc.sectorType as CorporationType,
+      industryModel: doc.industryModel as CorporateSector["industryModel"],
+      mediaDiscriminator: doc.mediaDiscriminator,
       revenueDelta: revenue,
     });
     await db.collection<UnownedSector>("unownedSectors").deleteOne({ _id: doc._id });
@@ -170,7 +229,16 @@ export async function absorbUnownedDocIntoNatCorp(
 /** Apply a revenue multiplier by absorbing the boosted amount into the National Corporation. */
 export async function boostUnownedDocIntoNatCorp(
   db: Db,
-  doc: Pick<UnownedSector, "_id" | "stateId" | "sectorType" | "countryId" | "revenue">,
+  doc: Pick<
+    UnownedSector,
+    | "_id"
+    | "stateId"
+    | "sectorType"
+    | "industryModel"
+    | "mediaDiscriminator"
+    | "countryId"
+    | "revenue"
+  >,
   multiplier: number
 ): Promise<number> {
   const boosted = Math.round((doc.revenue ?? 0) * multiplier);
@@ -182,6 +250,8 @@ export type OwnedSectorMergeInput = Pick<
   | "_id"
   | "stateId"
   | "sectorType"
+  | "industryModel"
+  | "mediaDiscriminator"
   | "countryId"
   | "revenue"
   | "workers"
@@ -221,7 +291,6 @@ export async function absorbOwnedSectorIntoNatCorp(
           projection: {
             capitalStock: 1,
             buildQueue: 1,
-            constructionInProgressAnchor: 1,
             mothballed: 1,
             activeCapacityPercent: 1,
             plantsStartTurn: 1,
@@ -236,8 +305,6 @@ export async function absorbOwnedSectorIntoNatCorp(
       const p = readSectorPlantFields(donorPlant);
       return (
         (typeof p.capitalStock === "number" && p.capitalStock > 0) ||
-        (typeof p.constructionInProgressAnchor === "number" &&
-          p.constructionInProgressAnchor > 0) ||
         (Array.isArray(p.buildQueue) && p.buildQueue.length > 0)
       );
     })();
@@ -249,24 +316,38 @@ export async function absorbOwnedSectorIntoNatCorp(
   if (opts?.dryRun) return Math.max(0, revenue);
 
   const now = new Date();
-  const corp = await resolveNationalCorporationForSector(
-    db,
-    sector.countryId,
-    sector.sectorType as CorporationType
-  );
+  const corp = sector.industryModel
+    ? await resolveNationalCorporationForSector(
+        db,
+        sector.countryId,
+        sector.sectorType as CorporationType,
+        sector.industryModel,
+        sector.mediaDiscriminator
+      )
+    : await resolveNationalCorporationForSector(
+        db,
+        sector.countryId,
+        sector.sectorType as CorporationType,
+        sector.industryModel,
+        sector.mediaDiscriminator
+      );
   const existing = await sectors.findOne({
     corporationId: corp._id,
     stateId: sector.stateId,
     sectorType: sector.sectorType,
+    mediaDiscriminator: sector.mediaDiscriminator ?? null,
+    ...(sector.industryModel !== undefined || sector.sectorType === "manufacturing"
+      ? { industryModel: sector.industryModel ?? null }
+      : {}),
   });
 
   if (existing && !existing._id.equals(sector._id)) {
     // MERGE — the donor row is DELETED immediately below, so anything not
     // folded into the survivor here is destroyed. The revenue/worker/growth
     // legs were folded; the PLANT state was not, so under plants every merged
-    // heal silently burned the donor's capacity and the ₳ sitting in its CIP.
-    // `mergeSectorPlantFields` sums capacity and CIP, concatenates the queues in
-    // landing order, ANDs `mothballed` and keeps the EARLIER ramp anchor —
+    // heal silently burned the donor's capacity and queued build costs.
+    // `mergeSectorPlantFields` sums capacity, concatenates the queues in landing
+    // order, ANDs `mothballed` and keeps the EARLIER ramp anchor.
     // the same fold `ownershipTransition` and `repairDuplicateSectors` use.
     const merged =
       plantsEnabled && donorPlant
@@ -281,12 +362,7 @@ export async function absorbOwnedSectorIntoNatCorp(
           currentGrowthCost: sector.currentGrowthCost ?? 0,
         },
         $set: {
-          ...(merged
-            ? {
-                ...merged,
-                constructionInProgressAnchor: Math.round(merged.constructionInProgressAnchor),
-              }
-            : {}),
+          ...(merged ? { ...merged } : {}),
           updatedAt: now,
         },
       }

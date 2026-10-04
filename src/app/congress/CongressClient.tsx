@@ -168,9 +168,7 @@ function ContractsTab({ countryId }: { countryId: string }) {
 
       {offers.length > 0 && (
         <div className="mb-6">
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted">
-            Pending offers
-          </h3>
+          <h3 className="mb-2 text-sm font-semibold text-muted">Pending offers</h3>
           <div className="space-y-2">
             {offers.map((c) => (
               <div
@@ -509,7 +507,7 @@ export function USCongressPage({ countryId }: { countryId: CountryId }) {
             <div className="absolute inset-0 flex flex-col justify-between px-5 sm:px-6 py-4 sm:py-5">
               {/* Top: chamber switcher */}
               <div
-                className="flex rounded-lg overflow-hidden w-fit border border-white/30 backdrop-blur-sm"
+                className="flex rounded-lg overflow-hidden w-fit border border-white/30 bg-black/60"
                 role="tablist"
                 aria-label="Chamber"
               >

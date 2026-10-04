@@ -37,7 +37,7 @@ export default async function CurrencyCentralBankLayout({ params, children }: Pr
         {!access.enabledForPlayers && (
           <div className="bg-warning/10 border-b border-warning/30 px-4 py-2 text-center text-sm text-warning">
             {access.econOnly
-              ? "Econ-only nation - players can view every page here, but cannot act."
+              ? "Econ-only nation. Players can view every page here, but cannot act."
               : "This country is not registered. Only admins can see this."}
           </div>
         )}

@@ -19,6 +19,8 @@ export interface ResultsElectionMeta {
   startTurn: number | null;
   endTurn: number | null;
   totalSeats: number;
+  /** When votes represent a modeled indirect ballot rather than the public. */
+  ballotLabel?: string;
   /** President only: EV majority threshold (floor(totalEv/2)+1). */
   evNeeded?: number;
   /** President only: total electoral votes in play. */

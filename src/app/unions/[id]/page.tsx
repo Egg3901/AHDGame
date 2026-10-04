@@ -464,7 +464,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
             <div className="flex items-center justify-between gap-2">
               <BackButton iconOnly fallbackLabel="All unions" fallbackHref="/unions" />
               {isLeader && (
-                <span className="rounded-full border border-white/30 bg-white/20 px-3 py-1 text-xs font-bold text-white backdrop-blur-sm">
+                <span className="rounded-full border border-white/30 bg-black/60 px-3 py-1 text-xs font-bold text-white">
                   You lead this union
                 </span>
               )}
@@ -608,8 +608,8 @@ export default function UnionDashboardPage({ params }: PageProps) {
       ) : (
         <section className="space-y-4 rounded-xl border border-card-border bg-card p-5">
           <div className="flex items-center gap-3">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">Organize</h2>
-            <div className="h-px flex-1 bg-gradient-to-r from-card-border to-transparent" />
+            <h2 className="text-sm font-semibold text-muted">Organize</h2>
+            <div className="h-px flex-1 bg-card-border" />
           </div>
 
           <p className="text-sm text-muted">
@@ -664,10 +664,8 @@ export default function UnionDashboardPage({ params }: PageProps) {
           only the head can move them. */}
       <section className="space-y-5 rounded-xl border border-card-border bg-card p-5">
         <div className="flex items-center gap-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">
-            Dues, Services &amp; Politics
-          </h2>
-          <div className="h-px flex-1 bg-gradient-to-r from-card-border to-transparent" />
+          <h2 className="text-sm font-semibold text-muted">Dues, services &amp; politics</h2>
+          <div className="h-px flex-1 bg-card-border" />
         </div>
         <UnionDuesPanel
           unionId={id}
@@ -756,10 +754,8 @@ export default function UnionDashboardPage({ params }: PageProps) {
       {isLeader && (
         <section className="space-y-4 rounded-xl border border-card-border bg-card p-5">
           <div className="flex items-center gap-3">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">
-              Leader Actions
-            </h2>
-            <div className="h-px flex-1 bg-gradient-to-r from-card-border to-transparent" />
+            <h2 className="text-sm font-semibold text-muted">Leader actions</h2>
+            <div className="h-px flex-1 bg-card-border" />
           </div>
 
           {/* The recruitment drive that used to live here is retired. It only
@@ -1205,9 +1201,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
               {actionableBills.length > 0 && (
                 <div className="overflow-hidden rounded-xl border border-card-border bg-card">
                   <div className="border-b border-card-border bg-card-elevated px-4 py-3">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">
-                      Active national bills
-                    </h3>
+                    <h3 className="text-sm font-semibold text-muted">Active national bills</h3>
                   </div>
                   <ul className="divide-y divide-card-border">
                     {actionableBills.map((bill) => (
@@ -1277,9 +1271,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
               {historicalEndorsements.length > 0 && (
                 <div className="overflow-hidden rounded-xl border border-card-border bg-card">
                   <div className="border-b border-card-border bg-card-elevated px-4 py-3">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">
-                      Past stances
-                    </h3>
+                    <h3 className="text-sm font-semibold text-muted">Past stances</h3>
                   </div>
                   <ul className="divide-y divide-card-border">
                     {historicalEndorsements.map((endorsement) => (
@@ -1395,10 +1387,8 @@ function UndergroundOrganizePanel({
   return (
     <section className="space-y-4 rounded-xl border border-card-border bg-card p-5">
       <div className="flex items-center gap-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">
-          Organize underground
-        </h2>
-        <div className="h-px flex-1 bg-gradient-to-r from-card-border to-transparent" />
+        <h2 className="text-sm font-semibold text-muted">Organize underground</h2>
+        <div className="h-px flex-1 bg-card-border" />
       </div>
 
       <p className="text-sm text-muted">

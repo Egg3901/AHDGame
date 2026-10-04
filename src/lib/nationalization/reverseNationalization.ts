@@ -4,6 +4,7 @@ import type { Corporation, CorporateSector } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import { isStateOwned } from "./nationalCorporation";
 import { privatizeAsset } from "./privatizeAsset";
+import { seedPlantLedger } from "@/lib/corporations/plantLedger";
 
 export interface ReverseNationalizationParams {
   countryId: string;
@@ -93,7 +94,15 @@ export async function reverseNationalizationTaking(
               corporationId: priorOwner._id,
               ...(typeof prov.formerRevenue === "number" ? { revenue: prov.formerRevenue } : {}),
               ...(typeof prov.formerCapitalStock === "number"
-                ? { capitalStock: prov.formerCapitalStock }
+                ? {
+                    capitalStock: prov.formerCapitalStock,
+                    ...seedPlantLedger(
+                      sector.sectorType,
+                      prov.formerCapitalStock,
+                      sector.industryModel,
+                      sector.mediaDiscriminator
+                    ),
+                  }
                 : {}),
               updatedAt: now,
             },

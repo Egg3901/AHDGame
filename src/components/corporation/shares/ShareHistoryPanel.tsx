@@ -44,7 +44,8 @@ const KIND_BADGE_CLASS: Record<ShareHistoryEntry["kind"], string> = {
   reverse_split: "bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/30",
 };
 
-function fmtAnchor(n: number): string {
+function fmtAnchor(n: number | null): string {
+  if (n === null || !Number.isFinite(n)) return "Unavailable";
   return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
@@ -86,7 +87,7 @@ function StructureChangeDetail({ entry }: { entry: ShareHistoryEntry }) {
     <div className="mt-3 grid gap-4 rounded-md border border-card-border/50 bg-card-elevated/40 p-3 md:grid-cols-2">
       <div>
         <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">
-          Before — {sc.oldTotalShares.toLocaleString("en-US")} shares
+          Before: {sc.oldTotalShares.toLocaleString("en-US")} shares
           {ccy && ` @ ${sc.oldSharePriceLocal.toLocaleString("en-US")} ${ccy}`}
         </p>
         <table className="w-full border-collapse">
@@ -99,7 +100,7 @@ function StructureChangeDetail({ entry }: { entry: ShareHistoryEntry }) {
       </div>
       <div>
         <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">
-          After — {sc.newTotalShares.toLocaleString("en-US")} shares
+          After: {sc.newTotalShares.toLocaleString("en-US")} shares
           {ccy && ` @ ${sc.newSharePriceLocal.toLocaleString("en-US")} ${ccy}`}
         </p>
         <table className="w-full border-collapse">
@@ -148,22 +149,22 @@ export default function ShareHistoryPanel({ corpId }: ShareHistoryPanelProps) {
   const rangeEnd = Math.min(page * PAGE_SIZE, total);
 
   return (
-    <div className="rounded-lg border border-card-border bg-card p-6">
-      <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-lg font-semibold">Share History</h3>
+    <section className="min-w-0">
+      <div className="mb-1 flex min-h-8 items-center justify-between gap-3 border-b border-card-border pb-1.5">
+        <h2 className="text-sm font-semibold text-foreground">Share history</h2>
         {loading ? (
           <Skeleton className="h-4 w-44" />
         ) : (
           <p className="text-xs text-muted">
             {total === 0
               ? "No share activity yet."
-              : `Showing ${rangeStart.toLocaleString("en-US")}–${rangeEnd.toLocaleString("en-US")} of ${total.toLocaleString("en-US")}`}
+              : `${rangeStart.toLocaleString("en-US")} to ${rangeEnd.toLocaleString("en-US")} of ${total.toLocaleString("en-US")}`}
           </p>
         )}
       </div>
 
       {error && (
-        <div className="mb-4 rounded-md border border-error/30 bg-error/10 p-3 text-sm text-error">
+        <div role="alert" className="py-2 text-xs text-error">
           {error}
         </div>
       )}
@@ -177,7 +178,7 @@ export default function ShareHistoryPanel({ corpId }: ShareHistoryPanelProps) {
       )}
 
       {!loading && entries.length === 0 && !error && (
-        <div className="rounded-md border border-dashed border-card-border p-8 text-center text-sm text-muted">
+        <div className="py-2 text-xs text-muted">
           No share movements recorded yet. Issuances, buys, sells, fills, and corrections will
           appear here once they occur.
         </div>
@@ -187,7 +188,7 @@ export default function ShareHistoryPanel({ corpId }: ShareHistoryPanelProps) {
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm">
             <thead>
-              <tr className="border-b border-card-border text-left text-xs uppercase text-muted">
+              <tr className="border-b border-card-border text-left text-[11px] text-muted">
                 <th className="py-2 pr-3 font-medium">Date</th>
                 <th className="py-2 pr-3 font-medium">Event</th>
                 <th className="py-2 pr-3 font-medium">From</th>
@@ -245,10 +246,10 @@ export default function ShareHistoryPanel({ corpId }: ShareHistoryPanelProps) {
                           : e.shares.toLocaleString("en-US")}
                       </td>
                       <td className="py-2 pr-3 text-right font-mono text-muted">
-                        {isStructureChange ? "—" : fmtAnchor(e.pricePerShareAnchor)}
+                        {isStructureChange ? "" : fmtAnchor(e.pricePerShareAnchor)}
                       </td>
                       <td className="py-2 text-right font-mono">
-                        {isStructureChange ? "—" : fmtAnchor(e.totalAnchor)}
+                        {isStructureChange ? "" : fmtAnchor(e.totalAnchor)}
                       </td>
                     </tr>
                     {isStructureChange && e.structureChange && (
@@ -289,6 +290,6 @@ export default function ShareHistoryPanel({ corpId }: ShareHistoryPanelProps) {
           </button>
         </div>
       )}
-    </div>
+    </section>
   );
 }

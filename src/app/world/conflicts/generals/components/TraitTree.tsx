@@ -276,7 +276,7 @@ function TraitDetail({
         </div>
         <div
           style={{
-            fontFamily: MIL_FONT.serif,
+            fontFamily: MIL_FONT.heading,
             fontSize: 17,
             fontWeight: 700,
             color: MIL_COLOR.textStrong,

@@ -1,5 +1,6 @@
-import type { ObjectId } from "mongodb";
+import type { Filter, ObjectId } from "mongodb";
 import type { CorporationType } from "@/lib/constants/corporations";
+import type { MediaDiscriminator } from "@/lib/constants/corporations";
 import type { Corporation, CorporateSector, SectorBuildOrder } from "@/lib/db/types";
 import type { CeoArchetypeModifiers } from "@/lib/turn/ceoArchetype";
 import type { NppStrategyState } from "./corpStrategy";
@@ -77,14 +78,17 @@ export interface NppCorpDecision {
   liquidCapitalDelta: number;
   /** Local-currency cash floor that later NPP operator passes must preserve. */
   cashFloorLocal: number;
+  /** Exact total founding charge, separate from any reinvestment or borrowed cash. */
+  foundingCashLocal?: number;
   sectorUpdates: Array<{
-    filter: { _id: ObjectId };
+    filter: Filter<CorporateSector> & { _id: ObjectId };
     update: NppSectorUpdateDoc;
   }>;
   newSectors?: Array<{
     stateId: string;
     countryId: string;
     sectorType: CorporationType;
+    mediaDiscriminator?: MediaDiscriminator | null;
     revenue: number;
     profitMargin: number;
     strategyId?: string;
@@ -94,6 +98,7 @@ export interface NppCorpDecision {
   unownedDraws?: Array<{
     stateId: string;
     sectorType: CorporationType;
+    mediaDiscriminator?: MediaDiscriminator | null;
     units: number;
     countryId: string;
   }>;
@@ -101,10 +106,22 @@ export interface NppCorpDecision {
   reinvestments?: Array<{
     sectorId: ObjectId;
     sectorType: CorporationType;
+    mediaDiscriminator?: MediaDiscriminator | null;
     units: number;
     costAnchor: number;
     costLocal: number;
     onlineTurn: number;
+  }>;
+  /** Cash-ineligible private-sector reinvestment candidates for optional bank finance. */
+  constructionFinanceIntents?: Array<{
+    sector: CorporateSector;
+    order: SectorBuildOrder;
+    costLocal: number;
+    cashContributionLimitLocal: number;
+    /** New-market portion of this order; replacements do not consume unowned headroom. */
+    growthUnits: number;
+    priority: number;
+    fill: number;
   }>;
   shortageCreditRequest?: {
     amountLocal: number;
@@ -133,6 +150,8 @@ export interface NppPlantsContext {
   nationalShareOf?: (
     corporationId: ObjectId,
     countryId: string,
-    sectorType: CorporationType
+    sectorType: CorporationType,
+    industryModel?: string | null,
+    mediaDiscriminator?: MediaDiscriminator | null
   ) => number;
 }

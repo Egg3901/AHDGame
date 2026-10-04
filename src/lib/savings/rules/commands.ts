@@ -40,6 +40,12 @@ export interface HolderSnapshot {
   holder: SavingsHolder;
   /** Cash the holder has available to pay out (a bank's vault). Ignored for the central bank. */
   cash: number;
+  /**
+   * What a central-bank holder can pay out right now: the household pool its
+   * savings payouts are debited from (`externalBroadMoney`). Absent when not
+   * loaded, in which case the rules leave the check to the guarded debit.
+   */
+  payoutCapacity?: number;
   /** Whether the holder may accept new player deposits right now. */
   acceptsDeposits: boolean;
   /** Player deposits the holder already carries, for the ceiling check. */
@@ -123,6 +129,27 @@ function holderCashTarget(
     collection: "corporations",
     filter: { _id: oid(holder), "bankCharter.status": "active" },
     path: "bankCharter.cashReserves",
+  };
+}
+
+/**
+ * Refusal when a central-bank holder's household pool cannot cover a payout.
+ * Without it an oversized withdrawal reached the guarded debit and failed with
+ * a raw ledger message (ticket 1364).
+ */
+function centralBankPayoutRefusal(
+  holder: HolderSnapshot,
+  amount: number,
+  currency: string
+): { code: "holder_cannot_pay"; available: number; message: string } | null {
+  if (isBankHolder(holder.holder) || holder.payoutCapacity === undefined) return null;
+  const available = Math.max(0, holder.payoutCapacity);
+  if (amount <= available + 1e-9) return null;
+  const formatted = Math.floor(available).toLocaleString("en-US");
+  return {
+    code: "holder_cannot_pay",
+    available,
+    message: `The central bank can pay out at most ${formatted} ${currency} from savings right now. Withdraw up to that and the rest later.`,
   };
 }
 
@@ -361,6 +388,13 @@ export function decideSavingsCommand(
           "The bank cannot cover that withdrawal from its cash right now. Withdraw less, or move your savings to the central bank."
         );
       }
+      const centralBankShort = centralBankPayoutRefusal(command.holder, amount, account.currency);
+      if (centralBankShort) {
+        return refuse(
+          { code: centralBankShort.code, available: centralBankShort.available },
+          centralBankShort.message
+        );
+      }
       const next = { ...account, balance: account.balance - amount, version: account.version + 1 };
       const source = holderCashTarget(account.holder, ctx.centralBankId);
       return {
@@ -436,6 +470,13 @@ export function decideSavingsCommand(
         return refuse(
           { code: "holder_cannot_pay", available: Math.max(0, command.from.cash) },
           "The bank cannot release your savings from its cash right now."
+        );
+      }
+      const centralBankShort = centralBankPayoutRefusal(command.from, amount, account.currency);
+      if (centralBankShort) {
+        return refuse(
+          { code: centralBankShort.code, available: centralBankShort.available },
+          "The central bank cannot release that much of your savings right now. Withdraw part of it first, then move the rest."
         );
       }
       const next = { ...account, holder: command.to.holder, version: account.version + 1 };

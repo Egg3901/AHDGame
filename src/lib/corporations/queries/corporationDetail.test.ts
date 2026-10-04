@@ -119,6 +119,47 @@ describe("loadCorporationDetailView", () => {
     expect(result.balanceSheet.assets.cashOnHand).toBe(corporation.liquidCapital);
   });
 
+  it("labels a modelled vehicle corporation while preserving its manufacturing identity", async () => {
+    const ceo = makeCharacter({
+      _id: new ObjectId(),
+      userId: new ObjectId(),
+      name: "Vehicle CEO",
+      sequentialId: 44,
+    });
+    const corporation = makeCorporation({
+      _id: new ObjectId(),
+      ceoId: ceo._id,
+      userId: ceo.userId,
+      type: "manufacturing",
+      industryModel: "vehicles",
+      countryId: "US",
+      headquartersState: "CA",
+      liquidCurrencyCode: "USD",
+      shareholders: [],
+      publicFloat: 0,
+    });
+    db.collectionMocks["characters"]!.findOne.mockResolvedValue(ceo);
+    db.collectionMocks["corporateSectors"]!.find.mockReturnValue({
+      toArray: () => Promise.resolve([]),
+    } as never);
+    db.collectionMocks["bonds"]!.find.mockReturnValue({
+      toArray: () => Promise.resolve([]),
+    } as never);
+    db.collectionMocks["corporationHistory"]!.findOne.mockResolvedValue({ income: 0 });
+
+    const { loadCorporationDetailView } = await import("./corporationDetail");
+    const result = await loadCorporationDetailView({
+      db: db as unknown as Db,
+      corporation,
+      currentTurn: 10,
+      viewerUserId: null,
+    });
+
+    expect(result.corporation.type).toBe("manufacturing");
+    expect(result.corporation.industryModel).toBe("vehicles");
+    expect(result.corporation.typeLabel).toBe("Vehicle manufacturing");
+  });
+
   it("includes active bank equity in the balance sheet", async () => {
     const ceo = makeCharacter({
       _id: new ObjectId(),
@@ -526,7 +567,11 @@ describe("loadCorporationDetailView", () => {
 describe("loadCorporationDetailView — plants-tier physicals", () => {
   let pdb: MockDb;
 
-  function sectorDoc(corporationId: ObjectId, partial: Record<string, unknown> = {}) {
+  function sectorDoc(
+    corporationId: ObjectId,
+    partial: Record<string, unknown> = {},
+    storedCip = 250_000
+  ) {
     return {
       _id: new ObjectId(),
       corporationId,
@@ -544,14 +589,14 @@ describe("loadCorporationDetailView — plants-tier physicals", () => {
       capitalStock: 5_000,
       producedUnits: 4_000,
       soldUnits: 1_200,
-      constructionInProgressAnchor: 250_000,
+      constructionInProgressAnchor: storedCip,
       mothballed: true,
       buildQueue: [{ unitsOrdered: 800, costPaidAnchor: 250_000, startTurn: 4, onlineTurn: 52 }],
       ...partial,
     };
   }
 
-  async function load(marketSystemMode: string | undefined) {
+  async function load(marketSystemMode: string | undefined, storedCip = 250_000) {
     pdb = createMockDb();
     vi.clearAllMocks();
     for (const name of [
@@ -579,7 +624,7 @@ describe("loadCorporationDetailView — plants-tier physicals", () => {
     pdb.collectionMocks["gameConfig"]!.findOne.mockResolvedValue(
       marketSystemMode ? { _id: "default", marketSystemMode } : null
     );
-    const sectors = [sectorDoc(corporation._id)];
+    const sectors = [sectorDoc(corporation._id, {}, storedCip)];
     pdb.collectionMocks["corporateSectors"]!.find.mockReturnValue({
       toArray: () => Promise.resolve(sectors),
     } as never);
@@ -623,6 +668,12 @@ describe("loadCorporationDetailView — plants-tier physicals", () => {
       nextOnlineTurn: 52,
       turnsRemaining: 12,
     });
+  });
+
+  it("derives displayed CIP from the loaded queue", async () => {
+    const result = await load("plants", 9_000_000);
+    expect(result.sectors[0]?.constructionInProgressAnchor).toBe(250_000);
+    expect(result.corporation.physical?.constructionInProgressAnchor).toBe(250_000);
   });
 
   it("rolls the physicals up to corp level, with fill as a ratio of totals", async () => {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { Button, Input, useDialogA11y } from "@/components/ui";
 import { WarningBandBadge } from "@/components/banking/WarningBandBadge";
 import { formatBankMoney, formatRatePercent } from "@/components/banking/formatBankMoney";
@@ -16,6 +17,7 @@ import {
 } from "@/lib/banking/lendingMath";
 import type { BankCharterType } from "@/lib/db/types/bank";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import { quoteLoanOrigination } from "@/lib/banking/rules/loanFees";
 
 export type PrivateLoanBank = {
   corporationId: string;
@@ -82,6 +84,7 @@ export function PrivateLoanModal({
   onChanged,
   showToast,
 }: PrivateLoanModalProps) {
+  const feeText = useTranslations("corporations.loanFees");
   const { dialogProps, titleId } = useDialogA11y(onClose);
   const [bankId, setBankId] = useState(
     initialBankId && banks.some((bank) => bank.corporationId === initialBankId)
@@ -168,6 +171,9 @@ export function PrivateLoanModal({
         ? "deposit headroom"
         : `income at ${Math.round(NAMED_LOAN_DTI_MAX_FRACTION * 100)}% of demonstrated per-turn income, after existing payments`;
   const principalNumber = Number(principal);
+  const feeQuote = selectedBank
+    ? quoteLoanOrigination(principalNumber, selectedBank.currency)
+    : null;
   const paymentPreview =
     Number.isFinite(principalNumber) && principalNumber > 0 && validTerm
       ? namedLoanPaymentDue(principalNumber, quotedRatePercent, term)
@@ -243,7 +249,7 @@ export function PrivateLoanModal({
         return;
       }
 
-      const amountLabel = formatBankMoney(principalNumber, selectedBank.currency);
+      const amountLabel = formatBankMoney(feeQuote?.proceeds ?? 0, selectedBank.currency);
       if (json.pending) {
         showToast("Loan request submitted for approval. No funds have moved yet.", "info");
       } else if (json.creditedTo?.destination === "corporationLiquidCapital") {
@@ -474,6 +480,23 @@ export function PrivateLoanModal({
           )}
 
           <div className="rounded-lg border border-card-border bg-background/45 px-3 py-2.5 text-xs">
+            {selectedBank && feeQuote && principalNumber > 0 && (
+              <div className="mb-2 space-y-1">
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted">{feeText("fee")}</span>
+                  <span className="font-mono">
+                    {formatBankMoney(feeQuote.originationFee, selectedBank.currency)}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted">{feeText("proceeds")}</span>
+                  <span className="font-mono">
+                    {formatBankMoney(feeQuote.proceeds, selectedBank.currency)}
+                  </span>
+                </div>
+                <p className="text-muted">{feeText("explanation")}</p>
+              </div>
+            )}
             <div className="flex justify-between gap-3">
               <span className="text-muted">Estimated payment per turn</span>
               <span className="font-mono font-semibold tabular-nums text-foreground">

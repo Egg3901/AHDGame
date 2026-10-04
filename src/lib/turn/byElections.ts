@@ -50,6 +50,23 @@ export const SPECIAL_GOVERNOR_GENERAL_TURNS = 24;
 export const BY_ELECTION_RETRY_COOLDOWN_TURNS = 48;
 
 /**
+ * Does a live regular race for the seat make a by-election redundant? Only
+ * when it resolves before a by-election spawned now could. Perpetual regular
+ * races sit `active` for their whole term, so "a regular race is live" holds
+ * almost every turn; gating on that alone suppressed every by-election and
+ * left vacated seats empty until the next general. A race with no numeric
+ * `endTurn` keeps the old conservative answer.
+ */
+export function regularRaceFillsSeatFirst(
+  race: Pick<Election, "endTurn">,
+  currentTurn: number,
+  byElectionTurns: number
+): boolean {
+  if (typeof race.endTurn !== "number") return true;
+  return race.endTurn <= currentTurn + byElectionTurns;
+}
+
+/**
  * Countries whose regional chief executive is watched for mid-term vacancies.
  * Status-gated countries (RU) are additionally checked for beta/active at
  * runtime so a coming-soon world never spawns specials.
@@ -142,15 +159,29 @@ export async function processByElectionWatcher(
     ];
 
     for (const state of vacantStates) {
-      // Suppress if a regular governor race is already live — the seat fills on
-      // schedule and a by-election would race it.
-      const liveRegular = await elections.findOne({
-        ...scope,
-        state,
-        electionType: "governor",
-        status: { $in: ["active", "upcoming"] },
-      });
-      if (liveRegular) continue;
+      // Suppress only if the live regular race resolves before a by-election
+      // could: the seat fills on schedule and a by-election would race it. A
+      // regular race further out than that leaves the seat empty for most of
+      // a term, so the by-election runs and its winner serves until then.
+      const liveRegular = await elections.findOne(
+        {
+          ...scope,
+          state,
+          electionType: "governor",
+          status: { $in: ["active", "upcoming"] },
+        },
+        { sort: { endTurn: 1 } }
+      );
+      if (
+        liveRegular &&
+        regularRaceFillsSeatFirst(
+          liveRegular,
+          currentTurn,
+          SPECIAL_GOVERNOR_FILING_TURNS + SPECIAL_GOVERNOR_GENERAL_TURNS
+        )
+      ) {
+        continue;
+      }
 
       // Suppress if a special is live, or one resolved within the cooldown (an
       // uncontested by-election leaves the seat vacant — don't re-spawn every turn).

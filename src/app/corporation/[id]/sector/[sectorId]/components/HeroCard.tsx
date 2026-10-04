@@ -68,7 +68,7 @@ export default function HeroCard({
       <p className="text-muted">{hiddenCopy.body}</p>
     </InfoTooltip>
   ) : (
-    "—"
+    "n/a"
   );
   const { formatAmount, toInternalFrom } = useCurrency();
   const liquidCode = (corporation.liquidCurrencyCode as CurrencyCode | undefined) ?? undefined;
@@ -108,7 +108,8 @@ export default function HeroCard({
                 className="inline-flex items-center rounded-full border border-success/40 bg-success/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-success"
                 title={`Asking price: ${fmtAnchor(sector.forSale.priceAnchor)}`}
               >
-                For Sale · {fmtAnchor(sector.forSale.priceAnchor)}
+                {sector.forSale.foreclosed ? "Foreclosure Sale" : "For Sale"} ·{" "}
+                {fmtAnchor(sector.forSale.priceAnchor)}
               </span>
             )}
           </div>

@@ -25,16 +25,35 @@ const NO_COUNTS = {
 } as const;
 
 /**
- * Player-facing reason a merge cannot proceed: the target operates a live bank
- * while the acquirer already holds a charter. A corporation carries a single
- * `bankCharter` sub-document, so there is nowhere to put the second bank.
- * Shared by the pre-money-move guards so every merge path reports the same
- * message. Returns null when there is no conflict.
+ * Player-facing reason a merge cannot proceed: funded sovereign cash is still
+ * unsettled, or the target operates a live bank while the acquirer already
+ * holds a charter. A corporation carries one `bankCharter` subdocument, so
+ * there is nowhere to put a second bank. Shared by pre-money-move guards so
+ * every merge path reports the same message. Returns null when clear.
  */
 export function bankTransferConflict(
-  target: Pick<Corporation, "name" | "bankCharter">,
+  target: Pick<
+    Corporation,
+    | "name"
+    | "bankCharter"
+    | "bankSovereignEscrows"
+    | "bankPropForexFee"
+    | "bankConstructionFunding"
+    | "bankPrimaryFunding"
+    | "bankUnderwritingFunding"
+  >,
   acquirer: Pick<Corporation, "name" | "bankCharter">
 ): string | null {
+  if (target.bankPrimaryFunding)
+    return `Cannot merge ${target.name} while sovereign primary funding is settling.`;
+  if (target.bankConstructionFunding)
+    return `Cannot merge ${target.name} while construction funding or deposit return is settling.`;
+  if (target.bankUnderwritingFunding)
+    return `Cannot merge ${target.name} while a funded underwriting placement is settling.`;
+  if (target.bankPropForexFee) return `Cannot merge ${target.name} while a forex fee is settling.`;
+  if (hasFundedSovereignEscrow(target)) {
+    return `Cannot merge ${target.name} while funded sovereign bank payments remain unsettled.`;
+  }
   if (target.bankCharter?.status === "active" && acquirer.bankCharter) {
     return (
       `Cannot merge ${target.name}: ${acquirer.name} already operates a bank. ` +
@@ -42,6 +61,14 @@ export function bankTransferConflict(
     );
   }
   return null;
+}
+
+export function hasFundedSovereignEscrow(
+  corporation: Pick<Corporation, "bankSovereignEscrows">
+): boolean {
+  return Object.values(corporation.bankSovereignEscrows ?? {}).some(
+    (escrow) => !Number.isFinite(escrow.amountLocal) || escrow.amountLocal !== 0
+  );
 }
 
 function sameId(a: ObjectId, b: ObjectId): boolean {
@@ -314,7 +341,18 @@ export async function transferBankCharterToAcquirer(
   const [target, acquirer] = await Promise.all([
     corps.findOne(
       { _id: targetId },
-      { projection: { name: 1, bankCharter: 1, bankCharterTransfer: 1 } }
+      {
+        projection: {
+          name: 1,
+          bankCharter: 1,
+          bankSovereignEscrows: 1,
+          bankPropForexFee: 1,
+          bankConstructionFunding: 1,
+          bankPrimaryFunding: 1,
+          bankUnderwritingFunding: 1,
+          bankCharterTransfer: 1,
+        },
+      }
     ),
     corps.findOne(
       { _id: acquirerId },
@@ -322,6 +360,20 @@ export async function transferBankCharterToAcquirer(
     ),
   ]);
   if (!target) return { ok: false, error: "Target corporation no longer exists" };
+  if (target.bankPrimaryFunding)
+    return {
+      ok: false,
+      error: "Sovereign primary funding must settle before transferring the charter",
+    };
+  if (target.bankConstructionFunding)
+    return {
+      ok: false,
+      error: "Construction funding or deposit return must settle before a charter transfer",
+    };
+  if (target.bankPropForexFee)
+    return { ok: false, error: "Forex fee settlement must finish before a charter transfer" };
+  if (target.bankUnderwritingFunding)
+    return { ok: false, error: "Underwriting settlement must finish before a charter transfer" };
   if (!acquirer) return { ok: false, error: "Acquiring corporation no longer exists" };
 
   const charter = target.bankCharter ?? null;
@@ -436,7 +488,13 @@ export async function transferBankCharterToAcquirer(
   let owned: string | null = null;
   let pendingOrphans: CharterTransferOrphan[] = [];
   const stamp = await corps.updateOne(
-    { _id: targetId, bankCharterTransfer: { $exists: false } },
+    {
+      _id: targetId,
+      bankCharterTransfer: { $exists: false },
+      bankConstructionFunding: { $exists: false },
+      bankPrimaryFunding: { $exists: false },
+      bankUnderwritingFunding: { $exists: false },
+    },
     { $set: { bankCharterTransfer: stampPlan, updatedAt: now } }
   );
   if (stamp.modifiedCount === 1) {
@@ -481,6 +539,9 @@ export async function transferBankCharterToAcquirer(
       const takeOver = await corps.updateOne(
         {
           _id: targetId,
+          bankConstructionFunding: { $exists: false },
+          bankPrimaryFunding: { $exists: false },
+          bankUnderwritingFunding: { $exists: false },
           ...identityFilter(charter),
           "bankCharterTransfer.attemptId": curPlan.attemptId,
         },
@@ -509,6 +570,9 @@ export async function transferBankCharterToAcquirer(
       const adopt = await corps.updateOne(
         {
           _id: targetId,
+          bankConstructionFunding: { $exists: false },
+          bankPrimaryFunding: { $exists: false },
+          bankUnderwritingFunding: { $exists: false },
           ...identityFilter(charter),
           ...(isOwnedPlan(curRaw)
             ? { "bankCharterTransfer.attemptId": curRaw.attemptId }
@@ -524,7 +588,13 @@ export async function transferBankCharterToAcquirer(
       // Plan vanished under us (winner completed and cleared, or a rollback);
       // one restamp decides it.
       const restamp = await corps.updateOne(
-        { _id: targetId, bankCharterTransfer: { $exists: false } },
+        {
+          _id: targetId,
+          bankCharterTransfer: { $exists: false },
+          bankConstructionFunding: { $exists: false },
+          bankPrimaryFunding: { $exists: false },
+          bankUnderwritingFunding: { $exists: false },
+        },
         { $set: { bankCharterTransfer: stampPlan, updatedAt: now } }
       );
       if (restamp.modifiedCount === 1) owned = attemptId;

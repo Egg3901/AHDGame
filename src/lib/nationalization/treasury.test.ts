@@ -4,7 +4,8 @@ import { ObjectId } from "mongodb";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
-vi.mock("@/lib/currency/govBudgetFields", () => ({
+vi.mock("@/lib/currency/govBudgetFields", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/currency/govBudgetFields")>()),
   // Identity at rate 1 — tests pass an empty FX map (rate defaults to 1).
   // The anchor-aware credit passes a real rate, so honour it when present.
   writeGovBudgetLocal: vi.fn((v: number, _code: string, rate?: number) =>
@@ -87,6 +88,46 @@ describe("coverSoeOperatingLoss", () => {
   });
 });
 
+describe("2027 EUR treasury denomination", () => {
+  it("converts compensation, SOE loss cover and capex grants using the persisted budget currency", async () => {
+    db.collectionMocks.federalBudget.findOne.mockResolvedValue({
+      countryId: "FR",
+      currencyCode: "EUR",
+    });
+    const { debitTreasuryCompensation, coverSoeOperatingLoss, debitTreasurySoeCapex } =
+      await import("./treasury");
+    const rates = new Map<CurrencyCode, number>([
+      ["EUR", 1.2],
+      ["FRF", 6],
+    ]);
+
+    expect(await debitTreasuryCompensation(db as unknown as Db, "FR", 100, rates, now)).toBe(120);
+    expect(await coverSoeOperatingLoss(db as unknown as Db, "FR", 50, rates, now)).toBe(60);
+    expect(await debitTreasurySoeCapex(db as unknown as Db, "FR", 25, rates, now)).toBe(30);
+    expect(
+      db.collectionMocks.federalBudget.updateOne.mock.calls.map(
+        (call) => call[1].$inc.treasuryBalance
+      )
+    ).toEqual([-120, -60, -30]);
+  });
+
+  it("credits cross-border anchor proceeds in the receiving treasury's EUR", async () => {
+    db.collectionMocks.federalBudget.findOne.mockResolvedValue({
+      countryId: "FR",
+      currencyCode: "EUR",
+    });
+    const { getCurrencyFxRate } = await import("@/lib/currency/corporationCapital");
+    vi.mocked(getCurrencyFxRate).mockResolvedValue(1.2);
+    const { creditTreasuryProceedsFromAnchor } = await import("./treasury");
+
+    expect(await creditTreasuryProceedsFromAnchor(db as unknown as Db, "FR", 100, now)).toBe(120);
+    expect(getCurrencyFxRate).toHaveBeenCalledWith(db, "EUR");
+    expect(db.collectionMocks.federalBudget.updateOne.mock.calls[0][1].$inc.treasuryBalance).toBe(
+      120
+    );
+  });
+});
+
 describe("drawFromTreasury", () => {
   const corpId = new ObjectId();
   beforeEach(() => {
@@ -97,7 +138,7 @@ describe("drawFromTreasury", () => {
     const { drawFromTreasury } = await import("./treasury");
     const res = await drawFromTreasury(
       db as unknown as Db,
-      { countryId: "CN", corpId, amountLocal: 3000 },
+      { countryId: "CN", corpId, amountLocal: 3000, corpCurrency: "CNY" },
       now
     );
 
@@ -114,7 +155,7 @@ describe("drawFromTreasury", () => {
     const { drawFromTreasury } = await import("./treasury");
     const res = await drawFromTreasury(
       db as unknown as Db,
-      { countryId: "CN", corpId, amountLocal: 9999 },
+      { countryId: "CN", corpId, amountLocal: 9999, corpCurrency: "CNY" },
       now
     );
 
@@ -138,7 +179,7 @@ describe("remitToTreasury", () => {
     const { remitToTreasury } = await import("./treasury");
     const amt = await remitToTreasury(
       db as unknown as Db,
-      { countryId: "CN", corpId, amountLocal: 1200 },
+      { countryId: "CN", corpId, amountLocal: 1200, corpCurrency: "CNY" },
       now
     );
 
@@ -155,7 +196,7 @@ describe("remitToTreasury", () => {
     const { remitToTreasury } = await import("./treasury");
     const amt = await remitToTreasury(
       db as unknown as Db,
-      { countryId: "CN", corpId, amountLocal: 0 },
+      { countryId: "CN", corpId, amountLocal: 0, corpCurrency: "CNY" },
       now
     );
 

@@ -13,6 +13,8 @@ import type { StateSectorSpecialization } from "@/lib/constants/corporations";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { CrossCorpStockHolding } from "@/lib/corporations/portfolioAnchorValuation";
 import type { FtaCoverage } from "@/lib/tariffs/ftaOverrides";
+import type { ManufacturingProductProject } from "@/lib/products/manufacturingProject";
+import type { MediaProductProject } from "@/lib/products/mediaProduct";
 
 /**
  * All data pre-fetched from the DB and converted into lookup structures.
@@ -22,7 +24,20 @@ import type { FtaCoverage } from "@/lib/tariffs/ftaOverrides";
 export interface CorporationLookups {
   corporations: Corporation[];
   sectorsByCorp: Map<string, CorporateSector[]>;
+  productLinesV2Enabled?: boolean;
+  productSectorQualityById?: Map<string, number>;
+  /** Active v2 manufacturing projects, empty and unread while productLinesV2 is off. */
+  manufacturingProductByCorpId?: Map<string, ManufacturingProductProject>;
+  /** Active media title projects, empty and unread while media product slates are off. */
+  mediaProductSlatesEnabled?: boolean;
+  mediaProductProjectsByCorpId?: Map<string, MediaProductProject[]>;
+  mediaProductProjectsBySectorId?: Map<string, MediaProductProject[]>;
+  mediaProductDevelopmentByCorpId?: Map<string, MediaProductProject>;
+  mediaProductQualityBySectorId?: Map<string, number>;
+  mediaProductLoyaltyBonusBySectorId?: Map<string, number>;
   corpById: Map<string, Corporation>;
+  /** Two-axis electorate lean, projected only while mediaEditorialEnabled is true. */
+  editorialAudienceLeanByState?: Map<string, { economic: number; social: number }>;
   /**
    * Corporate-presence suppression from TOTAL embargoes. A full "all commodities,
    * block" embargo by country S against country T means T-national corporations
@@ -131,6 +146,8 @@ export interface CorporationLookups {
   costOfLivingByState: Map<string, number>;
   // Commodity supply/demand data for margin calculation
   globalCommodityBalances: Map<CommodityType, { supply: number; demand: number }>;
+  /** Price rows that contain a prior turn's real supply ledger (turn > 0). */
+  initializedLaggedBooks?: ReadonlySet<CommodityType>;
   /**
    * Lagged state delivery availability from active freight settlement.  Only
    * physical commodities with a resolved route are present; all others retain
@@ -333,6 +350,14 @@ export interface CorpSnapshot {
   /** Pre-tax operating income minus overhead, before bond flows and dividends (₳/turn). */
   incomePreDividends: number;
   income: number;
+  /** Net operating cash delta in the corporation's liquid currency for this turn. */
+  operatingCashIncomeLocal?: number;
+  /** Currency used by the operating cash writer above. */
+  operatingCashCurrency?: CurrencyCode;
+  /** Per-country federal tax withholding in anchor units, frozen with this snapshot. */
+  federalTaxByCountryAnchor?: Map<string, number>;
+  /** Corporation cash currency units per anchor, used to freeze source-side value. */
+  operatingCashLocalPerAnchor?: number;
   /** Coupon income earned as a bond holder this turn (₳/turn). */
   perTurnBondCouponIncome: number;
   /** Gross bond coupon expense on issued bonds this turn (₳/turn). */
@@ -425,6 +450,8 @@ export interface SectorUpdateOp {
 export interface SectorCalculationsResult {
   sectorOps: SectorUpdateOp[];
   corpOps: AnyBulkWriteOperation<Corporation>[];
+  /** Live-balance guarded product-development cash debits, applied after all other corp cash ops. */
+  manufacturingDevelopmentCashOps: AnyBulkWriteOperation<Corporation>[];
   corpSnapshots: CorpSnapshot[];
   ceoSalaryPayments: Map<string, Map<CurrencyCode, number>>;
   dividendPayments: Map<string, Map<CurrencyCode, number>>;

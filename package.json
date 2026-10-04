@@ -1,6 +1,6 @@
 {
   "name": "a-house-divided",
-  "version": "1.9.0",
+  "version": "1.11.0",
   "private": true,
   "engines": {
     "node": ">=20"
@@ -40,6 +40,7 @@
     "seed:state-sector-specializations": "npx tsx scripts/seed/seed-state-sector-specializations.ts",
     "seed:wiki": "npx tsx scripts/seed/seed-wiki.ts",
     "seed:wiki:force": "npx tsx scripts/seed/seed-wiki.ts --force",
+    "seed:wiki:iteration1": "npx tsx scripts/seed/publish-iteration-1-wiki.ts",
     "migrate:npp-avatars": "npx tsx scripts/migrations/backfill-npp-avatars.ts",
     "migrate:fix-character-userid-index": "npx tsx scripts/migrations/fix-characters-userid-index.ts",
     "migrate:sovereign-crises": "npx tsx scripts/migrations/migrate-sovereign-crises.ts",
@@ -76,9 +77,11 @@
     "api:mcp": "tsx scripts/publicApiMcp.ts",
     "sim:takeover-evidence": "npx tsx scripts/sim/takeoverBankNavEvidence.ts",
     "audit:sector-viability": "npx tsx scripts/sim/sectorStrategyViability.ts",
+    "sim:manufacturing-products-v2-balance": "npx tsx scripts/sim/manufacturingProductLinesV2Balance.ts",
     "ops:corporation-balance": "npx tsx scripts/ops/corporationBalanceAudit.ts --pretty",
     "architecture:audit": "node scripts/architecture-audit.mjs",
-    "verify:build": "next build"
+    "verify:build": "next build",
+    "postinstall": "node scripts/install/patch-mongodb-transaction-cursors.mjs && node scripts/install/verify-braces-depth.mjs && node scripts/install/patch-lightweight-chart-gestures.mjs"
   },
   "lint-staged": {
     "*.{ts,tsx,mts}": [
@@ -121,7 +124,7 @@
     "lightweight-charts": "^5.2.1",
     "lucide-react": "^1.33.0",
     "mongodb": "^7.4.0",
-    "next": "^16.3.3",
+    "next": "^16.3.8",
     "next-intl": "^4.13.6",
     "node-cron": "^4.6.0",
     "pg": "^8.23.0",
@@ -148,16 +151,17 @@
     "postcss": ">=8.5.18",
     "@opentelemetry/core": ">=2.8.0",
     "js-yaml": "^4.3.2",
-    "brace-expansion@1": "1.1.18",
-    "brace-expansion@5": "^5.0.9",
+    "brace-expansion@1": "1.1.21",
+    "brace-expansion@5": "^5.0.12",
     "fast-uri": "^3.1.7",
     "sharp": "^0.35.4",
     "@babel/core": "^7.29.7",
-    "vite": ">=8.0.16"
+    "vite": "$vite",
+    "braces": "$braces"
   },
   "devDependencies": {
-    "@commitlint/cli": "^21.2.2",
-    "@commitlint/config-conventional": "^21.2.2",
+    "@commitlint/cli": "^21.2.3",
+    "@commitlint/config-conventional": "^21.2.3",
     "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4",
     "@testing-library/dom": "^10.4.1",
@@ -167,10 +171,11 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/topojson-server": "^3.0.4",
-    "@vitest/coverage-v8": "^4.1.10",
+    "@vitest/coverage-v8": "^5.0.1",
+    "braces": "file:vendor/braces-depth-guard-3.0.3-ahd.1.tgz",
     "concurrently": "^10.0.5",
     "d3-geo": "^3.1.1",
-    "eslint": "^9.39.4",
+    "eslint": "^10.12.0",
     "eslint-config-next": "16.3.5",
     "eslint-config-prettier": "^10.1.8",
     "happy-dom": "^20.11.6",
@@ -181,7 +186,8 @@
     "tailwindcss": "^4",
     "topojson-server": "^3.0.1",
     "typescript": "6.0.2",
-    "vitest": "^4.1.11"
+    "vite": "^8.3.0",
+    "vitest": "^5.0.1"
   },
   "license": "PolyForm-Noncommercial-1.0.0"
 }

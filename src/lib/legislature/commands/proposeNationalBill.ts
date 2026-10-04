@@ -1,9 +1,13 @@
+/**
+ * Seated deputies propose bills in their active national legislature.
+ * proposeNationalBill resolves current offices, preserves proposal costs and rejects a dissolved chamber.
+ */
 import { getNationalDocId } from "@/lib/constants/nationalScope";
 import type { Db } from "mongodb";
 import type { AuthUser } from "@/lib/auth";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import { getEnabledCountryIds } from "@/lib/countryAccess";
-import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
+import { type CountryId } from "@/lib/constants/countries";
 import { CORPORATION_TYPES, type CorporationType } from "@/lib/constants/corporations";
 import {
   checkDuplicateProvisions,
@@ -39,6 +43,7 @@ import {
 import { validateNationalizationProvisions } from "@/lib/nationalization/billProvisionValidation";
 import type { LegislatureCommandResult } from "@/lib/legislature/commands/types";
 import { getGameState } from "@/lib/gameState";
+import { loadRuntimeCountryOffices } from "@/lib/countries/runtimeOffices";
 import {
   getChamberKeyForOfficeType,
   getOfficeTypeForChamber,
@@ -82,7 +87,16 @@ export async function proposeNationalBill(
 
   const gameState = await getGameState(db);
   const preset = gameState?.preset;
-  const config = getCountryConfig(countryId, preset);
+  const { config } = await loadRuntimeCountryOffices(db, countryId, preset);
+  if (
+    config.legislature.lowerChamber.elected === false ||
+    config.legislature.lowerChamber.seats < 1
+  ) {
+    return {
+      status: 409,
+      body: { error: "This legislature is dissolved and cannot receive bills." },
+    };
+  }
   const lowerKey = config.legislature.lowerChamber.key;
   const upperKey = config.legislature.upperChamber?.key;
   // Bill-active bicameral legislatures (JP/NG) let the upper chamber originate
@@ -94,7 +108,7 @@ export async function proposeNationalBill(
 
   // Resolve chamber keys to office types for DB queries (e.g. CN "npc" → "npcDelegate")
   const allowedOriginOfficeTypes = allowedOriginKeys.map((k) =>
-    getOfficeTypeForChamber(countryId, k, preset)
+    getOfficeTypeForChamber(countryId, k, preset, config)
   );
 
   const character = await getCharacterByUserId(db, authUser.userId);
@@ -149,7 +163,7 @@ export async function proposeNationalBill(
         },
       };
     }
-    sponsorChamberKey = getChamberKeyForOfficeType(countryId, official.officeType);
+    sponsorChamberKey = getChamberKeyForOfficeType(countryId, official.officeType, preset, config);
   }
 
   // One-party-state guard: banned parties cannot propose bills. Admin
@@ -357,6 +371,7 @@ export async function proposeNationalBill(
     unionLawProvisions: validatedUnionLawProvisions,
     electoralLawProvisions: validatedElectoralLawProvisions,
     centralBankProvisions: validatedCentralBankProvisions,
+    economicSystemReformProvisions: validatedEconomicSystemReformProvisions,
     euroAdoptionProvisions: validatedEuroAdoptionProvisions,
     europeanTreatyProvisions: validatedEuropeanTreatyProvisions,
     resetLawProvisions: validatedResetLawProvisions,
@@ -520,6 +535,7 @@ export async function proposeNationalBill(
       unionLawProvisionCount: validatedUnionLawProvisions.length,
       standaloneProvisionCount:
         validatedCentralBankProvisions.length +
+        validatedEconomicSystemReformProvisions.length +
         validatedElectoralLawProvisions.length +
         validatedEuroAdoptionProvisions.length +
         validatedEuropeanTreatyProvisions.length +
@@ -584,6 +600,7 @@ export async function proposeNationalBill(
     ...validatedUnionLawProvisions,
     ...validatedElectoralLawProvisions,
     ...validatedCentralBankProvisions,
+    ...validatedEconomicSystemReformProvisions,
     ...validatedEuroAdoptionProvisions,
     ...validatedEuropeanTreatyProvisions,
     ...validatedResetLawProvisions,

@@ -30,6 +30,8 @@ const { creditOrganizationFund } =
   await import("@/lib/internationalOrganizations/organizationFund");
 const { isOrganizationFoundedLive } = await import("@/lib/internationalOrganizations/founding");
 
+const { processAlignmentTurn } = await import("./alignmentPhase");
+
 describe("processAlignmentTurn", () => {
   let db: MockDb;
 
@@ -133,7 +135,6 @@ describe("processAlignmentTurn", () => {
 
   it("does nothing at all when the gate is off", async () => {
     gameState({ _id: "current", currentYear: 1953, intOrgAlignmentEnabled: false });
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     const r = await processAlignmentTurn(db as unknown as Db, 10);
     expect(r).toEqual({
       countriesDrifted: 0,
@@ -163,7 +164,6 @@ describe("processAlignmentTurn", () => {
         turn: 3,
       },
     ]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     await processAlignmentTurn(db as unknown as Db, 4);
 
     const set = written();
@@ -183,7 +183,6 @@ describe("processAlignmentTurn", () => {
         turn: 3,
       },
     ]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     const r = await processAlignmentTurn(db as unknown as Db, 4);
 
     expect(r.erasCrossed).toBe(1);
@@ -204,7 +203,6 @@ describe("processAlignmentTurn", () => {
         turn: 3,
       },
     ]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     await processAlignmentTurn(db as unknown as Db, 4);
     const set = written();
     const total = Object.values(set.shares).reduce((a, b) => a + b, 0) + set.nonAligned;
@@ -227,7 +225,6 @@ describe("processAlignmentTurn", () => {
 
   it("pulls a bloc member toward the pole its org channels to", async () => {
     polishMember(5);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     await processAlignmentTurn(db as unknown as Db, 5);
 
     const set = written();
@@ -240,7 +237,6 @@ describe("processAlignmentTurn", () => {
     // the write. On the old tenth grid this rounded to nothing every turn and
     // the tide was inert.
     polishMember(4);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     await processAlignmentTurn(db as unknown as Db, 4);
     expect(written().shares.EAST!).toBeCloseTo(40.04, 5);
   });
@@ -249,7 +245,6 @@ describe("processAlignmentTurn", () => {
     // Drift keeps an alliance's members securely in it; it never makes one
     // immovable. Past this, standing has to be bought.
     polishMember(5, 67);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     await processAlignmentTurn(db as unknown as Db, 5);
     expect(written().shares.EAST!).toBe(67);
   });
@@ -265,7 +260,6 @@ describe("processAlignmentTurn", () => {
         turn: 3,
       },
     ]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     const r = await processAlignmentTurn(db as unknown as Db, 4);
 
     const set = written();
@@ -293,7 +287,6 @@ describe("processAlignmentTurn", () => {
         turn: 3,
       },
     ]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     const r = await processAlignmentTurn(db as unknown as Db, 4);
     expect(r).toEqual({
       countriesDrifted: 2,
@@ -341,7 +334,6 @@ describe("processAlignmentTurn", () => {
         ],
       },
     ]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     const r = await processAlignmentTurn(db as unknown as Db, 4);
 
     expect(r.spheresSynced).toBe(1);
@@ -370,7 +362,6 @@ describe("processAlignmentTurn", () => {
         turn: 3,
       },
     ]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     const r = await processAlignmentTurn(db as unknown as Db, 4);
     expect(r.spheresSynced).toBe(0);
     expect(db.collection("sphereMemberships").updateOne).not.toHaveBeenCalled();
@@ -397,7 +388,6 @@ describe("processAlignmentTurn", () => {
         ],
       },
     ]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     const r = await processAlignmentTurn(db as unknown as Db, 200);
 
     expect(r.rowsHealed).toBe(1);
@@ -422,7 +412,6 @@ describe("processAlignmentTurn", () => {
     alignments([]);
     spheres([]);
     memberships([{ organizationId: "NATO", countryId: "CA" }]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     const r = await processAlignmentTurn(db as unknown as Db, 200);
 
     expect(r.rowsHealed).toBe(1);
@@ -451,7 +440,6 @@ describe("processAlignmentTurn", () => {
         relationships: [],
       },
     ]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     const r = await processAlignmentTurn(db as unknown as Db, 4);
     expect(r.rowsHealed).toBe(0);
     expect(db.collection("countryAlignments").insertOne).not.toHaveBeenCalled();
@@ -472,7 +460,6 @@ describe("processAlignmentTurn", () => {
         relationships: [],
       },
     ]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     const r = await processAlignmentTurn(db as unknown as Db, 3000);
 
     expect(r.rowsHealed).toBe(1);
@@ -495,7 +482,6 @@ describe("processAlignmentTurn", () => {
       previous: null,
       turn: 3,
     };
-    const { processAlignmentTurn } = await import("./alignmentPhase");
 
     // Sub-cap on purpose: proportionality is only observable below the
     // per-nation ceiling, and $30bn at a tenth of a percent is $30m a point.
@@ -544,7 +530,6 @@ describe("processAlignmentTurn", () => {
     ]);
     plays([play()]);
     targetEconomy(null);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     const r = await processAlignmentTurn(db as unknown as Db, 4);
 
     expect(r.playsResolved).toBe(1);
@@ -568,12 +553,13 @@ describe("processAlignmentTurn", () => {
       },
     ]);
     plays([play({ amountLocal: 250_000_000 })]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     const r = await processAlignmentTurn(db as unknown as Db, 4);
 
     expect(r.playsResolved).toBe(1);
     expect(r.playsRefunded).toBe(1);
-    expect(creditOrganizationFund).toHaveBeenCalledWith(expect.anything(), "NATO", 250_000_000);
+    expect(creditOrganizationFund).toHaveBeenCalledWith(expect.anything(), "NATO", 250_000_000, {
+      context: null,
+    });
 
     const stamped = db.collection("alignmentPlays").updateOne.mock.calls[0]![1] as {
       $set: { appliedPoints: number; refunded: boolean };
@@ -597,7 +583,6 @@ describe("processAlignmentTurn", () => {
       },
     ]);
     plays([play({ amountLocal: 250_000_000, source: "aid" })]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     const r = await processAlignmentTurn(db as unknown as Db, 4);
 
     expect(r.playsResolved).toBe(1);
@@ -622,7 +607,6 @@ describe("processAlignmentTurn", () => {
       },
     ]);
     plays([play({ amountUsd: 60_000_000, amountLocal: 60_000_000 })]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     const r = await processAlignmentTurn(db as unknown as Db, 4);
 
     expect(r.playsRefunded).toBe(0);
@@ -661,7 +645,6 @@ describe("processAlignmentTurn", () => {
       // the per-nation ceiling lands on the cap either way and the dampening
       // becomes invisible — both arms would read the same number.
       plays([play({ amountUsd: 60_000_000, amountLocal: 60_000_000 })]);
-      const { processAlignmentTurn } = await import("./alignmentPhase");
       const r = await processAlignmentTurn(db as unknown as Db, 4);
       return { result: r, shares: written().shares };
     }
@@ -704,7 +687,6 @@ describe("processAlignmentTurn", () => {
       },
     ]);
     plays([play()]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     const r = await processAlignmentTurn(db as unknown as Db, 4);
 
     expect(r.playsResolved).toBe(1);
@@ -735,7 +717,6 @@ describe("processAlignmentTurn", () => {
         sanctionsTargetCountryId: "YU",
       },
     ]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     await processAlignmentTurn(db as unknown as Db, 4);
 
     const set = written();
@@ -757,7 +738,6 @@ describe("processAlignmentTurn", () => {
       },
     ]);
     orgLegislation([]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     await processAlignmentTurn(db as unknown as Db, 4);
 
     expect(written().shares.WEST!).toBe(40);
@@ -777,7 +757,6 @@ describe("processAlignmentTurn", () => {
       },
     ]);
     plays([play()]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     await processAlignmentTurn(db as unknown as Db, 4);
 
     const set = written();
@@ -800,7 +779,6 @@ describe("processAlignmentTurn", () => {
       },
     ]);
     plays([play(), play({ _id: "p2", organizationId: "WARSAW_PACT", sponsorCountryId: "RU" })]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     await processAlignmentTurn(db as unknown as Db, 4);
 
     const set = written();
@@ -820,22 +798,69 @@ describe("processAlignmentTurn", () => {
       },
     ]);
     plays([play({ amountUsd: 100_000_000 })]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     await processAlignmentTurn(db as unknown as Db, 7);
 
     const set = (
       db.collection("alignmentPlays").updateOne.mock.calls[0]![1] as {
-        $set: { resolvedTurn: number; appliedPoints: number };
+        $set: { resolvedTurn: number; appliedPoints: number; effectivePoints: number };
       }
     ).$set;
     expect(set.resolvedTurn).toBe(7);
     expect(set.appliedPoints).toBeGreaterThan(0);
+    expect(set.effectivePoints).toBeCloseTo(written().shares.WEST! - 22, 2);
+    expect(set).toMatchObject({ effectivePoleId: "WEST" });
+  });
+
+  it("stamps effective zero without refunding canceled pressure", async () => {
+    alignments([
+      {
+        entityId: "YU",
+        eraKey: "cold-war",
+        shares: { WEST: 22, EAST: 50 },
+        nonAligned: 28,
+        previous: null,
+        turn: 3,
+      },
+    ]);
+    plays([play(), play({ _id: "p2", organizationId: "WARSAW_PACT", sponsorCountryId: "RU" })]);
+    const result = await processAlignmentTurn(db as unknown as Db, 4);
+    const updates = db.collection("alignmentPlays").updateOne.mock.calls;
+    expect(updates).toHaveLength(2);
+    for (const [, update] of updates) {
+      expect(update).toMatchObject({
+        $set: { appliedPoints: 10, effectivePoints: 0, refunded: false },
+      });
+    }
+    expect(result.playsRefunded).toBe(0);
+    expect(creditOrganizationFund).not.toHaveBeenCalled();
+  });
+
+  it("shares the actual gain across stacked plays without adding database writes", async () => {
+    alignments([
+      {
+        entityId: "YU",
+        eraKey: "cold-war",
+        shares: { WEST: 22, EAST: 50 },
+        nonAligned: 28,
+        previous: null,
+        turn: 3,
+      },
+    ]);
+    plays([play(), play({ _id: "p2" })]);
+    await processAlignmentTurn(db as unknown as Db, 4);
+    expect(written().shares.WEST).toBe(27);
+    const updates = db.collection("alignmentPlays").updateOne.mock.calls;
+    expect(updates).toHaveLength(2);
+    for (const [, update] of updates) {
+      expect(update).toMatchObject({
+        $set: { appliedPoints: 10, effectivePoints: 2.5, refunded: false },
+      });
+    }
   });
 
   it("resolves a play whose target has no row rather than leaking it forever", async () => {
     alignments([]);
     plays([play({ targetEntityId: "TANG" })]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     const r = await processAlignmentTurn(db as unknown as Db, 4);
 
     expect(db.collection("alignmentPlays").updateOne).toHaveBeenCalled();
@@ -854,7 +879,6 @@ describe("processAlignmentTurn", () => {
       },
     ]);
     plays([play({ targetEntityId: "PL", amountUsd: 1e12 })]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     await processAlignmentTurn(db as unknown as Db, 4);
 
     expect(written().shares).toEqual({ WEST: 2, EAST: 90 });
@@ -875,7 +899,6 @@ describe("processAlignmentTurn", () => {
       },
     ]);
     plays([play({ targetEntityId: "PL", amountUsd: 9e8 })]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     await processAlignmentTurn(db as unknown as Db, 4);
 
     const set = (
@@ -884,6 +907,7 @@ describe("processAlignmentTurn", () => {
       }
     ).$set;
     expect(set.appliedPoints).toBe(0);
+    expect(set).toMatchObject({ effectivePoints: 0 });
   });
 
   /** A NATO member whose alignment has collapsed, below the gate since turn 1. */
@@ -908,7 +932,6 @@ describe("processAlignmentTurn", () => {
   it("removes a non-player member whose share has sat at or below 40 long enough", async () => {
     alignments([collapsedRow]);
     orgMemberships([wobbling()]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     const r = await processAlignmentTurn(db as unknown as Db, 100);
 
     expect(r.defections).toBe(1);
@@ -925,7 +948,6 @@ describe("processAlignmentTurn", () => {
   it("does not remove one that has not been there long enough", async () => {
     alignments([collapsedRow]);
     orgMemberships([wobbling({ wantsOutSinceTurn: 90 })]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     const r = await processAlignmentTurn(db as unknown as Db, 100); // only 10 turns
 
     expect(r.defections).toBe(0);
@@ -936,7 +958,6 @@ describe("processAlignmentTurn", () => {
     vi.mocked(getAllCountryAccess).mockResolvedValue({ YU: { enabledForPlayers: true } } as never);
     alignments([collapsedRow]);
     orgMemberships([wobbling()]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     const r = await processAlignmentTurn(db as unknown as Db, 100);
 
     expect(r.defectionWarnings).toBe(1);
@@ -947,7 +968,6 @@ describe("processAlignmentTurn", () => {
   it("starts the clock the first turn a member falls to the leave share", async () => {
     alignments([collapsedRow]);
     orgMemberships([wobbling({ wantsOutSinceTurn: null })]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     const r = await processAlignmentTurn(db as unknown as Db, 100);
 
     expect(r.defections).toBe(0);
@@ -967,7 +987,6 @@ describe("processAlignmentTurn", () => {
       },
     ]);
     orgMemberships([wobbling()]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     const r = await processAlignmentTurn(db as unknown as Db, 100);
 
     expect(r.defections).toBe(0);
@@ -978,7 +997,6 @@ describe("processAlignmentTurn", () => {
   it("never defects anyone from an org with no alignment channel", async () => {
     alignments([collapsedRow]);
     orgMemberships([wobbling({ organizationId: "UN" })]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     const r = await processAlignmentTurn(db as unknown as Db, 100);
 
     expect(r.defections).toBe(0);
@@ -999,7 +1017,6 @@ describe("processAlignmentTurn", () => {
       },
     ]);
     orgMemberships([wobbling()]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     const r = await processAlignmentTurn(db as unknown as Db, 100);
     expect(r.defections).toBe(1);
   });
@@ -1010,7 +1027,6 @@ describe("processAlignmentTurn", () => {
     // clock on it, so it sat in NATO and the Warsaw Pact at once (ticket #1285).
     alignments([collapsedRow]);
     orgMemberships([wobbling({ status: "founding" })]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     const r = await processAlignmentTurn(db as unknown as Db, 100);
 
     expect(r.defections).toBe(1);
@@ -1032,7 +1048,6 @@ describe("processAlignmentTurn", () => {
     // about an org it does not channel to.
     alignments([collapsedRow]);
     orgMemberships([wobbling({ organizationId: "UN", status: "founding" })]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     const r = await processAlignmentTurn(db as unknown as Db, 100);
 
     expect(r.defections).toBe(0);
@@ -1054,7 +1069,6 @@ describe("processAlignmentTurn", () => {
 
   it("asks to join a bloc it has held the join share in for a sustained run", async () => {
     alignments([joinReadyRow()]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     const r = await processAlignmentTurn(db as unknown as Db, 100);
 
     expect(r.joinRequests).toBeGreaterThanOrEqual(1);
@@ -1072,7 +1086,6 @@ describe("processAlignmentTurn", () => {
 
   it("does not ask before the run is long enough", async () => {
     alignments([joinReadyRow({ joinReadySince: { WEST: 90 } })]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     const r = await processAlignmentTurn(db as unknown as Db, 100); // only 10 turns
     expect(r.joinRequests).toBe(0);
     expect(db.collection("organizationMembershipProposals").insertOne).not.toHaveBeenCalled();
@@ -1081,7 +1094,6 @@ describe("processAlignmentTurn", () => {
   it("never asks on a player's behalf — they choose their own alliances", async () => {
     vi.mocked(getAllCountryAccess).mockResolvedValue({ SE: { enabledForPlayers: true } } as never);
     alignments([joinReadyRow()]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     const r = await processAlignmentTurn(db as unknown as Db, 100);
     expect(r.joinRequests).toBe(0);
   });
@@ -1097,7 +1109,6 @@ describe("processAlignmentTurn", () => {
         wantsOutSinceTurn: null,
       },
     ]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     const r = await processAlignmentTurn(db as unknown as Db, 100);
     // NATO is skipped; the Commonwealth channel is still open to it.
     const asked = db
@@ -1112,7 +1123,6 @@ describe("processAlignmentTurn", () => {
   it("does not ask twice while a proposal is already open", async () => {
     vi.mocked(hasOpenMembershipProposal).mockResolvedValue(true);
     alignments([joinReadyRow()]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     const r = await processAlignmentTurn(db as unknown as Db, 100);
     expect(r.joinRequests).toBe(0);
   });
@@ -1120,7 +1130,6 @@ describe("processAlignmentTurn", () => {
   it("does not ask to join an org that has not been founded yet", async () => {
     vi.mocked(isOrganizationFoundedLive).mockResolvedValue(false);
     alignments([joinReadyRow()]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     const r = await processAlignmentTurn(db as unknown as Db, 100);
     expect(r.joinRequests).toBe(0);
   });
@@ -1146,7 +1155,6 @@ describe("processAlignmentTurn", () => {
   it("never asks on behalf of a country that has been dissolved", async () => {
     alignments([joinReadyRow({ entityId: "DE" })]);
     dissolvedCountries([{ _id: "DE", dissolvedTurn: 550 }]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     const r = await processAlignmentTurn(db as unknown as Db, 600);
 
     expect(r.joinRequests).toBe(0);
@@ -1159,7 +1167,6 @@ describe("processAlignmentTurn", () => {
     // dissolved, and it must keep its accession.
     alignments([joinReadyRow({ entityId: "CA" })]);
     dissolvedCountries([]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     const r = await processAlignmentTurn(db as unknown as Db, 100);
 
     expect(r.joinRequests).toBeGreaterThanOrEqual(1);
@@ -1170,7 +1177,6 @@ describe("processAlignmentTurn", () => {
     // the application returns the moment the no-pestering window lapses.
     alignments([joinReadyRow({ entityId: "DE" })]);
     dissolvedCountries([{ _id: "DE", dissolvedTurn: 550 }]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     const r = await processAlignmentTurn(db as unknown as Db, 600);
 
     expect(r.countriesDrifted).toBe(0);
@@ -1183,7 +1189,6 @@ describe("processAlignmentTurn", () => {
     alignments([collapsedRow]);
     orgMemberships([wobbling()]);
     dissolvedCountries([{ _id: "YU", dissolvedTurn: 90 }]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     const r = await processAlignmentTurn(db as unknown as Db, 100);
 
     expect(r.defections).toBe(0);
@@ -1192,7 +1197,6 @@ describe("processAlignmentTurn", () => {
 
   it("starts the accession clock the first turn a share reaches the join threshold", async () => {
     alignments([joinReadyRow({ joinReadySince: null })]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     await processAlignmentTurn(db as unknown as Db, 100);
 
     const set = written();
@@ -1213,7 +1217,6 @@ describe("processAlignmentTurn", () => {
         turn: 3,
       },
     ]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     await processAlignmentTurn(db as unknown as Db, 100);
 
     const set = written() as unknown as { joinReadySince: Record<string, number> };
@@ -1230,7 +1233,6 @@ describe("processAlignmentTurn", () => {
       resolvedOnTurn: 95,
     });
     alignments([joinReadyRow()]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     const r = await processAlignmentTurn(db as unknown as Db, 100);
     expect(r.joinRequests).toBe(0);
   });
@@ -1239,7 +1241,6 @@ describe("processAlignmentTurn", () => {
     // The Commonwealth shares NATO's pole but is a former-empire association, so
     // being Western is no claim on it.
     alignments([joinReadyRow()]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     const r = await processAlignmentTurn(db as unknown as Db, 100);
 
     const asked = db
@@ -1254,7 +1255,6 @@ describe("processAlignmentTurn", () => {
   it("never walks a nation out of the Commonwealth for ceasing to be Western", async () => {
     alignments([collapsedRow]);
     orgMemberships([wobbling({ organizationId: "COMMONWEALTH" })]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     const r = await processAlignmentTurn(db as unknown as Db, 100);
 
     expect(r.defections).toBe(0);
@@ -1279,7 +1279,6 @@ describe("processAlignmentTurn", () => {
 
     alignments([rowFor("YU")]);
     plays([play({ targetEntityId: "YU", amountUsd: 1e12 })]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     await processAlignmentTurn(db as unknown as Db, 4);
     const calmGain = written().shares.WEST! - 60;
 
@@ -1309,7 +1308,6 @@ describe("processAlignmentTurn", () => {
       },
     ]);
     crises([{ _id: "c1", targetEntityId: "YU", status: "open", closesTurn: 99 }]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     await processAlignmentTurn(db as unknown as Db, 4);
 
     // A raised ceiling is not a grant.
@@ -1319,7 +1317,6 @@ describe("processAlignmentTurn", () => {
   it("closes a crisis whose window has passed", async () => {
     alignments([]);
     crises([{ _id: "c1", targetEntityId: "YU", status: "open", closesTurn: 4 }]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     const r = await processAlignmentTurn(db as unknown as Db, 4);
     expect(r.crisesResolved).toBe(1);
   });
@@ -1337,7 +1334,6 @@ describe("processAlignmentTurn", () => {
     ]);
     crises([{ _id: "c1", targetEntityId: "PL", status: "open", closesTurn: 99 }]);
     plays([play({ targetEntityId: "PL", amountUsd: 1e12 })]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     await processAlignmentTurn(db as unknown as Db, 4);
     expect(written().shares).toEqual({ WEST: 2, EAST: 90 });
   });
@@ -1353,7 +1349,6 @@ describe("processAlignmentTurn", () => {
         turn: 3,
       },
     ]);
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     const r = await processAlignmentTurn(db as unknown as Db, 4);
 
     expect(r.crisesOpened).toBe(1);
@@ -1366,7 +1361,6 @@ describe("processAlignmentTurn", () => {
 
   it("opens nothing at all when the gate is off", async () => {
     gameState({ _id: "current", currentYear: 1953, intOrgAlignmentEnabled: false });
-    const { processAlignmentTurn } = await import("./alignmentPhase");
     const r = await processAlignmentTurn(db as unknown as Db, 4);
     expect(r.crisesOpened).toBe(0);
     expect(r.crisesResolved).toBe(0);

@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useToast } from "@/contexts/ToastContext";
 import { captureProductEvent } from "@/lib/analytics/capture";
-import { getStoredConsent } from "@/components/CookieConsent";
 import { useAuthMe } from "@/contexts/AuthDataContext";
 import { BillPageErrorBoundary } from "@/components/BillPageErrorBoundary";
 import { BillTimeline } from "@/components/bills/BillTimeline";
@@ -72,24 +71,6 @@ function StateBillDetailContent() {
   useEffect(() => {
     void fetchBill();
   }, [fetchBill]);
-
-  useEffect(() => {
-    if (
-      !bill ||
-      bill.status !== "enacted" ||
-      bill.sponsorId !== user?.character?.id ||
-      getStoredConsent() !== "accepted"
-    )
-      return;
-    const key = `ahd:bill-passed:${bill.id}`;
-    try {
-      if (window.localStorage.getItem(key)) return;
-      window.localStorage.setItem(key, "1");
-      void captureProductEvent("bill_passed", { bill_id: bill.id });
-    } catch {
-      // Analytics storage is optional.
-    }
-  }, [bill, user?.character?.id]);
 
   async function postJson(url: string, body: Record<string, unknown>, okMessage: string) {
     setError("");
@@ -237,9 +218,7 @@ function StateBillDetailContent() {
                   <span className="text-[10px] text-cyan-400/90">{bill.legislationTypeName}</span>
                 )}
               </div>
-              <h1 className="font-display text-3xl font-semibold leading-tight tracking-tight">
-                {bill.title}
-              </h1>
+              <h1 className="text-3xl font-semibold leading-tight tracking-tight">{bill.title}</h1>
             </div>
           </div>
 
@@ -274,7 +253,7 @@ function StateBillDetailContent() {
 
           {bill.provisions?.length > 0 && (
             <div className="flex flex-col gap-3 pt-2 border-t border-card-border/40">
-              <h3 className="font-display text-lg font-semibold">Provisions</h3>
+              <h3 className="text-lg font-semibold">Provisions</h3>
               {bill.provisions.map((p, i) => (
                 <BillProvisionCard
                   key={i}
@@ -310,9 +289,7 @@ function StateBillDetailContent() {
 
           {bill.vetoMessage && (
             <div className="mt-2 rounded-xl border border-error/40 bg-error/5 p-4">
-              <h3 className="text-[10px] uppercase tracking-widest text-error font-semibold">
-                Veto message
-              </h3>
+              <h3 className="text-sm text-error font-semibold">Veto message</h3>
               <p className="mt-1 text-sm italic">&ldquo;{bill.vetoMessage}&rdquo;</p>
               <p className="mt-2 text-xs text-muted">
                 — {getRegionalBillAssentTitleForState(bill.countryId as CountryId, bill.stateId)}
@@ -369,9 +346,7 @@ function StateBillDetailContent() {
 
         {hasChamberTally && bill.eligibleSeats > 0 && (
           <div className="rounded-xl border border-card-border bg-card p-5">
-            <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
-              Chamber · Floor Vote
-            </h3>
+            <h3 className="mb-3 text-sm font-semibold text-muted">Chamber · floor vote</h3>
             <VoteSeatingChart
               style="hemicycle"
               votes={{

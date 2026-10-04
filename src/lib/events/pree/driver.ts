@@ -6,6 +6,7 @@ import { processLotteryAnnuities } from "./annuity";
 import { getEventCooldownLedgerCollection } from "@/lib/db/collections/eventCooldownLedger";
 import { getEventDefinitionsCollection } from "@/lib/db/collections/eventDefinitions";
 import { getEventInstancesCollection } from "@/lib/db/collections/eventInstances";
+import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { isPlayerRandomEventsEnabled } from "@/lib/events/featureFlag";
 import {
   ActiveEventConflictError,
@@ -150,7 +151,8 @@ function buildResolveHooks(
  */
 async function sweepExpiredWithNotifications(
   db: Db,
-  currentTurn: number
+  currentTurn: number,
+  treasuryCashLedgerEnabled = false
 ): Promise<ReturnType<typeof sweepExpired>> {
   const userIdByCharacterId = new Map<string, Character["userId"]>();
   const resolveHooks = buildResolveHooks(userIdByCharacterId);
@@ -176,7 +178,7 @@ async function sweepExpiredWithNotifications(
     }
   }
 
-  return sweepExpired(db, currentTurn, Date.now(), resolveHooks);
+  return sweepExpired(db, currentTurn, Date.now(), resolveHooks, treasuryCashLedgerEnabled);
 }
 
 /**
@@ -189,12 +191,17 @@ export async function processPlayerRandomEventsTurn(
   preloaded?: {
     playerRandomEventsEnabled?: boolean;
     rpgStatsEnabled?: boolean;
+    treasuryCashLedgerEnabled?: boolean;
     /** In-game year for era gating (minYear/maxYear on definitions). Omit = no era filtering. */
     currentYear?: number;
   }
 ): Promise<PlayerRandomEventsTurnResult> {
   await processLotteryAnnuities(db);
-  const sweepResult = await sweepExpiredWithNotifications(db, currentTurn);
+  const sweepResult = await sweepExpiredWithNotifications(
+    db,
+    currentTurn,
+    preloaded?.treasuryCashLedgerEnabled
+  );
 
   const offersEnabled = await isPlayerRandomEventsEnabled(preloaded);
   if (!offersEnabled) {
@@ -226,6 +233,7 @@ export async function processPlayerRandomEventsTurn(
       await markBroadcastFired(db, broadcastDef.kind, currentTurn);
     }
   }
+  const broadcastPreset = broadcastDef ? await getGameStatePresetOrDefault(db) : undefined;
 
   let offered = 0;
   let skippedOffers = 0;
@@ -260,7 +268,9 @@ export async function processPlayerRandomEventsTurn(
         definitions,
         maps,
         preloaded?.currentYear,
-        broadcastDef
+        broadcastDef,
+        broadcastPreset,
+        preloaded?.treasuryCashLedgerEnabled
       );
       if (result === "offered") {
         offered++;
@@ -289,7 +299,9 @@ async function offerEventToCharacter(
   definitions: EventDefinition[],
   maps: CharacterEligibilityMaps,
   currentYear?: number,
-  broadcastDef?: EventDefinition | null
+  broadcastDef?: EventDefinition | null,
+  broadcastPreset?: string,
+  treasuryCashLedgerEnabled = false
 ): Promise<"offered" | "skipped"> {
   const pendingInstance = await getEventInstancesCollection(db).findOne({
     scope: "character",
@@ -323,7 +335,13 @@ async function offerEventToCharacter(
     if (!useBroadcast) {
       return "skipped";
     }
-    const cleared = await supersedePendingEventForBroadcast(db, pendingInstance, currentTurn);
+    const cleared = await supersedePendingEventForBroadcast(
+      db,
+      pendingInstance,
+      currentTurn,
+      broadcastPreset,
+      treasuryCashLedgerEnabled
+    );
     if (!cleared) {
       return "skipped";
     }

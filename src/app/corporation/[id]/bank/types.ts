@@ -2,6 +2,7 @@ import type { BankCharterType } from "@/lib/db/types/bank";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { CreditBandId, LendingProfileId } from "@/lib/banking/creditBands";
 import type { BankOutlook } from "@/lib/banking/outlook";
+import type { BankTreasuryOverview } from "@/lib/banking/bankTreasury";
 
 export type Corridor = { minOffset: number; maxOffset: number };
 
@@ -16,6 +17,24 @@ export type Party = {
 export type ConsolePayload = {
   privateBankingEnabled: boolean;
   bankPropTradingEnabled: boolean;
+  bankTreasuryEnabled?: boolean;
+  bankTreasury?: BankTreasuryOverview | null;
+  bankPropForexFeesEnabled?: boolean;
+  primaryUnderwritingEnabled?: boolean;
+  underwritingReceipts?: Array<{
+    key: string;
+    issuerCorporationId: string;
+    issuerName: string;
+    instrumentType: "equity" | "corporate_bond";
+    instrumentId?: string;
+    currencyCode: string;
+    grossPlacedLocal: number;
+    feeLocal: number;
+    issuerNetLocal: number;
+    turn: number;
+    charteredTurn: number;
+  }>;
+  propAssetOptions?: readonly import("@/lib/db/types/bank").PropPosition["asset"][];
   visible: boolean;
   isCeo: boolean;
   isAdmin: boolean;
@@ -40,6 +59,7 @@ export type ConsolePayload = {
   capitalRequirementByType: Record<BankCharterType, number>;
   risk: {
     cashReserves: number;
+    sovereignTreasuryMarkValue?: number;
     requiredReserves: number;
     runFailureThreshold: number;
     reserveCoverRatio: number;
@@ -115,6 +135,8 @@ export type ConsolePayload = {
      */
     lastBankingDepositInterest: number;
     lastBankingLoanInterest: number;
+    lastBankingLoanOriginationFees?: number;
+    loanOriginationFeesLifetime?: number;
     lastBankingInterbankInterestPaid: number;
     lastBankingInterbankInterestReceived: number;
     lastBankingFacilityInterest: number;
@@ -140,6 +162,7 @@ export type ConsolePayload = {
     interbankDebt: number;
     cbMarginDebt: number;
     propBookMarkValue: number;
+    sovereignTreasuryMarkValue: number;
     propBook: Array<{
       asset: string;
       ref: string;

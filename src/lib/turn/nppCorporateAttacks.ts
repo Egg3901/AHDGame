@@ -60,6 +60,7 @@ import {
   capacityCaptureBookUpdates,
   resolveWorldYear,
 } from "@/lib/corporations/capacityCapture";
+import { plantCapacityDeltaPipeline, seedPlantLedger } from "@/lib/corporations/plantLedger";
 import { deriveCeoArchetype } from "./ceoArchetype";
 import { logWireEvent, wireHeadlineSectorAttack } from "@/lib/wireEvent";
 import { createNotification } from "@/lib/notifications";
@@ -88,6 +89,8 @@ export interface AttackCandidate {
     | "_id"
     | "stateId"
     | "sectorType"
+    | "mediaDiscriminator"
+    | "industryModel"
     | "countryId"
     | "revenue"
     | "capitalStock"
@@ -193,6 +196,8 @@ export async function executeNppSectorAttack(
       | "capitalStock"
       | "capacityBookAnchor"
       | "strategyId"
+      | "industryModel"
+      | "mediaDiscriminator"
     >;
     defender: AttackCandidate["defender"];
     currentTurn: number;
@@ -237,6 +242,8 @@ export async function executeNppSectorAttack(
     attackCapacityBasisAnchor(
       {
         sectorType: targetSector.sectorType as CorporationType,
+        industryModel: targetSector.industryModel,
+        mediaDiscriminator: targetSector.mediaDiscriminator,
         capitalStock: targetSector.capitalStock,
         strategyId: targetSector.strategyId,
       },
@@ -274,7 +281,9 @@ export async function executeNppSectorAttack(
     actualCapture,
     targetSector.sectorType as CorporationType,
     targetSector.strategyId,
-    eraUnitScale
+    eraUnitScale,
+    targetSector.industryModel,
+    targetSector.mediaDiscriminator
   );
   const unitsTaken = Math.min(defenderStock, rawUnits.unitsTaken);
   const unitsReceivedAtDefenderMix =
@@ -285,6 +294,8 @@ export async function executeNppSectorAttack(
         legacyCostAnchor: calculateAttackCostAnchor(targetRevenueAnchor),
         unitsReceived: unitsReceivedAtDefenderMix,
         sectorType: targetSector.sectorType as CorporationType,
+        industryModel: targetSector.industryModel,
+        mediaDiscriminator: targetSector.mediaDiscriminator,
         // The units received are at the DEFENDER's mix, so the floor must price
         // them at the defender's strategy too.
         strategyId: targetSector.strategyId ?? null,
@@ -314,15 +325,21 @@ export async function executeNppSectorAttack(
   // Credit the attacker's matching sector (existing or new). Read BEFORE the
   // defender is written so the P5 basis transfer sees both sides' pre-attack state.
   const stateId = targetSector.stateId;
-  const existing = await db
-    .collection<CorporateSector>("corporateSectors")
-    .findOne({ stateId, sectorType: targetSector.sectorType, corporationId: attacker._id });
+  const existing = await db.collection<CorporateSector>("corporateSectors").findOne({
+    stateId,
+    sectorType: targetSector.sectorType,
+    industryModel: targetSector.industryModel ?? null,
+    mediaDiscriminator: targetSector.mediaDiscriminator ?? null,
+    corporationId: attacker._id,
+  });
 
   // P5: the paid basis moves with the plant. Identical to the player route.
   const captureBook = plantsEnabled
     ? capacityCaptureBookUpdates({
         defender: {
           sectorType: targetSector.sectorType as CorporationType,
+          industryModel: targetSector.industryModel,
+          mediaDiscriminator: targetSector.mediaDiscriminator,
           strategyId: targetSector.strategyId ?? null,
           capitalStock: targetSector.capitalStock,
           capacityBookAnchor: targetSector.capacityBookAnchor,
@@ -330,6 +347,8 @@ export async function executeNppSectorAttack(
         attacker: existing
           ? {
               sectorType: existing.sectorType,
+              industryModel: existing.industryModel,
+              mediaDiscriminator: existing.mediaDiscriminator,
               strategyId: existing.strategyId ?? null,
               capitalStock: existing.capitalStock,
               capacityBookAnchor: existing.capacityBookAnchor,
@@ -343,15 +362,20 @@ export async function executeNppSectorAttack(
     : null;
 
   // Reduce the defender: capacity units under plants, revenue below it.
-  await db.collection<CorporateSector>("corporateSectors").updateOne(
-    { _id: targetSector._id },
-    plantsEnabled
-      ? {
-          $inc: { capitalStock: -(Math.round(unitsTaken * 100) / 100) },
-          $set: { updatedAt: now, ...(captureBook?.defenderSet ?? {}) },
-        }
-      : { $inc: { revenue: -captureInDefenderLocal }, $set: { updatedAt: now } }
-  );
+  await db
+    .collection<CorporateSector>("corporateSectors")
+    .updateOne(
+      { _id: targetSector._id },
+      plantsEnabled
+        ? plantCapacityDeltaPipeline(
+            targetSector.sectorType as CorporationType,
+            -(Math.round(unitsTaken * 100) / 100),
+            { updatedAt: now, ...(captureBook?.defenderSet ?? {}) },
+            targetSector.industryModel,
+            targetSector.mediaDiscriminator
+          )
+        : { $inc: { revenue: -captureInDefenderLocal }, $set: { updatedAt: now } }
+    );
 
   // Nameplate-invariant across a strategy difference — see the player route.
   const unitsForAttacker = plantsEnabled
@@ -359,7 +383,9 @@ export async function executeNppSectorAttack(
       capacityRescaleRatio(
         targetSector.sectorType as CorporationType,
         targetSector.strategyId,
-        existing?.strategyId
+        existing?.strategyId,
+        targetSector.industryModel,
+        targetSector.mediaDiscriminator
       )
     : 0;
   const capitalStockDelta = Math.round(unitsForAttacker * 100) / 100;
@@ -368,10 +394,16 @@ export async function executeNppSectorAttack(
     await db.collection<CorporateSector>("corporateSectors").updateOne(
       { _id: existing._id },
       plantsEnabled
-        ? {
-            $inc: { capitalStock: capitalStockDelta },
-            $set: { updatedAt: now, capacityBookAnchor: captureBook?.attackerBookAnchor ?? 0 },
-          }
+        ? plantCapacityDeltaPipeline(
+            targetSector.sectorType as CorporationType,
+            capitalStockDelta,
+            {
+              updatedAt: now,
+              capacityBookAnchor: captureBook?.attackerBookAnchor ?? 0,
+            },
+            targetSector.industryModel,
+            targetSector.mediaDiscriminator
+          )
         : { $inc: { revenue: captureInAttackerLocal }, $set: { updatedAt: now } }
     );
   } else {
@@ -380,6 +412,10 @@ export async function executeNppSectorAttack(
       countryId: targetSector.countryId,
       stateId,
       sectorType: targetSector.sectorType as CorporationType,
+      ...(targetSector.industryModel ? { industryModel: targetSector.industryModel } : {}),
+      ...(targetSector.mediaDiscriminator
+        ? { mediaDiscriminator: targetSector.mediaDiscriminator }
+        : {}),
       targetGrowthRate: 0,
       currentGrowthRate: 0,
       currentGrowthCost: 0,
@@ -388,6 +424,12 @@ export async function executeNppSectorAttack(
       ...(plantsEnabled
         ? {
             capitalStock: capitalStockDelta,
+            ...seedPlantLedger(
+              targetSector.sectorType as CorporationType,
+              capitalStockDelta,
+              targetSector.industryModel,
+              targetSector.mediaDiscriminator
+            ),
             capacityBookAnchor: captureBook?.attackerBookAnchor ?? 0,
             plantsStartTurn: currentTurn,
           }
@@ -404,15 +446,24 @@ export async function executeNppSectorAttack(
     } catch (error) {
       if (isCorporateSectorDuplicateKey(error)) {
         await db.collection<CorporateSector>("corporateSectors").updateOne(
-          { corporationId: attacker._id, stateId, sectorType: targetSector.sectorType },
+          {
+            corporationId: attacker._id,
+            stateId,
+            sectorType: targetSector.sectorType,
+            industryModel: targetSector.industryModel ?? null,
+            mediaDiscriminator: targetSector.mediaDiscriminator ?? null,
+          },
           plantsEnabled
-            ? {
-                $inc: { capitalStock: capitalStockDelta },
-                $set: {
+            ? plantCapacityDeltaPipeline(
+                targetSector.sectorType as CorporationType,
+                capitalStockDelta,
+                {
                   updatedAt: now,
                   capacityBookAnchor: captureBook?.attackerBookAnchor ?? 0,
                 },
-              }
+                targetSector.industryModel,
+                targetSector.mediaDiscriminator
+              )
             : { $inc: { revenue: captureInAttackerLocal }, $set: { updatedAt: now } }
         );
       } else {
@@ -679,6 +730,8 @@ export async function runNppCorporateAttacks(
           capitalStock: 1,
           capacityBookAnchor: 1,
           strategyId: 1,
+          industryModel: 1,
+          mediaDiscriminator: 1,
         },
       }
     )
@@ -689,7 +742,7 @@ export async function runNppCorporateAttacks(
     const corpKey = s.corporationId.toString();
     if (!sectorsByCorp.has(corpKey)) sectorsByCorp.set(corpKey, []);
     sectorsByCorp.get(corpKey)!.push(s);
-    const marketKey = `${s.stateId}::${s.sectorType}`;
+    const marketKey = `${s.stateId}::${s.sectorType}::${s.industryModel ?? ""}::${s.mediaDiscriminator ?? ""}`;
     if (!sectorsByMarket.has(marketKey)) sectorsByMarket.set(marketKey, []);
     sectorsByMarket.get(marketKey)!.push(s);
   }
@@ -714,12 +767,20 @@ export async function runNppCorporateAttacks(
     // Markets the attacker operates in (its own sectors' state+type).
     const ownSectors = sectorsByCorp.get(attacker._id.toString()) ?? [];
     if (ownSectors.length === 0) continue;
-    const markets = ownSectors.map((s) => ({ stateId: s.stateId, sectorType: s.sectorType }));
+    const markets = ownSectors.map((s) => ({
+      stateId: s.stateId,
+      sectorType: s.sectorType,
+      industryModel: s.industryModel ?? null,
+      mediaDiscriminator: s.mediaDiscriminator ?? null,
+    }));
 
     // Rival sectors in those markets.
     const rivalSectors: CorporateSector[] = [];
     for (const m of markets) {
-      const bucket = sectorsByMarket.get(`${m.stateId}::${m.sectorType}`) ?? [];
+      const bucket =
+        sectorsByMarket.get(
+          `${m.stateId}::${m.sectorType}::${m.industryModel ?? ""}::${m.mediaDiscriminator ?? ""}`
+        ) ?? [];
       for (const s of bucket) {
         if (!s.corporationId.equals(attacker._id)) rivalSectors.push(s);
       }
@@ -755,6 +816,7 @@ export async function runNppCorporateAttacks(
         attackCapacityBasisAnchor(
           {
             sectorType: sector.sectorType as CorporationType,
+            industryModel: sector.industryModel,
             capitalStock: sector.capitalStock,
             strategyId: sector.strategyId,
           },

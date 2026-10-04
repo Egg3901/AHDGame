@@ -4,30 +4,35 @@
  */
 
 import type { ClientSession, Db, ObjectId } from "mongodb";
-import type { Corporation, IndexFund, IndexFundHolding } from "@/lib/db/types";
-import { creditSharesToFund, debitSharesFromFund } from "@/lib/corporations/shareholderOps";
-import {
-  isOrderFlowPriceEligible,
-  resolveShareExecutionPrice,
-} from "@/lib/corporations/marketExecution";
-import { recordShareTrade } from "@/lib/corporations/shareTradeHistory";
+import type { Corporation, IndexFundHolding } from "@/lib/db/types";
+import { resolveShareExecutionPrice } from "@/lib/corporations/marketExecution";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import {
-  onFloatSellCommitted,
-  reverseFloatSellDebit,
-  settleFloatSellDebit,
-} from "@/lib/corporations/shareEscrowSettlement";
-import { loadEquityQuote } from "@/lib/equities/marketPool";
+  equityPoolCurrency,
+  loadEquityQuote,
+  readEquityPool,
+  loadEquityPoolsByCurrency,
+} from "@/lib/equities/marketPool";
+import type { EquityMarketPool } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import {
   fxRateForCorpFromMap,
   loadFxRatesByCurrency,
-  resolveCorpLiquidCurrencyCode,
   shareTradeAnchorValue,
 } from "@/lib/currency/corporationCapital";
-import { emitTx, loadTxThresholds } from "@/lib/financialTxLog/emit";
 import type { TxThresholds } from "@/lib/db/types/financialTxLog";
-import { insertFundTransaction, updateFundHoldings } from "@/lib/indexFunds/fundQueries";
+import {
+  fundSettlementDb,
+  claimFundFloatPlan,
+  settleFundFloatPlan,
+  reverseCompletedFundFloatPlan,
+  type SettlementFund,
+} from "./fundFloatSettlement";
+import {
+  prepareFundFloatTrade,
+  loadFloatAuditContext,
+  type FloatAuditContext,
+} from "./fundFloatTradePlan";
 
 export type HoldingSaleInput = {
   corporationId: ObjectId;
@@ -185,7 +190,7 @@ type CorpQuoteRow = Pick<
  */
 export async function sellFundHoldingsForRedemptionCash(
   db: Db,
-  fund: IndexFund,
+  fund: SettlementFund,
   cashNeededAnchor: number,
   options?: {
     session?: ClientSession;
@@ -208,7 +213,8 @@ export async function sellFundHoldingsForRedemptionCash(
   }
 
   const corpIds = holdingsToSell.map((h) => h.corporationId);
-  const corps = (await db
+  const settlementDb = fundSettlementDb(db, options?.session);
+  const corps = (await settlementDb
     .collection<CorpQuoteRow>("corporations")
     .find({ _id: { $in: corpIds } })
     .project({
@@ -225,12 +231,14 @@ export async function sellFundHoldingsForRedemptionCash(
     .toArray()) as CorpQuoteRow[];
   const corpMap = new Map(corps.map((c) => [c._id.toString(), c]));
 
-  const fxByCurrency = await loadFxRatesByCurrency(db);
+  const pools = await loadEquityPoolsByCurrency(settlementDb);
+  const audit = await loadFloatAuditContext(settlementDb, options?.session);
+  const fxByCurrency = await loadFxRatesByCurrency(settlementDb);
   const pricedHoldings: HoldingSaleInput[] = [];
   for (const holding of holdingsToSell) {
     const corp = corpMap.get(holding.corporationId.toString());
     if (!corp) continue;
-    const quote = await loadEquityQuote(db, corp);
+    const quote = await loadEquityQuote(settlementDb, corp, { pools });
     const executionPrice = quote.bidPriceLocal;
     if (!Number.isFinite(executionPrice) || executionPrice <= 0) continue;
     const fxRate = fxRateForCorpFromMap(corp, fxByCurrency);
@@ -239,7 +247,7 @@ export async function sellFundHoldingsForRedemptionCash(
       { ...corp, sharePrice: executionPrice },
       fxRate
     );
-    if (pricePerShareAnchor <= 0) continue;
+    if (!Number.isFinite(pricePerShareAnchor) || pricePerShareAnchor <= 0) continue;
     pricedHoldings.push({
       corporationId: holding.corporationId,
       shares: holding.shares,
@@ -261,35 +269,40 @@ export async function sellFundHoldingsForRedemptionCash(
     return { cashRaisedAnchor: 0, sharesSold: 0, salesExecuted: 0 };
   }
 
-  let holdings = [...fund.holdings];
+  let settlementGeneration = fund.floatSettlementGeneration ?? 0;
   let cashRaisedAnchor = 0;
   let sharesSold = 0;
   let salesExecuted = 0;
   const saleUndos: Array<() => Promise<void>> = [];
-  const turn = await getCurrentTurn(db);
-  const now = new Date();
-  // #992 tranche 6: one thresholds read for the whole sale loop; the FX map
-  // above is reused per sale so neither is re-read per item.
-  const thresholds = await loadTxThresholds(db);
+  const turn = await getCurrentTurn(settlementDb);
 
   for (const sale of plan) {
     if (cashRaisedAnchor >= cashNeededAnchor) break;
 
     const corp = corpMap.get(sale.corporationId.toString());
-    if (!corp) continue;
+    if (!corp || !Number.isFinite(sale.sharesToSell) || sale.sharesToSell <= 0) continue;
 
-    const saleResult = await executeOneHoldingSale(db, fund, corp, sale, holdings, turn, now, {
+    const saleResult = await executeOneHoldingSale(db, fund, corp, sale, turn, {
       session: options?.session,
       note: options?.note,
-      thresholds,
       fxByCurrency,
+      pools,
+      audit,
+      expectedGeneration: settlementGeneration,
     });
-    if (!saleResult) continue;
+    if (!saleResult) {
+      // A compensated refusal consumes a generation but must not block other holdings.
+      const current = await settlementDb
+        .collection<SettlementFund>("indexFunds")
+        .findOne({ _id: fund._id }, { projection: { floatSettlementGeneration: 1 } });
+      settlementGeneration = current?.floatSettlementGeneration ?? settlementGeneration;
+      continue;
+    }
 
     cashRaisedAnchor += saleResult.proceedsAnchor;
     sharesSold += sale.sharesToSell;
     salesExecuted++;
-    holdings = saleResult.updatedHoldings;
+    settlementGeneration = saleResult.settlementGeneration;
     if (saleResult.undo) saleUndos.push(saleResult.undo);
   }
 
@@ -323,21 +336,25 @@ export async function sellFundHoldingsForRedemptionCash(
 // ── Shared per-sale execution helper ─────────────────────────────────────────
 
 type OneHoldingSaleOptions = {
+  audit?: FloatAuditContext;
+  expectedGeneration?: number;
   session?: ClientSession;
   note?: string;
   settlementCounterparty?: "market" | "issuer";
-  /**
-   * #992 tranche 6: preloaded one-per-pass inputs so the per-sale body does
-   * no per-item reads of its own (thresholds for the ledger row, FX for the
-   * proceeds conversion). Callers that loop over sales load both once.
-   */
-  thresholds?: TxThresholds;
+  /** Preloaded FX inputs shared across the sale pass. */
   fxByCurrency?: ReadonlyMap<CurrencyCode, number>;
+  /**
+   * The sale's equity pool, read once by the caller. Prices the quote and
+   * answers pool existence for the settle and commit legs, which would
+   * otherwise each read the same document again.
+   */
+  pools?: Map<CurrencyCode, EquityMarketPool>;
 };
 
 type OneHoldingSaleResult = {
   proceedsAnchor: number;
   updatedHoldings: IndexFundHolding[];
+  settlementGeneration: number;
   undo?: () => Promise<void>;
 };
 
@@ -345,200 +362,69 @@ type OneHoldingSaleResult = {
  * Execute a single holding-sale leg: settle issuer debit, debit shares from
  * fund, credit cash, update holdings, insert tx + trade history.
  * Returns null if the sale could not be executed (issuer block, insufficient
- * holdings, etc.) — the caller must skip and continue.
+ * holdings, etc.). The caller skips a proven refusal and resumes an unknown outcome.
  */
 async function executeOneHoldingSale(
   db: Db,
-  fund: IndexFund,
+  fund: SettlementFund,
   corp: CorpQuoteRow,
   sale: { corporationId: ObjectId; sharesToSell: number; pricePerShareAnchor: number },
-  currentHoldings: IndexFundHolding[],
   turn: number,
-  now: Date,
   options?: OneHoldingSaleOptions
 ): Promise<OneHoldingSaleResult | null> {
-  const quote = await loadEquityQuote(db, corp);
+  const settlementDb = fundSettlementDb(db, options?.session);
+  const pools = options?.pools ?? (await loadEquityPoolsByCurrency(settlementDb));
+  const quote = await loadEquityQuote(settlementDb, corp, { pools });
   const issuerFunded = options?.settlementCounterparty === "issuer";
   if (!issuerFunded && quote.active && sale.sharesToSell > quote.bidDepthShares) return null;
   const executionPrice = issuerFunded ? resolveShareExecutionPrice(corp) : quote.bidPriceLocal;
-  const orderFlowEligible = isOrderFlowPriceEligible(corp.publicFloat, corp.totalShares);
-  const issuerBuyback = sale.sharesToSell * executionPrice;
-
-  const issuerDebit = await settleFloatSellDebit(db, corp, issuerBuyback, {
-    session: options?.session,
-    counterparty: options?.settlementCounterparty,
-  });
-  if (!issuerDebit.ok) return null;
-
-  const remaining = await debitSharesFromFund(
-    db,
-    corp._id,
-    fund._id,
-    sale.sharesToSell,
-    {
-      $inc: {
-        publicFloat: sale.sharesToSell,
-        ...(orderFlowEligible
-          ? { orderFlowWindowSellValue: sale.sharesToSell * executionPrice }
-          : {}),
-      },
-      $set: { updatedAt: now },
-    },
-    { requireSufficient: true, session: options?.session }
-  );
-
-  if (remaining < 0) {
-    await reverseFloatSellDebit(db, corp, issuerBuyback, {
-      session: options?.session,
-      split: issuerDebit.split,
-      counterparty: options?.settlementCounterparty,
-    });
-    return null;
-  }
-
-  const fxByCurrency = options?.fxByCurrency ?? (await loadFxRatesByCurrency(db));
+  const fxByCurrency = options?.fxByCurrency ?? (await loadFxRatesByCurrency(settlementDb));
   const fxRate = fxRateForCorpFromMap(corp, fxByCurrency);
   const proceedsAnchor =
     Math.round(
       shareTradeAnchorValue(sale.sharesToSell, { ...corp, sharePrice: executionPrice }, fxRate) *
         100
     ) / 100;
-
-  const updatedHoldings = updateHoldingAfterSale(
-    currentHoldings,
-    sale.corporationId,
-    sale.sharesToSell,
-    sale.pricePerShareAnchor
-  );
-
-  await db
-    .collection("indexFunds")
-    .updateOne(
-      { _id: fund._id },
-      { $inc: { cashAnchor: proceedsAnchor }, $set: { updatedAt: now } },
-      options?.session ? { session: options.session } : undefined
-    );
-
-  await updateFundHoldings(db, fund._id, updatedHoldings, { session: options?.session });
-
-  const transactionId = await insertFundTransaction(
-    db,
-    {
-      fundId: fund._id,
-      kind: "public_float_sell",
-      corporationId: sale.corporationId,
-      shares: sale.sharesToSell,
-      navAnchor: sale.pricePerShareAnchor,
-      amountAnchor: proceedsAnchor,
-      note: options?.note ?? "Redemption liquidity",
-      createdAt: now,
-    },
-    { session: options?.session }
-  );
-
-  // #992 tranche 6: fund-subject ledger leg for the cashAnchor credit above.
-  // The contra is the unmodeled public float (single-sided under the shared
-  // equity_transfer reason, same as the tranche-5 float-buy row and the
-  // character/corporation stock_trade_sell rows). Fund-subject rows never
-  // mirror, so this is the only ledger row for the credit. Emitted after the
-  // holdings write and the fund transaction both landed, inside the same
-  // guarded sale that returns null on any settlement failure — a skipped sale
-  // emits nothing, an executed sale emits exactly one row.
-  await emitTx(
-    db,
-    {
-      type: "stock_trade_sell",
-      turn,
-      createdAt: now,
-      subjectType: "fund",
-      subjectId: fund._id,
-      subjectName: fund.name,
-      amount: proceedsAnchor,
-      anchorAmount: proceedsAnchor,
-      currencyCode: fund.anchorCurrencyCode,
-      counterpartyType: "system",
-      counterpartyName: "Public float",
-      meta: {
-        corporationId: corp._id.toString(),
-        shares: sale.sharesToSell,
-        pricePerShareAnchor: sale.pricePerShareAnchor,
-        source: options?.note ?? "redemption-liquidity",
-      },
-    },
-    options?.thresholds
-  );
-
-  void recordShareTrade(db, {
-    corporationId: corp._id,
-    kind: "market_sell",
-    turn,
+  const audit = options?.audit ?? (await loadFloatAuditContext(settlementDb, options?.session));
+  const prepared = await prepareFundFloatTrade(settlementDb, {
+    fund,
+    corp,
+    direction: "sell",
     shares: sale.sharesToSell,
-    pricePerShareAnchor: proceedsAnchor / sale.sharesToSell,
-    from: { name: `${fund.name} (index fund)` },
-    to: null,
-    corpCurrencyCode: resolveCorpLiquidCurrencyCode(corp) ?? undefined,
-    note: options?.note ?? "Index fund redemption liquidity",
+    priceLocal: executionPrice,
+    priceAnchor: sale.pricePerShareAnchor,
+    amountAnchor: proceedsAnchor,
+    turn,
+    pools,
+    issuerFunded,
+    audit,
+    expectedGeneration: options?.expectedGeneration,
+    note: options?.note ?? "Redemption liquidity",
+    holdingsAfter: (holdings) =>
+      updateHoldingAfterSale(
+        holdings,
+        sale.corporationId,
+        sale.sharesToSell,
+        sale.pricePerShareAnchor
+      ),
   });
-
-  await onFloatSellCommitted(db, corp, issuerBuyback, {
-    session: options?.session,
-    counterparty: options?.settlementCounterparty,
-  });
-
-  const undo = options?.session
-    ? undefined
-    : async () => {
-        const errors: unknown[] = [];
-        const reverse = async (work: () => Promise<unknown>) => {
-          try {
-            await work();
-          } catch (error) {
-            errors.push(error);
-          }
-        };
-        await reverse(() =>
-          db.collection("indexFundTransactions").deleteOne({ _id: transactionId })
-        );
-        await reverse(() => updateFundHoldings(db, fund._id, currentHoldings));
-        await reverse(() =>
-          db
-            .collection("indexFunds")
-            .updateOne(
-              { _id: fund._id },
-              { $inc: { cashAnchor: -proceedsAnchor }, $set: { updatedAt: new Date() } }
-            )
-        );
-        await reverse(async () => {
-          const restored = await creditSharesToFund(
-            db,
-            corp._id,
-            fund._id,
-            sale.sharesToSell,
-            sale.pricePerShareAnchor,
-            {
-              $inc: {
-                publicFloat: -sale.sharesToSell,
-                ...(orderFlowEligible
-                  ? { orderFlowWindowSellValue: -sale.sharesToSell * executionPrice }
-                  : {}),
-              },
-              $set: { updatedAt: new Date() },
-            }
-          );
-          if (!restored) throw new Error("Failed to restore fund shares after liquidity sale");
-        });
-        await reverse(() =>
-          reverseFloatSellDebit(db, corp, issuerBuyback, {
-            split: issuerDebit.split,
-            counterparty: options?.settlementCounterparty,
-          })
-        );
-        if (errors.length > 0) {
-          throw new AggregateError(errors, "Redemption liquidity sale compensation was incomplete");
-        }
-      };
-
-  return { proceedsAnchor, updatedHoldings, undo };
+  if (!prepared || !(await claimFundFloatPlan(settlementDb, prepared.fund, prepared.plan)))
+    return null;
+  if (!(await settleFundFloatPlan(settlementDb, fund._id, prepared.plan))) return null;
+  const pool = pools.get(prepared.currency);
+  if (pool) pool.cashLocal += prepared.poolDelta;
+  return {
+    proceedsAnchor,
+    updatedHoldings: prepared.plan.holdingsAfter,
+    settlementGeneration: (prepared.fund.floatSettlementGeneration ?? 0) + 1,
+    ...(options?.session
+      ? {}
+      : {
+          undo: async () => {
+            await reverseCompletedFundFloatPlan(db, fund._id, prepared.plan);
+          },
+        }),
+  };
 }
 
 // ── sellFundHoldingShares ─────────────────────────────────────────────────────
@@ -551,7 +437,7 @@ async function executeOneHoldingSale(
  */
 export async function sellFundHoldingShares(
   db: Db,
-  fund: IndexFund,
+  fund: SettlementFund,
   corporationId: ObjectId,
   maxShares: number,
   options?: {
@@ -561,6 +447,8 @@ export async function sellFundHoldingShares(
     thresholds?: TxThresholds;
     fxByCurrency?: ReadonlyMap<CurrencyCode, number>;
     turn?: number;
+    audit?: FloatAuditContext;
+    pools?: Map<CurrencyCode, EquityMarketPool>;
   }
 ): Promise<SellHoldingsForRedemptionResult> {
   const holding = fund.holdings.find(
@@ -570,7 +458,8 @@ export async function sellFundHoldingShares(
     return { cashRaisedAnchor: 0, sharesSold: 0, salesExecuted: 0 };
   }
 
-  const corps = (await db
+  const settlementDb = fundSettlementDb(db, options?.session);
+  const corps = (await settlementDb
     .collection<CorpQuoteRow>("corporations")
     .find({ _id: corporationId })
     .project({
@@ -591,7 +480,15 @@ export async function sellFundHoldingShares(
     return { cashRaisedAnchor: 0, sharesSold: 0, salesExecuted: 0 };
   }
 
-  const quote = await loadEquityQuote(db, corp);
+  // One read of the sale's pool serves both quotes and both pool-existence
+  // checks below; nothing writes the pool before the sale's own debit.
+  const currency = equityPoolCurrency(corp);
+  const pools = options?.pools ?? new Map<CurrencyCode, EquityMarketPool>();
+  if (!options?.pools) {
+    const pool = await readEquityPool(settlementDb, currency);
+    if (pool) pools.set(currency, pool);
+  }
+  const quote = await loadEquityQuote(settlementDb, corp, { pools });
   const issuerFunded = options?.settlementCounterparty === "issuer";
   const sharesToSell = Math.min(
     maxShares,
@@ -607,7 +504,7 @@ export async function sellFundHoldingShares(
     return { cashRaisedAnchor: 0, sharesSold: 0, salesExecuted: 0 };
   }
 
-  const fxByCurrency = options?.fxByCurrency ?? (await loadFxRatesByCurrency(db));
+  const fxByCurrency = options?.fxByCurrency ?? (await loadFxRatesByCurrency(settlementDb));
   const fxRate = fxRateForCorpFromMap(corp, fxByCurrency);
   const pricePerShareAnchor = shareTradeAnchorValue(
     1,
@@ -618,18 +515,22 @@ export async function sellFundHoldingShares(
     return { cashRaisedAnchor: 0, sharesSold: 0, salesExecuted: 0 };
   }
 
-  const turn = options?.turn ?? (await getCurrentTurn(db));
-  const now = new Date();
+  const turn = options?.turn ?? (await getCurrentTurn(settlementDb));
 
   const saleResult = await executeOneHoldingSale(
     db,
     fund,
     corp,
     { corporationId, sharesToSell, pricePerShareAnchor },
-    [...fund.holdings],
     turn,
-    now,
-    { ...options, thresholds: options?.thresholds ?? (await loadTxThresholds(db)), fxByCurrency }
+    {
+      ...options,
+      audit:
+        options?.audit ??
+        (await loadFloatAuditContext(settlementDb, options?.session, options?.thresholds)),
+      fxByCurrency,
+      pools,
+    }
   );
 
   if (!saleResult) {
@@ -640,5 +541,6 @@ export async function sellFundHoldingShares(
     cashRaisedAnchor: saleResult.proceedsAnchor,
     sharesSold: sharesToSell,
     salesExecuted: 1,
+    ...(saleResult.undo ? { undo: saleResult.undo } : {}),
   };
 }

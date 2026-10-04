@@ -1,0 +1,229 @@
+{
+  "title": "Media regulation advertising availability diagnostic",
+  "method": "Runs production clearing and political residual rules against final normalized delivery and current-turn settled attribution. This is a rule sensitivity report, not a world simulation or a 1991 seed target.",
+  "assumptions": {
+    "currentTurnPhysicalAdvertisingUnits": {
+      "network-a": 80,
+      "network-b": 20
+    },
+    "missingHistoryBehavior": "ownership enforcement uses current clearing; bill eligibility fails closed on incomplete current-turn measurement",
+    "audienceAccessLimitDefinition": "each owner is bounded against final delivered state units; no positive delivery is feasible when too few owners satisfy the cap",
+    "ownershipBillThresholdScope": "national US aggregate, with foreign delivery excluded",
+    "enactedAudienceAccessLimitScope": "each US state audience market; no ownership divestiture is modeled",
+    "ownershipBillMeasurement": "current-turn sector sold units less all planned political units, plus each matching applied seller receipt once by stable movement id"
+  },
+  "audienceLimitCases": [
+    {
+      "policyOptionIndex": 0,
+      "shareCap": 0.35,
+      "filledAgainstStrongPoliticalDemand": {
+        "largestFinalShare": 0,
+        "rawProducedUnits": 100,
+        "availableUnits": 100,
+        "commercialUnits": 0,
+        "fundedPoliticalUnits": 0,
+        "totalUnits": 0,
+        "remainingProducedUnits": 100,
+        "overflowUnits": 0,
+        "deliveredPoliticalAnchor": 0,
+        "refundAnchor": 10000,
+        "sellerReceiptAnchor": 0,
+        "payoutMatchesDeliveredAnchor": true
+      }
+    },
+    {
+      "policyOptionIndex": 1,
+      "shareCap": 0.45,
+      "filledAgainstStrongPoliticalDemand": {
+        "largestFinalShare": 0,
+        "rawProducedUnits": 100,
+        "availableUnits": 100,
+        "commercialUnits": 0,
+        "fundedPoliticalUnits": 0,
+        "totalUnits": 0,
+        "remainingProducedUnits": 100,
+        "overflowUnits": 0,
+        "deliveredPoliticalAnchor": 0,
+        "refundAnchor": 10000,
+        "sellerReceiptAnchor": 0,
+        "payoutMatchesDeliveredAnchor": true
+      }
+    },
+    {
+      "policyOptionIndex": 2,
+      "shareCap": 0.55,
+      "filledAgainstStrongPoliticalDemand": {
+        "largestFinalShare": 0.55,
+        "rawProducedUnits": 100,
+        "availableUnits": 100,
+        "commercialUnits": 22.222222,
+        "fundedPoliticalUnits": 4.938272,
+        "totalUnits": 27.160494,
+        "remainingProducedUnits": 72.839506,
+        "overflowUnits": 0,
+        "deliveredPoliticalAnchor": 0.205761,
+        "refundAnchor": 9999.794239,
+        "sellerReceiptAnchor": 0.205761,
+        "payoutMatchesDeliveredAnchor": true
+      }
+    },
+    {
+      "policyOptionIndex": 3,
+      "shareCap": 0.65,
+      "filledAgainstStrongPoliticalDemand": {
+        "largestFinalShare": 0.518519,
+        "rawProducedUnits": 100,
+        "availableUnits": 100,
+        "commercialUnits": 28.571429,
+        "fundedPoliticalUnits": 10,
+        "totalUnits": 38.571429,
+        "remainingProducedUnits": 61.428571,
+        "overflowUnits": 0,
+        "deliveredPoliticalAnchor": 0.416667,
+        "refundAnchor": 9999.583333,
+        "sellerReceiptAnchor": 0.416667,
+        "payoutMatchesDeliveredAnchor": true
+      }
+    },
+    {
+      "policyOptionIndex": 4,
+      "shareCap": 0.75,
+      "filledAgainstStrongPoliticalDemand": {
+        "largestFinalShare": 0.6,
+        "rawProducedUnits": 100,
+        "availableUnits": 100,
+        "commercialUnits": 40,
+        "fundedPoliticalUnits": 10,
+        "totalUnits": 50,
+        "remainingProducedUnits": 50,
+        "overflowUnits": 0,
+        "deliveredPoliticalAnchor": 0.416667,
+        "refundAnchor": 9999.583333,
+        "sellerReceiptAnchor": 0.416667,
+        "payoutMatchesDeliveredAnchor": true
+      }
+    },
+    {
+      "policyOptionIndex": 5,
+      "shareCap": null,
+      "filledAgainstStrongPoliticalDemand": {
+        "largestFinalShare": 0.8,
+        "rawProducedUnits": 100,
+        "availableUnits": 100,
+        "commercialUnits": 50,
+        "fundedPoliticalUnits": 50,
+        "totalUnits": 100,
+        "remainingProducedUnits": 0,
+        "overflowUnits": 0,
+        "deliveredPoliticalAnchor": 2.083333,
+        "refundAnchor": 9997.916667,
+        "sellerReceiptAnchor": 2.083333,
+        "payoutMatchesDeliveredAnchor": true
+      }
+    },
+    {
+      "policyOptionIndex": 6,
+      "shareCap": null,
+      "filledAgainstStrongPoliticalDemand": {
+        "largestFinalShare": 0.8,
+        "rawProducedUnits": 100,
+        "availableUnits": 100,
+        "commercialUnits": 50,
+        "fundedPoliticalUnits": 50,
+        "totalUnits": 100,
+        "remainingProducedUnits": 0,
+        "overflowUnits": 0,
+        "deliveredPoliticalAnchor": 2.083333,
+        "refundAnchor": 9997.916667,
+        "sellerReceiptAnchor": 2.083333,
+        "payoutMatchesDeliveredAnchor": true
+      }
+    }
+  ],
+  "censorshipCases": [
+    {
+      "name": "open press",
+      "pressFreedom": 100,
+      "stateMediaControl": 0,
+      "privateOutletAvailability": 1
+    },
+    {
+      "name": "restricted press",
+      "pressFreedom": 50,
+      "stateMediaControl": 65,
+      "privateOutletAvailability": 0.7125
+    },
+    {
+      "name": "state controlled press",
+      "pressFreedom": 10,
+      "stateMediaControl": 100,
+      "privateOutletAvailability": 0.525
+    }
+  ],
+  "ownershipTriggerCases": [
+    {
+      "label": "at national threshold",
+      "billAvailable": false
+    },
+    {
+      "label": "above national threshold",
+      "billAvailable": true
+    },
+    {
+      "label": "one state is concentrated but national share is below threshold",
+      "billAvailable": false
+    },
+    {
+      "label": "foreign output is excluded from US concentration",
+      "billAvailable": true
+    }
+  ],
+  "fairnessEraCases": [
+    {
+      "currentYear": 1986,
+      "regulatedPolicyOptionIndex": 2,
+      "fairnessDoctrineInEffect": true
+    },
+    {
+      "currentYear": 1987,
+      "regulatedPolicyOptionIndex": 2,
+      "fairnessDoctrineInEffect": false
+    }
+  ],
+  "currentTurnPoliticalAttribution": {
+    "physicalSoldUnits": 80,
+    "plannedPoliticalUnits": 20,
+    "appliedSellerReceiptUnits": 10,
+    "unpaidPlannedUnits": 10,
+    "measuredReachUnits": 70,
+    "reachWhenNoSellerReceiptHasApplied": 60,
+    "staleSnapshotReach": null
+  },
+  "attributionReadBudget": {
+    "flagOffAdditionalQueries": 0,
+    "flagOnQueries": {
+      "sectorAndOwnerLoads": 2,
+      "currentTurnOrderPlans": 1,
+      "appliedSellerReceipts": "1 only when a current-turn settlement plan has sellers"
+    },
+    "sellerReceiptIndex": "bankMoneyMoves_politicalMedia_sellerReceiptTurn"
+  },
+  "fresh1991RuleContext": {
+    "currentYear": 1991,
+    "representativePolicyOptionIndex": 3,
+    "fairnessDoctrineInEffect": false,
+    "ownershipBillAvailableAtMeasured80To20Share": true,
+    "finalDeliveredShareAtRepresentativeOption": 0.518519
+  },
+  "accounting": {
+    "finalCommercialFillsAndPoliticalResidualAreBoundedBeforeReceipts": true,
+    "noAdvertisingUnitsAreCreated": true,
+    "capUsesFinalDeliveredShare": true,
+    "allFinalSharesMeetEnactedCap": true,
+    "unmeasuredHistoryDoesNotInventConcentration": true,
+    "unpaidPoliticalPlansDoNotCountAsReach": true,
+    "staleDeliverySnapshotsFailClosed": true,
+    "fundedPoliticalBuyerDebitEqualsSellerReceipt": true,
+    "partialPoliticalFillRetainsUnfilledBudget": true
+  }
+}

@@ -18,6 +18,7 @@ import type { Bond, BondMarketPool, BondMarketPoolFlowKind } from "@/lib/db/type
 import { BOND_MARKET_POOLS_COLLECTION } from "@/lib/db/types/bondMarketPool";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
+import { witnessBondPoolCash, type BondPoolLedgerContext } from "./marketPoolLedger";
 import { quoteBondPrices, type BondPoolQuote } from "@/lib/bonds/marketPoolQuotes";
 
 /** Share of a currency's broad money (M2) the pool is seeded with and steered toward. */
@@ -54,7 +55,7 @@ export async function creditBondPool(
   amountLocal: number,
   kind: BondMarketPoolFlowKind,
   now: Date = new Date(),
-  options?: { session?: ClientSession }
+  options?: { session?: ClientSession; ledgerContext?: BondPoolLedgerContext | null }
 ): Promise<void> {
   const amount = roundCents(amountLocal);
   if (!Number.isFinite(amount) || amount <= 0) return;
@@ -67,6 +68,7 @@ export async function creditBondPool(
     },
     { upsert: true, ...(options?.session ? { session: options.session } : {}) }
   );
+  await witnessBondPoolCash(db, currency, amount, kind, now, options);
 }
 
 /**
@@ -80,7 +82,11 @@ export async function debitBondPoolGated(
   amountLocal: number,
   kind: BondMarketPoolFlowKind,
   now: Date = new Date(),
-  options?: { session?: ClientSession; stamp?: string }
+  options?: {
+    session?: ClientSession;
+    stamp?: string;
+    ledgerContext?: BondPoolLedgerContext | null;
+  }
 ): Promise<{ ok: true; cashAfter: number } | { ok: false }> {
   const amount = roundCents(amountLocal);
   if (!Number.isFinite(amount) || amount < 0) return { ok: false };
@@ -109,6 +115,7 @@ export async function debitBondPoolGated(
     }
   );
   if (!result) return { ok: false };
+  await witnessBondPoolCash(db, currency, -amount, kind, now, options);
   return { ok: true, cashAfter: result.cashLocal };
 }
 
@@ -122,16 +129,23 @@ export async function refundBondPoolDebit(
   currency: CurrencyCode,
   amountLocal: number,
   kind: BondMarketPoolFlowKind,
-  now: Date = new Date()
+  now: Date = new Date(),
+  options?: { stamp?: string; ledgerContext?: BondPoolLedgerContext | null }
 ): Promise<void> {
   const amount = roundCents(amountLocal);
   if (!Number.isFinite(amount) || amount <= 0) return;
-  await db
-    .collection<BondMarketPool>(BOND_MARKET_POOLS_COLLECTION)
-    .updateOne(
-      { _id: currency },
-      { $inc: { cashLocal: amount, [`lifetime.${kind}`]: -amount }, $set: { updatedAt: now } }
-    );
+  const result = await db.collection<BondMarketPool>(BOND_MARKET_POOLS_COLLECTION).updateOne(
+    {
+      _id: currency,
+      ...(options?.stamp ? { [SETTLED_KEYS_FIELD]: options.stamp } : {}),
+    } as Filter<BondMarketPool>,
+    {
+      $inc: { cashLocal: amount, [`lifetime.${kind}`]: -amount },
+      $set: { updatedAt: now },
+      ...(options?.stamp ? { $pull: { [SETTLED_KEYS_FIELD]: options.stamp } } : {}),
+    } as unknown as UpdateFilter<BondMarketPool>
+  );
+  if (result.modifiedCount > 0) await witnessBondPoolCash(db, currency, amount, kind, now, options);
 }
 
 /**

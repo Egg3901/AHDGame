@@ -112,7 +112,9 @@ export function resolveBuildQueueTurn(args: BuildQueueTurnArgs): BuildQueueTurn 
     sector.sectorType,
     currentYear ?? CAPACITY_ANCHOR_YEAR,
     eraUnitScale,
-    sector.strategyId ?? null
+    sector.strategyId ?? null,
+    sector.industryModel,
+    sector.mediaDiscriminator
   );
   // C10: the credit keys on the ACCRUED COST, not on the target slider.
   // `currentGrowthCost` is what the sector is being billed THIS turn;

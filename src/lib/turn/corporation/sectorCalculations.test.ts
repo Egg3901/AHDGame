@@ -23,6 +23,13 @@ import {
   STRIKE_WAITOUT_UNIONIZATION_BUMP,
 } from "@/lib/labour/strikes";
 import type { Corporation, CorporateSector } from "@/lib/db/types";
+import type { MediaProductProject } from "@/lib/products/mediaProduct";
+import { MEDIA_PRODUCT_PROJECTS } from "@/lib/products/mediaProduct";
+import { processMediaProductProjectsV1 } from "@/lib/products/mediaProductPersistence";
+import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
+import { InjectedCrash, withInjectedCrash } from "@/lib/test-utils/faultyDb";
+import { settleMediaProductAdvertisingObligations } from "@/lib/products/mediaProductAdvertisingSettlement";
+import { applyOperatingCashThenDevelopmentCash } from "./manufacturingDevelopmentCashSettlement";
 import {
   TURNS_PER_DAY,
   MIN_SHARE_PRICE,
@@ -54,6 +61,7 @@ function getTotalPayment(map: Map<string, Map<CurrencyCode, number>>, charId: st
 
 vi.mock("@/lib/bonds/corporateCredit", () => ({
   sumCorporateSectorConstructionInProgress: vi.fn().mockReturnValue(0),
+  corporateCashArrearsAnchor: vi.fn().mockReturnValue(0),
   computeCorporateCreditAtTurn: vi.fn().mockReturnValue({
     creditRating: { rating: "BBB", compositeScore: 50 },
     totalDebt: 0,
@@ -97,17 +105,21 @@ vi.mock("@/lib/constants/commodities", async (importOriginal) => {
 vi.mock("@/lib/utils/productionPolicy", () => ({
   trendProductionPolicy: vi.fn().mockImplementation((current: number) => current),
   getRevenueMultiplier: vi.fn().mockReturnValue(1),
+  getInputMultiplier: vi.fn().mockReturnValue(1),
+  getOutputMultiplier: vi.fn().mockReturnValue(1),
 }));
 
 vi.mock("@/lib/constants/sectorStrategies", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/constants/sectorStrategies")>();
+  const mockEffectiveRates = vi.fn().mockReturnValue({
+    growthRate: 1,
+    profitMargin: 0,
+    isTransitioning: false,
+  });
   return {
     ...actual,
-    getEffectiveStrategyRates: vi.fn().mockReturnValue({
-      growthRate: 1,
-      profitMargin: 0,
-      isTransitioning: false,
-    }),
+    getEffectiveStrategyRates: mockEffectiveRates,
+    getEffectiveStrategyRatesForOperatingModel: mockEffectiveRates,
   };
 });
 
@@ -238,6 +250,104 @@ function makeSector(corpId: ObjectId, overrides: Partial<CorporateSector> = {}):
   } as CorporateSector;
 }
 
+describe("funded manufacturing project development cash", () => {
+  function developmentFixture(liquidCapital: number) {
+    const corp = makeCorp({
+      liquidCapital,
+      rdBudget: 24_000,
+    });
+    const sector = makeSector(corp._id, { profitMargin: 0 });
+    const lookups = baseLookups([corp], [sector]);
+    lookups.productLinesV2Enabled = true;
+    lookups.manufacturingProductByCorpId = new Map([
+      [
+        corp._id.toString(),
+        {
+          _id: "product-1",
+          corporationId: corp._id.toString(),
+          activeCorporationId: corp._id.toString(),
+          kindId: "passenger_car",
+          stage: "development",
+          stageStartedTurn: 4,
+          allocations: [{ sectorId: sector._id.toString(), share: 1 }],
+          startedTurn: 4,
+          developmentPaidAnchor: 0,
+          paidThresholdAnchor: 500,
+          elapsedDevelopmentTurns: 0,
+          elapsedThresholdTurns: 12,
+        },
+      ],
+    ]);
+    return { corp, lookups };
+  }
+
+  it("does not record project progress when a loss leaves no operating cash", () => {
+    const { corp, lookups } = developmentFixture(0);
+    const result = processSectors(lookups, 5, new Date());
+    const normal = result.corpOps[0] as {
+      updateOne: { update: { $inc: { liquidCapital: number }; $set: Record<string, unknown> } };
+    };
+    expect(normal.updateOne.update.$inc.liquidCapital).toBeLessThan(0);
+    expect(normal.updateOne.update.$set).not.toHaveProperty(
+      "manufacturingProductDevelopmentReceiptV2"
+    );
+    expect(result.manufacturingDevelopmentCashOps).toHaveLength(0);
+    expect(corp.liquidCapital).toBe(0);
+  });
+
+  it("debits only the affordable amount and guards live cash, old receipts, and same-turn retries", () => {
+    const { corp, lookups } = developmentFixture(1_500);
+    const result = processSectors(lookups, 5, new Date());
+    const guarded = result.manufacturingDevelopmentCashOps[0] as {
+      updateOne: {
+        filter: Record<string, unknown>;
+        update: { $inc: { liquidCapital: number }; $set: Record<string, unknown> };
+      };
+    };
+
+    expect(guarded.updateOne.filter).toMatchObject({
+      _id: corp._id,
+      manufacturingProductDevelopmentPaidTurnV2: { $ne: 5 },
+      manufacturingProductDevelopmentReceiptV2: { $exists: false },
+      $expr: {
+        $gte: [{ $ifNull: ["$liquidCapital", 0] }, 500],
+      },
+    });
+    expect(guarded.updateOne.update).toEqual({
+      $inc: { liquidCapital: -500 },
+      $set: {
+        manufacturingProductDevelopmentPaidTurnV2: 5,
+        manufacturingProductDevelopmentReceiptV2: {
+          projectId: "product-1",
+          turn: 5,
+          amountAnchor: 500,
+        },
+      },
+    });
+
+    const normalCashWrite = result.corpOps[0] as {
+      updateOne: { update: { $inc: { liquidCapital: number } } };
+    };
+    expect(result.corpSnapshots[0].liquidCapital).toBe(
+      corp.liquidCapital + normalCashWrite.updateOne.update.$inc.liquidCapital
+    );
+    expect(result.corpSnapshots[0].liquidCapitalAnchorAfterIncome).toBe(
+      result.corpSnapshots[0].liquidCapital
+    );
+
+    // A concurrent spend to 499 makes the actual Mongo predicate false. If a
+    // crash occurs after receipt consumption, retaining this turn stamp makes
+    // a retried turn's otherwise-empty-slot predicate false as well.
+    expect(499 < (guarded.updateOne.filter.$expr as { $gte: [unknown, number] }).$gte[1]).toBe(
+      true
+    );
+    expect(
+      5 ===
+        (guarded.updateOne.filter.manufacturingProductDevelopmentPaidTurnV2 as { $ne: number }).$ne
+    ).toBe(true);
+  });
+});
+
 // ── Zero corporations ─────────────────────────────────────────────────────────
 
 describe("processSectors with no corporations", () => {
@@ -287,8 +397,12 @@ describe("expropriation-risk margin drag", () => {
 describe("marketing settlement", () => {
   type CorpOp = {
     updateOne: {
-      filter: { _id: ObjectId };
-      update: { $inc?: { liquidCapital?: number } };
+      filter: { _id: ObjectId; advertisingMarketSettledTurnV1?: { $ne: number } };
+      update: {
+        $inc?: { liquidCapital?: number };
+        $set?: Record<string, unknown>;
+        $push?: Record<string, unknown>;
+      };
     };
   };
 
@@ -374,6 +488,285 @@ describe("marketing settlement", () => {
     expect(result.corpSnapshots.find((s) => s.corpId.equals(buyer._id))?.liquidCapital).toBe(990);
     expect(result.corpSnapshots.find((s) => s.corpId.equals(seller._id))?.liquidCapital).toBe(
       1_000
+    );
+  });
+
+  it("freezes title advertising and defers its buyer and seller cash legs", () => {
+    const buyer = makeCorp({ liquidCapital: 1_000, marketingBudget: 2_400 });
+    const seller = makeCorp({ liquidCapital: 1_000 });
+    const lookups = baseLookups([buyer, seller], []);
+    lookups.mediaProductSlatesEnabled = true;
+    lookups.mediaProductDevelopmentByCorpId = new Map([
+      [
+        buyer._id.toString(),
+        {
+          _id: "media-title-1",
+          corporationId: buyer._id.toString(),
+          activeDevelopmentCorporationId: buyer._id.toString(),
+          sectorId: "media-sector-1",
+          operatingSectorType: "media",
+          kindId: "newspaper_edition",
+          title: "Daily Record",
+          allocationShare: 0.5,
+          stage: "development",
+          startedTurn: 0,
+          stageStartedTurn: 0,
+          developmentPaidAnchor: 0,
+          paidThresholdAnchor: 10,
+          elapsedDevelopmentTurns: 0,
+          elapsedThresholdTurns: 2,
+          developmentAdvertisingAnchor: 0,
+          developmentAdvertisingTurns: 0,
+        } satisfies MediaProductProject,
+      ],
+    ]);
+    const result = processSectors(lookups, 1, new Date(), false, 1953, undefined, {
+      ...MARKET_DISABLED,
+      clearingEnabled: true,
+      advertisingSellerDeliveredValueAnchorByCorpId: new Map([[seller._id.toString(), 50]]),
+    });
+    const operation = (result.corpOps as CorpOp[]).find((op) =>
+      op.updateOne.filter._id.equals(buyer._id)
+    );
+
+    const update = operation?.updateOne.update as {
+      $inc?: Record<string, number>;
+      $set?: Record<string, unknown>;
+      $push?: Record<string, unknown>;
+    };
+    expect(operation?.updateOne.filter).toMatchObject({
+      advertisingMarketSettledTurnV1: { $ne: 1 },
+    });
+    expect(update.$push?.mediaProductAdvertisingObligationsV1).toMatchObject({
+      projectId: "media-title-1",
+      turn: 1,
+      amountAnchor: 25,
+      buyerAmountLocal: 25,
+      sellerAllocations: [{ corporationId: seller._id.toString(), amountLocal: 25 }],
+    });
+    expect(update.$inc?.liquidCapital).toBe(-25);
+    expect(update.$set).not.toHaveProperty("mediaProductAdvertisingReceiptV1");
+  });
+
+  it("pays the frozen title order once across a post-credit crash and changed budget or FX retry", async () => {
+    const buyer = makeCorp({ liquidCapital: 1_000, marketingBudget: 480 });
+    const seller = makeCorp({ liquidCapital: 1_000 });
+    const title: MediaProductProject = {
+      _id: "media-title-retry",
+      corporationId: buyer._id.toString(),
+      activeDevelopmentCorporationId: buyer._id.toString(),
+      sectorId: "media-sector-retry",
+      operatingSectorType: "media",
+      kindId: "newspaper_edition",
+      title: "Evening Ledger",
+      allocationShare: 0.5,
+      stage: "development",
+      startedTurn: 0,
+      stageStartedTurn: 0,
+      developmentPaidAnchor: 0,
+      paidThresholdAnchor: 100,
+      elapsedDevelopmentTurns: 0,
+      elapsedThresholdTurns: 2,
+      developmentAdvertisingAnchor: 0,
+      developmentAdvertisingTurns: 0,
+    };
+    const makeMediaLookups = (payingCorporation: Corporation, rate: number) => {
+      const lookups = baseLookups([payingCorporation, seller], []);
+      lookups.exchangeRatesByCurrency = new Map<CurrencyCode, number>([["USD", rate]]);
+      lookups.mediaProductSlatesEnabled = true;
+      lookups.mediaProductDevelopmentByCorpId = new Map([
+        [payingCorporation._id.toString(), title],
+      ]);
+      return lookups;
+    };
+    const market: MarketContext = {
+      ...MARKET_DISABLED,
+      clearingEnabled: true,
+      advertisingSellerDeliveredValueAnchorByCorpId: new Map([[seller._id.toString(), 100]]),
+    };
+    const memory = createInMemoryDb();
+    memory.seed("corporations", [{ ...buyer }, { ...seller }]);
+    memory.seed(MEDIA_PRODUCT_PROJECTS, [title as unknown as Record<string, unknown>]);
+
+    const firstResult = processSectors(
+      makeMediaLookups(buyer, 1),
+      1,
+      new Date(),
+      false,
+      1953,
+      undefined,
+      market
+    );
+    const crash = withInjectedCrash(memory, {
+      collection: "corporations",
+      op: "updateOne",
+      onCall: 1,
+      afterWrite: true,
+      matches: (args) => (args[0] as { _id?: ObjectId })._id?.equals(buyer._id) === true,
+    });
+    await expect(
+      applyOperatingCashThenDevelopmentCash({
+        db: crash.db,
+        operations: [],
+        turn: 1,
+        corporations: [buyer, seller],
+        snapshots: [],
+        exchangeRatesByCurrency: new Map(),
+        bondsByCorpId: new Map(),
+        sectorsByCorp: new Map(),
+        mediaProductSlatesEnabled: true,
+        applyOperatingCashWrites: async () => {
+          await crash.db.collection("corporations").bulkWrite(firstResult.corpOps as never[]);
+          await crash.db
+            .collection("corporations")
+            .updateOne({ _id: seller._id }, { $inc: { liquidCapital: 100 } });
+        },
+      })
+    ).rejects.toBeInstanceOf(InjectedCrash);
+    crash.disarm();
+
+    // The crash follows the buyer debit. The journal owns both frozen native
+    // quotes, and the debit's settled-key stamp prevents a duplicate on retry.
+    const afterCrashBuyer = await memory.collection("corporations").findOne({ _id: buyer._id });
+    const afterCrashSeller = await memory.collection("corporations").findOne({ _id: seller._id });
+    expect(afterCrashBuyer?.liquidCapital).toBe(980);
+    expect(afterCrashSeller?.liquidCapital).toBe(1_010);
+
+    // A changed budget and exchange quote cannot replace the paid obligation.
+    const changedBudgetBuyer = { ...buyer, marketingBudget: 4_800 };
+    const retryOperations = processSectors(
+      makeMediaLookups(changedBudgetBuyer, 2),
+      1,
+      new Date(),
+      false,
+      1953,
+      undefined,
+      market
+    );
+    await applyOperatingCashThenDevelopmentCash({
+      db: memory as never,
+      operations: [],
+      turn: 1,
+      corporations: [buyer, seller],
+      snapshots: [],
+      exchangeRatesByCurrency: new Map(),
+      bondsByCorpId: new Map(),
+      sectorsByCorp: new Map(),
+      mediaProductSlatesEnabled: true,
+      applyOperatingCashWrites: async () => {
+        await memory.collection("corporations").bulkWrite(retryOperations.corpOps as never[]);
+      },
+    });
+    const settledAgain = await settleMediaProductAdvertisingObligations(
+      memory as never,
+      [buyer._id, seller._id],
+      1
+    );
+    const afterRetry = await memory.collection("corporations").findOne({ _id: buyer._id });
+    expect(afterRetry?.liquidCapital).toBe(980);
+    expect(
+      (await memory.collection("corporations").findOne({ _id: seller._id }))?.liquidCapital
+    ).toBe(1_020);
+    expect(afterRetry?.mediaProductAdvertisingReceiptV1).toEqual({
+      projectId: title._id,
+      turn: 1,
+      amountAnchor: 10,
+    });
+    expect(afterRetry?.mediaProductAdvertisingObligationsV1).toEqual([]);
+    expect(settledAgain).toContainEqual(buyer._id);
+    expect(
+      (await memory.collection("bankMoneyMoves").find({}).toArray()).filter((row) =>
+        String(row._id).startsWith("media-product-advertising:")
+      )
+    ).toHaveLength(1);
+    const afterRetrySeller = await memory.collection("corporations").findOne({ _id: seller._id });
+    expect(
+      Number(afterRetrySeller?.liquidCapital ?? 0) + Number(afterRetry?.liquidCapital ?? 0)
+    ).toBe(2_000);
+
+    await processMediaProductProjectsV1({
+      db: memory as never,
+      corporations: [afterRetry as unknown as Corporation],
+      projectsByCorporationId: new Map([[buyer._id.toString(), [title]]]),
+      currentTurn: 2,
+      sectorQualityBySectorId: new Map(),
+    });
+    const paidTitle = await memory.collection(MEDIA_PRODUCT_PROJECTS).findOne({ _id: title._id });
+    expect(paidTitle).toMatchObject({
+      developmentAdvertisingAnchor: 10,
+      developmentAdvertisingTurns: 1,
+      lastProcessedTurn: 1,
+    });
+  });
+
+  it("does not credit title sellers when the buyer has operating arrears", async () => {
+    const buyer = makeCorp({
+      liquidCapital: 1_000,
+      marketingBudget: 480,
+      operatingCashArrearsByCurrency: { USD: 1 },
+    });
+    const seller = makeCorp({ liquidCapital: 1_000 });
+    const title: MediaProductProject = {
+      _id: "media-title-arrears",
+      corporationId: buyer._id.toString(),
+      activeDevelopmentCorporationId: buyer._id.toString(),
+      sectorId: "media-sector-arrears",
+      operatingSectorType: "media",
+      kindId: "newspaper_edition",
+      title: "Morning Ledger",
+      allocationShare: 0.5,
+      stage: "development",
+      startedTurn: 0,
+      stageStartedTurn: 0,
+      developmentPaidAnchor: 0,
+      paidThresholdAnchor: 100,
+      elapsedDevelopmentTurns: 0,
+      elapsedThresholdTurns: 2,
+      developmentAdvertisingAnchor: 0,
+      developmentAdvertisingTurns: 0,
+    };
+    const lookups = baseLookups([buyer, seller], []);
+    lookups.mediaProductSlatesEnabled = true;
+    lookups.mediaProductDevelopmentByCorpId = new Map([[buyer._id.toString(), title]]);
+    const turnResult = processSectors(lookups, 1, new Date(), false, 1953, undefined, {
+      ...MARKET_DISABLED,
+      clearingEnabled: true,
+      advertisingSellerDeliveredValueAnchorByCorpId: new Map([[seller._id.toString(), 100]]),
+    });
+    const memory = createInMemoryDb();
+    memory.seed("corporations", [
+      buyer as unknown as Record<string, unknown>,
+      seller as unknown as Record<string, unknown>,
+    ]);
+    await applyOperatingCashThenDevelopmentCash({
+      db: memory as never,
+      operations: [],
+      turn: 1,
+      corporations: [buyer, seller],
+      snapshots: [],
+      exchangeRatesByCurrency: new Map(),
+      bondsByCorpId: new Map(),
+      sectorsByCorp: new Map(),
+      mediaProductSlatesEnabled: true,
+      applyOperatingCashWrites: async () => {
+        await memory.collection("corporations").bulkWrite(turnResult.corpOps as never[]);
+        await memory
+          .collection("corporations")
+          .updateOne({ _id: seller._id }, { $inc: { liquidCapital: 100 } });
+      },
+    });
+    const buyerAfter = await memory.collection("corporations").findOne({ _id: buyer._id });
+    const sellerAfter = await memory.collection("corporations").findOne({ _id: seller._id });
+    expect(buyerAfter?.liquidCapital).toBe(990);
+    expect(sellerAfter?.liquidCapital).toBe(1_010);
+    expect(buyerAfter?.mediaProductAdvertisingReceiptV1).toBeUndefined();
+    expect(buyerAfter?.mediaProductAdvertisingObligationsV1).toEqual([]);
+    const move = (await memory.collection("bankMoneyMoves").find({}).toArray()).find((row) =>
+      String(row._id).startsWith("media-product-advertising:")
+    );
+    expect(move?.status).toBe("rejected");
+    expect(Number(buyerAfter?.liquidCapital ?? 0) + Number(sellerAfter?.liquidCapital ?? 0)).toBe(
+      2_000
     );
   });
 
@@ -758,6 +1151,46 @@ describe("corporate tax deduction", () => {
     expect(snapshot.taxPaidByCountryForeign.has("US")).toBe(false);
   });
 
+  it("defers only operating cash when the funded Treasury journal owns it", () => {
+    const corp = makeCorp({ headquartersState: "US-CA", countryId: "US", liquidCapital: 1_000 });
+    const sector = makeSector(corp._id, {
+      stateId: "US-CA",
+      countryId: "US",
+      revenue: 24_000,
+      profitMargin: 50,
+      targetGrowthRate: 0,
+      currentGrowthRate: 0,
+    });
+    const lookups = baseLookups([corp], [sector]);
+    lookups.domesticCorpTaxRateByCountry.set("US", 20);
+
+    const result = processSectors(
+      lookups,
+      1,
+      new Date(),
+      false,
+      undefined,
+      undefined,
+      undefined,
+      false,
+      false,
+      false,
+      new Set(),
+      true
+    );
+    const snapshot = result.corpSnapshots[0];
+    const operation = result.corpOps[0];
+    if (!operation || !("updateOne" in operation)) throw new Error("Expected a corp cash update");
+    const cashIncrement = (operation.updateOne.update as { $inc?: { liquidCapital?: number } }).$inc
+      ?.liquidCapital;
+    const incomeLocal = snapshot.operatingCashIncomeLocal ?? 0;
+
+    expect(incomeLocal).toBeGreaterThan(0);
+    expect(snapshot.federalTaxByCountryAnchor?.get("US")).toBeGreaterThan(0);
+    expect(cashIncrement).toBe(0);
+    expect(snapshot.liquidCapital).toBeCloseTo(corp.liquidCapital + incomeLocal);
+  });
+
   it("taxes each sector at its own country's federal rate (cross-border corp)", () => {
     const corp = makeCorp({ headquartersState: "US-CA", countryId: "US" });
     const usSector = makeSector(corp._id, {
@@ -938,6 +1371,43 @@ describe("corporate tax deduction", () => {
     const usIncome = result.domesticIncomeByCountry.get("US") ?? 0;
     const hourlyIncome = (24_000 / TURNS_PER_DAY) * EFF_MARGIN_100;
     expect(usIncome).toBeCloseTo(hourlyIncome * TURNS_PER_YEAR, 0);
+  });
+
+  it("neither books nor taxes coupons on a defaulted held bond, which the bond turn never pays", () => {
+    // Regression: a live corp held two defaulted sovereigns. Their coupons
+    // still counted as income, the coupon tax on them exceeded every coupon the
+    // corp really received, and its cash fell every turn while the income
+    // statement showed a profit.
+    const performing = {
+      couponRate: 10,
+      currencyCode: "USD",
+      defaulted: false,
+    } as unknown as import("@/lib/db/types/bond").Bond;
+    const defaulted = {
+      couponRate: 23,
+      currencyCode: "USD",
+      defaulted: true,
+    } as unknown as import("@/lib/db/types/bond").Bond;
+
+    const run = (positions: { bond: typeof performing; units: number }[]) => {
+      const corp = makeCorp({ dividendRate: 10 });
+      const lookups = baseLookups([corp], [makeSector(corp._id)]);
+      lookups.domesticCorpTaxRateByCountry.set("US", 50);
+      lookups.bondsHeldByCorpId.set(corp._id.toString(), positions);
+      return processSectors(lookups, 1, new Date()).corpSnapshots[0];
+    };
+
+    const performingOnly = run([{ bond: performing, units: 4_800 }]);
+    const withDefaulted = run([
+      { bond: performing, units: 4_800 },
+      { bond: defaulted, units: 1_000_000 },
+    ]);
+
+    // 4,800 units × ₳1,000 face × 10% / 48 turns = ₳10,000 per turn.
+    expect(withDefaulted.perTurnBondCouponIncome).toBeCloseTo(10_000, 6);
+    expect(withDefaulted.federalTaxPaid).toBeCloseTo(performingOnly.federalTaxPaid, 6);
+    expect(withDefaulted.dividendPaidPerTurn).toBeCloseTo(performingOnly.dividendPaidPerTurn, 6);
+    expect(withDefaulted.income).toBeCloseTo(performingOnly.income, 6);
   });
 });
 
@@ -2980,6 +3450,51 @@ describe("throughput coupling", () => {
 // ── Posted-price clearing (marketSystemMode >= "clearing", Fix 2) ──
 
 describe("market clearing", () => {
+  it("persists only project snapshots from this turn's clearing fill", () => {
+    const corp = makeCorp();
+    const sector = makeSector(corp._id, {
+      capitalStock: 500,
+      plantCount: 2,
+      producedUnits: 100,
+      operatingCapacityUnits: 500,
+      productOutputCapacityUnits: 500,
+    });
+    const lookups = baseLookups([corp], [sector]);
+    const clearing = {
+      factor: 1,
+      soldFraction: 0.5,
+      soldByCommodity: { vehicles: 0.5 },
+      effectivePosture: 0,
+      productProjectId: "project-1",
+      productOutputTurn: 2,
+      projectOutputUnitsByCommodity: { vehicles: 10 },
+      projectSoldUnitsByCommodity: { vehicles: 5 },
+      projectQualityByCommodity: { vehicles: 72 },
+    };
+    const run = (productOutputTurn: number) =>
+      processSectors(lookups, 2, new Date(), false, undefined, undefined, {
+        ...MARKET_DISABLED,
+        plantsEnabled: true,
+        clearingEnabled: true,
+        clearingBySectorId: new Map([[sector._id.toString(), { ...clearing, productOutputTurn }]]),
+      });
+    const current = run(2).sectorOps[0] as {
+      updateOne: { update: { $set: Record<string, unknown> } };
+    };
+    const stale = run(1).sectorOps[0] as {
+      updateOne: { update: { $set: Record<string, unknown> } };
+    };
+
+    expect(current.updateOne.update.$set).toMatchObject({
+      productLineProjectId: "project-1",
+      productLineOutputTurn: 2,
+      productLineOutputUnitsByCommodity: { vehicles: 10 },
+      productLineSoldUnitsByCommodity: { vehicles: 5 },
+      productLineQualityByCommodity: { vehicles: 72 },
+    });
+    expect(stale.updateOne.update.$set.productLineProjectId).toBeUndefined();
+  });
+
   it("applies the pre-pass clearing factor to realized revenue and persists telemetry", () => {
     const corp = makeCorp();
     const sector = makeSector(corp._id, { revenue: 24_000, profitMargin: 50 });

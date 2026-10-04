@@ -54,6 +54,24 @@ export default function InvestmentForecast({
         <p className="mt-2 text-body-sm text-muted">{t("noForecast")}</p>
       ) : (
         <>
+          <p className="mt-2 text-body-sm text-foreground">
+            {forecast[2].cashPaybackTurn != null
+              ? t("cashPayback", { turns: forecast[2].cashPaybackTurn })
+              : t("noCashPayback")}
+          </p>
+          <p className="mt-2 text-body-xs text-muted">
+            {assumptions?.bondReference
+              ? t("bondReference", {
+                  issuer: assumptions.bondReference.issuerName,
+                  currency: assumptions.bondReference.currencyCode,
+                  yield: assumptions.bondReference.annualYieldPercent.toFixed(2),
+                  turns: assumptions.bondReference.turnsToMaturity,
+                })
+              : t("noBondReference")}
+          </p>
+          {assumptions?.bondReference && (
+            <p className="mt-1 text-body-xs text-muted">{t("bondReferenceLimits")}</p>
+          )}
           <div className="mt-3 grid gap-3 sm:grid-cols-3">
             {forecast.map((point) => (
               <div key={point.turns} className="rounded bg-background/50 p-2">

@@ -33,8 +33,13 @@ export async function computeRequiredIssuance(
   const budget = await db.collection<FederalBudget>("federalBudget").findOne({ _id: budgetId });
   if (!budget) return 0;
 
-  const annualDeficit = Math.max(0, -(budget.surplus ?? 0));
-  const deficitAmount = calculateQuarterlyIssuanceAmount(annualDeficit);
   const rolloverAmount = await calculateSovereignRolloverAmount(db, countryCode as CountryId, turn);
+  return requiredIssuanceFrom(budget.surplus, rolloverAmount);
+}
+
+/** Quarter-slice of the annual deficit plus the rollover already worked out. */
+export function requiredIssuanceFrom(surplus: number | undefined, rolloverAmount: number): number {
+  const annualDeficit = Math.max(0, -(surplus ?? 0));
+  const deficitAmount = calculateQuarterlyIssuanceAmount(annualDeficit);
   return deficitAmount + rolloverAmount;
 }

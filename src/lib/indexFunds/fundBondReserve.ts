@@ -4,15 +4,25 @@
  * fund cashAnchor); the fund cron redeploys cash into bonds to maintain 25%.
  */
 
+import { withBondPoolLedgerSnapshot } from "@/lib/bonds/marketPoolLedger";
 import { ObjectId, type Db } from "mongodb";
 import type { Bond, IndexFund, IndexFundTransaction } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import { corpCapitalToAnchor, loadFxRatesRecord } from "@/lib/currency/corporationCapital";
-import { loadBondPoolsByCurrency } from "@/lib/bonds/marketPool";
+import { advanceBondPoolSnapshot, loadBondPoolsByCurrency } from "@/lib/bonds/marketPool";
 import { insertFundTransactionsBulk } from "@/lib/indexFunds/fundQueries";
-import { purchaseBondUnitsForFund } from "@/lib/bonds/purchaseBondUnitsForFund";
+import {
+  BondBatchGuardMiss,
+  planBondUnitsForFund,
+  purchaseBondUnitsForFund,
+  recordSettledBondPurchase,
+  settleBondPurchasesInTransaction,
+  type BondPurchasePlan,
+} from "@/lib/bonds/purchaseBondUnitsForFund";
+import { runTransactionWithSessionRetry } from "@/lib/db/transactionWithRetry";
+import { getMongoClient } from "@/lib/mongodb";
 import { emitTxBulk, loadTxThresholds, type TxInput } from "@/lib/financialTxLog/emit";
 import type { TxThresholds } from "@/lib/db/types/financialTxLog";
 import {
@@ -200,6 +210,17 @@ export async function deployBondReserveFromCash(
   db: Db,
   fund: IndexFund,
   bondPrincipalAnchor: number,
+  options?: Parameters<typeof deployBondReserve>[3]
+): Promise<DeployBondReserveResult> {
+  return withBondPoolLedgerSnapshot(db, options?.turn, () =>
+    deployBondReserve(db, fund, bondPrincipalAnchor, options)
+  );
+}
+
+async function deployBondReserve(
+  db: Db,
+  fund: IndexFund,
+  bondPrincipalAnchor: number,
   options?: {
     liquidityTargetEnabled?: boolean;
     /**
@@ -215,13 +236,19 @@ export async function deployBondReserveFromCash(
     thresholds?: TxThresholds;
     /** Preloaded turn cadence shared by every purchase receipt. */
     turnLengthMinutes?: number;
+    /**
+     * Settle the whole pass in one transaction (replica set only). Purchases
+     * are planned exactly as below, then committed as guarded bulk writes; if
+     * any guard misses, nothing commits and the pass re-runs per purchase.
+     */
+    settleInTransaction?: boolean;
   }
 ): Promise<DeployBondReserveResult> {
   const breakdown = computeFundAllocationBreakdown(fund, {
     bondPrincipalAnchor,
     bondLiquidityTargetEnabled: options?.liquidityTargetEnabled,
   });
-  let budgetAnchor = Math.min(
+  const budgetAnchor = Math.min(
     breakdown.bondDeploymentNeededAnchor,
     breakdown.cashAvailableForBondDeployAnchor
   );
@@ -301,58 +328,129 @@ export async function deployBondReserveFromCash(
   // One thresholds read for the whole pass, shared by every purchase row.
   const thresholds =
     options?.turn !== undefined ? (options?.thresholds ?? (await loadTxThresholds(db))) : undefined;
-  let deployedAnchor = 0;
-  let markedValueAnchor = 0;
-  let unitsPurchased = 0;
-  let liveCashAnchor = fund.cashAnchor;
-  let liveBackingAnchor = breakdown.totalBackingAnchor;
-
-  const transactions: Omit<IndexFundTransaction, "_id">[] = [];
-  const ledgerEntries: TxInput[] = [];
-  try {
+  type Purchase = { costAnchor: number; markedValueAnchor: number; units: number };
+  // One pass over the issues in order. `buy` either settles a purchase now or
+  // plans it for the batch; the sizing, budget and cash-buffer bookkeeping
+  // between purchases is the same either way.
+  const runPass = async (
+    buy: (
+      bond: Bond,
+      units: number,
+      limits: {
+        maxCostAnchor: number;
+        cashFloor: { cashAnchor: number; totalBackingAnchor: number; fraction: number };
+      }
+    ) => Promise<Purchase | null>
+  ) => {
+    let deployedAnchor = 0;
+    let markedValueAnchor = 0;
+    let unitsPurchased = 0;
+    let remainingBudgetAnchor = budgetAnchor;
+    let liveCashAnchor = fund.cashAnchor;
+    let liveBackingAnchor = breakdown.totalBackingAnchor;
     for (let index = 0; index < bonds.length; index++) {
       const bond = bonds[index]!;
-      if (budgetAnchor <= 0) break;
+      if (remainingBudgetAnchor <= 0) break;
 
       const unitCostAnchor = costPerUnitAnchor(bond, fxRates);
       if (unitCostAnchor <= 0) continue;
 
       const issueBudgetAnchor =
         options?.liquidityTargetEnabled || bondUniverse
-          ? bondAllocationBudgetForIssue(budgetAnchor, bonds.length - index)
-          : budgetAnchor;
+          ? bondAllocationBudgetForIssue(remainingBudgetAnchor, bonds.length - index)
+          : remainingBudgetAnchor;
       const maxUnitsByBudget = Math.floor(issueBudgetAnchor / unitCostAnchor);
       const maxUnitsByFloat = Math.floor(bond.publicFloat ?? 0);
       const maxUnitsByPosition = sovereignBondRemainingCapacityUnits(bond, "fundId", fund._id);
       const units = Math.min(maxUnitsByBudget, maxUnitsByFloat, maxUnitsByPosition);
       if (units <= 0) continue;
 
-      const purchase = await purchaseBondUnitsForFund(db, fund, bond, units, {
-        bondPools,
-        fxRates,
+      const purchase = await buy(bond, units, {
         maxCostAnchor: issueBudgetAnchor,
         cashFloor: {
           cashAnchor: liveCashAnchor,
           totalBackingAnchor: liveBackingAnchor,
           fraction: INDEX_FUND_RESERVE_CASH_BUFFER_FRACTION,
         },
+      });
+      if (!purchase) continue;
+
+      deployedAnchor += purchase.costAnchor;
+      markedValueAnchor += purchase.markedValueAnchor;
+      unitsPurchased += purchase.units;
+      remainingBudgetAnchor -= purchase.costAnchor;
+      liveCashAnchor -= purchase.costAnchor;
+      liveBackingAnchor += purchase.markedValueAnchor - purchase.costAnchor;
+      // The purchase debits fund cash atomically; nothing below reads the
+      // fund's cash, so no re-read per bond. `remainingBudgetAnchor` is the running cap.
+    }
+    return { deployedAnchor, markedValueAnchor, unitsPurchased, countryId };
+  };
+
+  const transactions: Omit<IndexFundTransaction, "_id">[] = [];
+  const ledgerEntries: TxInput[] = [];
+
+  if (options?.settleInTransaction) {
+    // Plan against a copy of the pool snapshot so a fallback starts clean.
+    const planPools = new Map(
+      Array.from(bondPools, ([currency, pool]) => [currency, { ...pool }] as const)
+    );
+    const planned: { plan: BondPurchasePlan; now: Date }[] = [];
+    const totals = await runPass(async (bond, units, limits) => {
+      const result = await planBondUnitsForFund(db, fund, bond, units, {
+        bondPools: planPools,
+        fxRates,
+        ...limits,
+      });
+      if (!result.ok) return null;
+      advanceBondPoolSnapshot(planPools, result.plan.currency, result.plan.costLocal);
+      planned.push({ plan: result.plan, now: new Date() });
+      return result.plan;
+    });
+    if (planned.length === 0) return totals;
+
+    for (const { plan, now } of planned) {
+      recordSettledBondPurchase(fund, plan, now, {
+        txSink: transactions,
+        ledgerSink: ledgerEntries,
+        turn: options.turn,
+      });
+    }
+    try {
+      await runTransactionWithSessionRetry(getMongoClient, async (session) => {
+        if (!session) throw new BondBatchGuardMiss("transactions unavailable");
+        await settleBondPurchasesInTransaction(db, session, fund, planned);
+        // Receipts commit with the money they describe.
+        await insertFundTransactionsBulk(db, transactions, { session });
+      });
+    } catch (err) {
+      // A guard miss is thrown inside the transaction body, so the
+      // transaction aborted and nothing was written: safe to settle per
+      // purchase below. Any other failure may have committed and propagates.
+      if (!(err instanceof BondBatchGuardMiss)) throw err;
+      transactions.length = 0;
+      ledgerEntries.length = 0;
+    }
+    if (transactions.length > 0) {
+      if (thresholds) await emitTxBulk(db, ledgerEntries, thresholds);
+      return totals;
+    }
+  }
+
+  try {
+    return await runPass(async (bond, units, limits) => {
+      const purchase = await purchaseBondUnitsForFund(db, fund, bond, units, {
+        bondPools,
+        fxRates,
+        ...limits,
         txSink: transactions,
         ledgerSink: ledgerEntries,
         turn: options?.turn,
         thresholds,
         turnLengthMinutes: options?.turnLengthMinutes,
       });
-      if (!purchase.ok) continue;
-
-      deployedAnchor += purchase.costAnchor;
-      markedValueAnchor += purchase.markedValueAnchor;
-      unitsPurchased += purchase.units;
-      budgetAnchor -= purchase.costAnchor;
-      liveCashAnchor -= purchase.costAnchor;
-      liveBackingAnchor += purchase.markedValueAnchor - purchase.costAnchor;
-      // The purchase debits fund cash atomically; nothing below reads the
-      // fund's cash, so no re-read per bond. `budgetAnchor` is the running cap.
-    }
+      return purchase.ok ? purchase : null;
+    });
   } finally {
     // Preserve receipts for purchases already committed if a later issue fails.
     // Balance gates, reservations and pool credits remain sequential per purchase.
@@ -362,6 +460,4 @@ export async function deployBondReserveFromCash(
       if (thresholds) await emitTxBulk(db, ledgerEntries, thresholds);
     }
   }
-
-  return { deployedAnchor, markedValueAnchor, unitsPurchased, countryId };
 }

@@ -3,6 +3,11 @@
  * Runs after corporation processing each turn, and on a five-minute cron between turns
  * so float and live quotes match intraday trades.
  */
+import {
+  splitAdjustedPriceChange,
+  type RecordedSplit,
+} from "@/lib/stockExchange/rules/priceChange";
+import type { ShareTradeHistory } from "@/lib/db/types/shareTradeHistory";
 import * as Sentry from "@sentry/nextjs";
 import { findMergedRegionMetricsMany } from "@/lib/macroMetrics/merge";
 import { ObjectId, type Db } from "mongodb";
@@ -19,7 +24,7 @@ import type {
   StockExchangeSnapshot,
   StockExchangeListing,
 } from "@/lib/db/types";
-import { perTurnCouponPayment } from "@/lib/constants/bonds";
+import { bondAccruesCoupon, perTurnCouponPayment } from "@/lib/constants/bonds";
 import {
   imfFacilityPaymentAnchorPerTurn,
   anchorPerTurnToFinancialDaily,
@@ -67,7 +72,10 @@ import { sectorEconomicRevenue } from "@/lib/corporations/sectorRevenueBasis";
 import { corpLevelDailyCosts } from "./corpLevelDailyCosts";
 import { TURNS_PER_YEAR, TURNS_PER_DAY } from "@/lib/constants/turnTime";
 import { readCorpEconomicAnchor, writeCorpEconomicLocal } from "@/lib/currency/corpEconomyFields";
-import { STRATEGY_TRANSITION_TURNS } from "@/lib/constants/sectorStrategies";
+import {
+  getOperatingSectorType,
+  STRATEGY_TRANSITION_TURNS,
+} from "@/lib/constants/sectorStrategies";
 
 const EXCHANGE_NAMES: Record<string, string> = getExchangeNamesMap();
 
@@ -217,9 +225,9 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
           .collection<CorporationHistory>("corporationHistory")
           .aggregate<{
             _id: ObjectId;
-            h1: { turn: number; sharePrice: number; totalShares: number };
-            h24: { turn: number; sharePrice: number; totalShares: number };
-            h48: { turn: number; sharePrice: number; totalShares: number };
+            h1: { turn: number; sharePrice: number; totalShares: number; createdAt?: Date };
+            h24: { turn: number; sharePrice: number; totalShares: number; createdAt?: Date };
+            h48: { turn: number; sharePrice: number; totalShares: number; createdAt?: Date };
           }>([
             // Bounded read (#2693). Every target turn is at or after turn48Ago,
             // so the answer only needs the rows inside that window plus each
@@ -234,7 +242,16 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
                 turn: { $gte: turn48Ago },
               },
             },
-            { $project: { _id: 0, corporationId: 1, turn: 1, sharePrice: 1, totalShares: 1 } },
+            {
+              $project: {
+                _id: 0,
+                corporationId: 1,
+                turn: 1,
+                sharePrice: 1,
+                totalShares: 1,
+                createdAt: 1,
+              },
+            },
             {
               $unionWith: {
                 coll: "corporationHistory",
@@ -249,6 +266,7 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
                       turn: { $first: "$turn" },
                       sharePrice: { $first: "$sharePrice" },
                       totalShares: { $first: "$totalShares" },
+                      createdAt: { $first: "$createdAt" },
                     },
                   },
                   {
@@ -258,6 +276,7 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
                       turn: 1,
                       sharePrice: 1,
                       totalShares: 1,
+                      createdAt: 1,
                     },
                   },
                 ],
@@ -272,6 +291,7 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
                     turn: "$turn",
                     sharePrice: "$sharePrice",
                     totalShares: "$totalShares",
+                    createdAt: "$createdAt",
                   },
                 },
               },
@@ -302,11 +322,13 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
       interface PriceHistoryPoint {
         turn: number;
         price: number;
+        timestamp?: number;
         totalShares?: number;
       }
       interface RawPriceHistoryPoint {
         turn: number;
         sharePrice: number;
+        createdAt?: Date;
         totalShares: number;
       }
 
@@ -323,10 +345,11 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
         const toPriceHistoryPoint = (
           point: RawPriceHistoryPoint | undefined
         ): PriceHistoryPoint | null => {
-          if (!point) return null;
+          if (!point || !Number.isFinite(point.sharePrice) || point.sharePrice <= 0) return null;
           return {
             turn: point.turn,
-            price: getPublicShareQuote(point),
+            price: point.sharePrice,
+            timestamp: point.createdAt ? new Date(point.createdAt).getTime() : undefined,
             totalShares: point.totalShares,
           };
         };
@@ -476,6 +499,8 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
       // it into the income expression. (A17)
       for (const bond of allBonds) {
         if (!bond.holders || bond.holders.length === 0) continue;
+        // Defaulted bonds pay holders nothing (the bond turn skips them).
+        if (!bondAccruesCoupon(bond)) continue;
         const bondCcy = (bond.currencyCode ??
           (bond.countryId && bond.countryId in COUNTRY_CURRENCY_MAP
             ? COUNTRY_CURRENCY_MAP[bond.countryId as keyof typeof COUNTRY_CURRENCY_MAP]
@@ -707,7 +732,11 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
           // until the lookup is wired in. negativeProductionSustainedTurns is
           // available directly on the sector and is passed through correctly.
           const mods = computeAllMarginModifiers(
-            sector.sectorType,
+            getOperatingSectorType(
+              sector.sectorType,
+              sector.industryModel,
+              sector.mediaDiscriminator
+            ) as Corporation["type"],
             sector.profitMargin,
             {
               fullMetrics: stateMetrics,
@@ -723,7 +752,11 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
             },
             commodityMod,
             homeLocationBonus,
-            corp.type,
+            getOperatingSectorType(
+              corp.type,
+              corp.industryModel,
+              corp.mediaDiscriminator
+            ) as Corporation["type"],
             corpSectors.length,
             macroEcon,
             corp.logisticsStrength ?? 0,
@@ -879,32 +912,16 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
           ? corporations.find((c) => c._id.equals(controlling.corporationId))?.name
           : undefined;
 
-        // Every early return is 0: with no comparable history (zero current
-        // or historical shares, missing or non-finite prices) there is no
-        // measured return, and only finite values are ever persisted (#2033).
         const calcSplitAdjustedPriceChange = (
           historyPoint: PriceHistoryPoint | null | undefined
         ): number => {
-          if (!Number.isFinite(sharePrice) || sharePrice <= 0) return 0;
-          if (!Number.isFinite(totalShares) || totalShares <= 0) return 0;
-          if (!historyPoint || !Number.isFinite(historyPoint.price) || historyPoint.price <= 0) {
+          if (!Number.isFinite(totalShares) || totalShares <= 0 || historyPoint?.totalShares === 0)
             return 0;
-          }
-          // A historical record without share counts predates the field, so
-          // there is no split to adjust for (ratio = 1): a clean
-          // price-to-price comparison. An explicit zero carries no basis.
-          const historicalShares = historyPoint.totalShares ?? totalShares;
-          if (!Number.isFinite(historicalShares) || historicalShares <= 0) return 0;
-          const splitAdjustedHistoricalPrice =
-            historyPoint.price * (historicalShares / totalShares);
-          if (!Number.isFinite(splitAdjustedHistoricalPrice) || splitAdjustedHistoricalPrice <= 0) {
-            return 0;
-          }
-          const change =
-            Math.round(
-              ((sharePrice - splitAdjustedHistoricalPrice) / splitAdjustedHistoricalPrice) * 10000
-            ) / 100;
-          return Number.isFinite(change) ? change : 0;
+          return splitAdjustedPriceChange(
+            sharePrice,
+            historyPoint,
+            splitsByCorp.get(corp._id.toString()) ?? []
+          );
         };
 
         const history = priceHistoryByCorpId.get(corp._id.toString());
@@ -932,7 +949,11 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
           name: corp.name,
           ...(corp.tickerSymbol ? { tickerSymbol: corp.tickerSymbol } : {}),
           type: corp.type,
-          typeLabel: CORPORATION_TYPE_LABELS[corp.type],
+          industryModel: corp.industryModel ?? null,
+          typeLabel:
+            corp.type === "manufacturing" && corp.industryModel === "vehicles"
+              ? "Vehicle manufacturing"
+              : CORPORATION_TYPE_LABELS[corp.type],
           headquartersState: corp.headquartersState,
           headquartersStateName: stateNameMap.get(corp.headquartersState) ?? corp.headquartersState,
           logoUrl: isNatcorp
@@ -999,6 +1020,45 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
       // Build listings for each exchange. Sort by the anchor mirror so a UK corp
       // with marketCap in GBP doesn't get ranked purely on denomination against a
       // US corp in USD — the anchor sibling gives a meaningful cross-corp order.
+      // One projected audit read. Current share counts can change through
+      // issuance or buybacks, neither of which is a split-adjusted price gain.
+      const oldestBasisTurn = Math.min(
+        turn48Ago,
+        ...[...priceHistoryByCorpId.values()].flatMap((h) =>
+          [h.h1?.turn, h.h24?.turn, h.h48?.turn].filter((t): t is number => t != null)
+        )
+      );
+      const splitRows = await database
+        .collection<ShareTradeHistory>("shareTradeHistory")
+        .find({
+          corporationId: { $in: corpIds },
+          kind: { $in: ["stock_split", "reverse_split"] },
+          turn: { $gte: oldestBasisTurn, $lte: currentTurn },
+          createdAt: { $lte: now },
+        })
+        .project<
+          Pick<ShareTradeHistory, "corporationId" | "turn" | "createdAt" | "structureChange">
+        >({
+          corporationId: 1,
+          turn: 1,
+          createdAt: 1,
+          "structureChange.oldTotalShares": 1,
+          "structureChange.newTotalShares": 1,
+        })
+        .toArray();
+      const splitsByCorp = new Map<string, RecordedSplit[]>();
+      for (const row of splitRows) {
+        if (!row.structureChange) continue;
+        const key = row.corporationId.toString();
+        const splits = splitsByCorp.get(key) ?? [];
+        splits.push({
+          turn: row.turn,
+          timestamp: new Date(row.createdAt).getTime(),
+          oldShares: row.structureChange.oldTotalShares,
+          newShares: row.structureChange.newTotalShares,
+        });
+        splitsByCorp.set(key, splits);
+      }
       const allListings = corporations.map(buildListing);
       // Player corps rank above NPP corps regardless of size (NPP corps are
       // negligible flavor, t834); within each group, sort by market-cap anchor so a
@@ -1066,13 +1126,21 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
       await recordIntradayLevels(
         database,
         currentTurn,
-        snapshots.map((snapshot) => ({
-          exchange: snapshot._id,
-          marketCap: snapshot.listings.reduce(
-            (sum, l) => sum + (l.marketCapAnchor ?? l.marketCap),
-            0
-          ),
-        })),
+        [
+          ...snapshots.map((snapshot) => ({
+            exchange: snapshot._id,
+            marketCap: snapshot.listings.reduce(
+              (sum, l) => sum + (l.marketCapAnchor ?? l.marketCap),
+              0
+            ),
+          })),
+          ...Object.keys(CORPORATION_TYPE_LABELS).map((type) => ({
+            exchange: `sector:${type}`,
+            marketCap: allListings
+              .filter((l) => l.type === type)
+              .reduce((sum, l) => sum + (l.marketCapAnchor ?? l.marketCap), 0),
+          })),
+        ],
         now
       );
     }

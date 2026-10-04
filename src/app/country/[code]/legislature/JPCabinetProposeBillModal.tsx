@@ -212,9 +212,7 @@ function LegacyJPCabinetProposeBillModal({
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h2 className="font-display text-lg font-semibold text-foreground">
-                Propose Legislation
-              </h2>
+              <h2 className="text-lg font-semibold text-foreground">Propose Legislation</h2>
               {adminOverride ? (
                 <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-medium text-warning">
                   Admin

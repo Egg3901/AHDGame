@@ -26,8 +26,8 @@ describe("approvalAdjustedIncumbencyBudget", () => {
   it("ramps -1pp per point below pivot, capping at -0.10 by approval 36", () => {
     expect(approvalAdjustedIncumbencyBudget(41)).toBeCloseTo(-0.05, 6);
     expect(approvalAdjustedIncumbencyBudget(36)).toBeCloseTo(-0.1, 6);
-    expect(approvalAdjustedIncumbencyBudget(20)).toBeCloseTo(-0.1, 6);
-    expect(approvalAdjustedIncumbencyBudget(0)).toBeCloseTo(-0.1, 6);
+    expect(approvalAdjustedIncumbencyBudget(20)).toBeCloseTo(-(0.1 + (0.1 * 16) / 36), 6);
+    expect(approvalAdjustedIncumbencyBudget(0)).toBeCloseTo(-0.2, 6);
   });
 
   it("falls back to the flat 0.10 budget on missing / NaN approval", () => {
@@ -39,8 +39,8 @@ describe("approvalAdjustedIncumbencyBudget", () => {
 describe("incumbencyDriver directional (executive own-race)", () => {
   it("drags the unpopular incumbent and boosts the challenger", () => {
     const opts: DistributeVotesOptions = { incumbentPartyId: "dem", incumbentApproval: 33 };
-    expect(incPct("dem", "rep", opts)).toBeCloseTo(-10, 4); // incumbent dragged (cap, pivot 46)
-    expect(incPct("rep", "dem", opts)).toBeCloseTo(10, 4); // challenger boosted
+    expect(incPct("dem", "rep", opts)).toBeCloseTo(-(10 + (10 * 3) / 36), 4);
+    expect(incPct("rep", "dem", opts)).toBeCloseTo(10 + (10 * 3) / 36, 4);
   });
 
   it("shields the popular incumbent up to the +10pp cap", () => {
@@ -74,7 +74,7 @@ describe("incumbencyDriver no longer carries party-tenure fatigue", () => {
       incumbentApproval: 20,
       incumbentConsecutiveTerms: 1,
     };
-    expect(incPct("dem", "rep", opts)).toBeCloseTo(-10, 4);
+    expect(incPct("dem", "rep", opts)).toBeCloseTo(-(10 + (10 * 16) / 36), 4);
   });
 });
 

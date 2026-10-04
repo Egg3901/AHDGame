@@ -33,8 +33,7 @@ export function RegionalMetricsHeader({
     "--g1": accent.g1,
     "--g2": accent.g2,
   } as CSSProperties;
-  const bg =
-    "radial-gradient(120% 150% at 0% 0%, color-mix(in srgb, var(--stat-soft) 16%, transparent) 0%, transparent 44%), linear-gradient(135deg, var(--g0) 0%, var(--g1) 52%, var(--g2) 100%)";
+  const bg = "linear-gradient(135deg, var(--g0) 0%, var(--g1) 52%, var(--g2) 100%)";
 
   return (
     <header
@@ -47,7 +46,7 @@ export function RegionalMetricsHeader({
       <div className="flex items-center gap-4 px-5 py-4 sm:px-6" style={{ background: bg }}>
         <div
           aria-hidden
-          className={`flex shrink-0 items-center justify-center rounded-lg font-black ${isCjk ? "font-serif" : "font-mono"}`}
+          className={`flex shrink-0 items-center justify-center rounded-lg font-black ${isCjk ? "" : "font-mono"}`}
           style={{
             width: 52,
             height: 52,
@@ -62,23 +61,19 @@ export function RegionalMetricsHeader({
         </div>
         <div className="min-w-0 flex-1">
           <div
-            className="truncate text-[10px] font-bold uppercase tracking-[0.16em]"
+            className="truncate text-body-sm font-medium"
             style={{ color: "color-mix(in srgb, var(--stat-soft) 80%, transparent)" }}
           >
             {dossier}
           </div>
-          <h2
-            className={`mt-0.5 truncate text-xl font-bold text-white ${isCjk ? "font-serif" : ""}`}
-          >
-            {regionName}
-          </h2>
+          <h2 className={`mt-0.5 truncate text-xl font-bold text-white`}>{regionName}</h2>
         </div>
         {stat !== undefined && (
           <div className="shrink-0 text-right">
             <div className="text-lg font-bold tabular-nums text-white">{stat}</div>
             {statLabel && (
               <div
-                className="text-[10px] font-bold uppercase tracking-[0.16em]"
+                className="text-body-sm font-medium"
                 style={{ color: "color-mix(in srgb, var(--stat-soft) 70%, transparent)" }}
               >
                 {statLabel}
@@ -87,14 +82,6 @@ export function RegionalMetricsHeader({
           </div>
         )}
       </div>
-      <div
-        style={{
-          height: 2,
-          opacity: 0.85,
-          background:
-            "linear-gradient(90deg, transparent, var(--stat) 16%, var(--stat-soft) 50%, var(--stat) 84%, transparent)",
-        }}
-      />
     </header>
   );
 }

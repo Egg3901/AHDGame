@@ -1,6 +1,6 @@
 import type { ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
-import type { JurisdictionMode, LawImplementationMode } from "./legislation";
+import type { EconomicSystemTarget, JurisdictionMode, LawImplementationMode } from "./legislation";
 
 export type CreditRating = "AAA" | "AA" | "A" | "BBB" | "BB" | "B" | "CCC";
 export type BudgetDocumentId = "federal" | "UK" | string;
@@ -220,6 +220,17 @@ export interface EconomicGrowthFactors {
    *  Present only for planned economies while `commandEconomyEnabled` is on; the
    *  turn engine hydrates the in-process registry from this field. */
   marketizationLevel?: number;
+  /** A legislated economic system (`economic_system_reform` provision). While
+   *  present the turn engine ramps `marketizationLevel` toward `targetLevel`,
+   *  then holds it there with weak gravity in place of the era schedule. */
+  economicReform?: {
+    target: EconomicSystemTarget;
+    targetLevel: number;
+    enactedTurn: number;
+    /** Turn the dial first reached the target; null while the ramp runs. */
+    reachedAtTurn?: number | null;
+    billId?: string;
+  };
 
   // ── Command Economy v2 (P1): active Gosbank (directed credit + soft budgets) ─
   /** Effective per-country budget-softness dial, 0 (hard: insolvent SOEs fold)
@@ -480,6 +491,8 @@ export interface TreasuryAccrualReceipt {
   anchorRateSource?: "observed" | "authored_budget_only" | "unpriced";
   anchorRatePreset?: string;
   ledgerShadow: boolean;
+  /** Frozen funding source policy for any bank claims created from this receipt. */
+  treasuryCashLedgerEnabled?: boolean;
   components: {
     revenue: number;
     primarySpending: number;
@@ -487,10 +500,48 @@ export interface TreasuryAccrualReceipt {
     enforcement: number;
     rounding: number;
   };
+  /**
+   * Bank-held sovereign coupons frozen from the opening bond snapshot. The
+   * treasury cash receipt reserves this amount from aggregate debt service;
+   * a separate journaled transfer then delivers it to the same charter epoch.
+   */
+  bankCouponPlan?: Array<{
+    bankId: string;
+    charteredTurn: number;
+    amountLocal: number;
+    bondIds: string[];
+  }>;
+}
+
+/** Unpaid bank-held sovereign coupon or maturity claims remain on the issuer budget. */
+export interface BankSovereignClaim {
+  id: string;
+  kind: "coupon" | "maturity";
+  bankId: string;
+  charteredTurn: number;
+  bondId?: string;
+  /** Scheduled maturity of a bond-backed principal claim, stable across retries. */
+  dueTurn?: number;
+  bondIds?: string[];
+  countryId: string;
+  currencyCode: import("@/lib/constants/currencies").CurrencyCode;
+  amountLocal: number;
+  turn: number;
+  /** Frozen ledger timestamp so a retry recreates an identical funded witness. */
+  ledgerCreatedAt?: Date;
+  anchorRate?: number;
+  ledgerShadow?: boolean;
+  /** Funding source frozen when the claim is created. */
+  treasuryCashLedgerEnabled?: boolean;
 }
 
 export interface FederalBudget {
   treasuryAccrual?: TreasuryAccrualReceipt;
+  bankSovereignClaims?: BankSovereignClaim[];
+  /** Frozen, unpaid non-bank sovereign coupon plans for funded Treasury cash. */
+  sovereignCouponClaims?: FundedSovereignCouponClaim[];
+  /** Highest due turn frozen for each sovereign bond, including already-paid claims. */
+  sovereignCouponFrozenThrough?: Record<string, number>;
   _id: BudgetDocumentId;
   countryId: string;
   fiscalYear: number;
@@ -563,6 +614,18 @@ export interface FederalBudget {
    * the bond stock is untouched).
    */
   treasuryBalance: number;
+  /** Feature-gated spendable native cash. Missing legacy value means zero when enabled. */
+  treasuryCashLocal?: number;
+  /** Applied automatic disaster crisis IDs; keeps fiscal debits replay-safe. */
+  disasterFiscalReceipts?: string[];
+  /**
+   * Negotiated indemnity receipts already applied to this treasury.
+   *
+   * Each transfer writes its offer id and balance delta in one document update.
+   * That keeps the two treasury legs replay-safe on standalone Mongo, where a
+   * multi-document transaction is unavailable and a request can stop between them.
+   */
+  appliedPeaceIndemnityOfferIds?: string[];
   /** Temporary executive crisis consolidation, consumed by normal fiscal recalculation. */
   financialCrisisAusterityUntilTurn?: number;
   /** Latest ordinary appropriations restored when temporary consolidation expires. */
@@ -628,6 +691,13 @@ export interface FederalBudget {
    */
   baselineSpendingByCategory?: Record<string, number>;
   baselineStateGrants?: number;
+  /**
+   * 1991 Russian transition spending outside the enacted political law book,
+   * calibrated once to the World Bank general-government expenditure total.
+   * Stored as a GDP share so it follows nominal output without canceling later
+   * law changes. Other countries leave this field absent.
+   */
+  nonLawSpendingGdpShareBaseline?: number;
   /**
    * Fiscal-divergence guardrail (refs #fiscal-divergence-audit): each tax
    * base's share of national GDP at the turn this field was first populated
@@ -765,6 +835,30 @@ export interface FederalBudget {
   imfBoardOverrideRateDelta?: number | null;
   imfBoardOverrideCaptureDelta?: number | null;
   imfBoardPublicStatement?: string | null;
+}
+
+export interface FundedSovereignCouponClaim {
+  id: string;
+  bondId: string;
+  dueTurn: number;
+  countryId: string;
+  currencyCode: import("@/lib/constants/currencies").CurrencyCode;
+  amountLocal: number;
+  anchorRate: number;
+  holders: Array<{
+    kind: "publicFloat" | "character" | "imperial" | "corporation" | "fund" | "npp";
+    id?: string;
+    amountLocal: number;
+    amountAnchor: number;
+    currencyCode?: import("@/lib/constants/currencies").CurrencyCode;
+    payeeCurrencyCode?: import("@/lib/constants/currencies").CurrencyCode;
+    payeeLocalPerAnchor?: number;
+    payeeCountryId?: string;
+    payeeCurrencyFieldPresent?: boolean;
+    payeeCurrencyFieldValue?: string | null;
+    payeeCurrencyUsesCountryFallback?: boolean;
+    personalBalancePath?: string;
+  }>;
 }
 
 /** Frozen snapshot of a country's federal budget at a fiscal year boundary. */

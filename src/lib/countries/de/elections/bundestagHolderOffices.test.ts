@@ -1,9 +1,15 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { reconcileBundestagHolderOffices } from "./bundestagHolderOffices";
+import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
+
+vi.mock("@/lib/analytics/officeTransitionAnalytics", () => ({
+  captureOfficeTransition: vi.fn().mockResolvedValue(undefined),
+}));
 
 describe("Bundestag direct and list holder offices", () => {
+  beforeEach(() => vi.clearAllMocks());
   it("combines mandates, seats list-only winners, clears former holders and preserves executives", async () => {
     const memory = createInMemoryDb(),
       db = memory as unknown as Db;
@@ -61,7 +67,17 @@ describe("Bundestag direct and list holder offices", () => {
       { countryId: "DE", officeType: "chancellor", characterId: executive },
     ]);
     const now = new Date("1993-01-01Z");
-    await reconcileBundestagHolderOffices(db, now);
+    await reconcileBundestagHolderOffices(db, now, 42);
+    expect(captureOfficeTransition).toHaveBeenCalledTimes(3);
+    expect(captureOfficeTransition).toHaveBeenCalledWith(
+      expect.objectContaining({ officeType: "landtag", transitionType: "left", turn: 42 })
+    );
+    expect(captureOfficeTransition).toHaveBeenCalledWith(
+      expect.objectContaining({ officeType: "bundestag", transitionType: "gained", turn: 42 })
+    );
+    expect(captureOfficeTransition).toHaveBeenCalledWith(
+      expect.objectContaining({ officeType: "bundestag", transitionType: "lost", turn: 42 })
+    );
     const office = async (_id: ObjectId) =>
       (await db.collection("characters").findOne({ _id }))?.currentOffice;
     expect(await office(direct)).toEqual({ type: "bundestag", state: "BW", seatsHeld: 441 });
@@ -75,7 +91,9 @@ describe("Bundestag direct and list holder offices", () => {
       (await db.collection("electedOfficials").findOne({ officeType: "chancellor" }))?.characterId
     ).toEqual(executive);
     const before = await db.collection("characters").find({}).toArray();
-    await reconcileBundestagHolderOffices(db, now);
+    vi.mocked(captureOfficeTransition).mockClear();
+    await reconcileBundestagHolderOffices(db, now, 42);
+    expect(captureOfficeTransition).not.toHaveBeenCalled();
     expect(await db.collection("characters").find({}).toArray()).toEqual(before);
   });
 

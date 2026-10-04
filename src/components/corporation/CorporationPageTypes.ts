@@ -121,6 +121,10 @@ export interface CorporationDefenceView {
 }
 
 export interface CorporationDetail {
+  /** Public CEO-published position, exposed only while the world gate is on. */
+  editorialStance?: { economic: number; social: number };
+  mediaEditorialEnabled?: boolean;
+  mediaOperatingModelsEnabled?: boolean;
   /**
    * True when this world runs `marketSystemMode >= "plants"` — sectors are
    * plants you BUILD, so every surface swaps its growth vocabulary for a
@@ -133,6 +137,12 @@ export interface CorporationDetail {
   _id: string;
   sequentialId?: number;
   name: string;
+  /**
+   * True when a published, non-private `corp-<sequentialId>` wiki page exists.
+   * The hero only links to Wiki when this is true: an unpublished slug renders
+   * the wiki Not Found page (#2347). Absent on stale payloads; treat as unknown.
+   */
+  wikiPagePublished?: boolean;
   /**
    * CEO self-acquisition window status — present only for the corp's own CEO.
    * Drives the buy-modal live status + countdown for the 10%/120-turn cap.
@@ -149,15 +159,26 @@ export interface CorporationDetail {
   tickerSymbol?: string;
   description?: string;
   type: CorporationType;
+  industryModel?: string | null;
   /** Country where the corporation is headquartered */
   countryId: string;
   secondaryType?: CorporationType | null;
   typeSwitchCooldownUntilTurn?: number | null;
   typeSwitchTurn?: number | null;
   currentTurn: number;
+  /** Present only for the owning CEO when primary underwriting is enabled. */
+  primaryUnderwritingEnabled?: boolean;
+  primaryUnderwritingMandate?: {
+    bankCorporationId: string;
+    charteredTurn: number;
+    currencyCode: string;
+    feeRate: number;
+  } | null;
   typeLabel: string;
   headquartersState: string;
   headquartersStateName: string;
+  /** Ratified federation settlement awaiting the owner's playable HQ choice. */
+  federationPendingHeadquartersId?: string;
   liquidCapital: number;
   /** Currency code for liquidCapital (defaults to "USD" for pre-forex corps) */
   liquidCurrencyCode: string;
@@ -271,6 +292,10 @@ export interface CorporationDetail {
   supplyAgreementsEnabled?: boolean;
   /** Global feature gate — when true, the Contracts tab (offers/active extraction contracts) is shown. */
   contractIssuanceEnabled?: boolean;
+  /** Global plants-tier feature gate for the manufacturing Product Studio. */
+  productLinesV2Enabled?: boolean;
+  /** Global feature gate for the paid Media & Entertainment Product Studio. */
+  mediaProductSlatesEnabled?: boolean;
   /** ID of an open privatization vote, if any. Used to mount the vote panel. */
   openPrivatizationVoteId?: string | null;
   /**
@@ -573,6 +598,8 @@ export interface SectorDetail {
   countryId?: string;
   stateName: string;
   sectorType: string;
+  industryModel?: string | null;
+  mediaDiscriminator?: "entertainment" | null;
   sectorLabel: string;
   displayName?: string | null;
   targetGrowthRate: number;
@@ -671,8 +698,17 @@ export interface SectorDetail {
   productionPolicy?: number;
   /** Currently active production level (-25 to +25) */
   productionPolicyLevel?: number;
+  /**
+   * CEO-only: posted price relative to market (-0.2 … 0.2), null = auto.
+   * Absent for every other viewer.
+   */
+  pricingPosture?: number | null;
+  /** CEO-only: wage-level multiplier (1 = baseline). Absent for other viewers. */
+  wageLevel?: number;
   /** Active for-sale listing — null when not on the secondary market */
   forSale?: {
+    foreclosed?: boolean;
+    pledged?: boolean;
     listedAt: string;
     /** Asking price in ₳ */
     priceAnchor: number;

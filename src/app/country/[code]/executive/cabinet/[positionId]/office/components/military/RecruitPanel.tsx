@@ -72,7 +72,7 @@ export function RecruitPanel({
       : null;
 
   return (
-    <div className="rounded-xl border border-[color-mix(in_srgb,var(--gov)_30%,transparent)] bg-card p-4 gov-glow">
+    <div className="rounded-xl border border-[color-mix(in_srgb,var(--gov)_30%,transparent)] bg-card p-4">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-sm font-semibold text-foreground">Recruit a new {branch.name} unit</h3>
         <button onClick={onCancel} className="text-[12px] text-muted hover:text-foreground">

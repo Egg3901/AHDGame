@@ -240,6 +240,7 @@ export async function buildBankOutlook(db: Db, ctx: OutlookContext): Promise<Ban
     Math.max(0, ctx.sheet.totalLoans - npcOutstanding);
   const targets = bandOriginationTargets({
     fundingCapacity: Math.max(0, fundingCapacity),
+    primeRatePercent: prime,
     lendingRatePercent: ctx.rates.lendingRatePercent,
     profile: charter.lendingProfile,
   });
@@ -385,6 +386,7 @@ export async function buildBankOutlook(db: Db, ctx: OutlookContext): Promise<Ban
     totalLoans: ctx.sheet.totalLoans,
     borrowings: borrowingsFromCharter(charter),
     propBookMarkValue: charter.propBookMarkValue,
+    sovereignTreasuryMarkValue: charter.sovereignTreasuryMarkValue,
   });
   const shortfall = capitalShortfall(position);
   let recommendationKind: BankOutlook["recommendationKind"] = "none";
@@ -430,6 +432,7 @@ export async function buildBankOutlook(db: Db, ctx: OutlookContext): Promise<Ban
   const stancePreview: OutlookStancePreview[] = LENDING_PROFILES.map((profile) => {
     const profileTargets = bandOriginationTargets({
       fundingCapacity: Math.max(0, fundingCapacity),
+      primeRatePercent: prime,
       lendingRatePercent: ctx.rates.lendingRatePercent,
       profile: profile.id,
     });
@@ -457,7 +460,11 @@ export async function buildBankOutlook(db: Db, ctx: OutlookContext): Promise<Ban
 
   const runsPropBook = charter.type === "investment" || charter.type === "universal";
   const propMark = Math.max(0, charter.propBookMarkValue ?? 0);
-  const propEquityBase = runsPropBook ? computePropEquityBase(cash, charter) : 0;
+  const propEquityBase = runsPropBook
+    ? computePropEquityBase(cash, charter, undefined, {
+        playerDepositsAreLiabilities: liabilitiesAreReal,
+      })
+    : 0;
 
   return {
     primeRate: prime,

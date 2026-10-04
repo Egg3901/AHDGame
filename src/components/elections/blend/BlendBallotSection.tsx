@@ -10,6 +10,7 @@
 
 import { useMemo } from "react";
 import { useGameClock } from "@/contexts/useGameClock";
+import { useActivePreset } from "@/contexts/RegisteredCountriesContext";
 import { resolveEntryAction } from "@/lib/elections/entryEligibility";
 import {
   buildBlendRegionCards,
@@ -66,6 +67,7 @@ export function BlendBallotSection({
   regionElectoralVotes,
 }: BlendBallotSectionProps) {
   const clock = useGameClock();
+  const activePreset = useActivePreset();
 
   const cards = useMemo(() => {
     const titleById: Record<string, string> = {};
@@ -79,6 +81,7 @@ export function BlendBallotSection({
     return buildBlendRegionCards({
       elections,
       countryId,
+      preset: activePreset,
       regionName,
       regionCode,
       regionBallots,
@@ -95,6 +98,7 @@ export function BlendBallotSection({
   }, [
     elections,
     countryId,
+    activePreset,
     regionName,
     regionCode,
     regionBallots,

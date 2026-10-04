@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { formatShare } from "@/lib/alignment/normalize";
 import { BalanceBar } from "./influence/BalanceBar";
 import { NationsInPlay } from "./influence/NationsInPlay";
@@ -28,6 +29,7 @@ export function InfluenceTab({
   // NationsInPlay owns the ordering, so the tab does not duplicate it — it
   // simply remembers which nation the player picked.
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
+  const t = useTranslations("worldOrganizations.influence");
 
   // Play amounts are a record of what was spent, not a field anyone types into,
   // so they read in the viewer's currency.
@@ -141,9 +143,9 @@ export function InfluenceTab({
               style={{ width: `${Math.round(view.blocStress.stress * 100)}%` }}
             />
           </div>
-          <p className="text-body-xs text-muted">
+          <p className="text-body-sm text-muted">
             {view.blocStress.effectiveness >= 1
-              ? "This bloc is settled — its plays land at full strength."
+              ? "This bloc is settled, so its plays land at full strength."
               : `Plays land at ${Math.round(view.blocStress.effectiveness * 100)}% strength while the bloc is stretched.`}
           </p>
           <ul className="mt-2 space-y-0.5 text-body-xs text-muted/80">
@@ -184,7 +186,7 @@ export function InfluenceTab({
               </li>
             ))}
           </ul>
-          <p className="mt-3 text-body-xs text-muted">
+          <p className="mt-3 text-body-sm text-muted">
             A member whose share falls to {view.leaveShare} and stays there for {view.sustainTurns}{" "}
             turns leaves the bloc; a nation that reaches {view.joinShare} for as long asks to join
             one. Nations a player is steering are warned rather than moved.
@@ -194,6 +196,7 @@ export function InfluenceTab({
 
       <Panel>
         <h3 className="mb-3 text-body-sm font-semibold text-foreground">Recent plays</h3>
+        <p className="mb-3 text-body-xs text-muted">{t("historyNote")}</p>
         {view.recent.length === 0 ? (
           <p className="text-body-sm text-muted">
             No influence has been committed through this organization yet.
@@ -206,7 +209,7 @@ export function InfluenceTab({
                   <Th>Nation</Th>
                   <Th>By</Th>
                   <Th numeric>Spend</Th>
-                  <Th numeric>Bought</Th>
+                  <Th numeric>{t("effective")}</Th>
                 </tr>
               </thead>
               <tbody>
@@ -231,8 +234,10 @@ export function InfluenceTab({
                         // Distinct from "0 pts": the money came back, and a row
                         // reading zero next to a spend looks like theft.
                         <span className="text-muted">refunded</span>
+                      ) : p.effectivePoints == null ? (
+                        t("notRecorded")
                       ) : (
-                        `${p.appliedPoints ?? 0} pts`
+                        t("points", { points: formatShare(p.effectivePoints) })
                       )}
                     </td>
                   </tr>

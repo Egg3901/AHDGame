@@ -74,9 +74,7 @@ export function CompareView({
       </div>
 
       <div className="flex flex-wrap items-center gap-3 rounded-lg border border-card-border bg-card p-4 shadow-card">
-        <h2 className="flex-1 font-display text-heading-lg font-bold text-foreground">
-          Country comparison
-        </h2>
+        <h2 className="flex-1 text-heading-lg font-bold text-foreground">Country comparison</h2>
         <div className="flex flex-wrap gap-2">
           {POLITICAL_METRIC_COUNTRY_IDS.map((id) => {
             const on = selected[id];
@@ -105,105 +103,117 @@ export function CompareView({
       {!loadedAll ? (
         <LoadingSpinner label="Retrieving registries…" centered />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-card-border bg-card p-0 shadow-card">
-          <div className="min-w-[640px]">
-            <div
-              className="grid border-b border-card-border px-4 py-2 font-mono text-body-xs uppercase tracking-wider text-muted"
-              style={{ gridTemplateColumns: `minmax(190px,1.5fr) repeat(${activeIds.length},1fr)` }}
-            >
-              <span>Category</span>
-              {activeIds.map((id) => (
-                <span key={id} className="text-center">
-                  {(byCountry[id]?.countryDisplayName ?? id).toUpperCase()}
-                </span>
-              ))}
-            </div>
-            <div
-              className="grid border-b border-dashed border-card-border bg-card-muted px-4 py-2"
-              style={{ gridTemplateColumns: `minmax(190px,1.5fr) repeat(${activeIds.length},1fr)` }}
-            >
-              <span className="text-body-sm font-bold text-foreground">Overall national score</span>
-              {activeIds.map((id) => {
-                const c = byCountry[id];
-                if (!c)
-                  return (
-                    <span key={id} className="text-center text-body-sm italic text-muted">
-                      unavailable
-                    </span>
-                  );
-                const tone = scoreTone(c.overall);
-                return (
-                  <span key={id} className="text-center">
-                    <span className={`text-body-lg font-extrabold tabular-nums ${tone.text}`}>
-                      {Math.round(c.overall)}
-                    </span>
-                  </span>
-                );
-              })}
-            </div>
-            {home.categories.map((cat) => (
+        <div className="flex flex-col gap-2">
+          {/* The table is wider than a phone; say so rather than hide the columns. */}
+          <p className="font-mono text-body-sm uppercase tracking-wider text-muted sm:hidden">
+            Scroll sideways for every country →
+          </p>
+          <div className="overflow-x-auto rounded-lg border border-card-border bg-card p-0 shadow-card">
+            <div className="min-w-[640px]">
               <div
-                key={cat.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => setOpenCategory(openCategory === cat.id ? null : cat.id)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ")
-                    setOpenCategory(openCategory === cat.id ? null : cat.id);
-                }}
-                className={`grid cursor-pointer items-center border-b border-dashed border-card-border px-4 py-2 ${
-                  openCategory === cat.id ? "bg-card-muted" : ""
-                }`}
+                className="grid border-b border-card-border px-4 py-2 font-mono text-body-sm uppercase tracking-wider text-muted"
                 style={{
                   gridTemplateColumns: `minmax(190px,1.5fr) repeat(${activeIds.length},1fr)`,
                 }}
               >
-                <span className="flex items-center gap-2 text-body-sm text-foreground">
-                  <span className="text-primary">
-                    <CategoryIcon
-                      icon={CATEGORY_ICONS[cat.id] ?? "library"}
-                      className="h-3.5 w-3.5"
-                    />
+                <span>Category</span>
+                {activeIds.map((id) => (
+                  <span key={id} className="text-center">
+                    {(byCountry[id]?.countryDisplayName ?? id).toUpperCase()}
                   </span>
-                  {cat.displayName}
-                  <span className="text-body-xs text-muted">
-                    {openCategory === cat.id ? "▲ close" : "▼ metrics"}
-                  </span>
+                ))}
+              </div>
+              <div
+                className="grid border-b border-dashed border-card-border bg-card-muted px-4 py-2"
+                style={{
+                  gridTemplateColumns: `minmax(190px,1.5fr) repeat(${activeIds.length},1fr)`,
+                }}
+              >
+                <span className="text-body-sm font-bold text-foreground">
+                  Overall national score
                 </span>
                 {activeIds.map((id) => {
                   const c = byCountry[id];
-                  const score = c?.categories.find((x) => x.id === cat.id)?.score;
-                  if (score === undefined)
+                  if (!c)
                     return (
                       <span key={id} className="text-center text-body-sm italic text-muted">
-                        —
+                        unavailable
                       </span>
                     );
-                  const tone = scoreTone(score);
+                  const tone = scoreTone(c.overall);
                   return (
-                    <span
-                      key={id}
-                      className={`text-center text-body font-bold tabular-nums ${tone.text}`}
-                    >
-                      {Math.round(score)}
+                    <span key={id} className="text-center">
+                      <span className={`text-body-lg font-extrabold tabular-nums ${tone.text}`}>
+                        {Math.round(c.overall)}
+                      </span>
                     </span>
                   );
                 })}
               </div>
-            ))}
+              {home.categories.map((cat) => (
+                <div
+                  key={cat.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setOpenCategory(openCategory === cat.id ? null : cat.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ")
+                      setOpenCategory(openCategory === cat.id ? null : cat.id);
+                  }}
+                  className={`grid cursor-pointer items-center border-b border-dashed border-card-border px-4 py-2 ${
+                    openCategory === cat.id ? "bg-card-muted" : ""
+                  }`}
+                  style={{
+                    gridTemplateColumns: `minmax(190px,1.5fr) repeat(${activeIds.length},1fr)`,
+                  }}
+                >
+                  <span className="flex items-center gap-2 text-body-sm text-foreground">
+                    <span className="text-primary">
+                      <CategoryIcon
+                        icon={CATEGORY_ICONS[cat.id] ?? "library"}
+                        className="h-3.5 w-3.5"
+                      />
+                    </span>
+                    {cat.displayName}
+                    <span className="text-body-sm text-muted">
+                      {openCategory === cat.id ? "▲ close" : "▼ metrics"}
+                    </span>
+                  </span>
+                  {activeIds.map((id) => {
+                    const c = byCountry[id];
+                    const score = c?.categories.find((x) => x.id === cat.id)?.score;
+                    if (score === undefined)
+                      return (
+                        <span key={id} className="text-center text-body-sm italic text-muted">
+                          n/a
+                        </span>
+                      );
+                    const tone = scoreTone(score);
+                    return (
+                      <span
+                        key={id}
+                        className={`text-center text-body font-bold tabular-nums ${tone.text}`}
+                      >
+                        {Math.round(score)}
+                      </span>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
 
       {loadedAll && openCatHome && (
         <div className="rounded-lg border border-card-border bg-card p-4 shadow-card">
-          <div className="mb-1 font-mono text-body-xs uppercase tracking-widest text-muted">
-            Metric families — {openCatHome.displayName.toUpperCase()}
+          <div className="mb-1 font-mono text-body-sm uppercase tracking-widest text-muted">
+            Metric families · {openCatHome.displayName.toUpperCase()}
           </div>
-          <p className="mb-3 max-w-[80ch] text-body-xs leading-normal text-muted">
+          <p className="mb-3 max-w-[80ch] text-body-sm leading-normal text-muted">
             Metric names are country-specific: comparisons match shared metric families, not display
-            names. Identical scores do not imply identical institutions — each country pursues these
-            outcomes through its own system.
+            names. Identical scores do not imply identical institutions, because each country
+            pursues these outcomes through its own system.
           </p>
           <div className="flex flex-col gap-2.5">
             {openCatHome.metrics.map((m) => (
@@ -213,7 +223,7 @@ export function CompareView({
               >
                 <div className="mb-2 flex items-center gap-2.5">
                   <LeanChip lean={m.lean} label={m.leanLabel} />
-                  <span className="text-body-xs text-muted">family</span>
+                  <span className="text-body-sm text-muted">family</span>
                 </div>
                 <div
                   className="grid gap-4"
@@ -227,7 +237,7 @@ export function CompareView({
                     if (!cm)
                       return (
                         <span key={id} className="text-body-sm italic text-muted">
-                          —
+                          n/a
                         </span>
                       );
                     const tone = scoreTone(cm.value);

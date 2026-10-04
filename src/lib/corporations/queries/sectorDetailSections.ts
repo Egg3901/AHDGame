@@ -1,9 +1,11 @@
+import { getCorporateSectorLaneQuery } from "@/lib/corporations/sectorLocation";
 /**
  * Payload-section builders for the sector detail query: apportioned taxes,
  * active-crisis margin penalty, attack/split info, for-sale info, tech
  * growth-cost reduction, and the strategy panel. Extracted verbatim from
  * sectorDetail.ts (pure code motion; no behavior change).
  */
+import { sectorFxSpreadBetween } from "@/lib/currency/sectorFxSpread";
 import { idleUpkeepUnitPrice } from "@/lib/corporations/physicalPnl";
 import {
   activeCapacityFraction,
@@ -36,7 +38,7 @@ import {
 } from "@/lib/tariffs/tariffEffects";
 import type { FtaCoverage } from "@/lib/tariffs/ftaOverrides";
 import { sectorEconomicRevenue } from "@/lib/corporations/sectorRevenueBasis";
-import { deliveredFraction } from "@/lib/corporations/buildDelivery";
+import { deliveredFraction, queueUndeliveredCost } from "@/lib/corporations/buildDelivery";
 import { readPlantsPnl, type PolicyStackRow } from "@/lib/corporations/plantsPnlBasis";
 import { seedPlantLedger } from "@/lib/corporations/plantLedger";
 import {
@@ -83,11 +85,13 @@ import {
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 import { getLegalStructureForCorp } from "@/lib/corporations/legalStructure";
 import {
-  SECTOR_STRATEGIES,
+  getSectorStrategies,
+  getStrategy,
   STRATEGY_TRANSITION_TURNS,
   STRATEGY_TRANSITION_MARGIN_PENALTY,
   STRATEGY_RETOOL_COST_FRACTION,
   CANCEL_COST_FRACTION,
+  getOperatingSectorType,
 } from "@/lib/constants/sectorStrategies";
 import type { EffectiveStrategyRates, SectorStrategy } from "@/lib/constants/sectorStrategies";
 import { computePriceRealization } from "@/lib/market/priceRealization";
@@ -107,6 +111,8 @@ import { STRIKE_REVENUE_THROTTLE } from "@/lib/labour/strikes";
 import { calculatePlantSectorSplit } from "@/lib/corporations/plantSectorSplit";
 import { CAPITAL_DEPRECIATION_PER_TURN } from "@/lib/market/capital";
 import { isNppOwned } from "@/lib/corporations/nppOwned";
+import { plantsNetMarginPct } from "@/lib/corporations/rules/netMargin";
+import type { RetoolHint } from "@/lib/corporations/retoolHint";
 import {
   CAPACITY_BUILD_TURNS,
   capacityRescaleRatio,
@@ -438,13 +444,25 @@ export async function buildSectorForSaleInfo(
     {
       corporationId: viewerCorporation._id,
       stateId: sector.stateId,
-      sectorType: sector.sectorType,
+      ...getCorporateSectorLaneQuery(sector),
     },
     { projection: { _id: 1 } }
   );
-  const priceInViewerCapital = Math.round(
-    anchorToCorpLiquidCapital(listing.priceAnchor, viewerCorporation, viewerCorpFxRate)
-  );
+  const buyerCurrency = resolveCorpLiquidCurrencyCode(viewerCorporation);
+  const feeLocal =
+    listing.pledged && sector.constructionFinancing
+      ? Math.round(
+          sectorFxSpreadBetween(
+            buyerCurrency,
+            sector.constructionFinancing.currency as CurrencyCode,
+            listing.priceAnchor
+          ).spreadAnchor * viewerCorpFxRate
+        )
+      : 0;
+  const priceInViewerCapital =
+    Math.round(
+      anchorToCorpLiquidCapital(listing.priceAnchor, viewerCorporation, viewerCorpFxRate)
+    ) + feeLocal;
   const viewerCapitalAnchor = Math.round(
     corpLiquidCapitalToAnchor(
       viewerCorporation.liquidCapital ?? 0,
@@ -452,13 +470,13 @@ export async function buildSectorForSaleInfo(
       viewerCorpFxRate
     )
   );
-  const hasFunds = viewerCapitalAnchor >= listing.priceAnchor;
+  const hasFunds = (viewerCorporation.liquidCapital ?? 0) >= priceInViewerCapital;
   return {
     viewerCorporationId: viewerCorporation._id.toString(),
     viewerLiquidCurrencyCode: resolveCorpLiquidCurrencyCode(viewerCorporation),
     priceInViewerCapital,
     viewerCapitalAnchor,
-    eligible: hasFunds,
+    eligible: hasFunds && !(conflict && listing.pledged),
     conflict: !!conflict,
     hasFunds,
   };
@@ -467,15 +485,31 @@ export async function buildSectorForSaleInfo(
 /** Tech-tree growth-cost reduction (%) shown on the financials panel. */
 export function computeTechGrowthCostReductionPct(args: {
   techTreesEnabled: boolean;
+  mediaOperatingModelsEnabled?: boolean;
   techCurrentYear: number;
   techCorpView: TechCorpView;
   sectorType: CorporationType;
+  industryModel?: CorporateSector["industryModel"];
+  mediaDiscriminator?: CorporateSector["mediaDiscriminator"];
 }): number {
-  const { techTreesEnabled, techCurrentYear, techCorpView, sectorType } = args;
+  const {
+    techTreesEnabled,
+    techCurrentYear,
+    techCorpView,
+    sectorType,
+    industryModel,
+    mediaDiscriminator,
+  } = args;
   if (!techTreesEnabled) return 0;
   const effects = techCurrentYear
-    ? getSectorTechEffectsForYear(techCorpView, sectorType, techCurrentYear)
-    : getSectorTechEffects(techCorpView, sectorType);
+    ? getSectorTechEffectsForYear(
+        techCorpView,
+        sectorType,
+        techCurrentYear,
+        industryModel,
+        mediaDiscriminator
+      )
+    : getSectorTechEffects(techCorpView, sectorType, industryModel, mediaDiscriminator);
   return Math.round((1 - effects.growthCostMultiplier) * 100 * 10) / 10;
 }
 
@@ -493,6 +527,7 @@ export function buildSectorStrategySection(args: {
   techCorpView: TechCorpView;
   techCurrentYear: number;
   techTreesEnabled: boolean;
+  mediaOperatingModelsEnabled?: boolean;
   shouldRedact: boolean;
   stateResources: Partial<Record<ExtractableResource, number>> | null | undefined;
   strategyCapacityMultipliers: Map<string, Partial<Record<ExtractableResource, number>>> | null;
@@ -531,6 +566,7 @@ export function buildSectorStrategySection(args: {
     techCorpView,
     techCurrentYear,
     techTreesEnabled,
+    mediaOperatingModelsEnabled = false,
     shouldRedact,
     stateResources,
     strategyCapacityMultipliers,
@@ -538,9 +574,7 @@ export function buildSectorStrategySection(args: {
   } = args;
   return {
     currentStrategyId: sector.strategyId ?? "standard",
-    currentStrategyName:
-      SECTOR_STRATEGIES[sectorType]?.find((s) => s.id === (sector.strategyId ?? "standard"))
-        ?.name ?? "Standard",
+    currentStrategyName: getStrategy(sectorType, sector.strategyId ?? "standard").name,
     isTransitioning: effectiveRates.isTransitioning,
     isReversing: sector.isReversing ?? false,
     transitionFromStrategyId: sector.transitionFromStrategyId ?? null,
@@ -654,55 +688,70 @@ export function buildSectorStrategySection(args: {
       };
 
       return (
-        SECTOR_STRATEGIES[sectorType]?.map((s) => {
-          const availability = getStrategyAvailability(
-            techCorpView,
-            s,
-            techCurrentYear,
-            techTreesEnabled
-          );
-          const projection = projectStrategy(s);
-          return {
-            id: s.id,
-            name: s.name,
-            description: s.description,
-            locked: availability.locked,
-            lockReason: availability.reason ?? null,
-            minDecade: s.minDecade ?? null,
-            // Percentage points this strategy would move the effective margin
-            // by, at today's commodity prices. null when redacted.
-            projectedMarginDelta: projection.marginDelta,
-            // Fractional change to realized revenue via price realization.
-            projectedRealizationDelta: projection.realizationDelta,
-            // D9 capacity rescale preview (plants tier): retooling re-denominates
-            // capacity into the new output mix at equal value, so the unit count
-            // moves even though nothing was built or scrapped. Shipped for every
-            // mode (harmless below plants, where the page does not read it) using
-            // the SAME `capacityRescaleRatio` the retool command applies.
-            capacityRescaleRatio: capacityRescaleRatio(sectorType, sector.strategyId, s.id),
-            capacityAfterRetool:
-              typeof sector.capitalStock === "number" && Number.isFinite(sector.capitalStock)
-                ? sector.capitalStock * capacityRescaleRatio(sectorType, sector.strategyId, s.id)
-                : null,
-            // ₳/turn preview; null when redacted or not an extraction sector.
-            projectedRevenuePerTurn:
-              sectorType === "extraction" && !shouldRedact
-                ? Math.round(
-                    projectStrategyRevenuePerTurn({
-                      revenueAnchor: sectorRevenueForPreview,
-                      supply: s.supply,
-                      priceRatioByCommodity: previewPriceRatioByCommodity,
-                      capacityMultipliers:
-                        stateResources === undefined
-                          ? undefined // no cap doc — uncapped legacy state
-                          : stateResources === null
-                            ? null // cap doc with no resources — zero capacity
-                            : (strategyCapacityMultipliers?.get(s.id) ?? {}),
-                    })
-                  )
-                : null,
-          };
-        }) ?? []
+        getSectorStrategies(sectorType, mediaOperatingModelsEnabled, sector.mediaDiscriminator).map(
+          (s) => {
+            const availability = getStrategyAvailability(
+              techCorpView,
+              s,
+              techCurrentYear,
+              techTreesEnabled
+            );
+            const projection = projectStrategy(s);
+            return {
+              id: s.id,
+              name: s.name,
+              description: s.description,
+              locked: availability.locked,
+              lockReason: availability.reason ?? null,
+              minDecade: s.minDecade ?? null,
+              // Percentage points this strategy would move the effective margin
+              // by, at today's commodity prices. null when redacted.
+              projectedMarginDelta: projection.marginDelta,
+              // Fractional change to realized revenue via price realization.
+              projectedRealizationDelta: projection.realizationDelta,
+              // D9 capacity rescale preview (plants tier): retooling re-denominates
+              // capacity into the new output mix at equal value, so the unit count
+              // moves even though nothing was built or scrapped. Shipped for every
+              // mode (harmless below plants, where the page does not read it) using
+              // the SAME `capacityRescaleRatio` the retool command applies.
+              capacityRescaleRatio: capacityRescaleRatio(
+                sectorType,
+                sector.strategyId,
+                s.id,
+                sector.industryModel,
+                sector.mediaDiscriminator
+              ),
+              capacityAfterRetool:
+                typeof sector.capitalStock === "number" && Number.isFinite(sector.capitalStock)
+                  ? sector.capitalStock *
+                    capacityRescaleRatio(
+                      sectorType,
+                      sector.strategyId,
+                      s.id,
+                      sector.industryModel,
+                      sector.mediaDiscriminator
+                    )
+                  : null,
+              // ₳/turn preview; null when redacted or not an extraction sector.
+              projectedRevenuePerTurn:
+                sectorType === "extraction" && !shouldRedact
+                  ? Math.round(
+                      projectStrategyRevenuePerTurn({
+                        revenueAnchor: sectorRevenueForPreview,
+                        supply: s.supply,
+                        priceRatioByCommodity: previewPriceRatioByCommodity,
+                        capacityMultipliers:
+                          stateResources === undefined
+                            ? undefined // no cap doc, uncapped legacy state
+                            : stateResources === null
+                              ? null // cap doc with no resources, zero capacity
+                              : (strategyCapacityMultipliers?.get(s.id) ?? {}),
+                      })
+                    )
+                  : null,
+            };
+          }
+        ) ?? []
       );
     })(),
     currentTurn,
@@ -992,7 +1041,11 @@ export function computeSectorMarginSection(args: {
     metrics,
     commodityMarginMod,
     homeLocationBonus,
-    corporation.type,
+    getOperatingSectorType(
+      corporation.type,
+      corporation.industryModel,
+      corporation.mediaDiscriminator
+    ) as CorporationType,
     totalCorpSectors,
     macroEcon,
     corporation.logisticsStrength ?? 0,
@@ -1164,8 +1217,32 @@ export interface SectorPlantsSection {
    * first leg saturates). 0 in a glut. `headroomUnits` above is the unowned
    * pool = claimable market SHARE, a different thing; the UI must not present
    * it as demand (ticket #1027 follow-up).
+   *
+   * 0 while `roomHeldByOwnIdle`: this sector's own idle capacity reaches the
+   * market before any new build would.
    */
   demandGapUnits: number;
+  /**
+   * True when this sector's own demand throttle bound last turn. Its idle
+   * capacity is what buyers' room fills first (output can climb by the probe
+   * margin each turn while sales keep up), so the room to BUILD reads 0 rather
+   * than quoting the market gap beside a plant that is itself held back
+   * (ticket 1370).
+   */
+  roomHeldByOwnIdle?: boolean;
+  /**
+   * Share of this market nobody has built into, in percent: the unowned pool
+   * over owned capacity plus that pool. The same pool `headroomUnits` bounds a
+   * build by, so the two numbers the panel shows side by side reconcile.
+   * Absent when owned capacity is unknown.
+   */
+  unclaimedSharePct?: number;
+  /**
+   * Set when the demand throttle holds this plant down because the valuable
+   * part of its output is oversupplied and another strategy for the same
+   * sector would sell into a shortage here (ticket 1370 follow-up). Advisory.
+   */
+  retoolHint: RetoolHint | null;
   currentTurn: number;
   /**
    * Everything the build dialog needs to price an order CLIENT-SIDE. Build cost
@@ -1180,8 +1257,10 @@ export interface SectorPlantsSection {
     taxRatePercent: number;
     freightNetCostDailyAnchor?: number;
     inventoryRevenueDailyAnchor?: number;
+    bondReference?: import("@/lib/corporations/investment/rules").InvestmentBondReference | null;
   };
   buildQuote: {
+    financing?: import("@/lib/banking/rules/constructionRequest").ConstructionFinanceView;
     /** Base ₳ per unit at this era, before the multipliers below. */
     unitPriceAnchor: number;
     expansionMultiplier?: number;
@@ -1317,11 +1396,12 @@ export interface SectorPlantsSection {
      */
     costPerUnitAnchor: number | null;
     /**
-     * The margin after unsold output: realized profit over the full cost of
-     * everything produced, in percent. This is the honest counterpart to the
-     * stored `effectiveProfitMargin`, which divides by SOLD revenue only and
-     * shows a 15%-fill sector a 45% margin while it bleeds money. Null when
-     * there were no costs to measure against.
+     * Net margin: realized profit over realized revenue, in percent, with the
+     * whole bill (unsold output included) netted out of profit. This is the
+     * honest counterpart to the stored `effectiveProfitMargin`, which divides
+     * by SOLD revenue only and shows a 15%-fill sector a 45% margin while it
+     * bleeds money. Floored at -999.9 for a sector that sold nothing but paid
+     * its bill; null when there was neither revenue nor cost.
      */
     fillAdjustedMarginPct: number | null;
     /**
@@ -1368,6 +1448,10 @@ export function buildSectorPlantsSection(args: {
   /** True buyers' room (see SectorPlantsSection.demandGapUnits). Optional so
    *  test fixtures predating the field keep compiling; defaults to 0. */
   demandGapUnits?: number;
+  /** Owned capacity in this (state, sectorType) cell, every producer, units/day. */
+  ownedCellCapacityUnits?: number;
+  /** Strategy suggestion when the plant's valuable output is oversupplied (computeRetoolHint). */
+  retoolHint?: RetoolHint | null;
   workers: number;
   /** ₳/day, all on the same basis as `sector.revenue` normalized to ₳. */
   money: {
@@ -1441,6 +1525,8 @@ export function buildSectorPlantsSection(args: {
     corpCapitalAnchor,
     headroomUnits,
     demandGapUnits = 0,
+    ownedCellCapacityUnits,
+    retoolHint = null,
     workers,
     money,
     regulatoryBurdenPp,
@@ -1455,7 +1541,12 @@ export function buildSectorPlantsSection(args: {
   const plantCount =
     Number.isInteger(sector.plantCount) && (sector.plantCount ?? 0) >= 0
       ? (sector.plantCount as number)
-      : seedPlantLedger(sectorType, sector.capitalStock).plantCount;
+      : seedPlantLedger(
+          sectorType,
+          sector.capitalStock,
+          sector.industryModel,
+          sector.mediaDiscriminator
+        ).plantCount;
   const producedUnits = num(sector.producedUnits);
   const soldUnits = num(sector.soldUnits);
   const mothballed = sector.mothballed === true;
@@ -1467,6 +1558,19 @@ export function buildSectorPlantsSection(args: {
   const fillRate =
     producedUnits != null && producedUnits > 0 && soldUnits != null
       ? Math.min(1, nonNeg(soldUnits) / producedUnits)
+      : null;
+
+  // Buyers' room is reported against the plant that would receive the build.
+  // A sector its own demand throttle held back last turn already has idle
+  // capacity that reaches the market first, so its room to build is 0.
+  const ownThrottle = num(sector.demandThrottleFactor);
+  const roomHeldByOwnIdle = !mothballed && ownThrottle != null && ownThrottle < 0.999;
+  // Unclaimed share from the same unowned pool `headroomUnits` measures.
+  const ownedCell = num(ownedCellCapacityUnits);
+  const unclaimedPool = nonNeg(headroomUnits);
+  const unclaimedSharePct =
+    ownedCell != null && ownedCell + unclaimedPool > 0
+      ? Math.round((unclaimedPool / (nonNeg(ownedCell) + unclaimedPool)) * 1000) / 10
       : null;
 
   // ─── Idle attribution ──────────────────────────────────────────────────────
@@ -1552,6 +1656,7 @@ export function buildSectorPlantsSection(args: {
   // ─── Build quote ──────────────────────────────────────────────────────────
   const oneUnit = computeBuildCost({
     sectorType,
+    industryModel: sector.industryModel,
     units: 1,
     // Must match what `buildCapacity` charges, or the quote a player sees is
     // 326.9x off the invoice for a rare-earth sector.
@@ -1733,12 +1838,15 @@ export function buildSectorPlantsSection(args: {
     producedUnits != null && producedUnits > 0 ? revenueAnchor / producedUnits : null;
   const costPerUnitAnchor =
     producedUnits != null && producedUnits > 0 ? operatingCostAnchor / producedUnits : null;
-  const fillAdjustedMarginPct =
-    totalCostAnchor > 0 ? (money.profitAnchor / totalCostAnchor) * 100 : null;
+  const fillAdjustedMarginPct = plantsNetMarginPct({
+    profit: money.profitAnchor,
+    revenue: revenueAnchor,
+    totalCost: totalCostAnchor,
+  });
   // Break-even: profit is stored per financial day (TURNS_PER_DAY turns), CIP
   // is a stock. Positive profit pays CIP down in cip / profitPerTurn turns; at
   // zero CIP the sector's own profit sign is the whole story.
-  const cipAnchor = nonNeg(num(sector.constructionInProgressAnchor) ?? 0);
+  const cipAnchor = Math.max(0, queueUndeliveredCost(rawQueue, currentTurn));
   const profitPerTurnAnchor = money.profitAnchor / TURNS_PER_DAY;
   const breakEven: SectorPlantsSection["truth"]["breakEven"] =
     profitPerTurnAnchor > 0
@@ -1785,14 +1893,20 @@ export function buildSectorPlantsSection(args: {
         }
       : {}),
     buildQueue,
-    constructionInProgressAnchor: num(sector.constructionInProgressAnchor) ?? 0,
+    constructionInProgressAnchor: cipAnchor,
     depreciationPerTurn: CAPITAL_DEPRECIATION_PER_TURN,
     buildTurns: CAPACITY_BUILD_TURNS(sectorType),
     workers,
     workersDesired: num(sector.workersDesired) ?? workers,
     labourStaffingFactor: Math.max(0, Math.min(1, num(sector.labourStaffingFactor) ?? 1)),
     unionizationPct: num(sector.unionization) ?? 0,
-    laborIntensity: laborIntensity(sectorType, currentYear, eraUnitScale),
+    laborIntensity: laborIntensity(
+      sectorType,
+      currentYear,
+      eraUnitScale,
+      sector.industryModel,
+      sector.mediaDiscriminator
+    ),
     governor: {
       active: governorTurnsRemaining > 0,
       startTurn: plantsStartTurn,
@@ -1801,7 +1915,10 @@ export function buildSectorPlantsSection(args: {
       cap: governorCap,
     },
     headroomUnits: nonNeg(headroomUnits),
-    demandGapUnits: nonNeg(demandGapUnits),
+    demandGapUnits: roomHeldByOwnIdle ? 0 : nonNeg(demandGapUnits),
+    roomHeldByOwnIdle,
+    ...(unclaimedSharePct != null ? { unclaimedSharePct } : {}),
+    retoolHint,
     currentTurn,
     buildQuote: {
       unitPriceAnchor: oneUnit.unitPriceAnchor,

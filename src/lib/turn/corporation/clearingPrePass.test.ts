@@ -12,6 +12,8 @@ import { describe, it, expect } from "vitest";
 import { runClearingPrePass, type ClearingPrePassInput } from "./clearingPrePass";
 import type { MarketContext } from "@/lib/market/marketContext";
 import type { buildCorporationLookups } from "./buildLookups";
+import { buildManufacturedSectorOutput } from "@/lib/products/rules/manufacturingRules";
+import { eraScaledBasePrices } from "@/lib/constants/commodities";
 
 type Lookups = Awaited<ReturnType<typeof buildCorporationLookups>>;
 
@@ -83,10 +85,41 @@ function makeSectorWorld() {
     statePriceRatioByState: new Map(),
     reachablePriceRatioByCountry: new Map(),
   } as unknown as Lookups;
-  return { corp, lookups };
+  return { corp, sector, lookups };
 }
 
 describe("runClearingPrePass with clearing enabled", () => {
+  it("does not read the new pricing mode while explicit costs are disabled", () => {
+    const { sector, lookups } = makeSectorWorld();
+    Object.defineProperty(sector, "costPlusCostBasis", {
+      get() {
+        throw new Error("disabled cost basis read");
+      },
+    });
+    Object.defineProperty(sector, "pricingMode", {
+      get() {
+        throw new Error("disabled mode read");
+      },
+    });
+    const market = {
+      clearingEnabled: true,
+      plantsEnabled: true,
+      explicitPlantCostsEnabled: false,
+    } as MarketContext;
+    expect(() => runClearingPrePass(makeInput({ lookups, market }))).not.toThrow();
+  });
+  it("does not read media regulation history while the flag is off", () => {
+    const { sector, lookups } = makeSectorWorld();
+    sector.sectorType = "media";
+    Object.defineProperty(sector, "outputUnitsByCommodity", {
+      get() {
+        throw new Error("disabled media history read");
+      },
+    });
+    const market = { clearingEnabled: true, plantsEnabled: false } as MarketContext;
+
+    expect(() => runClearingPrePass(makeInput({ lookups, market }))).not.toThrow();
+  });
   it("populates clearing results on the market and reports deterministic breaches", () => {
     const { lookups } = makeSectorWorld();
     const market = { clearingEnabled: true, plantsEnabled: false } as MarketContext;
@@ -103,6 +136,203 @@ describe("runClearingPrePass with clearing enabled", () => {
     expect(result.contractedByCorpCommodity).toBeUndefined();
   });
 
+  it("enforces the final delivered owner share across multiple grown outlets", () => {
+    const { corp, sector, lookups } = makeSectorWorld();
+    Object.assign(sector, {
+      stateId: "US-CA",
+      countryId: "US",
+      sectorType: "media",
+      strategyId: "standard",
+      producedUnits: 2_000,
+      soldFraction: 0.05,
+      soldByCommodity: { advertising: 0.05 },
+    });
+    const secondOwned = {
+      ...sector,
+      _id: "sector3",
+      producedUnits: 1_000,
+    };
+    const competitor = {
+      ...sector,
+      _id: "sector2",
+      corporationId: "corp2",
+      producedUnits: 1_000,
+      soldFraction: 0.01,
+      soldByCommodity: { advertising: 0.01 },
+    };
+    Object.assign(lookups, {
+      sectorsByCorp: new Map([
+        ["corp1", [sector, secondOwned]],
+        ["corp2", [competitor]],
+      ]),
+      corpById: new Map([
+        ["corp1", corp],
+        ["corp2", { _id: "corp2", brandLoyalty: 0.5, brandPostureNorm: 0 }],
+      ]),
+      stateCountryMap: new Map([["US-CA", "US"]]),
+      globalCommodityBalances: new Map([["advertising", { supply: 1_000, demand: 1_000 }]]),
+      stateMetricsByState: new Map([
+        [
+          "US-CA",
+          { mediaInformation: { pressFreedom: { value: 100 }, stateMediaControl: { value: 0 } } },
+        ],
+      ]),
+    });
+    const market = {
+      clearingEnabled: true,
+      plantsEnabled: true,
+      mediaRegulationEnabled: true,
+      mediaRegulationPolicyOptionIndex: 3,
+    } as MarketContext;
+
+    runClearingPrePass(makeInput({ lookups, market }));
+
+    const dominantFill = market.clearingBySectorId?.get("sector1")?.soldByCommodity?.advertising;
+    const secondOwnedFill = market.clearingBySectorId?.get("sector3")?.soldByCommodity?.advertising;
+    const competitorFill = market.clearingBySectorId?.get("sector2")?.soldByCommodity?.advertising;
+    expect(dominantFill).toBeGreaterThan(0);
+    expect(dominantFill).toBeCloseTo(secondOwnedFill ?? 0);
+    const ownerUnits = 200 * (dominantFill ?? 0) + 100 * (secondOwnedFill ?? 0);
+    const rivalUnits = 100 * (competitorFill ?? 0);
+    expect(ownerUnits / (ownerUnits + rivalUnits)).toBeCloseTo(0.65);
+    expect(competitorFill).toBeCloseTo(1);
+  });
+  it("scopes the pre-repeal Fairness Doctrine to US broadcast outlets", () => {
+    const { corp, sector, lookups } = makeSectorWorld();
+    Object.assign(corp, { editorialStance: { economic: 5, social: 5 } });
+    Object.assign(sector, {
+      stateId: "US-CA",
+      countryId: "US",
+      sectorType: "media",
+      strategyId: "radio_network",
+      producedUnits: 100,
+    });
+    const foreignCorp = {
+      ...corp,
+      _id: "corp2",
+      editorialStance: { economic: 5, social: 5 },
+    };
+    const foreignBroadcast = {
+      ...sector,
+      _id: "sector2",
+      corporationId: "corp2",
+      stateId: "FR-IDF",
+      countryId: "FR",
+    };
+    const newspaperCorp = {
+      ...corp,
+      _id: "corp3",
+      editorialStance: { economic: 5, social: 5 },
+    };
+    const newspaper = {
+      ...sector,
+      _id: "sector3",
+      corporationId: "corp3",
+      strategyId: "standard",
+    };
+    Object.assign(lookups, {
+      sectorsByCorp: new Map([
+        ["corp1", [sector]],
+        ["corp2", [foreignBroadcast]],
+        ["corp3", [newspaper]],
+      ]),
+      corpById: new Map([
+        ["corp1", corp],
+        ["corp2", foreignCorp],
+        ["corp3", newspaperCorp],
+      ]),
+      stateCountryMap: new Map([
+        ["US-CA", "US"],
+        ["FR-IDF", "FR"],
+      ]),
+      globalCommodityBalances: new Map([["advertising", { supply: 300, demand: 300 }]]),
+      editorialAudienceLeanByState: new Map([
+        ["US-CA", { economic: -5, social: -5 }],
+        ["FR-IDF", { economic: -5, social: -5 }],
+      ]),
+    });
+    const fairMarket = {
+      clearingEnabled: true,
+      plantsEnabled: true,
+      mediaFairnessDoctrineEnabled: true,
+      mediaEditorialEnabled: false,
+    } as MarketContext;
+    const postRepealMarket = {
+      clearingEnabled: true,
+      plantsEnabled: true,
+      mediaFairnessDoctrineEnabled: false,
+      mediaEditorialEnabled: false,
+    } as MarketContext;
+
+    runClearingPrePass(makeInput({ lookups, market: fairMarket }));
+    const usFairnessFill =
+      fairMarket.clearingBySectorId?.get("sector1")?.soldByCommodity?.advertising;
+    const foreignFairnessFill =
+      fairMarket.clearingBySectorId?.get("sector2")?.soldByCommodity?.advertising;
+    const newspaperFairnessFill =
+      fairMarket.clearingBySectorId?.get("sector3")?.soldByCommodity?.advertising;
+    runClearingPrePass(makeInput({ lookups, market: postRepealMarket }));
+    const usPostRepealFill =
+      postRepealMarket.clearingBySectorId?.get("sector1")?.soldByCommodity?.advertising;
+    const foreignPostRepealFill =
+      postRepealMarket.clearingBySectorId?.get("sector2")?.soldByCommodity?.advertising;
+    const newspaperPostRepealFill =
+      postRepealMarket.clearingBySectorId?.get("sector3")?.soldByCommodity?.advertising;
+
+    expect(usFairnessFill).toBeGreaterThan(0);
+    expect(usFairnessFill).toBeLessThan(usPostRepealFill ?? 0);
+    expect(foreignFairnessFill).toBeCloseTo(foreignPostRepealFill ?? 0);
+    expect(newspaperFairnessFill).toBeCloseTo(newspaperPostRepealFill ?? 0);
+  });
+
+  it("limits the Fairness Doctrine to US outlets while preserving global editorial stance effects", () => {
+    const { corp, sector, lookups } = makeSectorWorld();
+    Object.assign(corp, { editorialStance: { economic: 5, social: 5 } });
+    Object.assign(sector, {
+      stateId: "GB-LON",
+      countryId: "GB",
+      sectorType: "media",
+      strategyId: "standard",
+      producedUnits: 100,
+    });
+    Object.assign(lookups, {
+      globalCommodityBalances: new Map([["advertising", { supply: 100, demand: 100 }]]),
+      editorialAudienceLeanByState: new Map([["GB-LON", { economic: -5, social: -5 }]]),
+    });
+
+    const fairnessMarket = {
+      clearingEnabled: true,
+      plantsEnabled: true,
+      mediaFairnessDoctrineEnabled: true,
+      mediaEditorialEnabled: false,
+    } as MarketContext;
+    const noFairnessMarket = {
+      clearingEnabled: true,
+      plantsEnabled: true,
+      mediaFairnessDoctrineEnabled: false,
+      mediaEditorialEnabled: false,
+    } as MarketContext;
+    const editorialMarket = {
+      clearingEnabled: true,
+      plantsEnabled: true,
+      mediaFairnessDoctrineEnabled: false,
+      mediaEditorialEnabled: true,
+    } as MarketContext;
+
+    runClearingPrePass(makeInput({ lookups, market: fairnessMarket }));
+    const fairnessFill =
+      fairnessMarket.clearingBySectorId?.get("sector1")?.soldByCommodity?.advertising;
+    runClearingPrePass(makeInput({ lookups, market: noFairnessMarket }));
+    const noFairnessFill =
+      noFairnessMarket.clearingBySectorId?.get("sector1")?.soldByCommodity?.advertising;
+    runClearingPrePass(makeInput({ lookups, market: editorialMarket }));
+    const editorialFill =
+      editorialMarket.clearingBySectorId?.get("sector1")?.soldByCommodity?.advertising;
+
+    expect(fairnessFill).toBe(noFairnessFill);
+    expect(editorialFill).toBeGreaterThan(0);
+    expect(editorialFill).toBeLessThan(noFairnessFill ?? 0);
+  });
   it("rolls loyalty up and keeps the in-memory corp docs consistent", () => {
     const { corp, lookups } = makeSectorWorld();
     const market = { clearingEnabled: true, plantsEnabled: false } as MarketContext;
@@ -133,4 +363,174 @@ describe("runClearingPrePass with clearing enabled", () => {
     expect(result.contractedByCorpCommodity).toBeDefined();
     expect(result.contractedByCorpCommodity?.size).toBe(0);
   });
+
+  it("rebuilds offers from current capacity and project stage instead of stale product maps", () => {
+    const { lookups } = makeSectorWorld();
+    const sector = lookups.sectorsByCorp.get("corp1")![0];
+    Object.assign(sector, {
+      capitalStock: 200,
+      plantCount: 1,
+      producedUnits: 100,
+      operatingCapacityUnits: 200,
+      productOutputCapacityUnits: 100,
+      outputUnitsByCommodity: { vehicles: 20 },
+      outputAnchorByCommodity: { vehicles: 5000 },
+      productQualityByCommodity: { vehicles: 72 },
+    });
+    Object.assign(lookups, {
+      productLinesV2Enabled: true,
+      manufacturingProductByCorpId: new Map([
+        [
+          "corp1",
+          {
+            _id: "project-1",
+            corporationId: "corp1",
+            activeCorporationId: "corp1",
+            kindId: "cement",
+            stage: "mature",
+            stageStartedTurn: 1,
+            allocations: [{ sectorId: "sector1", share: 0.5 }],
+            startedTurn: 1,
+            developmentPaidAnchor: 400,
+            paidThresholdAnchor: 500,
+            elapsedDevelopmentTurns: 1,
+            elapsedThresholdTurns: 1,
+          },
+        ],
+      ]),
+      productSectorQualityById: new Map([["sector1", 70]]),
+    });
+    const market = { clearingEnabled: true, plantsEnabled: true } as MarketContext;
+    const producedByCorpCommodity = new Map<string, Map<string, number>>();
+
+    runClearingPrePass(
+      makeInput({
+        lookups,
+        market,
+        producedByCorpCommodity,
+        supplyAgreementsEnabled: true,
+        settleableAgreements: [],
+        contractedByCorpCommodity: new Map(),
+      })
+    );
+
+    const basePrices = eraScaledBasePrices(lookups.eraUnitScale);
+    const expected = buildManufacturedSectorOutput({
+      outputAnchor: 200 * (basePrices.steel! * 0.5 + basePrices.building_materials! * 0.5),
+      supplyRates: { steel: 0.4, building_materials: 0.2 },
+      allocationShare: 0.5,
+      stage: "mature",
+      outputCommodity: "building_materials",
+      basePrices,
+      currentSectorQualityByCommodity: { steel: 70, building_materials: 70 },
+      paidDevelopmentAnchor: 400,
+      paidThresholdAnchor: 500,
+    });
+    expect(market.clearingBySectorId?.get("sector1")?.soldByCommodity).toHaveProperty("steel");
+    expect(market.clearingBySectorId?.get("sector1")?.soldByCommodity).toHaveProperty(
+      "building_materials"
+    );
+    expect(market.clearingBySectorId?.get("sector1")?.soldByCommodity).not.toHaveProperty(
+      "vehicles"
+    );
+    expect(producedByCorpCommodity.get("corp1")?.get("steel")).toBeCloseTo(
+      expected.outputUnitsByCommodity.steel!
+    );
+    expect(producedByCorpCommodity.get("corp1")?.get("building_materials")).toBeCloseTo(
+      expected.outputUnitsByCommodity.building_materials!
+    );
+    expect(producedByCorpCommodity.get("corp1")?.get("vehicles")).toBeUndefined();
+  });
+
+  it.each([
+    ["development", 0],
+    ["launch", 0.15],
+    ["growth", 0.4],
+    ["mature", 0.7],
+    ["decline", 0.4],
+    ["retired", 0],
+  ] as const)(
+    "applies the %s funded stage curve to market offers without changing recipe value",
+    (stage, redirectShare) => {
+      const { lookups } = makeSectorWorld();
+      const sector = lookups.sectorsByCorp.get("corp1")![0];
+      Object.assign(sector, {
+        sectorType: "manufacturing",
+        industryModel: "vehicles",
+        strategyId: "standard",
+        capitalStock: 200,
+        plantCount: 1,
+        producedUnits: 100,
+        operatingCapacityUnits: 200,
+        productOutputCapacityUnits: 100,
+      });
+      Object.assign(lookups, {
+        productLinesV2Enabled: true,
+        manufacturingProductByCorpId: new Map([
+          [
+            "corp1",
+            {
+              _id: "project-1",
+              corporationId: "corp1",
+              activeCorporationId: "corp1",
+              kindId: "passenger_car",
+              stage,
+              stageStartedTurn: 1,
+              allocations: [{ sectorId: "sector1", share: 0.5 }],
+              startedTurn: 1,
+              developmentPaidAnchor: 500,
+              paidThresholdAnchor: 500,
+              elapsedDevelopmentTurns: 12,
+              elapsedThresholdTurns: 12,
+            },
+          ],
+        ]),
+        productSectorQualityById: new Map([["sector1", 70]]),
+      });
+      const market = { clearingEnabled: true, plantsEnabled: true } as MarketContext;
+      const producedByCorpCommodity = new Map<string, Map<string, number>>();
+
+      runClearingPrePass(
+        makeInput({
+          lookups,
+          market,
+          producedByCorpCommodity,
+          supplyAgreementsEnabled: true,
+          settleableAgreements: [],
+          contractedByCorpCommodity: new Map(),
+        })
+      );
+
+      const basePrices = eraScaledBasePrices(lookups.eraUnitScale);
+      const totalNominalValue = 200 * basePrices.vehicles!;
+      const productUnits = 100 * redirectShare;
+      const offered = market.clearingBySectorId?.get("sector1");
+      expect(offered?.productProjectId).toBe("project-1");
+      expect(offered?.productOutputTurn).toBe(12);
+      expect(offered?.projectOutputUnitsByCommodity?.vehicles).toBeCloseTo(productUnits, 6);
+      expect(offered?.projectQualityByCommodity?.vehicles).toBeCloseTo(
+        70 +
+          10 *
+            (
+              {
+                development: 0,
+                launch: 0.25,
+                growth: 0.6,
+                mature: 1,
+                decline: 0.6,
+                retired: 0,
+              } as const
+            )[stage],
+        6
+      );
+      expect(offered?.projectSoldUnitsByCommodity?.vehicles).toBeCloseTo(
+        productUnits * (offered?.soldByCommodity?.vehicles ?? 0),
+        6
+      );
+      expect(producedByCorpCommodity.get("corp1")?.get("vehicles")).toBeCloseTo(200, 6);
+      const totalOfferedNominalValue =
+        (producedByCorpCommodity.get("corp1")?.get("vehicles") ?? 0) * basePrices.vehicles!;
+      expect(totalOfferedNominalValue).toBeCloseTo(totalNominalValue, 6);
+    }
+  );
 });

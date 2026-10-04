@@ -1,3 +1,4 @@
+import { governmentLeaderReference, leaderStateId } from "@/lib/government/leaderReference";
 import type { Db } from "mongodb";
 import { getCountryLeaderStatesCollection } from "@/lib/db/collections/countryLeaderState";
 import { adjustLeaderConfidence } from "@/lib/turn/rulingPartyConfidence";
@@ -44,15 +45,14 @@ export async function processRulingPartyConfidenceTurn(
 ): Promise<RulingPartyConfidenceTurnResult | null> {
   // 1. Find current country leader
   const gov = await getGovernmentFormationsCollection(db).findOne({ _id: countryId });
-  if (!gov || !gov.pmCharacterId) {
+  const leaderId = governmentLeaderReference(gov);
+  if (!leaderId) {
     return null; // No leader installed yet
   }
 
-  const leaderId = gov.pmCharacterId;
-
   // 2. Fetch confidence state
   const stateColl = getCountryLeaderStatesCollection(db);
-  const stateId = `${countryId}_${leaderId.toString()}`;
+  const stateId = leaderStateId(countryId, leaderId);
   const state = await stateColl.findOne({ _id: stateId });
   if (!state) {
     return null; // No confidence state yet (leader not initialized)
@@ -95,7 +95,7 @@ export async function processRulingPartyConfidenceTurn(
   const consequenceDescription = CONFIDENCE_CONSEQUENCE_DESCRIPTIONS[consequenceLevel];
 
   return {
-    leaderId: leaderId.toString(),
+    leaderId: ("kind" in leaderId ? leaderId.id : leaderId).toString(),
     previousConfidence,
     newConfidence: newConfidence.partyConfidence,
     delta: drift.totalDelta,

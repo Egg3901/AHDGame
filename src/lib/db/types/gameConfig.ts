@@ -2,6 +2,17 @@ import type { EconomicInterventionPlan } from "@/lib/economy/interventionGoverna
 
 export interface GameConfig {
   _id: string;
+  /** Enables product-project reads and output adapters; absent remains off. */
+  productLinesV2Enabled?: boolean;
+  /** Enables media product project reads and bounded quality/brand overlays; absent remains off. */
+  mediaProductSlatesEnabled?: boolean;
+  /** Explicit fresh-reset marker for the 1991 automobile-to-vehicle-model seed. */
+  fresh1991VehicleModelSeed?: {
+    preset: "1991-default";
+    schema: "manufacturing-vehicles-v1";
+    status: "in_progress" | "complete";
+    startedAt: Date;
+  };
   /** Shared nominal commodity price level. Scarcity remains in price/base ratios. */
   commodityNominalPriceIndex?: number;
   /** Last commodity turn included in commodityNominalPriceIndex. */
@@ -144,6 +155,19 @@ export interface GameConfig {
    * See `@/lib/constants/commandEconomy`.
    */
   commandEconomyEnabled?: boolean;
+  /** Public media editorial stance and audience response rules. Missing means off. */
+  mediaEditorialEnabled?: boolean;
+  /** Paid media and entertainment operating-model catalog. Default off. */
+  mediaOperatingModelsEnabled?: boolean;
+  /** Combined media and entertainment taxonomy gate. Default off. */
+  fresh1991MediaTaxonomySeed?: {
+    preset: "1991-default";
+    schema: "media-entertainment-taxonomy-v1";
+    status: "in_progress" | "complete";
+    startedAt: Date;
+  };
+  /** Media ownership limits and censorship effects in the advertising market. Default off. */
+  mediaRegulationEnabled?: boolean;
   /**
    * Sovereignty transitions (decolonization). Absent/false ⇒ the phase is a
    * no-op, which is the required default: the evaluator returns a "strong
@@ -196,6 +220,15 @@ export interface GameConfig {
    * read-only freeze: pages render, no actions accepted, nothing unwinds.
    */
   privateBankingEnabled?: boolean;
+  bankConstructionAdmissions?: import("@/lib/banking/constructionAdmission").ConstructionAdmission[];
+  bankConstructionAdmissionClosing?: boolean;
+  bankConstructionAdmissionClosingToken?: string;
+  /** Enable funded sovereign-bill holdings for private bank treasuries. Default off. */
+  bankTreasuryEnabled?: boolean;
+  /** Fund unplaced sovereign units from investment-bank vault cash. Default off. */
+  bankSovereignPrimaryEnabled?: boolean;
+  /** Experimental funded spendable government-cash ledger. Absent means off. */
+  treasuryCashLedgerEnabled?: boolean;
   /**
    * Gate on player-chartered ADVANCED bank types. When absent/false, players may
    * only charter (or switch to) a RETAIL bank; investment and universal charters
@@ -211,8 +244,16 @@ export interface GameConfig {
   playerFundSponsorshipEnabled?: boolean;
   /** Kill switch: investment-bank proprietary trading (incl. leveraged forex). Default on when banking is on. */
   bankPropTradingEnabled?: boolean;
+  /** Size-priced forex prop orders and their fee journal. Default off. */
+  bankPropForexFeesEnabled?: boolean;
+  /** Funded corporate primary-market underwriting fees. Default off. */
+  bankUnderwritingEnabled?: boolean;
   /** Kill switch: bank-failure contagion cascade. Default on when banking is on. */
   bankContagionEnabled?: boolean;
+  /** Funded bank failures affect approval and consumer confidence. Default off. */
+  bankFailurePoliticsEnabled?: boolean;
+  /** Funded plant construction loans. Off unless explicitly enabled. */
+  bankConstructionFinanceEnabled?: boolean;
   /**
    * Savings account rollout. `off`: legacy character fields only. `shadow`:
    * accounts are materialized from the legacy fields every turn and compared,
@@ -474,6 +515,10 @@ export interface GameConfig {
    * See src/lib/market/clearing.ts (qualityPremiumMultiplier).
    */
   qualityPremiumPricingEnabled?: boolean;
+  /** Funded political advertising orders, settled against unsold media output. */
+  politicalMediaMarketEnabled?: boolean;
+  /** Fresh-world explicit plant overhead. Default off preserves legacy residuals. */
+  explicitPlantCostsEnabled?: boolean;
   /**
    * Private supply agreements. When true, active bilateral supply contracts are
    * fulfilled in a contracted pre-pass before the loyal-slice and cheapest-first

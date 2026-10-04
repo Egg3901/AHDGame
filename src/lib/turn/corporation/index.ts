@@ -2,10 +2,12 @@
  * Corporation turns settle operating results and distribute shareholder income.
  * processCorporationTurn shares monetary quotes across automatic dividend conversions.
  */
+import { applyCorporationCashWrites } from "@/lib/turn/npp/foundingCashLedger";
 import { loadConversionQuoteContext } from "@/lib/currency/euro/quotes";
 import { ObjectId } from "mongodb";
 import type { AnyBulkWriteOperation } from "mongodb";
 import type { Character } from "@/lib/db/types";
+import type { StatePolicy } from "@/lib/db/types/statePolicy";
 import type { State } from "@/lib/db/types/state";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
 import { getDb } from "@/lib/mongodb";
@@ -20,9 +22,15 @@ import { processSectors } from "./sectorCalculations";
 import { getLabourSystemMode, labourAtLeast } from "@/lib/labour/featureFlag";
 import { getMarketSystemMode, marketAtLeast } from "@/lib/market/featureFlag";
 import { buildMarketContext } from "@/lib/market/marketContext";
+import { isFairnessDoctrineInEffect } from "@/lib/mediaRegulation/rules";
 import { runClearingPrePass } from "./clearingPrePass";
 import { computeQualityUpdates } from "./brandQualityTurn";
-import { getEffectiveStrategyRates } from "@/lib/constants/sectorStrategies";
+import { consumeManufacturingDevelopmentReceiptsV2 } from "@/lib/products/manufacturingProjectPersistence";
+import {
+  MANUFACTURING_PRODUCT_PROJECTS_V2,
+  type ManufacturingProductProject,
+} from "@/lib/products/manufacturingProject";
+import { getEffectiveStrategyRatesForOperatingModel } from "@/lib/constants/sectorStrategies";
 import { settleSupplyAgreements, type SettleableSupplyAgreement } from "./settleSupplyAgreements";
 import type { CommodityType } from "@/lib/constants/commodities";
 import { loadSettleableSupplyAgreements } from "./loadSettleableSupplyAgreements";
@@ -82,6 +90,8 @@ import {
   emitCorporationTurnTx,
 } from "./corporationTurnPhases";
 import { getGameState } from "@/lib/gameState";
+import { unprotectedConstructionPropertyFilter } from "@/lib/corporations/securedConstructionProperty";
+import { requestConstructionFinance } from "@/lib/banking/constructionFinance";
 import { makeSeededRng } from "@/lib/events/substrate/rng";
 import { logger } from "../../observability/logger";
 import { recordAuditBulk } from "@/lib/audit/recordAudit";
@@ -90,6 +100,24 @@ import { createCorporationTurnTimer, type CorporationTurnResult } from "./corpor
 import { processEquityMarketPoolTurn } from "@/lib/equities/marketPoolTurn";
 import { placePendingShareIssuances } from "@/lib/equities/primaryMarket";
 import { creditEquityPoolsBatch } from "@/lib/equities/marketPool";
+import { partitionedBulkWrite } from "./partitionedBulkWrite";
+import {
+  applyPoliticalMediaOrderEffect,
+  loadPoliticalMediaOrdersForClearing,
+  savePoliticalMediaSettlementPlan,
+  settlePoliticalMediaOrder,
+  type PoliticalMediaOrderForClearing,
+} from "@/lib/politicalMedia/journal";
+import { applyMediaEditorialEffects } from "@/lib/mediaEditorial/applyEffects";
+import { addSettledPoliticalAttention } from "@/lib/mediaOperatingModels/reach";
+import { applyOperatingCashThenDevelopmentCash } from "./manufacturingDevelopmentCashSettlement";
+import { resumeFoundingUnderwritingPlans } from "@/lib/banking/underwritingSettlement";
+import {
+  processMediaProductProjectsV1,
+  startNppMediaProductsV1,
+} from "@/lib/products/mediaProductPersistence";
+import { getMediaProductKind } from "@/lib/products/mediaProductCatalog";
+import { aggregateMediaProductSectorEffects } from "@/lib/products/rules/mediaProductRules";
 
 export type { CorporationTurnResult } from "./corporationTurnRuntime";
 
@@ -138,12 +166,15 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       {
         projection: {
           marketSystemMode: 1,
+          productLinesV2Enabled: 1,
           marketGovernorCap: 1,
           marketGovernorRampTurns: 1,
           brandLoyaltyEnabled: 1,
           brandLoyaltySliceEnabled: 1,
           sectorQualityEnabled: 1,
           qualityPremiumPricingEnabled: 1,
+          politicalMediaMarketEnabled: 1,
+          explicitPlantCostsEnabled: 1,
           supplyAgreementsEnabled: 1,
           prospectingEnabled: 1,
           commandEconomyEnabled: 1,
@@ -151,6 +182,10 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           interstateMoneyWiringEnabled: 1,
           freightSettlementMode: 1,
           canonicalFreightBillingEnabled: 1,
+          treasuryCashLedgerEnabled: 1,
+          mediaEditorialEnabled: 1,
+          mediaOperatingModelsEnabled: 1,
+          mediaRegulationEnabled: 1,
         },
       }
     ),
@@ -158,6 +193,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     getLabourSystemMode(),
   ]);
   mark("preamble");
+  await resumeFoundingUnderwritingPlans(db, now);
   const equityPoolTurn = await processEquityMarketPoolTurn(
     db,
     turn ?? gameState?.currentTurn ?? 0,
@@ -187,13 +223,83 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   const canonicalFreightBillingEnabled =
     (marketGovernorConfig as { canonicalFreightBillingEnabled?: boolean } | null)
       ?.canonicalFreightBillingEnabled === true;
-  const lookups = await buildCorporationLookups(db, {
-    plantsEnabled: plantsEnabledForMarketShare,
-    productionTurn: turn,
-    freightSettlementActive,
-    moneyWiringEnabled: interstateMoneyWiringEnabled,
-    canonicalFreightBillingEnabled,
-  });
+  const mediaEditorialEnabled = marketGovernorConfig?.mediaEditorialEnabled === true;
+  const mediaOperatingModelsEnabled = marketGovernorConfig?.mediaOperatingModelsEnabled === true;
+  const mediaProductSlatesEnabled =
+    marketAtLeast(marketSystemMode, "clearing") &&
+    mediaOperatingModelsEnabled &&
+    marketGovernorConfig?.mediaProductSlatesEnabled === true &&
+    marketGovernorConfig?.brandLoyaltyEnabled === true &&
+    marketGovernorConfig?.brandLoyaltySliceEnabled === true &&
+    marketGovernorConfig?.qualityPremiumPricingEnabled === true;
+  const mediaRegulationEnabled =
+    marketAtLeast(marketSystemMode, "clearing") &&
+    marketGovernorConfig?.mediaRegulationEnabled === true;
+  const [lookups, mediaRegulationPolicy] = await Promise.all([
+    buildCorporationLookups(db, {
+      plantsEnabled: plantsEnabledForMarketShare,
+      explicitPlantCostsEnabled:
+        plantsEnabledForMarketShare && marketGovernorConfig?.explicitPlantCostsEnabled === true,
+      productionTurn: turn,
+      freightSettlementActive,
+      moneyWiringEnabled: interstateMoneyWiringEnabled,
+      canonicalFreightBillingEnabled,
+      mediaEditorialEnabled:
+        mediaEditorialEnabled ||
+        (mediaRegulationEnabled &&
+          typeof gameState?.currentYear === "number" &&
+          gameState.currentYear <= 1986),
+      mediaProductSlatesEnabled,
+      productLinesV2Enabled:
+        plantsEnabledForMarketShare &&
+        (marketGovernorConfig as { productLinesV2Enabled?: boolean } | null)
+          ?.productLinesV2Enabled === true,
+    }),
+    mediaRegulationEnabled
+      ? db
+          .collection<StatePolicy>("statePolicies")
+          .findOne(
+            { legislationTypeId: "us_media_communications", stateId: "federal" },
+            { projection: { policyOptionIndex: 1 } }
+          )
+      : Promise.resolve(null),
+  ]);
+  if (
+    mediaProductSlatesEnabled &&
+    lookups.mediaProductProjectsByCorpId &&
+    typeof gameState?.currentYear === "number"
+  ) {
+    const startedNppProjects = await startNppMediaProductsV1({
+      db,
+      corporations: lookups.corporations,
+      sectorsByCorp: lookups.sectorsByCorp,
+      projectsByCorporationId: lookups.mediaProductProjectsByCorpId,
+      currentYear: gameState.currentYear,
+      currentTurn: turn ?? 1,
+    });
+    for (const project of startedNppProjects) {
+      const development = lookups.mediaProductDevelopmentByCorpId ?? new Map();
+      development.set(project.corporationId, project);
+      lookups.mediaProductDevelopmentByCorpId = development;
+      const bySector = lookups.mediaProductProjectsBySectorId ?? new Map();
+      const sectorProjects = bySector.get(project.sectorId) ?? [];
+      sectorProjects.push(project);
+      bySector.set(project.sectorId, sectorProjects);
+      lookups.mediaProductProjectsBySectorId = bySector;
+    }
+  }
+  const politicalMediaMarketEnabled = marketGovernorConfig?.politicalMediaMarketEnabled === true;
+  const politicalMediaOrders: PoliticalMediaOrderForClearing[] = politicalMediaMarketEnabled
+    ? await loadPoliticalMediaOrdersForClearing(db, turn ?? 0)
+    : [];
+  if (lookups.productLinesV2Enabled && lookups.manufacturingProductByCorpId) {
+    await consumeManufacturingDevelopmentReceiptsV2({
+      db,
+      corporations: lookups.corporations,
+      projectsByCorporationId: lookups.manufacturingProductByCorpId,
+      completedTurn: (turn ?? gameState?.currentTurn ?? 0) - 1,
+    });
+  }
   const currentYear = gameState?.currentYear;
   // Soft-budget gate for the turn path (see sectorTurn's affordability brake and
   // nppInsolvencyDissolution, which already exempts planned economies). Read off
@@ -204,6 +310,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   const privateBankingEnabled =
     (marketGovernorConfig as { privateBankingEnabled?: boolean } | null)?.privateBankingEnabled ===
     true;
+  const treasuryCashLedgerEnabled = marketGovernorConfig?.treasuryCashLedgerEnabled === true;
   const subsidiaryCorporationsEnabled = await isSubsidiaryCorporationsEnabled(
     gameState ?? undefined
   );
@@ -304,6 +411,19 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     cap: marketGovernorConfig?.marketGovernorCap,
     rampTurns: marketGovernorConfig?.marketGovernorRampTurns,
   });
+  market.explicitPlantCostsEnabled = marketGovernorConfig?.explicitPlantCostsEnabled === true;
+  market.mediaRegulationEnabled = mediaRegulationEnabled;
+  market.mediaEditorialEnabled = mediaEditorialEnabled;
+  if (mediaRegulationEnabled) {
+    market.mediaRegulationPolicyOptionIndex =
+      typeof mediaRegulationPolicy?.policyOptionIndex === "number"
+        ? Math.max(0, Math.min(6, Math.trunc(mediaRegulationPolicy.policyOptionIndex)))
+        : 3;
+    market.mediaFairnessDoctrineEnabled = isFairnessDoctrineInEffect(
+      gameState?.currentYear,
+      market.mediaRegulationPolicyOptionIndex
+    );
+  }
   // Canonical freight billing (issue #897): apportion last turn's state-scoped
   // shipping money onto sectors once, before the per-corp loop, and thread the
   // result through the market context like the delivery-limited telemetry.
@@ -330,6 +450,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     brandLoyaltyUpdates,
     contractedByCorpCommodity: clearingContractedByCorpCommodity,
     buyerDemandByCorpCommodity,
+    politicalMediaSettlementPlans,
   } = runClearingPrePass({
     lookups,
     market,
@@ -347,8 +468,22 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     brandLoyaltyEnabled,
     brandLoyaltySliceEnabled,
     qualityPremiumPricingEnabled,
+    politicalMediaOrders,
   });
+  const plannedPoliticalMediaOrders = new Map(
+    politicalMediaSettlementPlans.map(({ orderId, plan }) => [orderId, plan])
+  );
+  for (const { orderId, plan } of politicalMediaSettlementPlans) {
+    await savePoliticalMediaSettlementPlan(db, orderId, plan);
+  }
   contractedByCorpCommodity = clearingContractedByCorpCommodity;
+  if (mediaEditorialEnabled && !mediaOperatingModelsEnabled && market.editorialOutletsByState) {
+    await applyMediaEditorialEffects({
+      db,
+      turn: turn ?? gameState?.currentTurn ?? 0,
+      outletsByState: market.editorialOutletsByState,
+    });
+  }
   mark("marketContext");
 
   // Output quality (four pillars): compute per-sector quality → corp
@@ -356,7 +491,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   // Independent of clearing; flag-gated. Display/telemetry only in this phase.
   let qualityCorpUpdates = new Map<string, number>();
   let newCommodityQuality: Map<CommodityType, number> | null = null;
-  if (sectorQualityEnabled) {
+  if (sectorQualityEnabled || lookups.productLinesV2Enabled || mediaProductSlatesEnabled) {
     const laggedQ = new Map<CommodityType, number>();
     const qDocs = await db
       .collection("commodityQuality")
@@ -369,12 +504,14 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     for (const [corpId, sectors] of lookups.sectorsByCorp) {
       const corp = lookups.corpById.get(corpId);
       const qSectors = sectors.map((sector) => {
-        const rates = getEffectiveStrategyRates(
+        const rates = getEffectiveStrategyRatesForOperatingModel(
           sector.sectorType,
           sector.strategyId ?? "standard",
           sector.transitionFromStrategyId,
           sector.transitionStartTurn,
-          turn ?? 0
+          turn ?? 0,
+          sector.industryModel,
+          sector.mediaDiscriminator
         );
         const outputs = (Object.keys(rates.supply ?? {}) as CommodityType[]).filter(
           (c) => (rates.supply?.[c] ?? 0) > 0
@@ -383,6 +520,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           (c) => (rates.demand?.[c] ?? 0) > 0
         );
         return {
+          sectorId: sector._id.toString(),
           revenueWeight: Math.max(0, sector.revenue),
           wageLevel: typeof sector.wageLevel === "number" ? sector.wageLevel : 1,
           outputs,
@@ -396,14 +534,74 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
         sectors: qSectors,
       });
     }
-    const { corpQuality, commodityQuality } = computeQualityUpdates(qCorps, laggedQ);
-    qualityCorpUpdates = corpQuality;
-    newCommodityQuality = commodityQuality;
+    const { corpQuality, commodityQuality, sectorQualityBySectorId } = computeQualityUpdates(
+      qCorps,
+      laggedQ
+    );
+    lookups.productSectorQualityById = sectorQualityBySectorId;
+    if (sectorQualityEnabled) {
+      qualityCorpUpdates = corpQuality;
+      newCommodityQuality = commodityQuality;
+    }
     // Keep in-memory corp docs current so the history snapshot charts this turn.
     for (const [corpId, q] of corpQuality) {
       const corp = lookups.corpById.get(corpId);
       if (corp) corp.averageQuality = q;
     }
+  }
+
+  if (mediaProductSlatesEnabled && lookups.mediaProductProjectsByCorpId) {
+    await processMediaProductProjectsV1({
+      db,
+      corporations: lookups.corporations,
+      projectsByCorporationId: lookups.mediaProductProjectsByCorpId,
+      currentTurn: turn ?? 1,
+      sectorQualityBySectorId: lookups.productSectorQualityById ?? new Map(),
+    });
+    const projectsBySectorId = new Map<
+      string,
+      import("@/lib/products/mediaProduct").MediaProductProject[]
+    >();
+    const developmentByCorpId = new Map<
+      string,
+      import("@/lib/products/mediaProduct").MediaProductProject
+    >();
+    for (const [corporationId, projects] of lookups.mediaProductProjectsByCorpId) {
+      for (const project of projects) {
+        const sectorProjects = projectsBySectorId.get(project.sectorId) ?? [];
+        sectorProjects.push(project);
+        projectsBySectorId.set(project.sectorId, sectorProjects);
+        if (project.activeDevelopmentCorporationId) {
+          developmentByCorpId.set(corporationId, project);
+        }
+      }
+    }
+    lookups.mediaProductProjectsBySectorId = projectsBySectorId;
+    lookups.mediaProductDevelopmentByCorpId = developmentByCorpId;
+    const mediaProductQualityBySectorId = new Map<string, number>();
+    const mediaProductLoyaltyBonusBySectorId = new Map<string, number>();
+    for (const sectors of lookups.sectorsByCorp.values()) {
+      for (const sector of sectors) {
+        const sectorId = sector._id.toString();
+        const projects = (projectsBySectorId.get(sectorId) ?? []).flatMap((project) => {
+          const kind = getMediaProductKind(project.kindId);
+          return kind && sector.strategyId === kind.modelId
+            ? [{ project: { ...project, id: project._id }, kind }]
+            : [];
+        });
+        if (projects.length === 0) continue;
+        const effect = aggregateMediaProductSectorEffects({
+          projects,
+          baseQuality: lookups.productSectorQualityById?.get(sectorId) ?? null,
+        });
+        if (effect.quality !== null) mediaProductQualityBySectorId.set(sectorId, effect.quality);
+        if (effect.loyaltyBonus > 0) {
+          mediaProductLoyaltyBonusBySectorId.set(sectorId, effect.loyaltyBonus);
+        }
+      }
+    }
+    lookups.mediaProductQualityBySectorId = mediaProductQualityBySectorId;
+    lookups.mediaProductLoyaltyBonusBySectorId = mediaProductLoyaltyBonusBySectorId;
   }
 
   // Phase 1a2: auto-install NPP caretakers on corps left CEO-less by a hard
@@ -490,6 +688,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   const {
     sectorOps,
     corpOps,
+    manufacturingDevelopmentCashOps,
     corpSnapshots,
     ceoSalaryPayments,
     dividendPayments,
@@ -524,7 +723,8 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     subsidiaryCorporationsEnabled,
     commandEconomyEnabled,
     privateBankingEnabled,
-    new Set(equityPoolTurn.activeCurrencies)
+    new Set(equityPoolTurn.activeCurrencies),
+    treasuryCashLedgerEnabled
   );
   mark("processSectors(CPU)");
 
@@ -536,12 +736,31 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     newSectors: nppNewSectors,
     divestedSectorIds: nppDivestedSectorIds,
     techLedger: nppTechLedger,
+    foundingCashWitnesses = [],
+    reinvestmentCashWitnesses = [],
+    manufacturingProductProjects: nppManufacturingProductProjects,
+    constructionFinanceRequests: nppConstructionFinanceRequests,
+    constructionFinanceCandidateCount: nppConstructionFinanceCandidateCount,
+    constructionFinanceBacklogCount: nppConstructionFinanceBacklogCount,
   } = await processNppCorporationDecisions(db, turn ?? 0, now, techTreesEnabled, {
     corporations: lookups.corporations,
     issuerBondsByCorpId: lookups.bondsByCorpId,
     heldBondsByCorpId: lookups.bondsHeldByCorpId,
   });
   mark("nppCorpDecisions");
+
+  for (const project of nppManufacturingProductProjects) {
+    try {
+      await db
+        .collection<ManufacturingProductProject>(MANUFACTURING_PRODUCT_PROJECTS_V2)
+        .insertOne(project);
+    } catch (error) {
+      if (typeof error === "object" && error !== null && "code" in error && error.code === 11000) {
+        continue;
+      }
+      throw error;
+    }
+  }
 
   // Merge NPP corp updates into the main corpOps
   for (const nppUpdate of nppCorpUpdates) {
@@ -592,7 +811,10 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
 
   // Divest losing NPP sectors, remove from corporateSectors
   if (nppDivestedSectorIds.length > 0) {
-    await db.collection("corporateSectors").deleteMany({ _id: { $in: nppDivestedSectorIds } });
+    await db.collection("corporateSectors").deleteMany({
+      _id: { $in: nppDivestedSectorIds },
+      ...unprotectedConstructionPropertyFilter(),
+    });
   }
 
   // v2: persist the per-state labour wage index (+ v2-3b: automation index) to
@@ -617,14 +839,91 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
 
   // Phase 3: Bulk write sector and corp updates
   if (sectorOps.length > 0) {
-    // bulkWrite op array type doesn't satisfy AnyBulkWriteOperation narrowing, runtime shape is valid
+    // bulkWrite op array type doesn't satisfy AnyBulkWriteOperation narrowing, runtime shape is valid.
+    // Every op is keyed by its sector `_id`; ops on one sector (the flip-turn
+    // `$push` after the main update) stay together and in order.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await db.collection("corporateSectors").bulkWrite(sectorOps as any[]);
+    await partitionedBulkWrite(db.collection("corporateSectors"), sectorOps as any[]);
   }
-  if (corpOps.length > 0) {
-    // bulkWrite op array type doesn't satisfy AnyBulkWriteOperation narrowing, runtime shape is valid
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await db.collection("corporations").bulkWrite(corpOps as any[]);
+  if (corpOps.length > 0 || manufacturingDevelopmentCashOps.length > 0) {
+    // Product development is capitalized separately, after operating P&L. The
+    // explicit sequence keeps its live cash guard from racing unordered corpOps.
+    await applyOperatingCashThenDevelopmentCash({
+      db,
+      operations: manufacturingDevelopmentCashOps,
+      turn: typeof turn === "number" ? turn : 1,
+      corporations: lookups.corporations,
+      snapshots: corpSnapshots,
+      exchangeRatesByCurrency: lookups.exchangeRatesByCurrency,
+      bondsByCorpId: lookups.bondsByCorpId,
+      sectorsByCorp: lookups.sectorsByCorp,
+      mediaProductSlatesEnabled,
+      applyOperatingCashWrites: async () => {
+        if (corpOps.length === 0) return;
+        // bulkWrite op array type does not satisfy AnyBulkWriteOperation narrowing, runtime shape is valid.
+        await applyCorporationCashWrites(
+          db,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          corpOps as any[],
+          foundingCashWitnesses,
+          reinvestmentCashWitnesses
+        );
+        if (treasuryCashLedgerEnabled) {
+          const { settleCorporateOperatingCash } = await import("./operatingCashSettlement");
+          await settleCorporateOperatingCash(
+            db,
+            corpSnapshots,
+            turn ?? gameState?.currentTurn ?? 1,
+            now
+          );
+        }
+      },
+    });
+  }
+  let constructionFinanceFundedCount = 0;
+  let constructionFinancePendingCount = 0;
+  let constructionFinanceFailedCount = nppConstructionFinanceBacklogCount;
+  for (const candidate of nppConstructionFinanceRequests) {
+    const result = await requestConstructionFinance({
+      db,
+      enabled: true,
+      sector: candidate.sector,
+      corporation: candidate.corporation,
+      bankId: candidate.bankId,
+      requestId: `npp-${turn ?? 0}-${candidate.sector._id.toHexString()}`,
+      principal: candidate.principal,
+      termTurns: candidate.termTurns,
+      constructionCostLocal: candidate.costLocal,
+      collateralCostLocal: candidate.costLocal,
+      maximumCostLocal: candidate.costLocal,
+      order: candidate.order,
+      preloadedFundingContext: candidate.preloadedFundingContext,
+      buildContext: candidate.buildContext,
+    });
+    if (!result.ok) {
+      constructionFinanceFailedCount += 1;
+      continue;
+    }
+    if (result.pending) constructionFinancePendingCount += 1;
+    else constructionFinanceFundedCount += 1;
+  }
+  if (nppConstructionFinanceCandidateCount > 0) {
+    corpAuditEntries.push({
+      source: "turn",
+      category: "corp",
+      action: "corp.npp_construction_finance",
+      phase: "corporationTurn",
+      subject: { type: "corpBatch", name: "NPP private-sector construction" },
+      outcome: "ok",
+      meta: {
+        candidates: nppConstructionFinanceCandidateCount,
+        attempted: nppConstructionFinanceRequests.length,
+        funded: constructionFinanceFundedCount,
+        pendingApproval: constructionFinancePendingCount,
+        deferredOrRejected: constructionFinanceFailedCount,
+        turn,
+      },
+    });
   }
   // Emit only for NPP unlocks proven applied above; the flush dedupes and
   // refunds any debit whose ledger row cannot be persisted (ticket #1998).
@@ -639,6 +938,60 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   // on pre-migration worlds.
   await creditEquityPoolsBatch(db, equityPoolDividendAccruals, "dividendsIn", now);
   mark("sector+corp bulkWrites");
+
+  const settledPoliticalMediaOrders = [];
+  if (politicalMediaMarketEnabled) {
+    for (const order of politicalMediaOrders) {
+      // New plans were already durably saved before sector P&L writes. The
+      // loaded order is an opening snapshot, so do not issue the same plan
+      // read/CAS a second time after bulk writes.
+      if (!order.settlementPlan && !plannedPoliticalMediaOrders.has(order.orderId)) continue;
+      const results = await settlePoliticalMediaOrder(db, order.orderId, turn ?? 0);
+      const plan = order.settlementPlan ?? plannedPoliticalMediaOrders.get(order.orderId);
+      const settled =
+        order.status === "settled" ||
+        (results.length > 0 &&
+          results.every((result) => result.status === "applied" || result.status === "replayed"));
+      if (settled && plan?.plannedTurn === (turn ?? gameState?.currentTurn ?? 0)) {
+        settledPoliticalMediaOrders.push({
+          orderId: order.orderId,
+          status: "settled" as const,
+          identity: order.identity,
+          settlementPlan: plan,
+        });
+      }
+      await applyPoliticalMediaOrderEffect(db, order.orderId);
+    }
+  }
+
+  if (mediaEditorialEnabled && mediaOperatingModelsEnabled && market.editorialOutletsByState) {
+    const outletsByState = addSettledPoliticalAttention({
+      commercialOutletsByState: new Map(
+        [...market.editorialOutletsByState].map(([stateId, outlets]) => [
+          stateId,
+          outlets.map((outlet) => ({
+            ...outlet,
+            attentionUnits: outlet.attentionUnits ?? 0,
+          })),
+        ])
+      ),
+      settledOrders: settledPoliticalMediaOrders,
+      stanceByCorporationId: new Map(
+        [...lookups.corpById].map(([corporationId, corporation]) => [
+          corporationId,
+          {
+            economic: corporation.editorialStance?.economic ?? 0,
+            social: corporation.editorialStance?.social ?? 0,
+          },
+        ])
+      ),
+    });
+    await applyMediaEditorialEffects({
+      db,
+      turn: turn ?? gameState?.currentTurn ?? 0,
+      outletsByState,
+    });
+  }
 
   // Contracts and surveys read the post-bulkWrite snapshot so this turn's
   // mothball / production-policy / cash writes are visible. Matching before
@@ -773,6 +1126,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   const soeSweepAudit = await runSoeBackingSweep({
     db,
     now,
+    turn: turn ?? gameState?.currentTurn,
     currentYear,
     corpSnapshots,
     corpById: lookups.corpById,

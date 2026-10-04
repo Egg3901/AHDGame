@@ -127,4 +127,47 @@ describe("stateEffectsAndNationalAggregation phase ordering", () => {
       },
     });
   });
+
+  it("runs the market snapshots alongside the long-horizon chain, then the health snapshot", async () => {
+    const { events, runtime, context } = makeHarness();
+
+    await stateEffectsAndNationalAggregationPhase.execute(context as never, runtime as never);
+
+    const idx = (event: string) => {
+      const i = events.indexOf(event);
+      expect(i, `${event} must be recorded`).toBeGreaterThanOrEqual(0);
+      return i;
+    };
+
+    // Chain A keeps its order: the context resolves before its consumers.
+    expect(idx("end:longHorizonContext")).toBeLessThan(idx("start:metricHistory"));
+    expect(idx("end:longHorizonContext")).toBeLessThan(idx("start:approvalSnapshot"));
+
+    // Chain B does not wait for the long-horizon context.
+    for (const phase of [
+      "portfolioSnapshot",
+      "corpPortfolioSnapshot",
+      "stockExchangeSnapshot",
+      "investorRankingSnapshot",
+      "wealthListSnapshot",
+    ]) {
+      expect(idx(`start:${phase}`)).toBeLessThan(idx("end:longHorizonContext"));
+      expect(idx(`end:${phase}`)).toBeLessThan(idx("start:gameHealthSnapshot"));
+    }
+    for (const phase of [
+      "metricHistory",
+      "approvalSnapshot",
+      "interestRateSnapshot",
+      "partyHistorySnapshot",
+    ]) {
+      expect(idx(`end:${phase}`)).toBeLessThan(idx("start:gameHealthSnapshot"));
+    }
+
+    // Result bookkeeping is unchanged when the snapshot phases return null.
+    expect(context.phaseResults).toMatchObject({
+      metricHistory: { snapshotsTaken: 0 },
+      approvalSnapshot: { countriesProcessed: 0 },
+      portfolioSnapshot: { charactersSnapshotted: 0 },
+    });
+  });
 });

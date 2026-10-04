@@ -36,7 +36,7 @@ export function GeneralResultsSection({
   return (
     <section className="mb-10 rounded-xl border border-card-border bg-card/40 p-6 shadow-panel">
       <SectionLabel as="h3">
-        {electionType === "president" ? "Popular Vote Summary" : "General Election Results"}
+        {electionType === "president" ? "Popular vote summary" : "General election results"}
       </SectionLabel>
       <p className="mb-4 text-sm text-muted">
         {electionType === "president"

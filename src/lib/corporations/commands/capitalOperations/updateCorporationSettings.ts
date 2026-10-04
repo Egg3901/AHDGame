@@ -15,6 +15,7 @@ import {
   type CorporationType,
 } from "@/lib/constants/corporations";
 import { migrateUnlockedTechOnPrimaryTypeSwitch } from "@/lib/corporations/techTree/migrateUnlocksOnTypeSwitch";
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import { STARTING_YEAR, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import type { Corporation } from "@/lib/db/types";
 
@@ -203,6 +204,9 @@ export async function updateCorporationSettings(request: Request, { params }: Ro
           );
         }
         updates.type = primaryType;
+        if (primaryType !== "manufacturing" && corporation.industryModel) {
+          techUnset = { ...(techUnset ?? {}), industryModel: "" };
+        }
 
         // Sector research is primary-type-specific: drop it on switch (no remap,
         // no refund). Corporate-lane unlocks + new-type past-decade baseline keep
@@ -213,14 +217,18 @@ export async function updateCorporationSettings(request: Request, { params }: Ro
             gameState?.currentYear ?? startingYear + Math.floor((currentTurn - 1) / TURNS_PER_YEAR);
           const migration = migrateUnlockedTechOnPrimaryTypeSwitch(
             corporation.unlockedTechNodeIds,
-            corporation.type as CorporationType,
+            getOperatingSectorType(
+              corporation.type,
+              corporation.industryModel,
+              corporation.mediaDiscriminator
+            ) as CorporationType,
             primaryType as CorporationType,
             currentYear,
             corporation.techDecadeLane
           );
           updates.unlockedTechNodeIds = migration.unlockedTechNodeIds;
           if (migration.clearDecadeLaneIds.length > 0) {
-            techUnset = {};
+            techUnset = { ...(techUnset ?? {}) };
             for (const decadeId of migration.clearDecadeLaneIds) {
               techUnset[`techDecadeLane.${decadeId}`] = "";
               techUnset[`techDecadeChosenTurn.${decadeId}`] = "";

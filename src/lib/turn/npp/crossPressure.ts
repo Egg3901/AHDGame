@@ -25,6 +25,7 @@ import type {
   StateDemographics,
 } from "@/lib/db/types";
 import { isPolicyProvision } from "@/lib/db/types/legislation";
+import { economicSystemReformDirection } from "@/lib/economy/economicSystemReformRules";
 import { isNewGenerationType } from "@/lib/politicalLegislation/project";
 import type { CrossPressureForces } from "@/lib/db/types/nppVotePrediction";
 
@@ -221,6 +222,16 @@ export function computeIdeologyForce(
     });
     return european.type === "european_treaty" && european.action === "reject" ? -support : support;
   }
+  // Economic system reform: a market-right legislator backs liberalization and
+  // a command-left one backs the plan, in proportion to how far the law moves.
+  const economicReform = bill.provisions?.find(
+    (provision) => provision.type === "economic_system_reform"
+  );
+  if (economicReform) {
+    const economic = npp.policies?.economic ?? 0;
+    const direction = economicSystemReformDirection(economicReform.target);
+    return clamp100(Math.max(-1, Math.min(1, (economic / 5) * direction)) * 100);
+  }
   const alignment = computePolicyAlignment(npp, bill, legislationType);
   if (alignment == null) return 0;
   return clamp100(alignment * 100);
@@ -230,7 +241,7 @@ export function computeIdeologyForce(
  * Compliance gate - how strongly the NPP responds to whips. Mirrors the
  * existing personality model: loyal NPPs follow the whip, stubborn NPPs resist.
  */
-export function complianceMultiplier(npp: NPP): number {
+export function complianceMultiplier(npp: Pick<NPP, "personality">): number {
   const loyalty = (npp.personality?.loyalty ?? 50) / 100;
   const stubbornness = (npp.personality?.stubbornness ?? 50) / 100;
   return loyalty * 0.7 + (1 - stubbornness) * 0.3;
@@ -278,7 +289,10 @@ export function computeWhipForce(npp: NPP, whips: CrossPressureWhipInputs): numb
  * Call sites should only apply this when `applicableWhip === null` to avoid
  * double-counting alongside an explicit party whip.
  */
-export function computePartyLineForce(npp: NPP, sponsorParty: string | undefined): number {
+export function computePartyLineForce(
+  npp: Pick<NPP, "party" | "personality">,
+  sponsorParty: string | undefined
+): number {
   if (!sponsorParty || !npp.party || npp.party !== sponsorParty) return 0;
   return PARTY_LINE_BIAS_BASE * complianceMultiplier(npp);
 }

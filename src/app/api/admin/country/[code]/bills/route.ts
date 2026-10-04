@@ -10,6 +10,7 @@ import { parseBoundedIntParam, parseJsonBody } from "@/lib/api/validate";
 import { adminBillsSchema } from "@/lib/api/schemas/admin";
 import { handleRouteError } from "@/lib/api/errors";
 import { onBillEnacted } from "@/lib/billEnactment";
+import { flushServerPosthog } from "@/lib/analytics/serverPosthog";
 import { applyLegislationEffect } from "@/lib/legislationEffects";
 import { claimStatusTransition } from "@/lib/turn/atomicClaim";
 import { notifyPresidentBillAwaitingSignature } from "@/lib/billLifecycle";
@@ -155,6 +156,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
         await onBillEnacted(db, bill, gameState.currentTurn).catch((err) =>
           console.error("Bill enactment hook failed (admin force-sign):", err)
         );
+        await flushServerPosthog();
       }
 
       return NextResponse.json({ message: `"${bill.title}" force-signed.` });

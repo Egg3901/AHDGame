@@ -162,9 +162,7 @@ export function ExecutiveTabsClient({
         <div data-testid="executive-admin-tab" className="space-y-8">
           <section data-testid="executive-admin-appoint">
             <div className="mb-4">
-              <h2 className="text-sm font-semibold uppercase tracking-widest text-muted">
-                Executive Appointment
-              </h2>
+              <h2 className="text-sm font-semibold text-muted">Executive appointment</h2>
               <p className="mt-1 text-xs text-muted">
                 Admin override: directly appoint or vacate the head of government, bypassing the
                 chamber vote.

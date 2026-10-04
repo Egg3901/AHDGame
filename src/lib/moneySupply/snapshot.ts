@@ -4,6 +4,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import type {
   Bond,
   CentralBank,
+  Corporation,
   FederalBudget,
   GameConfig,
   MoneySupplySnapshot,
@@ -15,11 +16,13 @@ import { seedMoneySupplyBaselines } from "./seed";
 import { isMoneySupplyEnabledFromConfig } from "./featureFlag";
 import {
   addCentralBankMoney,
+  addFundedBankCash,
   addComponent,
   addHouseholdMoneyFromDemography,
   aggregatesForCurrency,
   emptyComponents,
   governmentLiquidFromTreasury,
+  governmentLiquidFromSpendableCash,
   homeCurrency,
   PERSONS_PER_HOUSEHOLD,
   HOUSEHOLD_LIQUID_RATIO,
@@ -32,18 +35,38 @@ export { PERSONS_PER_HOUSEHOLD, HOUSEHOLD_LIQUID_RATIO, HOUSEHOLD_SAVINGS_RATIO 
 
 export const MONEY_SUPPLY_SNAPSHOTS_COLLECTION = "moneySupplySnapshots";
 
-export async function snapshotMoneySupply(db: Db, turn: number): Promise<number> {
-  const config = await db
-    .collection<GameConfig>("gameConfig")
-    .findOne({ _id: "default" }, { projection: { moneySupplyEnabled: 1 } });
-  if (!isMoneySupplyEnabledFromConfig(config)) return 0;
+type SnapshotMoneySupplyConfig = GameConfig & {
+  privateBankingEnabled?: boolean;
+  bankConstructionFinanceEnabled?: boolean;
+};
 
+export async function snapshotMoneySupply(db: Db, turn: number): Promise<number> {
+  const config = await db.collection<SnapshotMoneySupplyConfig>("gameConfig").findOne(
+    { _id: "default" },
+    {
+      projection: {
+        moneySupplyEnabled: 1,
+        treasuryCashLedgerEnabled: 1,
+        privateBankingEnabled: 1,
+        bankConstructionFinanceEnabled: 1,
+      },
+    }
+  );
+  if (!isMoneySupplyEnabledFromConfig(config)) return 0;
+  const treasuryCashLedgerEnabled = config?.treasuryCashLedgerEnabled === true;
+  const constructionCashEnabled =
+    treasuryCashLedgerEnabled &&
+    config?.privateBankingEnabled === true &&
+    config?.bankConstructionFinanceEnabled === true;
+
+  const gameState = await db
+    .collection<{ _id: string; preset?: string }>("gameState")
+    .findOne({ _id: "current" }, { projection: { preset: 1 } });
+  const preset = gameState?.preset ?? DEFAULT_SEED_PRESET;
+  const currencyFor = (countryId: CountryId) => homeCurrency(countryId, preset);
   let banks = await db.collection<CentralBank>("centralBanks").find({}).toArray();
   if (banks.some((bank) => bank.externalBroadMoney == null)) {
-    const gameState = await db
-      .collection<{ _id: string; preset?: string }>("gameState")
-      .findOne({ _id: "current" }, { projection: { preset: 1 } });
-    await seedMoneySupplyBaselines(db, gameState?.preset ?? DEFAULT_SEED_PRESET);
+    await seedMoneySupplyBaselines(db, preset);
     banks = await db.collection<CentralBank>("centralBanks").find({}).toArray();
   }
   const [
@@ -87,7 +110,7 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
     // Corp-level liquidCapital is the SSOT insolvency keys on and sectorTurn
     // $inc's every turn. CorporateSector has no liquidCapital field.
     db
-      .collection("corporations")
+      .collection<Corporation>("corporations")
       .find(
         {},
         {
@@ -99,6 +122,14 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
             "bankCharter.currency": 1,
             "bankCharter.npcDeposits": 1,
             "bankCharter.totalLoans": 1,
+            ...(treasuryCashLedgerEnabled
+              ? {
+                  "bankCharter.cashReserves": 1,
+                  bankTreasuryEscrows: 1,
+                  bankSovereignEscrows: 1,
+                  bankPropForexFee: 1,
+                }
+              : {}),
           },
         }
       )
@@ -109,7 +140,16 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
       .toArray(),
     db
       .collection<FederalBudget>("federalBudget")
-      .find({}, { projection: { countryId: 1, currencyCode: 1, treasuryBalance: 1 } })
+      .find(
+        {},
+        {
+          projection: {
+            countryId: 1,
+            currencyCode: 1,
+            ...(treasuryCashLedgerEnabled ? { treasuryCashLocal: 1 } : { treasuryBalance: 1 }),
+          },
+        }
+      )
       .toArray(),
     db
       .collection<OrganizationFund>("organizationFunds")
@@ -156,12 +196,32 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
   ]);
   const byCurrency = new Map<CurrencyCode, MutableComponents>();
 
-  addCentralBankMoney(byCurrency, banks);
-  addHouseholdMoneyFromDemography(byCurrency, states, medianIncomeDocs);
+  // Construction escrow is funded native cash held for a corporation, not a
+  // construction-in-progress or collateral mark. Read it only when both the
+  // funded Treasury ledger and bank construction finance are enabled.
+  const constructionEscrows = constructionCashEnabled
+    ? await db
+        .collection<{
+          constructionFinancing?: { currency?: CurrencyCode; escrowLocal?: number };
+        }>("corporateSectors")
+        .find(
+          { "constructionFinancing.escrowLocal": { $gt: 0 } },
+          {
+            projection: {
+              "constructionFinancing.currency": 1,
+              "constructionFinancing.escrowLocal": 1,
+            },
+          }
+        )
+        .toArray()
+    : [];
+
+  addCentralBankMoney(byCurrency, banks, preset);
+  addHouseholdMoneyFromDemography(byCurrency, states, medianIncomeDocs, preset);
 
   for (const character of characters) {
     const country = character.countryId as CountryId;
-    const currency = homeCurrency(country);
+    const currency = currencyFor(country);
     const balances = character.currencyBalances;
     if (balances) {
       addComponent(byCurrency, currency, "campaignLiquid", balances.campaign);
@@ -183,7 +243,7 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
       addComponent(byCurrency, code as CurrencyCode, "creditOutstanding", amount);
   }
   for (const npp of npps) {
-    const currency = homeCurrency(npp.countryId as CountryId);
+    const currency = currencyFor(npp.countryId as CountryId);
     addComponent(byCurrency, currency, "nppLiquid", npp.funds);
     for (const [code, amount] of Object.entries(npp.currencyBalances?.personal ?? {}))
       addComponent(byCurrency, code as CurrencyCode, "nppLiquid", amount);
@@ -194,23 +254,31 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
   for (const corp of corporations)
     addComponent(
       byCurrency,
-      (corp.liquidCurrencyCode ?? homeCurrency(corp.countryId as CountryId)) as CurrencyCode,
+      (corp.liquidCurrencyCode ?? currencyFor(corp.countryId as CountryId)) as CurrencyCode,
       "corporateLiquid",
       corp.liquidCapital
     );
+  for (const sector of constructionEscrows) {
+    const escrow = sector.constructionFinancing;
+    if (escrow?.currency && Number.isFinite(escrow.escrowLocal) && escrow.escrowLocal! > 0)
+      addComponent(byCurrency, escrow.currency, "corporateLiquid", escrow.escrowLocal);
+  }
+  if (treasuryCashLedgerEnabled) addFundedBankCash(byCurrency, corporations);
   for (const party of parties)
     addComponent(
       byCurrency,
-      homeCurrency(party.countryId as CountryId),
+      currencyFor(party.countryId as CountryId),
       "partyLiquid",
       party.treasury
     );
   for (const budget of budgets)
     addComponent(
       byCurrency,
-      (budget.currencyCode ?? homeCurrency(budget.countryId as CountryId)) as CurrencyCode,
+      (budget.currencyCode ?? currencyFor(budget.countryId as CountryId)) as CurrencyCode,
       "governmentLiquid",
-      governmentLiquidFromTreasury(budget.treasuryBalance)
+      treasuryCashLedgerEnabled
+        ? governmentLiquidFromSpendableCash(budget.treasuryCashLocal)
+        : governmentLiquidFromTreasury(budget.treasuryBalance)
     );
   // Fund cash is ₳ and the rate table is local-per-₳, so cashAnchor × rate is
   // the native figure. This used to be left at 0 because the equity leg of a
@@ -245,7 +313,7 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
   for (const fund of organizationFunds)
     addComponent(
       byCurrency,
-      homeCurrency(fund.currencyCountryId),
+      currencyFor(fund.currencyCountryId),
       "organizationLiquid",
       fund.balanceLocal
     );
@@ -262,7 +330,7 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
   for (const pool of equityPools)
     addComponent(byCurrency, pool._id as CurrencyCode, "equityPoolCash", pool.cashLocal ?? 0);
   for (const bond of bonds) {
-    const currency = (bond.currencyCode ?? homeCurrency(bond.countryId!)) as CurrencyCode;
+    const currency = (bond.currencyCode ?? currencyFor(bond.countryId!)) as CurrencyCode;
     addComponent(byCurrency, currency, "sovereignBondsOutstanding", bond.totalIssued);
     addComponent(
       byCurrency,
@@ -285,7 +353,7 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
     bankId: string,
     netMoneyCreatedLifetime: number
   ): Promise<void> {
-    const currencyCode = homeCurrency(countryId);
+    const currencyCode = currencyFor(countryId);
     const aggregates = aggregatesForCurrency(byCurrency, currencyCode);
     const prior = await db
       .collection<MoneySupplySnapshot>(MONEY_SUPPLY_SNAPSHOTS_COLLECTION)
@@ -345,11 +413,11 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
   // netMoneyCreatedLifetime: 0 reflect that there is no CB operations ledger
   // behind these currencies.
   const bankedCountryIds = new Set(banks.map((bank) => bank.countryId));
-  const writtenCurrencies = new Set(banks.map((bank) => homeCurrency(bank.countryId)));
+  const writtenCurrencies = new Set(banks.map((bank) => currencyFor(bank.countryId)));
   for (const budget of budgets) {
     const countryId = budget.countryId as CountryId | undefined;
     if (!countryId || bankedCountryIds.has(countryId)) continue;
-    const currencyCode = homeCurrency(countryId);
+    const currencyCode = currencyFor(countryId);
     if (writtenCurrencies.has(currencyCode)) continue;
     writtenCurrencies.add(currencyCode);
     await writeSnapshot(countryId, countryId, 0);

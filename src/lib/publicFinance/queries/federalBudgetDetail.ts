@@ -308,12 +308,16 @@ export async function loadFederalBudgetDetail(params: {
           : { countryId },
         { projection: { primeRate: 1, reserveBalance: 1 } }
       ),
-    db
-      .collection<GameConfig>("gameConfig")
-      .findOne(
-        { _id: "default" },
-        { projection: { commandEconomyEnabled: 1, interstateMoneyWiringEnabled: 1 } }
-      ),
+    db.collection<GameConfig>("gameConfig").findOne(
+      { _id: "default" },
+      {
+        projection: {
+          commandEconomyEnabled: 1,
+          interstateMoneyWiringEnabled: 1,
+          treasuryCashLedgerEnabled: 1,
+        },
+      }
+    ),
   ]);
 
   let storedNationalBudget = storedNationalBudgetDoc;
@@ -558,6 +562,7 @@ export async function loadFederalBudgetDetail(params: {
       isFinanceMinister,
       currentYear,
       commandEconomyEnabled: gameConfig?.commandEconomyEnabled === true,
+      treasuryCashLedgerEnabled: gameConfig?.treasuryCashLedgerEnabled === true,
     },
   };
 }

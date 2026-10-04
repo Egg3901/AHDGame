@@ -62,6 +62,11 @@ import {
   type PrimaryAccountingContext,
 } from "./sovereignPrimarySettlement";
 import type { TransitionProjection } from "@/lib/banking/rules/boundary";
+import {
+  resumeSettlement,
+  settleTransition,
+  type SettlementResult,
+} from "@/lib/banking/settlementJournal";
 import { treasuryAdvanceMoneyDelta } from "@/lib/moneySupply/rules/assemble";
 import { createNotifications } from "@/lib/notifications";
 import {
@@ -261,7 +266,6 @@ export function applySovereignDebtAdjustment(
 
 function buildSovereignBondDoc(params: {
   countryId: CountryId;
-  currencyCode: CurrencyCode | undefined;
   turn: number;
   now: Date;
   issueAmount: number;
@@ -272,6 +276,11 @@ function buildSovereignBondDoc(params: {
   credibilitySpreadPp?: number;
   /** Democratic backsliding premium in percentage points. */
   democraticSpreadPp?: number;
+  /**
+   * Explicit home currency (usually the budget's `currencyCode`). Preferred
+   * over the era-blind map fallback, so 2027 euro members issue in EUR.
+   */
+  currencyCode?: CurrencyCode | string | null;
 }): { bondDoc: Omit<Bond, "_id">; annualCouponCost: number } {
   const { countryId, turn, now, issueAmount, maturityTurns, primeRate, countryCorporation } =
     params;
@@ -307,8 +316,10 @@ function buildSovereignBondDoc(params: {
     restructureExtendedMaturityTurn: null,
     originalMaturityTurn: null,
     originalTotalIssued: null,
-    // Sovereign bonds denominate in the issuing country's currency.
-    currencyCode: params.currencyCode,
+    // Sovereign bonds denominate in the issuing country's currency: the
+    // caller's explicit code (the budget row) wins, the era-blind map is
+    // only the fallback for callers without a budget in hand.
+    currencyCode: resolveCountryCurrencyCode({ countryId, currencyCode: params.currencyCode }),
     createdAt: now,
     updatedAt: now,
   };
@@ -326,6 +337,7 @@ async function issueSovereignBondSeries(
     issueAmount: number;
     maturityTurns?: BondMaturityTurns;
     issuanceKey: string;
+    poolOnly?: boolean;
   }
 ): Promise<SovereignBondIssueResult | null> {
   const { countryId, turn, now, issueAmount } = params;
@@ -361,13 +373,13 @@ async function issueSovereignBondSeries(
 
   const { bondDoc } = buildSovereignBondDoc({
     countryId,
-    currencyCode: resolveCountryCurrencyCode(budget),
     turn,
     now,
     issueAmount: normalizedIssueAmount,
     maturityTurns,
     primeRate,
     countryCorporation,
+    currencyCode: budget.currencyCode,
     // B4: a discredited central bank makes its government borrow dearer. No
     // bank document means no scrutiny to read, so the spread is 0, not a guess.
     credibilitySpreadPp: centralBank ? sovereignCredibilitySpread(centralBank.chairInfamy ?? 0) : 0,
@@ -382,7 +394,7 @@ async function issueSovereignBondSeries(
     turn,
     now,
     budget,
-    centralBank,
+    centralBank: params.poolOnly ? null : centralBank,
     bondDocs: [bondDoc],
     accounting,
   });
@@ -402,6 +414,35 @@ async function issueSovereignBondSeries(
     newDebtInterest: updatedBudget.spending.debtInterest,
     newSurplus: updatedBudget.surplus,
   };
+}
+
+/**
+ * Issue a sovereign bond solely against the currency bond pool for a deposit
+ * insurance backstop. Unsold units remain unissued until the normal primary
+ * placement pass finds pool cash; this path never uses central bank money.
+ */
+export async function issueDepositInsuranceBackstopBond(
+  db: Db,
+  args: {
+    countryId: CountryId;
+    turn: number;
+    now: Date;
+    amount: number;
+    issuanceKey: string;
+  }
+): Promise<SovereignBondIssueResult | null> {
+  if (!Number.isFinite(args.amount) || args.amount <= 0) return null;
+  const units = Math.ceil(args.amount / BOND_UNIT_FACE_VALUE);
+  if (!Number.isSafeInteger(units)) return null;
+  const rounded = units * BOND_UNIT_FACE_VALUE;
+  return issueSovereignBondSeries(db, {
+    countryId: args.countryId,
+    turn: args.turn,
+    now: args.now,
+    issueAmount: rounded,
+    issuanceKey: args.issuanceKey,
+    poolOnly: true,
+  });
 }
 
 export async function issueAdminSovereignBondSeries(
@@ -461,6 +502,22 @@ export async function calculateSovereignRolloverAmount(
       defaulted: false,
     })
     .toArray();
+  const budget = await db
+    .collection<Pick<FederalBudget, "_id" | "debt">>("federalBudget")
+    .findOne({ _id: getNationalBudgetId(countryId) }, { projection: { debt: 1 } });
+  return sovereignRolloverFromBonds(activeBonds, budget?.debt?.principal, turn);
+}
+
+/**
+ * Rollover for a country from its live (unmatured, undefaulted) sovereign
+ * bonds and its budget principal. Pure, so a caller holding both for many
+ * countries at once gets the same figure without a read per country.
+ */
+export function sovereignRolloverFromBonds(
+  activeBonds: ReadonlyArray<Pick<Bond, "maturityTurn" | "totalIssued">>,
+  principal: unknown,
+  turn: number
+): number {
   const maturingSoon = activeBonds.filter(
     (bond) =>
       bond.maturityTurn >= turn && bond.maturityTurn < turn + SOVEREIGN_ISSUANCE_INTERVAL_TURNS
@@ -476,10 +533,6 @@ export async function calculateSovereignRolloverAmount(
   // coupons from nothing. Cap the rollover so bonds outstanding after this
   // quarter never exceed the budget's principal. A missing budget keeps the
   // old behaviour (roll everything) so seeds and tests without one still work.
-  const budget = await db
-    .collection<Pick<FederalBudget, "_id" | "debt">>("federalBudget")
-    .findOne({ _id: getNationalBudgetId(countryId) }, { projection: { debt: 1 } });
-  const principal = budget?.debt?.principal;
   const rollover =
     typeof principal === "number" && Number.isFinite(principal)
       ? Math.min(maturingFace, Math.max(0, principal - (activeFace - maturingFace)))
@@ -593,7 +646,9 @@ export async function issueScheduledSovereignBondSeries(
     // the cash it has and the appetite the demand model gives this issuer.
     // Without a funded pool, units remain unplaced unless monetary financing supplies cash.
     const poolCurrency: CurrencyCode =
-      resolveCountryCurrencyCode(budgetDoc) ?? COUNTRY_CURRENCY_MAP[countryId] ?? "USD";
+      resolveCountryCurrencyCode({ countryId, currencyCode: budgetDoc.currencyCode }) ??
+      COUNTRY_CURRENCY_MAP[countryId] ??
+      "USD";
     // Plan the ladder first so the gated consolidation (#1001) reshapes rungs
     // before pool underwriting sees them. Gate off: the same rungs, same order.
     const tranchePlans = consolidateSovereignTranches(
@@ -741,7 +796,10 @@ export async function reconcileSovereignDebt(
   if (gap >= BOND_UNIT_FACE_VALUE) {
     const corporationId = countryCorporation?._id ?? new ObjectId();
     const issuerName = countryCorporation?.name ?? getSovereignIssuerName(countryId);
-    const currencyCode = resolveCountryCurrencyCode(budget);
+    const currencyCode = resolveCountryCurrencyCode({
+      countryId,
+      currencyCode: budget.currencyCode,
+    });
 
     for (const [maturityStr, fraction] of Object.entries(distribution)) {
       if (!fraction || fraction <= 0) continue;
@@ -859,12 +917,31 @@ export async function reconcileSovereignDebt(
 
 export async function settleSovereignBondMaturity(
   db: Db,
-  bond: Pick<Bond, "countryId" | "couponRate" | "totalIssued" | "restructureHaircutPercent">
-): Promise<void> {
-  if (!bond.countryId) return;
+  bond: Pick<
+    Bond,
+    "countryId" | "couponRate" | "totalIssued" | "restructureHaircutPercent" | "currencyCode"
+  >,
+  repaymentLocal = bond.totalIssued,
+  bankRepaymentLocal = 0
+): Promise<{ amountLocal: number; currencyCode: CurrencyCode } | null> {
+  if (!bond.countryId) return null;
   const budgetId = getNationalBudgetId(bond.countryId);
   const budget = await db.collection<FederalBudget>("federalBudget").findOne({ _id: budgetId });
-  if (!budget) return;
+  if (!budget) return null;
+  const currencyCode = resolveCountryCurrencyCode(budget) ?? COUNTRY_CURRENCY_MAP[bond.countryId];
+  if (bond.currencyCode && bond.currencyCode !== currencyCode) {
+    throw new Error("Sovereign maturity currency differs from its treasury");
+  }
+  if (!Number.isFinite(repaymentLocal) || repaymentLocal < 0) {
+    throw new Error("Sovereign maturity requires a finite nonnegative repayment");
+  }
+  if (
+    !Number.isFinite(bankRepaymentLocal) ||
+    bankRepaymentLocal < 0 ||
+    bankRepaymentLocal > repaymentLocal
+  ) {
+    throw new Error("Bank sovereign maturity share must be within the total repayment");
+  }
 
   // Net exactly this bond's outstanding contribution (face minus any restructure
   // haircut, see sovereignPrincipal.ts), not raw face: a haircut bond carries
@@ -880,9 +957,14 @@ export async function settleSovereignBondMaturity(
   const annualCouponCost = (bond.couponRate / 100) * bond.totalIssued;
   const budgetUpdate = applySovereignDebtAdjustment(budget, -maturedFace, -annualCouponCost);
 
-  await db.collection<FederalBudget>("federalBudget").updateOne(
+  const landed = await db.collection<FederalBudget>("federalBudget").updateOne(
     { _id: budgetId },
     {
+      // Rollover issuance credits this same treasury. Redemption must pay its
+      // holders from cash as well as retiring the bond-owned debt stock.
+      // Bank holders receive their exact share through the guarded settlement
+      // journal. This legacy debit remains responsible for every other holder.
+      $inc: { treasuryBalance: -(repaymentLocal - bankRepaymentLocal) },
       $set: {
         debt: budgetUpdate.debt,
         spending: budgetUpdate.spending,
@@ -893,6 +975,392 @@ export async function settleSovereignBondMaturity(
       },
     }
   );
+  return landed.matchedCount === 1 ? { amountLocal: repaymentLocal, currencyCode } : null;
+}
+
+export interface SovereignMaturityCashLeg {
+  collection: string;
+  filter: Record<string, unknown>;
+  path: string;
+  amount: number;
+  currencyCode: CurrencyCode;
+  localPerAnchor: number;
+  note: string;
+}
+
+/** Freeze the due-turn holder snapshot before any maturity claim can be paid. */
+export async function freezeFundedSovereignBondMaturityQuote(
+  db: Db,
+  input: {
+    bond: Bond;
+    dueTurn: number;
+    currencyCode: CurrencyCode;
+    treasuryLocalPerAnchor: number;
+    nonBankRepaymentLocal: number;
+    holderLegs: readonly SovereignMaturityCashLeg[];
+    now: Date;
+  }
+): Promise<NonNullable<Bond["sovereignMaturityClaim"]> | null> {
+  const {
+    bond,
+    dueTurn,
+    currencyCode,
+    treasuryLocalPerAnchor,
+    nonBankRepaymentLocal,
+    holderLegs,
+    now,
+  } = input;
+  if (!bond.countryId) return null;
+  if (!Number.isSafeInteger(dueTurn) || dueTurn !== bond.maturityTurn)
+    throw new Error("Funded sovereign maturity requires its frozen due turn");
+  if (
+    !Number.isFinite(nonBankRepaymentLocal) ||
+    nonBankRepaymentLocal < 0 ||
+    !Number.isFinite(treasuryLocalPerAnchor) ||
+    treasuryLocalPerAnchor <= 0
+  )
+    throw new Error("Funded sovereign maturity requires finite cash and valuation");
+  if (bond.currencyCode && bond.currencyCode !== currencyCode)
+    throw new Error("Sovereign maturity currency differs from its treasury");
+  if (holderLegs.some((leg) => !Number.isFinite(leg.amount) || leg.amount < 0))
+    throw new Error("Funded sovereign maturity holder legs must be finite and nonnegative");
+
+  const claimId = `sovereign-maturity:${bond._id.toHexString()}:${dueTurn}`;
+  let quote = bond.sovereignMaturityClaim;
+  if (!quote) {
+    const candidate: NonNullable<Bond["sovereignMaturityClaim"]> = {
+      id: claimId,
+      dueTurn,
+      currencyCode,
+      treasuryLocalPerAnchor,
+      amountLocal: nonBankRepaymentLocal,
+      escrowLocal: 0,
+      sourceHolders: bond.holders ?? [],
+      sourcePublicFloat: bond.publicFloat,
+      sourceCentralBankHoldings: bond.centralBankHoldings,
+      holderLegs: holderLegs.map((leg) => ({ ...leg })),
+    };
+    await db.collection<Bond>("bonds").updateOne(
+      {
+        _id: bond._id,
+        issuerType: "sovereign",
+        countryId: bond.countryId,
+        maturityTurn: dueTurn,
+        matured: false,
+        defaulted: false,
+        holders: bond.holders,
+        publicFloat: bond.publicFloat,
+        ...(bond.centralBankHoldings === undefined
+          ? { centralBankHoldings: { $exists: false } }
+          : { centralBankHoldings: bond.centralBankHoldings }),
+        sovereignMaturityClaim: { $exists: false },
+      },
+      { $set: { sovereignMaturityClaim: candidate, updatedAt: now } }
+    );
+    const saved = await db
+      .collection<Bond>("bonds")
+      .findOne({ _id: bond._id }, { projection: { sovereignMaturityClaim: 1 } });
+    quote = saved?.sovereignMaturityClaim;
+  }
+  if (
+    !quote ||
+    quote.id !== claimId ||
+    quote.dueTurn !== dueTurn ||
+    quote.currencyCode !== currencyCode
+  )
+    throw new Error("Sovereign maturity quote changed after it was frozen");
+  return quote;
+}
+
+/**
+ * Settle the non-bank holders of one matured sovereign bond from actual
+ * spendable Treasury cash. The due-turn key freezes the original holder and
+ * FX snapshot across retries. The budget's signed fiscal position and debt
+ * service are accounting projections; the cash debit is a distinct guarded
+ * leg. Bond retirement is deliberately the last projection, so a failed cash
+ * or holder leg leaves the bond active and the original receipt resumable.
+ */
+export async function settleFundedSovereignBondMaturity(
+  db: Db,
+  input: {
+    bond: Bond;
+    turn: number;
+    dueTurn: number;
+    currencyCode: CurrencyCode;
+    treasuryLocalPerAnchor: number;
+    nonBankRepaymentLocal: number;
+    holderLegs: readonly SovereignMaturityCashLeg[];
+    now: Date;
+  }
+): Promise<SettlementResult | null> {
+  const {
+    bond,
+    turn,
+    dueTurn,
+    currencyCode,
+    treasuryLocalPerAnchor,
+    nonBankRepaymentLocal,
+    holderLegs,
+    now,
+  } = input;
+  if (!bond.countryId) return null;
+  if (!Number.isSafeInteger(dueTurn) || dueTurn !== bond.maturityTurn)
+    throw new Error("Funded sovereign maturity requires its frozen due turn");
+  if (
+    !Number.isFinite(nonBankRepaymentLocal) ||
+    nonBankRepaymentLocal < 0 ||
+    !Number.isFinite(treasuryLocalPerAnchor) ||
+    treasuryLocalPerAnchor <= 0
+  )
+    throw new Error("Funded sovereign maturity requires finite cash and valuation");
+  if (bond.currencyCode && bond.currencyCode !== currencyCode)
+    throw new Error("Sovereign maturity currency differs from its treasury");
+  if (holderLegs.some((leg) => !Number.isFinite(leg.amount) || leg.amount < 0))
+    throw new Error("Funded sovereign maturity holder legs must be finite and nonnegative");
+
+  const budgetId = getNationalBudgetId(bond.countryId);
+  const budget = await db.collection<FederalBudget>("federalBudget").findOne({ _id: budgetId });
+  if (!budget) return null;
+  const budgetCurrency = resolveCountryCurrencyCode(budget) ?? COUNTRY_CURRENCY_MAP[bond.countryId];
+  if (budgetCurrency !== currencyCode)
+    throw new Error("Sovereign maturity currency differs from its treasury");
+
+  const claimId = `sovereign-maturity:${bond._id.toHexString()}:${dueTurn}`;
+  const frozenQuote = await freezeFundedSovereignBondMaturityQuote(db, input);
+  if (!frozenQuote) return null;
+  let quote = frozenQuote;
+
+  // Finish a previous attempt before opening another generation. A rejected
+  // insufficient-cash attempt has no applied legs and is terminal by design;
+  // its stable claim quote allows a new turn-keyed attempt without changing
+  // payees, amounts, or FX.
+  const pendingFunding = await db
+    .collection<{ _id: string; status?: string }>("bankMoneyMoves")
+    .find({ _id: { $regex: `^${claimId}:fund:` }, status: "partial" })
+    .toArray();
+  for (const receipt of pendingFunding) {
+    const recovered = await resumeSettlement(db, receipt._id);
+    if (recovered.status !== "applied" && !(recovered.status === "replayed" && !recovered.error))
+      return recovered;
+  }
+  const currentBond = await db
+    .collection<Bond>("bonds")
+    .findOne({ _id: bond._id }, { projection: { sovereignMaturityClaim: 1 } });
+  const currentQuote = currentBond?.sovereignMaturityClaim;
+  if (!currentQuote || currentQuote.id !== claimId)
+    throw new Error("Frozen sovereign maturity quote disappeared");
+  quote = currentQuote;
+
+  const previousPayout = await db
+    .collection<{ _id: string; status?: string }>("bankMoneyMoves")
+    .findOne({ _id: `${claimId}:payout`, status: "partial" });
+  if (previousPayout) {
+    const recovered = await resumeSettlement(db, previousPayout._id);
+    if (recovered.status === "applied" || (recovered.status === "replayed" && !recovered.error))
+      return recovered;
+    return recovered;
+  }
+
+  if (quote.escrowLocal < quote.amountLocal) {
+    const currentBudget = await db
+      .collection<FederalBudget>("federalBudget")
+      .findOne({ _id: budgetId }, { projection: { treasuryCashLocal: 1 } });
+    if ((currentBudget?.treasuryCashLocal ?? 0) < quote.amountLocal) return null;
+    if (quote.fundingAttemptTurn !== turn) {
+      const priorAttemptTurn = quote.fundingAttemptTurn;
+      const reservation = await db.collection<Bond>("bonds").updateOne(
+        {
+          _id: bond._id,
+          "sovereignMaturityClaim.id": claimId,
+          "sovereignMaturityClaim.escrowLocal": quote.escrowLocal,
+          ...(priorAttemptTurn === undefined
+            ? { "sovereignMaturityClaim.fundingAttemptTurn": { $exists: false } }
+            : { "sovereignMaturityClaim.fundingAttemptTurn": priorAttemptTurn }),
+        },
+        { $set: { "sovereignMaturityClaim.fundingAttemptTurn": turn } }
+      );
+      if (reservation.matchedCount !== 1) {
+        const reservedBond = await db
+          .collection<Bond>("bonds")
+          .findOne({ _id: bond._id }, { projection: { sovereignMaturityClaim: 1 } });
+        const reservedQuote = reservedBond?.sovereignMaturityClaim;
+        if (
+          !reservedQuote ||
+          reservedQuote.id !== claimId ||
+          reservedQuote.fundingAttemptTurn !== turn
+        )
+          return null;
+        quote = reservedQuote;
+      } else {
+        quote = { ...quote, fundingAttemptTurn: turn };
+      }
+    }
+    const attemptKey = `${claimId}:fund:${turn}`;
+    let attempt = await settleTransition(db, {
+      key: attemptKey,
+      kind: "sovereign_maturity_funding",
+      turn,
+      currency: quote.currencyCode,
+      legs: [
+        {
+          kind: "debit",
+          amount: quote.amountLocal,
+          valuation: {
+            currencyCode: quote.currencyCode,
+            localPerAnchor: quote.treasuryLocalPerAnchor,
+          },
+          collection: "federalBudget",
+          filter: { _id: budgetId, treasuryCashLocal: { $gte: quote.amountLocal } },
+          path: "treasuryCashLocal",
+          note: "Fund frozen sovereign maturity claim from Treasury cash",
+        },
+        {
+          kind: "credit",
+          amount: quote.amountLocal,
+          valuation: {
+            currencyCode: quote.currencyCode,
+            localPerAnchor: quote.treasuryLocalPerAnchor,
+          },
+          collection: "bonds",
+          filter: {
+            _id: bond._id,
+            "sovereignMaturityClaim.id": claimId,
+            "sovereignMaturityClaim.escrowLocal": quote.escrowLocal,
+          },
+          path: "sovereignMaturityClaim.escrowLocal",
+          note: "Hold funded sovereign maturity cash in its immutable bond claim",
+        },
+      ],
+      projections: [
+        {
+          collection: "federalBudget",
+          filter: { _id: budgetId },
+          update: { $inc: { treasuryBalance: -quote.amountLocal } },
+          note: "Record funded sovereign principal payment in signed fiscal position",
+        },
+      ],
+      event: {
+        kind: "monetary.executed",
+        command: "turn.sovereign.maturity.fund",
+        subjectType: "government",
+        subjectId: bond.countryId,
+        amount: quote.amountLocal,
+        meta: { bondId: bond._id.toHexString(), dueTurn },
+      },
+    });
+    if (attempt.status === "partial" || (attempt.status === "replayed" && attempt.error))
+      attempt = await resumeSettlement(db, attemptKey);
+    if (attempt.status !== "applied" && !(attempt.status === "replayed" && !attempt.error))
+      return attempt;
+    const fundedBond = await db
+      .collection<Bond>("bonds")
+      .findOne({ _id: bond._id }, { projection: { sovereignMaturityClaim: 1 } });
+    const fundedQuote = fundedBond?.sovereignMaturityClaim;
+    if (!fundedQuote || fundedQuote.escrowLocal < fundedQuote.amountLocal) return attempt;
+    quote = fundedQuote;
+  }
+
+  const maturedFace = sovereignBondOutstanding({
+    issuerType: "sovereign",
+    matured: false,
+    defaulted: false,
+    totalIssued: bond.totalIssued,
+    restructureHaircutPercent: bond.restructureHaircutPercent ?? null,
+  });
+  const annualCouponCost = (bond.couponRate / 100) * bond.totalIssued;
+  const payoutKey = `${claimId}:payout`;
+  return settleTransition(db, {
+    key: payoutKey,
+    kind: "sovereign_maturity_payout",
+    turn,
+    currency: quote.currencyCode,
+    legs: [
+      {
+        kind: "debit",
+        amount: quote.amountLocal,
+        valuation: {
+          currencyCode: quote.currencyCode,
+          localPerAnchor: quote.treasuryLocalPerAnchor,
+        },
+        collection: "bonds",
+        filter: {
+          _id: bond._id,
+          "sovereignMaturityClaim.id": claimId,
+          "sovereignMaturityClaim.escrowLocal": { $gte: quote.amountLocal },
+        },
+        path: "sovereignMaturityClaim.escrowLocal",
+        note: "Pay non-bank sovereign maturity holders from funded claim escrow",
+      },
+      ...quote.holderLegs.map((leg) => ({
+        kind: "credit" as const,
+        amount: leg.amount,
+        valuation: { currencyCode: leg.currencyCode, localPerAnchor: leg.localPerAnchor },
+        collection: leg.collection,
+        filter: leg.filter,
+        path: leg.path,
+        note: leg.note,
+      })),
+    ],
+    projections: [
+      {
+        collection: "federalBudget",
+        filter: { _id: budgetId },
+        update: {
+          // Delta projection preserves concurrent issuance and maturity
+          // changes on the same country's budget. A stale $set here could
+          // overwrite a second bond's newly issued or retired principal.
+          $inc: {
+            "debt.principal": -maturedFace,
+            "spending.debtInterest": -annualCouponCost,
+            "spending.total": -annualCouponCost,
+            surplus: annualCouponCost,
+          },
+          $set: { updatedAt: now },
+        },
+        note: "Retire matured sovereign debt after funded payouts",
+      },
+      {
+        collection: "bonds",
+        filter: {
+          _id: bond._id,
+          issuerType: "sovereign",
+          countryId: bond.countryId,
+          maturityTurn: dueTurn,
+          matured: false,
+          defaulted: false,
+          "sovereignMaturityClaim.id": claimId,
+          "sovereignMaturityClaim.escrowLocal": 0,
+          holders: quote.sourceHolders,
+          publicFloat: quote.sourcePublicFloat,
+          ...(quote.sourceCentralBankHoldings === undefined
+            ? { centralBankHoldings: { $exists: false } }
+            : { centralBankHoldings: quote.sourceCentralBankHoldings }),
+        },
+        update: {
+          $set: {
+            "sovereignMaturityClaim.escrowLocal": 0,
+            "sovereignMaturityClaim.paid": true,
+            matured: true,
+            redeemedAtTurn: turn,
+            marketPrice: 1,
+            publicFloat: 0,
+            holders: [],
+            centralBankHoldings: 0,
+            updatedAt: now,
+          },
+        },
+        note: "Retire sovereign bond after every funded holder leg lands",
+      },
+    ],
+    event: {
+      kind: "monetary.executed",
+      command: "turn.sovereign.maturity.payout",
+      subjectType: "government",
+      subjectId: bond.countryId,
+      amount: quote.amountLocal,
+      meta: { bondId: bond._id.toHexString(), dueTurn },
+    },
+  });
 }
 
 export interface SovereignPrincipalResync {
@@ -1167,7 +1635,24 @@ export async function refreshSovereignDebtTerms(
   db: Db,
   budgetId: FederalBudget["_id"]
 ): Promise<void> {
-  const refreshed = await db.collection<FederalBudget>("federalBudget").findOne({ _id: budgetId });
+  // Only what applySovereignDebtAdjustment reads: the full budget carries an
+  // ever-growing settledKeys list this refresh has no use for.
+  const refreshed = await db.collection<FederalBudget>("federalBudget").findOne(
+    { _id: budgetId },
+    {
+      projection: {
+        debt: 1,
+        "spending.debtInterest": 1,
+        "spending.total": 1,
+        "revenue.total": 1,
+        gdp: 1,
+        gdpSmoothed: 1,
+        sovereignRiskAnchor: 1,
+        imfSovereignBailoutActive: 1,
+        investorConfidence: 1,
+      },
+    }
+  );
   if (refreshed) {
     const terms = applySovereignDebtAdjustment(refreshed, 0, 0);
     await db.collection<FederalBudget>("federalBudget").updateOne(

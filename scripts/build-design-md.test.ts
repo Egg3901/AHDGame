@@ -4,7 +4,7 @@ import {
   extractPropsBlock,
   parseComponentExports,
   parseDeclarations,
-  parseThemeInline,
+  parseThemeTokens,
   parseThemes,
   resolveValue,
   tailwindUtilitiesFor,
@@ -32,16 +32,22 @@ const CSS_FIXTURE = `
   background: linear-gradient(168deg, #002028 0%, #04303a 100%);
 }
 
-/* Typography scale */
+/* A bare :root token */
 :root {
+  --gov-default: #c9a24b;
+}
+
+/* Typography scale */
+@theme static {
   --text-body: 0.875rem;
+  --text-body--line-height: calc(1.25 / 0.875);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-card: var(--card);
+  --color-gov: var(--gov-default);
   --shadow-card: var(--shadow-sm);
-  --font-size-body: var(--text-body);
 }
 `;
 
@@ -69,7 +75,7 @@ describe("parseThemes", () => {
 
   it("collects bare :root declarations separately", () => {
     const { root } = parseThemes(CSS_FIXTURE);
-    expect(root["--text-body"]).toBe("0.875rem");
+    expect(root["--gov-default"]).toBe("#c9a24b");
   });
 
   it("throws when no theme blocks exist (empty-section guard)", () => {
@@ -77,18 +83,20 @@ describe("parseThemes", () => {
   });
 });
 
-describe("parseThemeInline", () => {
-  it("maps tailwind vars to their source vars", () => {
-    expect(parseThemeInline(CSS_FIXTURE)).toEqual({
+describe("parseThemeTokens", () => {
+  it("maps tailwind vars to their source vars across every @theme block", () => {
+    expect(parseThemeTokens(CSS_FIXTURE)).toEqual({
+      "--text-body": "0.875rem",
+      "--text-body--line-height": "calc(1.25 / 0.875)",
       "--color-background": "var(--background)",
       "--color-card": "var(--card)",
+      "--color-gov": "var(--gov-default)",
       "--shadow-card": "var(--shadow-sm)",
-      "--font-size-body": "var(--text-body)",
     });
   });
 
-  it("throws when the @theme inline block is missing", () => {
-    expect(() => parseThemeInline("body {}")).toThrow(/@theme inline/);
+  it("throws when there is no @theme block", () => {
+    expect(() => parseThemeTokens("body {}")).toThrow(/no @theme block/);
   });
 });
 
@@ -100,8 +108,8 @@ describe("resolveValue", () => {
     expect(resolveValue("var(--card)", def, root)).toBe("#1d1d2a");
   });
 
-  it("falls back to :root for typography vars", () => {
-    expect(resolveValue("var(--text-body)", def, root)).toBe("0.875rem");
+  it("falls back to :root for vars no theme defines", () => {
+    expect(resolveValue("var(--gov-default)", def, root)).toBe("#c9a24b");
   });
 
   it("passes through non-var values and unresolvable vars", () => {
@@ -119,6 +127,7 @@ export {
   type BadgeVariant,
 } from "./Badge";
 export { ResponsiveTable, type ResponsiveTableColumn } from "./ResponsiveTable";
+export { useDialogA11y } from "./useDialogA11y";
 `;
 
 const COMPONENT_FIXTURE = `
@@ -137,7 +146,7 @@ export function Button({ variant = "primary" }: ButtonProps) {
 `;
 
 describe("parseComponentExports", () => {
-  it("lists component exports with their source file, skipping type exports", () => {
+  it("lists component exports with their source file, skipping type exports and hooks", () => {
     expect(parseComponentExports(INDEX_FIXTURE)).toEqual([
       { name: "Skeleton", file: "Skeleton" },
       { name: "Badge", file: "Badge" },
@@ -167,7 +176,8 @@ describe("extractPropsBlock", () => {
 describe("tailwindUtilitiesFor", () => {
   it("maps token prefixes to utility class names", () => {
     expect(tailwindUtilitiesFor("--color-card")).toBe("bg-card · text-card · border-card");
-    expect(tailwindUtilitiesFor("--font-size-body")).toBe("text-body");
+    expect(tailwindUtilitiesFor("--text-body")).toBe("text-body");
+    expect(tailwindUtilitiesFor("--text-body-sm--line-height")).toBe("text-body-sm");
     expect(tailwindUtilitiesFor("--shadow-card")).toBe("shadow-card");
     expect(tailwindUtilitiesFor("--font-sans")).toBe("font-sans");
     expect(tailwindUtilitiesFor("--something-else")).toBe("—");

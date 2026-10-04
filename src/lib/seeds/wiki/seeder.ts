@@ -18,6 +18,8 @@ export interface WikiSeedResult {
 export interface WikiSeedOptions {
   /** When true, overwrite pages that have human edit history. */
   force?: boolean;
+  /** When true, report the writes that would occur without changing the database. */
+  dryRun?: boolean;
   /** When set, limit seeding to these slugs. */
   slugs?: string[];
   /** Override the seed list (tests). */
@@ -109,7 +111,9 @@ export async function seedWikiPages(
     const existing = await wikiPages.findOne({ slug: seed.slug });
 
     if (!existing) {
-      await wikiPages.insertOne(pageDocForSeed(seed, adminUserId, now) as never);
+      if (!options.dryRun) {
+        await wikiPages.insertOne(pageDocForSeed(seed, adminUserId, now) as never);
+      }
       inserted.push(seed.slug);
       continue;
     }
@@ -129,36 +133,38 @@ export async function seedWikiPages(
 
     const tags = Array.from(new Set([seed.category, ...(seed.extraTags ?? [])]));
     const lastUpdated = seedLastUpdated(seed);
-    await wikiPages.updateOne(
-      { slug: seed.slug },
-      {
-        $set: {
-          title: seed.title,
-          description: seed.description,
-          content: seed.content,
-          tags,
-          category: seed.category,
-          featured: seed.featured ?? false,
-          contentType: seed.contentType,
-          difficulty: seed.difficulty,
-          estimatedReadTime: seed.estimatedReadTime,
-          private: seed.private,
-          countryId: seed.countryId,
-          lastUpdated,
-          designDocUrl: seed.designDocUrl,
-          status: "published",
-          updatedAt: now,
-        },
-        $push: {
-          editHistory: {
-            userId: adminUserId,
-            timestamp: now,
-            action: "edited",
-            note: "Reseed: overwrite",
+    if (!options.dryRun) {
+      await wikiPages.updateOne(
+        { slug: seed.slug },
+        {
+          $set: {
+            title: seed.title,
+            description: seed.description,
+            content: seed.content,
+            tags,
+            category: seed.category,
+            featured: seed.featured ?? false,
+            contentType: seed.contentType,
+            difficulty: seed.difficulty,
+            estimatedReadTime: seed.estimatedReadTime,
+            private: seed.private,
+            countryId: seed.countryId,
+            lastUpdated,
+            designDocUrl: seed.designDocUrl,
+            status: "published",
+            updatedAt: now,
           },
-        },
-      }
-    );
+          $push: {
+            editHistory: {
+              userId: adminUserId,
+              timestamp: now,
+              action: "edited",
+              note: "Reseed: overwrite",
+            },
+          },
+        }
+      );
+    }
     updated.push(seed.slug);
   }
 

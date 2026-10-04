@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { seedCountryStateFromConfig } from "@/lib/countryState/seed";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/discordWebhooks", () => ({
@@ -18,9 +19,18 @@ vi.mock("@/lib/congress/governmentVoteBreakdown", async (importOriginal) => {
   };
 });
 
+const officeCapture = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const billCapture = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+vi.mock("@/lib/analytics/officeTransitionAnalytics", () => ({
+  captureOfficeTransition: officeCapture,
+}));
+vi.mock("@/lib/analytics/billStatusAnalytics", () => ({ captureBillStatusChanged: billCapture }));
+
 let db: MockDb;
 
 beforeEach(async () => {
+  officeCapture.mockClear();
+  billCapture.mockClear();
   db = createMockDb();
   const { getDb } = await import("@/lib/mongodb");
   vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
@@ -92,6 +102,31 @@ describe("cancelActiveNoConfidenceVotes", () => {
 });
 
 describe("failInProgressBills", () => {
+  it("reports only dissolution failures confirmed by the bulk write timestamp", async () => {
+    const billId = new ObjectId();
+    db.collection("bills");
+    db.collection("gameState");
+    db.collectionMocks.bills.find
+      .mockReturnValueOnce({
+        toArray: async () => [
+          { _id: billId, status: "active", category: "economic", provisions: [{ type: "policy" }] },
+        ],
+      })
+      .mockReturnValueOnce({ toArray: async () => [{ _id: billId }] });
+    db.collectionMocks.bills.updateMany.mockResolvedValue({ modifiedCount: 1 });
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ currentTurn: 42 });
+    expect(await failInProgressBills(db as unknown as Db, "UK", new Date())).toBe(1);
+    expect(billCapture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        billId: billId.toString(),
+        fromStatus: "active",
+        toStatus: "failed",
+        scope: "national",
+        turn: 42,
+      })
+    );
+  });
+
   it("fails lower-chamber in-progress bills only and returns count", async () => {
     db.collectionMocks["bills"] = {
       ...db.collection("bills"),
@@ -233,6 +268,28 @@ describe("unformGovernmentAndVacatePM", () => {
     expect(db.collectionMocks["npps"].updateMany).toHaveBeenCalledWith(
       { "currentOffice.type": "primeMinister", countryId: "UK" },
       { $set: { currentOffice: null, updatedAt: now } }
+    );
+  });
+
+  it("emits the actual player PM departure on loss of confidence", async () => {
+    setupGovMocks({ existing: { _id: "UK", status: "formed", formedTurn: 20 }, currentTurn: 50 });
+    db.collectionMocks.characters.find.mockReturnValue({
+      toArray: async () => [
+        { _id: new ObjectId(), party: "1", careerHistory: [{ type: "appointed" }] },
+      ],
+    });
+    await unformGovernmentAndVacatePM(db as unknown as Db, "UK", new Date(), {
+      reason: "no-confidence",
+    });
+    expect(officeCapture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        officeType: "primeMinister",
+        transitionType: "lost",
+        selectionMethod: "removal",
+        tenureTurns: 30,
+        partyId: "1",
+        turn: 50,
+      })
     );
   });
 
@@ -479,7 +536,7 @@ describe("resetParliamentaryGovernmentAfterElection — else-branch refactor reg
 });
 
 describe("updateSeatCountsOnly", () => {
-  it("bumps cycle, recalculates seatsByParty and governingPartyId, leaves PM state alone", async () => {
+  it("refreshes the chamber while preserving the sitting PM and governing party", async () => {
     db.collectionMocks["governmentFormations"] = {
       ...db.collection("governmentFormations"),
       findOne: vi.fn().mockResolvedValue({
@@ -487,6 +544,7 @@ describe("updateSeatCountsOnly", () => {
         status: "formed",
         pmCharacterId: new ObjectId(),
         pmName: "Sitting PM",
+        governingPartyId: "2",
         cycle: 5,
       }),
       updateOne: vi.fn().mockResolvedValue({ matchedCount: 1, modifiedCount: 1 }),
@@ -511,7 +569,7 @@ describe("updateSeatCountsOnly", () => {
     const update = call[1].$set;
     expect(update.cycle).toBe(6);
     expect(update.seatsByParty).toEqual({ "1": 340, "2": 200 });
-    expect(update.governingPartyId).toBe("1");
+    expect(update.governingPartyId).toBe("2");
     expect(update.updatedAt).toEqual(now);
 
     // PM fields untouched
@@ -1278,6 +1336,38 @@ describe("appointPrimeMinister — same-holder announce guard", () => {
     vi.mocked(sendCountryGameEvent).mockClear();
     await appointPrimeMinister(db as unknown as Db, "UK", pmId, null, "Same PM", new Date());
     expect(sendCountryGameEvent).not.toHaveBeenCalled();
+  });
+
+  it("contains optional telemetry reads when a preset was already supplied", async () => {
+    const pmId = new ObjectId();
+    const outgoingId = new ObjectId();
+    setupAppointMocks(outgoingId);
+    // An existing runtime state needs no preset recovery from the unavailable clock.
+    db.collection("countryState");
+    db.collectionMocks.countryState.findOne.mockResolvedValue(
+      seedCountryStateFromConfig("UK", new Date(), "1991-default")
+    );
+    db.collectionMocks.gameState.findOne.mockRejectedValue(
+      new Error("Telemetry clock unavailable")
+    );
+    db.collectionMocks.characters.findOne.mockImplementation(async (filter, options) => {
+      if (options?.projection?.careerHistory === 1 && filter._id?.equals(outgoingId))
+        throw new Error("Telemetry holder unavailable");
+      return { _id: pmId, party: "LAB" };
+    });
+    const { appointPrimeMinister } = await import("./parliamentaryGovernment");
+    await expect(
+      appointPrimeMinister(
+        db as unknown as Db,
+        "UK",
+        pmId,
+        null,
+        "New PM",
+        new Date(),
+        "1991-default"
+      )
+    ).resolves.toBeUndefined();
+    expect(db.collectionMocks.characters.updateOne).toHaveBeenCalled();
   });
 
   it("announces when appointing a genuinely new PM", async () => {

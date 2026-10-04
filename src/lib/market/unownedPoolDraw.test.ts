@@ -15,6 +15,26 @@ const NOW = new Date("2026-08-21T00:00:00.000Z");
 const SCALE = 1;
 
 describe("unownedPoolDeltaPipeline", () => {
+  it("keeps canonical entertainment headroom on its own recipe and identity", () => {
+    const entertainmentBucket = {
+      stateId: "CA",
+      countryId: "us",
+      sectorType: "media" as const,
+      mediaDiscriminator: "entertainment" as const,
+    };
+    const stages = unownedPoolDeltaPipeline(entertainmentBucket, -100, NOW, SCALE);
+    const [deltaStage] = stages as [{ $set: Record<string, unknown> }, unknown];
+    expect(deltaStage.$set.mediaDiscriminator).toEqual({
+      $ifNull: ["$mediaDiscriminator", "entertainment"],
+    });
+    expect(JSON.stringify(deltaStage.$set.headroomUnits)).toContain(
+      String(unownedHeadroomUnitsPerAnchor("media", SCALE, null, "entertainment"))
+    );
+    expect(unownedHeadroomUnitsPerAnchor("media", SCALE, null, "entertainment")).toBeCloseTo(
+      unownedHeadroomUnitsPerAnchor("entertainment", SCALE)
+    );
+  });
+
   it("emits the delta stage and the trailing restatement as SEPARATE stages", () => {
     // The trailing stage reads the post-write `headroomUnits`, which is only
     // visible to a later stage. Folding them into one $set silently restates

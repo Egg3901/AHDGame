@@ -2,6 +2,16 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
 import { getDb } from "@/lib/mongodb";
+import { loadBankingPolicy } from "@/lib/banking/policy";
+import {
+  DEFAULT_PRIMARY_UNDERWRITING_FEE_RATE,
+  primaryUnderwritingCharterEligible,
+  quotePrimaryUnderwritingFee,
+} from "@/lib/banking/rules/underwriting";
+import type { PrimaryUnderwritingOffer } from "@/lib/banking/underwritingTypes";
+import { settlePrimaryUnderwritingFill } from "@/lib/banking/underwritingSettlement";
+import type { TransitionProjection } from "@/lib/banking/rules/boundary";
+import { issuanceDilutionFactorExpr } from "@/lib/corporations/shareConsolidation";
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { getEraFoundingBounds, getEraFounderShares } from "@/lib/constants/sectorSeedEra";
 import { requireAuth } from "@/lib/api/requireAuth";
@@ -49,11 +59,12 @@ import {
   atomicallyDebitCharacterCash,
   refundCharacterCash,
 } from "@/lib/financialTxLog/atomicCashGuard";
-import { CURRENCY_SYMBOLS, COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
+import { CURRENCY_SYMBOLS, getSeedCurrencyCode } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import type { CountryId } from "@/lib/constants/countries";
 import { isPrivateEnterpriseBlocked } from "@/lib/economy/queries/privateEnterpriseGate";
 import {
+  planEquityPrimaryPlacement,
   prepareEquityPrimaryPlacement,
   refundPreparedEquityPlacement,
   type PreparedEquityPlacement,
@@ -213,7 +224,11 @@ export async function GET(request: Request) {
         name: corp.name,
         description: corp.description,
         type: corp.type,
-        typeLabel: CORPORATION_TYPE_LABELS[corp.type],
+        industryModel: corp.industryModel ?? null,
+        typeLabel:
+          corp.type === "manufacturing" && corp.industryModel === "vehicles"
+            ? "Vehicle manufacturing"
+            : CORPORATION_TYPE_LABELS[corp.type],
         headquartersState: corp.headquartersState,
         headquartersStateName: stateNameMap.get(corp.headquartersState) ?? corp.headquartersState,
         liquidCapital: corp.liquidCapital,
@@ -375,12 +390,45 @@ export async function POST(request: Request) {
 
     // Check cash on hand (founding costs personal cash, not campaign funds)
     const forexEnabled = await isForexEnabled();
-    const homeCurrency = getHomeCurrency(character);
+    const homeCurrency = getHomeCurrency(character, worldPreset);
 
     const corpCountryId = character.countryId as CountryId;
+    // Preset-aware: player corps founded in a 2027 euro member stamp EUR, so
+    // they match NPP-spawned corps and the seeded EUR exchange rows.
     const corpHomeCurrency: CurrencyCode | undefined = forexEnabled
-      ? (COUNTRY_CURRENCY_MAP[corpCountryId] ?? undefined)
+      ? (getSeedCurrencyCode(corpCountryId, worldPreset) ?? undefined)
       : undefined;
+    const underwritingCurrency = (corpHomeCurrency ?? "USD") as CurrencyCode;
+    const foundingUnderwriterBank = ipo?.underwriterCorporationId
+      ? await (async () => {
+          const policy = await loadBankingPolicy(db);
+          if (!policy.primaryUnderwriting) return null;
+          const bankId = new ObjectId(ipo.underwriterCorporationId);
+          const bank = await db.collection<Corporation>("corporations").findOne(
+            {
+              _id: bankId,
+              "bankCharter.status": "active",
+              "bankCharter.type": { $in: ["investment", "universal"] },
+              "bankCharter.currency": underwritingCurrency,
+              "bankCharter.resolutionClaimedTurn": { $exists: false },
+              bankCharterTransfer: { $exists: false },
+              bankPrimaryFunding: { $exists: false },
+              bankUnderwritingFunding: { $exists: false },
+              bankConstructionFunding: { $exists: false },
+            },
+            { projection: { _id: 1, name: 1, bankCharter: 1 } }
+          );
+          return bank && primaryUnderwritingCharterEligible(bank.bankCharter, underwritingCurrency)
+            ? bank
+            : null;
+        })()
+      : null;
+    if (ipo?.underwriterCorporationId && !foundingUnderwriterBank) {
+      return NextResponse.json(
+        { error: "The selected same-currency underwriter is unavailable" },
+        { status: 409 }
+      );
+    }
     // Founder charge AND corp seed are both denominated in the corp's local
     // currency. Scaling only the seed (and leaving the charge in ₳) minted
     // `foundingRate`× free capital for non-USD corps — the money-laundering
@@ -392,7 +440,8 @@ export async function POST(request: Request) {
     const foundingRate = getFoundingFxRate(
       corpCountryId,
       forexEnabled,
-      await loadCampaignCurrencyRates(db)
+      await loadCampaignCurrencyRates(db),
+      worldPreset
     );
     // Feed-3 (spec §12.4): low investor confidence adds a founding premium. The
     // premium is captured by the country treasury (see the credit below); the
@@ -447,6 +496,7 @@ export async function POST(request: Request) {
     }
 
     const now = new Date();
+    const corporationId = new ObjectId();
     const sequentialId = await getNextSequentialId(db, "corporation");
     // Reuse the turn read for the cooldown check above (single game-state read).
     const foundedAtTurn = currentTurnAtFounding;
@@ -478,28 +528,71 @@ export async function POST(request: Request) {
           withSuperShares: ipo.superShareMultiplier !== undefined,
         })
       : null;
-    const foundingPlacement: PreparedEquityPlacement | null = ipoResult
-      ? await prepareEquityPrimaryPlacement(
-          db,
-          {
-            countryId: character.countryId,
-            liquidCurrencyCode: corpHomeCurrency,
-          },
-          ipoResult.newShares,
-          initialSharePrice,
-          now
-        )
-      : null;
+    const foundingOffer: (PrimaryUnderwritingOffer & { instrumentId: ObjectId }) | null =
+      ipoResult && foundingUnderwriterBank?.bankCharter
+        ? {
+            bankCorporationId: foundingUnderwriterBank._id,
+            issuerCorporationId: corporationId,
+            charteredTurn: foundingUnderwriterBank.bankCharter.charteredTurn,
+            currencyCode: underwritingCurrency,
+            feeRate: DEFAULT_PRIMARY_UNDERWRITING_FEE_RATE,
+            instrumentType: "equity",
+            instrumentId: new ObjectId(),
+            originalQuoteTurn: foundedAtTurn,
+          }
+        : null;
+    const plannedFoundingPlacement =
+      ipoResult && foundingOffer
+        ? await planEquityPrimaryPlacement(
+            db,
+            { countryId: character.countryId, liquidCurrencyCode: corpHomeCurrency },
+            ipoResult.newShares,
+            initialSharePrice
+          )
+        : null;
+    if (
+      plannedFoundingPlacement &&
+      (!plannedFoundingPlacement.poolActive || !plannedFoundingPlacement.placedShares)
+    ) {
+      return NextResponse.json(
+        {
+          error: "The selected underwriter cannot fund an IPO fill from this market pool right now",
+        },
+        { status: 409 }
+      );
+    }
+    const foundingPlacement: PreparedEquityPlacement | null = plannedFoundingPlacement
+      ? {
+          poolActive: true,
+          currency: plannedFoundingPlacement.currency,
+          requestedShares: plannedFoundingPlacement.requestedShares,
+          placedShares: plannedFoundingPlacement.placedShares,
+          unsoldShares: plannedFoundingPlacement.unsoldShares,
+          paidLocal: plannedFoundingPlacement.plannedGrossLocal,
+        }
+      : ipoResult
+        ? await prepareEquityPrimaryPlacement(
+            db,
+            {
+              countryId: character.countryId,
+              liquidCurrencyCode: corpHomeCurrency,
+            },
+            ipoResult.newShares,
+            initialSharePrice,
+            now
+          )
+        : null;
     // Dual-class founding IPO: the founder's initial stake is designated
     // supershares (S#33) — see lib/corporations/superShares.
     const superShareMultiplier = ipo?.superShareMultiplier;
-    const placedIpoShares = foundingPlacement?.placedShares ?? 0;
+    const placedIpoShares = foundingOffer ? 0 : (foundingPlacement?.placedShares ?? 0);
     const totalSharesAtFounding = founderShares + placedIpoShares;
     const publicFloatAtFounding = placedIpoShares;
     const liquidCapitalAtFounding =
-      corpStartingCapital + (foundingPlacement?.poolActive ? foundingPlacement.paidLocal : 0);
+      corpStartingCapital +
+      (foundingPlacement?.poolActive && !foundingOffer ? foundingPlacement.paidLocal : 0);
     const publicSharePriceAtFounding =
-      foundingPlacement?.poolActive && totalSharesAtFounding > 0
+      foundingPlacement?.poolActive && !foundingOffer && totalSharesAtFounding > 0
         ? (initialSharePrice * founderShares) / totalSharesAtFounding
         : initialSharePrice;
 
@@ -519,6 +612,83 @@ export async function POST(request: Request) {
       }
     }
 
+    const foundingUnderwritingProjection =
+      foundingOffer && foundingPlacement && ipoResult
+        ? (() => {
+            const quote = quotePrimaryUnderwritingFee({
+              grossPlacedLocal: foundingPlacement.paidLocal,
+              feeRate: foundingOffer.feeRate,
+            });
+            return {
+              collection: "corporations",
+              filter: {
+                _id: corporationId,
+                "foundingIpoUnderwritingPending.offer.instrumentId": foundingOffer.instrumentId,
+              },
+              pipelineUpdate: [
+                {
+                  $set: {
+                    isPrivate: false,
+                    hiddenFromExchange: false,
+                    legalStructure: getDefaultLegalStructureId(character.countryId, {
+                      isPrivate: false,
+                    }),
+                    lastIpoTurn: foundedAtTurn,
+                    totalShares: {
+                      $add: [{ $ifNull: ["$totalShares", 0] }, foundingPlacement.placedShares],
+                    },
+                    publicFloat: {
+                      $add: [{ $ifNull: ["$publicFloat", 0] }, foundingPlacement.placedShares],
+                    },
+                    shareIssuanceProceeds: {
+                      $add: [{ $ifNull: ["$shareIssuanceProceeds", 0] }, quote.issuerNetLocal],
+                    },
+                    sharePrice: {
+                      $round: [
+                        {
+                          $multiply: [
+                            { $ifNull: ["$sharePrice", 0] },
+                            issuanceDilutionFactorExpr(foundingPlacement.placedShares),
+                          ],
+                        },
+                        4,
+                      ],
+                    },
+                    fundamentalSharePrice: {
+                      $round: [
+                        {
+                          $multiply: [
+                            {
+                              $ifNull: ["$fundamentalSharePrice", { $ifNull: ["$sharePrice", 0] }],
+                            },
+                            issuanceDilutionFactorExpr(foundingPlacement.placedShares),
+                          ],
+                        },
+                        4,
+                      ],
+                    },
+                    ...(foundingPlacement.unsoldShares > 0
+                      ? {
+                          pendingShareIssuance: {
+                            remainingShares: foundingPlacement.unsoldShares,
+                            requestedShares: ipoResult.newShares,
+                            source: "founding_ipo",
+                            issuedUpfront: false,
+                            createdAtTurn: foundedAtTurn,
+                            initialPriceLocal: initialSharePrice,
+                            underwriting: foundingOffer,
+                          },
+                        }
+                      : {}),
+                    foundingIpoUnderwritingPending: null,
+                    updatedAt: now,
+                  },
+                },
+              ],
+              note: "Publish funded founding IPO shares and net proceeds",
+            } satisfies TransitionProjection;
+          })()
+        : undefined;
     const corporation: Omit<Corporation, "_id"> = {
       name,
       tickerSymbol,
@@ -551,10 +721,10 @@ export async function POST(request: Request) {
         },
       ],
       publicFloat: publicFloatAtFounding,
-      ...(foundingPlacement?.poolActive && foundingPlacement.paidLocal > 0
+      ...(foundingPlacement?.poolActive && foundingPlacement.paidLocal > 0 && !foundingOffer
         ? { shareIssuanceProceeds: foundingPlacement.paidLocal }
         : {}),
-      ...(foundingPlacement && foundingPlacement.unsoldShares > 0
+      ...(foundingPlacement && foundingPlacement.unsoldShares > 0 && !foundingOffer
         ? {
             pendingShareIssuance: {
               remainingShares: foundingPlacement.unsoldShares,
@@ -569,14 +739,31 @@ export async function POST(request: Request) {
       // every place the corp appears next to rivals, and a random pick beats a
       // shared default: two corps side by side are told apart on sight.
       brandColor: randomBrandColor(),
-      isPrivate: ipoResult ? false : true,
+      isPrivate: ipoResult && !foundingOffer ? false : true,
       // Private founding uses the jurisdiction's private form (e.g. UK Ltd),
       // not the public default (PLC) — otherwise the hero shows "Private PLC".
       legalStructure: getDefaultLegalStructureId(character.countryId, {
-        isPrivate: !ipoResult,
+        isPrivate: !ipoResult || !!foundingOffer,
       }),
       foundedAtTurn,
-      ...(ipoResult ? { lastIpoTurn: foundedAtTurn } : {}),
+      ...(ipoResult && !foundingOffer ? { lastIpoTurn: foundedAtTurn } : {}),
+      ...(foundingOffer
+        ? {
+            primaryUnderwritingMandate: {
+              bankCorporationId: foundingOffer.bankCorporationId,
+              charteredTurn: foundingOffer.charteredTurn,
+              currencyCode: foundingOffer.currencyCode,
+              feeRate: foundingOffer.feeRate,
+              selectedAtTurn: foundedAtTurn,
+            },
+            foundingIpoUnderwritingPending: {
+              offer: foundingOffer,
+              grossPlacedLocal: foundingPlacement!.paidLocal,
+              turn: foundedAtTurn,
+              instrumentProjection: foundingUnderwritingProjection!,
+            },
+          }
+        : {}),
       ...(superShareMultiplier !== undefined
         ? { superShareMultiplier, superSharesAdoptedAtTurn: foundedAtTurn }
         : {}),
@@ -600,7 +787,7 @@ export async function POST(request: Request) {
       forexEnabled
     );
     if (!debitResult.ok) {
-      if (foundingPlacement) {
+      if (foundingPlacement && !foundingOffer) {
         await refundPreparedEquityPlacement(db, foundingPlacement, now);
       }
       const sym = CURRENCY_SYMBOLS[homeCurrency] ?? "$";
@@ -613,11 +800,69 @@ export async function POST(request: Request) {
     }
 
     let createdCorporationId: ObjectId | null = null;
+    let foundingSettlementStarted = false;
+    let foundingSettlementPending = false;
+    let foundingSettlementAborted = false;
     try {
       const result = await db
         .collection<Corporation>("corporations")
-        .insertOne(corporation as Corporation);
+        .insertOne({ _id: corporationId, ...corporation } as Corporation);
       createdCorporationId = result.insertedId;
+
+      if (foundingOffer && foundingUnderwriterBank && foundingUnderwritingProjection) {
+        // The private shell and frozen publication plan exist before settlement.
+        // If the process stops here, corporation-turn recovery resumes the
+        // exact plan; no public shares or proceeds exist until its journal ACKs.
+        foundingSettlementStarted = true;
+        const settlement = await settlePrimaryUnderwritingFill(db, {
+          bank: foundingUnderwriterBank,
+          issuer: { _id: result.insertedId, name },
+          issuerCurrencyCode: underwritingCurrency,
+          offer: foundingOffer,
+          instrumentId: foundingOffer.instrumentId,
+          grossPlacedLocal: foundingPlacement!.paidLocal,
+          turn: foundedAtTurn,
+          now,
+          poolCollection: "equityMarketPools",
+          instrumentProjection: foundingUnderwritingProjection,
+        });
+        if (settlement.status === "applied" || settlement.status === "replayed") {
+          const quote = quotePrimaryUnderwritingFee({
+            grossPlacedLocal: foundingPlacement!.paidLocal,
+            feeRate: foundingOffer.feeRate,
+          });
+          void emitTx(db, {
+            type: "ipo_proceeds",
+            turn: foundedAtTurn,
+            createdAt: now,
+            subjectType: "corporation",
+            subjectId: result.insertedId,
+            subjectName: name,
+            amount: quote.issuerNetLocal,
+            currencyCode: underwritingCurrency,
+            meta: {
+              grossPlacedLocal: quote.grossPlacedLocal,
+              underwritingFeeLocal: quote.feeLocal,
+              sharesPlaced: foundingPlacement!.placedShares,
+              sharesRequested: foundingPlacement!.requestedShares,
+              sharesPending: foundingPlacement!.unsoldShares,
+              counterparty: "equity_market_pool",
+            },
+          });
+        } else if (settlement.status === "rejected" && settlement.appliedLegs.length === 0) {
+          await db.collection<Corporation>("corporations").updateOne(
+            {
+              _id: result.insertedId,
+              "foundingIpoUnderwritingPending.offer.instrumentId": foundingOffer.instrumentId,
+            },
+            { $unset: { foundingIpoUnderwritingPending: "" }, $set: { updatedAt: now } }
+          );
+          foundingSettlementStarted = false;
+          foundingSettlementAborted = true;
+        } else {
+          foundingSettlementPending = true;
+        }
+      }
 
       // Open the founder's CEO tenure so later departures stamp an endTurn
       // (needed for the former-CEO bond-purchase block).
@@ -714,7 +959,7 @@ export async function POST(request: Request) {
         });
       }
 
-      if (foundingPlacement?.poolActive && foundingPlacement.paidLocal > 0) {
+      if (foundingPlacement?.poolActive && foundingPlacement.paidLocal > 0 && !foundingOffer) {
         void emitTx(db, {
           type: "ipo_proceeds",
           turn: foundedAtTurn,
@@ -760,7 +1005,7 @@ export async function POST(request: Request) {
         meta: { type, headquartersState, isPublicIpo: !!ipoResult },
       });
 
-      if (ipoResult && ipo) {
+      if (ipoResult && ipo && !foundingSettlementPending && !foundingSettlementAborted) {
         logWireEvent("corporation_ipo", wireHeadlineCorpIpo(name, ipo.floatPct), {
           href: `/corporation/${sequentialId}`,
         });
@@ -776,15 +1021,34 @@ export async function POST(request: Request) {
           { $set: { lastCorporationFoundedTurn: foundedAtTurn } }
         );
 
+      if (foundingSettlementPending) {
+        return NextResponse.json(
+          {
+            corporationId: result.insertedId.toString(),
+            sequentialId,
+            message: `${name} has been founded privately while its funded IPO settlement completes.`,
+            settlementPending: true,
+          },
+          { status: 202 }
+        );
+      }
+      foundingSettlementStarted = false;
       return NextResponse.json(
         {
           corporationId: result.insertedId.toString(),
           sequentialId,
-          message: `${name} has been founded!`,
+          message: foundingSettlementAborted
+            ? `${name} has been founded privately; the selected bank could not fund the IPO. No public shares or proceeds were issued.`
+            : `${name} has been founded!`,
         },
         { status: 201 }
       );
     } catch (error) {
+      if (foundingSettlementStarted) {
+        // The settlement may have committed one or more cash legs. Keep the
+        // frozen shell for journal recovery rather than deleting a paid issuer.
+        throw error;
+      }
       if (createdCorporationId) {
         await db
           .collection("corporationCeoVotes")
@@ -792,7 +1056,7 @@ export async function POST(request: Request) {
         await db.collection<Corporation>("corporations").deleteOne({ _id: createdCorporationId });
       }
       await refundCharacterCash(db, character._id, homeCurrency, totalPlayerCost, forexEnabled);
-      if (foundingPlacement) {
+      if (foundingPlacement && !foundingOffer) {
         await refundPreparedEquityPlacement(db, foundingPlacement, now);
       }
       // Race-loser path: the pre-check above said the ticker was free, but a

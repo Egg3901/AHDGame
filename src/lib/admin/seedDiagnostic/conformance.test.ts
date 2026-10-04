@@ -142,6 +142,27 @@ describe("wouldSilentlyFallback", () => {
 });
 
 describe("era-derived expectations", () => {
+  it("uses worldsim bootstrap clock and maintenance expectations", async () => {
+    const { db } = makeDb({
+      gameState: { preset: "2027-default", startingYear: 2027, currentYear: 2027, currentTurn: 1 },
+      gameConfig: { maintenanceMode: "off" },
+    });
+    const { checks } = await runConformanceChecks(db, {
+      preset: "2027-default",
+      trigger: "worldsim-post-bootstrap",
+    });
+    expect(checks.find((check) => check.id === "gameState.iteration")?.severity).toBe("ok");
+    expect(checks.find((check) => check.id === "config.maintenanceMode")?.severity).toBe("ok");
+  });
+
+  it("checks forex fallback rates for included 2027 countries", async () => {
+    const { db } = makeDb({});
+    const { checks } = await runConformanceChecks(db, { preset: "2027-default" });
+    expect(checks.some((check) => check.id === "forex.HU.eraRate")).toBe(true);
+    expect(checks.some((check) => check.id === "forex.PL.eraRate")).toBe(true);
+    expect(checks.some((check) => check.id === "forex.YU.eraRate")).toBe(false);
+  });
+
   it("excludes latent BLR/BAL from 1953 seeded countries and budgets", () => {
     const seeded = seededCountryIdsForPreset("1953-default");
     expect(seeded).not.toContain("BLR");
@@ -174,7 +195,12 @@ describe("era-derived expectations", () => {
     expect(expectedRegionCount("DE", "2019-default")).toBe(16);
   });
 
-  it("uses seeder defaultPrimeRate, not era monetary baseline", () => {
+  it("uses authored opening benchmarks for 1991 and keeps other defaults", () => {
+    expect(expectedPrimeRate("US", 1991)).toBe(7);
+    expect(expectedPrimeRate("JP", 1991)).toBe(6);
+    expect(expectedPrimeRate("IE", 1991)).toBe(11.25);
+    expect(expectedPrimeRate("JP", 1953)).toBe(1);
+
     expect(expectedPrimeRate("JP")).toBe(COUNTRY_CONFIGS.JP.centralBank.defaultPrimeRate);
     expect(expectedPrimeRate("JP")).toBe(1);
     expect(expectedPrimeRate("TR")).toBe(COUNTRY_CONFIGS.TR.centralBank.defaultPrimeRate);
@@ -314,6 +340,25 @@ describe("runConformanceChecks", () => {
     expect(checks.find((c) => c.id === "gameState.currentYear")?.severity).toBe("ok");
   });
 
+  it("finds an authored fiscal baseline for every active 1991 country", async () => {
+    const { db } = makeDb({
+      gameState: {
+        _id: "current",
+        preset: "1991-default",
+        startingYear: 1991,
+        currentTurn: 1,
+        currentYear: 1991,
+      },
+    });
+    const { checks } = await runConformanceChecks(db, { preset: "1991-default" });
+    expect(
+      checks
+        .filter((check) => check.id.endsWith(".authored1991"))
+        .map((check) => check.id)
+        .sort()
+    ).toEqual([]);
+  });
+
   it("flags wrong GDP on a national budget as critical", async () => {
     const seedExpect = buildSeedExpectations("2019-default");
     const us = seedExpect.nationalBudgets.find((b) => b.countryId === "US");
@@ -360,11 +405,11 @@ describe("runConformanceChecks", () => {
         iteration: { type: "Alpha", number: 1 },
       },
       gameConfig: { _id: "default", maintenanceMode: true },
-      centralBanks: [{ _id: "RU", countryId: "RU", primeRate: 5 }],
+      centralBanks: [{ _id: "YU", countryId: "YU", primeRate: 5 }],
     });
 
     const { checks } = await runConformanceChecks(db, { preset: "2019-default" });
-    expect(checks.find((check) => check.id === "centralBank.RU.fiscalCoverage")).toMatchObject({
+    expect(checks.find((check) => check.id === "centralBank.YU.fiscalCoverage")).toMatchObject({
       severity: "critical",
       actual: null,
     });
@@ -652,6 +697,42 @@ describe("runConformanceChecks — config.maintenanceMode (tri-state)", () => {
     const check = checks.find((c) => c.id === "config.maintenanceMode");
     expect(check?.severity).toBe("warn");
     expect(check?.actual).toBe("off");
+  });
+});
+
+describe("2027 Bulgarian euro conformance", () => {
+  it("marks a surviving BGL exchange-rate row critical", async () => {
+    const { db } = makeDb({
+      exchangeRates: [{ _id: "BG", countryId: "BG", currencyCode: "BGL", rate: 1.06 }],
+    });
+    const { checks } = await runConformanceChecks(db, { preset: "2027-default" });
+    expect(checks.find((check) => check.id === "forex.BG.currency")).toMatchObject({
+      severity: "critical",
+    });
+  });
+
+  it("rejects an incomplete persisted euro adoption manifest", async () => {
+    const { db } = makeDb({
+      gameState: { eurozoneEnabled: true, euroAdoptedCountries: ["DE", "IE"] },
+    });
+    const { checks } = await runConformanceChecks(db, { preset: "2027-default" });
+    expect(checks.find((check) => check.id === "forex.euroAdoption")).toMatchObject({
+      severity: "critical",
+    });
+  });
+
+  it("accepts the complete persisted 2027 euro adoption manifest", async () => {
+    const { EUROZONE_2027_MEMBERS } = await import("@/lib/currency/rules/euroAdoption");
+    const { db } = makeDb({
+      gameState: {
+        eurozoneEnabled: true,
+        euroAdoptedCountries: [...EUROZONE_2027_MEMBERS],
+      },
+    });
+    const { checks } = await runConformanceChecks(db, { preset: "2027-default" });
+    expect(checks.find((check) => check.id === "forex.euroAdoption")).toMatchObject({
+      severity: "ok",
+    });
   });
 });
 

@@ -763,8 +763,8 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
               </div>
             )}
             <section>
-              <h2 className="text-sm font-semibold uppercase tracking-widest text-muted mb-4">
-                Executive Appointments (Admin)
+              <h2 className="text-sm font-semibold text-muted mb-4">
+                Executive appointments (admin)
               </h2>
               <div className="grid gap-6 sm:grid-cols-2">
                 <ExecutiveCard
@@ -794,9 +794,7 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
           <>
             {/* President & Vice President — B office plaques */}
             <section className="mb-8 space-y-3">
-              <h2 className="text-sm font-semibold uppercase tracking-widest text-muted mb-4">
-                Executive Leadership
-              </h2>
+              <h2 className="text-sm font-semibold text-muted mb-4">Executive leadership</h2>
               <OfficePlaques
                 countryId={countryId}
                 identity={getExecutiveIdentity(countryId)}
@@ -911,8 +909,8 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
             {/* VP Nomination Status */}
             {data.vpNomination && (
               <section className="mb-8">
-                <h2 className="text-sm font-semibold uppercase tracking-widest text-muted mb-4">
-                  VP Nomination — Senate Confirmation Vote
+                <h2 className="text-sm font-semibold text-muted mb-4">
+                  VP nomination: Senate confirmation vote
                 </h2>
                 <div className="rounded-2xl border border-card-border bg-card p-5 shadow-sm space-y-4">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -984,8 +982,8 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
             {/* Bills Awaiting Signature */}
             {data.isPresident && bills.length > 0 && (
               <section className="mb-8">
-                <h2 className="text-sm font-semibold uppercase tracking-widest text-muted mb-4">
-                  Bills Awaiting Your Signature
+                <h2 className="text-sm font-semibold text-muted mb-4">
+                  Bills awaiting your signature
                 </h2>
                 <div className="rounded-2xl border border-card-border bg-card p-6 shadow-sm">
                   <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">

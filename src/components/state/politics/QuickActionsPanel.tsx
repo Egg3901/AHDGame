@@ -15,7 +15,7 @@ import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
  *
  * Preview-only actions (Contest, Field Office, Establish Presence,
  * Rally, Ad Buy, Endorse) render as visible-but-disabled buttons with
- * "Coming in Phase X" tooltips per §16. No fake success toasts.
+ * No fake success toasts.
  *
  * Renders nothing if the viewer is unaffiliated (no partyId) — there
  * is no actor context for actions to apply to.
@@ -37,9 +37,7 @@ export function QuickActionsPanel({
 }) {
   if (!viewerPartyId) {
     return (
-      <div className="rounded-xl border border-card-border bg-card p-4 text-xs text-muted shadow-sm">
-        Join a party to see quick actions for this state.
-      </div>
+      <div className="text-body text-muted">Join a party to see quick actions for this state.</div>
     );
   }
 
@@ -50,10 +48,10 @@ export function QuickActionsPanel({
     : undefined;
 
   return (
-    <div className="rounded-xl border border-card-border bg-card p-4 shadow-sm">
-      <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">Quick Actions</h3>
+    <div className="rounded-xl border border-card-border bg-card p-5 sm:p-6">
+      <h3 className="text-body text-muted">Quick actions</h3>
 
-      <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
+      <div className="mt-2 grid grid-cols-1 gap-2 text-body sm:grid-cols-3">
         {/* Live actions — deep-link to State Party page where mutation lives. */}
         <DeepLinkButton
           href={liveDisabled ? null : partyUrl}
@@ -85,15 +83,6 @@ export function QuickActionsPanel({
           disabledSubLabel="No presence yet"
           disabledTitle={liveTitle}
         />
-
-        {/* Contest folded into Build Org (2026-06-24) — Build Org now poaches rivals
-            directly, so there is no separate Contest entry. Other preview-only
-            actions remain Phase 4+. */}
-        <PreviewButton label="Field Office" sublabel="Phase 4" />
-        <PreviewButton label="Establish Presence" sublabel="Phase 4" />
-        <PreviewButton label="Rally" sublabel="Phase 4" />
-        <PreviewButton label="Ad Buy" sublabel="Phase 4" />
-        <PreviewButton label="Endorse" sublabel="Phase 4" />
       </div>
     </div>
   );
@@ -119,16 +108,16 @@ function DeepLinkButton({
   if (href) {
     return (
       <Link href={href} className={`${baseClasses} hover:bg-[var(--card-muted)]`}>
-        <span className="text-[11px] font-semibold">{label}</span>
-        <span className="text-[10px] text-muted">{subLabel}</span>
+        <span className="text-body font-medium text-foreground">{label}</span>
+        <span className="text-body-sm text-muted">{subLabel}</span>
         {estimate}
       </Link>
     );
   }
   return (
     <span className={`${baseClasses} cursor-not-allowed opacity-60`} title={disabledTitle}>
-      <span className="text-[11px] font-semibold">{label}</span>
-      <span className="text-[10px] text-muted">{disabledSubLabel}</span>
+      <span className="text-body font-medium text-foreground">{label}</span>
+      <span className="text-body-sm text-muted">{disabledSubLabel}</span>
     </span>
   );
 }
@@ -178,19 +167,5 @@ function OrgBuildEstimate({
         gain={{ sign: "+", value: preview.projectedGain, unit: "Org" }}
       />
     </span>
-  );
-}
-
-function PreviewButton({ label, sublabel }: { label: string; sublabel: string }) {
-  return (
-    <button
-      type="button"
-      disabled
-      className="flex cursor-not-allowed flex-col rounded-md border border-dashed border-card-border px-3 py-2 text-left opacity-60"
-      title={`Coming in ${sublabel}`}
-    >
-      <span className="text-[11px] font-semibold">{label}</span>
-      <span className="text-[10px] uppercase tracking-wider text-muted">Coming · {sublabel}</span>
-    </button>
   );
 }

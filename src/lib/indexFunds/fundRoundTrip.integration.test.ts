@@ -17,6 +17,12 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
+import type { IndexFundRedemptionQueueEntry } from "@/lib/db/types";
+import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
+import { runIndexFundCron, rebalanceFundToTarget } from "@/lib/indexFunds/fundCron";
+import { fundBidLimitPriceLocal } from "@/lib/indexFunds/fundBidPolicy";
+import { placeFundShareBuyOrder } from "@/lib/indexFunds/fundShareOrders";
+import { sellFundHoldingShares } from "@/lib/indexFunds/fundRedemptionLiquidity";
 
 // ── Module mocks (external I/O boundaries only) ──────────────────────────────
 
@@ -28,14 +34,23 @@ vi.mock("@/lib/indexFunds/featureFlag", () => ({
 vi.mock("@/lib/currency/featureFlag", () => ({
   isForexEnabled: vi.fn().mockResolvedValue(false),
 }));
-vi.mock("@/lib/ledger/emit", () => ({ emitLedgerEntries: vi.fn() }));
+vi.mock("@/lib/ledger/emit", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/ledger/emit")>()),
+  emitLedgerEntries: vi.fn(),
+}));
 vi.mock("@/lib/ledger/featureFlag", () => ({
   isLedgerShadowEnabledFromConfig: vi.fn().mockReturnValue(false),
 }));
-vi.mock("@/lib/financialTxLog/emit", () => ({
+vi.mock("@/lib/financialTxLog/emit", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/financialTxLog/emit")>()),
   emitTx: vi.fn(),
   emitTxBulk: vi.fn(),
-  loadTxThresholds: vi.fn().mockResolvedValue({}),
+  loadTxThresholds: vi
+    .fn()
+    .mockResolvedValue((await import("@/lib/db/types/financialTxLog")).DEFAULT_TX_THRESHOLDS),
+}));
+vi.mock("@/lib/db/transactionSupport", () => ({
+  assertTransactionSupportAtBoot: vi.fn(async () => false),
 }));
 vi.mock("@/lib/db/runWithOptionalTransaction", () => ({
   runWithOptionalTransaction: vi.fn(
@@ -146,412 +161,13 @@ vi.mock("@/lib/indexFunds/sponsorship/windUp", () => ({
   advanceWindDowns: vi.fn().mockResolvedValue({ fundsProcessed: 0, fundsCompleted: 0, errors: [] }),
 }));
 
-// ── Stateful in-memory Mongo fake ────────────────────────────────────────────
-
+// One shared Mongo adapter exercises protected journal receipts and nested writes.
 type Doc = Record<string, any>;
-
-function isOperatorObject(cond: unknown): cond is Record<string, unknown> {
-  return (
-    typeof cond === "object" &&
-    cond !== null &&
-    !Array.isArray(cond) &&
-    !(cond instanceof ObjectId) &&
-    !(cond instanceof Date) &&
-    Object.keys(cond).some((key) => key.startsWith("$"))
-  );
-}
-
-function valuesEqual(a: unknown, b: unknown): boolean {
-  if (a instanceof ObjectId || b instanceof ObjectId) return String(a) === String(b);
-  if (a instanceof Date || b instanceof Date) return Number(a) === Number(b);
-  return a === b;
-}
-
-function getPath(doc: Doc, path: string): unknown {
-  let current: unknown = doc;
-  for (const part of path.split(".")) {
-    if (current == null || typeof current !== "object") return undefined;
-    current = (current as Doc)[part];
-  }
-  return current;
-}
-
-function matchesOperators(value: unknown, cond: Record<string, unknown>): boolean {
-  for (const [op, expected] of Object.entries(cond)) {
-    switch (op) {
-      case "$in":
-        if (!(expected as unknown[]).some((e) => valuesEqual(value, e))) return false;
-        break;
-      case "$nin":
-        if ((expected as unknown[]).some((e) => valuesEqual(value, e))) return false;
-        break;
-      case "$gte":
-        if (!(typeof value === "number" && value >= (expected as number))) return false;
-        break;
-      case "$gt":
-        if (!(typeof value === "number" && value > (expected as number))) return false;
-        break;
-      case "$lte":
-        if (!(typeof value === "number" && value <= (expected as number))) return false;
-        break;
-      case "$lt":
-        if (!(typeof value === "number" && value < (expected as number))) return false;
-        break;
-      case "$ne":
-        if (valuesEqual(value, expected)) return false;
-        break;
-      case "$exists":
-        if ((value !== undefined) !== (expected as boolean)) return false;
-        break;
-      default:
-        throw new Error(`fakeDb: unsupported query operator ${op}`);
-    }
-  }
-  return true;
-}
-
-function matches(doc: Doc, filter: Doc): boolean {
-  for (const [key, cond] of Object.entries(filter)) {
-    if (key === "$or") {
-      if (!(cond as Doc[]).some((sub) => matches(doc, sub))) return false;
-      continue;
-    }
-    if (key === "$and") {
-      if (!(cond as Doc[]).every((sub) => matches(doc, sub))) return false;
-      continue;
-    }
-    const value = getPath(doc, key);
-    if (isOperatorObject(cond)) {
-      if (!matchesOperators(value, cond)) return false;
-    } else if (!valuesEqual(value, cond)) {
-      return false;
-    }
-  }
-  return true;
-}
-
-function evalExpr(expr: any, doc: Doc): any {
-  if (typeof expr === "string" && expr.startsWith("$")) return getPath(doc, expr.slice(1));
-  if (expr instanceof Date || expr instanceof ObjectId || expr === null) return expr;
-  if (isOperatorObject(expr)) {
-    const [op, arg] = Object.entries(expr)[0]!;
-    const evalArg = (a: unknown) => evalExpr(a, doc);
-    const args = Array.isArray(arg) ? arg.map(evalArg) : [evalArg(arg)];
-    switch (op) {
-      case "$subtract":
-        return args[0] - args[1];
-      case "$add":
-        return args.reduce((a, b) => a + b, 0);
-      case "$multiply":
-        return args.reduce((a, b) => a * b, 1);
-      case "$divide":
-        return args[0] / args[1];
-      case "$max":
-        return Math.max(...args);
-      case "$min":
-        return Math.min(...args);
-      case "$sum":
-        return args.reduce((a, b) => a + b, 0);
-      case "$ifNull":
-        return args[0] ?? args[1];
-      case "$gt":
-        return args[0] > args[1];
-      case "$gte":
-        return args[0] >= args[1];
-      case "$lt":
-        return args[0] < args[1];
-      case "$lte":
-        return args[0] <= args[1];
-      case "$eq":
-        return args[0] === args[1];
-      case "$ne":
-        return args[0] !== args[1];
-      case "$cond": {
-        if (Array.isArray(arg)) return evalArg(arg[0]) ? evalArg(arg[1]) : evalArg(arg[2]);
-        const branch = arg as Doc;
-        return evalArg(branch.if) ? evalArg(branch.then) : evalArg(branch.else);
-      }
-      default:
-        throw new Error(`fakeDb: unsupported expression operator ${op}`);
-    }
-  }
-  return expr;
-}
-
-function applyUpdate(doc: Doc, update: any): void {
-  if (Array.isArray(update)) {
-    for (const stage of update as Doc[]) {
-      if (stage.$set) {
-        for (const [key, expr] of Object.entries(stage.$set as Doc)) doc[key] = evalExpr(expr, doc);
-      }
-    }
-    return;
-  }
-  for (const [op, spec] of Object.entries(update as Doc)) {
-    if (op === "$inc") {
-      for (const [key, value] of Object.entries(spec as Doc))
-        doc[key] = (typeof doc[key] === "number" ? doc[key] : 0) + (value as number);
-    } else if (op === "$set") {
-      for (const [key, value] of Object.entries(spec as Doc)) doc[key] = value;
-    } else if (op === "$unset") {
-      for (const key of Object.keys(spec as Doc)) delete doc[key];
-    } else if (op === "$max") {
-      for (const [key, value] of Object.entries(spec as Doc))
-        doc[key] = Math.max(typeof doc[key] === "number" ? doc[key] : -Infinity, value as number);
-    } else if (op === "$min") {
-      for (const [key, value] of Object.entries(spec as Doc))
-        doc[key] = Math.min(typeof doc[key] === "number" ? doc[key] : Infinity, value as number);
-    } else if (op === "$push") {
-      for (const [key, value] of Object.entries(spec as Doc)) {
-        if (!Array.isArray(doc[key])) doc[key] = [];
-        doc[key].push(value);
-      }
-    } else if (op === "$addToSet") {
-      for (const [key, value] of Object.entries(spec as Doc)) {
-        if (!Array.isArray(doc[key])) doc[key] = [];
-        if (!doc[key].some((el: unknown) => valuesEqual(el, value))) doc[key].push(value);
-      }
-    } else if (op === "$pull") {
-      for (const [key, cond] of Object.entries(spec as Doc)) {
-        if (Array.isArray(doc[key]))
-          doc[key] = (doc[key] as Doc[]).filter((el) => !matches(el, cond as Doc));
-      }
-    }
-  }
-}
-
-function sortBy(rows: Doc[], spec: Doc): Doc[] {
-  const entries = Object.entries(spec) as [string, number][];
-  return [...rows].sort((a, b) => {
-    for (const [key, direction] of entries) {
-      const av = getPath(a, key);
-      const bv = getPath(b, key);
-      if (av === bv) continue;
-      if (av === undefined) return 1;
-      if (bv === undefined) return -1;
-      const cmp = (av as number | string) < (bv as number | string) ? -1 : 1;
-      return direction < 0 ? -cmp : cmp;
-    }
-    return 0;
-  });
-}
-
-function evalGroupExpr(expr: any, row: Doc): any {
-  if (typeof expr === "string" && expr.startsWith("$")) return getPath(row, expr.slice(1));
-  if (isOperatorObject(expr)) {
-    const [op, arg] = Object.entries(expr)[0]!;
-    if (op === "$toString") return String(evalGroupExpr(arg, row));
-    if (op === "$multiply")
-      return (arg as unknown[])
-        .map((entry) => Number(evalGroupExpr(entry, row)))
-        .reduce((acc: number, value: number) => acc * value, 1);
-    if (op === "$subtract") {
-      const [a, b] = arg as unknown[];
-      return Number(evalGroupExpr(a, row)) - Number(evalGroupExpr(b, row));
-    }
-  }
-  return expr;
-}
-
-function groupStage(rows: Doc[], spec: Doc): Doc[] {
-  const groups = new Map<string, Doc>();
-  for (const row of rows) {
-    const key = evalGroupExpr(spec._id, row);
-    const mapKey = key instanceof ObjectId ? key.toString() : String(key);
-    let acc = groups.get(mapKey);
-    if (!acc) {
-      acc = { _id: key };
-      groups.set(mapKey, acc);
-    }
-    for (const [field, expr] of Object.entries(spec)) {
-      if (field === "_id") continue;
-      const e = expr as Doc;
-      if (e.$sum !== undefined) acc[field] = (acc[field] ?? 0) + Number(evalGroupExpr(e.$sum, row));
-    }
-  }
-  return [...groups.values()];
-}
-
-function runAggregate(rows: Doc[], pipeline: Doc[]): Doc[] {
-  let current = rows;
-  for (const stage of pipeline) {
-    if (stage.$match) current = current.filter((r) => matches(r, stage.$match));
-    else if (stage.$group) current = groupStage(current, stage.$group);
-    else if (stage.$sort) current = sortBy(current, stage.$sort);
-    else if (stage.$limit) current = current.slice(0, stage.$limit);
-    // $project: identity — the fake stores full docs and callers only read the
-    // fields they projected anyway.
-  }
-  return current;
-}
-
-class FakeCursor {
-  constructor(private rows: Doc[]) {}
-  sort(spec?: Doc) {
-    if (spec) this.rows = sortBy(this.rows, spec);
-    return this;
-  }
-  project() {
-    return this;
-  }
-  limit(n: number) {
-    this.rows = this.rows.slice(0, n);
-    return this;
-  }
-  skip(n: number) {
-    this.rows = this.rows.slice(n);
-    return this;
-  }
-  async toArray() {
-    return this.rows;
-  }
-  async next() {
-    return this.rows[0] ?? null;
-  }
-  async *[Symbol.asyncIterator]() {
-    for (const row of this.rows) yield row;
-  }
-}
-
-class FakeCollection {
-  docs: Doc[];
-  constructor(seed: Doc[] = []) {
-    this.docs = seed;
-  }
-  find(filter: Doc = {}) {
-    return new FakeCursor(this.docs.filter((doc) => matches(doc, filter)));
-  }
-  async findOne(filter: Doc = {}) {
-    return this.docs.find((doc) => matches(doc, filter)) ?? null;
-  }
-  async insertOne(doc: Doc) {
-    const withId: Doc = { _id: new ObjectId(), ...doc };
-    this.docs.push(withId);
-    return { insertedId: withId._id };
-  }
-  async insertMany(docs: Doc[]) {
-    const insertedIds: Record<number, ObjectId> = {};
-    docs.forEach((doc, index) => {
-      const withId: Doc = { _id: new ObjectId(), ...doc };
-      this.docs.push(withId);
-      insertedIds[index] = withId._id;
-    });
-    return { insertedIds };
-  }
-  async updateOne(filter: Doc, update: any, options?: { upsert?: boolean }) {
-    const doc = this.docs.find((d) => matches(d, filter));
-    if (doc) {
-      applyUpdate(doc, update);
-      return { matchedCount: 1, modifiedCount: 1, upsertedCount: 0 };
-    }
-    if (options?.upsert) {
-      const base: Doc = {};
-      for (const [key, value] of Object.entries(filter)) {
-        if (!key.startsWith("$") && !isOperatorObject(value)) base[key] = value;
-      }
-      applyUpdate(base, update);
-      base._id ??= new ObjectId();
-      this.docs.push(base);
-      return { matchedCount: 0, modifiedCount: 0, upsertedCount: 1, upsertedId: base._id };
-    }
-    return { matchedCount: 0, modifiedCount: 0, upsertedCount: 0 };
-  }
-  async updateMany(filter: Doc, update: any) {
-    let matched = 0;
-    for (const doc of this.docs) {
-      if (matches(doc, filter)) {
-        applyUpdate(doc, update);
-        matched++;
-      }
-    }
-    return { matchedCount: matched, modifiedCount: matched };
-  }
-  async findOneAndUpdate(filter: Doc, update: any, options?: { returnDocument?: string }) {
-    const doc = this.docs.find((d) => matches(d, filter));
-    if (!doc) return null;
-    const before = { ...doc };
-    applyUpdate(doc, update);
-    return options?.returnDocument === "before" ? before : doc;
-  }
-  async deleteOne(filter: Doc) {
-    const index = this.docs.findIndex((d) => matches(d, filter));
-    if (index < 0) return { deletedCount: 0 };
-    this.docs.splice(index, 1);
-    return { deletedCount: 1 };
-  }
-  async deleteMany(filter: Doc) {
-    const before = this.docs.length;
-    this.docs = this.docs.filter((d) => !matches(d, filter));
-    return { deletedCount: before - this.docs.length };
-  }
-  async countDocuments(filter: Doc = {}) {
-    return this.docs.filter((d) => matches(d, filter)).length;
-  }
-  aggregate(pipeline: Doc[]) {
-    return new FakeCursor(runAggregate(this.docs, pipeline));
-  }
-  async bulkWrite(ops: Doc[]) {
-    let matchedCount = 0;
-    let upsertedCount = 0;
-    let insertedCount = 0;
-    for (const op of ops) {
-      if (op.updateOne) {
-        const res = await this.updateOne(
-          op.updateOne.filter,
-          op.updateOne.update,
-          op.updateOne.upsert ? { upsert: true } : undefined
-        );
-        matchedCount += res.matchedCount;
-        upsertedCount += res.upsertedCount ?? 0;
-      } else if (op.insertOne) {
-        await this.insertOne(op.insertOne);
-        insertedCount++;
-      } else if (op.deleteOne) {
-        await this.deleteOne(op.deleteOne.filter);
-      }
-    }
-    return {
-      matchedCount,
-      modifiedCount: matchedCount,
-      upsertedCount,
-      insertedCount,
-      deletedCount: 0,
-    };
-  }
-}
-
 function createStatefulDb(seed: Record<string, Doc[]>) {
-  const collections = new Map<string, FakeCollection>();
-  for (const [name, docs] of Object.entries(seed)) collections.set(name, new FakeCollection(docs));
-  const db = {
-    collection(name: string) {
-      let collection = collections.get(name);
-      if (!collection) {
-        collection = new FakeCollection();
-        collections.set(name, collection);
-      }
-      return collection;
-    },
-  };
-  return {
-    db: db as unknown as Db,
-    collection(name: string): FakeCollection {
-      let collection = collections.get(name);
-      if (!collection) {
-        collection = new FakeCollection();
-        collections.set(name, collection);
-      }
-      return collection;
-    },
-  };
+  const memory = createInMemoryDb();
+  for (const [collection, rows] of Object.entries(seed)) memory.seed(collection, rows);
+  return { db: memory as unknown as Db, collection: memory.collection.bind(memory) };
 }
-
-// ── Fixtures ─────────────────────────────────────────────────────────────────
-
-import { runIndexFundCron, rebalanceFundToTarget } from "@/lib/indexFunds/fundCron";
-import { fundBidLimitPriceLocal } from "@/lib/indexFunds/fundBidPolicy";
-import { placeFundShareBuyOrder } from "@/lib/indexFunds/fundShareOrders";
-import { sellFundHoldingShares } from "@/lib/indexFunds/fundRedemptionLiquidity";
 
 const FUND_ID = new ObjectId();
 const CORP_ID = new ObjectId();
@@ -663,7 +279,10 @@ describe("index fund subscribe -> redeem round trip via fundCron (#2120)", () =>
     expect(nppPosition.units).toBeGreaterThan(0);
 
     // One bounded autonomous redemption was queued through enqueueRedemption.
-    const queue = state.collection("indexFundRedemptionQueue").docs;
+    const queue = await state.db
+      .collection<IndexFundRedemptionQueueEntry>("indexFundRedemptionQueue")
+      .find({})
+      .toArray();
     expect(queue).toHaveLength(1);
     const entry = queue[0]!;
     expect(entry).toMatchObject({
@@ -699,7 +318,7 @@ describe("index fund subscribe -> redeem round trip via fundCron (#2120)", () =>
     // Turn 5: Pass 3c pays the queue through the NPP branch of
     // processQueuedRedemptions.
     const result = await runIndexFundCron(state.db, { currentTurn: 5 });
-    expect(result.redemptionsPaid).toBe(1);
+    expect(result).toMatchObject({ redemptionsPaid: 1, errors: [] });
 
     const fund = fundDoc(state);
     const npp = state.collection("npps").docs[0]!;
@@ -734,6 +353,49 @@ describe("index fund subscribe -> redeem round trip via fundCron (#2120)", () =>
     const backingRatio = fund.backingRatio as number;
     expect(backingRatio).toBeGreaterThan(0.9);
     expect(backingRatio).toBeLessThan(1.1);
+  });
+
+  it("recovers an interrupted payout through the next ordinary cron before NAV pricing", async () => {
+    const state = roundTripSeed();
+    await runIndexFundCron(state.db, { currentTurn: 4 });
+    const before =
+      Number(fundDoc(state).cashAnchor) +
+      Number(state.collection("npps").docs[0].nppInvestmentCashAnchor);
+    const npps = state.collection("npps"),
+      update = npps.updateOne.bind(npps);
+    let interrupted = false;
+    npps.updateOne = async (...args: Parameters<typeof update>) => {
+      const result = await update(...args);
+      if (
+        !interrupted &&
+        (args[1] as { $inc?: { nppInvestmentCashAnchor?: number } }).$inc?.nppInvestmentCashAnchor
+      ) {
+        interrupted = true;
+        throw new Error("Synthetic ordinary-turn payout acknowledgement lost");
+      }
+      return result;
+    };
+    const failed = await runIndexFundCron(state.db, { currentTurn: 5 });
+    expect(interrupted).toBe(true);
+    expect(failed.errors).toHaveLength(1);
+    const recovered = await runIndexFundCron(state.db, { currentTurn: 6 });
+    expect(recovered.errors).toEqual([]);
+    expect(recovered.redemptionsPaid).toBe(1);
+    expect(state.collection("indexFundRedemptionQueue").docs[0]).toMatchObject({
+      status: "paid",
+      units: 0,
+    });
+    expect(
+      Number(fundDoc(state).cashAnchor) +
+        Number(state.collection("npps").docs[0].nppInvestmentCashAnchor)
+    ).toBeCloseTo(before, 6);
+    expect(
+      state.collection("indexFundTransactions").docs.filter((row) => row.kind === "redemption")
+    ).toHaveLength(1);
+    await runIndexFundCron(state.db, { currentTurn: 7 });
+    expect(
+      state.collection("indexFundTransactions").docs.filter((row) => row.kind === "redemption")
+    ).toHaveLength(1);
   });
 
   it("is a no-op round trip when nppFundRedemptionEnabled is off (no queue rows)", async () => {

@@ -79,14 +79,17 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import { getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { bankEquity, cashBackedDeposits, getCashReserves } from "@/lib/banking/balanceSheet";
-import { settleTransition } from "@/lib/banking/settlementJournal";
+import { resumeSettlement, settleTransition } from "@/lib/banking/settlementJournal";
+import type { BankingPolicySnapshot } from "./rules/policy";
 import { oid, type TransitionLeg, type TransitionProjection } from "@/lib/banking/rules/boundary";
-import { getNationalBudgetId } from "@/lib/bonds/sovereign";
+import { getNationalBudgetId, issueDepositInsuranceBackstopBond } from "@/lib/bonds/sovereign";
 import type { FederalBudget } from "@/lib/db/types";
 import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
 import { loadBankingPolicy } from "@/lib/banking/policy";
 import { savingsReadsAuthoritative } from "@/lib/banking/rules/policy";
 import type { SavingsAccount } from "@/lib/db/types/savingsAccount";
+import { BANK_FAILURE_EVENTS } from "./failurePolitics";
+import type { BankFailurePoliticalEvent } from "./rules/failurePolitics";
 import { CENTRAL_BANK_HOLDER } from "@/lib/savings/rules/accounts";
 
 /** Budget spending line a deposit insurance backstop is booked against. */
@@ -155,6 +158,74 @@ export function depositBookReturnKey(
   return `deposit-book-return:${corporationId.toString()}:${cause}:${turn}`;
 }
 
+async function ensureTreasuryInsuranceCash(
+  db: Db,
+  args: {
+    corporationId: ObjectId;
+    charteredTurn: number;
+    currency: CurrencyCode;
+    turn: number;
+    now: Date;
+    amount: number;
+    treasuryCashLedgerEnabled?: boolean;
+  }
+): Promise<string | null> {
+  if (!(args.amount > 0)) return null;
+  const countryId = getCountryIdForCurrency(args.currency);
+  const budgetId = getNationalBudgetId(countryId);
+  const budget = await db.collection<FederalBudget>("federalBudget").findOne(
+    { _id: budgetId },
+    {
+      projection: args.treasuryCashLedgerEnabled
+        ? { treasuryCashLocal: 1 }
+        : { treasuryBalance: 1 },
+    }
+  );
+  if (!budget) return `No federal budget is available for ${countryId}.`;
+
+  const treasuryCash =
+    typeof (args.treasuryCashLedgerEnabled ? budget.treasuryCashLocal : budget.treasuryBalance) ===
+      "number" &&
+    Number.isFinite(
+      args.treasuryCashLedgerEnabled ? budget.treasuryCashLocal : budget.treasuryBalance
+    )
+      ? Math.max(
+          0,
+          (args.treasuryCashLedgerEnabled ? budget.treasuryCashLocal : budget.treasuryBalance)!
+        )
+      : 0;
+  if (treasuryCash >= args.amount) return null;
+
+  const amountToFinance = args.amount - treasuryCash;
+  const issuance = await issueDepositInsuranceBackstopBond(db, {
+    countryId,
+    turn: args.turn,
+    now: args.now,
+    amount: amountToFinance,
+    issuanceKey: `deposit-insurance-backstop:${args.corporationId.toHexString()}:${args.charteredTurn}`,
+  });
+  if (!issuance) return `Could not issue a funded insurance bond for ${countryId}.`;
+
+  const fundedBudget = await db.collection<FederalBudget>("federalBudget").findOne(
+    { _id: budgetId },
+    {
+      projection: args.treasuryCashLedgerEnabled
+        ? { treasuryCashLocal: 1 }
+        : { treasuryBalance: 1 },
+    }
+  );
+  const fundedBalance = args.treasuryCashLedgerEnabled
+    ? fundedBudget?.treasuryCashLocal
+    : fundedBudget?.treasuryBalance;
+  const fundedCash =
+    typeof fundedBalance === "number" && Number.isFinite(fundedBalance)
+      ? Math.max(0, fundedBalance)
+      : 0;
+  return fundedCash >= args.amount
+    ? null
+    : `Treasury cash and the bond pool cannot cover the ${countryId} deposit insurance backstop yet.`;
+}
+
 /**
  * Return a bank's deposit book: pointers to the central bank, household cash to
  * the money supply, residual equity to the owner.
@@ -162,29 +233,152 @@ export function depositBookReturnKey(
  * Safe to call on a bank with no deposits (it flips nothing and moves nothing)
  * and safe to call twice with the same turn and cause.
  */
+type DepositReturnOptions = {
+  cause: DepositBookReturnCause;
+  turn: number;
+  /** Current delivery turn, distinct from an older resolution claim. */
+  effectsTurn?: number;
+  releaseResidualToOwner: boolean;
+};
+
 export async function returnDepositBook(
   db: Db,
   corporationId: ObjectId,
-  options: {
-    cause: DepositBookReturnCause;
-    turn: number;
-    /** Pay any surplus above the household book to the parent. */
-    releaseResidualToOwner: boolean;
-  }
+  options: DepositReturnOptions
 ): Promise<DepositBookReturnResult> {
-  const corp = await db
-    .collection<Corporation>("corporations")
-    .findOne({ _id: corporationId }, { projection: { bankCharter: 1, liquidCapital: 1 } });
-  const charter = corp?.bankCharter;
-  if (!corp || !charter) return EMPTY;
+  const corporations = db.collection<Corporation>("corporations");
+  let corp = await corporations.findOne(
+    { _id: corporationId },
+    {
+      projection: {
+        bankCharter: 1,
+        liquidCapital: 1,
+        bankConstructionFunding: 1,
+        bankPrimaryFunding: 1,
+      },
+    }
+  );
+  if (!corp?.bankCharter) return EMPTY;
+  if (corp.bankPrimaryFunding)
+    return {
+      ...EMPTY,
+      error: "Sovereign primary funding must settle before returning bank deposits",
+    };
+  if (corp.bankConstructionFunding && corp.bankConstructionFunding.kind !== "returning")
+    return { ...EMPTY, error: "Construction funding must settle before returning bank deposits" };
+  const policy = await loadBankingPolicy(db);
+  if (!policy.constructionFinance && !policy.sovereignPrimary && !corp.bankConstructionFunding)
+    return returnDepositBookInner(db, corporationId, options, corp, policy);
 
+  // The original return owns its quote across later turns. Admission and
+  // construction funding compete on the same parent document, so neither can
+  // read a vault between the other's cash debit and liability publication.
+  const previous = corp.bankConstructionFunding;
+  if (previous?.kind === "returning") {
+    if (!previous.depositReturn || previous.charteredTurn !== corp.bankCharter.charteredTurn)
+      return { ...EMPTY, error: "The bank deposit-return claim is incomplete" };
+    options = { ...previous.depositReturn, effectsTurn: options.effectsTurn ?? options.turn };
+  }
+  const key = depositBookReturnKey(corporationId, options.cause, options.turn);
+  if (!previous) {
+    const acquired = await corporations.updateOne(
+      {
+        _id: corporationId,
+        "bankCharter.charteredTurn": corp.bankCharter.charteredTurn,
+        bankConstructionFunding: { $exists: false },
+        bankPrimaryFunding: { $exists: false },
+        bankCharterTransfer: { $exists: false },
+      },
+      {
+        $set: {
+          bankConstructionFunding: {
+            loanId: key,
+            charteredTurn: corp.bankCharter.charteredTurn,
+            kind: "returning",
+            disbursed: false,
+            depositReturn: {
+              cause: options.cause,
+              turn: options.turn,
+              releaseResidualToOwner: options.releaseResidualToOwner,
+            },
+          },
+        },
+      }
+    );
+    if (acquired.matchedCount !== 1)
+      return { ...EMPTY, error: "Another bank operation owns deposit return" };
+  }
+  if (previous?.kind === "returning") {
+    const original = await db
+      .collection<{ _id: string }>("bankMoneyMoves")
+      .findOne({ _id: key }, { projection: { _id: 1 } });
+    if (original) {
+      const recovered = await resumeSettlement(db, key);
+      if (recovered.error || !["applied", "replayed"].includes(recovered.status))
+        return { ...EMPTY, error: recovered.error ?? "Original deposit return remains pending" };
+    }
+  }
+  // Reload after admission: funding may have finished since the first read.
+  corp = await corporations.findOne(
+    {
+      _id: corporationId,
+      "bankConstructionFunding.loanId": key,
+      "bankConstructionFunding.kind": "returning",
+    },
+    { projection: { bankCharter: 1, liquidCapital: 1 } }
+  );
+  if (!corp?.bankCharter) return { ...EMPTY, error: "Deposit-return ownership changed" };
+  const result = await returnDepositBookInner(db, corporationId, options, corp, policy);
+  if (!result.error) {
+    await corporations.updateOne(
+      {
+        _id: corporationId,
+        "bankConstructionFunding.loanId": key,
+        "bankConstructionFunding.kind": "returning",
+      },
+      { $unset: { bankConstructionFunding: "" } }
+    );
+  }
+  // An interrupted receipt keeps ownership until its original quote completes.
+  return result;
+}
+
+async function returnDepositBookInner(
+  db: Db,
+  corporationId: ObjectId,
+  options: DepositReturnOptions,
+  corp: Corporation,
+  policy: BankingPolicySnapshot
+): Promise<DepositBookReturnResult> {
+  let charter = corp.bankCharter;
+  if (!charter) return EMPTY;
   const currency = charter.currency as CurrencyCode;
   const bankIdHex = corporationId.toString();
   const holderPath = `currencyBalances.savingsHolder.${currency}`;
   const now = new Date();
-
-  const policy = await loadBankingPolicy(db);
   const playerDepositsAreLiabilities = savingsReadsAuthoritative(policy, currency);
+  if (
+    policy.bankTreasury &&
+    charter.status === "failed" &&
+    charter.depositorsResolvedTurn == null
+  ) {
+    const { liquidateFailedBankTreasury } = await import("@/lib/banking/bankTreasury");
+    const liquidation = await liquidateFailedBankTreasury(db, corporationId, policy, options.turn);
+    if (liquidation.pending || liquidation.error) {
+      return {
+        ...EMPTY,
+        error: liquidation.error ?? "Failed-bank treasury liquidation is still settling",
+      };
+    }
+    if (liquidation.soldUnits > 0) {
+      const refreshed = await db
+        .collection<Corporation>("corporations")
+        .findOne({ _id: corporationId }, { projection: { bankCharter: 1 } });
+      if (!refreshed?.bankCharter)
+        return { ...EMPTY, error: "Failed-bank charter disappeared after bill liquidation" };
+      charter = refreshed.bankCharter;
+    }
+  }
   const sheetOptions = { playerDepositsAreLiabilities };
 
   // Under the pointer model the pointer flips first, outside the money move:
@@ -246,6 +440,19 @@ export async function returnDepositBook(
   const fundBalance = Math.max(0, fund?.balance ?? 0);
   const fromInsuranceFund = Math.min(fundBalance, shortfall);
   const fromTreasury = Math.max(0, shortfall - fromInsuranceFund);
+
+  if (fromTreasury > 0) {
+    const fundingError = await ensureTreasuryInsuranceCash(db, {
+      corporationId,
+      charteredTurn: charter.charteredTurn,
+      currency,
+      turn: options.turn,
+      now,
+      amount: toCents(fromTreasury),
+      treasuryCashLedgerEnabled: policy.treasuryCashLedger,
+    });
+    if (fundingError) return { ...EMPTY, depositorsFlipped, error: fundingError };
+  }
 
   // (3) Interbank lenders, pro rata on outstanding principal. Unlike the two
   // central bank facilities, this money was never minted: it came out of
@@ -355,9 +562,17 @@ export async function returnDepositBook(
     }
     if (fromTreasury > 0) {
       legs.push({
-        kind: "mint",
+        kind: "debit",
         amount: fromTreasury,
-        note: "treasury backstop, deficit financed",
+        collection: "federalBudget",
+        filter: policy.treasuryCashLedger
+          ? {
+              _id: getNationalBudgetId(getCountryIdForCurrency(currency)),
+              treasuryCashLocal: { $gte: fromTreasury },
+            }
+          : { _id: getNationalBudgetId(getCountryIdForCurrency(currency)) },
+        path: policy.treasuryCashLedger ? "treasuryCashLocal" : "treasuryBalance",
+        note: "funded treasury deposit insurance backstop",
       });
     }
     legs.push({
@@ -428,12 +643,19 @@ export async function returnDepositBook(
     });
   }
   if (fromTreasury > 0) {
+    if (policy.treasuryCashLedger) {
+      projections.push({
+        collection: "federalBudget",
+        filter: { _id: getNationalBudgetId(getCountryIdForCurrency(currency)) },
+        update: { $inc: { treasuryBalance: -fromTreasury } },
+        note: "Keep the signed fiscal-position record aligned with the funded insurance draw",
+      });
+    }
     projections.push({
       collection: "federalBudget",
       filter: { _id: getNationalBudgetId(getCountryIdForCurrency(currency)) },
       update: {
         $inc: {
-          treasuryBalance: -fromTreasury,
           [`spending.byCategory.${DEPOSIT_INSURANCE_SPENDING_KEY}`]: fromTreasury,
           "spending.total": fromTreasury,
           surplus: -fromTreasury,
@@ -466,6 +688,34 @@ export async function returnDepositBook(
     depositAggregateClearProjection(bankIdHex, options.turn, options.cause, now)
   );
 
+  if (policy.failurePolitics && options.cause === "failure" && npc > 0) {
+    const countryId = getCountryIdForCurrency(currency);
+    const budget = await db
+      .collection<FederalBudget>("federalBudget")
+      .findOne({ _id: getNationalBudgetId(countryId) }, { projection: { gdp: 1 } });
+    // Both GDP and paid amounts are in this government's native currency.
+    // Publish last: no event is visible before cash and liability projections land.
+    if (typeof budget?.gdp === "number" && Number.isFinite(budget.gdp) && budget.gdp > 0) {
+      projections.push({
+        collection: BANK_FAILURE_EVENTS,
+        filter: {},
+        insert: {
+          _id: `bank-failure:${bankIdHex}:${charter.charteredTurn}`,
+          bankId: bankIdHex,
+          charteredTurn: charter.charteredTurn,
+          countryId,
+          currency,
+          paidTurn: null,
+          depositExposure: npc,
+          insurancePaid: fromInsuranceFund,
+          taxpayerPaid: fromTreasury,
+          gdp: budget.gdp,
+        },
+        note: "completed funded bank failure political event",
+      });
+    }
+  }
+
   const key = depositBookReturnKey(corporationId, options.cause, options.turn);
   const settled = await settleTransition(db, {
     key,
@@ -496,6 +746,16 @@ export async function returnDepositBook(
       .updateMany(
         { [holderPath]: bankIdHex },
         { $set: { [holderPath]: "centralBank", updatedAt: now } }
+      );
+  }
+  if (policy.failurePolitics && options.cause === "failure") {
+    // Activation follows completed cash and liability settlement, including replay.
+    // A delayed payout starts its decay when delivered, not when first claimed.
+    await db
+      .collection<BankFailurePoliticalEvent>(BANK_FAILURE_EVENTS)
+      .updateOne(
+        { _id: `bank-failure:${bankIdHex}:${charter.charteredTurn}`, paidTurn: null },
+        { $set: { paidTurn: options.effectsTurn ?? options.turn } }
       );
   }
   if (settled.status === "replayed") {
@@ -734,8 +994,8 @@ function depositAggregateClearProjection(
 }
 
 /**
- * Debit treasuryBalance and book the spend on spending.byCategory.depositInsurance.
- * Unconditional: an unaffordable backstop pushes the treasury into debt.
+ * Debit available treasury cash and book the spend on
+ * spending.byCategory.depositInsurance. An unfunded backstop is refused.
  *
  * The balance/spending/surplus legs stay `$inc` (concurrent-safe).
  * `debt.principal` belongs to the bond ledger (see bonds/sovereignPrincipal.ts)
@@ -744,22 +1004,32 @@ function depositAggregateClearProjection(
 export async function debitTreasuryDepositInsurance(
   db: Db,
   currency: CurrencyCode,
-  amount: number
+  amount: number,
+  treasuryCashLedgerEnabled = false
 ): Promise<void> {
   if (!(amount > 0)) return;
   const countryId = getCountryIdForCurrency(currency);
   const budgetId = getNationalBudgetId(countryId);
   const now = new Date();
-  await db.collection<FederalBudget>("federalBudget").updateOne(
-    { _id: budgetId },
-    {
-      $inc: {
-        treasuryBalance: -amount,
-        [`spending.byCategory.${DEPOSIT_INSURANCE_SPENDING_KEY}`]: amount,
-        "spending.total": amount,
-        surplus: -amount,
-      },
-      $set: { updatedAt: now },
-    }
-  );
+  const result = await db
+    .collection<FederalBudget>("federalBudget")
+    .updateOne(
+      treasuryCashLedgerEnabled
+        ? { _id: budgetId, treasuryCashLocal: { $gte: amount } }
+        : { _id: budgetId, treasuryBalance: { $gte: amount } },
+      {
+        $inc: {
+          ...(treasuryCashLedgerEnabled
+            ? { treasuryCashLocal: -amount }
+            : { treasuryBalance: -amount }),
+          ...(treasuryCashLedgerEnabled ? { treasuryBalance: -amount } : {}),
+          [`spending.byCategory.${DEPOSIT_INSURANCE_SPENDING_KEY}`]: amount,
+          "spending.total": amount,
+          surplus: -amount,
+        },
+        $set: { updatedAt: now },
+      }
+    );
+  if (!result.matchedCount)
+    throw new Error("Treasury cash cannot cover the deposit insurance debit.");
 }

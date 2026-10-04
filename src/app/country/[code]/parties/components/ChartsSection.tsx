@@ -5,6 +5,12 @@ import { Party, OrgParty, PartyTrendPoint } from "../partiesTypes";
 import { DonutChart } from "./DonutChart";
 import { DonutChartBase } from "./DonutChartBase";
 import { PartyTrendChart } from "./PartyTrendChart";
+import {
+  PARTY_LABEL_CLASS,
+  PARTY_SECTION_HEADING_CLASS,
+  PARTY_SUBHEADING_CLASS,
+  PartySwatch,
+} from "@/components/party/partyPageStyles";
 
 interface ChartsSectionProps {
   parties: Party[];
@@ -53,27 +59,25 @@ export function ChartsSection({
 
   if (parties.length === 0 && orgParties.length === 0) return null;
 
-  return (
-    <section className="mb-6 space-y-4" aria-labelledby="power-briefing-title">
-      <div className="overflow-hidden rounded-xl border border-card-border bg-card shadow-card">
-        <div className="grid lg:grid-cols-[minmax(0,1.7fr)_minmax(18rem,1fr)]">
-          <div className="p-5 sm:p-6">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <p className="text-body-xs font-bold uppercase tracking-widest text-muted">
-                  National picture
-                </p>
-                <h2 id="power-briefing-title" className="mt-1 text-heading-lg font-extrabold">
-                  Balance of power
-                </h2>
-              </div>
-              <span className="rounded-full border border-card-border bg-card-muted px-3 py-1 text-body-xs text-muted">
-                Membership share
-              </span>
-            </div>
+  const segmentClass = (active: boolean) =>
+    `rounded-md px-3 py-1.5 text-body font-medium transition-colors ${
+      active ? "bg-card-elevated text-foreground" : "text-muted hover:text-foreground"
+    }`;
 
+  return (
+    <div className="mb-12 space-y-12">
+      <section aria-labelledby="power-briefing-title">
+        <div className="mb-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <h2 id="power-briefing-title" className={PARTY_SECTION_HEADING_CLASS}>
+            Balance of power
+          </h2>
+          <p className={PARTY_LABEL_CLASS}>Membership share</p>
+        </div>
+
+        <div className="grid gap-x-12 gap-y-8 lg:grid-cols-[minmax(0,1.7fr)_minmax(16rem,1fr)]">
+          <div className="min-w-0">
             <div
-              className="mt-6 flex h-5 w-full overflow-hidden rounded-full bg-track"
+              className="flex h-4 w-full overflow-hidden rounded-sm bg-track"
               aria-label={`Membership balance across ${parties.length} parties`}
             >
               {rankedParties.map((party) => (
@@ -88,36 +92,33 @@ export function ChartsSection({
                 />
               ))}
             </div>
-            <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            <ol className="mt-4 grid gap-x-8 gap-y-2 sm:grid-cols-2">
               {rankedParties.map((party, index) => {
                 const share = totalMembers ? (party.memberCount / totalMembers) * 100 : 0;
                 return (
-                  <div key={party.id} className="flex min-w-0 items-center gap-2 text-body-sm">
-                    <span
-                      className="h-2.5 w-2.5 shrink-0 rounded-full"
-                      style={{ backgroundColor: party.color }}
-                    />
-                    <span className="min-w-0 flex-1 truncate">
-                      {index + 1}. {party.name}
+                  <li key={party.id} className="flex min-w-0 items-center gap-2 text-body">
+                    <PartySwatch color={party.color} />
+                    <span className="min-w-0 flex-1 truncate text-foreground">
+                      <span className="tabular-nums text-muted">{index + 1}.</span> {party.name}
                     </span>
-                    <span className="shrink-0 font-mono font-semibold tabular-nums">
+                    <span className="shrink-0 font-semibold tabular-nums text-foreground">
                       {share.toFixed(1)}%
                     </span>
-                  </div>
+                  </li>
                 );
               })}
-            </div>
+            </ol>
           </div>
 
-          <div className="grid border-t border-card-border bg-card-muted/40 sm:grid-cols-2 lg:grid-cols-1 lg:border-l lg:border-t-0">
-            <div className="p-5 sm:p-6">
-              <p className="text-body-xs font-bold uppercase tracking-widest text-muted">
+          <dl className="grid gap-6 sm:grid-cols-2 lg:grid-cols-1">
+            <div className="min-w-0">
+              <dt className={PARTY_LABEL_CLASS}>
                 {leadingParty?.regimeStatus === "ruling" ? "Ruling party" : "Largest party"}
-              </p>
-              <p className="mt-2 truncate text-heading-lg font-extrabold">
+              </dt>
+              <dd className="mt-1 line-clamp-2 break-words text-heading font-semibold text-foreground">
                 {leadingParty?.name ?? "No leader"}
-              </p>
-              <p className="mt-1 text-body-sm text-muted">
+              </dd>
+              <dd className="mt-1 text-body-sm text-muted">
                 {leadingParty
                   ? `${leadingParty.memberCount.toLocaleString("en-US")} members · ${
                       totalMembers
@@ -125,63 +126,53 @@ export function ChartsSection({
                         : "0.0"
                     }% share`
                   : "No party membership recorded"}
-              </p>
+              </dd>
             </div>
-            <div className="border-t border-card-border p-5 sm:border-l sm:border-t-0 sm:p-6 lg:border-l-0 lg:border-t">
-              <p className="text-body-xs font-bold uppercase tracking-widest text-muted">
-                Strongest momentum
-              </p>
-              <p className="mt-2 truncate text-heading font-extrabold">
+            <div className="min-w-0">
+              <dt className={PARTY_LABEL_CLASS}>Strongest momentum</dt>
+              <dd className="mt-1 line-clamp-2 break-words text-heading font-semibold text-foreground">
                 {biggestMover?.party.name ?? "Awaiting history"}
-              </p>
-              <p
-                className={`mt-1 text-body-sm font-semibold ${
+              </dd>
+              <dd
+                className={`mt-1 text-body-sm ${
                   !biggestMover
                     ? "text-muted"
                     : biggestMover.change > 0
-                      ? "text-success"
-                      : "text-error"
+                      ? "font-medium text-success"
+                      : "font-medium text-error"
                 }`}
               >
                 {biggestMover
                   ? `${biggestMover.change > 0 ? "+" : ""}${biggestMover.change.toLocaleString("en-US")} members last turn`
                   : "Two turns of data are needed"}
-              </p>
+              </dd>
             </div>
-          </div>
+          </dl>
         </div>
-      </div>
+      </section>
 
-      <div className="rounded-xl border border-card-border bg-card p-4 sm:p-5">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <section aria-labelledby="party-charts-title">
+        <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-muted">
-              Party Charts
-            </p>
-            <p className="text-sm text-muted">
+            <h2 id="party-charts-title" className={PARTY_SECTION_HEADING_CLASS}>
+              Party charts
+            </h2>
+            <p className="mt-1 text-body text-muted">
               Switch between live snapshots and party trend lines.
             </p>
           </div>
-          <div className="inline-flex rounded-lg border border-card-border bg-background p-1">
+          <div className="inline-flex rounded-lg border border-card-border p-1">
             <button
               type="button"
               onClick={() => setMode("trend")}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                mode === "trend"
-                  ? "bg-card text-foreground shadow-sm"
-                  : "text-muted hover:text-foreground"
-              }`}
+              className={segmentClass(mode === "trend")}
             >
               Trend
             </button>
             <button
               type="button"
               onClick={() => setMode("snapshot")}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                mode === "snapshot"
-                  ? "bg-card text-foreground shadow-sm"
-                  : "text-muted hover:text-foreground"
-              }`}
+              className={segmentClass(mode === "snapshot")}
             >
               Snapshot
             </button>
@@ -189,16 +180,14 @@ export function ChartsSection({
         </div>
 
         {mode === "trend" ? (
-          <div className="space-y-4">
-            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+          <div className="space-y-6">
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto_auto]">
               <label className="space-y-1">
-                <span className="text-xs font-semibold uppercase tracking-widest text-muted">
-                  Party
-                </span>
+                <span className={`block font-medium ${PARTY_LABEL_CLASS}`}>Party</span>
                 <select
                   value={resolvedPartyId}
                   onChange={(e) => setSelectedPartyId(e.target.value)}
-                  className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm text-foreground outline-none transition-colors focus:border-primary"
+                  className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-body text-foreground outline-none transition-colors focus:border-primary"
                 >
                   {parties.map((party) => (
                     <option key={party.id} value={party.id}>
@@ -209,29 +198,19 @@ export function ChartsSection({
               </label>
 
               <div className="space-y-1 lg:min-w-56">
-                <span className="text-xs font-semibold uppercase tracking-widest text-muted">
-                  Series
-                </span>
-                <div className="inline-flex w-full rounded-lg border border-card-border bg-background p-1">
+                <span className={`block font-medium ${PARTY_LABEL_CLASS}`}>Series</span>
+                <div className="inline-flex w-full rounded-lg border border-card-border p-1">
                   <button
                     type="button"
                     onClick={() => setTrendSeries("membership")}
-                    className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                      trendSeries === "membership"
-                        ? "bg-card text-foreground shadow-sm"
-                        : "text-muted hover:text-foreground"
-                    }`}
+                    className={`flex-1 ${segmentClass(trendSeries === "membership")}`}
                   >
                     Membership
                   </button>
                   <button
                     type="button"
                     onClick={() => setTrendSeries("organization")}
-                    className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                      trendSeries === "organization"
-                        ? "bg-card text-foreground shadow-sm"
-                        : "text-muted hover:text-foreground"
-                    }`}
+                    className={`flex-1 ${segmentClass(trendSeries === "organization")}`}
                   >
                     Organization
                   </button>
@@ -240,29 +219,21 @@ export function ChartsSection({
 
               {trendSeries === "membership" ? (
                 <label className="space-y-1 lg:min-w-56">
-                  <span className="text-xs font-semibold uppercase tracking-widest text-muted">
+                  <span className={`block font-medium ${PARTY_LABEL_CLASS}`}>
                     Membership detail
                   </span>
-                  <div className="inline-flex w-full rounded-lg border border-card-border bg-background p-1">
+                  <div className="inline-flex w-full rounded-lg border border-card-border p-1">
                     <button
                       type="button"
                       onClick={() => setIncludeNpps(false)}
-                      className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                        !includeNpps
-                          ? "bg-card text-foreground shadow-sm"
-                          : "text-muted hover:text-foreground"
-                      }`}
+                      className={`flex-1 ${segmentClass(!includeNpps)}`}
                     >
                       Players only
                     </button>
                     <button
                       type="button"
                       onClick={() => setIncludeNpps(true)}
-                      className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                        includeNpps
-                          ? "bg-card text-foreground shadow-sm"
-                          : "text-muted hover:text-foreground"
-                      }`}
+                      className={`flex-1 ${segmentClass(includeNpps)}`}
                     >
                       With NPPs
                     </button>
@@ -273,37 +244,31 @@ export function ChartsSection({
               )}
             </div>
 
-            <div className="rounded-xl border border-card-border bg-card-muted/20 p-4">
-              {selectedParty ? (
-                <PartyTrendChart
-                  history={selectedHistory}
-                  partyName={selectedParty.name}
-                  partyColor={selectedParty.color}
-                  series={trendSeries}
-                  includeNpps={includeNpps}
-                />
-              ) : (
-                <div className="flex h-40 items-center justify-center text-sm text-muted">
-                  No party selected.
-                </div>
-              )}
-            </div>
+            {selectedParty ? (
+              <PartyTrendChart
+                history={selectedHistory}
+                partyName={selectedParty.name}
+                partyColor={selectedParty.color}
+                series={trendSeries}
+                includeNpps={includeNpps}
+              />
+            ) : (
+              <div className="flex h-40 items-center justify-center text-body text-muted">
+                No party selected.
+              </div>
+            )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 sm:divide-x sm:divide-card-border">
+          <div className="grid grid-cols-1 gap-10 sm:grid-cols-2">
             {parties.length > 0 && (
               <div>
-                <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted">
-                  Membership
-                </p>
+                <h3 className={`mb-4 ${PARTY_SUBHEADING_CLASS}`}>Membership</h3>
                 <DonutChart parties={parties} />
               </div>
             )}
             {orgParties.length > 0 && (
-              <div className="sm:pl-6">
-                <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted">
-                  Organization
-                </p>
+              <div>
+                <h3 className={`mb-4 ${PARTY_SUBHEADING_CLASS}`}>Organization</h3>
                 <DonutChartBase
                   items={orgParties.map((p) => ({
                     id: p.id,
@@ -319,7 +284,7 @@ export function ChartsSection({
             )}
           </div>
         )}
-      </div>
-    </section>
+      </section>
+    </div>
   );
 }

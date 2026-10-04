@@ -1,5 +1,12 @@
+/**
+ * Party leaders can whip members of each active voting chamber.
+ * buildBillWhipPanelData follows the installed constitution, including appointed
+ * Council members and both chambers of a concurrent vote.
+ */
+import { loadRuntimeCountryOffices } from "@/lib/countries/runtimeOffices";
+import { getVotingUpperChamberKey } from "@/lib/countries/rules/officeLayout";
 import type { Db, ObjectId } from "mongodb";
-import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
+import { type CountryId } from "@/lib/constants/countries";
 import { findPartyBySequentialId, getPartyIdString } from "@/lib/db/partyLookup";
 import type { Bill, BillWhip, ElectedOfficial, PoliticalParty } from "@/lib/db/types";
 import { getPartyHex } from "@/lib/utils/politics";
@@ -88,10 +95,10 @@ export async function buildBillWhipPanelData(
   const party = await findPartyBySequentialId(db, viewer.partyId, countryId);
   if (!party) return null;
 
-  const config = getCountryConfig(countryId);
+  const { config } = await loadRuntimeCountryOffices(db, countryId);
   const chamberOptions = [
     config.legislature.lowerChamber,
-    ...(config.upperElectionSystem && config.legislature.upperChamber
+    ...(getVotingUpperChamberKey(config) && config.legislature.upperChamber
       ? [config.legislature.upperChamber]
       : []),
   ];
@@ -131,7 +138,7 @@ export async function buildBillWhipPanelData(
   // (CN: "npc" → "npcDelegate"; identity elsewhere). Querying the raw chamber
   // key matched no CN delegates, so the CN bill whip panel never rendered.
   const officeTypeByChamberKey = new Map(
-    activeChambers.map((key) => [key, getOfficeTypeForChamber(countryId, key)])
+    activeChambers.map((key) => [key, getOfficeTypeForChamber(countryId, key, undefined, config)])
   );
   const officials = await db
     .collection<ElectedOfficial>("electedOfficials")

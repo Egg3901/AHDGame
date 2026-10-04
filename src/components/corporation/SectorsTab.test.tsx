@@ -91,6 +91,7 @@ describe("SectorsTab Build-here deep link", () => {
 
 function sector(over: Partial<SectorDetail> & Pick<SectorDetail, "_id" | "sectorType">) {
   return {
+    industryModel: null,
     stateId: "OH",
     stateName: "Ohio",
     sectorLabel: "Sector",
@@ -155,33 +156,36 @@ const mixedSectors = [
   }),
 ];
 
-describe("SectorsTab type rail and dossier", () => {
+/** Pick a division from the sector type select. */
+function pickType(value: string) {
+  // The select value is the full model-aware identity. These fixtures are
+  // legacy-shaped sectors, so their canonical model discriminator is empty.
+  fireEvent.change(screen.getByLabelText("Sector type"), {
+    target: { value: value.includes(":") ? value : `${value}:` },
+  });
+}
+
+describe("SectorsTab type select and dossier", () => {
   afterEach(() => {
     cleanup();
   });
 
-  it("lists one chip per owned type and shows every sector until one is picked", () => {
+  it("lists every owned type and shows every sector until one is picked", () => {
     render(<SectorsTab {...baseProps} sectors={mixedSectors} isCeo />);
 
-    const rail = screen.getByRole("tablist", { name: "Sector type" });
-    expect(
-      within(rail)
-        .getByRole("tab", { name: /All sectors/ })
-        .getAttribute("aria-selected")
-    ).toBe("true");
-    expect(within(rail).getByRole("tab", { name: /Manufacturing/ })).toBeTruthy();
-    expect(within(rail).getByRole("tab", { name: /Energy/ })).toBeTruthy();
+    const select = screen.getByLabelText("Sector type") as HTMLSelectElement;
+    expect(select.value).toBe("");
+    expect(within(select).getByRole("option", { name: /All types/ })).toBeTruthy();
+    expect(within(select).getByRole("option", { name: /Manufacturing/ })).toBeTruthy();
+    expect(within(select).getByRole("option", { name: /Energy/ })).toBeTruthy();
 
-    expect(screen.getByRole("heading", { name: "Owned Sectors" })).toBeTruthy();
-    expect(screen.getByLabelText("Filter by sector type")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Owned sectors" })).toBeTruthy();
     expect(screen.queryByRole("tablist", { name: "Operating strategy" })).toBeNull();
   });
 
   it("opens the division dossier, its strategy panel and a retitled table", () => {
     render(<SectorsTab {...baseProps} sectors={mixedSectors} isCeo />);
-
-    const rail = screen.getByRole("tablist", { name: "Sector type" });
-    fireEvent.click(within(rail).getByRole("tab", { name: /Manufacturing/ }));
+    pickType("manufacturing");
 
     // Two sectors holding two plants each: the headline counts facilities, not
     // the sectors that own them.
@@ -196,24 +200,24 @@ describe("SectorsTab type rail and dossier", () => {
     ).toBeTruthy();
 
     expect(screen.getByRole("heading", { name: "Manufacturing plants" })).toBeTruthy();
-    expect(screen.queryByLabelText("Filter by sector type")).toBeNull();
+    expect((screen.getByLabelText("Sector type") as HTMLSelectElement).value).toBe(
+      "manufacturing:"
+    );
   });
 
   it("filters the table to the chosen type", () => {
     render(<SectorsTab {...baseProps} sectors={mixedSectors} isCeo />);
-    const rail = screen.getByRole("tablist", { name: "Sector type" });
 
-    // Rows render a desktop and a mobile layout, so names appear more than once.
+    // Rows render a desktop and a phone layout, so names appear more than once.
     expect(screen.getAllByText("Albuquerque Solar").length).toBeGreaterThan(0);
-    fireEvent.click(within(rail).getByRole("tab", { name: /Manufacturing/ }));
+    pickType("manufacturing");
     expect(screen.queryAllByText("Albuquerque Solar")).toHaveLength(0);
     expect(screen.getAllByText("Cleveland Works").length).toBeGreaterThan(0);
   });
 
   it("opens the expand modal already pointed at the open division", async () => {
     render(<SectorsTab {...baseProps} sectors={mixedSectors} isCeo />);
-    const rail = screen.getByRole("tablist", { name: "Sector type" });
-    fireEvent.click(within(rail).getByRole("tab", { name: /Energy/ }));
+    pickType("energy");
 
     fireEvent.click(screen.getAllByRole("button", { name: /Build a power station/ })[0]);
     await waitFor(() => expect(screen.getByTestId("expand-modal")).toBeTruthy());
@@ -222,8 +226,7 @@ describe("SectorsTab type rail and dossier", () => {
 
   it("leaves the proposed type levers on screen but disabled", () => {
     render(<SectorsTab {...baseProps} sectors={mixedSectors} isCeo />);
-    const rail = screen.getByRole("tablist", { name: "Sector type" });
-    fireEvent.click(within(rail).getByRole("tab", { name: /Manufacturing/ }));
+    pickType("manufacturing");
 
     for (const button of screen.getAllByRole("button", { name: "Retool line" })) {
       expect((button as HTMLButtonElement).disabled).toBe(true);
@@ -233,15 +236,14 @@ describe("SectorsTab type rail and dossier", () => {
     );
   });
 
-  it("offers exactly two build buttons, neither of them inside the strategy panel", () => {
+  it("offers exactly one build button, pointed at the open division", () => {
     render(<SectorsTab {...baseProps} sectors={mixedSectors} isCeo />);
-    const rail = screen.getByRole("tablist", { name: "Sector type" });
-    fireEvent.click(within(rail).getByRole("tab", { name: /Manufacturing/ }));
+    pickType("manufacturing");
 
-    // The dossier and the table each carry one; the strategy panel used to add
-    // a third that only differed by pre-selecting a strategy.
+    // The toolbar carries it. The dossier and the strategy panel used to add
+    // their own, and the panel's only differed by pre-selecting a strategy.
     const builds = screen.getAllByRole("button", { name: /Build a plant/ });
-    expect(builds).toHaveLength(2);
+    expect(builds).toHaveLength(1);
     for (const button of builds) expect((button as HTMLButtonElement).disabled).toBe(false);
     expect(screen.queryByRole("button", { name: /Build a plant · / })).toBeNull();
   });
@@ -256,8 +258,7 @@ describe("SectorsTab type rail and dossier", () => {
       }),
     ];
     render(<SectorsTab {...baseProps} sectors={orphaned} isCeo />);
-    const rail = screen.getByRole("tablist", { name: "Sector type" });
-    fireEvent.click(within(rail).getByRole("tab", { name: /Manufacturing/ }));
+    pickType("manufacturing");
 
     // It must land in some tab rather than vanishing: the badges have to sum
     // to the division's site count.
@@ -273,12 +274,11 @@ describe("SectorsTab type rail and dossier", () => {
 
   it("unfilters the table when the last sector of the open division goes away", () => {
     const { rerender } = render(<SectorsTab {...baseProps} sectors={mixedSectors} isCeo />);
-    const rail = screen.getByRole("tablist", { name: "Sector type" });
-    fireEvent.click(within(rail).getByRole("tab", { name: /Energy/ }));
+    pickType("energy");
     expect(screen.getByRole("heading", { name: "Energy power stations" })).toBeTruthy();
 
-    // The CEO abandons the only energy sector. The rail loses the chip, and the
-    // table must fall back to every sector rather than filtering to nothing.
+    // The CEO abandons the only energy sector. The select loses the type, and
+    // the table must fall back to every sector rather than filtering to nothing.
     rerender(
       <SectorsTab
         {...baseProps}
@@ -286,15 +286,15 @@ describe("SectorsTab type rail and dossier", () => {
         isCeo
       />
     );
-    expect(screen.getByRole("heading", { name: "Owned Sectors" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Owned sectors" })).toBeTruthy();
     expect(screen.getAllByText("Cleveland Works").length).toBeGreaterThan(0);
     expect(screen.queryByRole("tablist", { name: "Operating strategy" })).toBeNull();
   });
 
   it("still filters the table for a sector type the constants no longer name", () => {
     // `sectorType` is a plain string on the wire and a row can carry a type
-    // that predates a rename. The chip must still filter, even though there is
-    // no dossier, palette or strategy table to open for it.
+    // that predates a rename. Picking it must still filter, even though there
+    // is no dossier, palette or strategy table to open for it.
     const legacy = [
       ...mixedSectors,
       sector({
@@ -306,11 +306,12 @@ describe("SectorsTab type rail and dossier", () => {
       }),
     ];
     render(<SectorsTab {...baseProps} sectors={legacy} isCeo />);
-    const rail = screen.getByRole("tablist", { name: "Sector type" });
-    const chip = within(rail).getByRole("tab", { name: /shipbuilding/ });
+    expect(
+      within(screen.getByLabelText("Sector type")).getByRole("option", { name: /shipbuilding/ })
+    ).toBeTruthy();
 
-    fireEvent.click(chip);
-    expect(chip.getAttribute("aria-selected")).toBe("true");
+    pickType("shipbuilding");
+    expect((screen.getByLabelText("Sector type") as HTMLSelectElement).value).toBe("shipbuilding:");
     expect(screen.getAllByText("Bath Yards").length).toBeGreaterThan(0);
     expect(screen.queryAllByText("Cleveland Works")).toHaveLength(0);
     // No dossier and no strategy panel: there is nothing known to describe.
@@ -320,8 +321,7 @@ describe("SectorsTab type rail and dossier", () => {
 
   it("shows no proposed levers to an outsider", () => {
     render(<SectorsTab {...baseProps} sectors={mixedSectors} isCeo={false} />);
-    const rail = screen.getByRole("tablist", { name: "Sector type" });
-    fireEvent.click(within(rail).getByRole("tab", { name: /Manufacturing/ }));
+    pickType("manufacturing");
 
     expect(screen.queryByRole("button", { name: "Retool line" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Switch ▾" })).toBeNull();

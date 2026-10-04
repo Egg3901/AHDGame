@@ -69,6 +69,8 @@ export interface Bond {
    */
   requestedUnits?: number;
   unsoldUnits?: number;
+  /** Frozen issuer-selected underwriter terms for future funded primary fills. */
+  primaryUnderwriting?: import("@/lib/banking/underwritingTypes").PrimaryUnderwritingOffer;
   primaryFillRatio?: number;
   /** Units held off-market by the issuing currency's central bank through QE. */
   centralBankHoldings?: number;
@@ -113,6 +115,31 @@ export interface Bond {
    * unmatured bonds.
    */
   redeemedAtTurn?: number;
+  /** Frozen, funded payout quote retained until a sovereign maturity fully pays. */
+  sovereignMaturityClaim?: {
+    id: string;
+    dueTurn: number;
+    currencyCode: CurrencyCode;
+    treasuryLocalPerAnchor: number;
+    amountLocal: number;
+    escrowLocal: number;
+    fundingAttemptTurn?: number;
+    paid?: boolean;
+    /** Bank epoch claims already paid or routed to insurance for this due quote. */
+    paidBankClaimIds?: string[];
+    sourceHolders: BondHolder[];
+    sourcePublicFloat: number;
+    sourceCentralBankHoldings?: number;
+    holderLegs: Array<{
+      collection: string;
+      filter: Record<string, unknown>;
+      path: string;
+      amount: number;
+      currencyCode: CurrencyCode;
+      localPerAnchor: number;
+      note: string;
+    }>;
+  };
   /**
    * Currency the bond's face value, coupon payments, principal, and market
    * price are denominated in (v0.2.6+). Sovereign bonds inherit the issuer
@@ -171,6 +198,14 @@ export interface BondHolder {
   fundId?: ObjectId;
   /** Autonomous (V3) NPP holding the bond. Gated by nppAutonomyLevel v3. */
   nppId?: ObjectId;
+  /** Private-bank treasury holder. Always paired with the charter epoch below. */
+  bankId?: ObjectId;
+  /** Charter epoch owning this position; rechartering cannot inherit holdings. */
+  charteredTurn?: number;
+  /** In-flight bank treasury reservation. Excluded from coupons until cash settles. */
+  bankTreasuryTradeId?: string;
+  /** Stable identity of a funded bank treasury purchase lot. */
+  bankTreasuryLotId?: string;
   /** Number of bond units held (each unit = $1,000 face value) */
   units: number;
   /**

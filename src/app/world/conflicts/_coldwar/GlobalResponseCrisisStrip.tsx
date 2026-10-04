@@ -156,7 +156,7 @@ export function GlobalResponseCrisisStrip({
                 <h3
                   style={{
                     color: "#eef3ff",
-                    font: "600 14px Georgia,serif",
+                    font: "600 14px var(--font-geist-sans),system-ui,sans-serif",
                     lineHeight: 1.25,
                     margin: 0,
                   }}

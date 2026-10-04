@@ -26,6 +26,7 @@ const PLANNED = [
 
 function world() {
   const db = createInMemoryDb();
+  db.seed("gameState", [{ _id: "current", preset: "1991-default" }]);
   const snapshots = db.collection("moneySupplySnapshots");
   Object.assign(snapshots, {
     replaceOne: (

@@ -1,0 +1,69 @@
+{
+  "issue": 2223,
+  "parent": 2159,
+  "status": "partial",
+  "executedSource": "2e3f5961d11921e6a3f3a5dab9b17fc45c4a977b",
+  "baselineSource": "283fa48a53e0efa856510e44acb9714ec43875c2",
+  "scope": "queued redemption payouts",
+  "focusedCases": 72,
+  "nativeCases": 22,
+  "nativeConfigurations": ["standalone", "replica set"],
+  "nativeControlsPerConfiguration": 11,
+  "nativeConservation": {
+    "openingCash": 1050,
+    "closingCash": 1050,
+    "fundReceipts": 1,
+    "cashWitnesses": 1,
+    "ledgerRows": 2,
+    "auditRows": 1,
+    "repeatedReplayStable": true
+  },
+  "performance": [
+    {
+      "payouts": 0,
+      "beforeCommands": 1,
+      "afterCommands": 2,
+      "beforeReturnedBsonBytes": 119,
+      "afterReturnedBsonBytes": 238,
+      "outcomesIdentical": true,
+      "stockDivergence": 0,
+      "trialImbalance": 0,
+      "unattributed": 0,
+      "repeatStable": true
+    },
+    {
+      "payouts": 1,
+      "beforeCommands": 16,
+      "afterCommands": 39,
+      "beforeReturnedBsonBytes": 1807,
+      "afterReturnedBsonBytes": 22486,
+      "outcomesIdentical": true,
+      "stockDivergence": 0,
+      "trialImbalance": 0,
+      "unattributed": 0,
+      "repeatStable": true
+    },
+    {
+      "payouts": 8,
+      "beforeCommands": 79,
+      "afterCommands": 270,
+      "beforeReturnedBsonBytes": 8856,
+      "afterReturnedBsonBytes": 177186,
+      "outcomesIdentical": true,
+      "stockDivergence": 0,
+      "trialImbalance": 0,
+      "unattributed": 0,
+      "repeatStable": true
+    }
+  ],
+  "phaseBudget": 18000,
+  "phaseBudgetChanged": false,
+  "fullTurnAcceptance": false,
+  "productionTouched": false,
+  "remaining": [
+    "Holding sale settlement recovery",
+    "Public float purchase settlement recovery",
+    "Hosted merge gate and review",
+    "Full world and performance qualification tracked separately"
+  ]
+}

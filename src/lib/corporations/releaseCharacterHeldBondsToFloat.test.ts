@@ -54,6 +54,7 @@ describe("releaseCharacterHeldBondsToFloat", () => {
       1,
       {
         _id: bondA,
+        sovereignMaturityClaim: { $exists: false },
         holders: { $elemMatch: { characterId, units: 50 } },
       },
       {
@@ -66,6 +67,7 @@ describe("releaseCharacterHeldBondsToFloat", () => {
       2,
       {
         _id: bondB,
+        sovereignMaturityClaim: { $exists: false },
         holders: { $elemMatch: { characterId, units: 25 } },
       },
       {

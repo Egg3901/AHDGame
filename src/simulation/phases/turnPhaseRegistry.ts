@@ -106,6 +106,7 @@ import { RESET_V2_READY } from "@/lib/resetVersions/availability";
 import { settleResetTreasuryCashTurn } from "@/lib/resetFinance/settleCashTurn";
 import { resetSystemVersionsFrom } from "@/lib/resetVersions/rules";
 import { reconcileResetLawEnactments } from "@/lib/resetLegislation/reconcileEnactments";
+import { processFederationFacilityPaymentTurn } from "@/lib/world/succession/facilityPaymentTurn";
 import { processDefenceWindfallRecoveryTurn } from "@/lib/turn/defenceWindfallRecoveryTurn";
 import { recomputeSharePricesAfterBondTurn } from "@/lib/turn/corporation/recomputeSharePrices";
 import { processSavingsInterestTurn } from "@/lib/turn/savingsInterestTurn";
@@ -128,7 +129,6 @@ import { processByElectionWatcher } from "@/lib/turn/byElections";
 import { processCommonsByElectionWatcher } from "@/lib/turn/commonsByElections";
 import { detectPreIterationComplete } from "@/lib/turn/preIterationLifecycle";
 import { processActivityLogging } from "@/lib/turn/activityLogging";
-import { runFinancialSuspectScan } from "@/lib/financialTxLog/suspectScan";
 import { isLedgerShadowEnabledFromConfig } from "@/lib/ledger/featureFlag";
 import { writeBalanceSnapshot } from "@/lib/ledger/balanceSnapshot";
 import { snapshotMoneySupply } from "@/lib/moneySupply/snapshot";
@@ -137,6 +137,7 @@ import { snapshotEconomicVitalSigns } from "@/lib/economy/economicVitalSigns";
 import { runAutoReelectionEntry } from "@/lib/turn/autoReelectionEntry";
 import { withdrawInactiveCandidates } from "@/lib/turn/withdrawInactiveCandidates";
 import { stateEffectsAndNationalAggregationPhase } from "./stateEffectsPhase";
+import { runHuAssemblyReform } from "@/lib/turn/huAssemblyReform";
 import type { TurnPhaseAdapter } from "@/simulation/engine/types";
 
 export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
@@ -326,9 +327,19 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           processPartyInfluenceTurn(characters, config, gameNow)
         );
 
-        const caucusTaxResult = await runtime.runPhase("caucusTax", () =>
-          processCaucusTax(gameState.forexEnabled === true, newTurn)
-        );
+        // caucusTax and treasuryTurn touch disjoint state and run together.
+        // caucusTax debits member characters/NPP funds, credits caucus treasuries
+        // and inserts treasuryTransactions; treasuryTurn reads/writes only
+        // federalBudget cash and its ledgerEntries receipts. treasuryTurn still
+        // starts after the corporation turn (SOE remittance/draws have settled
+        // into the treasury before the budget's primary slice is applied).
+        // caucusTax must NOT overlap nppFundGeneration below: both $inc npps.funds.
+        const [caucusTaxResult, treasuryResult] = await Promise.all([
+          runtime.runPhase("caucusTax", () =>
+            processCaucusTax(gameState.forexEnabled === true, newTurn)
+          ),
+          runtime.runPhase("treasuryTurn", () => processTreasuryTurn(newTurn)),
+        ]);
         if (caucusTaxResult) {
           phaseResults.caucusTax = {
             caucusesProcessed: caucusTaxResult.caucusesProcessed,
@@ -369,12 +380,6 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           }
         }
 
-        // Live fiscal accrual into the signed treasury balance. Runs after the
-        // corporation turn so SOE remittance/draws have settled into the treasury
-        // this turn before the budget's primary slice is applied.
-        const treasuryResult = await runtime.runPhase("treasuryTurn", () =>
-          processTreasuryTurn(newTurn)
-        );
         if (treasuryResult) {
           phaseResults.treasuryTurn = {
             countriesProcessed: treasuryResult.countriesProcessed,
@@ -532,7 +537,12 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         const captureV2SovereignCash =
           resetSystemVersionsFrom(context.gameState, RESET_V2_READY).cabinet === "v2";
         const [bondTurnResult, commodityResult] = await Promise.all([
-          runtime.runPhase("bondTurn", () => processBondTurn(newTurn, captureV2SovereignCash)),
+          runtime.runPhase("bondTurn", () =>
+            processBondTurn(newTurn, {
+              treasuryCashLedgerEnabled: context.config?.treasuryCashLedgerEnabled,
+              captureSovereignCashProceeds: captureV2SovereignCash,
+            })
+          ),
           runtime.runPhase("commodityPrices", () => processCommodityPriceTurn(newTurn)),
         ]);
         if (captureV2SovereignCash) {
@@ -547,6 +557,17 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
                 bondFlows: bondTurnResult,
               })
           );
+        }
+
+        // Creditor servicing takes priority over private facility compensation.
+        if (bondTurnResult !== null) {
+          const compensated = await runtime.runPhase("federationFacilityCompensation", () =>
+            processFederationFacilityPaymentTurn(context.db, newTurn, context.realNow)
+          );
+          if (compensated !== null)
+            (phaseResults as Record<string, unknown>).federationFacilityCompensation = {
+              applicationsServiced: compensated,
+            };
         }
 
         // Collect a staged procurement-windfall assessment after bond coupons
@@ -566,7 +587,12 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         // offers/terms, and defaults on repeated non-payment.
         if (await isContractIssuanceEnabled(config)) {
           const settlementResult = await runtime.runPhase("contractSettlement", () =>
-            settleExtractionContracts(context.db, newTurn, context.realNow)
+            settleExtractionContracts(
+              context.db,
+              newTurn,
+              context.realNow,
+              context.config?.treasuryCashLedgerEnabled === true
+            )
           );
           if (settlementResult) {
             (phaseResults as Record<string, unknown>).contractSettlement = settlementResult;
@@ -631,10 +657,7 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           };
         }
 
-        const suspectScanResult = await runtime.runPhase("financialSuspectScan", () =>
-          runFinancialSuspectScan(context.db, newTurn)
-        );
-        phaseResults.financialSuspectScan = suspectScanResult === null ? null : true;
+        // financialSuspectScan runs after the turn commits (#2694, postTurnScans.ts).
 
         if (bondTurnResult) {
           phaseResults.bondTurn = {
@@ -823,28 +846,34 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           phaseResults.governorLegislationQueue = governorQueueResult;
         }
 
-        // NPP autonomous bill sponsorship runs BEFORE nppBehavior so NPPs can
-        // vote on the just-introduced bills in the same turn.
-        await runtime.runPhase("nppBillSponsorship", async () => {
-          // Load a lightweight NPP context scoped to the current turn so we have
-          // nppOfficials + nppMap without the full voting/election machinery.
-          const { loadNPPContext } = await import("@/lib/turn/npp/context");
-          const sponsorCtx = await loadNPPContext(gameNow, {
-            billDeadlineNow: realNow,
-            currentTurn: newTurn,
-          });
-          const billsProposed = await processNppBillSponsorship(sponsorCtx);
-          if (billsProposed > 0) {
-            console.log(`[Turn] NPP bill sponsorship: ${billsProposed} bills introduced`);
-          }
-          return { billsProposed };
-        });
-
-        // File bench challengers directly into uncovered primaries before
-        // nppBehavior. Some direct chamber families are outside RACE_PRIORITY,
-        // while low-priority races can be starved by the shared NPP pool.
-        // nppBehavior reloads context afterward and sees the filed candidates.
-        await runtime.runPhase("generateChallengers", () => processChallengerGeneration(gameNow));
+        // NPP autonomous bill sponsorship and challenger filing both run BEFORE
+        // nppBehavior: NPPs vote on the just-introduced bills in the same turn,
+        // and nppBehavior reloads context afterward so it sees the filed
+        // candidates. The two are independent of each other and run together.
+        // Sponsorship reads only office holders (and their NPP docs) and writes
+        // only `bills` inserts. Challenger filing reads elections, candidacies,
+        // free NPPs and statePartyOrg and inserts electionCandidates and new
+        // NPPs; a fresh challenger never holds an office, so it can never enter
+        // the sponsor pool. Some direct chamber families are outside
+        // RACE_PRIORITY, while low-priority races can be starved by the shared
+        // NPP pool, which is why bench challengers are filed directly here.
+        await Promise.all([
+          runtime.runPhase("nppBillSponsorship", async () => {
+            // Load a lightweight NPP context scoped to the current turn so we have
+            // nppOfficials + nppMap without the full voting/election machinery.
+            const { loadNPPContext } = await import("@/lib/turn/npp/context");
+            const sponsorCtx = await loadNPPContext(gameNow, {
+              billDeadlineNow: realNow,
+              currentTurn: newTurn,
+            });
+            const billsProposed = await processNppBillSponsorship(sponsorCtx);
+            if (billsProposed > 0) {
+              console.log(`[Turn] NPP bill sponsorship: ${billsProposed} bills introduced`);
+            }
+            return { billsProposed };
+          }),
+          runtime.runPhase("generateChallengers", () => processChallengerGeneration(gameNow)),
+        ]);
 
         const nppResult = await runtime.runPhase("nppBehavior", () =>
           processNPPTurn(gameNow, {
@@ -1087,6 +1116,7 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           processPlayerRandomEventsTurn(db, newTurn, {
             playerRandomEventsEnabled: gameState.playerRandomEventsEnabled,
             rpgStatsEnabled: gameState.rpgStatsEnabled,
+            treasuryCashLedgerEnabled: context.config?.treasuryCashLedgerEnabled === true,
             currentYear: eventsCurrentYear,
           })
         );
@@ -1142,7 +1172,7 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
     {
       key: "electionResolutionAndGovernment",
       async execute(context, runtime) {
-        const { db, gameNow, newTurn, phaseResults } = context;
+        const { db, gameNow, newTurn, currentYear, phaseResults } = context;
         // Group 7 is strictly sequential. Reordering any of these steps corrupts
         // elections by dropping final-turn votes or resolving offices from stale tallies.
         await runtime.runPhase("withdrawInactiveCandidates", () =>
@@ -1218,10 +1248,120 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         );
         phaseResults.leadershipVacated = { positionsVacated: vacatedCount ?? 0 };
 
-        const govResult = await runtime.runPhase("parliamentaryGovernmentFormation", () =>
-          runPostElectionGovernmentPhases(db, gameNow, generalResolved ?? 0)
-        );
+        if (currentYear >= 2012 && context.gameState.preset === "1991-default") {
+          await runtime.runPhase("huAssemblyReform", () =>
+            runHuAssemblyReform(db, currentYear, gameNow)
+          );
+        }
+        const govResult = await runtime.runPhase("parliamentaryGovernmentFormation", async () => {
+          const { processBg1991ConstitutionalMandate } =
+            await import("@/lib/countries/bg/constitutionalProposals1991");
+          const { processBg1991ConstitutionalNpcProposal } =
+            await import("@/lib/countries/bg/constitutionalNpcProposals1991");
+          const { processBg1991AssemblyDissolution } =
+            await import("@/lib/countries/bg/assemblyDissolution1991");
+          await processBg1991ConstitutionalMandate(db, context.gameState, newTurn, gameNow);
+          await processBg1991AssemblyDissolution(db, context.gameState, newTurn, gameNow);
+          await processBg1991ConstitutionalNpcProposal(db, context.gameState, newTurn, gameNow);
+          const { processBgAssemblyTransition } = await import("@/lib/turn/bgAssemblyTransition");
+          await processBgAssemblyTransition(db, context.gameState, newTurn, gameNow);
+          const { advanceBg1991ListVacancies } =
+            await import("@/lib/countries/bg/listVacancies1991");
+          await advanceBg1991ListVacancies(db, context.gameState, newTurn, gameNow);
+          const { openBgGrandConstituencyByElections } =
+            await import("@/lib/countries/bg/constituencyByElections1991");
+          await openBgGrandConstituencyByElections(db, context.gameState, newTurn, gameNow);
+          const { processRoParliamentTransition } =
+            await import("@/lib/turn/roParliamentTransition");
+          const { processRo1992ElectoralMandate } =
+            await import("@/lib/countries/ro/electoralProposals1992");
+          await processRo1992ElectoralMandate(db, context.gameState, newTurn, gameNow);
+          const { processRo1992ElectoralNpcProposal } =
+            await import("@/lib/countries/ro/electoralNpcProposals1992");
+          await processRo1992ElectoralNpcProposal(db, context.gameState, newTurn, gameNow);
+          await processRoParliamentTransition(db, context.gameState, newTurn, gameNow);
+          const { processFederationRatifications } =
+            await import("@/lib/turn/federationRatifications");
+          const { processRatifiedFederationSettlements } =
+            await import("@/lib/turn/federationSettlements");
+          const { processFederationNpcMandates } = await import("@/lib/turn/federationNpcMandates");
+          await processFederationNpcMandates(db, context.gameState.preset, currentYear, gameNow);
+          await processFederationRatifications(db, context.gameState.preset, newTurn);
+          await processRatifiedFederationSettlements(
+            db,
+            context.gameState.preset,
+            newTurn,
+            currentYear,
+            gameNow
+          );
+          const { processYuDissolution } = await import("@/lib/turn/yuDissolution");
+          await processYuDissolution(db, context.gameState, newTurn, gameNow);
+          const { processRussianConstitutionalNpcProposals } =
+            await import("@/lib/countries/ru/constitutionalNpcProposals");
+          await processRussianConstitutionalNpcProposals(db, context.gameState, newTurn, gameNow);
+          const { processRussianConstitutionalMandates } =
+            await import("@/lib/countries/ru/constitutionalProposals");
+          await processRussianConstitutionalMandates(db, context.gameState, newTurn, gameNow);
+          const { processRussianDuma1995Mandate } =
+            await import("@/lib/countries/ru/dumaElectoralProposals1995");
+          await processRussianDuma1995Mandate(db, context.gameState, newTurn, gameNow);
+          const { processHu1994ElectoralMandate } =
+            await import("@/lib/countries/hu/electoralProposals1994");
+          await processHu1994ElectoralMandate(db, context.gameState, newTurn, gameNow);
+          const { processHu1994ElectoralNpcProposal } =
+            await import("@/lib/countries/hu/electoralNpcProposals1994");
+          await processHu1994ElectoralNpcProposal(db, context.gameState, newTurn, gameNow);
+          const { processHu2011ElectoralMandate } =
+            await import("@/lib/countries/hu/electoralProposals2011");
+          await processHu2011ElectoralMandate(db, context.gameState, newTurn, gameNow);
+          const { processHu2011ElectoralNpcProposal } =
+            await import("@/lib/countries/hu/electoralNpcProposals2011");
+          await processHu2011ElectoralNpcProposal(db, context.gameState, newTurn, gameNow);
+          const { openRussianPresidentialElection } =
+            await import("@/lib/countries/ru/presidentialElectionOpening");
+          await openRussianPresidentialElection({
+            db,
+            game: context.gameState,
+            turn: newTurn,
+            now: gameNow,
+          });
+          const { processRuPresidencyTransition } =
+            await import("@/lib/countries/ru/ruPresidencyTransition");
+          await processRuPresidencyTransition(db, context.gameState, newTurn, gameNow);
+          const { processRuLegislatureTransition } =
+            await import("@/lib/countries/ru/ruLegislatureTransition");
+          await processRuLegislatureTransition(db, context.gameState, newTurn, gameNow);
+          return runPostElectionGovernmentPhases(db, gameNow, generalResolved ?? 0);
+        });
         const govFormedMap = govResult?.governmentFormed ?? {};
+
+        if (context.gameState?.preset === "1991-default") {
+          const { processRussianCouncilComposition } =
+            await import("@/lib/countries/ru/councilCompositionTurn");
+          (phaseResults as Record<string, unknown>).russianCouncilComposition =
+            await runtime.runPhase("russianCouncilComposition", () =>
+              processRussianCouncilComposition({
+                db,
+                game: context.gameState,
+                turn: newTurn,
+                now: gameNow,
+              })
+            );
+        }
+
+        if (context.gameState?.preset === "1991-default") {
+          const { processRussianAssemblyCampaigns } =
+            await import("@/lib/countries/ru/assemblyCampaigns");
+          (phaseResults as Record<string, unknown>).russianAssemblyCampaigns =
+            await runtime.runPhase("russianAssemblyCampaigns", () =>
+              processRussianAssemblyCampaigns({
+                db,
+                game: context.gameState,
+                turn: newTurn,
+                now: gameNow,
+              })
+            );
+        }
 
         await runtime.runPhase("parliamentaryGovernmentPhases", () =>
           runParliamentaryGovernmentPhases(gameNow, newTurn)
@@ -1465,7 +1605,9 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           return;
         }
         const accountsSnapshotted = await runtime.runPhase("ledgerBalanceSnapshot", () =>
-          writeBalanceSnapshot(db, newTurn)
+          writeBalanceSnapshot(db, newTurn, {
+            treasuryCashLedgerEnabled: config?.treasuryCashLedgerEnabled,
+          })
         );
         if (accountsSnapshotted !== null) {
           phaseResults.ledgerBalanceSnapshot = { accountsSnapshotted };

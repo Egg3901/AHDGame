@@ -21,10 +21,32 @@ export type SeedIndexPlanEntry = {
  */
 export async function collectSeedIndexPlan(): Promise<SeedIndexPlanEntry[]> {
   const plan: SeedIndexPlanEntry[] = [];
-  const recorded = (collection: string) =>
-    plan
+  // bootstrapGameWorld runs these registered identity migrations before
+  // seedIndexes. Model their resulting index in the stand-in so seedCoreIndexes
+  // sees the same prerequisite it requires on a real bootstrap. Its subsequent
+  // idempotent createIndex call still places the index in the captured plan.
+  const startupIndexes: Record<string, Array<Record<string, unknown>>> = {
+    corporateSectors: [
+      {
+        v: 2,
+        key: {
+          corporationId: 1,
+          stateId: 1,
+          sectorType: 1,
+          industryModel: 1,
+          mediaDiscriminator: 1,
+        },
+        name: "corporateSectors_corporation_state_type_models_unique",
+        unique: true,
+      },
+    ],
+  };
+  const recorded = (collection: string) => [
+    ...(startupIndexes[collection] ?? []),
+    ...plan
       .filter((entry) => entry.collection === collection)
-      .map((entry) => ({ v: 2, key: entry.key, name: entry.options.name, ...entry.options }));
+      .map((entry) => ({ v: 2, key: entry.key, name: entry.options.name, ...entry.options })),
+  ];
   const emptyCursor = () => {
     const cursor = {
       toArray: async () => [],

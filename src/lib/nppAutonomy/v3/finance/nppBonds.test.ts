@@ -166,6 +166,31 @@ describe("nppBuyBond", () => {
     );
   });
 
+  it("accepts EUR sovereign paper for a 2027 French NPP", async () => {
+    bondsFindOne.mockResolvedValue({
+      _id: bondId,
+      marketPrice: MARKET,
+      publicFloat: 1000,
+      maturityTurn: 100,
+      currencyCode: "EUR",
+    });
+    vi.mocked(reserveBondUnitsForHolder).mockResolvedValue(true);
+    const frenchNpp = { _id: nppId, countryId: "FR" as const };
+    const result = await nppBuyBond(
+      db,
+      frenchNpp,
+      bondId,
+      UNITS,
+      4,
+      0.92,
+      undefined,
+      "2027-default"
+    );
+    expect(result.ok).toBe(true);
+    expect(emitTx).toHaveBeenCalledWith(db, expect.objectContaining({ currencyCode: "EUR" }));
+    expect(bondsFindOne).toHaveBeenCalledTimes(1);
+  });
+
   it("rejects when funds are insufficient (guard returns null), no reserve attempted", async () => {
     nppFindOneAndUpdate.mockResolvedValue(null);
     const res = await nppBuyBond(db, npp, bondId, UNITS, 4, 1);

@@ -122,7 +122,7 @@ export function NewsWhoToWatch() {
 
   return (
     <div className="rounded-xl border border-card-border bg-card p-5 space-y-6">
-      <SectionLabel as="h3">Top Posters</SectionLabel>
+      <SectionLabel as="h3">Top posters</SectionLabel>
       <MiniList title="By Total Likes" entries={entries} sortBy="likes" loading={loading} />
       <MiniList title="By Subscribers" entries={entries} sortBy="subscribers" loading={loading} />
     </div>

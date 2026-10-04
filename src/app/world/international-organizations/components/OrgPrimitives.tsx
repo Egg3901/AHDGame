@@ -19,7 +19,7 @@ export function Seal({ identity, size = 64 }: { identity: OrgIdentity; size?: nu
   const fontSize = len >= 3 ? size * 0.26 : len >= 2 ? size * 0.34 : size * 0.5;
   return (
     <div
-      className="relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-lg font-serif font-black leading-none"
+      className="relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-lg font-black leading-none"
       style={{
         width: size,
         height: size,

@@ -129,6 +129,26 @@ describe("construction in progress", () => {
 });
 
 describe("sectorBookValueAnchor (D11)", () => {
+  it("keeps the legacy automobile list basis for manufacturing vehicle rows", () => {
+    const legacy = sectorBookValueAnchor(
+      { sectorType: "automobiles", capitalStock: 250_000, strategyId: "standard" },
+      1991,
+      1
+    );
+    const modelled = sectorBookValueAnchor(
+      {
+        sectorType: "manufacturing",
+        industryModel: "vehicles",
+        capitalStock: 250_000,
+        strategyId: "standard",
+      },
+      1991,
+      1
+    );
+
+    expect(modelled).toBe(legacy);
+  });
+
   const CAPACITY = 250;
 
   it("prices a flip-identity sector at 3.0 × RPU × capacity at the anchor year", () => {
@@ -158,6 +178,29 @@ describe("sectorBookValueAnchor (D11)", () => {
       1
     );
     expect(withCip - built).toBeCloseTo(1_000, 8);
+  });
+
+  it("values the loaded queue instead of a stale CIP mirror", () => {
+    const value = sectorBookValueAnchor(
+      {
+        sectorType: "retail",
+        capitalStock: 0,
+        constructionInProgressAnchor: 9_000,
+        buildQueue: [
+          {
+            unitsOrdered: 10,
+            costPaidAnchor: 1_000,
+            startTurn: 10,
+            onlineTurn: 20,
+            smooth: true,
+          },
+        ],
+      },
+      CAPACITY_ANCHOR_YEAR,
+      1,
+      15
+    );
+    expect(value).toBe(500);
   });
 
   it("is zero for a sector with no capacity and nothing in flight", () => {

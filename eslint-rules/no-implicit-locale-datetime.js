@@ -119,7 +119,7 @@ module.exports = {
     schema: [],
   },
   create(context) {
-    const filename = context.getFilename();
+    const filename = context.filename;
     if (!filename.endsWith(".tsx")) return {};
     // The canonical <LocalTime>/<RelativeTime> component IS the sanctioned local-zone
     // render — its post-mount toLocaleString is the fix, not a violation.
@@ -131,9 +131,10 @@ module.exports = {
     // client subtree, and gating on the directive alone let those files through
     // (#569). Importing a `useX` hook is the reliable signal — a React Server
     // Component cannot call one at all.
-    const source = context.getSourceCode().getText();
+    const sourceCode = context.sourceCode;
+    const source = sourceCode.getText();
     const hasUseClient = /^\s*(['"])use client\1/m.test(source.slice(0, 200));
-    if (!hasUseClient && !importsAHook(context.getSourceCode().ast)) return {};
+    if (!hasUseClient && !importsAHook(sourceCode.ast)) return {};
 
     return {
       CallExpression(node) {

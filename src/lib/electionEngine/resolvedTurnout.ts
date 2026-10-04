@@ -381,14 +381,7 @@ export function capTurnSliceToElectorate(
  * pool doc — most non-US worlds) leaves the pool untouched: prior behavior,
  * no invented exclusion.
  */
-export function scalePoolToRegistered(
-  pool: number,
-  unregisteredPct: number | null | undefined
-): number {
-  if (typeof unregisteredPct !== "number" || !Number.isFinite(unregisteredPct)) return pool;
-  const clamped = Math.min(100, Math.max(0, unregisteredPct));
-  return pool * (1 - clamped / 100);
-}
+export { scalePoolToRegistered } from "./rules/registration";
 
 /**
  * Hard ceiling on CUMULATIVE ballots: this turn's slice can release at most

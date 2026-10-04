@@ -21,7 +21,7 @@ import { WorldBlocMap } from "./WorldBlocMap";
 import { NationDetailPanel } from "./NationDetailPanel";
 
 const mono = "'IBM Plex Mono',monospace";
-const serif = "Lora,Georgia,serif";
+const headingFont = "var(--font-geist-sans),system-ui,sans-serif";
 
 type Selected = { name: string; bloc: BlocId } | null;
 type Hover = { name: string; bloc: BlocId; x: number; y: number } | null;
@@ -122,7 +122,7 @@ export function BlocOverviewBoard({ side = "west" }: { side?: BlocSide }) {
                   <h1
                     style={{
                       margin: 0,
-                      fontFamily: serif,
+                      fontFamily: headingFont,
                       fontWeight: 700,
                       fontSize: 38,
                       lineHeight: 1,
@@ -173,7 +173,7 @@ export function BlocOverviewBoard({ side = "west" }: { side?: BlocSide }) {
                   <div
                     style={{
                       marginTop: 6,
-                      fontFamily: serif,
+                      fontFamily: headingFont,
                       fontWeight: 700,
                       fontSize: 24,
                       lineHeight: 1,
@@ -1044,7 +1044,7 @@ function BlocStat({
 function StatCell({ value, label }: { value: string; label: string }) {
   return (
     <div>
-      <div style={{ fontFamily: serif, fontWeight: 700, fontSize: 21, color: "#f3f1ea" }}>
+      <div style={{ fontFamily: headingFont, fontWeight: 700, fontSize: 21, color: "#f3f1ea" }}>
         {value}
       </div>
       <div style={{ font: `500 9px ${mono}`, color: "#7a7a8c" }}>{label}</div>

@@ -5,10 +5,13 @@ import { COMMODITY_LABELS } from "@/lib/constants/commodities";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useGameTurnStatus } from "@/hooks/useGameEvents";
-import { Button } from "@/components/ui";
-import { ContractStatusBadge } from "@/components/extraction/ContractStatusBadge";
-import { effectiveContractStatus, type ExtractionContractRow } from "@/components/extraction/types";
+import {
+  effectiveContractStatus,
+  type ExtractionContractRow,
+  type ExtractionContractStatus,
+} from "@/components/extraction/types";
 import { CONTRACT_DEFAULT_MISSED_PAYMENTS } from "@/lib/constants/prospecting";
+import { DenseSection, SmallButton, TableScroll, Td, Th } from "./dense/DenseKit";
 
 interface CorporationContractsTabProps {
   corpId: string;
@@ -69,9 +72,7 @@ export default function CorporationContractsTab({ corpId, isCeo }: CorporationCo
   }
 
   if (loading) {
-    return (
-      <div className="py-8 text-center text-sm text-muted animate-pulse">Loading contracts…</div>
-    );
+    return <p className="py-2 text-xs text-muted">Loading contracts…</p>;
   }
 
   const offers = contracts.filter((c) => effectiveContractStatus(c) === "offered");
@@ -83,154 +84,172 @@ export default function CorporationContractsTab({ corpId, isCeo }: CorporationCo
 
   if (contracts.length === 0) {
     return (
-      <div className="rounded-xl border border-card-border bg-card p-8 text-center text-sm text-muted">
-        No extraction contracts yet.
-      </div>
+      <DenseSection title="Extraction contracts">
+        <p className="py-2 text-xs text-muted">No extraction contracts yet.</p>
+      </DenseSection>
     );
   }
 
+  const resource = (c: ExtractionContractRow) => COMMODITY_LABELS[c.resource] ?? c.resource;
+  const royalty = (c: ExtractionContractRow) =>
+    c.royaltyRatePerTurn != null ? `${(c.royaltyRatePerTurn * 100).toFixed(2)}%` : "n/a";
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {offers.length > 0 && (
-        <section>
-          <h3 className="mb-3 text-sm font-semibold uppercase tracking-widest text-muted">
-            Pending offers
-          </h3>
-          <div className="space-y-3">
-            {offers.map((c) => (
-              <div key={c._id} className="rounded-xl border border-primary/30 bg-primary/5 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-foreground">
-                        {COMMODITY_LABELS[c.resource] ?? c.resource}
-                      </span>
-                      <span className="text-xs text-muted">in {c.stateId}</span>
-                      <ContractStatusBadge status="offered" />
-                    </div>
-                    <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
-                      <span>Share: {(c.share * 100).toFixed(1)}%</span>
-                      <span>
-                        Signing fee:{" "}
-                        {c.signingFeeAnchor != null ? formatAmount(c.signingFeeAnchor) : "n/a"}
-                      </span>
-                      <span>
-                        Royalty:{" "}
-                        {c.royaltyRatePerTurn != null
-                          ? `${(c.royaltyRatePerTurn * 100).toFixed(2)}% of contracted value / turn`
-                          : "n/a"}
-                      </span>
-                      <span>Term: {c.termTurns ? `${c.termTurns} turns` : "Perpetual"}</span>
-                      {c.offerExpiresTurn != null && (
-                        <span>
-                          Offer expires in {Math.max(0, c.offerExpiresTurn - currentTurn)} turns
-                        </span>
-                      )}
-                    </div>
-                  </div>
+        <DenseSection title="Pending offers" meta={`${offers.length}`}>
+          <TableScroll>
+            <table className="w-full border-collapse">
+              <thead>
+                <tr>
+                  <Th>Resource</Th>
+                  <Th>State</Th>
+                  <Th align="right">Share</Th>
+                  <Th align="right">Signing fee</Th>
+                  <Th align="right" title="Share of contracted value paid each turn">
+                    Royalty / turn
+                  </Th>
+                  <Th align="right">Term</Th>
+                  <Th align="right">Offer expires</Th>
                   {isCeo && (
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        onClick={() => respond(c._id, "accept")}
-                        disabled={busyId === c._id}
-                      >
-                        {busyId === c._id ? "Working…" : "Accept"}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => respond(c._id, "decline")}
-                        disabled={busyId === c._id}
-                      >
-                        Decline
-                      </Button>
-                    </div>
+                    <Th align="right">
+                      <span className="sr-only">Respond</span>
+                    </Th>
                   )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
+                </tr>
+              </thead>
+              <tbody>
+                {offers.map((c) => (
+                  <tr key={c._id}>
+                    <Td className="text-foreground">{resource(c)}</Td>
+                    <Td className="text-muted">{c.stateId}</Td>
+                    <Td align="right">{(c.share * 100).toFixed(1)}%</Td>
+                    <Td align="right">
+                      {c.signingFeeAnchor != null ? formatAmount(c.signingFeeAnchor) : "n/a"}
+                    </Td>
+                    <Td align="right">{royalty(c)}</Td>
+                    <Td align="right">{c.termTurns ? `${c.termTurns} turns` : "Perpetual"}</Td>
+                    <Td align="right" className="text-muted">
+                      {c.offerExpiresTurn != null
+                        ? `${Math.max(0, c.offerExpiresTurn - currentTurn)} turns`
+                        : ""}
+                    </Td>
+                    {isCeo && (
+                      <Td align="right" numeric={false}>
+                        <span className="inline-flex gap-1.5">
+                          <SmallButton
+                            tone="primary"
+                            onClick={() => void respond(c._id, "accept")}
+                            disabled={busyId === c._id}
+                          >
+                            {busyId === c._id ? "Working…" : "Accept"}
+                          </SmallButton>
+                          <SmallButton
+                            onClick={() => void respond(c._id, "decline")}
+                            disabled={busyId === c._id}
+                          >
+                            Decline
+                          </SmallButton>
+                        </span>
+                      </Td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </TableScroll>
+        </DenseSection>
       )}
 
       {active.length > 0 && (
-        <section>
-          <h3 className="mb-3 text-sm font-semibold uppercase tracking-widest text-muted">
-            Active contracts
-          </h3>
-          <div className="overflow-x-auto rounded-lg border border-card-border">
-            <table className="w-full text-sm">
+        <DenseSection title="Active contracts" meta={`${active.length}`}>
+          <TableScroll>
+            <table className="w-full border-collapse">
               <thead>
-                <tr className="border-b border-card-border bg-card-elevated">
-                  <th className="px-4 py-3 text-left font-medium text-muted">State</th>
-                  <th className="px-4 py-3 text-left font-medium text-muted">Resource</th>
-                  <th className="px-4 py-3 text-right font-medium text-muted">Share</th>
-                  <th className="px-4 py-3 text-right font-medium text-muted">Royalty / turn</th>
-                  <th className="px-4 py-3 text-right font-medium text-muted">Expires</th>
-                  <th className="px-4 py-3 text-right font-medium text-muted">Status</th>
+                <tr>
+                  <Th>Resource</Th>
+                  <Th>State</Th>
+                  <Th align="right">Share</Th>
+                  <Th align="right">Royalty / turn</Th>
+                  <Th align="right">Expires</Th>
+                  <Th align="right">Status</Th>
                 </tr>
               </thead>
               <tbody>
                 {active.map((c) => {
                   const missed = c.missedPayments ?? 0;
                   return (
-                    <tr key={c._id} className="border-b border-card-border last:border-0">
-                      <td className="px-4 py-3 font-medium">{c.stateId}</td>
-                      <td className="px-4 py-3">{COMMODITY_LABELS[c.resource] ?? c.resource}</td>
-                      <td className="px-4 py-3 text-right tabular-nums">
-                        {(c.share * 100).toFixed(1)}%
-                      </td>
-                      <td className="px-4 py-3 text-right tabular-nums">
-                        {c.royaltyRatePerTurn != null
-                          ? `${(c.royaltyRatePerTurn * 100).toFixed(2)}%`
-                          : "n/a"}
-                      </td>
-                      <td className="px-4 py-3 text-right tabular-nums text-muted">
+                    <tr key={c._id}>
+                      <Td className="text-foreground">{resource(c)}</Td>
+                      <Td className="text-muted">{c.stateId}</Td>
+                      <Td align="right">{(c.share * 100).toFixed(1)}%</Td>
+                      <Td align="right">{royalty(c)}</Td>
+                      <Td align="right" className="text-muted">
                         {c.expiresTurn != null ? `Turn ${c.expiresTurn}` : "Perpetual"}
-                      </td>
-                      <td className="px-4 py-3 text-right">
+                      </Td>
+                      <Td align="right" numeric={false}>
                         {missed > 0 ? (
                           <span
-                            className="rounded-full bg-warning/15 px-2 py-0.5 text-xs font-medium text-warning"
+                            className="text-warning"
                             title={`${missed} of ${CONTRACT_DEFAULT_MISSED_PAYMENTS} missed royalty payments before default`}
                           >
                             {missed} missed payment{missed === 1 ? "" : "s"}
                           </span>
                         ) : (
-                          <ContractStatusBadge status="active" />
+                          <ContractStatusText status="active" />
                         )}
-                      </td>
+                      </Td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
-          </div>
-        </section>
+          </TableScroll>
+        </DenseSection>
       )}
 
       {past.length > 0 && (
-        <section>
-          <h3 className="mb-3 text-sm font-semibold uppercase tracking-widest text-muted">
-            History
-          </h3>
-          <div className="space-y-2">
-            {past.map((c) => (
-              <div
-                key={c._id}
-                className="flex items-center justify-between rounded-lg border border-card-border px-4 py-2 text-sm"
-              >
-                <span>
-                  {COMMODITY_LABELS[c.resource] ?? c.resource} in {c.stateId},{" "}
-                  {(c.share * 100).toFixed(1)}% share
-                </span>
-                <ContractStatusBadge status={effectiveContractStatus(c)} />
-              </div>
-            ))}
-          </div>
-        </section>
+        <DenseSection title="History" meta={`${past.length}`}>
+          <TableScroll>
+            <table className="w-full border-collapse">
+              <thead>
+                <tr>
+                  <Th>Resource</Th>
+                  <Th>State</Th>
+                  <Th align="right">Share</Th>
+                  <Th align="right">Status</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {past.map((c) => (
+                  <tr key={c._id}>
+                    <Td className="text-foreground">{resource(c)}</Td>
+                    <Td className="text-muted">{c.stateId}</Td>
+                    <Td align="right">{(c.share * 100).toFixed(1)}%</Td>
+                    <Td align="right" numeric={false}>
+                      <ContractStatusText status={effectiveContractStatus(c)} />
+                    </Td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </TableScroll>
+        </DenseSection>
       )}
     </div>
   );
+}
+
+const STATUS_TEXT: Record<ExtractionContractStatus, { label: string; tone: string }> = {
+  offered: { label: "Offered", tone: "text-foreground" },
+  active: { label: "Active", tone: "text-success" },
+  declined: { label: "Declined", tone: "text-muted" },
+  expired: { label: "Expired", tone: "text-muted" },
+  defaulted: { label: "Defaulted", tone: "text-error" },
+};
+
+/** Contract status as plain text, coloured by what it means. */
+function ContractStatusText({ status }: { status: ExtractionContractStatus }) {
+  const s = STATUS_TEXT[status];
+  return <span className={s.tone}>{s.label}</span>;
 }

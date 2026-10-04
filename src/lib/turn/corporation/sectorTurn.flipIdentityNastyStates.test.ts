@@ -5,8 +5,9 @@ import { CAPITAL_SEED_HEADROOM, impliedOutputUnits } from "@/lib/market/capital"
 import { COMMODITY_BASE_PRICES, type CommodityType } from "@/lib/constants/commodities";
 import { buildMarketContext } from "@/lib/market/marketContext";
 import { getEffectiveStrategyRates } from "@/lib/constants/sectorStrategies";
-import { GROWTH_RATE_TURNS_PER_YEAR } from "@/lib/constants/corporations";
+import { GROWTH_RATE_TURNS_PER_YEAR, TURNS_PER_DAY } from "@/lib/constants/corporations";
 import type { CorporationLookups } from "./types";
+import { costPlusPriceFactor } from "@/lib/market/costPlusPricing/rules";
 import { processSector, type SectorTurnEnv } from "./sectorTurn";
 
 /**
@@ -315,5 +316,55 @@ describe("plants flip identity: composed nasty states", () => {
       run("capital", s(), { marketSharePct: 70 }, 1000, true),
       run("plants", s(), { marketSharePct: 70 }, 1000, true)
     );
+  });
+});
+
+describe("recorded cost-plus operating basis", () => {
+  it("quotes the explicit turn's actual costs without inheriting a negative residual", () => {
+    const sector = makeSector({ capitalStock: STOCK, otherOpexPerUnitAnchor: -1000 });
+    const env = makeEnv("plants", 1000, makeLookups({}));
+    env.currentYear = 1991;
+    env.market.explicitPlantCostsEnabled = true;
+    processSector(env, makeCorp(), sector, 1, undefined, 1);
+    const update = env.sectorOps[0].updateOne.update.$set as Record<string, unknown>;
+    const basis = update.costPlusCostBasis as {
+      inputCostShare: number;
+      fixedCostShare: number;
+      turn: number;
+    };
+    const pnl = update.plantsPnl as {
+      inputs: number;
+      labour: number;
+      otherOpex: number;
+      upkeep: number;
+      compliance: number;
+    };
+    expect(basis.turn).toBe(1000);
+    expect(pnl.otherOpex).toBeGreaterThan(0);
+    const strategy = getEffectiveStrategyRates(
+      "manufacturing",
+      "standard",
+      undefined,
+      undefined,
+      0
+    );
+    const mixPrice =
+      1 /
+      Object.entries(strategy.supply ?? {}).reduce(
+        (sum, [commodity, rate]) => sum + rate / COMMODITY_BASE_PRICES[commodity as CommodityType],
+        0
+      );
+    const nominalOutputPerTurn = (Number(update.producedUnits) * mixPrice) / TURNS_PER_DAY;
+    const quotedCost =
+      costPlusPriceFactor(1, 0, basis.inputCostShare, basis.fixedCostShare) * nominalOutputPerTurn;
+    expect(quotedCost).toBeCloseTo(
+      (pnl.inputs + pnl.labour + pnl.otherOpex + pnl.upkeep + pnl.compliance) / TURNS_PER_DAY,
+      0
+    );
+  });
+
+  it("writes no basis while explicit operating costs are disabled", () => {
+    const result = run("plants", makeSector({ capitalStock: STOCK }));
+    expect(result.update).not.toHaveProperty("costPlusCostBasis");
   });
 });

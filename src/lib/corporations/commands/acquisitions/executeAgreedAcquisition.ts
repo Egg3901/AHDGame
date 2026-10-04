@@ -23,13 +23,18 @@ import { cleanupShareMarketActivityForCorporations } from "@/lib/corporations/cl
 import { stampSubjectDeleted } from "@/lib/financialTxLog/stampDeleted";
 import { allocateShareholderPool } from "@/lib/bonds/corporateBondDefault";
 import { moveSectorToCorp } from "@/lib/corporations/moveSector";
+import { hasProtectedConstructionProperty } from "@/lib/corporations/securedConstructionProperty";
 import { recordAudit } from "@/lib/audit/recordAudit";
 import { assertMergerClearance } from "@/lib/corporations/mergerReview/gate";
 import { attachMergerRemedy } from "@/lib/corporations/mergerReview/lifecycle";
 import type { AcquisitionSettlement } from "@/lib/db/types/acquisitionSettlement";
 import type { MergerReview } from "@/lib/db/types/mergerReview";
 import { MERGER_REVIEWS } from "@/lib/corporations/mergerReview/gate";
-import { bankTransferConflict, transferBankCharterToAcquirer } from "@/lib/banking/transferCharter";
+import {
+  bankTransferConflict,
+  hasFundedSovereignEscrow,
+  transferBankCharterToAcquirer,
+} from "@/lib/banking/transferCharter";
 import { withCorpLock } from "@/lib/corporations/corpMoneyLock";
 import { buildAcquisitionPayoutPlan } from "./rules/acquisitionPayoutPlan";
 import {
@@ -155,7 +160,13 @@ async function runAgreedAcquisition(
   // settlement for this offer owns the run. (Identity compare mirrors
   // #2016's; the protocol itself is not duplicated here.)
   const bankConflict = bankTransferConflict(target, acquirer);
-  if (bankConflict && !(await isOwnInterruptedCharterClaim(db, offer, target, acquirer))) {
+  if (
+    bankConflict &&
+    (target.bankPropForexFee ||
+      target.bankUnderwritingFunding ||
+      hasFundedSovereignEscrow(target) ||
+      !(await isOwnInterruptedCharterClaim(db, offer, target, acquirer)))
+  ) {
     return { ok: false, error: bankConflict, status: 400 };
   }
 
@@ -340,6 +351,15 @@ async function runAgreedAcquisition(
     plan,
   });
 
+  if (targetSectors.some(hasProtectedConstructionProperty)) {
+    if (fresh) await releaseAcquisitionTarget(db, target._id, offer._id);
+    return {
+      ok: false,
+      error: "Resolve secured construction before completing this acquisition",
+      status: 409,
+    };
+  }
+
   // A pinned plan from an earlier attempt rules: on replay the recorded legs
   // are the only amounts ever applied, never the recomputed plan above. A
   // compensated record (withdraw/reject raced the retry) closes the run here.
@@ -451,6 +471,11 @@ async function runAgreedAcquisition(
     const sectorsRemain = await db
       .collection<CorporateSector>("corporateSectors")
       .countDocuments({ corporationId: target._id });
+    if (sectorsRemain > 0) {
+      throw new Error(
+        `Acquisition cannot delete target while ${sectorsRemain} sector property row(s) remain`
+      );
+    }
     const sectorsMovedTotal = settlement.sectorTotal - sectorsRemain;
     await markAcquisitionProgress(db, offer._id, { sectorsMoved: sectorsMovedTotal });
     settlement.sectorsMoved = sectorsMovedTotal;

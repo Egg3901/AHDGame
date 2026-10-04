@@ -26,10 +26,13 @@ import { sectorDemandGapUnits } from "@/lib/market/sectorDemandGap";
 import { commodityDemandGap, isStateScopedCommodity } from "@/lib/market/commodityMarketScope";
 import { latentTopUpForCountry, latentTopUpForState } from "@/lib/market/latentShortageSignal";
 import { bookFor, loadReachableBooks } from "@/lib/trade/queries/loadReachableBooks";
-import { getStrategy } from "@/lib/constants/sectorStrategies";
+import {
+  getOperatingSectorType,
+  getStrategyForOperatingModel,
+} from "@/lib/constants/sectorStrategies";
 import { CAPACITY_BUILD_TURNS, computeBuildCost } from "@/lib/constants/capacityEconomy";
 import { foundingStarterUnits, sectorEntryFeeAnchor } from "@/lib/corporations/foundingPlant";
-import { resolveCountryPrimeRate } from "@/lib/corporations/sectorGrowthCost";
+import { resolveCountryPrimeRates } from "@/lib/corporations/sectorGrowthCost";
 import { getSectorTechEffects } from "@/lib/constants/techTree";
 import { isSectorTechTreesEnabled } from "@/lib/corporations/techTree/featureFlag";
 import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
@@ -109,6 +112,10 @@ export async function GET(request: Request, { params }: RouteParams) {
     const resolved = await resolveCorporation(db, id);
     if (!resolved.ok) return resolved.response;
     const { corporation } = resolved;
+    const industryModel =
+      sectorType === corporation.type ? (corporation.industryModel ?? null) : null;
+    const marketFilter = { sectorType, industryModel };
+    const operatingType = getOperatingSectorType(sectorType, industryModel) as CorporationType;
 
     const ceoCheck = requireCeo(corporation, auth.user.userId);
     if (ceoCheck) return ceoCheck;
@@ -162,7 +169,8 @@ export async function GET(request: Request, { params }: RouteParams) {
     // a market running a real shortage read as a glut and every state on Earth
     // quoted "room for 0". A market a corporation cannot sell into must not
     // suppress the quote for one it can.
-    const supplyMix = getStrategy(sectorType, "standard").supply ?? {};
+    const supplyMix =
+      getStrategyForOperatingModel(sectorType, "standard", industryModel).supply ?? {};
     const [reachableBooks, priceDocs] = plantsMode
       ? await Promise.all([
           loadReachableBooks(db),
@@ -252,7 +260,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       const competitorSectors = await db
         .collection<CorporateSector>("corporateSectors")
         .find({
-          sectorType,
+          ...marketFilter,
           corporationId: { $ne: corporation._id },
         })
         .project<{ stateId: string }>({ stateId: 1 })
@@ -266,7 +274,7 @@ export async function GET(request: Request, { params }: RouteParams) {
         // A plants market can be a valid greenfield build even before it earns
         // revenue. Filtering those rows out made zero-revenue markets vanish
         // from the only UI that can found their first plant.
-        .find(plantsMode ? { sectorType } : { sectorType, revenue: { $gt: 0 } })
+        .find(plantsMode ? marketFilter : { ...marketFilter, revenue: { $gt: 0 } })
         .project<{ stateId: string }>({ stateId: 1 })
         .toArray();
 
@@ -290,12 +298,12 @@ export async function GET(request: Request, { params }: RouteParams) {
         .toArray(),
       db
         .collection<CorporateSector>("corporateSectors")
-        .find({ corporationId: corporation._id, sectorType, stateId: { $in: stateIds } })
+        .find({ corporationId: corporation._id, ...marketFilter, stateId: { $in: stateIds } })
         .project<{ _id: string; stateId: string }>({ _id: 1, stateId: 1 })
         .toArray(),
       db
         .collection<CorporateSector>("corporateSectors")
-        .find({ sectorType, stateId: { $in: stateIds } })
+        .find({ ...marketFilter, stateId: { $in: stateIds } })
         .project<{ corporationId: string; stateId: string; revenue: number }>({
           corporationId: 1,
           stateId: 1,
@@ -304,7 +312,7 @@ export async function GET(request: Request, { params }: RouteParams) {
         .toArray(),
       db
         .collection<UnownedSector>("unownedSectors")
-        .find({ sectorType, stateId: { $in: stateIds } })
+        .find({ ...marketFilter, stateId: { $in: stateIds } })
         .toArray(),
     ]);
 
@@ -422,10 +430,12 @@ export async function GET(request: Request, { params }: RouteParams) {
         ? getSectorTechEffects(
             {
               type: corporation.type,
+              industryModel: corporation.industryModel,
               unlockedTechNodeIds: corporation.unlockedTechNodeIds,
               techDecadeLane: corporation.techDecadeLane,
             },
-            corporation.type
+            operatingType,
+            industryModel
           )
         : null;
       // Same era-scaled fee + one-facility starter expandSector charges.
@@ -433,8 +443,8 @@ export async function GET(request: Request, { params }: RouteParams) {
       // Priced for the SELECTED sector type, which is what the player is about
       // to found — not `corporation.type`. Off-primary founding is exactly the
       // case where quoting the wrong type's build turns misleads most.
-      starterUnits = foundingStarterUnits(sectorType);
-      foundingBuildTurns = Math.max(1, CAPACITY_BUILD_TURNS(sectorType, true));
+      starterUnits = foundingStarterUnits(sectorType, industryModel);
+      foundingBuildTurns = Math.max(1, CAPACITY_BUILD_TURNS(operatingType, true));
 
       const ceoChar = corporation.ceoId
         ? await db
@@ -447,23 +457,19 @@ export async function GET(request: Request, { params }: RouteParams) {
       // the build price, so a single blended quote would be wrong in most
       // states. One lookup per unique country, one bulk lookup for the states.
       const uniqueCountryIds = [...new Set(states.map((s) => s.countryId))];
-      const [nationalShareByCountry, primeRateEntries, costOfLivingDocs] = await Promise.all([
+      const [nationalShareByCountry, primeRateByCountry, costOfLivingDocs] = await Promise.all([
         fetchCorporationNationalSectorSharesByCountry(db, {
           corporationId: corporation._id,
           sectorType,
+          industryModel,
           countryIds: uniqueCountryIds as CountryId[],
         }),
-        Promise.all(
-          uniqueCountryIds.map(
-            async (c) => [c, await resolveCountryPrimeRate(db, c)] as [string, number]
-          )
-        ),
+        resolveCountryPrimeRates(db, uniqueCountryIds as CountryId[]),
         db
           .collection<StateMetrics>("macroMetrics")
           .find({ _id: { $in: stateIds } }, { projection: { "economic.costOfLiving": 1 } })
           .toArray(),
       ]);
-      const primeRateByCountry = new Map<string, number>(primeRateEntries);
       const costOfLivingByState = new Map(
         costOfLivingDocs.map((d) => [d._id, d.economic?.costOfLiving?.value ?? null])
       );
@@ -474,6 +480,7 @@ export async function GET(request: Request, { params }: RouteParams) {
           Math.round(
             computeBuildCost({
               sectorType,
+              industryModel,
               units: starterUnits,
               // A suggestion for a sector that does not exist yet, so there is
               // no chosen production method: quote the sector-type default,
@@ -531,7 +538,7 @@ export async function GET(request: Request, { params }: RouteParams) {
         const poolHeadroomUnits = plantsMode
           ? unownedDoc?.headroomUnits != null && Number.isFinite(unownedDoc.headroomUnits)
             ? unownedDoc.headroomUnits
-            : computeUnownedHeadroomUnits(sectorType, unownedRevenue, eraUnitScale)
+            : computeUnownedHeadroomUnits(sectorType, unownedRevenue, eraUnitScale, industryModel)
           : null;
         // Cap the pool share at what buyers in THIS market can actually absorb —
         // in a glut the pool reads huge while extra output simply goes unsold.

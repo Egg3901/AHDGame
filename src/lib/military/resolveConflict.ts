@@ -5,6 +5,7 @@ import { getConflictsCollection } from "@/lib/db/collections/conflicts";
 import { standDownCountry } from "./leaveConflict";
 import { hostEntitiesOf } from "./hostEntities";
 import { recordTruce } from "./truce";
+import { captureServerGameEvent } from "@/lib/analytics/serverPosthog";
 
 /** Every country that fought here, both rosters, deduped. */
 function belligerents(c: ConflictDoc): CountryId[] {
@@ -22,7 +23,12 @@ export async function resolveConflict(
   db: Db,
   conflict: ConflictDoc,
   winner: "A" | "B" | "stalemate",
-  currentTurn: number
+  currentTurn: number,
+  analytics?: {
+    endingType?: "peace" | "victory" | "expiry";
+    attackerNation?: string;
+    defenderNation?: string;
+  }
 ): Promise<void> {
   const hosts = hostEntitiesOf(conflict).join(" and ");
   // Every host, not just the map anchor: a proxy war can be fought over two
@@ -42,6 +48,24 @@ export async function resolveConflict(
       },
     }
   );
+
+  const attackerNation = analytics?.attackerNation ?? conflict.sideA.countries[0];
+  const defenderNation = analytics?.defenderNation ?? conflict.sideB.countries[0];
+  await captureServerGameEvent({
+    db,
+    event: "war_ended",
+    distinctId: "system:conflict-lifecycle",
+    insertId: `war-ended:${conflict._id.toString()}`,
+    nationId: attackerNation,
+    turn: currentTurn,
+    properties: {
+      attacker_nation: attackerNation ?? "unknown",
+      defender_nation: defenderNation ?? "unknown",
+      outcome:
+        analytics?.endingType ??
+        (conflict.settlement || winner === "stalemate" ? "peace" : "victory"),
+    },
+  });
 
   for (const countryId of belligerents(conflict)) {
     await standDownCountry(db, conflict, countryId);

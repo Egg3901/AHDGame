@@ -122,7 +122,7 @@ export function OpenShareOrdersPanel() {
     <div className="rounded-xl border border-card-border bg-card shadow-sm overflow-hidden">
       <div className="px-5 py-4 border-b border-card-border flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">My Orders</h2>
+          <h2 className="text-sm font-bold text-foreground">My orders</h2>
           <p className="text-xs text-muted mt-0.5">
             Open buy and sell share orders across every corporation
           </p>

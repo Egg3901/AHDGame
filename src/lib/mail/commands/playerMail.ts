@@ -3,7 +3,7 @@ import type { Character, PlayerMail, PlayerMailReport, User } from "@/lib/db/typ
 import { ObjectId, type Db } from "mongodb";
 import { createNotifications } from "@/lib/notifications";
 
-type MailSender = Pick<Character, "_id" | "name" | "sequentialId">;
+type MailSender = Pick<Character, "_id" | "name" | "sequentialId" | "userId">;
 
 export async function sendPlayerMail(
   db: Db,
@@ -23,7 +23,9 @@ export async function sendPlayerMail(
   }
 
   const toUser = await db.collection<User>("users").findOne({ _id: toChar.userId });
-  if (toUser?.isBanned) {
+  // Same message for banned and blocking recipients: a blocked sender is not
+  // told they were blocked.
+  if (toUser?.isBanned || toUser?.blockedUserIds?.some((id) => id.equals(sender.userId))) {
     throw badRequest("Cannot send mail to this player");
   }
 
@@ -138,6 +140,18 @@ export async function reportReceivedMail(db: Db, userId: string, mailId: string)
 
   const report: Omit<PlayerMailReport, "_id"> = {
     mailId: mailOid,
+    mailSnapshot: {
+      fromCharacterId: mail.fromCharacterId,
+      fromCharacterName: mail.fromCharacterName,
+      fromCharacterSequentialId: mail.fromCharacterSequentialId,
+      toUserId: mail.toUserId,
+      toCharacterId: mail.toCharacterId,
+      toCharacterName: mail.toCharacterName,
+      toCharacterSequentialId: mail.toCharacterSequentialId,
+      subject: mail.subject,
+      body: mail.body,
+      createdAt: mail.createdAt,
+    },
     reportedByUserId: userOid,
     status: "pending",
     createdAt: new Date(),

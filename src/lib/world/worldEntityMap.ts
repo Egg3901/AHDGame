@@ -1,6 +1,7 @@
 import { WORLD_COUNTRY_ISO_TO_ID } from "@/lib/worldCountryRegistry";
 import {
   getWorldEntityPresetManifest,
+  type WorldEntityManifestEntry,
   type WorldEntityStatus,
   type WorldSimulationTier,
 } from "./worldEntityManifest";
@@ -45,8 +46,11 @@ export interface WorldEntityMapSnapshot {
  *
  * Tier-3 rows may declare `mapFeatureIds` as modern proxies (#3728).
  */
-export function getWorldEntityMapSnapshot(presetId: string): WorldEntityMapSnapshot {
-  const manifest = getWorldEntityPresetManifest(presetId);
+export function getWorldEntityMapSnapshot(
+  presetId: string,
+  runtimeEntries?: readonly WorldEntityManifestEntry[]
+): WorldEntityMapSnapshot {
+  const entries = runtimeEntries ?? getWorldEntityPresetManifest(presetId).entries;
   const featureIdsByCountry = new Map<string, string[]>();
   for (const [featureId, countryId] of Object.entries(WORLD_COUNTRY_ISO_TO_ID)) {
     const featureIds = featureIdsByCountry.get(countryId) ?? [];
@@ -58,7 +62,7 @@ export function getWorldEntityMapSnapshot(presetId: string): WorldEntityMapSnaps
   const byEntityId: Record<string, WorldEntityMapItem> = {};
   const unmappedEntityIds: string[] = [];
 
-  for (const entry of manifest.entries) {
+  for (const entry of entries) {
     const fromCountry = entry.countryId ? (featureIdsByCountry.get(entry.countryId) ?? []) : [];
     const featureIds =
       entry.mapFeatureIds && entry.mapFeatureIds.length > 0 ? entry.mapFeatureIds : fromCountry;
@@ -78,10 +82,13 @@ export function getWorldEntityMapSnapshot(presetId: string): WorldEntityMapSnaps
       continue;
     }
     for (const featureId of featureIds) {
-      // First writer wins when multiple entities claim the same modern proxy
-      // (e.g. North Vietnam + modern Vietnam feature). Later claimants stay
-      // classified in the manifest and appear in diagnostics if needed.
-      if (!byFeatureId[featureId]) byFeatureId[featureId] = item;
+      // A settled sovereign replaces a dependent or emergent grouping on its
+      // modern feature. Other overlaps retain first-writer ownership.
+      if (
+        !byFeatureId[featureId] ||
+        (byFeatureId[featureId].status !== "sovereign" && item.status === "sovereign")
+      )
+        byFeatureId[featureId] = item;
     }
   }
 
@@ -94,3 +101,29 @@ export function getWorldEntityMapSnapshot(presetId: string): WorldEntityMapSnaps
 }
 
 export { backgroundMacroFeatureIds } from "./worldEntityMapInspection";
+
+const backgroundMacroByPreset = new Map<string, readonly string[]>();
+
+/**
+ * Map features a preset simulates as background macro aggregates, read from
+ * the manifest alone: no seeded summaries needed, so the landing page can ask
+ * before a world exists. These are the roughly 150 nations the 1991 preset
+ * runs as macro economies, which the landing globe paints apart from land
+ * nothing simulates. An unknown preset has none rather than borrowing another
+ * era's roster.
+ */
+export function backgroundMacroFeatureIdsForPreset(presetId: string): readonly string[] {
+  const cached = backgroundMacroByPreset.get(presetId);
+  if (cached) return cached;
+  let ids: readonly string[] = [];
+  try {
+    ids = Object.entries(getWorldEntityMapSnapshot(presetId).byFeatureId)
+      .filter(([, item]) => item.simulationTier === "background-macro")
+      .map(([featureId]) => featureId)
+      .sort();
+  } catch {
+    ids = [];
+  }
+  backgroundMacroByPreset.set(presetId, ids);
+  return ids;
+}

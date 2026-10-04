@@ -81,7 +81,7 @@ export function PolicyMasthead({
           <div className="flex gap-5 text-right">
             <div>
               <div
-                className="text-[9px] font-semibold uppercase tracking-[0.14em]"
+                className="text-body-sm font-semibold"
                 style={{ color: hexToRgba(identity.accentSoft, 0.6) }}
               >
                 Economic
@@ -101,7 +101,7 @@ export function PolicyMasthead({
             </div>
             <div>
               <div
-                className="text-[9px] font-semibold uppercase tracking-[0.14em]"
+                className="text-body-sm font-semibold"
                 style={{ color: hexToRgba(identity.accentSoft, 0.6) }}
               >
                 Social

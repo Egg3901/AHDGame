@@ -34,7 +34,7 @@ const LOCAL_CURRENCY_1953: CountryId[] = [
 const USD_ANCHORED_1953: CountryId[] = ["IT", "JP", "CN", "NG"];
 
 /** Soviet union republics: GDP authored in Soviet rubles, so they take RU's basis. */
-const SOVIET_RUBLE_1953: CountryId[] = ["BLR", "BAL"];
+const SOVIET_RUBLE_1953: CountryId[] = ["UKR", "BLR", "BAL"];
 
 /**
  * Warsaw-Pact / non-aligned satellites (refs #3778 §1). Budget-only economies —
@@ -208,19 +208,33 @@ describe("1953 era usdExchangeRate overrides", () => {
         ).toBe(COUNTRY_CONFIGS[countryId].usdExchangeRate);
       }
     }
-    // Only 1953 and 1991 carry usdExchangeRate overrides at all.
-    const ANCHORED_ERAS = new Set(["1953-default", "1991-default"]);
+    // The 2027 seed now carries its own authored currency anchors as well.
+    const ANCHORED_ERAS = new Set(["1953-default", "1991-default", "2027-default"]);
     for (const [preset, table] of Object.entries(ERA_COUNTRY_CONFIG_OVERRIDES)) {
       if (ANCHORED_ERAS.has(preset)) continue;
       for (const override of Object.values(table)) {
         expect(override?.usdExchangeRate).toBeUndefined();
       }
     }
-    // And 1991 authors exactly the five, so a sweep cannot quietly add more.
+    // The 1991 list includes the six successor bundles stored in original local currencies.
     const anchored1991 = Object.entries(ERA_COUNTRY_CONFIG_OVERRIDES["1991-default"] ?? {})
       .filter(([, override]) => override?.usdExchangeRate !== undefined)
       .map(([countryId]) => countryId)
       .sort();
-    expect(anchored1991).toEqual(["CN", "DE", "IE", "JP", "UK"]);
+    expect(anchored1991).toEqual([
+      "BG",
+      "CN",
+      "CS",
+      "DE",
+      "HU",
+      "IE",
+      "JP",
+      "NG",
+      "PL",
+      "RO",
+      "RU",
+      "UK",
+      "YU",
+    ]);
   });
 });

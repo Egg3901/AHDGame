@@ -48,6 +48,7 @@ import {
   applyProtectedProjection,
   bindProjectionTargets,
   invalidProjectionTarget,
+  isUpdateProjection,
 } from "./projectionSettlement";
 export { reviveObjectIds } from "./settlementEncoding";
 
@@ -108,7 +109,10 @@ interface JournalExtension {
   error?: string;
   legs?: { applied: boolean }[];
   transitionKind?: string;
+  /** Original economic quote, frozen atomically with the cash and projection claim. */
+  event?: BankingTransition["event"];
   currency?: string;
+  retryCreditLegOnGuardFailure?: boolean;
   projections?: JournalProjectionRecord[];
   projectionsCompletedAt?: Date;
 }
@@ -126,6 +130,7 @@ function toMoneyLeg(leg: TransitionLeg): MoneyMoveLeg {
   return {
     kind: leg.kind,
     amount: leg.amount,
+    ...(leg.valuation ? { valuation: leg.valuation } : {}),
     ...(leg.collection ? { collection: leg.collection } : {}),
     ...(leg.filter ? { filter: reviveObjectIds(leg.filter) } : {}),
     ...(leg.path ? { path: leg.path } : {}),
@@ -157,7 +162,7 @@ export async function applyProjection(
       return { ok: false, error: error instanceof Error ? error.message : String(error) };
     }
   }
-  if (projection.update)
+  if (isUpdateProjection(projection))
     return { ok: false, error: "Update projections require durable journal publication" };
   return { ok: false, error: `projection "${projection.note}" has neither insert nor update` };
 }
@@ -192,8 +197,8 @@ export async function settleTransition(
   }
   for (const leg of transition.legs) {
     if (
-      (leg.kind === "debit" || leg.kind === "credit") &&
-      (!leg.collection || !leg.path || !leg.filter)
+      (leg.kind === "debit" || leg.kind === "credit" || leg.kind === "asset") &&
+      (!leg.collection || (leg.kind !== "asset" && !leg.path) || !leg.filter)
     ) {
       return { ...result, status: "rejected", error: `leg "${leg.note}" is missing a target` };
     }
@@ -247,7 +252,9 @@ export async function settleTransition(
   const extension: JournalExtension = {
     transitionKind: transition.kind,
     currency: transition.currency,
+    ...(transition.retryCreditLegOnGuardFailure ? { retryCreditLegOnGuardFailure: true } : {}),
     projections: records,
+    event: transition.event,
   };
 
   const move = await applyMoneyMove(db, {
@@ -429,13 +436,13 @@ async function finishProjections(
   for (let i = 0; i < records.length; i += 1) {
     const record = records[i];
     if (record?.appliedAt || record?.applied) {
-      if (record.projection.update)
+      if (isUpdateProjection(record.projection))
         await applyProtectedProjection(db, transition.key, i, record.projection);
       result.appliedProjections.push(i);
       continue;
     }
     const projection = record.projection;
-    if (projection.update && !record.receiptProtocol && !record.claimedAt) {
+    if (isUpdateProjection(projection) && !record.receiptProtocol && !record.claimedAt) {
       await journal.updateOne(
         {
           _id: transition.key,
@@ -467,7 +474,7 @@ async function finishProjections(
       continue;
     }
 
-    const outcome = projection.update
+    const outcome = isUpdateProjection(projection)
       ? await applyProtectedProjection(db, transition.key, i, projection)
       : await applyProjection(db, projection, projectionStamp(transition.key, i));
     if (!outcome.ok) {
@@ -485,7 +492,7 @@ async function finishProjections(
           $set: {
             status: "partial",
             error: outcome.error,
-            ...(!projection.update ? { [`projections.${i}.claimedAt`]: null } : {}),
+            ...(!isUpdateProjection(projection) ? { [`projections.${i}.claimedAt`]: null } : {}),
           },
         }
       );
@@ -494,7 +501,7 @@ async function finishProjections(
     result.appliedProjections.push(i);
     if (!("newlyApplied" in outcome) || outcome.newlyApplied)
       result.newlyAppliedProjections.push(i);
-    if (projection.update) continue;
+    if (isUpdateProjection(projection)) continue;
     await journal.updateOne(
       { _id: transition.key },
       {

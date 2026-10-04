@@ -57,19 +57,25 @@ function makeData(partial?: Partial<NationalAxesData>): NationalAxesData {
 
 describe("NationalIdeologyBand", () => {
   it("renders both axes with bucket labels, provenance, and the movers feed", () => {
-    render(<NationalIdeologyBand countryId="US" data={makeData()} loading={false} />);
-    expect(screen.getByText("National Ideology")).toBeTruthy();
-    expect(screen.getByText("Economic Axis")).toBeTruthy();
-    expect(screen.getByText("Social Axis")).toBeTruthy();
+    const { container } = render(
+      <NationalIdeologyBand countryId="US" data={makeData()} loading={false} />
+    );
+    expect(screen.getByText("National ideology")).toBeTruthy();
+    expect(screen.getByText("Economic axis")).toBeTruthy();
+    expect(screen.getByText("Social axis")).toBeTruthy();
     expect(screen.getByText(/23 implemented national laws/)).toBeTruthy();
     expect(screen.getByText("Recently moved the needle")).toBeTruthy();
     expect(screen.getByText("Public Health Insurance Expansion")).toBeTruthy();
-    expect(screen.getByText(/avg -1\.1 → -1\.2/)).toBeTruthy();
+    expect(screen.getByText(/Average -1\.1 → -1\.2/)).toBeTruthy();
+    expect(screen.getByText("Drifting left")).toBeTruthy();
+    expect(screen.getByText("Drifting liberal")).toBeTruthy();
+    // Plain copy: no dashes standing in for punctuation.
+    expect(container.textContent).not.toMatch(/[\u2013\u2014]/);
   });
 
   it("shows 'Not yet determined' in the E1 field before the model is classified (404)", async () => {
     render(<NationalIdeologyBand countryId="US" data={makeData()} loading={false} />);
-    expect(screen.getByText("Economic Model")).toBeTruthy();
+    expect(screen.getByText("Economic model")).toBeTruthy();
     await waitFor(() => expect(screen.getByText("Not yet determined")).toBeTruthy());
   });
 
@@ -137,12 +143,12 @@ describe("NationalIdeologyBand", () => {
     expect(
       screen.getByText(/No implemented national laws carry ideology positions yet/)
     ).toBeTruthy();
-    expect(screen.getByText("Economic Model")).toBeTruthy(); // E1 field still renders
+    expect(screen.getByText("Economic model")).toBeTruthy(); // E1 field still renders
   });
 
   it("renders a skeleton while loading", () => {
     const { container } = render(<NationalIdeologyBand countryId="US" data={null} loading />);
-    expect(screen.queryByText("Economic Axis")).toBeNull();
+    expect(screen.queryByText("Economic axis")).toBeNull();
     expect(container.querySelector("[aria-hidden]")).toBeTruthy();
   });
 

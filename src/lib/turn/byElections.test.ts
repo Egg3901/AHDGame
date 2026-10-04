@@ -62,7 +62,7 @@ const TURN = 1000;
 describe("by-election watcher — US + RU", () => {
   let db: MockDb;
   let officialRows: OfficialRow[];
-  let liveGovernorRaces: { countryId?: string; state: string }[];
+  let liveGovernorRaces: { countryId?: string; state: string; endTurn?: number }[];
   let priorSpecials: Partial<Election>[];
 
   beforeEach(async () => {
@@ -153,7 +153,25 @@ describe("by-election watcher — US + RU", () => {
     expect(db.collectionMocks.elections!.insertOne).not.toHaveBeenCalled();
   });
 
-  it("suppresses when a regular governor race is live for that region", async () => {
+  it("suppresses when the region's live regular race resolves before a special could", async () => {
+    officialRows.push({
+      countryId: "RU",
+      officeType: "governor",
+      state: "CEN",
+      characterId: null,
+      nppId: null,
+    });
+    liveGovernorRaces.push({
+      countryId: "RU",
+      state: "CEN",
+      endTurn: TURN + SPECIAL_GOVERNOR_FILING_TURNS + SPECIAL_GOVERNOR_GENERAL_TURNS,
+    });
+
+    const { spawned } = await processByElectionWatcher(db as unknown as Db, TURN, NOW);
+    expect(spawned).toBe(0);
+  });
+
+  it("suppresses when a live regular race has no schedule on record", async () => {
     officialRows.push({
       countryId: "RU",
       officeType: "governor",
@@ -165,6 +183,25 @@ describe("by-election watcher — US + RU", () => {
 
     const { spawned } = await processByElectionWatcher(db as unknown as Db, TURN, NOW);
     expect(spawned).toBe(0);
+  });
+
+  it("spawns while the region's live regular race is still far off", async () => {
+    // Regular races are `active` for the whole term; a seat vacated early in
+    // it must not sit empty until that race resolves.
+    officialRows.push({
+      countryId: "RU",
+      officeType: "governor",
+      state: "CEN",
+      characterId: null,
+      nppId: null,
+    });
+    liveGovernorRaces.push({ countryId: "RU", state: "CEN", endTurn: TURN + 150 });
+
+    const { spawned } = await processByElectionWatcher(db as unknown as Db, TURN, NOW);
+    expect(spawned).toBe(1);
+    const doc = db.collectionMocks.elections!.insertOne.mock.calls[0]![0] as Election;
+    expect(doc).toMatchObject({ countryId: "RU", state: "CEN" });
+    expect(doc.endTurn as number).toBeLessThan(TURN + 150);
   });
 
   it("suppresses within the retry cooldown after a resolved special", async () => {

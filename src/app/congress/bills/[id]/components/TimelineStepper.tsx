@@ -139,7 +139,7 @@ export function TimelineStepper({ bill }: { bill: BillDetail }) {
                   isDone
                     ? "border-emerald-500 bg-emerald-500/20 text-emerald-400"
                     : isCurrent
-                      ? "border-yellow-400 bg-yellow-400/10 text-yellow-400 animate-pulse"
+                      ? "border-yellow-400 bg-yellow-400/10 text-yellow-400"
                       : "border-card-border bg-card text-muted/40"
                 }`}
               >
@@ -224,7 +224,7 @@ export function TimelineStepper({ bill }: { bill: BillDetail }) {
                       isPast
                         ? "border-amber-500 bg-amber-500/20 text-amber-400"
                         : isActive
-                          ? "border-amber-400 bg-amber-400/10 text-amber-400 animate-pulse"
+                          ? "border-amber-400 bg-amber-400/10 text-amber-400"
                           : "border-card-border bg-card text-muted/40"
                     }`}
                   >
@@ -321,7 +321,7 @@ export function TimelineStepper({ bill }: { bill: BillDetail }) {
                       isPast
                         ? "border-amber-500 bg-amber-500/20 text-amber-400"
                         : isActive
-                          ? "border-amber-400 bg-amber-400/10 text-amber-400 animate-pulse"
+                          ? "border-amber-400 bg-amber-400/10 text-amber-400"
                           : "border-card-border bg-card text-muted/40"
                     }`}
                   >

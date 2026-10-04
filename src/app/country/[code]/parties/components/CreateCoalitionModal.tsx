@@ -31,12 +31,12 @@ export function CreateCoalitionModal({
   const canSubmit = canCreate && formName.trim().length >= 3 && formAbbrev.trim().length >= 2;
 
   return (
-    <Modal open title="Create a Coalition" onClose={onClose}>
+    <Modal open title="Create a coalition" onClose={onClose}>
       <div className="mb-4 rounded-lg bg-warning/10 border border-warning/30 p-3 text-sm">
         <p className="font-medium text-warning mb-1">Requirements</p>
         <ul className="text-muted space-y-0.5">
-          <li>• 25 Actions (You have: {userActions})</li>
-          <li>• You must be a National Party Chair</li>
+          <li>• 25 actions (you have {userActions})</li>
+          <li>• You must be a national party chair</li>
         </ul>
         {!canCreate && (
           <p className="mt-2 text-error font-medium">
@@ -48,7 +48,7 @@ export function CreateCoalitionModal({
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <Label htmlFor="coalition-name">Coalition Name</Label>
+            <Label htmlFor="coalition-name">Coalition name</Label>
             <Input
               id="coalition-name"
               type="text"
@@ -78,7 +78,7 @@ export function CreateCoalitionModal({
         </div>
 
         <div>
-          <Label htmlFor="coalition-color">Coalition Color</Label>
+          <Label htmlFor="coalition-color">Coalition color</Label>
           <div className="flex items-center gap-3">
             <input
               type="color"
@@ -116,7 +116,7 @@ export function CreateCoalitionModal({
             disabled={!canSubmit}
             className="px-6 py-2 text-sm"
           >
-            Create Coalition (25 Actions)
+            Create coalition (25 actions)
           </Button>
         </div>
       </form>

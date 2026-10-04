@@ -21,21 +21,29 @@ describe("aggregateExchangeTotals", () => {
   });
 
   it("weights price change by anchored market cap", () => {
-    // 90% of anchored cap moved +10, 10% moved 0 => +9.
+    // Starting weights must be reconstructed before aggregating returns.
     const t = aggregateExchangeTotals([
       { marketCapAnchor: 900, priceChange24h: 10 },
       { marketCapAnchor: 100, priceChange24h: 0 },
     ]);
-    expect(t.weightedChange24h).toBe(9);
+    expect(t.weightedChange24h).toBeCloseTo((1000 / (900 / 1.1 + 100) - 1) * 100);
   });
 
   it("weights each timeframe independently", () => {
     const t = aggregateExchangeTotals([
       { marketCapAnchor: 100, priceChange1h: 1, priceChange24h: 2, priceChange48h: 3 },
     ]);
-    expect(t.weightedChange1h).toBe(1);
-    expect(t.weightedChange24h).toBe(2);
-    expect(t.weightedChange48h).toBe(3);
+    expect(t.weightedChange1h).toBeCloseTo(1);
+    expect(t.weightedChange24h).toBeCloseTo(2);
+    expect(t.weightedChange48h).toBeCloseTo(3);
+  });
+
+  it("does not magnify a tiny recovered listing into a market-wide spike", () => {
+    const result = aggregateExchangeTotals([
+      { marketCapAnchor: 1_000_000, priceChange24h: 0 },
+      { marketCapAnchor: 1000, priceChange24h: 1_000_000 },
+    ]);
+    expect(result.weightedChange24h).toBeLessThan(0.1);
   });
 
   it("sums revenue and income on the anchor basis too", () => {
@@ -69,6 +77,6 @@ describe("aggregateExchangeTotals", () => {
       { marketCapAnchor: Number.NaN, priceChange24h: 999 },
     ]);
     expect(t.marketCap).toBe(100);
-    expect(t.weightedChange24h).toBe(4);
+    expect(t.weightedChange24h).toBeCloseTo(4);
   });
 });

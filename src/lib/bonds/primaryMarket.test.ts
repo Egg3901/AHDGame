@@ -161,7 +161,11 @@ describe("placeUnsoldBondUnits", () => {
 
     expect(result.unitsPlaced).toBe(14);
     expect(db.collectionMocks.bonds.updateOne).toHaveBeenCalledWith(
-      { _id: bond._id, unsoldUnits: { $gte: 14 } },
+      {
+        _id: bond._id,
+        unsoldUnits: { $gte: 14 },
+        sovereignMaturityClaim: { $exists: false },
+      },
       expect.objectContaining({
         $inc: { unsoldUnits: -14, publicFloat: 14, totalIssued: 14_000 },
       })

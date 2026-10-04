@@ -1,8 +1,7 @@
 "use client";
 
-import { Badge, Tooltip } from "@/components/ui";
+import { Tooltip } from "@/components/ui";
 import { useTranslations } from "next-intl";
-import { WarningBandBadge } from "@/components/banking/WarningBandBadge";
 import { formatBankMoney } from "@/components/banking/formatBankMoney";
 import {
   assessCapital,
@@ -11,7 +10,6 @@ import {
 } from "@/lib/banking/capitalAdequacy";
 import type { ConsolePayload } from "../types";
 import { charterLabel } from "../lib/helpers";
-import { Eyebrow } from "../components/BankSection";
 
 /** English ordinal for the panic-turn copy ("3rd", not "3th"). */
 export function panicTurnOrdinal(turns: number): string {
@@ -76,11 +74,25 @@ function bandMeaning(
   };
 }
 
+const BAND_TEXT: Record<"green" | "amber" | "red", { label: string; tone: string }> = {
+  green: { label: "Stable", tone: "text-success" },
+  amber: { label: "Watch", tone: "text-warning" },
+  red: { label: "At risk", tone: "text-error" },
+};
+
+const TONE_TEXT: Record<"success" | "warning" | "error" | "default", string> = {
+  success: "text-success",
+  warning: "text-warning",
+  error: "text-error",
+  default: "text-foreground",
+};
+
 export function HealthCard({ data }: { data: ConsolePayload }) {
   const t = useTranslations("corporations.bankConsole");
   const charter = data.charter!;
   const capital = assessCapital({
     cashReserves: charter.cashReserves,
+    sovereignTreasuryMarkValue: charter.sovereignTreasuryMarkValue,
     totalLoans: charter.totalLoans,
     borrowings: borrowingsFromCharter(charter),
     propBookMarkValue: charter.propBookMarkValue,
@@ -108,35 +120,38 @@ export function HealthCard({ data }: { data: ConsolePayload }) {
   const reserveSub =
     `cash ${formatBankMoney(npcCash, charter.currency)} NPC` +
     (pointerShare > 0
-      ? ` · ${formatBankMoney(pointerShare, charter.currency)} player pointers (not cash, not in reserves)`
+      ? `, ${formatBankMoney(pointerShare, charter.currency)} player pointers (not cash, not in reserves)`
       : "");
-
-  const toneBorder =
-    meaning.tone === "error"
-      ? "border-error/40 bg-error/5"
-      : meaning.tone === "warning"
-        ? "border-warning/40 bg-warning/5"
-        : meaning.tone === "success"
-          ? "border-success/30 bg-success/5"
-          : "border-card-border bg-card";
+  const band = charter.warningBand ? BAND_TEXT[charter.warningBand] : null;
+  const confidence =
+    typeof charter.confidence === "number" && Number.isFinite(charter.confidence)
+      ? `${(charter.confidence * 100).toFixed(0)}%`
+      : null;
 
   return (
-    <section className={`space-y-4 rounded-xl border p-5 ${toneBorder}`}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="space-y-1">
-          <Eyebrow kind="monitor" />
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-semibold text-foreground">{meaning.headline}</h2>
-            <WarningBandBadge band={charter.warningBand} confidence={charter.confidence} />
-          </div>
-          <p className="max-w-2xl text-sm text-muted">{meaning.detail}</p>
+    <section className="min-w-0">
+      <div className="flex min-h-8 flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-card-border pb-1.5">
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+          <h2 className={`text-sm font-semibold ${TONE_TEXT[meaning.tone]}`}>{meaning.headline}</h2>
+          <span className="text-xs text-muted">
+            {t("eyebrow.monitor")}, {charterLabel(charter.type)} charter in {charter.currency}
+          </span>
         </div>
-        <Badge color="default" variant="subtle">
-          {charterLabel(charter.type)} · {charter.currency}
-        </Badge>
+        <span className="text-xs text-muted">
+          Confidence{" "}
+          {band ? (
+            <span className={`font-medium ${band.tone}`}>
+              {band.label}
+              {confidence ? <span className="font-mono"> {confidence}</span> : null}
+            </span>
+          ) : (
+            <span className="text-foreground">unknown</span>
+          )}
+        </span>
       </div>
+      <p className="max-w-3xl py-1.5 text-xs text-muted">{meaning.detail}</p>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <dl className="grid grid-cols-2 gap-x-6 gap-y-3 pt-1 sm:grid-cols-3">
         <HealthStat
           label="Capital"
           value={
@@ -193,7 +208,7 @@ export function HealthCard({ data }: { data: ConsolePayload }) {
                 })
           }
         />
-      </div>
+      </dl>
     </section>
   );
 }
@@ -212,22 +227,16 @@ function HealthStat({
   tone: "success" | "warning" | "error" | "default";
 }) {
   const t = useTranslations("corporations.bankConsole");
-  const valueTone =
-    tone === "error"
-      ? "text-error"
-      : tone === "warning"
-        ? "text-warning"
-        : tone === "success"
-          ? "text-success"
-          : "text-foreground";
   return (
-    <div className="rounded-lg border border-card-border bg-card px-4 py-3">
-      <div className="text-[10px] font-semibold uppercase tracking-widest text-muted">
+    <div className="min-w-0">
+      <dt className="flex items-center gap-1 text-[11px] text-muted">
         {label}
         <Tooltip content={tooltip} label={t("about", { label })} />
-      </div>
-      <div className={`mt-1 text-xl font-semibold tabular-nums ${valueTone}`}>{value}</div>
-      {sub && <div className="mt-0.5 text-xs text-muted">{sub}</div>}
+      </dt>
+      <dd className={`mt-0.5 font-mono text-sm font-medium tabular-nums ${TONE_TEXT[tone]}`}>
+        {value}
+      </dd>
+      {sub && <dd className="mt-0.5 text-[11px] text-muted">{sub}</dd>}
     </div>
   );
 }

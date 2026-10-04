@@ -58,6 +58,7 @@ import {
 } from "@/lib/sim/actorCoverage";
 import { parseSimActorMode } from "@/lib/sim/syntheticActors";
 import { completedTurnProgress } from "./simStatusMirror";
+import { preservedAutonomyLevel } from "./preparedSandbox";
 import {
   allFeatureFlagsGameStateSet,
   economicExperimentConfigSet,
@@ -84,6 +85,7 @@ interface SimRunDoc {
   lastMessage?: string;
   lastWarnings?: string[];
   health?: GameHealthSummary | null;
+  openingLedgerSnapshot?: import("./openingLedgerSnapshot").OpeningLedgerSnapshot;
   /** Pinned-source identity (#1966): requested pin plus the exact code that
    * executed this run. Proves the SHA in the experiment report. */
   source?: {
@@ -112,6 +114,13 @@ interface SimRunDoc {
   nppForeignPolicyStage?: NppForeignPolicyStage;
   /** Simulation actor mode (#1993): pure NPP autonomy vs synthetic actors. */
   actorMode?: SimActorMode;
+  /** Durable seven-family 1991-to-2027 telemetry interval for qualification runs. */
+  crisisHorizonTelemetry?: {
+    schemaVersion: number;
+    expectedFirstTurn: number;
+    expectedLastTurn: number;
+    families: number;
+  };
   /** Effective-run actor-coverage manifest evaluated from live sandbox counts. */
   actorCoverage?: ActorCoverageManifest;
   preservePlayerRail?: boolean;
@@ -488,6 +497,13 @@ async function main() {
   const { snapshotCorporationsByCountry } = await import("@/lib/turn/corporationCountrySnapshot");
 
   const db = await getDb();
+  const preservedState = preserveLiveConfig
+    ? await db.collection("gameState").findOne({ _id: "current" as never })
+    : null;
+  const requestedAutonomyLevel = AUTONOMY_LEVEL;
+  const effectiveAutonomyLevel = preserveLiveConfig
+    ? preservedAutonomyLevel(preservedState?.nppAutonomyLevel)
+    : requestedAutonomyLevel;
 
   // Executed source identity (#1966): this process's own cwd + git HEAD.
   // Best-effort SHA, but fails closed when a pin was requested and disagrees,
@@ -627,7 +643,7 @@ async function main() {
       sourceRevision: executedCommit,
       sourceWorktree: sourceWorktree ?? null,
       featureManifest: buildWorldsimFeatureManifest({
-        autonomyLevel: AUTONOMY_LEVEL,
+        autonomyLevel: effectiveAutonomyLevel,
         actorMode,
         simTurnPhaseMode: simTurnPhaseMode ?? "full",
         preIteration,
@@ -656,6 +672,14 @@ async function main() {
       }),
     });
     log(`Bootstrap seed conformance: ${bootstrapConformance.summary}`);
+    if (
+      bootstrapConformance.status === "diagnostic-error" ||
+      (bootstrapConformance.report?.summary.critical ?? 0) > 0
+    ) {
+      throw new Error(
+        `Refusing to advance a world with critical bootstrap findings: ${bootstrapConformance.summary}`
+      );
+    }
 
     // Apply the structural-market rollout tier for this run (if requested).
     // Sim-only: patches the sandbox gameConfig so every turn resolves
@@ -724,11 +748,11 @@ async function main() {
     }
 
     log(
-      `Forcing NPP autonomy (${AUTONOMY_LEVEL}, foreign policy ${foreignPolicyMode}/${foreignPolicyStage}, player rail ${preservePlayerRail ? "preserved" : "disabled"})`
+      `Forcing NPP autonomy (${effectiveAutonomyLevel}, foreign policy ${foreignPolicyMode}/${foreignPolicyStage}, player rail ${preservePlayerRail ? "preserved" : "disabled"})`
     );
     await forceFullAutonomy(
       db,
-      AUTONOMY_LEVEL,
+      effectiveAutonomyLevel,
       foreignPolicyMode,
       foreignPolicyStage,
       preservePlayerRail
@@ -743,7 +767,7 @@ async function main() {
             singleplayerConfig: {
               mode: "worldsim",
               difficulty,
-              nppAutonomyLevel: AUTONOMY_LEVEL,
+              nppAutonomyLevel: effectiveAutonomyLevel,
               featureFlags: {},
               permanentHeadOfState: false,
               configuredAt: new Date(),
@@ -833,7 +857,7 @@ async function main() {
           error: null,
           source,
           ...(corporationBootstrap ? { corporationBootstrap } : {}),
-          autonomyLevel: AUTONOMY_LEVEL,
+          autonomyLevel: effectiveAutonomyLevel,
           ...(difficulty ? { difficulty } : {}),
           bootstrapConformance: {
             status: bootstrapConformance.status,
@@ -863,7 +887,7 @@ async function main() {
           status: "running",
           error: null,
           source,
-          autonomyLevel: AUTONOMY_LEVEL,
+          autonomyLevel: effectiveAutonomyLevel,
           ...(difficulty ? { difficulty } : {}),
           updatedAt: new Date(),
         },
@@ -1005,10 +1029,10 @@ async function main() {
     }
     const converted = await applyCloneControllerPolicy(db, log, preservePlayerRail);
     if (converted > 0) log(`[clone] autonomized ${converted} human-run corporations → ceoType=npp`);
-    log(`[clone] forcing full NPP autonomy (world/country gates → ${AUTONOMY_LEVEL})`);
+    log(`[clone] forcing full NPP autonomy (world/country gates → ${effectiveAutonomyLevel})`);
     await forceFullAutonomy(
       db,
-      AUTONOMY_LEVEL,
+      effectiveAutonomyLevel,
       foreignPolicyMode,
       foreignPolicyStage,
       preservePlayerRail
@@ -1102,8 +1126,12 @@ async function main() {
       $set: {
         simTurnPhaseMode: simTurnPhaseMode ?? "full",
         electionScope: electionScope ? [...electionScope] : null,
-        nppForeignPolicyMode: foreignPolicyMode,
-        nppForeignPolicyStage: foreignPolicyStage,
+        nppForeignPolicyMode: preserveLiveConfig
+          ? (preservedState?.nppForeignPolicyMode ?? null)
+          : foreignPolicyMode,
+        nppForeignPolicyStage: preserveLiveConfig
+          ? (preservedState?.nppForeignPolicyStage ?? null)
+          : foreignPolicyStage,
         actorMode,
         preservePlayerRail,
         preserveLiveConfig,
@@ -1198,13 +1226,50 @@ async function main() {
 
   const gameStateBefore = await db.collection<GameState>("gameState").findOne({ _id: "current" });
   const startTurn = (gameStateBefore?.currentTurn as number | undefined) ?? 0;
-  const { snapshotSectorInvestment, assertInvestmentTurnComplete } =
-    await import("./sectorInvestmentSnapshot");
-  if (investmentSnapshots) await snapshotSectorInvestment(db, investmentSnapshots, startTurn);
-  const targetTurn = startTurn + turns;
-  log(`Advancing from turn ${startTurn} to turn ${targetTurn} (${turns} turns)`);
-
   try {
+    const { prepareOpeningLedgerSnapshot } = await import("./openingLedgerSnapshot");
+    const openingLedgerSnapshot = await prepareOpeningLedgerSnapshot(db, startTurn);
+    await simRuns.updateOne({ _id: runId }, { $set: { openingLedgerSnapshot } });
+    log(
+      `Opening cash snapshot at turn ${startTurn}: ${openingLedgerSnapshot.accounts} accounts ` +
+        `(${openingLedgerSnapshot.reused ? "reused" : "captured"})`
+    );
+    const { snapshotSectorInvestment, assertInvestmentTurnComplete } =
+      await import("./sectorInvestmentSnapshot");
+    if (investmentSnapshots) await snapshotSectorInvestment(db, investmentSnapshots, startTurn);
+    const targetTurn = startTurn + turns;
+    // Retain complete crisis snapshots only for long, full, source-pinned 1991
+    // sandbox runs. The collector itself also enforces the sandbox database.
+    const crisisHorizonTelemetry =
+      preset === "1991-default" &&
+      turns >= 1700 &&
+      (simTurnPhaseMode ?? "full") === "full" &&
+      !cloneMode;
+    let captureCrisisHorizonTurn:
+      (typeof import("./crisisHorizonTelemetry"))["captureCrisisHorizonTurn"] | undefined;
+    if (crisisHorizonTelemetry) {
+      if (!source.executedCommit) throw new Error("Crisis horizon requires a source-pinned run");
+      ({ captureCrisisHorizonTurn } = await import("./crisisHorizonTelemetry"));
+      await db
+        .collection("simCrisisHorizon")
+        .createIndex({ runId: 1, turn: 1, defKey: 1 }, { unique: true });
+      await simRuns.updateOne(
+        { _id: runId },
+        {
+          $set: {
+            crisisHorizonTelemetry: {
+              schemaVersion: 1,
+              expectedFirstTurn:
+                existing?.crisisHorizonTelemetry?.expectedFirstTurn ?? startTurn + 1,
+              expectedLastTurn: existing?.crisisHorizonTelemetry?.expectedLastTurn ?? targetTurn,
+              families: 7,
+            },
+          },
+        }
+      );
+    }
+    log(`Advancing from turn ${startTurn} to turn ${targetTurn} (${turns} turns)`);
+
     let lastTurn = startTurn;
     let iterations = 0;
     let skippedSinceMs: number | null = null;
@@ -1230,18 +1295,19 @@ async function main() {
       if (result.message.startsWith("Skipped:")) {
         // Another holder has the turn lock. In a dedicated sandbox DB that
         // holder is almost always a dead process from a mid-turn restart, so
-        // don't busy-loop on turn 0 until TURN_LOCK_STALE_MS elapses: back
-        // off, and after 2 minutes of no progress force-clear the lock.
+        // don't busy-loop until TURN_LOCK_STALE_MS elapses. After 2 minutes,
+        // mark the lock abandoned while preserving its phase history. The
+        // turn recovery path needs that history to avoid replaying writes.
         skippedSinceMs ??= Date.now();
         if (Date.now() - skippedSinceMs > 2 * 60 * 1000) {
           log(
-            `Turn lock held with no progress for 2m at turn ${lastTurn} — clearing stale sandbox lock`
+            `Turn lock held with no progress for 2m at turn ${lastTurn} — marking sandbox lock abandoned for phase recovery`
           );
           await db
             .collection<GameState>("gameState")
             .updateOne(
               { _id: "current", isProcessing: true },
-              { $set: { isProcessing: false, processingKind: null, processingPhase: null } }
+              { $set: { processingAbandonedAt: new Date() } }
             );
           skippedSinceMs = null;
         } else {
@@ -1251,8 +1317,13 @@ async function main() {
       }
       skippedSinceMs = null;
       lastTurn = result.turn;
-      if (investmentSnapshots) {
-        if (isCrashRecovery) throw new Error("Crashed turn invalidates the balance comparison");
+      if (investmentSnapshots || captureCrisisHorizonTurn) {
+        if (isCrashRecovery)
+          throw new Error(
+            investmentSnapshots
+              ? "Crashed turn invalidates the balance comparison"
+              : "Crashed turn invalidates crisis horizon telemetry"
+          );
         const [checkedState, completedLog] = await Promise.all([
           db
             .collection<GameState>("gameState")
@@ -1265,7 +1336,7 @@ async function main() {
             ),
         ]);
         assertInvestmentTurnComplete(lastTurn, checkedState?.currentTurn, completedLog);
-        await snapshotSectorInvestment(db, investmentSnapshots, lastTurn);
+        if (investmentSnapshots) await snapshotSectorInvestment(db, investmentSnapshots, lastTurn);
       }
 
       // Sim-harness-only snapshots (seats, corporations-by-country) for the
@@ -1283,6 +1354,14 @@ async function main() {
       if (actorMode === "synthetic") {
         const { driveSyntheticActors } = await import("@/lib/sim/driveSyntheticActors");
         await driveSyntheticActors(db, { seed, turn: lastTurn, now: new Date() });
+      }
+      if (captureCrisisHorizonTurn) {
+        await captureCrisisHorizonTurn(db, {
+          runId,
+          turn: lastTurn,
+          seed,
+          codeVersion: source.executedCommit!,
+        });
       }
 
       if (iterations % checkpointEvery === 0 || lastTurn >= targetTurn) {

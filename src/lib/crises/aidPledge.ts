@@ -73,10 +73,16 @@ export async function submitCrisisAidPledge(
     senderGdp
   );
   if (amountLocal <= 0) throw badRequest("Aid amount rounds to zero");
+  const commitmentId = new ObjectId();
 
   // 1. Spend (surplus first, remainder = debt; derived fields resynced now).
   const impact = await spendFromTreasury(db, input.senderCountryId, amountLocal, {
     resyncDerived: true,
+    witness: {
+      flow: "crisis_aid",
+      key: `crisis-aid:${interaction.crisisId.toString()}:${input.senderCountryId}`,
+      site: "crises/aidPledge",
+    },
   });
 
   // 2. Provisionally apply benefits.
@@ -84,7 +90,6 @@ export async function submitCrisisAidPledge(
   await applyCrisisEffects(db, senderEffects, [], [input.senderCountryId]);
 
   // 3. File the appropriation bill.
-  const commitmentId = new ObjectId();
   const crisis = await db.collection("crises").findOne({ _id: interaction.crisisId });
   const crisisName = (crisis as { name?: string } | null)?.name ?? "a foreign crisis";
   const billId = await proposeCrisisAidBill(db, {

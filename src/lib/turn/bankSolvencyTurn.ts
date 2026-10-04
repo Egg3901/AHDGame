@@ -272,13 +272,22 @@ async function evaluateOneBank(
   policy: BankingPolicySnapshot
 ): Promise<{ row: EvalResult; forcedLiquidation: boolean } | null> {
   const propEnabled = policy.propTrading;
-  const live = await db
-    .collection<Corporation>("corporations")
-    .findOne(
-      { _id: corp._id },
-      { projection: { liquidCapital: 1, bankCharter: 1, bankPropBookRevision: 1 } }
-    );
-  if (!live?.bankCharter || live.bankCharter.lastSolvencyTurn === turn) {
+  const live = await db.collection<Corporation>("corporations").findOne(
+    { _id: corp._id },
+    {
+      projection: {
+        liquidCapital: 1,
+        bankCharter: 1,
+        bankPropBookRevision: 1,
+        bankUnderwritingFunding: 1,
+      },
+    }
+  );
+  if (
+    !live?.bankCharter ||
+    live.bankUnderwritingFunding ||
+    live.bankCharter.lastSolvencyTurn === turn
+  ) {
     return null;
   }
 
@@ -314,7 +323,8 @@ async function evaluateOneBank(
       marked,
       live.bankPropBookRevision,
       corp.name,
-      turn
+      turn,
+      { playerDepositsAreLiabilities: savingsReadsAuthoritative(policy, currency) }
     );
     if (liq.stale) return null;
     cashReserves = liq.cashReserves;
@@ -461,7 +471,9 @@ async function evaluateOneBank(
   }
 
   const priorBand = charter.warningBand;
-  const equityBase = computePropEquityBase(cashReserves, charter);
+  const equityBase = computePropEquityBase(cashReserves, { ...charter, npcDeposits }, undefined, {
+    playerDepositsAreLiabilities: savingsReadsAuthoritative(policy, currency),
+  });
 
   let fails = false;
   if (depositTaking) {
@@ -504,33 +516,10 @@ async function evaluateOneBank(
       totalDeposits,
       lastSolvencyTurn: turn,
     };
-    await archiveCharter(db, corp._id, failedCharter, turn, "failed");
-    await writeOffLenderSideInterbankOnFailure(db, corp._id, turn);
-    emitBankingAuditEvent(
-      {
-        kind: "bank.failed",
-        command: depositTaking ? "bank.solvency.run" : "bank.solvency.insolvency",
-        turn,
-        outcome: "ok",
-        currency,
-        bankId: corp._id.toString(),
-        statusBefore: "active",
-        statusAfter: "failed",
-        amount: npcDeposits,
-        meta: {
-          charterType: charter.type,
-          confidence,
-          band,
-          cashReserves,
-          totalLoans,
-          equityBase,
-        },
-      },
-      db
-    );
-    await db.collection<Corporation>("corporations").updateOne(
+    const failed = await db.collection<Corporation>("corporations").updateOne(
       {
         _id: corp._id,
+        bankUnderwritingFunding: { $exists: false },
         "bankCharter.status": "active",
         $or: [
           { "bankCharter.lastSolvencyTurn": { $ne: turn } },
@@ -558,6 +547,32 @@ async function evaluateOneBank(
         },
       }
     );
+    if (failed.modifiedCount === 1) {
+      await archiveCharter(db, corp._id, failedCharter, turn, "failed");
+      await writeOffLenderSideInterbankOnFailure(db, corp._id, turn);
+      emitBankingAuditEvent(
+        {
+          kind: "bank.failed",
+          command: depositTaking ? "bank.solvency.run" : "bank.solvency.insolvency",
+          turn,
+          outcome: "ok",
+          currency,
+          bankId: corp._id.toString(),
+          statusBefore: "active",
+          statusAfter: "failed",
+          amount: npcDeposits,
+          meta: {
+            charterType: charter.type,
+            confidence,
+            band,
+            cashReserves,
+            totalLoans,
+            equityBase,
+          },
+        },
+        db
+      );
+    }
   }
 
   return {

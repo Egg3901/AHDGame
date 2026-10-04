@@ -118,6 +118,18 @@ describe("identity A (labour): workers per unit/day of capacity", () => {
 });
 
 describe("identity B (price): ₳ per unit/day of capacity", () => {
+  it("prices canonical entertainment capacity from the legacy entertainment recipe", () => {
+    expect(defaultSupplyRates("media", null, "entertainment")).toEqual(
+      defaultSupplyRates("entertainment")
+    );
+    expect(revenuePerCapacityUnit("media", 1, null, "entertainment")).toBeCloseTo(
+      revenuePerCapacityUnit("entertainment", 1)
+    );
+    expect(
+      capacityPricePerUnit("media", CAPACITY_ANCHOR_YEAR, 1, null, null, "entertainment")
+    ).toBeCloseTo(capacityPricePerUnit("entertainment", CAPACITY_ANCHOR_YEAR, 1, null));
+  });
+
   it.each(ANCHOR_SECTORS)(
     "%s at the anchor year equals the legacy growth charge ÷ the capacity it buys",
     (type) => {
@@ -168,16 +180,46 @@ describe("era lookup", () => {
     expect(capacityEraLaborIndex(CAPACITY_ANCHOR_YEAR)).toBeCloseTo(1, 12);
   });
 
-  it("steps on the monetaryEra span boundaries, holding flat inside a span", () => {
-    // 1953 span runs up to (not including) 1971.
-    expect(capacityEraPriceIndex(1900)).toBe(capacityEraPriceIndex(1953));
-    expect(capacityEraPriceIndex(1970)).toBe(capacityEraPriceIndex(1953));
-    expect(capacityEraPriceIndex(1971)).toBeGreaterThan(capacityEraPriceIndex(1970));
-    expect(capacityEraPriceIndex(1978)).toBe(capacityEraPriceIndex(1971));
-    expect(capacityEraPriceIndex(1979)).toBeGreaterThan(capacityEraPriceIndex(1978));
-    expect(capacityEraPriceIndex(1991)).toBeGreaterThan(capacityEraPriceIndex(1990));
-    expect(capacityEraPriceIndex(1999)).toBeGreaterThan(capacityEraPriceIndex(1998));
-    expect(capacityEraPriceIndex(2100)).toBe(capacityEraPriceIndex(1999));
+  it.each([
+    [1953, 1],
+    [1971, 1.4],
+    [1979, 2.6],
+    [1991, 3.6],
+    [1999, 5],
+  ])("preserves the authored %i price calibration", (year, expected) =>
+    expect(capacityEraPriceIndex(year)).toBeCloseTo(expected, 12)
+  );
+
+  it("holds the endpoint outside the authored range and keeps invalid-year fallback", () => {
+    expect(capacityEraPriceIndex(1900)).toBe(1);
+    expect(capacityEraPriceIndex(2100)).toBe(5);
+    for (const year of [undefined, null, NaN, Infinity, -Infinity]) {
+      expect(capacityEraPriceIndex(year)).toBe(5);
+    }
+  });
+
+  it("has no era-boundary discontinuity", () => {
+    for (const boundary of [1953, 1971, 1979, 1991, 1999]) {
+      expect(capacityEraPriceIndex(boundary - 0.000001)).toBeCloseTo(
+        capacityEraPriceIndex(boundary),
+        5
+      );
+      expect(capacityEraPriceIndex(boundary + 0.000001)).toBeCloseTo(
+        capacityEraPriceIndex(boundary),
+        5
+      );
+    }
+  });
+
+  it("spreads the 1991 to 1999 nominal increase across the intervening years", () => {
+    const annualRatio = Math.pow(5 / 3.6, 1 / 8);
+    for (let year = 1992; year <= 1999; year++) {
+      expect(capacityEraPriceIndex(year) / capacityEraPriceIndex(year - 1)).toBeCloseTo(
+        annualRatio,
+        12
+      );
+    }
+    expect(capacityEraPriceIndex(1999) / capacityEraPriceIndex(1998) - 1).toBeLessThan(0.05);
   });
 
   it("price index is monotonically non-decreasing across 1900-2100", () => {

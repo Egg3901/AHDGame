@@ -29,6 +29,9 @@
  * the internal [-1, +1] driver-budget units used by `persuasionDrivers.ts`.
  */
 
+import { calculateInflationPenalty, INFLATION_BAND_PCT } from "./rules/economicReferendum";
+export { INFLATION_BAND_PCT, INFLATION_CAP, INFLATION_SLOPE } from "./rules/economicReferendum";
+
 /** National macro aggregates the referendum reads. All in display percent. */
 export interface MiseryInputs {
   /** Headline unemployment, % of labour force. */
@@ -37,6 +40,8 @@ export interface MiseryInputs {
   povertyRate: number;
   /** Annual inflation RATE (not a price level), %. */
   inflationRate: number;
+  /** Country and era monetary-policy target, when the election context has one. */
+  inflationTargetPct?: number;
   /**
    * Trailing change in real median income, annualized percentage points.
    * Optional; treated as 0 (neutral) when absent.
@@ -113,8 +118,6 @@ export interface ReferendumResult {
 export const NATURAL_UNEMPLOYMENT_PCT = 6;
 /** Poverty baseline; above this the incumbent starts paying. */
 export const POVERTY_BASELINE_PCT = 20;
-/** Inflation is free inside this band; outside it (either side) it bites. */
-export const INFLATION_BAND_PCT: readonly [number, number] = [1, 4];
 /** Real-income trend anchor: flat real incomes are neutral. */
 export const INCOME_TREND_ANCHOR_PCT = 0;
 
@@ -124,9 +127,6 @@ export const UNEMPLOYMENT_CAP = 4;
 /** Share points lost per point of poverty above baseline. */
 export const POVERTY_SLOPE = 0.15;
 export const POVERTY_CAP = 3;
-/** Share points lost per point of inflation outside the band (either side). */
-export const INFLATION_SLOPE = 0.4;
-export const INFLATION_CAP = 3;
 /** Share points per point of real-income trend, symmetric. */
 export const INCOME_TREND_SLOPE = 0.3;
 export const INCOME_TREND_CAP = 1.5;
@@ -258,9 +258,9 @@ function finite(value: number | undefined, fallback: number): number {
  * response, and term fatigue scales what is left of the penalty side only. The
  * signed total is clamped to +/-{@link REFERENDUM_SHARE_CLAMP}.
  *
- * `era` is accepted for future era-specific anchors (a 6% natural rate is not
- * the same politics in 1953 as in 2020); it is currently unused and the anchors
- * above apply to every era.
+ * The caller supplies the country's era-specific inflation target as plain
+ * data. When absent, the original 1%-4% neutral band remains in force. `era`
+ * remains in the call shape for compatibility with existing integrations.
  */
 export function computeEconomicReferendum(
   inputs: MiseryInputs,
@@ -268,7 +268,7 @@ export function computeEconomicReferendum(
   era?: string,
   responseCredit?: readonly ResponseCreditCandidate[]
 ): ReferendumResult {
-  void era; // reserved for era-specific anchors; see the doc comment above.
+  void era;
   const unemployment = finite(inputs.unemploymentRate, NATURAL_UNEMPLOYMENT_PCT);
   const poverty = finite(inputs.povertyRate, POVERTY_BASELINE_PCT);
   const inflation = finite(inputs.inflationRate, INFLATION_BAND_PCT[0]);
@@ -276,12 +276,8 @@ export function computeEconomicReferendum(
 
   const unemploymentExcess = unemployment - NATURAL_UNEMPLOYMENT_PCT;
   const povertyExcess = poverty - POVERTY_BASELINE_PCT;
-  const inflationExcess =
-    inflation > INFLATION_BAND_PCT[1]
-      ? inflation - INFLATION_BAND_PCT[1]
-      : inflation < INFLATION_BAND_PCT[0]
-        ? INFLATION_BAND_PCT[0] - inflation
-        : 0;
+  const inflationPenalty = calculateInflationPenalty(inflation, inputs.inflationTargetPct);
+  const inflationExcess = inflationPenalty.excessPct;
   const incomeExcess = incomeTrend - INCOME_TREND_ANCHOR_PCT;
 
   const components: ReferendumComponent[] = [
@@ -300,7 +296,7 @@ export function computeEconomicReferendum(
       label: "Inflation",
       // Inflation outside the band is always a penalty (deflation hurts too),
       // so the excess is a magnitude and never earns a bonus.
-      contributionPts: clampMagnitude(-INFLATION_SLOPE * inflationExcess, INFLATION_CAP),
+      contributionPts: inflationPenalty.contributionPts,
     },
     {
       key: "incomeTrend",

@@ -17,6 +17,7 @@ import type {
 } from "@/lib/db/types";
 import type { Crisis } from "@/lib/db/types/crisis";
 import { buildDisasterEffectsByState } from "@/lib/crises/disasterMarginPenalty";
+import { excludePendingFederationFirms } from "@/lib/world/succession/rules/pendingFirmActivity";
 import type { CommodityPrice } from "@/lib/db/types";
 import type { TradeFlowSnapshot } from "@/lib/db/types/tradeFlowSnapshot";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -35,6 +36,12 @@ import { buildTradeAffinity } from "@/lib/trade/tradeAffinity";
 import { buildCountryClearingBooks } from "@/lib/market/tradePartition";
 import { sectorCountryForClearing } from "./sectorCountry";
 import { COUNTRY_ORDER } from "@/lib/constants/countries";
+import {
+  MANUFACTURING_PRODUCT_PROJECTS_V2,
+  type ManufacturingProductProject,
+} from "@/lib/products/manufacturingProject";
+import { activeManufacturingProductProjectProjection } from "@/lib/products/manufacturingProjectPersistence";
+import { MEDIA_PRODUCT_PROJECTS, type MediaProductProject } from "@/lib/products/mediaProduct";
 import type { TradeEmbargo } from "@/lib/db/types/tradeEmbargo";
 import type { OrganizationMembership } from "@/lib/db/types/internationalOrganization";
 import {
@@ -119,6 +126,7 @@ export async function buildCorporationLookups(
      * keeps the legacy revenue-based share exactly.
      */
     plantsEnabled?: boolean;
+    explicitPlantCostsEnabled?: boolean;
     /** Target turn for production and the blended recipe; stored turn for read-only callers. */
     productionTurn?: number;
     /**
@@ -128,6 +136,10 @@ export async function buildCorporationLookups(
      * `landedPremiumByState`. Omitted/false keeps that map empty.
      */
     moneyWiringEnabled?: boolean;
+    /** Read product output maps only while the corporation product gate is on. */
+    productLinesV2Enabled?: boolean;
+    /** Read durable media projects and receipts only while the feature gate is on. */
+    mediaProductSlatesEnabled?: boolean;
     /** Use lagged freight-delivery availability as a local input constraint. */
     freightSettlementActive?: boolean;
     /**
@@ -138,6 +150,8 @@ export async function buildCorporationLookups(
      * so the corporation turn computes and writes nothing.
      */
     canonicalFreightBillingEnabled?: boolean;
+    /** Project editorial positions and audience lean only while the rule is enabled. */
+    mediaEditorialEnabled?: boolean;
   }
 ): Promise<CorporationLookups> {
   await reconcileSignedTariffBills(db);
@@ -177,8 +191,8 @@ export async function buildCorporationLookups(
   }
 
   const [
-    corporations,
-    allSectors,
+    loadedCorporations,
+    loadedSectors,
     allStateMetrics,
     commodityPrices,
     centralBanks,
@@ -196,11 +210,37 @@ export async function buildCorporationLookups(
     orgMembershipDocs,
     activeEmbargoDocs,
     worldPreset,
+    activeManufacturingProjects,
+    activeMediaProductProjects,
   ] = await Promise.all([
-    db.collection<Corporation>("corporations").find({}).toArray(),
+    db
+      .collection<Corporation>("corporations")
+      .find(
+        {},
+        {
+          projection: {
+            ...(options?.mediaEditorialEnabled === true ? {} : { editorialStance: 0 }),
+            ...(options?.productLinesV2Enabled === true
+              ? {}
+              : {
+                  manufacturingProductDevelopmentReceiptV2: 0,
+                  manufacturingProductDevelopmentPaidTurnV2: 0,
+                }),
+            ...(options?.mediaProductSlatesEnabled === true
+              ? {}
+              : {
+                  mediaProductDevelopmentReceiptV1: 0,
+                  mediaProductAdvertisingReceiptV1: 0,
+                  mediaProductAdvertisingObligationsV1: 0,
+                }),
+          },
+        }
+      )
+      .toArray(),
     // `plantsPnl` is ~15% of the collection. corporationTurn writes it via
     // sectorTurn as a complete overwrite and never reads the prior value.
-    // `soldByCommodity` is likewise overwritten by sector telemetry.
+    // `soldByCommodity` IS read: the demand throttle values last turn's sales
+    // leg by leg (ticket 1370), so it must not be projected out.
     db
       .collection<CorporateSector>("corporateSectors")
       .find(
@@ -208,8 +248,18 @@ export async function buildCorporationLookups(
         {
           projection: {
             plantsPnl: 0,
-            soldByCommodity: 0,
+            ...(options?.explicitPlantCostsEnabled === true
+              ? {}
+              : { pricingMode: 0, costPlusCostBasis: 0 }),
             ...(options?.omitBuildQueue ? { buildQueue: 0 } : {}),
+            ...(options?.productLinesV2Enabled
+              ? {}
+              : {
+                  outputUnitsByCommodity: 0,
+                  outputAnchorByCommodity: 0,
+                  productQualityByCommodity: 0,
+                  productOutputCapacityUnits: 0,
+                }),
           },
         }
       )
@@ -304,7 +354,20 @@ export async function buildCorporationLookups(
     getActiveSubsidies(db),
     db
       .collection<State>("states")
-      .find({}, { projection: { _id: 1, countryId: 1, gdp: 1, sectorSpecializations: 1 } })
+      .find(
+        {},
+        {
+          projection: {
+            _id: 1,
+            countryId: 1,
+            gdp: 1,
+            sectorSpecializations: 1,
+            ...(options?.mediaEditorialEnabled === true
+              ? { cachedEconomicLean: 1, cachedSocialLean: 1 }
+              : {}),
+          },
+        }
+      )
       .toArray(),
     // Only currencyCode + rate read; consumed only as exchangeRatesByCurrency map.
     db
@@ -337,7 +400,70 @@ export async function buildCorporationLookups(
       })
       .toArray(),
     loadWorldPreset(db),
+    options?.productLinesV2Enabled === true
+      ? db
+          .collection<ManufacturingProductProject>(MANUFACTURING_PRODUCT_PROJECTS_V2)
+          .find(
+            { activeCorporationId: { $exists: true } },
+            { projection: activeManufacturingProductProjectProjection() }
+          )
+          .toArray()
+      : Promise.resolve([] as ManufacturingProductProject[]),
+    options?.mediaProductSlatesEnabled === true
+      ? db
+          .collection<MediaProductProject>(MEDIA_PRODUCT_PROJECTS)
+          .find({ stage: { $in: ["development", "launch", "growth", "mature", "decline"] } })
+          .project<MediaProductProject>({
+            _id: 1,
+            corporationId: 1,
+            activeDevelopmentCorporationId: 1,
+            sectorId: 1,
+            operatingSectorType: 1,
+            kindId: 1,
+            title: 1,
+            allocationShare: 1,
+            stage: 1,
+            startedTurn: 1,
+            stageStartedTurn: 1,
+            lastProcessedTurn: 1,
+            developmentPaidAnchor: 1,
+            paidThresholdAnchor: 1,
+            elapsedDevelopmentTurns: 1,
+            elapsedThresholdTurns: 1,
+            developmentAdvertisingAnchor: 1,
+            developmentAdvertisingTurns: 1,
+            launchQuality: 1,
+            qualityBonus: 1,
+            productBrand: 1,
+          })
+          .toArray()
+      : Promise.resolve([] as MediaProductProject[]),
   ]);
+
+  // A split can preserve a player's corporation while its owner chooses a new
+  // playable headquarters. Its retained facilities pause with the company;
+  // background facilities have already moved to compensated claims.
+  const { firms: corporations, facilities: allSectors } = excludePendingFederationFirms(
+    loadedCorporations,
+    loadedSectors
+  );
+  const manufacturingProductByCorpId = new Map<string, ManufacturingProductProject>(
+    activeManufacturingProjects.map((project) => [project.corporationId, project])
+  );
+  const mediaProductProjectsByCorpId = new Map<string, MediaProductProject[]>();
+  const mediaProductProjectsBySectorId = new Map<string, MediaProductProject[]>();
+  const mediaProductDevelopmentByCorpId = new Map<string, MediaProductProject>();
+  for (const project of activeMediaProductProjects) {
+    const corpProjects = mediaProductProjectsByCorpId.get(project.corporationId) ?? [];
+    corpProjects.push(project);
+    mediaProductProjectsByCorpId.set(project.corporationId, corpProjects);
+    const sectorProjects = mediaProductProjectsBySectorId.get(project.sectorId) ?? [];
+    sectorProjects.push(project);
+    mediaProductProjectsBySectorId.set(project.sectorId, sectorProjects);
+    if (project.activeDevelopmentCorporationId) {
+      mediaProductDevelopmentByCorpId.set(project.corporationId, project);
+    }
+  }
 
   // Backfill countryId on corporations and sectors missing it (pre-migration data)
   const stateCountryMap = new Map(states.map((s) => [s._id, s.countryId]));
@@ -619,8 +745,10 @@ export async function buildCorporationLookups(
   // PRIOR commodity-price pass, so reading them here is the one-turn lag that
   // breaks the price->revenue->supply->price circularity.
   const priceRatioByCommodity = new Map<CommodityType, number>();
+  const initializedLaggedBooks = new Set<CommodityType>();
   const reachablePriceRatioByCountry = new Map<string, Map<CommodityType, number>>();
   for (const cp of commodityPrices) {
+    if (cp.turn > 0) initializedLaggedBooks.add(cp.commodity);
     globalCommodityBalances.set(cp.commodity, {
       supply: cp.globalSupply,
       demand: cp.globalDemand,
@@ -1189,7 +1317,25 @@ export async function buildCorporationLookups(
     eraUnitScale,
     corporations,
     sectorsByCorp,
+    productLinesV2Enabled: options?.productLinesV2Enabled === true,
+    manufacturingProductByCorpId,
+    mediaProductSlatesEnabled: options?.mediaProductSlatesEnabled === true,
+    mediaProductProjectsByCorpId,
+    mediaProductProjectsBySectorId,
+    mediaProductDevelopmentByCorpId,
     corpById,
+    editorialAudienceLeanByState:
+      options?.mediaEditorialEnabled === true
+        ? new Map(
+            states.map((state) => [
+              state._id,
+              {
+                economic: state.cachedEconomicLean ?? 0,
+                social: state.cachedSocialLean ?? 0,
+              },
+            ])
+          )
+        : undefined,
     ceoBusinessAcumenByCorpId,
     bondsByCorpId,
     bondsHeldByCorpId,
@@ -1222,6 +1368,7 @@ export async function buildCorporationLookups(
     carbonEmissionsByState,
     costOfLivingByState,
     globalCommodityBalances,
+    initializedLaggedBooks,
     stateInputAvailabilityByState,
     statePlacementRatioByState,
     stateDeliveryLimitedRatioByState,

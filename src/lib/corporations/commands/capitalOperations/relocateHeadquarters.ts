@@ -8,10 +8,11 @@ import { handleRouteError } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { getGameState } from "@/lib/gameState";
 import { closeCeoTenure } from "@/lib/corporations/ceoHistory";
-import type { Corporation, State } from "@/lib/db/types";
+import type { Corporation, CorporateSector, State } from "@/lib/db/types";
 import type { Character } from "@/lib/db/types/character";
 import type { ImperialCharacter } from "@/lib/db/types/imperialCharacter";
 import type { CountryId } from "@/lib/constants/countries";
+import { commandEconomyRelocationBlock } from "@/lib/corporations/relocationCommandEconomyGate";
 import {
   COUNTRY_CURRENCY_MAP,
   SECTOR_FX_SPREAD,
@@ -37,6 +38,11 @@ import {
   type ConvertCorpCurrencySuccess,
 } from "@/lib/corporations/convertCorpCurrency";
 import { doesCeoResideAtHeadquarters } from "@/lib/corporations/ceoResidency";
+import {
+  hasProtectedConstructionPropertyIn,
+  reserveSectorsForTransition,
+  releaseConstructionPropertyTransition,
+} from "@/lib/corporations/securedConstructionProperty";
 
 const relocateSchema = z.object({
   targetStateId: z.string().min(1, "Target state/region ID required"),
@@ -87,6 +93,24 @@ export async function relocateHeadquarters(request: Request, { params }: RoutePa
     const resolved = await resolveCorporation(db, id);
     if (!resolved.ok) return resolved.response;
     const { corporation } = resolved;
+
+    const propertySectors = await db
+      .collection<CorporateSector>("corporateSectors")
+      .find({ corporationId: corporation._id })
+      .toArray();
+    if (hasProtectedConstructionPropertyIn(propertySectors)) {
+      return NextResponse.json(
+        { error: "Resolve secured construction before relocating corporate headquarters" },
+        { status: 409 }
+      );
+    }
+
+    if (corporation.federationPendingHeadquartersId) {
+      return NextResponse.json(
+        { error: "Choose this firm's new headquarters through its pending federation settlement." },
+        { status: 409 }
+      );
+    }
 
     const ceoCheck = requireCeo(corporation, auth.user.userId);
     if (ceoCheck) return ceoCheck;
@@ -152,6 +176,16 @@ export async function relocateHeadquarters(request: Request, { params }: RoutePa
         { error: "Corporation has no resolvable home country" },
         { status: 400 }
       );
+    }
+
+    const commandEconomyBlock = await commandEconomyRelocationBlock(
+      db,
+      corporation,
+      corpCountryId,
+      targetState.countryId
+    );
+    if (commandEconomyBlock) {
+      return NextResponse.json({ error: commandEconomyBlock }, { status: 400 });
     }
 
     // Load FX rates once — used for cost math and any currency conversion.
@@ -271,7 +305,8 @@ export async function relocateHeadquarters(request: Request, { params }: RoutePa
         newCurrency,
         fxByCurrency,
         now,
-        forexEnabled
+        forexEnabled,
+        propertySectors
       );
       if (!convResult.ok) {
         return NextResponse.json(
@@ -297,31 +332,125 @@ export async function relocateHeadquarters(request: Request, { params }: RoutePa
       }
     }
 
-    if (paymentMethod === "cash") {
-      const relocationInCorpCapital = anchorToCorpLiquidCapital(
-        relocationCost + relocationSpreadAnchor,
+    // Currency conversion reserves these same sector rows while it runs. For
+    // same-currency relocations, hold a property marker through the final
+    // cash or bond write so construction cannot be claimed after the read.
+    const hqTransitionKeys = needsCurrencyConversion
+      ? null
+      : await reserveSectorsForTransition(
+          db,
+          propertySectors,
+          "headquarters_relocation",
+          `headquarters:${corporation._id.toHexString()}:${normalizedTarget}`
+        );
+    if (!needsCurrencyConversion && !hqTransitionKeys) {
+      return NextResponse.json(
+        { error: "A sector changed or acquired secured construction during relocation" },
+        { status: 409 }
+      );
+    }
+    const releaseHqTransition = async () => {
+      if (!hqTransitionKeys) return;
+      await Promise.all(
+        propertySectors.map((sector, index) =>
+          releaseConstructionPropertyTransition(db, sector._id, hqTransitionKeys[index])
+        )
+      );
+    };
+
+    try {
+      if (paymentMethod === "cash") {
+        const relocationInCorpCapital = anchorToCorpLiquidCapital(
+          relocationCost + relocationSpreadAnchor,
+          workingCorp,
+          workingFxRate
+        );
+
+        await db.collection<Corporation>("corporations").updateOne(
+          { _id: workingCorp._id },
+          {
+            $set: baseCorpSet,
+            ...(ceoVacated ? { $unset: { ceoId: "", userId: "" } } : {}),
+            $inc: { liquidCapital: -relocationInCorpCapital },
+          }
+        );
+
+        // Route the cross-currency relocation spread (old → new currency).
+        if (relocationSpreadAnchor > 0 && oldCurrency && newCurrency) {
+          await safeDistributeConversionSpread(
+            db,
+            Math.round(
+              anchorToCorpLiquidCapital(relocationSpreadAnchor, workingCorp, workingFxRate)
+            ),
+            oldCurrency as CurrencyCode,
+            newCurrency
+          );
+        }
+
+        if (ceoVacated && corporation.ceoId) {
+          await closeCeoTenure(db, workingCorp._id, {
+            holderId: corporation.ceoId,
+            turn: currentTurn,
+          });
+        }
+
+        logWireEvent(
+          "corporation_relocated",
+          wireHeadlineCorpRelocated(corporation.name, targetState.name, relocationCost),
+          { href: `/corporation/${corporation.sequentialId ?? corporation._id}` }
+        );
+
+        return NextResponse.json({
+          success: true,
+          paymentMethod: "cash",
+          cost: relocationCost,
+          crossCountry,
+          newHeadquarters: normalizedTarget,
+          newHeadquartersName: targetState.name,
+          newCountryId: targetState.countryId,
+          ceoVacated,
+          currencyConversion: currencyConversion?.converted
+            ? {
+                from: currencyConversion.fromCurrency,
+                to: currencyConversion.toCurrency,
+                scale: currencyConversion.scale,
+                sectorsConverted: currencyConversion.sectorsConverted,
+                ordersCancelled: currencyConversion.ordersCancelled,
+                listingsCancelled: currencyConversion.listingsCancelled,
+              }
+            : null,
+        });
+      }
+
+      // Bond path — preflight already validated above. Issue the bond now; it
+      // stamps the (possibly new) corp currency.
+      if (!bondPreflight) {
+        return NextResponse.json({ error: "Internal bond-path error" }, { status: 500 });
+      }
+      const bondResult = await issueRelocationBond(
+        db,
+        workingCorp,
+        relocationCost,
+        currentTurn,
+        bondPreflight,
+        fxByCurrency
+      );
+      if (!bondResult.ok) return bondResult.response;
+      const { bondFaceValue, couponRate, creditRating } = bondResult.data;
+
+      const netDeltaInCorpCapital = anchorToCorpLiquidCapital(
+        bondFaceValue - relocationCost,
         workingCorp,
         workingFxRate
       );
-
       await db.collection<Corporation>("corporations").updateOne(
         { _id: workingCorp._id },
         {
           $set: baseCorpSet,
           ...(ceoVacated ? { $unset: { ceoId: "", userId: "" } } : {}),
-          $inc: { liquidCapital: -relocationInCorpCapital },
+          $inc: { liquidCapital: netDeltaInCorpCapital },
         }
       );
-
-      // Route the cross-currency relocation spread (old → new currency).
-      if (relocationSpreadAnchor > 0 && oldCurrency && newCurrency) {
-        await safeDistributeConversionSpread(
-          db,
-          Math.round(anchorToCorpLiquidCapital(relocationSpreadAnchor, workingCorp, workingFxRate)),
-          oldCurrency as CurrencyCode,
-          newCurrency
-        );
-      }
 
       if (ceoVacated && corporation.ceoId) {
         await closeCeoTenure(db, workingCorp._id, {
@@ -338,9 +467,12 @@ export async function relocateHeadquarters(request: Request, { params }: RoutePa
 
       return NextResponse.json({
         success: true,
-        paymentMethod: "cash",
+        paymentMethod: "bond",
         cost: relocationCost,
         crossCountry,
+        bondFaceValue,
+        couponRate,
+        creditRating,
         newHeadquarters: normalizedTarget,
         newHeadquartersName: targetState.name,
         newCountryId: targetState.countryId,
@@ -356,74 +488,9 @@ export async function relocateHeadquarters(request: Request, { params }: RoutePa
             }
           : null,
       });
+    } finally {
+      await releaseHqTransition();
     }
-
-    // Bond path — preflight already validated above. Issue the bond now; it
-    // stamps the (possibly new) corp currency.
-    if (!bondPreflight) {
-      return NextResponse.json({ error: "Internal bond-path error" }, { status: 500 });
-    }
-    const bondResult = await issueRelocationBond(
-      db,
-      workingCorp,
-      relocationCost,
-      currentTurn,
-      bondPreflight,
-      fxByCurrency
-    );
-    if (!bondResult.ok) return bondResult.response;
-    const { bondFaceValue, couponRate, creditRating } = bondResult.data;
-
-    const netDeltaInCorpCapital = anchorToCorpLiquidCapital(
-      bondFaceValue - relocationCost,
-      workingCorp,
-      workingFxRate
-    );
-    await db.collection<Corporation>("corporations").updateOne(
-      { _id: workingCorp._id },
-      {
-        $set: baseCorpSet,
-        ...(ceoVacated ? { $unset: { ceoId: "", userId: "" } } : {}),
-        $inc: { liquidCapital: netDeltaInCorpCapital },
-      }
-    );
-
-    if (ceoVacated && corporation.ceoId) {
-      await closeCeoTenure(db, workingCorp._id, {
-        holderId: corporation.ceoId,
-        turn: currentTurn,
-      });
-    }
-
-    logWireEvent(
-      "corporation_relocated",
-      wireHeadlineCorpRelocated(corporation.name, targetState.name, relocationCost),
-      { href: `/corporation/${corporation.sequentialId ?? corporation._id}` }
-    );
-
-    return NextResponse.json({
-      success: true,
-      paymentMethod: "bond",
-      cost: relocationCost,
-      crossCountry,
-      bondFaceValue,
-      couponRate,
-      creditRating,
-      newHeadquarters: normalizedTarget,
-      newHeadquartersName: targetState.name,
-      newCountryId: targetState.countryId,
-      ceoVacated,
-      currencyConversion: currencyConversion?.converted
-        ? {
-            from: currencyConversion.fromCurrency,
-            to: currencyConversion.toCurrency,
-            scale: currencyConversion.scale,
-            sectorsConverted: currencyConversion.sectorsConverted,
-            ordersCancelled: currencyConversion.ordersCancelled,
-            listingsCancelled: currencyConversion.listingsCancelled,
-          }
-        : null,
-    });
   } catch (error) {
     return handleRouteError(error);
   }

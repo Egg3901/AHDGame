@@ -34,6 +34,7 @@ import { MongoClient, type Db, type Collection, type Filter } from "mongodb";
 import { claimFilterAt, parseClaimWindow } from "./claimWindow";
 import {
   claimNextJob,
+  SIM_JOB_CLAIM_SORT,
   createHandoffController,
   findLiveEngineRunIdsFromCmdlines,
   listProcessCmdlines,
@@ -43,11 +44,12 @@ import {
   type HandoffStore,
 } from "./simJobHandoff";
 import { spawnWithPrefixedLogs, type ChildRunIdentity } from "./childLogPrefix";
-import { assertSafeToken } from "./simJobArgs";
+import { assertSafeToken, buildRunWorldArgs } from "./simJobArgs";
 import { resolveSimPreset } from "./simPreset";
 import { buildStatusMirrorUpdate, type SandboxProgress } from "./simStatusMirror";
 import type { GameHealthSummary } from "@/lib/db/types/gameHealthSnapshot";
 import { defaultSimSourceDeps, planRunWorldSpawn, verifySimSource } from "./simSource";
+import { activatePreparedSandbox, type PreparedSandbox } from "./preparedSandbox";
 import { planCollectorSpawns } from "./collectorSource";
 import {
   pickSovereignDemandExperimentFlags,
@@ -116,6 +118,8 @@ if (OPS_MONGODB_URI === SIM_MONGODB_URI && !ALLOW_SHARED_MONGO) {
 }
 
 interface SimJob {
+  preparedSandbox?: PreparedSandbox;
+  queuePriority?: number;
   _id: string;
   status: "queued" | "running" | "completed" | "failed";
   preset: string;
@@ -176,6 +180,13 @@ interface SimJob {
   workerPhase?: string;
 }
 
+interface BootstrapFailureReport {
+  summary?: { critical?: number; ok?: number; warn?: number };
+  checks?: Array<{ id: string; severity: string }>;
+  ranAt?: Date;
+  _id: unknown;
+}
+
 function log(msg: string) {
   console.log(`[sim-worker] ${msg}`);
 }
@@ -212,7 +223,7 @@ function mongoHandoffStore(jobsCol: Collection<SimJob>): HandoffStore {
           $set: update.set,
           $unset: { error: "" },
         },
-        { sort: { createdAt: 1 }, returnDocument: "after" }
+        { sort: SIM_JOB_CLAIM_SORT, returnDocument: "after" }
       );
       return (job ?? null) as unknown as HandoffJob | null;
     },
@@ -330,6 +341,21 @@ async function mirrorSandboxStatus(jobsCol: Collection<SimJob>, job: SimJob) {
   }
 }
 
+async function readFailedBootstrap(job: SimJob): Promise<BootstrapFailureReport | null> {
+  const client = new MongoClient(SIM_MONGODB_URI as string);
+  try {
+    await client.connect();
+    return await client
+      .db(job.dbName)
+      .collection<BootstrapFailureReport>("seedDiagnostics")
+      .findOne({ runId: job._id, trigger: "worldsim-post-bootstrap" } as never, {
+        projection: { summary: 1, checks: 1, ranAt: 1 },
+      });
+  } finally {
+    await client.close();
+  }
+}
+
 async function processJob(jobsCol: Collection<SimJob>, job: SimJob, slotId: number) {
   // Validate before this job's fields touch a Mongo db name or a child-process
   // argv — see SAFE_TOKEN above. A job document only ever comes from this
@@ -366,6 +392,9 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob, slotId: numb
   // spawn work. Read-only git checks only - the worker never fetches,
   // checks out, resets, or otherwise mutates the shared worktree.
   const verifiedSource = verifySimSource(job, defaultSimSourceDeps());
+  if (job.preparedSandbox && (!verifiedSource || job.cloneFromLive)) {
+    throw new Error("Prepared sandbox requires a source pin and forbids production cloning");
+  }
   if (verifiedSource) {
     await jobsCol.updateOne(
       { _id: job._id },
@@ -403,6 +432,24 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob, slotId: numb
     // OPS_MONGODB_URI (it never should, but it especially shouldn't be handed
     // the production credential it has no use for).
     const runWorldEnv = { ...baseChildEnv(), SIM_MONGODB_URI: SIM_MONGODB_URI as string };
+    // Validate all arguments before the prepared copy is activated.
+    buildRunWorldArgs(job);
+    if (job.preparedSandbox) {
+      const client = await new MongoClient(SIM_MONGODB_URI as string).connect();
+      try {
+        const validation = await activatePreparedSandbox(
+          client.db(job.dbName),
+          job.preset,
+          job.preparedSandbox
+        );
+        await jobsCol.updateOne(
+          { _id: job._id },
+          { $set: { preparedSandboxValidation: validation, updatedAt: new Date() } }
+        );
+      } finally {
+        await client.close();
+      }
+    }
     if (job.cloneFromLive) {
       // Copy the live world's STATE into the sandbox db (history/log
       // collections excluded — see cloneWorld.ts). The clone step is the one
@@ -482,12 +529,32 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob, slotId: numb
     await mirrorSandboxStatus(jobsCol, job);
 
     if (code !== 0) {
+      const bootstrap = await readFailedBootstrap(job).catch(() => null);
+      const criticalIds = bootstrap?.checks
+        ?.filter((check) => check.severity === "critical")
+        .map((check) => check.id);
+      const bootstrapError =
+        (job.currentTurn ?? 0) <= 1 && criticalIds?.length
+          ? `Bootstrap conformance: ${criticalIds.length} critical finding(s): ${criticalIds.slice(0, 5).join(", ")}${criticalIds.length > 5 ? ` (+${criticalIds.length - 5} more)` : ""}`
+          : null;
       await jobsCol.updateOne(
         { _id: job._id },
         {
           $set: {
             status: "failed",
-            error: `runWorld.ts exited with code ${code}`,
+            error: bootstrapError ?? `runWorld.ts exited with code ${code}`,
+            ...(bootstrap
+              ? {
+                  bootstrapConformance: {
+                    status: "reported",
+                    reportId: String(bootstrap._id),
+                    ranAt: bootstrap.ranAt ?? null,
+                    ok: bootstrap.summary?.ok ?? null,
+                    warn: bootstrap.summary?.warn ?? null,
+                    critical: bootstrap.summary?.critical ?? null,
+                  },
+                }
+              : {}),
             updatedAt: new Date(),
           },
         }

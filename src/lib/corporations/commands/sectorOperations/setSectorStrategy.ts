@@ -5,15 +5,18 @@ import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
-import type { CorporateSector, GameState } from "@/lib/db/types";
+import type { CorporateSector, GameConfig, GameState } from "@/lib/db/types";
 import type { StateResourceCapacity } from "@/lib/db/types/stateResourceCapacity";
 import type { CorporationType } from "@/lib/constants/corporations";
 import {
   SECTOR_STRATEGIES,
+  getOperatingSectorType,
   STRATEGY_RETOOL_COST_FRACTION,
   STRATEGY_TRANSITION_TURNS,
   STRATEGY_COOLDOWN_TURNS,
+  getMediaOperatingModelStrategies,
 } from "@/lib/constants/sectorStrategies";
+import { getMediaOperatingModel } from "@/lib/mediaOperatingModels/catalog";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { setSectorStrategySchema as setStrategySchema } from "@/lib/api/schemas/corporations";
 import {
@@ -92,7 +95,11 @@ export async function setSectorStrategy(request: Request, { params }: RouteParam
     }
 
     // Validate strategy exists for this sector type
-    const sectorType = sector.sectorType as CorporationType;
+    const sectorType = getOperatingSectorType(
+      sector.sectorType,
+      sector.industryModel,
+      sector.mediaDiscriminator
+    ) as CorporationType;
     const strategies = SECTOR_STRATEGIES[sectorType];
     if (!strategies) {
       return NextResponse.json(
@@ -101,7 +108,29 @@ export async function setSectorStrategy(request: Request, { params }: RouteParam
       );
     }
 
-    const targetStrategy = strategies.find((s) => s.id === strategyId);
+    const operatingModel = getMediaOperatingModel(strategyId);
+    let operatingModelsEnabled = false;
+    if (operatingModel) {
+      const config = await db
+        .collection<GameConfig>("gameConfig")
+        .findOne({ _id: "default" }, { projection: { mediaOperatingModelsEnabled: 1 } });
+      operatingModelsEnabled = config?.mediaOperatingModelsEnabled === true;
+      if (!operatingModelsEnabled) {
+        return NextResponse.json(
+          { error: "Media operating models are not available." },
+          { status: 404 }
+        );
+      }
+      if (!operatingModel.sectorTypes.includes(sectorType as "media" | "entertainment")) {
+        return NextResponse.json({ error: "Invalid model for this sector type." }, { status: 400 });
+      }
+    }
+
+    const targetStrategy =
+      strategies.find((s) => s.id === strategyId) ??
+      (operatingModelsEnabled
+        ? getMediaOperatingModelStrategies(sectorType).find((s) => s.id === strategyId)
+        : undefined);
     if (!targetStrategy) {
       return NextResponse.json({ error: "Invalid strategy for this sector type" }, { status: 400 });
     }
@@ -131,9 +160,16 @@ export async function setSectorStrategy(request: Request, { params }: RouteParam
     const currentYear =
       gameState?.currentYear ??
       STARTING_YEAR + Math.floor((Math.max(1, currentTurn) - 1) / TURNS_PER_YEAR);
+    if (operatingModel && currentYear < operatingModel.availableFromYear) {
+      return NextResponse.json(
+        { error: "This business model is not available in this era yet." },
+        { status: 400 }
+      );
+    }
     const availability = getStrategyAvailability(
       {
         type: corporation.type,
+        industryModel: corporation.industryModel,
         unlockedTechNodeIds: corporation.unlockedTechNodeIds,
         techDecadeLane: corporation.techDecadeLane,
       },
@@ -260,6 +296,8 @@ export async function setSectorStrategy(request: Request, { params }: RouteParam
     const plantsEnabled = marketAtLeast(marketMode, "plants");
     const rescale = retoolRescaleFields({
       sectorType,
+      industryModel: sector.industryModel,
+      mediaDiscriminator: sector.mediaDiscriminator,
       fromStrategyId: currentStrategyId,
       toStrategyId: strategyId,
       plantsEnabled,

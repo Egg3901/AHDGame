@@ -2,7 +2,7 @@ import { ObjectId, type Db } from "mongodb";
 import type { Bond, Corporation, Shareholder } from "@/lib/db/types";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import { perTurnCouponPayment } from "@/lib/constants/bonds";
+import { bondAccruesCoupon, perTurnCouponPayment } from "@/lib/constants/bonds";
 import { getBondIssuerDisplayName } from "@/lib/bonds/sovereign";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import {
@@ -112,11 +112,17 @@ export async function loadPortfolioHoldings(
   const GAME_DAYS_PER_YEAR_RATIO = TURNS_PER_YEAR / TURNS_PER_DAY;
   const portfolioFxByCurrency = await loadValuationFxRates(db);
   const heldBondsSummary: HeldBondSummary[] = heldBondsRaw.map((bond) => {
-    const holding = bond.holders.find(
+    // `holders` is required by the Bond type, but legacy rows can arrive
+    // without it; an unguarded `.find` throws a TypeError and 500s the whole
+    // corporation page (#2349). A bond with no holder rows contributes nothing.
+    const holding = (bond.holders ?? []).find(
       (h) => h.corporationId?.toString() === corporation._id.toString()
     );
     const units = holding?.units ?? 0;
-    const couponPerUnit = perTurnCouponPayment(bond.couponRate, BOND_UNIT_FACE_VALUE);
+    // A defaulted bond pays no coupon, so it adds nothing to the income statement.
+    const couponPerUnit = bondAccruesCoupon(bond)
+      ? perTurnCouponPayment(bond.couponRate, BOND_UNIT_FACE_VALUE)
+      : 0;
     const dailyIncome = couponPerUnit * units * TURNS_PER_DAY;
     const currentValue = units * BOND_UNIT_FACE_VALUE * bond.marketPrice;
     const bondCcy = (bond.currencyCode ??

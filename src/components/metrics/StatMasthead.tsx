@@ -64,8 +64,7 @@ export function StatMasthead({
     "--g1": accent.g1,
     "--g2": accent.g2,
   } as CSSProperties;
-  const mastheadBg =
-    "radial-gradient(120% 150% at 0% 0%, color-mix(in srgb, var(--stat-soft) 16%, transparent) 0%, transparent 44%), linear-gradient(135deg, var(--g0) 0%, var(--g1) 52%, var(--g2) 100%)";
+  const mastheadBg = "linear-gradient(135deg, var(--g0) 0%, var(--g1) 52%, var(--g2) 100%)";
 
   return (
     <header
@@ -74,30 +73,14 @@ export function StatMasthead({
       style={{
         ...accentVars,
         borderColor: "color-mix(in srgb, var(--stat) 25%, transparent)",
-        boxShadow:
-          "0 0 0 1px color-mix(in srgb, var(--stat) 25%, transparent), 0 12px 34px -14px color-mix(in srgb, var(--stat) 45%, transparent)",
       }}
     >
       <div className="relative px-5 pb-4 pt-5 sm:px-7 sm:pt-6" style={{ background: mastheadBg }}>
-        {/* watermark glyph */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -right-4 -top-12 select-none font-black"
-          style={{
-            fontSize: 200,
-            lineHeight: 1,
-            color: "color-mix(in srgb, var(--stat-soft) 6%, transparent)",
-            fontFamily: "var(--font-serif), serif",
-          }}
-        >
-          {identity.glyph}
-        </div>
-
         <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center">
           {/* seal / chop */}
           <div
             aria-hidden
-            className={`flex shrink-0 items-center justify-center rounded-lg font-black ${isCjk ? "font-serif" : "font-mono"}`}
+            className={`flex shrink-0 items-center justify-center rounded-lg font-black ${isCjk ? "" : "font-mono"}`}
             style={{
               width: 76,
               height: 76,
@@ -115,13 +98,13 @@ export function StatMasthead({
 
           <div className="min-w-0 flex-1">
             <div
-              className="whitespace-nowrap text-[10px] font-bold uppercase tracking-[0.16em]"
+              className="whitespace-nowrap text-body-sm font-medium"
               style={{ color: "color-mix(in srgb, var(--stat-soft) 80%, transparent)" }}
             >
               {identity.registry}
             </div>
             <h1
-              className={`mt-1.5 text-2xl font-bold leading-[1.1] tracking-tight text-white sm:text-3xl ${isCjk ? "font-serif" : ""}`}
+              className={`mt-1.5 text-2xl font-bold leading-[1.1] tracking-tight text-white sm:text-3xl`}
             >
               {title}
             </h1>
@@ -141,39 +124,11 @@ export function StatMasthead({
               >
                 {scopeLabel}
               </span>
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-black/30 px-2.5 py-0.5 text-xs font-medium text-white/80">
-                <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success/60" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
-                </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-black px-2.5 py-0.5 text-xs font-medium text-white/80">
+                <span className="h-2 w-2 shrink-0 rounded-full bg-success" aria-hidden />
                 Live · turn-weighted
               </span>
             </div>
-          </div>
-
-          {/* round seal */}
-          <div className="hidden shrink-0 flex-col items-center gap-1.5 sm:flex">
-            <div
-              className={`flex items-center justify-center rounded-full border-2 text-center font-bold ${isCjk ? "font-serif" : ""}`}
-              style={{
-                width: 84,
-                height: 84,
-                transform: "rotate(-11deg)",
-                borderColor: "color-mix(in srgb, var(--stat) 70%, transparent)",
-                color: "color-mix(in srgb, var(--stat) 92%, white)",
-                fontSize: 11,
-                padding: 8,
-                boxShadow: "inset 0 0 0 2px color-mix(in srgb, var(--stat) 22%, transparent)",
-              }}
-            >
-              {identity.seal}
-            </div>
-            <span
-              className="text-[8px] font-bold uppercase tracking-[0.16em]"
-              style={{ color: "color-mix(in srgb, var(--stat-soft) 55%, transparent)" }}
-            >
-              official statistics
-            </span>
           </div>
         </div>
 
@@ -185,15 +140,7 @@ export function StatMasthead({
         )}
       </div>
 
-      {/* accent rule */}
-      <div
-        style={{
-          height: 2,
-          opacity: 0.85,
-          background:
-            "linear-gradient(90deg, transparent, var(--stat) 16%, var(--stat-soft) 50%, var(--stat) 84%, transparent)",
-        }}
-      />
+      <div aria-hidden className="h-px bg-card-border" />
 
       {/* headline stat strip */}
       <div className="grid grid-cols-2 divide-x divide-y divide-card-border bg-card-muted/60 sm:grid-cols-3 lg:grid-cols-7 lg:divide-y-0">
@@ -202,9 +149,7 @@ export function StatMasthead({
             key={i}
             className="flex min-w-[120px] flex-1 flex-col justify-between gap-1 px-4 py-3.5"
           >
-            <span className="whitespace-nowrap text-[10px] font-bold uppercase tracking-[0.16em] text-muted">
-              {t.label}
-            </span>
+            <span className="whitespace-nowrap text-body-sm font-medium text-muted">{t.label}</span>
             <div className="flex flex-col">
               <span
                 className={`text-lg font-bold leading-tight tabular-nums ${t.tone === "accent" ? "" : toneClass(t.tone) || "text-foreground"}`}

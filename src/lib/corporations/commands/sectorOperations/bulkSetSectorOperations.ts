@@ -14,7 +14,7 @@ import { bulkSectorOperationsSchema } from "@/lib/api/schemas/corporations";
 import { handleRouteError } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import type { Character, CorporateSector } from "@/lib/db/types";
-import { CORPORATION_TYPE_LABELS, type CorporationType } from "@/lib/constants/corporations";
+import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
 import { clampProductionPolicy } from "@/lib/utils/productionPolicy";
 import { clampPricingPosture } from "@/lib/market/clearing";
 import { getMarketSystemMode, isMarketSystemMode, marketAtLeast } from "@/lib/market/featureFlag";
@@ -146,17 +146,22 @@ export async function bulkSetSectorOperations(request: Request, { params }: Rout
       const techEnabled = await isSectorTechTreesEnabled();
       const techCorpView = {
         type: corporation.type,
+        industryModel: corporation.industryModel,
+        mediaDiscriminator: corporation.mediaDiscriminator,
         unlockedTechNodeIds: corporation.unlockedTechNodeIds,
         techDecadeLane: corporation.techDecadeLane,
       };
-      const techMultFor = (st: CorporationType) =>
-        techEnabled ? getSectorTechEffects(techCorpView, st).growthCostMultiplier : 1;
+      const techMultFor = (s: CorporateSector) =>
+        techEnabled
+          ? getSectorTechEffects(techCorpView, s.sectorType, s.industryModel, s.mediaDiscriminator)
+              .growthCostMultiplier
+          : 1;
       let projectedTotal = 0;
       let currentTotal = 0;
       for (const s of sectors) {
         const marketSharePct = await fetchSectorMarketSharePercent(db, s, corporation);
         const activeRate = s.currentGrowthRate ?? s.growthRate ?? 0;
-        const techGrowthMult = techMultFor(s.sectorType);
+        const techGrowthMult = techMultFor(s);
         const persisted = growthCostFor(
           s.revenue,
           activeRate,

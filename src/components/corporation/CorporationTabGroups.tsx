@@ -112,7 +112,7 @@ export const CORP_GROUPS: CorpGroupDef[] = [
   {
     id: "operations",
     label: "Operations",
-    tooltip: "What the corporation runs and produces — sectors, goods, R&D, and contracts",
+    tooltip: "What the corporation runs and produces: sectors, goods, R&D and contracts",
     icon: ICONS.operations,
     tabIds: ["sectors", "commodities", "tech", "contracts", "defence"],
   },

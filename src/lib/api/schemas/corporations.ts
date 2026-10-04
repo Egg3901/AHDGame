@@ -48,6 +48,11 @@ const ipoTermsSchema = z
       .min(SUPERSHARE_MIN_MULTIPLIER, `Multiplier must be at least ${SUPERSHARE_MIN_MULTIPLIER}×`)
       .max(SUPERSHARE_MAX_MULTIPLIER, `Multiplier cannot exceed ${SUPERSHARE_MAX_MULTIPLIER}×`)
       .optional(),
+    /** Optional bank selected for a funded founding or late IPO. */
+    underwriterCorporationId: z
+      .string()
+      .regex(/^[0-9a-fA-F]{24}$/)
+      .optional(),
   })
   .refine((v) => v.floatPct <= IPO_MAX_FLOAT_PCT || v.superShareMultiplier !== undefined, {
     message: `Floating more than ${IPO_MAX_FLOAT_PCT}% requires a dual-class supershare structure`,
@@ -219,6 +224,7 @@ export const setSectorStockpileSchema = z.object({
 // the CEO's price relative to market, -20%..+20%; null reverts to auto.
 export const setSectorPricingSchema = z.object({
   pricingPosture: z.number().min(-0.2).max(0.2).nullable(),
+  pricingMode: z.enum(["market", "costPlus"]).optional(),
 });
 
 export const setSectorWageLevelSchema = z.object({

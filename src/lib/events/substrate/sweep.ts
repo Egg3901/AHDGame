@@ -1,6 +1,7 @@
 import type { Db } from "mongodb";
 import { getEventInstancesCollection } from "@/lib/db/collections/eventInstances";
 import type { EventInstance } from "@/lib/db/types/events";
+import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { getDefaultOptionId } from "./registry";
 import { resolveEvent } from "./resolve";
 import type { ResolveEventHooks } from "./types";
@@ -21,7 +22,8 @@ export async function sweepExpired(
   db: Db,
   currentTurn: number,
   nowMs: number = Date.now(),
-  hooks?: ResolveEventHooks
+  hooks?: ResolveEventHooks,
+  treasuryCashLedgerEnabled = false
 ): Promise<SweepExpiredResult> {
   const coll = getEventInstancesCollection(db);
   const expired = await coll
@@ -33,6 +35,7 @@ export async function sweepExpired(
 
   const swept: EventInstance[] = [];
   const skipped: SweepExpiredResult["skipped"] = [];
+  const preset = expired.length > 0 ? await getGameStatePresetOrDefault(db) : undefined;
 
   for (const instance of expired) {
     const defaultOptionId = getDefaultOptionId(instance.kind);
@@ -51,7 +54,9 @@ export async function sweepExpired(
         defaultOptionId,
         "timeout",
         currentTurn,
-        hooks
+        hooks,
+        preset,
+        treasuryCashLedgerEnabled
       );
       swept.push(resolved);
     } catch (err) {

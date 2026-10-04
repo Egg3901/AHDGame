@@ -41,6 +41,7 @@ const POWER_LABEL: Record<OrganizationResolutionType, string> = {
   set_posture: "Alert posture",
   fund_agency: "Agency funding",
   set_dues: "Dues",
+  declare_war: "Collective declarations of war",
   join_conflict: "Entry into conflicts",
 };
 

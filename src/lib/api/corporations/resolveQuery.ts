@@ -30,7 +30,8 @@ export function corporationQueryFromParamId(id: string): Record<string, unknown>
  */
 export async function resolveCorporation(
   db: Db,
-  id: string
+  id: string,
+  projection?: Record<string, 0 | 1>
 ): Promise<{ ok: true; corporation: Corporation } | { ok: false; response: NextResponse }> {
   const query = corporationQueryFromParamId(id);
   if (!query) {
@@ -39,7 +40,16 @@ export async function resolveCorporation(
       response: NextResponse.json({ error: "Invalid corporation ID" }, { status: 400 }),
     };
   }
-  const corporation = await db.collection<Corporation>("corporations").findOne(query);
+  // Keep the editorial default exclusion with exclusion projections. Inclusion
+  // projections already omit it and must not mix Mongo's two projection modes.
+  const inclusion =
+    projection && Object.entries(projection).some(([key, value]) => key !== "_id" && value === 1);
+  const effectiveProjection = inclusion
+    ? projection
+    : { editorialStance: 0 as const, ...projection };
+  const corporation = await db
+    .collection<Corporation>("corporations")
+    .findOne(query, { projection: effectiveProjection });
   if (!corporation) {
     return {
       ok: false,

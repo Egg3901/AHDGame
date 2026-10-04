@@ -28,6 +28,7 @@ import { toAuditEnvelope } from "@/lib/banking/rules/auditEvents";
 import { getAuditRequestContext } from "@/lib/observability/context";
 import { isLedgerShadowEnabledFromConfig } from "@/lib/ledger/featureFlag";
 import { finalizeLedgerEntry } from "@/lib/ledger/emit";
+import { resolveLedgerTurn } from "@/lib/ledger/ledgerTurn";
 import { accountId } from "@/lib/ledger/accounts";
 import { buildTxDocs, loadTxThresholds } from "@/lib/financialTxLog/emit";
 import { loadTurnLengthMinutes } from "@/lib/financialTxLog/expiresAt";
@@ -62,6 +63,7 @@ interface Plan {
   auditDelivered?: boolean;
   error?: string;
   sourceRevision?: number;
+  treasuryCashLedgerEnabled?: boolean;
   destinationRevision?: number;
 }
 interface Receipt extends Document {
@@ -75,6 +77,7 @@ interface BalanceDocument {
   _id: string;
   settledKeys?: string[];
   treasuryBalance?: number;
+  treasuryCashLocal?: number;
   treasuryReserveRevision?: number;
   treasuryReserveRejectedKey?: string;
   reserveBalance?: number;
@@ -96,7 +99,20 @@ function assertSame(saved: Command, input: Command): void {
 }
 async function prepare(db: Db, command: Command): Promise<void> {
   const budgetId = command.countryId === "US" ? "federal" : command.countryId;
-  const budget = await db.collection<FederalBudget>("federalBudget").findOne({ _id: budgetId });
+  const [budget, config] = await Promise.all([
+    db.collection<FederalBudget>("federalBudget").findOne({ _id: budgetId }),
+    db.collection<GameConfig>("gameConfig").findOne(
+      { _id: "default" },
+      {
+        projection: {
+          treasuryCashLedgerEnabled: 1,
+          ledgerShadow: 1,
+          auditLog: 1,
+          turnLengthMinutes: 1,
+        },
+      }
+    ),
+  ]);
   if (!budget) throw new TreasuryReserveTransferRejected("Federal budget not found", 404);
   const bankId = getBankId(command.countryId);
   const bank = await db
@@ -117,9 +133,17 @@ async function prepare(db: Db, command: Command): Promise<void> {
     debtCeiling: ceiling,
   });
   if (error) throw new TreasuryReserveTransferRejected(error);
-  if (!Number.isFinite(budget.treasuryBalance))
+  const treasuryCashLedgerEnabled = config?.treasuryCashLedgerEnabled === true;
+  const availableTreasuryCash = treasuryCashLedgerEnabled
+    ? budget.treasuryCashLocal
+    : budget.treasuryBalance;
+  if (!Number.isFinite(availableTreasuryCash))
     throw new TreasuryReserveTransferRejected(
       "Treasury cash is unavailable; reconciliation is required"
+    );
+  if (treasuryCashLedgerEnabled && availableTreasuryCash! < command.amount)
+    throw new TreasuryReserveTransferRejected(
+      "Funded Treasury cash cannot cover this reserve transfer"
     );
   const currency = resolveCountryCurrencyCode(budget);
   if (!currency) throw new TreasuryReserveTransferRejected("Treasury currency is unavailable");
@@ -130,6 +154,7 @@ async function prepare(db: Db, command: Command): Promise<void> {
     budgetId,
     currency,
     state: "planning",
+    treasuryCashLedgerEnabled,
     ...(typeof ceiling === "number" ? { debtFloor: command.amount - ceiling } : {}),
     record: {
       turn: command.turn,
@@ -141,12 +166,6 @@ async function prepare(db: Db, command: Command): Promise<void> {
     },
   };
   const projections: TransitionProjection[] = [];
-  const config = await db
-    .collection<GameConfig>("gameConfig")
-    .findOne(
-      { _id: "default" },
-      { projection: { ledgerShadow: 1, auditLog: 1, turnLengthMinutes: 1 } }
-    );
   const [rate, state, thresholds, cadence] = await Promise.all([
     db
       .collection<{ currencyCode: string; rate: number }>("exchangeRates")
@@ -200,8 +219,10 @@ async function prepare(db: Db, command: Command): Promise<void> {
     note: "Original treasury cash transaction",
   });
   if (isLedgerShadowEnabledFromConfig(config) && valuation) {
+    // Planned once and replayed from the receipt, so the turn is fixed here: the
+    // one whose closing snapshot holds this cash, not the route's clock (#3022).
     const entry = finalizeLedgerEntry({
-      turn: command.turn,
+      turn: (await resolveLedgerTurn(db)) ?? command.turn,
       createdAt: now,
       txType: "gov_budget_transfer",
       emitSite: "budget/treasuryReserveTransfer.ts",
@@ -227,6 +248,35 @@ async function prepare(db: Db, command: Command): Promise<void> {
       insert: { ...entry, ...valuation },
       note: "Original conserved treasury/reserve cash witness",
     });
+    if (config?.treasuryCashLedgerEnabled === true) {
+      const cashEntry = finalizeLedgerEntry({
+        turn: entry.turn,
+        createdAt: now,
+        txType: "gov_budget_transfer",
+        emitSite: "budget/treasuryReserveTransfer.ts:fundedCash",
+        legs: [
+          {
+            account: accountId("government_cash", command.countryId, currency),
+            amount: -command.amount,
+            currencyCode: currency,
+            anchorAmount: -command.amount / valuation.anchorRate,
+            role: "primary",
+          },
+          {
+            account: `central_bank_reserve:${bankId}:${currency}`,
+            amount: command.amount,
+            currencyCode: currency,
+            anchorAmount: command.amount / valuation.anchorRate,
+            role: "contra",
+          },
+        ],
+      });
+      projections.push({
+        collection: "ledgerEntries",
+        insert: { ...cashEntry },
+        note: "Funded Treasury cash debit witness",
+      });
+    }
   }
   if (isAuditLogEnabledFromConfig(config)) {
     const context = getAuditRequestContext();
@@ -265,8 +315,10 @@ async function prepare(db: Db, command: Command): Promise<void> {
         kind: "debit",
         amount: command.amount,
         collection: "federalBudget",
-        filter: { _id: budgetId },
-        path: "treasuryBalance",
+        filter: plan.treasuryCashLedgerEnabled
+          ? { _id: budgetId, treasuryCashLocal: { $gte: command.amount } }
+          : { _id: budgetId },
+        path: plan.treasuryCashLedgerEnabled ? "treasuryCashLocal" : "treasuryBalance",
         note: "Signed native treasury position",
       },
       {
@@ -278,6 +330,18 @@ async function prepare(db: Db, command: Command): Promise<void> {
         note: "Native central-bank reserves",
       },
     ],
+    ...(plan.treasuryCashLedgerEnabled
+      ? {
+          projections: [
+            {
+              collection: "federalBudget",
+              filter: { _id: budgetId },
+              update: { $inc: { treasuryBalance: -command.amount } },
+              note: "Keep signed fiscal position aligned with the funded reserve transfer",
+            },
+          ],
+        }
+      : {}),
     record: {
       currency,
       treasuryReserveTransfer: plan,
@@ -503,7 +567,9 @@ export async function resumeTreasuryReserveTransfer(
         _id: plan.budgetId,
         settledKeys: { $ne: debitStamp },
         ...revisionGuard(plan.sourceRevision!),
-        treasuryBalance: { $gte: -Number.MAX_VALUE, $lte: Number.MAX_VALUE },
+        ...(plan.treasuryCashLedgerEnabled
+          ? { treasuryCashLocal: { $gte: plan.command.amount } }
+          : { treasuryBalance: { $gte: -Number.MAX_VALUE, $lte: Number.MAX_VALUE } }),
         ...(plan.debtFloor !== undefined
           ? {
               $expr: {
@@ -521,7 +587,15 @@ export async function resumeTreasuryReserveTransfer(
           : {}),
       },
       {
-        $inc: { treasuryBalance: -plan.command.amount, treasuryReserveRevision: 1 },
+        $inc: {
+          ...(plan.treasuryCashLedgerEnabled
+            ? {
+                treasuryCashLocal: -plan.command.amount,
+                treasuryBalance: -plan.command.amount,
+              }
+            : { treasuryBalance: -plan.command.amount }),
+          treasuryReserveRevision: 1,
+        },
         $set: { updatedAt: new Date() },
         $push: { settledKeys: { $each: [debitStamp], $slice: -SETTLED_KEYS_CAP } },
       }

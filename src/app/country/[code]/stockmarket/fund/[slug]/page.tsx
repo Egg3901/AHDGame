@@ -1,4 +1,5 @@
 "use client";
+import { MARKET_TIMEFRAMES } from "@/lib/stockExchange/rules/calendar";
 
 import { use, useCallback, useEffect, useState, Suspense } from "react";
 import BackButton from "@/components/BackButton";
@@ -197,7 +198,7 @@ function FundDetailPageInner({ params }: { params: Promise<{ code: string; slug:
                 {statusTone.label}
               </span>
             </div>
-            <h1 className="mt-3 font-serif text-2xl sm:text-4xl font-semibold leading-tight tracking-tight">
+            <h1 className="mt-3 text-2xl sm:text-4xl font-semibold leading-tight tracking-tight">
               {fund.name}
             </h1>
             <p className="mt-2.5 text-[13px] text-muted">
@@ -227,7 +228,7 @@ function FundDetailPageInner({ params }: { params: Promise<{ code: string; slug:
                         : "border-transparent text-muted hover:text-foreground"
                     }`}
                   >
-                    {tf}
+                    {MARKET_TIMEFRAMES[tf].label}
                   </button>
                 ))}
               </div>
@@ -287,7 +288,7 @@ function FundDetailPageInner({ params }: { params: Promise<{ code: string; slug:
                     aria-selected={active}
                     className={`inline-flex items-center gap-2 rounded-[10px] border px-4 py-2 text-[13px] font-semibold transition-all ${
                       active
-                        ? "border-primary/55 bg-card-elevated text-foreground shadow-glow-sm"
+                        ? "border-primary/55 bg-card-elevated text-foreground"
                         : "border-card-border bg-card text-muted hover:text-foreground"
                     }`}
                   >

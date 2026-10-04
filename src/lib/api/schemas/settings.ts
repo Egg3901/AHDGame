@@ -54,6 +54,7 @@ export const characterDemographicsSchema = z.object({
 });
 
 export const createCharacterSchema = z.object({
+  analyticsConsent: z.boolean().optional().default(false),
   name: moderatedNameSchema("Name", 2, 50),
   homeState: z.string().min(1, "Home state required"),
   // The country picked by the user at character creation. Used to scope the
@@ -81,6 +82,9 @@ export const createCharacterSchema = z.object({
 export const characterTransferSchema = z.object({
   // `amount` is in the sender's local home currency (same unit as their balance).
   amount: z.coerce.number().int().min(1000, "Minimum transfer is 1,000"),
+  // Optional client idempotency key: same key + same transfer replays the
+  // stored outcome instead of moving money again (issue #1672).
+  idempotencyKey: z.string().min(1).max(128).optional(),
 });
 
 export const partyTransferSchema = z.object({

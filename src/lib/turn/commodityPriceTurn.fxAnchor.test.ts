@@ -82,10 +82,11 @@ describe("commodityPriceTurn sector currency anchoring", () => {
       [],
     ];
 
+    const dataCollection = vi.fn();
     for (const data of positionalReads) {
-      mockCollection.mockReturnValueOnce(createChainableCursor(data));
+      dataCollection.mockReturnValueOnce(createChainableCursor(data));
     }
-    mockCollection.mockReturnValue({
+    dataCollection.mockReturnValue({
       bulkWrite: mockBulkWrite,
       insertMany: vi.fn().mockResolvedValue({ insertedIds: [] }),
       updateOne: vi.fn().mockResolvedValue({}),
@@ -94,6 +95,15 @@ describe("commodityPriceTurn sector currency anchoring", () => {
       findOne: vi.fn().mockResolvedValue(null),
       find: vi.fn().mockReturnValue(createChainableCursor([])),
     });
+    // The ledger configuration read precedes the sector data reads and must
+    // not consume a positional fixture intended for a different collection.
+    const ledgerConfig = {
+      findOne: vi.fn().mockResolvedValue(null),
+      updateOne: vi.fn().mockResolvedValue({}),
+    };
+    mockCollection.mockImplementation((name: string) =>
+      name === "gameConfig" ? ledgerConfig : dataCollection(name)
+    );
 
     await processCommodityPriceTurn(100);
 

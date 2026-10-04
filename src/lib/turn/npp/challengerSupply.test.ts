@@ -329,7 +329,7 @@ describe("processChallengerGeneration: concurrent regional chamber floor (#2098)
   });
 });
 
-describe("processChallengerGeneration: 2027 qualification coverage (#2072)", () => {
+describe("processChallengerGeneration: qualification coverage (#2072)", () => {
   let db: MockDb;
 
   beforeEach(async () => {
@@ -339,6 +339,12 @@ describe("processChallengerGeneration: 2027 qualification coverage (#2072)", () 
   });
 
   it.each([
+    ["HU", "nationalAssembly", "HU_BUD"],
+    ["BG", "nationalAssembly", "BG_SOF"],
+    ["PL", "sejm", "PL_MAZ"],
+    ["PL", "senat", "PL_MAZ"],
+    ["RO", "chamberOfDeputies", "RO_BUC"],
+    ["RO", "senat", "RO_BUC"],
     ["DE", "ministerPresident", "BY"],
     ["ES", "congresoDiputados", "ES_MAD"],
     ["ES", "senado", "ES_MAD"],
@@ -346,13 +352,20 @@ describe("processChallengerGeneration: 2027 qualification coverage (#2072)", () 
     ["GR", "vouli", "GR_ATT"],
     ["IE", "dail", "DUB"],
     ["IE", "localCouncil", "DUB"],
+    ["IE", "localCouncil", "KIL"],
+    ["IE", "localCouncil", "MID"],
+    ["IE", "localCouncil", "WEX"],
+    ["IE", "localCouncil", "LIM"],
+    ["IE", "localCouncil", "COR"],
+    ["IE", "localCouncil", "GAL"],
+    ["IE", "localCouncil", "DON"],
     ["JP", "sangiin", "JP_TKY"],
     ["NG", "president", "NG"],
     ["NG", "governor", "NORTH_WEST"],
     ["NG", "senate", "NORTH_WEST"],
     ["NG", "regionalCouncil", "NORTH_WEST"],
   ])(
-    "files a candidate into an empty active %s %s contest",
+    "files a candidate into an empty active %s %s contest in %s",
     async (countryId, electionType, state) => {
       const election = {
         ...cnPeoplesCongress(state),
@@ -384,4 +397,46 @@ describe("processChallengerGeneration: 2027 qualification coverage (#2072)", () 
       ]);
     }
   );
+});
+
+describe("custom-party challenger supply", () => {
+  it("fields a matured custom party with presence without recreating a default roster", async () => {
+    const db = createMockDb();
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+    const fixture: WorldFixture = {
+      currentTurn: 100,
+      elections: [{ ...cnPeoplesCongress("CA"), countryId: "US", electionType: "senate" }],
+      parties: [
+        { sequentialId: 7, countryId: "US", isDefault: false, createdTurn: 40 } as PoliticalParty,
+      ],
+      freeNpps: [],
+      officials: [],
+      statePartyOrgs: [{ ...spo("CA", "7"), countryId: "US" }],
+    };
+    const { insertedCandidates } = mountWorld(db, fixture);
+    expect(await processChallengerGeneration(new Date())).toBe(1);
+    expect(insertedCandidates.map((c) => c.party)).toEqual(["7"]);
+  });
+  it("requires both maturity and genuine local presence for custom parties", async () => {
+    for (const [createdTurn, hasPresence] of [
+      [90, true],
+      [40, false],
+    ] as const) {
+      const db = createMockDb();
+      const { getDb } = await import("@/lib/mongodb");
+      vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+      mountWorld(db, {
+        currentTurn: 100,
+        elections: [{ ...cnPeoplesCongress("CA"), countryId: "US", electionType: "senate" }],
+        parties: [
+          { sequentialId: 7, countryId: "US", isDefault: false, createdTurn } as PoliticalParty,
+        ],
+        freeNpps: [],
+        officials: [],
+        statePartyOrgs: [{ ...spo("CA", "7"), countryId: "US", hasPresence }],
+      });
+      expect(await processChallengerGeneration(new Date())).toBe(0);
+    }
+  });
 });

@@ -14,6 +14,7 @@ import { PriorityRegionCard } from "./PriorityRegionCard";
 import { PartyCampaignersCard } from "./PartyCampaignersCard";
 import { MembershipModeCard } from "./MembershipModeCard";
 import { BulkStateOrgControl } from "./BulkStateOrgControl";
+import { HuListVacanciesCard } from "./HuListVacanciesCard";
 
 interface ChairOfficeTabProps {
   party: PartyData;
@@ -225,8 +226,11 @@ export function ChairOfficeTab({ party, countryId, characterId, onUpdate }: Chai
   return (
     <>
       <div className="space-y-6">
+        {countryId.toUpperCase() === "HU" && (
+          <HuListVacanciesCard partyId={party.id} onUpdate={onUpdate} />
+        )}
         <div className="rounded-xl border border-card-border bg-card p-6">
-          <h2 className="text-lg font-semibold mb-4">Chair Office</h2>
+          <h2 className="text-lg font-semibold mb-4">Chair office</h2>
           <p className="text-sm text-muted mb-6">
             {`As ${getPartyRoleLabel(countryId, "chair")}, you can customize your party's appearance. Changes will be reflected across the site.`}
           </p>
@@ -237,9 +241,7 @@ export function ChairOfficeTab({ party, countryId, characterId, onUpdate }: Chai
 
           {/* Party Logo */}
           <div className="space-y-4 mb-8">
-            <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">
-              Party Logo
-            </h3>
+            <h3 className="text-sm font-semibold text-muted">Party logo</h3>
             <div className="flex items-center gap-6">
               <div className="shrink-0">
                 <PartyLogo
@@ -278,9 +280,7 @@ export function ChairOfficeTab({ party, countryId, characterId, onUpdate }: Chai
 
           {/* Party Color */}
           <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">
-              Party Color
-            </h3>
+            <h3 className="text-sm font-semibold text-muted">Party color</h3>
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-3">
                 <input
@@ -318,9 +318,7 @@ export function ChairOfficeTab({ party, countryId, characterId, onUpdate }: Chai
 
           {/* Discord Link */}
           <div className="mt-8 space-y-4 border-t border-card-border pt-6">
-            <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">
-              Party Discord
-            </h3>
+            <h3 className="text-sm font-semibold text-muted">Party Discord</h3>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <input
                 type="url"
@@ -357,9 +355,7 @@ export function ChairOfficeTab({ party, countryId, characterId, onUpdate }: Chai
 
           {/* Preview */}
           <div className="mt-8 pt-6 border-t border-card-border">
-            <h3 className="text-sm font-semibold text-muted uppercase tracking-wider mb-4">
-              Preview
-            </h3>
+            <h3 className="text-sm font-semibold text-muted mb-4">Preview</h3>
             <div className="flex items-center gap-4 p-4 rounded-lg bg-background border border-card-border">
               <PartyLogo
                 partyId={party.id}
@@ -385,9 +381,7 @@ export function ChairOfficeTab({ party, countryId, characterId, onUpdate }: Chai
           {/* Purge Member */}
           {PARTY_PURGE_ENABLED && (
             <div className="mt-8 pt-6 border-t border-card-border">
-              <h3 className="text-sm font-semibold text-muted uppercase tracking-wider mb-2">
-                Purge Member
-              </h3>
+              <h3 className="text-sm font-semibold text-muted mb-2">Purge member</h3>
               <p className="text-xs text-muted mb-4">
                 Expel a member from the party. Costs you 25 infamy and half of their party
                 influence. 6-turn cooldown per expulsion.
@@ -430,14 +424,12 @@ export function ChairOfficeTab({ party, countryId, characterId, onUpdate }: Chai
           }}
         >
           <div className="w-full max-w-md rounded-xl border border-card-border bg-card p-6 shadow-xl">
-            <h2 className="text-lg font-bold mb-1">Purge Party Member</h2>
+            <h2 className="text-lg font-bold mb-1">Purge party member</h2>
             <p className="text-sm text-muted mb-5">
               Choose a member to expel. This action cannot be undone and imposes a 6-turn cooldown.
             </p>
 
-            <label className="block text-xs font-semibold text-muted uppercase tracking-wider mb-1">
-              Select Member
-            </label>
+            <label className="block text-xs font-semibold text-muted mb-1">Select member</label>
             <select
               value={selectedMemberId}
               onChange={(e) => setSelectedMemberId(e.target.value)}

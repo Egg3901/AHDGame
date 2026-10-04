@@ -18,9 +18,16 @@
  * with the transition).
  */
 
-import type { CorporationType } from "./corporations";
+import * as Sentry from "@sentry/nextjs";
+import type { CorporationType, ManufacturingIndustryModel } from "./corporations";
 import type { CommodityType } from "./commodities";
 import { COMMODITY_BASE_PRICES } from "./commodities";
+import {
+  MEDIA_OPERATING_MODELS,
+  mediaOperatingModelOutputRates,
+  type MediaOperatingModelId,
+  type MediaOperatingModelSector,
+} from "@/lib/mediaOperatingModels/catalog";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -57,6 +64,8 @@ export interface SectorStrategy {
    */
   minDecade?: string;
   requiresTechUnlock?: boolean;
+  /** Present on virtual strategy definitions backed by the media model catalog. */
+  mediaOperatingModelId?: MediaOperatingModelId;
 }
 
 export interface EffectiveStrategyRates {
@@ -1190,13 +1199,134 @@ export const SECTOR_STRATEGIES: Record<CorporationType, SectorStrategy[]> = {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
+const reportedUnknownSectorTypes = new Set<string>();
+const UNKNOWN_SECTOR_STRATEGY: SectorStrategy = {
+  id: "standard",
+  name: "Unknown sector",
+  description: "Production is unavailable until this sector type is recognized.",
+  supply: {},
+  demand: {},
+};
+
+/**
+ * Build the model recipes from existing physical input baskets and output
+ * patterns. Output rates retain the default sector's base-value budget; input
+ * costs remain on the ordinary strategy demand and physical-cost rails.
+ */
+export function getMediaOperatingModelStrategies(sectorType: string): SectorStrategy[] {
+  if (sectorType !== "media" && sectorType !== "entertainment") return [];
+  const lane = sectorType as MediaOperatingModelSector;
+  const strategies = SECTOR_STRATEGIES[sectorType as CorporationType];
+  const baseline = strategies.find((strategy) => strategy.id === "standard");
+  if (!baseline) return [];
+
+  return MEDIA_OPERATING_MODELS.flatMap((model) => {
+    const recipe = model.recipes[lane];
+    if (!recipe) return [];
+    const input = strategies.find((strategy) => strategy.id === recipe.inputStrategyId);
+    const output = SECTOR_STRATEGIES[lane].find(
+      (strategy) => strategy.id === recipe.outputStrategyId
+    );
+    if (!input || !output) return [];
+
+    const outputSourceRates = Object.fromEntries(
+      model.outputProducts.flatMap((commodity) => {
+        const rate = output.supply[commodity];
+        return typeof rate === "number" && Number.isFinite(rate) && rate > 0
+          ? [[commodity, rate]]
+          : [];
+      })
+    ) as Partial<Record<"advertising" | "entertainment_services", number>>;
+    const sourceBudget = Object.values(outputSourceRates).reduce(
+      (total, rate) => total + (rate ?? 0),
+      0
+    );
+    if (sourceBudget <= 0) return [];
+    const outputValueShares = Object.fromEntries(
+      Object.entries(outputSourceRates).map(([commodity, rate]) => [
+        commodity,
+        (rate ?? 0) / sourceBudget,
+      ])
+    ) as Partial<Record<"advertising" | "entertainment_services", number>>;
+
+    return [
+      {
+        id: model.id,
+        name: model.name,
+        description: `${model.name} operating model using established ${recipe.inputStrategyId.replaceAll("_", " ")} inputs.`,
+        supply: mediaOperatingModelOutputRates(baseline.supply, outputValueShares),
+        demand: { ...input.demand },
+        ...(model.technologies[lane] ? { minDecade: model.technologies[lane]?.decade } : {}),
+        requiresTechUnlock: Boolean(model.technologies[lane]),
+        mediaOperatingModelId: model.id,
+      },
+    ];
+  });
+}
+
 /**
  * Look up a strategy by sector type and strategy ID.
- * Falls back to "standard" if not found.
+ * Falls back to the sector's first strategy if the strategy ID is unknown.
+ * Unknown persisted sector types use an inert strategy until repaired.
  */
-export function getStrategy(sectorType: CorporationType, strategyId: string): SectorStrategy {
-  const strategies = SECTOR_STRATEGIES[sectorType];
-  return strategies.find((s) => s.id === strategyId) ?? strategies[0];
+export function getStrategy(sectorType: string, strategyId: string): SectorStrategy {
+  if (!Object.hasOwn(SECTOR_STRATEGIES, sectorType)) {
+    if (!reportedUnknownSectorTypes.has(sectorType)) {
+      reportedUnknownSectorTypes.add(sectorType);
+      Sentry.captureMessage("Unknown persisted sector type: using inert strategy", {
+        level: "error",
+        extra: { sectorType },
+      });
+    }
+    return UNKNOWN_SECTOR_STRATEGY;
+  }
+  const strategies = SECTOR_STRATEGIES[sectorType as CorporationType];
+  return (
+    strategies.find((s) => s.id === strategyId) ??
+    getMediaOperatingModelStrategies(sectorType).find((s) => s.id === strategyId) ??
+    strategies[0]
+  );
+}
+
+/** Strategy options for queries and menus. Model options are omitted unless enabled. */
+export function getSectorStrategies(
+  sectorType: string,
+  mediaOperatingModelsEnabled = false,
+  mediaDiscriminator?: string | null
+): SectorStrategy[] {
+  const operatingType = getOperatingSectorType(sectorType, undefined, mediaDiscriminator);
+  if (!Object.hasOwn(SECTOR_STRATEGIES, operatingType)) return [];
+  const strategies = SECTOR_STRATEGIES[operatingType as CorporationType];
+  return mediaOperatingModelsEnabled
+    ? [...strategies, ...getMediaOperatingModelStrategies(operatingType)]
+    : strategies;
+}
+
+/** Resolve the legacy economic profile represented by a persisted sector. */
+export function getOperatingSectorType(
+  sectorType: string,
+  industryModel?: ManufacturingIndustryModel | string | null,
+  mediaDiscriminator?: string | null
+): string {
+  if (sectorType === "manufacturing" && industryModel === "vehicles") return "automobiles";
+  if (sectorType === "media" && mediaDiscriminator === "entertainment") return "entertainment";
+  return sectorType;
+}
+
+/**
+ * Resolve a strategy for a persisted sector and its optional manufacturing
+ * production model. Vehicle models reuse the unchanged automobile recipes.
+ */
+export function getStrategyForOperatingModel(
+  sectorType: string,
+  strategyId: string,
+  industryModel?: string | null,
+  mediaDiscriminator?: string | null
+): SectorStrategy {
+  return getStrategy(
+    getOperatingSectorType(sectorType, industryModel, mediaDiscriminator),
+    strategyId
+  );
 }
 
 /**
@@ -1206,13 +1336,15 @@ export function getStrategy(sectorType: CorporationType, strategyId: string): Se
  * and new strategy over STRATEGY_TRANSITION_TURNS turns.
  */
 export function getEffectiveStrategyRates(
-  sectorType: CorporationType,
+  sectorType: string,
   strategyId: string,
   transitionFromStrategyId: string | undefined | null,
   transitionStartTurn: number | undefined | null,
-  currentTurn: number
+  currentTurn: number,
+  mediaDiscriminator?: string | null
 ): EffectiveStrategyRates {
-  const target = getStrategy(sectorType, strategyId);
+  const operatingType = getOperatingSectorType(sectorType, undefined, mediaDiscriminator);
+  const target = getStrategy(operatingType, strategyId);
 
   // No transition in progress → return target directly
   if (!transitionFromStrategyId || transitionStartTurn == null) {
@@ -1235,13 +1367,33 @@ export function getEffectiveStrategyRates(
     };
   }
 
-  const source = getStrategy(sectorType, transitionFromStrategyId);
+  const source = getStrategy(operatingType, transitionFromStrategyId);
 
   // Interpolate each commodity rate
   const supply = blendRates(source.supply, target.supply, progress);
   const demand = blendRates(source.demand, target.demand, progress);
 
   return { supply, demand, isTransitioning: true };
+}
+
+/** Resolve a strategy transition through the sector's optional production model. */
+export function getEffectiveStrategyRatesForOperatingModel(
+  sectorType: string,
+  strategyId: string,
+  transitionFromStrategyId: string | undefined | null,
+  transitionStartTurn: number | undefined | null,
+  currentTurn: number,
+  industryModel?: string | null,
+  mediaDiscriminator?: string | null
+): EffectiveStrategyRates {
+  return getEffectiveStrategyRates(
+    getOperatingSectorType(sectorType, industryModel, mediaDiscriminator),
+    strategyId,
+    transitionFromStrategyId,
+    transitionStartTurn,
+    currentTurn,
+    mediaDiscriminator
+  );
 }
 
 /** Linearly blend two rate maps. Commodities in either map are included. */

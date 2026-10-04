@@ -27,9 +27,10 @@ import type { CountryId } from "@/lib/constants/countries";
 import { getSubNationalLegislatureKey } from "@/lib/constants/countries";
 import { buildNppElectionEligiblePartyKeys } from "@/lib/parties/antiAbuseGuards";
 import {
-  getJointSittingOfficeTypes,
-  getOfficeTypeForChamber,
-} from "@/lib/legislature/chamberOfficeType";
+  loadRuntimeCountryOffices,
+  type RuntimeCountryOffices,
+} from "@/lib/countries/runtimeOffices";
+import { resolveNppBillCountryId, resolveNppBillVoterOffices } from "./rules/billVoterOffices";
 import { resolveBillVoteField } from "@/lib/congress/billVoteField";
 import { isVotingDeadlinePassed } from "@/lib/legislature/billVotingWindow";
 import { isBillWhipInCurrentPhase } from "@/lib/congress/billWhipPhase";
@@ -101,6 +102,8 @@ export interface NPPContext {
    * rather than issuing another.
    */
   preset?: string;
+  /** Active office snapshots shared by policy hydration and NPC bill voting. */
+  runtimeCountryOffices?: Map<CountryId, RuntimeCountryOffices>;
 }
 
 // ─── Context Loader ────────────────────────────────────────────────────────────
@@ -236,6 +239,7 @@ export function collectPendingNppVoterIds(opts: {
   stateBills: StateBill[];
   states: State[];
   preset?: string;
+  runtimeCountryOffices?: Map<CountryId, RuntimeCountryOffices>;
   now: Date;
   currentTurn: number;
 }): ObjectId[] {
@@ -257,21 +261,15 @@ export function collectPendingNppVoterIds(opts: {
     }
   }
 
-  for (const bill of opts.bills) {
-    const countryId = (bill.countryId ?? "US") as CountryId;
-    let officeTypes: string[];
-    if (bill.status === "veto_override") {
-      officeTypes = ["house", "senate"];
-    } else if (bill.status === "override_shugiin") {
-      officeTypes = ["shugiin"];
-    } else if (bill.status === "active_both") {
-      officeTypes = getJointSittingOfficeTypes(countryId, opts.preset);
-    } else {
-      officeTypes = [
-        getOfficeTypeForChamber(countryId, bill.currentChamber ?? "house", opts.preset),
-      ];
-    }
-    const lowerOfficeType = bill.status === "active_both" ? (officeTypes[0] ?? "") : "";
+  const statesById = new Map(opts.states.map((state) => [state._id, state]));
+  for (const storedBill of opts.bills) {
+    const countryId = resolveNppBillCountryId(storedBill, statesById);
+    const bill = { ...storedBill, countryId };
+    const { officeTypes, lowerOfficeType } = resolveNppBillVoterOffices(
+      bill,
+      opts.preset,
+      opts.runtimeCountryOffices?.get(countryId)
+    );
     for (const officeType of officeTypes) {
       const voteField = resolveBillVoteField(bill, {
         voterOfficeType: officeType,
@@ -453,6 +451,14 @@ export async function loadNPPContext(now: Date, options?: NPPContextOptions): Pr
   const currentTurn = gameStateDoc?.currentTurn ?? 0;
   const preset = typeof gameStateDoc?.preset === "string" ? gameStateDoc.preset : undefined;
 
+  const runtimeCountryOffices = new Map<CountryId, RuntimeCountryOffices>();
+  const billStatesById = new Map(allStates.map((state) => [state._id, state]));
+  if (
+    preset === "1991-default" &&
+    activeBills.some((bill) => resolveNppBillCountryId(bill, billStatesById) === "RU")
+  ) {
+    runtimeCountryOffices.set("RU", await loadRuntimeCountryOffices(db, "RU", preset));
+  }
   const nppMap = new Map(allNPPs.map((n) => [n._id.toString(), n]));
   const pendingNppVoterIds = collectPendingNppVoterIds({
     officials: nppOfficials,
@@ -460,6 +466,7 @@ export async function loadNPPContext(now: Date, options?: NPPContextOptions): Pr
     stateBills: activeStateBills,
     states: allStates,
     preset,
+    runtimeCountryOffices,
     now,
     currentTurn,
   }).filter((id) => nppMap.has(id.toString()));
@@ -485,7 +492,11 @@ export async function loadNPPContext(now: Date, options?: NPPContextOptions): Pr
     }
     partyCountries.set(partyId, existing);
   }
-  const nppElectionEligiblePartyKeys = buildNppElectionEligiblePartyKeys(allParties, now);
+  const nppElectionEligiblePartyKeys = buildNppElectionEligiblePartyKeys(
+    allParties,
+    now,
+    currentTurn
+  );
 
   // Group officials by NPP
   const officialsByNPP = new Map<string, ElectedOfficial[]>();
@@ -609,5 +620,6 @@ export async function loadNPPContext(now: Date, options?: NPPContextOptions): Pr
     statesById,
     currentTurn,
     preset,
+    runtimeCountryOffices,
   };
 }

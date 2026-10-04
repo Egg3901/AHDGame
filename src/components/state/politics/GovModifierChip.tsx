@@ -26,11 +26,9 @@ export function GovModifierChip({
 }) {
   if (!regionalExecutive) {
     return (
-      <div className="rounded-xl border border-card-border bg-card p-4 shadow-sm opacity-70">
-        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">
-          Regional Executive
-        </h3>
-        <p className="mt-2 text-xs italic">No comparable executive office in this country.</p>
+      <div className="rounded-xl border border-card-border bg-card p-5 opacity-70">
+        <h3 className="text-sm font-semibold text-muted">Regional executive</h3>
+        <p className="mt-2 text-body-sm">No comparable executive office in this country.</p>
       </div>
     );
   }
@@ -47,31 +45,23 @@ export function GovModifierChip({
         : "Light modifier";
 
   return (
-    <div className="rounded-xl border border-card-border bg-card p-4 shadow-sm">
-      <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">
-        {regionalExecutive.label}
-      </h3>
+    <div className="rounded-xl border border-card-border bg-card p-5">
+      <h3 className="text-body text-muted">{regionalExecutive.label}</h3>
       <div className="mt-2 flex items-center gap-2">
         <span
-          className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-bold tracking-wide"
-          style={
-            color
-              ? {
-                  background: `color-mix(in srgb, ${color} 16%, transparent)`,
-                  border: `1px solid color-mix(in srgb, ${color} 40%, transparent)`,
-                  color,
-                }
-              : {
-                  border: "1px solid var(--card-border)",
-                  color: "var(--muted)",
-                }
-          }
+          className="inline-flex items-center gap-1.5 text-body font-semibold"
+          style={{ color: color ?? undefined }}
         >
+          <span
+            className="h-2 w-2 rounded-full"
+            style={{ backgroundColor: color ?? "var(--muted)" }}
+            aria-hidden
+          />
           {abbr}
         </span>
-        <span className="text-[10px] uppercase tracking-wider text-muted">{signLabel}</span>
+        <span className="text-body-sm text-muted">{signLabel}</span>
       </div>
-      <p className="mt-2 text-[10px] italic opacity-60">
+      <p className="mt-2 text-body-sm text-muted">
         Boosts {abbr} registration and down-ballot candidates in this state.
       </p>
     </div>

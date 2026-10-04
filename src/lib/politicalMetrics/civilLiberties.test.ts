@@ -80,4 +80,19 @@ describe("applyCivilLibertiesDelta", () => {
     const updated = await applyCivilLibertiesDelta(db as unknown as Db, "DD", -4);
     expect(updated).toBe(1);
   });
+
+  it("guards an unhealed funded effect against a concurrently created residual map", async () => {
+    const doc = board("BY", false);
+    db.collectionMocks.politicalMetrics!.find.mockReturnValue({
+      toArray: async () => [doc],
+    });
+    db.collectionMocks.politicalMetrics!.findOne.mockResolvedValue(doc);
+
+    await applyCivilLibertiesDelta(db as unknown as Db, "DD", -4, "event:effect");
+
+    expect(db.collectionMocks.politicalMetrics!.updateOne).toHaveBeenCalledWith(
+      expect.objectContaining({ residuals: { $exists: false } }),
+      expect.objectContaining({ $addToSet: { appliedEventEffects: "event:effect" } })
+    );
+  });
 });

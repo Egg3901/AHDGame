@@ -28,6 +28,9 @@ import {
   CentralBankProvisionEditor,
   type CentralBankIndependenceAction,
 } from "@/components/bills/CentralBankProvisionEditor";
+import { EconomicSystemReformEditor } from "@/components/bills/EconomicSystemReformEditor";
+import { canLegislateEconomicSystem } from "@/lib/economy/economicSystemReformRules";
+import type { EconomicSystemTarget } from "@/lib/db/types/legislation";
 import {
   NationalizationProvisionEditor,
   toNatPayload,
@@ -222,6 +225,11 @@ function LegacyProposeLegislationModal({
   const [includeCbIndependence, setIncludeCbIndependence] = useState(false);
   const [cbIndependenceAction, setCbIndependenceAction] =
     useState<CentralBankIndependenceAction>("grant");
+  // Economic system reform — opt-in, economy category, planned-era countries.
+  const canReformEconomicSystem = cat === "economy" && canLegislateEconomicSystem(countryId);
+  const [includeEconomicReform, setIncludeEconomicReform] = useState(false);
+  const [economicReformTarget, setEconomicReformTarget] =
+    useState<EconomicSystemTarget>("dual_track");
   // Union ban (player suggestion #93): "bias" = the slider law; "ban"/"repeal_ban"
   // are standalone actions that leave the bias untouched at enactment.
   const [unionLawAction, setUnionLawAction] = useState<"bias" | "ban" | "repeal_ban">("bias");
@@ -238,6 +246,7 @@ function LegacyProposeLegislationModal({
     (canProposeEuro && includeEuroAdoption ? 1 : 0) +
     (includeTreaty ? 1 : 0) +
     (isCentralBankCat && includeCbIndependence ? 1 : 0) +
+    (canReformEconomicSystem && includeEconomicReform ? 1 : 0) +
     (isElectoralCat && (includeVotingAge || includeRegAccess) ? 1 : 0);
   const hasStandaloneProvision = standaloneProvisionCount > 0;
   // A standalone provision occupies one of the bill's MAX_PROVISIONS slots, so
@@ -450,6 +459,12 @@ function LegacyProposeLegislationModal({
           action: cbIndependenceAction,
         });
       }
+      if (canReformEconomicSystem && includeEconomicReform) {
+        provisionsPayload.push({
+          type: "economic_system_reform",
+          target: economicReformTarget,
+        });
+      }
     }
 
     setSubmitting(true);
@@ -527,7 +542,7 @@ function LegacyProposeLegislationModal({
       <div className="my-auto w-full max-w-lg space-y-5 rounded-2xl border border-card-border bg-card p-6 shadow-modal">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="font-display text-lg font-semibold">Propose Legislation</h2>
+            <h2 className="text-lg font-semibold">Propose Legislation</h2>
             <p className="text-xs text-muted">
               Costs {BILL_PROPOSE_ACTION_COST} action points and {npiCost} national influence.
             </p>
@@ -1085,6 +1100,14 @@ function LegacyProposeLegislationModal({
           {/* Central bank independence — economy bills only. */}
           {canDecideTreaty && (
             <EuropeanTreatyProvisionEditor action={treatyAction} onChange={setTreatyAction} />
+          )}
+          {canReformEconomicSystem && (
+            <EconomicSystemReformEditor
+              include={includeEconomicReform}
+              onIncludeChange={setIncludeEconomicReform}
+              target={economicReformTarget}
+              onTargetChange={setEconomicReformTarget}
+            />
           )}
           {isCentralBankCat && (
             <CentralBankProvisionEditor

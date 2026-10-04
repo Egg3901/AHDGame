@@ -14,7 +14,7 @@ import {
 } from "../worldConstants";
 import { WORLD_COUNTRY_ISO_TO_ID, WORLD_MAPPED_COUNTRIES } from "@/lib/worldCountryRegistry";
 import MapControls from "./MapControls";
-import MapTooltip from "./MapTooltip";
+import WorldMapTooltip from "./WorldMapTooltip";
 import MapSVGContent, { BACKGROUND_LAYER_KEY } from "./MapSVGContent";
 import { buildTierLookup, isTierInteractive } from "@/components/landing/countryTiers";
 import { buildBlocLookup, buildBlocPalette, hasBlocData } from "../worldBlocs";
@@ -1202,13 +1202,9 @@ export default function WorldMapSVG({
           syncPathsState={syncPathsState}
         />
 
-        {/* Grid Background */}
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_800px_at_50%_50%,var(--primary-dark)_0%,transparent_100%)] opacity-5 pointer-events-none" />
-
         {!isLoaded && (
           <div
-            className={`w-full flex items-center justify-center text-muted text-sm ${isFullscreen ? "h-full" : ""}`}
+            className={`w-full flex items-center justify-center text-muted text-body ${isFullscreen ? "h-full" : ""}`}
             style={isFullscreen ? undefined : { aspectRatio: `${SVG_W}/${SVG_H}` }}
           >
             Loading map...
@@ -1250,7 +1246,7 @@ export default function WorldMapSVG({
         )}
 
         {hoveredLabel && tooltipPos && tooltipAccess && !isAnimating && (
-          <MapTooltip
+          <WorldMapTooltip
             countryLabel={hoveredLabel}
             position={tooltipPos}
             access={tooltipAccess}

@@ -11,7 +11,8 @@ import { Tooltip } from "@/components/ui";
 import { resolveListingColor } from "../stockMarketColors";
 import type { BondListing, CommodityData, MarketCapPoint, StockListing } from "../types";
 import { SectorPieChart } from "./SectorPieChart";
-import { finitePriceChange } from "@/lib/stockExchange/listingEligibility";
+import { yearOfTurn } from "@/lib/utils/gameDate";
+import { aggregateExchangeTotals } from "@/lib/stockExchange/aggregate";
 
 const CHART_W = 700;
 const CHART_H = 240;
@@ -124,11 +125,6 @@ function sumBySector(pt: MarketCapPoint): number {
   return Object.values(pt.bySector).reduce((a, b) => a + (b ?? 0), 0);
 }
 
-/** Raw history turn to the calendar year the player sees (mirrors MarketOverview). */
-function turnToGameYear(turn: number, startingYear: number, calendarOffset = 0): number {
-  return startingYear + Math.floor((Math.max(1, turn - calendarOffset) - 1) / 48);
-}
-
 export function MarketStats({
   listings,
   commodities,
@@ -171,14 +167,7 @@ export function MarketStats({
     for (const [type, ls] of groupedListings) {
       const marketCap = ls.reduce((s, x) => s + (x.marketCapAnchor ?? x.marketCap), 0);
       const totalRevenue = ls.reduce((s, x) => s + (x.totalRevenueAnchor ?? x.totalRevenue), 0);
-      const weightedRoi =
-        marketCap > 0
-          ? ls.reduce(
-              (s, x) =>
-                s + finitePriceChange(x.priceChange24h) * (x.marketCapAnchor ?? x.marketCap),
-              0
-            ) / marketCap
-          : 0;
+      const weightedRoi = aggregateExchangeTotals(ls).weightedChange24h;
       const avgGrowth =
         ls.length > 0 ? ls.reduce((s, x) => s + (x.avgSectorGrowth ?? 0), 0) / ls.length : 0;
       rows.push({
@@ -443,11 +432,11 @@ export function MarketStats({
                     </th>
                     <th className="px-4 py-3 font-semibold tabular-nums">
                       Daily revenue
-                      <Tooltip content="Combined gross revenue across this sector per game day (24 turns)" />
+                      <Tooltip content="Combined gross revenue across this sector per 24-turn reporting period (6 game months)" />
                     </th>
                     <th className="px-4 py-3 font-semibold tabular-nums">
-                      Avg ROI %
-                      <Tooltip content="Market-cap-weighted average share price change over the last 24 turns" />
+                      6M Price Return
+                      <Tooltip content="Price return of current sector listings over 24 turns (6 game months), using reconstructed starting capitalization weights" />
                     </th>
                     <th className="px-4 py-3 font-semibold tabular-nums">
                       Avg growth %
@@ -564,7 +553,13 @@ export function MarketStats({
                 if (labels[labels.length - 1] !== multiSeries.maxTurn)
                   labels.push(multiSeries.maxTurn);
                 return labels
-                  .map((t) => ({ t, y: turnToGameYear(t, startingYearRef, calendarOffset) }))
+                  .map((t) => ({
+                    t,
+                    y: yearOfTurn(t, startingYearRef, {
+                      preIterationTurns: calendarOffset,
+                      preIterationActive: turnStatus?.preIterationActive,
+                    }),
+                  }))
                   .filter((d, i, arr) => i === 0 || d.y !== arr[i - 1].y)
                   .map(({ t, y }) => (
                     <text

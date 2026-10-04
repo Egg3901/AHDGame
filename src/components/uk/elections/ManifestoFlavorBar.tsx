@@ -83,9 +83,7 @@ export function ManifestoFlavorBar({
   if (!data.isPartyLeader) {
     return (
       <div className="rounded-2xl border border-card-border bg-card p-5 shadow-card">
-        <h3 className="text-caption font-semibold uppercase tracking-wider text-muted">
-          Election Manifesto
-        </h3>
+        <h3 className="text-caption font-semibold text-muted">Election manifesto</h3>
         <p className="mt-2 text-body-sm text-muted">
           Only the party leader sets the manifesto for this campaign.
         </p>
@@ -96,9 +94,7 @@ export function ManifestoFlavorBar({
   return (
     <div className="rounded-2xl border border-card-border bg-card p-5 shadow-card space-y-4">
       <div className="flex items-baseline justify-between gap-2">
-        <h3 className="text-caption font-semibold uppercase tracking-wider text-muted">
-          Election Manifesto
-        </h3>
+        <h3 className="text-caption font-semibold text-muted">Election manifesto</h3>
         {data.party?.name ? (
           <span className="text-body-sm font-medium text-foreground">{data.party.name}</span>
         ) : null}

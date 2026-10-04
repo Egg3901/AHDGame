@@ -1,5 +1,5 @@
 import {
-  treasuryAccrualReceipt,
+  treasuryAccrualWithBankCouponReserve,
   treasuryAnchorValuation,
 } from "@/lib/budget/rules/treasuryAccrual";
 import { publishTreasuryAccrualReceipt } from "@/lib/budget/treasuryAccrualReceipt";
@@ -8,9 +8,13 @@ import { expireFinancialCrisisAusterity } from "@/lib/crises/financialCrisisBudg
 import { advanceTaxRatePhaseIn } from "@/lib/budget/taxRatePhaseIn";
 import { getDb } from "@/lib/mongodb";
 import type { FederalBudget, TreasuryAccrualReceipt } from "@/lib/db/types/budget";
+import type { Bond } from "@/lib/db/types/bond";
 import type { CentralBank } from "@/lib/db/types/centralBank";
+import type { GameConfig } from "@/lib/db/types/gameConfig";
 import type { GameState } from "@/lib/db/types/gameState";
+import type { Corporation } from "@/lib/db/types/corporation";
 import type { CountryId } from "@/lib/constants/countries";
+import type { CurrencyCode } from "@/lib/constants/currencies";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { sovereignDebtTerms } from "@/lib/bonds/sovereignPrincipal";
 import { ensureFederalBudget } from "@/lib/turn/ensureFederalBudget";
@@ -18,6 +22,15 @@ import { getCentralBankScope } from "@/lib/centralBank/helpers";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import { getRegisteredCountryIdSet } from "@/lib/country/registeredCountries";
 import { enforcementTreasuryCostPerTurn } from "@/lib/unions/enforcementCosts";
+import { settleBankSovereignClaims } from "@/lib/banking/bankSovereignClaims";
+import { bankCouponClaim, bankCouponPlanForCountry } from "@/lib/banking/rules/sovereignClaims";
+import { settleFundedSovereignCoupons } from "@/lib/banking/fundedSovereignCoupons";
+import { isForexEnabled } from "@/lib/currency/featureFlag";
+import {
+  fxRateForCorpFromMap,
+  resolveCorpLiquidCurrencyCode,
+} from "@/lib/currency/corporationCapital";
+import type { SovereignCouponCorporationQuote } from "@/lib/banking/rules/sovereignCoupons";
 
 /**
  * Per-turn fiscal accrual (spec §4). For each country's federalBudget, move a
@@ -59,19 +72,92 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
   // Dissolved countries keep their budget doc but must not be simulated against
   // it; see `getRegisteredCountryIdSet`.
   const liveCountries = await getRegisteredCountryIdSet(db);
-  const budgets = allBudgets.filter((b) => liveCountries.has(String(b.countryId ?? b._id)));
+  const budgets = allBudgets.filter(
+    (b) =>
+      liveCountries.has(String(b.countryId ?? b._id)) || (b.sovereignCouponClaims?.length ?? 0) > 0
+  );
 
   const [config, rates] = await Promise.all([
-    db
-      .collection<{ _id: string; ledgerShadow?: boolean }>("gameConfig")
-      .findOne({ _id: "default" }, { projection: { ledgerShadow: 1 } }),
+    db.collection<GameConfig>("gameConfig").findOne(
+      { _id: "default" },
+      {
+        projection: {
+          ledgerShadow: 1,
+          bankTreasuryEnabled: 1,
+          treasuryCashLedgerEnabled: 1,
+        },
+      }
+    ),
     db
       .collection<{ currencyCode: string; rate: number }>("exchangeRates")
       .find({}, { projection: { currencyCode: 1, rate: 1 } })
       .toArray(),
   ]);
   const rateByCurrency = new Map(rates.map((r) => [r.currencyCode, r.rate]));
+  const forexEnabled = await isForexEnabled();
   const ledgerShadow = config?.ledgerShadow === true;
+  const bankTreasuryEnabled = config?.bankTreasuryEnabled === true;
+  const treasuryCashLedgerEnabled = config?.treasuryCashLedgerEnabled === true;
+  const sovereignBonds =
+    bankTreasuryEnabled || treasuryCashLedgerEnabled
+      ? await db
+          .collection<Bond>("bonds")
+          .find(
+            { issuerType: "sovereign", defaulted: { $ne: true }, matured: { $ne: true } },
+            {
+              projection: {
+                _id: 1,
+                issuerType: 1,
+                countryId: 1,
+                currencyCode: 1,
+                couponRate: 1,
+                holders: 1,
+                publicFloat: 1,
+                matured: 1,
+                defaulted: 1,
+              },
+            }
+          )
+          .toArray()
+      : [];
+  const corporationIds = [
+    ...new Set(
+      sovereignBonds.flatMap((bond) =>
+        (bond.holders ?? []).flatMap((holder) =>
+          holder.corporationId ? [holder.corporationId] : []
+        )
+      )
+    ),
+  ];
+  const corporationQuotes = new Map<string, SovereignCouponCorporationQuote>();
+  if (treasuryCashLedgerEnabled && corporationIds.length > 0) {
+    const corporations = await db
+      .collection<Corporation>("corporations")
+      .find(
+        { _id: { $in: corporationIds } },
+        { projection: { _id: 1, countryId: 1, liquidCurrencyCode: 1 } }
+      )
+      .toArray();
+    for (const corp of corporations) {
+      const currencyCode = resolveCorpLiquidCurrencyCode(corp);
+      if (!currencyCode || !rateByCurrency.has(currencyCode)) continue;
+      const localPerAnchor = fxRateForCorpFromMap(
+        corp,
+        rateByCurrency as Map<CurrencyCode, number>
+      );
+      if (!Number.isFinite(localPerAnchor) || localPerAnchor <= 0) continue;
+      corporationQuotes.set(corp._id.toHexString(), {
+        id: corp._id.toHexString(),
+        countryId: String(corp.countryId ?? ""),
+        currencyCode,
+        localPerAnchor,
+        currencyFieldPresent: corp.liquidCurrencyCode !== undefined,
+        currencyFieldValue: corp.liquidCurrencyCode ?? null,
+        currencyUsesCountryFallback:
+          corp.liquidCurrencyCode == null || String(corp.liquidCurrencyCode).trim() === "",
+      });
+    }
+  }
   function valuationFor(
     budget: FederalBudget
   ): Pick<TreasuryAccrualReceipt, "anchorRate" | "anchorRateSource" | "anchorRatePreset"> {
@@ -97,10 +183,43 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
   let countriesProcessed = 0;
   for (const initial of budgets) {
     let b = initial;
+    if (!liveCountries.has(String(b.countryId ?? b._id))) {
+      if (treasuryCashLedgerEnabled && b.sovereignCouponClaims?.length) {
+        await settleFundedSovereignCoupons(db, b, {
+          turn: _turn,
+          bonds: [],
+          anchorRate: b.sovereignCouponClaims[0].anchorRate,
+          forexEnabled,
+          corporateQuotes: corporationQuotes,
+        });
+      }
+      continue;
+    }
     for (let attempt = 0; attempt < 4; attempt++) {
       if (b.treasuryAccrual) {
         await publishTreasuryAccrualReceipt(db, b, b.treasuryAccrual);
-        if (b.treasuryAccrual.turn >= _turn) break;
+        if (b.treasuryAccrual.turn >= _turn) {
+          if (b.bankSovereignClaims?.length) {
+            await settleBankSovereignClaims(db, b, _turn);
+          }
+          if (treasuryCashLedgerEnabled) {
+            const valuation = valuationFor(b);
+            if (!Number.isFinite(valuation.anchorRate) || (valuation.anchorRate ?? 0) <= 0)
+              throw new Error(
+                `Cannot fund sovereign coupon claims for ${b.countryId}: missing native FX quote`
+              );
+            await settleFundedSovereignCoupons(db, b, {
+              turn: _turn,
+              bonds: sovereignBonds.filter(
+                (bond) => String(bond.countryId) === String(b.countryId)
+              ),
+              anchorRate: valuation.anchorRate!,
+              forexEnabled,
+              corporateQuotes: corporationQuotes,
+            });
+          }
+          break;
+        }
       }
       // Invariant: every federalBudget carries a signed treasuryBalance (set at
       // creation + backfilled). If one is still null, heal it in place to zero so
@@ -144,7 +263,11 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
       );
       const currencyCode = resolveCountryCurrencyCode(b) ?? "USD";
       const valuation = valuationFor(b);
-      const receipt = treasuryAccrualReceipt({
+      const bankCouponPlan = bankTreasuryEnabled
+        ? bankCouponPlanForCountry(sovereignBonds, String(b.countryId ?? b._id), currencyCode)
+        : [];
+      const bankCouponAmount = bankCouponPlan.reduce((sum, plan) => sum + plan.amountLocal, 0);
+      const accrualInput = {
         turn: _turn,
         openingCash: current,
         currencyCode,
@@ -154,7 +277,40 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
         annualPrimarySpending: spendingTotal - debtInterest,
         debtService: debtServiceTurn,
         enforcement: enforcementCost,
-      });
+      };
+      const accrualReceipt = treasuryAccrualWithBankCouponReserve(accrualInput, bankCouponAmount);
+      const receipt: TreasuryAccrualReceipt = {
+        ...accrualReceipt,
+        ...(treasuryCashLedgerEnabled ? { treasuryCashLedgerEnabled: true } : {}),
+        ...(bankTreasuryEnabled
+          ? {
+              bankCouponPlan: bankCouponPlan.map(
+                ({ bankId, charteredTurn, amountLocal, bondIds }) => ({
+                  bankId,
+                  charteredTurn,
+                  amountLocal,
+                  bondIds,
+                })
+              ),
+            }
+          : {}),
+      };
+      const existingClaims = b.bankSovereignClaims ?? [];
+      const claimById = new Map(existingClaims.map((claim) => [claim.id, claim]));
+      for (const plan of bankCouponPlan) {
+        const claim = bankCouponClaim({
+          countryId: String(b.countryId ?? b._id),
+          currencyCode,
+          turn: _turn,
+          plan,
+          anchorRate: valuation.anchorRate ?? undefined,
+          ledgerShadow,
+          treasuryCashLedgerEnabled: receipt.treasuryCashLedgerEnabled === true,
+          ledgerCreatedAt: new Date(),
+        });
+        claimById.set(claim.id, claim);
+      }
+      const bankSovereignClaims = [...claimById.values()];
       const next = current + receipt.cashDelta;
 
       // Ticket #1102: walk any enacted tax-rate change one step toward its
@@ -189,6 +345,7 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
           $set: {
             treasuryBalance: next,
             treasuryAccrual: receipt,
+            ...(bankSovereignClaims.length > 0 ? { bankSovereignClaims } : {}),
             ...rampSet,
           },
           ...(Object.keys(rampUnset).length > 0 ? { $unset: rampUnset } : {}),
@@ -196,6 +353,38 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
       );
       if (applied.matchedCount === 1) {
         await publishTreasuryAccrualReceipt(db, b, receipt);
+        if (bankSovereignClaims.length > 0) {
+          await settleBankSovereignClaims(
+            db,
+            { _id: b._id, countryId: b.countryId, bankSovereignClaims },
+            _turn
+          );
+        }
+        if (treasuryCashLedgerEnabled) {
+          const valuation = valuationFor(b);
+          if (!Number.isFinite(valuation.anchorRate) || (valuation.anchorRate ?? 0) <= 0)
+            throw new Error(
+              `Cannot fund sovereign coupon claims for ${b.countryId}: missing native FX quote`
+            );
+          await settleFundedSovereignCoupons(
+            db,
+            {
+              _id: b._id,
+              countryId: b.countryId,
+              sovereignCouponClaims: b.sovereignCouponClaims,
+              sovereignCouponFrozenThrough: b.sovereignCouponFrozenThrough,
+            },
+            {
+              turn: _turn,
+              bonds: sovereignBonds.filter(
+                (bond) => String(bond.countryId) === String(b.countryId)
+              ),
+              anchorRate: valuation.anchorRate!,
+              forexEnabled,
+              corporateQuotes: corporationQuotes,
+            }
+          );
+        }
         countriesProcessed += 1;
         break;
       }

@@ -10,6 +10,7 @@ import { DEFAULT_DURATIONS } from "@/lib/constants/electionDurations";
 import { pickNextCanonicalCycle, turnToWallClock } from "@/lib/elections/canonicalCycle";
 import { electionToLarpYear } from "@/lib/utils/formatters";
 import { getSeatIdFromElection } from "@/lib/seats";
+import { getElectionMethod } from "@/lib/elections/electionMethod";
 import { planNextLowerChamberCycle } from "@/lib/elections/snapShift";
 import {
   endTimeToLarpTurn,
@@ -63,6 +64,22 @@ export async function ensureJPElections(now: Date, inFlightTurn?: number): Promi
     })
     .toArray();
   const liveShugiin = new Set(liveElections.map((e) => e.state));
+  // Legacy 1991 races were opened before the method snapshot existed. Fix
+  // active/upcoming races once, then leave the frozen rule alone across reforms.
+  const eraMethod = getElectionMethod("JP", "shugiin", ctx.preset);
+  if (eraMethod === "sntv") {
+    const methodHealOps = liveElections
+      .filter((e) => !e.allocationMethod)
+      .map((e) => ({
+        updateOne: {
+          filter: { _id: e._id, allocationMethod: { $exists: false } },
+          update: { $set: { allocationMethod: eraMethod, updatedAt: now } },
+        },
+      }));
+    if (methodHealOps.length > 0) {
+      await db.collection<Election>("elections").bulkWrite(methodHealOps);
+    }
+  }
   const seatHealOps = liveElections.flatMap((e) => {
     const authoritative = shugiinSeatsByRegion[e.state];
     if (typeof authoritative !== "number" || authoritative <= 0 || e.totalSeats === authoritative)
@@ -131,6 +148,7 @@ export async function ensureJPElections(now: Date, inFlightTurn?: number): Promi
       countryId: "JP",
       electionType: "shugiin",
       state: regionId,
+      allocationMethod: getElectionMethod("JP", "shugiin", ctx.preset),
       seatId: getSeatIdFromElection({
         countryId: "JP",
         electionType: "shugiin",

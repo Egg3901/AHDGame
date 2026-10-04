@@ -13,7 +13,7 @@ import {
   getTreeMaintenanceCost,
   getCampaignFamilyScalar,
 } from "@/lib/campaigns/upgradeCosts";
-import { isCampaignUpgradeGeneralPhase } from "@/lib/elections/phases";
+import { computeElectionPhase, isCampaignUpgradeGeneralPhase } from "@/lib/elections/phases";
 import { getGameTime } from "@/lib/time/gameTime";
 import {
   SUPPORT_RALLY_FULL_VALUE,
@@ -30,7 +30,8 @@ import { presidentialRulesetFor } from "@/lib/elections/presidentialRuleset";
 import { CAMPAIGN_STRENGTH_MAX_BONUS } from "@/lib/campaigns/campaignStrength";
 import { buildCampaignStatePresence } from "@/lib/elections/campaignStatePresence";
 import { getCampaignCopyForElection } from "@/lib/campaigns/raceFamilyCopy";
-import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
+import { getSeedCurrencyCode } from "@/lib/constants/currencies";
+import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import {
   campaignAnchorToLocal,
   campaignLocalRate,
@@ -142,12 +143,17 @@ export async function getCampaignDetail(
   // the frozen world-seeded currency basis (via campaignAnchorToLocal) so it matches
   // what campaignTurn and upgradeCampaign actually credit/charge (never the live
   // exchangeRates).
-  const campaignCurrencyCode = getCampaignCurrency(electionCountryId);
-  const campaignRates = await loadCampaignCurrencyRates(db);
-  const priceLevel = await loadCampaignPriceLevel(db);
-  const campaignRate = campaignLocalRate(electionCountryId, campaignRates); // frozen base rate, for the fxRate payload field
+  const [campaignRates, detailPreset, priceLevel] = await Promise.all([
+    loadCampaignCurrencyRates(db),
+    // One route-path read: euro members preview in EUR, matching what
+    // upgradeCampaign/donateToCampaign actually charge.
+    getGameStatePresetOrDefault(db),
+    loadCampaignPriceLevel(db),
+  ]);
+  const campaignCurrencyCode = getCampaignCurrency(electionCountryId, detailPreset);
+  const campaignRate = campaignLocalRate(electionCountryId, campaignRates, detailPreset); // frozen base rate, for the fxRate payload field
   const toLocal = (anchor: number) =>
-    campaignAnchorToLocal(anchor * priceLevel, electionCountryId, campaignRates);
+    campaignAnchorToLocal(anchor * priceLevel, electionCountryId, campaignRates, detailPreset);
   const [isNominee, isRunningMate, partyTreasuryAccess] = await Promise.all([
     user
       ? isCampaignNomineeUser(db, campaign, user.userId, user.character?._id ?? null)
@@ -155,7 +161,7 @@ export async function getCampaignDetail(
     user
       ? isCampaignRunningMateUser(db, campaign, user.userId, user.character?._id ?? null)
       : Promise.resolve(false),
-    getPartyTreasuryAccess(db, campaign, election, user),
+    getPartyTreasuryAccess(db, campaign, election, user, detailPreset),
   ]);
   // A running mate gets an owner-level VIEW of the ticket campaign (canSeeExact),
   // but a narrower action set, enforced client-side and by the server route
@@ -307,6 +313,21 @@ export async function getCampaignDetail(
   // accept it. SSOT shared with the gate — see isCampaignUpgradeGeneralPhase.
   const gameTime = await getGameTime();
   const isGeneralPhase = isCampaignUpgradeGeneralPhase(election, gameTime.currentTurn, gameTime);
+  if (base.electionInfo && election) {
+    const phase = computeElectionPhase(
+      election.startTime ?? null,
+      election.primaryEndTime ?? null,
+      election.endTime ?? null,
+      election.status,
+      gameTime,
+      {
+        startTurn: election.startTurn,
+        primaryEndTurn: election.primaryEndTurn,
+        endTurn: election.endTurn,
+      }
+    );
+    base.electionInfo.phase = phase.inPrimary ? "primary" : phase.inGeneral ? "general" : "unknown";
+  }
   const income = calculateCampaignIncome(campaign, electionType);
   const maintenance = calculateMaintenanceCosts(campaign, electionType);
   // Budget-panel split. Strategic Operations v2: read the tree's per-lever
@@ -916,7 +937,8 @@ async function getPartyTreasuryAccess(
   db: Db,
   campaign: Campaign,
   election: Election | null,
-  user: AuthUserWithCharacter | null
+  user: AuthUserWithCharacter | null,
+  preset?: string
 ): Promise<CampaignData["partyTreasuryAccess"] | undefined> {
   if (!user?.hasCharacter || !election || !Number.isFinite(Number(campaign.party))) {
     return undefined;
@@ -969,7 +991,6 @@ async function getPartyTreasuryAccess(
     partyName: candidateParty.name,
     role,
     treasury: candidateParty.treasury ?? 0,
-    currencyCode:
-      COUNTRY_CURRENCY_MAP[election.countryId as keyof typeof COUNTRY_CURRENCY_MAP] ?? "USD",
+    currencyCode: getSeedCurrencyCode(election.countryId, preset ?? ""),
   };
 }

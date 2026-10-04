@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { ObjectId } from "mongodb";
-import { computeSectorTaxSection } from "@/lib/corporations/queries/sectorDetailSections";
+import { ObjectId, type Db } from "mongodb";
+import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
+import {
+  buildSectorStrategySection,
+  buildSectorForSaleInfo,
+  computeSectorTaxSection,
+} from "@/lib/corporations/queries/sectorDetailSections";
 import type { Corporation, CorporateSector, FederalBudget, StateBudget } from "@/lib/db/types";
 
 function makeCorp(overrides: Partial<Corporation> = {}): Corporation {
@@ -96,5 +101,66 @@ describe("computeSectorTaxSection revenue-weighting basis", () => {
     });
 
     expect(result.thisRevenueShare).toBeCloseTo(0.5, 10);
+  });
+});
+
+describe("persisted operating model strategy reads", () => {
+  it("shows an active model by name when its selector is disabled", () => {
+    const section = buildSectorStrategySection({
+      sector: makeSector({ sectorType: "media", strategyId: "newspaper" }),
+      sectorType: "media",
+      effectiveRates: { isTransitioning: false },
+      transitionProgress: 0,
+      strategyTransitionMod: 0,
+      currentTurn: 100,
+      sectorHostLiquidCode: "USD",
+      sectorHostFxRate: 1,
+      commodityPrices: [],
+      techCorpView: { type: "media", unlockedTechNodeIds: [] },
+      techCurrentYear: 1991,
+      techTreesEnabled: false,
+      shouldRedact: false,
+      stateResources: undefined,
+      strategyCapacityMultipliers: null,
+      marginProjection: null,
+      mediaOperatingModelsEnabled: false,
+    });
+
+    expect(section.currentStrategyName).toBe("Newspaper");
+    expect(section.availableStrategies.some((strategy) => strategy.id === "newspaper")).toBe(false);
+  });
+});
+
+describe("pledged property sale affordability", () => {
+  it("includes actual native FX fees in the buyer quote and refuses a same-market merge", async () => {
+    const memory = createInMemoryDb();
+    const viewer = makeCorp({ liquidCurrencyCode: "EUR", liquidCapital: 300_500 });
+    const sector = makeSector({
+      forSale: { priceAnchor: 150_000, listedAt: new Date(0), npvAnchor: 150_000, pledged: true },
+      constructionFinancing: { currency: "USD" } as CorporateSector["constructionFinancing"],
+    });
+    memory.seed("corporateSectors", []);
+    const args = { sector, viewerCorporation: viewer, isCeo: false, viewerCorpFxRate: 2 };
+    const quote = await buildSectorForSaleInfo(memory as unknown as Db, args);
+    expect(quote).toMatchObject({
+      priceInViewerCapital: 301_500,
+      hasFunds: false,
+      eligible: false,
+    });
+    viewer.liquidCapital = 400_000;
+    memory.seed("corporateSectors", [
+      { ...makeSector({ corporationId: viewer._id, industryModel: "vehicles" }) },
+    ]);
+    expect(await buildSectorForSaleInfo(memory as unknown as Db, args)).toMatchObject({
+      hasFunds: true,
+      conflict: false,
+      eligible: true,
+    });
+    memory.seed("corporateSectors", [{ ...makeSector({ corporationId: viewer._id }) }]);
+    expect(await buildSectorForSaleInfo(memory as unknown as Db, args)).toMatchObject({
+      hasFunds: true,
+      conflict: true,
+      eligible: false,
+    });
   });
 });

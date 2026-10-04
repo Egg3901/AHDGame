@@ -319,7 +319,6 @@ export function AppearanceSection({ enableExperimentalUI, onExperimentalUiChange
                       <span
                         className="text-[11px] font-semibold leading-none tracking-tight"
                         style={{
-                          fontFamily: "var(--font-serif, Georgia, serif)",
                           color: opt.fg,
                         }}
                       >

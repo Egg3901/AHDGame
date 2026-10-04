@@ -3,6 +3,7 @@
 import { useId, useMemo } from "react";
 import { useRegionGeometry } from "@/lib/maps/useRegionGeometry";
 import { useStaticHostGeometry } from "@/lib/maps/proxyHostGeometry";
+import { controlSplitDisplay } from "../../controlDisplay";
 import { projectRegions, type ProjectedRegion } from "@/lib/maps/projectRegions";
 import {
   axisWords,
@@ -142,8 +143,9 @@ export function FrontLineMap({
     [regionGeometry.features, staticHost.features]
   );
 
-  const pctB = Math.round(control);
+  const pctB = Math.max(0, Math.min(100, control));
   const pctA = 100 - pctB;
+  const controlDisplay = controlSplitDisplay(control);
 
   // Keyed on the sorted roster + control so the projection and the (comparatively
   // expensive) land sample are recomputed only when the war actually moves.
@@ -319,7 +321,7 @@ export function FrontLineMap({
             height="100%"
             preserveAspectRatio="xMidYMid meet"
             role="img"
-            aria-label={`Front line across ${hostCountry}: ${sideALabel} holds ${pctA}%, ${sideBLabel} holds ${pctB}%`}
+            aria-label={`Front line across ${hostCountry}: ${sideALabel} holds ${controlDisplay.sideA}%, ${sideBLabel} holds ${controlDisplay.sideB}%`}
             // `hidden`, not the design's `visible`. The advancing side's fill is a
             // path deliberately extended 4000 units behind the line, so it is ~1800
             // CSS px wider than the frame. The silhouette clipPath contains it today

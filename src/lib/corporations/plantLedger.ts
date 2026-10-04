@@ -1,4 +1,5 @@
 import type { CorporationType } from "@/lib/constants/corporations";
+import type { MediaDiscriminator } from "@/lib/constants/corporations";
 import { plantSizeUnits } from "@/lib/constants/facilityQuantum";
 
 export interface PlantLedgerState {
@@ -8,6 +9,8 @@ export interface PlantLedgerState {
 
 interface PlantLedgerSector {
   sectorType: CorporationType;
+  industryModel?: string | null;
+  mediaDiscriminator?: MediaDiscriminator | null;
   plantCount?: number | null;
   plantUnitRemainder?: number | null;
 }
@@ -30,12 +33,14 @@ function wholeNonNegative(value: number | null | undefined): number {
  */
 export function seedPlantLedger(
   sectorType: CorporationType,
-  capitalStock: number | null | undefined
+  capitalStock: number | null | undefined,
+  industryModel?: string | null,
+  mediaDiscriminator?: MediaDiscriminator | null
 ): PlantLedgerState {
   const stock = finiteNonNegative(capitalStock);
   if (stock <= 0) return { plantCount: 0, plantUnitRemainder: 0 };
 
-  const quantum = plantSizeUnits(sectorType);
+  const quantum = plantSizeUnits(sectorType, industryModel, mediaDiscriminator);
   if (stock < quantum) return { plantCount: 1, plantUnitRemainder: 0 };
 
   const plantCount = Math.floor(stock / quantum);
@@ -46,12 +51,61 @@ export function seedPlantLedger(
 }
 
 /**
- * Add newly delivered construction to a persisted whole-plant ledger.
- * Depreciation does not call this function: it changes plant condition and
- * productive capacity, not the number of owned facilities.
+ * Atomically applies a stock delta, then derives the whole-plant ledger from the resulting stock.
+ * The second pipeline stage reads the value written by the first, so concurrent capacity deltas
+ * cannot persist a plant count seeded from a stale application snapshot.
+ */
+export function plantCapacityDeltaPipeline(
+  sectorType: CorporationType,
+  delta: number,
+  setFields: Record<string, unknown> = {},
+  industryModel?: string | null,
+  mediaDiscriminator?: MediaDiscriminator | null
+): Array<Record<string, unknown>> {
+  const quantum = plantSizeUnits(sectorType, industryModel, mediaDiscriminator);
+  const stock = "$capitalStock";
+  const count = { $floor: { $divide: [stock, quantum] } };
+  return [
+    {
+      $set: {
+        capitalStock: {
+          $max: [0, { $add: [{ $ifNull: [stock, 0] }, Number.isFinite(delta) ? delta : 0] }],
+        },
+      },
+    },
+    {
+      $set: {
+        ...setFields,
+        plantCount: {
+          $cond: [{ $lte: [stock, 0] }, 0, { $cond: [{ $lt: [stock, quantum] }, 1, count] }],
+        },
+        plantUnitRemainder: {
+          $cond: [
+            { $lte: [stock, 0] },
+            0,
+            {
+              $cond: [
+                { $lt: [stock, quantum] },
+                0,
+                { $subtract: [stock, { $multiply: [count, quantum] }] },
+              ],
+            },
+          ],
+        },
+      },
+    },
+  ];
+}
+
+/**
+ * Advance the construction ledger with newly delivered capacity.
+ * Turn writers reconcile the persisted count from final capitalStock after
+ * depreciation, so this helper is only for computations before that write.
  */
 export function advancePlantLedger(input: {
   sectorType: CorporationType;
+  industryModel?: string | null;
+  mediaDiscriminator?: MediaDiscriminator | null;
   plantCount: number | null | undefined;
   plantUnitRemainder: number | null | undefined;
   currentCapitalStock: number | null | undefined;
@@ -62,8 +116,13 @@ export function advancePlantLedger(input: {
         plantCount: wholeNonNegative(input.plantCount),
         plantUnitRemainder: finiteNonNegative(input.plantUnitRemainder),
       }
-    : seedPlantLedger(input.sectorType, input.currentCapitalStock);
-  const quantum = plantSizeUnits(input.sectorType);
+    : seedPlantLedger(
+        input.sectorType,
+        input.currentCapitalStock,
+        input.industryModel,
+        input.mediaDiscriminator
+      );
+  const quantum = plantSizeUnits(input.sectorType, input.industryModel, input.mediaDiscriminator);
   const accumulated = seeded.plantUnitRemainder + finiteNonNegative(input.deliveredUnits);
   const completedPlants = Math.floor(accumulated / quantum);
 
@@ -81,6 +140,8 @@ export function advanceSectorPlantLedger(
 ): PlantLedgerState {
   return advancePlantLedger({
     sectorType: sector.sectorType,
+    industryModel: sector.industryModel,
+    mediaDiscriminator: sector.mediaDiscriminator,
     plantCount: sector.plantCount,
     plantUnitRemainder: sector.plantUnitRemainder,
     currentCapitalStock,

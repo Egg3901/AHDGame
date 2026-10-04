@@ -1,8 +1,16 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render as renderUi, screen } from "@testing-library/react";
+import { NextIntlClientProvider } from "next-intl";
+import messages from "../../../../../../messages/en/worldOrganizations.json";
 import type { InfluenceTarget, OrgInfluenceView } from "@/lib/alignment/queries/orgInfluence";
 import { NationDossier } from "./NationDossier";
+const render = (ui: React.ReactNode) =>
+  renderUi(
+    <NextIntlClientProvider locale="en" messages={messages}>
+      {ui}
+    </NextIntlClientProvider>
+  );
 
 // Anchor-unit formatter, so a converted figure is distinguishable from one that
 // was printed in the fund's own currency.
@@ -48,6 +56,8 @@ const TARGET = {
   sanctionedBy: [],
   pointCostLocal: 76_000_000,
   turnCapCostLocal: 380_000_000,
+  playMaxPoints: 10,
+  playCapCostLocal: 760_000_000,
   costToGate: 2_888_000_000,
   resistsAtHalfStrength: false,
   joinCountdown: null,
@@ -85,7 +95,7 @@ describe("NationDossier", () => {
       sanctionedBy: ["WARSAW_PACT"],
     });
     expect(screen.getByText(/half strength/i)).toBeTruthy();
-    expect(screen.getByText(/7\.5/)).toBeTruthy();
+    expect(screen.getByText(/movement ceiling here is raised to 7\.5/)).toBeTruthy();
     expect(screen.getByText(/WARSAW_PACT/)).toBeTruthy();
   });
 
@@ -103,6 +113,28 @@ describe("NationDossier", () => {
     expect(intel.textContent).toMatch(/6/);
     // The guard that stops a later change reintroducing the spend.
     expect(intel.textContent).not.toMatch(/[$£€]/);
+  });
+
+  it("labels legacy rival results as unknown and keeps zero gains visible", () => {
+    render(
+      <NationDossier
+        view={{
+          ...VIEW,
+          rivalIntel: {
+            YU: [
+              { poleLabel: "East", accentToken: "error", pointsLanded: null, turnsAgo: 0 },
+              { poleLabel: "East", accentToken: "error", pointsLanded: 0, turnsAgo: 2 },
+            ],
+          },
+        }}
+        target={TARGET}
+        orgId="NATO"
+        viewerCountryId={null}
+        onCommitted={() => {}}
+      />
+    );
+    expect(screen.getByText(/effective gain was not recorded/i)).toBeTruthy();
+    expect(screen.getByText(/0.00 effective points here 2 turns ago/i)).toBeTruthy();
   });
 
   it("shows a nation it cannot price without offering to buy it", () => {
@@ -152,7 +184,7 @@ describe("NationDossier", () => {
 
 describe("NationDossier costs and the display-currency preference", () => {
   it("shows costs in the viewer's currency, using the era rate from the server", () => {
-    // 76M a point at 2 anchor-per-fund-unit is 152M anchor. Deriving the rate
+    // A 760M play ceiling at 2 anchor-per-fund-unit is 1,520M anchor. Deriving the rate
     // client-side from COUNTRY_CONFIGS would price a 1953 world at 1979 rates.
     render(
       <NationDossier
@@ -163,8 +195,8 @@ describe("NationDossier costs and the display-currency preference", () => {
         onCommitted={() => {}}
       />
     );
-    expect(formatAmount).toHaveBeenCalledWith(152_000_000, "USD");
-    expect(screen.getByText("¥152000000")).toBeTruthy();
+    expect(formatAmount).toHaveBeenCalledWith(1_520_000_000, "USD");
+    expect(screen.getByText(/¥1520000000/)).toBeTruthy();
   });
 
   it("prices a ruble-denominated fund in rubles, never with a dollar fallback", () => {
@@ -180,10 +212,10 @@ describe("NationDossier costs and the display-currency preference", () => {
         onCommitted={() => {}}
       />
     );
-    // 76M SUR a point at 0.1 anchor-per-ruble is 7.6M anchor, tagged SUR so the
+    // The 760M SUR play ceiling at 0.1 anchor-per-ruble is 76M anchor, tagged SUR so the
     // "local" display preference resolves to rubles, not dollars.
-    expect(formatAmount).toHaveBeenCalledWith(7_600_000, "SUR");
-    expect(formatAmount).not.toHaveBeenCalledWith(7_600_000, "USD");
+    expect(formatAmount).toHaveBeenCalledWith(76_000_000, "SUR");
+    expect(formatAmount).not.toHaveBeenCalledWith(76_000_000, "USD");
   });
 
   it("leaves the commit input in the fund's own currency", () => {
@@ -228,7 +260,7 @@ describe("NationDossier costs and the display-currency preference", () => {
     expect(
       screen.getByText((_, el) => {
         const t = el?.textContent ?? "";
-        return t.startsWith("Buys") && t.includes("2.00") && t.includes("each");
+        return t.startsWith("Estimated effective gain:") && t.includes("2.00");
       })
     ).toBeTruthy();
   });
@@ -245,7 +277,7 @@ describe("NationDossier costs and the display-currency preference", () => {
         onCommitted={() => {}}
       />
     );
-    expect(screen.getByText(/the nation moves when the turn processes/i)).toBeTruthy();
+    expect(screen.getByText(/when the turn resolves/i)).toBeTruthy();
   });
 
   it("blocks and guides a spend too small to move the nation at all (ticket #1213)", () => {
@@ -263,8 +295,8 @@ describe("NationDossier costs and the display-currency preference", () => {
     // client-side and the player is told the floor (a point is 76m, a hundredth
     // of it is 760,000).
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "10" } });
-    expect(screen.getByText(/too little to move Yugoslavia/i)).toBeTruthy();
-    expect(screen.getByText(/spend at least/i).textContent).toContain("0.01");
+    expect(screen.getByText(/below this form's minimum spend/i)).toBeTruthy();
+    expect(screen.getByText(/enter at least/i).textContent).toContain("$760,000");
     const commit = screen.getByRole("button", { name: /commit play/i }) as HTMLButtonElement;
     expect(commit.disabled).toBe(true);
   });
@@ -292,7 +324,7 @@ describe("NationDossier costs and the display-currency preference", () => {
 
     // One plain unit against a 399M point: still refused, as ticket #1213 set.
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "1" } });
-    expect(screen.getByText(/too little to move Yugoslavia/i)).toBeTruthy();
+    expect(screen.getByText(/below this form's minimum spend/i)).toBeTruthy();
     const commit = screen.getByRole("button", { name: /commit play/i }) as HTMLButtonElement;
     expect(commit.disabled).toBe(true);
 
@@ -302,7 +334,7 @@ describe("NationDossier costs and the display-currency preference", () => {
     expect(
       screen.getByText((_, el) => {
         const t = el?.textContent ?? "";
-        return t.startsWith("Buys") && t.includes("0.12") && t.includes("each");
+        return t.startsWith("Estimated effective gain:") && t.includes("0.12");
       })
     ).toBeTruthy();
   });
@@ -317,8 +349,87 @@ describe("NationDossier costs and the display-currency preference", () => {
         onCommitted={() => {}}
       />
     );
-    // 76m a point, so the 5-point ceiling is 380m; 500m is past it.
+    // 76m a point, so the 5-point ceiling is 380m; 500m is past it but still
+    // inside one play's 10-point cap, so the extra counts against a rival.
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "500000000" } });
-    expect(screen.getByText(/past the 5-point ceiling/i)).toBeTruthy();
+    expect(screen.getByText(/reaches the shared 5-point movement ceiling/i)).toBeTruthy();
+    expect(screen.getByText(/only helps counter opposition/i)).toBeTruthy();
+  });
+});
+
+describe("NationDossier per-play cap (ticket #1371)", () => {
+  const renderForm = (over: Partial<InfluenceTarget> = {}) =>
+    render(
+      <NationDossier
+        view={{ ...VIEW, fundBalanceLocal: 5_000_000_000 } as OrgInfluenceView}
+        target={{ ...TARGET, ...over } as InfluenceTarget}
+        orgId="NATO"
+        viewerCountryId="US"
+        onCommitted={() => {}}
+      />
+    );
+  const previewLine = () =>
+    screen.getByText((_, el) => {
+      const t = el?.textContent ?? "";
+      return el?.tagName === "P" && t.startsWith("Estimated effective gain:");
+    });
+
+  it("caps the preview at one play's maximum and says the rest is wasted", () => {
+    // The old line read "buys nothing unless a rival pushes back", so players
+    // kept paying past the play cap. Past it the money buys nothing even
+    // against a rival.
+    renderForm();
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "1b" } });
+    expect(previewLine().textContent).toContain("5.00");
+    expect(previewLine().textContent).not.toContain("10.00");
+    expect(previewLine().textContent).toContain("$760.0M");
+    expect(previewLine().textContent).toMatch(/wasted, even against opposition/i);
+    expect(previewLine().textContent).not.toMatch(/rival pushes back/i);
+  });
+
+  it("halves the play cap on a nation resisting at half strength", () => {
+    renderForm({
+      shares: { WEST: 30, EAST: 30 },
+      nonAligned: 40,
+      resistsAtHalfStrength: true,
+      pointCostLocal: 152_000_000,
+      playMaxPoints: 5,
+    });
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "1b" } });
+    expect(previewLine().textContent).toContain("5.00");
+    expect(previewLine().textContent).not.toContain("10.00");
+  });
+
+  it("uses the raised flashpoint limit for the turn ceiling", () => {
+    // 600m at 76m a point is 7.89 points: past the flashpoint's 7.5 and still
+    // inside one play's 10-point cap.
+    renderForm({ crisis: { turnsRemaining: 4, movementCap: 7.5 } });
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "600m" } });
+    expect(previewLine().textContent).toContain("7.50");
+    expect(previewLine().textContent).toMatch(/shared 7\.5-point movement ceiling/i);
+
+    // 500m is 6.58 points: past 5, but inside the flashpoint's 7.5.
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "500m" } });
+    expect(previewLine().textContent).toContain("6.58");
+    expect(previewLine().textContent).not.toMatch(/reaches the shared/i);
+  });
+
+  it("says a point moves less than one share once nothing is uncommitted", () => {
+    renderForm({ shares: { WEST: 26, EAST: 74 }, nonAligned: 0 });
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "76m" } });
+    expect(previewLine().textContent).toContain("0.73");
+  });
+
+  it("explains cancelling and stacking next to the price", () => {
+    renderForm({ crisis: { turnsRemaining: 4, movementCap: 7.5 }, turnCapCostLocal: 570_000_000 });
+    const price = screen.getByText((_, el) => {
+      const t = el?.textContent ?? "";
+      return el?.tagName === "P" && t.startsWith("Yugoslavia shares");
+    });
+    expect(price.textContent).toMatch(/7\.5-point movement ceiling/i);
+    expect(price.textContent).toMatch(/cancels before that ceiling/i);
+    expect(price.textContent).not.toMatch(/10 points/i);
+    expect(price.textContent).toMatch(/cannot raise the shared turn ceiling/i);
+    expect(price.textContent).not.toMatch(/[\u2013\u2014]/);
   });
 });

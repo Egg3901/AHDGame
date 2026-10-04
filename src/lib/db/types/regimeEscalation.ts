@@ -38,7 +38,9 @@ export interface LeaderDecision {
   /** Turn after which the default-action fires automatically. */
   expiresAtTurn: number;
   /** Character id of the leader the decision is directed at. */
-  leaderCharacterId: ObjectId;
+  leaderCharacterId: ObjectId | null;
+  /** NPP recipient; timed-out decisions resolve without a player session. */
+  leaderNppId?: ObjectId | null;
   /** Kind-specific payload (e.g. defectors list for stage3, draft params for convention). */
   payload: Record<string, unknown>;
 }

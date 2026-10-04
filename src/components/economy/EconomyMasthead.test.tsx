@@ -7,7 +7,7 @@ import { EconomyMasthead } from "./EconomyMasthead";
 import { getEconomyIdentity } from "@/lib/constants/economyIdentity";
 
 describe("EconomyMasthead", () => {
-  it("renders registry, title, office, turn badge, verdict seal, and the strip", () => {
+  it("renders registry, title, office, turn badge, verdict pill, and the strip", () => {
     render(
       <EconomyMasthead
         countryId="US"
@@ -22,17 +22,16 @@ describe("EconomyMasthead", () => {
     expect(screen.getByText("Economic Outlook")).toBeTruthy();
     expect(screen.getByText("Bureau of National Accounts")).toBeTruthy();
     expect(screen.getByText(/Live · Turn 412/)).toBeTruthy();
-    // verdict appears twice: the rotated seal (sm+) and the mobile badge pill
-    expect(screen.getAllByText("STEADY").length).toBe(2);
-    // seal caption (distinct from the "Economic Outlook" title by case)
-    expect(screen.getByText("economic outlook")).toBeTruthy();
+    // the verdict is a single badge-row pill at every breakpoint (no rotated seal)
+    expect(screen.getAllByText("STEADY").length).toBe(1);
+    expect(screen.queryByText("economic outlook")).toBeNull();
     expect(screen.getByText(/price pressure elevated/)).toBeTruthy();
     expect(screen.getByTestId("pulse-strip")).toBeTruthy();
     const budgetLink = screen.getByRole("link", { name: /National Budget/ });
     expect(budgetLink.getAttribute("href")).toBe("/country/us/budget");
   });
 
-  it("omits the verdict seal and reasoning bar when no verdict can be derived", () => {
+  it("omits the verdict pill and reasoning bar when no verdict can be derived", () => {
     render(
       <EconomyMasthead
         countryId="US"
@@ -43,7 +42,7 @@ describe("EconomyMasthead", () => {
         strip={<div />}
       />
     );
-    expect(screen.queryByText("economic outlook")).toBeNull();
+    expect(screen.queryByText(/^(EXPANDING|STEADY|COOLING|CONTRACTING|OVERHEATING)$/)).toBeNull();
     expect(screen.queryByText("Verdict")).toBeNull();
   });
 

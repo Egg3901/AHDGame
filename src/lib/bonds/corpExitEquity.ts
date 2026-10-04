@@ -36,7 +36,11 @@ import { corpCapitalToAnchor } from "@/lib/currency/corporationCapital";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import { sectorExitValueAnchor } from "@/lib/bonds/sectorExitBasis";
 import { totalEquityForBonds } from "@/lib/bonds/corporateBondDefault";
-import { sumConstructionInProgressAnchor } from "@/lib/corporations/sectorProfitBasis";
+import { corporateCashArrearsAnchor } from "@/lib/bonds/corporateCredit";
+import {
+  sectorConstructionInProgressAnchor,
+  sumConstructionInProgressAnchor,
+} from "@/lib/corporations/sectorProfitBasis";
 import { getGameState } from "@/lib/gameState";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 
@@ -107,6 +111,8 @@ export interface CorpExitEquityInput {
   plantsEnabled: boolean;
   /** Game year — era-prices the book basis. Only read under plants. */
   currentYear?: number | null;
+  /** Turn used to derive CIP from loaded build queues. */
+  currentTurn?: number | null;
   /** The world's era unit-basis scale. Only read under plants. */
   eraUnitScale: number;
 }
@@ -138,6 +144,7 @@ export function corpExitEquityAnchor(input: CorpExitEquityInput): CorpExitEquity
     {
       plantsEnabled: input.plantsEnabled,
       currentYear: input.currentYear,
+      currentTurn: input.currentTurn,
       eraUnitScale: input.eraUnitScale,
     }
   );
@@ -150,17 +157,30 @@ export function corpExitEquityAnchor(input: CorpExitEquityInput): CorpExitEquity
   // double-counting it under plants.
   const constructionInProgressAnchor = input.plantsEnabled
     ? 0
-    : sumConstructionInProgressAnchor(ownSectors);
+    : sumConstructionInProgressAnchor(
+        ownSectors.map((sector) => ({
+          constructionInProgressAnchor: sectorConstructionInProgressAnchor(
+            sector,
+            input.currentTurn
+          ),
+        }))
+      );
 
   const heldBondFaceAnchor = sumHeldBondFaceAnchor(input.bonds, id, input.fxByCurrency);
+  const corpArrears = input.corp as
+    (Partial<Corporation> & CorpCapitalCurrencyInfo) | null | undefined;
+  const cashAfterLiabilities =
+    input.liquidCapitalAnchor -
+    corporateCashArrearsAnchor({
+      operatingByCurrency: corpArrears?.operatingCashArrearsByCurrency,
+      federalTaxByCountryAnchor: corpArrears?.federalTaxArrearsAnchorByCountry,
+      fxByCurrency: input.fxByCurrency,
+    });
 
   return {
     exitEquityAnchor:
-      totalEquityForBonds(
-        input.liquidCapitalAnchor,
-        sectorExitAnchor,
-        constructionInProgressAnchor
-      ) + heldBondFaceAnchor,
+      totalEquityForBonds(cashAfterLiabilities, sectorExitAnchor, constructionInProgressAnchor) +
+      heldBondFaceAnchor,
     sectorExitAnchor,
     constructionInProgressAnchor,
     heldBondFaceAnchor,
@@ -187,6 +207,7 @@ export async function loadCorpExitEquityAnchor(
     fxByCurrency: ReadonlyMap<CurrencyCode, number>;
     primeRateByCountry: Map<string, number>;
     plantsEnabled: boolean;
+    currentTurn?: number | null;
   }
 ): Promise<CorpExitEquity> {
   const [heldBonds, gameState, eraUnitScale] = await Promise.all([
@@ -201,6 +222,7 @@ export async function loadCorpExitEquityAnchor(
     ...input,
     bonds: heldBonds,
     currentYear: gameState?.currentYear,
+    currentTurn: input.currentTurn ?? gameState?.currentTurn,
     eraUnitScale,
   });
 }

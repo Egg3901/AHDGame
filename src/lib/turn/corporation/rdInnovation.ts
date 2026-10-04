@@ -1,5 +1,6 @@
-import { ObjectId } from "mongodb";
+import type { UpdateOneModel } from "mongodb";
 import type { CorporationLookups } from "./types";
+import type { CorporateSector } from "@/lib/db/types/corporation";
 import type { ExtractableResource } from "@/lib/constants/commodities";
 import { EXTRACTABLE_RESOURCES } from "@/lib/constants/commodities";
 import {
@@ -14,6 +15,7 @@ import {
 } from "@/lib/constants/corporations";
 import { SECTOR_STRATEGIES } from "@/lib/constants/sectorStrategies";
 import { createNotifications } from "@/lib/notifications";
+import { plantCapacityDeltaPipeline } from "@/lib/corporations/plantLedger";
 
 // PLANTS-GATED: under plants a breakthrough raises `capitalStock` by the same
 // proportion the legacy path raised `revenue`; the revenue write below runs only
@@ -25,19 +27,14 @@ import { createNotifications } from "@/lib/notifications";
  */
 export interface RdInnovationResult {
   /** Bulk ops for sector revenue boosts (corporateSectors collection) */
-  sectorBoostOps: {
-    updateOne: {
-      filter: { _id: ObjectId };
-      update: { $inc: Record<string, number>; $set: Record<string, unknown> };
-    };
-  }[];
+  sectorBoostOps: Array<{ updateOne: UpdateOneModel<CorporateSector> }>;
   /** Bulk ops for state resource capacity boosts (stateResourceCapacity collection) */
-  capacityBoostOps: {
+  capacityBoostOps: Array<{
     updateOne: {
       filter: { stateId: string };
       update: { $inc: Record<string, number>; $set: Record<string, unknown> };
     };
-  }[];
+  }>;
   /** Number of innovations that triggered this turn */
   innovationsTriggered: number;
 }
@@ -200,10 +197,13 @@ export function processRdInnovations(
       sectorBoostOps.push({
         updateOne: {
           filter: { _id: sector._id },
-          update: {
-            $inc: { capitalStock: Math.round(deltaCapacity * 100) / 100 },
-            $set: { updatedAt: now },
-          },
+          update: plantCapacityDeltaPipeline(
+            sector.sectorType,
+            Math.round(deltaCapacity * 100) / 100,
+            { updatedAt: now },
+            sector.industryModel,
+            sector.mediaDiscriminator
+          ),
         },
       });
     } else {

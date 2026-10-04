@@ -20,10 +20,10 @@ import type { CountryEraOverride } from "../../contract";
  * same table `seedExchangeRates` writes into the `exchangeRates` collection.
  * Left unset, Germany read as a $1.46T economy against a real ~$1.81T.
  *
- * ⚠️ NOT EVERY COUNTRY TAKES THE RECIPROCAL. RU and NG deliberately do not: RU's
- * 1991 rate is a placeholder for a country this era does not enable, and NG's
- * bundle is ~900x too large for the unit its header claims, so the reciprocal
- * would read Nigeria as a $24 trillion economy. See `gdpAnchorRate1991.test.ts`.
+ * The conversion follows the seed's stored GDP denomination. Native-currency
+ * output uses the opening quote; output already in the shared unit stays at 1.
+ * Soviet and Nigerian native-currency seeds now use that same rule after their
+ * source denomination and national totals were reconciled.
  */
 export const DE_1991: CountryEraOverride = {
   preset: "1991-default",

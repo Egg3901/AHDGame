@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ObjectId } from "mongodb";
+import type { CorporateSector } from "@/lib/db/types/corporation";
 import {
   bucketKey,
   computeCapturedMarketMergeBuckets,
@@ -20,12 +21,40 @@ function sector(
   revenue: number,
   nationalizedAtTurn?: number,
   countryId: string = CN
-) {
-  return { corporationId, stateId, sectorType, revenue, nationalizedAtTurn, countryId } as never;
+): Pick<
+  CorporateSector,
+  | "corporationId"
+  | "stateId"
+  | "sectorType"
+  | "industryModel"
+  | "revenue"
+  | "nationalizedAtTurn"
+  | "countryId"
+> {
+  return {
+    corporationId,
+    stateId,
+    sectorType: sectorType as CorporateSector["sectorType"],
+    revenue,
+    nationalizedAtTurn,
+    countryId: countryId as CorporateSector["countryId"],
+  };
 }
 
 describe("computeStateControlledBuckets", () => {
   const natIds = new Set([NAT.toString()]);
+
+  it("keeps generic manufacturing and vehicle manufacturing in separate buckets", () => {
+    const controlled = computeStateControlledBuckets(
+      [
+        { ...sector(NAT, "HD", "manufacturing", 900, 331), industryModel: null },
+        { ...sector(PRIV, "HD", "manufacturing", 50), industryModel: "vehicles" },
+      ],
+      natIds
+    );
+    expect(controlled.has(bucketKey("HD", "manufacturing"))).toBe(true);
+    expect(controlled.has(bucketKey("HD", "manufacturing", "vehicles"))).toBe(false);
+  });
 
   it("marks a nationalized bucket the national corp solely holds as controlled", () => {
     const set = computeStateControlledBuckets(

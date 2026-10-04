@@ -27,6 +27,8 @@ export interface ExtractionContract {
   status?: "offered" | "active" | "declined" | "expired" | "defaulted";
   /** One-time signing fee (anchor units) charged to the corp on acceptance. */
   signingFeeAnchor?: number;
+  /** Frozen idempotency identity for a funded national signing-fee receipt. */
+  signingFeeAttemptKey?: string;
   /** Per-turn royalty as a fraction of contracted capacity market value (0–0.02). */
   royaltyRatePerTurn?: number;
   /** Contract term in turns; absent = perpetual (legacy / admin). */

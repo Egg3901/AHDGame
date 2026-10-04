@@ -38,6 +38,7 @@
  * learn a new ledger row.
  */
 
+import { substepMarker } from "@/lib/observability/phaseSubsteps";
 import { ObjectId, type Db, type AnyBulkWriteOperation } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
 import type { CommodityType } from "@/lib/constants/commodities";
@@ -47,7 +48,7 @@ import {
   dollarsToUnits,
 } from "@/lib/constants/commodities";
 import type { CorporationType } from "@/lib/constants/corporations";
-import { getEffectiveStrategyRates } from "@/lib/constants/sectorStrategies";
+import { getEffectiveStrategyRatesForOperatingModel } from "@/lib/constants/sectorStrategies";
 import { getInputMultiplier } from "@/lib/utils/productionPolicy";
 import { safeUnitScale } from "@/lib/constants/capacityEconomy";
 import {
@@ -63,6 +64,7 @@ import {
 import type { CorporationLookups } from "./types";
 import type { TxThresholds, FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
 import { emitTxBulk } from "@/lib/financialTxLog/emit";
+import { partitionedBulkWrite } from "./partitionedBulkWrite";
 import {
   resolveCorpLiquidCurrencyCode,
   fxRateForCorpFromMap,
@@ -258,13 +260,6 @@ function scopeOf(a: Pick<SettleableSupplyAgreement, "commodity" | "stateId">): s
 
 type ByCorpScope = ReadonlyMap<string, ReadonlyMap<string, number>>;
 
-type DeliveryFlowEdge = {
-  to: number;
-  reverseIndex: number;
-  capacity: number;
-  originalCapacity: number;
-};
-
 function demandCappedAgreementWeights(args: {
   agreements: readonly SettleableSupplyAgreement[];
   buyerDemandByCorpCommodity: ByCorpScope;
@@ -411,7 +406,7 @@ function rebalanceDeliveriesProRata(args: {
  * agreement cap or the buyer's physical demand. This is a small max-flow graph
  * per commodity: source -> supplier -> agreement -> buyer -> sink.
  */
-function allocateDeliveriesToBuyers(args: {
+export function allocateDeliveriesToBuyers(args: {
   agreements: readonly SettleableSupplyAgreement[];
   contractSettlementByCorp: ByCorpScope;
   buyerDemandByCorpCommodity: ByCorpScope;
@@ -447,23 +442,23 @@ function allocateDeliveriesToBuyers(args: {
     const agreementNode = new Map(indexed.map(({ index }) => [index, nextNode++]));
     const buyerNode = new Map(buyers.map((id) => [id, nextNode++]));
     const sink = nextNode++;
-    const graph: DeliveryFlowEdge[][] = Array.from({ length: nextNode }, () => []);
-
-    const addEdge = (from: number, to: number, capacity: number): DeliveryFlowEdge => {
-      const forward: DeliveryFlowEdge = {
-        to,
-        reverseIndex: graph[to]!.length,
-        capacity,
-        originalCapacity: capacity,
-      };
-      const reverse: DeliveryFlowEdge = {
-        to: from,
-        reverseIndex: graph[from]!.length,
-        capacity: 0,
-        originalCapacity: 0,
-      };
-      graph[from]!.push(forward);
-      graph[to]!.push(reverse);
+    // Adjacency is built per node in insertion order, then frozen into flat
+    // typed arrays (CSR) for the search below. Edge `e` of node `n` lives at
+    // `edgeStart[n] + e`, so every node still walks its edges in exactly the
+    // order they were added, and capacities stay doubles (Float64Array), so
+    // each subtraction and comparison is the one the object graph performed.
+    const adjacency: number[][] = Array.from({ length: nextNode }, () => []);
+    const edgeTo: number[] = [];
+    const edgeCapacity: number[] = [];
+    const edgeReverse: number[] = [];
+    const addEdge = (from: number, to: number, capacity: number): number => {
+      const forward = edgeTo.length;
+      const reverse = forward + 1;
+      edgeTo.push(to, from);
+      edgeCapacity.push(capacity, 0);
+      edgeReverse.push(reverse, forward);
+      adjacency[from]!.push(forward);
+      adjacency[to]!.push(reverse);
       return forward;
     };
 
@@ -472,7 +467,7 @@ function allocateDeliveriesToBuyers(args: {
       addEdge(source, supplierNode.get(supplier)!, Math.max(0, available));
     }
 
-    const deliveryEdgeByAgreement = new Map<number, DeliveryFlowEdge>();
+    const deliveryEdgeByAgreement = new Map<number, number>();
     for (const { agreement, index } of indexed) {
       const cap = Math.max(0, agreement.volumeCap);
       const supplier = supplierNode.get(agreement.supplierCorpId)!;
@@ -488,48 +483,75 @@ function allocateDeliveriesToBuyers(args: {
       addEdge(buyerNode.get(buyer)!, sink, Math.max(0, demand));
     }
 
+    const edgeCount = edgeTo.length;
+    const edgeStart = new Int32Array(nextNode + 1);
+    const slotOfEdge = new Int32Array(edgeCount);
+    for (let node = 0; node < nextNode; node++) {
+      edgeStart[node + 1] = edgeStart[node]! + adjacency[node]!.length;
+    }
+    for (let node = 0; node < nextNode; node++) {
+      const edges = adjacency[node]!;
+      for (let position = 0; position < edges.length; position++) {
+        slotOfEdge[edges[position]!] = edgeStart[node]! + position;
+      }
+    }
+    const slotTo = new Int32Array(edgeCount);
+    const slotCapacity = new Float64Array(edgeCount);
+    const slotReverse = new Int32Array(edgeCount);
+    for (let edge = 0; edge < edgeCount; edge++) {
+      const slot = slotOfEdge[edge]!;
+      slotTo[slot] = edgeTo[edge]!;
+      slotCapacity[slot] = edgeCapacity[edge]!;
+      slotReverse[slot] = slotOfEdge[edgeReverse[edge]!]!;
+    }
+
+    // Edmonds-Karp. The search order (edges in insertion order, stop at the
+    // sink) decides WHICH maximum flow is found, so it is part of the result
+    // and must not change. The flat arrays keep that order; they only drop
+    // the per-edge object loads that dominated this step on a book of
+    // thousands of agreements.
+    const parentNode = new Int32Array(nextNode);
+    const parentSlot = new Int32Array(nextNode);
+    const queue = new Int32Array(nextNode);
     for (;;) {
-      const parent = Array.from(
-        { length: nextNode },
-        () =>
-          null as null | {
-            node: number;
-            edgeIndex: number;
-          }
-      );
-      const queue = [source];
-      parent[source] = { node: source, edgeIndex: -1 };
-      for (let cursor = 0; cursor < queue.length && parent[sink] === null; cursor++) {
-        const node = queue[cursor]!;
-        for (let edgeIndex = 0; edgeIndex < graph[node]!.length; edgeIndex++) {
-          const edge = graph[node]![edgeIndex]!;
-          if (edge.capacity <= 1e-9 || parent[edge.to] !== null) continue;
-          parent[edge.to] = { node, edgeIndex };
-          queue.push(edge.to);
-          if (edge.to === sink) break;
+      parentNode.fill(-1);
+      parentNode[source] = source;
+      parentSlot[source] = -1;
+      let head = 0;
+      let tail = 0;
+      queue[tail++] = source;
+      while (head < tail && parentNode[sink] === -1) {
+        const node = queue[head++]!;
+        const end = edgeStart[node + 1]!;
+        for (let slot = edgeStart[node]!; slot < end; slot++) {
+          const to = slotTo[slot]!;
+          if (slotCapacity[slot]! <= 1e-9 || parentNode[to] !== -1) continue;
+          parentNode[to] = node;
+          parentSlot[to] = slot;
+          queue[tail++] = to;
+          if (to === sink) break;
         }
       }
-      if (parent[sink] === null) break;
+      if (parentNode[sink] === -1) break;
 
       let amount = Number.POSITIVE_INFINITY;
-      for (let node = sink; node !== source;) {
-        const step = parent[node]!;
-        amount = Math.min(amount, graph[step.node]![step.edgeIndex]!.capacity);
-        node = step.node;
+      for (let node = sink; node !== source; node = parentNode[node]!) {
+        amount = Math.min(amount, slotCapacity[parentSlot[node]!]!);
       }
       if (!(amount > 1e-9) || !Number.isFinite(amount)) break;
-      for (let node = sink; node !== source;) {
-        const step = parent[node]!;
-        const edge = graph[step.node]![step.edgeIndex]!;
-        edge.capacity -= amount;
-        graph[node]![edge.reverseIndex]!.capacity += amount;
-        node = step.node;
+      for (let node = sink; node !== source; node = parentNode[node]!) {
+        const slot = parentSlot[node]!;
+        slotCapacity[slot] = slotCapacity[slot]! - amount;
+        slotCapacity[slotReverse[slot]!] = slotCapacity[slotReverse[slot]!]! + amount;
       }
     }
 
     for (const { index } of indexed) {
       const edge = deliveryEdgeByAgreement.get(index)!;
-      deliveredByAgreement.set(index, Math.max(0, edge.originalCapacity - edge.capacity));
+      deliveredByAgreement.set(
+        index,
+        Math.max(0, edgeCapacity[edge]! - slotCapacity[slotOfEdge[edge]!]!)
+      );
     }
   }
 
@@ -569,6 +591,8 @@ export function computeDemandCappedContractReservations(args: {
 export interface SupplyAgreementDemandSector {
   corporationId: string;
   sectorType: CorporationType;
+  industryModel?: string | null;
+  mediaDiscriminator?: string | null;
   revenueAnchor: number;
   strategyId?: string;
   transitionFromStrategyId?: string | null;
@@ -603,12 +627,14 @@ export function computeSupplyAgreementBuyerDemand(args: {
 
   for (const sector of args.sectors) {
     if (args.plantsEnabled && sector.mothballed === true) continue;
-    const rates = getEffectiveStrategyRates(
+    const rates = getEffectiveStrategyRatesForOperatingModel(
       sector.sectorType,
       sector.strategyId ?? "standard",
       sector.transitionFromStrategyId,
       sector.transitionStartTurn,
-      args.currentTurn
+      args.currentTurn,
+      sector.industryModel,
+      sector.mediaDiscriminator
     );
     const utilization =
       args.plantsEnabled &&
@@ -1128,6 +1154,7 @@ export async function settleSupplyAgreements(args: {
   deliveries: SupplyAgreementDelivery[];
   damages: SupplyAgreementDamages[];
 }> {
+  const step = substepMarker();
   const { db, lookups, agreements, contractSettlementByCorp, priceRatioByCommodity, turn, now } =
     args;
   if (agreements.length === 0)
@@ -1162,6 +1189,8 @@ export async function settleSupplyAgreements(args: {
       freshCapitalByCorpId.set(current._id.toString(), current.liquidCapital ?? 0);
     }
   }
+
+  step.mark("settle.balances");
 
   const {
     deltaByCorp,
@@ -1200,6 +1229,8 @@ export async function settleSupplyAgreements(args: {
     now,
   });
 
+  step.mark("settle.compute");
+
   if (deltaByCorp.size > 0) {
     const ops: AnyBulkWriteOperation<Corporation>[] = [];
     for (const [corpId, delta] of deltaByCorp) {
@@ -1217,6 +1248,7 @@ export async function settleSupplyAgreements(args: {
     }
     if (ops.length > 0) await db.collection<Corporation>("corporations").bulkWrite(ops);
   }
+  step.mark("settle.corpWrites");
   if (deliveries.length > 0) {
     const deliveryOps: AnyBulkWriteOperation<SupplyAgreement>[] = [];
     for (const delivery of deliveries) {
@@ -1281,12 +1313,15 @@ export async function settleSupplyAgreements(args: {
         },
       });
     }
-    if (deliveryOps.length > 0) {
-      await db.collection<SupplyAgreement>("supplyAgreements").bulkWrite(deliveryOps);
-    }
+    // One op per live agreement (~27k on a mature world), each keyed by its
+    // own `_id`, so the batches can be applied side by side.
+    await partitionedBulkWrite(db.collection<SupplyAgreement>("supplyAgreements"), deliveryOps);
   }
+  step.mark("settle.deliveryWrites");
   if (txEntries.length > 0) await emitTxBulk(db, txEntries, args.thresholds);
+  step.mark("settle.ledger");
   await notifySupplyAgreementDamages({ db, damages, agreements, lookups, turn });
+  step.mark("settle.notify");
 
   return { settledCount, totalPremiumAnchor, settledPremiums, deliveries, damages };
 }

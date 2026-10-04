@@ -18,9 +18,16 @@ const command = {
   actorId,
   actorName: "Synthetic minister",
 };
-function world(treasury = 10000, reserves = 5000) {
+function world(
+  treasury = 10000,
+  reserves = 5000,
+  treasuryCashLedgerEnabled = false,
+  treasuryCashLocal = 0
+) {
   const db = createInMemoryDb();
-  db.seed("gameConfig", [{ _id: "default", auditLog: true, ledgerShadow: true }]);
+  db.seed("gameConfig", [
+    { _id: "default", auditLog: true, ledgerShadow: true, treasuryCashLedgerEnabled },
+  ]);
   db.seed("gameState", [{ _id: "current", currentTurn: 100, preset: "1991-default" }]);
   db.seed("exchangeRates", [{ currencyCode: "USD", rate: 1 }]);
   db.seed("federalBudget", [
@@ -28,6 +35,7 @@ function world(treasury = 10000, reserves = 5000) {
       _id: "federal",
       countryId: "US",
       treasuryBalance: treasury,
+      treasuryCashLocal,
       revenue: { total: 1000000 },
       spending: { total: 900000 },
       surplus: 100000,
@@ -45,6 +53,7 @@ function state(db: ReturnType<typeof world>) {
   const bank = db.collection("centralBanks").docs[0];
   return {
     treasury: budget.treasuryBalance,
+    treasuryCash: budget.treasuryCashLocal,
     reserves: bank.reserveBalance,
     spending: budget.spending,
     surplus: budget.surplus,
@@ -54,6 +63,16 @@ function state(db: ReturnType<typeof world>) {
 }
 beforeEach(() => vi.restoreAllMocks());
 describe("treasury reserve settlement", () => {
+  it("uses only the funded cash stock when enabled and folds the flag into the existing config read", async () => {
+    const db = world(-5000, 5000, true, 3000);
+    const config = db.collection("gameConfig");
+    const findOne = vi.spyOn(config, "findOne");
+
+    await executeTreasuryReserveTransfer(db as unknown as Db, command);
+
+    expect(state(db)).toMatchObject({ treasury: -6000, treasuryCash: 2000, reserves: 6000 });
+    expect(findOne).toHaveBeenCalledTimes(2); // policy/audit config plus existing TTL cadence read
+  });
   it.each([
     [10000, 5000],
     [-1000, -5000],

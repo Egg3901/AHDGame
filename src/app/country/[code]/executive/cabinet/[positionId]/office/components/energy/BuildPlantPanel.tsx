@@ -23,7 +23,7 @@ export function BuildPlantPanel({
   const src = ENERGY_SOURCES.find((s) => s.id === sel) ?? ENERGY_SOURCES[0];
 
   return (
-    <div className="gov-glow rounded-xl border border-[color-mix(in_srgb,var(--gov)_30%,transparent)] bg-card p-4">
+    <div className="rounded-xl border border-[color-mix(in_srgb,var(--gov)_30%,transparent)] bg-card p-4">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-sm font-semibold text-foreground">Build a new power plant</h3>
         <button onClick={onCancel} className="text-[12px] text-muted hover:text-foreground">

@@ -114,6 +114,106 @@ describe("processAutoDisasterSpawn", () => {
     );
   });
 
+  it("opens an early weather event without making earthquakes more frequent", async () => {
+    setupHappyPath(0);
+    const template = (name: string): CrisisTemplate => ({
+      name,
+      description: name,
+      scope: "region",
+      naturalDisaster: true,
+      durationTurns: 4,
+      countryIds: [],
+      regionIds: [],
+      effects: [],
+      wireMessageOnStart: name,
+      wireMessageOnEnd: null,
+    });
+    vi.spyOn(selectDisasterTemplateModule, "disasterTemplatesForCountry").mockReturnValue([
+      { key: "earthquake", template: template("Earthquake") },
+      { key: "flood", template: template("Flood") },
+    ]);
+
+    await processAutoDisasterSpawn(db as unknown as Db, "BR", 120, {
+      enabled: true,
+      climatePressure: 1,
+    });
+
+    expect(db.collectionMocks.crises!.insertOne).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "Flood" })
+    );
+    vi.restoreAllMocks();
+  });
+
+  it("debits a bounded weather cost once and reconciles an interrupted replay", async () => {
+    setupHappyPath(0);
+    db.collectionMocks.states!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([REGIONS[0]]),
+    });
+    const flood: CrisisTemplate = {
+      name: "Flood",
+      description: "Flood",
+      scope: "region",
+      naturalDisaster: true,
+      durationTurns: 4,
+      countryIds: [],
+      regionIds: [],
+      effects: [],
+      wireMessageOnStart: "Flood",
+      wireMessageOnEnd: null,
+    };
+    vi.spyOn(selectDisasterTemplateModule, "disasterTemplatesForCountry").mockReturnValue([
+      { key: "flood", template: flood },
+    ]);
+    db.collection("stateMetrics").find.mockReturnValue({
+      toArray: vi
+        .fn()
+        .mockResolvedValue([{ _id: "S1", environment: { climateResilience: { value: 0 } } }]),
+    });
+    db.collection("federalBudget").findOne.mockResolvedValue({ gdp: 1_000_000_000 });
+    const charged = new Set<string>();
+    let balance = 1_000_000_000;
+    db.collection("federalBudget").updateOne.mockImplementation(
+      async (
+        filter: { disasterFiscalReceipts: { $ne: string } },
+        update: { $inc: { treasuryBalance: number } }
+      ) => {
+        const receipt = filter.disasterFiscalReceipts.$ne as string;
+        if (charged.has(receipt)) return { modifiedCount: 0 };
+        charged.add(receipt);
+        balance += update.$inc.treasuryBalance;
+        return { modifiedCount: 1 };
+      }
+    );
+
+    await processAutoDisasterSpawn(db as unknown as Db, "BR", 144, {
+      enabled: true,
+      climatePressure: 0.5,
+    });
+    const inserted = db.collectionMocks.crises!.insertOne.mock.calls[0]![0] as {
+      _id: { toString(): string };
+      autoDisasterFiscalCost: number;
+    };
+    expect(inserted.autoDisasterFiscalCost).toBe(250_000);
+    expect(balance).toBe(999_750_000);
+
+    // A crash after crisis insertion but before the charge can replay the
+    // existing event. The atomic receipt filter prevents a second debit.
+    db.collectionMocks.crises!.findOne.mockResolvedValue(inserted);
+    await processAutoDisasterSpawn(db as unknown as Db, "BR", 144, {
+      enabled: true,
+      climatePressure: 0.5,
+    });
+    expect(charged).toEqual(new Set([inserted._id.toString()]));
+    expect(balance).toBe(999_750_000);
+    expect(db.collectionMocks.crises!.insertOne).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.countryGameStates!.updateOne).toHaveBeenCalledWith(
+      { _id: "BR" },
+      { $max: { lastDisasterTurn: 144 } },
+      { upsert: true }
+    );
+    vi.restoreAllMocks();
+  });
+
   it("skips when an active auto-disaster already exists for the country", async () => {
     db.collectionMocks["countryGameStates"]!.findOne.mockResolvedValue({
       _id: "BR",

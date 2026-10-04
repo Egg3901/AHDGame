@@ -26,14 +26,18 @@ import {
   type CommodityType,
   type ExtractableResource,
 } from "@/lib/constants/commodities";
-import { SECTOR_STRATEGIES, getStrategy } from "@/lib/constants/sectorStrategies";
+import {
+  SECTOR_STRATEGIES,
+  getOperatingSectorType,
+  getStrategyForOperatingModel,
+} from "@/lib/constants/sectorStrategies";
 import { facilityPlural } from "@/lib/constants/facilityVocabulary";
 import { formatFillPercent, formatUnits } from "./plantsPresentation";
 import type { SectorDetail } from "./CorporationPageTypes";
 
 export interface SectorTypeMetric {
   label: string;
-  /** Formatted figure, or "—" when this corporation has nothing to compute it from. */
+  /** Formatted figure, or "n/a" when this corporation has nothing to compute it from. */
   value: string;
   /** The one-line gloss under the figure. */
   sub: string;
@@ -125,12 +129,16 @@ export function typeMarketShare(sectors: SectorDetail[]): number | null {
  * file still counted it.
  */
 export function resolveSectorStrategy(sector: SectorDetail) {
-  const type = sector.sectorType as CorporationType;
+  const type = getOperatingSectorType(sector.sectorType, sector.industryModel) as CorporationType;
   if (!SECTOR_STRATEGIES[type]?.length) return null;
   // `corporationDetail` already normalises an absent id to "standard", so this
   // only matters for a row that arrives with one; kept so the function is
   // correct on its own terms, the same way every other caller writes it.
-  return getStrategy(type, sector.strategyId ?? "standard");
+  return getStrategyForOperatingModel(
+    sector.sectorType,
+    sector.strategyId ?? "standard",
+    sector.industryModel
+  );
 }
 
 const strategyFor = resolveSectorStrategy;
@@ -289,7 +297,7 @@ function buildMetric(
         label: "Output mix",
         value: mix
           ? `${Math.round(mix.share * 100)}% ${COMMODITY_LABELS[mix.commodity] ?? mix.commodity}`.toLowerCase()
-          : "—",
+          : "n/a",
         sub: "largest share of output",
         help: `The commodity these ${sites} mostly make, read off the operating strategy each one is running.`,
       };
@@ -298,7 +306,7 @@ function buildMetric(
       const fossil = typeFossilShare(sectors);
       return {
         label: "Fuel mix",
-        value: fossil == null ? "—" : `${Math.round(fossil * 100)}% fossil`,
+        value: fossil == null ? "n/a" : `${Math.round(fossil * 100)}% fossil`,
         sub: "coal, oil and gas share of inputs",
         help: `How much of what these ${sites} buy is hydrocarbon. Renewable strategies buy electronics and rare earths instead.`,
       };
@@ -316,7 +324,7 @@ function buildMetric(
       const workers = sum(sectors, (s) => s.workers);
       return {
         label: "Jobs",
-        value: workers > 0 ? workers.toLocaleString("en-US") : "—",
+        value: workers > 0 ? workers.toLocaleString("en-US") : "n/a",
         sub: `employed across these ${sites}`,
         help: "Total employees these sectors carry.",
       };
@@ -325,7 +333,7 @@ function buildMetric(
       const share = typeMarketShare(sectors);
       return {
         label: "Market share",
-        value: share == null ? "—" : `${share.toFixed(1)}%`,
+        value: share == null ? "n/a" : `${share.toFixed(1)}%`,
         sub: "of the markets you are in",
         help: `Capacity weighted share of each state market these ${sites} sell into.`,
       };
@@ -343,7 +351,7 @@ function buildMetric(
       const capacity = sum(sectors, (s) => s.capacityUnits);
       return {
         label: "Freight capacity",
-        value: capacity > 0 ? formatUnits(capacity) : "—",
+        value: capacity > 0 ? formatUnits(capacity) : "n/a",
         sub: "units per day",
         help: "Nameplate capacity of your depots, the freight the network can move each day.",
       };
@@ -367,7 +375,8 @@ function buildMetric(
       };
     }
     case "growthTarget": {
-      if (!sectors.length) return { label: "Growth target", value: "—", sub: "average", help: "" };
+      if (!sectors.length)
+        return { label: "Growth target", value: "n/a", sub: "average", help: "" };
       const avg = sectors.reduce((acc, s) => acc + s.targetGrowthRate, 0) / sectors.length;
       return {
         label: "Growth target",

@@ -13,6 +13,8 @@ export type GovernmentFormationStatus = "pending" | "formed" | "collapsed";
 export type GovernmentFormationType = "majority" | "coalition" | "minority" | "admin";
 
 export interface GovernmentFormation {
+  /** Serializes native Hungarian mandate changes with a new chamber handover. */
+  hu1991MandateGeneration?: number;
   _id: string; // "UK"
   countryId: CountryId;
   cycle: number;
@@ -33,9 +35,11 @@ export interface GovernmentFormation {
   pmName: string | null;
 
   // Parliamentary support
-  governingPartyId: string | null; // party sequentialId of largest party
+  governingPartyId: string | null; // party of the sitting executive; presumptive largest party while pending
   coalitionId: number | null; // coalition sequentialId if formed via coalition
-  coalitionPartyIds: string[] | null; // party sequentialIds in supporting coalition
+  coalitionPartyIds: string[] | null;
+  /** Explicit parliamentary tolerance, distinct from cabinet support. */
+  confidenceAbstentionPartyIds?: string[]; // party sequentialIds in supporting coalition
   totalSeatsSupporting: number;
   majorityThreshold: number; // 326 for UK
 
@@ -84,6 +88,7 @@ export interface GovernmentFormation {
    * `appointNppPresident`. The player path never sets it.
    */
   presidentNppId?: ObjectId | null;
+  presidentCharacterId?: ObjectId | null;
   presidentName?: string | null;
 
   /**
@@ -155,20 +160,22 @@ export interface PMAppointmentVote {
   office?: "headOfState";
 
   // Nomination
-  /** Player nominee. Null for NPP nominees on head-of-state votes (see nomineeMode). */
+  /** Player nominee. Null for NPP appointment or confidence votes. */
   nomineeCharacterId: ObjectId | null;
-  /** NPP nominee. Set only for head-of-state votes with nomineeMode "npp". */
+  /** NPP nominee, including autonomous post-election confidence votes. */
   nomineeNppId?: ObjectId | null;
   /** Discriminator. Absent on legacy docs, which are always character nominees. */
   nomineeMode?: "character" | "npp";
   nomineeName: string;
   nomineePartyId: string; // party sequentialId
-  nominatedByCharacterId: ObjectId; // party chair or coalition chair
+  nominatedByCharacterId: ObjectId | null; // null for a system-filed NPP confidence motion
   formationType: GovernmentFormationType;
 
   // Coalition context — null for majority/minority
   coalitionId: number | null;
   coalitionPartyIds: string[] | null;
+  /** Explicit parliamentary tolerance, distinct from cabinet support. */
+  confidenceAbstentionPartyIds?: string[];
 
   // Votes
   votesFor: number;

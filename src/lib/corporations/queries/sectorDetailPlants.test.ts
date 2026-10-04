@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { NET_MARGIN_FLOOR_PCT } from "@/lib/corporations/rules/netMargin";
 import { ObjectId } from "mongodb";
 import { buildSectorPlantsSection } from "./sectorDetailSections";
 import type { CorporateSector } from "@/lib/db/types";
@@ -343,8 +344,8 @@ describe("buildSectorPlantsSection", () => {
       // the full operating bill (maintenanceNet 600 + labour 200) over 150.
       expect(s.truth.receivedPerUnitAnchor).toBeCloseTo(1000 / 150, 6);
       expect(s.truth.costPerUnitAnchor).toBeCloseTo(800 / 150, 6);
-      // Fill-adjusted margin: profit 150 over the total bill 850 (opex + growth).
-      expect(s.truth.fillAdjustedMarginPct).toBeCloseTo((150 / 850) * 100, 6);
+      // Net margin: profit 150 over realized revenue 1000.
+      expect(s.truth.fillAdjustedMarginPct).toBeCloseTo((150 / 1000) * 100, 6);
     });
 
     it("falls back to the units ratio when the engine wrote no soldFraction", () => {
@@ -366,9 +367,9 @@ describe("buildSectorPlantsSection", () => {
       });
       expect(s.truth.receivedPerUnitAnchor).toBeNull();
       expect(s.truth.costPerUnitAnchor).toBeNull();
-      // Costs still exist, so the fill-adjusted margin is a real (deeply
-      // negative) number, and there is no path to profit at this fill.
-      expect(s.truth.fillAdjustedMarginPct).toBeCloseTo(-100, 6);
+      // Nothing sold but costs still exist: the net margin reads as the floor
+      // rather than null, and there is no path to profit at this fill.
+      expect(s.truth.fillAdjustedMarginPct).toBe(NET_MARGIN_FLOOR_PCT);
       expect(s.truth.breakEven).toEqual({ status: "not_at_current_fills", turns: null });
     });
 
@@ -408,7 +409,10 @@ describe("buildSectorPlantsSection", () => {
       const s = buildSectorPlantsSection({
         eraUnitScale: 1,
         ...BASE_ARGS,
-        sector: sectorFixture({ constructionInProgressAnchor: 100 }),
+        sector: sectorFixture({
+          constructionInProgressAnchor: 9_000,
+          buildQueue: [{ unitsOrdered: 10, costPaidAnchor: 100, startTurn: 100, onlineTurn: 101 }],
+        }),
       });
       // Profit is 150 ₳ per financial DAY, i.e. 150 / 24 per turn.
       expect(s.truth.breakEven).toEqual({ status: "turns", turns: Math.ceil(100 / (150 / 24)) });
@@ -418,7 +422,10 @@ describe("buildSectorPlantsSection", () => {
       const s = buildSectorPlantsSection({
         eraUnitScale: 1,
         ...BASE_ARGS,
-        sector: sectorFixture({ constructionInProgressAnchor: 100 }),
+        sector: sectorFixture({
+          constructionInProgressAnchor: 9_000,
+          buildQueue: [{ unitsOrdered: 10, costPaidAnchor: 100, startTurn: 100, onlineTurn: 101 }],
+        }),
         money: { ...BASE_ARGS.money, profitAnchor: -10 },
       });
       expect(s.truth.breakEven).toEqual({ status: "not_at_current_fills", turns: null });
@@ -499,5 +506,53 @@ describe("partial mothball attribution", () => {
     });
     expect(result.idleCauses.find((cause) => cause.cause === "mothballed")?.units).toBe(150);
     expect(result.idleCauses.reduce((sum, cause) => sum + cause.units, 0)).toBeCloseTo(160, 8);
+  });
+});
+
+describe("buildSectorPlantsSection: room to build agrees with the engine (ticket 1370)", () => {
+  it("reports no room while the sector's own demand throttle holds it back", () => {
+    const held = buildSectorPlantsSection({
+      eraUnitScale: 1,
+      ...BASE_ARGS,
+      demandGapUnits: 3_000,
+      sector: sectorFixture({ demandThrottleFactor: 0.1 }),
+    });
+    expect(held.roomHeldByOwnIdle).toBe(true);
+    expect(held.demandGapUnits).toBe(0);
+    const running = buildSectorPlantsSection({
+      eraUnitScale: 1,
+      ...BASE_ARGS,
+      demandGapUnits: 3_000,
+      sector: sectorFixture({ demandThrottleFactor: 1 }),
+    });
+    expect(running.roomHeldByOwnIdle).toBe(false);
+    expect(running.demandGapUnits).toBe(3_000);
+  });
+
+  it("does not hold room for a mothballed sector, whose idle capacity is the owner's choice", () => {
+    const s = buildSectorPlantsSection({
+      eraUnitScale: 1,
+      ...BASE_ARGS,
+      demandGapUnits: 3_000,
+      sector: sectorFixture({ demandThrottleFactor: 0.1, mothballed: true }),
+    });
+    expect(s.roomHeldByOwnIdle).toBe(false);
+  });
+
+  it("states unclaimed share from the same pool that bounds a build", () => {
+    // 500 unowned units beside 1,500 owned: a quarter of the market is unclaimed.
+    const s = buildSectorPlantsSection({
+      eraUnitScale: 1,
+      ...BASE_ARGS,
+      ownedCellCapacityUnits: 1_500,
+      sector: sectorFixture(),
+    });
+    expect(s.unclaimedSharePct).toBe(25);
+    const unknown = buildSectorPlantsSection({
+      eraUnitScale: 1,
+      ...BASE_ARGS,
+      sector: sectorFixture(),
+    });
+    expect(unknown.unclaimedSharePct).toBeUndefined();
   });
 });

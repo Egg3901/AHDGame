@@ -83,7 +83,13 @@ export type ModPlayersSubTab =
   "users" | "achievements" | "characters" | "patreon" | "activity-log" | "suspicious" | "audit-log";
 
 export type ModContentSubTab =
-  "news" | "banner-ads" | "wiki" | "wiki-review" | "supporter-requests" | "mail-reports";
+  | "news"
+  | "banner-ads"
+  | "wiki"
+  | "wiki-review"
+  | "supporter-requests"
+  | "mail-reports"
+  | "player-reports";
 
 export const VALID_MOD_SUBS: Record<ModTabId, string[]> = {
   priority: [],
@@ -97,7 +103,15 @@ export const VALID_MOD_SUBS: Record<ModTabId, string[]> = {
     "audit-log",
   ],
   transactions: [],
-  content: ["news", "banner-ads", "wiki", "wiki-review", "supporter-requests", "mail-reports"],
+  content: [
+    "news",
+    "banner-ads",
+    "wiki",
+    "wiki-review",
+    "supporter-requests",
+    "mail-reports",
+    "player-reports",
+  ],
   site: [],
 };
 

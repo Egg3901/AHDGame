@@ -33,7 +33,10 @@ const SENTRY_RELEASE =
 process.env.SENTRY_RELEASE = SENTRY_RELEASE;
 process.env.NEXT_PUBLIC_SENTRY_RELEASE = SENTRY_RELEASE;
 process.env.NEXT_PUBLIC_SENTRY_ENVIRONMENT =
-  process.env.RAILWAY_ENVIRONMENT_NAME || process.env.NODE_ENV || "development";
+  process.env.SENTRY_ENVIRONMENT ||
+  process.env.RAILWAY_ENVIRONMENT_NAME ||
+  process.env.NODE_ENV ||
+  "development";
 
 // Short commit shown in the version badge — derived from the same SHA as the
 // release identifier so the badge and Sentry release can never disagree.
@@ -232,7 +235,7 @@ const nextConfig: NextConfig = {
           {
             key: "Content-Security-Policy-Report-Only",
             value:
-              "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; img-src 'self' data: blob: https:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.posthog.com https://pagead2.googlesyndication.com https://*.googlesyndication.com https://www.googletagmanager.com https://fundingchoicesmessages.google.com; worker-src 'self' blob:; connect-src 'self' https:; frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://*.googlesyndication.com https://googleads.g.doubleclick.net https://fundingchoicesmessages.google.com",
+              "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; img-src 'self' data: blob: https:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.posthog.com https://pagead2.googlesyndication.com https://*.googlesyndication.com https://www.googletagmanager.com https://fundingchoicesmessages.google.com https://analytics.lakesidegames.net; worker-src 'self' blob:; connect-src 'self' https:; frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://*.googlesyndication.com https://googleads.g.doubleclick.net https://fundingchoicesmessages.google.com",
           },
         ],
       },

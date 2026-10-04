@@ -27,6 +27,8 @@ import {
   IE_DAIL_2020,
   IE_SEANAD_1991,
   IE_SEANAD_2020,
+  IE_UACHTARAN_1991,
+  IE_UACHTARAN_2019,
   JP_GOVERNORS_1991,
   JP_GOVERNORS_2020,
   JP_REGIONAL_COUNCIL_1991,
@@ -59,6 +61,10 @@ import {
   US_STATE_SENATE_1990,
   US_STATE_SENATE_2020,
 } from "./historicalSeats";
+import {
+  modeledBrMacroregionGovernors,
+  modeledIeRegionalOffices,
+} from "@/lib/seeds/reference/rules/aggregateRegionalOffices";
 import { seatCountFor, seatGroupsFor, seatsForCountry } from "./presetSeatGroups";
 
 const ALL_PRESETS = [...SHIPPING_PRESETS, "empty", "2019-no-parties", "1968-default"];
@@ -108,8 +114,11 @@ const SOURCE_1992 =
   CN_GOVERNORS_1991.length +
   BR_CHAMBER_1991.length +
   BR_SENATE_1991.length +
+  modeledBrMacroregionGovernors("1991-default").length +
   IE_DAIL_1991.length +
-  IE_SEANAD_1991.length;
+  IE_SEANAD_1991.length +
+  IE_UACHTARAN_1991.length +
+  modeledIeRegionalOffices("1991-default").length;
 
 const SOURCE_1953 =
   US_EXECUTIVE_1953.length +
@@ -138,7 +147,11 @@ describe("preset seat groups", () => {
    */
   it("holds exactly the rows the source arrays contain", () => {
     const expected: Record<string, number> = {
-      "2019-default": SOURCE_2020,
+      "2019-default":
+        SOURCE_2020 +
+        IE_UACHTARAN_2019.length +
+        modeledBrMacroregionGovernors("2019-default").length +
+        modeledIeRegionalOffices("2019-default").length,
       "1999-default": SOURCE_2020,
       "2007-default": SOURCE_2020,
       "2023-default": SOURCE_2020,

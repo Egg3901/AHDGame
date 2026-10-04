@@ -25,6 +25,7 @@ import {
 } from "@/lib/unions/bargaining";
 import {
   openBargainingCampaignFromLiveConditions,
+  type BargainingReadCache,
   persistBargainingCounter,
   persistBargainingMediationAction,
   persistBargainingSettlement,
@@ -305,6 +306,8 @@ export async function processNppUnionBehavior(
     ),
   ]);
 
+  // One read per country / state set for the whole phase (#2690).
+  const bargainingReads: BargainingReadCache = new Map();
   for (const union of [...activeLed].sort((a, b) =>
     a._id.toHexString().localeCompare(b._id.toHexString())
   )) {
@@ -363,7 +366,8 @@ export async function processNppUnionBehavior(
         agreementDurationTurns: 48,
         noStrikeTurns: 24,
       },
-      currentTurn
+      currentTurn,
+      bargainingReads
     );
     if (opened.ok) {
       result.campaignsOpened++;
@@ -480,7 +484,13 @@ export async function processNppUnionBehavior(
       );
       if (requested.ok) result.mediationsRequested++;
     } else if (disputeParty === "union") {
-      const escalated = await persistUnionBargainingEscalation(db, union, campaign, currentTurn);
+      const escalated = await persistUnionBargainingEscalation(
+        db,
+        union,
+        campaign,
+        currentTurn,
+        bargainingReads
+      );
       if (escalated.ok) result.disputesEscalated++;
     }
   }

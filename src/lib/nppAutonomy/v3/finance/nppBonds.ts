@@ -20,7 +20,7 @@ import type { Db, Filter, ObjectId } from "mongodb";
 import type { Bond, NPP } from "@/lib/db/types";
 import { reserveBondUnitsForHolder } from "@/lib/bonds/bondHolderOps";
 import { bondPoolCurrency, creditBondPool, loadBondQuote } from "@/lib/bonds/marketPool";
-import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
+import { COUNTRY_CURRENCY_MAP, getSeedCurrencyCode } from "@/lib/constants/currencies";
 import { nppHomeFxRate, localToAnchor } from "./nppEconomicAccount";
 import { emitTx } from "@/lib/financialTxLog/emit";
 
@@ -57,7 +57,8 @@ export async function nppBuyBond(
   /** Pre-loaded home FX rate (local per ₳); loaded on demand when omitted. */
   homeRate?: number,
   /** Candidate from the turn sweep. The reservation still checks live float atomically. */
-  bondSnapshot?: NppBondBuySnapshot
+  bondSnapshot?: NppBondBuySnapshot,
+  preset?: string
 ): Promise<NppBondBuyResult> {
   if (!Number.isInteger(units) || units <= 0) {
     return { ok: false, reason: "Units must be a positive integer." };
@@ -73,7 +74,10 @@ export async function nppBuyBond(
     return { ok: false, reason: `Only ${bond.publicFloat ?? 0} units available.` };
   }
 
-  const homeCurrency = COUNTRY_CURRENCY_MAP[npp.countryId ?? "US"] ?? "USD";
+  const homeCountry = npp.countryId ?? "US";
+  const homeCurrency = preset
+    ? getSeedCurrencyCode(homeCountry, preset)
+    : (COUNTRY_CURRENCY_MAP[homeCountry] ?? "USD");
   if (bond.currencyCode && bond.currencyCode !== homeCurrency) {
     return { ok: false, reason: "NPPs only buy bonds in their home currency." };
   }
@@ -85,7 +89,7 @@ export async function nppBuyBond(
   const pricePerUnit = quote.askPerUnit;
   const cost = Math.round(units * pricePerUnit * 100) / 100;
   // Bond price is LOCAL; the economic account is ₳ — convert at the FX boundary.
-  const rate = homeRate ?? (await nppHomeFxRate(db, npp.countryId));
+  const rate = homeRate ?? (await nppHomeFxRate(db, npp.countryId, undefined, preset));
   const costAnchor = localToAnchor(cost, rate);
   const now = new Date();
 
@@ -105,13 +109,12 @@ export async function nppBuyBond(
 
   // Deduct from the personal forex account first (atomic guard), then reserve
   // units. NOT campaign `funds` — investing is real-economy, not political.
-  const deducted = await db
-    .collection<NPP>("npps")
-    .findOneAndUpdate(
-      { _id: npp._id, nppInvestmentCashAnchor: { $gte: costAnchor } },
-      { $inc: { nppInvestmentCashAnchor: -costAnchor }, $set: { updatedAt: now } },
-      { returnDocument: "after" }
-    );
+  const deducted = await db.collection<NPP>("npps").findOneAndUpdate(
+    { _id: npp._id, nppInvestmentCashAnchor: { $gte: costAnchor } },
+    { $inc: { nppInvestmentCashAnchor: -costAnchor }, $set: { updatedAt: now } },
+    // Only the balance is read back; an NPP document is ~28 KB.
+    { returnDocument: "after", projection: { nppInvestmentCashAnchor: 1 } }
+  );
   if (!deducted) {
     return { ok: false, reason: "Insufficient investment capital for bond purchase." };
   }

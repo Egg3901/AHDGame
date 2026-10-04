@@ -6,12 +6,15 @@
  * recorded, that a structural abort is recorded as such, and that the record is
  * opened BEFORE anything is destroyed.
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import type { SeedDiagnosticReport } from "@/lib/admin/seedDiagnostic/types";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
-vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
+vi.mock("@/lib/mongodb", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/mongodb")>();
+  return { ...actual, getDb: vi.fn() };
+});
 vi.mock("@/lib/admin/resetGameWorld", () => ({ resetGameWorld: vi.fn() }));
 vi.mock("@/lib/admin/bootstrapGameWorld", () => ({ bootstrapGameWorld: vi.fn() }));
 vi.mock("@/lib/admin/finalizeResetGameWorld", () => ({ finalizeResetGameWorld: vi.fn() }));
@@ -79,6 +82,8 @@ describe("resetAndBootstrapGameWorld — failure handling", () => {
     vi.mocked(finalizeResetGameWorld).mockResolvedValue(okFinalize as never);
   });
 
+  afterEach(() => vi.unstubAllEnvs());
+
   const run = async () => {
     const { resetAndBootstrapGameWorld } = await import("./resetAndBootstrapGameWorld");
     return resetAndBootstrapGameWorld({
@@ -91,7 +96,7 @@ describe("resetAndBootstrapGameWorld — failure handling", () => {
   const closeUpdate = () =>
     db.collectionMocks.adminLogs!.updateOne.mock.calls[0]![1] as { $set: Record<string, unknown> };
 
-  it("threads explicit 1991 none through every phase and disables founding", async () => {
+  it("threads explicit 1991 none through every phase and starts partyless founding", async () => {
     const { resetAndBootstrapGameWorld } = await import("./resetAndBootstrapGameWorld");
     const { resetGameWorld } = await import("./resetGameWorld");
     const { bootstrapGameWorld } = await import("./bootstrapGameWorld");
@@ -107,20 +112,61 @@ describe("resetAndBootstrapGameWorld — failure handling", () => {
       expect.objectContaining({
         preset: "1991-default",
         startingParties: "none",
-        preIteration: false,
+        preIteration: true,
       })
     );
     expect(bootstrapGameWorld).toHaveBeenCalledWith(
       expect.objectContaining({
         preset: "1991-default",
         startingParties: "none",
-        preIteration: false,
+        preIteration: true,
       })
     );
     expect(finalizeResetGameWorld).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ preset: "1991-default", startingParties: "none" })
     );
+  });
+
+  it("clears the old 1991 unowned market pool after teardown and before fresh taxonomy preflight", async () => {
+    const { resetGameWorld } = await import("@/lib/admin/resetGameWorld");
+    const { bootstrapGameWorld } = await import("@/lib/admin/bootstrapGameWorld");
+    const order: string[] = [];
+    db.collection("unownedSectors").deleteMany.mockImplementation(async () => {
+      order.push("clear-unowned");
+      return { deletedCount: 2791 } as never;
+    });
+    vi.mocked(resetGameWorld).mockImplementation(async () => {
+      order.push("teardown");
+      return okTeardown as never;
+    });
+    vi.mocked(bootstrapGameWorld).mockImplementation(async () => {
+      order.push("bootstrap");
+      return {} as never;
+    });
+
+    const { resetAndBootstrapGameWorld } = await import("./resetAndBootstrapGameWorld");
+    await resetAndBootstrapGameWorld({
+      db: db as unknown as Db,
+      preset: "1991-default",
+      startingParties: "none",
+      resetReference: true,
+    });
+
+    expect(order).toEqual(["teardown", "clear-unowned", "bootstrap"]);
+    expect(db.collectionMocks.unownedSectors?.deleteMany).toHaveBeenCalledWith({});
+  });
+
+  it("preserves unowned markets when reset does not request a 1991 reference rebuild", async () => {
+    const { resetAndBootstrapGameWorld } = await import("./resetAndBootstrapGameWorld");
+    await resetAndBootstrapGameWorld({
+      db: db as unknown as Db,
+      preset: "1991-default",
+      startingParties: "none",
+      resetReference: false,
+    });
+
+    expect(db.collectionMocks.unownedSectors?.deleteMany).toBeUndefined();
   });
 
   it("rejects unsupported empty starts before sealing or touching the database", async () => {
@@ -162,6 +208,45 @@ describe("resetAndBootstrapGameWorld — failure handling", () => {
     expect(vi.mocked(resetGameWorld).mock.calls[0]?.[1]).toMatchObject({
       versionSelectionSnapshot: selection,
     });
+  });
+
+  it.each(["AUTH_SECRET", "ADMIN_REGISTRATION_KEY", "CRON_SECRET"] as const)(
+    "rejects missing %s before any reset mutation",
+    async (missing) => {
+      vi.stubEnv("NODE_ENV", "development");
+      vi.stubEnv("MONGODB_URI", "mongodb://127.0.0.1/fixture-world");
+      vi.stubEnv("MONGODB_DB", "fixture-world");
+      vi.stubEnv("AUTH_SECRET", "reset-orchestrator-test-secret");
+      vi.stubEnv("ADMIN_REGISTRATION_KEY", "admin-key");
+      vi.stubEnv("CRON_SECRET", "cron-key");
+      vi.stubEnv(missing, "");
+
+      const { enableMaintenanceMode } = await import("@/lib/maintenanceStatus");
+      const { resetGameWorld } = await import("@/lib/admin/resetGameWorld");
+      const { bootstrapGameWorld } = await import("@/lib/admin/bootstrapGameWorld");
+
+      await expect(run()).rejects.toThrow(missing);
+
+      expect(enableMaintenanceMode).not.toHaveBeenCalled();
+      expect(resetGameWorld).not.toHaveBeenCalled();
+      expect(bootstrapGameWorld).not.toHaveBeenCalled();
+      expect(Object.keys(db.collectionMocks)).toHaveLength(0);
+    }
+  );
+
+  it("rejects a connected world different from the application before any mutation", async () => {
+    vi.stubEnv("MONGODB_DB", "fixture-world");
+    Object.defineProperty(db, "databaseName", { value: "other-world" });
+    const { enableMaintenanceMode } = await import("@/lib/maintenanceStatus");
+    const { resetGameWorld } = await import("@/lib/admin/resetGameWorld");
+    const { bootstrapGameWorld } = await import("@/lib/admin/bootstrapGameWorld");
+
+    await expect(run()).rejects.toThrow("connected database other-world");
+
+    expect(enableMaintenanceMode).not.toHaveBeenCalled();
+    expect(resetGameWorld).not.toHaveBeenCalled();
+    expect(bootstrapGameWorld).not.toHaveBeenCalled();
+    expect(Object.keys(db.collectionMocks)).toHaveLength(0);
   });
 
   it("opens the audit row BEFORE teardown runs", async () => {

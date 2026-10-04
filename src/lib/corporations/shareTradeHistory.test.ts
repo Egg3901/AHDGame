@@ -103,7 +103,7 @@ describe("recordShareTrade", () => {
     expect(doc.totalAnchor).toBe(0);
   });
 
-  it("swallows insert errors and reports them to Sentry", async () => {
+  it("reports insert failures to the caller and Sentry", async () => {
     const { recordShareTrade } = await import("./shareTradeHistory");
     // Trigger lazy-creation of the collection mock, then make insertOne reject.
     db.collection("shareTradeHistory");
@@ -119,7 +119,43 @@ describe("recordShareTrade", () => {
         from: null,
         to: null,
       })
-    ).resolves.toBeUndefined();
+    ).resolves.toBe("failed");
     expect(sentry.captureException).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("invalid monetary audit records", () => {
+  it("rejects a non-finite single fill without throwing into the transaction", async () => {
+    const { recordShareTrade } = await import("./shareTradeHistory");
+    const { captureException } = await import("@sentry/nextjs");
+    await recordShareTrade(db as unknown as Db, {
+      corporationId: new ObjectId(),
+      kind: "market_sell",
+      turn: 10,
+      shares: 5,
+      pricePerShareAnchor: Number.NaN,
+      from: null,
+      to: null,
+    });
+    expect(db.collectionMocks["shareTradeHistory"]!.insertOne).not.toHaveBeenCalled();
+    expect(captureException).toHaveBeenCalled();
+  });
+  it("retains valid batch fills when another fill has an invalid total", async () => {
+    const { recordShareTrades } = await import("./shareTradeHistory");
+    const input = {
+      corporationId: new ObjectId(),
+      kind: "market_sell" as const,
+      turn: 10,
+      shares: 5,
+      from: null,
+      to: null,
+    };
+    await recordShareTrades(db as unknown as Db, [
+      { ...input, pricePerShareAnchor: Infinity },
+      { ...input, pricePerShareAnchor: 2 },
+    ]);
+    const records = db.collectionMocks["shareTradeHistory"]!.insertMany.mock.calls[0][0];
+    expect(records).toHaveLength(1);
+    expect(records[0].totalAnchor).toBe(10);
   });
 });

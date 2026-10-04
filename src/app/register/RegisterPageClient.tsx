@@ -180,7 +180,7 @@ export default function RegisterPageClient({ heroImageUrl }: { heroImageUrl?: st
           ageConfirmed: formData.ageConfirmed,
           termsAccepted: formData.termsAccepted,
           fingerprint,
-          fingerprintComponents,
+          fingerprintComponents: fingerprint ? fingerprintComponents : undefined,
           deviceKey: deviceKey || undefined,
           turnstileToken: turnstileToken || undefined,
         }),
@@ -204,7 +204,7 @@ export default function RegisterPageClient({ heroImageUrl }: { heroImageUrl?: st
           email: formData.email,
           password: formData.password,
           fingerprint,
-          fingerprintComponents,
+          fingerprintComponents: fingerprint ? fingerprintComponents : undefined,
           deviceKey: deviceKey || undefined,
         }),
       });
@@ -229,7 +229,6 @@ export default function RegisterPageClient({ heroImageUrl }: { heroImageUrl?: st
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="sticky top-0 z-50 border-b border-card-border bg-background/90 backdrop-blur-xl">
-        <div className="h-[2px] w-full bg-gradient-to-r from-primary/60 via-primary/30 to-transparent" />
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6">
           <Link href="/" className="flex items-center gap-2.5">
             <Image
@@ -271,13 +270,10 @@ export default function RegisterPageClient({ heroImageUrl }: { heroImageUrl?: st
         </div>
         <div className="relative z-10 mx-auto max-w-3xl px-4 py-8 text-left sm:px-6 sm:py-12">
           <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-body-xs font-medium uppercase tracking-wider text-primary">
-            <span className="relative flex h-1.5 w-1.5">
-              <span className="absolute inline-flex h-full w-full animate-ping-slow rounded-full bg-primary opacity-75" />
-              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-primary" />
-            </span>
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" aria-hidden />
             {t("badge")}
           </div>
-          <h1 className="max-w-xl font-display text-display font-semibold tracking-tight text-foreground">
+          <h1 className="max-w-xl text-display font-semibold tracking-tight text-foreground">
             {t("heading")}
           </h1>
           <p className="mt-3 max-w-xl text-body text-muted sm:text-body-lg">{t("subheading")}</p>
@@ -313,12 +309,6 @@ export default function RegisterPageClient({ heroImageUrl }: { heroImageUrl?: st
 
       {/* Main Content */}
       <main className="relative mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-10">
-        {/* Subtle background decoration */}
-        <div className="pointer-events-none absolute inset-0 overflow-hidden">
-          <div className="absolute -right-48 top-0 h-96 w-96 rounded-full bg-primary/5 blur-3xl" />
-          <div className="absolute -left-40 bottom-0 h-80 w-80 rounded-full bg-secondary/5 blur-3xl" />
-        </div>
-
         {testMode && (
           <div
             role="status"
@@ -376,8 +366,7 @@ export default function RegisterPageClient({ heroImageUrl }: { heroImageUrl?: st
           />
 
           {/* Submit area */}
-          <div className="relative overflow-hidden rounded-xl border border-card-border bg-card/90 p-5 shadow-panel backdrop-blur-sm sm:p-7">
-            <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-primary/40 via-secondary/30 to-transparent" />
+          <div className="relative overflow-hidden rounded-xl border border-card-border bg-card p-5 shadow-panel sm:p-7">
             <div className="mb-6 space-y-3 rounded-lg border border-card-border bg-card-muted p-4">
               <label className="flex cursor-pointer items-start gap-3">
                 <input
@@ -438,7 +427,7 @@ export default function RegisterPageClient({ heroImageUrl }: { heroImageUrl?: st
                 isLoading={isLoading}
                 disabled={TURNSTILE_ENABLED && !turnstileToken}
                 size="lg"
-                className="w-full shadow-glow-sm transition-shadow hover:shadow-glow sm:w-auto sm:min-w-60"
+                className="w-full sm:w-auto sm:min-w-60"
               >
                 {isLoading ? t("creatingAccount") : t("createAccount")}
               </Button>

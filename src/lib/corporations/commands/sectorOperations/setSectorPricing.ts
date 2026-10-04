@@ -7,7 +7,8 @@ import { handleRouteError } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { clampPricingPosture } from "@/lib/market/clearing";
 import { isMarketSystemMode, marketAtLeast, getMarketSystemMode } from "@/lib/market/featureFlag";
-import type { CorporateSector } from "@/lib/db/types";
+import type { CorporateSector, GameConfig } from "@/lib/db/types";
+import { supportsCostPlusPricing, validCostPlusBasis } from "@/lib/market/costPlusPricing/rules";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { setSectorPricingSchema } from "@/lib/api/schemas/corporations";
 
@@ -44,7 +45,7 @@ export async function setSectorPricing(request: Request, { params }: RouteParams
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
     }
 
-    const { pricingPosture } = parsed.data;
+    const { pricingPosture, pricingMode } = parsed.data;
     const db = await getDb();
 
     const resolved = await resolveCorporation(db, id);
@@ -58,21 +59,70 @@ export async function setSectorPricing(request: Request, { params }: RouteParams
       return NextResponse.json({ error: "Invalid sector ID" }, { status: 400 });
     }
 
-    const sector = await db
-      .collection<CorporateSector>("corporateSectors")
-      .findOne({ _id: new ObjectId(sectorId), corporationId: corporation._id });
+    const config =
+      pricingMode === "costPlus"
+        ? await db
+            .collection<GameConfig>("gameConfig")
+            .findOne({ _id: "default" }, { projection: { explicitPlantCostsEnabled: 1 } })
+        : null;
+
+    const sector = await db.collection<CorporateSector>("corporateSectors").findOne(
+      { _id: new ObjectId(sectorId), corporationId: corporation._id },
+      {
+        projection:
+          config?.explicitPlantCostsEnabled === true
+            ? {}
+            : { pricingMode: 0, costPlusCostBasis: 0 },
+      }
+    );
 
     if (!sector) {
       return NextResponse.json({ error: "Sector not found" }, { status: 404 });
     }
 
+    if (pricingMode === "costPlus") {
+      if (
+        config?.explicitPlantCostsEnabled !== true ||
+        !marketAtLeast(mode, "plants") ||
+        !supportsCostPlusPricing(sector.sectorType)
+      ) {
+        return NextResponse.json(
+          { error: "Cost-plus pricing is not available for this sector" },
+          { status: 400 }
+        );
+      }
+      if (!validCostPlusBasis(sector.costPlusCostBasis)) {
+        return NextResponse.json(
+          { error: "Cost-plus pricing needs a producing turn with recorded operating costs" },
+          { status: 400 }
+        );
+      }
+      if (pricingPosture === null) {
+        return NextResponse.json(
+          { error: "Choose a markup for cost-plus pricing" },
+          { status: 400 }
+        );
+      }
+    }
+
     const clamped = pricingPosture == null ? null : clampPricingPosture(pricingPosture);
 
-    await db
-      .collection<CorporateSector>("corporateSectors")
-      .updateOne({ _id: sector._id }, { $set: { pricingPosture: clamped, updatedAt: new Date() } });
+    await db.collection<CorporateSector>("corporateSectors").updateOne(
+      { _id: sector._id, corporationId: corporation._id },
+      {
+        $set: {
+          pricingPosture: clamped,
+          ...(pricingMode !== undefined ? { pricingMode } : {}),
+          updatedAt: new Date(),
+        },
+      }
+    );
 
-    return NextResponse.json({ success: true, pricingPosture: clamped });
+    return NextResponse.json({
+      success: true,
+      pricingPosture: clamped,
+      ...(pricingMode !== undefined ? { pricingMode } : {}),
+    });
   } catch (error) {
     return handleRouteError(error);
   }

@@ -86,7 +86,7 @@ export function RunningMateSurrogatePanel({
           marginBottom: 8,
         }}
       >
-        <h3 style={{ margin: 0, fontFamily: FONT.serif, fontSize: 17, fontWeight: 600 }}>
+        <h3 style={{ margin: 0, fontFamily: FONT.sans, fontSize: 17, fontWeight: 600 }}>
           Running mate surrogate
         </h3>
         <span
@@ -112,7 +112,7 @@ export function RunningMateSurrogatePanel({
         <div
           style={{
             marginBottom: 10,
-            fontFamily: FONT.serif,
+            fontFamily: FONT.sans,
             fontSize: 13,
             lineHeight: 1.55,
             color: BLEND.muted,
@@ -143,7 +143,7 @@ export function RunningMateSurrogatePanel({
           <div
             style={{
               marginTop: 8,
-              fontFamily: FONT.serif,
+              fontFamily: FONT.sans,
               fontSize: 13,
               color: BLEND.muted,
             }}

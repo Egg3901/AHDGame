@@ -4,11 +4,7 @@ import type { ReactNode } from "react";
 import type { CountryId } from "@/lib/constants/countries";
 import type { TreasuryIdentity } from "@/lib/constants/treasuryIdentity";
 import { NationalSeal } from "@/components/national/NationalSeal";
-import { AuthoritySeal } from "@/components/national/AuthoritySeal";
 import { hexToRgba } from "@/components/national/identityColor";
-
-const SERIF_CJK = "'Noto Serif SC', 'Noto Serif JP', 'Songti SC', serif";
-const SERIF_MONO = "'Playfair Display', Georgia, 'Times New Roman', serif";
 
 export type BudgetLens = "public" | "minister";
 
@@ -39,12 +35,12 @@ interface TreasuryMastheadProps {
 }
 
 /**
- * Treasury masthead for the National Budget surface — the finance-ministry
+ * Treasury masthead for the National Budget surface, the finance-ministry
  * counterpart to the corp `NationalMasthead`. Reuses the shared `NationalSeal`
- * (finance chop via glyph override) and `AuthoritySeal` (ministry/public stamp),
- * with a control bar (lens toggle · FY scrubber · vs-FY compare) and the fiscal
- * stat strip. The banner gradient + accent are the country's fixed brand colors;
- * everything else inherits `ahd-design-system` tokens.
+ * (finance chop via glyph override), with a control bar (lens toggle, FY
+ * scrubber, vs-FY compare) and the fiscal stat strip. The banner gradient and
+ * accent are the country's fixed brand colors; everything else inherits
+ * `ahd-design-system` tokens.
  */
 export function TreasuryMasthead({
   countryId,
@@ -64,9 +60,7 @@ export function TreasuryMasthead({
   hasPrevFy,
   statStrip,
 }: TreasuryMastheadProps) {
-  const serif = id.serif === "cjk" ? SERIF_CJK : SERIF_MONO;
-  const bannerBg = `radial-gradient(120% 140% at 0% 0%, ${hexToRgba(id.accent, 0.14)} 0%, transparent 42%), linear-gradient(135deg, ${id.palette[0]} 0%, ${id.palette[1]} 46%, ${id.palette[2]} 100%)`;
-  const sealLabel = lens === "minister" ? id.ministry : id.publicSeal;
+  const bannerBg = `linear-gradient(135deg, ${id.palette[0]} 0%, ${id.palette[1]} 46%, ${id.palette[2]} 100%)`;
 
   return (
     <header className="overflow-hidden rounded-2xl border border-card-border bg-card shadow-lg">
@@ -75,21 +69,12 @@ export function TreasuryMasthead({
         className="relative overflow-hidden px-5 pt-5 pb-4 sm:px-7 sm:pt-6"
         style={{ background: bannerBg }}
       >
-        {/* Faint watermark glyph */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -right-4 -top-12 select-none font-black leading-none"
-          style={{ fontSize: 210, fontFamily: serif, color: hexToRgba(id.accentSoft, 0.06) }}
-        >
-          {id.glyph}
-        </div>
-
         <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center">
           <NationalSeal country={countryId} size={76} glyph={id.glyph} serif={id.serif} />
 
           <div className="min-w-0 flex-1">
             <div
-              className="text-[10px] font-bold uppercase tracking-[0.18em]"
+              className="text-body-sm font-medium"
               style={{ color: hexToRgba(id.accentSoft, 0.8) }}
             >
               {id.registry}
@@ -98,9 +83,7 @@ export function TreasuryMasthead({
               data-coach="nav-budget"
               className="mt-1 text-2xl font-bold leading-[1.1] tracking-tight text-white sm:text-3xl"
             >
-              <span style={id.serif === "cjk" ? { fontFamily: serif } : undefined}>
-                {id.budgetTitle}
-              </span>
+              {id.budgetTitle}
               {id.budgetTitleEn && (
                 <span className="ml-2 align-middle text-lg font-semibold text-white/55 sm:text-xl">
                   ({id.budgetTitleEn})
@@ -127,15 +110,12 @@ export function TreasuryMasthead({
               >
                 Fiscal Year {fiscalYear}
               </span>
-              <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-white/15 bg-black/30 px-2.5 py-0.5 text-xs font-medium text-white/80">
+              <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-white/15 bg-black px-2.5 py-0.5 text-xs font-medium text-white/80">
                 {executiveLabel}
               </span>
               {isLive ? (
-                <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-white/15 bg-black/30 px-2.5 py-0.5 text-xs font-medium text-white/80">
-                  <span className="relative flex h-2 w-2">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success/60" />
-                    <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
-                  </span>
+                <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-white/15 bg-black px-2.5 py-0.5 text-xs font-medium text-white/80">
+                  <span className="h-2 w-2 shrink-0 rounded-full bg-success" aria-hidden />
                   Live · next FY in {turnsUntilFY}t
                 </span>
               ) : (
@@ -145,31 +125,13 @@ export function TreasuryMasthead({
               )}
             </div>
           </div>
-
-          {/* Authority stamp */}
-          <div className="hidden shrink-0 flex-col items-center gap-1.5 sm:flex">
-            <AuthoritySeal
-              country={countryId}
-              role={lens === "minister" ? "official" : "public"}
-              label={sealLabel}
-              size={84}
-            />
-            <span
-              className="text-[8px] font-bold uppercase tracking-[0.16em]"
-              style={{ color: hexToRgba(id.accentSoft, 0.6) }}
-            >
-              {lens === "minister" ? "minister lens" : "public record"}
-            </span>
-          </div>
         </div>
 
         {/* Control bar */}
         <div className="relative mt-4 flex flex-wrap items-center gap-x-4 gap-y-2.5 border-t border-white/10 pt-3.5">
           {/* Lens toggle */}
           <div className="flex items-center gap-1.5">
-            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/45">
-              Lens
-            </span>
+            <span className="text-body-sm font-medium text-white/45">Lens</span>
             <div className="inline-flex rounded-lg border border-white/15 bg-black/30 p-0.5">
               <button
                 type="button"
@@ -207,9 +169,7 @@ export function TreasuryMasthead({
 
           {/* FY scrubber */}
           <div className="flex items-center gap-2">
-            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/45">
-              FY
-            </span>
+            <span className="text-body-sm font-medium text-white/45">FY</span>
             <input
               type="range"
               min={fyMin}
@@ -243,15 +203,7 @@ export function TreasuryMasthead({
         </div>
       </div>
 
-      {/* Accent rule (country brand line) */}
-      <div
-        className="h-0.5"
-        style={{
-          background: `linear-gradient(90deg, transparent, ${id.accent} 18%, ${id.accentSoft} 50%, ${id.accent} 82%, transparent)`,
-          opacity: 0.85,
-        }}
-      />
-
+      <div aria-hidden className="h-px bg-card-border" />
       {statStrip}
     </header>
   );

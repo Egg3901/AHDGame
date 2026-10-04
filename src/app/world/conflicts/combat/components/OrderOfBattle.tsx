@@ -90,7 +90,7 @@ export function OrderOfBattle({
                   <span style={{ minWidth: 0 }}>
                     <span
                       style={{
-                        fontFamily: MIL_FONT.serif,
+                        fontFamily: MIL_FONT.heading,
                         fontSize: 13,
                         fontWeight: 600,
                         color: MIL_COLOR.text,

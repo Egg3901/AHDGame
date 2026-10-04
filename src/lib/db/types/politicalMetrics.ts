@@ -18,6 +18,8 @@ export interface PoliticalMetricsDoc {
    */
   countryId: CountryId;
   values: Record<PoliticalMetricId, number>;
+  /** Durable event-effect witnesses for exactly-once funded country choices. */
+  appliedEventEffects?: string[];
   /**
    * SP2 structural residual (dynamics spec §4): the permanent per-metric gap
    * between this region's character and its law-implied target. Set once at

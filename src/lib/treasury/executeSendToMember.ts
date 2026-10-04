@@ -24,7 +24,9 @@ import { runTransactionWithSessionRetry } from "@/lib/db/transactionWithRetry";
 import { badRequest, notFound } from "@/lib/api/errors";
 import type { AdminLog, Character, PoliticalParty } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
-import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
+import { COUNTRY_CURRENCY_MAP, getSeedCurrencyCode } from "@/lib/constants/currencies";
+import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
+import { getGameState } from "@/lib/gameState";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { emitTreasuryTransaction } from "@/lib/treasury/emit";
 import { checkPlayerPayoutCap } from "@/lib/treasury/payoutCap";
@@ -225,6 +227,15 @@ export async function executeSendToMember(
   // approver's signature back, reopening a row whose funds are already
   // gone, which a second Approve click then spends again. A lost audit
   // row is a reporting gap; a thrown audit row was a double payout.
+  //
+  // Record currency is the world's seed home code, so 2027 euro members
+  // stamp EUR. The gameState read resolves failures to the default preset
+  // (era-blind map), never to a throw. One read on a user-initiated
+  // transfer; nothing on the turn path.
+  const txCurrency = await getGameState().then(
+    (gameState) => getSeedCurrencyCode(countryId, gameState?.preset ?? DEFAULT_SEED_PRESET),
+    () => COUNTRY_CURRENCY_MAP[countryId] ?? "USD"
+  );
   const adminLog: AdminLog = {
     _id: new ObjectId(),
     createdAt: now,
@@ -280,6 +291,7 @@ export async function executeSendToMember(
       // full allowance.
       turn: args.currentTurn,
       now,
+      currencyCode: txCurrency,
     });
   } catch (err) {
     console.error(
@@ -310,7 +322,7 @@ export async function executeSendToMember(
       countryId,
       fundEventType: "party_transfer",
       amount,
-      currencyCode: COUNTRY_CURRENCY_MAP[countryId] ?? "USD",
+      currencyCode: txCurrency,
       fromId: party._id,
       fromName: party.name,
       fromType: "party",

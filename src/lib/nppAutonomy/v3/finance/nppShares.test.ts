@@ -13,6 +13,12 @@ vi.mock("@/lib/corporations/shareEscrowSettlement", () => ({
 }));
 vi.mock("@/lib/equities/marketPool", () => ({
   loadEquityQuote: vi.fn(),
+  equityPoolCurrency: vi.fn(() => "USD"),
+  readEquityPool: vi.fn(async () => ({
+    _id: "USD",
+    cashLocal: 1_000_000,
+    targetCashLocal: 1_000_000,
+  })),
 }));
 import { creditSharesToNpp, debitSharesFromNpp } from "@/lib/corporations/shareholderOps";
 import {
@@ -21,7 +27,7 @@ import {
   reverseFloatSellDebit,
   onFloatSellCommitted,
 } from "@/lib/corporations/shareEscrowSettlement";
-import { loadEquityQuote } from "@/lib/equities/marketPool";
+import { loadEquityQuote, readEquityPool } from "@/lib/equities/marketPool";
 import { nppBuyShares, nppSellShares } from "./nppShares";
 
 describe("nppBuyShares", () => {
@@ -100,9 +106,13 @@ describe("nppBuyShares", () => {
       db,
       expect.objectContaining({ _id: corpId }),
       SHARES * SHARE_PRICE,
-      { sharesBought: SHARES }
+      { sharesBought: SHARES, pools: expect.any(Map) }
     );
     expect(nppUpdateOne).not.toHaveBeenCalled(); // no refund on success
+    // One pool read prices the buy and answers pool existence for the credit.
+    expect(readEquityPool).toHaveBeenCalledTimes(1);
+    const pools = vi.mocked(loadEquityQuote).mock.calls[0]![2]!.pools;
+    expect(vi.mocked(applyFloatBuyCredit).mock.calls[0]![3]!.pools).toBe(pools);
   });
 
   it("refunds funds if the float was taken before the credit", async () => {
@@ -115,6 +125,28 @@ describe("nppBuyShares", () => {
       expect.objectContaining({ $inc: { nppInvestmentCashAnchor: EXPECTED_COST } })
     );
     expect(applyFloatBuyCredit).not.toHaveBeenCalled();
+  });
+
+  it("accepts EUR equity for a 2027 French NPP", async () => {
+    corpFindOne.mockResolvedValue({
+      _id: corpId,
+      sharePrice: SHARE_PRICE,
+      totalShares: 100_000,
+      publicFloat: 5_000,
+      liquidCurrencyCode: "EUR",
+    });
+    vi.mocked(creditSharesToNpp).mockResolvedValue(true);
+    const result = await nppBuyShares(
+      db,
+      { _id: nppId, countryId: "FR" },
+      corpId,
+      SHARES,
+      0.92,
+      undefined,
+      "2027-default"
+    );
+    expect(result.ok).toBe(true);
+    expect(corpFindOne).toHaveBeenCalledTimes(1);
   });
 
   it("uses a sweep snapshot and refunds if the guarded credit sees changed quote inputs", async () => {
@@ -295,8 +327,14 @@ describe("nppSellShares", () => {
     expect(settleFloatSellDebit).toHaveBeenCalledWith(
       db,
       expect.objectContaining({ _id: corpId }),
-      EXPECTED_PROCEEDS
+      EXPECTED_PROCEEDS,
+      { pools: expect.any(Map) }
     );
+    // One pool read prices the sale and answers pool existence for both legs.
+    expect(readEquityPool).toHaveBeenCalledTimes(1);
+    const pools = vi.mocked(loadEquityQuote).mock.calls[0]![2]!.pools;
+    expect(vi.mocked(settleFloatSellDebit).mock.calls[0]![3]!.pools).toBe(pools);
+    expect(vi.mocked(onFloatSellCommitted).mock.calls[0]![3]!.pools).toBe(pools);
     const debitArgs = vi.mocked(debitSharesFromNpp).mock.calls[0];
     expect(debitArgs[1]).toBe(corpId);
     expect(debitArgs[2]).toBe(nppId);
@@ -306,14 +344,34 @@ describe("nppSellShares", () => {
     expect(nppFindOneAndUpdate).toHaveBeenCalledWith(
       { _id: nppId },
       expect.objectContaining({ $inc: { nppInvestmentCashAnchor: EXPECTED_PROCEEDS } }),
-      { returnDocument: "after" }
+      { returnDocument: "after", projection: { nppInvestmentCashAnchor: 1 } }
     );
     expect(onFloatSellCommitted).toHaveBeenCalledWith(
       db,
       expect.objectContaining({ _id: corpId }),
-      EXPECTED_PROCEEDS
+      EXPECTED_PROCEEDS,
+      { pools: expect.any(Map) }
     );
     expect(reverseFloatSellDebit).not.toHaveBeenCalled();
+  });
+
+  it("sells EUR equity for a 2027 French NPP at the preloaded EUR rate", async () => {
+    corpFindOne.mockResolvedValue(baseCorp({ countryId: "FR", liquidCurrencyCode: "EUR" }));
+    const result = await nppSellShares(
+      db,
+      { _id: nppId, countryId: "FR" },
+      corpId,
+      SHARES,
+      CURRENT_TURN,
+      0.92,
+      undefined,
+      "2027-default"
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      proceedsAnchor: Math.round((EXPECTED_PROCEEDS / 0.92) * 100) / 100,
+    });
+    expect(corpFindOne).toHaveBeenCalledTimes(1);
   });
 
   it("vacates the CEO seat when the selling NPP is the CEO selling their entire stake", async () => {

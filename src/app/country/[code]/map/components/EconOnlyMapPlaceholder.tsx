@@ -44,7 +44,7 @@ import { ES_GEO_URL, ES_LABEL_OVERRIDES } from "@/lib/maps/esGeometry";
 import { SE_GEO_URL, SE_LABEL_OVERRIDES } from "@/lib/maps/seGeometry";
 import { YU_GEO_URL, YU_LABEL_OVERRIDES } from "@/lib/maps/yuGeometry";
 import { CS_GEO_URL, CS_LABEL_OVERRIDES } from "@/lib/maps/csGeometry";
-import { BG_GEO_URL, BG_LABEL_OVERRIDES } from "@/lib/maps/bgGeometry";
+import { BG_GEO_URL, BG_LABEL_OVERRIDES, bgGeoUrlForRegions } from "@/lib/maps/bgGeometry";
 import { HU_GEO_URL, HU_LABEL_OVERRIDES } from "@/lib/maps/huGeometry";
 import { PL_GEO_URL, PL_LABEL_OVERRIDES } from "@/lib/maps/plGeometry";
 import { RO_GEO_URL, RO_LABEL_OVERRIDES } from "@/lib/maps/roGeometry";
@@ -286,7 +286,6 @@ export function EconOnlyMapPlaceholder({
   const devolvedGeoUrl = DEVOLVED_GEO_URL[countryId];
   // A dedicated single-shard URL: the British-Isles tile (IE) or a seceded
   // nation's own geometry (SCO/WAL/NG). Listless countries have none.
-  const geoUrl = isBritishIsles ? BRITISH_ISLES_GEO_URL : devolvedGeoUrl;
   const containsByRegion = DEVOLVED_REGION_CONTAINS[countryId];
   // Active countries (IE, seceded SCO/WAL) are playable — only a not-yet-enabled
   // country carries the econ-only label.
@@ -313,6 +312,11 @@ export function EconOnlyMapPlaceholder({
   // German Länder) renders them via the merged shard features. Owned regions
   // with no geometry anywhere stay list-only.
   const ownedCodes = useMemo(() => displayRegions.map((r) => r._id), [displayRegions]);
+  const geoUrl = isBritishIsles
+    ? BRITISH_ISLES_GEO_URL
+    : countryId === "BG"
+      ? bgGeoUrlForRegions(ownedCodes)
+      : devolvedGeoUrl;
   const { features: multiAreaFeatures } = useRegionGeometry(geoUrl ? [] : ownedCodes);
   const hasMultiArea = !geoUrl && (multiAreaFeatures?.length ?? 0) > 0;
   const hasGeoMap = geoUrl != null || hasMultiArea;
@@ -371,7 +375,7 @@ export function EconOnlyMapPlaceholder({
         <div className="grid gap-4 sm:gap-6 lg:grid-cols-3">
           {hasGeoMap && (
             <div className="flex flex-col items-center gap-4 rounded-xl border border-card-border bg-card p-4 sm:p-6">
-              <SectionLabel className="mb-4">Interactive Map</SectionLabel>
+              <SectionLabel className="mb-4">Interactive map</SectionLabel>
               <p className="-mt-2 mb-1 text-xs text-muted">
                 Click a region to open it. Hover for population &amp; seat detail.
               </p>
@@ -395,7 +399,7 @@ export function EconOnlyMapPlaceholder({
               hasGeoMap ? "lg:col-span-2" : "lg:col-span-3"
             }`}
           >
-            <SectionLabel className="mb-4">All Regions</SectionLabel>
+            <SectionLabel className="mb-4">All regions</SectionLabel>
             <div className="space-y-1">
               {displayRegions.map((region) => {
                 const d = regionData[region._id];
