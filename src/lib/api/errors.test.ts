@@ -50,12 +50,16 @@ describe("ApiError", () => {
   describe("toJson", () => {
     it("includes error message always", () => {
       const error = new ApiError(400, "Something went wrong");
-      expect(error.toJson()).toEqual({ error: "Something went wrong" });
+      expect(error.toJson("r1")).toEqual({
+        error: "Something went wrong",
+        code: "BAD_REQUEST",
+        ref: "r1",
+      });
     });
 
     it("includes code when provided", () => {
       const error = new ApiError(400, "Bad request", "BAD_REQUEST");
-      expect(error.toJson()).toEqual({ error: "Bad request", code: "BAD_REQUEST" });
+      expect(error.toJson("r1")).toEqual({ error: "Bad request", code: "BAD_REQUEST", ref: "r1" });
     });
 
     it("includes details when provided", () => {
@@ -63,16 +67,20 @@ describe("ApiError", () => {
         field: "email",
         reason: "Invalid format",
       });
-      expect(error.toJson()).toEqual({
+      expect(error.toJson("r1")).toEqual({
         error: "Validation failed",
         code: "VALIDATION_ERROR",
+        ref: "r1",
         details: { field: "email", reason: "Invalid format" },
       });
     });
 
-    it("excludes code and details when undefined", () => {
+    it("falls back to the status catalog code and generates a ref", () => {
       const error = new ApiError(404, "Not found");
-      expect(error.toJson()).toEqual({ error: "Not found" });
+      const body = error.toJson();
+      expect(body).toMatchObject({ error: "Not found", code: "NOT_FOUND" });
+      expect(typeof body.ref).toBe("string");
+      expect(body.ref).not.toBe("");
     });
   });
 });
@@ -201,6 +209,7 @@ describe("handleRouteError", () => {
       error: "Internal server error",
       code: "INTERNAL_ERROR",
       eventId: "1234567890abcdef1234567890abcdef",
+      ref: "1234567890abcdef1234567890abcdef",
     });
   });
 

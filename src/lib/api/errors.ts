@@ -5,6 +5,7 @@
 import * as Sentry from "@sentry/nextjs";
 import { NextResponse } from "next/server";
 import { alertOps } from "@/lib/observability/alertOps";
+import { errorCodeForStatus, newRequestRef, type ApiErrorBody } from "@/lib/errors/catalog";
 
 export class ApiError extends Error {
   constructor(
@@ -17,14 +18,31 @@ export class ApiError extends Error {
     this.name = "ApiError";
   }
 
-  toJson(): { error: string; code?: string; details?: unknown } {
-    const body: { error: string; code?: string; details?: unknown } = {
+  /** Shared error envelope: always carries a catalog code and a ref. */
+  toJson(ref: string = newRequestRef()): ApiErrorBody {
+    const body: ApiErrorBody = {
       error: this.message,
+      code: this.code ?? errorCodeForStatus(this.status),
+      ref,
     };
-    if (this.code) body.code = this.code;
     if (this.details !== undefined) body.details = this.details;
     return body;
   }
+}
+
+/**
+ * Build a shared-envelope error response for routes that answer with a
+ * specific status and message instead of throwing. Prefer this over a
+ * hand-rolled `NextResponse.json({ error }, { status })` so the client always
+ * gets a catalog `code` and a `ref`.
+ */
+export function errorResponse(
+  status: number,
+  message: string,
+  options: { code?: string; details?: unknown; headers?: HeadersInit } = {}
+): NextResponse {
+  const body = new ApiError(status, message, options.code, options.details).toJson();
+  return NextResponse.json(body, { status, headers: options.headers });
 }
 
 /**
@@ -151,6 +169,7 @@ export function handleRouteError(error: unknown, context?: RouteErrorContext): N
     tags["http.route"] = context.route;
   }
   if (isDuplicateKeyError(error)) tags["db.duplicateKey"] = true;
+  tags["error.code"] = "INTERNAL_ERROR";
 
   console.error("[API] Unhandled error:", error);
   const eventId = Sentry.captureException(error, { tags, extra: context?.extra });
@@ -161,8 +180,9 @@ export function handleRouteError(error: unknown, context?: RouteErrorContext): N
       : "Internal server error",
     error
   );
+  const ref = eventId || newRequestRef();
   return NextResponse.json(
-    { ...apiErr.toJson(), ...(eventId ? { eventId } : {}) },
+    { ...apiErr.toJson(ref), ...(eventId ? { eventId } : {}) },
     { status: 500 }
   );
 }
