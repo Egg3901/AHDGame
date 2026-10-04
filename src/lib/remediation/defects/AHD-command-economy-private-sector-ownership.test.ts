@@ -11,28 +11,26 @@ import {
 
 describe("command-economy ownership repair valuation", () => {
   it("uses paid queue cost when a corrupt negative CIP would erase live construction", () => {
-    expect(
-      administrativeBookValueAnchor({
-        sectorType: "technology",
-        capacityBookAnchor: 4_492.986570879902,
-        constructionInProgressAnchor: -12,
-        buildQueue: [
-          { unitsOrdered: 1, costPaidAnchor: 8.753431363493558, startTurn: 300, onlineTurn: 324 },
-          { unitsOrdered: 1, costPaidAnchor: 8.737568837914935, startTurn: 301, onlineTurn: 325 },
-        ],
-      })
-    ).toBeCloseTo(4_510.47757108131, 9);
+    const persistedSector = {
+      sectorType: "technology" as const,
+      capacityBookAnchor: 4_492.986570879902,
+      constructionInProgressAnchor: -12,
+      buildQueue: [
+        { unitsOrdered: 1, costPaidAnchor: 8.753431363493558, startTurn: 300, onlineTurn: 324 },
+        { unitsOrdered: 1, costPaidAnchor: 8.737568837914935, startTurn: 301, onlineTurn: 325 },
+      ],
+    };
+    expect(administrativeBookValueAnchor(persistedSector)).toBeCloseTo(4_510.47757108131, 9);
   });
 
   it("ignores a stale stored CIP when the queue is empty", () => {
-    expect(
-      administrativeBookValueAnchor({
-        sectorType: "media",
-        capacityBookAnchor: 12_403.610080694778,
-        constructionInProgressAnchor: 3,
-        buildQueue: [],
-      })
-    ).toBeCloseTo(12_403.610080694778, 9);
+    const persistedSector = {
+      sectorType: "media" as const,
+      capacityBookAnchor: 12_403.610080694778,
+      constructionInProgressAnchor: 3,
+      buildQueue: [],
+    };
+    expect(administrativeBookValueAnchor(persistedSector)).toBeCloseTo(12_403.610080694778, 9);
   });
 });
 

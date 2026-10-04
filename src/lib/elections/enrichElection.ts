@@ -1426,6 +1426,9 @@ export async function _enrichElection(
           },
         }
       : {}),
+    ...(election.hungarianModernAssembly
+      ? { hungarianModernAssembly: { ruleVersion: election.hungarianModernAssembly.ruleVersion } }
+      : {}),
     ...(election.hungarianModernByElection
       ? { hungarianModernByElection: { districtId: election.hungarianModernByElection.districtId } }
       : {}),

@@ -203,6 +203,7 @@ export interface ElectionDetail {
     round: 1 | 2;
     newNominationDistrictIds?: string[];
   };
+  hungarianModernAssembly?: { ruleVersion: "mixed-2011-v1" };
   hungarianAssemblyRound?: {
     ruleVersion: "mixed-1989-v1";
     round: 1 | 2;
