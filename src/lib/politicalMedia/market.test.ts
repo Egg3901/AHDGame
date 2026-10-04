@@ -41,15 +41,26 @@ describe("settlePoliticalAdMarket", () => {
   it("keeps commercial and funded political delivery inside one grown owner's prior audience budget", () => {
     const accessLimit = mediaAudienceAccessLimitUnitsByOutlet(
       [
-        { stateId: "CA", countryId: "US", corporationId: "network-a", deliveredAdvertisingUnits: 80 },
-        { stateId: "CA", countryId: "US", corporationId: "network-b", deliveredAdvertisingUnits: 20 },
+        {
+          stateId: "CA",
+          countryId: "US",
+          corporationId: "network-a",
+          deliveredAdvertisingUnits: 80,
+        },
+        {
+          stateId: "CA",
+          countryId: "US",
+          corporationId: "network-b",
+          deliveredAdvertisingUnits: 20,
+        },
       ],
       0
     ).get("CA:network-a");
     expect(accessLimit).toBe(35);
 
     const currentUnits = [200, 100];
-    const commonAvailability = (accessLimit ?? 0) / currentUnits.reduce((sum, units) => sum + units, 0);
+    const commonAvailability =
+      (accessLimit ?? 0) / currentUnits.reduce((sum, units) => sum + units, 0);
     const mediaInputs: SectorClearingInput[] = currentUnits.map((units, index) => ({
       sectorId: `grown-outlet-${index}`,
       revenue: 100,
@@ -60,7 +71,7 @@ describe("settlePoliticalAdMarket", () => {
     }));
     const commercialClearing = computeClearingFactors({
       sectors: mediaInputs,
-      balances: new Map([ ["advertising", { supply: 1_000, demand: 100 }] ]),
+      balances: new Map([["advertising", { supply: 1_000, demand: 100 }]]),
       priceRatioByCommodity: new Map([["advertising", 1]]),
       basePrices: { advertising: 240 } as Record<CommodityType, number>,
     });
@@ -73,7 +84,13 @@ describe("settlePoliticalAdMarket", () => {
     );
     const political = settlePoliticalAdMarket({
       orders: [
-        { orderId: "funded-order", countryId: "US", stateId: "CA", createdTurn: 12, budgetAnchor: 10_000 },
+        {
+          orderId: "funded-order",
+          countryId: "US",
+          stateId: "CA",
+          createdTurn: 12,
+          budgetAnchor: 10_000,
+        },
       ],
       offers: mediaInputs.map((mediaInput, index) => ({
         ...offer,

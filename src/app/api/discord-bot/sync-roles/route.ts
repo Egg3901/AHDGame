@@ -5,7 +5,10 @@ import { requireBotToken } from "@/lib/api/requireBotToken";
 import { checkRateLimit, rateLimitResponse, BOT_FINANCIAL_LIMITS } from "@/lib/api/rateLimit";
 import type { Character, User, PoliticalParty, Corporation, ElectedOfficial } from "@/lib/db/types";
 import { COUNTRY_ORDER, type CountryId } from "@/lib/constants/countries";
-import { getHeadOfGovernmentCharacterIds } from "@/lib/api/headOfGovernment";
+import {
+  getHeadOfGovernmentCharacterId,
+  getHeadOfGovernmentCharacterIds,
+} from "@/lib/api/headOfGovernment";
 import {
   corpLiquidCapitalToAnchor,
   fxRateForCorpFromMap,

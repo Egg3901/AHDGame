@@ -278,7 +278,8 @@ describe("snapshotMoneySupply", () => {
     db.collectionMocks.corporateSectors.find.mockReturnValue(cursorWith([]));
     db.collectionMocks[MONEY_SUPPLY_SNAPSHOTS_COLLECTION].replaceOne.mockClear();
     await snapshotMoneySupply(db as unknown as Db, 13);
-    const withoutEscrow = db.collectionMocks[MONEY_SUPPLY_SNAPSHOTS_COLLECTION].replaceOne.mock.calls;
+    const withoutEscrow =
+      db.collectionMocks[MONEY_SUPPLY_SNAPSHOTS_COLLECTION].replaceOne.mock.calls;
     expect(usd!.m2 - withoutEscrow.find((call) => call[1].currencyCode === "USD")![1].m2).toBe(40);
     expect(eur!.m2 - withoutEscrow.find((call) => call[1].currencyCode === "EUR")![1].m2).toBe(25);
     const options = db.collectionMocks.corporateSectors.find.mock.calls[0]?.[1] as {

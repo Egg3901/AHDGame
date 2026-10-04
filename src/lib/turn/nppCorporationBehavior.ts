@@ -1,15 +1,19 @@
+/**
+ * NPC corporations plan investment, staffing and shareholder returns.
+ * processNppCorporationDecisions shares turn snapshots; makeNppCorpDecision
+ * plans each corporation using that context.
+ */
+import {
+  loadNppDecisionFxRates,
+  loadNppMarketDecisionContext,
+  loadNppPlantsDecisionContext,
+} from "@/lib/turn/npp/decisionContext";
 import {
   buildNppDecisionCashWrites,
   type NppFoundingCashWitness,
 } from "@/lib/turn/npp/foundingCashLedger";
 import type { Db, ObjectId } from "mongodb";
-import type {
-  Corporation,
-  CorporateSector,
-  SectorBuildOrder,
-  GameState,
-  ExchangeRate,
-} from "@/lib/db/types";
+import type { Corporation, CorporateSector, SectorBuildOrder, GameState } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { netPerTurnDebtServiceAnchor } from "@/lib/bonds/corpBondCashflows";
 import {
@@ -65,11 +69,7 @@ import {
 } from "@/lib/corporations/strandedPlant";
 import { labourAtLeast, isLabourSystemMode } from "@/lib/labour/modes";
 import { CHRONIC_LOW_FILL_THRESHOLD } from "@/lib/turn/npp/strategyExpectedRevenue";
-import {
-  bucketKey,
-  computeStateControlledBuckets,
-  loadNationalCorpIds,
-} from "@/lib/nationalization/stateControlledBuckets";
+import { bucketKey } from "@/lib/nationalization/stateControlledBuckets";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
 import { STARTING_YEAR, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { CAPITAL_DEPRECIATION_PER_TURN } from "@/lib/market/capital";
@@ -84,14 +84,9 @@ import {
 } from "@/lib/constants/capacityEconomy";
 import { foundingStarterUnits, sectorEntryFeeAnchor } from "@/lib/corporations/foundingPlant";
 import { unownedHeadroomUnitsOf } from "@/lib/corporations/marketShare";
-import { buildNppNationalShareResolver } from "@/lib/turn/npp/nationalDominancePricing";
-import { resolvePresetIdFromGameState } from "@/lib/world/countryReadinessContract";
 import { buildNppPriceSignals } from "@/lib/turn/npp/priceSignals";
-import type { RelocationPrimeBank } from "@/lib/corporations/issueRelocationBond";
-import { loadNppBankRateSnapshot } from "@/lib/turn/npp/bankRateSnapshot";
 import {
   buildNppProductProjectsV2,
-  loadNppCostOfLivingByState,
   loadNppProductProjectsV2,
 } from "@/lib/turn/npp/manufacturingProducts";
 import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
@@ -107,7 +102,6 @@ import {
   type NppOperatorObservation,
 } from "@/lib/corporations/nppOperatorTelemetry/rules";
 import {
-  buildCapacityCompetitorIndex,
   createFoundingCapacityOutcome,
   createReinvestCapacityObserver,
   evaluateReinvestPreSizingGate,
@@ -130,7 +124,6 @@ import {
   drawFoundedCapacityFromPools,
   flushNppCapacityWriteback,
 } from "@/lib/turn/npp/capacityWriteback";
-import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 import { getNppCashFloorAnchor } from "@/lib/turn/npp/nppCashReserve";
 import { loadNppBehaviorConfig } from "@/lib/turn/npp/behaviorConfig";
@@ -317,67 +310,19 @@ export async function processNppCorporationDecisions(
     );
   }
 
-  // NPPs cannot auto-expand into state-controlled buckets; players still may.
-  const [nationalCorpIds, globalSectors] = await Promise.all([
-    loadNationalCorpIds(db),
-    db
-      .collection<CorporateSector>("corporateSectors")
-      .find(
-        {},
-        {
-          projection: {
-            stateId: 1,
-            countryId: 1,
-            sectorType: 1,
-            revenue: 1,
-            corporationId: 1,
-            nationalizedAtTurn: 1,
-            mothballed: 1,
-          },
-        }
-      )
-      .toArray(),
-  ]);
-  const stateControlled = computeStateControlledBuckets(globalSectors, nationalCorpIds);
+  const { globalSectors, stateControlled, competitorsByBucket } =
+    await loadNppMarketDecisionContext(db);
   placementSignals.activeMarketBuckets = buildActiveMarketBuckets(globalSectors);
-
-  // Rival index for capacity-decision telemetry, off the already-loaded
-  // `globalSectors` snapshot: no turn-path reads. See capacityDecisionTelemetry.
-  const competitorsByBucket = buildCapacityCompetitorIndex(globalSectors);
 
   const manufacturingProductProjectState = await loadNppProductProjectsV2(db, nppCorps);
   const plantsEnabled = manufacturingProductProjectState.plantsEnabled;
-  let plants: NppPlantsContext | undefined;
-  let bankRates: RelocationPrimeBank[] | undefined;
-  if (plantsEnabled) {
-    const gsPlants = await db
-      .collection<GameState>("gameState")
-      .findOne(
-        { _id: "current" },
-        { projection: { currentYear: 1, startingYear: 1, currentTurn: 1, preset: 1 } }
-      );
-    const plantsYear =
-      gsPlants?.currentYear ??
-      (gsPlants?.startingYear ?? STARTING_YEAR) +
-        Math.floor(((gsPlants?.currentTurn ?? turn) - 1) / TURNS_PER_YEAR);
-
-    const countryIds = [...new Set(nppCorps.map((c) => c.countryId))];
-    // Bank rates are fixed during this phase; reuse this snapshot for quotes.
-    const bankSnapshot = await loadNppBankRateSnapshot(db, countryIds);
-    bankRates = bankSnapshot.bankRates;
-    const primeByCountry = bankSnapshot.primeByCountry;
-    const colByState = await loadNppCostOfLivingByState(db);
-    const nationalShareOf = buildNppNationalShareResolver(globalSectors);
-    plants = {
-      enabled: true,
-      year: plantsYear,
-      eraUnitScale: await loadWorldEraUnitScale(db),
-      preset: resolvePresetIdFromGameState(gsPlants),
-      primeRateOf: (cid) => primeByCountry.get(cid) ?? 0,
-      costOfLivingOf: (sid) => colByState.get(sid) ?? null,
-      nationalShareOf,
-    };
-  }
+  const { plants, bankRates } = await loadNppPlantsDecisionContext(
+    db,
+    turn,
+    nppCorps,
+    globalSectors,
+    plantsEnabled
+  );
   const unownedDraws: NonNullable<NppCorpDecision["unownedDraws"]> = [];
   // Capacity-decision observations, aggregated in memory and flushed once for
   // the whole cohort below: no per-row turn queries, no new reads.
@@ -411,14 +356,7 @@ export async function processNppCorporationDecisions(
     priceRatioOf,
   });
 
-  // Local-per-₳ rates for every live currency, loaded once. NPP money constants
-  // are all ₳; `liquidCapital` is not. See `NppCorpDecisionContext.fxRate`.
-  const fxByCurrency = new Map<string, number>();
-  for (const rate of await db.collection<ExchangeRate>("exchangeRates").find({}).toArray()) {
-    if (rate.currencyCode && typeof rate.rate === "number" && rate.rate > 0) {
-      fxByCurrency.set(rate.currencyCode, rate.rate);
-    }
-  }
+  const fxByCurrency = await loadNppDecisionFxRates(db);
 
   // ─── Debt service, loaded once for the cohort ─────────────────────────────
   // Same two maps `buildCorporationLookups` builds for the turn engine, and the
