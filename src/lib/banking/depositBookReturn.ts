@@ -447,6 +447,11 @@ async function returnDepositBookInner(
   const fundBalance = Math.max(0, fund?.balance ?? 0);
   const fromInsuranceFund = Math.min(fundBalance, shortfall);
   const fromTreasury = Math.max(0, shortfall - fromInsuranceFund);
+  const measuredPricingClaim =
+    policy.privateBanking &&
+    typeof fund?.pricingEvidenceStartTurn === "number" &&
+    options.turn >= fund.pricingEvidenceStartTurn &&
+    fromInsuranceFund + fromTreasury > 0;
 
   if (fromTreasury > 0) {
     const fundingError = await ensureTreasuryInsuranceCash(db, {
@@ -680,6 +685,12 @@ async function returnDepositBookInner(
         $inc: {
           payoutsLifetime: fromInsuranceFund + fromTreasury,
           treasuryBackstopLifetime: fromTreasury,
+          ...(measuredPricingClaim
+            ? {
+                measuredGrossClaimsSincePricingStart: fromInsuranceFund + fromTreasury,
+                measuredPaidClaimsSincePricingStart: 1,
+              }
+            : {}),
         },
       },
       note: "fund lifetime payout counters",
@@ -692,7 +703,13 @@ async function returnDepositBookInner(
       interbankPayouts,
       interbankOwed,
     }),
-    depositAggregateClearProjection(bankIdHex, options.turn, options.cause, now)
+    depositAggregateClearProjection(
+      bankIdHex,
+      options.turn,
+      options.cause,
+      now,
+      measuredPricingClaim
+    )
   );
 
   if (policy.failurePolitics && options.cause === "failure" && npc > 0) {
@@ -979,7 +996,8 @@ function depositAggregateClearProjection(
   bankIdHex: string,
   turn: number,
   cause: DepositBookReturnCause,
-  now: Date
+  now: Date,
+  measuredPricingClaim: boolean
 ): TransitionProjection {
   return {
     collection: "corporations",
@@ -989,6 +1007,8 @@ function depositAggregateClearProjection(
         "bankCharter.npcDeposits": 0,
         "bankCharter.playerDeposits": 0,
         "bankCharter.totalDeposits": 0,
+        "bankCharter.insuranceResolutionTurn": turn,
+        ...(measuredPricingClaim ? { "bankCharter.insuranceMeasuredClaimTurn": turn } : {}),
         // The floor follows the deposits out, otherwise the corp stays locked
         // out of its own cash until the next banking turn recomputes it.
         "bankCharter.reserveFloor": 0,
