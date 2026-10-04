@@ -78,6 +78,8 @@ describe("POST /api/admin/heal/duplicate-sectors", () => {
         { _id: "KAN", countryId: "JP" },
       ]),
     });
+    // The secured-property transition reserves the duplicate group first; the
+    // heal reports it only after Mongo acknowledges deleting the losing row.
     db.collectionMocks.corporateSectors.deleteMany.mockResolvedValue({ deletedCount: 1 });
 
     const { POST } = await import("./route");
@@ -109,7 +111,10 @@ describe("POST /api/admin/heal/duplicate-sectors", () => {
       })
     );
     expect(db.collectionMocks.corporateSectors.updateOne).toHaveBeenCalledWith(
-      expect.objectContaining({ _id: keeperId }),
+      {
+        _id: keeperId,
+        "constructionPropertyTransition.key": `duplicate:${keeperId.toHexString()}:${keeperId.toHexString()}`,
+      },
       expect.objectContaining({
         $set: expect.objectContaining({
           countryId: "UK",
@@ -123,7 +128,7 @@ describe("POST /api/admin/heal/duplicate-sectors", () => {
       $or: [
         {
           _id: duplicateId,
-          "constructionPropertyTransition.key": expect.any(String),
+          "constructionPropertyTransition.key": `duplicate:${keeperId.toHexString()}:${duplicateId.toHexString()}`,
         },
       ],
     });

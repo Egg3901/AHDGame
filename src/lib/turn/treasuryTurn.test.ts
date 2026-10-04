@@ -40,6 +40,16 @@ function mockBudgets(docs: Record<string, unknown>[]) {
 }
 
 describe("processTreasuryTurn", () => {
+  it("does not load sovereign bond or corporate quote collections while funded coupon cash is off", async () => {
+    db.collection("bonds");
+    db.collection("corporations");
+    mockBudgets([budgetDoc({})]);
+    const { processTreasuryTurn } = await import("./treasuryTurn");
+    await processTreasuryTurn(10);
+    expect(db.collectionMocks.bonds.find).not.toHaveBeenCalled();
+    expect(db.collectionMocks.corporations.find).not.toHaveBeenCalled();
+  });
+
   it("does NOT accrue for a country that has been dissolved", async () => {
     // A dissolved country keeps its budget doc — for history, and so a merge has
     // somewhere to stamp `mergedInto` — and this phase scans every one of them.
