@@ -1,4 +1,7 @@
-/** Decide NPP corporation operations from a supplied turn snapshot, preserving the existing rules. */
+/**
+ * NPP corporations choose operating and construction actions from a supplied turn snapshot.
+ * makeNppCorpDecision returns cash changes and sector updates without writing them.
+ */
 import { buildNppGlutMothballUpdates } from "@/lib/turn/npp/glutMothballing";
 import type { ObjectId } from "mongodb";
 import type { CorporateSector, SectorBuildOrder } from "@/lib/db/types";
