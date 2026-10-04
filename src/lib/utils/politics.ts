@@ -347,6 +347,14 @@ export function interpolateLeanHex(
   return lerpHex(stops[i], stops[i + 1], pos - i);
 }
 
+/** Countries whose left/right colours run red-left, blue-right (party convention). */
+const EUROPEAN_COLOUR_COUNTRIES = new Set(["UK", "DE"]);
+
+/** Whether an economic lean in this country takes the red-left, blue-right ramp. */
+export function usesEuropeanLeanColours(countryId?: string | null): boolean {
+  return !!countryId && EUROPEAN_COLOUR_COUNTRIES.has(countryId);
+}
+
 /**
  * Hex colour for a position/lean value, bucketed on the 0.5 ruler. European
  * swaps economic left/right (Labour-red left, Conservative-blue right).

@@ -12,7 +12,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import type { StateRosterResult, StateRosterRow } from "@/lib/states/overview/getStateRoster";
 
 /**
- * Front-and-center Overview tab table: every player whose character calls
+ * Overview tab table: every player whose character calls
  * this state home, sorted by influence (descending). Server-paginated
  * (page/pageSize query params) so a populous state never ships its full
  * roster to the client in one payload.
@@ -72,19 +72,13 @@ export function PlayerRoster({ countryId, stateId }: { countryId: CountryId; sta
             <div className="flex items-center gap-1.5">
               <Link
                 href={buildCharacterHref({ sequentialId: p.sequentialId ?? undefined, _id: p.id })}
-                className="truncate font-medium hover:text-primary transition-colors"
+                className="truncate font-medium text-foreground hover:underline underline-offset-4"
               >
                 {p.name}
               </Link>
-              {p.isAdmin && (
-                <span className="shrink-0 rounded-full border border-warning/30 bg-warning/10 px-1 py-0.5 text-[8px] font-bold uppercase tracking-wider text-warning">
-                  Admin
-                </span>
-              )}
+              {p.isAdmin && <span className="shrink-0 text-body-sm text-muted">Admin</span>}
               {p.isModerator && !p.isAdmin && (
-                <span className="shrink-0 rounded-full border border-info/30 bg-info/10 px-1 py-0.5 text-[8px] font-bold uppercase tracking-wider text-info">
-                  Moderator
-                </span>
+                <span className="shrink-0 text-body-sm text-muted">Moderator</span>
               )}
             </div>
           </div>
@@ -95,7 +89,7 @@ export function PlayerRoster({ countryId, stateId }: { countryId: CountryId; sta
       key: "influence",
       header: "Influence",
       render: (p) => (
-        <span className="text-sm font-medium text-primary tabular-nums">
+        <span className="text-body font-medium tabular-nums text-foreground">
           {p.politicalInfluence.toFixed(2)}%
         </span>
       ),
@@ -125,13 +119,13 @@ export function PlayerRoster({ countryId, stateId }: { countryId: CountryId; sta
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
-    <div className="rounded-xl border border-card-border bg-card p-4 sm:p-6">
-      <div className="mb-4 flex items-baseline justify-between gap-3">
-        <h2 className="text-lg font-semibold sm:text-xl">Player Roster</h2>
+    <section aria-labelledby="overview-roster-title">
+      <div className="mb-3 flex items-baseline justify-between gap-3">
+        <h2 id="overview-roster-title" className="text-heading-lg font-semibold text-foreground">
+          Players
+        </h2>
         {!loading && !error && (
-          <span className="shrink-0 text-xs text-muted">
-            {total} player{total === 1 ? "" : "s"}
-          </span>
+          <span className="shrink-0 text-body-sm text-muted">{total} based here, by influence</span>
         )}
       </div>
       {loading ? (
@@ -177,6 +171,6 @@ export function PlayerRoster({ countryId, stateId }: { countryId: CountryId; sta
           )}
         </>
       )}
-    </div>
+    </section>
   );
 }

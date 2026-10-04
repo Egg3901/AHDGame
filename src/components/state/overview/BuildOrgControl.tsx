@@ -7,11 +7,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { regionPartyApiUrl } from "@/lib/urls";
 import { usePsSpendScope } from "@/components/state/politics/orgActions/usePsSpendScope";
 import { useActionPreview } from "@/components/state/politics/orgActions/useActionPreview";
-import { EstimateLine } from "@/components/state/politics/orgActions/EstimateLine";
-import { PoolLegend, type PoolLegendRow } from "@/components/state/overview/PoolLegend";
 import { COUNTRY_CURRENCY_MAP, CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
-
-const UNAFFILIATED_COLOR = "var(--card-border)";
 
 type BuildOrgPreview =
   | {
@@ -26,20 +22,15 @@ type BuildOrgPreview =
   | { ok: false };
 
 /**
- * Narrative card that pairs with the all-party Org pie. Mirrors the
- * Registration Pool legend's row format (color dot + party abbr + %),
- * with the focus party's standing summary and a Build Org CTA underneath.
- *
- * "Org Pool" header label matches the pie's bottom label so the visual
- * pair reads as a single concept. Governor / regional-executive chip is
- * intentionally omitted here — it's already shown in the state header
- * strip directly above the tabs.
+ * The Organization pool's call to action: the viewer party's standing, the
+ * Build Org button(s) and the next-click estimate. Sits under the pool's
+ * legend on the Overview tab, so it carries no heading or legend of its own.
  *
  * The Build Org button spends Political Strength inline (no navigation):
  * each click grows the viewer's party from the Unaffiliated pool and poaches
- * rivals (the unified action — there is no separate Contest).
+ * rivals (the unified action; there is no separate Contest).
  */
-export function PoliticalSummaryCard({
+export function BuildOrgControl({
   vm,
   viewerPartyId,
 }: {
@@ -67,7 +58,7 @@ export function PoliticalSummaryCard({
     !!viewerPartyId
   );
 
-  const { focusPartyAbbr, narrative, partyOrg, unaffiliatedPct } = vm;
+  const { focusPartyAbbr, narrative, partyOrg } = vm;
   const isLeader = narrative.rank === 1;
   // Detect a top-Org tie: more than one party shares the leader's orgPct
   // (within a small epsilon to absorb floating-point noise from the
@@ -93,34 +84,10 @@ export function PoliticalSummaryCard({
       return `${focusPartyAbbr} leads the state with ${topOrgPct.toFixed(1)}% Org.`;
     }
     return (
-      `${focusPartyAbbr} ranks #${narrative.rank} of ${narrative.totalParties} — ` +
-      `gap to leader ${narrative.gapToTop.toFixed(1)} pts.`
+      `${focusPartyAbbr} ranks ${narrative.rank} of ${narrative.totalParties}, ` +
+      `${narrative.gapToTop.toFixed(1)} points behind the leader.`
     );
   })();
-
-  // Pool legend rows: every party with a non-zero Org slice + the
-  // unaffiliated remainder. Same format as the Registration Pool legend
-  // so the two cards read as a matched pair.
-  const orgRows: PoolLegendRow[] = [
-    ...partyOrg
-      .filter((p) => p.orgPct > 0)
-      .map((p) => ({
-        key: p.id,
-        label: p.name,
-        abbr: p.abbr,
-        partyId: p.id,
-        color: p.color,
-        value: p.orgPct,
-      })),
-  ];
-  if (unaffiliatedPct > 0) {
-    orgRows.push({
-      key: "unaffiliated",
-      label: "Unaffiliated",
-      color: UNAFFILIATED_COLOR,
-      value: unaffiliatedPct,
-    });
-  }
 
   const buildOrgUrl = viewerPartyId
     ? `/api/country/${vm.countryId.toLowerCase()}/region/${vm.stateId.toUpperCase()}/party/${encodeURIComponent(viewerPartyId)}/build-org`
@@ -194,13 +161,14 @@ export function PoliticalSummaryCard({
     ? "Join a party to build Org in this state"
     : "Spend Political Strength to grow your party's Org in this state (requires a player or official here)";
 
-  return (
-    <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card)] p-4 shadow-sm">
-      <div className="text-[10px] uppercase tracking-wider text-[var(--muted)]">Org Pool</div>
-      {orgRows.length > 0 && <PoolLegend rows={orgRows} countryId={vm.countryId} />}
-      <div className="mt-3 text-xs leading-snug text-[var(--muted)]">{standingLine}</div>
+  const buttonClass =
+    "rounded-lg bg-primary px-3.5 py-2 text-body font-semibold text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50";
 
-      <div className="mt-3 flex flex-wrap gap-2">
+  return (
+    <div className="mt-4 space-y-3">
+      <p className="text-body text-muted">{standingLine}</p>
+
+      <div className="flex flex-wrap items-center gap-2">
         {eligibleScopes?.state || eligibleScopes?.national ? (
           <>
             {eligibleScopes?.state && (
@@ -208,14 +176,14 @@ export function PoliticalSummaryCard({
                 type="button"
                 onClick={() => handleBuildOrg("state")}
                 disabled={buildOrgDisabled}
-                className="rounded-md border border-[var(--card-border)] px-3 py-1.5 text-xs font-medium hover:bg-[var(--card)]/80 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                className={buttonClass}
                 title={
                   poolPS
                     ? `Build Org from state pool (${poolPS.statePoolPS.toFixed(0)} PS)`
                     : buildOrgTitle
                 }
               >
-                {busy ? "Building…" : "Build Org · State PS"}
+                {busy ? "Building…" : "Build Org with state PS"}
               </button>
             )}
             {eligibleScopes?.national && (
@@ -223,14 +191,14 @@ export function PoliticalSummaryCard({
                 type="button"
                 onClick={() => handleBuildOrg("national")}
                 disabled={buildOrgDisabled}
-                className="rounded-md border border-[var(--card-border)] px-3 py-1.5 text-xs font-medium hover:bg-[var(--card)]/80 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                className={buttonClass}
                 title={
                   poolPS
                     ? `Build Org from national pool (${poolPS.nationalPoolPS.toFixed(0)} PS)`
                     : buildOrgTitle
                 }
               >
-                {busy ? "Building…" : "Build Org · Nat'l PS"}
+                {busy ? "Building…" : "Build Org with national PS"}
               </button>
             )}
           </>
@@ -239,28 +207,35 @@ export function PoliticalSummaryCard({
             type="button"
             onClick={() => handleBuildOrg()}
             disabled={buildOrgDisabled}
-            className="rounded-md border border-[var(--card-border)] px-3 py-1.5 text-xs font-medium hover:bg-[var(--card)]/80 transition-colors disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+            className={buttonClass}
             title={buildOrgTitle}
           >
             {busy ? "Building…" : "Build Org"}
           </button>
         )}
+        {!viewerPartyId && (
+          <span className="text-body-sm text-muted">Join a party to build Org here.</span>
+        )}
       </div>
 
       {estimate?.ok ? (
-        <div className="mt-2 space-y-0.5">
-          <EstimateLine
-            label="Build"
-            costPS={estimate.effectiveCost}
-            costCash={
-              estimate.cashPrice !== undefined
-                ? { amount: estimate.cashPrice, currencyCode: buildOrgCurrency }
-                : undefined
-            }
-            gain={{ sign: "+", value: estimate.projectedGain, unit: "Org" }}
-          />
+        <div className="space-y-0.5">
+          <p className="text-body-sm text-muted">
+            Next click costs{" "}
+            <span className="font-medium tabular-nums text-foreground">
+              {estimate.effectiveCost.toFixed(0)} PS
+              {estimate.cashPrice !== undefined
+                ? ` and ${CURRENCY_SYMBOLS[buildOrgCurrency as keyof typeof CURRENCY_SYMBOLS] ?? "$"}${Math.round(estimate.cashPrice).toLocaleString("en-US")}`
+                : ""}
+            </span>{" "}
+            for{" "}
+            <span className="font-medium tabular-nums text-foreground">
+              +{estimate.projectedGain.toFixed(2)} Org
+            </span>
+            .
+          </p>
           {estimate.fundedFraction !== undefined && estimate.fundedFraction < 1 ? (
-            <span className="block text-[10px] text-warning">
+            <span className="block text-body-sm text-warning">
               Partly funded: the treasury covers {Math.round(estimate.fundedFraction * 100)}% of
               this click.
             </span>

@@ -204,6 +204,13 @@ export const CATEGORY_LABELS: Record<string, string> = {
   research: "Intelligence",
 };
 
+/** One line under each category heading on the grouped "All operations" view. */
+export const CATEGORY_DESCRIPTIONS: Record<string, string> = {
+  influence: "Build influence and favorability, reach voter groups, or change your position.",
+  money: "Fill the campaign treasury and grow the donor network that pays into it.",
+  research: "Polls that show where you stand, and preparation for debates.",
+};
+
 /**
  * One shared photo scrim for every card.
  *

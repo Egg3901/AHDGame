@@ -32,12 +32,12 @@ interface ActionsHeroProps {
 const LABEL_CLASS = "text-body-sm text-muted";
 const VALUE_CLASS = "text-heading font-semibold tabular-nums text-foreground";
 
-/** A 0 to 100 meter: a neutral fill on the track, so the number carries the meaning. */
-function Meter({ value }: { value: number }) {
+/** A 0 to 100 meter in the stat's own color (influence red, favorability amber). */
+function Meter({ value, fillClass }: { value: number; fillClass: string }) {
   return (
-    <div className="h-1.5 w-full overflow-hidden rounded-full bg-card-border" aria-hidden>
+    <div className="h-2 w-full overflow-hidden rounded-full bg-card-border" aria-hidden>
       <div
-        className="h-full rounded-full bg-foreground/70 transition-[width] duration-500"
+        className={`h-full rounded-full transition-[width] duration-500 ${fillClass}`}
         style={{ width: `${Math.min(100, Math.max(0, value))}%` }}
       />
     </div>
@@ -182,7 +182,7 @@ export default function ActionsHero({
                 {influence.toFixed(1)}%
               </span>
             </div>
-            <Meter value={influence} />
+            <Meter value={influence} fillClass="bg-primary" />
             <div className="mt-1 text-right text-body-sm text-muted">
               Decay: -{influenceDecay}% per turn
             </div>
@@ -194,7 +194,7 @@ export default function ActionsHero({
                 {favorability.toFixed(1)}%
               </span>
             </div>
-            <Meter value={favorability} />
+            <Meter value={favorability} fillClass="bg-warning" />
             {favDecayDisplay && (
               <div className="mt-1 text-right text-body-sm text-muted">
                 Decay: -{favDecayDisplay}% per turn
