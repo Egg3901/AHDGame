@@ -36,6 +36,7 @@ describe("investment sovereign reference read", () => {
   it("leaves an absent currency or absent issue explicit without a substituted quote", async () => {
     const collection = vi.fn().mockReturnValue({ findOne: vi.fn().mockResolvedValue(null) });
     expect(await loadInvestmentBondReference({ collection } as never, undefined, 10)).toBeNull();
+    expect(await loadInvestmentBondReference({ collection } as never, "UNKNOWN", 10)).toBeNull();
     expect(collection).not.toHaveBeenCalled();
     expect(await loadInvestmentBondReference({ collection } as never, "USD", 10)).toBeNull();
   });
