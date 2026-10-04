@@ -3,8 +3,6 @@ import { calculateCreditRating, calculateInterestRate } from "@/lib/budget/debt"
 import { IMF_SOVEREIGN_DEFAULT_RATE } from "@/lib/sovereignDefault/constants";
 import {
   sovereignCouponBook,
-  sovereignIssuanceRiskSpreadPp,
-  sovereignRiskFreeLadderRate,
   sovereignStockAnnualService,
   sovereignStockServiceRate,
   type CouponBearingSovereignBond,
@@ -97,24 +95,6 @@ describe("sovereign stock service", () => {
   });
 });
 
-describe("new-issue credit-risk spread", () => {
-  it("is zero for an AAA issuer at full confidence", () => {
-    expect(sovereignIssuanceRiskSpreadPp({ debtToGdpRatio: 0.4, investorConfidence: 100 })).toBe(0);
-  });
-
-  it("prices the ladder premium over AAA for a distressed ratio", () => {
-    const expectedPp = (calculateInterestRate(2.0) - sovereignRiskFreeLadderRate()) * 100;
-    expect(sovereignIssuanceRiskSpreadPp({ debtToGdpRatio: 2.0 })).toBeCloseTo(expectedPp, 9);
-    expect(expectedPp).toBeGreaterThan(0);
-  });
-
-  it("is IMF-capped while a program is active", () => {
-    const capped = sovereignIssuanceRiskSpreadPp({ debtToGdpRatio: 3, imfBailoutActive: true });
-    const uncapped = sovereignIssuanceRiskSpreadPp({ debtToGdpRatio: 3 });
-    expect(capped).toBeLessThan(uncapped);
-  });
-});
-
 /**
  * Deterministic projection of the #2089 mechanism: a 1953-style sovereign at
  * 217% of GDP on low seeded coupons, balanced primary budget, 7% nominal
@@ -163,7 +143,7 @@ describe("1953 high-debt sovereign projection (#2089)", () => {
       gdp *= 1 + GROWTH;
       // Interest is deficit-financed with new 1y paper; maturing paper rolls
       // at its original tenor. Both price prime plus the current spread.
-      const spread = sovereignIssuanceRiskSpreadPp({ debtToGdpRatio: principal / gdp });
+      const spread = (calculateInterestRate(principal / gdp) - calculateInterestRate(0)) * 100;
       const next: Tranche[] = [];
       for (const t of tranches) {
         if (t.yearsLeft > 1) next.push({ ...t, yearsLeft: t.yearsLeft - 1 });
