@@ -60,6 +60,7 @@ export async function loadUSMediaOutletDelivery(
           countryId: 1,
           corporationId: 1,
           sectorType: 1,
+          mediaDiscriminator: 1,
           strategyId: 1,
           transitionFromStrategyId: 1,
           transitionStartTurn: 1,
