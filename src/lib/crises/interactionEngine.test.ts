@@ -211,6 +211,33 @@ describe("resolveCharacterRoles", () => {
     });
     expect(roles).toContain("headOfState");
   });
+
+  it("recognizes only the configured finance minister and the seated monetary chair", async () => {
+    const characterId = new ObjectId();
+    db.collection("centralBanks").findOne.mockResolvedValue({ _id: "IE" });
+    const roles = await resolveCharacterRoles(mdb(), {
+      _id: characterId,
+      currentOffice: { type: "parliamentaryCabinet", positionId: "minister_for_finance" },
+      countryId: "IE",
+    });
+    expect(roles).toContain("financeMinister");
+    expect(roles).toContain("centralBankChair");
+    expect(db.collection("centralBanks").findOne).toHaveBeenCalledWith(
+      { _id: "IE", chairCharacterId: characterId },
+      { projection: { _id: 1 } }
+    );
+  });
+
+  it("does not treat another cabinet portfolio as the finance minister", async () => {
+    db.collection("centralBanks").findOne.mockResolvedValue(null);
+    const roles = await resolveCharacterRoles(mdb(), {
+      _id: new ObjectId(),
+      currentOffice: { type: "parliamentaryCabinet", positionId: "minister_for_health" },
+      countryId: "IE",
+    });
+    expect(roles).not.toContain("financeMinister");
+    expect(roles).not.toContain("centralBankChair");
+  });
 });
 
 describe("canCharacterInteract", () => {
