@@ -973,6 +973,7 @@ function buildNationalBudgetSeed(config: NationalBudgetSeedConfig): SupportedNat
     // with debt starts negative, a debt-free country starts at 0. Mirrors the
     // one-time backfill migration so seed and migration agree.
     treasuryBalance: -(config.debt.principal ?? 0),
+    treasuryCashLocal: 0,
     surplus,
     gdp: config.gdp,
     debtToGdpRatio: config.debt.principal / config.gdp,

@@ -51,6 +51,10 @@ export interface FiscalStatStripProps {
   rating: CreditRating;
   /** Signed national treasury balance (local currency); negative = national debt. */
   treasuryReserve: number;
+  /** Show actual funded cash separately from legacy fiscal position. */
+  treasuryCashLedgerEnabled?: boolean;
+  treasuryCashLocal?: number;
+  bankClaimsDueLocal?: number;
   /** Compare mode: show vs-prior-FY delta chips. */
   compare?: boolean;
   /** Prior fiscal year point (for compare deltas); null when unavailable. */
@@ -80,6 +84,9 @@ export function FiscalStatStrip({
   debtToGdp,
   rating,
   treasuryReserve,
+  treasuryCashLedgerEnabled = false,
+  treasuryCashLocal = 0,
+  bankClaimsDueLocal = 0,
   compare = false,
   prev,
   toUsd,
@@ -160,11 +167,34 @@ export function FiscalStatStrip({
         delta={compare ? <Delta now={gdp} prev={prev?.gdp} kind="money" sym={sym} /> : undefined}
       />
       <StatTile
-        label="Treasury Balance"
+        label={treasuryCashLedgerEnabled ? "Signed Fiscal Position" : "Treasury Balance"}
         value={money(Math.abs(treasuryReserve))}
         tone={treasuryReserve < 0 ? "down" : "foreground"}
-        sub={usdNote(treasuryReserve, treasuryReserve < 0 ? "national debt" : "in surplus")}
+        sub={usdNote(
+          treasuryReserve,
+          treasuryCashLedgerEnabled
+            ? "legacy signed position"
+            : treasuryReserve < 0
+              ? "national debt"
+              : "in surplus"
+        )}
       />
+      {treasuryCashLedgerEnabled && (
+        <>
+          <StatTile
+            label="Funded Treasury Cash"
+            value={money(treasuryCashLocal)}
+            tone="up"
+            sub="spendable proceeds received from bond pools"
+          />
+          <StatTile
+            label="Bank Claims Due"
+            value={money(bankClaimsDueLocal)}
+            tone={bankClaimsDueLocal > 0 ? "warning" : "foreground"}
+            sub="unpaid sovereign coupon and maturity claims"
+          />
+        </>
+      )}
     </div>
   );
 }

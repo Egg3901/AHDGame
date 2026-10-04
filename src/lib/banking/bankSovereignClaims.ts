@@ -27,6 +27,7 @@ export async function addBankMaturityClaims(
     bond: Bond;
     anchorRate?: number;
     ledgerShadow?: boolean;
+    treasuryCashLedgerEnabled?: boolean;
   }
 ): Promise<BankSovereignClaim[]> {
   const claims: BankSovereignClaim[] = [];
@@ -62,6 +63,7 @@ export async function addBankMaturityClaims(
       ledgerCreatedAt: new Date(),
       ...(input.anchorRate !== undefined ? { anchorRate: input.anchorRate } : {}),
       ...(input.ledgerShadow ? { ledgerShadow: true } : {}),
+      ...(input.treasuryCashLedgerEnabled ? { treasuryCashLedgerEnabled: true } : {}),
     };
     // BondTurn can replay after the settlement projection removed this claim.
     // Do not recreate it if the same-turn funding witness already completed.
@@ -92,7 +94,8 @@ export async function addBankMaturityClaims(
     if (
       !saved ||
       saved.amountLocal !== claim.amountLocal ||
-      saved.charteredTurn !== claim.charteredTurn
+      saved.charteredTurn !== claim.charteredTurn ||
+      saved.treasuryCashLedgerEnabled !== claim.treasuryCashLedgerEnabled
     )
       throw new Error(`Bank maturity claim ${claim.id} changed after it was frozen`);
     claims.push(saved);
@@ -112,6 +115,20 @@ function fundingTransition(
   attemptTurn: number
 ): BankingTransition {
   const key = `${claim.id}:funding:${attemptTurn}`;
+  const cashLedger = claim.treasuryCashLedgerEnabled === true;
+  const projections: BankingTransition["projections"] = [];
+  if (cashLedger) {
+    projections.push({
+      collection: "federalBudget",
+      filter: { _id: budgetId },
+      update: { $inc: { treasuryBalance: -claim.amountLocal } },
+      note: "Keep the signed fiscal-position record in step with the funded claim",
+    });
+    if (claim.ledgerShadow) {
+      projections.push(fundingLedgerProjection(claim, key, attemptTurn, "government"));
+      projections.push(fundingLedgerProjection(claim, key, attemptTurn, "government_cash"));
+    }
+  }
   return {
     key,
     kind: `sovereign_bank_${claim.kind}_escrow_funding`,
@@ -122,8 +139,10 @@ function fundingTransition(
         kind: "debit",
         amount: claim.amountLocal,
         collection: "federalBudget",
-        filter: { _id: budgetId, treasuryBalance: { $gte: claim.amountLocal } },
-        path: "treasuryBalance",
+        filter: cashLedger
+          ? { _id: budgetId, treasuryCashLocal: { $gte: claim.amountLocal } }
+          : { _id: budgetId, treasuryBalance: { $gte: claim.amountLocal } },
+        path: cashLedger ? "treasuryCashLocal" : "treasuryBalance",
         note: `Fund sovereign ${claim.kind} claim from treasury cash`,
       },
       {
@@ -135,7 +154,7 @@ function fundingTransition(
         note: `Hold funded sovereign ${claim.kind} claim outside the replaceable charter`,
       },
     ],
-    projections: [],
+    projections,
     event: {
       kind: "monetary.executed",
       command: `turn.sovereignBank.${claim.kind}.fundEscrow`,
@@ -144,6 +163,48 @@ function fundingTransition(
       amount: claim.amountLocal,
       meta: { claimKind: claim.kind, bondId: claim.bondId ?? "aggregate" },
     },
+  };
+}
+
+function fundingLedgerProjection(
+  claim: BankSovereignClaim,
+  key: string,
+  turn: number,
+  account: "government" | "government_cash"
+): BankingTransition["projections"][number] {
+  if (!claim.anchorRate || !Number.isFinite(claim.anchorRate) || claim.anchorRate <= 0)
+    throw new Error(`Bank sovereign claim ${claim.id} has no ledger valuation`);
+  const anchorAmount = claim.amountLocal / claim.anchorRate;
+  const ledgerId = new ObjectId(
+    createHash("sha256").update(`${key}:funding-ledger:${account}`).digest("hex").slice(0, 24)
+  );
+  return {
+    collection: "ledgerEntries",
+    insert: {
+      _id: ledgerId,
+      turn,
+      createdAt: claim.ledgerCreatedAt ?? new Date(Date.UTC(1970, 0, 1) + claim.turn * 1000),
+      txType: claim.kind === "coupon" ? "gov_coupon_payment" : "gov_bond_maturity_payment",
+      legs: [
+        {
+          account: `${account}:${claim.countryId}:${claim.currencyCode}`,
+          amount: -claim.amountLocal,
+          currencyCode: claim.currencyCode,
+          anchorAmount: -anchorAmount,
+          role: "primary",
+        },
+        {
+          account: `sink:bank_sovereign_claim_funded:${claim.currencyCode}`,
+          amount: claim.amountLocal,
+          currencyCode: claim.currencyCode,
+          anchorAmount,
+          role: "contra",
+        },
+      ],
+      balanced: true,
+      emitSite: "banking/bankSovereignClaims:funding",
+    },
+    note: `Funded sovereign claim ${account} stock-flow witness`,
   };
 }
 
@@ -161,7 +222,8 @@ function insuranceTransition(
       note: "Clear the funded sovereign claim after insurance receives escrow cash",
     },
   ];
-  if (claim.ledgerShadow) projections.push(ledgerProjection(claim, key, attemptTurn, "insurance"));
+  if (claim.ledgerShadow && !claim.treasuryCashLedgerEnabled)
+    projections.push(ledgerProjection(claim, key, attemptTurn, "insurance"));
   return {
     key,
     kind: `sovereign_bank_${claim.kind}_insurance`,
@@ -412,7 +474,7 @@ async function payFromEscrow(
     if (settled.status === "partial" || (settled.status === "replayed" && settled.error))
       settled = await resumeSettlement(db, transition.key);
     if (settled.status === "applied" || (settled.status === "replayed" && !settled.error)) {
-      if (claim.ledgerShadow) {
+      if (claim.ledgerShadow && !claim.treasuryCashLedgerEnabled) {
         await ensureLedgerWitness(db, claim, transition.key, attemptTurn, "bank");
       }
       await db
@@ -456,9 +518,13 @@ async function recoverCompletedClaim(
     if (record.status !== "partial" && record.status !== "applied") continue;
     const settled = await resumeSettlement(db, record._id);
     if (settled.status !== "applied" && (settled.status !== "replayed" || settled.error)) continue;
-    if (record._id.includes(":bank:") && claim.ledgerShadow) {
+    if (record._id.includes(":bank:") && claim.ledgerShadow && !claim.treasuryCashLedgerEnabled) {
       await ensureLedgerWitness(db, claim, record._id, record.turn ?? claim.turn, "bank");
-    } else if (record._id.includes(":insurance:") && claim.ledgerShadow) {
+    } else if (
+      record._id.includes(":insurance:") &&
+      claim.ledgerShadow &&
+      !claim.treasuryCashLedgerEnabled
+    ) {
       await ensureLedgerWitness(db, claim, record._id, record.turn ?? claim.turn, "insurance");
     }
     await db

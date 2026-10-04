@@ -35,6 +35,7 @@ export function financialRescueTransition(input: {
   amount: number;
   response: FinancialRescueResponse;
   banks: { id: string; confidence: number }[];
+  treasuryCashLedgerEnabled?: boolean;
 }): BankingTransition {
   const { key, countryId, currency, turn, amount, response, banks } = input;
   const transition: BankingTransition = {
@@ -69,10 +70,20 @@ export function financialRescueTransition(input: {
     kind: "debit",
     amount,
     collection: "federalBudget",
-    filter: { _id: input.treasuryId, countryId },
-    path: "treasuryBalance",
+    filter: input.treasuryCashLedgerEnabled
+      ? { _id: input.treasuryId, countryId, treasuryCashLocal: { $gte: amount } }
+      : { _id: input.treasuryId, countryId },
+    path: input.treasuryCashLedgerEnabled ? "treasuryCashLocal" : "treasuryBalance",
     note: "Fund the authorized crisis intervention",
   });
+  if (input.treasuryCashLedgerEnabled) {
+    transition.projections.push({
+      collection: "federalBudget",
+      filter: { _id: input.treasuryId, countryId },
+      update: { $inc: { treasuryBalance: -amount } },
+      note: "Keep the signed fiscal-position record aligned with the funded cash draw",
+    });
+  }
   if (response === "guarantee") {
     transition.legs.push({
       kind: "credit",
