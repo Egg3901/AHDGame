@@ -45,14 +45,14 @@ describe("getReadinessExpectations", () => {
         expect(derived.regionCount, where).toBe(eraRegions ?? authored.regionCount);
         expect(derived.demographicsCount, where).toBe(
           preset === "1991-default" && id === "RU"
-            ? 10
+            ? eraRegions
             : eraRegions === null
               ? authored.demographicsCount
               : eraRegions - demographicOffset
         );
         expect(derived.stateMetricsCount, where).toBe(
           preset === "1991-default" && id === "RU"
-            ? 10
+            ? eraRegions
             : eraRegions === null
               ? authored.stateMetricsCount
               : eraRegions - metricsOffset
@@ -89,6 +89,13 @@ describe("getReadinessExpectations", () => {
     // correct 1953 seed as incomplete.
     expect(getReadinessExpectations("DE", "1953-default")!.regionCount).toBe(11);
     expect(getReadinessExpectations("DE", "1991-default")!.regionCount).toBe(16);
+  });
+
+  it("requires demographics and metrics for every January 1991 Soviet region", () => {
+    const expectation = getReadinessExpectations("RU", "1991-default")!;
+    expect(expectation.regionCount).toBe(24);
+    expect(expectation.demographicsCount).toBe(expectation.regionCount);
+    expect(expectation.stateMetricsCount).toBe(expectation.regionCount);
   });
 
   it("stops asserting the CPSU in a post-Soviet world", () => {
