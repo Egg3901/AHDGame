@@ -21,14 +21,21 @@ export interface PaidPoliticalMediaSellerAmount {
   amountAnchor: number;
 }
 
+export interface PaidPoliticalMediaSellerReceipt extends PaidPoliticalMediaSellerAmount {
+  allocationId: string;
+}
+
 export function paidPoliticalMediaSellerReceipts(input: {
-  sellers: readonly (PaidPoliticalMediaSellerAmount & { sectorId: string })[];
+  orderId: string;
+  sellers: readonly (PaidPoliticalMediaSellerReceipt & { sectorId: string })[];
   results: readonly { status: string }[];
   orderAlreadySettled?: boolean;
-}): Array<PaidPoliticalMediaSellerAmount & { sectorId: string }> {
+}): Array<PaidPoliticalMediaSellerReceipt & { sectorId: string }> {
+  const seenAllocationIds = new Set<string>();
   return input.sellers.filter((seller, index) => {
     if (
       !seller.sectorId ||
+      !seller.allocationId ||
       !Number.isFinite(seller.units) ||
       seller.units <= 0 ||
       !Number.isFinite(seller.amountAnchor) ||
@@ -37,7 +44,13 @@ export function paidPoliticalMediaSellerReceipts(input: {
       return false;
     }
     const status = input.results[index]?.status;
-    return input.orderAlreadySettled === true || status === "applied" || status === "replayed";
+    if (input.orderAlreadySettled !== true && status !== "applied" && status !== "replayed") {
+      return false;
+    }
+    const identity = `${input.orderId}:${seller.allocationId}`;
+    if (seenAllocationIds.has(identity)) return false;
+    seenAllocationIds.add(identity);
+    return true;
   });
 }
 

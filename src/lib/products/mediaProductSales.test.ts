@@ -34,22 +34,44 @@ function project(overrides: Partial<MediaProductProject> = {}): MediaProductProj
 describe("media product sales attribution", () => {
   it("counts only applied or replayed political seller receipts", () => {
     const sellers = [
-      { sectorId: "sector-a", units: 5, amountAnchor: 50 },
-      { sectorId: "sector-b", units: 7, amountAnchor: 70 },
+      { allocationId: "alloc-a", sectorId: "sector-a", units: 5, amountAnchor: 50 },
+      { allocationId: "alloc-b", sectorId: "sector-b", units: 7, amountAnchor: 70 },
     ];
     expect(
       paidPoliticalMediaSellerReceipts({
+        orderId: "order-1",
         sellers,
         results: [{ status: "applied" }, { status: "rejected" }],
       })
     ).toEqual([sellers[0]]);
     expect(
       paidPoliticalMediaSellerReceipts({
+        orderId: "order-1",
         sellers,
         results: [],
         orderAlreadySettled: true,
       })
     ).toEqual(sellers);
+  });
+
+  it("counts a paid political allocation once when an adjacent allocation is unpaid", () => {
+    const seller = {
+      allocationId: "alloc-a",
+      sectorId: "sector-a",
+      units: 5,
+      amountAnchor: 50,
+    };
+    expect(
+      paidPoliticalMediaSellerReceipts({
+        orderId: "order-1",
+        sellers: [
+          seller,
+          seller,
+          { allocationId: "alloc-b", sectorId: "sector-b", units: 7, amountAnchor: 70 },
+        ],
+        results: [{ status: "applied" }, { status: "replayed" }, { status: "rejected" }],
+      })
+    ).toEqual([seller]);
   });
 
   it("caps titles inside existing output and removes retired titles from the offer", () => {

@@ -972,6 +972,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       const plan = order.settlementPlan ?? plannedPoliticalMediaOrders.get(order.orderId);
       if (mediaProductSlatesEnabled && plan?.plannedTurn === currentTurnNumber) {
         for (const seller of paidPoliticalMediaSellerReceipts({
+          orderId: order.orderId,
           sellers: plan.sellers,
           results,
           orderAlreadySettled: order.status === "settled",
