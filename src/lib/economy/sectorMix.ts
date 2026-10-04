@@ -38,7 +38,6 @@ import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 import { effectiveMarketAnchor, gdpDerivedMarketAnchor } from "@/lib/corporations/marketShare";
 import { loadWorldPreset } from "@/lib/currency/gdpAnchorRate";
 import { defaultSupplyRates, unitYieldForSupply } from "@/lib/constants/capacityEconomy";
-import { getEffectiveStrategyRates } from "@/lib/constants/sectorStrategies";
 import { getEffectiveStrategyRatesForOperatingModel } from "@/lib/constants/sectorStrategies";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 

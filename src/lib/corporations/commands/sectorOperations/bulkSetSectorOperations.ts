@@ -14,7 +14,7 @@ import { bulkSectorOperationsSchema } from "@/lib/api/schemas/corporations";
 import { handleRouteError } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import type { Character, CorporateSector } from "@/lib/db/types";
-import { CORPORATION_TYPE_LABELS, type CorporationType } from "@/lib/constants/corporations";
+import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
 import { clampProductionPolicy } from "@/lib/utils/productionPolicy";
 import { clampPricingPosture } from "@/lib/market/clearing";
 import { getMarketSystemMode, isMarketSystemMode, marketAtLeast } from "@/lib/market/featureFlag";
