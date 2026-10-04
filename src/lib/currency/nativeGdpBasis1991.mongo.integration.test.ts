@@ -7,6 +7,9 @@ import { ngRegions1991 } from "@/lib/countries/ng/data/ngRegions1991";
 import { sovietUnionRegions1991 } from "@/lib/countries/ru/data/sovietUnionRegions1991";
 import { ruRegions1991 } from "@/lib/countries/ru/data/ruRegions1991";
 import { plRegions1991 } from "@/lib/countries/pl/data/plRegions1991";
+import { reconcileStateGdpWithNationalSeeds } from "@/lib/admin/seed/reconcileStateGdp";
+import { getNationalBudgetSeedConfigsForPreset } from "@/lib/seeds/reference/budgets";
+import { NG_1991_NOMINAL_GDP_NGN } from "@/lib/countries/ng/data/ngGdp1991";
 import { loadUsdGdpByCountry } from "@/lib/internationalOrganizations/countryGdp";
 
 const uri = process.env.FEDERATION_TEST_MONGO_URI;
@@ -43,6 +46,20 @@ describe.skipIf(!uri)("1991 native GDP consumers on isolated Mongo", () => {
           ignoredPayload: "x".repeat(100_000),
         }))
       );
+      const budget = getNationalBudgetSeedConfigsForPreset("1991-default").find(
+        (config) => config.countryId === "NG"
+      )!;
+      expect(budget.gdp).toBe(NG_1991_NOMINAL_GDP_NGN);
+      expect(budget.otherRevenue / budget.gdp).toBeCloseTo(120 / 1800, 10);
+      expect(budget.debt.principal / budget.gdp).toBeCloseTo(400 / 1800, 10);
+      const reconciliation = await reconcileStateGdpWithNationalSeeds(
+        db,
+        () => {},
+        "1991-default",
+        ["NG", "RU"]
+      );
+      expect(reconciliation).toHaveLength(2);
+      expect(reconciliation.every((row) => !row.applied && row.scalar === 1)).toBe(true);
       commands = 0;
       replyBytes = 0;
       const values = await loadUsdGdpByCountry(db, ["NG", "RU", "PL"]);
