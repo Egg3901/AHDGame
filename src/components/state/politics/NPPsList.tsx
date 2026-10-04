@@ -5,6 +5,8 @@ import Link from "next/link";
 import type { State } from "@/lib/db/types";
 import { Avatar } from "@/components/Avatar";
 import { PartyChip } from "@/app/congress/components/CongressShared";
+import type { CountryId } from "@/lib/constants/countries";
+import { officeLabelFor } from "@/lib/utils/officeLabel";
 import type { NPPDisplaySimple, PartyOrgDisplay } from "../StatePageTabsTypes";
 
 export function NPPsList({
@@ -21,10 +23,10 @@ export function NPPsList({
   if (npps.length === 0) return null;
 
   return (
-    <div className="rounded-xl border border-purple-500/30 bg-purple-500/5 p-6">
-      <h2 className="mb-4 text-xl font-semibold">Non-Player Politicians in {state.name}</h2>
+    <section className="min-w-0 rounded-xl border border-purple-500/30 bg-purple-500/5 p-5 sm:p-6">
+      <h2 className="mb-3 text-heading-sm font-semibold text-foreground">Non-player politicians</h2>
       <div className={`overflow-x-auto overflow-y-auto ${!nppsExpanded ? "max-h-60" : ""}`}>
-        <div className="flex items-center border-b border-purple-500/20 py-2 text-xs text-muted font-medium">
+        <div className="flex items-center border-b border-purple-500/20 py-2 text-body-sm text-muted">
           <div className="flex-1">Name</div>
           <div className="w-24 text-center">Party</div>
           <div className="w-16 text-right">Influence</div>
@@ -34,12 +36,7 @@ export function NPPsList({
             key={npp._id}
             className="flex items-center gap-3 border-b border-purple-500/20 py-3 last:border-b-0"
           >
-            <Avatar
-              url={npp.avatarUrl}
-              name={npp.name}
-              size="h-9 w-9"
-              className="text-purple-300"
-            />
+            <Avatar url={npp.avatarUrl} name={npp.name} size="h-9 w-9" />
             <div className="flex-1 min-w-0">
               <Link
                 href={
@@ -47,11 +44,13 @@ export function NPPsList({
                     ? `/politicians/npp/${npp.sequentialId}`
                     : `/politicians/npp/${npp._id}`
                 }
-                className="font-medium hover:text-purple-400 transition-colors"
+                className="font-medium text-foreground underline-offset-4 hover:underline"
               >
                 {npp.name}
               </Link>
-              <div className="text-sm text-muted">Private Citizen</div>
+              <div className="text-body-sm text-muted">
+                {officeLabelFor(state.countryId as CountryId, npp.currentOffice)}
+              </div>
             </div>
             <div className="w-32 flex justify-center">
               {(() => {
@@ -76,7 +75,7 @@ export function NPPsList({
               })()}
             </div>
             <div className="w-16 text-right">
-              <span className="text-sm font-medium text-primary">
+              <span className="text-body font-medium tabular-nums text-foreground">
                 {npp.politicalInfluence.toFixed(2)}%
               </span>
             </div>
@@ -87,11 +86,11 @@ export function NPPsList({
         <button
           type="button"
           onClick={() => setNppsExpanded((v) => !v)}
-          className="mt-3 text-sm text-muted hover:text-purple-400 transition-colors"
+          className="mt-2 text-body font-medium text-foreground underline decoration-card-border underline-offset-4 hover:decoration-foreground"
         >
           {nppsExpanded ? "Show less" : `Show all ${npps.length} NPPs`}
         </button>
       )}
-    </div>
+    </section>
   );
 }
