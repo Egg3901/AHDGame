@@ -153,7 +153,7 @@ export async function seedTRStateMetrics(
   const { trStateMetrics } = await import("@/lib/seeds/tr/trStateMetrics");
   const { getRegionMetricPresets, applyMetricPresetToMetrics } =
     await import("@/lib/seeds/metricPresets");
-  // Base bundle is ~1979; 1953 overlay is the only registered TR preset (2019 no-op).
+  // The base is historical; authored 1953 and modern overlays select the era.
   const bundle = trStateMetrics.map((metric) => {
     const overlay = getRegionMetricPresets("TR", String(metric._id), preset);
     return overlay ? applyMetricPresetToMetrics(metric, overlay) : metric;
@@ -193,7 +193,7 @@ export async function seedTRBaselines(
       : is1979
         ? applyEra1979BaselineAdjustments(raw)
         : raw;
-    // Align decay targets with the authored metric overlay (1953); no-op otherwise.
+    // Align decay targets with the same authored overlay used by initial metrics.
     const overlay = getRegionMetricPresets("TR", String(raw._id), preset);
     const baseline = overlay ? applyMetricPresetToBaseline(adjusted, overlay) : adjusted;
     const { _id, ...baselineData } = baseline;

@@ -12,6 +12,7 @@
  */
 import type { CountryLayer1Model, DemographicPosition } from "@/lib/seeds/international/types";
 import { trRegionCensusData, type TRRegionLayer1 } from "@/lib/seeds/tr/trRegionCensusData";
+import { trRegionCensusDataModern } from "@/lib/seeds/tr/trRegionCensusDataModern";
 import { trRegionCensusData1953 } from "@/lib/seeds/tr/trRegionCensusData1953";
 import type { EraId } from "@/lib/seeds/presetSelector";
 
@@ -179,6 +180,7 @@ const POSITIONS_1979: EraPositions = {
 };
 
 const ERA_POSITIONS: Partial<Record<EraId, EraPositions>> = {
+  // Political positions remain game-model carry-forwards, not modern polling observations.
   "1953": POSITIONS_1953,
   "1979": POSITIONS_1979,
   "1991": POSITIONS_1979,
@@ -195,9 +197,9 @@ const ERA_CENSUS: Partial<Record<EraId, Record<string, TRRegionLayer1>>> = {
   "1991": trRegionCensusData,
   "1999": trRegionCensusData,
   "2007": trRegionCensusData,
-  "2019": trRegionCensusData,
-  "2023": trRegionCensusData,
-  "2027": trRegionCensusData,
+  "2019": trRegionCensusDataModern,
+  "2023": trRegionCensusDataModern,
+  "2027": trRegionCensusDataModern,
 };
 
 function convertCensus(

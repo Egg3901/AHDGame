@@ -1,6 +1,8 @@
 import type { CountryGeography } from "../contract";
 import { trMetricPresets1953 } from "./data/trMetricPresets1953";
+import { trMetricPresetsModern } from "./data/trMetricPresetsModern";
 import { trRegionCensusData } from "@/lib/seeds/tr/trRegionCensusData";
+import { trRegionCensusDataModern } from "@/lib/seeds/tr/trRegionCensusDataModern";
 import { trRegionCensusData1953 } from "@/lib/seeds/tr/trRegionCensusData1953";
 import { trRegions } from "./data/trRegions";
 import { trRegions1991 } from "./data/trRegions1991";
@@ -32,10 +34,9 @@ import {
  * early revision of Japan's geography generated copies from the snapshot; deep
  * equality passed and Japan had two sources for every region.
  *
- * ⚠ THE PRESET KEYS COME FROM THE SNAPSHOT. Turkey authors 3 census
- * eras, 1 metric eras, 0 anchor eras and 4 region eras. The gaps are real:
- * an unauthored era inherits, and inventing a key for it would turn a fallback
- * into an authored value.
+ * Modern aliases project a dated national profile to 2019/2023/2027.
+ * Historical census entries preserve their prior fallback identity, while
+ * historical metric entries preserve the prior no-overlay behavior.
  */
 
 const regionNames: Record<string, string> = Object.fromEntries(
@@ -45,11 +46,25 @@ const regionNames: Record<string, string> = Object.fromEntries(
 const censusBundles = {
   "1953-default": trRegionCensusData1953,
   "1979-default": trRegionCensusData,
-  "2019-default": trRegionCensusData,
+  "1991-default": trRegionCensusData,
+  "1999-default": trRegionCensusData,
+  "2007-default": trRegionCensusData,
+  "2019-default": trRegionCensusDataModern,
+  "2023-default": trRegionCensusDataModern,
+  "2027-default": trRegionCensusDataModern,
 };
 
 const metricPresetBundles = {
   "1953-default": trMetricPresets1953,
+  // Preserve the existing historical no-overlay behavior before adding the
+  // generic selector's 2019 fallback. Modern roots must not leak backward.
+  "1979-default": {},
+  "1991-default": {},
+  "1999-default": {},
+  "2007-default": {},
+  "2019-default": trMetricPresetsModern,
+  "2023-default": trMetricPresetsModern,
+  "2027-default": trMetricPresetsModern,
 };
 
 const populationAnchors = {};
