@@ -14,6 +14,9 @@ import type { BankCharter, BankLoan } from "@/lib/db/types/bank";
 import { ARREARS_DEFAULT_TURNS } from "@/lib/banking/rules/loans";
 import { originateLoan } from "@/lib/banking/lending";
 import { processBankingTurn } from "../bankingTurn";
+import { withInjectedCrash, InjectedCrash } from "@/lib/test-utils/faultyDb";
+import { recoverBankingSettlements } from "@/lib/banking/recovery";
+import { revokeCharter } from "@/lib/banking/charter";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/audit/recordAudit", () => ({ recordAudit: vi.fn(), recordAuditBulk: vi.fn() }));
@@ -269,6 +272,77 @@ describe("named loan lifecycle through the banking turn", () => {
 });
 
 describe("construction loan servicing through the banking turn", () => {
+  it.each(["borrower debit", "completed receipt"])(
+    "holds the original epoch across a crash after %s and recovers once",
+    async (boundary) => {
+      const { db, bankId, borrowerId } = makeWorld(1_000_000);
+      const native = db as unknown as Db;
+      const { getDb } = await import("@/lib/mongodb");
+      vi.mocked(getDb).mockResolvedValue(native);
+      await db
+        .collection("gameConfig")
+        .updateOne({ _id: "default" }, { $set: { bankConstructionFinanceEnabled: true } });
+      const originated = await originateLoan(
+        native,
+        bankId,
+        { type: "corporation", id: borrowerId },
+        PRINCIPAL,
+        TERM
+      );
+      if (!originated.ok) throw new Error(originated.error);
+      await db.collection("bankLoans").updateOne(
+        { _id: originated.loan._id },
+        {
+          $set: {
+            constructionCollateral: {
+              claimId: "crash-pledge",
+              sectorId: new ObjectId(),
+              quotedCostLocal: 20_000,
+              constructionCostLocal: 20_000,
+            },
+          },
+        }
+      );
+      const initialMoney = money(db);
+      const key = `loan-service:${originated.loan._id}:${START + 1}`;
+      const crash = withInjectedCrash(db, {
+        collection: boundary === "borrower debit" ? "corporations" : "bankMoneyMoves",
+        op: "updateOne",
+        onCall: 1,
+        afterWrite: true,
+        matches: (args) => {
+          const filter = args[0] as Record<string, unknown>;
+          const update = args[1] as {
+            $inc?: Record<string, unknown>;
+            $set?: Record<string, unknown>;
+          };
+          return boundary === "borrower debit"
+            ? Number(update.$inc?.liquidCapital) < 0 &&
+                (update.$set?.pendingMoneyMoveReceipt as { key?: string } | undefined)?.key === key
+            : filter._id === key && update.$set?.status === "applied";
+        },
+      });
+      await expect(processBankingTurn(crash.db, START + 1)).rejects.toBeInstanceOf(InjectedCrash);
+      const bank = await native.collection("corporations").findOne({ _id: bankId });
+      expect(bank?.bankConstructionFunding).toMatchObject({ kind: "servicing", service: { key } });
+      const revocation = await revokeCharter(native, bankId, "lease test");
+      expect(revocation.ok).toBe(false);
+      const recovery = await recoverBankingSettlements(native, START + 2);
+      expect(recovery.stillPartial).toEqual([]);
+      expect(
+        (await native.collection("corporations").findOne({ _id: bankId }))?.bankConstructionFunding
+      ).toBeUndefined();
+      expect(theLoan(db).constructionSettlementOwner).toBeUndefined();
+      expect(theLoan(db).outstanding).toBeLessThan(PRINCIPAL);
+      expect(corp(db, bankId).bankCharter!.totalLoans).toBeCloseTo(theLoan(db).outstanding);
+      expect(money(db)).toBeCloseTo(initialMoney);
+      const after = money(db);
+      const outstanding = theLoan(db).outstanding;
+      await recoverBankingSettlements(native, START + 2);
+      expect(money(db)).toBe(after);
+      expect(theLoan(db).outstanding).toBe(outstanding);
+    }
+  );
   it.each([false, true])(
     "retains security until payoff or funded foreclosure (default=%s)",
     async (defaults) => {
