@@ -5,7 +5,7 @@
  * already greys those out from `campaignBrief.optionAvailability`; this feed has
  * to carry the same verdict so both surfaces agree.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
@@ -102,8 +102,15 @@ function mockInteractions(...interactions: ReturnType<typeof makeInteraction>[])
   });
 }
 
+let GET: typeof import("./route").GET;
+
+// Compile the route's full dependency graph before timing individual requests.
+// A timed-out import can otherwise finish during the next test and reuse its DB.
+beforeAll(async () => {
+  ({ GET } = await import("./route"));
+}, 60_000);
+
 async function get() {
-  const { GET } = await import("./route");
   return GET(new Request("http://localhost/api/crises/active-for-character"));
 }
 
