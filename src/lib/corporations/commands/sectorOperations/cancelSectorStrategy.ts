@@ -11,6 +11,7 @@ import {
   rescaleBuildQueueForStrategyChange,
 } from "@/lib/constants/capacityEconomy";
 import { rescaleOtherOpexAnchorForRetool } from "@/lib/corporations/physicalPnl";
+import { seedPlantLedger } from "@/lib/corporations/plantLedger";
 import { STRATEGY_TRANSITION_TURNS, CANCEL_COST_FRACTION } from "@/lib/constants/sectorStrategies";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import {
@@ -202,6 +203,9 @@ export async function cancelSectorStrategy(request: Request, { params }: RoutePa
             transitionStartTurn: newTransitionStartTurn,
             isReversing: true,
             ...(rescaledCapitalStock != null ? { capitalStock: rescaledCapitalStock } : {}),
+            ...(rescaledCapitalStock != null
+              ? seedPlantLedger(sector.sectorType, rescaledCapitalStock)
+              : {}),
             ...(rescaledBuildQueue != null ? { buildQueue: rescaledBuildQueue } : {}),
             ...(rescaledCancelOtherOpexAnchor != null
               ? { otherOpexPerUnitAnchor: rescaledCancelOtherOpexAnchor }

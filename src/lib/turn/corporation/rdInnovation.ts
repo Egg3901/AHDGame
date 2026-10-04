@@ -14,6 +14,7 @@ import {
 } from "@/lib/constants/corporations";
 import { SECTOR_STRATEGIES } from "@/lib/constants/sectorStrategies";
 import { createNotifications } from "@/lib/notifications";
+import { plantCapacityDeltaPipeline } from "@/lib/corporations/plantLedger";
 
 // PLANTS-GATED: under plants a breakthrough raises `capitalStock` by the same
 // proportion the legacy path raised `revenue`; the revenue write below runs only
@@ -200,10 +201,11 @@ export function processRdInnovations(
       sectorBoostOps.push({
         updateOne: {
           filter: { _id: sector._id },
-          update: {
-            $inc: { capitalStock: Math.round(deltaCapacity * 100) / 100 },
-            $set: { updatedAt: now },
-          },
+          update: plantCapacityDeltaPipeline(
+            sector.sectorType,
+            Math.round(deltaCapacity * 100) / 100,
+            { updatedAt: now }
+          ),
         },
       });
     } else {

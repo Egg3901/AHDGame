@@ -130,6 +130,23 @@ describe("acceptLoan", () => {
     expect(corp(memory, BORROWER).liquidCapital).toBe(400_000);
   });
 
+  it("withholds the stored fee once while preserving the contractual principal", async () => {
+    loan(memory).originationFee = 3_000;
+    const result = await acceptLoan(memory as unknown as Db, BANK, LOAN);
+    expect(result.ok).toBe(true);
+    expect(corp(memory, BANK).bankCharter.cashReserves).toBe(703_000);
+    expect(corp(memory, BANK).bankCharter.totalLoans).toBe(300_000);
+    expect(corp(memory, BANK).bankCharter.loanOriginationFeesLifetime).toBe(3_000);
+    expect(corp(memory, BORROWER).liquidCapital).toBe(397_000);
+    expect(loan(memory).outstanding).toBe(300_000);
+    expect(await acceptLoan(memory as unknown as Db, BANK, LOAN)).toEqual({
+      ok: false,
+      error: "Loan is not pending",
+    });
+    expect(corp(memory, BANK).bankCharter.cashReserves).toBe(703_000);
+    expect(corp(memory, BANK).bankCharter.loanOriginationFeesLifetime).toBe(3_000);
+  });
+
   it("starts the repayment term when the pending loan is funded", async () => {
     loan(memory).originatedTurn = TURN - 100;
     loan(memory).requestedTurn = TURN - 100;

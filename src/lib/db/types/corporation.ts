@@ -170,6 +170,17 @@ export interface Corporation {
    * at least one financial sector; one bank per corp. See src/lib/db/types/bank.ts.
    */
   bankCharter?: import("./bank").BankCharter;
+  /** Funded sovereign claims held outside the replaceable charter subdocument. */
+  bankSovereignEscrows?: Record<
+    string,
+    {
+      bankId: string;
+      charteredTurn: number;
+      currencyCode: CurrencyCode;
+      amountLocal: number;
+      claimKind: "coupon" | "maturity";
+    }
+  >;
   /** Monotonic generation for atomic proprietary book settlement. */
   bankPropBookRevision?: number;
   /**

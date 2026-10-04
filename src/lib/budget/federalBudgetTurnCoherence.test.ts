@@ -24,10 +24,11 @@ function coherentBudget(
   revenueTotal: number,
   spendingTotal: number,
   treasuryBalance: number,
-  principal: number
+  principal: number,
+  documentId = countryId
 ): Record<string, unknown> {
   return {
-    _id: countryId,
+    _id: documentId,
     countryId,
     taxRates: { ...TAX_RATES },
     taxBases: { ...BASES },
@@ -106,7 +107,14 @@ describe("federal budget end-of-turn coherence (#1975 slice: surplus + bond-ledg
       { _id: "GR", status: "active", enabledForPlayers: true },
     ]);
     memory.seed("federalBudget", [
-      coherentBudget("US", 4_000_000_000_000, 4_200_000_000_000, -500_000_000_000, 500_000_000_000),
+      coherentBudget(
+        "US",
+        4_000_000_000_000,
+        4_200_000_000_000,
+        -500_000_000_000,
+        500_000_000_000,
+        "federal"
+      ),
       // USSR-style near-balance: per-turn revenue growth used to exceed 25% of
       // the derived surplus, so the invariant refused repair for 21 straight
       // turns (raw 115-135). The fixed writer keeps the triple exact instead.
@@ -160,7 +168,7 @@ describe("federal budget end-of-turn coherence (#1975 slice: surplus + bond-ledg
         const before = new Map(budgets.map((b) => [String(b._id), b.debt?.principal ?? 0]));
         await db
           .collection<FederalBudget>("federalBudget")
-          .updateOne({ _id: "US" }, { $inc: { treasuryBalance: 1_000_000 } });
+          .updateOne({ _id: "federal" }, { $inc: { treasuryBalance: 1_000_000 } });
         await db
           .collection<FederalBudget>("federalBudget")
           .updateOne({ _id: "RU" }, { $inc: { treasuryBalance: -2_000_000 } });
@@ -203,9 +211,29 @@ describe("federal budget end-of-turn coherence (#1975 slice: surplus + bond-ledg
   it("keeps the triple coherent through a deposit-insurance backstop debit", async () => {
     const db = await setup();
     const { debitTreasuryDepositInsurance } = await import("@/lib/banking/depositBookReturn");
+    await db
+      .collection<FederalBudget>("federalBudget")
+      .updateOne({ _id: "federal" }, { $set: { treasuryBalance: 25_000_000 } });
     await debitTreasuryDepositInsurance(db, "USD", 25_000_000);
     const [us] = (await readBudgets(db)).filter((b) => b.countryId === "US");
     expect(checkFederalBudgetInvariants(us!)).toEqual([]);
+    expect(us!.treasuryBalance).toBe(0);
+  });
+
+  it("refuses a deposit-insurance debit without enough treasury cash", async () => {
+    const db = await setup();
+    const { debitTreasuryDepositInsurance } = await import("@/lib/banking/depositBookReturn");
+    await db
+      .collection<FederalBudget>("federalBudget")
+      .updateOne({ _id: "federal" }, { $set: { treasuryBalance: 10_000_000 } });
+
+    await expect(debitTreasuryDepositInsurance(db, "USD", 25_000_000)).rejects.toThrow(
+      "Treasury cash cannot cover the deposit insurance debit."
+    );
+
+    const [us] = (await readBudgets(db)).filter((b) => b.countryId === "US");
+    expect(us!.treasuryBalance).toBe(10_000_000);
+    expect(us!.spending.byCategory.depositInsurance).toBeUndefined();
   });
 
   it("tolerates legacy docs with missing surplus, balance, or debt", async () => {

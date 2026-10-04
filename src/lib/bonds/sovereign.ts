@@ -332,6 +332,7 @@ async function issueSovereignBondSeries(
     issueAmount: number;
     maturityTurns?: BondMaturityTurns;
     issuanceKey: string;
+    poolOnly?: boolean;
   }
 ): Promise<SovereignBondIssueResult | null> {
   const { countryId, turn, now, issueAmount } = params;
@@ -388,7 +389,7 @@ async function issueSovereignBondSeries(
     turn,
     now,
     budget,
-    centralBank,
+    centralBank: params.poolOnly ? null : centralBank,
     bondDocs: [bondDoc],
     accounting,
   });
@@ -408,6 +409,35 @@ async function issueSovereignBondSeries(
     newDebtInterest: updatedBudget.spending.debtInterest,
     newSurplus: updatedBudget.surplus,
   };
+}
+
+/**
+ * Issue a sovereign bond solely against the currency bond pool for a deposit
+ * insurance backstop. Unsold units remain unissued until the normal primary
+ * placement pass finds pool cash; this path never uses central bank money.
+ */
+export async function issueDepositInsuranceBackstopBond(
+  db: Db,
+  args: {
+    countryId: CountryId;
+    turn: number;
+    now: Date;
+    amount: number;
+    issuanceKey: string;
+  }
+): Promise<SovereignBondIssueResult | null> {
+  if (!Number.isFinite(args.amount) || args.amount <= 0) return null;
+  const units = Math.ceil(args.amount / BOND_UNIT_FACE_VALUE);
+  if (!Number.isSafeInteger(units)) return null;
+  const rounded = units * BOND_UNIT_FACE_VALUE;
+  return issueSovereignBondSeries(db, {
+    countryId: args.countryId,
+    turn: args.turn,
+    now: args.now,
+    issueAmount: rounded,
+    issuanceKey: args.issuanceKey,
+    poolOnly: true,
+  });
 }
 
 export async function issueAdminSovereignBondSeries(
@@ -886,7 +916,8 @@ export async function settleSovereignBondMaturity(
     Bond,
     "countryId" | "couponRate" | "totalIssued" | "restructureHaircutPercent" | "currencyCode"
   >,
-  repaymentLocal = bond.totalIssued
+  repaymentLocal = bond.totalIssued,
+  bankRepaymentLocal = 0
 ): Promise<{ amountLocal: number; currencyCode: CurrencyCode } | null> {
   if (!bond.countryId) return null;
   const budgetId = getNationalBudgetId(bond.countryId);
@@ -898,6 +929,13 @@ export async function settleSovereignBondMaturity(
   }
   if (!Number.isFinite(repaymentLocal) || repaymentLocal < 0) {
     throw new Error("Sovereign maturity requires a finite nonnegative repayment");
+  }
+  if (
+    !Number.isFinite(bankRepaymentLocal) ||
+    bankRepaymentLocal < 0 ||
+    bankRepaymentLocal > repaymentLocal
+  ) {
+    throw new Error("Bank sovereign maturity share must be within the total repayment");
   }
 
   // Net exactly this bond's outstanding contribution (face minus any restructure
@@ -919,7 +957,9 @@ export async function settleSovereignBondMaturity(
     {
       // Rollover issuance credits this same treasury. Redemption must pay its
       // holders from cash as well as retiring the bond-owned debt stock.
-      $inc: { treasuryBalance: -repaymentLocal },
+      // Bank holders receive their exact share through the guarded settlement
+      // journal. This legacy debit remains responsible for every other holder.
+      $inc: { treasuryBalance: -(repaymentLocal - bankRepaymentLocal) },
       $set: {
         debt: budgetUpdate.debt,
         spending: budgetUpdate.spending,

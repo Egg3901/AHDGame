@@ -62,6 +62,12 @@ describe("computeHouseholdConsumption — basket coverage", () => {
     expect(stateTotal(r, "S1")).toBeGreaterThan(0);
   });
 
+  it("does not treat advertising inventory as household consumption", () => {
+    const result = run([mkState()]);
+    expect(HOUSEHOLD_CONSUMER_BASKET).not.toHaveProperty("advertising");
+    expect(gd(result, "advertising")).toBe(0);
+  });
+
   it("conserves: global demand equals the sum of per-state contributions", () => {
     const r = run([mkState({ stateId: "A" }), mkState({ stateId: "B" })]);
     for (const c of Object.keys(HOUSEHOLD_CONSUMER_BASKET) as CommodityType[]) {

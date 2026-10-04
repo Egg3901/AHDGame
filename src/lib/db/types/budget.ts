@@ -435,10 +435,40 @@ export interface TreasuryAccrualReceipt {
     enforcement: number;
     rounding: number;
   };
+  /**
+   * Bank-held sovereign coupons frozen from the opening bond snapshot. The
+   * treasury cash receipt reserves this amount from aggregate debt service;
+   * a separate journaled transfer then delivers it to the same charter epoch.
+   */
+  bankCouponPlan?: Array<{
+    bankId: string;
+    charteredTurn: number;
+    amountLocal: number;
+    bondIds: string[];
+  }>;
+}
+
+/** Unpaid bank-held sovereign coupon or maturity claims remain on the issuer budget. */
+export interface BankSovereignClaim {
+  id: string;
+  kind: "coupon" | "maturity";
+  bankId: string;
+  charteredTurn: number;
+  bondId?: string;
+  bondIds?: string[];
+  countryId: string;
+  currencyCode: import("@/lib/constants/currencies").CurrencyCode;
+  amountLocal: number;
+  turn: number;
+  /** Frozen ledger timestamp so a retry recreates an identical funded witness. */
+  ledgerCreatedAt?: Date;
+  anchorRate?: number;
+  ledgerShadow?: boolean;
 }
 
 export interface FederalBudget {
   treasuryAccrual?: TreasuryAccrualReceipt;
+  bankSovereignClaims?: BankSovereignClaim[];
   _id: BudgetDocumentId;
   countryId: string;
   fiscalYear: number;

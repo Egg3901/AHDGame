@@ -46,9 +46,54 @@ export function seedPlantLedger(
 }
 
 /**
- * Add newly delivered construction to a persisted whole-plant ledger.
- * Depreciation does not call this function: it changes plant condition and
- * productive capacity, not the number of owned facilities.
+ * Atomically applies a stock delta, then derives the whole-plant ledger from the resulting stock.
+ * The second pipeline stage reads the value written by the first, so concurrent capacity deltas
+ * cannot persist a plant count seeded from a stale application snapshot.
+ */
+export function plantCapacityDeltaPipeline(
+  sectorType: CorporationType,
+  delta: number,
+  setFields: Record<string, unknown> = {}
+): Array<Record<string, unknown>> {
+  const quantum = plantSizeUnits(sectorType);
+  const stock = "$capitalStock";
+  const count = { $floor: { $divide: [stock, quantum] } };
+  return [
+    {
+      $set: {
+        capitalStock: {
+          $max: [0, { $add: [{ $ifNull: [stock, 0] }, Number.isFinite(delta) ? delta : 0] }],
+        },
+      },
+    },
+    {
+      $set: {
+        ...setFields,
+        plantCount: {
+          $cond: [{ $lte: [stock, 0] }, 0, { $cond: [{ $lt: [stock, quantum] }, 1, count] }],
+        },
+        plantUnitRemainder: {
+          $cond: [
+            { $lte: [stock, 0] },
+            0,
+            {
+              $cond: [
+                { $lt: [stock, quantum] },
+                0,
+                { $subtract: [stock, { $multiply: [count, quantum] }] },
+              ],
+            },
+          ],
+        },
+      },
+    },
+  ];
+}
+
+/**
+ * Advance the construction ledger with newly delivered capacity.
+ * Turn writers reconcile the persisted count from final capitalStock after
+ * depreciation, so this helper is only for computations before that write.
  */
 export function advancePlantLedger(input: {
   sectorType: CorporationType;
