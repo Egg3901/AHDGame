@@ -78,6 +78,7 @@ describe("POST /api/admin/heal/duplicate-sectors", () => {
         { _id: "KAN", countryId: "JP" },
       ]),
     });
+    db.collectionMocks.corporateSectors.deleteMany.mockResolvedValue({ deletedCount: 1 });
 
     const { POST } = await import("./route");
     const response = await POST();
@@ -108,7 +109,10 @@ describe("POST /api/admin/heal/duplicate-sectors", () => {
       })
     );
     expect(db.collectionMocks.corporateSectors.updateOne).toHaveBeenCalledWith(
-      { _id: keeperId },
+      {
+        _id: keeperId,
+        "constructionPropertyTransition.key": `duplicate:${keeperId.toHexString()}:${keeperId.toHexString()}`,
+      },
       expect.objectContaining({
         $set: expect.objectContaining({
           countryId: "UK",
@@ -119,7 +123,12 @@ describe("POST /api/admin/heal/duplicate-sectors", () => {
       })
     );
     expect(db.collectionMocks.corporateSectors.deleteMany).toHaveBeenCalledWith({
-      _id: { $in: [duplicateId] },
+      $or: [
+        {
+          _id: duplicateId,
+          "constructionPropertyTransition.key": `duplicate:${keeperId.toHexString()}:${duplicateId.toHexString()}`,
+        },
+      ],
     });
   });
 });
