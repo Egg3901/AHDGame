@@ -9,6 +9,7 @@ import {
   quotePrimaryUnderwritingFee,
 } from "@/lib/banking/rules/underwriting";
 import type { PrimaryUnderwritingOffer } from "@/lib/banking/underwritingTypes";
+import { capturePrimaryUnderwritingCurrencySnapshot } from "@/lib/banking/underwritingTypes";
 import { settlePrimaryUnderwritingFill } from "@/lib/banking/underwritingSettlement";
 import type { TransitionProjection } from "@/lib/banking/rules/boundary";
 import { issuanceDilutionFactorExpr } from "@/lib/corporations/shareConsolidation";
@@ -416,7 +417,15 @@ export async function POST(request: Request) {
               bankUnderwritingFunding: { $exists: false },
               bankConstructionFunding: { $exists: false },
             },
-            { projection: { _id: 1, name: 1, bankCharter: 1 } }
+            {
+              projection: {
+                _id: 1,
+                name: 1,
+                countryId: 1,
+                liquidCurrencyCode: 1,
+                bankCharter: 1,
+              },
+            }
           );
           return bank && primaryUnderwritingCharterEligible(bank.bankCharter, underwritingCurrency)
             ? bank
@@ -528,8 +537,18 @@ export async function POST(request: Request) {
           withSuperShares: ipo.superShareMultiplier !== undefined,
         })
       : null;
+    const foundingIssuerSnapshot = capturePrimaryUnderwritingCurrencySnapshot({
+      countryId: corpCountryId,
+      ...(corpHomeCurrency ? { liquidCurrencyCode: corpHomeCurrency } : {}),
+    });
+    const foundingBankSnapshot = foundingUnderwriterBank
+      ? capturePrimaryUnderwritingCurrencySnapshot(foundingUnderwriterBank)
+      : null;
     const foundingOffer: (PrimaryUnderwritingOffer & { instrumentId: ObjectId }) | null =
-      ipoResult && foundingUnderwriterBank?.bankCharter
+      ipoResult &&
+      foundingUnderwriterBank?.bankCharter &&
+      foundingIssuerSnapshot &&
+      foundingBankSnapshot
         ? {
             bankCorporationId: foundingUnderwriterBank._id,
             issuerCorporationId: corporationId,
@@ -539,8 +558,16 @@ export async function POST(request: Request) {
             instrumentType: "equity",
             instrumentId: new ObjectId(),
             originalQuoteTurn: foundedAtTurn,
+            issuerCurrencySnapshot: foundingIssuerSnapshot,
+            bankCurrencySnapshot: foundingBankSnapshot,
           }
         : null;
+    if (ipo?.underwriterCorporationId && !foundingOffer) {
+      return NextResponse.json(
+        { error: "The selected underwriter's native currency could not be frozen for this IPO" },
+        { status: 409 }
+      );
+    }
     const plannedFoundingPlacement =
       ipoResult && foundingOffer
         ? await planEquityPrimaryPlacement(
@@ -816,7 +843,7 @@ export async function POST(request: Request) {
         foundingSettlementStarted = true;
         const settlement = await settlePrimaryUnderwritingFill(db, {
           bank: foundingUnderwriterBank,
-          issuer: { _id: result.insertedId, name },
+          issuer: { _id: result.insertedId, ...corporation },
           issuerCurrencyCode: underwritingCurrency,
           offer: foundingOffer,
           instrumentId: foundingOffer.instrumentId,

@@ -112,6 +112,7 @@ function EarningsBreakdown({ data, onTreasury }: { data: ConsolePayload; onTreas
   const depositInterest = charter.lastBankingDepositInterest ?? 0;
   const loanInterest = charter.lastBankingLoanInterest ?? 0;
   const fees = charter.lastBankingLoanOriginationFees ?? 0;
+  const underwritingFees = charter.lastBankingUnderwritingFees ?? 0;
   const ibPaid = charter.lastBankingInterbankInterestPaid ?? 0;
   const ibReceived = charter.lastBankingInterbankInterestReceived ?? 0;
   const facility = charter.lastBankingFacilityInterest ?? 0;
@@ -185,6 +186,13 @@ function EarningsBreakdown({ data, onTreasury }: { data: ConsolePayload; onTreas
             value={formatBankMoney(fees, currency)}
             tooltip={t("originationFeesTooltip")}
             aboutLabel={t("about", { label: t("originationFees") })}
+          />
+          <EarningsRow
+            label="Underwriting fees"
+            detail="Funded IPO and corporate bond placements"
+            value={formatBankMoney(underwritingFees, currency)}
+            tooltip="Fees are counted only for proceeds funded by completed market fills."
+            aboutLabel="Underwriting fees"
           />
           <EarningsRow
             label="Bottom line"

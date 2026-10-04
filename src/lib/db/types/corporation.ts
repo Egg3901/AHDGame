@@ -1,5 +1,9 @@
 import type { ObjectId } from "mongodb";
-import type { ManufacturingDevelopmentCashReceiptV2 } from "@/lib/products/manufacturingProject";
+import type {
+  ManufacturingDevelopmentCashReceiptV2,
+  ManufacturingProductAdvertisingObligationV2,
+  ManufacturingProductAdvertisingReceiptV2,
+} from "@/lib/products/manufacturingProject";
 import type {
   MediaProductAdvertisingReceipt,
   MediaProductDevelopmentReceipt,
@@ -221,6 +225,13 @@ export interface Corporation {
   };
   /** Issuer-selected primary-market underwriter for future issues. */
   primaryUnderwritingMandate?: import("@/lib/banking/underwritingTypes").PrimaryUnderwritingMandate;
+  primaryUnderwritingMandateRevision?: number;
+  /** Incoming funded proceeds pin the issuer's native cash denomination until ACK. */
+  primaryUnderwritingIncomingFunding?: {
+    key: string;
+    currencySnapshot: import("@/lib/banking/underwritingTypes").PrimaryUnderwritingCurrencySnapshot;
+    turn: number;
+  };
   /** Frozen unpaid founding IPO plan. The corporation remains private until its journal publishes it. */
   foundingIpoUnderwritingPending?: {
     offer: import("@/lib/banking/underwritingTypes").PrimaryUnderwritingOffer & {
@@ -246,6 +257,27 @@ export interface Corporation {
     issuerName: string;
     poolCollection: "equityMarketPools" | "bondMarketPools";
     instrumentProjection: import("@/lib/banking/rules/boundary").TransitionProjection;
+  };
+  /** Frozen relocation-bond quote held until the matching bond and HQ update ACK. */
+  headquartersRelocationBondFunding?: {
+    operationKey: string;
+    targetStateId: string;
+    targetCountryId: CountryId;
+    turn: number;
+    relocationCostAnchor: number;
+    crossCountry: boolean;
+    relocationSpreadAnchor: number;
+    currencyCode: CurrencyCode;
+    nativeFxRate: number;
+    sourceCountryIdPresent: boolean;
+    sourceCountryId?: CountryId;
+    sourceLiquidCurrencyCodePresent: boolean;
+    sourceLiquidCurrencyCode?: CurrencyCode;
+    bondId: ObjectId;
+    preflight: import("@/lib/corporations/issueRelocationBond").RelocationBondPreflight;
+    ceoVacated: boolean;
+    ceoId?: ObjectId;
+    ceoType?: Corporation["ceoType"];
   };
   /** Cumulative fees from actually funded primary placements, by native currency. */
   bankUnderwritingIncomeByCurrency?: Partial<Record<CurrencyCode, number>>;
@@ -685,6 +717,8 @@ export interface Corporation {
   averageQuality?: number;
   /** Project-bound cash receipt written beside the R&D cash debit while product lines v2 is on. */
   manufacturingProductDevelopmentReceiptV2?: ManufacturingDevelopmentCashReceiptV2;
+  manufacturingProductAdvertisingObligationsV2?: ManufacturingProductAdvertisingObligationV2[];
+  manufacturingProductAdvertisingReceiptV2?: ManufacturingProductAdvertisingReceiptV2;
   mediaProductDevelopmentReceiptV1?: MediaProductDevelopmentReceipt;
   mediaProductAdvertisingReceiptV1?: MediaProductAdvertisingReceipt;
   /** Frozen original buyer quote, including seller allocations, until durable settlement completes. */

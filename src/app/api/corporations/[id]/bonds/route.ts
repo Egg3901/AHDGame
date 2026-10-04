@@ -830,7 +830,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       };
       const settlement = await settlePrimaryUnderwritingFill(db, {
         bank: underwritingResolution.bank,
-        issuer: { _id: corporation._id, name: corporation.name },
+        issuer: corporation,
         issuerCurrencyCode: (corpCurrencyCode ?? "USD") as CurrencyCode,
         offer: frozenOffer,
         instrumentId: insertedBondId,

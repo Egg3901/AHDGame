@@ -89,6 +89,63 @@ describe("convertCorpCurrency", () => {
     expect(db.collectionMocks.corporations).toBeUndefined();
   });
 
+  it("refuses denomination changes while funded underwriting proceeds are settling", async () => {
+    const corp = makeCorp({
+      primaryUnderwritingIncomingFunding: {
+        key: "primary-underwriting:equity:seed:31",
+        currencySnapshot: {
+          currencyCode: "JPY",
+          liquidCurrencyCodePresent: true,
+          liquidCurrencyCode: "JPY",
+          countryIdPresent: true,
+          countryId: "JP",
+        },
+        turn: 31,
+      },
+    });
+    const result = await convertCorpCurrency(
+      db as unknown as Db,
+      corp,
+      "GBP",
+      fxMap([
+        ["JPY", 130],
+        ["GBP", 0.8],
+      ]),
+      new Date(),
+      true
+    );
+    expect(result).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("Primary underwriting proceeds are settling"),
+    });
+    expect(db.collectionMocks.corporations).toBeUndefined();
+  });
+
+  it("holds a bank's denomination while its charter-epoch underwriting lease is active", async () => {
+    const corp = makeCorp({
+      bankUnderwritingFunding: {
+        key: "primary-underwriting:equity:seed:31",
+        turn: 31,
+      } as NonNullable<Corporation["bankUnderwritingFunding"]>,
+    });
+    const result = await convertCorpCurrency(
+      db as unknown as Db,
+      corp,
+      "GBP",
+      fxMap([
+        ["JPY", 130],
+        ["GBP", 0.8],
+      ]),
+      new Date(),
+      true
+    );
+    expect(result).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("Primary underwriting proceeds are settling"),
+    });
+    expect(db.collectionMocks.corporations).toBeUndefined();
+  });
+
   it("refuses a currency change before share escrow work when a sector has a secured construction claim", async () => {
     const corp = makeCorp();
     const claim = {

@@ -36,6 +36,12 @@ export function activeManufacturingProductProjectProjection() {
     startedTurn: 1,
     lastProcessedTurn: 1,
     lastDevelopmentReceiptTurn: 1,
+    advertisingAllocationShare: 1,
+    developmentAdvertisingAnchor: 1,
+    developmentAdvertisingTurns: 1,
+    lastAdvertisingReceiptTurn: 1,
+    productBrand: 1,
+    developmentCompletedTurn: 1,
     developmentPaidAnchor: 1,
     paidThresholdAnchor: 1,
     elapsedDevelopmentTurns: 1,
@@ -89,6 +95,7 @@ export async function consumeManufacturingDevelopmentReceiptsV2(input: {
     const progress = tickManufacturingProject({
       project,
       receipt: completedReceipt,
+      advertisingReceipt: corporation.manufacturingProductAdvertisingReceiptV2,
       completedTurn,
     });
     if (!progress) continue;
@@ -104,6 +111,7 @@ export async function consumeManufacturingDevelopmentReceiptsV2(input: {
           lastProcessedTurn: project.lastProcessedTurn ?? { $exists: false },
           lastDevelopmentReceiptTurn: project.lastDevelopmentReceiptTurn ?? { $exists: false },
           developmentPaidAnchor: project.developmentPaidAnchor,
+          lastAdvertisingReceiptTurn: project.lastAdvertisingReceiptTurn ?? { $exists: false },
         },
         update: {
           $set: persistedProgress,
@@ -148,6 +156,56 @@ export async function consumeManufacturingDevelopmentReceiptsV2(input: {
     }
   }
 
+  const advertisingToClear = input.corporations.flatMap((corporation) => {
+    const receipt = corporation.manufacturingProductAdvertisingReceiptV2;
+    if (!receipt || receipt.turn > (input.completedTurn ?? -1)) return [];
+    const stored = input.projectsByCorporationId.get(corporation._id.toString());
+    const orphan = !stored || stored._id !== receipt.projectId;
+    const acknowledged =
+      stored?._id === receipt.projectId && receipt.turn <= (stored.lastAdvertisingReceiptTurn ?? 0);
+    const outsideWindow =
+      stored &&
+      stored.stage !== "development" &&
+      receipt.turn > (stored.developmentCompletedTurn ?? stored.stageStartedTurn);
+    return orphan || acknowledged || outsideWindow ? [{ corporation, receipt }] : [];
+  });
+  if (advertisingToClear.length > 0) {
+    const cleared = await input.db.collection<Corporation>("corporations").bulkWrite(
+      advertisingToClear.map(({ corporation, receipt }) => ({
+        updateOne: {
+          filter: {
+            _id: corporation._id,
+            "manufacturingProductAdvertisingReceiptV2.projectId": receipt.projectId,
+            "manufacturingProductAdvertisingReceiptV2.turn": receipt.turn,
+            "manufacturingProductAdvertisingReceiptV2.amountAnchor": receipt.amountAnchor,
+          },
+          update: { $unset: { manufacturingProductAdvertisingReceiptV2: "" } },
+        },
+      })),
+      { ordered: false }
+    );
+    let clearedIds = new Set(
+      advertisingToClear.map(({ corporation }) => corporation._id.toString())
+    );
+    if (cleared.matchedCount !== advertisingToClear.length) {
+      const current = await input.db
+        .collection<Corporation>("corporations")
+        .find(
+          { _id: { $in: advertisingToClear.map(({ corporation }) => corporation._id) } },
+          { projection: { _id: 1, manufacturingProductAdvertisingReceiptV2: 1 } }
+        )
+        .toArray();
+      clearedIds = new Set(
+        current
+          .filter((corp) => !corp.manufacturingProductAdvertisingReceiptV2)
+          .map((corp) => corp._id.toString())
+      );
+    }
+    for (const { corporation } of advertisingToClear) {
+      if (clearedIds.has(corporation._id.toString()))
+        delete corporation.manufacturingProductAdvertisingReceiptV2;
+    }
+  }
   if (receiptsToClear.size === 0) return;
   const receiptOps: AnyBulkWriteOperation<Corporation>[] = [...receiptsToClear.values()].map(
     ({ corporation, receipt }) => ({

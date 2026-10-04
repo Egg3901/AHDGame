@@ -329,13 +329,17 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
                   outputCommodity: productKind.outputCommodity,
                   basePrices,
                   currentSectorQualityByCommodity: Object.fromEntries(
-                    Object.keys(rates.supply ?? {}).map((commodity) => [
+                    [
+                      ...new Set([...Object.keys(rates.supply ?? {}), productKind.outputCommodity]),
+                    ].map((commodity) => [
                       commodity,
                       lookups.productSectorQualityById?.get(sector._id.toString()),
                     ])
                   ) as Partial<Record<CommodityType, number>>,
                   paidDevelopmentAnchor: productProject.developmentPaidAnchor,
                   paidThresholdAnchor: productProject.paidThresholdAnchor,
+                  productBrand: productProject.productBrand,
+                  elapsedThresholdTurns: productProject.elapsedThresholdTurns,
                 });
               })()
             : null;

@@ -53,7 +53,7 @@ import {
   facilityInterestTransition,
   facilityInterestAmounts,
 } from "@/lib/banking/rules/facilityInterest";
-import { interbankServiceTransition } from "@/lib/banking/rules/interbankServicing";
+import { serviceOneInterbankLoan } from "@/lib/banking/serviceInterbankLoan";
 import { settleLegacyDepositInterest } from "@/lib/banking/legacyDepositInterest";
 import {
   settleTransition,
@@ -179,7 +179,16 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
   // so a flag flipped mid-turn cannot split the pass between two policies.
   const policy = await loadBankingPolicy(db);
   if (!policy.privateBanking) {
-    return { ...ZERO_SUMMARY };
+    const recovered = await recoverBankingSettlements(db, turn, policy);
+    return {
+      ...ZERO_SUMMARY,
+      recovery: {
+        resumedSettlements: recovered.resumedSettlements.length,
+        stillPartial: recovered.stillPartial.length,
+        estatesRecovered: recovered.estatesRecovered.length,
+        estatesStillResolving: recovered.estatesStillResolving.length,
+      },
+    };
   }
   const centralBankPricing = await loadCentralBankPricingAdjustment(db, turn);
 
@@ -911,6 +920,10 @@ async function processOneBank(
   // (f) Recompute aggregates + stamp lastBankingTurn (END of bank pass)
   const finalPlayerDeposits = playerDeposits + playerInterestSettled;
   const totalDeposits = finalPlayerDeposits + npcDeposits;
+  const underwritingFeesForTurn =
+    corp.bankCharter?.lastBankingUnderwritingFeesTurn === turn
+      ? (corp.bankCharter.lastBankingUnderwritingFees ?? 0)
+      : 0;
 
   await db.collection<Corporation>("corporations").updateOne(
     {
@@ -938,7 +951,8 @@ async function processOneBank(
           result.loanOriginationFeesCollected -
           result.depositInterestPaid -
           result.insurancePremiumPaid -
-          result.defaultsWrittenOff,
+          result.defaultsWrittenOff +
+          underwritingFeesForTurn,
         "bankCharter.lastBankingIncomeTurn": turn,
         // The per-turn split behind the net above, so the console can show
         // interest paid vs earned from the ledger instead of estimating.
@@ -947,6 +961,8 @@ async function processOneBank(
         "bankCharter.lastBankingDepositInterest": result.depositInterestPaid,
         "bankCharter.lastBankingLoanInterest": result.loanInterestCollected,
         "bankCharter.lastBankingLoanOriginationFees": result.loanOriginationFeesCollected,
+        "bankCharter.lastBankingUnderwritingFees": underwritingFeesForTurn,
+        "bankCharter.lastBankingUnderwritingFeesTurn": turn,
         "bankCharter.lastBankingInterbankInterestPaid": 0,
         "bankCharter.lastBankingInterbankInterestReceived": 0,
         "bankCharter.lastBankingFacilityInterest": 0,
@@ -962,7 +978,8 @@ async function processOneBank(
     result.loanOriginationFeesCollected -
     result.depositInterestPaid -
     result.insurancePremiumPaid -
-    result.defaultsWrittenOff;
+    result.defaultsWrittenOff +
+    underwritingFeesForTurn;
 
   return result;
 }
@@ -1080,12 +1097,22 @@ async function processLoanBookOnlyBank(
         // end-of-pass snapshot must not overwrite a concurrent origination,
         // repayment or collateral recovery.
         "bankCharter.lastBankingTurn": turn,
-        "bankCharter.lastBankingIncome": serviced.interestCollected - serviced.writtenOff,
+        "bankCharter.lastBankingIncome":
+          serviced.interestCollected -
+          serviced.writtenOff +
+          (charter.lastBankingUnderwritingFeesTurn === turn
+            ? (charter.lastBankingUnderwritingFees ?? 0)
+            : 0),
         "bankCharter.lastBankingIncomeTurn": turn,
         // No deposit base, so no deposit interest and no premium; the loan
         // split still applies for the console breakdown.
         "bankCharter.lastBankingDepositInterest": 0,
         "bankCharter.lastBankingLoanInterest": serviced.interestCollected,
+        "bankCharter.lastBankingUnderwritingFees":
+          charter.lastBankingUnderwritingFeesTurn === turn
+            ? (charter.lastBankingUnderwritingFees ?? 0)
+            : 0,
+        "bankCharter.lastBankingUnderwritingFeesTurn": turn,
         "bankCharter.lastBankingInterbankInterestPaid": 0,
         "bankCharter.lastBankingInterbankInterestReceived": 0,
         "bankCharter.lastBankingFacilityInterest": 0,
@@ -1929,52 +1956,4 @@ async function serviceInterbankAndCbMargin(
       }
     }
   }
-}
-
-type InterbankServiceResult = { interestPaid: number; writtenOff: number };
-
-/**
- * One turn of interbank interest, decided by the rules and landed by the
- * journal as one transition: borrower vault debit, lender vault credit and
- * the loan record's advance (or its default and the borrower's debt clear),
- * under the per-loan-per-turn key.
- */
-async function serviceOneInterbankLoan(
-  db: Db,
-  turn: number,
-  loan: InterbankLoan
-): Promise<InterbankServiceResult> {
-  const empty: InterbankServiceResult = { interestPaid: 0, writtenOff: 0 };
-  if (loan.lastProcessedTurn === turn) return empty;
-
-  const borrower = await db
-    .collection<Corporation>("corporations")
-    .findOne({ _id: loan.borrowerCorporationId }, { projection: { bankCharter: 1 } });
-  const { decision, transition } = interbankServiceTransition({
-    loan,
-    borrowerCash: getCashReserves(borrower?.bankCharter),
-    turn,
-  });
-  const settled = await settleTransition(db, transition);
-  if (settled.status === "rejected") return empty;
-  const moneyLanded =
-    transition.legs.length === 0 || settled.appliedLegs.length === transition.legs.length;
-  const advanced = settled.appliedProjections.length === transition.projections.length;
-  if (settled.status === "applied" && advanced) {
-    emitBankingAuditEvent(
-      {
-        ...transition.event,
-        turn,
-        outcome: "ok",
-        currency: loan.currency,
-        bankId: loan.borrowerCorporationId.toString(),
-        settlementId: transition.key,
-      },
-      db
-    );
-  }
-  return {
-    interestPaid: moneyLanded && settled.status === "applied" ? decision.interestPaid : 0,
-    writtenOff: advanced && settled.status === "applied" ? decision.writtenOff : 0,
-  };
 }

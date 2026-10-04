@@ -255,6 +255,7 @@ export async function returnDepositBook(
         liquidCapital: 1,
         bankConstructionFunding: 1,
         bankPrimaryFunding: 1,
+        bankUnderwritingFunding: 1,
       },
     }
   );
@@ -263,6 +264,11 @@ export async function returnDepositBook(
     return {
       ...EMPTY,
       error: "Sovereign primary funding must settle before returning bank deposits",
+    };
+  if (corp.bankUnderwritingFunding)
+    return {
+      ...EMPTY,
+      error: "Primary underwriting settlement must finish before returning bank deposits",
     };
   if (corp.bankConstructionFunding && corp.bankConstructionFunding.kind !== "returning")
     return { ...EMPTY, error: "Construction funding must settle before returning bank deposits" };
@@ -287,6 +293,7 @@ export async function returnDepositBook(
         "bankCharter.charteredTurn": corp.bankCharter.charteredTurn,
         bankConstructionFunding: { $exists: false },
         bankPrimaryFunding: { $exists: false },
+        bankUnderwritingFunding: { $exists: false },
         bankCharterTransfer: { $exists: false },
       },
       {

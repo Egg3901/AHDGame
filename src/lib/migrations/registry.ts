@@ -109,6 +109,7 @@ import { migration as bankLoanCharterEpoch } from "./entries/2026-10-04-bank-loa
 import { migration as manufacturingProductProjectsV2Index } from "./entries/2026-10-04-manufacturing-product-projects-v2-index";
 import { migration as mediaProductProjectsV1Index } from "./entries/2026-10-04-media-product-projects-v1-index";
 import { migration as bankTreasuryTradeIndexes } from "./entries/2026-10-04-bank-treasury-trade-indexes";
+import { migration as underwritingRecoveryIndexes } from "./entries/2026-10-04-underwriting-recovery-indexes";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -341,6 +342,7 @@ export const MIGRATIONS: Migration[] = [
   manufacturingProductProjectsV2Index,
   mediaProductProjectsV1Index,
   bankTreasuryTradeIndexes,
+  underwritingRecoveryIndexes,
   bankFailurePoliticsIndex,
 ];
 

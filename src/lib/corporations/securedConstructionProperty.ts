@@ -120,7 +120,11 @@ export async function reserveSectorsForTransition(
       const key = `${keyPrefix}:${sector._id.toHexString()}`;
       return (
         hasProtectedConstructionProperty(sector) &&
-        !(allowSameKeyResume && sector.constructionPropertyTransition?.key === key)
+        !(
+          allowSameKeyResume &&
+          sector.constructionPropertyTransition?.kind === kind &&
+          sector.constructionPropertyTransition.key === key
+        )
       );
     })
   )

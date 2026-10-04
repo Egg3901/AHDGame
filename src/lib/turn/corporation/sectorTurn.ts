@@ -759,13 +759,17 @@ export function processSector(
           outputCommodity: productKind.outputCommodity,
           basePrices: eraScaledBasePrices(lookups.eraUnitScale),
           currentSectorQualityByCommodity: Object.fromEntries(
-            Object.keys(strategyRates.supply ?? {}).map((commodity) => [
+            [
+              ...new Set([...Object.keys(strategyRates.supply ?? {}), productKind.outputCommodity]),
+            ].map((commodity) => [
               commodity,
               lookups.productSectorQualityById?.get(sector._id.toString()),
             ])
           ) as Partial<Record<CommodityType, number>>,
           paidDevelopmentAnchor: productProject.developmentPaidAnchor,
           paidThresholdAnchor: productProject.paidThresholdAnchor,
+          productBrand: productProject.productBrand,
+          elapsedThresholdTurns: productProject.elapsedThresholdTurns,
         })
       : null;
   // (moved to decomposePhysicalCosts: inputs bill + financial legs)

@@ -394,7 +394,7 @@ describe("processBankingTurn", () => {
     );
   });
 
-  it("is a no-op when private banking is disabled", async () => {
+  it("recovers paid underwriting receipts without running the bank pass when private banking is disabled", async () => {
     db.collectionMocks.gameConfig!.findOne.mockResolvedValue({
       _id: "default",
       privateBankingEnabled: false,
@@ -425,7 +425,14 @@ describe("processBankingTurn", () => {
         estatesStillResolving: 0,
       },
     });
-    expect(db.collectionMocks.corporations!.find).not.toHaveBeenCalled();
+    expect(db.collectionMocks.corporations!.find.mock.calls.map((call) => call[0])).toEqual([
+      { "bankUnderwritingFunding.turn": { $lt: TURN } },
+      {
+        "bankCharter.resolutionClaimedTurn": { $lt: TURN },
+        "bankCharter.depositorsResolvedTurn": { $exists: false },
+      },
+    ]);
+    expect(db.collectionMocks.centralBanks!.find).not.toHaveBeenCalled();
   });
 
   it("reads the feature policy exactly once per turn", async () => {
