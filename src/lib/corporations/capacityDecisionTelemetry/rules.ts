@@ -71,6 +71,7 @@ export type CapacityDecisionOutcome =
   | "no_telemetry"
   | "fill_below_min"
   | "state_controlled"
+  | "property_unavailable"
   | "below_minimum_order";
 
 /** Gates evaluated on the NPP founding path, earliest first. */
@@ -100,6 +101,7 @@ export type ReinvestCapacityGate = Extract<
   | "no_telemetry"
   | "fill_below_min"
   | "state_controlled"
+  | "property_unavailable"
   | "below_minimum_order"
   | "insufficient_cash"
 >;
@@ -139,6 +141,7 @@ export const REINVEST_GATE_PRECEDENCE = [
   "no_telemetry",
   "fill_below_min",
   "state_controlled",
+  "property_unavailable",
   "below_minimum_order",
   "insufficient_cash",
 ] as const satisfies readonly ReinvestCapacityGate[];

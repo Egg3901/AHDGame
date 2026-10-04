@@ -8,6 +8,11 @@ import { runTransactionWithSessionRetry } from "@/lib/db/transactionWithRetry";
 import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
 import { cancelShareOrderAndRefund } from "@/lib/corporations/cancelShareOrder";
 import { cancelShareListingAndRefund } from "@/lib/corporations/cancelShareListing";
+import {
+  hasProtectedConstructionPropertyIn,
+  reserveSectorsForTransition,
+  releaseConstructionPropertyTransition,
+} from "@/lib/corporations/securedConstructionProperty";
 
 export type ConvertCorpCurrencyResult = ConvertCorpCurrencySuccess | ConvertCorpCurrencyError;
 
@@ -91,7 +96,8 @@ export async function convertCorpCurrency(
   toCurrencyCode: CurrencyCode,
   fxByCurrency: ReadonlyMap<CurrencyCode, number>,
   now: Date,
-  forexEnabled: boolean
+  forexEnabled: boolean,
+  sectorSnapshot?: CorporateSector[]
 ): Promise<ConvertCorpCurrencyResult> {
   const fromCurrency = resolveCorpLiquidCurrencyCode(corp);
   // No-op: same currency already; nothing to change.
@@ -124,6 +130,40 @@ export async function convertCorpCurrency(
   // LOCAL_new = (LOCAL_old / fromRate) * toRate = LOCAL_old * (toRate / fromRate)
   const scale = toRate / fromRate;
 
+  // The corporation's sectors are already loaded for the currency write below.
+  // Read them before cancelling any share-market escrow so a secured plant can
+  // refuse the denomination change without first mutating unrelated accounts.
+  const sectors =
+    sectorSnapshot ??
+    (await db
+      .collection<CorporateSector>("corporateSectors")
+      .find({ corporationId: corp._id })
+      .toArray());
+  if (hasProtectedConstructionPropertyIn(sectors)) {
+    return {
+      ok: false,
+      error: "Resolve secured construction before changing the corporation's liquid currency",
+    };
+  }
+  const transitionKeys = await reserveSectorsForTransition(
+    db,
+    sectors,
+    "currency_conversion",
+    `currency:${corp._id.toHexString()}:${toCurrencyCode}`
+  );
+  if (!transitionKeys) {
+    return {
+      ok: false,
+      error: "A sector changed or acquired secured construction during currency conversion",
+    };
+  }
+  const releaseTransitions = () =>
+    Promise.all(
+      sectors.map((sector, index) =>
+        releaseConstructionPropertyTransition(db, sector._id, transitionKeys[index])
+      )
+    );
+
   // 1. Cancel open share orders — existing cancel helper reads the corp's
   //    CURRENT liquidCurrencyCode to interpret escrow/pricePerShare, so this
   //    MUST run before the currency field is rewritten. Any failure here aborts
@@ -137,6 +177,7 @@ export async function convertCorpCurrency(
   for (const order of openOrders) {
     const res = await cancelShareOrderAndRefund(db, order);
     if (!res.ok) {
+      await releaseTransitions();
       return {
         ok: false,
         // cancelShareOrderAndRefund's 503-eligible failure mode is missing
@@ -160,6 +201,7 @@ export async function convertCorpCurrency(
     // being cancelled here belong to `corp`, so we skip N redundant findOnes.
     const res = await cancelShareListingAndRefund(db, listing, now, forexEnabled, corp);
     if (!res.ok) {
+      await releaseTransitions();
       return {
         ok: false,
         rateUnavailable: res.rateUnavailable === true,
@@ -219,10 +261,6 @@ export async function convertCorpCurrency(
     revertCorpSet.ceoSalary = corp.ceoSalary;
   }
 
-  const sectors = await db
-    .collection<CorporateSector>("corporateSectors")
-    .find({ corporationId: corp._id })
-    .toArray();
   // ─── WHAT AN FX FLIP MAY AND MAY NOT TOUCH ──────────────────────────────
   // `revenue` and `currentGrowthCost` are LOCAL-currency fields, so a change of
   // the owner's currency re-denominates them. The capacity fields are not:
@@ -244,9 +282,12 @@ export async function convertCorpCurrency(
   // does not touch, so rescaling here would be both pointless and a write to a
   // field the engine owns. `currentGrowthCost` is still rescaled in every mode.
   const plantsEnabled = marketAtLeast(await getMarketSystemModeForDb(db), "plants");
-  const sectorOps: AnyBulkWriteOperation<CorporateSector>[] = sectors.map((s) => ({
+  const sectorOps: AnyBulkWriteOperation<CorporateSector>[] = sectors.map((s, index) => ({
     updateOne: {
-      filter: { _id: s._id },
+      filter: {
+        _id: s._id,
+        "constructionPropertyTransition.key": transitionKeys[index],
+      },
       update: {
         $set: {
           ...(plantsEnabled ? {} : { revenue: round2((s.revenue ?? 0) * scale) }),
@@ -256,23 +297,28 @@ export async function convertCorpCurrency(
       },
     },
   }));
-  const restoreSectorOps: AnyBulkWriteOperation<CorporateSector>[] = sectors.map((sector) => {
-    const $set: Record<string, unknown> = {};
-    const $unset: Record<string, ""> = {};
-    for (const field of ["revenue", "currentGrowthCost", "updatedAt"] as const) {
-      if (sector[field] === undefined) $unset[field] = "";
-      else $set[field] = sector[field];
-    }
-    return {
-      updateOne: {
-        filter: { _id: sector._id },
-        update: {
-          ...(Object.keys($set).length > 0 ? { $set } : {}),
-          ...(Object.keys($unset).length > 0 ? { $unset } : {}),
+  const restoreSectorOps: AnyBulkWriteOperation<CorporateSector>[] = sectors.map(
+    (sector, index) => {
+      const $set: Record<string, unknown> = {};
+      const $unset: Record<string, ""> = {};
+      for (const field of ["revenue", "currentGrowthCost", "updatedAt"] as const) {
+        if (sector[field] === undefined) $unset[field] = "";
+        else $set[field] = sector[field];
+      }
+      return {
+        updateOne: {
+          filter: {
+            _id: sector._id,
+            "constructionPropertyTransition.key": transitionKeys[index],
+          },
+          update: {
+            ...(Object.keys($set).length > 0 ? { $set } : {}),
+            ...(Object.keys($unset).length > 0 ? { $unset } : {}),
+          },
         },
-      },
-    };
-  });
+      };
+    }
+  );
 
   const applyCorpAndSectors = async (
     sessionOpts: { session?: ClientSession } = {},
@@ -356,11 +402,22 @@ export async function convertCorpCurrency(
     // Atlas always runs a replica set and gets the atomicity guarantee.
     const code = (err as MongoServerError | undefined)?.code;
     if (code === 20 || code === 263 /* IllegalOperation for sessions */) {
-      await applyCorpAndSectors({}, true);
+      try {
+        await applyCorpAndSectors({}, true);
+      } catch (fallbackError) {
+        if (!(fallbackError instanceof CorpCurrencyConversionUncertainError))
+          await releaseTransitions();
+        throw fallbackError;
+      }
     } else {
+      if (!(err instanceof CorpCurrencyConversionUncertainError)) {
+        await releaseTransitions();
+      }
       throw err;
     }
   }
+
+  await releaseTransitions();
 
   const sectorsConverted = sectors.length;
 

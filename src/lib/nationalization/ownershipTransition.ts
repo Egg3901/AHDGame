@@ -1,5 +1,6 @@
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
+import { badRequest } from "@/lib/api/errors";
 import type {
   Bond,
   CentralBank,
@@ -78,6 +79,14 @@ import { applyNationalizationConsequences } from "./consequences/apply";
 import { recordNationalizationLedger } from "./ledger";
 import type { NationalizationMethod, NationalizationTrigger } from "./consequences/types";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
+import {
+  hasProtectedConstructionProperty,
+  releaseConstructionPropertyTransition,
+  reserveSectorsForTransition,
+  unprotectedConstructionPropertyFilter,
+} from "@/lib/corporations/securedConstructionProperty";
+
+const UNOWNED_RELEASE_RETRY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
  * Politics inputs the caller supplies; the money fields (valuation, compensation,
@@ -122,7 +131,8 @@ async function absorbSectorIntoNatCorp(
   absorbedAtTurn: number,
   now: Date,
   transitionMultiplier: number,
-  plantsEnabled: boolean
+  plantsEnabled: boolean,
+  transitionKey?: string
 ): Promise<ObjectId> {
   const sectors = db.collection<CorporateSector>("corporateSectors");
   // Prior-owner provenance — captured from the donor row BEFORE it is re-parented
@@ -171,6 +181,9 @@ async function absorbSectorIntoNatCorp(
     sectorType: sector.sectorType,
     industryModel: sector.industryModel ?? null,
   });
+  if (existing && hasProtectedConstructionProperty(existing)) {
+    throw badRequest("Resolve secured construction before merging this nationalized sector");
+  }
   if (existing && !existing._id.equals(sector._id)) {
     // MERGE: the donor row is DELETED below, so anything not folded into the
     // survivor here is destroyed outright. `mergeSectorPlantFields` sums
@@ -190,8 +203,8 @@ async function absorbSectorIntoNatCorp(
           capacityBookAnchor: haircutBook,
         })
       : null;
-    await sectors.updateOne(
-      { _id: existing._id },
+    const merge = await sectors.updateOne(
+      { _id: existing._id, ...unprotectedConstructionPropertyFilter() },
       {
         $inc: {
           // Revenue merges in EVERY mode, in lockstep with the capacity fold
@@ -222,7 +235,16 @@ async function absorbSectorIntoNatCorp(
         },
       }
     );
-    await sectors.deleteOne({ _id: sector._id });
+    if (merge.matchedCount !== 1)
+      throw badRequest("The National Corporation holding became secured during the taking");
+    const remove = await sectors.deleteOne({
+      _id: sector._id,
+      ...(transitionKey
+        ? { "constructionPropertyTransition.key": transitionKey }
+        : unprotectedConstructionPropertyFilter()),
+    });
+    if (remove.deletedCount !== 1)
+      throw badRequest("The sector became secured during the nationalization");
     return existing._id;
   } else {
     // RE-PARENT: the doc itself is re-pointed, so the plant state rides along
@@ -230,8 +252,13 @@ async function absorbSectorIntoNatCorp(
     // the next tick restates `revenue` from the untouched nameplate straight
     // back to the full pre-taking figure and the transition penalty silently
     // evaporates.
-    await sectors.updateOne(
-      { _id: sector._id },
+    const reparent = await sectors.updateOne(
+      {
+        _id: sector._id,
+        ...(transitionKey
+          ? { "constructionPropertyTransition.key": transitionKey }
+          : unprotectedConstructionPropertyFilter()),
+      },
       {
         $set: {
           corporationId: destId,
@@ -254,6 +281,8 @@ async function absorbSectorIntoNatCorp(
         },
       }
     );
+    if (reparent.matchedCount !== 1)
+      throw badRequest("The sector became secured during the nationalization");
     return sector._id;
   }
 }
@@ -268,14 +297,15 @@ async function absorbSectorIntoNatCorp(
  * No transition haircut — the asset is released to the market, not operated by
  * the state. Mirrors the shed path's CorporateSector→unowned conversion.
  */
-async function releaseSectorToUnowned(
+export async function releaseForeignSectorToUnowned(
   db: Db,
   sector: CorporateSector,
   currencyCode: CurrencyCode | string | undefined,
   fxRate: number,
   now: Date,
   plantsEnabled: boolean,
-  eraUnitScale: number
+  eraUnitScale: number,
+  transitionKey: string
 ): Promise<void> {
   // PLANTS RETURNS CAPACITY, NOT FILL-DEPENDENT REVENUE.
   //
@@ -374,7 +404,9 @@ async function releaseSectorToUnowned(
       .collection<State>("states")
       .findOne({ _id: sector.stateId }, { projection: { countryId: 1 } });
     const releaseCountryId = releaseState?.countryId ?? sector.countryId;
-    await db.collection<UnownedSector>("unownedSectors").updateOne(
+    const restoreToken = sector._id.toHexString();
+    const retryWindowStart = new Date(now.getTime() - UNOWNED_RELEASE_RETRY_WINDOW_MS);
+    await db.collection<UnownedSector>("unownedSectors").findOneAndUpdate(
       {
         stateId: sector.stateId,
         sectorType: sector.sectorType,
@@ -398,16 +430,98 @@ async function releaseSectorToUnowned(
             },
             createdAt: { $ifNull: ["$createdAt", now] },
             [creditField]: {
-              $add: [
-                unownedPoolCreditBaseExpr(
-                  sectorType,
-                  plantsEnabled,
-                  eraUnitScale,
-                  sector.industryModel,
-                  sector.mediaDiscriminator
-                ),
-                creditAmount,
-              ],
+              $let: {
+                vars: {
+                  currentValue: unownedPoolCreditBaseExpr(
+                    sectorType,
+                    plantsEnabled,
+                    eraUnitScale,
+                    sector.industryModel
+                  ),
+                  recentRestores: {
+                    $filter: {
+                      input: { $ifNull: ["$recentCorporateSectorRestores", []] },
+                      as: "restore",
+                      cond: {
+                        $or: [
+                          { $eq: ["$$restore.pendingSourceDelete", true] },
+                          { $gte: ["$$restore.restoredAt", retryWindowStart] },
+                        ],
+                      },
+                    },
+                  },
+                },
+                in: {
+                  $let: {
+                    vars: {
+                      recentRestoreIds: {
+                        $map: {
+                          input: "$$recentRestores",
+                          as: "restore",
+                          in: "$$restore.sectorId",
+                        },
+                      },
+                    },
+                    in: {
+                      $cond: [
+                        { $in: [restoreToken, "$$recentRestoreIds"] },
+                        "$$currentValue",
+                        { $add: ["$$currentValue", creditAmount] },
+                      ],
+                    },
+                  },
+                },
+              },
+            },
+            recentCorporateSectorRestores: {
+              $let: {
+                vars: {
+                  recentRestores: {
+                    $filter: {
+                      input: { $ifNull: ["$recentCorporateSectorRestores", []] },
+                      as: "restore",
+                      cond: {
+                        $or: [
+                          { $eq: ["$$restore.pendingSourceDelete", true] },
+                          { $gte: ["$$restore.restoredAt", retryWindowStart] },
+                        ],
+                      },
+                    },
+                  },
+                },
+                in: {
+                  $let: {
+                    vars: {
+                      recentRestoreIds: {
+                        $map: {
+                          input: "$$recentRestores",
+                          as: "restore",
+                          in: "$$restore.sectorId",
+                        },
+                      },
+                    },
+                    in: {
+                      $cond: [
+                        { $in: [restoreToken, "$$recentRestoreIds"] },
+                        "$$recentRestores",
+                        {
+                          $concatArrays: [
+                            "$$recentRestores",
+                            [
+                              {
+                                sectorId: restoreToken,
+                                restoredAt: now,
+                                pendingSourceDelete: true,
+                                operationKey: transitionKey,
+                              },
+                            ],
+                          ],
+                        },
+                      ],
+                    },
+                  },
+                },
+              },
             },
             updatedAt: now,
           },
@@ -422,10 +536,65 @@ async function releaseSectorToUnowned(
           ),
         },
       ],
-      { upsert: true }
+      { upsert: true, returnDocument: "before" }
     );
+    // The returned preimage acknowledges the atomic pool update. The stable
+    // source-sector receipt makes a retry a no-op if a crash lands before the
+    // guarded source deletion below.
   }
-  await db.collection<CorporateSector>("corporateSectors").deleteOne({ _id: sector._id });
+  const removed = await db.collection<CorporateSector>("corporateSectors").deleteOne({
+    _id: sector._id,
+    "constructionPropertyTransition.key": transitionKey,
+  });
+  if (removed.deletedCount !== 1)
+    throw badRequest("The sector transition reservation was lost during release");
+  if (revenueAnchor > 0) {
+    const acknowledged = await db.collection<UnownedSector>("unownedSectors").findOneAndUpdate(
+      {
+        stateId: sector.stateId,
+        sectorType: sector.sectorType,
+        ...(sector.industryModel != null || sector.sectorType === "manufacturing"
+          ? { industryModel: sector.industryModel ?? null }
+          : {}),
+        recentCorporateSectorRestores: {
+          $elemMatch: {
+            sectorId: sector._id.toHexString(),
+            operationKey: transitionKey,
+            pendingSourceDelete: true,
+          },
+        },
+      },
+      [
+        {
+          $set: {
+            recentCorporateSectorRestores: {
+              $map: {
+                input: { $ifNull: ["$recentCorporateSectorRestores", []] },
+                as: "restore",
+                in: {
+                  $cond: [
+                    {
+                      $and: [
+                        { $eq: ["$$restore.sectorId", sector._id.toHexString()] },
+                        { $eq: ["$$restore.operationKey", transitionKey] },
+                        { $eq: ["$$restore.pendingSourceDelete", true] },
+                      ],
+                    },
+                    { $mergeObjects: ["$$restore", { pendingSourceDelete: false }] },
+                    "$$restore",
+                  ],
+                },
+              },
+            },
+            updatedAt: now,
+          },
+        },
+      ],
+      { returnDocument: "before" }
+    );
+    if (!acknowledged)
+      throw new Error("The unowned pool did not acknowledge the completed sector release");
+  }
 }
 
 // ── Single-sector absorption ──────────────────────────────────────────────────
@@ -470,20 +639,25 @@ export async function nationalizeSector(
 
   const sector = await sectors.findOne({ _id: params.sectorId });
   if (!sector) throw new Error("Sector not found");
+  if (hasProtectedConstructionProperty(sector)) {
+    throw badRequest("Resolve secured construction before nationalizing this sector");
+  }
 
   const donor = await corps.findOne({ _id: sector.corporationId });
   if (!donor) throw new Error("Donor corporation not found");
 
   // Route to the NatCorp that owns this sector type (split-off if one claims it,
   // else the primary). Future takings of a split-off type land in the right corp.
-  const nationalCorp = sector.industryModel
-    ? await resolveNationalCorporationForSector(
-        db,
-        params.countryId,
-        sector.sectorType,
-        sector.industryModel
-      )
-    : await resolveNationalCorporationForSector(db, params.countryId, sector.sectorType);
+  const nationalCorp =
+    sector.industryModel || sector.mediaDiscriminator
+      ? await resolveNationalCorporationForSector(
+          db,
+          params.countryId,
+          sector.sectorType,
+          sector.industryModel,
+          sector.mediaDiscriminator
+        )
+      : await resolveNationalCorporationForSector(db, params.countryId, sector.sectorType);
 
   // Valuation in ₳ via the canonical sector NPV (going-concern, growth-cost-net).
   const [centralBanks, fxByCurrency, donorFxRate, marketMode, gameState] = await Promise.all([
@@ -655,13 +829,26 @@ export async function nationalizeWholeCorp(
     throw new Error("Cannot nationalize a state-owned corporation");
   }
 
+  const targetSectors = await sectors.find({ corporationId: target._id }).toArray();
+  const transitionKeys = await reserveSectorsForTransition(
+    db,
+    targetSectors,
+    "nationalization",
+    `nationalize:${new ObjectId().toHexString()}`
+  );
+  if (!transitionKeys) {
+    throw badRequest("Resolve secured construction before nationalizing this corporation");
+  }
+  const transitionKeyBySectorId = new Map(
+    targetSectors.map((sector, index) => [sector._id.toHexString(), transitionKeys[index]])
+  );
+
   // The primary NatCorp is the bond-assumption target + the canonical return.
   // Individual sectors may route to split-offs (resolved per type below).
   const nationalCorp = await ensurePrimaryNationalCorporation(db, params.countryId);
 
   // ── 1. Capture valuation inputs BEFORE moving sectors/bonds (₳). ──
   const [
-    targetSectors,
     targetBonds,
     heldStakes,
     centralBanks,
@@ -670,7 +857,6 @@ export async function nationalizeWholeCorp(
     marketMode,
     corpGameState,
   ] = await Promise.all([
-    sectors.find({ corporationId: target._id }).toArray(),
     bonds.find({ corporationId: target._id, matured: false }).toArray(),
     corps
       .find(
@@ -826,17 +1012,19 @@ export async function nationalizeWholeCorp(
 
   const destByType = new Map<string, ObjectId>();
   for (const s of domesticSectors) {
-    const modelKey = `${s.sectorType}:${s.industryModel ?? ""}`;
+    const modelKey = `${s.sectorType}:${s.industryModel ?? ""}:${s.mediaDiscriminator ?? ""}`;
     let destId = destByType.get(modelKey);
     if (!destId) {
-      const dest = s.industryModel
-        ? await resolveNationalCorporationForSector(
-            db,
-            params.countryId,
-            s.sectorType,
-            s.industryModel
-          )
-        : await resolveNationalCorporationForSector(db, params.countryId, s.sectorType);
+      const dest =
+        s.industryModel || s.mediaDiscriminator
+          ? await resolveNationalCorporationForSector(
+              db,
+              params.countryId,
+              s.sectorType,
+              s.industryModel,
+              s.mediaDiscriminator
+            )
+          : await resolveNationalCorporationForSector(db, params.countryId, s.sectorType);
       destId = dest._id;
       destByType.set(modelKey, destId);
     }
@@ -847,20 +1035,22 @@ export async function nationalizeWholeCorp(
       params.consequence.turn,
       now,
       transitionMultiplier,
-      corpPlantsEnabled
+      corpPlantsEnabled,
+      transitionKeyBySectorId.get(s._id.toHexString())!
     );
   }
   for (const s of foreignSectors) {
     // A foreign sector's revenue is stored in ITS host-state currency, not the
     // (donor) corp's — convert to the ₳-native unowned pool at the host rate.
-    await releaseSectorToUnowned(
+    await releaseForeignSectorToUnowned(
       db,
       s,
       resolveSectorHostCurrencyCode(s, target),
       fxRateForSectorHostFromMap(s, target, fxByCurrency),
       now,
       corpPlantsEnabled,
-      corpEraUnitScale
+      corpEraUnitScale,
+      transitionKeyBySectorId.get(s._id.toHexString())!
     );
   }
 
@@ -885,6 +1075,17 @@ export async function nationalizeWholeCorp(
     deletedAt: now,
   });
   await deleteDissolvedCorporation(db, target._id, ledger, now, "ownershipTransition:dissolve");
+  // Keep every reservation through compensation, asset transfer, share/bond
+  // settlement, and shell deletion. Only release after ownership is final.
+  await Promise.all(
+    targetSectors.map((sector) =>
+      releaseConstructionPropertyTransition(
+        db,
+        sector._id,
+        transitionKeyBySectorId.get(sector._id.toHexString())!
+      )
+    )
+  );
 
   // Politics + investor-confidence (spec §12). `target` + `targetSectors` are
   // still in scope here (captured before the shell was deleted), so the foreign

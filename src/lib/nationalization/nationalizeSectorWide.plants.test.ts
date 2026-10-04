@@ -132,6 +132,8 @@ describe("nationalizeSectorWide — plants capacity conservation", () => {
     });
     db.collectionMocks.corporateSectors.findOne.mockResolvedValue(null);
     db.collectionMocks.corporateSectors.find.mockReturnValue(cursor([donorSector()]));
+    db.collectionMocks.corporateSectors.updateOne.mockResolvedValue({ matchedCount: 1 });
+    db.collectionMocks.corporateSectors.deleteOne.mockResolvedValue({ deletedCount: 1 });
   });
 
   async function run(carveFraction: number) {
@@ -150,7 +152,9 @@ describe("nationalizeSectorWide — plants capacity conservation", () => {
   /** The donor shrink write. */
   const donorSet = () =>
     (db.collectionMocks.corporateSectors.updateOne.mock.calls as UpdateCall[]).find(
-      (c) => String(c[0]._id) === String(donorSectorId)
+      (c) =>
+        String(c[0]._id) === String(donorSectorId) &&
+        (c[1].$set?.capitalStock !== undefined || c[1].$set?.revenue !== undefined)
     )![1].$set!;
 
   // ── (a) below plants: nothing changes ──
@@ -232,9 +236,30 @@ describe("nationalizeSectorWide — plants capacity conservation", () => {
         consequence.turn
       )
     ).toBe(90);
-    expect(db.collectionMocks.corporateSectors.deleteOne).toHaveBeenCalledWith({
-      _id: donorSectorId,
-    });
+    expect(db.collectionMocks.corporateSectors.deleteOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        _id: donorSectorId,
+        "constructionPropertyTransition.key": expect.stringContaining("nationalize-sector-wide"),
+      })
+    );
+  });
+
+  it("leaves a sector with an active construction claim untouched", async () => {
+    const pledged = {
+      ...donorSector(),
+      constructionFinancing: {
+        claimId: "funded-build-1",
+        status: "awaiting_approval",
+        escrowLocal: 0,
+      },
+    };
+    db.collectionMocks.corporateSectors.find.mockReturnValue(cursor([pledged]));
+
+    const result = await run(1);
+
+    expect(result.sectorsCarved).toBe(0);
+    expect(db.collectionMocks.corporateSectors.deleteOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.corporateSectors.updateOne).not.toHaveBeenCalled();
   });
 
   it("folds into an existing NatCorp row by summing capacity", async () => {

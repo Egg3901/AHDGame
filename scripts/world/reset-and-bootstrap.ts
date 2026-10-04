@@ -48,7 +48,7 @@ async function main() {
   // meaningful with the historical bootstrap; ignored for --mode=vacant.
   //
   // Neither flag given => undefined => resetAndBootstrapGameWorld applies the
-  // preset default (1953-default founds; every other preset does not).
+  // preset + starting-party default (1953/1979 found; 1991 founds when partyless).
   const preIteration = hasFlag("--pre-iteration")
     ? true
     : hasFlag("--no-pre-iteration")
@@ -57,9 +57,8 @@ async function main() {
 
   // Mirrors resolution inside resetAndBootstrapGameWorld — for logging only.
   const foundingEffective =
-    startingParties !== "none" &&
     mode === "historical" &&
-    (preIteration ?? presetDefaultsToFoundingPhase(preset));
+    (preIteration ?? presetDefaultsToFoundingPhase(preset, startingParties ?? "default"));
 
   const db = await connectDb(databaseName);
   try {

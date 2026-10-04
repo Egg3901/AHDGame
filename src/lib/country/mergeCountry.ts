@@ -20,8 +20,8 @@
  * reverse order would retire a country that still owned regions, stranding them
  * in a state nothing enumerates.
  */
-import type { Db } from "mongodb";
-import type { Corporation, State } from "@/lib/db/types";
+import { ObjectId, type Db } from "mongodb";
+import type { Corporation, CorporateSector, State } from "@/lib/db/types";
 import type { BillStatus } from "@/lib/db/types/legislation";
 import type { CountryGameState } from "@/lib/db/types/gameState";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -38,6 +38,10 @@ import { loadFxScalePair } from "@/lib/country/mergeFxScale";
 import { convertCorpCurrency } from "@/lib/corporations/convertCorpCurrency";
 import { isMember } from "@/lib/internationalOrganizations/service";
 import { removeOrganizationMembership } from "@/lib/internationalOrganizations/withdrawalBills";
+import {
+  releaseConstructionPropertyTransition,
+  reserveSectorsForTransition,
+} from "@/lib/corporations/securedConstructionProperty";
 import {
   INTELLIGENCE_AGENCIES,
   INTELLIGENCE_COVERAGE,
@@ -507,16 +511,44 @@ async function mergeNationalCorporations(
   const survivor = await corps.findOne({ _id: survivorId });
   if (!survivor) return;
   const absorbed = await corps.find({ _id: { $in: absorbedIds } }).toArray();
+  const absorbedSectors = await db
+    .collection<CorporateSector>("corporateSectors")
+    .find({ corporationId: { $in: absorbedIds } })
+    .toArray();
+  const transitionKeys = await reserveSectorsForTransition(
+    db,
+    absorbedSectors,
+    "country_national_corporation_merge",
+    `country-merge:${fromCountryId}:${toCountryId}:${now.getTime()}`
+  );
+  if (!transitionKeys) {
+    throw new Error("Resolve secured construction before consolidating National Corporations");
+  }
+  const transitionKeyBySectorId = new Map(
+    absorbedSectors.map((sector, index) => [sector._id.toHexString(), transitionKeys[index]])
+  );
+  const movedSectorIds: ObjectId[] = [];
 
   for (const shell of absorbed) {
     if (String(shell._id) === String(survivor._id)) continue;
 
-    await db
-      .collection("corporateSectors")
-      .updateMany(
-        { corporationId: shell._id },
+    for (const sector of absorbedSectors.filter(
+      (row) => row.corporationId.toString() === shell._id.toString()
+    )) {
+      const transitionKey = transitionKeyBySectorId.get(sector._id.toHexString());
+      if (!transitionKey) throw new Error("A secured sector reservation was lost");
+      const moved = await db.collection<CorporateSector>("corporateSectors").updateOne(
+        {
+          _id: sector._id,
+          corporationId: shell._id,
+          "constructionPropertyTransition.key": transitionKey,
+        },
         { $set: { corporationId: survivor._id, updatedAt: now } }
       );
+      if (moved.matchedCount !== 1)
+        throw new Error("A sector changed during National Corporation consolidation");
+      movedSectorIds.push(sector._id);
+    }
     await db
       .collection("bonds")
       .updateMany(
@@ -553,6 +585,16 @@ async function mergeNationalCorporations(
       );
     }
   }
+
+  await Promise.all(
+    movedSectorIds.map((sectorId) =>
+      releaseConstructionPropertyTransition(
+        db,
+        sectorId,
+        transitionKeyBySectorId.get(sectorId.toHexString())!
+      )
+    )
+  );
 }
 
 /**

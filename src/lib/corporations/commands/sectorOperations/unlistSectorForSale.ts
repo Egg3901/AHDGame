@@ -52,13 +52,23 @@ export async function unlistSectorForSale(_request: Request, { params }: RoutePa
       );
     }
 
-    await db.collection<CorporateSector>("corporateSectors").updateOne(
-      { _id: sector._id, corporationId: corporation._id },
+    const unlisted = await db.collection<CorporateSector>("corporateSectors").updateOne(
+      {
+        _id: sector._id,
+        corporationId: corporation._id,
+        constructionPropertyTransition: { $exists: false },
+        "constructionFinancing.foreclosure": { $exists: false },
+      },
       {
         $unset: { forSale: "" },
         $set: { updatedAt: new Date() },
       }
     );
+    if (unlisted.matchedCount === 0)
+      return NextResponse.json(
+        { error: "The listing belongs to a secured recovery or owner transition." },
+        { status: 409 }
+      );
 
     return NextResponse.json({ success: true });
   } catch (error) {

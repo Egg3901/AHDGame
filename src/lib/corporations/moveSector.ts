@@ -10,6 +10,10 @@ import {
 } from "@/lib/constants/capacityEconomy";
 import type { SectorBuildOrder } from "@/lib/db/types";
 import { mergeSectorPlantFields } from "@/lib/corporations/sectorTransferCapex";
+import {
+  hasProtectedConstructionProperty,
+  unprotectedConstructionPropertyFilter,
+} from "@/lib/corporations/securedConstructionProperty";
 
 /**
  * Move one operating sector to `destCorpId`, re-denominating its revenue + growth
@@ -32,6 +36,9 @@ export async function moveSectorToCorp(
   destFxRate: number,
   now: Date
 ): Promise<void> {
+  if (hasProtectedConstructionProperty(sector)) {
+    throw new Error("A sector with secured construction cannot change ownership yet");
+  }
   const sectors = db.collection<CorporateSector>("corporateSectors");
   const revenueAnchor = readCorpEconomicAnchor(sector.revenue ?? 0, srcCurrency, srcFxRate);
   const growthCostAnchor = readCorpEconomicAnchor(
@@ -65,6 +72,9 @@ export async function moveSectorToCorp(
   const plantsEnabled = marketAtLeast(await getMarketSystemModeForDb(db), "plants");
 
   if (existing && !existing._id.equals(sector._id)) {
+    if (hasProtectedConstructionProperty(existing)) {
+      throw new Error("The destination sector has secured construction and cannot be merged");
+    }
     if (plantsEnabled) {
       const ratio = capacityRescaleRatio(
         sector.sectorType as CorporationType,
@@ -118,8 +128,8 @@ export async function moveSectorToCorp(
           legacyRevenueShadow: sector.legacyRevenueShadow,
         }
       );
-      await sectors.updateOne(
-        { _id: existing._id },
+      const mergedSurvivor = await sectors.updateOne(
+        { _id: existing._id, ...unprotectedConstructionPropertyFilter() },
         {
           // Workers are recomputed from capacity next turn under plants, so the
           // headcount merge is informational only — kept so the row is not
@@ -134,11 +144,20 @@ export async function moveSectorToCorp(
           },
         }
       );
-      await sectors.deleteOne({ _id: sector._id });
+      if (mergedSurvivor.matchedCount !== 1)
+        throw new Error(
+          "The destination sector became secured before the ownership merge completed"
+        );
+      const removed = await sectors.deleteOne({
+        _id: sector._id,
+        ...unprotectedConstructionPropertyFilter(),
+      });
+      if (removed.deletedCount !== 1)
+        throw new Error("The source sector became secured before the ownership merge completed");
       return;
     }
-    await sectors.updateOne(
-      { _id: existing._id },
+    const mergedSurvivor = await sectors.updateOne(
+      { _id: existing._id, ...unprotectedConstructionPropertyFilter() },
       {
         $inc: {
           // PLANTS-GATED: unreachable under plants — the branch above returns
@@ -150,10 +169,17 @@ export async function moveSectorToCorp(
         $set: { updatedAt: now },
       }
     );
-    await sectors.deleteOne({ _id: sector._id });
+    if (mergedSurvivor.matchedCount !== 1)
+      throw new Error("The destination sector became secured before the ownership merge completed");
+    const removed = await sectors.deleteOne({
+      _id: sector._id,
+      ...unprotectedConstructionPropertyFilter(),
+    });
+    if (removed.deletedCount !== 1)
+      throw new Error("The source sector became secured before the ownership merge completed");
   } else {
-    await sectors.updateOne(
-      { _id: sector._id },
+    const moved = await sectors.updateOne(
+      { _id: sector._id, ...unprotectedConstructionPropertyFilter() },
       {
         $set: {
           corporationId: destCorpId,
@@ -164,5 +190,7 @@ export async function moveSectorToCorp(
         $unset: { forSale: "" },
       }
     );
+    if (moved.matchedCount !== 1)
+      throw new Error("The sector became secured before its ownership transfer completed");
   }
 }

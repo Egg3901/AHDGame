@@ -32,9 +32,14 @@ const NO_COUNTS = {
  * every merge path reports the same message. Returns null when clear.
  */
 export function bankTransferConflict(
-  target: Pick<Corporation, "name" | "bankCharter" | "bankSovereignEscrows" | "bankPropForexFee">,
+  target: Pick<
+    Corporation,
+    "name" | "bankCharter" | "bankSovereignEscrows" | "bankPropForexFee" | "bankConstructionFunding"
+  >,
   acquirer: Pick<Corporation, "name" | "bankCharter">
 ): string | null {
+  if (target.bankConstructionFunding)
+    return `Cannot merge ${target.name} while construction funding or deposit return is settling.`;
   if (target.bankPropForexFee) return `Cannot merge ${target.name} while a forex fee is settling.`;
   if (hasFundedSovereignEscrow(target)) {
     return `Cannot merge ${target.name} while funded sovereign bank payments remain unsettled.`;
@@ -332,6 +337,7 @@ export async function transferBankCharterToAcquirer(
           bankCharter: 1,
           bankSovereignEscrows: 1,
           bankPropForexFee: 1,
+          bankConstructionFunding: 1,
           bankCharterTransfer: 1,
         },
       }
@@ -342,6 +348,11 @@ export async function transferBankCharterToAcquirer(
     ),
   ]);
   if (!target) return { ok: false, error: "Target corporation no longer exists" };
+  if (target.bankConstructionFunding)
+    return {
+      ok: false,
+      error: "Construction funding or deposit return must settle before a charter transfer",
+    };
   if (target.bankPropForexFee)
     return { ok: false, error: "Forex fee settlement must finish before a charter transfer" };
   if (!acquirer) return { ok: false, error: "Acquiring corporation no longer exists" };
@@ -458,7 +469,11 @@ export async function transferBankCharterToAcquirer(
   let owned: string | null = null;
   let pendingOrphans: CharterTransferOrphan[] = [];
   const stamp = await corps.updateOne(
-    { _id: targetId, bankCharterTransfer: { $exists: false } },
+    {
+      _id: targetId,
+      bankCharterTransfer: { $exists: false },
+      bankConstructionFunding: { $exists: false },
+    },
     { $set: { bankCharterTransfer: stampPlan, updatedAt: now } }
   );
   if (stamp.modifiedCount === 1) {
@@ -546,7 +561,11 @@ export async function transferBankCharterToAcquirer(
       // Plan vanished under us (winner completed and cleared, or a rollback);
       // one restamp decides it.
       const restamp = await corps.updateOne(
-        { _id: targetId, bankCharterTransfer: { $exists: false } },
+        {
+          _id: targetId,
+          bankCharterTransfer: { $exists: false },
+          bankConstructionFunding: { $exists: false },
+        },
         { $set: { bankCharterTransfer: stampPlan, updatedAt: now } }
       );
       if (restamp.modifiedCount === 1) owned = attemptId;

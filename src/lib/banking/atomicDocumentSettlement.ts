@@ -100,6 +100,7 @@ export async function settleAtomicDocumentTransition(
   if (
     !transition.projections.length ||
     !projection?.update ||
+    projection.pipelineUpdate ||
     !projection.filter ||
     projection.insert
   )
@@ -109,7 +110,11 @@ export async function settleAtomicDocumentTransition(
       .slice(1)
       .some(
         (item) =>
-          item.collection !== "financialTxLog" || !item.insert?._id || item.update || item.filter
+          item.collection !== "financialTxLog" ||
+          !item.insert?._id ||
+          item.update ||
+          item.pipelineUpdate ||
+          item.filter
       )
   )
     return bad("Atomic follow-up projections must be financial transaction inserts with fixed ids");

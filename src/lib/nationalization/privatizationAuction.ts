@@ -34,6 +34,10 @@ import { snapshotCorporationCurrency } from "@/lib/ledger/balanceSnapshot";
 import { applyPrivatizationConsequences } from "./consequences/apply";
 import { recordNationalizationLedger } from "./ledger";
 import { notifyCountryResidents } from "./privatizationNotifications";
+import {
+  releaseConstructionPropertyTransition,
+  reserveSectorsForTransition,
+} from "@/lib/corporations/securedConstructionProperty";
 
 /**
  * Witness escrow cash that landed on a bidder: a bid moves it into escrow, and a
@@ -262,6 +266,17 @@ export async function reabsorbSpunOutCorp(
   const now = new Date();
   const sectors = db.collection<CorporateSector>("corporateSectors");
   const shellSectors = await sectors.find({ corporationId: shell._id }).toArray();
+  const transitionKeys = await reserveSectorsForTransition(
+    db,
+    shellSectors,
+    "privatization_reabsorption",
+    `reabsorb:${shell._id.toHexString()}:${turn}`
+  );
+  if (!transitionKeys)
+    throw new Error("Resolve secured construction before reabsorbing this corporation");
+  const transitionKeyBySectorId = new Map(
+    shellSectors.map((sector, index) => [sector._id.toHexString(), transitionKeys[index]])
+  );
 
   // Route each sector back to the NatCorp that owns its type.
   const destByType = new Map<string, ObjectId>();
@@ -284,10 +299,20 @@ export async function reabsorbSpunOutCorp(
     idsByDest.set(key, [...(idsByDest.get(key) ?? []), s._id]);
   }
   for (const [destKey, ids] of idsByDest) {
-    await sectors.updateMany(
-      { _id: { $in: ids } },
-      { $set: { corporationId: new ObjectId(destKey), absorbedAtTurn: turn, updatedAt: now } }
-    );
+    for (const sectorId of ids) {
+      const transitionKey = transitionKeyBySectorId.get(sectorId.toHexString());
+      if (!transitionKey) throw new Error("A secured sector reservation was lost");
+      const moved = await sectors.updateOne(
+        {
+          _id: sectorId,
+          corporationId: shell._id,
+          "constructionPropertyTransition.key": transitionKey,
+        },
+        { $set: { corporationId: new ObjectId(destKey), absorbedAtTurn: turn, updatedAt: now } }
+      );
+      if (moved.matchedCount !== 1)
+        throw new Error("A sector changed during the National Corporation reabsorption");
+    }
   }
 
   // Residual cash → the primary NatCorp (money conservation).
@@ -327,6 +352,15 @@ export async function reabsorbSpunOutCorp(
     ledger,
     now,
     "privatizationAuction:dissolveShell"
+  );
+  await Promise.all(
+    shellSectors.map((sector) =>
+      releaseConstructionPropertyTransition(
+        db,
+        sector._id,
+        transitionKeyBySectorId.get(sector._id.toHexString())!
+      )
+    )
   );
 }
 
