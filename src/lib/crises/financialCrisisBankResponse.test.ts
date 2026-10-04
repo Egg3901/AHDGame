@@ -210,21 +210,17 @@ describe("funded financial crisis interventions", () => {
         { _id: id },
         { $set: { "bankCharter.status": "failed", "bankCharter.failedTurn": 51 } }
       );
-    const cashPolicy = resolveBankingPolicy({
-      privateBankingEnabled: true,
-      treasuryCashLedgerEnabled: true,
-    });
     expect(
-      await processFinancialCrisisGuarantees(db as unknown as Db, 51 + TURNS_PER_YEAR, cashPolicy)
+      await processFinancialCrisisGuarantees(db as unknown as Db, 51 + TURNS_PER_YEAR, policy)
     ).toEqual({ paid: 150, refunded: 50 });
     const budget = await ctx.db.collection("federalBudget").findOne({ countryId: "US" });
     expect(budget?.treasuryCashLocal).toBe(850);
     expect(budget?.treasuryBalance).toBe(3_850);
     expect(
-      await processFinancialCrisisGuarantees(db as unknown as Db, 52 + TURNS_PER_YEAR, cashPolicy)
+      await processFinancialCrisisGuarantees(db as unknown as Db, 52 + TURNS_PER_YEAR, policy)
     ).toEqual({ paid: 0, refunded: 0 });
   });
-  it("cannot pay an unfunded legacy guarantee", async () => {
+  it("fails closed on legacy escrow without a funding witness", async () => {
     const { db, id } = world("resolve");
     await db.collection("corporations").updateOne(
       { _id: id },
@@ -247,6 +243,33 @@ describe("funded financial crisis interventions", () => {
         countryId: "US",
       },
     ]);
+    db.seed("bankMoneyMoves", [
+      {
+        _id: "legacy",
+        kind: "financial_crisis_guarantee",
+        currency: "USD",
+        turn: 10,
+        status: "applied",
+        legs: [
+          {
+            kind: "debit",
+            amount: 200,
+            collection: "federalBudget",
+            filter: { _id: "national-budget-us", countryId: "US" },
+            path: "treasuryBalance",
+            applied: true,
+          },
+          {
+            kind: "credit",
+            amount: 200,
+            collection: "bankGuarantees",
+            filter: { _id: "a-different-guarantee" },
+            path: "escrowBalance",
+            applied: true,
+          },
+        ],
+      },
+    ]);
     expect(await processFinancialCrisisGuarantees(db as unknown as Db, 51, policy)).toEqual({
       paid: 0,
       refunded: 0,
@@ -255,9 +278,80 @@ describe("funded financial crisis interventions", () => {
     expect(legacy?.escrowBalance).toBe(150);
     expect(await processFinancialCrisisGuarantees(db as unknown as Db, 61, policy)).toEqual({
       paid: 0,
+      refunded: 0,
+    });
+    const treasury = await db.collection("federalBudget").findOne({ countryId: "US" });
+    expect(treasury?.treasuryBalance).toBe(1000);
+  });
+  it("refunds legacy escrow only from its journaled source and matching native currency", async () => {
+    const { db } = world("resolve");
+    db.seed("bankGuarantees", [
+      {
+        _id: "legacy-funded",
+        crisisActionId: "legacy-funded",
+        status: "active",
+        countryId: "US",
+        currency: "USD",
+        bankIds: [],
+        escrowBalance: 150,
+        expiresTurn: 60,
+      },
+    ]);
+    db.seed("bankMoneyMoves", [
+      {
+        _id: "legacy-funded",
+        kind: "financial_crisis_guarantee",
+        currency: "USD",
+        turn: 10,
+        status: "applied",
+        legs: [
+          {
+            kind: "debit",
+            amount: 200,
+            collection: "federalBudget",
+            filter: { _id: "national-budget-us", countryId: "US" },
+            path: "treasuryBalance",
+            applied: true,
+            note: "Original Treasury funding",
+          },
+          {
+            kind: "credit",
+            amount: 200,
+            collection: "bankGuarantees",
+            filter: { _id: "legacy-funded" },
+            path: "escrowBalance",
+            applied: true,
+            note: "Original escrow funding",
+          },
+        ],
+      },
+    ]);
+    await db
+      .collection("federalBudget")
+      .updateOne({ countryId: "US" }, { $set: { currencyCode: "EUR" } });
+    expect(await processFinancialCrisisGuarantees(db as unknown as Db, 61, policy)).toEqual({
+      paid: 0,
+      refunded: 0,
+    });
+    await db
+      .collection("federalBudget")
+      .updateOne({ countryId: "US" }, { $set: { currencyCode: "USD" } });
+    const changedPolicy = resolveBankingPolicy({
+      privateBankingEnabled: true,
+      treasuryCashLedgerEnabled: true,
+    });
+    expect(await processFinancialCrisisGuarantees(db as unknown as Db, 62, changedPolicy)).toEqual({
+      paid: 0,
       refunded: 150,
     });
     const treasury = await db.collection("federalBudget").findOne({ countryId: "US" });
     expect(treasury?.treasuryBalance).toBe(1150);
+    expect(treasury?.treasuryCashLocal).toBe(0);
+    const refund = db
+      .collection("bankMoneyMoves")
+      .docs.find((row) => row.kind === "financial_crisis_guarantee_refund") as unknown as {
+      legs: { filter: Record<string, unknown> }[];
+    };
+    expect(refund.legs[1]?.filter.currencyCode).toEqual({ $exists: true, $eq: "USD" });
   });
 });
