@@ -132,9 +132,7 @@ export function RegionApprovalClient({
 
             <div className="rounded-xl border border-card-border bg-card p-6 shadow-panel">
               <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
-                <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">
-                  Active Effects
-                </h2>
+                <h2 className="text-sm font-semibold text-muted">Active effects</h2>
                 {modifiers.length > 0 && (
                   <div className="flex gap-4 text-right text-xs">
                     <div>

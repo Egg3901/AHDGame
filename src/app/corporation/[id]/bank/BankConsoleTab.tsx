@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useReducer } from "react";
-import { EmptyState, Skeleton } from "@/components/ui";
+import { Skeleton } from "@/components/ui";
 import { useToast } from "@/contexts/ToastContext";
 import type { ConsolePayload } from "./types";
 import { mergeState } from "./lib/helpers";
@@ -54,23 +54,27 @@ export function BankConsoleTab({ corporationId, isCeo }: Props) {
 
   if (loading && !data) {
     return (
-      <div className="space-y-4">
-        <Skeleton className="h-24 w-full rounded-xl" />
-        <Skeleton className="h-48 w-full rounded-xl" />
+      <div className="space-y-2">
+        <Skeleton className="h-4 w-48" />
+        <Skeleton className="h-40 w-full" />
       </div>
     );
   }
 
   if (error || !data) {
-    return <EmptyState title="Bank console unavailable" description={error ?? undefined} />;
+    return (
+      <p role="alert" className="py-2 text-xs text-error">
+        Bank console unavailable{error ? `: ${error}` : "."}
+      </p>
+    );
   }
 
   if (!data.visible) {
     return (
-      <EmptyState
-        title="No bank console"
-        description="Own a financial sector to charter a bank, or open a corp that already holds a charter."
-      />
+      <p className="py-2 text-xs text-muted">
+        No bank console. Own a financial sector to charter a bank, or open a corporation that
+        already holds a charter.
+      </p>
     );
   }
 
@@ -86,11 +90,11 @@ export function BankConsoleTab({ corporationId, isCeo }: Props) {
       : "Bank actions are paused while private banking is frozen.";
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {!data.privateBankingEnabled && (
-        <div className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
+        <p role="status" className="text-xs text-warning">
           Private banking is frozen. You can view this console, but bank actions are disabled.
-        </div>
+        </p>
       )}
 
       {data.charter ? (

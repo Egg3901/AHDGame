@@ -6,6 +6,7 @@ vi.mock("./operations", () => ({
   executeMonetaryOperation: vi.fn(),
 }));
 import { executeMonetaryOperation } from "./operations";
+import { LiquidityAdvanceRejected } from "./liquidityAdvance";
 import { processNppMonetaryOperations } from "./nppPolicy";
 import { MONEY_ACCOUNTING_VERSION } from "./rules/calculate";
 
@@ -98,7 +99,7 @@ describe("common monetary authority", () => {
       ]);
       db.seed("centralBanks", [
         { _id: "ECB", countryId: "DE", chairMode, reserveBalance: 1000 },
-        { _id: "BOE", countryId: "UK", chairMode: "npp", reserveBalance: 1000 },
+        { _id: "UK", countryId: "UK", chairMode: "npp", reserveBalance: 1000 },
       ]);
       db.seed("federalBudget", [
         { _id: "DE", gdp: 10000, economicFactors: { inflationRate: 0, gdpGrowth: 0 } },
@@ -163,4 +164,103 @@ describe("common monetary authority", () => {
       }
     }
   );
+});
+
+function seedRecessionWorld(banks: Record<string, unknown>[], budgetIds: string[]) {
+  const db = createInMemoryDb();
+  db.seed("gameConfig", [{ _id: "default", moneySupplyEnabled: true }]);
+  db.seed("gameState", [{ _id: "current", startingYear: 1953, preset: "1953-default" }]);
+  db.seed("centralBanks", banks);
+  db.seed(
+    "federalBudget",
+    budgetIds.map((_id) => ({
+      _id,
+      gdp: 10000,
+      economicFactors: { inflationRate: -1, gdpGrowth: -2 },
+    }))
+  );
+  const bonds = db.collection("bonds");
+  const findBonds = bonds.find.bind(bonds);
+  vi.spyOn(bonds, "find").mockImplementation((filter) => {
+    const cursor = findBonds(filter);
+    return Object.assign(cursor, { next: async () => (await cursor.toArray())[0] ?? null });
+  });
+  return db;
+}
+
+describe("bank documents that are not the country's bank", () => {
+  it.each([
+    [98, 0],
+    [90, 1],
+  ])(
+    "a dormant shared bank never acts for DD (DD last operated at turn %i)",
+    async (lastMonetaryOperationTurn, calls) => {
+      vi.mocked(executeMonetaryOperation).mockReset();
+      const db = seedRecessionWorld(
+        [
+          { _id: "ECB", countryId: "DD", chairMode: "npp", reserveBalance: 1 },
+          {
+            _id: "DD",
+            countryId: "DD",
+            chairMode: "npp",
+            reserveBalance: 2,
+            lastMonetaryOperationTurn,
+          },
+        ],
+        ["DD"]
+      );
+      const result = await processNppMonetaryOperations(db as unknown as Db, 100, 1953);
+      expect(result.banksProcessed).toBe(1);
+      expect(executeMonetaryOperation).toHaveBeenCalledTimes(calls);
+      if (calls > 0) {
+        expect(executeMonetaryOperation).toHaveBeenCalledWith(
+          expect.anything(),
+          expect.objectContaining({
+            countryId: "DD",
+            operationId: "npp-liquidity-DD-100",
+            actorName: "DD Monetary Committee",
+          })
+        );
+        const dd = db.collection("centralBanks").docs.find((bank) => bank._id === "DD");
+        expect(dd?.lastMonetaryPolicyEvaluation).toMatchObject({ bankReserves: 2 });
+      }
+      const ecb = db.collection("centralBanks").docs.find((bank) => bank._id === "ECB");
+      expect(ecb?.lastMonetaryPolicyEvaluation).toBeUndefined();
+    }
+  );
+});
+
+describe("refused monetary operations", () => {
+  it("skip the refused bank and keep evaluating the rest", async () => {
+    vi.mocked(executeMonetaryOperation)
+      .mockReset()
+      .mockRejectedValueOnce(
+        new LiquidityAdvanceRejected(
+          "Monetary operation is on cooldown or another liquidity command is pending"
+        )
+      );
+    const db = seedRecessionWorld(
+      [
+        { _id: "US", countryId: "US", chairMode: "npp", reserveBalance: 1 },
+        { _id: "JP", countryId: "JP", chairMode: "npp", reserveBalance: 1 },
+      ],
+      ["federal", "JP"]
+    );
+    const result = await processNppMonetaryOperations(db as unknown as Db, 100, 1953);
+    expect(executeMonetaryOperation).toHaveBeenCalledTimes(2);
+    expect(result).toEqual({ banksProcessed: 2, evaluationsRecorded: 2, operationsExecuted: 1 });
+  });
+
+  it("still fail the phase on an unexpected error", async () => {
+    vi.mocked(executeMonetaryOperation)
+      .mockReset()
+      .mockRejectedValueOnce(new Error("ledger unavailable"));
+    const db = seedRecessionWorld(
+      [{ _id: "US", countryId: "US", chairMode: "npp", reserveBalance: 1 }],
+      ["federal"]
+    );
+    await expect(processNppMonetaryOperations(db as unknown as Db, 100, 1953)).rejects.toThrow(
+      "ledger unavailable"
+    );
+  });
 });

@@ -1,6 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { publicPageMetadata } from "@/lib/siteMetadata";
+import {
+  Callout,
+  FormulaBlock,
+  SectionHeader,
+  SubHeader,
+  TableOfContents,
+  Tag,
+} from "@/app/guides/_components/GuideBlocks";
 
 export const metadata: Metadata = publicPageMetadata({
   title: "Commodities Guide | A House Divided",
@@ -9,82 +17,17 @@ export const metadata: Metadata = publicPageMetadata({
   pathname: "/guides/commodities",
 });
 
-function SectionHeader({ id, children }: { id: string; children: React.ReactNode }) {
-  return (
-    <h2
-      id={id}
-      className="scroll-mt-4 text-xl font-bold tracking-tight text-foreground border-l-4 border-primary/60 pl-3"
-    >
-      {children}
-    </h2>
-  );
-}
-
-function SubHeader({ children }: { children: React.ReactNode }) {
-  return <h3 className="font-semibold text-foreground">{children}</h3>;
-}
-
-function Callout({
-  children,
-  variant = "info",
-}: {
-  children: React.ReactNode;
-  variant?: "info" | "warn" | "tip";
-}) {
-  const colors = {
-    info: "border-primary/40 bg-primary/5",
-    warn: "border-amber-500/40 bg-amber-500/5",
-    tip: "border-emerald-500/40 bg-emerald-500/5",
-  };
-  return (
-    <div
-      className={`rounded-r-lg border-l-4 px-4 py-3 text-sm text-muted leading-relaxed ${colors[variant]}`}
-    >
-      {children}
-    </div>
-  );
-}
-
-function FormulaBlock({ children }: { children: React.ReactNode }) {
-  return (
-    <pre className="overflow-x-auto rounded-lg border border-card-border bg-background px-4 py-3 font-mono text-xs text-foreground/80 leading-relaxed whitespace-pre-wrap">
-      {children}
-    </pre>
-  );
-}
-
-function Tag({
-  children,
-  variant,
-}: {
-  children: React.ReactNode;
-  variant: "positive" | "negative" | "neutral";
-}) {
-  const colors = {
-    positive: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-    negative: "bg-red-500/10 text-red-400 border-red-500/20",
-    neutral: "bg-primary/10 text-primary border-primary/20",
-  };
-  return (
-    <span
-      className={`inline-flex items-center rounded border px-1.5 py-0.5 font-mono text-xs font-semibold ${colors[variant]}`}
-    >
-      {children}
-    </span>
-  );
-}
-
 const TOC_ITEMS = [
-  { id: "overview", label: "How the Market Works" },
-  { id: "pricing", label: "Pricing Formula" },
-  { id: "margin-effects", label: "Margin Effects" },
-  { id: "sector-supply", label: "What Each Sector Supplies" },
-  { id: "sector-demand", label: "What Each Sector Demands" },
-  { id: "retail-hub", label: "Retail: The Demand Hub" },
-  { id: "financial-rate", label: "Financial Services & Interest Rates" },
-  { id: "strategies", label: "Operating Strategies" },
-  { id: "strategy-list", label: "Strategy Reference" },
-  { id: "tips", label: "Operating Tips" },
+  { id: "overview", label: "How the market works" },
+  { id: "pricing", label: "Pricing formula" },
+  { id: "margin-effects", label: "Margin effects" },
+  { id: "sector-supply", label: "What each sector supplies" },
+  { id: "sector-demand", label: "What each sector demands" },
+  { id: "retail-hub", label: "Retail and household demand" },
+  { id: "financial-rate", label: "Financial services & interest rates" },
+  { id: "strategies", label: "Operating strategies" },
+  { id: "strategy-list", label: "Strategy reference" },
+  { id: "tips", label: "Operating tips" },
 ];
 
 export default function CommoditiesGuidePage() {
@@ -108,32 +51,20 @@ export default function CommoditiesGuidePage() {
         </div>
 
         <div className="space-y-10">
-          {/* Table of Contents */}
-          <div className="rounded-xl border border-card-border bg-card p-5">
-            <p className="mb-3 text-xs font-bold uppercase tracking-wider text-muted">Contents</p>
-            <ol className="grid gap-y-1 gap-x-4 text-sm sm:grid-cols-2">
-              {TOC_ITEMS.map((item, i) => (
-                <li key={item.id}>
-                  <a href={`#${item.id}`} className="text-primary hover:underline">
-                    {i + 1}. {item.label}
-                  </a>
-                </li>
-              ))}
-            </ol>
-          </div>
+          <TableOfContents items={TOC_ITEMS} />
 
           {/* ── 1. Overview ── */}
           <section className="space-y-4">
-            <SectionHeader id="overview">1. How the Market Works</SectionHeader>
+            <SectionHeader id="overview">1. How the market works</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               The commodity market connects corporations through 28 goods and services. Sectors that
               produce certain goods <strong className="text-foreground">add to supply</strong>;
               sectors that consume them <strong className="text-foreground">add to demand</strong>.
               When supply is short, buyers pay a margin penalty. When supply exceeds demand, buyers
-              get a bonus and sellers are squeezed. Only owned sectors participate - unowned sectors
+              get a bonus and sellers are squeezed. Only owned sectors participate; unowned sectors
               contribute nothing to either side.
             </p>
-            <Callout variant="info">
+            <Callout>
               Planned economies work differently: national prices can be administered by the plan
               instead of tracking market S/D. See{" "}
               <Link href="/guides/planned-economies" className="text-primary hover:underline">
@@ -179,7 +110,7 @@ export default function CommoditiesGuidePage() {
 
           {/* ── 2. Pricing ── */}
           <section className="space-y-4">
-            <SectionHeader id="pricing">2. Pricing Formula</SectionHeader>
+            <SectionHeader id="pricing">2. Pricing formula</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Commodity prices update every turn from the global supply/demand balance, blended with
               country-aggregate (national) and state-level conditions. (In planned economies the
@@ -228,7 +159,7 @@ Examples:
 
           {/* ── 3. Margin Effects ── */}
           <section className="space-y-4">
-            <SectionHeader id="margin-effects">3. Margin Effects</SectionHeader>
+            <SectionHeader id="margin-effects">3. Margin effects</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Commodity shortages and surpluses feed directly into your corporation&apos;s profit
               margin through a <strong className="text-foreground">logarithmic modifier</strong>:
@@ -329,17 +260,13 @@ effective D/S = raw D/S up to 3x, softened beyond 3x
                 </tbody>
               </table>
             </div>
-            <Callout variant="info">
-              <strong className="text-foreground">Multiple commodities stack.</strong> A defense
-              sector facing steel shortage at −3.4% and electronics shortage at −4.3% sees a
-              combined −7.7% margin hit. Sectors with many inputs are more exposed than sectors with
-              few. Each commodity is soft-capped at ±50 percentage points of contribution before
-              stacking.
+            <Callout label="Multiple commodities stack.">
+              A defense sector facing steel shortage at −3.4% and electronics shortage at −4.3% sees
+              a combined −7.7% margin hit. Sectors with many inputs are more exposed than sectors
+              with few. Each commodity is soft-capped at ±50 percentage points of contribution
+              before stacking.
             </Callout>
-            <Callout variant="tip">
-              <strong className="text-foreground">
-                Retail absorbs only 25% of negative penalties.
-              </strong>{" "}
+            <Callout label="Retail absorbs only 25% of negative penalties.">
               Retail sectors have built-in resilience to input shortages. A shortage that hits a
               manufacturing sector for −6.9% only hits a retail sector for −1.7% on the same
               commodity. Positive bonuses from oversupply are unaffected.
@@ -348,7 +275,7 @@ effective D/S = raw D/S up to 3x, softened beyond 3x
 
           {/* ── 4. Sector Supply ── */}
           <section className="space-y-4">
-            <SectionHeader id="sector-supply">4. What Each Sector Supplies</SectionHeader>
+            <SectionHeader id="sector-supply">4. What each sector supplies</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Supply rates are fractions of sector daily revenue. A sector generating $1M/day at
               supply rate 0.4 pushes $400k worth of that commodity into the market every day.
@@ -399,10 +326,10 @@ effective D/S = raw D/S up to 3x, softened beyond 3x
 
           {/* ── 5. Sector Demand ── */}
           <section className="space-y-4">
-            <SectionHeader id="sector-demand">5. What Each Sector Demands</SectionHeader>
+            <SectionHeader id="sector-demand">5. What each sector demands</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               These are the inputs each sector type consumes. The rates shown are per-unit fractions
-              of daily revenue - higher rates mean the sector is more sensitive to that
+              of daily revenue. Higher rates mean the sector is more sensitive to that
               commodity&apos;s price swings.
             </p>
             <div className="overflow-x-auto rounded-xl border border-card-border">
@@ -469,7 +396,7 @@ effective D/S = raw D/S up to 3x, softened beyond 3x
 
           {/* ── 6. Retail ── */}
           <section className="space-y-4">
-            <SectionHeader id="retail-hub">6. Retail and Household Demand</SectionHeader>
+            <SectionHeader id="retail-hub">6. Retail and household demand</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Retail supplies the Consumer Goods commodity. Its customers come from the household
               consumption ledger, independently of how much Retail capacity exists. Population,
@@ -488,22 +415,22 @@ effective D/S = raw D/S up to 3x, softened beyond 3x
               healthcare, entertainment, and other household goods and services. Those purchases are
               counted once by households, not duplicated as a Retail-sector input proxy.
             </p>
-            <Callout variant="info">
-              <strong className="text-foreground">Retail can saturate.</strong> Excess stores lower
-              seller fill and revenue. Shortages raise prices and create room for competitors to
-              build. Retail follows the same supply-and-demand discipline as every other sector.
+            <Callout label="Retail can saturate.">
+              Excess stores lower seller fill and revenue. Shortages raise prices and create room
+              for competitors to build. Retail follows the same supply-and-demand discipline as
+              every other sector.
             </Callout>
           </section>
 
           {/* ── 7. Financial Services & Rates ── */}
           <section className="space-y-4">
             <SectionHeader id="financial-rate">
-              7. Financial Services &amp; Interest Rates
+              7. Financial services &amp; interest rates
             </SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Financial Services commodity demand has a built-in sensitivity to the central bank
               prime rate. Cheap money means more borrowing, M&amp;A activity, and mortgage
-              refinancing - all of which drive demand for financial sector output.
+              refinancing, all of which drive demand for financial sector output.
             </p>
             <FormulaBlock>{`Rate multiplier = 1 + (2.75 - primeRate) × 0.12
 
@@ -515,7 +442,7 @@ Examples:
   Prime rate 5%:   multiplier ≈ 0.73 → −27% financial services demand
   Prime rate 8%:   multiplier = 0.60 → −40% demand (floor)`}</FormulaBlock>
             <p className="text-sm text-muted leading-relaxed">
-              Additionally, government debt issuance drives latent financial services demand - more
+              Additionally, government debt issuance drives latent financial services demand: more
               bond issuance means more underwriting activity, which feeds into Financial Services
               commodity demand. A country running large deficits and issuing heavy bond supply will
               sustain elevated Financial Services demand independent of interest rates.
@@ -524,10 +451,10 @@ Examples:
 
           {/* ── 8. Operating Strategies ── */}
           <section className="space-y-4">
-            <SectionHeader id="strategies">8. Operating Strategies</SectionHeader>
+            <SectionHeader id="strategies">8. Operating strategies</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Each sector can switch between 2-3 operating strategies that change its commodity
-              supply and demand rates. Strategies have no direct margin modifier - all effects come
+              supply and demand rates. Strategies have no direct margin modifier; all effects come
               through commodity market prices. Choose a strategy based on which commodities are in
               shortage (supplies you can profit from) or oversupply (inputs you want to minimize).
             </p>
@@ -550,25 +477,22 @@ Examples:
                   key={title}
                   className="rounded-xl border border-card-border bg-card p-4 space-y-1.5"
                 >
-                  <p className="text-xs font-bold uppercase tracking-wider text-muted">{title}</p>
+                  <p className="text-sm font-semibold text-foreground">{title}</p>
                   <p className="text-sm text-muted leading-relaxed">{body}</p>
                 </div>
               ))}
             </div>
-            <Callout variant="warn">
-              <strong className="text-foreground">
-                Time switches to market conditions, not theory.
-              </strong>{" "}
+            <Callout kind="warning" label="Time your switches to market conditions, not theory.">
               The strategy confirmation panel shows the current market status of every commodity
-              your new strategy would add or remove. Only switch if the market is already aligned -
-              switching to a strategy that produces an oversupplied commodity will immediately
+              your new strategy would add or remove. Only switch if the market is already aligned.
+              Switching to a strategy that produces an oversupplied commodity will immediately
               compress your margins.
             </Callout>
           </section>
 
           {/* ── 9. Strategy Reference ── */}
           <section className="space-y-4">
-            <SectionHeader id="strategy-list">9. Strategy Reference</SectionHeader>
+            <SectionHeader id="strategy-list">9. Strategy reference</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Each sector&apos;s available strategies and how they shift commodity flows:
             </p>
@@ -1013,7 +937,7 @@ Examples:
 
           {/* ── 10. Tips ── */}
           <section className="space-y-4">
-            <SectionHeader id="tips">10. Operating Tips</SectionHeader>
+            <SectionHeader id="tips">10. Operating tips</SectionHeader>
             <ul className="space-y-3 text-sm text-muted">
               {[
                 [
@@ -1026,7 +950,7 @@ Examples:
                 ],
                 [
                   "Technology and Defense are in commodity competition.",
-                  "Both consume electronics and software. When Defense scales up (heavy government spending), it competes directly with Technology for electronics, driving up the price for both. Defense also supplies electronics at a lower rate than it consumes - it is a net electronics buyer.",
+                  "Both consume electronics and software. When Defense scales up (heavy government spending), it competes directly with Technology for electronics, driving up the price for both. Defense also supplies electronics at a lower rate than it consumes, so it is a net electronics buyer.",
                 ],
                 [
                   "Agriculture and Chemical Industries are linked.",

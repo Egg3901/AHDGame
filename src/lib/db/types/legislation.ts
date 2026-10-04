@@ -207,6 +207,10 @@ export interface DeclareWarProvision {
   /** The defender. The conflict is hosted here, so the map pin lands on it. */
   targetCountry: CountryId;
   warGoal: WarGoal;
+  /** Bloc that originated this declaration, when filed through an organization. */
+  organizationId?: string;
+  /** Organization resolution that spawned the national bill. */
+  resolutionId?: string;
 }
 
 /**

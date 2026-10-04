@@ -7,6 +7,7 @@ import { resetLedgerShadowFlagCache } from "@/lib/ledger/featureFlag";
 import { collectBalances } from "@/lib/ledger/balanceSnapshot";
 import { reconcileLedger } from "@/lib/ledger/reconcile";
 import type { LedgerEntry } from "@/lib/ledger/types";
+import { runWithLedgerTurn } from "@/lib/ledger/ledgerTurn";
 import { processBondMarketPoolTurn } from "./marketPoolTurn";
 import { emitLedgerEntries } from "@/lib/ledger/emit";
 import { deriveLedgerEntry } from "@/lib/ledger/deriveFromTx";
@@ -14,7 +15,7 @@ import { loadBondPoolLedgerContext, withBondPoolLedgerBatch } from "./marketPool
 import { creditBondPool, debitBondPoolGated } from "./marketPool";
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/sovereignDefault/snapshotLoader", () => ({
-  loadCountrySovereignSnapshot: vi.fn().mockResolvedValue(null),
+  loadCountrySovereignSnapshots: vi.fn().mockResolvedValue(new Map()),
 }));
 beforeEach(() => {
   vi.clearAllMocks();
@@ -31,7 +32,7 @@ it.each(cases)("reconciles actual modeled upkeep in $currency", async ({ currenc
     db = memory as unknown as Db;
   vi.mocked(getDb).mockResolvedValue(db);
   memory.seed("gameConfig", [{ _id: "default", ledgerShadow: true }]);
-  memory.seed("gameState", [{ _id: "current", currentTurn: TURN, preset: "1991-default" }]);
+  memory.seed("gameState", [{ _id: "current", currentTurn: TURN - 1, preset: "1991-default" }]);
   memory.seed("exchangeRates", [{ currencyCode: currency, rate }]);
   memory.seed("bondMarketPools", [{ _id: currency, cashLocal: 100, targetCashLocal: 500 }]);
   memory.seed("moneySupplySnapshots", [{ currencyCode: currency, m2: 10000, turn: 24 }]);
@@ -55,7 +56,7 @@ it.each(cases)("reconciles actual coupon receipts in $currency", async ({ curren
     db = memory as unknown as Db;
   vi.mocked(getDb).mockResolvedValue(db);
   memory.seed("gameConfig", [{ _id: "default", ledgerShadow: true }]);
-  memory.seed("gameState", [{ _id: "current", currentTurn: TURN, preset: "1991-default" }]);
+  memory.seed("gameState", [{ _id: "current", currentTurn: TURN - 1, preset: "1991-default" }]);
   memory.seed("exchangeRates", [{ currencyCode: currency, rate }]);
   memory.seed("bondMarketPools", [{ _id: currency, cashLocal: 100, targetCashLocal: 500 }]);
   const opening = await collectBalances(db);
@@ -78,7 +79,7 @@ function fixture(currency: "USD" | "GBP" = "USD", rate = 1, cashLocal = 100, ena
     db = memory as unknown as Db;
   vi.mocked(getDb).mockResolvedValue(db);
   memory.seed("gameConfig", [{ _id: "default", ledgerShadow: enabled }]);
-  memory.seed("gameState", [{ _id: "current", currentTurn: TURN, preset: "1991-default" }]);
+  memory.seed("gameState", [{ _id: "current", currentTurn: TURN - 1, preset: "1991-default" }]);
   memory.seed("exchangeRates", [{ currencyCode: currency, rate }]);
   memory.seed("bondMarketPools", [{ _id: currency, cashLocal, targetCashLocal: 500 }]);
   memory.seed("moneySupplySnapshots", [{ currencyCode: currency, m2: 10000, turn: TURN - 1 }]);
@@ -202,12 +203,12 @@ it("preserves cash outcomes with shadow disabled", async () => {
   expect(await db.collection("ledgerEntries").countDocuments()).toBe(0);
 });
 
-it("does not infer duplicate primary placement or secondary trade legs", async () => {
+it("keeps primary placement journal-owned while witnessing secondary trades", async () => {
   const { db } = fixture();
   await creditBondPool(db, "USD", 20, "purchasesIn", NOW);
   await debitBondPoolGated(db, "USD", 20, "issuanceOut", NOW);
   await debitBondPoolGated(db, "USD", 20, "salesOut", NOW);
-  expect(await db.collection("ledgerEntries").countDocuments()).toBe(0);
+  expect(await db.collection("ledgerEntries").countDocuments()).toBe(2);
 });
 
 it("uses the processing turn rather than a stale game clock", async () => {
@@ -238,8 +239,11 @@ it("reuses a loaded context without a flag, clock or FX query per receipt", asyn
   const configRead = vi.spyOn(db.collection("gameConfig"), "findOne");
   const fxRead = vi.spyOn(db.collection("exchangeRates"), "find");
   const stateRead = vi.spyOn(db.collection("gameState"), "findOne");
-  await creditBondPool(db, "USD", 2.35, "couponsIn", NOW, { ledgerContext: context });
-  await creditBondPool(db, "USD", 100, "maturitiesIn", NOW, { ledgerContext: context });
+  // The bond turn runs inside the turn's ledger scope, so no clock read either.
+  await runWithLedgerTurn(TURN, async () => {
+    await creditBondPool(db, "USD", 2.35, "couponsIn", NOW, { ledgerContext: context });
+    await creditBondPool(db, "USD", 100, "maturitiesIn", NOW, { ledgerContext: context });
+  });
   expect(configRead).not.toHaveBeenCalled();
   expect(fxRead).not.toHaveBeenCalled();
   expect(stateRead).not.toHaveBeenCalled();

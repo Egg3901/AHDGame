@@ -769,3 +769,72 @@ describe("openBargainingCampaignFromLiveConditions read cache (#2690)", () => {
     expect(secondMacro).toBe(1);
   });
 });
+
+describe("persistUnionBargainingEscalation read cache (#2690)", () => {
+  it("reuses country macro and cost-of-living reads across escalations that share a cache", async () => {
+    const { persistUnionBargainingEscalation } = await import("./bargaining");
+    const reads: string[] = [];
+    const sector = {
+      _id: new ObjectId(),
+      countryId: "US",
+      stateId: "US_PA",
+      sectorType: "manufacturing",
+      workers: 100,
+      unionization: 60,
+      wageLevel: 1,
+      profitMargin: 10,
+    };
+    const chain = (docs: unknown[]) => ({
+      toArray: async () => docs,
+      sort: () => chain(docs),
+      limit: () => chain(docs),
+      project: () => chain(docs),
+    });
+    const db = {
+      collection: (name: string) => ({
+        findOne: async () => {
+          reads.push(`${name}.findOne`);
+          return null;
+        },
+        find: () => {
+          reads.push(`${name}.find`);
+          return chain(name === "corporateSectors" ? [sector] : []);
+        },
+        updateOne: async () => ({ matchedCount: 0, modifiedCount: 0 }),
+        bulkWrite: async () => ({ matchedCount: 0, modifiedCount: 0 }),
+      }),
+    } as unknown as Db;
+    const union = {
+      _id: new ObjectId(),
+      countryId: "US",
+      sectorType: "manufacturing",
+      treasury: 0,
+    } as never;
+    const campaign = () =>
+      ({
+        _id: new ObjectId(),
+        sectorIds: [sector._id],
+        status: "dispute",
+        escalationLevel: "none",
+        lastActionTurn: 1,
+        offers: [],
+        mandate: {},
+      }) as never;
+    const cache = new Map();
+
+    await persistUnionBargainingEscalation(db, union, campaign(), 10, cache).catch(() => null);
+    const first = {
+      macro: reads.filter((r) => r.startsWith("federalBudget")).length,
+      col: reads.filter((r) => r.startsWith("macroMetrics")).length,
+    };
+    await persistUnionBargainingEscalation(db, union, campaign(), 10, cache).catch(() => null);
+    const second = {
+      macro: reads.filter((r) => r.startsWith("federalBudget")).length,
+      col: reads.filter((r) => r.startsWith("macroMetrics")).length,
+    };
+
+    expect(first.macro).toBeGreaterThan(0);
+    expect(first.col).toBeGreaterThan(0);
+    expect(second).toEqual(first);
+  });
+});

@@ -147,9 +147,7 @@ export function PoliticsTab({
   const leanAndOrg = (
     <div className="grid gap-6 lg:grid-cols-2">
       <div className="rounded-xl border border-card-border bg-card p-5">
-        <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted">
-          Political Lean
-        </h2>
+        <h2 className="mb-4 text-sm font-semibold text-muted">Political lean</h2>
         <div className="grid grid-cols-2 gap-5">
           {/* Economic axis */}
           <div className="space-y-3">

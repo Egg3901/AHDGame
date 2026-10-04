@@ -80,6 +80,7 @@ describe("underground resistance in ban-strike responses", () => {
     await respond("negotiate");
     expect(spendFromTreasury).toHaveBeenCalledWith(expect.anything(), "US", 1_000, {
       resyncDerived: true,
+      witness: { flow: "crisis_response", site: "crises/unionBanStrike" },
     });
   });
 

@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import type { CorporationDetail } from "../CorporationPageTypes";
+import { InlineStatus, SmallButton } from "../dense/DenseKit";
+import { GovernanceRow } from "./GovernanceRow";
 
 /**
  * Hand day-to-day operation of the corp to an autonomous NPP caretaker, or
@@ -114,66 +116,59 @@ export function CaretakerCeoCard({
     }
   }
 
+  const mandate = corporation.caretakerMandate ?? "active";
+
   return (
-    <div className="rounded-xl border border-card-border bg-card p-6">
-      <h2 className="text-lg font-bold text-foreground mb-2">NPP Caretaker</h2>
-      <p className="text-sm text-muted mb-4">
-        {isCaretakerRun
-          ? "An autonomous NPP caretaker is running this corporation on your behalf. You remain the owner and can resume control immediately. After an owner-initiated handoff, a cooldown of three real days applies before you can hand it back to a caretaker."
-          : "Hand day-to-day operation to an autonomous NPP caretaker. It runs the corporation under the same bounded rules as any AI-run corp. You stay the owner and can resume control immediately. After this owner-initiated handoff, a cooldown of three real days applies before you can hand it back to a caretaker."}
-      </p>
-      {error && (
-        <div className="rounded-lg border border-error/30 bg-error/10 p-3 text-sm text-error mb-3">
-          {error}
-        </div>
-      )}
-      {success && (
-        <div className="rounded-lg border border-success/30 bg-success/10 p-3 text-sm text-success mb-3">
-          {success}
-        </div>
-      )}
-      {onCooldown && (
-        <p className="text-sm text-muted mb-3">
-          You recently resumed control. You can hand this corporation to a caretaker again in{" "}
-          {cooldownHours} {cooldownHours === 1 ? "hour" : "hours"}.
+    <GovernanceRow
+      label="NPP caretaker"
+      summary={
+        isCaretakerRun
+          ? `A caretaker runs the corporation (${mandate}). You remain the owner.`
+          : onCooldown
+            ? `You resumed control recently. Available again in ${cooldownHours} ${cooldownHours === 1 ? "hour" : "hours"}.`
+            : "You run the corporation."
+      }
+      actionLabel={isCaretakerRun ? "Manage" : "Hand over"}
+      disabled={onCooldown}
+      disabledReason="Cooling down after you resumed control."
+    >
+      <div className="space-y-2">
+        <p className="text-xs text-muted">
+          {isCaretakerRun
+            ? "An autonomous NPP caretaker is running this corporation on your behalf. You remain the owner and can resume control immediately. After an owner-initiated handoff, a cooldown of three real days applies before you can hand it back to a caretaker."
+            : "Hand day-to-day operation to an autonomous NPP caretaker. It runs the corporation under the same bounded rules as any AI-run corp. You stay the owner and can resume control immediately. After this owner-initiated handoff, a cooldown of three real days applies before you can hand it back to a caretaker."}
         </p>
-      )}
-      {isCaretakerRun ? (
-        <div className="space-y-4">
-          <label className="block text-sm text-muted">
-            Caretaker mandate
-            <select
-              aria-label="Caretaker mandate"
-              value={corporation.caretakerMandate ?? "active"}
-              disabled={busy}
-              onChange={(event) => void setMandate(event.target.value as "active" | "passive")}
-              className="mt-2 block w-full rounded-lg border border-card-border bg-card-elevated px-3 py-2 text-foreground"
-            >
-              <option value="active">Active: pursue guarded profitable opportunities</option>
-              <option value="passive">Passive: make no new discretionary commitments</option>
-            </select>
-          </label>
-          <p className="text-xs text-muted">
-            Passive stops new plants, capacity, technology, marketing, logistics, R&amp;D,
-            dividends, and bond investments. Existing debt and operating costs still settle.
-          </p>
-          <button
-            onClick={dismiss}
-            disabled={busy}
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 transition-colors disabled:opacity-50"
-          >
-            {busy ? "Updating…" : "Resume Control"}
-          </button>
-        </div>
-      ) : (
-        <button
-          onClick={appoint}
-          disabled={busy || onCooldown}
-          className="rounded-lg border border-card-border px-4 py-2 text-sm font-medium text-foreground hover:bg-card-elevated transition-colors disabled:opacity-50"
-        >
-          {busy ? "Appointing…" : "Hand to NPP Caretaker"}
-        </button>
-      )}
-    </div>
+        {isCaretakerRun ? (
+          <>
+            <label className="flex flex-wrap items-center gap-2 text-xs text-muted">
+              Mandate
+              <select
+                aria-label="Caretaker mandate"
+                value={mandate}
+                disabled={busy}
+                onChange={(event) => void setMandate(event.target.value as "active" | "passive")}
+                className="h-7 rounded-md border border-card-border bg-background px-1.5 text-xs text-foreground focus:border-foreground focus:outline-none"
+              >
+                <option value="active">Active: pursue guarded profitable opportunities</option>
+                <option value="passive">Passive: make no new discretionary commitments</option>
+              </select>
+            </label>
+            <p className="text-[11px] text-muted">
+              Passive stops new plants, capacity, technology, marketing, logistics, R&amp;D,
+              dividends, and bond investments. Existing debt and operating costs still settle.
+            </p>
+            <SmallButton tone="primary" onClick={dismiss} disabled={busy}>
+              {busy ? "Updating" : "Resume control"}
+            </SmallButton>
+          </>
+        ) : (
+          <SmallButton tone="primary" onClick={appoint} disabled={busy || onCooldown}>
+            {busy ? "Appointing" : "Hand to NPP caretaker"}
+          </SmallButton>
+        )}
+        <InlineStatus message={error} tone="error" />
+        <InlineStatus message={success} tone="success" />
+      </div>
+    </GovernanceRow>
   );
 }

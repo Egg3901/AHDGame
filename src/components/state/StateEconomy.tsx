@@ -48,7 +48,7 @@ import {
   productionTone,
 } from "@/components/state/economy/production";
 
-// Default colors for corps that haven't set a brand color
+// Market-share pie colors for corps that haven't set a brand color
 const DEFAULT_CORP_COLORS = [
   "#3b82f6",
   "#ef4444",
@@ -700,7 +700,7 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
             showToggle && !participantsExpanded ? sortedOwners.slice(0, 3) : sortedOwners;
           return (
             <>
-              {visibleOwners.map((owner, i) => {
+              {visibleOwners.map((owner) => {
                 const isOwn =
                   data.userCorporationId != null && owner.corporationId === data.userCorporationId;
                 const revenue = owner.revenue;
@@ -710,14 +710,11 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
                   : 0;
                 const canExpand = owner.targetGrowthRate < MAX_GROWTH_RATE;
                 const canDownsize = owner.targetGrowthRate > MIN_GROWTH_RATE;
-                const color =
-                  owner.brandColor || DEFAULT_CORP_COLORS[i % DEFAULT_CORP_COLORS.length];
 
                 return (
                   <div
                     key={owner.sectorId}
                     className="rounded-xl border border-card-border bg-card overflow-hidden"
-                    style={{ borderLeftWidth: "4px", borderLeftColor: color }}
                   >
                     {/* Header: name + badges + market share */}
                     <div className="flex items-start justify-between px-4 pt-4 pb-3">
@@ -776,10 +773,7 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
                         </div>
                       </div>
                       <div className="text-right shrink-0 ml-4">
-                        <div
-                          className="text-xl font-bold tabular-nums leading-none"
-                          style={{ color }}
-                        >
+                        <div className="text-xl font-bold tabular-nums leading-none text-foreground">
                           {owner.marketShare}%
                         </div>
                         <div className="text-[10px] text-muted uppercase tracking-wide mt-0.5">
@@ -1033,17 +1027,7 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
             world — the one panel that tells a player how much room a build has.
             Gate on the figure the panel actually shows in each mode (#1162). */}
         {(data.plantsMode ? (sector.headroomUnits ?? 0) > 0 : sector.unownedRevenue > 0) && (
-          <div
-            className={`rounded-xl border bg-card overflow-hidden ${
-              data.plantsMode ? "border-primary/30" : "border-card-border"
-            }`}
-            style={{
-              borderLeftWidth: "4px",
-              borderLeftColor: data.plantsMode
-                ? "var(--color-primary, rgba(128,128,128,0.25))"
-                : "rgba(128,128,128,0.25)",
-            }}
-          >
+          <div className="rounded-xl border border-card-border bg-card overflow-hidden">
             {/* Header */}
             <div className="flex items-center justify-between px-4 pt-4 pb-3">
               <span
@@ -1053,7 +1037,7 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
               </span>
               <div className="text-right">
                 <div
-                  className={`text-xl font-bold tabular-nums leading-none ${data.plantsMode ? "text-primary" : "text-muted"}`}
+                  className={`text-xl font-bold tabular-nums leading-none ${data.plantsMode ? "text-foreground" : "text-muted"}`}
                 >
                   {data.plantsMode
                     ? formatUnits(sector.headroomUnits)

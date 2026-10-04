@@ -1,108 +1,96 @@
 "use client";
 
 import { Button } from "@/components/ui/Button";
-import { LiveDot } from "@/components/ui/Badge";
-import { COUNTRY_CHROME } from "@/lib/politicalMetrics/names";
 import type { PoliticalMetricsCountryId } from "@/lib/politicalMetrics/types";
-import { scoreTone } from "./tones";
+import { statusTextClass } from "./tones";
+
+/** "Georgia is 2 points below the national score of 70." */
+function comparisonSentence(name: string, gap: number, label: string, value: number): string {
+  if (gap === 0) return `${name} matches the ${label} score of ${value}.`;
+  const points = Math.abs(gap) === 1 ? "point" : "points";
+  const side = gap > 0 ? "above" : "below";
+  return `${name} is ${Math.abs(gap)} ${points} ${side} the ${label} score of ${value}.`;
+}
 
 /**
- * National-registry masthead. No government line, history slider, or alerts
- * in v1 — those return with the dynamics/consumers sub-projects.
+ * Registry page header, shared by the national page and the region tab: the
+ * name, one line of context, the compare control, and the headline, which is
+ * the overall condition as a large figure with its status word and one line
+ * saying what it is. The header is the page's one surface change; every
+ * section below it sits on the page background.
+ *
+ * `countryId`, `registryLabel` and `glyph` are still accepted because the
+ * region tab passes them, but the plain header prints no registry line, badge
+ * or per-country chrome.
  */
 export function Masthead({
-  countryId,
   countryDisplayName,
   overall,
   overallStatus,
   year,
   turn,
   onCompare,
-  registryLabel,
+  compareLabel = "Compare",
   sealLabel,
-  glyph,
   comparison,
 }: {
-  countryId: PoliticalMetricsCountryId;
+  /** @deprecated Not printed. */
+  countryId?: PoliticalMetricsCountryId;
   countryDisplayName: string;
   overall: number;
   overallStatus: string;
   year: number;
   turn: number;
   onCompare: () => void;
-  /** Region scope overrides the country's registry heading. */
+  /** Text on the compare button. */
+  compareLabel?: string;
+  /** @deprecated Not printed. */
   registryLabel?: string;
-  /** Region scope overrides the statistics-office seal line. */
+  /** Region scope: the country and region type, printed ahead of the date line. */
   sealLabel?: string;
-  /** Region scope shows the region code in the badge instead of the country glyph. */
+  /** @deprecated Not printed. */
   glyph?: string;
-  /** Region scope shows the country figure beside the region's own. */
+  /** Region scope: the country figure the region's own is measured against. */
   comparison?: { label: string; value: number };
 }) {
-  const countryChrome = COUNTRY_CHROME[countryId];
-  const chrome = {
-    registry: registryLabel ?? countryChrome.registry,
-    seal: sealLabel ?? countryChrome.seal,
-    glyph: glyph ?? countryChrome.glyph,
-  };
-  const tone = scoreTone(overall);
+  const shown = Math.round(overall);
   // Differenced from the ROUNDED figures either side of it, not the exact ones.
-  // The badge shows 68 and the comparison shows 70, so a delta of -2.4 taken
-  // from 67.6 and 70.0 would be three numbers on one line that do not add up.
-  const delta = comparison ? Math.round(overall) - Math.round(comparison.value) : 0;
+  // The headline shows 68 and the comparison 70, so a gap of 2.4 taken from
+  // 67.6 and 70.0 would put three numbers on the page that do not add up.
+  const comparedTo = comparison ? Math.round(comparison.value) : 0;
   return (
-    <header className="overflow-hidden rounded-lg border border-card-border bg-card shadow-panel">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-card-border px-4 py-2 font-mono text-body-xs uppercase tracking-widest text-muted">
-        <span>{chrome.registry}</span>
-        <span className="inline-flex items-center gap-2">
-          <LiveDot color="success" />
-          LIVE · SERIES {year}
-        </span>
-      </div>
-      <div className="flex flex-wrap items-center gap-4 p-4">
-        <div
-          aria-hidden="true"
-          className={`flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-md border-2 bg-card-muted font-mono font-bold ${tone.border} ${tone.text} ${countryId === "RU" ? "text-body-sm" : "text-heading-sm"}`}
-        >
-          {chrome.glyph}
-        </div>
-        <div className="min-w-[220px] flex-1">
-          <h1 className="font-display text-display font-bold leading-tight text-foreground">
+    <header className="rounded-lg border border-card-border bg-card p-5 sm:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+        <div className="min-w-0">
+          <h1 className="break-words text-display font-bold leading-tight tracking-tight text-foreground sm:text-4xl">
             {countryDisplayName}
           </h1>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <span
-              className={`inline-block rounded border px-2 py-0.5 font-mono text-body-xs font-bold tracking-wider ${tone.border} ${tone.text} bg-card-muted`}
-            >
-              {overallStatus.toUpperCase()} · {Math.round(overall)}/100
-            </span>
-            <span className="font-mono text-body-xs text-muted">
-              TURN {turn.toLocaleString("en-US")}
-            </span>
-            {comparison && (
-              <span className="font-mono text-body-xs text-muted">
-                {comparison.label} {Math.round(comparison.value)}
-                {delta !== 0 && (
-                  <span className={delta > 0 ? "text-success" : "text-error"}>
-                    {" "}
-                    ({delta > 0 ? "+" : ""}
-                    {delta})
-                  </span>
-                )}
-              </span>
-            )}
-          </div>
+          <p className="mt-1 text-body-lg text-muted">
+            {sealLabel ? `${sealLabel} · ` : ""}Political metrics · {year} · Turn{" "}
+            {turn.toLocaleString("en-US")}
+          </p>
         </div>
-        <div className="flex flex-col items-end gap-2">
-          <Button variant="secondary" size="sm" onClick={onCompare}>
-            ⇄ Compare
-          </Button>
-          <span className="font-mono text-body-xs uppercase tracking-widest text-muted">
-            {chrome.seal}
-          </span>
-        </div>
+        <Button variant="secondary" onClick={onCompare} className="shrink-0">
+          {compareLabel}
+        </Button>
       </div>
-      <div className="h-0.5 bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
+
+      <div className="mt-6 flex flex-wrap items-baseline gap-x-4 gap-y-1">
+        <span className="text-5xl font-semibold leading-none tabular-nums text-foreground">
+          {shown}
+        </span>
+        <span className={`text-heading-lg font-semibold ${statusTextClass(overallStatus)}`}>
+          {overallStatus}
+        </span>
+      </div>
+      <p className="mt-2 text-body-lg text-muted">
+        Overall condition: the mean of the nine category scores, out of 100.
+      </p>
+      {comparison && (
+        <p className="mt-1 text-body-lg text-muted">
+          {comparisonSentence(countryDisplayName, shown - comparedTo, comparison.label, comparedTo)}
+        </p>
+      )}
     </header>
   );
 }

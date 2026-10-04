@@ -97,7 +97,7 @@ export function BulkStateOrgControl({ countryCode, partyId, onApplied }: BulkSta
   return (
     <div className="rounded-xl border border-card-border bg-card p-6">
       <div className="mb-4 flex items-baseline justify-between gap-3">
-        <h2 className="text-lg font-semibold">Bulk State Settings</h2>
+        <h2 className="text-lg font-semibold">Bulk state settings</h2>
         <span className="text-xs text-muted">Applies to every state chapter</span>
       </div>
 
@@ -110,7 +110,7 @@ export function BulkStateOrgControl({ countryCode, partyId, onApplied }: BulkSta
       {msg && <div className={`mb-4 rounded-lg p-3 text-sm ${getMessageStyle(msg)}`}>{msg}</div>}
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-        <label className="flex-1 text-xs font-semibold uppercase tracking-wider text-muted">
+        <label className="flex-1 text-xs font-semibold text-muted">
           Setting
           <select
             value={settingKey}
@@ -128,7 +128,7 @@ export function BulkStateOrgControl({ countryCode, partyId, onApplied }: BulkSta
           </select>
         </label>
 
-        <label className="text-xs font-semibold uppercase tracking-wider text-muted">
+        <label className="text-xs font-semibold text-muted">
           Value (%)
           <input
             type="number"

@@ -79,7 +79,7 @@ function DeltaCell({
   format: (v: number) => string;
   title?: string;
 }) {
-  if (value == null) return <span className="text-muted/50">—</span>;
+  if (value == null) return <span className="text-muted/50">n/a</span>;
   // Treat anything that rounds to nothing as flat rather than showing "+0.0".
   const flat = Math.abs(value) < 0.05;
   return (
@@ -87,7 +87,7 @@ function DeltaCell({
       className={`tabular-nums ${flat ? "text-muted" : value > 0 ? "text-success" : "text-error"}`}
       title={title}
     >
-      {flat ? "—" : `${value > 0 ? "+" : ""}${format(value)}`}
+      {flat ? "0" : `${value > 0 ? "+" : ""}${format(value)}`}
     </span>
   );
 }
@@ -244,7 +244,7 @@ export default function StrategyPanel({
                   </th>
                   <th
                     className="py-1.5 pl-2 text-right font-semibold"
-                    title="Combined effect on daily operating profit — margin and revenue together"
+                    title="Combined effect on daily operating profit: margin and revenue together"
                   >
                     Net / day
                   </th>
@@ -333,10 +333,10 @@ export default function StrategyPanel({
                       <td className="px-2 py-2 text-right">
                         {isCurrent ? (
                           <span className="tabular-nums text-muted">
-                            {margins?.effective != null ? `${margins.effective}%` : "—"}
+                            {margins?.effective != null ? `${margins.effective}%` : "n/a"}
                           </span>
                         ) : unavailable ? (
-                          <span className="text-muted/50">—</span>
+                          <span className="text-muted/50">n/a</span>
                         ) : (
                           <DeltaCell
                             value={s.projectedMarginDelta}
@@ -351,7 +351,7 @@ export default function StrategyPanel({
                       </td>
                       <td className="px-2 py-2 text-right">
                         {isCurrent || unavailable ? (
-                          <span className="text-muted/50">—</span>
+                          <span className="text-muted/50">n/a</span>
                         ) : (
                           <DeltaCell
                             value={
@@ -365,7 +365,7 @@ export default function StrategyPanel({
                       </td>
                       <td className="py-2 pl-2 text-right font-medium">
                         {isCurrent || unavailable || !outcome ? (
-                          <span className="text-muted/50">—</span>
+                          <span className="text-muted/50">n/a</span>
                         ) : (
                           <DeltaCell
                             value={outcome.profitDelta}

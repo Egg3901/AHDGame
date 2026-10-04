@@ -29,13 +29,13 @@ export function FourPowerWire({ lines }: { lines: DossierWireLine[] }) {
           ▌FOUR-POWER WIRE · OPEN LOG
         </h2>
         <span className="flex items-center gap-1.5 font-mono text-body-xs font-semibold text-warning">
-          <span aria-hidden className="size-1.5 animate-pulse rounded-full bg-warning" />
+          <span aria-hidden className="size-1.5 rounded-full bg-warning" />
           LIVE · EVERY SEAT SEES EVERY PLAY
         </span>
       </div>
 
       {lines.length === 0 ? (
-        <p className="py-3 font-mono text-body-xs text-muted">
+        <p className="py-3 font-mono text-body-sm text-muted">
           Nothing on the wire yet. The first play of the turn appears here.
         </p>
       ) : (

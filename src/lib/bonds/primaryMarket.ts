@@ -38,6 +38,7 @@ import { getNationalBudgetId, refreshSovereignDebtTerms } from "@/lib/bonds/sove
 import { poolLiquidityAllocation } from "@/lib/moneySupply/rules/poolTarget";
 import {
   commitSovereignPrimary,
+  existingPrimarySettlementKeys,
   loadPrimaryAccounting,
   primarySettlementExists,
 } from "./sovereignPrimarySettlement";
@@ -213,6 +214,11 @@ export async function debitPoolForPrimary(
   return debit.ok ? amount : 0;
 }
 
+/** Settlement-journal key of one bond's sovereign placement in one turn. */
+export function sovereignPlacementKey(bondId: ObjectId, turn: number): string {
+  return `sovereign-primary:placement:${bondId}:${turn}`;
+}
+
 export interface PlacementResult {
   bondsTouched: number;
   unitsPlaced: number;
@@ -247,6 +253,16 @@ export async function placeUnsoldBondUnits(
   if (placing.length === 0) return result;
 
   const accounting = await loadPrimaryAccounting(db);
+  // Placement settlement keys are per bond per turn, and nothing but this
+  // bond's own iteration writes one while the turn runs, so a key absent now
+  // stays absent until its bond is reached. One read finds the ones already recorded (a retried turn); only
+  // those take the per-key status check, instead of every sovereign bond.
+  const recordedPlacementKeys = await existingPrimarySettlementKeys(
+    db,
+    placing
+      .filter((bond) => bond.issuerType === "sovereign" && bond.countryId)
+      .map((bond) => sovereignPlacementKey(bond._id, turn))
+  );
   const budgetByCurrency = new Map<CurrencyCode, number>();
   // The pool docs read for the budgets double as the quote snapshot for the
   // pass; each placement's debit is mirrored onto them so later quotes see it.
@@ -275,8 +291,8 @@ export async function placeUnsoldBondUnits(
     if (units <= 0) continue;
 
     if (bond.issuerType === "sovereign" && bond.countryId) {
-      const key = `sovereign-primary:placement:${bond._id}:${turn}`;
-      if (await primarySettlementExists(db, key)) continue;
+      const key = sovereignPlacementKey(bond._id, turn);
+      if (recordedPlacementKeys.has(key) && (await primarySettlementExists(db, key))) continue;
       const paid = Math.round(units * price * 100) / 100;
       await commitSovereignPrimary(
         db,
@@ -398,7 +414,7 @@ export async function monetizeUnsoldSovereignUnits(
   }
 ): Promise<boolean> {
   if (args.units <= 0) return false;
-  const key = `sovereign-primary:placement:${args.bondId}:${args.turn}`;
+  const key = sovereignPlacementKey(args.bondId, args.turn);
   if (await primarySettlementExists(db, key)) return true;
   const bond = await db.collection<Bond>("bonds").findOne({ _id: args.bondId });
   if (!bond?.countryId || args.units > (bond.unsoldUnits ?? 0)) return false;

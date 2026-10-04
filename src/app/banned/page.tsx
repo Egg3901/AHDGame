@@ -55,9 +55,7 @@ function BannedContent() {
 
         {/* Additional info card */}
         <div className="mt-4 rounded-xl border border-card-border bg-card p-4">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted mb-2">
-            What This Means
-          </h2>
+          <h2 className="text-sm font-semibold text-muted mb-2">What this means</h2>
           <ul className="space-y-1 text-xs text-muted list-disc list-inside">
             <li>You cannot access your character or participate in the game</li>
             <li>Your profile and political career have been suspended</li>

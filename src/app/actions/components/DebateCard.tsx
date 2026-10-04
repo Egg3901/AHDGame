@@ -117,14 +117,11 @@ export default function DebateCard() {
   // Resolved-this-session summary.
   if (outcome) {
     return (
-      <div
-        ref={cardRef}
-        className="rounded-xl border border-card-border bg-card/50 p-5 shadow-card backdrop-blur-sm"
-      >
-        <h3 className="text-base font-semibold text-foreground">Debate concluded</h3>
-        <p className="mt-1 text-sm text-muted">
+      <div ref={cardRef} className="rounded-xl border border-card-border bg-card p-5">
+        <h3 className="text-body-lg font-semibold text-foreground">Debate concluded</h3>
+        <p className="mt-1 text-body text-muted">
           {outcome.result === "draw"
-            ? "The debate ended in a draw — no change to favorability."
+            ? "The debate ended in a draw, with no change to favorability."
             : `Result decided by a ${outcome.favorabilitySwing}-point favorability swing.`}
         </p>
       </div>
@@ -142,13 +139,10 @@ export default function DebateCard() {
           ? "text-error"
           : "text-muted";
     return (
-      <div
-        ref={cardRef}
-        className="rounded-xl border border-card-border bg-card/50 p-5 shadow-card backdrop-blur-sm"
-      >
-        <h3 className="text-base font-semibold text-foreground">Recent debate</h3>
-        <p className="mt-1 text-sm text-muted">
-          vs. {lastResolved.opponentName} —{" "}
+      <div ref={cardRef} className="rounded-xl border border-card-border bg-card p-5">
+        <h3 className="text-body-lg font-semibold text-foreground">Recent debate</h3>
+        <p className="mt-1 text-body text-muted">
+          vs. {lastResolved.opponentName}:{" "}
           <span className={`font-semibold ${tone}`}>
             {lastResolved.result === "won"
               ? `Won (+${lastResolved.favorabilitySwing} favorability)`
@@ -168,24 +162,20 @@ export default function DebateCard() {
   const hasSubmitted = !debate.canSubmit && submitted.length > 0;
 
   return (
-    <div
-      ref={cardRef}
-      className="overflow-hidden rounded-xl border border-primary/30 bg-card/50 shadow-card backdrop-blur-sm"
-    >
+    <div ref={cardRef} className="overflow-hidden rounded-xl border border-card-border bg-card">
       <div className="relative px-5 pt-5 pb-1">
-        <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-primary/60 via-secondary/30 to-transparent" />
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="text-base font-semibold text-foreground">
-            Debate challenge — {debate.opponentName}
+        <div className="flex items-baseline justify-between gap-3">
+          <h3 className="text-body-lg font-semibold text-foreground">
+            Debate challenge: {debate.opponentName}
           </h3>
-          <span className="shrink-0 rounded-full border border-primary/30 bg-primary/5 px-2.5 py-0.5 text-xs font-medium text-primary">
+          <span className="shrink-0 text-body-sm font-medium tabular-nums text-foreground">
             {formatCountdown(msLeft)}
           </span>
         </div>
-        <p className="mt-1 text-xs text-muted">
+        <p className="mt-1 text-body-sm text-muted">
           {hasSubmitted
-            ? "You've locked in your strategy — this debate resolves at the deadline."
-            : "Pick your debate strategy. Each leans on a different stat with its own risk/reward — a bold attack swings hard, staying above the fray plays it safe."}
+            ? "You've locked in your strategy. This debate resolves at the deadline."
+            : "Pick your debate strategy. Each leans on a different stat with its own risk and reward: a bold attack swings hard, and staying above the fray plays it safe."}
         </p>
       </div>
 
@@ -193,13 +183,15 @@ export default function DebateCard() {
         {debate.strategyOptions.map((opt) => {
           const isOn = selected.includes(opt.id);
           const isSubmittedChoice = hasSubmitted && submitted.includes(opt.id);
+          // Selection keeps its state color: green once submitted, the primary tint
+          // while choosing, so a player can always see which strategy is theirs.
           const stateClass = isSubmittedChoice
             ? "border-success/60 bg-success/10"
             : hasSubmitted
-              ? "border-card-border bg-background opacity-50"
+              ? "border-card-border opacity-50"
               : isOn
                 ? "border-primary/60 bg-primary/10"
-                : "border-card-border bg-background hover:border-primary/40";
+                : "border-card-border hover:bg-card-elevated";
           return (
             <button
               key={opt.id}
@@ -209,24 +201,24 @@ export default function DebateCard() {
               className={`block w-full rounded-lg border px-3 py-2.5 text-left transition-colors disabled:cursor-not-allowed ${stateClass}`}
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="text-sm font-semibold text-foreground">{opt.label}</span>
+                <span className="text-body font-semibold text-foreground">{opt.label}</span>
                 {isSubmittedChoice ? (
-                  <span className="shrink-0 rounded-full border border-success/40 bg-success/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-success">
+                  <span className="shrink-0 text-body-sm font-medium text-success">
                     ✓ You selected
                   </span>
                 ) : (
-                  <span className="text-[10px] uppercase tracking-wider text-muted">
+                  <span className="shrink-0 text-body-sm text-muted">
                     {STAT_LABEL[opt.linkedStat] ?? opt.linkedStat}
                   </span>
                 )}
               </div>
-              <p className="mt-0.5 text-xs text-muted">{opt.blurb}</p>
+              <p className="mt-0.5 text-body-sm text-muted">{opt.blurb}</p>
             </button>
           );
         })}
 
         {error && (
-          <p className="rounded-lg border border-error/30 bg-error/5 px-3 py-2 text-xs text-error">
+          <p className="rounded-lg border border-error/30 px-3 py-2 text-body-sm text-error">
             {error}
           </p>
         )}
@@ -245,7 +237,7 @@ export default function DebateCard() {
                 : "Commit strategy"}
           </button>
         ) : hasSubmitted ? null : (
-          <p className="mt-1 text-xs italic text-muted">
+          <p className="mt-1 text-body-sm text-muted">
             Waiting on the other candidate. This debate resolves at the deadline.
           </p>
         )}

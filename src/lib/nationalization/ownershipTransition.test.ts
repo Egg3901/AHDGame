@@ -1,3 +1,4 @@
+import "./ownershipTransition";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
@@ -309,7 +310,8 @@ describe("nationalizeSector", () => {
       "CN",
       20000, // valuation 4000 × fair × buyout premium (5)
       expect.anything(),
-      expect.any(Date)
+      expect.any(Date),
+      expect.objectContaining({ flow: "nationalization_compensation" })
     );
   });
 });
@@ -429,7 +431,8 @@ describe("nationalizeWholeCorp", () => {
       db,
       "CN",
       500,
-      expect.any(Date)
+      expect.any(Date),
+      expect.objectContaining({ flow: "corporation_liquidation" })
     );
     expect(db.collectionMocks.characters.updateOne).not.toHaveBeenCalled();
   });
@@ -485,7 +488,8 @@ describe("nationalizeWholeCorp", () => {
       db,
       "CN",
       5000,
-      expect.any(Date)
+      expect.any(Date),
+      expect.objectContaining({ flow: "corporation_liquidation" })
     );
   });
 
@@ -530,7 +534,8 @@ describe("nationalizeWholeCorp", () => {
       db,
       "CN",
       8000,
-      expect.any(Date)
+      expect.any(Date),
+      expect.objectContaining({ flow: "corporation_liquidation" })
     );
     expect(db.collectionMocks.characters.updateOne).not.toHaveBeenCalled();
   });
@@ -924,12 +929,11 @@ describe("nationalizeWholeCorp", () => {
       avgCostPerShare: 150,
     });
 
-    // Verify that the National Corporation was credited with the value of the shares
+    // Shares only: the buyout pays the holders for them, so crediting their value
+    // to the National Corporation as cash too would create money (#3041).
     const creditCall = db.collectionMocks.corporations.updateOne.mock.calls.find(
       (c) => c[1]?.$inc?.liquidCapital != null && (c[0]?._id as ObjectId)?.equals(nationalCorpId)
     );
-    expect(creditCall).toBeTruthy();
-    // 100 shares * 200 CNY/share = 20,000 CNY
-    expect(creditCall![1].$inc.liquidCapital).toBe(20_000);
+    expect(creditCall).toBeUndefined();
   });
 });

@@ -57,9 +57,7 @@ function Cell({
 }) {
   return (
     <div className={`flex flex-col gap-1 px-4 py-3.5 ${className}`}>
-      <span className="whitespace-nowrap text-[10px] font-bold uppercase tracking-[0.16em] text-muted">
-        {label}
-      </span>
+      <span className="whitespace-nowrap text-body-sm font-medium text-muted">{label}</span>
       {children}
     </div>
   );

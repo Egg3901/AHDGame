@@ -143,7 +143,7 @@ export function CeoOperationsPanel({
               minimum remittance can never be undercut from the UI. */}
           <div>
             <div className="text-body-sm font-medium text-foreground">Profit retained / turn</div>
-            <p className="text-body-xs text-muted">
+            <p className="text-body-sm text-muted">
               Share of operating profit kept in the corporation each turn; the rest remits to the
               national budget. At least {MIN_PROFIT_REMITTANCE_PERCENT}% always remits.
             </p>
@@ -181,7 +181,7 @@ export function CeoOperationsPanel({
           {/* Treasury draw */}
           <div>
             <div className="text-body-sm font-medium text-foreground">Draw from the treasury</div>
-            <p className="text-body-xs text-muted">
+            <p className="text-body-sm text-muted">
               Pull working capital from the national budget into the corporation, up to the treasury
               minister&apos;s per-turn cap. A draw may run the reserve into debt.
             </p>
@@ -246,7 +246,7 @@ export function CeoOperationsPanel({
             breakthrough
           </div>
         </div>
-        <div className="mt-2 space-y-1 rounded-lg border border-card-border bg-card-muted/40 px-3 py-2 text-body-xs text-muted">
+        <div className="mt-2 space-y-1 rounded-lg border border-card-border bg-card-muted/40 px-3 py-2 text-body-sm text-muted">
           <p>
             <span className="font-semibold text-foreground">What it does:</span> every{" "}
             {RD_INNOVATION_INTERVAL} turns, a{" "}
@@ -529,7 +529,7 @@ function NatBulkGroupCard({
           </Button>
         </div>
         {preview && (
-          <div className="mt-2 rounded-lg border border-gold/40 bg-gold/10 p-2 text-body-xs">
+          <div className="mt-2 rounded-lg border border-gold/40 bg-gold/10 p-2 text-body-sm">
             <p className="text-foreground">
               Set growth to {preview.target}% across {preview.matchedCount} holdings. Projected cost
               ~{natMoney(preview.projected, currency)}/day (currently ~
@@ -588,7 +588,7 @@ function NatBulkGroupCard({
       {/* Pricing posture (direct apply; requires market clearing) */}
       <div>
         <div className="text-body-xs font-medium text-foreground">Pricing posture</div>
-        <p className="mt-1 text-body-xs text-muted">
+        <p className="mt-1 text-body-sm text-muted">
           Posted price vs market for every holding in this group.
         </p>
         <div className="mt-2 flex flex-wrap gap-1.5">
@@ -722,12 +722,12 @@ function SectorOpsRow({
       {strategies.length > 1 && (
         <div>
           <div className="text-body-sm font-medium text-foreground">Production method</div>
-          <p className="text-body-xs text-muted">
+          <p className="text-body-sm text-muted">
             How this sector makes what it makes. Each method uses different inputs and produces
             different goods. Changing method costs a retooling period before the new one is live.
           </p>
           {retooling ? (
-            <p className="mt-2 text-body-xs text-warning">
+            <p className="mt-2 text-body-sm text-warning">
               Retooling in progress. You can pick a new method once it finishes.
             </p>
           ) : (
@@ -771,7 +771,7 @@ function SectorOpsRow({
       {plantsMode && (
         <div>
           <div className="text-body-sm font-medium text-foreground">Capacity</div>
-          <p className="text-body-xs text-muted">
+          <p className="text-body-sm text-muted">
             What these {facilityPlural(sector.sectorType as CorporationType)} can make in one
             financial day. Capacity is bought, not set: order a build and it arrives after a
             construction lag.
@@ -805,7 +805,7 @@ function SectorOpsRow({
       {/* Capacity */}
       <div className={plantsMode ? "hidden" : undefined}>
         <div className="text-body-sm font-medium text-foreground">Capacity</div>
-        <p className="text-body-xs text-muted">
+        <p className="text-body-sm text-muted">
           Set the growth rate this sector trends toward each turn. Higher targets expand revenue
           faster but raise the per-turn growth cost. Range {MIN_GROWTH_RATE}% to {MAX_GROWTH_RATE}%.
         </p>
@@ -842,7 +842,7 @@ function SectorOpsRow({
       {/* Production */}
       <div>
         <div className="text-body-sm font-medium text-foreground">Production</div>
-        <p className="text-body-xs text-muted">
+        <p className="text-body-sm text-muted">
           Set a target output level ({PRODUCTION_MIN}% to +{PRODUCTION_MAX}%). The active level
           trends toward the target by 1 point per turn. Higher output raises revenue and commodity
           supply; lower output reduces them and cuts input demand.

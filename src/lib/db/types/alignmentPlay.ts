@@ -1,4 +1,5 @@
 import type { ObjectId } from "mongodb";
+import type { AlignmentPoleId } from "@/lib/constants/alignmentEras";
 import type { AlignmentCountryKey } from "@/lib/constants/alignmentRoster";
 import type { CountryId } from "@/lib/constants/countries";
 import type { InternationalOrganizationId } from "@/lib/constants/internationalOrganizations";
@@ -11,9 +12,8 @@ import type { InternationalOrganizationId } from "@/lib/constants/internationalO
  * into the same pull vector drift feeds — so a play inherits the non-aligned
  * resistance, the locked gate and the per-nation turn cap for free.
  *
- * Resolved rows are STAMPED rather than deleted (`resolvedTurn`, `appliedPoints`)
- * so a member can see what its money actually bought. That is the difference
- * between a lever and a slot machine.
+ * Resolved rows are stamped rather than deleted. `appliedPoints` preserves the
+ * accounting input; `effectivePoints` reports the attributed final share gain.
  */
 export interface AlignmentPlay {
   _id: ObjectId;
@@ -29,11 +29,19 @@ export interface AlignmentPlay {
   turn: number;
   /** Set when the alignment phase consumes it. Null while pending. */
   resolvedTurn: number | null;
-  /** Share points it contributed, after the channel weight. Null while pending. */
+  /** Raw pull after channel weight and bloc strain, before drift. Null while pending. */
   appliedPoints: number | null;
   /**
+   * Attributed share gain after opposition, resistance, the shared turn cap and
+   * normalization. Absent on legacy rows; never substitute appliedPoints.
+   * Zero effective gain does not itself entitle a play to a refund.
+   */
+  effectivePoints?: number;
+  /** Pole the play resolved toward, so later era/channel changes cannot relabel its gain. */
+  effectivePoleId?: AlignmentPoleId;
+  /**
    * True when the spend was returned to the fund because the play resolved to
-   * exactly zero points — the target locked, or lost its alignment row, inside
+   * exactly zero raw applied points: the target locked, or lost its alignment row, inside
    * the turn between commit and resolve. Absent on rows written before refunds
    * existed; read as "not refunded".
    */

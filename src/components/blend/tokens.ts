@@ -3,8 +3,8 @@
  * campaign redesign canvas).
  *
  * Blend is a newsroom layout: a dark near-black ground, hairline rules instead
- * of card borders, Lora for prose and headings, JetBrains Mono for every
- * numeric and label. It deliberately does not use the app's Tailwind card
+ * of card borders, the app's Geist sans for prose and headings, JetBrains Mono
+ * for every numeric and label. It deliberately does not use the app's Tailwind card
  * tokens, so the values live here rather than in `globals.css` and are pinned
  * by `tokens.test.ts`.
  *
@@ -56,12 +56,14 @@ export const BLEND = {
 } as const;
 
 /**
- * Font stacks. Lora, JetBrains Mono and Geist are already registered in
+ * Font stacks. JetBrains Mono and Geist are already registered in
  * `src/app/layout.tsx` via `next/font/google` and exposed as CSS variables on
- * `<body>`, so these reference the variables rather than loading anything new.
+ * `<html>`, so these reference the variables rather than loading anything new.
+ *
+ * Headings and prose are sans like the rest of the app; mono is for figures
+ * and labels.
  */
 export const FONT = {
-  serif: "var(--font-lora), Lora, Georgia, serif",
   mono: "var(--font-jetbrains-mono), 'JetBrains Mono', ui-monospace, monospace",
   sans: "var(--font-geist-sans), Geist, system-ui, sans-serif",
 } as const;

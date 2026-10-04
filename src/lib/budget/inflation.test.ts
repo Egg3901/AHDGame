@@ -232,14 +232,14 @@ describe("calculateInflation", () => {
   });
 
   it("GRADUATION: targets re-key on the CURRENT in-game year as a world advances", () => {
-    // A 1953-default world over its life: 1953 anchors while in the 1953 era…
-    expect(getInflationTarget("IT", 1955)).toBe(2.5);
-    expect(getNeutralPrimeRate("IT", 1955)).toBe(4.0);
-    // …the 1979 stagflation anchors through 1979-1990…
-    expect(getInflationTarget("IT", 1985)).toBe(15.0);
-    // …the 1991 disinflation anchors through 1991-1998…
-    expect(getInflationTarget("IT", 1995)).toBe(5.5);
-    expect(getInflationTarget("US", 1995)).toBe(4.0);
+    // Reference values graduate between the same authored calibration points.
+    expect(getInflationTarget("IT", 1955)).toBeCloseTo(2.5 + 6.5 / 9);
+    expect(getNeutralPrimeRate("IT", 1955)).toBeCloseTo(4 + 6 / 9);
+    // Intermediate dates blend their neighboring points.
+    expect(getInflationTarget("IT", 1985)).toBeCloseTo(10.25);
+    // The 1991 reference converges toward the unchanged modern fallback.
+    expect(getInflationTarget("IT", 1995)).toBeCloseTo(10.25);
+    expect(getInflationTarget("US", 1995)).toBeCloseTo(3);
     // …and the modern table from 1999 on. The live 1991-default world at
     // in-game ~2015 resolves modern anchors (its pre-era-table behavior).
     expect(getInflationTarget("US", 2015)).toBe(getInflationTarget("US"));

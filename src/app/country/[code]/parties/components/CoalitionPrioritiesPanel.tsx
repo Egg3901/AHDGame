@@ -264,7 +264,7 @@ export function CoalitionPrioritiesPanel({
             </div>
           </div>
           <div className="text-right">
-            <div className="text-xs uppercase tracking-widest text-muted font-medium">Support</div>
+            <div className="text-xs text-muted font-medium">Support</div>
             <div className="text-lg font-semibold text-foreground">
               {priority.tally.support}/{priority.tally.requiredToPass}
             </div>
@@ -310,9 +310,7 @@ export function CoalitionPrioritiesPanel({
         )}
 
         <div className="rounded-lg border border-card-border bg-background p-3">
-          <div className="text-xs uppercase tracking-widest text-muted font-medium mb-2">
-            Party Stances
-          </div>
+          <div className="text-xs text-muted font-medium mb-2">Party stances</div>
           <div className="grid gap-2 md:grid-cols-2">
             {priority.partyStances.map((stance) => (
               <div
@@ -348,7 +346,7 @@ export function CoalitionPrioritiesPanel({
       <div className="rounded-xl border border-card-border bg-card p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h2 className="text-lg font-semibold mb-1">Coalition Priorities</h2>
+            <h2 className="text-lg font-semibold mb-1">Coalition priorities</h2>
             <p className="text-sm text-muted">
               Coalitions can hold up to three active priorities at once. Member party chairs vote to
               activate proposals, and cohesion reflects how much support those active goals still
@@ -357,16 +355,12 @@ export function CoalitionPrioritiesPanel({
           </div>
           <div className="grid min-w-[240px] gap-3 sm:grid-cols-2">
             <div className="rounded-xl border border-card-border bg-background p-4">
-              <div className="text-xs uppercase tracking-widest text-muted font-medium">
-                Cohesion
-              </div>
+              <div className="text-xs text-muted font-medium">Cohesion</div>
               <div className="mt-1 text-xl font-semibold">{data.cohesion.label}</div>
               <div className="text-sm text-muted">{data.cohesion.score}/100 alignment</div>
             </div>
             <div className="rounded-xl border border-card-border bg-background p-4">
-              <div className="text-xs uppercase tracking-widest text-muted font-medium">
-                Active Priorities
-              </div>
+              <div className="text-xs text-muted font-medium">Active priorities</div>
               <div className="mt-1 text-xl font-semibold">{data.priorities.active.length}/3</div>
               <div className="text-sm text-muted">
                 {data.cohesion.supportVotes} support • {data.cohesion.opposeVotes} oppose
@@ -389,7 +383,7 @@ export function CoalitionPrioritiesPanel({
       {data.viewer.canPropose && (
         <div className="rounded-xl border border-card-border bg-card p-6 space-y-4">
           <div>
-            <h3 className="text-lg font-semibold">Propose Priority</h3>
+            <h3 className="text-lg font-semibold">Propose priority</h3>
             <p className="text-sm text-muted">
               The coalition chair proposes agenda items here. Member party chairs then vote them
               into the active slate.
@@ -404,9 +398,7 @@ export function CoalitionPrioritiesPanel({
 
           <div className="grid gap-4 md:grid-cols-2">
             <label className="block">
-              <span className="mb-1 block text-xs uppercase tracking-widest text-muted font-medium">
-                Type
-              </span>
+              <span className="mb-1 block text-xs text-muted font-medium">Type</span>
               <select
                 value={draftType}
                 onChange={(event) => setDraftType(event.target.value as DraftType)}
@@ -418,9 +410,7 @@ export function CoalitionPrioritiesPanel({
               </select>
             </label>
             <label className="block">
-              <span className="mb-1 block text-xs uppercase tracking-widest text-muted font-medium">
-                Visibility
-              </span>
+              <span className="mb-1 block text-xs text-muted font-medium">Visibility</span>
               <select
                 value={draftVisibility}
                 onChange={(event) =>
@@ -433,9 +423,7 @@ export function CoalitionPrioritiesPanel({
               </select>
             </label>
             <label className="block">
-              <span className="mb-1 block text-xs uppercase tracking-widest text-muted font-medium">
-                Stance
-              </span>
+              <span className="mb-1 block text-xs text-muted font-medium">Stance</span>
               <select
                 value={draftStance}
                 onChange={(event) => setDraftStance(event.target.value as "support" | "oppose")}
@@ -447,9 +435,7 @@ export function CoalitionPrioritiesPanel({
             </label>
             {draftType === "policy_theme" && (
               <label className="block">
-                <span className="mb-1 block text-xs uppercase tracking-widest text-muted font-medium">
-                  Theme
-                </span>
+                <span className="mb-1 block text-xs text-muted font-medium">Theme</span>
                 <select
                   value={draftPolicyTheme}
                   onChange={(event) => setDraftPolicyTheme(event.target.value)}
@@ -465,9 +451,7 @@ export function CoalitionPrioritiesPanel({
             )}
             {draftType === "bill" && (
               <label className="block md:col-span-2">
-                <span className="mb-1 block text-xs uppercase tracking-widest text-muted font-medium">
-                  Bill
-                </span>
+                <span className="mb-1 block text-xs text-muted font-medium">Bill</span>
                 <select
                   value={draftBillId}
                   onChange={(event) => setDraftBillId(event.target.value)}
@@ -488,9 +472,7 @@ export function CoalitionPrioritiesPanel({
             {draftType === "leadership_goal" && (
               <>
                 <label className="block">
-                  <span className="mb-1 block text-xs uppercase tracking-widest text-muted font-medium">
-                    Goal
-                  </span>
+                  <span className="mb-1 block text-xs text-muted font-medium">Goal</span>
                   <select
                     value={draftLeadershipGoal}
                     onChange={(event) => setDraftLeadershipGoal(event.target.value)}
@@ -504,9 +486,7 @@ export function CoalitionPrioritiesPanel({
                   </select>
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-xs uppercase tracking-widest text-muted font-medium">
-                    Goal Window
-                  </span>
+                  <span className="mb-1 block text-xs text-muted font-medium">Goal window</span>
                   <select
                     value={draftLeadershipDurationHours}
                     onChange={(event) => setDraftLeadershipDurationHours(event.target.value)}
@@ -519,9 +499,7 @@ export function CoalitionPrioritiesPanel({
                   </select>
                 </label>
                 <label className="block md:col-span-2">
-                  <span className="mb-1 block text-xs uppercase tracking-widest text-muted font-medium">
-                    Target Name
-                  </span>
+                  <span className="mb-1 block text-xs text-muted font-medium">Target name</span>
                   <input
                     value={draftTargetName}
                     onChange={(event) => setDraftTargetName(event.target.value)}
@@ -532,9 +510,7 @@ export function CoalitionPrioritiesPanel({
               </>
             )}
             <label className="block md:col-span-2">
-              <span className="mb-1 block text-xs uppercase tracking-widest text-muted font-medium">
-                Title
-              </span>
+              <span className="mb-1 block text-xs text-muted font-medium">Title</span>
               <input
                 value={draftTitle}
                 onChange={(event) => setDraftTitle(event.target.value)}
@@ -543,9 +519,7 @@ export function CoalitionPrioritiesPanel({
               />
             </label>
             <label className="block md:col-span-2">
-              <span className="mb-1 block text-xs uppercase tracking-widest text-muted font-medium">
-                Description
-              </span>
+              <span className="mb-1 block text-xs text-muted font-medium">Description</span>
               <textarea
                 value={draftDescription}
                 onChange={(event) => setDraftDescription(event.target.value)}
@@ -576,7 +550,7 @@ export function CoalitionPrioritiesPanel({
 
       <section className="space-y-4">
         <div className="flex items-center justify-between gap-4">
-          <h3 className="text-lg font-semibold">Active Priorities</h3>
+          <h3 className="text-lg font-semibold">Active priorities</h3>
           <span className="text-sm text-muted">{data.priorities.active.length}/3 slots used</span>
         </div>
         {data.priorities.active.length === 0 ? (
@@ -592,7 +566,7 @@ export function CoalitionPrioritiesPanel({
       </section>
 
       <section className="space-y-4">
-        <h3 className="text-lg font-semibold">Proposals Awaiting Votes</h3>
+        <h3 className="text-lg font-semibold">Proposals awaiting votes</h3>
         {data.priorities.proposed.length === 0 ? (
           <div className="rounded-xl border border-card-border bg-card p-12">
             <EmptyState
@@ -606,7 +580,7 @@ export function CoalitionPrioritiesPanel({
       </section>
 
       <section className="space-y-4">
-        <h3 className="text-lg font-semibold">Recent History</h3>
+        <h3 className="text-lg font-semibold">Recent history</h3>
         {visibleArchived.length === 0 ? (
           <div className="rounded-xl border border-card-border bg-card p-12">
             <EmptyState

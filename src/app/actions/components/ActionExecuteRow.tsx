@@ -101,20 +101,16 @@ export default function ActionExecuteRow({
     executingKey === execKey || executingKey === execKey5 || executingKey === execKey10;
 
   const btnBase = compact
-    ? "rounded-md px-2.5 py-1.5 text-xs font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed backdrop-blur-sm"
-    : "rounded-lg px-3 py-2 text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed";
+    ? "rounded-md px-2.5 py-1.5 text-body-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+    : "rounded-lg px-3 py-2 text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed";
 
-  const primary = compact
-    ? isBusy && executingKey === execKey
-      ? "bg-white/20 cursor-wait text-white"
-      : "bg-primary hover:bg-primary-dark text-white"
-    : isBusy && executingKey === execKey
+  const primary =
+    isBusy && executingKey === execKey
       ? "bg-muted cursor-wait text-white"
-      : "bg-primary hover:bg-primary-dark hover:shadow-primary/20 text-white shadow-md";
+      : "bg-primary hover:bg-primary-dark text-white";
 
-  const batchIdle = compact
-    ? "border border-white/15 bg-white/10 text-white hover:bg-white/20 hover:border-white/30"
-    : "border border-card-border bg-card-elevated text-foreground hover:bg-primary/10 hover:border-primary/30";
+  const batchIdle =
+    "border border-card-border bg-card-elevated text-foreground hover:bg-card-muted";
 
   const pendingConfirm = confirmCount === 5 ? sim5 : confirmCount === 10 ? sim10 : null;
 
@@ -127,7 +123,7 @@ export default function ActionExecuteRow({
           type="button"
           onClick={() => onExecute(actionType, 1)}
           disabled={blocked || isBusy}
-          className={`${btnBase} ${primary} ${compact ? "min-w-[72px] flex-1 sm:flex-none" : "shadow-md flex-1 min-w-0 sm:flex-none"}`}
+          className={`${btnBase} ${primary} ${compact ? "min-w-[72px] flex-1 sm:flex-none" : "flex-1 min-w-0 sm:flex-none"}`}
         >
           {executingKey === execKey
             ? compact
@@ -135,7 +131,7 @@ export default function ActionExecuteRow({
               : "Executing..."
             : compact
               ? "Execute"
-              : "Execute Action"}
+              : "Execute action"}
         </button>
 
         {batchable && (
@@ -167,11 +163,11 @@ export default function ActionExecuteRow({
         typeof document !== "undefined" &&
         createPortal(
           <div
-            className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+            className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-4"
             onClick={() => setConfirmCount(null)}
           >
             <div
-              className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-xl border border-card-border bg-card p-5 shadow-xl"
+              className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-xl border border-card-border bg-card p-5 shadow-modal"
               onClick={(e) => e.stopPropagation()}
               role="dialog"
               aria-modal="true"
@@ -216,7 +212,7 @@ export default function ActionExecuteRow({
                     onExecute(actionType, c);
                   }}
                   disabled={isBusy}
-                  className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark transition-colors disabled:opacity-50"
+                  className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark transition-colors disabled:opacity-50"
                 >
                   Confirm ×{confirmCount}
                 </button>

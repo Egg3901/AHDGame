@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { POLITICAL_METRIC_COUNTRY_IDS } from "@/lib/politicalMetrics/types";
 import PoliticalMetricsClient from "./PoliticalMetricsClient";
 
-/** Political Metrics dashboard — available for the playable US/UK/RU/DD set only. */
+/** Political metrics registry, available for the playable US/UK/RU/DD set only. */
 export default async function PoliticalMetricsPage({
   params,
 }: {

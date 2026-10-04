@@ -284,6 +284,73 @@ describe("P3.5 — policy margin stack rides the revenue-side policyCredit line"
   });
 });
 
+describe("P3.5 — legacy anchors solved with the policy stack inside them", () => {
+  /**
+   * Before `policyCredit` existed the residual was solved against a margin
+   * cost that already contained the modifier stack, and the stored basis was
+   * `1 − (base + stack)/100`. Rebuild such an anchor from a calibration turn
+   * and check it reproduces the margin formula on that same state. The old
+   * multiplicative rebase missed by stack × (inputs + labour) ÷ basis.
+   */
+  const withStack = (env: SectorTurnEnv) => {
+    env.market = { ...env.market, governorRampTurns: 0 };
+    (env.lookups.regionalConditionMarginByState as Map<string, number>).set(STATE_ID, 12);
+  };
+
+  it("reproduces the margin formula on its calibration state", () => {
+    const capital = run("capital", makeSector({ capitalStock: STOCK }), 1000, withStack);
+    const flip = run("plants", makeSector({ capitalStock: STOCK }), 1000, withStack);
+    const pnl = flip.update.plantsPnl as { policyCredit: number; revenue: number };
+    const units = flip.update.producedUnits as number;
+    const neutralAnchor = flip.update.otherOpexPerUnitAnchor as number;
+    const neutralBasis = flip.update.otherOpexAnchorMarginBasis as number;
+    expect(pnl.policyCredit).toBeGreaterThan(0);
+
+    // What the pre-policyCredit calibration stamped on the same state.
+    const legacyAnchor = neutralAnchor - pnl.policyCredit / TURNS_PER_DAY / units;
+    const legacyBasis = neutralBasis - pnl.policyCredit / pnl.revenue;
+
+    const legacy = run(
+      "plants",
+      makeSector({
+        capitalStock: STOCK,
+        plantsStartTurn: 1000,
+        otherOpexPerUnitAnchor: legacyAnchor,
+        otherOpexAnchorMarginBasis: legacyBasis,
+      }),
+      1000,
+      withStack
+    );
+    // Both reference paths round to cents and the stored P&L lines are
+    // rounded too; the old multiplicative rebase missed by ~189 here.
+    expect(Math.abs(legacy.result.costs - capital.result.costs)).toBeLessThan(0.01);
+    expect(Math.abs(legacy.result.costs - flip.result.costs)).toBeLessThan(0.01);
+  });
+
+  it("moves profit only by the change in the stack since calibration", () => {
+    const flip = run("plants", makeSector({ capitalStock: STOCK }), 1000, withStack);
+    const pnl = flip.update.plantsPnl as { policyCredit: number; revenue: number };
+    const units = flip.update.producedUnits as number;
+    const sector = makeSector({
+      capitalStock: STOCK,
+      plantsStartTurn: 1000,
+      otherOpexPerUnitAnchor:
+        (flip.update.otherOpexPerUnitAnchor as number) - pnl.policyCredit / TURNS_PER_DAY / units,
+      otherOpexAnchorMarginBasis:
+        (flip.update.otherOpexAnchorMarginBasis as number) - pnl.policyCredit / pnl.revenue,
+    });
+    const same = run("plants", sector, 1000, withStack);
+    const removed = run("plants", sector, 1000, (env) => {
+      withStack(env);
+      (env.lookups.regionalConditionMarginByState as Map<string, number>).set(STATE_ID, 0);
+    });
+    // Dropping the 12-point regional modifier costs exactly its revenue
+    // share; the charge-back is the same amount in both runs.
+    const delta = profitOf(same) - profitOf(removed);
+    expect(delta).toBeCloseTo(same.result.hourlyRevenue * 0.12, 6);
+  });
+});
+
 describe("P3.5 — input prices actually reach the P&L", () => {
   /** A calibrated, post-flip sector; `ratio` is the lagged price of every input. */
   const calibrated = (ratio: number, anchor: number, basis: number) =>

@@ -40,6 +40,7 @@ import {
 } from "@/lib/constants/countries";
 import { isExecutiveOffice } from "@/lib/elections/executiveOffice";
 import { spawnHouseElection, spawnCommonsElection } from "@/lib/turn/election/electionSpawning";
+import { countPrStv, validateRankedBallots } from "./rules/prStv";
 import { allocateSeats } from "@/lib/turn/election/seatAllocation";
 import { loadApportionment } from "@/lib/elections/apportionment";
 import { getUkCommonsSeats } from "@/lib/constants/states";
@@ -72,6 +73,8 @@ import {
 } from "./generalResolutionHelpers";
 import { logger } from "../../observability/logger";
 import { finishFinalizedElectionCleanup } from "./finalizedElectionCleanup";
+import { applyConversionVotePenalty, applyLegacySeatFloor } from "./conversionTerms";
+import { loadSurvivingPartyResolver } from "@/lib/parties/survivingParty";
 import { captureElectionWon } from "@/lib/analytics/electionAnalytics";
 import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
 
@@ -167,6 +170,15 @@ export async function resolveOneGeneralElection(
     ) {
       throw new Error("Bulgarian ordinary Assembly requires its frozen national allocation");
     }
+    if (
+      tally?.countingMethod === "pr_stv" &&
+      (election.countryId !== "IE" || !["dail", "localCouncil"].includes(election.electionType))
+    )
+      throw new Error("Ranked PR-STV is supported only for Irish Dail and local council races");
+    if (tally?.countingMethod === "pr_stv" && election.conversionTerms)
+      throw new Error(
+        "Ranked PR-STV does not support conversion vote penalties or reserved seat floors"
+      );
     // Phase 4: Sainte-Laguë chambers (DE Landtag) use proportional allocation
     // (5% Land-level threshold) instead of FPTP. Dispatch on the configured
     // method — `pr_sainteLague` is unique to the DE Landtag — before any other
@@ -272,6 +284,12 @@ export async function resolveOneGeneralElection(
     // Fallback: if totalVotes is empty but snapshots have data, recover from
     // the last snapshot's cumulativeVotes. This guards against any process
     // that clears totalVotes between the final accumulation and resolution.
+    const isPrStv = tally.countingMethod === "pr_stv";
+    if (isPrStv) {
+      if (election.countryId !== "IE" || !["dail", "localCouncil"].includes(election.electionType))
+        throw new Error("Ranked PR-STV is supported only for Irish Dail and local council races");
+      validateRankedBallots(tally.rankedBallots, tally.totalVotes);
+    }
     let effectiveVotes = tally.totalVotes;
     if (Object.keys(effectiveVotes).length === 0 && tally.turnSnapshots?.length > 0) {
       const lastSnapshot = tally.turnSnapshots[tally.turnSnapshots.length - 1];
@@ -287,6 +305,7 @@ export async function resolveOneGeneralElection(
     let totalVotesCast = Object.values(effectiveVotes).reduce((s, v) => s + v, 0);
 
     if (totalVotesCast === 0) {
+      if (isPrStv) throw new Error("PR-STV cannot resolve without cast ranked ballots");
       // Tally exists but zero votes were cast — finalize, withdraw candidates,
       // vacate stale seats and respawn. See resolveElectionWithZeroVotes.
       return await resolveElectionWithZeroVotes(db, election, now, currentTurn);
@@ -308,6 +327,11 @@ export async function resolveOneGeneralElection(
         status: "active",
       })
       .toArray();
+
+    // A candidacy filed under a party that has since merged away counts for,
+    // and seats into, the party that absorbed it (ticket 1376).
+    const survivingParty = await loadSurvivingPartyResolver(db, election.countryId ?? "US");
+    for (const c of candidates) c.party = survivingParty(c.party) ?? c.party;
 
     const candidateMap = new Map(candidates.map((c) => [c._id.toString(), c]));
 
@@ -405,7 +429,7 @@ export async function resolveOneGeneralElection(
       console.warn(
         `[Turn] Election ${election._id} (${election.electionType}/${election.state}): ` +
           `${missingIds.length} candidate ID(s) in tally not found in electionCandidates — ` +
-          `votes discarded: ${missingIds.join(", ")}`
+          `${isPrStv ? "preferences transfer past unavailable candidates" : "votes discarded"}: ${missingIds.join(", ")}`
       );
     }
 
@@ -437,6 +461,18 @@ export async function resolveOneGeneralElection(
           `Devolution hook applied nudge=${hookResult.nudgeApplied.toFixed(3)}, ` +
           `proIndyBonus=${hookResult.proIndyBonusApplied.toFixed(3)}`
       );
+    }
+
+    // First election after a forced one-party-state conversion: the former
+    // ruling party's votes take the conversion's penalty before ranking.
+    const penalizedVotes = applyConversionVotePenalty(
+      effectiveVotes,
+      (id) => candidateMap.get(id)?.party,
+      election.conversionTerms
+    );
+    if (penalizedVotes) {
+      effectiveVotes = penalizedVotes;
+      totalVotesCast = Object.values(effectiveVotes).reduce((s, v) => s + v, 0);
     }
 
     // ── Defense-in-depth: never seat a hard-deleted character ────────────────
@@ -504,6 +540,7 @@ export async function resolveOneGeneralElection(
     }
 
     if (ranked.length === 0) {
+      if (isPrStv) throw new Error("PR-STV cannot resolve without eligible candidates");
       // Every ranked candidate was dropped (missing docs / deleted characters)
       // — same cleanup as zero votes. See resolveElectionWithNoRankedCandidates.
       return await resolveElectionWithNoRankedCandidates(db, election, now, currentTurn);
@@ -698,25 +735,51 @@ export async function resolveOneGeneralElection(
           };
         })()
       : null;
-    const { isMultiSeat, seatsEstimate, winners, losers } =
-      districted ??
-      bgOrdinaryAllocation ??
-      bgAllocation ??
-      huAllocation ??
-      allocateSeats(
-        election.electionType,
-        election.state,
-        totalSeats,
-        ranked,
-        totalVotesCast,
-        houseSeats,
-        // National Front chambers: the quota decides the party split, not the
-        // vote. Undefined for every non-bloc-list country, so their allocation
-        // is byte-identical.
-        runtimeBlocQuota?.shares,
-        commonsSeats,
-        election.countryId ?? "US"
-      );
+    const prStvResult = isPrStv
+      ? countPrStv(
+          ranked.map((c) => c.id),
+          totalSeats,
+          tally.rankedBallots!
+        )
+      : undefined;
+    if (prStvResult) {
+      const holders = ranked.map(({ id }) => {
+        const c = candidateMap.get(id)!;
+        return `${c.isNPP ? "npp" : "player"}:${c.isNPP ? c.nppId : c.characterId}`;
+      });
+      if (new Set(holders).size !== holders.length)
+        throw new Error("PR-STV requires distinct candidate holder identities");
+    }
+    // The opt-in ranked count seats individual people, not aggregate seat blocks.
+    const { isMultiSeat, seatsEstimate, winners, losers } = prStvResult
+      ? {
+          isMultiSeat: true,
+          seatsEstimate: prStvResult.seats,
+          winners: prStvResult.elected.map((id): [string, number] => [id, 1]),
+          losers: ranked.filter((c) => !prStvResult.seats[c.id]).map((c) => c.id),
+        }
+      : applyLegacySeatFloor(
+          districted ??
+            bgOrdinaryAllocation ??
+            bgAllocation ??
+            huAllocation ??
+            allocateSeats(
+              election.electionType,
+              election.state,
+              totalSeats,
+              ranked,
+              totalVotesCast,
+              houseSeats,
+              // National Front chambers: the quota decides the party split, not the
+              // vote. Undefined for every non-bloc-list country, so their allocation
+              // is byte-identical.
+              runtimeBlocQuota?.shares,
+              commonsSeats,
+              election.countryId ?? "US"
+            ),
+          ranked,
+          election.conversionTerms
+        );
 
     if (isMultiSeat) {
       if (isSpecialCommonsElection(election.electionType)) {
@@ -1377,19 +1440,22 @@ export async function resolveOneGeneralElection(
             };
           }),
           resolvedTotalSeats: winners.reduce((sum, [, seats]) => sum + seats, 0),
-          resolutionPath: bgOrdinaryAllocation
-            ? "bg_ordinary_national"
-            : districted
-              ? "districted_house"
-              : runtimeBlocQuota
-                ? "bloc_list"
-                : election.countryId === "DE" &&
-                    (election.electionType === "bundestag" ||
-                      election.electionType === "snap_bundestag")
-                  ? "ams_direct"
-                  : isMultiSeat
-                    ? "hare_quota"
-                    : "single_winner",
+          ...(prStvResult ? { prStvResult } : {}),
+          resolutionPath: prStvResult
+            ? "pr_stv"
+            : bgOrdinaryAllocation
+              ? "bg_ordinary_national"
+              : districted
+                ? "districted_house"
+                : runtimeBlocQuota
+                  ? "bloc_list"
+                  : election.countryId === "DE" &&
+                      (election.electionType === "bundestag" ||
+                        election.electionType === "snap_bundestag")
+                    ? "ams_direct"
+                    : isMultiSeat
+                      ? "hare_quota"
+                      : "single_winner",
         },
       }
     );
@@ -1450,7 +1516,7 @@ export async function resolveOneGeneralElection(
       }
     }
 
-    updatePoliticianPagesAfterElection(
+    const politicianHistory = updatePoliticianPagesAfterElection(
       db,
       election,
       candidateIds,
@@ -1459,7 +1525,12 @@ export async function resolveOneGeneralElection(
       loserCandidateIds,
       seatsEstimate,
       now
-    ).catch((err) => logger.error("Turn", "Failed to update politician pages", err));
+    );
+    if (isPrStv) await politicianHistory;
+    else
+      politicianHistory.catch((err) =>
+        logger.error("Turn", "Failed to update politician pages", err)
+      );
 
     console.log(
       `[Turn] Election ${election._id} (${election.electionType}/${election.state}) resolved — ` +

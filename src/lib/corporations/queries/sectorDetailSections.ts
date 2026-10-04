@@ -107,6 +107,7 @@ import { STRIKE_REVENUE_THROTTLE } from "@/lib/labour/strikes";
 import { calculatePlantSectorSplit } from "@/lib/corporations/plantSectorSplit";
 import { CAPITAL_DEPRECIATION_PER_TURN } from "@/lib/market/capital";
 import { isNppOwned } from "@/lib/corporations/nppOwned";
+import { plantsNetMarginPct } from "@/lib/corporations/rules/netMargin";
 import type { RetoolHint } from "@/lib/corporations/retoolHint";
 import {
   CAPACITY_BUILD_TURNS,
@@ -1342,11 +1343,12 @@ export interface SectorPlantsSection {
      */
     costPerUnitAnchor: number | null;
     /**
-     * The margin after unsold output: realized profit over the full cost of
-     * everything produced, in percent. This is the honest counterpart to the
-     * stored `effectiveProfitMargin`, which divides by SOLD revenue only and
-     * shows a 15%-fill sector a 45% margin while it bleeds money. Null when
-     * there were no costs to measure against.
+     * Net margin: realized profit over realized revenue, in percent, with the
+     * whole bill (unsold output included) netted out of profit. This is the
+     * honest counterpart to the stored `effectiveProfitMargin`, which divides
+     * by SOLD revenue only and shows a 15%-fill sector a 45% margin while it
+     * bleeds money. Floored at -999.9 for a sector that sold nothing but paid
+     * its bill; null when there was neither revenue nor cost.
      */
     fillAdjustedMarginPct: number | null;
     /**
@@ -1777,8 +1779,11 @@ export function buildSectorPlantsSection(args: {
     producedUnits != null && producedUnits > 0 ? revenueAnchor / producedUnits : null;
   const costPerUnitAnchor =
     producedUnits != null && producedUnits > 0 ? operatingCostAnchor / producedUnits : null;
-  const fillAdjustedMarginPct =
-    totalCostAnchor > 0 ? (money.profitAnchor / totalCostAnchor) * 100 : null;
+  const fillAdjustedMarginPct = plantsNetMarginPct({
+    profit: money.profitAnchor,
+    revenue: revenueAnchor,
+    totalCost: totalCostAnchor,
+  });
   // Break-even: profit is stored per financial day (TURNS_PER_DAY turns), CIP
   // is a stock. Positive profit pays CIP down in cip / profitPerTurn turns; at
   // zero CIP the sector's own profit sign is the whole story.

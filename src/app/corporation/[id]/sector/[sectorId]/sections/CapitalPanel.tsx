@@ -5,7 +5,7 @@ import { InfoTooltip } from "@/components/InfoTooltip";
 import type { CapitalData } from "../types";
 
 function fmt(n: number | null | undefined, digits = 2): string {
-  if (n == null || !Number.isFinite(n)) return "—";
+  if (n == null || !Number.isFinite(n)) return "n/a";
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: digits }).format(n);
 }
 
@@ -171,7 +171,7 @@ export default function CapitalPanel({ capital }: CapitalPanelProps) {
               unit.margin == null ? "text-muted" : unit.margin > 0 ? "text-success" : "text-error"
             }`}
           >
-            {unit.margin == null ? "—" : `₳ ${fmt(unit.margin)}`}
+            {unit.margin == null ? "n/a" : `₳ ${fmt(unit.margin)}`}
           </span>
         </div>
       </div>

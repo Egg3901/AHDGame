@@ -13,7 +13,7 @@ import {
 import type { Org } from "./orgs";
 
 const mono = "'IBM Plex Mono',monospace";
-const serif = "Lora,Georgia,serif";
+const headingFont = "var(--font-geist-sans),system-ui,sans-serif";
 
 export type Reaction = { who: string; color: string; text: string };
 
@@ -169,7 +169,7 @@ export function OrgsForcesTab({
             <div style={{ flex: 1, minWidth: 320 }}>
               <div
                 style={{
-                  fontFamily: serif,
+                  fontFamily: headingFont,
                   fontWeight: 700,
                   fontSize: 28,
                   color: "#f3f1ea",
@@ -508,7 +508,7 @@ export function OrgsForcesTab({
             </div>
             <div
               style={{
-                fontFamily: serif,
+                fontFamily: headingFont,
                 fontWeight: 700,
                 fontSize: 20,
                 color: "#f3f1ea",

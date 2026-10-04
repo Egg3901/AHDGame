@@ -10,7 +10,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { getExchangeForCountry } from "@/lib/constants/exchangeRegistry";
 import type { MoneyPeriod } from "@/lib/constants/moneyTimescale";
 import { CORPORATION_TYPES, type CorporationType } from "@/lib/constants/corporations";
-import { CorporationHero } from "@/components/corporation/CorporationHero";
+import { CorporationMasthead } from "@/components/corporation/CorporationMasthead";
 import { HostileTakeoverCard } from "@/components/corporation/HostileTakeoverCard";
 import { SubsidiaryManagementCard } from "@/components/corporation/SubsidiaryManagementCard";
 import { PrivatizationVotePanel } from "@/components/corporation/PrivatizationVotePanel";
@@ -56,7 +56,6 @@ import {
   CorporationContractsTab,
   DefenceContractsTab,
   SupplyAgreementsSection,
-  IndustrialRelationsSection,
   DefaultedBondCrisisModal,
 } from "@/components/corporation/CorporationPageTabs";
 import { BankConsoleTab } from "./bank/BankConsoleTab";
@@ -525,7 +524,7 @@ export default function CorporationDetailPage() {
       });
       const data = await res.json();
       if (res.ok) {
-        setSectorsMessage({ type: "success", text: "Transition cancelled — reversing now." });
+        setSectorsMessage({ type: "success", text: "Transition cancelled, reversing now." });
         fetchCorporation();
       } else {
         setSectorsMessage({ type: "error", text: data.error || "Failed to cancel transition" });
@@ -613,30 +612,19 @@ export default function CorporationDetailPage() {
             <Skeleton className="h-4 w-40" />
           </div>
 
-          {/* Corporation hero card */}
-          <div className="rounded-2xl border border-card-border bg-card overflow-hidden">
-            {/* Brand accent bar */}
-            <div className="h-1.5 w-full bg-card-border animate-pulse" />
-            <div className="p-5 sm:p-6 space-y-5">
-              {/* Logo + name + CEO row */}
-              <div className="flex items-start gap-4">
-                <Skeleton className="h-16 w-16 rounded-xl shrink-0" />
-                <div className="flex-1 min-w-0 space-y-2">
-                  <Skeleton className="h-7 w-64" />
-                  <div className="flex flex-wrap gap-2">
-                    <Skeleton className="h-5 w-20 rounded-full" />
-                    <Skeleton className="h-5 w-24 rounded-full" />
-                  </div>
-                  <Skeleton className="h-4 w-36" />
-                </div>
-                <Skeleton className="h-8 w-20 rounded-lg shrink-0" />
-              </div>
-              {/* Stats strip */}
-              <div className="flex flex-wrap gap-6 border-t border-card-border pt-4">
-                {[1, 2, 3, 4, 5].map((i) => (
-                  <div key={i} className="space-y-1 min-w-[80px]">
-                    <Skeleton className="h-2.5 w-16" />
-                    <Skeleton className="h-5 w-20" />
+          {/* Masthead: name, identity line, then the quote beside the figures grid */}
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Skeleton className="h-8 w-72 max-w-full" />
+              <Skeleton className="h-3.5 w-[28rem] max-w-full" />
+            </div>
+            <div className="flex flex-col gap-x-10 gap-y-4 border-t border-card-border pt-4 lg:flex-row">
+              <Skeleton className="h-8 w-40" />
+              <div className="grid flex-1 grid-cols-3 gap-x-6 gap-y-3 md:grid-cols-5">
+                {Array.from({ length: 10 }, (_, i) => (
+                  <div key={i} className="space-y-1">
+                    <Skeleton className="h-3 w-12" />
+                    <Skeleton className="h-4 w-16" />
                   </div>
                 ))}
               </div>
@@ -806,8 +794,6 @@ export default function CorporationDetailPage() {
       : []),
   ];
 
-  const brandHex = corporation.brandColor ?? "#3b82f6";
-
   // A country with no configured venue links to the global market rather than
   // claiming a NYSE listing it does not have.
   const exchangeName = corporation.countryId
@@ -816,11 +802,23 @@ export default function CorporationDetailPage() {
   const exchange = exchangeName ? corporation.countryId! : "global";
   const exchangeLabel = exchangeName ?? "Global";
 
+  // Trading happens on the Shares tab; `trade=1` opens the ticket on arrival.
+  const canTrade = !!myCharacterId && !corporation.isPrivate;
+  const openTrade = () => {
+    const target = corpNavLocation(visibleTabs, "shares");
+    const p = new URLSearchParams(searchParams.toString());
+    p.set("tab", target.superTab);
+    if (target.subTab) p.set("sub", target.subTab);
+    else p.delete("sub");
+    p.set("trade", "1");
+    router.replace(`${pathname}?${p.toString()}`, { scroll: false });
+  };
+
   return (
     <div className="min-h-screen bg-background pb-16" data-replay-block>
-      <main className="mx-auto max-w-7xl px-4 sm:px-6 py-8 space-y-8 overflow-x-hidden">
+      <main className="mx-auto max-w-7xl px-4 sm:px-6 py-6 space-y-6 overflow-x-hidden">
         {/* Breadcrumb */}
-        <nav className="flex items-center gap-1.5 text-sm text-muted" aria-label="Breadcrumb">
+        <nav className="flex items-center gap-1.5 text-xs text-muted" aria-label="Breadcrumb">
           <Link
             href={`/stockmarket/${exchange}?tab=stocks`}
             className="hover:text-foreground transition-colors"
@@ -838,25 +836,24 @@ export default function CorporationDetailPage() {
           <span className="text-foreground font-medium truncate">{corporation.name}</span>
         </nav>
 
-        <CorporationHero
+        <CorporationMasthead
           corporation={corporation}
           ceo={ceo}
-          brandHex={brandHex}
           isCeo={isCeo}
-          onRefresh={fetchCorporation}
-          exchangeLabel={exchangeLabel}
           corpId={id}
+          exchangeLabel={exchangeLabel}
           creditRating={corporation.creditRatingSnapshot ?? bondInfo?.creditRating?.rating}
-          sectorCount={sectors.length}
-          stateCount={new Set(sectors.map((s) => s.stateId)).size}
           // Retained income after dividends, from the shared basis. The realized
           // figure is already net of the payout, so netting the projection-derived
           // `dividendDistribution` off it read as a loss on a profitable corp (#1098).
-          income={financials != null ? corpIncomeBasis(financials).retained : null}
+          retainedDaily={financials != null ? corpIncomeBasis(financials).retained : null}
           effectiveDividendRate={financials?.effectiveDividendRate ?? null}
           periodView={periodView}
           financialFogOfWar={financialFogOfWar}
           ceoIsInactive={ceoIsInactive}
+          onRefresh={fetchCorporation}
+          onTrade={canTrade ? openTrade : undefined}
+          showBanner={activeTab === "overview"}
         />
 
         <NationalizationStatusCard corpId={id} />
@@ -887,30 +884,24 @@ export default function CorporationDetailPage() {
         )}
 
         {corporation.isPrivate && !isCeo && (isModerator || isAdmin) && (
-          <div className="rounded-xl border border-info/30 bg-info/10 px-4 py-3 text-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="font-semibold text-foreground">Moderator View</p>
-                <p className="text-muted">
-                  Unlock private-corporation financial screens in read-only mode. Each unlock is
-                  written to the moderator audit log.
-                </p>
-              </div>
-              {modViewEnabled ? (
-                <span className="rounded-full border border-info/40 bg-info/15 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-info">
-                  Mod View Active
-                </span>
-              ) : (
-                <button
-                  type="button"
-                  onClick={enableModView}
-                  disabled={modViewLoading}
-                  className="rounded-lg border border-info/40 bg-info/15 px-4 py-2 text-sm font-medium text-info transition-colors hover:bg-info/20 disabled:opacity-50"
-                >
-                  {modViewLoading ? "Enabling..." : "Mod View"}
-                </button>
-              )}
-            </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-card-border pb-2 text-xs">
+            <p className="text-muted">
+              <span className="font-medium text-foreground">Moderator view.</span> Unlock this
+              private corporation&apos;s financial screens read-only. Each unlock is written to the
+              moderator audit log.
+            </p>
+            {modViewEnabled ? (
+              <span className="font-medium text-info">Mod view active</span>
+            ) : (
+              <button
+                type="button"
+                onClick={enableModView}
+                disabled={modViewLoading}
+                className="inline-flex h-7 items-center rounded-md border border-card-border px-2.5 text-xs font-medium text-foreground hover:bg-card-elevated disabled:opacity-50"
+              >
+                {modViewLoading ? "Enabling" : "Mod view"}
+              </button>
+            )}
           </div>
         )}
 
@@ -951,12 +942,14 @@ export default function CorporationDetailPage() {
             controls stay on the shares tab; the panel's seller actions are
             scoped to the viewer's own listings server-side (isMySelling). */}
         {corporation.isPrivate && !isCeo && myCharacterId && (
-          <div className="rounded-xl border border-card-border bg-card px-6 py-5">
-            <h2 className="text-base font-bold text-foreground">Private Sale</h2>
-            <p className="mt-0.5 mb-4 text-xs text-muted">
-              Open share listings from current owners. Submitting an offer escrows the funds until
-              the seller accepts.
-            </p>
+          <section className="space-y-1">
+            <div className="flex flex-wrap items-baseline gap-x-2 border-b border-card-border pb-1.5">
+              <h2 className="text-sm font-semibold text-foreground">Private sale</h2>
+              <p className="text-xs text-muted">
+                Open listings from current owners. An offer escrows the funds until the seller
+                accepts.
+              </p>
+            </div>
             <PrivateSalePanel
               corporation={corporation}
               myCharacterId={myCharacterId}
@@ -967,7 +960,7 @@ export default function CorporationDetailPage() {
               onToast={showToast}
               forceOpen
             />
-          </div>
+          </section>
         )}
 
         {corporation.openPrivatizationVoteId && (
@@ -1011,51 +1004,52 @@ export default function CorporationDetailPage() {
         )}
 
         {error && (
-          <div className="rounded-xl border border-error/30 bg-error/10 px-4 py-3 text-sm text-error">
+          <p role="alert" className="text-sm text-error">
             {error}
-          </div>
+          </p>
         )}
 
         {isCeo &&
           !corporation.countryOwnerId &&
           bondInfo?.bonds?.some((b) => b.defaulted) &&
           !bondDefaultModalOpen && (
-            <div className="mb-6 rounded-xl border border-error/40 bg-error/10 p-4 flex flex-wrap items-center justify-between gap-3">
-              <p className="text-body-sm text-foreground">
-                This corporation is in{" "}
-                <span className="font-semibold text-error">bond default</span>. Open the resolution
-                panel to pay, refinance, or dissolve.
+            <div className="flex flex-wrap items-center justify-between gap-3 border-y border-error/40 py-2">
+              <p className="text-sm text-foreground">
+                <span className="font-semibold text-error">Bond default.</span> Pay, refinance or
+                dissolve from the resolution panel.
               </p>
               <button
                 type="button"
                 onClick={() => setBondDefaultModalOpen(true)}
-                className="rounded-lg bg-error px-4 py-2 text-sm font-medium text-white hover:bg-error/90 transition-colors shrink-0"
+                className="inline-flex h-7 shrink-0 items-center rounded-md border border-error bg-error px-2.5 text-xs font-medium text-white hover:bg-error/90"
               >
                 Open resolution
               </button>
             </div>
           )}
 
-        {/* Pending CEO offer banner */}
         {isPendingCeo && (
-          <div className="mb-6 rounded-xl border border-warning/40 bg-warning/10 p-4">
-            <div className="text-sm font-semibold text-warning mb-1">
-              You&apos;ve been offered the CEO position at {corporation.name}
-            </div>
-            <p className="text-xs text-muted mb-3">
-              Shareholders have voted you as their top choice for CEO. You may only hold one CEO
-              position at a time.
+          <div className="flex flex-wrap items-center justify-between gap-3 border-y border-warning/40 py-2">
+            <p className="text-sm text-foreground">
+              <span className="font-semibold text-warning">
+                You have been offered the CEO seat at {corporation.name}.
+              </span>{" "}
+              <span className="text-muted">
+                Shareholders voted you their first choice. You can hold one CEO seat at a time.
+              </span>
             </p>
-            <div className="flex gap-3">
+            <div className="flex gap-1.5">
               <button
+                type="button"
                 onClick={handleAcceptCeo}
-                className="rounded-lg bg-success px-4 py-2 text-sm font-medium text-white hover:bg-success/90 transition-colors"
+                className="inline-flex h-7 items-center rounded-md border border-success bg-success px-2.5 text-xs font-medium text-white hover:bg-success/90"
               >
-                Accept Position
+                Accept
               </button>
               <button
+                type="button"
                 onClick={handleDeclineCeo}
-                className="rounded-lg border border-card-border px-4 py-2 text-sm font-medium text-muted hover:text-foreground transition-colors"
+                className="inline-flex h-7 items-center rounded-md border border-card-border px-2.5 text-xs font-medium text-muted hover:text-foreground"
               >
                 Decline
               </button>
@@ -1077,27 +1071,22 @@ export default function CorporationDetailPage() {
             const tab = corpTabIdFor(visibleTabs, superId, subId) ?? "overview";
             return (
               <div className="space-y-8">
-                {tab === "overview" && financials && (
+                {tab === "overview" && (
                   <OverviewTab
                     corporation={corporation}
                     financials={financials}
                     balanceSheet={balanceSheet}
                     bondInfo={bondInfo}
                     sectors={sectors}
+                    corpId={id}
                     periodView={periodView}
+                    onPeriodViewChange={setPeriodView}
                     onTabChange={setTab}
-                    isNationalCorp={isNationalCorp}
                     financialFogOfWar={financialFogOfWar}
+                    isCeo={isCeo}
+                    myCharacterId={myCharacterId}
+                    onTrade={canTrade ? openTrade : undefined}
                   />
-                )}
-                {tab === "overview" && !financials && (
-                  <div className="rounded-xl border border-card-border bg-card p-6 text-center space-y-2">
-                    <p className="text-sm font-semibold text-foreground">Private Corporation</p>
-                    <p className="text-sm text-muted">
-                      This corporation is privately held. Detailed financials are not publicly
-                      disclosed.
-                    </p>
-                  </div>
                 )}
 
                 {tab === "financials" && financials && (
@@ -1203,10 +1192,7 @@ export default function CorporationDetailPage() {
                       />
                     );
                     const bondsPanel = financials ? (
-                      <div id="corp-bonds" className="scroll-mt-24 space-y-3">
-                        <h2 className="text-sm font-bold uppercase tracking-widest text-muted">
-                          Bonds &amp; issuance
-                        </h2>
+                      <div id="corp-bonds" className="scroll-mt-24">
                         <BondsTab
                           bondInfo={bondInfo}
                           bondLoading={!bondInfo && tab === "credit"}
@@ -1223,7 +1209,7 @@ export default function CorporationDetailPage() {
 
                     // The CEO is the only one who can issue bonds, so lead with the
                     // interactable issuance controls for them; everyone else sees the
-                    // credit-rating readout first. A divider sits between the two panels.
+                    // credit-rating readout first.
                     const panels = (
                       isCeo ? [bondsPanel, creditPanel] : [creditPanel, bondsPanel]
                     ).filter(Boolean);
@@ -1231,12 +1217,7 @@ export default function CorporationDetailPage() {
                     return (
                       <div className="space-y-8">
                         {panels.map((panel, i) => (
-                          <div
-                            key={i}
-                            className={i > 0 ? "border-t border-card-border pt-6" : undefined}
-                          >
-                            {panel}
-                          </div>
+                          <div key={i}>{panel}</div>
                         ))}
                       </div>
                     );
@@ -1245,19 +1226,12 @@ export default function CorporationDetailPage() {
                 {tab === "charts" && (
                   <ChartsTab
                     corpId={id}
-                    brandColor={corporation.brandColor}
                     modViewEnabled={modViewEnabled}
                     ownerView={isCeo || modViewEnabled}
                   />
                 )}
 
-                {tab === "snapshot" && (
-                  <SnapshotTab
-                    corpId={id}
-                    brandColor={corporation.brandColor}
-                    modViewEnabled={modViewEnabled}
-                  />
-                )}
+                {tab === "snapshot" && <SnapshotTab corpId={id} modViewEnabled={modViewEnabled} />}
 
                 {tab === "tech" && corporation.techTreesEnabled && (
                   <TechTab corporationId={id} isCeo={isCeo} />
@@ -1304,19 +1278,16 @@ export default function CorporationDetailPage() {
                 )}
 
                 {tab === "ceo" && isCeo && financials && (
-                  <div className="space-y-6">
-                    <IndustrialRelationsSection corpId={id} />
-                    <CeoOfficeTab
-                      corporation={corporation}
-                      financials={financials}
-                      sectors={sectors}
-                      corpId={id}
-                      currentTurn={corporation.currentTurn ?? 0}
-                      onRefresh={fetchCorporation}
-                      myCashOnHand={myCashOnHand}
-                      myCurrencyBalances={myCurrencyBalances}
-                    />
-                  </div>
+                  <CeoOfficeTab
+                    corporation={corporation}
+                    financials={financials}
+                    sectors={sectors}
+                    corpId={id}
+                    currentTurn={corporation.currentTurn ?? 0}
+                    onRefresh={fetchCorporation}
+                    myCashOnHand={myCashOnHand}
+                    myCurrencyBalances={myCurrencyBalances}
+                  />
                 )}
               </div>
             );

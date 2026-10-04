@@ -289,6 +289,13 @@ const SPECIAL_TO_REGULAR: Readonly<Record<string, string>> = {
   special_commons: "commons",
 };
 
+/** By-election types that fill seats of `regularType` (e.g. `commons`). */
+export function byElectionTypesFor(regularType: string): string[] {
+  return Object.entries(SPECIAL_TO_REGULAR)
+    .filter(([, regular]) => regular === regularType)
+    .map(([special]) => special);
+}
+
 /**
  * Beta-parliament chamber keys → default (modern) office-type keys.
  *
@@ -330,6 +337,15 @@ const CHAMBER_KEY_TO_OFFICE_TYPE: Readonly<Record<string, string>> = {
  */
 export function isCommonsGeneralElection(electionType: string): boolean {
   return electionType === "commons" || electionType === "snap_commons";
+}
+
+/**
+ * A by-election: a mid-term race for seats left vacant (`special_commons`,
+ * `special_governor`). Lists that show it beside the region's regular race need
+ * this to tell the two apart, since both carry the same office and region.
+ */
+export function isByElectionType(electionType: string): boolean {
+  return electionType.startsWith("special_");
 }
 
 /**

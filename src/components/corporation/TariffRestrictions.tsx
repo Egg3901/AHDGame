@@ -79,40 +79,36 @@ export function TariffRestrictions({
   const countries = Object.keys(tariffsByCountry);
 
   if (loading) {
-    return <div className="h-16 rounded-lg bg-card/60 animate-pulse" />;
+    return <div className="h-8 animate-pulse border-b border-card-border/60" />;
   }
 
   if (countries.length === 0) {
     return (
-      <div className="rounded-lg border border-border bg-card/60 p-4 text-sm text-muted-foreground">
-        No active trade restrictions affecting this corporation.
-      </div>
+      <p className="py-1 text-xs text-muted">
+        No active trade restrictions affect this corporation.
+      </p>
     );
   }
 
   return (
-    <div className="space-y-4">
-      {countries.map((country) => (
-        <div key={country}>
-          <h4 className="mb-2 text-sm font-semibold text-foreground">{country} Tariffs</h4>
-          <div className="space-y-1.5">
-            {tariffsByCountry[country].map((t) => (
-              <div
-                key={t.id}
-                className="flex items-center justify-between rounded-md border border-border bg-card/40 px-3 py-2"
-              >
-                <span className="text-xs text-muted-foreground">
-                  {SCOPE_LABELS[t.scopeType] ?? t.scopeType}
-                  {t.targetSectorType
-                    ? ` — ${CORPORATION_TYPE_LABELS[t.targetSectorType as CorporationType] ?? t.targetSectorType}`
-                    : ""}
-                </span>
-                <span className="text-sm font-semibold text-amber-400">{t.rate}%</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
+    <table className="w-full border-collapse">
+      <tbody>
+        {countries.flatMap((country) =>
+          tariffsByCountry[country].map((t) => (
+            <tr key={t.id}>
+              <td className="border-b border-card-border/60 py-1.5 pr-2 text-xs text-muted">
+                {country}, {SCOPE_LABELS[t.scopeType] ?? t.scopeType}
+                {t.targetSectorType
+                  ? `, ${CORPORATION_TYPE_LABELS[t.targetSectorType as CorporationType] ?? t.targetSectorType}`
+                  : ""}
+              </td>
+              <td className="whitespace-nowrap border-b border-card-border/60 py-1.5 text-right font-mono text-[13px] text-warning">
+                {t.rate}% tariff
+              </td>
+            </tr>
+          ))
+        )}
+      </tbody>
+    </table>
   );
 }

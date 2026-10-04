@@ -47,12 +47,12 @@
   border-radius: 0;
 }
 
-/* Headings run in the serif; numerics and labels in the mono. */
+/* Headings run in the sans; numerics and labels in the mono. */
 .scope :global(h1),
 .scope :global(h2),
 .scope :global(h3),
 .scope :global(h4) {
-  font-family: var(--font-lora), Lora, Georgia, serif;
+  font-family: var(--font-geist-sans), Geist, system-ui, sans-serif;
   letter-spacing: -0.01em;
 }
 

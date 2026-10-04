@@ -68,7 +68,6 @@ export function ReferendumMasthead({
   accent = "neutral",
   emblemSeal,
   emblemSplit,
-  watermark,
   viewingAs,
 }: {
   countryId: string;
@@ -86,8 +85,6 @@ export function ReferendumMasthead({
   accent?: "yes" | "neutral";
   /** Circular crest, top-right (kind-aware text). */
   emblemSeal?: { line1: string; line2: string };
-  /** Faded oversized watermark behind the header. */
-  watermark?: string;
   /** A row under the title (the admin "Viewing as" control). */
   viewingAs?: React.ReactNode;
 }) {
@@ -104,11 +101,6 @@ export function ReferendumMasthead({
             : undefined
         }
       >
-        {watermark && (
-          <span className="pointer-events-none absolute right-6 top-1 select-none text-[68px] font-black leading-none tracking-tighter text-foreground/[0.06]">
-            {watermark}
-          </span>
-        )}
         <div className="relative flex flex-wrap items-center gap-4">
           {emblemSplit ? (
             <SplitFlagEmblem topLeft={emblemSplit.topLeft} bottomRight={emblemSplit.bottomRight} />
@@ -118,9 +110,7 @@ export function ReferendumMasthead({
             </div>
           )}
           <div className="min-w-[200px] flex-1">
-            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted">
-              {registry}
-            </div>
+            <div className="text-body-sm font-medium text-muted">{registry}</div>
             <h1 className="mt-1 text-2xl font-extrabold leading-tight tracking-tight text-foreground">
               {title}
             </h1>
@@ -128,7 +118,7 @@ export function ReferendumMasthead({
               {subtitle && <span className="text-sm text-muted">{subtitle}</span>}
               {statusPill && <CampaignStatusPill status={statusPill} />}
               <span className="inline-flex items-center gap-1.5 rounded-full border border-card-border bg-background/40 px-2.5 py-1 text-[11px] font-semibold text-muted">
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--success)]" />
+                <span className="h-1.5 w-1.5 rounded-full bg-[var(--success)]" aria-hidden />
                 Live · turn-weighted
               </span>
             </div>
@@ -137,10 +127,10 @@ export function ReferendumMasthead({
           <div className="ml-auto flex items-center gap-3">
             {emblemSeal && (
               <div className="flex h-[72px] w-[72px] flex-none flex-col items-center justify-center rounded-full border-2 border-[var(--ref-yes)]/50 bg-background/40 px-1 text-center">
-                <span className="text-[8px] font-bold uppercase leading-tight tracking-wide text-[var(--ref-yes)]">
+                <span className="text-body-sm font-medium leading-tight text-[var(--ref-yes)]">
                   {emblemSeal.line1}
                 </span>
-                <span className="mt-0.5 text-[8px] font-bold uppercase leading-tight tracking-wide text-muted">
+                <span className="mt-0.5 text-body-sm font-medium leading-tight text-muted">
                   {emblemSeal.line2}
                 </span>
               </div>
@@ -149,22 +139,13 @@ export function ReferendumMasthead({
           </div>
         </div>
       </div>
-      <div
-        className="h-0.5 opacity-80"
-        style={{
-          background:
-            "linear-gradient(90deg,transparent,var(--ref-gold) 16%,var(--ref-amber) 50%,var(--ref-gold) 84%,transparent)",
-        }}
-      />
       <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] bg-background/40">
         {tiles.map((t) => (
           <div
             key={t.label}
             className="flex min-w-0 flex-col gap-0.5 border-r border-t border-card-border px-4 py-3"
           >
-            <span className="truncate text-[10px] font-bold uppercase tracking-wider text-muted">
-              {t.label}
-            </span>
+            <span className="truncate text-body-sm font-medium text-muted">{t.label}</span>
             <span
               className={`truncate font-mono text-lg font-extrabold leading-tight ${
                 TILE_TONE[t.tone ?? "fg"]

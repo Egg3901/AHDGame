@@ -14,7 +14,7 @@ import type { NavalAirPanel as NavalAirPanelData } from "./conflictRecordView";
 export function NavalAirPanel({ data }: { data: NavalAirPanelData }) {
   return (
     <section aria-labelledby="navair-heading" className="rounded border border-neutral-800 p-4">
-      <h3 id="navair-heading" className="text-xs uppercase tracking-wide text-neutral-400">
+      <h3 id="navair-heading" className="text-sm text-neutral-400">
         Air and sea
       </h3>
 

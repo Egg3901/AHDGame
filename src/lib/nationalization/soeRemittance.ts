@@ -24,6 +24,8 @@ import {
 import { isStateOwned } from "./nationalCorporation";
 import { cappedRemittanceLocal } from "./ceoFinance";
 import { remitToTreasury } from "./treasury";
+import type { TreasuryCashOptions } from "./treasuryLedger";
+import { snapshotCorporationCurrency } from "@/lib/ledger/balanceSnapshot";
 import { loadSoeGovernanceInputs } from "./soeGovernanceInputs";
 
 /** One corp's profit-remittance leg this turn, in the corp's own currency. */
@@ -35,7 +37,8 @@ export interface SoeRemittedCorp {
 
 export async function processSoeRemittance(
   db: Db,
-  now: Date
+  now: Date,
+  ledger?: TreasuryCashOptions
 ): Promise<{ remitted: number; perCorp: SoeRemittedCorp[] }> {
   const corps = await db
     .collection<Corporation>("corporations")
@@ -114,7 +117,17 @@ export async function processSoeRemittance(
     if (amountLocal <= 0) continue;
 
     const countryId = (corp.countryOwnerId ?? corp.countryId) as CountryId;
-    await remitToTreasury(db, { countryId, corpId: corp._id, amountLocal }, now);
+    await remitToTreasury(
+      db,
+      {
+        countryId,
+        corpId: corp._id,
+        amountLocal,
+        corpCurrency: snapshotCorporationCurrency(corp),
+      },
+      now,
+      ledger
+    );
     perCorp.push({ corpId: corp._id, countryId, amountLocal });
     remitted++;
   }

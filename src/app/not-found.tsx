@@ -47,9 +47,7 @@ export default function NotFound() {
 
         {/* Quick navigation */}
         <div className="mt-6 rounded-xl border border-card-border bg-card p-6">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted mb-4">
-            Popular Destinations
-          </h3>
+          <h3 className="text-sm font-semibold text-muted mb-4">Popular destinations</h3>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <Link
               href="/elections"

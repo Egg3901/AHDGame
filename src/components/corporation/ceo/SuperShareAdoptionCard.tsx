@@ -6,6 +6,8 @@ import {
   SUPERSHARE_MAX_MULTIPLIER,
 } from "@/lib/corporations/superShares";
 import type { CorporationDetail } from "../CorporationPageTypes";
+import { InlineStatus, SmallButton } from "../dense/DenseKit";
+import { GovernanceRow } from "./GovernanceRow";
 
 /**
  * CEO card to propose adopting a dual-class supershare structure (S#33) via
@@ -51,39 +53,29 @@ export function SuperShareAdoptionCard({
     }
   }
 
+  if (adopted) {
+    return (
+      <GovernanceRow
+        label="Dual-class shares"
+        summary={`Adopted: founder shares carry ${corporation.superShareMultiplier}x votes${
+          corporation.superSharesAdoptedAtTurn != null
+            ? ` since turn ${corporation.superSharesAdoptedAtTurn}`
+            : ""
+        }. They convert to common stock when sold.`}
+      />
+    );
+  }
+
   return (
-    <div className="rounded-xl border border-card-border bg-card p-6">
-      <h2 className="text-lg font-bold text-foreground mb-2">Dual-Class Supershares</h2>
-      {adopted ? (
-        <p className="text-sm text-muted">
-          This corporation has a dual-class structure: each of your founder supershares carries{" "}
-          <strong>{corporation.superShareMultiplier}× votes</strong> in shareholder votes
-          {corporation.superSharesAdoptedAtTurn != null
-            ? ` (adopted on turn ${corporation.superSharesAdoptedAtTurn})`
-            : ""}
-          . Supershares convert to common stock when sold; dividends and payouts are unaffected.
+    <GovernanceRow label="Dual-class shares" summary="Not adopted" actionLabel="Propose">
+      <div className="space-y-1.5">
+        <p className="text-xs text-muted">
+          A shareholder vote to make your current shares supershares, each with several votes. You
+          keep control of governance votes while selling more of the company. Supershares convert to
+          common stock when sold; dividends and payouts are unchanged.
         </p>
-      ) : (
-        <>
-          <p className="text-sm text-muted mb-4">
-            Propose a shareholder vote to designate your current shares as supershares, each
-            carrying multiple votes. This preserves your control of governance votes even as you
-            sell more of the company. Supershares convert to common stock when sold; dividends and
-            payouts are unaffected.
-          </p>
-          {error && (
-            <div className="rounded-lg border border-error/30 bg-error/10 p-3 text-sm text-error mb-3">
-              {error}
-            </div>
-          )}
-          {success && (
-            <div className="rounded-lg border border-success/30 bg-success/10 p-3 text-sm text-success mb-3">
-              {success}
-            </div>
-          )}
-          <label className="block text-xs font-bold uppercase tracking-wider text-muted mb-1.5">
-            Votes per supershare ({multiplier}×)
-          </label>
+        <label className="flex items-center gap-2 text-xs text-muted">
+          Votes per share
           <input
             type="range"
             min={SUPERSHARE_MIN_MULTIPLIER}
@@ -91,21 +83,16 @@ export function SuperShareAdoptionCard({
             step={1}
             value={multiplier}
             onChange={(e) => setMultiplier(Number(e.target.value))}
-            className="w-full"
+            className="w-40"
           />
-          <div className="flex justify-between text-xs text-muted mb-4">
-            <span>{SUPERSHARE_MIN_MULTIPLIER}×</span>
-            <span>{SUPERSHARE_MAX_MULTIPLIER}×</span>
-          </div>
-          <button
-            onClick={handlePropose}
-            disabled={submitting}
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 transition-colors disabled:opacity-50"
-          >
-            {submitting ? "Proposing…" : "Propose Supershares (shareholder vote)"}
-          </button>
-        </>
-      )}
-    </div>
+          <span className="w-8 tabular-nums text-foreground">{multiplier}x</span>
+        </label>
+        <SmallButton tone="primary" onClick={handlePropose} disabled={submitting}>
+          {submitting ? "Proposing" : "Propose supershares vote"}
+        </SmallButton>
+        <InlineStatus message={error} tone="error" />
+        <InlineStatus message={success} tone="success" />
+      </div>
+    </GovernanceRow>
   );
 }

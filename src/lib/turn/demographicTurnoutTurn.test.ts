@@ -16,7 +16,7 @@ import type { Db } from "mongodb";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/treasury/emit", () => ({
-  emitTreasuryTransaction: vi.fn().mockResolvedValue(null),
+  emitTreasuryTransactionsBulk: vi.fn().mockResolvedValue([]),
 }));
 
 describe("demographicTurnoutTurn", () => {
@@ -769,11 +769,14 @@ describe("demographicTurnoutTurn", () => {
         cursorFor(stateIds.map((stateId) => ({ _id: stateId, population: 100_000 })))
       );
 
-      const { emitTreasuryTransaction } = await import("@/lib/treasury/emit");
+      const { emitTreasuryTransactionsBulk } = await import("@/lib/treasury/emit");
 
       await processPartyGOTV();
 
-      expect(emitTreasuryTransaction).toHaveBeenCalledWith(
+      // All treasury rows for the pass go out in one bulk insert.
+      expect(emitTreasuryTransactionsBulk).toHaveBeenCalledTimes(1);
+      const entries = vi.mocked(emitTreasuryTransactionsBulk).mock.calls[0][1];
+      expect(entries).toContainEqual(
         expect.objectContaining({
           holderType: "party",
           partyId,
@@ -781,7 +784,7 @@ describe("demographicTurnoutTurn", () => {
           memo: "GOTV operations",
         })
       );
-      expect(emitTreasuryTransaction).toHaveBeenCalledWith(
+      expect(entries).toContainEqual(
         expect.objectContaining({
           holderType: "party",
           partyId,
@@ -790,10 +793,12 @@ describe("demographicTurnoutTurn", () => {
         })
       );
 
-      const calls = vi
-        .mocked(emitTreasuryTransaction)
-        .mock.calls.filter(([args]) => args.holderType === "party" && args.partyId === partyId);
+      const calls = entries.filter(
+        (args) => args.holderType === "party" && args.partyId === partyId
+      );
       expect(calls).toHaveLength(2);
+      // Emission order is unchanged: GOTV rows before suppression rows.
+      expect(calls.map((args) => args.category)).toEqual(["gotv", "suppression"]);
     });
 
     // Ticket #1265: UK Labour's national GOTV was divided across every

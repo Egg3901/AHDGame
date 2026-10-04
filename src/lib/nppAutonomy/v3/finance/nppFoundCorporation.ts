@@ -98,13 +98,12 @@ export async function nppFoundCorporation(
   const rate = homeRate ?? (await nppHomeFxRate(db, npp.countryId, undefined, preset));
   const foundingFeeAnchor = localToAnchor(foundingFeeLocal, rate);
   const now = new Date();
-  const deducted = await db
-    .collection<NPP>("npps")
-    .findOneAndUpdate(
-      { _id: npp._id, nppInvestmentCashAnchor: { $gte: foundingFeeAnchor } },
-      { $inc: { nppInvestmentCashAnchor: -foundingFeeAnchor }, $set: { updatedAt: now } },
-      { returnDocument: "after" }
-    );
+  const deducted = await db.collection<NPP>("npps").findOneAndUpdate(
+    { _id: npp._id, nppInvestmentCashAnchor: { $gte: foundingFeeAnchor } },
+    { $inc: { nppInvestmentCashAnchor: -foundingFeeAnchor }, $set: { updatedAt: now } },
+    // Only the balance is read back; an NPP document is ~28 KB.
+    { returnDocument: "after", projection: { nppInvestmentCashAnchor: 1 } }
+  );
   if (!deducted) {
     return { ok: false, reason: "Insufficient investment capital to found a corporation." };
   }

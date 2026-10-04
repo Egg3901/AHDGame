@@ -2,6 +2,7 @@ import type { Db } from "mongodb";
 import type { Corporation } from "@/lib/db/types/corporation";
 import type { CorporationVote } from "@/lib/db/types/corporationVote";
 import { getDefaultLegalStructureId } from "@/lib/corporations/legalStructure";
+import { commandEconomyRelocationBlock } from "@/lib/corporations/relocationCommandEconomyGate";
 import { executeCorporationBondDefaultDissolution } from "@/lib/bonds/executeCorporationBondDefaultDissolution";
 import { withCorporationSettlementLock } from "@/lib/corporations/settlementLock";
 import { recordShareTrade } from "@/lib/corporations/shareTradeHistory";
@@ -41,6 +42,18 @@ export async function applyPassedVoteEffects(opts: {
     case "relocation": {
       const { destinationCountryId, destinationStateCode } = vote.payload;
       if (!destinationCountryId || !destinationStateCode) return;
+      // A vote opened before the destination became a command economy (or
+      // around the proposal gate) must not carry a private corporation in.
+      if (
+        await commandEconomyRelocationBlock(
+          db,
+          corporation,
+          corporation.countryId,
+          destinationCountryId
+        )
+      ) {
+        return;
+      }
       const newDefault = getDefaultLegalStructureId(destinationCountryId, {
         isPrivate: corporation.isPrivate === true,
       });

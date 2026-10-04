@@ -511,6 +511,16 @@ export interface FederalBudget {
    * the bond stock is untouched).
    */
   treasuryBalance: number;
+  /** Applied automatic disaster crisis IDs; keeps fiscal debits replay-safe. */
+  disasterFiscalReceipts?: string[];
+  /**
+   * Negotiated indemnity receipts already applied to this treasury.
+   *
+   * Each transfer writes its offer id and balance delta in one document update.
+   * That keeps the two treasury legs replay-safe on standalone Mongo, where a
+   * multi-document transaction is unavailable and a request can stop between them.
+   */
+  appliedPeaceIndemnityOfferIds?: string[];
   /** Temporary executive crisis consolidation, consumed by normal fiscal recalculation. */
   financialCrisisAusterityUntilTurn?: number;
   /** Latest ordinary appropriations restored when temporary consolidation expires. */

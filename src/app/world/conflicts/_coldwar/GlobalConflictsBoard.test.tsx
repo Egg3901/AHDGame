@@ -25,7 +25,7 @@ const base: Conflict = {
   east: "PLA",
   sev: "CRITICAL",
   intensity: 70,
-  status: "NATO holds 30% of CN",
+  status: "NATO holds 30.00% of CN",
   deaths: "12,345 casualties",
   escalating: false,
 };
@@ -37,7 +37,8 @@ describe("GlobalConflictsBoard", () => {
     expect(screen.getByText("NATO")).toBeTruthy();
     expect(screen.getByText("PLA")).toBeTruthy();
     expect(screen.getAllByText("CRITICAL").length).toBeGreaterThan(0);
-    expect(screen.getByText("NATO holds 30% of CN")).toBeTruthy();
+    expect(screen.getByText("NATO holds 30.00% of CN")).toBeTruthy();
+    expect(screen.getByTitle(/Bloc balance: 70\.00%/)).toBeTruthy();
   });
 
   it("allows the hero stat cards to wrap on narrow screens", () => {

@@ -44,9 +44,7 @@ export async function NppForecastCard({ nppId }: { nppId: ObjectId }) {
   if (!data) {
     return (
       <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-        <h2 className="text-[11px] font-semibold uppercase tracking-widest text-zinc-500 mb-3">
-          Cross-pressure forecast
-        </h2>
+        <h2 className="text-sm font-semibold text-zinc-500 mb-3">Cross-pressure forecast</h2>
         <p className="text-sm text-zinc-400">
           No active vote prediction on file. The next bill this NPP votes on will populate the
           forecast with their ideology, whip, district, and donor pulls.
@@ -67,7 +65,7 @@ export async function NppForecastCard({ nppId }: { nppId: ObjectId }) {
     <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 space-y-4">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h2 className="text-[11px] font-semibold uppercase tracking-widest text-zinc-500">
+          <h2 className="text-sm font-semibold text-zinc-500">
             Cross-pressure forecast · most recent vote
           </h2>
           <p className="mt-1 text-sm font-semibold">{bill.title}</p>

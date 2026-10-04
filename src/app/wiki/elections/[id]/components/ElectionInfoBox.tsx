@@ -11,8 +11,8 @@ interface ElectionInfoBoxProps {
 
 export function ElectionInfoBox({ election, totalVotes }: ElectionInfoBoxProps) {
   return (
-    <aside className="mb-8 float-right ml-6 w-80 rounded-xl border-2 border-card-border bg-gradient-to-b from-card/80 to-card/60 p-5 shadow-lg backdrop-blur-sm">
-      <h2 className="mb-4 border-b-2 border-primary/30 pb-2 text-sm font-bold uppercase tracking-wider text-foreground">
+    <aside className="mb-8 float-right ml-6 w-80 rounded-xl border-2 border-card-border bg-card p-5 shadow-lg">
+      <h2 className="mb-4 border-b-2 border-primary/30 pb-2 text-sm font-bold text-foreground">
         {election.label}
       </h2>
       <dl className="space-y-3 text-sm">

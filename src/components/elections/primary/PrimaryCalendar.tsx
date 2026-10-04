@@ -5,9 +5,9 @@
  * `PRIMARY_WAVES`, with wave label on the left and a horizontal scroll of
  * per-state chips on the right.
  *
- * Past waves render in muted styling; the current and upcoming waves render
- * with the party-color accent. Selected state shows a highlight ring matching
- * the party color.
+ * Past waves render in muted styling. A voted state shows its winner as a
+ * small color swatch beside the state code. Selected state shows a highlight
+ * ring matching the party color.
  *
  * Phase 4 ships this for the presidential primary surface only. Senate /
  * Gov / House calendars look different — they don't use the staggered-wave
@@ -70,12 +70,8 @@ export function PrimaryCalendar({
   return (
     <div className="rounded-xl border border-card-border bg-card p-4">
       <div className="mb-3 flex items-baseline justify-between">
-        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">
-          {t("primaryCalendar.title")}
-        </h3>
-        <span className="text-[10px] uppercase tracking-wider text-muted">
-          {t("primaryCalendar.subtitle")}
-        </span>
+        <h3 className="text-sm font-semibold text-muted">{t("primaryCalendar.title")}</h3>
+        <span className="text-xs text-muted">{t("primaryCalendar.subtitle")}</span>
       </div>
       <div className="flex max-h-[560px] flex-col gap-3 overflow-y-auto pr-1">
         {waves.map((w) => {
@@ -103,9 +99,8 @@ export function PrimaryCalendar({
               <div
                 className="self-stretch rounded-full"
                 style={{
-                  width: 2,
-                  background: w.isPast ? "var(--card-border)" : accent,
-                  opacity: w.isPast ? 0.6 : 0.9,
+                  width: 1,
+                  background: w.isPast ? "var(--card-border)" : "var(--muted)",
                 }}
               />
               <div className="flex flex-1 flex-wrap gap-1.5">
@@ -115,34 +110,14 @@ export function PrimaryCalendar({
                   const showWinner = w.isPast && winnerColor;
                   const baseClasses =
                     "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-semibold cursor-pointer transition-colors";
-                  const muted = !isSelected && !showWinner;
-                  // Split `borderColor` (shorthand) into the three non-left
-                  // sides when a winner color is set on the left edge —
-                  // React rejects mixing shorthand + non-shorthand for the
-                  // same property. The base path (no winner) keeps using
-                  // `borderColor` since all four sides share one value.
-                  const otherSidesColor = isSelected
-                    ? accent
-                    : showWinner
-                      ? `color-mix(in srgb, ${winnerColor} 50%, transparent)`
-                      : "var(--card-border)";
-                  const borderColorStyle = showWinner
-                    ? {
-                        borderTopColor: otherSidesColor,
-                        borderRightColor: otherSidesColor,
-                        borderBottomColor: otherSidesColor,
-                        borderLeftColor: winnerColor,
-                        borderLeftWidth: 3,
-                      }
-                    : { borderColor: otherSidesColor };
                   return (
                     <button
                       key={stateId}
                       type="button"
                       onClick={() => onSelectState(stateId)}
-                      className={`${baseClasses} ${muted ? "hover:bg-[var(--card-muted)]" : ""}`}
+                      className={`${baseClasses} ${isSelected ? "" : "hover:bg-[var(--card-muted)]"}`}
                       style={{
-                        ...borderColorStyle,
+                        borderColor: isSelected ? accent : "var(--card-border)",
                         outline: isSelected ? `2px solid ${accent}` : undefined,
                         backgroundColor: isSelected
                           ? `color-mix(in srgb, ${accent} 10%, transparent)`
@@ -154,6 +129,13 @@ export function PrimaryCalendar({
                           : t("primaryCalendar.chipUpcoming", { state: stateId })
                       }
                     >
+                      {showWinner ? (
+                        <span
+                          aria-hidden
+                          className="h-1.5 w-1.5 shrink-0 rounded-full"
+                          style={{ backgroundColor: winnerColor }}
+                        />
+                      ) : null}
                       {stateId}
                     </button>
                   );

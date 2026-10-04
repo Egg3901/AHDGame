@@ -51,7 +51,7 @@ export function QuickActionsPanel({
 
   return (
     <div className="rounded-xl border border-card-border bg-card p-4 shadow-sm">
-      <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">Quick Actions</h3>
+      <h3 className="text-sm font-semibold text-muted">Quick actions</h3>
 
       <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
         {/* Live actions — deep-link to State Party page where mutation lives. */}

@@ -214,3 +214,51 @@ describe("supporter provider", () => {
     expect(patreonBadgeProps.at(-1)?.provider).toBeUndefined();
   });
 });
+
+describe("ProfileHeader identity block", () => {
+  it("names the party once, with a single colour swatch and no strip or gradient", () => {
+    const { container } = render(<ProfileHeader {...baseProps} />);
+
+    const partyLink = screen.getByRole("link", { name: baseParty.name });
+    expect(partyLink.getAttribute("href")).toBe("/country/dd/parties/1");
+    const coloured = container.querySelectorAll<HTMLElement>("[style*='background']");
+    expect(coloured).toHaveLength(1);
+    expect(partyLink.contains(coloured[0])).toBe(true);
+    expect(container.innerHTML).not.toContain("gradient");
+  });
+
+  it("reads Independent for a player outside any party", () => {
+    render(
+      <ProfileHeader
+        {...baseProps}
+        party={null}
+        character={{ ...baseCharacter, party: "independent" } as Character}
+      />
+    );
+    expect(screen.getByText("Independent")).toBeTruthy();
+  });
+
+  it("shows the biography as plain text", () => {
+    render(
+      <ProfileHeader
+        {...baseProps}
+        character={{ ...baseCharacter, bio: "Builds railways." } as Character}
+      />
+    );
+    const bio = screen.getByText("Builds railways.");
+    expect(bio.tagName).toBe("P");
+    expect(bio.className).not.toContain("border-l");
+  });
+
+  it("hides the biography from a viewer who blocked the player", () => {
+    render(
+      <ProfileHeader
+        {...baseProps}
+        character={{ ...baseCharacter, bio: "Builds railways." } as Character}
+        bioHidden
+      />
+    );
+    expect(screen.queryByText("Builds railways.")).toBeNull();
+    expect(screen.queryByText(/has not published a public biography/)).toBeNull();
+  });
+});

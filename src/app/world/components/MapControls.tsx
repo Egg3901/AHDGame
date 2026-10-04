@@ -78,9 +78,9 @@ export default function MapControls({
       <div className="flex items-center gap-1 pointer-events-auto">
         <button
           onClick={onFullscreenToggle}
-          className="w-8 h-8 flex items-center justify-center rounded-lg bg-card/90 backdrop-blur-md border border-card-border shadow-sm text-muted hover:text-foreground hover:bg-card-elevated transition-colors"
-          title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
-          aria-label={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+          className="w-8 h-8 flex items-center justify-center rounded-lg bg-card border border-card-border shadow-sm text-muted hover:text-foreground hover:bg-card-elevated transition-colors"
+          title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+          aria-label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
         >
           {isFullscreen ? (
             <svg
@@ -118,7 +118,7 @@ export default function MapControls({
         </button>
         <button
           onClick={() => setMenuOpen((v) => !v)}
-          className={`w-8 h-8 flex items-center justify-center rounded-lg bg-card/90 backdrop-blur-md border border-card-border shadow-sm transition-colors ${
+          className={`w-8 h-8 flex items-center justify-center rounded-lg bg-card border border-card-border shadow-sm transition-colors ${
             menuOpen
               ? "text-primary bg-card-elevated"
               : "text-muted hover:text-foreground hover:bg-card-elevated"
@@ -145,12 +145,12 @@ export default function MapControls({
 
       {/* Collapsible settings: map/globe toggle only */}
       {menuOpen && (
-        <div className="pointer-events-auto animate-in fade-in slide-in-from-top-1 duration-150">
-          <div className="flex items-center gap-1 bg-card/90 backdrop-blur-md p-1 rounded-lg border border-card-border shadow-sm">
+        <div className="pointer-events-auto">
+          <div className="flex items-center gap-1 bg-card p-1 rounded-lg border border-card-border shadow-sm">
             <button
               onClick={() => onViewChange("map")}
               disabled={isAnimating}
-              className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-md transition-all ${
+              className={`rounded-md px-3 py-1 text-body-sm font-medium transition-colors ${
                 viewMode === "map"
                   ? "bg-primary text-white shadow-sm"
                   : "text-muted hover:text-foreground hover:bg-card-elevated"
@@ -161,7 +161,7 @@ export default function MapControls({
             <button
               onClick={() => onViewChange("globe")}
               disabled={isAnimating}
-              className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-md transition-all ${
+              className={`rounded-md px-3 py-1 text-body-sm font-medium transition-colors ${
                 viewMode === "globe"
                   ? "bg-primary text-white shadow-sm"
                   : "text-muted hover:text-foreground hover:bg-card-elevated"
@@ -173,12 +173,12 @@ export default function MapControls({
         </div>
       )}
 
-      {/* Zoom Controls — always visible */}
-      <div className="flex flex-col gap-1 bg-card/90 backdrop-blur-md p-1 rounded-lg border border-card-border shadow-sm pointer-events-auto">
+      {/* Zoom controls, always visible */}
+      <div className="flex flex-col gap-1 bg-card p-1 rounded-lg border border-card-border shadow-sm pointer-events-auto">
         <button
           onClick={zoomIn}
           className="w-8 h-8 flex items-center justify-center rounded-md text-muted hover:text-foreground hover:bg-card-elevated transition-colors"
-          title="Zoom In"
+          title="Zoom in"
           aria-label="Zoom in"
         >
           <svg
@@ -199,7 +199,7 @@ export default function MapControls({
         <button
           onClick={zoomOut}
           className="w-8 h-8 flex items-center justify-center rounded-md text-muted hover:text-foreground hover:bg-card-elevated transition-colors"
-          title="Zoom Out"
+          title="Zoom out"
           aria-label="Zoom out"
         >
           <svg

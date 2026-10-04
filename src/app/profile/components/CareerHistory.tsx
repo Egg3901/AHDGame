@@ -11,6 +11,7 @@ import { formatStableUtc } from "@/lib/time/localTime";
 import { EmptyState } from "@/components/ui";
 import { Modal } from "@/components/ui";
 import { SectionHeader } from "./ProfileMeters";
+import { PROFILE_LINK_CLASS } from "./profileStyles";
 
 type CareerT = ReturnType<typeof useTranslations>;
 
@@ -78,19 +79,30 @@ function resolvePartyName(
   return party;
 }
 
-function EventDot({ type }: { type: string }) {
-  const color =
-    type === "elected"
-      ? "bg-success"
-      : type === "lost_election"
-        ? "bg-error"
-        : type === "relocated"
-          ? "bg-primary/60"
-          : "bg-muted";
+/** One dated row of the career list: the date column, then what happened. */
+function HistoryRow({
+  date,
+  title,
+  detail,
+  emphasis = false,
+}: {
+  date: string;
+  title: string;
+  detail?: React.ReactNode;
+  emphasis?: boolean;
+}) {
   return (
-    <div
-      className={`absolute -left-[5px] top-1.5 h-2.5 w-2.5 rounded-full ring-4 ring-card ${color}`}
-    />
+    <li className="grid grid-cols-[5rem_minmax(0,1fr)] gap-3 py-2">
+      <span className="text-body-sm tabular-nums text-muted">{date}</span>
+      <div className="min-w-0">
+        <p
+          className={`text-body-sm leading-snug text-foreground ${emphasis ? "font-semibold" : "font-medium"}`}
+        >
+          {title}
+        </p>
+        {detail && <p className="mt-0.5 text-body-sm text-muted">{detail}</p>}
+      </div>
+    </li>
   );
 }
 
@@ -149,14 +161,7 @@ function EventItem({
     ? formatGameMonth(event.date, gameDateAnchor)
     : formatStableUtc(event.date, { year: "numeric", month: "short", day: "numeric" });
 
-  return (
-    <div className="relative pl-4 border-l-2 border-card-border/60 pb-1">
-      <EventDot type={event.type} />
-      <p className="text-xs text-muted mb-0.5">{dateLabel}</p>
-      <p className="text-sm font-medium text-foreground leading-snug">{text}</p>
-      {partyLabel && <p className="text-xs text-muted mt-0.5">{partyLabel}</p>}
-    </div>
-  );
+  return <HistoryRow date={dateLabel} title={text} detail={partyLabel} />;
 }
 
 function formatTenureDate(
@@ -238,8 +243,6 @@ function PartyTenureItem({
   gameDateAnchor?: GameDateAnchor;
   t: CareerT;
 }) {
-  const isIndependent = tenure.partyId === null;
-  const dotClass = isIndependent ? "bg-muted" : "bg-success";
   const startText = tenureStartText(tenure, gameDateAnchor, t);
   // Pre-compute next-tenure label for the "Switched to ..." end phrase using
   // the same name-resolution chain (snapshot → partyNames lookup → fallback).
@@ -257,16 +260,16 @@ function PartyTenureItem({
   const partyLabel = resolveTenurePartyLabel(tenure, partyNames, t);
 
   return (
-    <div className="relative pl-4 border-l-2 border-card-border/60 pb-1">
-      <div
-        className={`absolute -left-[5px] top-1.5 h-2.5 w-2.5 rounded-full ring-4 ring-card ${dotClass}`}
-      />
-      <p className="text-sm font-medium text-foreground leading-snug">{partyLabel}</p>
-      <p className="text-xs text-muted mt-0.5">
-        {t("tenureRange", { start: startText, end: endText })}
-        {isSynthetic && <span className="italic ml-1 text-muted/70">({t("historical")})</span>}
-      </p>
-    </div>
+    <HistoryRow
+      date={formatTenureDate(tenure.startedAt, gameDateAnchor, t)}
+      title={partyLabel}
+      detail={
+        <>
+          {t("tenureRange", { start: startText, end: endText })}
+          {isSynthetic && <span className="ml-1">{t("historical")}</span>}
+        </>
+      }
+    />
   );
 }
 
@@ -292,19 +295,20 @@ function TabStrip({
     other: t("tabOther"),
   };
   return (
-    <div className="flex gap-2 mb-4 border-b border-card-border">
+    <div className="mb-1 flex flex-wrap gap-x-4 border-b border-card-border/60">
       {tabs.map((tab) => (
         <button
           key={tab}
           type="button"
+          aria-pressed={active === tab}
           onClick={() => onSelect(tab)}
-          className={`px-3 py-1.5 text-xs font-medium border-b-2 -mb-px transition-colors ${
+          className={`-mb-px border-b-2 py-1.5 text-body-sm font-medium transition-colors ${
             active === tab
-              ? "border-primary text-primary"
+              ? "border-foreground text-foreground"
               : "border-transparent text-muted hover:text-foreground"
           }`}
         >
-          {tabLabels[tab]} <span className="text-muted/70">({counts[tab]})</span>
+          {tabLabels[tab]} <span className="tabular-nums text-muted">{counts[tab]}</span>
         </button>
       ))}
     </div>
@@ -376,9 +380,17 @@ export function CareerHistory({
   const activeListLength = safeActive === "party" ? partyHistory.length : activeEvents.length;
   const hasMore = activeListLength > PREVIEW_COUNT;
 
+  const incumbentRow = character.currentOffice ? (
+    <HistoryRow
+      date={t("incumbent")}
+      title={getOfficeLabel(character.currentOffice, character.countryId)}
+      emphasis
+    />
+  ) : null;
+
   return (
-    <div className="rounded-xl border border-card-border bg-card p-6 shadow-card">
-      <SectionHeader>{t("title")}</SectionHeader>
+    <section>
+      <SectionHeader level="aside">{t("title")}</SectionHeader>
 
       {showTabs && (
         <TabStrip
@@ -390,32 +402,30 @@ export function CareerHistory({
         />
       )}
 
-      <div className="space-y-4">
-        {showIncumbent && character.currentOffice && (
-          <div className="relative pl-4 border-l-2 border-primary">
-            <div className="absolute -left-[5px] top-1.5 h-2.5 w-2.5 rounded-full bg-primary ring-4 ring-card" />
-            <p className="text-sm font-bold text-foreground">
-              {getOfficeLabel(character.currentOffice, character.countryId)}
-            </p>
-            <p className="text-xs text-primary font-medium">{t("incumbent")}</p>
-          </div>
-        )}
-
-        {safeActive === "party"
-          ? partyHistory
-              .slice(0, PREVIEW_COUNT)
-              .map((tenure, i) => (
-                <PartyTenureItem
-                  key={i}
-                  tenure={tenure}
-                  nextTenure={partyHistory[i + 1]}
-                  partyNames={partyNames}
-                  gameDateAnchor={gameDateAnchor}
-                  t={t}
-                />
-              ))
-          : preview.length > 0
-            ? preview.map((event, i) => (
+      {safeActive !== "party" && preview.length === 0 && !showIncumbent ? (
+        <EmptyState
+          title={t("emptyTitle")}
+          description={t("emptyDescription")}
+          actionLabel={t("findElection")}
+          actionHref="/elections"
+        />
+      ) : (
+        <ol className="divide-y divide-card-border/60">
+          {showIncumbent && incumbentRow}
+          {safeActive === "party"
+            ? partyHistory
+                .slice(0, PREVIEW_COUNT)
+                .map((tenure, i) => (
+                  <PartyTenureItem
+                    key={i}
+                    tenure={tenure}
+                    nextTenure={partyHistory[i + 1]}
+                    partyNames={partyNames}
+                    gameDateAnchor={gameDateAnchor}
+                    t={t}
+                  />
+                ))
+            : preview.map((event, i) => (
                 <EventItem
                   key={i}
                   event={event}
@@ -424,29 +434,22 @@ export function CareerHistory({
                   gameDateAnchor={gameDateAnchor}
                   t={t}
                 />
-              ))
-            : !showIncumbent && (
-                <EmptyState
-                  title={t("emptyTitle")}
-                  description={t("emptyDescription")}
-                  actionLabel={t("findElection")}
-                  actionHref="/elections"
-                />
-              )}
+              ))}
+        </ol>
+      )}
 
-        {hasMore && (
-          <button
-            type="button"
-            onClick={() => {
-              setModalTab(safeActive);
-              setModalOpen(true);
-            }}
-            className="w-full text-xs text-primary hover:text-primary/80 font-medium py-1 transition-colors"
-          >
-            {t("viewAll", { count: totalCount })}
-          </button>
-        )}
-      </div>
+      {hasMore && (
+        <button
+          type="button"
+          onClick={() => {
+            setModalTab(safeActive);
+            setModalOpen(true);
+          }}
+          className={`mt-2 text-body-sm ${PROFILE_LINK_CLASS}`}
+        >
+          {t("viewAll", { count: totalCount })}
+        </button>
+      )}
 
       <Modal
         open={modalOpen}
@@ -463,16 +466,8 @@ export function CareerHistory({
             t={t}
           />
         )}
-        <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1 scrollbar-hide">
-          {showModalIncumbent && character.currentOffice && (
-            <div className="relative pl-4 border-l-2 border-primary">
-              <div className="absolute -left-[5px] top-1.5 h-2.5 w-2.5 rounded-full bg-primary ring-4 ring-card" />
-              <p className="text-sm font-bold text-foreground">
-                {getOfficeLabel(character.currentOffice, character.countryId)}
-              </p>
-              <p className="text-xs text-primary font-medium">{t("incumbent")}</p>
-            </div>
-          )}
+        <ol className="max-h-[60vh] divide-y divide-card-border/60 overflow-y-auto pr-1 scrollbar-hide">
+          {showModalIncumbent && incumbentRow}
           {safeModalActive === "party"
             ? partyHistory.map((tenure, i) => (
                 <PartyTenureItem
@@ -494,8 +489,8 @@ export function CareerHistory({
                   t={t}
                 />
               ))}
-        </div>
+        </ol>
       </Modal>
-    </div>
+    </section>
   );
 }

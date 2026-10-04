@@ -51,6 +51,7 @@ import {
 import { createTurnPhaseRuntime } from "@/simulation/engine/turnPhaseRuntime";
 import { buildTurnExecutionContext } from "@/simulation/engine/turnExecutionContext";
 import { getTurnPhaseRegistry } from "@/simulation/phases/turnPhaseRegistry";
+import { runWithLedgerTurn } from "@/lib/ledger/ledgerTurn";
 import { getSimTurnPhasePredicate } from "@/simulation/phases/simTurnProfiles";
 import {
   combinePhasePredicates,
@@ -563,9 +564,12 @@ async function processTurnImpl(
       timestamp: new Date().toISOString(),
     });
 
-    for (const adapter of getTurnPhaseRegistry()) {
-      await adapter.execute(context, runtime);
-    }
+    // Ledger entries emitted by the phases land in this turn without a clock read.
+    await runWithLedgerTurn(context.newTurn, async () => {
+      for (const adapter of getTurnPhaseRegistry()) {
+        await adapter.execute(context, runtime);
+      }
+    });
 
     // Reconciles, never throws. `federalBudget.surplus` and `debt.principal` are
     // caches of an expression, and both drift intra-year on the live world even

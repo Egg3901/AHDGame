@@ -28,19 +28,18 @@ export function NewPlayerBanner() {
   }
 
   return (
-    <div className="rounded-xl border border-primary/30 bg-card px-4 py-3 shadow-card flex items-center justify-between gap-4">
-      <Link href="/actions/suggestions" className="flex-1 group min-w-0">
-        <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">
-          {t("newTitle")}
-        </p>
-        <p className="text-xs text-muted mt-0.5 group-hover:text-primary/70 transition-colors">
-          {t("newSubtitle")}
-        </p>
+    <div className="flex items-center justify-between gap-4 rounded-md border border-card-border px-3 py-2">
+      <Link
+        href="/actions/suggestions"
+        className="min-w-0 flex-1 truncate text-body underline-offset-4 hover:underline"
+      >
+        <span className="font-medium text-foreground">{t("newTitle")}</span>
+        <span className="hidden text-muted sm:inline"> {t("newSubtitle")}</span>
       </Link>
       <button
         onClick={handleDismiss}
         disabled={dismissing}
-        className="shrink-0 text-xs text-muted hover:text-foreground transition-colors"
+        className="shrink-0 text-body-sm text-muted transition-colors hover:text-foreground"
         aria-label={t("newDismissAria")}
       >
         {t("dismiss")}

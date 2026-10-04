@@ -1,6 +1,12 @@
 import type { Db } from "mongodb";
 import type { FederalBudget } from "@/lib/db/types/budget";
 import { computeFiscalImpact } from "@/lib/budget/fiscalImpact";
+import type { CountryId } from "@/lib/constants/countries";
+import {
+  witnessTreasuryCash,
+  type TreasuryCashFlow,
+  type TreasuryCashOptions,
+} from "@/lib/nationalization/treasuryLedger";
 
 export interface FiscalImpact {
   fromSurplus: number;
@@ -17,11 +23,23 @@ export interface FiscalImpact {
  * (zero split for a credit) plus the post-move balance and the untouched
  * bond-owned principal. The treasury is allowed to go negative.
  */
+/**
+ * Opt-in ledger witness for a caller whose own rows do not already evidence the
+ * treasury. It books exactly the movement that landed.
+ */
+export interface TreasurySpendWitness {
+  flow: TreasuryCashFlow;
+  /** The caller's module path, recorded as the entry's emit site. */
+  site: string;
+  ledger?: TreasuryCashOptions;
+}
+
 async function moveTreasury(
   db: Db,
   countryId: string,
   delta: number,
-  _resyncDerived: boolean
+  _resyncDerived: boolean,
+  witness?: TreasurySpendWitness
 ): Promise<FiscalImpact> {
   const budget = await db
     .collection<FederalBudget>("federalBudget")
@@ -35,9 +53,18 @@ async function moveTreasury(
   const set: Record<string, unknown> = { treasuryBalance: after, updatedAt: new Date() };
   const newDebtPrincipal = Math.max(0, budget?.debt?.principal ?? 0);
 
-  await db
+  const result = await db
     .collection<FederalBudget>("federalBudget")
     .updateOne({ countryId: countryId as FederalBudget["countryId"] }, { $set: set });
+  if (witness && (result?.matchedCount ?? 0) > 0) {
+    await witnessTreasuryCash(db, witness.ledger, {
+      flow: witness.flow,
+      account: { kind: "government", countryId: countryId as CountryId },
+      amount: after - before,
+      now: set.updatedAt as Date,
+      site: witness.site,
+    });
+  }
 
   return { ...split, newTreasuryBalance: after, newDebtPrincipal };
 }
@@ -47,9 +74,15 @@ export function spendFromTreasury(
   db: Db,
   countryId: string,
   amountLocal: number,
-  opts: { resyncDerived?: boolean } = {}
+  opts: { resyncDerived?: boolean; witness?: TreasurySpendWitness } = {}
 ): Promise<FiscalImpact> {
-  return moveTreasury(db, countryId, -Math.max(0, amountLocal), opts.resyncDerived ?? true);
+  return moveTreasury(
+    db,
+    countryId,
+    -Math.max(0, amountLocal),
+    opts.resyncDerived ?? true,
+    opts.witness
+  );
 }
 
 /** Credit `amountLocal` (≥0) back to the treasury (inverse of spendFromTreasury). */
@@ -57,7 +90,13 @@ export function creditTreasury(
   db: Db,
   countryId: string,
   amountLocal: number,
-  opts: { resyncDerived?: boolean } = {}
+  opts: { resyncDerived?: boolean; witness?: TreasurySpendWitness } = {}
 ): Promise<FiscalImpact> {
-  return moveTreasury(db, countryId, Math.max(0, amountLocal), opts.resyncDerived ?? true);
+  return moveTreasury(
+    db,
+    countryId,
+    Math.max(0, amountLocal),
+    opts.resyncDerived ?? true,
+    opts.witness
+  );
 }

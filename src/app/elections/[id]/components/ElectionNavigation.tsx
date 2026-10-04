@@ -46,7 +46,7 @@ export function ElectionNavigation({ election }: ElectionNavigationProps) {
             className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
           >
             {election.status === "active" && (
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
+              <span className="h-1.5 w-1.5 rounded-full bg-primary" />
             )}
             Live Results
           </Link>

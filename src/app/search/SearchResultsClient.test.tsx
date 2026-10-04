@@ -32,7 +32,6 @@ beforeEach(() => {
           title: "Steel",
           subtitle: "Market & price data",
           href: "/commodity/steel",
-          icon: "📦",
         },
       ],
     })

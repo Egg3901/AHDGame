@@ -75,17 +75,18 @@ const TYPE_LABEL_KEY: Record<SearchResult["type"], string> = {
 };
 
 // Token-based badge classes so themes stay in sync.
+/** Result type badges are neutral; only admin results, visible to admins alone, stand apart. */
 const TYPE_BADGE: Record<SearchResult["type"], string> = {
-  politician: "bg-secondary/15 text-secondary",
-  corporation: "bg-success/15 text-success",
-  seat: "bg-primary/15 text-primary",
-  region: "bg-primary/15 text-primary",
-  election: "bg-warning/15 text-warning",
-  bill: "bg-muted/15 text-muted",
+  politician: "bg-card-elevated text-muted",
+  corporation: "bg-card-elevated text-muted",
+  seat: "bg-card-elevated text-muted",
+  region: "bg-card-elevated text-muted",
+  election: "bg-card-elevated text-muted",
+  bill: "bg-card-elevated text-muted",
   page: "bg-card-elevated text-muted",
-  commodity: "bg-amber-500/15 text-amber-600",
-  currency: "bg-blue-500/15 text-blue-400",
-  bond: "bg-purple-500/15 text-purple-400",
+  commodity: "bg-card-elevated text-muted",
+  currency: "bg-card-elevated text-muted",
+  bond: "bg-card-elevated text-muted",
   admin: "bg-red-500/15 text-red-400",
 };
 
@@ -358,12 +359,6 @@ export function UniversalSearch({ open, onNavigate }: UniversalSearchProps = {})
                       }`
                 }`}
               >
-                <span
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-background text-base"
-                  aria-hidden="true"
-                >
-                  {result.icon}
-                </span>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-semibold text-foreground truncate">{result.title}</p>
@@ -419,25 +414,25 @@ export function UniversalSearch({ open, onNavigate }: UniversalSearchProps = {})
             className="rounded-xl border border-card-border bg-card shadow-modal z-[60] px-4 py-6 text-center space-y-5"
           >
             <div>
-              <p className="example-title text-xs font-semibold text-muted uppercase tracking-wider">
+              <p className="example-title text-xs font-semibold text-muted">
                 {t("search.trySearchingFor")}
               </p>
             </div>
             <div className="example-grid grid grid-cols-1 sm:grid-cols-2 gap-2">
               {[
-                { name: "Nicola Sturgeon", icon: "👤" },
-                { name: "General Electric", icon: "🏢" },
-                { name: "California", icon: "📍" },
-                { name: "Parliament", icon: "📄" },
-                { name: "Texas", icon: "📍" },
-                { name: "Bond Markets", icon: "📊" },
-                { name: "FTSE 100", icon: "📈" },
-                { name: "Legislation", icon: "📜" },
+                "Nicola Sturgeon",
+                "General Electric",
+                "California",
+                "Parliament",
+                "Texas",
+                "Bond Markets",
+                "FTSE 100",
+                "Legislation",
               ].map((example, idx) => (
                 <button
-                  key={example.name}
+                  key={example}
                   onClick={() => {
-                    setQuery(example.name);
+                    setQuery(example);
                     inputRef.current?.focus();
                   }}
                   style={{
@@ -445,8 +440,7 @@ export function UniversalSearch({ open, onNavigate }: UniversalSearchProps = {})
                   }}
                   className="group relative px-3 py-2 rounded-lg bg-card-muted/30 hover:bg-card-muted/60 transition-colors border border-card-border/40 hover:border-card-border/60 text-xs font-medium text-foreground hover:text-primary"
                 >
-                  <span className="mr-1.5">{example.icon}</span>
-                  {example.name}
+                  {example}
                 </button>
               ))}
             </div>

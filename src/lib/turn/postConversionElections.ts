@@ -38,10 +38,25 @@ export async function processPostConversionElections(
   let fired = 0;
   for (const row of rows) {
     const countryId = row._id;
+    // The terms the conversion promised the former ruling party travel on
+    // the races themselves, so resolution applies them to this election only.
+    const marker = row.pendingPostConversionElection;
+    const conversionTerms =
+      marker && marker.formerRulingPartyId != null
+        ? {
+            formerRulingPartyId: String(marker.formerRulingPartyId),
+            legacyReservationPct: marker.legacyReservation ?? 0,
+            ...(typeof marker.forcedVoteSharePenalty === "number" &&
+              marker.forcedVoteSharePenalty !== 0 && {
+                voteSharePenalty: marker.forcedVoteSharePenalty,
+              }),
+          }
+        : undefined;
     try {
       await triggerSnapElection(db, countryId, now, {
         reason: "regime-change",
         bypassLimits: true,
+        ...(conversionTerms && { conversionTerms }),
       });
       fired++;
     } catch (err) {

@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRuntimeCountryConfig } from "@/hooks/useRuntimeCountryConfig";
 import { Button } from "@/components/ui/Button";
-import { CardSkeleton } from "@/components/ui/loading-skeletons";
 import { Skeleton } from "@/components/ui/Skeleton";
 import type { CountryPoliticalMetricsResponse } from "@/lib/politicalMetrics/queries/countryPoliticalMetrics";
 import type { PoliticalMetricsCountryId } from "@/lib/politicalMetrics/types";
@@ -19,6 +18,39 @@ type View =
   | { kind: "category"; categoryId: string }
   | { kind: "metric"; categoryId: string; metricId: string }
   | { kind: "compare"; categoryId?: string };
+
+/** Placeholder in the shape of the loaded page: header, summary, then the table. */
+function LoadingState() {
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="rounded-lg border border-card-border bg-card p-5 sm:p-6">
+        <Skeleton className="h-9 w-56 max-w-full" />
+        <Skeleton className="mt-3 h-4 w-72 max-w-full" />
+        <Skeleton className="mt-6 h-12 w-40" />
+        <Skeleton className="mt-3 h-4 w-96 max-w-full" />
+      </div>
+      <div className="grid grid-cols-2 gap-x-8 gap-y-6 sm:grid-cols-3 lg:grid-cols-5">
+        {Array.from({ length: 5 }, (_, i) => (
+          <div key={i}>
+            <Skeleton className="h-3 w-24 max-w-full" />
+            <Skeleton className="mt-2 h-5 w-12" />
+          </div>
+        ))}
+      </div>
+      <div className="mt-6">
+        <Skeleton className="h-7 w-40" />
+        <div className="mt-4 space-y-3">
+          {Array.from({ length: 9 }, (_, i) => (
+            <Skeleton key={i} className="h-10 w-full" />
+          ))}
+        </div>
+      </div>
+      <p role="status" className="text-center text-body text-muted">
+        Loading political metrics…
+      </p>
+    </div>
+  );
+}
 
 export default function PoliticalMetricsClient({ code }: { code: string }) {
   const countryId = code.toUpperCase() as PoliticalMetricsCountryId;
@@ -55,50 +87,21 @@ export default function PoliticalMetricsClient({ code }: { code: string }) {
     []
   );
 
-  if (loading) {
-    return (
-      <div className="flex flex-col gap-4">
-        <CardSkeleton className="p-4">
-          <div className="flex items-center gap-4">
-            <Skeleton className="h-16 w-16 rounded-md" />
-            <div className="flex flex-1 flex-col gap-2">
-              <Skeleton className="h-4 w-2/5" />
-              <Skeleton className="h-3 w-3/5" />
-            </div>
-          </div>
-        </CardSkeleton>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {Array.from({ length: 9 }, (_, i) => (
-            <CardSkeleton key={i} className="flex h-48 flex-col gap-3 p-4">
-              <Skeleton className="h-3 w-1/2" />
-              <Skeleton className="h-8 w-1/3" />
-              <Skeleton className="min-h-0 flex-1" />
-            </CardSkeleton>
-          ))}
-        </div>
-        <div className="text-center font-mono text-body-xs uppercase tracking-widest text-muted">
-          Retrieving national situation data…
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <LoadingState />;
 
   if (error || !data) {
     return (
-      <div className="mx-auto mt-12 max-w-lg rounded-lg border border-card-border bg-card p-8 text-center shadow-card">
-        <span className="inline-block -rotate-1 rounded border border-error px-2.5 py-0.5 font-mono text-body-xs uppercase tracking-widest text-error">
-          Transmission interrupted
-        </span>
-        <h2 className="mt-4 font-display text-heading-lg text-foreground">
-          Registry data unavailable
+      <div role="alert" className="mx-auto mt-12 max-w-lg text-center">
+        <h2 className="text-heading-lg font-semibold text-foreground">
+          Political metrics could not load
         </h2>
         <p className="mt-2 text-body text-muted">
-          The national situation registry could not be reached. Figures shown elsewhere may be out
-          of date. This does not affect stored historical series.
+          The figures could not be fetched just now, so anything shown elsewhere may be out of date.
+          Stored history is not affected.
         </p>
         <div className="mt-5">
           <Button variant="primary" onClick={() => void load()}>
-            Retry retrieval
+            Try again
           </Button>
         </div>
       </div>
@@ -106,15 +109,15 @@ export default function PoliticalMetricsClient({ code }: { code: string }) {
   }
 
   return (
-    <div className="flex flex-col gap-0">
+    <div className="flex flex-col">
       <Masthead
-        countryId={countryId}
         countryDisplayName={data.countryDisplayName}
         overall={data.overall}
         overallStatus={data.overallStatus}
         year={data.year}
         turn={data.turn}
         onCompare={() => setView({ kind: "compare" })}
+        compareLabel="Compare countries"
       />
       {view.kind === "overview" && (
         <OverviewView

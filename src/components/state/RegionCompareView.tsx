@@ -250,7 +250,7 @@ export function RegionCompareView({
         </table>
       </div>
 
-      <p className="text-body-xs text-muted">
+      <p className="text-body-sm text-muted">
         Every figure is that {home.regionLabel.toLowerCase()}&apos;s own registry value. Scores are
         the mean of the nine categories&apos; seven metrics.
       </p>

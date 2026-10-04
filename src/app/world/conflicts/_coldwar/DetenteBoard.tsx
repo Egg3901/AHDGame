@@ -20,7 +20,7 @@ import {
 import type { Side } from "./proxyWar";
 
 const mono = "'IBM Plex Mono',monospace";
-const serif = "Lora,Georgia,serif";
+const headingFont = "var(--font-geist-sans),system-ui,sans-serif";
 
 type Wire = { who: string; c: string; t: string };
 
@@ -175,7 +175,7 @@ export function DetenteBoard({ side }: { side: Side }) {
             <h1
               style={{
                 margin: 0,
-                fontFamily: serif,
+                fontFamily: headingFont,
                 fontWeight: 700,
                 fontSize: 34,
                 lineHeight: 1,
@@ -212,7 +212,7 @@ export function DetenteBoard({ side }: { side: Side }) {
               <div
                 style={{
                   marginTop: 6,
-                  fontFamily: serif,
+                  fontFamily: headingFont,
                   fontWeight: 700,
                   fontSize: 24,
                   lineHeight: 1,
@@ -242,7 +242,7 @@ export function DetenteBoard({ side }: { side: Side }) {
               <div
                 style={{
                   marginTop: 6,
-                  fontFamily: serif,
+                  fontFamily: headingFont,
                   fontWeight: 700,
                   fontSize: 24,
                   lineHeight: 1,

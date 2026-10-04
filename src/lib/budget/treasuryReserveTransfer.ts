@@ -28,6 +28,7 @@ import { toAuditEnvelope } from "@/lib/banking/rules/auditEvents";
 import { getAuditRequestContext } from "@/lib/observability/context";
 import { isLedgerShadowEnabledFromConfig } from "@/lib/ledger/featureFlag";
 import { finalizeLedgerEntry } from "@/lib/ledger/emit";
+import { resolveLedgerTurn } from "@/lib/ledger/ledgerTurn";
 import { accountId } from "@/lib/ledger/accounts";
 import { buildTxDocs, loadTxThresholds } from "@/lib/financialTxLog/emit";
 import { loadTurnLengthMinutes } from "@/lib/financialTxLog/expiresAt";
@@ -200,8 +201,10 @@ async function prepare(db: Db, command: Command): Promise<void> {
     note: "Original treasury cash transaction",
   });
   if (isLedgerShadowEnabledFromConfig(config) && valuation) {
+    // Planned once and replayed from the receipt, so the turn is fixed here: the
+    // one whose closing snapshot holds this cash, not the route's clock (#3022).
     const entry = finalizeLedgerEntry({
-      turn: command.turn,
+      turn: (await resolveLedgerTurn(db)) ?? command.turn,
       createdAt: now,
       txType: "gov_budget_transfer",
       emitSite: "budget/treasuryReserveTransfer.ts",

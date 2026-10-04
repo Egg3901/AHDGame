@@ -54,7 +54,7 @@ function Note({ children }: { children: React.ReactNode }) {
     <p
       style={{
         margin: "6px 0 0",
-        fontFamily: FONT.serif,
+        fontFamily: FONT.sans,
         fontSize: 13.5,
         lineHeight: 1.5,
         color: BLEND.muted,
@@ -167,7 +167,7 @@ export function StateOperationsSection({
       <h2
         style={{
           margin: mobile ? "0 0 4px" : "0 0 4px",
-          fontFamily: FONT.serif,
+          fontFamily: FONT.sans,
           fontSize: mobile ? 20 : 23,
           fontWeight: 600,
         }}
@@ -177,7 +177,7 @@ export function StateOperationsSection({
       <p
         style={{
           margin: "0 0 18px",
-          fontFamily: FONT.serif,
+          fontFamily: FONT.sans,
           fontSize: 14.5,
           lineHeight: 1.55,
           color: BLEND.muted,
@@ -311,7 +311,7 @@ export function StateOperationsSection({
                     />
                     <span
                       style={{
-                        fontFamily: FONT.serif,
+                        fontFamily: FONT.sans,
                         fontSize: 15.5,
                         fontWeight: 600,
                         color: BLEND.ink,

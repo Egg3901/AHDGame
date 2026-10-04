@@ -513,9 +513,7 @@ export default function PresidentialCabinetClient({ countryId }: { countryId: Co
               )}
 
               <section>
-                <h2 className="mb-4 text-sm font-semibold uppercase tracking-widest text-muted">
-                  Principal Officers
-                </h2>
+                <h2 className="mb-4 text-sm font-semibold text-muted">Principal officers</h2>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   {getCabinetPositions(countryId).map((positionMeta) => {
                     const position =

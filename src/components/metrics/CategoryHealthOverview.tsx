@@ -66,7 +66,7 @@ export function CategoryHealthOverview({
               onClick={() => onSelect(cat.id)}
               className={`flex flex-col items-center gap-2 rounded-xl border p-3 text-center transition-all ${
                 active
-                  ? "border-primary/60 bg-primary/[0.07] shadow-glow-sm"
+                  ? "border-primary/60 bg-primary/[0.07]"
                   : "border-card-border bg-card-muted hover:border-primary/40"
               }`}
             >

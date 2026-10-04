@@ -146,6 +146,7 @@ describe("loadOrgInfluence", () => {
         turn: 4,
         resolvedTurn: 5,
         appliedPoints: 3,
+        effectivePoints: 2,
       },
     ]);
     const { loadOrgInfluence } = await import("./orgInfluence");
@@ -153,7 +154,7 @@ describe("loadOrgInfluence", () => {
     expect(v.recent[0]).toMatchObject({
       targetName: "Yugoslavia",
       resolvedTurn: 5,
-      appliedPoints: 3,
+      effectivePoints: 2,
     });
   });
 
@@ -162,6 +163,23 @@ describe("loadOrgInfluence", () => {
     const v = await loadOrgInfluence(db as unknown as Db, "NATO");
     expect(v.fundBalanceLocal).toBe(5_000_000);
     expect(v.fundCurrencyCountryId).toBe("US");
+  });
+
+  it("does not substitute legacy raw pressure for missing effective results", async () => {
+    plays([
+      {
+        organizationId: "WARSAW_PACT",
+        targetEntityId: "YU",
+        appliedPoints: 10,
+        resolvedTurn: 5,
+        turn: 4,
+      },
+    ]);
+    const { loadOrgInfluence } = await import("./orgInfluence");
+    const view = await loadOrgInfluence(db as unknown as Db, "NATO");
+    expect(view.recent[0]?.effectivePoints).toBeNull();
+    expect(view.recent[0]).not.toHaveProperty("appliedPoints");
+    expect(view.rivalIntel.YU?.[0]?.pointsLanded).toBeNull();
   });
 
   it("reports each member's standing, the ones on their way out first", async () => {
@@ -263,11 +281,19 @@ describe("loadOrgInfluence", () => {
     expect(yu.resistsAtHalfStrength).toBe(false);
     expect(yu.pointCostLocal).toBe(30_000_000);
     expect(yu.turnCapCostLocal).toBe(30_000_000 * 5);
+    // One play caps at 10 points of list price, so past 300m a single play
+    // buys nothing more (ticket #1371).
+    expect(yu.playMaxPoints).toBe(10);
+    expect(yu.playCapCostLocal).toBe(30_000_000 * 10);
     // SE leads by exactly 20 — inside the band, so it resists at half strength.
     // Ten times the economy, and then doubled again for the resistance: this is
     // the DELIVERED price, which is the only one a player can budget against.
     expect(se.resistsAtHalfStrength).toBe(true);
     expect(se.pointCostLocal).toBe(300_000_000 * 2);
+    // The cap is on list price, so it is the same spend but half the delivered
+    // points.
+    expect(se.playMaxPoints).toBe(5);
+    expect(se.playCapCostLocal).toBe(300_000_000 * 10);
   });
 
   it("quotes no price for a target whose economy is not on record", async () => {
@@ -281,6 +307,48 @@ describe("loadOrgInfluence", () => {
 
     expect(v.targets[0]!.pointCostLocal).toBeNull();
     expect(v.targets[0]!.turnCapCostLocal).toBeNull();
+    expect(v.targets[0]!.playCapCostLocal).toBeNull();
+  });
+
+  it("matches the spending command's currency basis in historical worlds", async () => {
+    gameState({
+      _id: "current",
+      currentYear: 1953,
+      preset: "1953-default",
+      intOrgAlignmentEnabled: true,
+    });
+    db.collection("organizationFunds").findOne.mockResolvedValue({
+      organizationId: "WARSAW_PACT",
+      balanceLocal: 1e10,
+      currencyCountryId: "RU",
+    });
+    alignments([{ entityId: "YU", shares: { WEST: 22, EAST: 50 }, nonAligned: 28 }]);
+    macroEconomies([{ entityId: "YU", sectors: { industry: { capacity: 625 } } }]);
+    const { loadOrgInfluence } = await import("./orgInfluence");
+    const { localToUsd } = await import("@/lib/internationalOrganizations/organizationFund");
+    const { pointsForSpend } = await import("../influence");
+    const { previewEffectivePlay } = await import("../rules/previewEffectivePlay");
+    const { computeDrift } = await import("../drift");
+    const view = await loadOrgInfluence(db as unknown as Db, "WARSAW_PACT");
+    const target = view.targets[0]!;
+    const amountLocal = target.pointCostLocal!;
+    const rawPoints = pointsForSpend(localToUsd("RU", amountLocal), 30_000_000_000);
+    expect(rawPoints).toBeCloseTo(1, 6);
+    const shares = { shares: target.shares, nonAligned: target.nonAligned };
+    const actual = computeDrift({ shares, poles: ["WEST", "EAST"], pull: { EAST: rawPoints } });
+    const estimated = previewEffectivePlay({
+      shares,
+      poles: ["WEST", "EAST"],
+      poleId: "EAST",
+      amountLocal,
+      pointCostLocal: amountLocal,
+      playMaxPoints: target.playMaxPoints,
+      resistsAtHalfStrength: false,
+      weight: 1,
+      effectiveness: 1,
+      turnCap: 5,
+    });
+    expect(estimated).toBeCloseTo(actual.shares.EAST! - shares.shares.EAST!, 2);
   });
 
   it("marks a member that cannot vote", async () => {
@@ -362,10 +430,13 @@ describe("loadOrgInfluence", () => {
 
     const { loadOrgInfluence } = await import("./orgInfluence");
     const v = await loadOrgInfluence(db as unknown as Db, "NATO");
-    expect(v.targets.find((t) => t.entityId === "YU")!.crisis).toEqual({
+    const yu = v.targets.find((t) => t.entityId === "YU")!;
+    expect(yu.crisis).toEqual({
       turnsRemaining: 12,
       movementCap: 7.5,
     });
+    // The full turn costs the raised limit, not the usual 5.
+    expect(yu.turnCapCostLocal).toBe(30_000_000 * 7.5);
   });
 
   it("names the orgs sanctioning a nation", async () => {
@@ -456,6 +527,7 @@ describe("loadOrgInfluence", () => {
           organizationId: "WARSAW_PACT",
           targetEntityId: "YU",
           appliedPoints: 6,
+          effectivePoints: 4,
           amountUsd: 450_000_000,
           turn: 9,
           resolvedTurn: 9,
@@ -466,7 +538,7 @@ describe("loadOrgInfluence", () => {
       const v = await loadOrgInfluence(db as unknown as Db, "NATO");
 
       expect(v.rivalIntel.YU).toEqual([
-        { poleLabel: "East", accentToken: "error", pointsLanded: 6, turnsAgo: 1 },
+        { poleLabel: "East", accentToken: "error", pointsLanded: 4, turnsAgo: 1 },
       ]);
       // The spend must not survive the query boundary at all.
       expect(JSON.stringify(v.rivalIntel)).not.toContain("450000000");
@@ -508,8 +580,42 @@ describe("loadOrgInfluence", () => {
       expect(v.rivalIntel.YU ?? []).toEqual([]);
     });
 
-    it("ignores a play that landed nothing", async () => {
-      // A resolved-at-zero play is noise, not intelligence.
+    it("keeps the resolved pole after an era change or channel disappearance", async () => {
+      gameState({
+        _id: "current",
+        currentYear: 1992,
+        currentTurn: 10,
+        intOrgAlignmentEnabled: true,
+      });
+      plays([
+        {
+          organizationId: "NATO",
+          targetEntityId: "YU",
+          appliedPoints: 10,
+          effectivePoints: 2.5,
+          effectivePoleId: "WEST",
+          turn: 9,
+          resolvedTurn: 9,
+        },
+        {
+          organizationId: "WARSAW_PACT",
+          targetEntityId: "YU",
+          appliedPoints: 10,
+          effectivePoints: 0,
+          effectivePoleId: "EAST",
+          turn: 9,
+          resolvedTurn: 9,
+        },
+      ]);
+      const { loadOrgInfluence } = await import("./orgInfluence");
+      const view = await loadOrgInfluence(db as unknown as Db, "EU");
+      expect(view.rivalIntel.YU).toEqual([
+        { poleLabel: "West", accentToken: "info", pointsLanded: 2.5, turnsAgo: 1 },
+        { poleLabel: "East", accentToken: "error", pointsLanded: 0, turnsAgo: 1 },
+      ]);
+    });
+
+    it("reports a zero effective gain rather than concealing canceled plays", async () => {
       atTurn10();
       alignments([{ entityId: "YU", shares: { WEST: 22, EAST: 50 }, nonAligned: 28 }]);
       macroEconomies([{ entityId: "YU", sectors: { industry: { capacity: 625 } } }]);
@@ -518,6 +624,7 @@ describe("loadOrgInfluence", () => {
           organizationId: "WARSAW_PACT",
           targetEntityId: "YU",
           appliedPoints: 0,
+          effectivePoints: 0,
           turn: 9,
           resolvedTurn: 9,
         },
@@ -525,7 +632,9 @@ describe("loadOrgInfluence", () => {
 
       const { loadOrgInfluence } = await import("./orgInfluence");
       const v = await loadOrgInfluence(db as unknown as Db, "NATO");
-      expect(v.rivalIntel.YU ?? []).toEqual([]);
+      expect(v.rivalIntel.YU).toEqual([
+        { poleLabel: "East", accentToken: "error", pointsLanded: 0, turnsAgo: 1 },
+      ]);
     });
   });
   it("marks a target that is already on our roll", async () => {

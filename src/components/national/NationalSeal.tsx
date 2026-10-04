@@ -13,15 +13,12 @@ interface NationalSealProps {
    * per-country emblem.
    */
   glyph?: string;
-  /** Override the glyph serif style; defaults to the national identity's. */
+  /** Override the glyph kind (CJK character or Latin monogram); defaults to the national identity's. */
   serif?: "cjk" | "mono";
   /** Override the ring motif; defaults to the national identity's. */
   motif?: SealMotif;
   className?: string;
 }
-
-const SERIF_CJK = "'Noto Serif SC', 'Noto Serif JP', 'Songti SC', serif";
-const SERIF_MONO = "'Playfair Display', Georgia, 'Times New Roman', serif";
 
 // ── geometry (120×120 viewBox, centered at C) ──────────────────────────────
 const C = 60;
@@ -226,7 +223,6 @@ export function NationalSeal({
   // Center glyph sizing in viewBox units: a single CJK fills the medallion;
   // multi-char monograms shrink to fit.
   const fontSize = isCjk ? 30 : sealGlyph.length >= 2 ? 20 : 28;
-  const fontFamily = isCjk ? SERIF_CJK : SERIF_MONO;
   // Stable gradient id (depends only on country colors, which are identical for
   // any seal of the same country — safe to share if two render on one page).
   const gradId = `ahd-seal-${country}-${Math.round(size)}`;
@@ -263,7 +259,6 @@ export function NationalSeal({
         y={60}
         dy="0.36em"
         textAnchor="middle"
-        fontFamily={fontFamily}
         fontWeight={900}
         fontSize={fontSize}
         letterSpacing={isCjk ? undefined : "-0.02em"}

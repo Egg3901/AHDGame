@@ -1,3 +1,4 @@
+import { countPrStv, validateRankedBallots } from "@/lib/turn/election/rules/prStv";
 import type { PoliticalParty, PrimarySnapshot, ElectionVoteTally } from "@/lib/db/types";
 import { getMultiSeatMinShare, largestRemainderSeats } from "@/lib/turn/election/seatAllocation";
 import type { PartyGroup } from "./candidateEnrichment";
@@ -34,6 +35,14 @@ export function computeSeatEstimates(
     MULTI_SEAT_TYPES.has(electionType) || (electionType === "senate" && (totalSeats ?? 0) > 1);
   if (!totalSeats || !tally || !multiSeat) {
     return null;
+  }
+
+  if (tally.countingMethod === "pr_stv") {
+    if (countryId !== "IE" || !["dail", "localCouncil"].includes(electionType))
+      throw new Error("Ranked PR-STV is supported only for Irish Dail and local council races");
+    validateRankedBallots(tally.rankedBallots, tally.totalVotes);
+    if (tally.rankedBallots.length === 0) return null;
+    return countPrStv([...activeCandidateIdSet], totalSeats, tally.rankedBallots).seats;
   }
 
   const activeVotes: Record<string, number> = {};

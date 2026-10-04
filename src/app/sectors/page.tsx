@@ -11,42 +11,6 @@ import { CORPORATION_TYPES } from "@/lib/constants/corporations";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { regionUrl } from "@/lib/urls";
 
-const DEFAULT_CORP_COLORS = [
-  "#3b82f6",
-  "#ef4444",
-  "#10b981",
-  "#f59e0b",
-  "#8b5cf6",
-  "#ec4899",
-  "#06b6d4",
-  "#f97316",
-  "#14b8a6",
-  "#6366f1",
-];
-
-function getTypeColor(type: CorporationType): string {
-  const colors: Partial<Record<CorporationType, string>> = {
-    financial: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
-    media: "bg-blue-500/15 text-blue-400 border-blue-500/30",
-    manufacturing: "bg-orange-500/15 text-orange-400 border-orange-500/30",
-    chemical_industries: "bg-green-500/15 text-green-400 border-green-500/30",
-    healthcare: "bg-rose-500/15 text-rose-400 border-rose-500/30",
-    retail: "bg-violet-500/15 text-violet-400 border-violet-500/30",
-    automobiles: "bg-sky-500/15 text-sky-400 border-sky-500/30",
-    technology: "bg-cyan-500/15 text-cyan-400 border-cyan-500/30",
-    energy: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
-    agriculture: "bg-lime-500/15 text-lime-400 border-lime-500/30",
-    real_estate: "bg-amber-500/15 text-amber-400 border-amber-500/30",
-    construction: "bg-orange-500/15 text-orange-400 border-orange-500/30",
-    defense: "bg-slate-500/15 text-slate-400 border-slate-500/30",
-    telecommunications: "bg-indigo-500/15 text-indigo-400 border-indigo-500/30",
-    entertainment: "bg-pink-500/15 text-pink-400 border-pink-500/30",
-    logistics: "bg-stone-500/15 text-stone-400 border-stone-500/30",
-    extraction: "bg-neutral-500/15 text-neutral-400 border-neutral-500/30",
-  };
-  return colors[type] ?? "bg-primary/10 text-primary border-primary/30";
-}
-
 type SectorView = "unowned" | "owned" | "forSale";
 type SectorSort = "revenue" | "type" | "state" | "country" | "margin" | "growth";
 
@@ -347,35 +311,20 @@ export default function SectorsPage() {
 }
 
 function SectorCard({ sector, view }: { sector: SectorRow; view: SectorView }) {
-  const color =
-    view === "unowned"
-      ? "rgba(128,128,128,0.25)"
-      : DEFAULT_CORP_COLORS[sector.sectorType.charCodeAt(0) % DEFAULT_CORP_COLORS.length];
-
   const sectorHref =
     view !== "unowned" && sector.corporationId
       ? `/corporation/${sector.corporationSequentialId ?? sector.corporationId}/sector/${sector.id}`
       : regionUrl(sector.countryId, sector.stateId);
 
   return (
-    <div
-      className="rounded-xl border border-card-border bg-card overflow-hidden transition-colors hover:bg-card/80"
-      style={{ borderLeftWidth: "4px", borderLeftColor: color }}
-    >
+    <div className="rounded-xl border border-card-border bg-card overflow-hidden transition-colors hover:bg-card/80">
       {/* Header — links to sector detail */}
       <Link href={sectorHref} className="block px-4 pt-4 pb-3">
         <div className="flex items-start justify-between">
           <div className="min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-semibold text-foreground text-sm leading-tight">
-                {sector.sectorTypeLabel}
-              </span>
-              <span
-                className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${getTypeColor(sector.sectorType)}`}
-              >
-                {sector.sectorTypeLabel}
-              </span>
-            </div>
+            <span className="font-semibold text-foreground text-sm leading-tight">
+              {sector.sectorTypeLabel}
+            </span>
             <div className="mt-1 flex items-center gap-1.5 text-[11px] text-muted">
               <span>{sector.stateName}</span>
               <span>·</span>

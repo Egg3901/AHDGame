@@ -126,3 +126,39 @@ describe("applyEstateEffects routing", () => {
     expect(Object.keys(bucket.regional)).toHaveLength(0);
   });
 });
+
+describe("applyEstateEffects with preloaded estates", () => {
+  it("matches the self-read result exactly and issues no estates read", async () => {
+    const roster = [
+      estate({ siteId: "US-CA", condition: 80 }),
+      estate({ siteId: "US-TX", archetypeId: "university", fundingLevel: "reduced" }),
+    ];
+    const budget = { spending: { byCategory: { education: 1_000_000_000_000 } } };
+    const emptyBucket = () => ({
+      national: {} as Record<string, number>,
+      regional: {} as Record<string, Record<string, number>>,
+    });
+
+    const selfReadDb = dbWith(roster, budget);
+    const selfRead = emptyBucket();
+    await applyEstateEffects(selfReadDb, "US", "secretary_of_education", selfRead, budget as never);
+
+    const preloadDb = dbWith([], budget);
+    const preloaded = emptyBucket();
+    await applyEstateEffects(
+      preloadDb,
+      "US",
+      "secretary_of_education",
+      preloaded,
+      budget as never,
+      roster
+    );
+
+    expect(preloaded).toEqual(selfRead);
+    expect(preloaded.national["governance.budgetBalance"]).toBeGreaterThan(0);
+    const selfCol = selfReadDb.collection("cabinetEstates");
+    const preCol = preloadDb.collection("cabinetEstates");
+    expect(preCol.find).not.toHaveBeenCalled();
+    expect(vi.mocked(preCol.bulkWrite).mock.calls).toEqual(vi.mocked(selfCol.bulkWrite).mock.calls);
+  });
+});

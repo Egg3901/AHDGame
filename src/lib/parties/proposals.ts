@@ -19,6 +19,8 @@ import type { ElectedOfficial } from "@/lib/db/types/officials";
 import type { GovernmentFormation } from "@/lib/db/types/governmentFormation";
 import { getGameTime } from "@/lib/time/gameTime";
 import { selectMergeNppCull } from "@/lib/npp/mergeNppCap";
+import { selectNationalMergeNppCull } from "@/lib/npp/rules/mergeNationalCap";
+import { getPartyNppCapacity } from "@/lib/npp/partyCapacity";
 import { notifyGovernorOfSenateVacancy } from "@/lib/governors/senateVacancy";
 import {
   REQUIRED_YES_FRACTION,
@@ -576,6 +578,14 @@ export async function processMergeProposal(
   const countryId = proposingParty.countryId;
   const now = new Date();
 
+  // Captured before step 1 re-points them: their live candidacies move in 4d.
+  const absorbedCharacterIds = (
+    await db
+      .collection("characters")
+      .find({ party: proposingStrId, countryId }, { projection: { _id: 1 } })
+      .toArray()
+  ).map((c) => c._id as ObjectId);
+
   // 1. Transfer characters — move party membership, halve partyInfluence
   await db.collection("characters").updateMany({ party: proposingStrId, countryId }, [
     {
@@ -670,14 +680,17 @@ export async function processMergeProposal(
     .deleteMany({ partyId: proposingStrId, countryId });
 
   // 4c. Transfer NPPs with the per-state recruitment cap enforced. The target
-  //     keeps all of its own NPPs; the absorbed party's active NPPs fill the
-  //     remaining slots in each home state (strongest first). Any over the cap
+  //     keeps all its own NPPs, even if already over a cap. Incoming active NPPs
+  //     fill the remaining slots in each home state (strongest first). Any over the cap
   //     are hard-deleted so a merge can't stack a region past the limit a fresh
   //     recruit would face. Retired NPPs carry no cap weight and always re-point
   //     to the target for historical continuity.
   const proposingActiveNpps = await db
     .collection<NPP>("npps")
-    .find({ party: proposingStrId, countryId, retiredAt: null })
+    .find(
+      { party: proposingStrId, countryId, retiredAt: null },
+      { projection: { homeState: 1, politicalInfluence: 1, favorability: 1 } }
+    )
     .toArray();
 
   // Surviving party's POST-merge org per state (re-read after step 4 merged it).
@@ -700,12 +713,30 @@ export async function processMergeProposal(
     targetActiveCountByState.set(n.homeState, (targetActiveCountByState.get(n.homeState) ?? 0) + 1);
   }
 
-  const { cull } = selectMergeNppCull({
+  const { keep, cull } = selectMergeNppCull({
     proposingNpps: proposingActiveNpps,
     targetActiveCountByState,
     targetOrgByState,
   });
-  const cullIds = cull.map((n) => n._id);
+  // Members have already moved in step 1, so this counts the combined party's
+  // distinct, non-banned active players at resolution, not at proposal time.
+  const { maxNpps } = await getPartyNppCapacity(db, countryId, targetStrId, now);
+  const toRank = (n: NPP) => ({
+    id: n._id.toString(),
+    politicalInfluence: n.politicalInfluence,
+    favorability: n.favorability,
+  });
+  const nationalCull = new Set(
+    selectNationalMergeNppCull({
+      survivingNpps: targetActiveNpps.map((n) => ({ id: n._id.toString() })),
+      incomingNpps: keep.map(toRank),
+      maxNpps,
+    })
+  );
+  const cullIds = [
+    ...cull.map((n) => n._id),
+    ...keep.filter((n) => nationalCull.has(n._id.toString())).map((n) => n._id),
+  ];
 
   // Re-point every absorbed NPP that survives (kept active + all retired) to the
   // target in a single pass; the cull set is excluded.
@@ -734,8 +765,50 @@ export async function processMergeProposal(
         }
       }
     }
-    await db.collection("electionCandidates").deleteMany({ nppId: { $in: cullIds } });
+    // Live NPP candidacies also use characterId; do not leave a deleted NPP
+    // on the ballot or permit its campaign to continue accumulating votes.
+    await db.collection("electionCandidates").deleteMany({
+      $or: [{ nppId: { $in: cullIds } }, { characterId: { $in: cullIds } }],
+    });
+    await db.collection("campaigns").updateMany(
+      { candidateId: { $in: cullIds }, status: { $ne: "archived" } },
+      {
+        $set: {
+          status: "archived",
+          archivedAt: now,
+          archivedReason: "removed",
+          updatedAt: now,
+        },
+      }
+    );
     await db.collection<NPP>("npps").deleteMany({ _id: { $in: cullIds } });
+  }
+
+  // 4d. Live candidacies follow their candidates. A candidacy keeps the party
+  //     it was filed under, so one left on the absorbed party seats its winner
+  //     back into the dead party when the race resolves (ticket 1376). NPP
+  //     candidacies carry the NPP's id as `characterId`. Selected by member
+  //     rather than by country because legacy candidacies have no countryId.
+  const cullIdSet = new Set(cullIds.map((id) => id.toString()));
+  const movedCandidateIds = [
+    ...absorbedCharacterIds,
+    ...proposingActiveNpps.map((n) => n._id).filter((id) => !cullIdSet.has(id.toString())),
+  ];
+  if (movedCandidateIds.length > 0) {
+    await db
+      .collection("electionCandidates")
+      .updateMany(
+        { party: proposingStrId, status: "active", characterId: { $in: movedCandidateIds } },
+        { $set: { party: targetStrId } }
+      );
+    await db.collection("campaigns").updateMany(
+      {
+        party: proposingStrId,
+        candidateId: { $in: movedCandidateIds },
+        status: { $ne: "archived" },
+      },
+      { $set: { party: targetStrId, updatedAt: now } }
+    );
   }
 
   // 5. Transfer elected seats — re-point all of the absorbed party's elected

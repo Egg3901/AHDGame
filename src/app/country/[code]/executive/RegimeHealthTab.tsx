@@ -45,6 +45,20 @@ interface ConventionState {
   electionDelayTurns: number;
 }
 
+interface ConventionDraftOptions {
+  /** Government types this country's convention may adopt. */
+  targets: string[];
+  electionDelays: number[];
+  legacyReservationMax: number;
+  defaults: { legacyReservation: number; electionDelayTurns: number };
+}
+
+interface ConventionDraft {
+  targetSystem: string;
+  legacyReservation: number;
+  electionDelayTurns: number;
+}
+
 interface Transition {
   turn: number;
   from: string;
@@ -65,6 +79,8 @@ interface BannedParty {
   sequentialId: number;
   name: string;
   abbreviation?: string;
+  /** Turn this party's own legalize cooldown ends, when it is still running. */
+  legalizeCooldownUntil?: number;
 }
 
 interface LeaderRegimeData {
@@ -87,6 +103,7 @@ interface LeaderRegimeData {
   activeDecision: ActiveDecision | null;
   convention: ConventionState | null;
   conventionInProgress: boolean;
+  conventionDraftOptions?: ConventionDraftOptions;
   transitionHistory: Transition[];
   reformAvailability: Record<string, { available: boolean; cooldownUntil?: number; note?: string }>;
   bannedParties: BannedParty[];
@@ -185,7 +202,7 @@ interface ReformMeta {
 const REFORM_META: Record<string, ReformMeta> = {
   legalizeParty: {
     description:
-      "Flips a chosen banned party to approved. Intra-party hardliners read this as a major concession; the public sees a real opening. Cooldown is per-party — different banned parties have independent windows.",
+      "Flips a chosen banned party to approved. Intra-party hardliners read this as a major concession; the public sees a real opening. Each banned party has its own cooldown.",
     intraCost: -6,
     popularGain: 8,
     boostPerTurn: 0.2,
@@ -240,6 +257,8 @@ export function RegimeHealthTab({ countryCode }: Props) {
   const [expandedAction, setExpandedAction] = useState<string | null>(null);
   /** Picker state for decision options that need a bannedPartyId payload. */
   const [selectedBannedParty, setSelectedBannedParty] = useState<number | "">("");
+  /** Banned party picked for the legalize reform. */
+  const [legalizePartyId, setLegalizePartyId] = useState<number | "">("");
 
   const refresh = useCallback(async () => {
     try {
@@ -291,7 +310,8 @@ export function RegimeHealthTab({ countryCode }: Props) {
     }
   }
 
-  async function triggerReform(action: string, body?: Record<string, unknown>): Promise<void> {
+  /** Resolves true when the reform went through. */
+  async function triggerReform(action: string, body?: Record<string, unknown>): Promise<boolean> {
     setBusy(`reform:${action}`);
     setErr(null);
     try {
@@ -303,9 +323,10 @@ export function RegimeHealthTab({ countryCode }: Props) {
       if (!res.ok) {
         const errBody = (await res.json().catch(() => ({}))) as { error?: string };
         setErr(errBody.error ?? `Reform action failed (${res.status})`);
-      } else {
-        await refresh();
+        return false;
       }
+      await refresh();
+      return true;
     } finally {
       setBusy(null);
     }
@@ -321,6 +342,26 @@ export function RegimeHealthTab({ countryCode }: Props) {
       if (!res.ok) {
         const errBody = (await res.json().catch(() => ({}))) as { error?: string };
         setErr(errBody.error ?? `Announce failed (${res.status})`);
+      } else {
+        await refresh();
+      }
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function submitConventionDraft(draft: ConventionDraft): Promise<void> {
+    setBusy("convention:draft");
+    setErr(null);
+    try {
+      const res = await fetch(`/api/country/${countryCode}/convention/draft`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(draft),
+      });
+      if (!res.ok) {
+        const errBody = (await res.json().catch(() => ({}))) as { error?: string };
+        setErr(errBody.error ?? `Draft submission failed (${res.status})`);
       } else {
         await refresh();
       }
@@ -554,6 +595,12 @@ export function RegimeHealthTab({ countryCode }: Props) {
             const isPerParty = action === "legalizeParty";
             const isExpanded = expandedAction === action;
             const meta = REFORM_META[action];
+            const legalizeTarget = isPerParty
+              ? data.bannedParties.find((p) => p.sequentialId === legalizePartyId)
+              : undefined;
+            const perPartyReady =
+              !isPerParty ||
+              (legalizeTarget !== undefined && legalizeTarget.legalizeCooldownUntil === undefined);
             return (
               <div key={action} className="rounded border border-card-border/60 bg-background/30">
                 <div className="flex items-center justify-between gap-3 p-2">
@@ -585,8 +632,19 @@ export function RegimeHealthTab({ countryCode }: Props) {
                       <span className="text-xs text-muted">{avail.note}</span>
                     )}
                     <button
-                      disabled={!avail?.available || busy !== null || isPerParty}
-                      onClick={() => void triggerReform(action)}
+                      disabled={!avail?.available || busy !== null || !perPartyReady}
+                      onClick={() => {
+                        if (isPerParty) {
+                          if (!legalizeTarget) return;
+                          void triggerReform(action, {
+                            partyId: legalizeTarget.sequentialId,
+                          }).then((ok) => {
+                            if (ok) setLegalizePartyId("");
+                          });
+                        } else {
+                          void triggerReform(action);
+                        }
+                      }}
                       className="rounded border border-card-border bg-card px-3 py-1 text-xs hover:bg-card/80 disabled:opacity-40 disabled:cursor-not-allowed"
                       data-testid={`regime-reform-${action}`}
                     >
@@ -594,6 +652,41 @@ export function RegimeHealthTab({ countryCode }: Props) {
                     </button>
                   </div>
                 </div>
+                {isPerParty && (
+                  <div className="px-2 pb-2 text-xs">
+                    {data.bannedParties.length > 0 ? (
+                      <label className="flex flex-wrap items-center gap-2">
+                        <span className="text-muted">Party to legalize</span>
+                        <select
+                          value={legalizePartyId}
+                          onChange={(e) =>
+                            setLegalizePartyId(e.target.value === "" ? "" : Number(e.target.value))
+                          }
+                          disabled={busy !== null}
+                          className="min-w-0 flex-1 rounded border border-card-border bg-background px-2 py-1 text-sm text-foreground"
+                          data-testid="regime-legalize-party-picker"
+                        >
+                          <option value="">Pick a banned party…</option>
+                          {data.bannedParties.map((p) => (
+                            <option
+                              key={p.sequentialId}
+                              value={p.sequentialId}
+                              disabled={p.legalizeCooldownUntil !== undefined}
+                            >
+                              {p.name}
+                              {p.abbreviation ? ` (${p.abbreviation})` : ""}
+                              {p.legalizeCooldownUntil !== undefined
+                                ? `, cooldown until turn ${p.legalizeCooldownUntil}`
+                                : ""}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : (
+                      <p className="text-muted">No party is banned right now.</p>
+                    )}
+                  </div>
+                )}
                 {isExpanded && meta && (
                   <div
                     className="border-t border-card-border/40 bg-card/40 p-3 text-xs"
@@ -637,12 +730,6 @@ export function RegimeHealthTab({ countryCode }: Props) {
                         </p>
                       )}
                     {meta.notes && <p className="mt-2 text-muted">{meta.notes}</p>}
-                    {isPerParty && (
-                      <p className="mt-2 text-muted">
-                        Per-party cooldown — pick a banned party first (party-management page wiring
-                        is a follow-up).
-                      </p>
-                    )}
                   </div>
                 )}
               </div>
@@ -660,47 +747,49 @@ export function RegimeHealthTab({ countryCode }: Props) {
         {!data.convention ? (
           <div className="mt-2 space-y-3 text-xs text-muted">
             <p>
-              No convention in progress. A convention is the voluntary off-ramp out of the one-party
-              state — the leader negotiates the transition to a parliamentary or presidential system
-              on their own terms, instead of waiting for Stage 4 to force a collapse with punishing
-              defaults.
+              No convention in progress. A convention is the voluntary way out of the one-party
+              state: you set the terms of the transition yourself instead of waiting for Stage 4 to
+              force a collapse on worse terms.
             </p>
             <div>
               <p className="font-medium text-foreground/90">How it works</p>
               <ol className="mt-1 list-decimal space-y-1 pl-5">
                 <li>
-                  <strong className="text-foreground">Announce</strong> — flips
-                  <code className="mx-1 rounded bg-card-border/40 px-1">conventionInProgress</code>
-                  on, freezes the Stage-4 dwell counter so the regime can&apos;t collapse during
-                  negotiations, applies +15 popular / -10 intra, and parks a 48-turn draft window.
+                  <strong className="text-foreground">Announce.</strong> Popular legitimacy +15,
+                  intra-party confidence -10. The regime cannot collapse while the convention sits,
+                  and you have 48 turns to submit a draft.
                 </li>
                 <li>
-                  <strong className="text-foreground">Draft</strong> — pick the target government
-                  type (from <code>collapseTargetAllowlist</code>: parliamentaryRepublic or
-                  presidential for CN), the legacy seat reservation (0-35% for the former ruling
-                  party in the snap election), and the election-delay window (12 / 24 / 48 turns).
+                  <strong className="text-foreground">Draft.</strong> Choose the new system of
+                  government
+                  {data.conventionDraftOptions && data.conventionDraftOptions.targets.length > 0
+                    ? ` (${data.conventionDraftOptions.targets.map(governmentSystemLabel).join(" or ")})`
+                    : ""}
+                  , the share of the new legislature reserved for the ruling party (0 to{" "}
+                  {data.conventionDraftOptions?.legacyReservationMax ?? 35}%), and how many turns
+                  after the draft deadline the first election is held (
+                  {(data.conventionDraftOptions?.electionDelays ?? [12, 24, 48]).join(", ")}).
                 </li>
                 <li>
-                  <strong className="text-foreground">Ratify</strong> — at the draft deadline the
-                  phase auto-advances to ratification. At
-                  <code className="mx-1 rounded bg-card-border/40 px-1">
-                    draftDeadlineTurn + electionDelayTurns
-                  </code>
-                  the conversion fires: governmentType flips, opsVoteMultipliers clear, regimeStatus
-                  is wiped from every party, and a snap election is scheduled with the legacy
-                  reservation as a vote-share floor for the former ruling party.
+                  <strong className="text-foreground">Ratify.</strong> Ratification starts at the
+                  draft deadline. When the election delay runs out, the country converts: the ruling
+                  party loses its vote weighting, every party&apos;s approved or banned status is
+                  cleared, and a snap election is held.
                 </li>
               </ol>
             </div>
             <p>
-              Abandoning the convention (no draft submitted before deadline) silently dissolves it.
-              Cannot be announced during Stage 4 (collapse) — at that point only the Stage-4
-              decision is available.
+              A convention with no draft by the deadline dissolves. It cannot be announced during
+              Stage 4 (collapse); only the Stage 4 decision is left then.
             </p>
-            <p className="text-foreground/70">
-              CN default reservation: <strong>20%</strong> · default election delay:{" "}
-              <strong>24 turns</strong>. Both are tunable per-draft.
-            </p>
+            {data.conventionDraftOptions && (
+              <p className="text-foreground/70">
+                Defaults: <strong>{data.conventionDraftOptions.defaults.legacyReservation}%</strong>{" "}
+                reserved, first election{" "}
+                <strong>{data.conventionDraftOptions.defaults.electionDelayTurns} turns</strong>{" "}
+                after the deadline. Both can be changed in the draft.
+              </p>
+            )}
             <button
               disabled={busy !== null || data.stage === "collapse"}
               onClick={() => void announceConvention()}
@@ -711,33 +800,17 @@ export function RegimeHealthTab({ countryCode }: Props) {
             </button>
             {data.stage === "collapse" && (
               <p className="text-rose-600 dark:text-rose-400">
-                Disabled: the regime is in Stage 4 (collapse). Voluntary convention is no longer an
-                option — resolve the Stage-4 decision instead.
+                Disabled: the regime is in Stage 4 (collapse). Resolve the Stage 4 decision instead.
               </p>
             )}
           </div>
         ) : (
-          <div className="mt-2 text-xs text-muted" data-testid="regime-convention-status">
-            Phase: <strong className="text-foreground">{data.convention.phase}</strong> • announced
-            T{data.convention.announcedAtTurn} • draft deadline T{data.convention.draftDeadlineTurn}
-            {data.convention.targetSystem && (
-              <>
-                {" "}
-                • target:{" "}
-                <strong className="text-foreground">
-                  {governmentSystemLabel(data.convention.targetSystem)}
-                </strong>
-              </>
-            )}{" "}
-            • legacy {data.convention.legacyReservation}% • election delay{" "}
-            {data.convention.electionDelayTurns} turns
-            {data.convention.phase === "announced" && (
-              <p className="mt-2 text-xs">
-                Draft submission UI lives at a future polish pass — for now, submit via POST
-                /api/country/{countryCode}/convention/draft.
-              </p>
-            )}
-          </div>
+          <ConventionStatus
+            convention={data.convention}
+            options={data.conventionDraftOptions ?? null}
+            busy={busy !== null}
+            onSubmitDraft={submitConventionDraft}
+          />
         )}
       </section>
 
@@ -781,6 +854,223 @@ interface ScalarCardProps {
  * separating them. Y-axis covers 0–100 so the visual scale is shared
  * between scalars.
  */
+const CONVENTION_PHASE_LABEL: Record<ConventionState["phase"], string> = {
+  announced: "Drafting",
+  draft: "Draft submitted",
+  ratification: "Ratification",
+};
+
+/**
+ * A live convention: the draft form while the draft window is open, then the
+ * locked terms and the turn the new constitution takes effect.
+ */
+function ConventionStatus({
+  convention,
+  options,
+  busy,
+  onSubmitDraft,
+}: {
+  convention: ConventionState;
+  options: ConventionDraftOptions | null;
+  busy: boolean;
+  onSubmitDraft: (draft: ConventionDraft) => Promise<void>;
+}) {
+  const electionTurn = convention.draftDeadlineTurn + convention.electionDelayTurns;
+  return (
+    <div className="mt-2 space-y-2 text-xs text-muted" data-testid="regime-convention-status">
+      <p>
+        Phase:{" "}
+        <strong className="text-foreground">
+          {CONVENTION_PHASE_LABEL[convention.phase] ?? convention.phase}
+        </strong>{" "}
+        · announced turn {convention.announcedAtTurn} · draft deadline turn{" "}
+        {convention.draftDeadlineTurn}
+      </p>
+      {convention.phase === "announced" ? (
+        options ? (
+          <ConventionDraftForm
+            convention={convention}
+            options={options}
+            busy={busy}
+            onSubmit={onSubmitDraft}
+          />
+        ) : (
+          <p>The draft form failed to load. Reload the page.</p>
+        )
+      ) : (
+        <>
+          <p>
+            Draft:{" "}
+            <strong className="text-foreground">
+              {convention.targetSystem ? governmentSystemLabel(convention.targetSystem) : "unset"}
+            </strong>
+            , {convention.legacyReservation}% of the new legislature reserved for the ruling party,
+            first election {convention.electionDelayTurns} turns after the deadline.
+          </p>
+          <p>
+            {convention.phase === "draft"
+              ? `Ratification starts on turn ${convention.draftDeadlineTurn}. `
+              : "Ratification is under way. "}
+            The country converts and calls its snap election on turn {electionTurn}.
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
+function ConventionDraftForm({
+  convention,
+  options,
+  busy,
+  onSubmit,
+}: {
+  convention: ConventionState;
+  options: ConventionDraftOptions;
+  busy: boolean;
+  onSubmit: (draft: ConventionDraft) => Promise<void>;
+}) {
+  const [targetSystem, setTargetSystem] = useState(options.targets[0] ?? "");
+  const [legacyReservation, setLegacyReservation] = useState(
+    Math.min(Math.max(convention.legacyReservation, 0), options.legacyReservationMax)
+  );
+  const [electionDelayTurns, setElectionDelayTurns] = useState(
+    options.electionDelays.includes(convention.electionDelayTurns)
+      ? convention.electionDelayTurns
+      : (options.electionDelays[0] ?? convention.electionDelayTurns)
+  );
+  // Submitting is final, so the first press only asks for confirmation.
+  const [confirming, setConfirming] = useState(false);
+
+  if (options.targets.length === 0) {
+    return <p>This country has no system of government a convention can adopt.</p>;
+  }
+
+  const electionTurn = convention.draftDeadlineTurn + electionDelayTurns;
+  const primaryButton =
+    "rounded border border-primary/40 bg-primary/10 px-3 py-1 text-sm text-primary hover:bg-primary/20 disabled:opacity-40 disabled:cursor-not-allowed";
+
+  return (
+    <form
+      className="space-y-3 rounded border border-card-border p-3"
+      data-testid="regime-convention-draft-form"
+      onSubmit={(e) => {
+        e.preventDefault();
+        setConfirming(true);
+      }}
+    >
+      <p className="text-foreground/90">
+        Submit a draft before turn {convention.draftDeadlineTurn} or the convention dissolves.
+      </p>
+      <label className="block space-y-1">
+        <span className="font-medium text-foreground/90">New system of government</span>
+        <select
+          value={targetSystem}
+          onChange={(e) => {
+            setTargetSystem(e.target.value);
+            setConfirming(false);
+          }}
+          disabled={busy}
+          className="block w-full rounded border border-card-border bg-background px-2 py-1.5 text-sm text-foreground"
+          data-testid="regime-convention-target"
+        >
+          {options.targets.map((t) => {
+            const label = governmentSystemLabel(t);
+            return (
+              <option key={t} value={t}>
+                {label.charAt(0).toUpperCase() + label.slice(1)}
+              </option>
+            );
+          })}
+        </select>
+      </label>
+      <label className="block space-y-1">
+        <span className="font-medium text-foreground/90">
+          Reserved for the ruling party: {legacyReservation}% of the new legislature
+        </span>
+        <input
+          type="range"
+          min={0}
+          max={options.legacyReservationMax}
+          step={1}
+          value={legacyReservation}
+          onChange={(e) => {
+            setLegacyReservation(Number(e.target.value));
+            setConfirming(false);
+          }}
+          disabled={busy}
+          className="block w-full accent-primary"
+          data-testid="regime-convention-reservation"
+        />
+      </label>
+      <fieldset className="space-y-1">
+        <legend className="font-medium text-foreground/90">
+          First election after the deadline
+        </legend>
+        <div className="flex flex-wrap gap-2">
+          {options.electionDelays.map((d) => (
+            <button
+              key={d}
+              type="button"
+              aria-pressed={electionDelayTurns === d}
+              disabled={busy}
+              onClick={() => {
+                setElectionDelayTurns(d);
+                setConfirming(false);
+              }}
+              className={`rounded border px-3 py-1 text-sm disabled:opacity-40 ${
+                electionDelayTurns === d
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-card-border text-foreground"
+              }`}
+              data-testid={`regime-convention-delay-${d}`}
+            >
+              {d} turns
+            </button>
+          ))}
+        </div>
+      </fieldset>
+      <p>
+        Ratification starts on turn {convention.draftDeadlineTurn}. The country converts and calls
+        its snap election on turn {electionTurn}.
+      </p>
+      {confirming ? (
+        <div className="space-y-2" data-testid="regime-convention-draft-confirm">
+          <p className="text-foreground/90">These terms cannot be changed once submitted.</p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void onSubmit({ targetSystem, legacyReservation, electionDelayTurns })}
+              className={primaryButton}
+              data-testid="regime-convention-draft-submit"
+            >
+              {busy ? "Submitting" : "Submit draft"}
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setConfirming(false)}
+              className="rounded border border-card-border px-3 py-1 text-sm text-foreground disabled:opacity-40"
+            >
+              Keep editing
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="submit"
+          disabled={busy}
+          className={primaryButton}
+          data-testid="regime-convention-draft-review"
+        >
+          Review draft
+        </button>
+      )}
+    </form>
+  );
+}
+
 function ScalarCard({
   label,
   value,

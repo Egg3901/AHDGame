@@ -462,10 +462,20 @@ export function NavbarWrapper({
   useEffect(() => {
     if (useLightweightNav || isExcludedPath) return;
     if (authBootstrapLoading || !navData) return;
+    // Character stats are per user; a signed-out visitor would only get a 401.
+    // Singleplayer has no account user and always has its local character.
+    if (!navData.user && !singleplayer) return;
     if (statusLoadedRef.current) return;
     statusLoadedRef.current = true;
     void fetchStatusData(navData.user?.statusBarLayout);
-  }, [authBootstrapLoading, fetchStatusData, isExcludedPath, navData, useLightweightNav]);
+  }, [
+    authBootstrapLoading,
+    fetchStatusData,
+    isExcludedPath,
+    navData,
+    singleplayer,
+    useLightweightNav,
+  ]);
 
   useEffect(() => {
     if (useLightweightNav || isExcludedPath) return;
@@ -571,6 +581,7 @@ export function NavbarWrapper({
             <div className="flex items-center gap-2">
               <Image
                 src={CDN_LOGO_URL}
+                priority
                 unoptimized
                 alt="A House Divided Logo"
                 width={40}

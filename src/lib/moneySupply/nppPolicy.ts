@@ -22,11 +22,15 @@ import type {
 import { getInflationTarget } from "@/lib/budget/inflation";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import { isBankGovernmentControlled } from "@/lib/centralBank/governance";
+import { getBankId } from "@/lib/centralBank/helpers";
+import { logger } from "@/lib/observability/logger";
 import { getStartingYearForPreset, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import type { CountryId } from "@/lib/constants/countries";
 import { getSeedCurrencyCode } from "@/lib/constants/currencies";
 import { executeMonetaryOperation, MONETARY_OPERATION_COOLDOWN_TURNS } from "./operations";
+import { LiquidityAdvanceRejected } from "./liquidityAdvance";
+import { MonetaryOperationRejected } from "./monetaryOperationJournal";
 import { MONEY_SUPPLY_SNAPSHOTS_COLLECTION } from "./snapshot";
 import { isMoneySupplyEnabledFromConfig } from "./featureFlag";
 
@@ -209,6 +213,12 @@ export async function processNppMonetaryOperations(
   let evaluationsRecorded = 0;
   for (const bank of banks) {
     const countryId = bank.countryId as CountryId;
+    // Operations execute against the country's own bank document. A leftover
+    // document carrying the same countryId (a dormant shared bank in a world
+    // without its union) passed the cooldown check on its own fields, was
+    // refused on the real bank's cooldown, and sized the operation from the
+    // wrong reserves.
+    if (bank._id !== getBankId(countryId)) continue;
     const member = union?.members[countryId];
     const authority = member ? bankById.get(euroPolicyBankId(countryId, union)) : bank;
     if (!authority || authority.chairMode !== "npp" || authority.chairControlsLocked) continue;
@@ -286,21 +296,38 @@ export async function processNppMonetaryOperations(
     };
 
     if (decision.type !== "hold") {
-      await executeMonetaryOperation(db, {
-        countryId,
-        operationId: `npp-${decision.type === "liquidity_injection" ? "liquidity" : decision.type}-${bank._id}-${turn}`,
-        type: decision.type,
-        ...((decision.type === "qe" || decision.type === "qt") && bond
-          ? { units: decision.units, bondId: bond._id.toString() }
-          : "amount" in decision
-            ? { amount: decision.amount }
-            : {}),
-        turn,
-        actorName: `${authority._id} Monetary Committee`,
-        actorClass: "npp",
-        reason: decision.rationale,
-      });
-      operationsExecuted++;
+      try {
+        await executeMonetaryOperation(db, {
+          countryId,
+          operationId: `npp-${decision.type === "liquidity_injection" ? "liquidity" : decision.type}-${bank._id}-${turn}`,
+          type: decision.type,
+          ...((decision.type === "qe" || decision.type === "qt") && bond
+            ? { units: decision.units, bondId: bond._id.toString() }
+            : "amount" in decision
+              ? { amount: decision.amount }
+              : {}),
+          turn,
+          actorName: `${authority._id} Monetary Committee`,
+          actorClass: "npp",
+          reason: decision.rationale,
+        });
+        operationsExecuted++;
+      } catch (error) {
+        // A refused command (cooldown, another pending command, no bond units)
+        // skips this bank; it must not abort the sweep for every bank after it.
+        if (
+          !(error instanceof LiquidityAdvanceRejected) &&
+          !(error instanceof MonetaryOperationRejected)
+        )
+          throw error;
+        logger.warn("nppMonetaryOperations", "Monetary operation refused", {
+          bankId: bank._id,
+          countryId,
+          type: decision.type,
+          turn,
+          reason: error.message,
+        });
+      }
     }
     await db
       .collection<CentralBank>("centralBanks")

@@ -138,7 +138,7 @@ describe("drawFromTreasury", () => {
     const { drawFromTreasury } = await import("./treasury");
     const res = await drawFromTreasury(
       db as unknown as Db,
-      { countryId: "CN", corpId, amountLocal: 3000 },
+      { countryId: "CN", corpId, amountLocal: 3000, corpCurrency: "CNY" },
       now
     );
 
@@ -155,7 +155,7 @@ describe("drawFromTreasury", () => {
     const { drawFromTreasury } = await import("./treasury");
     const res = await drawFromTreasury(
       db as unknown as Db,
-      { countryId: "CN", corpId, amountLocal: 9999 },
+      { countryId: "CN", corpId, amountLocal: 9999, corpCurrency: "CNY" },
       now
     );
 
@@ -179,7 +179,7 @@ describe("remitToTreasury", () => {
     const { remitToTreasury } = await import("./treasury");
     const amt = await remitToTreasury(
       db as unknown as Db,
-      { countryId: "CN", corpId, amountLocal: 1200 },
+      { countryId: "CN", corpId, amountLocal: 1200, corpCurrency: "CNY" },
       now
     );
 
@@ -196,7 +196,7 @@ describe("remitToTreasury", () => {
     const { remitToTreasury } = await import("./treasury");
     const amt = await remitToTreasury(
       db as unknown as Db,
-      { countryId: "CN", corpId, amountLocal: 0 },
+      { countryId: "CN", corpId, amountLocal: 0, corpCurrency: "CNY" },
       now
     );
 

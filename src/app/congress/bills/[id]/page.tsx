@@ -264,9 +264,7 @@ function BillDetailContent() {
                   <span className="text-[10px] text-cyan-400/90">{bill.legislationTypeName}</span>
                 ) : null}
               </div>
-              <h1 className="font-display text-3xl font-semibold leading-tight tracking-tight">
-                {bill.title}
-              </h1>
+              <h1 className="text-3xl font-semibold leading-tight tracking-tight">{bill.title}</h1>
             </div>
           </div>
 
@@ -274,9 +272,7 @@ function BillDetailContent() {
 
           {bill.vetoMessage && (
             <div className="rounded-lg border border-error/40 bg-error/5 px-4 py-3">
-              <h2 className="text-[10px] font-semibold uppercase tracking-widest text-error">
-                President&apos;s veto message
-              </h2>
+              <h2 className="text-sm font-semibold text-error">President&apos;s veto message</h2>
               <p className="mt-1 text-sm italic">&ldquo;{bill.vetoMessage}&rdquo;</p>
             </div>
           )}
@@ -319,7 +315,7 @@ function BillDetailContent() {
           {/* Provisions — Proposed vs Current */}
           {bill.provisions?.length ? (
             <div className="flex flex-col gap-3 pt-2 border-t border-card-border/40">
-              <h3 className="font-display text-lg font-semibold">Provisions</h3>
+              <h3 className="text-lg font-semibold">Provisions</h3>
               {bill.provisions.map((p, i) => (
                 <BillProvisionCard
                   key={i}
@@ -408,7 +404,7 @@ function BillDetailContent() {
               <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-5 space-y-4">
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <div>
-                    <h3 className="font-display text-base font-semibold text-amber-300">
+                    <h3 className="text-base font-semibold text-amber-300">
                       Congressional Veto Override
                     </h3>
                     <p className="text-xs text-muted mt-1">
@@ -493,13 +489,13 @@ function BillDetailContent() {
                 bill.votesFor + bill.votesAgainst + bill.votesAbstain > 0) && (
                 <div className="space-y-4 rounded-xl border border-card-border bg-card p-5">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
-                      {chamberLabel(bill.currentChamber)} · Floor Vote
+                    <h3 className="text-sm font-semibold text-muted">
+                      {chamberLabel(bill.currentChamber)} · floor vote
                     </h3>
                     {(isActive || isConcurrent || isJpOverride || isCabinetReview) &&
                       bill.votingEndsAt && (
                         <span className="inline-flex items-center gap-1.5 text-xs text-warning">
-                          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-warning" />
+                          <span className="h-1.5 w-1.5 rounded-full bg-warning" />
                           LIVE · <DeadlineCountdown deadline={bill.votingEndsAt} />
                         </span>
                       )}
@@ -631,7 +627,7 @@ function BillDetailContent() {
                 (bill.voteByPartyOther?.length ?? 0) > 0) && (
                 <div className="min-w-0 rounded-xl border border-card-border bg-card p-5 space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h3 className="font-display text-lg font-semibold">Vote by Party</h3>
+                    <h3 className="text-lg font-semibold">Vote by Party</h3>
                     {/* Chamber sub-tabs — bicameral only */}
                     {!isUnicameral && (
                       <div className="flex rounded-lg border border-card-border overflow-hidden text-sm">
@@ -692,7 +688,7 @@ function BillDetailContent() {
               ((bill.voteByPartyOrigin?.length ?? 0) > 0 ||
                 (bill.voteByPartyOther?.length ?? 0) > 0) && (
                 <div className="rounded-xl border border-card-border bg-card p-5 space-y-3">
-                  <h3 className="font-display text-lg font-semibold">Member Vote History</h3>
+                  <h3 className="text-lg font-semibold">Member Vote History</h3>
                   <VoteListTable
                     billId={id}
                     chamber={voteTableChamber}
@@ -706,7 +702,7 @@ function BillDetailContent() {
               <div className="rounded-xl border border-purple-500/30 bg-purple-500/5 p-5 space-y-4">
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <div>
-                    <h3 className="font-display text-base font-semibold text-purple-300">
+                    <h3 className="text-base font-semibold text-purple-300">
                       Awaiting Presidential Action
                     </h3>
                     <p className="text-xs text-muted mt-1">
@@ -740,7 +736,7 @@ function BillDetailContent() {
             {/* Full text */}
             {bill.fullText && (
               <div className="rounded-xl border border-card-border bg-card p-5 space-y-3">
-                <h3 className="font-display text-lg font-semibold">Full Text</h3>
+                <h3 className="text-lg font-semibold">Full Text</h3>
                 <pre className="text-xs text-muted whitespace-pre-wrap leading-relaxed font-sans">
                   {bill.fullText}
                 </pre>
@@ -750,7 +746,7 @@ function BillDetailContent() {
             {/* Override failed panel — US only */}
             {!isUnicameral && bill.status === "override_failed" && (
               <div className="rounded-xl border border-error/30 bg-error/5 p-5 space-y-3">
-                <h3 className="font-display text-base font-semibold text-error">Veto Sustained</h3>
+                <h3 className="text-base font-semibold text-error">Veto Sustained</h3>
                 <p className="text-xs text-muted">
                   The override attempt failed to reach a 2/3 supermajority of the seats in both
                   chambers. The presidential veto stands.
@@ -775,9 +771,7 @@ function BillDetailContent() {
             {/* Veto overridden panel — US only */}
             {!isUnicameral && bill.status === "signed" && bill.presidentAction === "override" && (
               <div className="rounded-xl border border-success/30 bg-success/5 p-5 space-y-3">
-                <h3 className="font-display text-base font-semibold text-success">
-                  Veto Overridden
-                </h3>
+                <h3 className="text-base font-semibold text-success">Veto Overridden</h3>
                 <p className="text-xs text-muted">
                   Congress overrode the presidential veto with a 2/3 supermajority of the seats in
                   both chambers. The bill is now law.
@@ -808,7 +802,7 @@ function BillDetailContent() {
             {/* How it becomes law — country-specific procedure */}
             {legProcess.quirks.length > 0 && (
               <div className="rounded-xl border border-card-border bg-card p-5 space-y-3">
-                <h3 className="font-display text-lg font-semibold">How it becomes law</h3>
+                <h3 className="text-lg font-semibold">How it becomes law</h3>
                 <div className="space-y-3">
                   {legProcess.quirks.map((q, i) => (
                     <div key={i} className="flex gap-3">
@@ -834,7 +828,7 @@ function BillDetailContent() {
             {/* Whip Count — every seated party, free vote when unwhipped */}
             {bill.whipCounts && bill.whipCounts.length > 0 && (
               <div className="rounded-xl border border-card-border bg-card p-5 space-y-3">
-                <h3 className="font-display text-lg font-semibold">Whip Count</h3>
+                <h3 className="text-lg font-semibold">Whip Count</h3>
                 <div className="space-y-2">
                   {bill.whipCounts.map((w) => (
                     <div key={w.partyId} className="flex items-center gap-2 text-sm">

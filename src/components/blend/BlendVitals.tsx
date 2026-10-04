@@ -80,7 +80,7 @@ export function BlendVitals({ cells, variant = "desktop" }: BlendVitalsProps) {
             <div
               style={{
                 marginTop: mobile ? 2 : 3,
-                fontFamily: FONT.serif,
+                fontFamily: FONT.sans,
                 fontSize: mobile ? 12 : 12.5,
                 color: BLEND.mutedDim,
               }}

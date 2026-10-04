@@ -152,8 +152,7 @@ export default function MetricDetailPage({
     "--g1": identity.accent.g1,
     "--g2": identity.accent.g2,
   } as CSSProperties;
-  const mastheadBg =
-    "radial-gradient(120% 150% at 0% 0%, color-mix(in srgb, var(--stat-soft) 16%, transparent) 0%, transparent 44%), linear-gradient(135deg, var(--g0) 0%, var(--g1) 52%, var(--g2) 100%)";
+  const mastheadBg = "linear-gradient(135deg, var(--g0) 0%, var(--g1) 52%, var(--g2) 100%)";
 
   return (
     <div className="min-h-screen bg-background">
@@ -205,14 +204,7 @@ export default function MetricDetailPage({
               )}
             </div>
           </div>
-          <div
-            style={{
-              height: 2,
-              opacity: 0.85,
-              background:
-                "linear-gradient(90deg, transparent, var(--stat) 16%, var(--stat-soft) 50%, var(--stat) 84%, transparent)",
-            }}
-          />
+          <div aria-hidden className="h-px bg-card-border" />
           {/* Stats row */}
           <div className="grid grid-cols-1 divide-y divide-card-border bg-card sm:grid-cols-3 sm:divide-x sm:divide-y-0">
             <div className="px-6 py-4">

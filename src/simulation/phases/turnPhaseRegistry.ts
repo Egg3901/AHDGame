@@ -322,9 +322,19 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           processPartyInfluenceTurn(characters, config, gameNow)
         );
 
-        const caucusTaxResult = await runtime.runPhase("caucusTax", () =>
-          processCaucusTax(gameState.forexEnabled === true, newTurn)
-        );
+        // caucusTax and treasuryTurn touch disjoint state and run together.
+        // caucusTax debits member characters/NPP funds, credits caucus treasuries
+        // and inserts treasuryTransactions; treasuryTurn reads/writes only
+        // federalBudget cash and its ledgerEntries receipts. treasuryTurn still
+        // starts after the corporation turn (SOE remittance/draws have settled
+        // into the treasury before the budget's primary slice is applied).
+        // caucusTax must NOT overlap nppFundGeneration below: both $inc npps.funds.
+        const [caucusTaxResult, treasuryResult] = await Promise.all([
+          runtime.runPhase("caucusTax", () =>
+            processCaucusTax(gameState.forexEnabled === true, newTurn)
+          ),
+          runtime.runPhase("treasuryTurn", () => processTreasuryTurn(newTurn)),
+        ]);
         if (caucusTaxResult) {
           phaseResults.caucusTax = {
             caucusesProcessed: caucusTaxResult.caucusesProcessed,
@@ -365,12 +375,6 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           }
         }
 
-        // Live fiscal accrual into the signed treasury balance. Runs after the
-        // corporation turn so SOE remittance/draws have settled into the treasury
-        // this turn before the budget's primary slice is applied.
-        const treasuryResult = await runtime.runPhase("treasuryTurn", () =>
-          processTreasuryTurn(newTurn)
-        );
         if (treasuryResult) {
           phaseResults.treasuryTurn = {
             countriesProcessed: treasuryResult.countriesProcessed,
@@ -805,28 +809,34 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           phaseResults.governorLegislationQueue = governorQueueResult;
         }
 
-        // NPP autonomous bill sponsorship runs BEFORE nppBehavior so NPPs can
-        // vote on the just-introduced bills in the same turn.
-        await runtime.runPhase("nppBillSponsorship", async () => {
-          // Load a lightweight NPP context scoped to the current turn so we have
-          // nppOfficials + nppMap without the full voting/election machinery.
-          const { loadNPPContext } = await import("@/lib/turn/npp/context");
-          const sponsorCtx = await loadNPPContext(gameNow, {
-            billDeadlineNow: realNow,
-            currentTurn: newTurn,
-          });
-          const billsProposed = await processNppBillSponsorship(sponsorCtx);
-          if (billsProposed > 0) {
-            console.log(`[Turn] NPP bill sponsorship: ${billsProposed} bills introduced`);
-          }
-          return { billsProposed };
-        });
-
-        // File bench challengers directly into uncovered primaries before
-        // nppBehavior. Some direct chamber families are outside RACE_PRIORITY,
-        // while low-priority races can be starved by the shared NPP pool.
-        // nppBehavior reloads context afterward and sees the filed candidates.
-        await runtime.runPhase("generateChallengers", () => processChallengerGeneration(gameNow));
+        // NPP autonomous bill sponsorship and challenger filing both run BEFORE
+        // nppBehavior: NPPs vote on the just-introduced bills in the same turn,
+        // and nppBehavior reloads context afterward so it sees the filed
+        // candidates. The two are independent of each other and run together.
+        // Sponsorship reads only office holders (and their NPP docs) and writes
+        // only `bills` inserts. Challenger filing reads elections, candidacies,
+        // free NPPs and statePartyOrg and inserts electionCandidates and new
+        // NPPs; a fresh challenger never holds an office, so it can never enter
+        // the sponsor pool. Some direct chamber families are outside
+        // RACE_PRIORITY, while low-priority races can be starved by the shared
+        // NPP pool, which is why bench challengers are filed directly here.
+        await Promise.all([
+          runtime.runPhase("nppBillSponsorship", async () => {
+            // Load a lightweight NPP context scoped to the current turn so we have
+            // nppOfficials + nppMap without the full voting/election machinery.
+            const { loadNPPContext } = await import("@/lib/turn/npp/context");
+            const sponsorCtx = await loadNPPContext(gameNow, {
+              billDeadlineNow: realNow,
+              currentTurn: newTurn,
+            });
+            const billsProposed = await processNppBillSponsorship(sponsorCtx);
+            if (billsProposed > 0) {
+              console.log(`[Turn] NPP bill sponsorship: ${billsProposed} bills introduced`);
+            }
+            return { billsProposed };
+          }),
+          runtime.runPhase("generateChallengers", () => processChallengerGeneration(gameNow)),
+        ]);
 
         const nppResult = await runtime.runPhase("nppBehavior", () =>
           processNPPTurn(gameNow, {

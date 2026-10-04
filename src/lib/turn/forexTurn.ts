@@ -44,6 +44,7 @@ import {
   computeRateUpdate,
   type MacroInputs,
   type RateUpdateResult,
+  type VolumeInputs,
 } from "@/lib/currency/rateCalculation";
 import {
   bandMultiplierFor,
@@ -56,6 +57,8 @@ import type { GameConfig } from "@/lib/db/types/gameConfig";
 import { isCommandEconomy, MARKETIZATION_SCHEDULE } from "@/lib/constants/commandEconomy";
 import { rankReserveCurrencies } from "@/lib/centralBank/reserveCurrencyRanking";
 import { computeCurrencyVolumes } from "@/lib/currency/volumeTracker";
+import { playerTradeFeeRate, recentVolumeAnchorOf } from "@/lib/currency/tradeFees";
+import { loadTraderRecentForexAnchor } from "@/lib/currency/traderForexVolume";
 import { computeInterventionPressure, isInBand } from "@/lib/currency/interventionCalculator";
 import { interventionAdherenceMultiplier } from "@/lib/centralBank/marketEffects";
 import { buildPersonalBalanceInc } from "@/lib/currency/characterFunds";
@@ -268,6 +271,9 @@ export async function processForexTurn(
     const safeVolumes = {
       buyVolume24: finiteOr(currencyVolumes.buyVolume24, 0),
       sellVolume24: finiteOr(currencyVolumes.sellVolume24, 0),
+      ...(Number.isFinite(currencyVolumes.effectiveTraders)
+        ? { effectiveTraders: currencyVolumes.effectiveTraders }
+        : {}),
     };
 
     // Fixed-rate short-circuit — hold at the pegged value, skip drift. Two
@@ -653,7 +659,7 @@ async function applyIntervention(args: {
   bank: CentralBank;
   rates: Partial<Record<CurrencyCode, number>>;
   macro: MacroInputs;
-  organicVolumes: { buyVolume24: number; sellVolume24: number };
+  organicVolumes: VolumeInputs;
   currentTurn: number;
   now: Date;
   /** Reduced jitter for the leading reserve currency (1 = no buff). */
@@ -725,21 +731,17 @@ async function applyIntervention(args: {
   const adherence = interventionAdherenceMultiplier(args.bank.chairInfamy ?? 0);
   const effectiveSynthetic = intervention.syntheticVolume * adherence;
 
-  // Re-run the rate pipeline with synthetic volume folded into the shared
-  // volume-pressure term. This is what makes intervention affect the SAME
-  // turn's published rate; the shared VOLUME_PRESSURE_CAP constrains it.
+  // Re-run the rate pipeline with the intervention alongside traded flow. This
+  // is what makes intervention affect the SAME turn's published rate. It rides
+  // its own channel (syntheticNet), which keeps the original strength, so a
+  // bank can still lean against a large traded flow.
   const runBlend = (syntheticVolume: number) => {
-    const syntheticBuy = syntheticVolume > 0 ? syntheticVolume : 0;
-    const syntheticSell = syntheticVolume < 0 ? -syntheticVolume : 0;
     return computeRateUpdate(
       args.rate,
       args.baseRate,
       args.countryId as Parameters<typeof computeRateUpdate>[2],
       args.macro,
-      {
-        buyVolume24: args.organicVolumes.buyVolume24 + syntheticBuy,
-        sellVolume24: args.organicVolumes.sellVolume24 + syntheticSell,
-      },
+      { ...args.organicVolumes, syntheticNet: syntheticVolume },
       undefined,
       args.volatilityMultiplier ?? 1,
       args.cyclePressure ?? 0,
@@ -1004,8 +1006,25 @@ async function processTriggeredLimitOrders(
       continue;
     }
 
-    // Calculate spread on the remaining fill
-    const spreadAmount = fixedRate == null ? remainingAmount * LIMIT_ORDER_SPREAD : 0;
+    // Calculate spread on the remaining fill. A limit order is a player's own
+    // trade, so on top of the cheaper limit spread it pays the same size and
+    // liquidity fee as an instant trade; otherwise it would be the way around it.
+    const fillAnchor = fixedRate == null && fromRate > 0 ? remainingAmount / fromRate : undefined;
+    const limitFeeRate =
+      fillAnchor === undefined
+        ? 0
+        : playerTradeFeeRate({
+            baseSpread: LIMIT_ORDER_SPREAD,
+            tradeAnchor: fillAnchor,
+            priorAnchor: await loadTraderRecentForexAnchor(db, order.characterId, currentTurn),
+            fromVolumeAnchor: recentVolumeAnchorOf(
+              rates.find((r) => r.currencyCode === order.fromCurrency)
+            ),
+            toVolumeAnchor: recentVolumeAnchorOf(
+              rates.find((r) => r.currencyCode === order.toCurrency)
+            ),
+          });
+    const spreadAmount = fixedRate == null ? remainingAmount * limitFeeRate : 0;
     const netAmount = remainingAmount - spreadAmount;
     const centralBankShare = spreadAmount * SPREAD_FEE_CENTRAL_BANK_RATIO;
 
@@ -1082,6 +1101,7 @@ async function processTriggeredLimitOrders(
         amount: netAmount,
         rate: crossRate,
         spread: spreadAmount,
+        ...(fillAnchor !== undefined ? { anchorAmount: fillAnchor } : {}),
         turn: currentTurn,
         createdAt: now,
         source: "limit_order",
@@ -1103,6 +1123,7 @@ async function processTriggeredLimitOrders(
       amount: netAmount,
       rate: crossRate,
       spread: spreadAmount,
+      ...(fillAnchor !== undefined ? { anchorAmount: fillAnchor } : {}),
       turn: currentTurn,
       createdAt: now,
       source: "limit_order",

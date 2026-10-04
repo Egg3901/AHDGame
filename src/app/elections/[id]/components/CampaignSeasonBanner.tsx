@@ -29,7 +29,7 @@ export function CampaignSeasonBanner({
 
   return (
     <div className="mb-4 flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2">
-      <span className="mt-0.5 h-2 w-2 shrink-0 animate-pulse rounded-full bg-warning" />
+      <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-warning" />
       <p className="text-xs text-muted">
         <span className="font-semibold text-warning">Campaign season is open.</span> {turnsLeft}{" "}
         turn

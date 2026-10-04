@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   checkFrontierGuardrails,
+  frontierPacingOpportunity,
   frontierEntryCohortKey,
   frontierEntryControllerKey,
   frontierEntryEligible,
@@ -98,6 +99,29 @@ describe("frontierEntryExperiment", () => {
     ]) {
       expect(isFrontierEntryRelaxableReason(reason)).toBe(false);
     }
+  });
+
+  it("replaces only the ordinary stagger for a healthy uncovered measured-use market", () => {
+    const opportunity = {
+      reason: "cohort_ineligible",
+      uncoveredMarket: true,
+      positiveLocalUse: true,
+      profitable: true,
+      marginPct: 25,
+      marginFloorPct: 20,
+    };
+    expect(frontierPacingOpportunity(opportunity)).toBe(true);
+    for (const change of [
+      { reason: "unprofitable" },
+      { reason: "logistics_capacity" },
+      { uncoveredMarket: false },
+      { positiveLocalUse: false },
+      { profitable: false },
+      { marginPct: 19 },
+      { marginPct: NaN },
+      { marginFloorPct: Infinity },
+    ])
+      expect(frontierPacingOpportunity({ ...opportunity, ...change })).toBe(false);
   });
 
   it("derives rollback observations from marked funnel diagnostics only", () => {

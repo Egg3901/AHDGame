@@ -1,6 +1,22 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { publicPageMetadata } from "@/lib/siteMetadata";
+import {
+  Callout,
+  FormulaBlock,
+  SectionHeader,
+  SubHeader,
+  TableOfContents,
+} from "@/app/guides/_components/GuideBlocks";
+import {
+  DIRECT_TRADE_SPREAD,
+  FOREX_MAX_TRADE_FEE,
+  FOREX_SIZE_FEE_MAX,
+  LIMIT_ORDER_SPREAD,
+  MARKET_MAKER_SPREAD,
+} from "@/lib/constants/currencies";
+
+const pct = (rate: number) => `${(rate * 100).toFixed(2).replace(/\.?0+$/, "")}%`;
 
 export const metadata: Metadata = publicPageMetadata({
   title: "Forex Guide | A House Divided",
@@ -9,50 +25,6 @@ export const metadata: Metadata = publicPageMetadata({
   pathname: "/guides/forex",
 });
 
-function SectionHeader({ id, children }: { id: string; children: React.ReactNode }) {
-  return (
-    <h2
-      id={id}
-      className="scroll-mt-4 text-xl font-bold tracking-tight text-foreground border-l-4 border-primary/60 pl-3"
-    >
-      {children}
-    </h2>
-  );
-}
-
-function SubHeader({ children }: { children: React.ReactNode }) {
-  return <h3 className="font-semibold text-foreground">{children}</h3>;
-}
-
-function Callout({
-  children,
-  variant = "info",
-}: {
-  children: React.ReactNode;
-  variant?: "info" | "warn" | "tip";
-}) {
-  const colors = {
-    info: "border-primary/40 bg-primary/5",
-    warn: "border-amber-500/40 bg-amber-500/5",
-    tip: "border-emerald-500/40 bg-emerald-500/5",
-  };
-  return (
-    <div
-      className={`rounded-r-lg border-l-4 px-4 py-3 text-sm text-muted leading-relaxed ${colors[variant]}`}
-    >
-      {children}
-    </div>
-  );
-}
-
-function FormulaBlock({ children }: { children: React.ReactNode }) {
-  return (
-    <pre className="overflow-x-auto rounded-lg border border-card-border bg-background px-4 py-3 font-mono text-xs text-foreground/80 leading-relaxed whitespace-pre-wrap">
-      {children}
-    </pre>
-  );
-}
-
 const TABLE_WRAP = "overflow-x-auto rounded-lg border border-card-border";
 const TABLE = "w-full min-w-[480px] text-sm";
 const TH =
@@ -60,14 +32,14 @@ const TH =
 const TD = "border-b border-card-border/50 px-3 py-2 text-muted";
 
 const TOC_ITEMS = [
-  { id: "overview", label: "How Forex Works" },
-  { id: "currencies", label: "Currencies and World Settings" },
-  { id: "rate-movement", label: "How Exchange Rates Move" },
-  { id: "trading-tiers", label: "The Three Trading Tiers" },
-  { id: "wallet", label: "The Multi-Currency Wallet" },
-  { id: "foreign-income", label: "Foreign Income" },
-  { id: "strategy", label: "Reading the Macro Board" },
-  { id: "tips", label: "Quick Tips" },
+  { id: "overview", label: "How forex works" },
+  { id: "currencies", label: "Currencies and world settings" },
+  { id: "rate-movement", label: "How exchange rates move" },
+  { id: "trading-tiers", label: "The three trading tiers" },
+  { id: "wallet", label: "The multi-currency wallet" },
+  { id: "foreign-income", label: "Foreign income" },
+  { id: "strategy", label: "Reading the macro board" },
+  { id: "tips", label: "Quick tips" },
 ];
 
 export default function ForexGuidePage() {
@@ -91,33 +63,21 @@ export default function ForexGuidePage() {
         </div>
 
         <div className="space-y-10">
-          {/* Table of Contents */}
-          <div className="rounded-xl border border-card-border bg-card p-5">
-            <p className="mb-3 text-xs font-bold uppercase tracking-wider text-muted">Contents</p>
-            <ol className="grid gap-y-1 gap-x-4 text-sm sm:grid-cols-2">
-              {TOC_ITEMS.map((item, i) => (
-                <li key={item.id}>
-                  <a href={`#${item.id}`} className="text-primary hover:underline">
-                    {i + 1}. {item.label}
-                  </a>
-                </li>
-              ))}
-            </ol>
-          </div>
+          <TableOfContents items={TOC_ITEMS} />
 
           {/* ── 1. Overview ── */}
           <section className="space-y-4">
-            <SectionHeader id="overview">1. How Forex Works</SectionHeader>
+            <SectionHeader id="overview">1. How forex works</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Countries use the currencies configured for their world and era; some share a
-              currency. Floating exchange rates move each turn based on economic conditions -
-              interest rates, inflation, GDP growth, and trade - plus the buying and selling
+              currency. Floating exchange rates move each turn based on economic conditions
+              (interest rates, inflation, GDP growth, and trade) plus the buying and selling
               pressure of players themselves. You can trade currencies directly for profit, and
               every cross-border investment you make (foreign stocks, bonds, corporations) settles
               in the currency of the asset&apos;s country, so exchange rates flow through your whole
               portfolio whether you trade forex deliberately or not.
             </p>
-            <Callout variant="info">
+            <Callout>
               Fixed exchange rates work differently. A configured peg, including a historical
               Bretton Woods peg, holds the rate steady instead of applying market drift. When
               command-economy rules are enabled, command countries also hold their official rates
@@ -138,7 +98,7 @@ export default function ForexGuidePage() {
 
           {/* ── 2. Currencies ── */}
           <section className="space-y-4">
-            <SectionHeader id="currencies">2. Currencies and World Settings</SectionHeader>
+            <SectionHeader id="currencies">2. Currencies and world settings</SectionHeader>
             <div className={TABLE_WRAP}>
               <table className={TABLE}>
                 <thead>
@@ -176,7 +136,7 @@ export default function ForexGuidePage() {
 
           {/* ── 3. Rate movement ── */}
           <section className="space-y-4">
-            <SectionHeader id="rate-movement">3. How Exchange Rates Move</SectionHeader>
+            <SectionHeader id="rate-movement">3. How exchange rates move</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Each turn, floating rates update through three components: macro fundamental drift
               (about 80% of direction), player volume pressure (about 20%), and a little random
@@ -202,10 +162,10 @@ export default function ForexGuidePage() {
               currency moves are multi-month trends you have time to spot, position for, and exit.
               Not one-turn lottery tickets.
             </p>
-            <Callout variant="info">
-              Example: if the US central bank hikes the prime rate from 3.0% to 5.0%, the USD macro
-              target strengthens by about 4% (2.0 points of excess × 0.02 sensitivity), and the spot
-              rate grinds toward it turn after turn.
+            <Callout label="Example:">
+              If the US central bank hikes the prime rate from 3.0% to 5.0%, the USD macro target
+              strengthens by about 4% (2.0 points of excess × 0.02 sensitivity), and the spot rate
+              grinds toward it turn after turn.
             </Callout>
 
             <SubHeader>Player volume pressure</SubHeader>
@@ -225,7 +185,7 @@ export default function ForexGuidePage() {
 
           {/* ── 4. Trading tiers ── */}
           <section className="space-y-4">
-            <SectionHeader id="trading-tiers">4. The Three Trading Tiers</SectionHeader>
+            <SectionHeader id="trading-tiers">4. The three trading tiers</SectionHeader>
             <div className={TABLE_WRAP}>
               <table className={TABLE}>
                 <thead>
@@ -240,19 +200,19 @@ export default function ForexGuidePage() {
                   <tr>
                     <td className={TD}>1</td>
                     <td className={TD}>Market maker</td>
-                    <td className={TD}>0.275%</td>
+                    <td className={TD}>{pct(MARKET_MAKER_SPREAD)}</td>
                     <td className={TD}>Instant, always available</td>
                   </tr>
                   <tr>
                     <td className={TD}>2</td>
                     <td className={TD}>Public limit order</td>
-                    <td className={TD}>0.175%</td>
+                    <td className={TD}>{pct(LIMIT_ORDER_SPREAD)}</td>
                     <td className={TD}>When the market crosses your limit</td>
                   </tr>
                   <tr>
                     <td className={TD}>3</td>
                     <td className={TD}>Direct player trade</td>
-                    <td className={TD}>0.10%</td>
+                    <td className={TD}>{pct(DIRECT_TRADE_SPREAD)}</td>
                     <td className={TD}>When the target player accepts</td>
                   </tr>
                 </tbody>
@@ -260,16 +220,25 @@ export default function ForexGuidePage() {
             </div>
             <p className="text-sm text-muted leading-relaxed">
               <strong className="text-foreground">Tier 1 (market maker)</strong> fills instantly at
-              the current rate plus a 0.275% spread. It is also what auto-convert uses when you buy
-              a foreign asset without holding that currency.{" "}
+              the current rate plus a {pct(MARKET_MAKER_SPREAD)} base fee. It is also what
+              auto-convert uses when you buy a foreign asset without holding that currency.{" "}
               <strong className="text-foreground">Tier 2 (limit orders)</strong> post publicly at
-              your target rate and auto-fill when the market crosses it, for a cheaper 0.175%
-              spread; you can set an expiry in turns, and other players can fill your order early as
-              a direct trade. <strong className="text-foreground">Tier 3 (direct trades)</strong>{" "}
-              send a specific offer to a named character at the lowest fee. They accept or decline,
-              no counter-offers, and offers expire after 24 turns by default.
+              your target rate and auto-fill when the market crosses it, for a cheaper{" "}
+              {pct(LIMIT_ORDER_SPREAD)} base fee; you can set an expiry in turns, and other players
+              can fill your order early as a direct trade.{" "}
+              <strong className="text-foreground">Tier 3 (direct trades)</strong> send a specific
+              offer to a named character at the lowest fee. They accept or decline, no
+              counter-offers, and offers expire after 24 turns by default.
             </p>
-            <Callout variant="tip">
+            <p className="text-sm text-muted leading-relaxed">
+              Your own market and limit trades also pay a size fee that rises toward{" "}
+              {pct(FOREX_SIZE_FEE_MAX)} on very large conversions. It counts everything you
+              converted in the last 24 turns, so splitting a big trade into small ones costs the
+              same. The whole fee is then scaled by how busy the two currencies are: half price in a
+              busy market, up to one and a half times in a quiet one, and never more than{" "}
+              {pct(FOREX_MAX_TRADE_FEE)} in total. Auto-convert pays only the base fee.
+            </p>
+            <Callout>
               Spread fees don&apos;t vanish into nowhere: 50% is destroyed as a deflationary sink,
               and 50% goes to the currency&apos;s central bank, which uses most of it as
               intervention ammunition. Player trading literally funds the central banks that trade
@@ -279,7 +248,7 @@ export default function ForexGuidePage() {
 
           {/* ── 5. Wallet ── */}
           <section className="space-y-4">
-            <SectionHeader id="wallet">5. The Multi-Currency Wallet</SectionHeader>
+            <SectionHeader id="wallet">5. The multi-currency wallet</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Your character holds two money pools.{" "}
               <strong className="text-foreground">Campaign funds</strong> are always in your home
@@ -291,14 +260,14 @@ export default function ForexGuidePage() {
             <p className="text-sm text-muted leading-relaxed">
               When you make a personal purchase denominated in a foreign currency, the game spends
               your existing balance in that currency first (free, no spread), auto-converts any
-              shortfall from your home currency at the market-maker rate (0.275% spread), and
-              rejects the transaction if both together still fall short.
+              shortfall from your home currency at the market-maker rate ({pct(MARKET_MAKER_SPREAD)}{" "}
+              fee), and rejects the transaction if both together still fall short.
             </p>
           </section>
 
           {/* ── 6. Foreign income ── */}
           <section className="space-y-4">
-            <SectionHeader id="foreign-income">6. Foreign Income</SectionHeader>
+            <SectionHeader id="foreign-income">6. Foreign income</SectionHeader>
             <ul className="list-disc space-y-2 pl-5 text-sm text-muted leading-relaxed">
               <li>
                 <strong className="text-foreground">Dividends</strong> from foreign stocks are
@@ -315,7 +284,7 @@ export default function ForexGuidePage() {
                 corporation&apos;s home currency, also unconverted.
               </li>
             </ul>
-            <Callout variant="warn">
+            <Callout>
               Holding foreign-currency income instead of converting it is itself a position. A stack
               of yen coupons is a bet on the yen. Decide whether you want that exposure or convert
               on your own schedule.
@@ -324,7 +293,7 @@ export default function ForexGuidePage() {
 
           {/* ── 7. Strategy ── */}
           <section className="space-y-4">
-            <SectionHeader id="strategy">7. Reading the Macro Board</SectionHeader>
+            <SectionHeader id="strategy">7. Reading the macro board</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Because 80% of rate direction comes from fundamentals, forex trading here is mostly
               macro analysis. The questions that matter each game week:
@@ -359,7 +328,7 @@ export default function ForexGuidePage() {
 
           {/* ── 8. Tips ── */}
           <section className="space-y-4">
-            <SectionHeader id="tips">8. Quick Tips</SectionHeader>
+            <SectionHeader id="tips">8. Quick tips</SectionHeader>
             <ul className="list-disc space-y-2 pl-5 text-sm text-muted leading-relaxed">
               <li>
                 Trends take ~48 turns to fully play out. You don&apos;t need to catch the exact turn

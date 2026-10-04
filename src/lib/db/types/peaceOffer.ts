@@ -2,6 +2,21 @@ import type { ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { PeaceTerm } from "@/lib/military/peaceTerm";
 
+export type PeaceApplicationPhase = "claimed" | "term_applied" | "completed";
+
+export interface PeaceApplicationPlan {
+  /** Durable progress marker used to resume an interrupted acceptance safely. */
+  phase: PeaceApplicationPhase;
+  acceptedBy: string;
+  acceptedTurn: number;
+  /** Frozen before any roster edits, so retries never infer a different settlement. */
+  leavers: Array<{ countryId: CountryId; side: "A" | "B" }>;
+  trucePairs: Array<{ first: CountryId; second: CountryId }>;
+  resolutionWinner: "A" | "B" | "stalemate" | null;
+  attackerNation: CountryId;
+  defenderNation: CountryId;
+}
+
 /**
  * Turns a truce holds between two countries after ANY war between them ends —
  * negotiated or won outright.
@@ -77,4 +92,9 @@ export interface PeaceOfferDoc {
   /** characterId of whoever accepted or rejected it. */
   resolvedBy?: string;
   resolvedTurn?: number;
+  /**
+   * Present on acceptances created by the resumable settlement pipeline. Legacy
+   * accepted offers omit it and are treated as already completed.
+   */
+  application?: PeaceApplicationPlan;
 }

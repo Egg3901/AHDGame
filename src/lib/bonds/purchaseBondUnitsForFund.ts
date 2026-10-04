@@ -1,3 +1,6 @@
+import { emitLedgerEntries } from "@/lib/ledger/emit";
+import type { LedgerEntryInput } from "@/lib/ledger/types";
+import { currentBondPoolLedgerContext, witnessBondPoolCash } from "./marketPoolLedger";
 import type { AnyBulkWriteOperation, ClientSession, Db, ObjectId } from "mongodb";
 import type { BondMarketPool, Bond, IndexFund, IndexFundTransaction } from "@/lib/db/types";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
@@ -385,6 +388,20 @@ export async function settleBondPurchasesInTransaction(
     if (credited.matchedCount + credited.upsertedCount !== poolCredits.length) {
       throw new BondBatchGuardMiss("bond pool");
     }
+    const context = await currentBondPoolLedgerContext(db);
+    const pendingEntries: LedgerEntryInput[] = [];
+    const ledgerContext = context ? { ...context, pendingEntries } : null;
+    for (const { plan, now } of purchases) {
+      await witnessBondPoolCash(
+        db,
+        plan.currency,
+        Math.round(plan.costLocal * 100) / 100,
+        "purchasesIn",
+        now,
+        { ledgerContext }
+      );
+    }
+    await emitLedgerEntries(db, pendingEntries, { session });
   }
 }
 

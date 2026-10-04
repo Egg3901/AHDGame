@@ -236,6 +236,8 @@ function evalExpr(expr: unknown, doc: Doc): unknown {
     ? rawArgs.map((a) => evalExpr(a, doc))
     : [evalExpr(rawArgs, doc)];
   switch (op) {
+    case "$toString":
+      return args[0] === undefined || args[0] === null ? null : String(args[0]);
     case "$and":
       return args.every(Boolean);
     case "$or":
@@ -262,6 +264,8 @@ function evalExpr(expr: unknown, doc: Doc): unknown {
       return Math.min(...args.map((a) => (a as number) ?? 0));
     case "$ifNull":
       return args[0] === undefined || args[0] === null ? args[1] : args[0];
+    case "$abs":
+      return typeof args[0] === "number" ? Math.abs(args[0]) : null;
     default:
       throw new Error(`inMemoryDb: unsupported expression operator ${op}`);
   }
@@ -562,9 +566,15 @@ class InMemoryCollection {
     return { insertedId: id };
   }
 
-  async insertMany(docs: Doc[]): Promise<{ insertedCount: number }> {
-    for (const doc of docs) await this.insertOne(doc);
-    return { insertedCount: docs.length };
+  async insertMany(docs: Doc[]): Promise<{
+    insertedCount: number;
+    insertedIds: Record<number, unknown>;
+  }> {
+    const insertedIds: Record<number, unknown> = {};
+    for (const [index, doc] of docs.entries()) {
+      insertedIds[index] = (await this.insertOne(doc)).insertedId;
+    }
+    return { insertedCount: docs.length, insertedIds };
   }
 
   async updateOne(
@@ -776,7 +786,13 @@ class InMemoryCollection {
                   ? null
                   : typeof idSpec === "string" && idSpec.startsWith("$")
                     ? getPath(row, idSpec.slice(1))
-                    : idSpec;
+                    : isPlainObject(idSpec) && !Object.keys(idSpec).some((k) => k.startsWith("$"))
+                      ? Object.fromEntries(
+                          Object.entries(idSpec).map(([k, v]) => [k, evalExpr(v, row)])
+                        )
+                      : isPlainObject(idSpec)
+                        ? evalExpr(idSpec, row)
+                        : idSpec;
               const key = JSON.stringify(id === undefined ? null : id);
               let group = groups.get(key);
               if (!group) {
@@ -796,7 +812,9 @@ class InMemoryCollection {
                 const value =
                   typeof operand === "string" && operand.startsWith("$")
                     ? getPath(row, operand.slice(1))
-                    : operand;
+                    : isPlainObject(operand)
+                      ? evalExpr(operand, row)
+                      : operand;
                 const n = typeof value === "number" && Number.isFinite(value) ? value : 0;
                 switch (accOp) {
                   case "$sum":
@@ -839,6 +857,25 @@ class InMemoryCollection {
                     : value;
               }
               return out;
+            });
+            break;
+          }
+          case "$unwind": {
+            // String form only: one row per array element, rows without an
+            // array (or with an empty one) dropped, as the server does.
+            const unwindSpec = stage[op] as unknown;
+            if (typeof unwindSpec !== "string" || !unwindSpec.startsWith("$")) {
+              throw new Error("inMemoryDb: only the string form of $unwind is supported");
+            }
+            const path = unwindSpec.slice(1);
+            rows = rows.flatMap((row) => {
+              const value = getPath(row, path);
+              if (!Array.isArray(value)) return [];
+              return value.map((element) => {
+                const copy = clone(row);
+                setPath(copy, path, element);
+                return copy;
+              });
             });
             break;
           }

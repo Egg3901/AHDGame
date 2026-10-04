@@ -450,9 +450,7 @@ export function TurnControls() {
           once Forex is enabled and the legacy "Enable Forex" button hides. */}
       <div className="border-b border-card-border px-6 py-4">
         <div className="mb-2 flex items-center justify-between">
-          <h3 className="text-xs font-semibold uppercase tracking-widest text-muted">
-            Feature toggles
-          </h3>
+          <h3 className="text-sm font-semibold text-muted">Feature toggles</h3>
           <span className="text-[10px] text-muted">Global game settings</span>
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

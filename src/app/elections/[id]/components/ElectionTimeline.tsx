@@ -53,7 +53,7 @@ export function ElectionTimeline({
             {election.startTime && primaryOpensTimer.urgency !== "ended" && (
               <>
                 <div className="flex items-center gap-1.5">
-                  <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse shrink-0" />
+                  <span className="h-1.5 w-1.5 rounded-full bg-muted shrink-0" />
                   <span className="text-xs text-muted">
                     Primary opens
                     {opensYear ? <span className="text-muted/50"> · {opensYear}</span> : null}
@@ -103,7 +103,7 @@ export function ElectionTimeline({
               <>
                 <div className="flex items-center gap-1.5">
                   <span
-                    className={`h-1.5 w-1.5 rounded-full shrink-0 ${localInPrimary ? "bg-warning animate-pulse" : "bg-card-border"}`}
+                    className={`h-1.5 w-1.5 rounded-full shrink-0 ${localInPrimary ? "bg-muted" : "bg-card-border"}`}
                   />
                   <span className={`text-xs ${localInPrimary ? "text-muted" : "text-muted/40"}`}>
                     {localInPrimary ? "Primary ends" : "Primary closed"}
@@ -129,7 +129,7 @@ export function ElectionTimeline({
               <>
                 <div className="flex items-center gap-1.5">
                   <span
-                    className={`h-1.5 w-1.5 rounded-full shrink-0 ${!localInPrimary && !localIsEnded ? "bg-success animate-pulse" : "bg-card-border"}`}
+                    className={`h-1.5 w-1.5 rounded-full shrink-0 ${!localInPrimary && !localIsEnded ? "bg-muted" : "bg-card-border"}`}
                   />
                   <span className="text-xs text-muted">
                     {localIsEnded ? "Closed" : "Closes"}

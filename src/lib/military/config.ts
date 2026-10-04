@@ -203,6 +203,8 @@ export const ATTRITION = {
    * and the margin already assume.
    */
   fortuneSpread: 0.5,
+  /** Maximum distance from parity used by the casualty/readiness exchange. */
+  battleSeveritySpread: 0.18,
   /** Casualty multiplier for the side that broke off. */
   retreatCasualtyMult: 0.6,
   /** Max fraction of establishment refilled per turn, by mode. */

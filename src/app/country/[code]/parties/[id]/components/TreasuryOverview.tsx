@@ -70,9 +70,7 @@ export function TreasuryOverview({
                   />
                 </svg>
               </div>
-              <div className="text-sm font-bold uppercase tracking-wide text-muted">
-                National War Chest
-              </div>
+              <div className="text-sm font-bold text-muted">National war chest</div>
             </div>
 
             <div>
@@ -91,9 +89,7 @@ export function TreasuryOverview({
 
           {(isInParty || isAdmin) && (
             <div className="flex flex-col sm:items-end gap-1 rounded-lg border border-card-border/50 bg-background/50 p-4 min-w-[180px]">
-              <span className="text-xs font-medium text-muted uppercase tracking-wider">
-                Net Income
-              </span>
+              <span className="text-xs font-medium text-muted">Net income</span>
               <div className="flex items-baseline gap-1.5">
                 <span
                   className={`text-2xl font-bold tabular-nums ${netIncome >= 0 ? "text-success" : "text-error"}`}
@@ -105,7 +101,7 @@ export function TreasuryOverview({
               </div>
 
               {netIncome < 0 && (
-                <div className="mt-2 flex items-center gap-1.5 text-[10px] font-medium text-error bg-error/10 px-2 py-1 rounded-full">
+                <div className="mt-2 flex items-center gap-1.5 text-body-sm font-medium text-error bg-error/10 px-2 py-1 rounded-full">
                   <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path
                       strokeLinecap="round"
@@ -126,9 +122,7 @@ export function TreasuryOverview({
       {(isInParty || isAdmin) && revenue > 0 && totalSpending > 0 && (
         <div className="px-6 py-4 border-b border-card-border/40 bg-card/50">
           <div className="flex items-center justify-between mb-2">
-            <div className="text-xs font-semibold uppercase tracking-wider text-muted">
-              Budget Allocation
-            </div>
+            <div className="text-xs font-semibold text-muted">Budget allocation</div>
             <div className="text-xs font-medium text-muted tabular-nums">
               Total Revenue: {fmt(revenue, party.countryId)}/hr
             </div>

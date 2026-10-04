@@ -64,7 +64,7 @@ export function EscalationLadder({ view, onArmed }: { view: DossierView; onArmed
               aria-hidden
               className={`size-2.5 shrink-0 rounded-full border-2 ${
                 rung.here
-                  ? "border-warning bg-warning shadow-glow-sm"
+                  ? "border-warning bg-warning"
                   : rung.passed
                     ? "border-muted bg-muted/40"
                     : "border-card-border bg-background"
@@ -93,15 +93,15 @@ export function EscalationLadder({ view, onArmed }: { view: DossierView; onArmed
       {view.turnsUntilOpen > 0 && !off && (
         // The countdown is the whole reason the gate is an age and not a
         // cleverer deadlock test: a greyed-out button has to say when it opens.
-        <p className="mt-3 rounded-md border border-dashed border-card-border p-3 font-mono text-body-xs leading-relaxed text-muted">
-          FOUR-POWER CHANNEL SITTING — the ladder opens on turn {view.opensAtTurn}, in{" "}
+        <p className="mt-3 rounded-md border border-dashed border-card-border p-3 font-mono text-body-sm leading-relaxed text-muted">
+          FOUR-POWER CHANNEL SITTING: the ladder opens on turn {view.opensAtTurn}, in{" "}
           {view.turnsUntilOpen} turn{view.turnsUntilOpen === 1 ? "" : "s"}. Coercive plays still add
           heat; the brink simply cannot be forced until the talks have run.
         </p>
       )}
 
       {view.armed && (
-        <p className="mt-3 rounded-md border border-warning/50 bg-warning/10 p-3 font-mono text-body-xs leading-relaxed text-warning">
+        <p className="mt-3 rounded-md border border-warning/50 bg-warning/10 p-3 font-mono text-body-sm leading-relaxed text-warning">
           ARMED · DEFCON 1. Every delegation&apos;s country is paying a mobilisation levy each turn
           it stands here. Let the heat decay and the ladder steps back down.
         </p>
@@ -109,8 +109,7 @@ export function EscalationLadder({ view, onArmed }: { view: DossierView; onArmed
 
       {off ? (
         <p className="mt-3 rounded-md border border-dashed border-card-border p-3 font-mono text-body-xs leading-relaxed text-muted">
-          LADDER STOOD DOWN —{" "}
-          {seat?.escalateGate ?? "escalation is switched off for this question."}
+          LADDER STOOD DOWN: {seat?.escalateGate ?? "escalation is switched off for this question."}
         </p>
       ) : seat?.canEscalate ? (
         view.armed ? (
@@ -124,7 +123,7 @@ export function EscalationLadder({ view, onArmed }: { view: DossierView; onArmed
             title="Open the war. The influence contest closes and the settlement goes to whoever wins."
             className="mt-3 w-full rounded-md border border-error bg-error/15 p-2.5 font-mono text-body-xs font-bold tracking-wider text-error hover:bg-error/25 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {pending ? "DECLARING…" : "☢ DECLARE — OPEN THE WAR"}
+            {pending ? "DECLARING…" : "DECLARE WAR"}
           </button>
         ) : (
           <button
@@ -140,12 +139,12 @@ export function EscalationLadder({ view, onArmed }: { view: DossierView; onArmed
             }
             className="mt-3 w-full rounded-md border border-warning/40 bg-warning/[0.07] p-2.5 font-mono text-body-xs font-semibold tracking-wider text-warning hover:bg-warning/[0.14] disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {pending ? "FORCING…" : "▲ FORCE THE ISSUE — ESCALATE"}
+            {pending ? "FORCING…" : "ESCALATE"}
           </button>
         )
       ) : (
         <p className="mt-3 rounded-md border border-dashed border-card-border p-3 font-mono text-body-xs leading-relaxed text-muted">
-          NO ESCALATION AUTHORITY — {seat?.escalateGate ?? "only a delegation may take the ladder."}
+          NO ESCALATION AUTHORITY: {seat?.escalateGate ?? "only a delegation may take the ladder."}
         </p>
       )}
 
@@ -158,7 +157,7 @@ export function EscalationLadder({ view, onArmed }: { view: DossierView; onArmed
       <p className="mt-2.5 font-mono text-body-xs leading-relaxed text-gold-muted">
         {off
           ? "While the ladder is stood down, coercive plays land as ordinary plays and leave no heat. The question can only be settled on the index."
-          : "At rung 5 the influence contest closes and a NATO–Warsaw Pact conflict opens on the Conflicts board. The settlement goes to whoever wins it."}
+          : "At rung 5 the influence contest closes and a conflict between NATO and the Warsaw Pact opens on the Conflicts board. The settlement goes to whoever wins it."}
       </p>
     </section>
   );

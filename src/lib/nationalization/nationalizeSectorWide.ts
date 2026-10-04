@@ -31,6 +31,8 @@ import { computeSectorImpliedUnits } from "@/lib/market/unownedHeadroom";
 import { CAPACITY_ANCHOR_YEAR, capacityPricePerUnit } from "@/lib/constants/capacityEconomy";
 import { getGameState } from "@/lib/gameState";
 import { debitTreasuryCompensation } from "./treasury";
+import { resolveTreasuryCashOptions, witnessTreasuryCash } from "./treasuryLedger";
+import { snapshotCorporationCurrency } from "@/lib/ledger/balanceSnapshot";
 import { applyNationalizationConsequences } from "./consequences/apply";
 import { recordNationalizationLedger } from "./ledger";
 import type { CompensationTier } from "./constants";
@@ -375,13 +377,31 @@ export async function nationalizeSectorWide(
         }
       );
       const payoutAnchor = applyTier(valuationAnchor, params.tier, { plantsEnabled });
-      await debitTreasuryCompensation(db, params.countryId, payoutAnchor, fxByCurrency, now);
+      const compensationLedger =
+        payoutAnchor > 0 ? await resolveTreasuryCashOptions(db) : undefined;
+      await debitTreasuryCompensation(db, params.countryId, payoutAnchor, fxByCurrency, now, {
+        flow: "nationalization_compensation",
+        ledger: compensationLedger,
+      });
       if (payoutAnchor > 0) {
         const compLocal = Math.round(anchorToCorpLiquidCapital(payoutAnchor, donor, donorRate));
-        await corps.updateOne(
+        const credited = await corps.updateOne(
           { _id: donor._id },
           { $inc: { liquidCapital: compLocal }, $set: { updatedAt: now } }
         );
+        if ((credited?.matchedCount ?? 0) > 0) {
+          await witnessTreasuryCash(db, compensationLedger, {
+            flow: "nationalization_compensation",
+            account: {
+              kind: "corporation",
+              corpId: donor._id.toString(),
+              currency: snapshotCorporationCurrency(donor),
+            },
+            amount: compLocal,
+            now,
+            site: "nationalizeSectorWide:compensation",
+          });
+        }
       }
 
       // Carve the slice into the NatCorp; shrink/remove the donor row. The donor

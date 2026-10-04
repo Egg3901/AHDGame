@@ -73,6 +73,7 @@ export async function atomicallyDebitCharacterCash(
  * Refund a previously-debited amount when a downstream write fails.
  * Idempotent — pure `$inc`, never gates on balance. Use only after a
  * successful `atomicallyDebitCharacterCash` when a follow-up write throws.
+ * Resolves true when a character matched, so callers witness only cash that landed.
  */
 export async function refundCharacterCash(
   db: Db,
@@ -81,16 +82,17 @@ export async function refundCharacterCash(
   amount: number,
   forexEnabled: boolean,
   options?: CashGuardOptions
-): Promise<void> {
-  if (!Number.isFinite(amount) || amount <= 0) return;
+): Promise<boolean> {
+  if (!Number.isFinite(amount) || amount <= 0) return false;
   const balanceField = forexEnabled ? `currencyBalances.personal.${currency}` : "cashOnHand";
-  await db
+  const result = await db
     .collection("characters")
     .updateOne(
       { _id: characterId },
       { $inc: { [balanceField]: amount }, $set: { updatedAt: new Date() } },
       mongoOptions(options)
     );
+  return (result?.matchedCount ?? 0) > 0;
 }
 
 /**
@@ -133,22 +135,23 @@ export async function atomicallyDebitCorpLiquidCapital(
 /**
  * Refund a corp `liquidCapital` debit. Idempotent. Same pattern as
  * `refundCharacterCash`. Use only after a successful debit when a follow-up
- * write throws.
+ * write throws. Resolves true when a corporation matched.
  */
 export async function refundCorpLiquidCapital(
   db: Db,
   corporationId: ObjectId,
   amount: number,
   options?: CashGuardOptions
-): Promise<void> {
-  if (!Number.isFinite(amount) || amount <= 0) return;
-  await db
+): Promise<boolean> {
+  if (!Number.isFinite(amount) || amount <= 0) return false;
+  const result = await db
     .collection("corporations")
     .updateOne(
       { _id: corporationId },
       { $inc: { liquidCapital: amount }, $set: { updatedAt: new Date() } },
       mongoOptions(options)
     );
+  return (result?.matchedCount ?? 0) > 0;
 }
 
 /**

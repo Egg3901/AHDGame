@@ -60,6 +60,7 @@ import {
   STRATEGY_TRANSITION_TURNS,
 } from "@/lib/constants/sectorStrategies";
 import { applyExtractionResourceCapacityToSupply } from "@/lib/corporations/extractionResourceSupply";
+import { plantsNetMarginPct } from "@/lib/corporations/rules/netMargin";
 
 export function getEmptyStateMetricValues(): StateMetricValues {
   return {
@@ -148,6 +149,25 @@ export interface SectorRowContext {
   tariffLookups: { blendPresenceKeys: Set<string>; ftaCoverage: FtaCoverage };
   stateCtx: StateViewContext;
   marketCtx: MarketViewContext;
+  /**
+   * The viewer is this corporation's CEO. Gates the sector levers only the
+   * CEO can set (posted-price posture, wage level): a rival reading them off
+   * the payload would see a competitor's pricing and pay stance for free.
+   */
+  viewerIsCeo?: boolean;
+}
+
+/**
+ * The sector levers only the CEO can set, for the CEO Office operations table.
+ * Empty for every other viewer: a rival reading them off the payload would see
+ * a competitor's posted-price posture and pay stance for free.
+ */
+export function ceoSectorLevers(
+  sector: Pick<CorporateSector, "pricingPosture" | "wageLevel">,
+  viewerIsCeo: boolean
+): { pricingPosture?: number | null; wageLevel?: number } {
+  if (!viewerIsCeo) return {};
+  return { pricingPosture: sector.pricingPosture ?? null, wageLevel: sector.wageLevel ?? 1 };
 }
 
 export interface SectorFinancialTotals {
@@ -190,6 +210,7 @@ export function buildSectorDetails(ctx: SectorRowContext) {
     tariffLookups,
     stateCtx,
     marketCtx,
+    viewerIsCeo = false,
   } = ctx;
   const { allTariffs, activeFtaPairs, activeSubsidies } = tariffs;
   const { blendPresenceKeys, ftaCoverage } = tariffLookups;
@@ -617,17 +638,22 @@ export function buildSectorDetails(ctx: SectorRowContext) {
         ? sector.deliveryLimitedFreightClass
         : null;
     const mothballed = plantsMode ? sector.mothballed === true : false;
-    // Fill-adjusted margin (ticket #1027 family): realized profit over the full
-    // cost bill, not over sold revenue. `effectiveProfitMargin` divides by the
-    // revenue the SOLD units earned, so a plants sector selling 15% of its
-    // output displays a fat positive margin while it loses money. Profit here
-    // already nets the whole bill, so profit / cost is the honest ratio and it
-    // reconciles with the profit figure shown on the same row. Plants only:
-    // below plants there is no produced-vs-sold split for the margin to lie
-    // about. Presentation only, never read back into the economy.
-    const sectorTotalCost = maintenance + sectorGrowthCostLocal;
+    // Net margin (ticket #1027 family): realized profit over realized revenue,
+    // with the whole bill, unsold output included, already netted out of
+    // profit. `effectiveProfitMargin` divides by the revenue the SOLD units
+    // earned, so a plants sector selling 15% of its output displays a fat
+    // positive margin while it loses money. Plants only: below plants there is
+    // no produced-vs-sold split for the margin to lie about. Presentation only,
+    // never read back into the economy. Rules: `plantsNetMarginPct`.
+    const sectorNetMargin = plantsMode
+      ? plantsNetMarginPct({
+          profit,
+          revenue: financialRevenue,
+          totalCost: maintenance + sectorGrowthCostLocal,
+        })
+      : null;
     const fillAdjustedMarginPct =
-      plantsMode && sectorTotalCost > 0 ? Math.round((profit / sectorTotalCost) * 1000) / 10 : null;
+      sectorNetMargin == null ? null : Math.round(sectorNetMargin * 10) / 10;
 
     if (plantsMode) {
       totalCapacityUnits += capacityUnits ?? 0;
@@ -691,6 +717,7 @@ export function buildSectorDetails(ctx: SectorRowContext) {
       isReversing: sector.isReversing ?? false,
       productionPolicy: sector.productionPolicy ?? 0,
       productionPolicyLevel: sector.productionPolicyLevel ?? 0,
+      ...ceoSectorLevers(sector, viewerIsCeo),
       forSale: sector.forSale
         ? {
             listedAt: sector.forSale.listedAt,

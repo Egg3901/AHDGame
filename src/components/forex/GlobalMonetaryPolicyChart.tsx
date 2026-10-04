@@ -255,9 +255,7 @@ export function GlobalMonetaryPolicyChart({ countries, defaultCountryIds }: Prop
     return (
       <div className="rounded-xl border border-card-border bg-card shadow-sm overflow-hidden">
         <div className="px-5 py-4 border-b border-card-border flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
-            Global monetary policy
-          </h2>
+          <h2 className="text-sm font-bold text-foreground">Global monetary policy</h2>
           <ForexChartTimeframeTabs
             value={timeframe}
             onChange={(tf: ForexChartTimeframe) => {
@@ -300,9 +298,7 @@ export function GlobalMonetaryPolicyChart({ countries, defaultCountryIds }: Prop
     <div className="rounded-xl border border-card-border bg-card shadow-sm overflow-hidden">
       <div className="px-5 py-4 border-b border-card-border flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-2">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
-            Global monetary policy
-          </h2>
+          <h2 className="text-sm font-bold text-foreground">Global monetary policy</h2>
           <ForexChartTimeframeTabs
             value={timeframe}
             onChange={(tf: ForexChartTimeframe) => {

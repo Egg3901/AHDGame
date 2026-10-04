@@ -9,6 +9,7 @@ import type {
   CrisisDecisionNode,
 } from "@/lib/db/types/crisis";
 import type { FederalBudget, ElectedOfficial } from "@/lib/db/types";
+import { witnessTreasuryCash } from "@/lib/nationalization/treasuryLedger";
 import {
   getCountryConfig,
   getHeadOfStateOfficeType,
@@ -42,12 +43,22 @@ async function getTreasuryBalance(db: Db, countryId: string): Promise<number> {
 
 /** Debit `amount` (country-local) from the national treasury. Treasury may go negative. */
 async function debitTreasury(db: Db, countryId: string, amount: number): Promise<void> {
-  await db
+  const now = new Date();
+  const result = await db
     .collection<FederalBudget>("federalBudget")
     .updateOne(
       { countryId: countryId as FederalBudget["countryId"] },
-      { $inc: { treasuryBalance: -amount }, $set: { updatedAt: new Date() } }
+      { $inc: { treasuryBalance: -amount }, $set: { updatedAt: now } }
     );
+  if ((result?.matchedCount ?? 0) > 0) {
+    await witnessTreasuryCash(db, undefined, {
+      flow: "crisis_response",
+      account: { kind: "government", countryId: countryId as CountryId },
+      amount: -amount,
+      now,
+      site: "crises/interactionEngine",
+    });
+  }
 }
 
 /**
@@ -595,6 +606,7 @@ export async function submitCrisisDecision(
       }
       await spendFromTreasury(db, countryId, option.collectiveContribution, {
         resyncDerived: true,
+        witness: { flow: "crisis_response", site: "crises/interactionEngine" },
       });
 
       interaction.contributors.push({
@@ -639,16 +651,8 @@ export async function submitCrisisDecision(
     const option = currentNode.options?.find((o) => o.optionId === optionId);
     if (!option) throw badRequest("Invalid option");
 
-    if (option.requiredBudget) {
-      const treasury = await getTreasuryBalance(db, countryId);
-      if (treasury < option.requiredBudget) {
-        throw badRequest(
-          `Insufficient funds. Required: ${option.requiredBudget}, Available: ${treasury}`
-        );
-      }
-      await debitTreasury(db, countryId, option.requiredBudget);
-    }
-
+    // Every check runs before any money moves: a rejected choice must not cost
+    // the treasury its budget.
     if (option.requiredApproval) {
       const approvalDoc = await db
         .collection("governmentApprovals")
@@ -659,6 +663,16 @@ export async function submitCrisisDecision(
           `Insufficient approval. Required: ${option.requiredApproval}, Current: ${approval}`
         );
       }
+    }
+
+    if (option.requiredBudget) {
+      const treasury = await getTreasuryBalance(db, countryId);
+      if (treasury < option.requiredBudget) {
+        throw badRequest(
+          `Insufficient funds. Required: ${option.requiredBudget}, Available: ${treasury}`
+        );
+      }
+      await debitTreasury(db, countryId, option.requiredBudget);
     }
 
     appliedEffects = option.effects;

@@ -181,7 +181,7 @@ function grouped(n: number): string {
   return Math.round(n).toLocaleString("en-US");
 }
 
-/** The office and region a candidate holds, for the field row's italic blurb. */
+/** The office and region a candidate holds, for the field row's blurb. */
 function blurbFor(c: CandidateDetail): string {
   if (c.isNPP) return "Non-player politician";
   return c.partyName;

@@ -84,7 +84,10 @@ export async function chargeOrganizationTribute(
   const payers = await tributeMembers(db, organizationId, access);
   if (payers.length === 0) return { ...EMPTY };
 
-  const gdpByEntity = await loadGdpUsdMillionsByEntity(db, payers);
+  // Reuse the preset already loaded above. Besides avoiding a second
+  // `gameState` round trip, this keeps GDP normalization and the tribute scope
+  // on one coherent era snapshot for the whole charge.
+  const gdpByEntity = await loadGdpUsdMillionsByEntity(db, payers, preset);
   if (gdpByEntity.size === 0) return { ...EMPTY };
 
   const context = await organizationCashContext(db, options);

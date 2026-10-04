@@ -2,7 +2,7 @@
  * @vitest-environment happy-dom
  */
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render as rtlRender, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render as rtlRender, screen, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import type { ReactElement } from "react";
 import profile from "@/../messages/en/profile.json";
@@ -53,6 +53,12 @@ const leaderPayload: Record<string, unknown> = {
   activeDecision: null,
   convention: null,
   conventionInProgress: false,
+  conventionDraftOptions: {
+    targets: ["parliamentaryRepublic", "presidential"],
+    electionDelays: [12, 24, 48],
+    legacyReservationMax: 35,
+    defaults: { legacyReservation: 20, electionDelayTurns: 24 },
+  },
   conversionPendingAtTurn: null,
   stage4Delay: null,
   transitionHistory: [],
@@ -173,9 +179,158 @@ describe("RegimeHealthTab", () => {
     render(<RegimeHealthTab countryCode="CN" />);
     await waitFor(() => {
       const block = screen.getByTestId("regime-convention-status");
-      expect(block.textContent).toMatch(/announced/);
+      expect(block.textContent).toMatch(/announced turn 480/);
     });
     expect(screen.queryByTestId("regime-convention-announce")).toBeNull();
+  });
+
+  it("offers a draft form while the convention is announced, not an API instruction", async () => {
+    mockFetch(() =>
+      jsonResponse({
+        ...leaderPayload,
+        convention: {
+          phase: "announced",
+          announcedAtTurn: 480,
+          draftDeadlineTurn: 528,
+          legacyReservation: 20,
+          electionDelayTurns: 24,
+        },
+        conventionInProgress: true,
+      })
+    );
+    render(<RegimeHealthTab countryCode="CN" />);
+    await waitFor(() => {
+      expect(screen.getByTestId("regime-convention-draft-form")).toBeTruthy();
+    });
+    const target = screen.getByTestId("regime-convention-target") as HTMLSelectElement;
+    expect([...target.options].map((o) => o.value)).toEqual([
+      "parliamentaryRepublic",
+      "presidential",
+    ]);
+    expect((screen.getByTestId("regime-convention-reservation") as HTMLInputElement).value).toBe(
+      "20"
+    );
+    expect(screen.getByTestId("regime-convention-delay-24").getAttribute("aria-pressed")).toBe(
+      "true"
+    );
+    expect(screen.getByTestId("regime-convention-status").textContent).not.toMatch(/\/api\//);
+  });
+
+  it("submits the chosen draft only after confirmation, then refreshes", async () => {
+    let drafted = false;
+    const posts: { url: string; body: unknown }[] = [];
+    mockFetch((url, init) => {
+      if (init?.method === "POST") {
+        posts.push({ url, body: JSON.parse(String(init.body)) });
+        drafted = true;
+        return jsonResponse({ ok: true, atTurn: 500 });
+      }
+      return jsonResponse({
+        ...leaderPayload,
+        convention: drafted
+          ? {
+              phase: "draft",
+              announcedAtTurn: 480,
+              draftDeadlineTurn: 528,
+              targetSystem: "presidential",
+              legacyReservation: 12,
+              electionDelayTurns: 48,
+            }
+          : {
+              phase: "announced",
+              announcedAtTurn: 480,
+              draftDeadlineTurn: 528,
+              legacyReservation: 20,
+              electionDelayTurns: 24,
+            },
+        conventionInProgress: true,
+      });
+    });
+    render(<RegimeHealthTab countryCode="CN" />);
+    await waitFor(() => {
+      expect(screen.getByTestId("regime-convention-draft-form")).toBeTruthy();
+    });
+
+    fireEvent.change(screen.getByTestId("regime-convention-target"), {
+      target: { value: "presidential" },
+    });
+    fireEvent.change(screen.getByTestId("regime-convention-reservation"), {
+      target: { value: "12" },
+    });
+    fireEvent.click(screen.getByTestId("regime-convention-delay-48"));
+    expect(screen.getByTestId("regime-convention-draft-form").textContent).toMatch(/turn 576/);
+
+    // First press only asks for confirmation.
+    fireEvent.click(screen.getByTestId("regime-convention-draft-review"));
+    expect(posts).toHaveLength(0);
+    fireEvent.click(screen.getByTestId("regime-convention-draft-submit"));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("regime-convention-draft-form")).toBeNull();
+    });
+    expect(posts).toEqual([
+      {
+        url: "/api/country/CN/convention/draft",
+        body: { targetSystem: "presidential", legacyReservation: 12, electionDelayTurns: 48 },
+      },
+    ]);
+    expect(screen.getByTestId("regime-convention-status").textContent).toMatch(
+      /presidential republic, 12% of the new legislature/
+    );
+  });
+
+  it("legalizes a banned party picked from the reform row", async () => {
+    const posts: { url: string; body: unknown }[] = [];
+    mockFetch((url, init) => {
+      if (init?.method === "POST") {
+        posts.push({ url, body: JSON.parse(String(init.body)) });
+        return jsonResponse({ ok: true });
+      }
+      return jsonResponse({
+        ...leaderPayload,
+        bannedParties: [
+          { sequentialId: 2, name: "Sozialdemokratische Partei", abbreviation: "SPD" },
+          {
+            sequentialId: 4,
+            name: "Freie Demokratische Partei",
+            abbreviation: "FDP",
+            legalizeCooldownUntil: 600,
+          },
+        ],
+      });
+    });
+    render(<RegimeHealthTab countryCode="DD" />);
+    await waitFor(() => {
+      expect(screen.getByTestId("regime-legalize-party-picker")).toBeTruthy();
+    });
+    const picker = screen.getByTestId("regime-legalize-party-picker") as HTMLSelectElement;
+    const trigger = screen.getByTestId("regime-reform-legalizeParty") as HTMLButtonElement;
+    // Placeholder plus both parties; the cooling one cannot be picked.
+    expect(picker.options.length).toBe(3);
+    expect(picker.options[2].disabled).toBe(true);
+    expect(picker.options[2].textContent).toMatch(/cooldown until turn 600/);
+    expect(trigger.disabled).toBe(true);
+
+    fireEvent.change(picker, { target: { value: "2" } });
+    expect(trigger.disabled).toBe(false);
+    fireEvent.click(trigger);
+    await waitFor(() => {
+      expect(posts).toEqual([
+        { url: "/api/country/DD/reform/legalizeParty", body: { partyId: 2 } },
+      ]);
+    });
+  });
+
+  it("says so when no party is banned instead of offering an empty picker", async () => {
+    mockFetch(() => jsonResponse(leaderPayload));
+    render(<RegimeHealthTab countryCode="CN" />);
+    await waitFor(() => {
+      expect(screen.getByText(/no party is banned right now/i)).toBeTruthy();
+    });
+    expect(screen.queryByTestId("regime-legalize-party-picker")).toBeNull();
+    expect((screen.getByTestId("regime-reform-legalizeParty") as HTMLButtonElement).disabled).toBe(
+      true
+    );
   });
 
   it("flags the half-cost discount when pendingReformDiscount matches currentTurn", async () => {

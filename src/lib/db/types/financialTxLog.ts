@@ -5,6 +5,23 @@ export type FinancialTxType =
   | "corp_sector_founding" // exact NPP founding cash, including entry fee and starter build
   | "org_cash"
   | "org_tribute_mint"
+  // State-enterprise treasury cash (nationalization/treasuryLedger)
+  | "soe_remittance"
+  | "soe_treasury_draw"
+  | "soe_loss_backing"
+  | "soe_capex_grant"
+  | "nationalization_compensation" // treasury compensation for a taken sector, both legs
+  | "corp_starting_grant" // system-granted treasury of a spawned corporation
+  | "nationalization_held_equity_credit" // cash credited for shares a seized corporation held
+  | "privatization_ipo_proceeds" // IPO float proceeds credited to the treasury
+  | "privatization_bid_escrow" // privatization auction bid moved into escrow
+  | "privatization_bid_refund" // privatization auction escrow returned to a bidder
+  | "privatization_auction_proceeds" // winning auction escrow released to the treasury
+  | "crisis_response_cost" // treasury spend on a crisis response
+  | "crisis_aid" // emergency aid pledged from a treasury, or refunded to it
+  | "settlement_play_cost" // treasury spend on a settlement crisis play
+  | "settlement_mobilisation_levy" // treasury share levied by a settlement mobilisation
+  | "peace_indemnity" // indemnity paid between treasuries under a peace term
   // Character / imperial cash
   | "fund_credit" // legacy mixed-source entry — keep for back-compat
   | "fund_debit"
@@ -137,6 +154,7 @@ export type FinancialTxType =
   | "party_transfer"
   | "party_gotv_spend"
   | "party_dues_received"
+  | "party_org_building" // org-building cash paid from a party or state-party treasury
   | "caucus_tax_debit"
 
   // Government & subsidies
@@ -150,6 +168,8 @@ export type FinancialTxType =
   | "gov_budget_transfer"
   | "gov_defense_overdraft"
   | "monetary_treasury_advance"
+  | "monetary_qe" // central bank buys bonds from the market pool with new money
+  | "monetary_qt" // central bank sells bonds to the market pool, withdrawing money
 
   // Crisis / events
   | "crisis_payout"
@@ -186,7 +206,11 @@ export type FinancialSubjectType =
   | "npp"
   // A8: a union pension scheme holds real assets paid in by employers, so it is
   // a counterparty in its own right rather than a destination with no account.
-  | "pension_scheme";
+  | "pension_scheme"
+  // Cash held by system counterparties, such as equity pools and share escrow.
+  // The original collection and cash path live in settlement metadata. These
+  // receipts do not imply snapshot coverage or a corporate treasury movement.
+  | "system";
 export type FinancialCounterpartyType = FinancialSubjectType | "system";
 export type SuspectFlagType =
   | "large_transaction"

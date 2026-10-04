@@ -4,7 +4,7 @@ import {
   isInAppWebViewUserAgent,
   isStoreAppUserAgent,
 } from "@/lib/displayMode";
-import { Geist, Geist_Mono, Lora, Fraunces, JetBrains_Mono } from "next/font/google";
+import { Geist, Geist_Mono, JetBrains_Mono } from "next/font/google";
 import { redirect } from "next/navigation";
 import Script from "next/script";
 import { cookies, headers } from "next/headers";
@@ -67,20 +67,25 @@ import { resolveNavbarPageCountry } from "@/lib/navigation/resolveNavbarPageCoun
 import "./globals.css";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 
-// Font preloading is deliberately limited to the two families that render
-// above the fold on a cold anonymous load: Geist Sans (body copy, and the
-// landing page's LCP element) and Lora (the global `h1` rule in globals.css).
+// Geist Sans sets every heading and all body copy, so it is the only family
+// preloaded: it is what renders above the fold on a cold anonymous load,
+// including the landing page's LCP element.
 //
-// All five families used to emit `<link rel=preload>`, so 166KB of woff2
-// across 5 files started at ~200ms and fought for the same connection. On a
-// throttled mid-tier mobile profile (4x CPU, 1.6Mbps) they did not finish
-// until 2326-3342ms, and the landing LCP fired at 2940ms — the paragraph was
-// waiting on its own font swap. Perf audit 2026-07-26.
+// Preloading every family used to put 166KB of woff2 across 5 files on the
+// wire at ~200ms, all fighting for the same connection. On a throttled
+// mid-tier mobile profile (4x CPU, 1.6Mbps) they did not finish until
+// 2326-3342ms, and the landing LCP fired at 2940ms because the paragraph was
+// waiting on its own font swap.
 //
-// The three below still load normally when a glyph needs them; they just no
-// longer compete during first paint. `display: "swap"` keeps their text
+// The mono families below still load normally when a glyph needs them; they
+// just do not compete during first paint. `display: "swap"` keeps their text
 // visible in the fallback face meanwhile, and next/font's automatic
 // size-adjust fallback keeps the swap from shifting layout.
+//
+// The variable classes go on <html>, not <body>: the Tailwind theme declares
+// --font-sans and --default-font-family on :root as var(--font-geist-sans),
+// and a custom property only resolves against variables defined on its own
+// element or an ancestor.
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -89,23 +94,6 @@ const geistSans = Geist({
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
-  subsets: ["latin"],
-  display: "swap",
-  preload: false,
-});
-
-// The Blend election/campaign screens set standfirsts and rail subtitles in
-// italic Lora, so the italic face is loaded rather than left to the browser's
-// synthetic oblique.
-const lora = Lora({
-  variable: "--font-lora",
-  subsets: ["latin"],
-  style: ["normal", "italic"],
-  display: "swap",
-});
-
-const fraunces = Fraunces({
-  variable: "--font-fraunces",
   subsets: ["latin"],
   display: "swap",
   preload: false,
@@ -303,10 +291,12 @@ export default async function RootLayout({
   );
 
   return (
-    <html lang={locale} data-store-app={isStoreApp ? "true" : undefined}>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} ${lora.variable} ${fraunces.variable} ${jetbrainsMono.variable} antialiased`}
-      >
+    <html
+      lang={locale}
+      data-store-app={isStoreApp ? "true" : undefined}
+      className={`${geistSans.variable} ${geistMono.variable} ${jetbrainsMono.variable}`}
+    >
+      <body className="antialiased">
         <Script
           id="ld-json"
           type="application/ld+json"
@@ -453,9 +443,13 @@ export default async function RootLayout({
                                   />
                                 </>
                               ) : null}
+                              {/* The canonical host. The old analytics.ahousedividedgame.com
+                                  308s here, which serves the script but breaks every event:
+                                  the tracker posts to its own origin, and a CORS preflight
+                                  cannot follow a redirect. */}
                               <Script
                                 id="umami-analytics"
-                                src="https://analytics.ahousedividedgame.com/script.js"
+                                src="https://analytics.lakesidegames.net/script.js"
                                 data-website-id="caa223b2-469d-4325-9ad3-63e3e87ed3d1"
                                 strategy="afterInteractive"
                               />

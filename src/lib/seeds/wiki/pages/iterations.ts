@@ -1,6 +1,7 @@
 import type { WikiSeedPage } from "../types";
 import { beta1Content } from "../content/beta1";
 import { beta2Content } from "../content/beta2";
+import { iteration1Content } from "../content/iteration1";
 
 export const iterationsPages: readonly WikiSeedPage[] = [
   {
@@ -28,5 +29,19 @@ export const iterationsPages: readonly WikiSeedPage[] = [
     difficulty: "beginner",
     contentType: "reference",
     estimatedReadTime: 14,
+  },
+  {
+    slug: "iteration-1",
+    title: "Iteration 1",
+    description:
+      "The current 1953-start world: German reunification by war, seven American presidents, a fractured Cold War, and private fortunes larger than public exchanges.",
+    content: iteration1Content,
+    category: "iterations",
+    extraTags: ["history", "iteration", "cold-war", "live-world"],
+    featured: false,
+    difficulty: "beginner",
+    contentType: "reference",
+    estimatedReadTime: 27,
+    lastUpdated: "2026-10-02",
   },
 ];

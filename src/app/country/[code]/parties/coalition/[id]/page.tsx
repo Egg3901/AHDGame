@@ -8,14 +8,21 @@ import { DiscordInviteButton } from "@/components/DiscordInviteButton";
 import { LocalTime } from "@/components/time/LocalTime";
 import { PartyLogo } from "@/components/PartyLogo";
 import { PartyRegimeBadge } from "@/components/parties/PartyRegimeBadge";
-import { HeroStatsStrip, Skeleton, TabRowSkeleton } from "@/components/ui";
+import { Skeleton, TabRowSkeleton } from "@/components/ui";
 import { useToast } from "@/contexts/ToastContext";
 import { useGameClock } from "@/contexts/useGameClock";
 import { CoalitionPrioritiesPanel } from "@/app/country/[code]/parties/components/CoalitionPrioritiesPanel";
 import { parseCountryParam } from "@/lib/db/partyLookup";
 import { getPartyRoleLabel } from "@/lib/parties/partyRoleLabels";
 import { coalitionApiUrl, partiesApiUrl } from "@/lib/urls";
-import { PositionLabel } from "@/components/PositionLabel";
+import { PlainPositionLabel } from "@/components/party/PlainPositionLabel";
+import {
+  PARTY_PAGE_TITLE_CLASS,
+  PARTY_VALUE_CLASS,
+  PartyStat,
+  PartyStatsRow,
+  PartySwatch,
+} from "@/components/party/partyPageStyles";
 import type { CoalitionDetail } from "@/app/country/[code]/parties/coalitionTypes";
 import { normalizeDiscordInviteUrl } from "@/lib/discord/invite";
 
@@ -445,7 +452,7 @@ function CoalitionDetailContent({ params }: { params: Promise<{ code: string; id
         {/* Back link */}
         <Link
           href={`/country/${effectiveCountry}/parties`}
-          className="mb-6 inline-flex items-center gap-2 text-sm text-muted hover:text-foreground"
+          className="mb-4 inline-flex items-center gap-2 text-body font-medium text-muted hover:text-foreground"
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path
@@ -455,42 +462,34 @@ function CoalitionDetailContent({ params }: { params: Promise<{ code: string; id
               d="M15 19l-7-7 7-7"
             />
           </svg>
-          All Parties
+          All parties
         </Link>
 
-        {/* Header card */}
-        <div className="rounded-xl border border-card-border bg-card overflow-hidden mb-6">
-          <div
-            className="px-6 py-5 flex items-center justify-between gap-4"
-            style={{
-              backgroundColor: `${coalition.color}18`,
-              borderBottom: `4px solid ${coalition.color}`,
-            }}
-          >
-            <div className="flex items-center gap-4">
+        {/* Header band: name, figures and the join or leave control */}
+        <header className="mb-10 overflow-hidden rounded-xl border border-card-border bg-card">
+          <div className="flex flex-col gap-4 px-4 py-6 sm:flex-row sm:items-start sm:justify-between sm:px-7 sm:py-8">
+            <div className="flex min-w-0 items-start gap-4">
               <CoalitionLogo
                 coalitionId={coalition.id}
                 coalitionColor={coalition.color}
                 logoUrl={coalition.logoUrl}
                 size="h-14 w-14"
-                className="border-4 border-foreground/20 bg-foreground/10"
+                className="shrink-0"
                 countryId={coalition.countryId}
               />
-              <div>
-                <h1 className="text-2xl font-bold">{coalition.name}</h1>
-                <div className="flex items-center gap-3 mt-1">
-                  <span className="text-sm font-medium" style={{ color: coalition.color }}>
-                    {coalition.abbreviation}
-                  </span>
-                  <span className="text-xs text-muted bg-background/60 px-2 py-0.5 rounded-full border border-card-border">
-                    Coalition
-                  </span>
-                </div>
+              <div className="min-w-0">
+                <h1 className={PARTY_PAGE_TITLE_CLASS}>{coalition.name}</h1>
+                <p className="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-body text-muted">
+                  <PartySwatch color={coalition.color} />
+                  <span className="font-medium text-foreground">{coalition.abbreviation}</span>
+                  <span aria-hidden>·</span>
+                  <span>Coalition</span>
+                </p>
               </div>
             </div>
 
             {/* Contextual action buttons — invite accept/decline in header */}
-            <div className="flex items-center gap-3 shrink-0">
+            <div className="flex shrink-0 items-center gap-3">
               <DiscordInviteButton
                 inviteUrl={coalition.discordInviteUrl}
                 entityName={coalition.name}
@@ -501,7 +500,7 @@ function CoalitionDetailContent({ params }: { params: Promise<{ code: string; id
                     onClick={handleAcceptInvite}
                     className="rounded-lg bg-success px-3 py-2 text-sm font-medium text-white hover:bg-success/90 transition-colors"
                   >
-                    Accept Invite
+                    Accept invite
                   </button>
                   <button
                     onClick={handleDeclineInvite}
@@ -514,91 +513,66 @@ function CoalitionDetailContent({ params }: { params: Promise<{ code: string; id
             </div>
           </div>
 
-          {/* Stats strip */}
-          <HeroStatsStrip>
-            <div className="p-4 flex flex-col min-w-[90px]">
-              <span className="text-[10px] uppercase tracking-widest text-muted font-bold">
-                Parties
-              </span>
-              <span className="text-lg font-bold text-foreground tabular-nums">
-                {coalition.partyCount}
-              </span>
-            </div>
-
-            <div className="p-4 flex flex-col min-w-[90px]">
-              <span className="text-[10px] uppercase tracking-widest text-muted font-bold">
-                Members
-              </span>
-              <span className="text-lg font-bold text-foreground tabular-nums">
-                {coalition.totalMembers}
-              </span>
-            </div>
-
-            <div className="p-4 flex flex-col min-w-[110px]">
-              <span className="text-[10px] uppercase tracking-widest text-muted font-bold">
-                Economic
-              </span>
-              <PositionLabel
+          <PartyStatsRow>
+            <PartyStat label="Parties">
+              <span className={PARTY_VALUE_CLASS}>{coalition.partyCount}</span>
+            </PartyStat>
+            <PartyStat label="Members">
+              <span className={PARTY_VALUE_CLASS}>{coalition.totalMembers}</span>
+            </PartyStat>
+            <PartyStat label="Economic">
+              <PlainPositionLabel
                 value={coalition.economicPosition}
                 axis="economic"
-                className="text-sm font-bold"
+                className="text-body-lg font-semibold text-foreground"
               />
-            </div>
-
-            <div className="p-4 flex flex-col min-w-[110px]">
-              <span className="text-[10px] uppercase tracking-widest text-muted font-bold">
-                Social
-              </span>
-              <PositionLabel
+            </PartyStat>
+            <PartyStat label="Social">
+              <PlainPositionLabel
                 value={coalition.socialPosition}
                 axis="social"
-                className="text-sm font-bold"
+                className="text-body-lg font-semibold text-foreground"
               />
-            </div>
-
-            <div className="p-4 flex flex-col min-w-[110px]">
-              <span className="text-[10px] uppercase tracking-widest text-muted font-bold">
-                Chair
-              </span>
-              <span className="text-sm font-semibold text-foreground truncate">
+            </PartyStat>
+            <PartyStat label="Chair">
+              <span className="block truncate text-body-lg font-semibold text-foreground">
                 {coalition.chairName}
               </span>
-            </div>
+            </PartyStat>
+          </PartyStatsRow>
 
-            {/* Join / Cancel Request — right side of stats strip */}
-            {isNationalChair && !isInCoalition && !hasJoinRequest && !hasInvite && (
-              <div className="ml-auto p-4">
+          {/* Join / cancel request / leave */}
+          {((isNationalChair && !isInCoalition && !hasJoinRequest && !hasInvite) ||
+            hasJoinRequest ||
+            (isMemberPartyChair && isInCoalition)) && (
+            <div className="flex flex-wrap justify-end gap-2 border-t border-card-border px-4 py-3 sm:px-7">
+              {isNationalChair && !isInCoalition && !hasJoinRequest && !hasInvite && (
                 <button
                   onClick={handleRequestJoin}
-                  className="rounded-lg px-4 py-2 text-sm font-medium text-white hover:opacity-90 transition-opacity"
-                  style={{ backgroundColor: coalition.color }}
+                  className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-dark"
                 >
-                  Request to Join
+                  Request to join
                 </button>
-              </div>
-            )}
-            {hasJoinRequest && (
-              <div className="ml-auto p-4">
+              )}
+              {hasJoinRequest && (
                 <button
                   onClick={handleCancelRequest}
                   className="rounded-lg border border-card-border px-4 py-2 text-sm font-medium text-muted hover:text-foreground transition-colors"
                 >
-                  Cancel Request
+                  Cancel request
                 </button>
-              </div>
-            )}
-            {isMemberPartyChair && isInCoalition && (
-              <div className="ml-auto p-4">
+              )}
+              {isMemberPartyChair && isInCoalition && (
                 <button
                   onClick={handleLeaveCoalition}
                   className="rounded-lg border border-error/40 px-4 py-2 text-sm font-medium text-error hover:bg-error/10 transition-colors"
                 >
-                  Leave Coalition
+                  Leave coalition
                 </button>
-              </div>
-            )}
-          </HeroStatsStrip>
-        </div>
+              )}
+            </div>
+          )}
+        </header>
 
         {/* Invite acceptance banner */}
         {hasInvite && isNationalChair && (
@@ -654,7 +628,7 @@ function CoalitionDetailContent({ params }: { params: Promise<{ code: string; id
             {/* Disband vote panel */}
             {disbandVote && isMemberPartyChair && (
               <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-6">
-                <h2 className="text-lg font-semibold text-red-400 mb-1">Active Disband Vote</h2>
+                <h2 className="text-lg font-semibold text-red-400 mb-1">Active disband vote</h2>
                 <p className="text-sm text-muted mb-4">
                   {disbandTurnsRemaining > 0
                     ? `Expires in approximately ${disbandTurnsRemaining} turn${disbandTurnsRemaining === 1 ? "" : "s"}`
@@ -662,15 +636,15 @@ function CoalitionDetailContent({ params }: { params: Promise<{ code: string; id
                 </p>
                 <div className="flex gap-8 mb-4">
                   <div>
-                    <div className="text-xs text-muted uppercase tracking-wider mb-1">Yes</div>
+                    <div className="text-xs text-muted mb-1">Yes</div>
                     <div className="text-2xl font-bold text-red-400">{disbandVote.yesCount}</div>
                   </div>
                   <div>
-                    <div className="text-xs text-muted uppercase tracking-wider mb-1">No</div>
+                    <div className="text-xs text-muted mb-1">No</div>
                     <div className="text-2xl font-bold text-success">{disbandVote.noCount}</div>
                   </div>
                   <div>
-                    <div className="text-xs text-muted uppercase tracking-wider mb-1">Total</div>
+                    <div className="text-xs text-muted mb-1">Total</div>
                     <div className="text-2xl font-bold text-foreground">
                       {disbandVote.totalMembers}
                     </div>
@@ -715,7 +689,7 @@ function CoalitionDetailContent({ params }: { params: Promise<{ code: string; id
 
             {/* Leadership list */}
             <div className="rounded-xl border border-card-border bg-card p-6">
-              <h2 className="text-lg font-semibold mb-4">Coalition Leadership</h2>
+              <h2 className="text-lg font-semibold mb-4">Coalition leadership</h2>
               <div className="space-y-3">
                 {coalition.members
                   .slice()
@@ -770,7 +744,7 @@ function CoalitionDetailContent({ params }: { params: Promise<{ code: string; id
         {/* ── Parties Tab ── */}
         {activeTab === "parties" && (
           <div className="rounded-xl border border-card-border bg-card p-6">
-            <h2 className="text-lg font-semibold mb-4">Member Parties</h2>
+            <h2 className="text-lg font-semibold mb-4">Member parties</h2>
             {coalition.members.length === 0 ? (
               <p className="text-sm text-muted italic">No member parties.</p>
             ) : (
@@ -871,7 +845,7 @@ function CoalitionDetailContent({ params }: { params: Promise<{ code: string; id
             </div>
             {/* Send Invites */}
             <div className="rounded-xl border border-card-border bg-card p-6">
-              <h2 className="text-lg font-semibold mb-1">Send Invites</h2>
+              <h2 className="text-lg font-semibold mb-1">Send invites</h2>
               <p className="text-sm text-muted mb-4">
                 Invite parties not currently in a coalition to join {coalition.name}.
               </p>
@@ -910,7 +884,7 @@ function CoalitionDetailContent({ params }: { params: Promise<{ code: string; id
 
             {/* Pending Invites */}
             <div className="rounded-xl border border-card-border bg-card p-6">
-              <h2 className="text-lg font-semibold mb-4">Pending Invites</h2>
+              <h2 className="text-lg font-semibold mb-4">Pending invites</h2>
               {coalition.pendingInvites.length === 0 ? (
                 <p className="text-sm text-muted italic">No pending invites.</p>
               ) : (
@@ -933,7 +907,7 @@ function CoalitionDetailContent({ params }: { params: Promise<{ code: string; id
 
             {/* Join Requests */}
             <div className="rounded-xl border border-card-border bg-card p-6">
-              <h2 className="text-lg font-semibold mb-4">Join Requests</h2>
+              <h2 className="text-lg font-semibold mb-4">Join requests</h2>
               {coalition.joinRequests.length === 0 ? (
                 <p className="text-sm text-muted italic">No pending join requests.</p>
               ) : (
@@ -972,7 +946,7 @@ function CoalitionDetailContent({ params }: { params: Promise<{ code: string; id
 
             {/* Kick Member */}
             <div className="rounded-xl border border-card-border bg-card p-6">
-              <h2 className="text-lg font-semibold mb-4">Kick Member</h2>
+              <h2 className="text-lg font-semibold mb-4">Kick member</h2>
               {coalition.members.filter((m) => m.partyId !== charPartySeqId).length === 0 ? (
                 <p className="text-sm text-muted italic">No other members to kick.</p>
               ) : (
@@ -1008,7 +982,7 @@ function CoalitionDetailContent({ params }: { params: Promise<{ code: string; id
 
             {/* Transfer Chair */}
             <div className="rounded-xl border border-card-border bg-card p-6">
-              <h2 className="text-lg font-semibold mb-4">Transfer Chair</h2>
+              <h2 className="text-lg font-semibold mb-4">Transfer chair</h2>
               <p className="text-sm text-muted mb-4">
                 Transfer the Coalition Chair role to another member party.
               </p>
@@ -1039,7 +1013,7 @@ function CoalitionDetailContent({ params }: { params: Promise<{ code: string; id
 
             {/* Disband */}
             <div className="rounded-xl border border-red-500/20 bg-card p-6">
-              <h2 className="text-lg font-semibold text-red-400 mb-2">Disband Coalition</h2>
+              <h2 className="text-lg font-semibold text-red-400 mb-2">Disband coalition</h2>
               <p className="text-sm text-muted mb-4">
                 Initiates a vote among all member party chairs. A majority of &apos;yes&apos; votes
                 disbands the coalition.
@@ -1060,7 +1034,7 @@ function CoalitionDetailContent({ params }: { params: Promise<{ code: string; id
           <div className="space-y-6">
             {/* Add Party */}
             <div className="rounded-xl border border-red-500/30 bg-card p-6">
-              <h2 className="text-lg font-semibold text-red-400 mb-4">Add Party</h2>
+              <h2 className="text-lg font-semibold text-red-400 mb-4">Add party</h2>
               <div className="flex gap-3">
                 <select
                   value={adminAddTarget}
@@ -1086,7 +1060,7 @@ function CoalitionDetailContent({ params }: { params: Promise<{ code: string; id
 
             {/* Remove Party */}
             <div className="rounded-xl border border-red-500/30 bg-card p-6">
-              <h2 className="text-lg font-semibold text-red-400 mb-4">Remove Party</h2>
+              <h2 className="text-lg font-semibold text-red-400 mb-4">Remove party</h2>
               {coalition.members.length === 0 ? (
                 <p className="text-sm text-muted italic">No members to remove.</p>
               ) : (
@@ -1120,7 +1094,7 @@ function CoalitionDetailContent({ params }: { params: Promise<{ code: string; id
 
             {/* Appoint Chair */}
             <div className="rounded-xl border border-red-500/30 bg-card p-6">
-              <h2 className="text-lg font-semibold text-red-400 mb-4">Appoint Chair</h2>
+              <h2 className="text-lg font-semibold text-red-400 mb-4">Appoint chair</h2>
               <p className="text-sm text-muted mb-4">
                 Override and appoint any member party as the Coalition Chair.
               </p>

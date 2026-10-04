@@ -541,7 +541,7 @@ export function ProposeLegislationModal({
       <div className="my-auto w-full max-w-lg space-y-5 rounded-2xl border border-card-border bg-card p-6 shadow-modal">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="font-display text-lg font-semibold">Propose Legislation</h2>
+            <h2 className="text-lg font-semibold">Propose Legislation</h2>
             <p className="text-xs text-muted">
               Costs {BILL_PROPOSE_ACTION_COST} action points and {npiCost} national influence.
             </p>

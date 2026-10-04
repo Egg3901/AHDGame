@@ -221,10 +221,8 @@ export function BankingHubClient() {
         >
           <SectionHeading
             id="central-banks-heading"
-            eyebrow="Monetary policy"
             title="Central banks"
             description="Compare the policy rates that set the baseline for saving and borrowing in each currency."
-            icon={Landmark}
           />
           <CentralBanksTable banks={data.centralBanks} />
         </section>
@@ -239,10 +237,8 @@ export function BankingHubClient() {
         >
           <SectionHeading
             id="private-banks-heading"
-            eyebrow="Commercial market"
             title="Private banks"
             description="Chartered institutions compete on rates while reserve rules and deposit insurance shape their risk."
-            icon={Building2}
             aside={
               <Badge color="default" variant="outline">
                 {data.privateBanks.length} chartered
@@ -274,10 +270,8 @@ export function BankingHubClient() {
         >
           <SectionHeading
             id="accounts-heading"
-            eyebrow="Personal finance"
             title="Your accounts"
             description="Place each savings balance where it earns the best return, or arrange new credit."
-            icon={WalletCards}
           />
           <div className="grid items-start gap-5 lg:grid-cols-2">
             <YourSavingsSection rows={data.savings} onChanged={load} showToast={showToast} />
@@ -385,34 +379,19 @@ function HubTabs({
 
 type SectionHeadingProps = {
   id: string;
-  eyebrow: string;
   title: string;
   description: string;
-  icon: typeof Landmark;
   aside?: React.ReactNode;
 };
 
-function SectionHeading({
-  id,
-  eyebrow,
-  title,
-  description,
-  icon: Icon,
-  aside,
-}: SectionHeadingProps) {
+function SectionHeading({ id, title, description, aside }: SectionHeadingProps) {
   return (
     <div className="flex items-end justify-between gap-4">
-      <div className="flex min-w-0 items-start gap-3">
-        <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary">
-          <Icon className="h-4 w-4" aria-hidden />
-        </div>
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">{eyebrow}</p>
-          <h2 id={id} className="mt-0.5 text-xl font-bold tracking-tight text-foreground">
-            {title}
-          </h2>
-          <p className="mt-1 max-w-2xl text-sm text-muted">{description}</p>
-        </div>
+      <div className="min-w-0">
+        <h2 id={id} className="text-xl font-bold tracking-tight text-foreground">
+          {title}
+        </h2>
+        <p className="mt-1 max-w-2xl text-sm text-muted">{description}</p>
       </div>
       {aside && <div className="hidden shrink-0 sm:block">{aside}</div>}
     </div>
@@ -439,17 +418,7 @@ function BankingHero({
   onNavigate: (tab: HubTab) => void;
 }) {
   return (
-    <header className="relative overflow-hidden rounded-3xl border border-card-border bg-gradient-to-br from-card via-card to-card-elevated shadow-lg">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -right-10 -top-16 h-72 w-72 rounded-full bg-primary/10 blur-3xl"
-      />
-      <Landmark
-        aria-hidden
-        className="pointer-events-none absolute -right-6 top-0 h-52 w-52 text-foreground/[0.035] sm:right-6"
-        strokeWidth={0.7}
-      />
-
+    <header className="relative overflow-hidden rounded-3xl border border-card-border bg-card shadow-lg">
       <div className="relative px-5 pb-6 pt-7 sm:px-8 sm:pb-8 sm:pt-9">
         <div
           className={`grid gap-6 ${hasCharacter ? "xl:grid-cols-[minmax(0,1fr)_minmax(300px,360px)]" : ""}`}
@@ -459,7 +428,7 @@ function BankingHero({
               <span className="h-px w-7 bg-primary/70" aria-hidden />
               World financial system
             </div>
-            <h1 className="mt-3 font-display text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+            <h1 className="mt-3 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
               Banking &amp; Credit
             </h1>
             <p className="mt-3 max-w-xl text-sm leading-relaxed text-muted sm:text-base">
@@ -499,7 +468,7 @@ function BankingHero({
         </div>
 
         {primary && (
-          <div className="mt-7 overflow-hidden rounded-2xl border border-primary/25 bg-background/55 backdrop-blur-sm">
+          <div className="mt-7 overflow-hidden rounded-2xl border border-primary/25 bg-background">
             <div className="grid lg:grid-cols-[1fr_auto]">
               <div className="flex items-center gap-4 p-4 sm:p-5">
                 <div className="flex h-11 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-card-border bg-card-elevated shadow-sm">
@@ -615,7 +584,7 @@ function YourFundsPanel({
   return (
     <aside
       aria-label="Your balances"
-      className="self-start overflow-hidden rounded-2xl border border-primary/25 bg-background/55 backdrop-blur-sm"
+      className="self-start overflow-hidden rounded-2xl border border-primary/25 bg-background"
     >
       <p className="border-b border-card-border px-4 py-3 text-[10px] font-bold uppercase tracking-[0.16em] text-primary">
         Your balances
@@ -1259,9 +1228,9 @@ function YourSavingsSection({
             className="grid gap-3 px-5 py-4 sm:grid-cols-[1fr_minmax(280px,1.1fr)] sm:items-center"
           >
             <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-success/10 font-mono text-xs font-bold text-success">
+              <span className="w-9 shrink-0 font-mono text-xs font-bold text-foreground">
                 {row.currency}
-              </div>
+              </span>
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
                   Balance
@@ -1506,9 +1475,7 @@ function AccountCardHeader({
 }) {
   return (
     <div className="flex items-center gap-3 border-b border-card-border bg-card-elevated/45 px-5 py-4">
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-        <Icon className="h-4 w-4" aria-hidden />
-      </div>
+      <Icon className="h-4 w-4 shrink-0 text-muted" aria-hidden />
       <div>
         <h3 className="font-bold text-foreground">{title}</h3>
         <p className="mt-0.5 text-xs text-muted">{description}</p>

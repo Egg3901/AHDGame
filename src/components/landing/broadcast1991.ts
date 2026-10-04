@@ -1,7 +1,7 @@
 /**
- * The 1991 broadcast lander's content: the year's headlines for the crawl,
- * each tied to the place it was filed from. The globe's satellites beam down
- * to those same datelines, so the crawl and the globe tell one story.
+ * The 1991 broadcast lander's content: the year's headlines, each tied to the
+ * place it was filed from. The globe's satellites beam down to those datelines
+ * and name them.
  */
 import type { BroadcastTickerItem } from "./eraThemes";
 import type { HistoricalCrisisShowcaseEntry } from "./historicalCrisisShowcase";

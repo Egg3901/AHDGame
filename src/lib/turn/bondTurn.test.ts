@@ -42,9 +42,15 @@ vi.mock("@/lib/bonds/sovereign", () => ({
   getBondCountryId: vi.fn().mockReturnValue("US"),
   isCorporateBond: vi.fn((b: { isCorporate?: boolean }) => !!b.isCorporate),
   issueScheduledSovereignBondSeries: vi.fn().mockResolvedValue(undefined),
-  settleSovereignBondMaturity: vi.fn().mockResolvedValue(undefined),
+  settleSovereignBondMaturity: vi.fn(async (_db, _bond, repaymentLocal: number) => ({
+    amountLocal: repaymentLocal,
+    currencyCode: "USD",
+  })),
 }));
-vi.mock("@/lib/constants/bonds", () => ({
+vi.mock("@/lib/constants/bonds", async (importOriginal) => ({
+  // The real rule, so these tests exercise the same defaulted-bond skip as prod.
+  bondAccruesCoupon: (await importOriginal<typeof import("@/lib/constants/bonds")>())
+    .bondAccruesCoupon,
   BOND_DEFAULT_CREDIT_PENALTY_TURNS: 100,
   CORP_BOND_DUE_SOON_REMINDER_TURNS: [12, 4],
   calculateBondMarketPrice: vi.fn().mockReturnValue(1.02),

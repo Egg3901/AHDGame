@@ -178,7 +178,7 @@ export function DiscussionTab({ apiBasePath, isModerator }: DiscussionTabProps) 
     <div className="space-y-4">
       {/* Compose */}
       <div className="rounded-xl border border-card-border bg-card p-4">
-        <h3 className="mb-3 text-sm font-semibold text-foreground">New Post</h3>
+        <h3 className="mb-3 text-sm font-semibold text-foreground">New post</h3>
         <textarea
           value={content}
           onChange={(e) => setContent(e.target.value)}

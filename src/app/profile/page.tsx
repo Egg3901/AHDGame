@@ -34,7 +34,7 @@ import type {
   ElectedOfficial,
 } from "@/lib/db/types";
 import { getAuthUser } from "@/lib/auth";
-import { getOfficeLabel, getPartyHex } from "@/lib/utils/politics";
+import { getOfficeLabel } from "@/lib/utils/politics";
 import { gameDateAnchorFromState } from "@/lib/utils/gameDate";
 import {
   calculateFullFundDistribution,
@@ -61,8 +61,7 @@ import { isRpgStatsEnabled } from "@/lib/stats/featureFlag";
 import type { CompassMarker } from "@/components/PoliticalCompass";
 import { ProfileAchievements } from "@/components/ProfileAchievements";
 import { checkPassiveProfileAchievements } from "@/lib/achievements/triggers";
-import { DiscordBadge } from "./DiscordBadge";
-import { getOnlineStatus } from "@/lib/utils/onlineStatus";
+import { ProfileSocial } from "./components/ProfileSocial";
 import { ProfileHeader } from "./components/ProfileHeader";
 import { businessProfileView } from "@/lib/character/businessProfileView";
 import { ProfileTabs } from "@/components/profile/ProfileTabs";
@@ -73,10 +72,6 @@ import { getMilitaryCommands } from "@/lib/db/collections/militaryCommands";
 import { resolveGeneralEra } from "@/lib/military/currentGeneralEra";
 import { CUR_ERA_YEAR } from "@/lib/military/generalsTree";
 import { PoliticalStanding } from "./components/PoliticalStanding";
-import { DossierHeader } from "./components/DossierHeader";
-import { DossierScoreboard } from "./components/DossierScoreboard";
-import { ProfileDesignScope, ProfileDesignSlot } from "./components/ProfileDesignExperiment";
-import { PROFILE_DESIGN_PRELOAD_SCRIPT } from "@/lib/analytics/storageKeys";
 import { FinancialStrip } from "./components/FinancialStrip";
 import { CareerHistory } from "./components/CareerHistory";
 import {
@@ -97,6 +92,17 @@ import { onboardingRewardLocalAmount } from "@/lib/onboarding/rules";
 import { CURRENCY_SYMBOLS, getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { StatAllocationBanner } from "./components/StatAllocationBanner";
 import { SectionHeader } from "./components/ProfileMeters";
+import {
+  PROFILE_ASIDE_COLUMN_CLASS,
+  PROFILE_GRID_CLASS,
+  PROFILE_LINK_CLASS,
+  PROFILE_MAIN_COLUMN_CLASS,
+} from "./components/profileStyles";
+import {
+  COMPASS_PARTY_MARKER,
+  COMPASS_SELF_DOT,
+  COMPASS_STATE_MARKER,
+} from "./components/compassColors";
 import { buildCharacterHref } from "@/lib/utils/profileUrls";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { getTotalPersonalLiquidWealth, getHomeCurrency } from "@/lib/currency/characterFunds";
@@ -489,16 +495,16 @@ export default async function ProfilePage() {
 
   const econ = character.policies.economic ?? 0;
   const social = character.policies.social ?? 0;
-  const partyHex = getPartyHex(character.party, party?.color ?? undefined);
-  const profileAccentHex = patreonHighlightColor ?? partyHex;
 
+  // The compass stays neutral: the party colour already appears once, in the
+  // header swatch. A supporter's chosen highlight still marks their own dot.
   const compassMarkers: CompassMarker[] = [];
   if (hasParty && party?.economicPosition !== undefined && party?.socialPosition !== undefined) {
     compassMarkers.push({
       economic: party.economicPosition,
       social: party.socialPosition,
       label: t("positions.markerParty"),
-      color: profileAccentHex,
+      color: COMPASS_PARTY_MARKER,
     });
   }
   if (homeState?.cachedEconomicLean !== undefined && homeState?.cachedSocialLean !== undefined) {
@@ -506,7 +512,7 @@ export default async function ProfilePage() {
       economic: homeState.cachedEconomicLean,
       social: homeState.cachedSocialLean,
       label: t("positions.markerState"),
-      color: "#38bdf8",
+      color: COMPASS_STATE_MARKER,
     });
   }
 
@@ -720,300 +726,200 @@ export default async function ProfilePage() {
     year: "numeric",
   });
 
-  const favColor =
-    favorability >= 60 ? "var(--success)" : favorability >= 40 ? "var(--warning)" : "var(--error)";
-
   const stateLabel = homeState?.name ?? character.homeState;
 
   return (
-    <>
-      <script dangerouslySetInnerHTML={{ __html: PROFILE_DESIGN_PRELOAD_SCRIPT }} />
-      <ProfileDesignScope>
-        <main className="mx-auto max-w-7xl px-4 sm:px-6 py-8 space-y-8 overflow-x-hidden">
-          <ProfileDesignSlot
-            control={
-              <ProfileHeader
-                character={character}
-                party={party}
-                user={user}
-                memberSince={memberSince}
-                officeLabels={profileOfficeLabels}
-                stateLabel={stateLabel}
-                campaignSongUrl={character.campaignSongUrl}
-                countrySlug={countrySlug}
-                patreonHighlightColor={patreonHighlightColor}
-                patreonTier={patreonTier}
-                patreonExpiresAt={patreonExpiresAt}
-                patreonSince={patreonSince}
-                patreonProfileBorder={patreonProfileBorder}
-                supporterProvider={supporterProvider}
-                ownProfileHref={buildCharacterHref(character)}
-              />
-            }
-            dossier={
-              <DossierHeader
-                character={character}
-                party={party}
-                user={user}
-                memberSince={memberSince}
-                officeLabels={profileOfficeLabels}
-                stateLabel={stateLabel}
-                countrySlug={countrySlug}
-                patreonHighlightColor={patreonHighlightColor}
-                patreonTier={patreonTier}
-                patreonExpiresAt={patreonExpiresAt}
-                patreonSince={patreonSince}
-                patreonProfileBorder={patreonProfileBorder}
-                supporterProvider={supporterProvider}
-                ownProfileHref={buildCharacterHref(character)}
-              />
-            }
+    <div className="min-h-screen overflow-x-hidden bg-background pb-16" data-replay-block>
+      <ProfileTabs
+        conflictsEnabled={conflictsEnabled}
+        adopted={doctrineAdopted}
+        general={general}
+        militaryService={militaryService}
+        business={businessProfileView(financialData, true)}
+        editable={true}
+        curEra={generalEra}
+        posting={generalPosting}
+        isCommandingGeneral={isCommandingGeneral}
+        subject={{
+          id: character._id.toString(),
+          name: character.name,
+          countryCode: (character.countryId ?? "US").toLowerCase(),
+        }}
+        header={
+          <ProfileHeader
+            character={character}
+            party={party}
+            user={user}
+            memberSince={memberSince}
+            memberSinceIsApproximate={data.membership.isApproximate}
+            officeLabels={profileOfficeLabels}
+            stateLabel={stateLabel}
+            campaignSongUrl={character.campaignSongUrl}
+            countrySlug={countrySlug}
+            patreonHighlightColor={patreonHighlightColor}
+            patreonTier={patreonTier}
+            patreonExpiresAt={patreonExpiresAt}
+            patreonSince={patreonSince}
+            patreonProfileBorder={patreonProfileBorder}
+            supporterProvider={supporterProvider}
+            ownProfileHref={buildCharacterHref(character)}
           />
-
-          <ConstituencySelector />
-
-          {/* New player onboarding: checklist when the flag is on, legacy banner otherwise */}
-          {onboardingChecklistEnabled ? (
-            <OnboardingFlaggedCard
-              checklist={onboardingChecklist}
-              bannerDismissed={!!character.onboardingDismissed}
+        }
+        notices={
+          <>
+            <ConstituencySelector />
+            {/* New player onboarding: checklist when the flag is on, legacy banner otherwise */}
+            {onboardingChecklistEnabled ? (
+              <OnboardingFlaggedCard
+                checklist={onboardingChecklist}
+                bannerDismissed={!!character.onboardingDismissed}
+              />
+            ) : (
+              !character.onboardingDismissed && <NewPlayerBanner />
+            )}
+            {/* Persistent reminder when the one-time stat allocation was set aside */}
+            {rpgStatsEnabled && !character.statsAllocated && character.statAllocationDismissed && (
+              <StatAllocationBanner />
+            )}
+          </>
+        }
+        actions={<ReplayTutorialButton className={`text-body-sm ${PROFILE_LINK_CLASS}`} />}
+      >
+        <div className={PROFILE_GRID_CLASS}>
+          {/* Main: standing, stats, finances and achievements (2/3) */}
+          <div className={PROFILE_MAIN_COLUMN_CLASS}>
+            <PoliticalStanding
+              isOwnProfile={true}
+              nationalRank={nationalNpiOrdinalRank}
+              character={character}
+              homeState={homeState}
+              influence={influence}
+              nationalInfluence={nationalInfluence}
+              influenceDecay={influenceDecay}
+              nationalGainPerTurn={nationalGainPerTurn}
+              favorability={favorability}
+              favDecayDisplay={favDecayDisplay}
+              infamy={infamy}
+              infamyPenalty={infamyPenalty}
+              maxNPI={maxNPI}
+              baseActionsPerTurn={baseActionsPerTurn}
+              officeActionBonus={officeActionBonus}
+              chairActionBonus={chairActionBonus}
+              actionBreakdown={actionBreakdown}
+              totalActionsPerTurn={totalActionsPerTurn}
+              actionHoarding={actionHoarding}
+              bonusActionsFromParty={bonusActionsFromParty}
+              partyInfluenceMaxBonus={partyInfluenceMaxBonus}
+              partyInfluenceNetGain={partyInfluenceNetGain}
+              partyInfluenceShare={partyInfluenceShare}
             />
-          ) : (
-            !character.onboardingDismissed && <NewPlayerBanner />
-          )}
 
-          <div className="flex justify-end">
-            <ReplayTutorialButton />
+            {rpgStatsEnabled && character.stats && (
+              <CharacterStatsPanel
+                stats={character.stats}
+                canReallocate={!!character.statsAllocated && !character.statsReallocationUsed}
+              />
+            )}
+
+            <section>
+              <SectionHeader>{t("finances.title")}</SectionHeader>
+              <p className="-mt-2 mb-4 text-body-sm text-muted">{t("finances.subtitle")}</p>
+              <FinancialStrip
+                donorLevel={character.donorBaseLevel}
+                maxDonorLevel={maxDonorLevel}
+                campaignFunds={character.currencyBalances?.campaign ?? character.funds ?? 0}
+                cashOnHand={getTotalPersonalLiquidWealth(character, forexEnabled, fxRatesRecord)}
+                currency={getHomeCurrency(character, preset)}
+                donorIncome={{
+                  passivePerHour: fundDistribution.donorBaseBonus,
+                  perLevelRate: DONOR_BASE_BONUS_PER_LEVEL[populationTier],
+                  fundraiseYield: fundraiseYieldLocal(
+                    character,
+                    forexEnabled,
+                    campaignRates,
+                    campaignPriceLevel,
+                    preset
+                  ),
+                  populationTier,
+                  influenceMultiplier: 1 + (character.politicalInfluence ?? 0) / 100,
+                }}
+                campaignIncome={{
+                  populationTier,
+                  baseGen: fundDistribution.baseGeneration,
+                  donorBonus: fundDistribution.donorBaseBonus,
+                  officeBonus: fundDistribution.officeBonus,
+                  unionContribution,
+                  totalTax: fundDistribution.stateTaxAmount + fundDistribution.nationalTaxAmount,
+                  netIncome: fundDistribution.characterReceives + unionContribution,
+                }}
+                personalIncome={{
+                  ceoSalaryPerHour: corporation ? corporation.ceoSalary / 24 : undefined,
+                  ceoSalaryCurrencyCode: corporation?.liquidCurrencyCode ?? null,
+                  bondIncomePerTurn,
+                  dividendIncomePerTurn,
+                  forexBalances: character.currencyBalances
+                    ? {
+                        personal: character.currencyBalances.personal,
+                        savings: character.currencyBalances.savings,
+                      }
+                    : undefined,
+                }}
+                portfolioHref="/portfolio"
+              />
+            </section>
+
+            <ProfileAchievements
+              characterId={character._id.toString()}
+              characterHref={buildCharacterHref(character)}
+              isOwnProfile={true}
+            />
           </div>
 
-          {/* Persistent reminder when the one-time stat allocation was set aside */}
-          {rpgStatsEnabled && !character.statsAllocated && character.statAllocationDismissed && (
-            <StatAllocationBanner />
-          )}
+          {/* Aside: positions, roles and history (1/3) */}
+          <div className={PROFILE_ASIDE_COLUMN_CLASS}>
+            <PolicyDemographicsCard
+              economic={econ}
+              social={social}
+              dotColor={patreonHighlightColor ?? COMPASS_SELF_DOT}
+              markers={compassMarkers.length > 0 ? compassMarkers : undefined}
+              demographics={character.demographics}
+              startingCountryId={resolveStartingCountryId(character)}
+              currentCountryId={character.countryId}
+            />
 
-          <ProfileTabs
-            conflictsEnabled={conflictsEnabled}
-            adopted={doctrineAdopted}
-            general={general}
-            militaryService={militaryService}
-            business={businessProfileView(financialData, true)}
-            editable={true}
-            curEra={generalEra}
-            posting={generalPosting}
-            isCommandingGeneral={isCommandingGeneral}
-            subject={{
-              id: character._id.toString(),
-              name: character.name,
-              countryCode: (character.countryId ?? "US").toLowerCase(),
-            }}
-          >
-            {/* Main Dashboard Grid */}
-            <div className="grid gap-8 lg:grid-cols-3 max-w-full">
-              {/* Left Column: Stats & Finances (2/3) */}
-              <div className="lg:col-span-2 space-y-8 min-w-0">
-                <ProfileDesignSlot
-                  control={
-                    <PoliticalStanding
-                      isOwnProfile={true}
-                      nationalNpiLeaderRank={
-                        nationalNpiOrdinalRank <= 3
-                          ? (nationalNpiOrdinalRank as 1 | 2 | 3)
-                          : undefined
-                      }
-                      character={character}
-                      homeState={homeState}
-                      influence={influence}
-                      nationalInfluence={nationalInfluence}
-                      influenceDecay={influenceDecay}
-                      nationalGainPerTurn={nationalGainPerTurn}
-                      favorability={favorability}
-                      favColor={favColor}
-                      favDecayDisplay={favDecayDisplay}
-                      infamy={infamy}
-                      infamyPenalty={infamyPenalty}
-                      maxNPI={maxNPI}
-                      baseActionsPerTurn={baseActionsPerTurn}
-                      officeActionBonus={officeActionBonus}
-                      chairActionBonus={chairActionBonus}
-                      actionBreakdown={actionBreakdown}
-                      totalActionsPerTurn={totalActionsPerTurn}
-                      actionHoarding={actionHoarding}
-                      bonusActionsFromParty={bonusActionsFromParty}
-                      partyInfluenceMaxBonus={partyInfluenceMaxBonus}
-                      partyInfluenceNetGain={partyInfluenceNetGain}
-                      partyInfluenceShare={partyInfluenceShare}
-                    />
-                  }
-                  dossier={
-                    <DossierScoreboard
-                      character={character}
-                      homeState={homeState}
-                      influence={influence}
-                      nationalInfluence={nationalInfluence}
-                      influenceDecay={influenceDecay}
-                      nationalGainPerTurn={nationalGainPerTurn}
-                      favorability={favorability}
-                      favDecayDisplay={favDecayDisplay}
-                      infamy={infamy}
-                      infamyPenalty={infamyPenalty}
-                      maxNPI={maxNPI}
-                      nationalRank={nationalNpiOrdinalRank}
-                      baseActionsPerTurn={baseActionsPerTurn}
-                      officeActionBonus={officeActionBonus}
-                      chairActionBonus={chairActionBonus}
-                      actionBreakdown={actionBreakdown}
-                      totalActionsPerTurn={totalActionsPerTurn}
-                      actionHoarding={actionHoarding}
-                      bonusActionsFromParty={bonusActionsFromParty}
-                      partyInfluenceMaxBonus={partyInfluenceMaxBonus}
-                      partyInfluenceNetGain={partyInfluenceNetGain}
-                      partyInfluenceShare={partyInfluenceShare}
-                    />
-                  }
-                />
-
-                {rpgStatsEnabled && character.stats && (
-                  <CharacterStatsPanel
-                    stats={character.stats}
-                    canReallocate={!!character.statsAllocated && !character.statsReallocationUsed}
-                  />
+            {ceoCorporation && (
+              <CeoCorporationCard
+                corporationName={ceoCorporation.name}
+                corporationRouteId={String(
+                  ceoCorporation.sequentialId ?? ceoCorporation._id.toString()
                 )}
-              </div>
-
-              {/* Right Column: Policy & History (1/3) */}
-              <div className="space-y-8 min-w-0">
-                <PolicyDemographicsCard
-                  economic={econ}
-                  social={social}
-                  dotColor={profileAccentHex}
-                  markers={compassMarkers.length > 0 ? compassMarkers : undefined}
-                  demographics={character.demographics}
-                  startingCountryId={resolveStartingCountryId(character)}
-                  currentCountryId={character.countryId}
-                />
-
-                {ceoCorporation && (
-                  <CeoCorporationCard
-                    corporationName={ceoCorporation.name}
-                    corporationRouteId={String(
-                      ceoCorporation.sequentialId ?? ceoCorporation._id.toString()
-                    )}
-                    logoUrl={ceoCorporation.logoUrl}
-                    brandColor={ceoCorporation.brandColor}
-                    isNationalEnterprise={
-                      Boolean(ceoCorporation.countryOwnerId) ||
-                      Boolean(ceoCorporation.isNationalized)
-                    }
-                  />
-                )}
-
-                <section className="rounded-xl border border-card-border bg-card shadow-card overflow-hidden">
-                  <div className="px-6 pt-5 pb-0">
-                    <SectionHeader>{t("finances.title")}</SectionHeader>
-                    <p className="-mt-2 mb-4 text-xs text-muted">{t("finances.subtitle")}</p>
-                  </div>
-                  <FinancialStrip
-                    donorLevel={character.donorBaseLevel}
-                    maxDonorLevel={maxDonorLevel}
-                    campaignFunds={character.currencyBalances?.campaign ?? character.funds ?? 0}
-                    cashOnHand={getTotalPersonalLiquidWealth(
-                      character,
-                      forexEnabled,
-                      fxRatesRecord
-                    )}
-                    currency={getHomeCurrency(character, preset)}
-                    donorIncome={{
-                      passivePerHour: fundDistribution.donorBaseBonus,
-                      perLevelRate: DONOR_BASE_BONUS_PER_LEVEL[populationTier],
-                      fundraiseYield: fundraiseYieldLocal(
-                        character,
-                        forexEnabled,
-                        campaignRates,
-                        campaignPriceLevel,
-                        preset
-                      ),
-                      populationTier,
-                      influenceMultiplier: 1 + (character.politicalInfluence ?? 0) / 100,
-                    }}
-                    campaignIncome={{
-                      populationTier,
-                      baseGen: fundDistribution.baseGeneration,
-                      donorBonus: fundDistribution.donorBaseBonus,
-                      officeBonus: fundDistribution.officeBonus,
-                      unionContribution,
-                      totalTax:
-                        fundDistribution.stateTaxAmount + fundDistribution.nationalTaxAmount,
-                      netIncome: fundDistribution.characterReceives + unionContribution,
-                    }}
-                    personalIncome={{
-                      ceoSalaryPerHour: corporation ? corporation.ceoSalary / 24 : undefined,
-                      ceoSalaryCurrencyCode: corporation?.liquidCurrencyCode ?? null,
-                      bondIncomePerTurn,
-                      dividendIncomePerTurn,
-                      forexBalances: character.currencyBalances
-                        ? {
-                            personal: character.currencyBalances.personal,
-                            savings: character.currencyBalances.savings,
-                          }
-                        : undefined,
-                    }}
-                    portfolioHref="/portfolio"
-                  />
-                </section>
-
-                {(discordId || lastActivity) && (
-                  <section className="rounded-xl border border-card-border bg-card p-5 shadow-card">
-                    <SectionHeader>{t("social.title")}</SectionHeader>
-                    <div className="flex flex-wrap items-center gap-3">
-                      {discordId && (
-                        <DiscordBadge
-                          discordId={discordId}
-                          discordUsername={discordUsername}
-                          discordAvatar={discordAvatar}
-                        />
-                      )}
-                      {lastActivity &&
-                        (() => {
-                          const online = getOnlineStatus(lastActivity);
-                          return (
-                            <span className="inline-flex items-center gap-2 text-xs text-muted">
-                              <span
-                                className={`h-2 w-2 rounded-full ${online.isOnline ? "bg-success" : "bg-muted"}`}
-                                aria-hidden
-                              />
-                              {online.text}
-                            </span>
-                          );
-                        })()}
-                    </div>
-                  </section>
-                )}
-
-                <CareerHistory
-                  character={{
-                    careerHistory: character.careerHistory,
-                    currentOffice: character.currentOffice,
-                    countryId: character.countryId,
-                  }}
-                  partyNames={partyNames}
-                  gameDateAnchor={gameDateAnchor}
-                  partyHistory={partyHistory}
-                />
-              </div>
-            </div>
-
-            {/* Achievements Full Width */}
-            <div className="rounded-xl border border-card-border bg-card p-6 shadow-card">
-              <SectionHeader>{t("achievements.title")}</SectionHeader>
-              <ProfileAchievements
-                characterId={character._id.toString()}
-                characterHref={buildCharacterHref(character)}
-                isOwnProfile={true}
+                logoUrl={ceoCorporation.logoUrl}
+                isNationalEnterprise={
+                  Boolean(ceoCorporation.countryOwnerId) || Boolean(ceoCorporation.isNationalized)
+                }
               />
-            </div>
-          </ProfileTabs>
-        </main>
-      </ProfileDesignScope>
-    </>
+            )}
+
+            <ProfileSocial
+              discordId={discordId}
+              discordUsername={discordUsername}
+              discordAvatar={discordAvatar}
+              lastActivity={lastActivity}
+            />
+
+            <CareerHistory
+              character={{
+                careerHistory: character.careerHistory,
+                currentOffice: character.currentOffice,
+                countryId: character.countryId,
+              }}
+              partyNames={partyNames}
+              gameDateAnchor={gameDateAnchor}
+              partyHistory={partyHistory}
+            />
+          </div>
+        </div>
+      </ProfileTabs>
+    </div>
   );
 }

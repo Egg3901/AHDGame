@@ -299,6 +299,66 @@ describe("POST /api/character/relocate-with-corp", () => {
     expect(data.corporation.newCountryId).toBe("UK");
   });
 
+  it("refuses to take a private corporation into a command economy (ticket 1378)", async () => {
+    await setupDb();
+    const userId = new ObjectId().toString();
+    const charId = new ObjectId();
+
+    const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue(
+      stubAuth({ userId, characterId: charId, countryId: "UK", homeState: "EAE" }) as never
+    );
+    const { checkRateLimit } = await import("@/lib/api/rateLimit");
+    vi.mocked(checkRateLimit).mockReturnValue({
+      ok: true,
+      limit: 100,
+      remaining: 99,
+      resetAt: Date.now() + 60_000,
+    });
+    const { getGameState } = await import("@/lib/gameState");
+    vi.mocked(getGameState).mockResolvedValue({ currentTurn: 1306 } as never);
+    db.collectionMocks.states.findOne.mockResolvedValue({
+      _id: "BY",
+      name: "Bayern",
+      countryId: "DD",
+    });
+    db.collectionMocks.corporations.findOne.mockResolvedValue({
+      _id: new ObjectId(),
+      name: "UK Defense",
+      countryId: "UK",
+      headquartersState: "EAE",
+      ceoId: charId,
+      ceoType: "character",
+      ceoVacant: false,
+      liquidCapital: 100_000_000,
+      liquidCurrencyCode: "GBP",
+      sharePrice: 10,
+      totalShares: 1_000_000,
+    });
+    // Live dial: East Germany is still fully command (private enterprise at 30).
+    db.collection("gameState");
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ currentYear: 1979 });
+    db.collection("federalBudget");
+    db.collectionMocks.federalBudget.find.mockReturnValue({
+      toArray: vi
+        .fn()
+        .mockResolvedValue([{ _id: "DD", economicFactors: { marketizationLevel: 4.7 } }]),
+    });
+
+    const { POST } = await import("./route");
+    const req = new Request("http://localhost/api/character/relocate-with-corp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ targetStateId: "BY", targetCountryId: "DD", paymentMethod: "cash" }),
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/East Germany has a state-run economy/);
+    const { performRelocation } = await import("@/lib/character/performRelocation");
+    expect(performRelocation).not.toHaveBeenCalled();
+    expect(db.collectionMocks.corporations.updateOne).not.toHaveBeenCalled();
+  });
+
   it("imperial CEO: paymentMethod 'imperial-free' succeeds at zero cost", async () => {
     await setupDb();
     const userId = new ObjectId().toString();

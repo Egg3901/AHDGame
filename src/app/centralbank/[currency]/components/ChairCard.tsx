@@ -13,6 +13,7 @@ import { Avatar } from "@/components/Avatar";
 import { InfoTooltip } from "@/components/InfoTooltip";
 import { ChairAppointmentActions } from "./ChairAppointmentActions";
 import type { ChairData } from "./centralBankTypes";
+import { CentralBankSection } from "./CentralBankSection";
 
 export function ChairCard({
   chairTitle,
@@ -76,31 +77,29 @@ export function ChairCard({
   if (rawDelta < 0) rawDelta *= Math.max(0.1, 1 - infamy / 150);
   const decay = -(infamy * 0.05);
   const netChange = decay + rawDelta;
-  const colorClass = infamy > 25 ? "text-error" : infamy > 10 ? "text-warning" : "text-success";
-  const barClass = infamy > 25 ? "bg-error" : infamy > 10 ? "bg-warning" : "bg-success";
+  // Colour only once scrutiny starts to cost something: amber from 10, red from
+  // 25, where office benefits are halved.
+  const colorClass = infamy > 25 ? "text-error" : infamy > 10 ? "text-warning" : "text-foreground";
+  const barClass = infamy > 25 ? "bg-error" : infamy > 10 ? "bg-warning" : "bg-foreground/50";
 
   // A leftover NPP caretaker (chairMode still "npp" after persistPendingProposal
   // clears chairCharacterId) must not hide the pending offer. Ticket #1072 put
   // Accept/Decline on this vacant branch; ticket #1144 is the same offer with
   // the caretaker still rendered, so the nominee never saw the buttons.
   return (
-    <div className="min-w-0 rounded-xl border border-card-border bg-card p-5">
-      <h2 className="mb-3 break-words text-xs font-semibold uppercase tracking-widest text-muted">
-        {chairTitle}
-      </h2>
-
+    <CentralBankSection title={chairTitle} level="aside">
       {chairSelectionPending ? (
-        <div className="rounded-lg border border-warning/30 bg-warning/10 p-4 text-center">
-          <p className="text-sm text-foreground">
+        <div className="text-body">
+          <p className="text-foreground">
             Appointment pending for{" "}
             <Link
               href={`/character/${chairSelectionPending.characterId}`}
-              className="font-medium text-primary hover:underline"
+              className="font-semibold text-foreground underline decoration-card-border underline-offset-4 hover:decoration-foreground"
             >
               {chairSelectionPending.characterName}
             </Link>
           </p>
-          <p className="mt-1 text-xs text-muted">
+          <p className="mt-1 text-body-sm text-muted">
             {typeof chairSelectionPending.acceptanceTurnsRemaining === "number" ? (
               chairSelectionPending.acceptanceTurnsRemaining > 0 ? (
                 <>
@@ -125,14 +124,12 @@ export function ChairCard({
           <div className="flex min-w-0 items-center gap-3">
             <Avatar url={chair.avatarUrl} name={chair.name} size="h-12 w-12" />
             <div className="min-w-0 flex-1">
-              <span className="block break-words text-sm font-semibold text-foreground">
+              <span className="block break-words text-body-lg font-semibold text-foreground">
                 {chair.name}
               </span>
-              <span className="mt-0.5 inline-block rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
-                Autonomous Chair (AI)
-              </span>
+              <span className="block text-body-sm text-muted">Autonomous chair (AI)</span>
               {appointedGameMonth && (
-                <p className="mt-1 text-xs text-muted">Appointed {appointedGameMonth}</p>
+                <p className="text-body-sm text-muted">Appointed {appointedGameMonth}</p>
               )}
             </div>
           </div>
@@ -153,31 +150,31 @@ export function ChairCard({
             <div className="min-w-0 flex-1">
               <Link
                 href={`/character/${chair.sequentialId ?? chair.characterId}`}
-                className="block break-words text-sm font-semibold text-foreground hover:text-primary transition-colors"
+                className="block break-words text-body-lg font-semibold text-foreground underline-offset-4 hover:underline"
               >
                 {chair.name}
               </Link>
               {chair.partyName && (
-                <p className="break-words text-xs text-muted">{chair.partyName}</p>
+                <p className="break-words text-body-sm text-muted">{chair.partyName}</p>
               )}
               {appointedGameMonth && (
-                <p className="text-xs text-muted">Appointed {appointedGameMonth}</p>
+                <p className="text-body-sm text-muted">Appointed {appointedGameMonth}</p>
               )}
             </div>
           </div>
         )
       ) : (
-        <div className="rounded-lg border border-card-border/50 bg-card-muted p-4 text-center">
-          <p className="text-sm text-muted">Position Vacant</p>
-          <p className="mt-1 text-xs text-muted/60">Awaiting appointment</p>
+        <div>
+          <p className="text-body-lg text-muted">Vacant</p>
+          <p className="text-body-sm text-muted">Awaiting appointment</p>
         </div>
       )}
 
       {chair && !chairSelectionPending && (
-        <div className="mt-3 space-y-2">
+        <div className="mt-4 space-y-2">
           {chairTermExpiresAtTurn != null ? (
             <>
-              <p className="break-words text-xs text-muted">
+              <p className="break-words text-body-sm text-muted">
                 Term expires in{" "}
                 <span className="font-semibold text-foreground">
                   {Math.max(0, chairTermExpiresAtTurn - currentTurn)} turns
@@ -187,9 +184,9 @@ export function ChairCard({
                   years)
                 </span>
               </p>
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-background">
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-track">
                 <div
-                  className="h-full rounded-full transition-all duration-500 bg-primary"
+                  className="h-full rounded-full bg-foreground/50"
                   style={{
                     width: `${Math.min(100, Math.max(0, ((192 - Math.max(0, chairTermExpiresAtTurn - currentTurn)) / 192) * 100))}%`,
                   }}
@@ -197,23 +194,24 @@ export function ChairCard({
               </div>
             </>
           ) : (
-            <p className="text-xs text-muted italic">No fixed term</p>
+            <p className="text-body-sm text-muted">No fixed term</p>
           )}
         </div>
       )}
 
       {chair && !chairSelectionPending && (
-        <div className="mt-4 border-t border-card-border pt-4 space-y-2">
-          <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-1">
+        <div className="mt-5 space-y-2">
+          <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
             <InfoTooltip
               trigger={
-                <span className="text-xs font-medium text-muted flex items-center gap-1 cursor-help">
-                  Public Scrutiny
+                <span className="flex cursor-help items-center gap-1 text-body-sm text-muted">
+                  Public scrutiny
                   <svg
-                    className="h-3 w-3 text-muted/60"
+                    className="h-3.5 w-3.5 text-muted"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
+                    aria-hidden
                   >
                     <path
                       strokeLinecap="round"
@@ -230,30 +228,28 @@ export function ChairCard({
                 and low GDP growth increase scrutiny; the inverse reduces it.
               </p>
               <p className="text-muted mt-1.5">
-                Above 25, office benefits (actions &amp; national influence) are halved. Recovery
-                becomes harder at high levels - positive effects are dampened.
+                Above 25, office benefits (actions and national influence) are halved. Recovery
+                becomes harder at high levels, because positive effects are dampened.
               </p>
               <p className="text-muted mt-1.5">
                 The trend shown below is the macro trend from inflation, growth, and natural decay.
                 Aggressive rate cuts and failed FX intervention can add separate event scrutiny.
               </p>
             </InfoTooltip>
-            <span className={`text-xs font-bold tabular-nums ${colorClass}`}>
+            <span className={`text-body-lg font-semibold tabular-nums ${colorClass}`}>
               {infamy.toFixed(1)}
             </span>
           </div>
-          <div className="h-1.5 w-full rounded-full bg-track overflow-hidden">
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-track">
             <div
-              className={`h-full rounded-full transition-all duration-500 ${barClass}`}
+              className={`h-full rounded-full ${barClass}`}
               style={{ width: `${Math.min(100, infamy)}%` }}
             />
           </div>
-          <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-1 text-[10px] font-medium text-muted">
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-1 text-body-sm text-muted">
             <span className="shrink-0">{infamy > 25 ? "Benefits halved" : "Normal benefits"}</span>
             <span
-              className={`shrink-0 tabular-nums ${
-                netChange > 0.01 ? "text-error" : netChange < -0.01 ? "text-success" : "text-muted"
-              }`}
+              className={`shrink-0 tabular-nums ${netChange > 0.01 ? "text-error" : "text-muted"}`}
             >
               Macro {netChange > 0 ? "+" : ""}
               {netChange.toFixed(2)}/turn
@@ -263,11 +259,11 @@ export function ChairCard({
           {/* The recovery path has to be visible: a hidden escape hatch is no
               escape hatch. Holding the stance the corridor calls for pays down
               scrutiny whether or not inflation has responded yet. */}
-          <div className="mt-2 rounded-lg border border-card-border bg-card-elevated px-3 py-2 text-[11px] leading-snug text-muted">
+          <p className="pt-1 text-body-sm leading-snug text-muted">
             {resolveTurnsRemaining === 0 ? (
               <>
                 Credibility restored this turn:{" "}
-                <span className="font-semibold text-success">-{RESOLVE_SCRUTINY_RELIEF}</span>{" "}
+                <span className="font-semibold text-foreground">-{RESOLVE_SCRUTINY_RELIEF}</span>{" "}
                 scrutiny for holding the stance the corridor called for.
               </>
             ) : stanceHeld ? (
@@ -275,20 +271,21 @@ export function ChairCard({
                 Hold this stance for{" "}
                 <span className="font-semibold text-foreground">{resolveTurnsRemaining}</span> more
                 turn{resolveTurnsRemaining === 1 ? "" : "s"} to cut{" "}
-                <span className="font-semibold">{RESOLVE_SCRUTINY_RELIEF}</span> scrutiny, whether
-                or not inflation has responded yet.
+                <span className="font-semibold text-foreground">{RESOLVE_SCRUTINY_RELIEF}</span>{" "}
+                scrutiny, whether or not inflation has responded yet.
               </>
             ) : (
               <>
                 Match the rate corridor and hold it for{" "}
                 <span className="font-semibold text-foreground">{RESOLVE_TURNS_REQUIRED}</span>{" "}
-                turns to cut <span className="font-semibold">{RESOLVE_SCRUTINY_RELIEF}</span>{" "}
+                turns to cut{" "}
+                <span className="font-semibold text-foreground">{RESOLVE_SCRUTINY_RELIEF}</span>{" "}
                 scrutiny. Resolve counts even before the numbers turn.
               </>
             )}
-          </div>
+          </p>
         </div>
       )}
-    </div>
+    </CentralBankSection>
   );
 }

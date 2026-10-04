@@ -25,7 +25,7 @@ export default function ShortageBadge({ ratio }: ShortageBadgeProps) {
   return (
     <span
       className={`ml-1.5 inline-flex items-center rounded-full border px-1.5 py-0 text-[9px] font-semibold uppercase tracking-wide ${colorClass}`}
-      title={`Global shortage: worldwide demand is ${ratio.toFixed(1)}x worldwide supply. This is the WORLD market, not this state — your state can be well supplied while this still reads Severe. Margin effects soften above 3x.`}
+      title={`Global shortage: worldwide demand is ${ratio.toFixed(1)}x worldwide supply. This is the WORLD market, not this state. Your state can be well supplied while this still reads Severe. Margin effects soften above 3x.`}
     >
       {label}
     </span>

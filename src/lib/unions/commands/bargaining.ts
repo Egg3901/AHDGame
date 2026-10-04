@@ -223,6 +223,25 @@ function memoRead<T>(
   return pending;
 }
 
+/** Cost of living for a set of locals, memoized per phase on their state set. */
+function memoCostOfLiving(
+  db: Db,
+  locals: readonly Pick<CorporateSector, "stateId">[],
+  cache: BargainingReadCache | undefined
+): Promise<Map<string, number>> {
+  const states = [
+    ...new Set(
+      locals
+        .map((s) => s.stateId)
+        .filter(Boolean)
+        .map(String)
+    ),
+  ]
+    .sort()
+    .join(",");
+  return memoRead(cache, `col:${states}`, () => costOfLivingByState(db, locals));
+}
+
 export async function openBargainingCampaignFromLiveConditions(
   db: Db,
   union: Union,
@@ -307,20 +326,7 @@ export async function openBargainingCampaignFromLiveConditions(
     treasury: union.treasury,
     laborTightness: macro.laborTightness,
     lawSupport: macro.lawSupport,
-    costOfLivingByState: await memoRead(
-      readCache,
-      `col:${[
-        ...new Set(
-          sectors
-            .map((s) => s.stateId)
-            .filter(Boolean)
-            .map(String)
-        ),
-      ]
-        .sort()
-        .join(",")}`,
-      () => costOfLivingByState(db, sectors)
-    ),
+    costOfLivingByState: await memoCostOfLiving(db, sectors, readCache),
   });
   const now = new Date();
   const campaign = openBargainingCampaign({
@@ -632,7 +638,8 @@ export async function persistUnionBargainingEscalation(
   db: Db,
   union: Union,
   campaign: BargainingCampaign,
-  currentTurn: number
+  currentTurn: number,
+  readCache?: BargainingReadCache
 ): Promise<UnionActionResult> {
   const now = new Date();
   const sectors = await db
@@ -653,8 +660,10 @@ export async function persistUnionBargainingEscalation(
   // keep calling strikes, and gives no credit to one that organized during the
   // dispute.
   const [macro, colByState] = await Promise.all([
-    bargainingMacroInputs(db, union.countryId),
-    costOfLivingByState(db, sectors),
+    memoRead(readCache, `macro:${union.countryId}`, () =>
+      bargainingMacroInputs(db, union.countryId)
+    ),
+    memoCostOfLiving(db, sectors, readCache),
   ]);
   const liveMandate = mandateFromLocals({
     locals: sectors,

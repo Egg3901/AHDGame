@@ -2,14 +2,15 @@
 
 import { useCallback, useEffect, useReducer, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Button, Input, Skeleton } from "@/components/ui";
+import { Skeleton } from "@/components/ui";
 import { formatBankMoney, formatRatePercent } from "@/components/banking/formatBankMoney";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { perTurnInterestOn } from "@/lib/banking/rules/loans";
 import { DISCOUNT_WINDOW_STIGMA } from "@/lib/banking/rules/discountWindow";
 import type { DiscountWindowQuote, ShowToast } from "../types";
 import { mergeState } from "../lib/helpers";
-import { Eyebrow } from "../components/BankSection";
+import { SmallButton } from "@/components/corporation/dense/DenseKit";
+import { BankPanel } from "../components/BankSection";
 import { StatCell } from "../components/StatCell";
 
 /**
@@ -128,7 +129,7 @@ export function DiscountWindowPanel({
   };
 
   if (loading && !quote) {
-    return <Skeleton className="h-24 w-full max-w-xl rounded-xl" />;
+    return <Skeleton className="h-16 w-full" />;
   }
   if (error || !quote || !quote.available) return null;
 
@@ -152,84 +153,81 @@ export function DiscountWindowPanel({
       : null;
 
   return (
-    <section className="space-y-4">
-      <div>
-        <Eyebrow kind="ceoControl" />
-        <h3 className="text-base font-semibold text-foreground">Discount window</h3>
-        <p className="text-sm text-muted">
-          Emergency central bank cash for banks that take deposits. Drawing carries a confidence
-          penalty that fades once the debt is repaid, and the penalty rate prices above the market.
-        </p>
-      </div>
-      <div className="rounded-xl border border-card-border bg-card grid grid-cols-2 sm:grid-cols-4 divide-x divide-card-border max-w-2xl">
-        <StatCell
-          label="Outstanding"
-          value={formatBankMoney(quote.outstanding, currency)}
-          tooltip={t("tooltips.discountOutstanding")}
-        />
-        <StatCell
-          label="Rate"
-          value={quote.ratePercent != null ? formatRatePercent(quote.ratePercent) : "-"}
-          sub="penalty over prime"
-          tooltip={t("tooltips.discountRate")}
-        />
-        <StatCell
-          label="Remaining capacity"
-          value={formatBankMoney(quote.headroomAnchor ?? 0, currency)}
-          sub={`cap ${formatBankMoney(quote.capAnchor ?? 0, currency)}`}
-          tooltip={t("tooltips.discountCapacity")}
-        />
-        <StatCell
-          label="Confidence penalty"
-          value={`${(quote.currentStigma * 100).toFixed(1)}%`}
-          sub={`fades on repayment, max ${(quote.maxStigma * 100).toFixed(0)}%`}
-          tooltip={t("tooltips.discountStigma")}
-        />
-      </div>
-      {canMutate && (
-        <div className="rounded-xl border border-card-border bg-card p-4 space-y-3 max-w-xl">
-          <p className="text-sm text-muted">Draw against the window, or repay outstanding debt.</p>
-          <label className="block space-y-1 text-xs text-muted max-w-xs">
-            Amount
-            <Input
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              inputMode="decimal"
-              aria-label="Discount window amount"
-            />
-          </label>
-          {validDraw && postDrawStigma != null && postDrawInterest != null && (
-            <p className="text-[11px] text-muted">
-              Drawing {formatBankMoney(entered, currency)} sets the penalty to{" "}
-              {(postDrawStigma * 100).toFixed(1)}% of confidence, costs about{" "}
-              {formatBankMoney(postDrawInterest, currency)} next turn, and leaves{" "}
-              {formatBankMoney((quote.headroomAnchor ?? 0) - entered, currency)} of capacity. Draws
-              above half the remaining capacity ask first. Interest accrues every turn (about every
-              hour) until repaid.
-            </p>
-          )}
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              onClick={() => void act("draw")}
-              disabled={busy || !validDraw}
-              title={
-                validDraw ? undefined : "Enter an amount within the remaining capacity to draw"
-              }
-            >
-              Draw
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => void act("repay")}
-              disabled={busy}
-            >
-              Repay
-            </Button>
-          </div>
+    <BankPanel kind="ceoControl" title="Discount window">
+      <p className="py-1.5 text-xs text-muted">
+        Emergency central bank cash for banks that take deposits. Drawing carries a confidence
+        penalty that fades once the debt is repaid, and the penalty rate prices above the market.
+      </p>
+      <div className="grid gap-x-8 gap-y-4 pt-1 md:grid-cols-2">
+        <div className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
+          <StatCell
+            label="Outstanding"
+            value={formatBankMoney(quote.outstanding, currency)}
+            tooltip={t("tooltips.discountOutstanding")}
+          />
+          <StatCell
+            label="Rate"
+            value={quote.ratePercent != null ? formatRatePercent(quote.ratePercent) : "n/a"}
+            sub="penalty over prime"
+            tooltip={t("tooltips.discountRate")}
+          />
+          <StatCell
+            label="Remaining capacity"
+            value={formatBankMoney(quote.headroomAnchor ?? 0, currency)}
+            sub={`cap ${formatBankMoney(quote.capAnchor ?? 0, currency)}`}
+            tooltip={t("tooltips.discountCapacity")}
+          />
+          <StatCell
+            label="Confidence penalty"
+            value={`${(quote.currentStigma * 100).toFixed(1)}%`}
+            sub={`fades on repayment, max ${(quote.maxStigma * 100).toFixed(0)}%`}
+            tooltip={t("tooltips.discountStigma")}
+          />
         </div>
-      )}
-    </section>
+        {canMutate && (
+          <div className="space-y-1.5">
+            <div className="flex flex-wrap items-end gap-2">
+              <label className="flex flex-col gap-1 text-xs text-muted">
+                Amount
+                <input
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  inputMode="decimal"
+                  aria-label="Discount window amount"
+                  className="h-8 w-40 rounded-md border border-card-border bg-background px-2 font-mono text-[13px] text-foreground focus:border-foreground focus:outline-none"
+                />
+              </label>
+              <SmallButton
+                tone="primary"
+                onClick={() => void act("draw")}
+                disabled={busy || !validDraw}
+                title={
+                  validDraw ? undefined : "Enter an amount within the remaining capacity to draw"
+                }
+              >
+                Draw
+              </SmallButton>
+              <SmallButton onClick={() => void act("repay")} disabled={busy}>
+                Repay
+              </SmallButton>
+            </div>
+            {validDraw && postDrawStigma != null && postDrawInterest != null ? (
+              <p className="text-[11px] text-muted">
+                Drawing {formatBankMoney(entered, currency)} sets the penalty to{" "}
+                {(postDrawStigma * 100).toFixed(1)}% of confidence, costs about{" "}
+                {formatBankMoney(postDrawInterest, currency)} next turn, and leaves{" "}
+                {formatBankMoney((quote.headroomAnchor ?? 0) - entered, currency)} of capacity.
+                Draws above half the remaining capacity ask first. Interest accrues every turn
+                (about every hour) until repaid.
+              </p>
+            ) : (
+              <p className="text-[11px] text-muted">
+                Draw against the window, or repay outstanding debt.
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    </BankPanel>
   );
 }

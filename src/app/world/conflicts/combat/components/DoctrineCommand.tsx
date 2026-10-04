@@ -136,7 +136,7 @@ export function DoctrineCommand({ state, natMods }: { state: CombatState; natMod
                 <div>
                   <div
                     style={{
-                      fontFamily: MIL_FONT.serif,
+                      fontFamily: MIL_FONT.heading,
                       fontSize: 13,
                       fontWeight: 600,
                       color: MIL_COLOR.text,

@@ -4,7 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { ArrowUpRight, LoaderCircle, Search, Sparkles } from "lucide-react";
+import { ArrowUpRight, LoaderCircle, Search } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -88,20 +88,11 @@ export function SearchResultsClient({ initialQuery }: { initialQuery: string }) 
     <main className="min-h-screen bg-background pb-16">
       <div className="mx-auto max-w-5xl space-y-6 px-4 py-6 sm:px-6 sm:py-9">
         <header className="relative isolate overflow-hidden rounded-2xl border border-card-border bg-card shadow-panel">
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute -right-24 -top-28 h-80 w-80 rounded-full bg-primary/10 blur-3xl"
-          />
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute -bottom-32 left-1/3 h-64 w-64 rounded-full bg-secondary/10 blur-3xl"
-          />
           <div className="relative px-5 py-7 sm:px-8 sm:py-9">
             <div className="mb-3 flex items-center gap-2 text-[length:var(--text-body-sm)] font-semibold uppercase tracking-[0.16em] text-primary">
-              <Sparkles className="h-4 w-4" aria-hidden="true" />
               {t("search.eyebrow")}
             </div>
-            <h1 className="font-serif text-[length:var(--text-display)] font-bold tracking-tight text-foreground">
+            <h1 className="text-[length:var(--text-display)] font-bold tracking-tight text-foreground">
               {t("search.pageTitle")}
             </h1>
             <p className="mt-2 max-w-2xl text-[length:var(--text-body)] leading-relaxed text-muted sm:text-[length:var(--text-body-lg)]">
@@ -203,12 +194,6 @@ export function SearchResultsClient({ initialQuery }: { initialQuery: string }) 
                     href={result.href}
                     className="group flex h-full min-h-24 items-center gap-3 rounded-xl border border-card-border bg-card p-4 shadow-card transition duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-panel focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   >
-                    <span
-                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-card-border bg-card-elevated text-[length:var(--text-heading)] shadow-card"
-                      aria-hidden="true"
-                    >
-                      {result.icon}
-                    </span>
                     <span className="min-w-0 flex-1">
                       <span className="mb-1 flex min-w-0 items-center gap-2">
                         <span className="truncate text-[length:var(--text-body-lg)] font-semibold text-foreground transition-colors group-hover:text-primary">

@@ -140,6 +140,18 @@ export async function reportReceivedMail(db: Db, userId: string, mailId: string)
 
   const report: Omit<PlayerMailReport, "_id"> = {
     mailId: mailOid,
+    mailSnapshot: {
+      fromCharacterId: mail.fromCharacterId,
+      fromCharacterName: mail.fromCharacterName,
+      fromCharacterSequentialId: mail.fromCharacterSequentialId,
+      toUserId: mail.toUserId,
+      toCharacterId: mail.toCharacterId,
+      toCharacterName: mail.toCharacterName,
+      toCharacterSequentialId: mail.toCharacterSequentialId,
+      subject: mail.subject,
+      body: mail.body,
+      createdAt: mail.createdAt,
+    },
     reportedByUserId: userOid,
     status: "pending",
     createdAt: new Date(),

@@ -12,6 +12,8 @@ vi.mock("@/lib/countryAccess", () => ({
   getAllCountryAccess: vi.fn().mockResolvedValue({
     US: { enabledForPlayers: true },
     FR: { enabledForPlayers: false },
+    RU: { enabledForPlayers: true },
+    UKR: { enabledForPlayers: false },
   }),
 }));
 
@@ -54,6 +56,18 @@ const nato = (memberIds: string[]) => ({
   pendingWithdrawalMeasures: [],
   leadership: null,
   pendingLeadershipElections: [],
+});
+
+const warsawPact = (memberIds: string[]) => ({
+  ...nato(memberIds),
+  id: "WARSAW_PACT",
+  def: {
+    ...nato(memberIds).def,
+    id: "WARSAW_PACT",
+    name: "Warsaw Pact",
+    shortName: "Warsaw Pact",
+    foundingMembers: ["RU"],
+  },
 });
 
 const load = async (preset: string, usGdp = 20_000_000, frGdp = 2_000_000) => {
@@ -104,5 +118,25 @@ describe("fund income splits the way the charge does", () => {
     expect(fund.tributeRateAnnual).toBe(0);
     expect(fund.annualTributeLocal).toBe(0);
     expect(fund.annualDuesLocal).toBeGreaterThan(0);
+  });
+
+  it("normalizes Ukrainian SSR GDP on the Soviet-ruble basis", async () => {
+    vi.mocked(loadOrganizationSummaries).mockResolvedValue([warsawPact(["RU", "UKR"])] as never);
+    const view = await loadWorldOrganizationsView(
+      db(
+        [
+          { countryId: "RU", gdp: 1_400_000, population: 167_000_000 },
+          { countryId: "UKR", gdp: 291_667, population: 41_000_000 },
+        ],
+        "1953-default"
+      )
+    );
+    const fund = view.organizations[0]!.fund;
+
+    // UKR's regional GDP is authored in Soviet-ruble millions. Both the payer
+    // and the Pact fund use the same 1/9 anchor rate, so the conversion cancels
+    // and the annual fund income is the raw GDP times the Pact's 0.75% rate.
+    expect(fund.usdToFundRate).toBe(1 / 9);
+    expect(fund.annualTributeLocal).toBe(Math.round(291_667 * 1_000_000 * 0.0075));
   });
 });

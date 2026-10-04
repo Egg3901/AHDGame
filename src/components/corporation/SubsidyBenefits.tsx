@@ -108,38 +108,39 @@ export function SubsidyBenefits({ corpHqState, corpHqCountryId, sectors }: Subsi
   );
 
   if (loading) {
-    return <div className="h-16 rounded-lg bg-card/60 animate-pulse" />;
+    return <div className="h-8 animate-pulse border-b border-card-border/60" />;
   }
 
   if (applicableSubsidies.length === 0) {
-    return (
-      <div className="rounded-lg border border-border bg-card/60 p-4 text-sm text-muted-foreground">
-        No active subsidies benefiting this corporation.
-      </div>
-    );
+    return <p className="py-1 text-xs text-muted">No active subsidies benefit this corporation.</p>;
   }
 
   return (
-    <div className="space-y-1.5">
-      {applicableSubsidies.map((s) => (
-        <div
-          key={s.id}
-          className="flex items-center justify-between rounded-md border border-border bg-card/40 px-3 py-2"
-        >
-          <span className="text-xs text-muted-foreground">
-            {getCountryConfig(s.countryId as CountryId).name}
-            {" — "}
-            {s.scope === "state" && s.stateId ? `${s.stateId} — ` : ""}
-            {SCOPE_LABELS[s.scopeType] ?? s.scopeType}
-            {s.targetSectorType
-              ? ` — ${CORPORATION_TYPE_LABELS[s.targetSectorType as CorporationType] ?? s.targetSectorType}`
-              : ""}
-            {s.targetStrategyId ? ` (${s.targetStrategyId})` : ""}
-            {s.domesticOnly ? " · domestic only" : ""}
-          </span>
-          <span className="text-sm font-semibold text-emerald-400">+7.5% margin</span>
-        </div>
-      ))}
-    </div>
+    <table className="w-full border-collapse">
+      <tbody>
+        {applicableSubsidies.map((s) => (
+          <tr key={s.id}>
+            <td className="border-b border-card-border/60 py-1.5 pr-2 text-xs text-muted">
+              {[
+                getCountryConfig(s.countryId as CountryId).name,
+                s.scope === "state" && s.stateId ? s.stateId : null,
+                SCOPE_LABELS[s.scopeType] ?? s.scopeType,
+                s.targetSectorType
+                  ? (CORPORATION_TYPE_LABELS[s.targetSectorType as CorporationType] ??
+                    s.targetSectorType)
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(", ")}
+              {s.targetStrategyId ? ` (${s.targetStrategyId})` : ""}
+              {s.domesticOnly ? ", domestic only" : ""}
+            </td>
+            <td className="whitespace-nowrap border-b border-card-border/60 py-1.5 text-right font-mono text-[13px] text-success">
+              +7.5% margin
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }

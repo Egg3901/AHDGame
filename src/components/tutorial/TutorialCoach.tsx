@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { TUTORIAL_CHAPTERS, buildChapterTour, buildTourSteps } from "@/lib/tutorial/chapters";
+import { buildChapterTour, buildTourSteps } from "@/lib/tutorial/chapters";
 import { coachCountryContext, type CoachCharacter, type TourStep } from "@/lib/tutorial/coachSteps";
 import { parseTutorialFacts, type TutorialFacts } from "@/lib/tutorial/facts";
 import {
@@ -124,7 +124,6 @@ export function TutorialCoach({ character, plan, autoStart }: TutorialCoachProps
     const out: Array<{
       id: TutorialChapterId;
       title: string;
-      icon: string;
       firstStep: number;
     }> = [];
     steps.forEach((step, index) => {
@@ -132,7 +131,6 @@ export function TutorialCoach({ character, plan, autoStart }: TutorialCoachProps
         out.push({
           id: step.chapterId,
           title: step.chapterTitle,
-          icon: TUTORIAL_CHAPTERS[step.chapterId]?.icon ?? "•",
           firstStep: index,
         });
       }
@@ -517,8 +515,8 @@ export function TutorialCoach({ character, plan, autoStart }: TutorialCoachProps
                         : "text-muted hover:bg-muted/10"
                   }`}
                 >
-                  <span aria-hidden className={here ? "" : "opacity-60"}>
-                    {chapter.icon}
+                  <span aria-hidden className={`font-mono ${here ? "" : "opacity-60"}`}>
+                    {index + 1}
                   </span>
                   {here && <span className="truncate">{t(chapter.title)}</span>}
                 </button>

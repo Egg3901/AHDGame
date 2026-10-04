@@ -62,7 +62,7 @@ describe("POST .../treasury-draw", () => {
     expect(res.status).toBe(200);
     expect(vi.mocked(drawFromTreasury)).toHaveBeenCalledWith(
       db,
-      { countryId: "CN", corpId, amountLocal: 500 },
+      { countryId: "CN", corpId, amountLocal: 500, corpCurrency: "USD" },
       expect.any(Date)
     );
     expect(

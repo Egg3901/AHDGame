@@ -154,7 +154,7 @@ export function CombatCommandClient({
           <h1
             style={{
               margin: 0,
-              fontFamily: MIL_FONT.serif,
+              fontFamily: MIL_FONT.heading,
               fontWeight: 700,
               fontSize: 32,
               lineHeight: 1,

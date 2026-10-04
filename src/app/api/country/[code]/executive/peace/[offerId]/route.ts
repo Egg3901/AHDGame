@@ -63,9 +63,15 @@ export async function POST(
       return NextResponse.json({ error: "That offer does not exist." }, { status: 404 });
     }
 
+    const recognizedAcceptance =
+      action === "accept" && offer.status === "accepted" && offer.application != null;
+    const resumableAcceptance = recognizedAcceptance && offer.application?.phase !== "completed";
+
     // Lazy expiry: a row can still say "pending" and be long dead. Checked here so a
     // stale offer cannot be accepted, rejected or withdrawn into a different state.
-    if (!isOfferLive(offer, currentTurn)) {
+    // An already-claimed acceptance is the exception: its frozen plan must remain
+    // resumable even after expiry or partial roster cleanup.
+    if (!recognizedAcceptance && !isOfferLive(offer, currentTurn)) {
       await getPeaceOffersCollection(db).updateOne(
         { _id: offer._id, status: "pending" },
         { $set: { status: "expired" } }
@@ -106,6 +112,15 @@ export async function POST(
       return NextResponse.json({ success: true, status });
     }
 
+    // A client may retry after the server committed but its response was lost.
+    // Completed application receipts make that retry a successful read of the same
+    // result instead of a misleading "no longer open" conflict.
+    if (recognizedAcceptance && offer.application?.phase === "completed") {
+      const warResolved = offer.application.resolutionWinner !== null;
+      if (warResolved) await flushServerPosthog();
+      return NextResponse.json({ success: true, status: "accepted", warResolved });
+    }
+
     // Revalidated at acceptance, not just at offer time. An offer sits for turns
     // while the world moves: the war may have ended, or either party may have left
     // it, and applying a stale deal would move money over a war nobody is fighting.
@@ -113,43 +128,45 @@ export async function POST(
     if (!conflict) {
       return NextResponse.json({ error: "That war no longer exists." }, { status: 409 });
     }
-    // Re-check the GDP cap at acceptance too: an offer stored before the cap
-    // existed, or one whose payer's GDP has since fallen, must not move an
-    // over-cap sum. maxIndemnityForGdp(null) → null skips the cap only when the
-    // payer has no GDP, which validatePeaceOffer treats as "no ceiling passed";
-    // that mirrors the pre-cap behaviour for the (unexpected) no-GDP payer and
-    // never loosens a real cap.
-    // Only an indemnity has a GDP ceiling to re-check. The other terms carry no
-    // figure that could have drifted while the offer sat.
-    let maxAmount: number | null = null;
-    if (offer.term.kind === "indemnity") {
-      const payerBudget = await db
-        .collection<FederalBudget>("federalBudget")
-        .findOne({ countryId: offer.term.payer }, { projection: { gdp: 1 } });
-      maxAmount = maxIndemnityForGdp(payerBudget?.gdp);
-    }
-    // The target's system is re-read too: a country converted by some other route
-    // while this offer sat must not be converted again to what it already is.
-    const targetState = await getCountryState(db, offer.toCountry);
-    // The crisis is re-read for the same reason as the GDP cap and the target's
-    // system: it may have moved while the offer sat. It is also LOAD-BEARING here in
-    // a way those two are not, because `settlement` fails closed — omit it and every
-    // reunification offer becomes impossible to accept, however legal it was to send.
-    const settlement =
-      offer.term.kind === "reunification" ? await loadTermSettlement(db, conflict._id) : null;
-    const still = validatePeaceOffer(
-      conflict,
-      offer.fromCountry,
-      offer.toCountry,
-      offer.term,
-      offer.leaver,
-      maxAmount,
-      targetState.governmentType,
-      null,
-      settlement
-    );
-    if (!still.ok) {
-      return NextResponse.json({ error: still.error }, { status: 409 });
+    if (!resumableAcceptance) {
+      // Re-check the GDP cap at acceptance too: an offer stored before the cap
+      // existed, or one whose payer's GDP has since fallen, must not move an
+      // over-cap sum. maxIndemnityForGdp(null) → null skips the cap only when the
+      // payer has no GDP, which validatePeaceOffer treats as "no ceiling passed";
+      // that mirrors the pre-cap behaviour for the (unexpected) no-GDP payer and
+      // never loosens a real cap.
+      // Only an indemnity has a GDP ceiling to re-check. The other terms carry no
+      // figure that could have drifted while the offer sat.
+      let maxAmount: number | null = null;
+      if (offer.term.kind === "indemnity") {
+        const payerBudget = await db
+          .collection<FederalBudget>("federalBudget")
+          .findOne({ countryId: offer.term.payer }, { projection: { gdp: 1 } });
+        maxAmount = maxIndemnityForGdp(payerBudget?.gdp);
+      }
+      // The target's system is re-read too: a country converted by some other route
+      // while this offer sat must not be converted again to what it already is.
+      const targetState = await getCountryState(db, offer.toCountry);
+      // The crisis is re-read for the same reason as the GDP cap and the target's
+      // system: it may have moved while the offer sat. It is also LOAD-BEARING here in
+      // a way those two are not, because `settlement` fails closed — omit it and every
+      // reunification offer becomes impossible to accept, however legal it was to send.
+      const settlement =
+        offer.term.kind === "reunification" ? await loadTermSettlement(db, conflict._id) : null;
+      const still = validatePeaceOffer(
+        conflict,
+        offer.fromCountry,
+        offer.toCountry,
+        offer.term,
+        offer.leaver,
+        maxAmount,
+        targetState.governmentType,
+        null,
+        settlement
+      );
+      if (!still.ok) {
+        return NextResponse.json({ error: still.error }, { status: 409 });
+      }
     }
 
     const applied = await acceptPeace(db, offer, conflict, currentTurn, character._id.toString());

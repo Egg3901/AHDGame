@@ -444,7 +444,10 @@ export async function spendGlobalResponseCost(
     budget?.gdpSmoothed && budget.gdpSmoothed > 0 ? budget.gdpSmoothed : (budget?.gdp ?? 0);
   const amount = Math.max(0, Math.round(gdp * pct));
   if (amount > 0) {
-    await spendFromTreasury(db, countryId, amount, { resyncDerived: true });
+    await spendFromTreasury(db, countryId, amount, {
+      resyncDerived: true,
+      witness: { flow: "crisis_response", site: "livingConflict/globalResponse" },
+    });
   }
   return amount;
 }

@@ -467,6 +467,22 @@ export async function calculateSovereignRolloverAmount(
       defaulted: false,
     })
     .toArray();
+  const budget = await db
+    .collection<Pick<FederalBudget, "_id" | "debt">>("federalBudget")
+    .findOne({ _id: getNationalBudgetId(countryId) }, { projection: { debt: 1 } });
+  return sovereignRolloverFromBonds(activeBonds, budget?.debt?.principal, turn);
+}
+
+/**
+ * Rollover for a country from its live (unmatured, undefaulted) sovereign
+ * bonds and its budget principal. Pure, so a caller holding both for many
+ * countries at once gets the same figure without a read per country.
+ */
+export function sovereignRolloverFromBonds(
+  activeBonds: ReadonlyArray<Pick<Bond, "maturityTurn" | "totalIssued">>,
+  principal: unknown,
+  turn: number
+): number {
   const maturingSoon = activeBonds.filter(
     (bond) =>
       bond.maturityTurn >= turn && bond.maturityTurn < turn + SOVEREIGN_ISSUANCE_INTERVAL_TURNS
@@ -482,10 +498,6 @@ export async function calculateSovereignRolloverAmount(
   // coupons from nothing. Cap the rollover so bonds outstanding after this
   // quarter never exceed the budget's principal. A missing budget keeps the
   // old behaviour (roll everything) so seeds and tests without one still work.
-  const budget = await db
-    .collection<Pick<FederalBudget, "_id" | "debt">>("federalBudget")
-    .findOne({ _id: getNationalBudgetId(countryId) }, { projection: { debt: 1 } });
-  const principal = budget?.debt?.principal;
   const rollover =
     typeof principal === "number" && Number.isFinite(principal)
       ? Math.min(maturingFace, Math.max(0, principal - (activeFace - maturingFace)))
@@ -870,12 +882,23 @@ export async function reconcileSovereignDebt(
 
 export async function settleSovereignBondMaturity(
   db: Db,
-  bond: Pick<Bond, "countryId" | "couponRate" | "totalIssued" | "restructureHaircutPercent">
-): Promise<void> {
-  if (!bond.countryId) return;
+  bond: Pick<
+    Bond,
+    "countryId" | "couponRate" | "totalIssued" | "restructureHaircutPercent" | "currencyCode"
+  >,
+  repaymentLocal = bond.totalIssued
+): Promise<{ amountLocal: number; currencyCode: CurrencyCode } | null> {
+  if (!bond.countryId) return null;
   const budgetId = getNationalBudgetId(bond.countryId);
   const budget = await db.collection<FederalBudget>("federalBudget").findOne({ _id: budgetId });
-  if (!budget) return;
+  if (!budget) return null;
+  const currencyCode = resolveCountryCurrencyCode(budget) ?? COUNTRY_CURRENCY_MAP[bond.countryId];
+  if (bond.currencyCode && bond.currencyCode !== currencyCode) {
+    throw new Error("Sovereign maturity currency differs from its treasury");
+  }
+  if (!Number.isFinite(repaymentLocal) || repaymentLocal < 0) {
+    throw new Error("Sovereign maturity requires a finite nonnegative repayment");
+  }
 
   // Net exactly this bond's outstanding contribution (face minus any restructure
   // haircut, see sovereignPrincipal.ts), not raw face: a haircut bond carries
@@ -891,9 +914,12 @@ export async function settleSovereignBondMaturity(
   const annualCouponCost = (bond.couponRate / 100) * bond.totalIssued;
   const budgetUpdate = applySovereignDebtAdjustment(budget, -maturedFace, -annualCouponCost);
 
-  await db.collection<FederalBudget>("federalBudget").updateOne(
+  const landed = await db.collection<FederalBudget>("federalBudget").updateOne(
     { _id: budgetId },
     {
+      // Rollover issuance credits this same treasury. Redemption must pay its
+      // holders from cash as well as retiring the bond-owned debt stock.
+      $inc: { treasuryBalance: -repaymentLocal },
       $set: {
         debt: budgetUpdate.debt,
         spending: budgetUpdate.spending,
@@ -904,6 +930,7 @@ export async function settleSovereignBondMaturity(
       },
     }
   );
+  return landed.matchedCount === 1 ? { amountLocal: repaymentLocal, currencyCode } : null;
 }
 
 export interface SovereignPrincipalResync {
@@ -1178,7 +1205,24 @@ export async function refreshSovereignDebtTerms(
   db: Db,
   budgetId: FederalBudget["_id"]
 ): Promise<void> {
-  const refreshed = await db.collection<FederalBudget>("federalBudget").findOne({ _id: budgetId });
+  // Only what applySovereignDebtAdjustment reads: the full budget carries an
+  // ever-growing settledKeys list this refresh has no use for.
+  const refreshed = await db.collection<FederalBudget>("federalBudget").findOne(
+    { _id: budgetId },
+    {
+      projection: {
+        debt: 1,
+        "spending.debtInterest": 1,
+        "spending.total": 1,
+        "revenue.total": 1,
+        gdp: 1,
+        gdpSmoothed: 1,
+        sovereignRiskAnchor: 1,
+        imfSovereignBailoutActive: 1,
+        investorConfidence: 1,
+      },
+    }
+  );
   if (refreshed) {
     const terms = applySovereignDebtAdjustment(refreshed, 0, 0);
     await db.collection<FederalBudget>("federalBudget").updateOne(

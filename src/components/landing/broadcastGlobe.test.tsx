@@ -151,7 +151,7 @@ describe("broadcast globe frame writer", () => {
     const outline = container.querySelector("path.ahd-bc-ghost")!;
     api.render(frame());
     expect(outline.getAttribute("d")).toBeNull();
-    api.render(frame({ pathGen: () => "M0 0L1 1" }));
+    api.render(frame({ lines: () => "M0 0L1 1" }));
     expect(outline.getAttribute("d")).toBe("M0 0L1 1");
   });
 

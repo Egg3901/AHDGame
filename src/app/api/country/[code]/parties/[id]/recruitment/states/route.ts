@@ -17,6 +17,7 @@ import { resolvePartyTier } from "@/lib/parties/partyTier";
 import type { State, StatePartyOrg, NPP } from "@/lib/db/types";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getPartyNppCapacity, partyNppCapacityError } from "@/lib/npp/partyCapacity";
+import { activePartyNppFilter } from "@/lib/npp/recruitmentScope";
 
 // GET /api/country/[code]/parties/[id]/recruitment/states — Return eligible states with NPP slot and cost info for recruitment
 // Auth: requireAuthWithCharacter
@@ -68,7 +69,7 @@ export async function GET(
     const nppAgg = await db
       .collection<NPP>("npps")
       .aggregate<{ _id: string; count: number }>([
-        { $match: { party: partyIdStr, retiredAt: null } },
+        { $match: activePartyNppFilter(countryId, partyIdStr) },
         { $group: { _id: "$homeState", count: { $sum: 1 } } },
       ])
       .toArray();

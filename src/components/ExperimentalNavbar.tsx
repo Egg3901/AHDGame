@@ -744,6 +744,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
               <span className="flex h-[30px] w-[30px] items-center justify-center rounded-full bg-white p-0.5 ring-1 ring-white/10">
                 <Image
                   src={CDN_LOGO_URL}
+                  priority
                   unoptimized
                   alt="A House Divided"
                   width={30}
@@ -754,7 +755,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
               <Wordmark
                 typed={typedWordmark}
                 className={`whitespace-nowrap text-base font-bold tracking-tight text-foreground ${
-                  typedWordmark ? "font-mono" : "font-serif"
+                  typedWordmark ? "font-mono" : ""
                 }`}
               />
             </Link>
@@ -1035,6 +1036,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
               <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white p-0.5">
                 <Image
                   src={CDN_LOGO_URL}
+                  priority
                   unoptimized
                   alt="A House Divided"
                   width={28}
@@ -1045,7 +1047,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
               <Wordmark
                 typed={typedWordmark}
                 className={`whitespace-nowrap text-[15px] font-bold tracking-tight text-foreground ${
-                  typedWordmark ? "font-mono" : "font-serif"
+                  typedWordmark ? "font-mono" : ""
                 }`}
               />
             </Link>
@@ -1191,7 +1193,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
                 <div className="flex h-14 shrink-0 items-center justify-between border-b border-card-border px-4">
                   <span
                     className={`text-base font-semibold text-foreground ${
-                      typedWordmark ? "font-mono" : "font-serif"
+                      typedWordmark ? "font-mono" : ""
                     }`}
                   >
                     {WORDMARK}

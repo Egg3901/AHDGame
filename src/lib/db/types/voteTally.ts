@@ -1,4 +1,5 @@
 import type { ObjectId } from "mongodb";
+import type { RankedBallot, PrStvResult } from "@/lib/turn/election/rules/prStv";
 import type { DemocraticHealthElectionSnapshot } from "@/lib/electionEngine/democraticHealth";
 import type { FactorLedgerSnapshot } from "@/lib/electionEngine/factorLedger";
 
@@ -44,6 +45,13 @@ export interface ElectionVoteTally {
   _id: ObjectId;
   electionId: ObjectId;
   state: string;
+  /** Explicit opt-in; absent tallies retain the country's existing allocator. */
+  countingMethod?: "pr_stv";
+  /** Original cast ballots, including preferences for subsequently unavailable candidates. */
+  rankedBallots?: RankedBallot[];
+  rankedPreferenceModel?: "same_party_then_policy_distance_v1";
+  /** Frozen executed count; absent on historical and non-STV results. */
+  prStvResult?: PrStvResult;
   totalVotes: Record<string, number>;
   candidateNames: Record<string, string>;
   candidateParties: Record<string, string>;
@@ -77,6 +85,7 @@ export interface ElectionVoteTally {
   seatsEstimate?: Record<string, number>;
   /** Actual non-presidential resolver receipt. Absent on historical tallies. */
   resolutionPath?:
+    | "pr_stv"
     | "single_winner"
     | "hare_quota"
     | "bg_ordinary_national"

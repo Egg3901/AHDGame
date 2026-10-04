@@ -79,15 +79,16 @@ const BEAM_REST_S = 0.9;
 /** Places a beam may not revisit until this many others have had one. */
 const BEAM_PLACE_COOLDOWN = 3;
 
+/** The dissolved state's outline breathes once its CSS break has run. */
+const GHOST_PULSE_DELAY_S = 3.2;
+const GHOST_PULSE_PERIOD_S = 6;
+
 /** A dateline nearer the limb than this share of the radius is too foreshortened to land on. */
 const BEAM_MAX_INSET = 0.9;
 
 export function broadcastZoomTransform(translate: readonly [number, number], zoom: number): string {
   return `translate(${translate[0]} ${translate[1]}) scale(${zoom})`;
 }
-
-/** A path generator as d3-geo builds one: GeoJSON in, SVG `d` (or null) out. */
-type PathGenerator = (object: unknown) => string | null;
 
 /** Precomputed meshes for a dissolved state. */
 export type DissolvedStateGeometry = {
@@ -135,8 +136,11 @@ export type BroadcastView = {
    * orbiting, but no beam competes with the tour's card. Defaults to true.
    */
   beams?: boolean;
-  /** Present only when the globe itself moved and its borders need redrawing. */
-  pathGen?: PathGenerator;
+  /**
+   * Projects a line mesh for this frame, cut at the horizon. Present only when
+   * the globe itself moved and its borders need redrawing.
+   */
+  lines?: (geometry: MultiLineString) => string;
 };
 
 type Dateline = { place: BroadcastPlace; date: string };
@@ -464,11 +468,20 @@ export function useBroadcastGlobeLayers({
       const seconds = view.now / 1000;
       const radius = globeRadius * view.zoom;
 
+      // The old border breathes, here rather than in CSS so it repaints with
+      // the frame instead of at 60fps on its own. Full strength while the
+      // stylesheet breaks it into dashes, then a slow 6s swell.
+      const breathing = view.animate ? Math.max(0, seconds - GHOST_PULSE_DELAY_S) : 0;
+      el("outline")?.setAttribute(
+        "opacity",
+        fixed(0.65 + 0.25 * Math.cos((2 * Math.PI * breathing) / GHOST_PULSE_PERIOD_S))
+      );
+
       // The dissolved state's borders only move when the globe does.
       const meshes = geometry.current;
-      if (meshes && view.pathGen) {
-        el("outline")?.setAttribute("d", view.pathGen(meshes.outline) ?? "");
-        el("seams")?.setAttribute("d", view.pathGen(meshes.seams) ?? "");
+      if (meshes && view.lines) {
+        el("outline")?.setAttribute("d", view.lines(meshes.outline));
+        el("seams")?.setAttribute("d", view.lines(meshes.seams));
       }
 
       if (lastZoom.current !== view.zoom) {

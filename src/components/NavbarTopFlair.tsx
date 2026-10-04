@@ -24,9 +24,8 @@ function shouldStartSpaBar(anchor: HTMLAnchorElement): boolean {
 }
 
 /**
- * Fixed accent strip: theme tokens via CSS (mix with --background, never `transparent`
- * in color-mix — that can wash out to invisible in sRGB). Indeterminate during client-nav
- * boot or in-flight SPA navigation, then fill → idle.
+ * Page-load indicator: a thin solid bar along the top edge. Nothing shows at rest. It
+ * sweeps while the client boots or a navigation is in flight, then fills and fades out.
  */
 export function NavbarTopFlair({ bootLoading }: { bootLoading: boolean }) {
   const pathname = usePathname();
@@ -102,16 +101,12 @@ export function NavbarTopFlair({ bootLoading }: { bootLoading: boolean }) {
 
   return (
     <div
-      className="pointer-events-none fixed inset-x-0 top-0 z-[100] h-[4px] overflow-hidden"
+      className="pointer-events-none fixed inset-x-0 top-0 z-[100] h-[2px] overflow-hidden"
       aria-hidden
     >
-      {/* Always-present idle base — overlays render on top, revealing this underneath */}
-      <div className="ahd-nav-flair-idle absolute inset-0" />
-
       {mode === "indeterminate" && (
         <div className="ahd-nav-flair-track absolute inset-0 overflow-hidden">
           <div className="ahd-nav-flair-shimmer ahd-nav-flair-sweep" />
-          <div className="ahd-nav-flair-shimmer ahd-nav-flair-shimmer-alt ahd-nav-flair-sweep" />
         </div>
       )}
 

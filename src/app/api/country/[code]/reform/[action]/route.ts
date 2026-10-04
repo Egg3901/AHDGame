@@ -20,6 +20,7 @@
  *   401 — not authenticated
  *   403 — caller is not the sitting leader
  *   409 — action is on cooldown OR already used (constitutional amendment)
+ *         OR the party to legalize is not banned in this country
  *   500 — anything else
  */
 import { NextResponse } from "next/server";
@@ -116,7 +117,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       // Cooldown / one-time-used violations surface as 409 (the action
       // is well-formed; the resource just isn't available right now).
       const msg = err instanceof Error ? err.message : String(err);
-      if (/on cooldown|already used/i.test(msg)) {
+      if (/on cooldown|already used|is not banned/i.test(msg)) {
         return NextResponse.json({ error: msg }, { status: 409 });
       }
       throw err;

@@ -83,6 +83,27 @@ describe("LOC original settlement", () => {
       currencyBalances: { personal: { USD: 150 } },
     });
   });
+  it("a stale knownAbsent hint replays the existing record instead of settling twice", async () => {
+    const db = fixture();
+    await settleLocPlan(db as unknown as Db, "hinted", 5, quote());
+    const replay = await settleLocPlan(db as unknown as Db, "hinted", 5, quote(), {
+      knownAbsent: true,
+    });
+    expect(replay.status).toBe("replayed");
+    expect(replay.result).toEqual({ success: true, amount: 50 });
+    const changed = quote();
+    changed.request.amount = 60;
+    await expect(
+      settleLocPlan(db as unknown as Db, "hinted", 5, changed, { knownAbsent: true })
+    ).rejects.toThrow("different request");
+    expect(db.collection("characters").docs[0]).toMatchObject({
+      currencyBalances: { personal: { USD: 150 } },
+      lineOfCredit: { balances: { USD: 60 } },
+    });
+    expect(db.collection("centralBanks").docs[0]).toMatchObject({ reserveBalance: 10 });
+    expect(db.collection("locLedger").docs).toHaveLength(1);
+    expect(db.collection("bankMoneyMoves").docs).toHaveLength(1);
+  });
   it.each(["character", "reserve", "ledger"])(
     "recovers lost %s acknowledgement without repeating cash or ledger",
     async (point) => {

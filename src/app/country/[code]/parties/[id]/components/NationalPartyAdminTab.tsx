@@ -71,7 +71,7 @@ function AdminAppointmentPanel({
 
   return (
     <div className="rounded-xl border border-card-border bg-card p-6 space-y-4">
-      <h3 className="font-semibold">Leadership Appointment</h3>
+      <h3 className="font-semibold">Leadership appointment</h3>
       <p className="text-xs text-muted/70">
         Directly appoint or vacate any leadership position. Active elections for the affected
         position will be cancelled automatically.
@@ -178,7 +178,7 @@ export function NationalPartyAdminTab({ party, onUpdate }: NationalPartyAdminTab
             />
           </svg>
           <div>
-            <h3 className="font-semibold text-red-400">Admin Controls</h3>
+            <h3 className="font-semibold text-red-400">Admin controls</h3>
             <p className="text-sm text-red-300/80 mt-1">
               These controls allow direct manipulation of the national party. Changes take effect
               immediately.
@@ -218,7 +218,7 @@ export function NationalPartyAdminTab({ party, onUpdate }: NationalPartyAdminTab
               d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
             />
           </svg>
-          <h3 className="font-semibold text-red-400">Danger Zone</h3>
+          <h3 className="font-semibold text-red-400">Danger zone</h3>
         </div>
 
         <div className="rounded-lg border border-red-500/30 bg-background p-4">

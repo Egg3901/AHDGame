@@ -298,7 +298,7 @@ export function NPPManagement() {
       <div className="rounded-xl border border-card-border bg-card p-4 shadow-card">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h3 className="font-serif text-lg text-foreground">NPP Autonomy</h3>
+            <h3 className="text-lg text-foreground">NPP Autonomy</h3>
             <p className="mt-0.5 max-w-xl text-sm text-muted">
               When on, NPPs in disabled or econ-only countries govern themselves — an autonomous
               technocrat runs the central bank toward the dual mandate (and, as later phases ship,

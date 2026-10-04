@@ -871,6 +871,50 @@ describe("resolveOneGeneralElection", () => {
     expect(db.collectionMocks["electedOfficials"]!.insertOne).not.toHaveBeenCalled();
   });
 
+  it("seats a candidacy filed under a since-merged party into the party that absorbed it (ticket 1376)", async () => {
+    const election = makeElection({ electionType: "senate", state: "OH" });
+    const nppId = new ObjectId();
+    const candidate = makeCandidate(election._id, {
+      isNPP: true,
+      nppId,
+      party: "4",
+      characterName: "Andre Ferguson",
+    });
+    const tally = makeTally(election._id, { [candidate._id.toString()]: 1_000 });
+    const fpusaId = new ObjectId();
+    const cupId = new ObjectId();
+
+    db.collectionMocks["electionCandidates"]!.find.mockReturnValue(makeCursor([candidate]));
+    db.collectionMocks["npps"]!.find.mockReturnValue(
+      makeCursor([{ _id: nppId, retiredAt: null, currentOffice: null }])
+    );
+    db.collection("politicalParties");
+    db.collectionMocks["politicalParties"]!.find.mockImplementation(
+      (filter: Record<string, unknown>) =>
+        makeCursor(
+          "mergedIntoPartyId" in filter
+            ? [{ _id: fpusaId, sequentialId: 4, mergedIntoPartyId: cupId }]
+            : [{ _id: cupId, sequentialId: 5 }]
+        )
+    );
+
+    const result = await resolveOneGeneralElection(
+      db as unknown as Db,
+      election,
+      tally,
+      CURRENT_TURN,
+      NOW
+    );
+
+    expect(result.resolved).toBe(true);
+    const nppSet = db.collectionMocks["npps"]!.updateOne.mock.calls.find(
+      (c) => c[0]?._id?.toString() === nppId.toString() && c[1]?.$set?.currentOffice
+    );
+    expect(nppSet?.[1].$set.party).toBe("5");
+    const official = db.collectionMocks["electedOfficials"]!.insertOne.mock.calls[0]?.[0];
+    expect(official).toMatchObject({ party: "5", nppId });
+  });
+
   it("winner notification is sent to the winning character's user", async () => {
     const election = makeElection({ electionType: "senate", state: "FL" });
     const winnerId = new ObjectId();

@@ -18,10 +18,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { cdnStatic, CDN_WORLD_GEO_URL } from "@/lib/images/cdnUrls";
-import { bypassNextImageOptimization } from "@/lib/images/bypassImageOptimization";
-import { SectionLabel } from "@/components/ui/SectionLabel";
-import { Badge } from "@/components/ui";
+import { CDN_WORLD_GEO_URL } from "@/lib/images/cdnUrls";
+import {
+  LANDING_TEXT_LINK_CLASS,
+  LandingSectionHeading,
+} from "@/components/landing/LandingSectionHeading";
 import { getEraConfig } from "@/components/landing/eraThemes";
 import { buildStarfield } from "@/components/landing/globeEnhancements";
 import { getEraFlavorCards } from "@/components/landing/flavorCards";
@@ -33,13 +34,8 @@ import { successorProxiesForYear } from "@/components/landing/countryTiers";
 import { resolveEraCopy, type MarketedWorld } from "@/lib/marketing/marketedWorld";
 import { CookieSettingsLink } from "@/components/CookieSettingsLink";
 import { CrtCountdown, useCrtCountdown } from "./CrtCountdown";
-import {
-  BroadcastBackdrop,
-  BroadcastHeadline,
-  BroadcastKicker,
-  BroadcastTicker,
-  BroadcastTierKey,
-} from "./BroadcastHero";
+import { BroadcastBackdrop, BroadcastHeadline, BroadcastTierKey } from "./BroadcastHero";
+import { EraExplainerLink } from "./EraExplainerLink";
 import { LANDING_FOOTER_SECTIONS, LANDING_TRAY_LINKS } from "./publicLinks";
 import type { GovernmentType } from "@/lib/constants/countries";
 import type { EraNation, EraTileKey } from "@/components/landing/eraThemes";
@@ -78,29 +74,24 @@ const CommunitySupportSection = dynamic(() =>
 type BlocId = "western" | "eastern";
 type TFunc = ReturnType<typeof useTranslations>;
 
-const blocMeta = (t: TFunc): Record<BlocId, { label: string; badge: "info" | "primary" }> => ({
-  western: { label: t("landing.blocs.western"), badge: "info" },
-  eastern: { label: t("landing.blocs.eastern"), badge: "primary" },
+const blocMeta = (t: TFunc): Record<BlocId, { label: string }> => ({
+  western: { label: t("landing.blocs.western") },
+  eastern: { label: t("landing.blocs.eastern") },
 });
 
-/** Playability remains a secondary cue on each chip; primary grouping is bloc. */
-const tierChip = (
-  t: TFunc
-): Record<EraNation["tier"], { label: string; title: string; className: string }> => ({
+/** Playability is a plain word after each nation; the primary grouping is bloc. */
+const tierLabel = (t: TFunc): Record<EraNation["tier"], { label: string; title: string }> => ({
   player: {
     label: t("landing.tiers.playable"),
     title: t("landing.tiers.playableTitle"),
-    className: "text-success",
   },
   econ: {
     label: t("landing.tiers.economy"),
     title: t("landing.tiers.economyTitle"),
-    className: "text-info",
   },
   npp: {
     label: t("landing.tiers.soon"),
     title: t("landing.tiers.soonTitle"),
-    className: "text-muted",
   },
 });
 
@@ -110,13 +101,13 @@ function isEasternBloc(governmentType: GovernmentType | undefined): boolean {
 }
 
 const PRIMARY_BUTTON_CLASSES =
-  "pointer-events-auto inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-4.5 h-11 text-sm font-semibold text-white transition-all duration-150 hover:bg-primary-dark hover:shadow-lg hover:shadow-primary/25 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background";
+  "pointer-events-auto inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-4.5 h-11 text-sm font-semibold text-white transition-all duration-150 hover:bg-primary-dark active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 
 const SECONDARY_BUTTON_CLASSES =
-  "pointer-events-auto inline-flex items-center justify-center gap-1.5 rounded-lg border border-card-border bg-card/80 px-4.5 h-11 text-sm font-medium text-foreground backdrop-blur-sm transition-all duration-150 hover:bg-card hover:border-muted/40 active:scale-[0.98]";
+  "pointer-events-auto inline-flex items-center justify-center gap-1.5 rounded-lg border border-card-border bg-card px-4.5 h-11 text-sm font-medium text-foreground transition-all duration-150 hover:border-muted/40 active:scale-[0.98]";
 
 const GHOST_BUTTON_CLASSES =
-  "pointer-events-auto inline-flex items-center justify-center gap-1.5 rounded-lg px-4.5 h-11 text-sm font-medium text-muted backdrop-blur-sm transition-all duration-150 hover:text-foreground active:scale-[0.98]";
+  "pointer-events-auto inline-flex items-center justify-center gap-1.5 rounded-lg px-4.5 h-11 text-sm font-medium text-muted transition-all duration-150 hover:text-foreground active:scale-[0.98]";
 
 /** Public sideload mirror for the Android beta build;  */
 const ANDROID_BETA_APK_URL = "https://ops.lakesidegames.net/downloads/a-house-divided-0.3.1.apk";
@@ -235,86 +226,34 @@ const defaultTileBodies = (t: TFunc): Record<EraTileKey, string> => ({
   centralBanks: t("landing.tiles.centralBanksBody"),
 });
 
-const TILE_IMAGES = {
-  stateMetrics: "state-metrics",
-  ballot: "ballot-box",
-  bills: "legislative-combat",
-  industrial: "industrial-empires",
-  markets: "global-markets",
-  newsroom: "newsroom",
-  centralBanks: "central-banks",
-  world: "world-1979",
-} as const;
-
 /**
- * Bento tile with a frosted CDN hover image behind the content.
+ * One entry in a landing list: a title, a one-line description and a link
+ * label, set as type with no box. The whole entry is the link target.
  */
-function BentoTile({
-  index,
+function LandingListItem({
   title,
   body,
   href,
-  imageSlug,
-  className,
-  enterLabel,
+  linkLabel,
 }: {
-  index: number;
   title: string;
   body: string;
   href: string;
-  imageSlug: string;
-  className?: string;
-  enterLabel: string;
+  linkLabel: string;
 }) {
-  // This art is decorative (aria-hidden) and only ever visible on hover/focus,
-  // so it is mounted on first hover instead of at page load. The six tile
-  // images total ~888KB — on a touch device, where hover never fires, that was
-  // the largest single block of bytes on the page and nothing was ever shown
-  // for it. Desktop still gets the effect; the fade-in covers decode time.
-  // Perf audit 2026-07-26.
-  const [showArt, setShowArt] = useState(false);
-
   return (
-    <Link
-      href={href}
-      onMouseEnter={() => setShowArt(true)}
-      onFocus={() => setShowArt(true)}
-      className={`group relative flex flex-col overflow-hidden rounded-lg border border-card-border bg-card p-5 shadow-card transition-all duration-150 hover:-translate-y-0.5 hover:border-muted/40 hover:shadow-lg ${className ?? ""}`}
-    >
-      {/* unoptimized: static Cloudflare CDN art — routing through the Railway image optimizer would add egress */}
-      {showArt ? (
-        <Image
-          src={cdnStatic("landing", imageSlug)}
-          alt=""
-          aria-hidden="true"
-          fill
-          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-          loading="lazy"
-          unoptimized={bypassNextImageOptimization(cdnStatic("landing", imageSlug))}
-          onError={(e) => {
-            e.currentTarget.style.display = "none";
-          }}
-          className="pointer-events-none object-cover opacity-0 blur-[3px] transition-opacity duration-300 group-hover:opacity-100"
-        />
-      ) : null}
-      <div
-        className="absolute inset-0 bg-background/55 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
-        aria-hidden="true"
-      />
-      <div className="relative z-10">
-        <div className="mb-2 flex items-center gap-2">
-          <span className="font-mono text-body-xs text-primary">
-            {String(index).padStart(2, "0")}
-          </span>
-          <h3 className="text-heading-sm font-semibold text-foreground">{title}</h3>
-        </div>
-        <p className="text-body leading-relaxed text-muted">{body}</p>
-        <span className="mt-3 inline-flex items-center gap-1 text-body-sm font-medium text-primary transition-transform group-hover:translate-x-0.5">
-          {enterLabel}
+    <li>
+      <Link href={href} className="group block">
+        <h3 className="text-body-lg font-semibold text-foreground group-hover:underline group-hover:underline-offset-4">
+          {title}
+        </h3>
+        <p className="mt-1 text-body leading-relaxed text-muted">{body}</p>
+        <span className="mt-2 inline-flex items-center gap-1 text-body-sm font-medium text-foreground">
+          {linkLabel}
           <span aria-hidden="true">→</span>
         </span>
-      </div>
-    </Link>
+      </Link>
+    </li>
   );
 }
 
@@ -363,8 +302,6 @@ export function SandboxHome({
   // until the deadline, after which both revert to normal behaviour with no
   // deploy needed.
   const countdown = useCrtCountdown();
-  // Deferred hover art for the wide world tile — see BentoTile.
-  const [showWorldArt, setShowWorldArt] = useState(false);
   const l = links(isSignedIn);
 
   // Signal-field star scatter: a full-viewport layer independent of the
@@ -397,7 +334,7 @@ export function SandboxHome({
   const tileBodies = useMemo(() => defaultTileBodies(t), [t]);
   const tileBody = (key: EraTileKey): string => eraConfig.tileBodies?.[key] ?? tileBodies[key];
   const bloc = useMemo(() => blocMeta(t), [t]);
-  const tier = useMemo(() => tierChip(t), [t]);
+  const tier = useMemo(() => tierLabel(t), [t]);
   const footer = useMemo(() => footerNav(t), [t]);
   const tray = useMemo(() => trayNav(t), [t]);
   const learn = useMemo(() => learnLinks(t), [t]);
@@ -518,8 +455,8 @@ export function SandboxHome({
       <div
         id="top"
         className={`pointer-events-none relative z-10 flex h-[100svh] min-h-[560px] flex-col justify-center ${
-          // Centre the copy in the space above the ticker, not behind it.
-          broadcast ? "pb-[calc(12vh+3.75rem)]" : ""
+          // Centre the copy in the space above the tier key, not behind it.
+          broadcast ? "pb-[calc(12vh+1.5rem)]" : ""
         }`}
       >
         {/* Hero copy — fades out of the way during the idle crisis showcase,
@@ -533,7 +470,6 @@ export function SandboxHome({
             <CrtCountdown remaining={countdown} />
             {broadcast ? (
               <>
-                <BroadcastKicker kicker={broadcast.kicker} dateline={broadcast.dateline} />
                 <BroadcastHeadline
                   text={eraConfig.heroHeadline}
                   year={eraConfig.year}
@@ -545,7 +481,7 @@ export function SandboxHome({
               </>
             ) : (
               <>
-                <h1 className="font-display text-display font-bold leading-tight tracking-tight text-foreground">
+                <h1 className="text-display font-bold leading-tight tracking-tight text-foreground">
                   {eraConfig.heroHeadline}
                 </h1>
                 <p className="mt-5 max-w-lg text-body-lg leading-relaxed text-muted">
@@ -553,6 +489,10 @@ export function SandboxHome({
                 </p>
               </>
             )}
+            <EraExplainerLink
+              explainer={eraConfig.explainer}
+              tone={broadcast ? "onDark" : "theme"}
+            />
             {/* Three actions, one shape each: create an account, come back to
                 one, or look around first. The app download lives in the drawer
                 below — it is not a way into the game. */}
@@ -589,12 +529,11 @@ export function SandboxHome({
           <span className="text-body-xs uppercase tracking-widest text-muted">
             {t("landing.scrollCue")}
           </span>
-          <span className="block h-5 w-[1px] animate-pulse bg-muted/60" />
+          <span className="block h-5 w-[1px] bg-muted/60" aria-hidden />
         </div>
 
-        {/* The crawl sits just above the drawer's 12vh overlap, so it is the
-            last thing in the first viewport. It stays up through the idle
-            showcase, the way a crawl outlasts the segment over it. */}
+        {/* The tier key sits just above the drawer's 12vh overlap, so it is
+            the last thing in the first viewport. */}
         {broadcast && (
           <div className="absolute inset-x-0 bottom-[calc(12vh+1rem)]">
             <div className="mx-auto w-full max-w-7xl px-5 sm:px-8">
@@ -602,7 +541,6 @@ export function SandboxHome({
                 hidden={showcaseActive}
                 backgroundIsSimulated={Boolean(backgroundMacroFeatureIds?.length)}
               />
-              <BroadcastTicker label={broadcast.tickerLabel} items={broadcast.ticker} />
             </div>
           </div>
         )}
@@ -615,173 +553,124 @@ export function SandboxHome({
           <span className="h-1.5 w-12 rounded-full bg-muted/40" aria-hidden="true" />
         </div>
 
-        {/* The halls of power */}
+        {/* What you can do: the feature list, then the world in the era's year */}
         <section id="play" className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16">
-          <SectionLabel as="h2">{t("landing.hallsOfPower")}</SectionLabel>
-          <p className="mb-8 max-w-2xl text-body-lg leading-relaxed text-muted">
+          <LandingSectionHeading>{t("landing.hallsOfPower")}</LandingSectionHeading>
+          <p className="mt-2 max-w-2xl text-body-lg leading-relaxed text-muted">
             {eraConfig.playSectionDek}
           </p>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <BentoTile
-              index={1}
+          <ul className="mt-8 grid gap-x-12 gap-y-8 sm:grid-cols-2">
+            <LandingListItem
               title={t("landing.tiles.stateMetrics")}
               body={tileBody("stateMetrics")}
               href={l.tiles.stateMetrics}
-              imageSlug={TILE_IMAGES.stateMetrics}
-              className="lg:row-span-2"
-              enterLabel={t("landing.enter")}
+              linkLabel={t("landing.enter")}
             />
-            <BentoTile
-              index={2}
+            <LandingListItem
               title={t("landing.tiles.ballot")}
               body={tileBody("ballot")}
               href={l.tiles.ballot}
-              imageSlug={TILE_IMAGES.ballot}
-              enterLabel={t("landing.enter")}
+              linkLabel={t("landing.enter")}
             />
-            <BentoTile
-              index={3}
+            <LandingListItem
               title={t("landing.tiles.bills")}
               body={tileBody("bills")}
               href={l.tiles.bills}
-              imageSlug={TILE_IMAGES.bills}
-              enterLabel={t("landing.enter")}
+              linkLabel={t("landing.enter")}
             />
-            <BentoTile
-              index={4}
+            <LandingListItem
               title={t("landing.tiles.industrial")}
               body={tileBody("industrial")}
               href={l.tiles.industrial}
-              imageSlug={TILE_IMAGES.industrial}
-              enterLabel={t("landing.enter")}
+              linkLabel={t("landing.enter")}
             />
-            <BentoTile
-              index={5}
+            <LandingListItem
               title={t("landing.tiles.markets")}
               body={tileBody("markets")}
               href={l.tiles.markets}
-              imageSlug={TILE_IMAGES.markets}
-              enterLabel={t("landing.enter")}
+              linkLabel={t("landing.enter")}
             />
-            <BentoTile
-              index={6}
+            <LandingListItem
               title={t("landing.tiles.newsroom")}
               body={tileBody("newsroom")}
               href={l.tiles.newsroom}
-              imageSlug={TILE_IMAGES.newsroom}
-              enterLabel={t("landing.enter")}
+              linkLabel={t("landing.enter")}
             />
-            {/* Wide world tile with inline tier chips */}
-            <div
-              id="world"
-              onMouseEnter={() => setShowWorldArt(true)}
-              onFocus={() => setShowWorldArt(true)}
-              className="group relative overflow-hidden rounded-lg border border-card-border bg-card p-5 shadow-card sm:col-span-2 lg:col-span-2"
-            >
-              {/* unoptimized: static Cloudflare CDN art — routing through the Railway image optimizer would add egress */}
-              {/* Hover-only decorative art — deferred to first hover, same as
-                  BentoTile above. Perf audit 2026-07-26. */}
-              {showWorldArt ? (
-                <Image
-                  src={cdnStatic("landing", TILE_IMAGES.world)}
-                  alt=""
-                  aria-hidden="true"
-                  fill
-                  sizes="(max-width: 640px) 100vw, 66vw"
-                  loading="lazy"
-                  unoptimized={bypassNextImageOptimization(cdnStatic("landing", TILE_IMAGES.world))}
-                  onError={(e) => {
-                    e.currentTarget.style.display = "none";
-                  }}
-                  className="pointer-events-none object-cover opacity-0 blur-[3px] transition-opacity duration-300 group-hover:opacity-100"
-                />
-              ) : null}
-              <div
-                className="absolute inset-0 bg-background/55 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
-                aria-hidden="true"
-              />
-              <div className="relative z-10">
-                <div className="mb-3 flex items-center gap-2">
-                  <span className="font-mono text-body-xs text-primary">07</span>
-                  <h3 className="text-heading-sm font-semibold text-foreground">
-                    {t("landing.worldInYear", { year: eraConfig.year })}
-                  </h3>
-                </div>
-                <p className="mb-4 text-body leading-relaxed text-muted">
-                  {resolveEraCopy(eraConfig.worldSectionDek, world)}
-                </p>
-                <div className="space-y-3">
-                  {visibleBlocs.map((blocId) => {
-                    const meta = bloc[blocId];
-                    const countries = countriesByBloc[blocId];
-                    const isDimmed = hoveredBloc !== null && hoveredBloc !== blocId;
-                    return (
-                      <div
-                        key={blocId}
-                        className={`transition-opacity duration-200 ${
-                          isDimmed ? "opacity-40" : "opacity-100"
-                        }`}
-                        onMouseEnter={() => setHoveredBloc(blocId)}
-                        onMouseLeave={() => setHoveredBloc(null)}
-                      >
-                        <div className="mb-1.5 flex items-center gap-2">
-                          <Badge color={meta.badge} variant="subtle">
-                            {meta.label}
-                          </Badge>
-                          <span className="text-body-xs text-muted">
-                            {t("landing.nationCount", { count: countries.length })}
-                          </span>
-                        </div>
-                        <div className="flex flex-wrap gap-1.5">
-                          {countries.map((c) => {
-                            const tierMeta = tier[c.tier];
-                            return (
-                              <span
-                                key={c.id}
-                                className={`inline-flex items-center gap-1.5 rounded-full border border-card-border bg-background px-2 py-0.5 text-body-xs text-muted ${
-                                  c.tier === "npp" ? "opacity-70" : ""
-                                }`}
-                              >
-                                {c.name}
-                                <span
-                                  className={`font-medium ${tierMeta.className}`}
-                                  title={tierMeta.title}
-                                >
-                                  · {tierMeta.label}
-                                </span>
-                              </span>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-            <BentoTile
-              index={8}
+            <LandingListItem
               title={t("landing.tiles.centralBanks")}
               body={tileBody("centralBanks")}
               href={l.tiles.centralBanks}
-              imageSlug={TILE_IMAGES.centralBanks}
-              className="lg:col-start-4 lg:row-start-2"
-              enterLabel={t("landing.enter")}
+              linkLabel={t("landing.enter")}
             />
+          </ul>
+
+          {/* The nations of the era, by bloc, each with a plain playability word */}
+          <div id="world" className="mt-12">
+            <h3 className="text-heading font-semibold text-foreground">
+              {t("landing.worldInYear", { year: eraConfig.year })}
+            </h3>
+            <p className="mt-1 max-w-2xl text-body leading-relaxed text-muted">
+              {resolveEraCopy(eraConfig.worldSectionDek, world)}
+            </p>
+            <div className="mt-6 grid gap-x-12 gap-y-8 lg:grid-cols-2">
+              {visibleBlocs.map((blocId) => {
+                const meta = bloc[blocId];
+                const countries = countriesByBloc[blocId];
+                const isDimmed = hoveredBloc !== null && hoveredBloc !== blocId;
+                return (
+                  <div
+                    key={blocId}
+                    className={`transition-opacity duration-200 ${
+                      isDimmed ? "opacity-40" : "opacity-100"
+                    }`}
+                    onMouseEnter={() => setHoveredBloc(blocId)}
+                    onMouseLeave={() => setHoveredBloc(null)}
+                  >
+                    <h4 className="flex flex-wrap items-baseline gap-x-2 text-body font-semibold text-foreground">
+                      {meta.label}
+                      <span className="text-body-sm font-normal text-muted">
+                        {t("landing.nationCount", { count: countries.length })}
+                      </span>
+                    </h4>
+                    <ul className="mt-2 grid gap-x-8 gap-y-1.5 sm:grid-cols-2">
+                      {countries.map((c) => {
+                        const tierMeta = tier[c.tier];
+                        return (
+                          <li
+                            key={c.id}
+                            className="flex items-baseline justify-between gap-3 text-body"
+                          >
+                            <span className={c.tier === "npp" ? "text-muted" : "text-foreground"}>
+                              {c.name}
+                            </span>
+                            <span
+                              className="shrink-0 text-body-sm text-muted"
+                              title={tierMeta.title}
+                            >
+                              {tierMeta.label}
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </section>
 
         {/* Flavor cards carousel */}
-        <section className="border-t border-card-border bg-card-muted/20">
+        <section className="border-t border-card-border">
           <div className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16">
             {/* The carousel is leaders PLUS whatever crises are live in the
                 world right now, so it cannot be headed "Leaders of the era":
                 on a world mid-crisis the section promised portraits and
                 delivered freight reroutes. */}
-            <SectionLabel as="h2">
+            <LandingSectionHeading>
               {t("landing.worldInYear", { year: eraConfig.year })}
-            </SectionLabel>
-            <p className="mb-8 max-w-2xl text-body-lg leading-relaxed text-muted">
+            </LandingSectionHeading>
+            <p className="mb-8 mt-2 max-w-2xl text-body-lg leading-relaxed text-muted">
               {t("landing.carouselDek")}
             </p>
             <FlavorCardCarousel staticCards={getEraFlavorCards(era)} crises={crises} />
@@ -791,27 +680,21 @@ export function SandboxHome({
         {/* Learn the game */}
         <section className="border-t border-card-border">
           <div className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16">
-            <SectionLabel as="h2">{t("landing.learnHeading")}</SectionLabel>
-            <p className="mb-8 max-w-2xl text-body-lg leading-relaxed text-muted">
+            <LandingSectionHeading>{t("landing.learnHeading")}</LandingSectionHeading>
+            <p className="mt-2 max-w-2xl text-body-lg leading-relaxed text-muted">
               {t("landing.learnDek")}
             </p>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <ul className="mt-8 grid gap-x-12 gap-y-8 sm:grid-cols-2">
               {learn.map((item) => (
-                <Link
+                <LandingListItem
                   key={item.href}
+                  title={item.title}
+                  body={item.body}
                   href={item.href}
-                  className="group flex flex-col rounded-lg border border-card-border bg-card p-5 shadow-card transition-all duration-150 hover:-translate-y-0.5 hover:border-muted/40 hover:shadow-lg"
-                >
-                  <h3 className="mb-2 text-heading-sm font-semibold text-foreground">
-                    {item.title}
-                  </h3>
-                  <p className="text-body leading-relaxed text-muted">{item.body}</p>
-                  <span className="mt-3 text-body-sm font-medium text-primary">
-                    {item.cta} <span aria-hidden="true">→</span>
-                  </span>
-                </Link>
+                  linkLabel={item.cta}
+                />
               ))}
-            </div>
+            </ul>
           </div>
         </section>
 
@@ -820,7 +703,7 @@ export function SandboxHome({
         {/* Closing CTA */}
         <section className="border-t border-card-border">
           <div className="mx-auto max-w-7xl px-5 py-16 text-center sm:px-8 sm:py-24">
-            <h2 className="font-display text-heading-lg font-semibold tracking-tight text-foreground sm:text-display">
+            <h2 className="text-heading-lg font-semibold tracking-tight text-foreground sm:text-display">
               {eraConfig.closingHeadline}
             </h2>
             <p className="mx-auto mt-3 max-w-xl text-body-lg text-muted">{eraConfig.closingDek}</p>
@@ -849,20 +732,23 @@ export function SandboxHome({
             to /login, so without this strip the only way off the lander is the
             sign-up form, while a dozen routes are readable with no account.
             Inventory and the "actually anonymous-readable" rule: publicLinks.ts. */}
-        <section className="border-t border-card-border bg-card-muted/20">
+        <section className="border-t border-card-border">
           <div className="mx-auto max-w-7xl px-5 py-12 sm:px-8">
-            <SectionLabel as="h2">{t("landing.tray.heading")}</SectionLabel>
-            <p className="mb-6 max-w-2xl text-body leading-relaxed text-muted">
+            <LandingSectionHeading>{t("landing.tray.heading")}</LandingSectionHeading>
+            <p className="mb-6 mt-2 max-w-2xl text-body leading-relaxed text-muted">
               {t("landing.tray.dek")}
             </p>
-            <nav aria-label={t("landing.tray.navLabel")} className="flex flex-wrap gap-2">
+            <nav
+              aria-label={t("landing.tray.navLabel")}
+              className="flex flex-wrap gap-x-6 gap-y-2 text-body"
+            >
               {tray.map((item) => (
                 <LandingNavLink
                   key={item.href}
                   href={item.href}
                   label={item.label}
                   external={item.external}
-                  className="inline-flex items-center rounded-full border border-card-border bg-card px-3.5 py-1.5 text-body-sm text-muted transition-colors duration-150 hover:border-muted/40 hover:text-foreground"
+                  className={LANDING_TEXT_LINK_CLASS}
                 />
               ))}
             </nav>
@@ -878,9 +764,7 @@ export function SandboxHome({
             >
               {footer.map((col) => (
                 <div key={col.headingKey}>
-                  <h3 className="mb-2 text-body-xs font-semibold uppercase tracking-widest text-muted/80">
-                    {col.heading}
-                  </h3>
+                  <h3 className="mb-2 text-sm font-semibold text-muted/80">{col.heading}</h3>
                   <ul className="space-y-1.5">
                     {col.links.map((link) => (
                       <li key={link.href}>

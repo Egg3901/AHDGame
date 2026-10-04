@@ -207,7 +207,7 @@ function GeneralBlock({
       >
         <div className="flex items-center gap-2">
           <span
-            className={`h-1.5 w-1.5 rounded-full ${result.finalized ? "bg-green-400" : "bg-blue-400 animate-pulse"}`}
+            className={`h-1.5 w-1.5 rounded-full ${result.finalized ? "bg-green-400" : "bg-blue-400"}`}
           />
           <span className="text-xs font-medium">
             {result.finalized ? "Final Results" : "Live Tally"}

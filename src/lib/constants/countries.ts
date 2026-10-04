@@ -46,6 +46,7 @@ import {
 } from "@/lib/countries/ru/runtimeInstitutions";
 import { SE_ERAS } from "@/lib/countries/se/eras";
 import { TR_ERAS } from "@/lib/countries/tr/eras";
+import { UKR_ERAS } from "@/lib/countries/ukr/eras";
 import { UK_ERAS } from "@/lib/countries/uk/eras";
 import { US_ERAS } from "@/lib/countries/us/eras";
 import { YU_ERAS } from "@/lib/countries/yu/eras";
@@ -1283,6 +1284,7 @@ export const ERA_COUNTRY_CONFIG_OVERRIDES: Record<
     DD: DD_ERAS["1953-default"]?.config,
     BLR: BLR_ERAS["1953-default"]?.config,
     BAL: BAL_ERAS["1953-default"]?.config,
+    UKR: UKR_ERAS["1953-default"]?.config,
     // ── Seat-count alignments to *Regions1953 houseDistricts ───────────────
     UK: UK_ERAS["1953-default"]?.config,
     IT: IT_ERAS["1953-default"]?.config,

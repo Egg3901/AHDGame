@@ -6,6 +6,15 @@ import { Skeleton } from "@/components/ui";
 import { countryUrl } from "@/lib/urls";
 import { LocalTime } from "@/components/time/LocalTime";
 import {
+  DenseSection,
+  InlineStatus,
+  Segmented,
+  SmallButton,
+  TableScroll,
+  Td,
+  Th,
+} from "../dense/DenseKit";
+import {
   useBondHistory,
   type BondHistoryDirection,
   type BondHistoryEntry,
@@ -25,8 +34,8 @@ interface BondHistoryPanelProps {
 const TURNS_PER_PAGE = 10;
 
 // Human-readable label for a (type, source, refinance) tuple. Keep grounded
-// in the emit semantics — see src/lib/turn/bondTurn.ts and the bond-default
-// routes.
+// in the emit semantics (see src/lib/turn/bondTurn.ts and the bond-default
+// routes).
 function entryLabel(e: BondHistoryEntry): string {
   if (e.type === "bond_coupon") {
     return e.source === "issuer_coupon" ? "Coupon paid" : "Coupon received";
@@ -61,13 +70,10 @@ function formatAnchor(amount: number): string {
 }
 
 function PartyLink({ party }: { party: BondHistoryParty | null }) {
-  if (!party) return <span className="text-muted italic">—</span>;
+  if (!party) return <span className="text-muted">none</span>;
   if (party.kind === "character" && party.characterId) {
     return (
-      <Link
-        href={`/character/${party.characterId}`}
-        className="text-foreground hover:text-primary hover:underline"
-      >
+      <Link href={`/character/${party.characterId}`} className="text-foreground hover:underline">
         {party.name}
       </Link>
     );
@@ -76,7 +82,7 @@ function PartyLink({ party }: { party: BondHistoryParty | null }) {
     return (
       <Link
         href={`/corporation/${party.corporationId}`}
-        className="text-foreground hover:text-primary hover:underline"
+        className="text-foreground hover:underline"
       >
         {party.name}
       </Link>
@@ -84,10 +90,7 @@ function PartyLink({ party }: { party: BondHistoryParty | null }) {
   }
   if (party.kind === "government" && party.countryId) {
     return (
-      <Link
-        href={countryUrl(party.countryId)}
-        className="text-foreground hover:text-primary hover:underline"
-      >
+      <Link href={countryUrl(party.countryId)} className="text-foreground hover:underline">
         {party.name}
       </Link>
     );
@@ -96,20 +99,16 @@ function PartyLink({ party }: { party: BondHistoryParty | null }) {
 }
 
 function BondLink({ bond }: { bond: BondHistoryBondInfo | null }) {
-  if (!bond) return <span className="text-muted italic">—</span>;
-  const label = `${bond.issuerName} · ${bond.couponRate}% matur T${bond.maturityTurn}`;
+  if (!bond) return <span className="text-muted">none</span>;
+  const label = `${bond.issuerName} ${bond.couponRate}%, due T${bond.maturityTurn}`;
   return (
-    <Link
-      href={`/bond/${bond.bondId}`}
-      className="text-foreground hover:text-primary hover:underline"
-      title={label}
-    >
+    <Link href={`/bond/${bond.bondId}`} className="text-foreground hover:underline" title={label}>
       {label}
     </Link>
   );
 }
 
-function TurnAccordion({ turn, entries }: { turn: number; entries: BondHistoryEntry[] }) {
+function TurnRows({ turn, entries }: { turn: number; entries: BondHistoryEntry[] }) {
   const [open, setOpen] = useState(false);
   const totals = useMemo(() => {
     const incomes = new Map<string, number>();
@@ -141,109 +140,104 @@ function TurnAccordion({ turn, entries }: { turn: number; entries: BondHistoryEn
       if (amt === 0) continue;
       parts.push(formatAmount(amt, ccy));
     }
-    return parts.length ? parts.join(", ") : "—";
+    return parts.join(", ");
   }
 
   const incomeText = summaryText(totals.incomes);
   const paymentText = summaryText(totals.payments);
+  const net = totals.anchorIncome + totals.anchorPayment;
 
   return (
-    <div className="rounded-lg border border-card-border bg-card-elevated/40">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left hover:bg-card-elevated/70 transition-colors"
-      >
-        <div className="flex items-center gap-3">
-          <span
-            className={`inline-flex h-5 w-5 items-center justify-center rounded text-xs transition-transform ${
-              open ? "rotate-90" : ""
-            } text-muted`}
-            aria-hidden
+    <>
+      <tr className="hover:bg-card-elevated/50">
+        <Td numeric={false}>
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            aria-expanded={open}
+            className="inline-flex items-center gap-1.5 font-medium text-foreground hover:underline"
           >
-            ▶
-          </span>
-          <div>
-            <div className="text-sm font-semibold text-foreground">Turn {turn}</div>
-            <div className="text-xs text-muted">
-              {entries.length} {entries.length === 1 ? "event" : "events"}
-            </div>
-          </div>
-        </div>
-        <div className="flex flex-col items-end text-xs tabular-nums">
-          <span className="text-success">+ {incomeText}</span>
-          <span className="text-error">− {paymentText.replace(/^-/, "")}</span>
-          {totals.anchorComplete && (
-            <span
-              className="text-muted mt-0.5"
-              title="Anchor currency (₳) — cross-currency net total summed from each row's anchor snapshot"
-            >
-              ≈ {formatAnchor(totals.anchorIncome + totals.anchorPayment)}
+            <span aria-hidden className="w-2 text-[9px] text-muted">
+              {open ? "▼" : "▶"}
             </span>
-          )}
-        </div>
-      </button>
+            Turn {turn}
+          </button>
+        </Td>
+        <Td align="right">{entries.length}</Td>
+        <Td align="right" className="text-success">
+          {incomeText}
+        </Td>
+        <Td align="right" className="text-error">
+          {paymentText}
+        </Td>
+        <Td
+          align="right"
+          className={net > 0 ? "text-success" : net < 0 ? "text-error" : "text-muted"}
+          title="Anchor currency net, summed from each event's anchor snapshot"
+        >
+          {totals.anchorComplete ? formatAnchor(net) : ""}
+        </Td>
+      </tr>
       {open && (
-        <div className="border-t border-card-border overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs uppercase tracking-wider text-muted">
-                <th className="px-4 py-2 font-medium">Time</th>
-                <th className="px-4 py-2 font-medium">Event</th>
-                <th className="px-4 py-2 font-medium">Counterparty</th>
-                <th className="px-4 py-2 font-medium">Bond</th>
-                <th className="px-4 py-2 font-medium text-right">Amount</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-card-border">
-              {entries.map((e) => {
-                const isIncome = e.amount > 0;
-                const amountClass = isIncome
-                  ? "text-success"
-                  : e.amount < 0
-                    ? "text-error"
-                    : "text-muted";
-                return (
-                  <tr key={e.id} className="align-top">
-                    <td className="px-4 py-2 text-muted whitespace-nowrap">
-                      <LocalTime
-                        value={e.createdAt}
-                        options={{ hour: "2-digit", minute: "2-digit", second: "2-digit" }}
-                      />
-                    </td>
-                    <td className="px-4 py-2">
-                      <div className="font-medium text-foreground">{entryLabel(e)}</div>
-                      {e.units != null && (
-                        <div className="text-xs text-muted">
-                          {e.units.toLocaleString("en-US")} units
-                          {e.couponRate != null && ` @ ${e.couponRate}%`}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-2">
-                      <PartyLink party={e.counterparty} />
-                    </td>
-                    <td className="px-4 py-2">
-                      <BondLink bond={e.bond} />
-                    </td>
-                    <td
-                      className={`px-4 py-2 text-right tabular-nums whitespace-nowrap ${amountClass}`}
-                    >
-                      <div>{formatAmount(e.amount, e.currencyCode)}</div>
-                      {e.bondAmount != null && e.bondCurrency && (
-                        <div className="text-xs text-muted">
-                          ≈ {formatAmount(e.bondAmount, e.bondCurrency)}
-                        </div>
-                      )}
-                    </td>
+        <tr>
+          <td colSpan={5} className="border-b border-card-border/60 bg-card-elevated/30 px-2 pb-2">
+            <TableScroll>
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr>
+                    <Th>Time</Th>
+                    <Th>Event</Th>
+                    <Th>Counterparty</Th>
+                    <Th>Bond</Th>
+                    <Th align="right">Amount</Th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                </thead>
+                <tbody>
+                  {entries.map((e) => (
+                    <tr key={e.id} className="align-top">
+                      <Td className="font-mono text-muted">
+                        <LocalTime
+                          value={e.createdAt}
+                          options={{ hour: "2-digit", minute: "2-digit", second: "2-digit" }}
+                        />
+                      </Td>
+                      <Td>
+                        <span className="text-foreground">{entryLabel(e)}</span>
+                        {e.units != null && (
+                          <span className="ml-2 font-mono text-[11px] text-muted">
+                            {e.units.toLocaleString("en-US")} units
+                            {e.couponRate != null && ` at ${e.couponRate}%`}
+                          </span>
+                        )}
+                      </Td>
+                      <Td>
+                        <PartyLink party={e.counterparty} />
+                      </Td>
+                      <Td>
+                        <BondLink bond={e.bond} />
+                      </Td>
+                      <Td
+                        align="right"
+                        className={
+                          e.amount > 0 ? "text-success" : e.amount < 0 ? "text-error" : "text-muted"
+                        }
+                      >
+                        {formatAmount(e.amount, e.currencyCode)}
+                        {e.bondAmount != null && e.bondCurrency && (
+                          <span className="ml-2 text-[11px] text-muted">
+                            ({formatAmount(e.bondAmount, e.bondCurrency)})
+                          </span>
+                        )}
+                      </Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </TableScroll>
+          </td>
+        </tr>
       )}
-    </div>
+    </>
   );
 }
 
@@ -268,123 +262,106 @@ export default function BondHistoryPanel({ corpId, refreshKey }: BondHistoryPane
     return [...byTurn.entries()].sort((a, b) => b[0] - a[0]);
   }, [entries]);
 
+  const showAll = () => {
+    setDirection("all");
+    setPage(1);
+  };
+
   return (
-    <div className="space-y-4">
-      <div className="rounded-xl border border-card-border bg-card p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-          <div>
-            <h2 className="text-lg font-bold text-foreground">Bond History</h2>
-            <p className="text-xs text-muted">
-              Income and payments from this corporation&apos;s bond activity. Each turn expands into
-              the underlying events. Retention is capped at the financial-ledger window (
-              {windowTurns} turns ≈ 7 days).
-            </p>
-          </div>
-          <div className="flex items-center gap-1 rounded-lg bg-card-elevated p-1 border border-card-border">
-            {(
-              [
-                { key: "all", label: "All" },
-                { key: "income", label: "Income" },
-                { key: "payment", label: "Payments" },
-              ] as { key: BondHistoryDirection; label: string }[]
-            ).map(({ key, label }) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => {
-                  setDirection(key);
-                  setPage(1);
-                }}
-                className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                  direction === key
-                    ? "bg-primary text-white shadow-sm"
-                    : "text-muted hover:text-foreground"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+    <DenseSection
+      title="Bond history"
+      meta={`last ${windowTurns} turns`}
+      actions={
+        <Segmented
+          ariaLabel="Bond history filter"
+          options={[
+            { value: "all", label: "All" },
+            { value: "income", label: "Income" },
+            { value: "payment", label: "Payments" },
+          ]}
+          value={direction}
+          onChange={(key: BondHistoryDirection) => {
+            setDirection(key);
+            setPage(1);
+          }}
+        />
+      }
+    >
+      <p className="py-1 text-xs text-muted">
+        Income and payments from this corporation&apos;s bond activity, one row per turn. Open a
+        turn for the underlying events. History is kept for the financial ledger window (
+        {windowTurns} turns, about 7 days).
+      </p>
+
+      <InlineStatus message={error} tone="error" className="py-1" />
+
+      {loading && (
+        <div className="space-y-1 pt-1">
+          <Skeleton className="h-7 w-full" />
+          <Skeleton className="h-7 w-full" />
+          <Skeleton className="h-7 w-full" />
         </div>
+      )}
 
-        {error && (
-          <div className="rounded-lg border border-error/30 bg-error/10 p-3 text-sm text-error">
-            {error}
-          </div>
-        )}
+      {!loading && !error && grouped.length === 0 && (
+        <div className="flex flex-wrap items-center gap-3 py-2 text-xs text-muted">
+          <span>
+            {totalTurns === 0
+              ? direction === "all"
+                ? `No bond activity in the last ${windowTurns} turns.`
+                : `No ${direction === "income" ? "income" : "payment"} activity in the last ${windowTurns} turns.`
+              : "No matches on this page."}
+          </span>
+          {totalTurns === 0 && direction !== "all" && (
+            <SmallButton onClick={showAll}>Show all bond events</SmallButton>
+          )}
+        </div>
+      )}
 
-        {loading && (
-          <div className="space-y-2">
-            <Skeleton className="h-12 w-full" />
-            <Skeleton className="h-12 w-full" />
-            <Skeleton className="h-12 w-full" />
-          </div>
-        )}
+      {!loading && grouped.length > 0 && (
+        <>
+          <TableScroll>
+            <table className="w-full border-collapse">
+              <thead>
+                <tr>
+                  <Th>Turn</Th>
+                  <Th align="right">Events</Th>
+                  <Th align="right">Income</Th>
+                  <Th align="right">Payments</Th>
+                  <Th align="right" title="Anchor currency net for the turn">
+                    Net (₳)
+                  </Th>
+                </tr>
+              </thead>
+              <tbody>
+                {grouped.map(([turn, turnEntries]) => (
+                  <TurnRows key={turn} turn={turn} entries={turnEntries} />
+                ))}
+              </tbody>
+            </table>
+          </TableScroll>
 
-        {!loading && !error && grouped.length === 0 && (
-          <div className="rounded-md border border-dashed border-card-border p-8 text-center text-sm text-muted">
-            {totalTurns === 0 ? (
-              direction === "all" ? (
-                `No bond activity in the last ${windowTurns} turns.`
-              ) : (
-                <>
-                  <div>
-                    No {direction === "income" ? "income" : "payment"} activity in the last{" "}
-                    {windowTurns} turns.
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDirection("all");
-                      setPage(1);
-                    }}
-                    className="mt-2 text-xs text-primary hover:underline"
-                  >
-                    Switch to All to see other bond events
-                  </button>
-                </>
-              )
-            ) : (
-              "No matches on this page."
-            )}
-          </div>
-        )}
-
-        {!loading && grouped.length > 0 && (
-          <>
-            <div className="space-y-2">
-              {grouped.map(([turn, turnEntries]) => (
-                <TurnAccordion key={turn} turn={turn} entries={turnEntries} />
-              ))}
+          {pageCount > 1 && (
+            <div className="flex items-center justify-between gap-2 pt-2">
+              <SmallButton
+                onClick={() => setPage(Math.max(1, serverPage - 1))}
+                disabled={serverPage <= 1 || loading}
+              >
+                Previous
+              </SmallButton>
+              <span className="text-xs text-muted">
+                Page {serverPage} of {pageCount}, {totalTurns} {totalTurns === 1 ? "turn" : "turns"}
+              </span>
+              <SmallButton
+                onClick={() => setPage(Math.min(pageCount, serverPage + 1))}
+                disabled={serverPage >= pageCount || loading}
+              >
+                Next
+              </SmallButton>
             </div>
-
-            {pageCount > 1 && (
-              <div className="mt-4 flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={() => setPage(Math.max(1, serverPage - 1))}
-                  disabled={serverPage <= 1 || loading}
-                  className="rounded-md border border-card-border px-3 py-1.5 text-sm hover:bg-card-elevated disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  Previous
-                </button>
-                <span className="text-sm text-muted">
-                  Page {serverPage} of {pageCount} · {totalTurns}{" "}
-                  {totalTurns === 1 ? "turn" : "turns"}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setPage(Math.min(pageCount, serverPage + 1))}
-                  disabled={serverPage >= pageCount || loading}
-                  className="rounded-md border border-card-border px-3 py-1.5 text-sm hover:bg-card-elevated disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  Next
-                </button>
-              </div>
-            )}
-          </>
-        )}
-      </div>
-    </div>
+          )}
+        </>
+      )}
+    </DenseSection>
   );
 }

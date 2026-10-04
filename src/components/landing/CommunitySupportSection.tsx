@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { SectionLabel } from "@/components/ui/SectionLabel";
+import { LandingSectionHeading } from "@/components/landing/LandingSectionHeading";
 import { COMMUNITY_DISCORD_URL, COMMUNITY_PATREON_URL } from "@/lib/communityLinks";
 
 type DiscordStats = {
@@ -28,15 +28,6 @@ function PatreonGlyph({ className }: { className?: string }) {
   );
 }
 
-function LiveDot() {
-  return (
-    <span className="relative flex h-2 w-2" aria-hidden="true">
-      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-60" />
-      <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
-    </span>
-  );
-}
-
 function formatCount(value: number): string {
   return value.toLocaleString("en-US");
 }
@@ -55,48 +46,49 @@ function DiscordMemberStat({ stats, loading }: { stats: DiscordStats | null; loa
 
   return (
     <div className="mt-5">
-      <div className="flex items-end gap-2">
-        <p className="font-display text-display font-semibold leading-none tracking-tight text-foreground">
+      <p className="flex items-baseline gap-2">
+        <span className="text-heading-lg font-semibold tabular-nums tracking-tight text-foreground">
           {formatCount(stats.memberCount)}
-        </p>
-        <span className="mb-1 text-body-sm font-medium text-muted">members</span>
-      </div>
-      <p className="mt-2 flex items-center gap-2 text-body-sm text-muted">
-        <LiveDot />
-        <span>
-          <span className="font-medium text-success">{formatCount(stats.onlineCount)}</span> online
-          now
         </span>
+        <span className="text-body text-muted">members</span>
+      </p>
+      <p className="mt-1 text-body text-muted">
+        <span className="font-medium tabular-nums text-foreground">
+          {formatCount(stats.onlineCount)}
+        </span>{" "}
+        online now
       </p>
     </div>
   );
 }
 
+/**
+ * The section's two calls to action share the landing page's button shapes:
+ * joining Discord is the primary one, Patreon support the secondary one.
+ */
 function ExternalCta({
   href,
-  accent,
+  emphasis,
   children,
 }: {
   href: string;
-  accent: "discord" | "patreon";
+  emphasis: "primary" | "secondary";
   children: React.ReactNode;
 }) {
-  const accentClasses =
-    accent === "discord"
-      ? "bg-secondary text-white hover:bg-secondary-dark hover:shadow-secondary/25 focus-visible:ring-secondary"
-      : "bg-gold text-background hover:bg-gold-muted hover:shadow-gold/25 focus-visible:ring-gold";
+  const emphasisClasses =
+    emphasis === "primary"
+      ? "bg-primary text-white hover:bg-primary-dark"
+      : "border border-card-border bg-card text-foreground hover:border-muted/40";
 
   return (
     <a
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className={`group mt-6 inline-flex w-full items-center justify-center gap-2 rounded-lg px-4.5 h-11 text-sm font-semibold transition-all duration-150 hover:shadow-lg active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:w-auto ${accentClasses}`}
+      className={`mt-6 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg px-4.5 text-sm font-semibold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:w-auto ${emphasisClasses}`}
     >
       {children}
-      <span className="transition-transform group-hover:translate-x-0.5" aria-hidden="true">
-        →
-      </span>
+      <span aria-hidden="true">→</span>
       <span className="sr-only"> (opens in new tab)</span>
     </a>
   );
@@ -147,10 +139,10 @@ export function CommunitySupportSection({
   }, [initialStats]);
 
   return (
-    <section className="border-t border-card-border bg-card-muted/20">
+    <section className="border-t border-card-border">
       <div className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16">
-        <SectionLabel as="h2">Join the community</SectionLabel>
-        <p className="mb-8 max-w-2xl text-body-lg leading-relaxed text-muted">
+        <LandingSectionHeading>Join the community</LandingSectionHeading>
+        <p className="mt-2 max-w-2xl text-body-lg leading-relaxed text-muted">
           Meet other players, get help from the team, and help keep the simulation running.
           <span className="store-purchase-cta">
             {" "}
@@ -158,102 +150,49 @@ export function CommunitySupportSection({
           </span>
         </p>
 
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="mt-8 grid grid-cols-1 gap-x-12 gap-y-12 lg:grid-cols-2">
           {/* Discord */}
-          <article className="group relative overflow-hidden rounded-xl border border-card-border bg-card p-6 shadow-card transition-all duration-150 hover:-translate-y-0.5 hover:border-secondary/35 hover:shadow-lg sm:p-7">
-            <div
-              className="pointer-events-none absolute inset-y-0 left-0 w-1 bg-secondary"
-              aria-hidden="true"
-            />
-            <div
-              className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-secondary/10 blur-2xl transition-opacity duration-300 group-hover:opacity-100"
-              aria-hidden="true"
-            />
+          <article>
+            <h3 className="flex items-center gap-2.5 text-heading-sm font-semibold text-foreground">
+              <DiscordGlyph className="h-5 w-5 shrink-0" />
+              Discord
+            </h3>
+            <p className="mt-0.5 text-body-sm text-muted">Official server</p>
+            <p className="mt-4 max-w-md text-body leading-relaxed text-muted">
+              Coordinate campaigns, report bugs, and talk politics with players and admins who are
+              active every day.
+            </p>
 
-            <div className="relative z-10">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <div className="flex items-center gap-2.5">
-                    <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-secondary/30 bg-secondary/10 text-secondary">
-                      <DiscordGlyph className="h-5 w-5" />
-                    </span>
-                    <div>
-                      <h3 className="text-heading-sm font-semibold text-foreground">Discord</h3>
-                      <p className="text-body-xs text-muted">Official server</p>
-                    </div>
-                  </div>
-                  <p className="mt-4 max-w-md text-body leading-relaxed text-muted">
-                    Coordinate campaigns, report bugs, and talk politics with players and admins who
-                    are active every day.
-                  </p>
-                </div>
-              </div>
+            <DiscordMemberStat stats={stats} loading={loading} />
 
-              <DiscordMemberStat stats={stats} loading={loading} />
-
-              <ExternalCta href={COMMUNITY_DISCORD_URL} accent="discord">
-                <DiscordGlyph className="h-4 w-4" />
-                Join Discord
-              </ExternalCta>
-            </div>
+            <ExternalCta href={COMMUNITY_DISCORD_URL} emphasis="primary">
+              <DiscordGlyph className="h-4 w-4" />
+              Join Discord
+            </ExternalCta>
           </article>
 
           {/* Patreon */}
-          <article className="store-purchase-cta group relative overflow-hidden rounded-xl border border-card-border bg-card p-6 shadow-card transition-all duration-150 hover:-translate-y-0.5 hover:border-gold/35 hover:shadow-lg sm:p-7">
-            <div
-              className="pointer-events-none absolute inset-y-0 left-0 w-1 bg-gold"
-              aria-hidden="true"
-            />
-            <div
-              className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-gold/10 blur-2xl transition-opacity duration-300 group-hover:opacity-100"
-              aria-hidden="true"
-            />
+          <article className="store-purchase-cta">
+            <h3 className="flex items-center gap-2.5 text-heading-sm font-semibold text-foreground">
+              <PatreonGlyph className="h-5 w-5 shrink-0" />
+              Patreon
+            </h3>
+            <p className="mt-0.5 text-body-sm text-muted">Support the project</p>
+            <p className="mt-4 max-w-md text-body leading-relaxed text-muted">
+              Optional monthly support helps fund servers and development. Supporters unlock
+              cosmetic perks, ad preferences, and a private channel on Discord.
+            </p>
 
-            <div className="relative z-10">
-              <div className="flex items-center gap-2.5">
-                <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-gold/30 bg-gold/10 text-gold">
-                  <PatreonGlyph className="h-5 w-5" />
-                </span>
-                <div>
-                  <h3 className="text-heading-sm font-semibold text-foreground">Patreon</h3>
-                  <p className="text-body-xs text-muted">Support the project</p>
-                </div>
-              </div>
+            <ul className="mt-5 list-disc space-y-1.5 pl-5 text-body text-muted marker:text-muted">
+              <li>Profile borders and highlight colors</li>
+              <li>Ad-free or player-ad-only browsing</li>
+              <li>Access to #patreon-support on Discord</li>
+            </ul>
 
-              <p className="mt-4 max-w-md text-body leading-relaxed text-muted">
-                Optional monthly support helps fund servers and development. Supporters unlock
-                cosmetic perks, ad preferences, and a private channel on Discord.
-              </p>
-
-              <ul className="mt-5 space-y-2 text-body-sm text-muted">
-                <li className="flex items-start gap-2">
-                  <span
-                    className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-gold"
-                    aria-hidden="true"
-                  />
-                  Profile borders and highlight colors
-                </li>
-                <li className="flex items-start gap-2">
-                  <span
-                    className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-gold"
-                    aria-hidden="true"
-                  />
-                  Ad-free or player-ad-only browsing
-                </li>
-                <li className="flex items-start gap-2">
-                  <span
-                    className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-gold"
-                    aria-hidden="true"
-                  />
-                  Access to #patreon-support on Discord
-                </li>
-              </ul>
-
-              <ExternalCta href={COMMUNITY_PATREON_URL} accent="patreon">
-                <PatreonGlyph className="h-4 w-4" />
-                Support on Patreon
-              </ExternalCta>
-            </div>
+            <ExternalCta href={COMMUNITY_PATREON_URL} emphasis="secondary">
+              <PatreonGlyph className="h-4 w-4" />
+              Support on Patreon
+            </ExternalCta>
           </article>
         </div>
       </div>

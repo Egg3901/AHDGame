@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { SectionLabel } from "@/components/ui";
 import { positionBucketHex } from "@/lib/utils/politics";
 import { policyUrl } from "@/lib/urls";
 import { AxisSpectrumBar } from "./AxisSpectrumBar";
@@ -52,9 +51,15 @@ function EnactedStamp({ enactedYear, enactedAt }: { enactedYear: number; enacted
   );
 }
 
-const formatAvg = (value: number | null) => (value === null ? "—" : value.toFixed(1));
+/** How the national average on the mover's axis moved: "Average -1.1 → -1.2". */
+function averageShift(before: number | null, after: number | null): string {
+  if (before === null && after === null) return "No average yet";
+  if (before === null) return `Average ${after!.toFixed(1)}`;
+  if (after === null) return `Average ${before.toFixed(1)}`;
+  return `Average ${before.toFixed(1)} → ${after.toFixed(1)}`;
+}
 
-function AxisChip({
+function AxisFigure({
   axis,
   value,
   countryId,
@@ -64,22 +69,21 @@ function AxisChip({
   countryId: string;
 }) {
   const european = axis === "economic" && EUROPEAN_COLOUR_COUNTRIES.has(countryId);
-  // Bucket ramp hex — the established chart-colour exception.
+  // Bucket ramp hex, the established chart-colour exception: the word carries
+  // the lean, so it is coloured text with no tinted chip behind it.
   const hex = positionBucketHex(value, axis, european);
   return (
-    <span
-      className="rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold"
-      style={{ color: hex, backgroundColor: `${hex}1f` }}
-    >
-      {axis === "economic" ? "econ" : "social"} {value > 0 ? `+${value}` : value}
+    <span className="font-medium tabular-nums" style={{ color: hex }}>
+      {axis === "economic" ? "Economic" : "Social"} {value > 0 ? `+${value}` : value}
     </span>
   );
 }
 
 /**
- * The lander's National Ideology band: twin R1 spectrum bars with live drift
- * sparklines, the E1 Economic Model placeholder field, and the recent-movers
- * feed — all driven by the national-axes route (equal weight, explicit zeros).
+ * The overview's national ideology section: twin R1 spectrum bars with live
+ * drift sparklines, the E1 economic model field, and the recent movers, all
+ * driven by the national-axes route (equal weight, explicit zeros). A plain
+ * section under a heading, with nothing boxed inside it.
  */
 export function NationalIdeologyBand({
   countryId,
@@ -98,47 +102,46 @@ export function NationalIdeologyBand({
   const hasAnyAxis = axes !== null && (axes.economic !== null || axes.social !== null);
 
   return (
-    <section className="rounded-2xl border border-card-border bg-card p-5 shadow-card sm:p-6">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <SectionLabel>National Ideology</SectionLabel>
-        <span className="text-xs text-muted">
-          {axes && axes.lawCount > 0 ? (
-            <>
-              Average of{" "}
-              <span className="font-semibold text-foreground/80">
-                {axes.lawCount} implemented national {axes.lawCount === 1 ? "law" : "laws"}
-              </span>{" "}
-              · equal weight ·{" "}
-            </>
-          ) : null}
-          <Link
-            href={policyUrl(countryId)}
-            className="font-semibold text-primary transition-colors hover:text-primary-dark"
-          >
-            View National Policy →
-          </Link>
-        </span>
+    <section>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
+        <h2 className="text-heading-lg font-semibold tracking-tight text-foreground">
+          National ideology
+        </h2>
+        <Link
+          href={policyUrl(countryId)}
+          className="text-body font-medium text-foreground underline decoration-card-border underline-offset-4 transition-colors hover:decoration-foreground"
+        >
+          View national policy
+        </Link>
       </div>
+      {axes && axes.lawCount > 0 && (
+        <p className="mt-1 text-body-sm text-muted">
+          Average of{" "}
+          <span className="font-medium text-foreground">
+            {axes.lawCount} implemented national {axes.lawCount === 1 ? "law" : "laws"}
+          </span>
+          , equal weight.
+        </p>
+      )}
 
       {loading ? (
-        <div className="mt-5 grid gap-7 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_0.9fr]" aria-hidden>
-          {[0, 1].map((i) => (
+        <div className="mt-6 grid gap-8 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_0.9fr]" aria-hidden>
+          {[0, 1, 2].map((i) => (
             <div key={i}>
               <div className="mb-2 h-3 w-24 rounded bg-track" />
               <div className="h-1.5 rounded-full bg-track" />
             </div>
           ))}
-          <div className="h-16 rounded-lg border border-dashed border-card-border bg-card-muted" />
         </div>
       ) : !hasAnyAxis ? (
-        <div className="mt-5 grid gap-7 lg:grid-cols-[2fr_0.9fr]">
-          <p className="self-center text-sm italic text-muted">
+        <div className="mt-6 grid gap-8 lg:grid-cols-[2fr_0.9fr]">
+          <p className="self-center text-body text-muted">
             No implemented national laws carry ideology positions yet.
           </p>
           <EconomicModelField countryId={countryId} />
         </div>
       ) : (
-        <div className="mt-5 grid gap-7 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_0.9fr]">
+        <div className="mt-6 grid gap-8 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_0.9fr]">
           <AxisSpectrumBar
             axis="economic"
             value={axes.economic}
@@ -156,13 +159,13 @@ export function NationalIdeologyBand({
       )}
 
       {!loading && (data?.movers.length ?? 0) > 0 && (
-        <div className="mt-5 border-t border-card-border pt-4">
-          <div className="mb-2 flex items-baseline justify-between gap-3">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-muted">
+        <div className="mt-8">
+          <div className="mb-1 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+            <h3 className="text-body-lg font-semibold text-foreground">
               Recently moved the needle
-            </span>
-            <span className="text-xs text-muted">
-              last {data!.movers.length} {data!.movers.length === 1 ? "law" : "laws"} with axis
+            </h3>
+            <span className="text-body-sm text-muted">
+              Last {data!.movers.length} {data!.movers.length === 1 ? "law" : "laws"} with axis
               positions
             </span>
           </div>
@@ -179,24 +182,24 @@ export function NationalIdeologyBand({
               return (
                 <li
                   key={`${mover.typeKey}-${mover.enactedAt}`}
-                  className="grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-1 border-b border-card-border/50 py-2 text-sm last:border-b-0 sm:grid-cols-[110px_1fr_auto_auto] sm:gap-x-4"
+                  className="grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-1 border-b border-card-border/60 py-2.5 text-body last:border-b-0 sm:grid-cols-[120px_1fr_auto_auto] sm:gap-x-4"
                 >
-                  <span className="order-2 font-mono text-[10px] text-muted sm:order-none">
+                  <span className="order-2 text-body-sm tabular-nums text-muted sm:order-none">
                     <EnactedStamp enactedYear={mover.enactedYear} enactedAt={mover.enactedAt} />
                   </span>
-                  <span className="order-1 truncate text-foreground/90 sm:order-none">
+                  <span className="order-1 truncate font-medium text-foreground sm:order-none">
                     {mover.title}
                   </span>
-                  <span className="order-3 flex gap-1.5 sm:order-none">
+                  <span className="order-3 flex gap-3 text-body-sm sm:order-none">
                     {mover.economic !== null && (
-                      <AxisChip axis="economic" value={mover.economic} countryId={countryId} />
+                      <AxisFigure axis="economic" value={mover.economic} countryId={countryId} />
                     )}
                     {mover.social !== null && (
-                      <AxisChip axis="social" value={mover.social} countryId={countryId} />
+                      <AxisFigure axis="social" value={mover.social} countryId={countryId} />
                     )}
                   </span>
-                  <span className="order-4 font-mono text-[10px] text-muted sm:order-none">
-                    avg {formatAvg(before)} → {formatAvg(after)}
+                  <span className="order-4 text-body-sm tabular-nums text-muted sm:order-none">
+                    {averageShift(before, after)}
                   </span>
                 </li>
               );
@@ -208,16 +211,9 @@ export function NationalIdeologyBand({
   );
 }
 
-const BAND_TONE: Record<string, string> = {
-  Mixed: "text-muted",
-  Emerging: "text-warning",
-  Established: "text-primary",
-  Dominant: "text-success",
-};
-
 /**
- * E1 placement (locked): dashed peer of the two axes, showing the country's
- * emergent economic model (P7) + its intensity band. Falls back to "Not yet
+ * E1 placement: the third peer of the two axes, showing the country's emergent
+ * economic model (P7) and its intensity band. Falls back to "Not yet
  * determined" only before the classification phase has run.
  */
 function EconomicModelField({ countryId }: { countryId: string }) {
@@ -242,34 +238,30 @@ function EconomicModelField({ countryId }: { countryId: string }) {
   }, [countryId]);
 
   return (
-    <div className="flex flex-col justify-center rounded-lg border border-dashed border-card-border bg-card-muted px-4 py-3">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-[10px] font-semibold uppercase tracking-widest text-muted">
-          Economic Model
-        </span>
+    <div className="min-w-0">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-body-sm text-muted">Economic model</span>
         {view && (
-          <span className={`text-[11px] font-semibold ${BAND_TONE[view.band] ?? "text-muted"}`}>
+          <span className="text-body-sm tabular-nums text-muted">
             {view.band} · {view.intensity}
           </span>
         )}
       </div>
       {view ? (
         <>
-          <span className="mt-1 text-sm font-semibold text-foreground">{view.currentName}</span>
+          <p className="mt-0.5 text-body-lg font-semibold text-foreground">{view.currentName}</p>
           {view.effects && (
-            <div className="mt-1.5 space-y-0.5 border-t border-card-border/40 pt-1.5 text-[10px] leading-snug text-muted">
+            <div className="mt-2 space-y-1 text-body-sm text-muted">
               {view.signatureSectors[0] && (
                 <div>
-                  <span className="font-semibold text-foreground/80">
-                    {view.signatureSectors[0]}
-                  </span>{" "}
+                  <span className="font-medium text-foreground">{view.signatureSectors[0]}</span>{" "}
                   <Effect v={view.effects.corpMarginFavoredPct} suffix="% margin" /> ·{" "}
                   <Effect v={view.effects.sectorGdpWeightPct} suffix="% GDP wt" />
                 </div>
               )}
               {view.signatureSectors.length > 1 && (
                 <div>
-                  <span className="text-foreground/70">
+                  <span className="text-foreground">
                     {view.signatureSectors.slice(1).join(", ")}
                   </span>{" "}
                   <Effect v={view.effects.corpMarginSecondaryPct} suffix="% margin" /> ·{" "}
@@ -298,18 +290,16 @@ function EconomicModelField({ countryId }: { countryId: string }) {
           )}
         </>
       ) : (
-        <span className="mt-1 text-sm italic text-muted">
-          {loaded ? "Not yet determined" : "…"}
-        </span>
+        <p className="mt-0.5 text-body-lg text-muted">{loaded ? "Not yet determined" : "…"}</p>
       )}
     </div>
   );
 }
 
-/** Signed effect magnitude, colored by direction. Renders "—" (no orphan suffix)
- *  when the value is missing/non-finite. */
+/** Signed effect magnitude, colored by direction. Renders "n/a" (no orphan
+ *  suffix) when the value is missing or non-finite. */
 function Effect({ v, suffix }: { v: number | undefined; suffix: string }) {
-  if (!Number.isFinite(v)) return <span className="text-muted">—</span>;
+  if (!Number.isFinite(v)) return <span className="text-muted">n/a</span>;
   const value = v as number;
   const tone = value > 0 ? "text-success" : value < 0 ? "text-error" : "text-muted";
   return (

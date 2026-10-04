@@ -69,6 +69,7 @@ export async function finalizeCrisisAid(
   await applyCrisisEffects(db, negate(commitment.senderEffects), [], [commitment.senderCountryId]);
   await creditTreasury(db, commitment.senderCountryId, commitment.treasuryDebited, {
     resyncDerived: true,
+    witness: { flow: "crisis_aid", site: "crises/aidFinalize" },
   });
   await incApproval(db, commitment.senderCountryId, -AID_FAILED_PENALTY);
 

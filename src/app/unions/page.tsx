@@ -265,9 +265,7 @@ export default function UnionsPage() {
 
       <section className="space-y-3">
         <div className="flex flex-wrap items-center gap-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">
-            {selectedCountryName} Unions
-          </h2>
+          <h2 className="text-sm font-semibold text-muted">{selectedCountryName} unions</h2>
           {availableCountries.length > 1 && (
             <select
               value={selectedCountry ?? "__all__"}
@@ -283,7 +281,7 @@ export default function UnionsPage() {
               <option value="__all__">All countries</option>
             </select>
           )}
-          <div className="h-px flex-1 bg-gradient-to-r from-card-border to-transparent" />
+          <div className="h-px flex-1 bg-card-border" />
           {!notEnabled && selectedCountry && (
             <button
               type="button"

@@ -3,6 +3,16 @@ import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { applyReinforcement } from "./reinforcement";
 
+const transactionSpy = vi.fn(async (body: (session: object) => Promise<unknown>) => body({}));
+let transactionsAvailable = true;
+
+vi.mock("@/lib/db/runWithOptionalTransaction", () => ({
+  runWithOptionalTransaction: (
+    runInTransaction: (session: object) => Promise<unknown>,
+    runWithoutTransaction: () => Promise<unknown>
+  ) => (transactionsAvailable ? transactionSpy(runInTransaction) : runWithoutTransaction()),
+}));
+
 function unit(over: Record<string, unknown> = {}) {
   return {
     _id: "u1",
@@ -21,6 +31,7 @@ describe("applyReinforcement", () => {
   let db: MockDb;
   beforeEach(() => {
     vi.clearAllMocks();
+    transactionsAvailable = true;
     db = createMockDb();
     db.collection("militaryUnits");
     db.collection("nationalManpower");
@@ -34,7 +45,7 @@ describe("applyReinforcement", () => {
       toArray: vi.fn().mockResolvedValue([{ _id: "CA", population: 10_000_000 }]),
     });
     db.collectionMocks.militaryUnits.find.mockReturnValue({
-      toArray: vi.fn().mockResolvedValue([unit()]),
+      sort: () => ({ toArray: vi.fn().mockResolvedValue([unit()]) }),
     });
   });
 
@@ -44,6 +55,16 @@ describe("applyReinforcement", () => {
     expect(out.reinforced).toBe(1);
     expect(out.drawn).toBeGreaterThan(0);
     expect(db.collectionMocks.militaryUnits.bulkWrite).toHaveBeenCalled();
+    expect(transactionSpy).toHaveBeenCalledOnce();
+  });
+
+  it("continues on standalone Mongo without a transaction session", async () => {
+    transactionsAvailable = false;
+    const out = await applyReinforcement(db as unknown as Db, "US");
+
+    expect(out.reinforced).toBe(1);
+    expect(transactionSpy).not.toHaveBeenCalled();
+    expect(db.collectionMocks.militaryUnits.bulkWrite.mock.calls[0][1]).toBeUndefined();
   });
 
   it("does nothing when the mode is off", async () => {
@@ -76,15 +97,41 @@ describe("applyReinforcement", () => {
       mode: "trained",
     });
     db.collectionMocks.states.find.mockReturnValue({
-      toArray: vi.fn().mockResolvedValue([{ _id: "CA", population: 0 }]),
+      toArray: vi.fn().mockResolvedValue([{ _id: "CA", population: 15_000 }]),
     });
     const out = await applyReinforcement(db as unknown as Db, "US");
     expect(out.drawn).toBeLessThanOrEqual(300);
   });
 
+  it("shares a scarce pool across damaged units instead of favoring natural order", async () => {
+    db.collectionMocks.nationalManpower.findOne.mockResolvedValue({
+      countryId: "US",
+      pool: 300,
+      mode: "trained",
+    });
+    db.collectionMocks.states.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ _id: "CA", population: 15_000 }]),
+    });
+    db.collectionMocks.militaryUnits.find.mockReturnValue({
+      sort: () => ({
+        toArray: vi.fn().mockResolvedValue([unit({ _id: "old" }), unit({ _id: "new" })]),
+      }),
+    });
+
+    await applyReinforcement(db as unknown as Db, "US");
+    const operations = db.collectionMocks.militaryUnits.bulkWrite.mock.calls[0][0];
+    expect(operations).toHaveLength(2);
+    expect(
+      operations.map(
+        (op: { updateOne: { update: { $set: { personnel: number } } } }) =>
+          op.updateOne.update.$set.personnel
+      )
+    ).toEqual([6150, 6150]);
+  });
+
   it("leaves full-strength units alone", async () => {
     db.collectionMocks.militaryUnits.find.mockReturnValue({
-      toArray: vi.fn().mockResolvedValue([unit({ personnel: 12000 })]),
+      sort: () => ({ toArray: vi.fn().mockResolvedValue([unit({ personnel: 12000 })]) }),
     });
     const out = await applyReinforcement(db as unknown as Db, "US");
     expect(out.reinforced).toBe(0);
@@ -97,7 +144,7 @@ describe("applyReinforcement", () => {
       mode: "trained",
     });
     db.collectionMocks.militaryUnits.find.mockReturnValue({
-      toArray: vi.fn().mockResolvedValue([unit({ countryId: "PL" })]),
+      sort: () => ({ toArray: vi.fn().mockResolvedValue([unit({ countryId: "PL" })]) }),
     });
     const out = await applyReinforcement(db as unknown as Db, "PL");
     expect(out.reinforced).toBe(1);

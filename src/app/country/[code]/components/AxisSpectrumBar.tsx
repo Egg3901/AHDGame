@@ -23,37 +23,35 @@ const DRIFT_TREND_THRESHOLD = 0.15;
 
 function driftTrendLabel(axis: "economic" | "social", series: number[]): string {
   const delta = series[series.length - 1] - series[0];
-  if (Math.abs(delta) < DRIFT_TREND_THRESHOLD) return "— steady";
+  if (Math.abs(delta) < DRIFT_TREND_THRESHOLD) return "Steady";
   const ticks = axis === "economic" ? getEconomicAxisTickLabels() : getSocialAxisTickLabels();
-  return `▾ drifting ${(delta < 0 ? ticks.negative : ticks.positive).toLowerCase()}`;
+  return `Drifting ${(delta < 0 ? ticks.negative : ticks.positive).toLowerCase()}`;
 }
 
 /**
- * R1 spectrum bar — the National Ideology renderer locked at design review.
- * Marker dot sits at (value+5)/10 in the bucket colour (bucket hexes are the
- * established chart exception); words come from PositionLabel untouched.
+ * R1 spectrum bar, the national ideology renderer. The marker dot sits at
+ * (value+5)/10 in the bucket colour (bucket hexes are the established chart
+ * exception); words come from PositionLabel untouched.
  */
 export function AxisSpectrumBar({ axis, value, countryId, driftSeries }: AxisSpectrumBarProps) {
   const ticks = axis === "economic" ? getEconomicAxisTickLabels() : getSocialAxisTickLabels();
-  const axisTitle = axis === "economic" ? "Economic Axis" : "Social Axis";
+  const axisTitle = axis === "economic" ? "Economic axis" : "Social axis";
   const european = axis === "economic" && EUROPEAN_COLOUR_COUNTRIES.has(countryId);
   const drift = (driftSeries ?? []).filter((point): point is number => point !== null);
 
   return (
     <div>
-      <div className="mb-1.5 flex items-baseline justify-between gap-2">
-        <span className="text-[10px] font-semibold uppercase tracking-widest text-muted">
-          {axisTitle}
-        </span>
+      <p className="text-body-sm text-muted">{axisTitle}</p>
+      <div className="mb-2 mt-0.5 flex items-baseline justify-between gap-2">
         {value !== null ? (
-          <span className="text-sm font-bold">
+          <span className="text-body-lg font-semibold text-foreground">
             <PositionLabel value={value} axis={axis} countryId={countryId} />{" "}
-            <span className="font-mono text-xs font-medium text-muted">
+            <span className="text-body font-medium tabular-nums text-muted">
               {formatLeanValue(value)}
             </span>
           </span>
         ) : (
-          <span className="text-xs italic text-muted">No positions yet</span>
+          <span className="text-body text-muted">No positions yet</span>
         )}
       </div>
       <div className="relative h-1.5 rounded-full bg-track">
@@ -70,12 +68,12 @@ export function AxisSpectrumBar({ axis, value, countryId, driftSeries }: AxisSpe
           />
         )}
       </div>
-      <div className="mt-1 flex justify-between text-[9px] uppercase tracking-wider text-muted/70">
+      <div className="mt-1 flex justify-between text-body-sm text-muted">
         <span>{ticks.negative}</span>
         <span>{ticks.positive}</span>
       </div>
       {drift.length >= 2 && value !== null && (
-        <div className="mt-2 border-t border-card-border/50 pt-1.5">
+        <div className="mt-3">
           <svg
             viewBox="0 0 100 24"
             preserveAspectRatio="none"
@@ -105,8 +103,8 @@ export function AxisSpectrumBar({ axis, value, countryId, driftSeries }: AxisSpe
               opacity="0.8"
             />
           </svg>
-          <div className="mt-0.5 flex justify-between font-mono text-[9px] text-muted/70">
-            <span>since first recorded law</span>
+          <div className="mt-1 flex justify-between gap-3 text-body-sm text-muted">
+            <span>Since the first recorded law</span>
             <span>{driftTrendLabel(axis, drift)}</span>
           </div>
         </div>

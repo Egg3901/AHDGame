@@ -7,17 +7,17 @@ import { buildBlocPalette, type MapBlocStyle } from "../worldBlocs";
 const DEFAULT_BLOC_PALETTE = buildBlocPalette([]);
 
 /** Category display info */
-const CATEGORY_INFO: Record<MetricCategoryId, { name: string; icon: string }> = {
-  economic: { name: "Economic", icon: "💰" },
-  education: { name: "Education", icon: "🎓" },
-  healthcare: { name: "Healthcare", icon: "❤️" },
-  infrastructure: { name: "Infrastructure", icon: "🏗️" },
-  publicSafety: { name: "Public Safety", icon: "🛡️" },
-  environment: { name: "Environment", icon: "🌿" },
-  social: { name: "Social", icon: "👥" },
-  governance: { name: "Governance", icon: "🏛️" },
-  population: { name: "Population", icon: "📊" },
-  mediaInformation: { name: "Media", icon: "📰" },
+const CATEGORY_INFO: Record<MetricCategoryId, { name: string }> = {
+  economic: { name: "Economic" },
+  education: { name: "Education" },
+  healthcare: { name: "Healthcare" },
+  infrastructure: { name: "Infrastructure" },
+  publicSafety: { name: "Public Safety" },
+  environment: { name: "Environment" },
+  social: { name: "Social" },
+  governance: { name: "Governance" },
+  population: { name: "Population" },
+  mediaInformation: { name: "Media" },
 };
 
 /** Short display names for metrics */
@@ -119,7 +119,7 @@ export default function GlobeMetricPanel({
 
   return (
     <div className="absolute bottom-4 left-4 right-4 z-10 pointer-events-none flex justify-center">
-      <div className="pointer-events-auto max-w-3xl w-full bg-card/95 backdrop-blur-md rounded-xl border border-card-border shadow-lg overflow-hidden">
+      <div className="pointer-events-auto max-w-3xl w-full bg-card rounded-xl border border-card-border shadow-lg overflow-hidden">
         {/* Top row: quick filters */}
         <div className="flex items-center gap-1 px-3 py-2 border-b border-card-border overflow-x-auto scrollbar-none">
           {blocsAvailable && (
@@ -185,7 +185,7 @@ export default function GlobeMetricPanel({
                   className="w-2.5 h-2.5 rounded-sm border border-card-border"
                   style={{ backgroundColor: entry.color }}
                 />
-                <span className="text-[10px] text-muted whitespace-nowrap">{entry.label}</span>
+                <span className="whitespace-nowrap text-body-sm text-muted">{entry.label}</span>
               </span>
             ))}
             {filter.type === "blocs" && (
@@ -194,7 +194,7 @@ export default function GlobeMetricPanel({
                   className="w-2.5 h-2.5 rounded-sm border border-card-border"
                   style={{ backgroundColor: TIER_COLORS.background }}
                 />
-                <span className="text-[10px] text-muted whitespace-nowrap">
+                <span className="whitespace-nowrap text-body-sm text-muted">
                   {TIER_LABELS.background}
                 </span>
               </span>
@@ -248,8 +248,8 @@ function FilterChip({
   return (
     <button
       onClick={onClick}
-      className={`shrink-0 rounded-md font-medium transition-all whitespace-nowrap ${
-        small ? "px-2 py-0.5 text-[10px]" : "px-2.5 py-1 text-[11px]"
+      className={`shrink-0 whitespace-nowrap rounded-md text-body-sm font-medium transition-colors ${
+        small ? "px-2 py-0.5" : "px-2.5 py-1"
       } ${
         active
           ? "bg-primary/20 text-primary border border-primary/30"

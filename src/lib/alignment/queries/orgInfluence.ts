@@ -38,7 +38,7 @@ import { resolveGameYear } from "@/lib/era/era";
 import { getGdpAnchorRate, loadWorldPreset } from "@/lib/currency/gdpAnchorRate";
 import { loadGdpUsdMillionsByEntity } from "@/lib/internationalOrganizations/entityGdp";
 import { getOrganizationFund } from "@/lib/internationalOrganizations/organizationFund";
-import { POINT_COST_GDP_SHARE } from "../influence";
+import { PLAY_MAX_POINTS, POINT_COST_GDP_SHARE } from "../influence";
 import { NON_ALIGNED_RESISTANCE } from "../drift";
 import { isIntOrgAlignmentEnabled } from "../featureFlag";
 import type { AlignmentStatus } from "../project";
@@ -68,18 +68,27 @@ export interface InfluenceTarget {
   /** This org's pole share in the target, 0–100. */
   ourShare: number;
   /**
-   * What one share point that ACTUALLY LANDS costs here, in the fund's own
-   * currency. Null when the target's economy is not on record — the command
-   * refuses those, so the tab must not offer a price it cannot honour.
-   *
-   * This is the delivered price, not the list price: a nation inside the
-   * non-aligned band resists at half strength, so a point costs twice as much
-   * there. Quoting the raw 1%-of-GDP figure would understate the real cost of
-   * the contested nations — the ones actually worth courting — by 2x.
+   * Fund-currency quote adjusted for non-aligned resistance only. Channel
+   * strength, strain, opposing pressure, the turn cap and normalization still
+   * apply. Use previewEffectivePlay for a displayed effective gain, never
+   * amount / pointCostLocal. Null when the target's economy is not on record.
    */
   pointCostLocal: number | null;
-  /** What moving it as far as a turn allows costs, at the delivered price. */
+  /**
+   * Indicative spend at the turn ceiling, before the remaining modifiers above.
+   * Uses the raised flashpoint limit while one is open on this nation.
+   */
   turnCapCostLocal: number | null;
+  /**
+   * Intermediate pressure ceiling in the same resistance-adjusted units as
+   * pointCostLocal. Not an effective share gain and must not be displayed as one.
+   */
+  playMaxPoints: number;
+  /**
+   * The spend that reaches `playMaxPoints`. One play buys nothing past it, rival
+   * or no rival; a second play in the same turn carries its own cap.
+   */
+  playCapCostLocal: number | null;
   /** True when this target resists at half strength (lead within the band). */
   resistsAtHalfStrength: boolean;
   shares: Partial<Record<AlignmentPoleId, number>>;
@@ -123,8 +132,9 @@ export interface InfluencePlayRow {
   amountLocal: number;
   turn: number;
   resolvedTurn: number | null;
-  appliedPoints: number | null;
-  /** Spend returned to the fund because the play resolved at zero points. */
+  /** Null for pending plays or legacy results whose gain was never recorded. */
+  effectivePoints: number | null;
+  /** Spend returned according to existing raw-pull refund rules, not effective gain. */
   refunded: boolean;
 }
 
@@ -132,7 +142,8 @@ export interface RivalIntelEntry {
   /** The rival bloc's pole label — never the org, its fund, or the sponsor. */
   poleLabel: string;
   accentToken: AlignmentPoleToken;
-  pointsLanded: number;
+  /** Attributed effective gain; null means legacy measurement unavailable. */
+  pointsLanded: number | null;
   turnsAgo: number;
 }
 
@@ -321,10 +332,14 @@ export async function loadOrgInfluence(
   // every influence play with the wrong currency normaliser (refs #3778).
   const preset = await loadWorldPreset(db);
   const fundRate = getGdpAnchorRate(base.fundCurrencyCountryId, preset);
-  // Handed to the client so cost figures can follow the display-currency
-  // preference; the same rate the costs below are normalised by, so the two can
-  // never disagree about what a fund unit is worth.
+  // Handed to the client for the display-currency preference. Keep display
+  // denomination separate from the command's spending basis below.
   base.usdToFundRate = fundRate;
+  // Match commitInfluencePlay's localToUsd(country, amount) conversion exactly.
+  // Its spending basis currently uses the default rate, not the display era's
+  // denomination rate above. Quoting the display rate would promise a different
+  // effective gain. Keep this read-only: do not change existing spending rules.
+  const spendRate = getGdpAnchorRate(base.fundCurrencyCountryId);
 
   // Loaded before the targets loop so a target can say whether it is already
   // ours; the members panel below reuses the same rows rather than re-querying.
@@ -391,11 +406,14 @@ export async function loadOrgInfluence(
     // A nation inside the non-aligned band absorbs only half of what is pushed
     // at it, so a point delivered there costs twice the list price.
     const resistsAtHalfStrength = lead <= ALIGNMENT_GATES.nonAligned;
-    const grossPointCost = (targetGdpUsd * POINT_COST_GDP_SHARE) / fundRate;
+    const grossPointCost = (targetGdpUsd * POINT_COST_GDP_SHARE) / spendRate;
     const pointCostLocal =
       targetGdpUsd > 0
         ? Math.round(grossPointCost / (resistsAtHalfStrength ? NON_ALIGNED_RESISTANCE : 1))
         : null;
+
+    const crisis = crisisByTarget.get(standing.entityId) ?? null;
+    const playMaxPoints = PLAY_MAX_POINTS * (resistsAtHalfStrength ? NON_ALIGNED_RESISTANCE : 1);
 
     const ourShare = standing.shares[channelDef.poleId] ?? 0;
     const previousOurShare = standing.previousShares?.[channelDef.poleId];
@@ -424,7 +442,12 @@ export async function loadOrgInfluence(
       ourShare,
       resistsAtHalfStrength,
       pointCostLocal,
-      turnCapCostLocal: pointCostLocal === null ? null : pointCostLocal * PER_NATION_TURN_CAP,
+      turnCapCostLocal:
+        pointCostLocal === null
+          ? null
+          : pointCostLocal * (crisis?.movementCap ?? PER_NATION_TURN_CAP),
+      playMaxPoints,
+      playCapCostLocal: pointCostLocal === null ? null : Math.round(pointCostLocal * playMaxPoints),
       // Null, not zero: a nation already past the gate has nothing left to buy,
       // and a zero would sort it to the top of "cheapest to flip".
       costToGate:
@@ -433,7 +456,7 @@ export async function loadOrgInfluence(
           : Math.round(pointCostLocal * pointsToGate),
       ourShareTrend:
         previousOurShare === undefined ? null : roundToShareGrid(ourShare - previousOurShare),
-      crisis: crisisByTarget.get(standing.entityId) ?? null,
+      crisis,
       sanctionedBy: sanctionsByTarget.get(standing.entityId) ?? [],
       isMember: memberIds.has(standing.entityId),
       joinCountdown,
@@ -450,8 +473,8 @@ export async function loadOrgInfluence(
     .limit(RECENT_LIMIT)
     .toArray();
 
-  // One grouped read for every target rather than a fetch per dossier. Plays
-  // are rare — at most one per org per turn — so this set stays small.
+  // One grouped read for every target rather than a fetch per dossier. Only
+  // plays resolved inside the intel window are read, so this set stays small.
   const intelDocs = await plays
     .find({
       organizationId: { $ne: organizationId },
@@ -464,17 +487,18 @@ export async function loadOrgInfluence(
   for (const doc of intelDocs) {
     if (doc.organizationId === organizationId) continue;
     const intelChannel = topology.channels.find((c) => c.organizationId === doc.organizationId);
-    if (!intelChannel) continue; // stranded by an era crossing; unmappable to a pole
-    const points = doc.appliedPoints ?? 0;
-    if (points <= 0) continue; // resolved at zero is noise, not intelligence
-    const intelPole = topology.poleDefinitions.get(intelChannel.poleId);
+    const intelPoleId = doc.effectivePoleId ?? intelChannel?.poleId;
+    if (!intelPoleId) continue; // legacy play with no recoverable pole
+    if (doc.refunded) continue;
+    const points = doc.effectivePoints;
+    const intelPole = topology.poleDefinitions.get(intelPoleId);
     if (!intelPole) continue;
     // `amountUsd` is deliberately not read here. Withholding a rival's spend is
     // enforced at this boundary so no later UI change can leak fund depth.
     const entry: RivalIntelEntry = {
       poleLabel: intelPole.label,
       accentToken: intelPole.accentToken,
-      pointsLanded: roundToShareGrid(points),
+      pointsLanded: points == null ? null : roundToShareGrid(points),
       turnsAgo: Math.max(0, currentTurn - (doc.resolvedTurn ?? currentTurn)),
     };
     rivalIntel[doc.targetEntityId] = [...(rivalIntel[doc.targetEntityId] ?? []), entry];
@@ -490,7 +514,7 @@ export async function loadOrgInfluence(
     amountLocal: p.amountLocal,
     turn: p.turn,
     resolvedTurn: p.resolvedTurn,
-    appliedPoints: p.appliedPoints,
+    effectivePoints: p.effectivePoints ?? null,
     refunded: p.refunded === true,
   }));
 

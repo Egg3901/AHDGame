@@ -64,22 +64,10 @@ export function GrowthBar({
     setDraft(rate ?? 0);
   }
 
-  const sliderVariant =
-    draft < 0
-      ? ("error" as const)
-      : draft <= 3
-        ? ("primary" as const)
-        : draft <= 8
-          ? ("success" as const)
-          : ("warning" as const);
-  const textColor =
-    draft < 0
-      ? "text-error"
-      : draft <= 3
-        ? "text-primary"
-        : draft <= 8
-          ? "text-success"
-          : "text-warning";
+  // Colour only says whether the target shrinks the sector; the figure says
+  // how much.
+  const sliderVariant = draft < 0 ? ("error" as const) : ("primary" as const);
+  const textColor = draft < 0 ? "text-error" : "text-foreground";
 
   const commit = (value: number) => {
     if (value !== rate) onChange(value);
@@ -87,8 +75,8 @@ export function GrowthBar({
 
   return (
     <div
-      className="flex items-center gap-1.5 min-w-[130px]"
-      title={`Growth target: ${draft}% — over ${GROWTH_RATE_TURNS_PER_YEAR} turns (1 game year); range ${MIN_GROWTH_RATE}%–${MAX_GROWTH_RATE}%`}
+      className="flex min-w-[130px] items-center gap-1.5"
+      title={`Growth target: ${draft}%, over ${GROWTH_RATE_TURNS_PER_YEAR} turns (1 game year); range ${MIN_GROWTH_RATE}% to ${MAX_GROWTH_RATE}%`}
     >
       <Slider
         min={MIN_GROWTH_RATE}
@@ -102,7 +90,9 @@ export function GrowthBar({
         variant={sliderVariant}
         className="flex-1 min-w-0"
       />
-      <span className={`text-[11px] font-bold tabular-nums w-9 text-right shrink-0 ${textColor}`}>
+      <span
+        className={`w-10 shrink-0 text-right font-mono text-[12px] font-medium tabular-nums ${textColor}`}
+      >
         {draft}%
       </span>
     </div>
@@ -110,42 +100,14 @@ export function GrowthBar({
 }
 
 export function GrowthBarReadOnly({ rate }: { rate: number }) {
-  const range = MAX_GROWTH_RATE - MIN_GROWTH_RATE;
-  const fill = Math.max(0, Math.min(1, (rate - MIN_GROWTH_RATE) / range));
-  const barColor =
-    rate < 0
-      ? "bg-error/60"
-      : rate <= 3
-        ? "bg-primary/60"
-        : rate <= 8
-          ? "bg-success/50"
-          : "bg-warning/60";
-  const textColor =
-    rate < 0
-      ? "text-error"
-      : rate <= 3
-        ? "text-primary"
-        : rate <= 8
-          ? "text-success"
-          : "text-warning";
-
+  const textColor = rate < 0 ? "text-error" : "text-foreground";
   return (
-    <div
-      className="inline-flex items-center rounded-md border border-card-border overflow-hidden h-5 min-w-[60px]"
-      title={`Growth target: ${rate}% — applied over ${GROWTH_RATE_TURNS_PER_YEAR} turns (one game year)`}
+    <span
+      className={`font-mono text-[13px] tabular-nums ${textColor}`}
+      title={`Growth target: ${rate}%, applied over ${GROWTH_RATE_TURNS_PER_YEAR} turns (one game year)`}
     >
-      <div className="relative flex-1 h-full bg-card-muted/30">
-        <div
-          className={`absolute top-0 bottom-0 left-0 ${barColor}`}
-          style={{ width: `${fill * 100}%` }}
-        />
-        <span
-          className={`absolute inset-0 flex items-center justify-center text-[10px] font-bold tabular-nums ${textColor} z-10`}
-        >
-          {rate}%
-        </span>
-      </div>
-    </div>
+      {rate}%
+    </span>
   );
 }
 
@@ -158,25 +120,20 @@ export function ActiveRateDisplay({
   targetRate: number;
   align?: "left" | "right";
 }) {
-  const alignment = align === "left" ? "items-start text-left" : "items-end text-right";
-
   return (
-    <div
-      className={`flex flex-col ${alignment}`}
-      title="The growth rate actually applied this turn. It trends toward the target by 0.5pp per turn."
+    <span
+      className={`inline-flex items-center gap-1 ${align === "left" ? "" : "justify-end"}`}
+      title="The growth rate actually applied this turn, per day. It trends toward the target by 0.5pp per turn."
     >
-      <div className="flex items-center gap-1">
-        <span className="text-sm tabular-nums font-medium text-foreground">
-          {currentRate.toFixed(1)}%
+      <span className="font-mono text-[13px] tabular-nums text-foreground">
+        {currentRate.toFixed(1)}%
+      </span>
+      {currentRate !== targetRate && (
+        <span className="text-[10px] text-muted" title="Trending toward target">
+          {currentRate < targetRate ? "↑" : "↓"}
         </span>
-        {currentRate !== targetRate && (
-          <span className="text-[10px] text-primary" title="Trending toward target">
-            {currentRate < targetRate ? "↑" : "↓"}
-          </span>
-        )}
-      </div>
-      <span className="text-[10px] text-muted">/day</span>
-    </div>
+      )}
+    </span>
   );
 }
 
@@ -216,11 +173,9 @@ export function StatusBadge({
     return (
       <InfoTooltip
         trigger={
-          <span className="inline-flex items-center gap-1 rounded border border-error/30 bg-error/10 px-2 py-0.5 text-[10px] font-medium text-error cursor-help max-w-full">
-            <span className="truncate">↩ → {targetName}</span>
-            <span className="tabular-nums font-bold bg-error/20 rounded px-1 py-px shrink-0">
-              {transitionTurnsRemaining}t
-            </span>
+          <span className="inline-flex max-w-full cursor-help items-center gap-1 text-xs text-error">
+            <span className="truncate">Reverting to {targetName}</span>
+            <span className="shrink-0 font-mono tabular-nums">{transitionTurnsRemaining}t</span>
           </span>
         }
         width={220}
@@ -243,11 +198,9 @@ export function StatusBadge({
       <span className="inline-flex items-center gap-1 max-w-full">
         <InfoTooltip
           trigger={
-            <span className="inline-flex items-center gap-1 rounded border border-warning/30 bg-warning/10 px-2 py-0.5 text-[10px] font-medium text-warning cursor-help truncate">
-              <span className="truncate">⟳ → {toName}</span>
-              <span className="tabular-nums font-bold bg-warning/20 rounded px-1 py-px shrink-0">
-                {transitionTurnsRemaining}t
-              </span>
+            <span className="inline-flex max-w-full cursor-help items-center gap-1 truncate text-xs text-warning">
+              <span className="truncate">To {toName}</span>
+              <span className="shrink-0 font-mono tabular-nums">{transitionTurnsRemaining}t</span>
             </span>
           }
           width={240}
@@ -263,11 +216,11 @@ export function StatusBadge({
           <button
             type="button"
             onClick={() => onCancelPendingSet(sector._id)}
-            className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-warning/40 text-[10px] font-bold text-warning hover:bg-warning/20 shrink-0"
-            title={`Cancel transition — costs ${fmtMoney(cancelCostDisplay)}`}
+            className="shrink-0 text-[11px] text-muted underline decoration-card-border underline-offset-2 hover:text-foreground"
+            title={`Cancel transition, costs ${fmtMoney(cancelCostDisplay)}`}
             aria-label="Cancel transition"
           >
-            ×
+            Cancel
           </button>
         )}
       </span>
@@ -276,16 +229,14 @@ export function StatusBadge({
 
   if (!isTransitioning && cooldownRemaining > 0) {
     return (
-      <span className="inline-flex items-center gap-1 rounded border border-muted/30 bg-muted/10 px-2 py-0.5 text-[11px] font-medium text-muted">
-        ⏱ Cooldown
-        <span className="tabular-nums text-[10px] font-bold bg-muted/20 rounded px-1 py-px">
-          {cooldownRemaining}t
-        </span>
+      <span className="inline-flex items-center gap-1 text-xs text-muted">
+        Cooldown
+        <span className="font-mono tabular-nums">{cooldownRemaining}t</span>
       </span>
     );
   }
 
-  return <span className="text-[11px] text-muted/40">—</span>;
+  return null;
 }
 
 export { SECTOR_STRATEGIES };

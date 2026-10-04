@@ -39,10 +39,11 @@ interface MarginsPanelProps {
    *  used to attribute tariff friction to the imported inputs causing it. */
   inputLabels?: string[];
   /**
-   * Plants tier: realized profit over the cost of everything PRODUCED
-   * (plants.truth.fillAdjustedMarginPct). When present it leads and the
-   * effective margin is demoted to a secondary row, because the effective
-   * figure divides by sold revenue only and misleads badly at low fills.
+   * Plants tier: net margin, realized profit over realized revenue after the
+   * cost of everything PRODUCED (plants.truth.fillAdjustedMarginPct). When
+   * present it leads and the effective margin is demoted to a secondary row,
+   * because the effective figure divides by sold revenue only and misleads
+   * badly at low fills.
    */
   fillAdjustedMarginPct?: number | null;
 }
@@ -291,7 +292,7 @@ export default function MarginsPanel({
                 modifier={margins.roadConditionModifier}
                 rawValue={margins.roadCondition}
                 rawUnit=" / 100"
-                tooltip="Good roads (above 60) lower logistics costs (+3% max). Poor roads (below 60) raise them (-3% max). Driven by state infrastructure spending AND the region's own freight capacity — a strong local logistics sector lifts this, a thin one drags it."
+                tooltip="Good roads (above 60) lower logistics costs (+3% max). Poor roads (below 60) raise them (-3% max). Driven by state infrastructure spending AND the region's own freight capacity: a strong local logistics sector lifts this, a thin one drags it."
                 icon={Route}
               />
             )}
@@ -573,15 +574,15 @@ export default function MarginsPanel({
             </div>
           )}
 
-          {/* Margin totals. When the plants tier supplies a fill-adjusted
-              figure (profit over the cost of everything PRODUCED), that number
+          {/* Margin totals. When the plants tier supplies a net margin (profit
+              over revenue, after paying for everything PRODUCED), that number
               leads and the effective margin is demoted to a secondary row: the
               effective figure divides by SOLD revenue only, so at a low fill it
               reads healthy while the sector loses money (ticket #1027 family). */}
           {fillAdjustedMarginPct != null ? (
             <>
               <div className="mt-2 flex items-center justify-between rounded-lg border border-card-border bg-card-elevated px-3 py-2.5">
-                <span className="text-sm font-semibold text-foreground">After unsold output</span>
+                <span className="text-sm font-semibold text-foreground">Net margin</span>
                 <span
                   className={`text-base font-bold tabular-nums ${
                     fillAdjustedMarginPct >= 0 ? "text-success" : "text-error"
@@ -592,7 +593,7 @@ export default function MarginsPanel({
               </div>
               <div
                 className="mt-1.5 flex items-center justify-between px-3"
-                title="Counts only the units that sold. When part of your output goes unsold this number overstates how the sector is really doing. The number above counts everything you made."
+                title="Counts only the units that sold. When part of your output goes unsold this number overstates how the sector is really doing. The net margin above is profit over revenue after paying for everything you made."
               >
                 <span className="text-xs text-muted">Effective margin (sold units only)</span>
                 <span className="text-xs tabular-nums text-muted">{margins.effective}%</span>

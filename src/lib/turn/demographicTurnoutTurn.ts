@@ -47,7 +47,10 @@ import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { DEFAULT_LEGACY_COUNTRY_ID, type CountryId } from "@/lib/constants/countries";
 import { REG_LAG_BELOW_ORG_PCT_BY_COUNTRY } from "./partyOrg/pacingConstants";
 import { loadTxThresholds, emitTxBulk } from "@/lib/financialTxLog/emit";
-import { emitTreasuryTransaction } from "@/lib/treasury/emit";
+import {
+  emitTreasuryTransactionsBulk,
+  type BulkTreasuryTransactionArgs,
+} from "@/lib/treasury/emit";
 import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
 import { isPartyTreasuryNegative, resetPartyBudgetSpending } from "@/lib/partyBudgetGuards";
 import { logger } from "../observability/logger";
@@ -912,7 +915,10 @@ export async function processPartyGOTV(
     }
   }
 
-  // Apply treasury deductions to the correct collections
+  // Apply treasury deductions to the correct collections. The matching
+  // treasury transaction rows are collected in emission order and written with
+  // one insertMany below instead of one insert per party.
+  const treasuryEntries: BulkTreasuryTransactionArgs[] = [];
   if (db && statePartyTreasuryDeductions.size > 0) {
     const ops = [...statePartyTreasuryDeductions.entries()].map(([key, amount]) => ({
       updateOne: {
@@ -925,8 +931,7 @@ export async function processPartyGOTV(
     for (const [key, amount] of statePartyTreasuryDeductions.entries()) {
       const sp = statePartyOrgMap.get(key);
       if (!sp) continue;
-      await emitTreasuryTransaction({
-        db,
+      treasuryEntries.push({
         countryId: sp.countryId ?? "US",
         partyId: sp.partyId,
         holderType: "state_party",
@@ -955,8 +960,7 @@ export async function processPartyGOTV(
 
     for (const [key, amount] of nationalPartyGotvDeductions.entries()) {
       const [cidRaw, seqStr] = key.split(":");
-      await emitTreasuryTransaction({
-        db,
+      treasuryEntries.push({
         countryId: cidRaw as CountryId,
         partyId: seqStr,
         holderType: "party",
@@ -972,8 +976,7 @@ export async function processPartyGOTV(
 
     for (const [key, amount] of nationalPartySuppressionDeductions.entries()) {
       const [cidRaw, seqStr] = key.split(":");
-      await emitTreasuryTransaction({
-        db,
+      treasuryEntries.push({
         countryId: cidRaw as CountryId,
         partyId: seqStr,
         holderType: "party",
@@ -989,8 +992,7 @@ export async function processPartyGOTV(
 
     for (const [key, amount] of nationalPartyRegistrationDeductions.entries()) {
       const [cidRaw, seqStr] = key.split(":");
-      await emitTreasuryTransaction({
-        db,
+      treasuryEntries.push({
         countryId: cidRaw as CountryId,
         partyId: seqStr,
         holderType: "party",
@@ -1003,6 +1005,10 @@ export async function processPartyGOTV(
         now,
       });
     }
+  }
+
+  if (db && treasuryEntries.length > 0) {
+    await emitTreasuryTransactionsBulk(db, treasuryEntries);
   }
 
   if (db && budgetCountryBackfills.size > 0) {

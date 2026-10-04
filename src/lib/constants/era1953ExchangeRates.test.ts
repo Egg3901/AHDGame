@@ -34,7 +34,7 @@ const LOCAL_CURRENCY_1953: CountryId[] = [
 const USD_ANCHORED_1953: CountryId[] = ["IT", "JP", "CN", "NG"];
 
 /** Soviet union republics: GDP authored in Soviet rubles, so they take RU's basis. */
-const SOVIET_RUBLE_1953: CountryId[] = ["BLR", "BAL"];
+const SOVIET_RUBLE_1953: CountryId[] = ["UKR", "BLR", "BAL"];
 
 /**
  * Warsaw-Pact / non-aligned satellites (refs #3778 §1). Budget-only economies —

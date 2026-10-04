@@ -33,9 +33,7 @@ export function RegistrationInfluenceCard({
   if (!breakdown) {
     return (
       <div className="rounded-xl border border-card-border bg-card p-4 shadow-sm">
-        <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-muted">
-          {t("registration.title")}
-        </h3>
+        <h3 className="mb-2 text-sm font-semibold text-muted">{t("registration.title")}</h3>
         <p className="text-xs italic text-muted">
           {t("registration.noData", { state: stateName, stateId })}
         </p>
@@ -46,9 +44,7 @@ export function RegistrationInfluenceCard({
   if (!breakdown.bootstrapped) {
     return (
       <div className="rounded-xl border border-dashed border-card-border bg-card p-4 shadow-sm">
-        <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-muted">
-          {t("registration.title")}
-        </h3>
+        <h3 className="mb-2 text-sm font-semibold text-muted">{t("registration.title")}</h3>
         <p className="text-xs leading-snug">
           {t.rich("registration.populating", {
             b: (chunks) => <span className="font-semibold">{chunks}</span>,
@@ -66,9 +62,7 @@ export function RegistrationInfluenceCard({
   return (
     <div className="rounded-xl border border-card-border bg-card p-4 shadow-sm">
       <div className="mb-2 flex items-baseline justify-between">
-        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">
-          {t("registration.title")}
-        </h3>
+        <h3 className="text-sm font-semibold text-muted">{t("registration.title")}</h3>
         <span className="text-[10px] uppercase tracking-wider text-muted">{stateId}</span>
       </div>
       <p className="mb-3 text-xs text-muted leading-snug">

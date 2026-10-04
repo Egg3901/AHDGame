@@ -141,6 +141,21 @@ export interface Election {
    */
   imposedSnap?: boolean;
   /**
+   * First election after a one-party-state conversion: the former ruling
+   * party's reserved share of each region's seats and, on a forced
+   * conversion, its vote penalty. Stamped by the post-conversion step on the
+   * snap races it opens and applied at resolution
+   * (`@/lib/turn/election/conversionTerms`). Absent on every other election.
+   */
+  conversionTerms?: {
+    /** Former ruling party, as candidates store `party` (its sequentialId). */
+    formerRulingPartyId: string;
+    /** Reserved share of each region's seats, in percent. */
+    legacyReservationPct: number;
+    /** Forced conversions: the party's votes scale by `1 + penalty` (e.g. -0.2). */
+    voteSharePenalty?: number;
+  };
+  /**
    * Scheduled LARP end turn of a regular lower-chamber race spawned on a
    * snap-shifted term clock. The next regular anchors to this plus one term, so
    * a snap resets the calendar for good rather than for a single Parliament.

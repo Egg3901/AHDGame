@@ -36,6 +36,7 @@
 import { isDeepStrictEqual } from "node:util";
 import { ObjectId, type Db, type Filter } from "mongodb";
 import { NET_TOLERANCE, legsNet, type ValueLegKind } from "@/lib/banking/rules/invariants";
+import { validEquityCustodyMutation } from "./rules/equityCustody";
 import { countBankingEvent } from "@/lib/banking/telemetry";
 
 /** Collection holding the claim records. Also the repair queue. */
@@ -174,7 +175,12 @@ export type MoneyMoveClaim =
  * correct place for a flow that stopped half way.
  */
 export async function claimMoneyMove(db: Db, move: MoneyMove): Promise<MoneyMoveClaim> {
-  const legs = move.legs.filter((leg) => Math.max(0, leg.amount) > 0);
+  if (move.legs.some((leg) => leg.kind === "asset" && !validEquityCustodyMutation(leg)))
+    return {
+      status: "rejected",
+      error: "Equity custody must preserve shares without changing cash.",
+    };
+  const legs = move.legs.filter((leg) => Math.max(0, leg.amount) > 0 || leg.kind === "asset");
   if (legs.length === 0) return { status: "claimed", legs: [] };
 
   const net = legsNet(legs);
@@ -267,6 +273,7 @@ export async function completeMoneyMove(
 export async function applyMoneyMove(db: Db, move: MoneyMove): Promise<MoneyMoveResult> {
   const invalid = move.legs.find((leg) => {
     if (!Number.isFinite(leg.amount) || leg.amount < 0) return true;
+    if (leg.kind === "asset") return !validEquityCustodyMutation(leg);
     if (leg.kind === "mint" || leg.kind === "burn" || leg.amount === 0) return false;
     return (
       !leg.collection ||
@@ -285,8 +292,8 @@ export async function applyMoneyMove(db: Db, move: MoneyMove): Promise<MoneyMove
   const prepared = move.legs.map((leg) => ({ ...leg }));
   const unbound = prepared.filter(
     (leg) =>
-      leg.amount > 0 &&
-      (leg.kind === "debit" || leg.kind === "credit") &&
+      (leg.amount > 0 || leg.kind === "asset") &&
+      (leg.kind === "debit" || leg.kind === "credit" || leg.kind === "asset") &&
       !(
         typeof leg.filter?._id === "string" ||
         typeof leg.filter?._id === "number" ||
@@ -356,10 +363,10 @@ export function legStamp(key: string, index: number): string {
   return `${key}#leg${index}`;
 }
 
-/** Debits first, then everything else, each group in the caller's order. */
+/** Debits, equity custody, then credits, each group in the caller's order. */
 function legOrder(legs: { kind: MoneyMoveLegKind }[]): number[] {
   return [...legs.keys()].sort((a, b) => {
-    const rank = (k: number) => (legs[k].kind === "debit" ? 0 : 1);
+    const rank = (k: number) => (legs[k].kind === "debit" ? 0 : legs[k].kind === "asset" ? 1 : 2);
     return rank(a) - rank(b) || a - b;
   });
 }
@@ -446,9 +453,11 @@ async function applyLeg(
     );
     return null;
   }
-  if (!leg.collection || !leg.path || leg.filter?._id === undefined)
+  if (!leg.collection || (leg.kind !== "asset" && !leg.path) || leg.filter?._id === undefined)
     return `Leg ${i} of ${key} requires a stable target id; reconcile by hand.`;
-  if ([leg.path, ...Object.keys(leg.set ?? {})].some(reservedLegPath))
+  if (leg.kind === "asset" && !validEquityCustodyMutation(leg))
+    return `Leg ${i} of ${key} is not a valid equity custody update.`;
+  if ([...(leg.path ? [leg.path] : []), ...Object.keys(leg.set ?? {})].some(reservedLegPath))
     return `Leg ${i} of ${key} attempts to change reserved settlement metadata.`;
 
   const target = db.collection<LegTarget>(leg.collection);
@@ -502,11 +511,14 @@ async function applyLeg(
         $and: [
           leg.filter,
           guard,
-          ...(leg.kind === "debit" ? [{ [leg.path]: { $gte: amount } }] : []),
+          ...(leg.kind === "debit" ? [{ [leg.path!]: { $gte: amount } }] : []),
         ],
       } as Filter<LegTarget>,
       {
-        $inc: { [leg.path]: leg.kind === "debit" ? -amount : amount, [LEG_REVISION]: 1 },
+        $inc: {
+          ...(leg.kind === "asset" ? {} : { [leg.path!]: leg.kind === "debit" ? -amount : amount }),
+          [LEG_REVISION]: 1,
+        },
         $set: { updatedAt: new Date(), ...leg.set, [PENDING_LEG]: delivered },
         $push: { settledKeys: { $each: [stamp], $slice: -SETTLED_KEYS_CAP } },
       }

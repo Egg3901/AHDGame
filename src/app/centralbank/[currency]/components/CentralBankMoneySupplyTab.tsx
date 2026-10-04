@@ -8,6 +8,22 @@ import type { CountryId } from "@/lib/constants/countries";
 import { Button } from "@/components/ui";
 import { formatNativeCurrency } from "./centralBankUtils";
 import type { MoneySupplyView } from "./centralBankTypes";
+import { CentralBankFigure, CentralBankRow, CentralBankSection } from "./CentralBankSection";
+
+/** Monetary operation and committee decision names, in sentence case. */
+const OPERATION_LABEL: Record<string, string> = {
+  qe: "QE",
+  qt: "QT",
+  treasury_advance: "Treasury advance",
+  liquidity_injection: "Liquidity injection",
+};
+
+function operationLabel(type: string): string {
+  const known = OPERATION_LABEL[type];
+  if (known) return known;
+  const words = type.replaceAll("_", " ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
 
 export function CentralBankMoneySupplyTab({
   countryId,
@@ -66,9 +82,7 @@ export function CentralBankMoneySupplyTab({
         if ([400, 403, 409, 422].includes(response.status)) pendingOperation.current = null;
         throw new Error(json.error ?? "Monetary operation failed");
       }
-      setMessage(
-        `${type.replaceAll("_", " ").toUpperCase()} completed: ${fmt(json.operation.amount)}`
-      );
+      setMessage(`${operationLabel(type)} completed: ${fmt(json.operation.amount)}`);
       pendingOperation.current = null;
       setValue("");
       setReason("");
@@ -97,23 +111,32 @@ export function CentralBankMoneySupplyTab({
   ] as const;
 
   return (
-    <div className="space-y-6 pb-16">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat label="M1 · spendable money" value={fmt(data.m1)} />
-        <Stat label="M2 · spendable money plus savings" value={fmt(data.m2)} />
-        <Stat
+    <div className="space-y-12 pb-16">
+      <div className="grid grid-cols-2 gap-x-8 gap-y-5 lg:grid-cols-4">
+        <CentralBankFigure label="M1 · spendable money" value={fmt(data.m1)} size="lg" />
+        <CentralBankFigure
+          label="M2 · spendable money plus savings"
+          value={fmt(data.m2)}
+          size="lg"
+        />
+        <CentralBankFigure
           label="Annualized M2 growth"
           value={
             growth == null
               ? t("money.collecting")
               : `${growth >= 0 ? "+" : ""}${growth.toFixed(2)}%`
           }
+          size="lg"
         />
-        <Stat label="Credit outstanding" value={fmt(data.creditOutstanding)} />
+        <CentralBankFigure
+          label="Credit outstanding"
+          value={fmt(data.creditOutstanding)}
+          size="lg"
+        />
       </div>
 
       {growth == null && (
-        <p className="rounded-xl border border-card-border bg-card p-4 text-sm text-muted">
+        <p className="-mt-6 max-w-3xl text-body text-muted">
           {t(
             data.accountingVersion === MONEY_ACCOUNTING_VERSION
               ? "money.transition"
@@ -121,18 +144,15 @@ export function CentralBankMoneySupplyTab({
           )}
         </p>
       )}
-      <div className="grid gap-6 lg:grid-cols-2">
-        <section className="rounded-xl border border-card-border bg-card p-5">
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">
-            Monetary stock · turn {data.turn}
-          </h2>
-          <p className="mt-2 text-xs text-muted">{t("money.stockExplanation")}</p>
-          <div className="mt-4 divide-y divide-card-border">
+
+      <div className="grid gap-x-12 gap-y-12 lg:grid-cols-2">
+        <CentralBankSection
+          title={`Monetary stock · turn ${data.turn}`}
+          meta={t("money.stockExplanation")}
+        >
+          <div>
             {components.map(([label, amount]) => (
-              <div key={label} className="flex justify-between gap-4 py-2 text-sm">
-                <span className="text-muted">{label}</span>
-                <span className="font-mono tabular-nums">{fmt(amount)}</span>
-              </div>
+              <Row key={label} label={label} value={fmt(amount)} />
             ))}
           </div>
           {(data.estimatedHouseholdLiquid != null || data.estimatedHouseholdSavings != null) && (
@@ -147,48 +167,46 @@ export function CentralBankMoneySupplyTab({
               />
             </div>
           )}
-        </section>
+        </CentralBankSection>
 
-        <section className="rounded-xl border border-card-border bg-card p-5">
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">
-            Bonds, reserves and issuance
-          </h2>
-          <div className="mt-4 divide-y divide-card-border">
+        <CentralBankSection title="Bonds, reserves and issuance">
+          <div>
             <Row label="Sovereign bonds outstanding" value={fmt(data.sovereignBondsOutstanding)} />
             <Row label="Central-bank bond holdings" value={fmt(data.centralBankBondHoldings)} />
             <Row label="Lending reserves" value={fmt(data.bankReserves)} />
             <Row label="Net explicit money creation" value={fmt(data.netMoneyCreatedLifetime)} />
           </div>
-          <p className="mt-4 text-xs text-muted">
+          <p className="mt-4 text-body-sm text-muted">
             Selling bonds is how the government pays for itself. Buying government bonds back off
             the market creates new money. Selling them again destroys it. A direct advance to the
             Treasury creates spendable money straight away. Lending more to banks only becomes money
             in circulation once someone actually borrows it.
           </p>
-        </section>
+        </CentralBankSection>
       </div>
 
       {data.lastPolicyEvaluation && (
-        <section className="rounded-xl border border-card-border bg-card p-5">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">
-              Monetary committee assessment · turn {data.lastPolicyEvaluation.turn}
-            </h2>
-            <span className="rounded-full border border-card-border px-2 py-1 text-xs font-semibold uppercase">
-              {data.lastPolicyEvaluation.decision.replaceAll("_", " ")}
+        <CentralBankSection
+          title={`Monetary committee assessment · turn ${data.lastPolicyEvaluation.turn}`}
+          action={
+            <span className="text-body font-semibold text-foreground">
+              {operationLabel(data.lastPolicyEvaluation.decision)}
             </span>
-          </div>
-          <p className="mt-3 text-sm">{data.lastPolicyEvaluation.rationale}</p>
-          <div className="mt-4 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
-            <Assessment
+          }
+        >
+          <p className="max-w-3xl text-body text-foreground">
+            {data.lastPolicyEvaluation.rationale}
+          </p>
+          <div className="mt-5 grid grid-cols-2 gap-x-8 gap-y-5 lg:grid-cols-4">
+            <CentralBankFigure
               label="Inflation / target"
               value={`${data.lastPolicyEvaluation.inflation.toFixed(2)}% / ${data.lastPolicyEvaluation.targetInflation.toFixed(2)}%`}
             />
-            <Assessment
+            <CentralBankFigure
               label="Real GDP growth"
               value={`${data.lastPolicyEvaluation.gdpGrowth.toFixed(2)}%`}
             />
-            <Assessment
+            <CentralBankFigure
               label={`Annualized M2 growth${data.lastPolicyEvaluation.moneyGrowthReliable ? "" : " · provisional"}`}
               value={
                 policyGrowth == null || !data.lastPolicyEvaluation.moneyGrowthReliable
@@ -196,125 +214,99 @@ export function CentralBankMoneySupplyTab({
                   : `${policyGrowth.toFixed(2)}%`
               }
             />
-            <Assessment
+            <CentralBankFigure
               label="Lending reserves"
               value={fmt(data.lastPolicyEvaluation.bankReserves)}
             />
           </div>
-        </section>
+        </CentralBankSection>
       )}
 
       {canOperate && (
-        <form onSubmit={submit} className="rounded-xl border border-primary/30 bg-card p-5">
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-primary">
-            Monetary operation
-          </h2>
-          <div className="mt-4 grid gap-3 md:grid-cols-4">
-            <select
-              value={type}
-              onChange={(event) => setType(event.target.value as typeof type)}
-              className="rounded-md border border-card-border bg-background px-3 py-2 text-sm"
-            >
-              <option value="qe">Buy government bonds (QE)</option>
-              <option value="qt">Sell government bonds (QT)</option>
-              <option value="treasury_advance">Lend directly to the Treasury</option>
-              <option value="liquidity_injection">Lend more to banks</option>
-            </select>
-            {isBondOperation && (
+        <form onSubmit={submit}>
+          <CentralBankSection title="Monetary operation">
+            <div className="grid gap-3 md:grid-cols-4">
               <select
-                value={bondId}
-                onChange={(event) => setBondId(event.target.value)}
-                className="rounded-md border border-card-border bg-background px-3 py-2 text-sm"
+                value={type}
+                onChange={(event) => setType(event.target.value as typeof type)}
+                className="rounded-md border border-card-border bg-background px-3 py-2 text-body"
               >
-                {data.eligibleBonds.map((bond) => (
-                  <option key={bond._id} value={bond._id}>
-                    {bond.issuerName ?? "Sovereign"} · {bond.couponRate.toFixed(2)}% · T
-                    {bond.maturityTurn}
-                  </option>
-                ))}
+                <option value="qe">Buy government bonds (QE)</option>
+                <option value="qt">Sell government bonds (QT)</option>
+                <option value="treasury_advance">Lend directly to the Treasury</option>
+                <option value="liquidity_injection">Lend more to banks</option>
               </select>
-            )}
-            <input
-              type="number"
-              min="1"
-              step="1"
-              required
-              value={value}
-              onChange={(event) => setValue(event.target.value)}
-              placeholder={isBondOperation ? "Bond units" : `Amount (${data.currencyCode})`}
-              className="rounded-md border border-card-border bg-background px-3 py-2 text-sm"
-            />
-            <input
-              value={reason}
-              onChange={(event) => setReason(event.target.value)}
-              placeholder="Policy rationale"
-              maxLength={240}
-              className="rounded-md border border-card-border bg-background px-3 py-2 text-sm"
-            />
-          </div>
-          <div className="mt-4 flex items-center gap-3">
-            <Button type="submit" disabled={busy || (isBondOperation && !bondId)}>
-              {busy ? "Executing…" : "Execute operation"}
-            </Button>
-            {message && <p className="text-xs text-success">{message}</p>}
-            {error && <p className="text-xs text-error">{error}</p>}
-          </div>
+              {isBondOperation && (
+                <select
+                  value={bondId}
+                  onChange={(event) => setBondId(event.target.value)}
+                  className="rounded-md border border-card-border bg-background px-3 py-2 text-body"
+                >
+                  {data.eligibleBonds.map((bond) => (
+                    <option key={bond._id} value={bond._id}>
+                      {bond.issuerName ?? "Sovereign"} · {bond.couponRate.toFixed(2)}% · turn{" "}
+                      {bond.maturityTurn}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <input
+                type="number"
+                min="1"
+                step="1"
+                required
+                value={value}
+                onChange={(event) => setValue(event.target.value)}
+                placeholder={isBondOperation ? "Bond units" : `Amount (${data.currencyCode})`}
+                className="rounded-md border border-card-border bg-background px-3 py-2 text-body"
+              />
+              <input
+                value={reason}
+                onChange={(event) => setReason(event.target.value)}
+                placeholder="Policy rationale"
+                maxLength={240}
+                className="rounded-md border border-card-border bg-background px-3 py-2 text-body"
+              />
+            </div>
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <Button type="submit" disabled={busy || (isBondOperation && !bondId)}>
+                {busy ? "Executing…" : "Execute operation"}
+              </Button>
+              {message && <p className="text-body-sm text-success">{message}</p>}
+              {error && <p className="text-body-sm text-error">{error}</p>}
+            </div>
+          </CentralBankSection>
         </form>
       )}
 
-      <section className="rounded-xl border border-card-border bg-card p-5">
-        <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">
-          Recent policy operations
-        </h2>
-        <div className="mt-3 space-y-2">
+      <CentralBankSection title="Recent policy operations">
+        <div>
           {[...data.operations]
             .reverse()
             .slice(0, 12)
             .map((operation, index) => (
               <div
                 key={`${operation.turn}:${operation.type}:${index}`}
-                className="flex flex-wrap items-center justify-between gap-2 border-b border-card-border py-2 text-sm"
+                className="flex flex-wrap items-center justify-between gap-2 border-b border-card-border/60 py-2 text-body"
               >
                 <span>
-                  T{operation.turn} · {operation.type.replaceAll("_", " ").toUpperCase()} ·{" "}
-                  {operation.actorName}
+                  Turn {operation.turn} · {operationLabel(operation.type)} · {operation.actorName}
                 </span>
-                <span className="font-mono">{fmt(operation.amount)}</span>
+                <span className="font-mono tabular-nums">{fmt(operation.amount)}</span>
                 {operation.reason && (
-                  <span className="w-full text-xs text-muted">{operation.reason}</span>
+                  <span className="w-full text-body-sm text-muted">{operation.reason}</span>
                 )}
               </div>
             ))}
-          {data.operations.length === 0 && <p className="text-sm text-muted">No operations yet.</p>}
+          {data.operations.length === 0 && (
+            <p className="text-body text-muted">No operations yet.</p>
+          )}
         </div>
-      </section>
-    </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-card-border bg-card p-4">
-      <p className="text-[10px] font-semibold uppercase tracking-widest text-muted">{label}</p>
-      <p className="mt-2 font-mono text-xl font-bold tabular-nums">{value}</p>
+      </CentralBankSection>
     </div>
   );
 }
 
 function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between gap-4 py-2 text-sm">
-      <span className="text-muted">{label}</span>
-      <span className="font-mono tabular-nums">{value}</span>
-    </div>
-  );
-}
-
-function Assessment({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg bg-background p-3">
-      <p className="uppercase tracking-wide text-muted">{label}</p>
-      <p className="mt-1 font-mono font-semibold">{value}</p>
-    </div>
-  );
+  return <CentralBankRow label={label} value={<span className="font-mono">{value}</span>} />;
 }

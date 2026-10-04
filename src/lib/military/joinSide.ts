@@ -55,3 +55,36 @@ export async function joinSide(
     { $push: { joinTurns: entry } }
   );
 }
+
+/** Enrol several coalition partners with one conflict write. */
+export async function joinManyToSide(
+  db: Db,
+  conflict: ConflictDoc,
+  countryIds: CountryId[],
+  side: Side,
+  currentTurn: number
+): Promise<void> {
+  const roster = side === "A" ? conflict.sideA.countries : conflict.sideB.countries;
+  const opposing = side === "A" ? conflict.sideB.countries : conflict.sideA.countries;
+  const entrants = [...new Set(countryIds)].filter(
+    (countryId) => !roster.includes(countryId) && !opposing.includes(countryId)
+  );
+  if (entrants.length === 0) return;
+
+  roster.push(...entrants);
+  const existingJoinTurns = new Set((conflict.joinTurns ?? []).map((entry) => entry.countryId));
+  const entries = entrants
+    .filter((countryId) => !existingJoinTurns.has(countryId))
+    .map((countryId) => ({ countryId, turn: currentTurn, control: conflict.control }));
+  conflict.joinTurns = [...(conflict.joinTurns ?? []), ...entries];
+
+  await getConflictsCollection(db).updateOne(
+    { _id: conflict._id },
+    {
+      $addToSet: {
+        [`side${side}.countries`]: { $each: entrants },
+        ...(entries.length > 0 ? { joinTurns: { $each: entries } } : {}),
+      },
+    }
+  );
+}

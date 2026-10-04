@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { CorpHistoryPoint } from "./CorporationPageTypes";
 import { Skeleton } from "@/components/ui";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { useFeatureSeen } from "@/hooks/useFeatureSeen";
 import { CORP_PAGE_FEATURE_KEYS } from "@/lib/ui/corpPageFeatureKeys";
-import { ChartMetricPills } from "./ChartMetricPills";
 import { MarketSharePanel } from "./MarketSharePanel";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import { DenseSection, TableScroll, Td, Th, signTone } from "./dense/DenseKit";
+import { DenseLineChart, type LineSeries } from "./dense/DenseLineChart";
 
 type ChartMetric =
   | "marketCap"
@@ -22,70 +23,40 @@ type ChartMetric =
   | "averageQuality"
   | "marketShare";
 
-const CHART_METRICS: { key: ChartMetric; label: string; color: string; description: string }[] = [
-  {
-    key: "sharePrice",
-    label: "Share Price",
-    color: "#3b82f6",
-    description: "Stock price over time",
-  },
-  {
-    key: "marketCap",
-    label: "Market Cap",
-    color: "#8b5cf6",
-    description: "Total market capitalization",
-  },
+const CHART_METRICS: { key: ChartMetric; label: string; description: string }[] = [
+  { key: "sharePrice", label: "Share price", description: "Stock price over time." },
+  { key: "marketCap", label: "Market cap", description: "Total market capitalization." },
   {
     key: "revenueCosts",
-    label: "Revenue & Costs",
-    color: "#22c55e",
+    label: "Revenue and costs",
     description:
       "Per-turn operating revenue vs operating costs. Financial Statement values are daily totals (24 turns), so multiply chart points by 24 when comparing.",
   },
-  {
-    key: "cashOnHand",
-    label: "Cash on Hand",
-    color: "#f59e0b",
-    description: "Liquid capital reserves",
-  },
-  {
-    key: "marketingStrength",
-    label: "Marketing",
-    color: "#ec4899",
-    description: "Marketing strength over time",
-  },
-  {
-    key: "dividendRate",
-    label: "Dividend Yield",
-    color: "#14b8a6",
-    description: "Dividend payout rate",
-  },
+  { key: "cashOnHand", label: "Cash on hand", description: "Liquid capital reserves." },
+  { key: "marketingStrength", label: "Marketing", description: "Marketing strength over time." },
+  { key: "dividendRate", label: "Dividend rate", description: "Dividend payout rate." },
   {
     key: "corporateTax",
-    label: "Corporate Tax",
-    color: "#ef4444",
+    label: "Corporate tax",
     description:
-      "Domestic vs foreign corporate tax paid per turn (federal + state combined). Pre-migration snapshots fall back to the combined total. Zero on unprofitable turns.",
+      "Domestic vs foreign corporate tax paid per turn (federal and state combined). Pre-migration snapshots fall back to the combined total. Zero on unprofitable turns.",
   },
   {
     key: "brandLoyalty",
-    label: "Brand Loyalty",
-    color: "#d97706",
+    label: "Brand loyalty",
     description:
       "Your corporation's brand loyalty reputation over time, earned by pricing consistently and delivering.",
   },
   {
     key: "averageQuality",
-    label: "Avg Quality",
-    color: "#0d9488",
+    label: "Average quality",
     description: "Average product quality across your corporation's sectors over time.",
   },
   {
     key: "marketShare",
-    label: "Market Share",
-    color: "#06b6d4",
+    label: "Market share",
     description:
-      "Your share of global commodity output over time — by physical units produced per commodity, with stockpile history.",
+      "Your share of global commodity output over time, by physical units produced per commodity, with stockpile history.",
   },
 ];
 
@@ -97,32 +68,30 @@ function sumRecord(rec: Record<string, number> | undefined): number {
   return total;
 }
 
-const CHART_WIDTH = 640;
-const CHART_HEIGHT = 200;
-const C_PAD_LEFT = 56;
-const C_PAD_RIGHT = 16;
-const C_PAD_TOP = 16;
-const C_PAD_BOTTOM = 32;
-const C_INNER_W = CHART_WIDTH - C_PAD_LEFT - C_PAD_RIGHT;
-const C_INNER_H = CHART_HEIGHT - C_PAD_TOP - C_PAD_BOTTOM;
+interface MetricSeries {
+  values: number[];
+  values2?: number[];
+  label: string;
+  label2?: string;
+  format: (v: number) => string;
+  /** Change column: percent change, or percentage points for a rate. */
+  changeIn: "pct" | "pp";
+}
 
 export default function ChartsTab({
   corpId,
-  brandColor,
   modViewEnabled = false,
   ownerView = false,
 }: {
   corpId: string;
-  brandColor?: string;
   modViewEnabled?: boolean;
-  /** CEO/owner or mod view — gates the owner-only Brand Loyalty chart. */
+  /** CEO/owner or mod view: gates the owner-only Brand Loyalty chart. */
   ownerView?: boolean;
 }) {
   const { formatAmount, formatPrice: fmtPrice, toInternalFrom } = useCurrency();
   const [history, setHistory] = useState<CorpHistoryPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeMetric, setActiveMetric] = useState<ChartMetric>("sharePrice");
-  const [hovered, setHovered] = useState<number | null>(null);
   const marketShareDiscovery = useFeatureSeen(CORP_PAGE_FEATURE_KEYS.marketShareChart);
 
   // Brand Loyalty is an owner/CEO + mod-only chart (reputation intel). Avg Quality
@@ -136,7 +105,6 @@ export default function ChartsTab({
       marketShareDiscovery.markSeen();
     }
     setActiveMetric(metric);
-    setHovered(null);
   };
 
   useEffect(() => {
@@ -164,52 +132,12 @@ export default function ChartsTab({
 
   if (loading) {
     return (
-      <div className="space-y-4">
-        <Skeleton className="h-10 w-full rounded-xl" />
-        <Skeleton className="h-64 w-full rounded-xl" />
+      <div className="space-y-2">
+        <Skeleton className="h-4 w-40" />
+        <Skeleton className="h-56 w-full" />
       </div>
     );
   }
-
-  if (activeMetric === "marketShare") {
-    return (
-      <div className="space-y-4">
-        <ChartMetricPills
-          metrics={visibleMetrics}
-          activeMetric={activeMetric}
-          onSelect={(key) => selectMetric(key as ChartMetric)}
-          brandColor={brandColor}
-          newBadgeKey="marketShare"
-          newBadgeVisible={marketShareDiscovery.isNew}
-        />
-        <MarketSharePanel corpId={corpId} brandColor={brandColor} modViewEnabled={modViewEnabled} />
-      </div>
-    );
-  }
-
-  if (history.length < 2) {
-    return (
-      <div className="space-y-4">
-        <ChartMetricPills
-          metrics={visibleMetrics}
-          activeMetric={activeMetric}
-          onSelect={(key) => selectMetric(key as ChartMetric)}
-          brandColor={brandColor}
-          newBadgeKey="marketShare"
-          newBadgeVisible={marketShareDiscovery.isNew}
-        />
-        <div className="rounded-xl border border-card-border bg-card p-8 text-center">
-          <div className="text-muted text-sm">
-            Not enough historical data yet. Time-series charts will appear after a few turns of
-            activity. Market Share is available now.
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const metricConfig = CHART_METRICS.find((m) => m.key === activeMetric)!;
-  const accentColor = brandColor || metricConfig.color;
 
   // Post-v0.2.6: money fields in each history snapshot are stored in that
   // snapshot's own `currencyCode` (Task 10). Normalize every plotted value
@@ -218,7 +146,7 @@ export default function ChartsTab({
   // the representative currency for the selected metric.
   //
   // Use the rate that was ACTUALLY in effect when this row was written
-  // (`fxRateAtWrite`), not the live/current rate — FX floats every turn, so
+  // (`fxRateAtWrite`), not the live/current rate. FX floats every turn, so
   // reconverting an old snapshot with today's rate drifts by however much
   // that currency has moved since (#2958). Rows written before this field
   // existed fall back to the live rate (best available, matches prior
@@ -229,30 +157,22 @@ export default function ChartsTab({
     return toInternalFrom(val, code as CurrencyCode);
   };
   const latestPoint = history[history.length - 1];
-  const representativeCode = (
-    activeMetric === "marketCap" && latestPoint?.marketCapCurrencyCode !== undefined
+  const representativeCode = (metric: ChartMetric) =>
+    (metric === "marketCap" && latestPoint?.marketCapCurrencyCode !== undefined
       ? (latestPoint.marketCapCurrencyCode ?? undefined)
-      : latestPoint?.currencyCode
-  ) as CurrencyCode | undefined;
-  const fmtMoney = (v: number) => formatAmount(v, representativeCode);
-  const fmtSharePrice = (v: number) => fmtPrice(v, representativeCode);
+      : latestPoint?.currencyCode) as CurrencyCode | undefined;
 
-  // Extract data series based on active metric
-  function getSeriesData(): {
-    values: number[];
-    values2?: number[];
-    label: string;
-    label2?: string;
-    format: (v: number) => string;
-    isCurrency: boolean;
-  } {
-    switch (activeMetric) {
+  // Extract the data series for one metric.
+  function seriesFor(metric: Exclude<ChartMetric, "marketShare">): MetricSeries {
+    const code = representativeCode(metric);
+    const fmtMoney = (v: number) => formatAmount(v, code);
+    switch (metric) {
       case "sharePrice":
         return {
           values: history.map((p) => toAnchor(p.sharePrice, p.currencyCode, p.fxRateAtWrite)),
-          label: "Share Price",
-          format: fmtSharePrice,
-          isCurrency: true,
+          label: "Share price",
+          format: (v) => fmtPrice(v, code),
+          changeIn: "pct",
         };
       case "marketCap":
         return {
@@ -261,9 +181,9 @@ export default function ChartsTab({
               ? toAnchor(p.marketCap, p.marketCapCurrencyCode ?? undefined)
               : toAnchor(p.marketCap, p.currencyCode, p.fxRateAtWrite)
           ),
-          label: "Market Cap",
+          label: "Market cap",
           format: fmtMoney,
-          isCurrency: true,
+          changeIn: "pct",
         };
       case "revenueCosts":
         return {
@@ -272,54 +192,53 @@ export default function ChartsTab({
           label: "Revenue / turn",
           label2: "Costs / turn",
           format: fmtMoney,
-          isCurrency: true,
+          changeIn: "pct",
         };
       case "cashOnHand":
         return {
           values: history.map((p) => toAnchor(p.liquidCapital, p.currencyCode, p.fxRateAtWrite)),
-          label: "Cash on Hand",
+          label: "Cash on hand",
           format: fmtMoney,
-          isCurrency: true,
+          changeIn: "pct",
         };
       case "marketingStrength":
         return {
           values: history.map((p) => p.marketingStrength),
-          label: "Marketing Strength",
+          label: "Marketing strength",
           format: (v) => v.toFixed(1),
-          isCurrency: false,
+          changeIn: "pct",
         };
       case "brandLoyalty":
         return {
           values: history.map((p) => p.brandLoyalty ?? 0),
-          label: "Brand Loyalty",
+          label: "Brand loyalty",
           format: (v) => v.toFixed(1),
-          isCurrency: false,
+          changeIn: "pct",
         };
       case "averageQuality":
         return {
           values: history.map((p) => p.averageQuality ?? 0),
-          label: "Avg Quality",
+          label: "Average quality",
           format: (v) => v.toFixed(1),
-          isCurrency: false,
+          changeIn: "pct",
         };
       case "dividendRate":
         return {
           values: history.map((p) => p.dividendRate),
-          label: "Dividend Rate",
+          label: "Dividend rate",
           format: (v) => `${v.toFixed(1)}%`,
-          isCurrency: false,
+          changeIn: "pp",
         };
       case "corporateTax":
         return {
           // Split domestic vs foreign when the per-turn split maps are populated (post-migration).
           // Falls back to federal+state combined for pre-migration rows so the chart remains
-          // continuous across the cutover. Each side collapses fed+state into one series so
-          // the existing 2-series renderer can stay as-is.
+          // continuous across the cutover. Each side collapses fed+state into one series.
           values: history.map((p) => {
             const domestic =
               sumRecord(p.taxPaidByCountryDomestic) + sumRecord(p.taxPaidByStateDomestic);
             if (domestic > 0) return toAnchor(domestic, p.currencyCode, p.fxRateAtWrite);
-            // Pre-migration fallback — domestic series carries the combined total.
+            // Pre-migration fallback: the domestic series carries the combined total.
             return toAnchor(
               (p.federalTaxPaid ?? 0) + (p.stateTaxPaid ?? 0),
               p.currencyCode,
@@ -334,423 +253,223 @@ export default function ChartsTab({
           label: "Domestic",
           label2: "Foreign",
           format: fmtMoney,
-          isCurrency: true,
+          changeIn: "pct",
         };
-      case "marketShare":
-        throw new Error("marketShare is rendered outside the time-series chart");
     }
   }
 
-  const series = getSeriesData();
-  const allVals = [...series.values, ...(series.values2 ?? [])];
-  const minVal = Math.min(...allVals);
-  const maxVal = Math.max(...allVals);
-  const range = maxVal - minVal || 1;
-  // Add 10% padding
-  const yMin = minVal - range * 0.05;
-  const yMax = maxVal + range * 0.05;
-  const yRange = yMax - yMin || 1;
+  const hasHistory = history.length >= 2;
 
-  function toX(i: number): number {
-    if (history.length <= 1) return C_PAD_LEFT + C_INNER_W / 2;
-    return C_PAD_LEFT + (i / (history.length - 1)) * C_INNER_W;
-  }
+  const changeText = (s: MetricSeries): { text: string; value: number | null } => {
+    const first = s.values[0];
+    const last = s.values[s.values.length - 1];
+    if (s.changeIn === "pp") {
+      const d = last - first;
+      return { text: `${d > 0 ? "+" : ""}${d.toFixed(1)} pp`, value: d };
+    }
+    if (first === 0) return { text: "", value: null };
+    const pct = ((last - first) / Math.abs(first)) * 100;
+    return { text: `${pct > 0 ? "+" : ""}${pct.toFixed(1)}%`, value: pct };
+  };
 
-  function toY(value: number): number {
-    return C_PAD_TOP + ((yMax - value) / yRange) * C_INNER_H;
-  }
+  const metricTable = (
+    <DenseSection
+      title="Metrics"
+      meta={hasHistory ? `T${history[0].turn} to T${latestPoint.turn}` : undefined}
+    >
+      <TableScroll>
+        <table className="w-full border-collapse">
+          <thead>
+            <tr>
+              <Th>Metric</Th>
+              <Th align="right">Latest</Th>
+              <Th align="right" title="Change over the charted history">
+                Change
+              </Th>
+            </tr>
+          </thead>
+          <tbody>
+            {visibleMetrics.map((m) => {
+              const selected = m.key === activeMetric;
+              const s = m.key !== "marketShare" && hasHistory ? seriesFor(m.key) : null;
+              const change = s ? changeText(s) : null;
+              return (
+                <tr key={m.key} className={selected ? "bg-card-elevated" : undefined}>
+                  <Td numeric={false}>
+                    <button
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => selectMetric(m.key)}
+                      className={`text-left hover:underline ${
+                        selected ? "font-semibold text-foreground" : "text-foreground"
+                      }`}
+                    >
+                      {m.label}
+                    </button>
+                    {m.key === "marketShare" && marketShareDiscovery.isNew && (
+                      <span className="ml-1.5 text-[10px] font-medium text-primary">new</span>
+                    )}
+                  </Td>
+                  <Td align="right">
+                    {m.key === "marketShare" ? (
+                      <span className="font-sans text-xs text-muted">by commodity</span>
+                    ) : s ? (
+                      s.format(s.values[s.values.length - 1])
+                    ) : (
+                      ""
+                    )}
+                  </Td>
+                  <Td align="right" className={signTone(change?.value)}>
+                    {change?.text ?? ""}
+                  </Td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </TableScroll>
+    </DenseSection>
+  );
 
-  const points = series.values.map((v, i) => ({ x: toX(i), y: toY(v), value: v }));
-  const polyline = points.map((p) => `${p.x},${p.y}`).join(" ");
+  const metricConfig = CHART_METRICS.find((m) => m.key === activeMetric)!;
 
-  let points2: typeof points | undefined;
-  let polyline2: string | undefined;
-  if (series.values2) {
-    points2 = series.values2.map((v, i) => ({ x: toX(i), y: toY(v), value: v }));
-    polyline2 = points2.map((p) => `${p.x},${p.y}`).join(" ");
-  }
-
-  // Y-axis labels (5 evenly spaced)
-  const yTicks = Array.from({ length: 5 }, (_, i) => yMin + (yRange * i) / 4);
-
-  // X-axis labels
-  const xLabelIndices: number[] = [];
-  if (history.length <= 5) {
-    history.forEach((_, i) => xLabelIndices.push(i));
+  let chartPanel: ReactNode;
+  if (activeMetric === "marketShare") {
+    chartPanel = <MarketSharePanel corpId={corpId} modViewEnabled={modViewEnabled} />;
+  } else if (!hasHistory) {
+    chartPanel = (
+      <DenseSection title={metricConfig.label}>
+        <p className="py-2 text-xs text-muted">
+          Not enough historical data yet. Time-series charts will appear after a few turns of
+          activity. Market share is available now.
+        </p>
+      </DenseSection>
+    );
   } else {
-    const step = Math.floor((history.length - 1) / 4);
-    for (let i = 0; i <= 4; i++) {
-      xLabelIndices.push(Math.min(i * step, history.length - 1));
+    const series = seriesFor(activeMetric);
+    const fmtMoney = (v: number) => formatAmount(v, representativeCode(activeMetric));
+    const lines: LineSeries[] = [
+      { label: series.label, values: series.values, tone: "text-foreground" },
+    ];
+    if (series.values2 && series.label2) {
+      lines.push({
+        label: series.label2,
+        values: series.values2,
+        tone: "text-muted",
+        dashed: true,
+      });
     }
-    if (!xLabelIndices.includes(history.length - 1)) {
-      xLabelIndices[xLabelIndices.length - 1] = history.length - 1;
-    }
+    const high = Math.max(...series.values);
+    const low = Math.min(...series.values);
+    const periodTurns = latestPoint.turn - history[0].turn + 1;
+
+    const tooltip = (i: number) => {
+      const point = history[i];
+      const currencyCode = point.currencyCode as CurrencyCode | undefined;
+      const fx = point.fxRateAtWrite;
+      const rows: { label: string; value: string }[] = [];
+      if (activeMetric === "revenueCosts") {
+        rows.push({
+          label: "Operating income",
+          value: fmtMoney(toAnchor(point.revenue - point.totalCosts, currencyCode, fx)),
+        });
+        const tax = toAnchor(point.corporateTaxPaid ?? 0, currencyCode, fx);
+        if (tax !== 0) rows.push({ label: "Taxes", value: fmtMoney(tax) });
+        const coupons = toAnchor(point.perTurnBondCouponIncome ?? 0, currencyCode, fx);
+        if (coupons !== 0) rows.push({ label: "Bond coupons", value: fmtMoney(coupons) });
+        const drag = toAnchor(point.perTurnBondDragOnNetIncome ?? 0, currencyCode, fx);
+        if (drag !== 0) rows.push({ label: "Bond interest", value: fmtMoney(drag) });
+        if (point.incomePreDividends != null) {
+          rows.push({
+            label: "Net income",
+            value: fmtMoney(
+              toAnchor(
+                point.incomePreDividends -
+                  (point.corporateTaxPaid ?? 0) +
+                  (point.perTurnBondCouponIncome ?? 0) -
+                  (point.perTurnBondDragOnNetIncome ?? 0),
+                currencyCode,
+                fx
+              )
+            ),
+          });
+        }
+        const dividends = toAnchor(point.dividendPaidPerTurn ?? 0, currencyCode, fx);
+        if (dividends !== 0) {
+          rows.push({ label: "Dividends", value: fmtMoney(dividends) });
+          rows.push({
+            label: "Retained after dividends",
+            value: fmtMoney(toAnchor(point.income, currencyCode, fx)),
+          });
+        }
+        const md = point.marginDiagnostic;
+        if (md) {
+          rows.push(
+            { label: "Margin", value: `${md.effectiveMargin.toFixed(1)}%` },
+            { label: "Commodity", value: `${md.commodityInputMod.toFixed(1)}pp` },
+            { label: "Surplus", value: `${md.commoditySurplusMod.toFixed(1)}pp` },
+            { label: "Export", value: `${(md.exportPremiumMod ?? 0).toFixed(1)}pp` },
+            { label: "Macro", value: `${md.macroMod.toFixed(1)}pp` },
+            { label: "State", value: `${md.stateMetricsMod.toFixed(1)}pp` },
+            { label: "Growth cost", value: `${(md.growthCostRatio * 100).toFixed(2)}%` },
+            { label: "Sectors", value: String(md.sectorCount) }
+          );
+        }
+      }
+      return (
+        <table className="border-collapse">
+          <tbody>
+            {lines.map((l) => (
+              <tr key={l.label}>
+                <td className={`pr-3 ${l.tone}`}>{l.label}</td>
+                <td className="text-right font-mono tabular-nums text-foreground">
+                  {series.format(l.values[i])}
+                </td>
+              </tr>
+            ))}
+            {rows.map((r) => (
+              <tr key={r.label} className="text-muted">
+                <td className="pr-3">{r.label}</td>
+                <td className="text-right font-mono tabular-nums">{r.value}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      );
+    };
+
+    chartPanel = (
+      <DenseSection title={metricConfig.label} meta={`${periodTurns} turns`}>
+        <p className="py-1 text-xs text-muted">{metricConfig.description}</p>
+        <DenseLineChart
+          turns={history.map((p) => p.turn)}
+          series={lines}
+          formatTick={series.format}
+          ariaLabel={`${metricConfig.label} by turn`}
+          tooltip={tooltip}
+        />
+        <dl className="flex flex-wrap gap-x-6 gap-y-1 border-t border-card-border pt-1.5 text-xs">
+          <div className="flex items-baseline gap-1.5">
+            <dt className="text-muted">High</dt>
+            <dd className="font-mono tabular-nums text-foreground">{series.format(high)}</dd>
+          </div>
+          <div className="flex items-baseline gap-1.5">
+            <dt className="text-muted">Low</dt>
+            <dd className="font-mono tabular-nums text-foreground">{series.format(low)}</dd>
+          </div>
+          <div className="flex items-baseline gap-1.5">
+            <dt className="text-muted">Points</dt>
+            <dd className="font-mono tabular-nums text-foreground">{history.length}</dd>
+          </div>
+        </dl>
+      </DenseSection>
+    );
   }
-
-  const hoveredPoint = hovered !== null ? points[hovered] : null;
-  const hoveredPoint2 = hovered !== null && points2 ? points2[hovered] : null;
-  const hoveredHistoryPoint = hovered !== null ? history[hovered] : null;
-  const revenueCostsTooltip =
-    activeMetric === "revenueCosts" && hoveredHistoryPoint
-      ? (() => {
-          const point = hoveredHistoryPoint;
-          const currencyCode = point.currencyCode as CurrencyCode | undefined;
-          const fxRateAtWrite = point.fxRateAtWrite;
-          const operatingIncome = toAnchor(
-            point.revenue - point.totalCosts,
-            currencyCode,
-            fxRateAtWrite
-          );
-          const corporateTaxPaid = toAnchor(
-            point.corporateTaxPaid ?? 0,
-            currencyCode,
-            fxRateAtWrite
-          );
-          const bondCouponIncome = toAnchor(
-            point.perTurnBondCouponIncome ?? 0,
-            currencyCode,
-            fxRateAtWrite
-          );
-          const bondInterestDrag = toAnchor(
-            point.perTurnBondDragOnNetIncome ?? 0,
-            currencyCode,
-            fxRateAtWrite
-          );
-          const dividendPaid = toAnchor(
-            point.dividendPaidPerTurn ?? 0,
-            currencyCode,
-            fxRateAtWrite
-          );
-          const netIncomeBeforeDividends =
-            point.incomePreDividends != null
-              ? toAnchor(
-                  point.incomePreDividends -
-                    (point.corporateTaxPaid ?? 0) +
-                    (point.perTurnBondCouponIncome ?? 0) -
-                    (point.perTurnBondDragOnNetIncome ?? 0),
-                  currencyCode,
-                  fxRateAtWrite
-                )
-              : null;
-          const retainedAfterDividends = toAnchor(point.income, currencyCode, fxRateAtWrite);
-
-          return {
-            operatingIncome,
-            corporateTaxPaid,
-            bondCouponIncome,
-            bondInterestDrag,
-            dividendPaid,
-            netIncomeBeforeDividends,
-            retainedAfterDividends,
-          };
-        })()
-      : null;
-
-  // Color for secondary line in revenue/costs chart
-  const secondaryColor = "#ef4444";
-
-  // Header + summary-card stats (primary series).
-  const lastVal = series.values[series.values.length - 1];
-  const firstVal = series.values[0];
-  const highVal = Math.max(...series.values);
-  const lowVal = Math.min(...series.values);
-  const changePct = firstVal !== 0 ? ((lastVal - firstVal) / Math.abs(firstVal)) * 100 : 0;
-  const periodTurns = history[history.length - 1].turn - history[0].turn + 1;
 
   return (
-    <div className="space-y-4">
-      {/* Metric selector — pill/chip toggle with per-metric colored dots */}
-      <ChartMetricPills
-        metrics={visibleMetrics}
-        activeMetric={activeMetric}
-        onSelect={(key) => selectMetric(key as ChartMetric)}
-        brandColor={brandColor}
-        newBadgeKey="marketShare"
-        newBadgeVisible={marketShareDiscovery.isNew}
-      />
-
-      {/* Chart */}
-      <div className="rounded-xl border border-card-border bg-card p-4">
-        {/* Header — metric title + description (left), current value (right) */}
-        <div className="mb-4 flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <h3 className="text-sm font-semibold text-foreground">{metricConfig.label}</h3>
-            <p className="mt-0.5 max-w-md text-xs text-muted">{metricConfig.description}</p>
-          </div>
-          <div className="shrink-0 text-right">
-            <div className="text-[10px] font-bold uppercase tracking-widest text-muted">
-              Current
-            </div>
-            <div className="text-2xl font-bold tabular-nums" style={{ color: accentColor }}>
-              {series.format(lastVal)}
-            </div>
-          </div>
-        </div>
-
-        <div className="relative select-none">
-          <svg
-            viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
-            className="w-full"
-            style={{ height: CHART_HEIGHT }}
-            onMouseLeave={() => setHovered(null)}
-          >
-            {/* Grid lines */}
-            {yTicks.map((tick, i) => {
-              const y = toY(tick);
-              return (
-                <g key={i}>
-                  <line
-                    x1={C_PAD_LEFT}
-                    y1={y}
-                    x2={CHART_WIDTH - C_PAD_RIGHT}
-                    y2={y}
-                    stroke="currentColor"
-                    strokeWidth={1}
-                    className="text-card-border/40"
-                    strokeDasharray={i === 0 || i === 4 ? undefined : "3 3"}
-                  />
-                  <text
-                    x={C_PAD_LEFT - 6}
-                    y={y + 4}
-                    textAnchor="end"
-                    fontSize={9}
-                    className="fill-muted/70"
-                  >
-                    {series.isCurrency
-                      ? activeMetric === "sharePrice"
-                        ? fmtSharePrice(tick)
-                        : fmtMoney(tick)
-                      : tick.toFixed(tick < 10 ? 1 : 0)}
-                    {!series.isCurrency && activeMetric === "dividendRate" ? "%" : ""}
-                  </text>
-                </g>
-              );
-            })}
-
-            {/* Area fill under primary line */}
-            <defs>
-              <linearGradient id={`chartGrad-${activeMetric}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={accentColor} stopOpacity={0.2} />
-                <stop offset="100%" stopColor={accentColor} stopOpacity={0} />
-              </linearGradient>
-              {series.values2 && (
-                <linearGradient id={`chartGrad2-${activeMetric}`} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={secondaryColor} stopOpacity={0.12} />
-                  <stop offset="100%" stopColor={secondaryColor} stopOpacity={0} />
-                </linearGradient>
-              )}
-            </defs>
-            <polygon
-              points={`${points[0].x},${C_PAD_TOP + C_INNER_H} ${polyline} ${points[points.length - 1].x},${C_PAD_TOP + C_INNER_H}`}
-              fill={`url(#chartGrad-${activeMetric})`}
-            />
-
-            {/* Secondary area fill */}
-            {polyline2 && points2 && (
-              <polygon
-                points={`${points2[0].x},${C_PAD_TOP + C_INNER_H} ${polyline2} ${points2[points2.length - 1].x},${C_PAD_TOP + C_INNER_H}`}
-                fill={`url(#chartGrad2-${activeMetric})`}
-              />
-            )}
-
-            {/* Secondary line */}
-            {polyline2 && (
-              <polyline
-                points={polyline2}
-                fill="none"
-                stroke={secondaryColor}
-                strokeWidth={2}
-                strokeLinejoin="round"
-                strokeLinecap="round"
-                opacity={0.8}
-              />
-            )}
-
-            {/* Primary line */}
-            <polyline
-              points={polyline}
-              fill="none"
-              stroke={accentColor}
-              strokeWidth={2.5}
-              strokeLinejoin="round"
-              strokeLinecap="round"
-            />
-
-            {/* Hover hit targets */}
-            {points.map((p, i) => {
-              const prevX = i > 0 ? points[i - 1].x : p.x;
-              const nextX = i < points.length - 1 ? points[i + 1].x : p.x;
-              const hitX = (prevX + p.x) / 2;
-              const hitW = (nextX + p.x) / 2 - hitX;
-              return (
-                <rect
-                  key={i}
-                  x={hitX}
-                  y={C_PAD_TOP}
-                  width={Math.max(hitW, 8)}
-                  height={C_INNER_H}
-                  fill="transparent"
-                  onMouseEnter={() => setHovered(i)}
-                />
-              );
-            })}
-
-            {/* Hover crosshair + dot */}
-            {hoveredPoint && (
-              <>
-                <line
-                  x1={hoveredPoint.x}
-                  y1={C_PAD_TOP}
-                  x2={hoveredPoint.x}
-                  y2={C_PAD_TOP + C_INNER_H}
-                  stroke={accentColor}
-                  strokeWidth={1}
-                  strokeDasharray="3 2"
-                  opacity={0.6}
-                />
-                <circle cx={hoveredPoint.x} cy={hoveredPoint.y} r={4} fill={accentColor} />
-                {hoveredPoint2 && (
-                  <circle cx={hoveredPoint2.x} cy={hoveredPoint2.y} r={4} fill={secondaryColor} />
-                )}
-              </>
-            )}
-
-            {/* X-axis turn labels */}
-            {xLabelIndices.map((i) => (
-              <text
-                key={i}
-                x={points[i].x}
-                y={CHART_HEIGHT - 6}
-                textAnchor="middle"
-                fontSize={9}
-                className="fill-muted/70"
-              >
-                T{history[i].turn}
-              </text>
-            ))}
-          </svg>
-
-          {/* Tooltip */}
-          {hovered !== null && hoveredPoint && (
-            <div className="pointer-events-none absolute top-2 right-3 rounded-lg border border-card-border bg-card px-3 py-2 text-xs shadow-card space-y-1">
-              <div className="text-muted">Turn {history[hovered].turn}</div>
-              <div className="font-semibold tabular-nums" style={{ color: accentColor }}>
-                {series.label}: {series.format(hoveredPoint.value)}
-              </div>
-              {hoveredPoint2 && series.label2 && (
-                <div className="font-semibold tabular-nums" style={{ color: secondaryColor }}>
-                  {series.label2}: {series.format(hoveredPoint2.value)}
-                </div>
-              )}
-              {activeMetric === "revenueCosts" && revenueCostsTooltip && (
-                <div className="pt-1 mt-1 border-t border-card-border/30 space-y-0.5 text-muted">
-                  <div>Operating income: {fmtMoney(revenueCostsTooltip.operatingIncome)}</div>
-                  {revenueCostsTooltip.corporateTaxPaid !== 0 && (
-                    <div>Taxes: {fmtMoney(revenueCostsTooltip.corporateTaxPaid)}</div>
-                  )}
-                  {revenueCostsTooltip.bondCouponIncome !== 0 && (
-                    <div>Bond coupons: {fmtMoney(revenueCostsTooltip.bondCouponIncome)}</div>
-                  )}
-                  {revenueCostsTooltip.bondInterestDrag !== 0 && (
-                    <div>Bond interest: {fmtMoney(revenueCostsTooltip.bondInterestDrag)}</div>
-                  )}
-                  {revenueCostsTooltip.netIncomeBeforeDividends != null && (
-                    <div>Net income: {fmtMoney(revenueCostsTooltip.netIncomeBeforeDividends)}</div>
-                  )}
-                  {revenueCostsTooltip.dividendPaid !== 0 && (
-                    <div>Dividends: {fmtMoney(revenueCostsTooltip.dividendPaid)}</div>
-                  )}
-                  {revenueCostsTooltip.dividendPaid !== 0 && (
-                    <div>
-                      Retained after dividends:{" "}
-                      {fmtMoney(revenueCostsTooltip.retainedAfterDividends)}
-                    </div>
-                  )}
-                  {history[hovered].marginDiagnostic && (
-                    <>
-                      <div>
-                        Margin: {history[hovered].marginDiagnostic!.effectiveMargin.toFixed(1)}%
-                      </div>
-                      <div>
-                        Commodity: {history[hovered].marginDiagnostic!.commodityInputMod.toFixed(1)}
-                        pp
-                      </div>
-                      <div>
-                        Surplus: {history[hovered].marginDiagnostic!.commoditySurplusMod.toFixed(1)}
-                        pp
-                      </div>
-                      <div>
-                        Export:{" "}
-                        {(history[hovered].marginDiagnostic!.exportPremiumMod ?? 0).toFixed(1)}pp
-                      </div>
-                      <div>Macro: {history[hovered].marginDiagnostic!.macroMod.toFixed(1)}pp</div>
-                      <div>
-                        State: {history[hovered].marginDiagnostic!.stateMetricsMod.toFixed(1)}pp
-                      </div>
-                      <div>
-                        Growth cost:{" "}
-                        {(history[hovered].marginDiagnostic!.growthCostRatio * 100).toFixed(2)}%
-                      </div>
-                      <div>Sectors: {history[hovered].marginDiagnostic!.sectorCount}</div>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Legend for dual-line charts */}
-        {series.values2 && (
-          <div className="flex items-center justify-center gap-6 mt-3 pt-3 border-t border-card-border/50">
-            <div className="flex items-center gap-1.5">
-              <span
-                className="inline-block h-2 w-4 rounded-full"
-                style={{ backgroundColor: accentColor }}
-              />
-              <span className="text-xs text-muted">{series.label}</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span
-                className="inline-block h-2 w-4 rounded-full"
-                style={{ backgroundColor: secondaryColor }}
-              />
-              <span className="text-xs text-muted">{series.label2}</span>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Summary stat cards — Period / High / Low / Change */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-xl border border-card-border bg-card p-4">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-muted">Period</div>
-          <div className="mt-1 text-lg font-bold tabular-nums text-foreground">
-            {periodTurns} turns
-          </div>
-        </div>
-        <div className="rounded-xl border border-card-border bg-card p-4">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-muted">High</div>
-          <div className="mt-1 text-lg font-bold tabular-nums text-foreground">
-            {series.format(highVal)}
-          </div>
-        </div>
-        <div className="rounded-xl border border-card-border bg-card p-4">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-muted">Low</div>
-          <div className="mt-1 text-lg font-bold tabular-nums text-foreground">
-            {series.format(lowVal)}
-          </div>
-        </div>
-        <div className="rounded-xl border border-card-border bg-card p-4">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-muted">Change</div>
-          <div
-            className={`mt-1 text-lg font-bold tabular-nums ${changePct >= 0 ? "text-success" : "text-error"}`}
-          >
-            {changePct >= 0 ? "+" : ""}
-            {changePct.toFixed(1)}%
-          </div>
-        </div>
-      </div>
+    <div className="grid gap-x-8 gap-y-6 lg:grid-cols-[300px_minmax(0,1fr)]">
+      <div className="min-w-0">{metricTable}</div>
+      <div className="min-w-0">{chartPanel}</div>
     </div>
   );
 }

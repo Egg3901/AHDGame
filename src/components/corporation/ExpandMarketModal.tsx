@@ -876,7 +876,7 @@ export default function ExpandMarketModal({
                           <p className="text-sm font-bold text-foreground">
                             {activeSuggestion.unownedRevenue > 0
                               ? formatMarketAmount(Math.round(activeSuggestion.unownedRevenue / 24))
-                              : "—"}
+                              : "none"}
                           </p>
                           <p className="text-[10px] text-muted">/turn revenue</p>
                         </div>
@@ -923,7 +923,7 @@ export default function ExpandMarketModal({
                               ? formatMarketAmount(
                                   Math.round(activeSuggestion.estimatedRevenueCapture / 24)
                                 )
-                              : "—"}
+                              : "none"}
                           </p>
                           <p className="text-[10px] text-muted">/turn (pre-margin)</p>
                         </div>
@@ -1006,7 +1006,7 @@ export default function ExpandMarketModal({
                       {/* No unowned pool notice */}
                       {!plantsMode && activeSuggestion.unownedRevenue === 0 && (
                         <p className="text-[11px] text-warning">
-                          No unowned revenue pool — this market is fully captured by existing
+                          No unowned revenue pool: this market is fully captured by existing
                           corporations. You cannot split here currently.
                         </p>
                       )}
@@ -1046,7 +1046,7 @@ export default function ExpandMarketModal({
                                       ? formatTreasuryAmount(
                                           activeSuggestion.starterBuildCostAnchor
                                         )
-                                      : "—"}
+                                      : "n/a"}
                                   </span>
                                 </div>
                                 <div className="flex justify-between gap-3 border-t border-card-border pt-0.5 font-semibold text-foreground">
@@ -1054,7 +1054,7 @@ export default function ExpandMarketModal({
                                   <span className="tabular-nums">
                                     {activeSuggestion.foundingTotalAnchor != null
                                       ? formatTreasuryAmount(activeSuggestion.foundingTotalAnchor)
-                                      : "—"}
+                                      : "n/a"}
                                   </span>
                                 </div>
                                 <div className="flex justify-between gap-3">
@@ -1141,7 +1141,7 @@ export default function ExpandMarketModal({
                           </Link>
                         ) : (
                           <Link
-                            href={`${regionUrl(activeSuggestion.countryId, activeSuggestion.stateId)}?tab=economy&sector=${selectedType}`}
+                            href={`${regionUrl(activeSuggestion.countryId, activeSuggestion.stateId)}?tab=economy&sector=${encodeURIComponent(selectedType)}`}
                             onClick={onClose}
                             className="block w-full rounded-lg border border-card-border bg-card-elevated/50 px-4 py-2 text-center text-sm font-medium text-foreground hover:bg-card-elevated transition-colors"
                           >

@@ -16,6 +16,7 @@
  * honest.
  */
 
+import { substepMarker } from "@/lib/observability/phaseSubsteps";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import type { Corporation, CorporateSector, GameConfig, GameState } from "@/lib/db/types";
@@ -197,37 +198,36 @@ function buyerStarved(
   return priceRatio != null && priceRatio >= NPP_CONTRACT_INPUT_SHORTAGE;
 }
 
-function committedVolume(
-  agreements: readonly ExistingNppAgreement[],
-  supplierCorpId: string,
-  commodity: CommodityType,
-  stateId?: string
-): number {
-  let sum = 0;
-  for (const a of agreements) {
-    if (a.supplierCorpId !== supplierCorpId || a.commodity !== commodity) continue;
-    if ((a.stateId ?? undefined) !== stateId) continue;
-    if (!liveStatuses(a.status)) continue;
-    sum += a.volumeCap;
-  }
-  return sum;
-}
+/** Distinguishes an absent state from any real state id in index keys. */
+const NO_STATE = "\u0000";
 
-function pairExists(
-  agreements: readonly ExistingNppAgreement[],
-  supplierCorpId: string,
-  buyerCorpId: string,
-  commodity: CommodityType,
-  stateId?: string
-): boolean {
-  return agreements.some(
-    (a) =>
-      a.supplierCorpId === supplierCorpId &&
-      a.buyerCorpId === buyerCorpId &&
-      a.commodity === commodity &&
-      (a.stateId ?? undefined) === stateId &&
-      liveStatuses(a.status)
-  );
+/**
+ * `committedVolume` and `pairExists` answered from one pass over the live
+ * agreements. The proposal step asks them for every supplier output and every
+ * candidate buyer; scanning all ~26,000 agreements per question made the
+ * matcher the costliest CPU step of the corporation turn. Sums accumulate in
+ * the agreements' own order, so totals match the scanning versions exactly.
+ */
+export function indexLiveAgreements(agreements: readonly ExistingNppAgreement[]) {
+  const committed = new Map<string, number>();
+  const pairs = new Set<string>();
+  for (const a of agreements) {
+    if (!liveStatuses(a.status)) continue;
+    const state = a.stateId ?? NO_STATE;
+    const volumeKey = `${a.supplierCorpId}|${a.commodity}|${state}`;
+    committed.set(volumeKey, (committed.get(volumeKey) ?? 0) + a.volumeCap);
+    pairs.add(`${a.supplierCorpId}|${a.buyerCorpId}|${a.commodity}|${state}`);
+  }
+  return {
+    committedVolume: (supplierCorpId: string, commodity: CommodityType, stateId?: string) =>
+      committed.get(`${supplierCorpId}|${commodity}|${stateId ?? NO_STATE}`) ?? 0,
+    pairExists: (
+      supplierCorpId: string,
+      buyerCorpId: string,
+      commodity: CommodityType,
+      stateId?: string
+    ) => pairs.has(`${supplierCorpId}|${buyerCorpId}|${commodity}|${stateId ?? NO_STATE}`),
+  };
 }
 
 export function nppContractPremium(fill: number | null, priceRatio: number | null): number {
@@ -330,6 +330,7 @@ export function decideNppSupplyAgreements(args: {
   }
 
   if (!plantsEnabled) return out;
+  const live = indexLiveAgreements(agreements);
 
   // 3. Propose NPP-NPP same-country contracts into starved buyers.
   for (const supplier of parties) {
@@ -383,7 +384,7 @@ export function decideNppSupplyAgreements(args: {
       const uncommitted = Math.max(
         0,
         capacity * CONTRACT_OVERCOMMIT_TOLERANCE -
-          committedVolume(agreements, supplier.corpId, commodity, stateId)
+          live.committedVolume(supplier.corpId, commodity, stateId)
       );
       const volumeCap = uncommitted * NPP_CONTRACT_CAPACITY_SHARE;
       if (!(volumeCap > 0)) continue;
@@ -398,7 +399,7 @@ export function decideNppSupplyAgreements(args: {
         if (buyer.isPlayer) continue;
         if (buyer.countryId !== supplier.countryId) continue;
         if (proposedBuyer.has(buyer.corpId) || acceptedBuyer.has(buyer.corpId)) continue;
-        if (pairExists(agreements, supplier.corpId, buyer.corpId, commodity, stateId)) continue;
+        if (live.pairExists(supplier.corpId, buyer.corpId, commodity, stateId)) continue;
         const buyerRatio = priceRatioOf(commodity, buyer.countryId);
         if (!buyerStarved(buyer, commodity, turn, buyerRatio, stateId)) continue;
         const score = (fill == null ? 0.5 : 1 - fill) + Math.max(0, (buyerRatio ?? 1) - 1);
@@ -425,7 +426,54 @@ export function decideNppSupplyAgreements(args: {
   return out;
 }
 
-function toParty(corp: Corporation, sectors: CorporateSector[]): NppAgreementParty {
+/**
+ * Only what `toParty` and the agreement map below read. The pass loads every
+ * NPP sector and every live NPP agreement each turn; full documents were about
+ * 23 MB a turn on the live world, these fields about 5 MB.
+ */
+export const NPP_SUPPLY_SECTOR_PROJECTION = {
+  corporationId: 1,
+  sectorType: 1,
+  capitalStock: 1,
+  producedUnits: 1,
+  soldFraction: 1,
+  throughputFactor: 1,
+  mothballed: 1,
+  strategyId: 1,
+  transitionFromStrategyId: 1,
+  retoolRescaleApplied: 1,
+  transitionStartTurn: 1,
+  productionPolicyLevel: 1,
+  embargoSuspended: 1,
+  embargoExportExposure: 1,
+  countryId: 1,
+  stateId: 1,
+} as const;
+
+export const NPP_SUPPLY_AGREEMENT_PROJECTION = {
+  supplierCorpId: 1,
+  buyerCorpId: 1,
+  commodity: 1,
+  stateId: 1,
+  volumeCap: 1,
+  pricePremium: 1,
+  status: 1,
+} as const;
+
+export function toExistingNppAgreement(a: SupplyAgreement): ExistingNppAgreement {
+  return {
+    id: a._id!.toString(),
+    supplierCorpId: a.supplierCorpId.toString(),
+    buyerCorpId: a.buyerCorpId.toString(),
+    commodity: a.commodity,
+    ...(a.stateId ? { stateId: a.stateId } : {}),
+    volumeCap: a.volumeCap,
+    pricePremium: a.pricePremium,
+    status: a.status,
+  };
+}
+
+export function toParty(corp: Corporation, sectors: CorporateSector[]): NppAgreementParty {
   return {
     corpId: corp._id.toString(),
     countryId: corp.countryId,
@@ -470,6 +518,7 @@ export async function processNppSupplyAgreements(
   if (cfg?.supplyAgreementsEnabled !== true) {
     return { accepted: 0, cancelled: 0, proposed: 0 };
   }
+  const step = substepMarker();
 
   const nppCorps = await db
     .collection<Corporation>("corporations")
@@ -487,17 +536,17 @@ export async function processNppSupplyAgreements(
   const [sectors, rawAgreements, commodityPriceDocs, gameState] = await Promise.all([
     db
       .collection<CorporateSector>("corporateSectors")
-      .find(
-        { corporationId: { $in: corpIds } },
-        { projection: { buildQueue: 0, plantsPnl: 0, soldByCommodity: 0 } }
-      )
+      .find({ corporationId: { $in: corpIds } }, { projection: NPP_SUPPLY_SECTOR_PROJECTION })
       .toArray(),
     db
       .collection<SupplyAgreement>("supplyAgreements")
-      .find({
-        status: { $in: ["pending", "active", "cancelling"] },
-        $or: [{ supplierCorpId: { $in: corpIds } }, { buyerCorpId: { $in: corpIds } }],
-      })
+      .find(
+        {
+          status: { $in: ["pending", "active", "cancelling"] },
+          $or: [{ supplierCorpId: { $in: corpIds } }, { buyerCorpId: { $in: corpIds } }],
+        },
+        { projection: NPP_SUPPLY_AGREEMENT_PROJECTION }
+      )
       .toArray(),
     db
       .collection<{
@@ -513,6 +562,7 @@ export async function processNppSupplyAgreements(
       .collection<GameState>("gameState")
       .findOne({ _id: "current" }, { projection: { currentYear: 1 } }),
   ]);
+  step.mark("nppSupply.load");
   const sectorsByCorp = new Map<string, CorporateSector[]>();
   for (const s of sectors) {
     const key = s.corporationId.toString();
@@ -524,16 +574,7 @@ export async function processNppSupplyAgreements(
   const parties = nppCorps.map((c) => toParty(c, sectorsByCorp.get(c._id.toString()) ?? []));
   const nppIds = new Set(nppCorps.map((c) => c._id.toString()));
 
-  const agreements: ExistingNppAgreement[] = rawAgreements.map((a) => ({
-    id: a._id!.toString(),
-    supplierCorpId: a.supplierCorpId.toString(),
-    buyerCorpId: a.buyerCorpId.toString(),
-    commodity: a.commodity,
-    ...(a.stateId ? { stateId: a.stateId } : {}),
-    volumeCap: a.volumeCap,
-    pricePremium: a.pricePremium,
-    status: a.status,
-  }));
+  const agreements: ExistingNppAgreement[] = rawAgreements.map(toExistingNppAgreement);
 
   const priceByCommodity = new Map<
     string,
@@ -573,6 +614,7 @@ export async function processNppSupplyAgreements(
     commandEconomyEnabled: cfg?.commandEconomyEnabled === true,
   });
 
+  step.mark("nppSupply.decide");
   const activations = decisions.filter(
     (decision): decision is Extract<NppAgreementDecision, { action: "activate" }> =>
       decision.action === "activate"
@@ -643,5 +685,6 @@ export async function processNppSupplyAgreements(
     await agreementsCollection.insertMany(inserts);
   }
 
+  step.mark("nppSupply.write");
   return { accepted, cancelled, proposed };
 }

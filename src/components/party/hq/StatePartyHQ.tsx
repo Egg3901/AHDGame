@@ -14,7 +14,8 @@ import { COUNTRY_CURRENCY_MAP, CURRENCY_SYMBOLS } from "@/lib/constants/currenci
 export interface StatePartyHQProps {
   countryId: string;
   partyId: string;
-  partyColor: string;
+  /** No longer drawn: party color appears only as a swatch beside the name. */
+  partyColor?: string;
   /** Chair / vice-chair / admin — may fund + set priority. */
   canManage: boolean;
   /** Chair / vice-chair / admin — may spend national PS (bulk Build Org). */
@@ -64,7 +65,6 @@ function fmtLocalMoney(v: number, countryId: string): string {
 export function StatePartyHQ({
   countryId,
   partyId,
-  partyColor,
   canManage,
   canSpendPs,
   nationalPoliticalStrength,
@@ -376,10 +376,10 @@ export function StatePartyHQ({
     <div className="space-y-4">
       {/* Aggregate tiles */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Tile label="Avg organization" value={`${totals.avgOrg.toFixed(1)}%`} accent={partyColor} />
+        <Tile label="Avg organization" value={`${totals.avgOrg.toFixed(1)}%`} />
         <Tile label="Total treasury" value={fmtMoney(totals.treasury)} />
         <Tile label="State PS (sum)" value={totals.ps.toFixed(0)} />
-        <Tile label="National PS" value={nationalPs.toFixed(1)} accent={partyColor} />
+        <Tile label="National PS" value={nationalPs.toFixed(1)} />
       </div>
 
       {/* Priority banner */}
@@ -408,7 +408,7 @@ export function StatePartyHQ({
 
       {/* Controls */}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold uppercase tracking-wide text-muted">State parties</h3>
+        <h3 className="text-sm font-semibold text-muted">State parties</h3>
         <div className="flex items-center gap-2">
           {view === "map" && (
             <div className="inline-flex rounded-lg border border-card-border p-0.5 text-xs">
@@ -586,16 +586,11 @@ export function StatePartyHQ({
   );
 }
 
-function Tile({ label, value, accent }: { label: string; value: string; accent?: string }) {
+function Tile({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-card-border bg-card p-3">
-      <div className="text-[10px] uppercase tracking-wide text-muted">{label}</div>
-      <div
-        className="text-lg font-bold tabular-nums"
-        style={accent ? { color: accent } : undefined}
-      >
-        {value}
-      </div>
+      <div className="text-body-sm text-muted">{label}</div>
+      <div className="text-lg font-bold tabular-nums text-foreground">{value}</div>
     </div>
   );
 }

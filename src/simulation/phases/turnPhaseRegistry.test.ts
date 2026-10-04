@@ -536,3 +536,79 @@ describe("settlement phase registration", () => {
     expect(TURN_PHASE_NAMES).toContain("settlement");
   });
 });
+
+// Phase overlaps that are safe because the paired phases touch disjoint state.
+// The stub resolves every phase on a macrotask and records start/end events, so
+// phases launched together record both starts before either end.
+describe("independent phase overlaps", () => {
+  function recordingRuntime() {
+    const events: string[] = [];
+    const runPhase = vi.fn(async (name: string) => {
+      events.push(`start:${name}`);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      events.push(`end:${name}`);
+      return null;
+    });
+    const markPhaseSkipped = vi.fn(async () => undefined);
+    const idx = (event: string) => {
+      const i = events.indexOf(event);
+      expect(i, `${event} must be recorded`).toBeGreaterThanOrEqual(0);
+      return i;
+    };
+    return { runtime: { runPhase, markPhaseSkipped } as never, idx };
+  }
+
+  function adapter(key: string) {
+    const found = getTurnPhaseRegistry().find((a) => a.key === key);
+    expect(found).toBeDefined();
+    return found!;
+  }
+
+  it("runs caucusTax with treasuryTurn, and both before nppFundGeneration", async () => {
+    const { runtime, idx } = recordingRuntime();
+    await adapter("resourceAndFinanceStart").execute(
+      {
+        characters: [],
+        config: { baseActionsPerTurn: 4 },
+        gameNow: new Date(),
+        stateMap: new Map(),
+        gameState: { corporationActionsPaused: false, forexEnabled: false },
+        newTurn: 5,
+        db: {} as never,
+        phaseResults: {} as Record<string, unknown>,
+        warnings: [],
+      } as never,
+      runtime
+    );
+
+    expect(idx("start:treasuryTurn")).toBeLessThan(idx("end:caucusTax"));
+    expect(idx("start:caucusTax")).toBeLessThan(idx("end:treasuryTurn"));
+    expect(idx("end:partyInfluenceTurn")).toBeLessThan(idx("start:caucusTax"));
+    expect(idx("end:corporationTurn")).toBeLessThan(idx("start:treasuryTurn"));
+    // Both $inc npps.funds: caucusTax must finish before nppFundGeneration.
+    expect(idx("end:caucusTax")).toBeLessThan(idx("start:nppFundGeneration"));
+    expect(idx("end:treasuryTurn")).toBeLessThan(idx("start:nppFundGeneration"));
+  });
+
+  it("runs nppBillSponsorship with generateChallengers, and both before nppBehavior", async () => {
+    const { runtime, idx } = recordingRuntime();
+    await adapter("demographicsAndPartySetup").execute(
+      {
+        stateMap: new Map(),
+        newTurn: 5,
+        gameNow: new Date(),
+        realNow: new Date(),
+        currentYear: 1960,
+        db: {} as never,
+        phaseResults: {} as Record<string, unknown>,
+      } as never,
+      runtime
+    );
+
+    expect(idx("start:generateChallengers")).toBeLessThan(idx("end:nppBillSponsorship"));
+    expect(idx("start:nppBillSponsorship")).toBeLessThan(idx("end:generateChallengers"));
+    expect(idx("end:governorLegislationQueue")).toBeLessThan(idx("start:nppBillSponsorship"));
+    expect(idx("end:nppBillSponsorship")).toBeLessThan(idx("start:nppBehavior"));
+    expect(idx("end:generateChallengers")).toBeLessThan(idx("start:nppBehavior"));
+  });
+});

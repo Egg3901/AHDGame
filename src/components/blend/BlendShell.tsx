@@ -64,7 +64,7 @@ export function BlendShell({ left, right, children, rightWidth = 296 }: BlendShe
 }
 
 export interface BlendHeaderProps {
-  /** Letterspaced serif kicker at the left of the rule. */
+  /** Letterspaced kicker at the left of the rule. */
   kicker: string;
   /** Mono readout at the right of the rule. */
   readout: string;
@@ -98,7 +98,7 @@ export function BlendHeader({
       >
         <div
           style={{
-            fontFamily: FONT.serif,
+            fontFamily: FONT.sans,
             fontSize: 12,
             letterSpacing: ".22em",
             textTransform: "uppercase",
@@ -114,7 +114,7 @@ export function BlendHeader({
       <h1
         style={{
           margin: "16px 0 0",
-          fontFamily: FONT.serif,
+          fontFamily: FONT.sans,
           fontSize: headlineSize,
           lineHeight: 1.08,
           fontWeight: 600,
@@ -127,8 +127,7 @@ export function BlendHeader({
         <div
           style={{
             marginTop: 7,
-            fontFamily: FONT.serif,
-            fontStyle: "italic",
+            fontFamily: FONT.sans,
             fontSize: 15,
             color: BLEND.muted,
           }}
@@ -142,14 +141,14 @@ export function BlendHeader({
 
 export interface BlendSectionProps {
   title: string;
-  /** Serif standfirst under the section heading. */
+  /** Standfirst under the section heading. */
   lede?: string;
   children: ReactNode;
   /** Section rules below itself unless it is the last on the screen. */
   ruled?: boolean;
 }
 
-/** A centre-column section: serif heading, optional lede, hairline rule below. */
+/** A centre-column section: heading, optional lede, hairline rule below. */
 export function BlendSection({ title, lede, children, ruled = true }: BlendSectionProps) {
   return (
     <section
@@ -161,7 +160,7 @@ export function BlendSection({ title, lede, children, ruled = true }: BlendSecti
       <h2
         style={{
           margin: lede ? "0 0 4px" : "0 0 16px",
-          fontFamily: FONT.serif,
+          fontFamily: FONT.sans,
           fontSize: 23,
           fontWeight: 600,
         }}
@@ -172,7 +171,7 @@ export function BlendSection({ title, lede, children, ruled = true }: BlendSecti
         <p
           style={{
             margin: "0 0 18px",
-            fontFamily: FONT.serif,
+            fontFamily: FONT.sans,
             fontSize: 14.5,
             lineHeight: 1.55,
             color: BLEND.muted,
