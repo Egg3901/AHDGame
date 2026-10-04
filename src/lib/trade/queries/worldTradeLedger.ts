@@ -55,7 +55,13 @@ const VERDICT_THRESHOLD = 0.12;
  */
 export function shapeWorldTradeLedger(
   snap: Omit<TradeFlowSnapshot, "_id">,
-  countries: CountryId[]
+  countries: CountryId[],
+  /**
+   * World-aware display name (era name plus per-world override). Defaults to the
+   * compiled config name; the loader passes the same resolver the Sectors and
+   * country pages use so one country never shows under two names.
+   */
+  nameOf: (c: CountryId) => string = (c) => COUNTRY_CONFIGS[c]?.name ?? c
 ): WorldTradeLedger {
   const hueOf = (c: CountryId) => getStatsIdentity(c).accent.stat;
 
@@ -89,7 +95,7 @@ export function shapeWorldTradeLedger(
       const net = n?.net ?? 0;
       return {
         code: c,
-        name: COUNTRY_CONFIGS[c]?.name ?? c,
+        name: nameOf(c),
         hue: hueOf(c),
         exports,
         imports,
@@ -158,7 +164,7 @@ export function shapeWorldTradeLedger(
     meta: {
       countries: countries.map((c) => ({
         code: c,
-        name: COUNTRY_CONFIGS[c]?.name ?? c,
+        name: nameOf(c),
         hue: hueOf(c),
       })),
     },

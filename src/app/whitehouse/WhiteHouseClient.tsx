@@ -34,6 +34,7 @@ import { approvalApiUrl, approvalUrl, scotusUrl } from "@/lib/urls";
 import { ApprovalTooltip } from "@/components/ApprovalTooltip";
 import type { ActiveModifier } from "@/lib/utils/approvalModifiers";
 import { useSearchParams } from "next/navigation";
+import { useGameClock } from "@/contexts/useGameClock";
 
 interface ExecutiveData {
   id: string;
@@ -66,12 +67,25 @@ function holderHref(holder: {
     : `/character/${holder.sequentialId ?? holder.characterId}`;
 }
 
+/** Where the White House points players for presidential powers and running. */
+export const PRESIDENCY_EXPLAINER_HREF = "/wiki/reference-offices";
+export const RUNNING_GUIDE_HREF = "/guides/running-for-office";
+
+/** Desk deadline copy: what is left, or what happens once it is gone. */
+export function deskDeadlineLabel(remaining: { text: string; urgency: string }): string {
+  if (remaining.urgency === "ended") {
+    return "Deadline passed: becomes law without your signature when the turn processes";
+  }
+  return `Sign or veto within ${remaining.text}`;
+}
+
 interface PendingBill {
   id: string;
   title: string;
   summary: string;
   sentToPresidentAt: string | null;
   presidentActionDeadline: string | null;
+  presidentActionDeadlineOnTurn?: number | null;
 }
 
 interface VpNomination {
@@ -305,6 +319,7 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
       : "overview";
   });
   const conflictsEnabled = useConflictsEnabled();
+  const clock = useGameClock();
   const [approval, setApproval] = useState<number | null>(null);
   const [approvalModifiers, setApprovalModifiers] = useState<ActiveModifier[]>([]);
   const [vpNominateModal, setVpNominateModal] = useState(false);
@@ -655,6 +670,19 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
                 </MastheadChip>
               )}
               {sinceChip && <MastheadChip tone="mono">{sinceChip}</MastheadChip>}
+              <MastheadChip>
+                <Link
+                  href={PRESIDENCY_EXPLAINER_HREF}
+                  className="underline-offset-2 hover:underline"
+                >
+                  presidential powers ↗
+                </Link>
+              </MastheadChip>
+              <MastheadChip>
+                <Link href={RUNNING_GUIDE_HREF} className="underline-offset-2 hover:underline">
+                  how to run ↗
+                </Link>
+              </MastheadChip>
             </>
           }
           rightSlot={
@@ -982,9 +1010,13 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
             {/* Bills Awaiting Signature */}
             {data.isPresident && bills.length > 0 && (
               <section className="mb-8">
-                <h2 className="text-sm font-semibold text-muted mb-4">
+                <h2 className="text-sm font-semibold text-muted mb-1">
                   Bills awaiting your signature
                 </h2>
+                <p className="mb-4 text-xs text-muted">
+                  Sign or veto before each deadline. A bill you leave unanswered becomes law without
+                  your signature when its deadline passes.
+                </p>
                 <div className="rounded-2xl border border-card-border bg-card p-6 shadow-sm">
                   <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
                     {bills.map((b) => (
@@ -1004,6 +1036,16 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
                             {b.title}
                           </Link>
                           <p className="text-sm text-muted mt-0.5 line-clamp-2">{b.summary}</p>
+                          {(b.presidentActionDeadlineOnTurn != null ||
+                            b.presidentActionDeadline) && (
+                            <p className="mt-1 text-xs font-medium text-warning">
+                              {deskDeadlineLabel(
+                                b.presidentActionDeadlineOnTurn != null
+                                  ? clock.formatRemainingTurns(b.presidentActionDeadlineOnTurn)
+                                  : clock.formatRemaining(b.presidentActionDeadline)
+                              )}
+                            </p>
+                          )}
                         </div>
                         <div className="flex gap-2 shrink-0">
                           <button
@@ -1030,7 +1072,7 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
                     }
                     className="mt-4 inline-block text-sm text-primary hover:underline font-medium"
                   >
-                    View all bills â†’
+                    View all bills →
                   </Link>
                 </div>
               </section>

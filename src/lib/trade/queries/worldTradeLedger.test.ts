@@ -78,3 +78,12 @@ describe("shapeWorldTradeLedger", () => {
     expect(led.headline.verdict).toBe("IMBALANCED");
   });
 });
+
+describe("shapeWorldTradeLedger country names", () => {
+  it("labels nations and meta with the supplied world-aware name", () => {
+    const names: Record<string, string> = { US: "United States", CN: "People's Republic" };
+    const led = shapeWorldTradeLedger(snap, ["US", "CN"], (c) => names[c] ?? c);
+    expect(led.nations.find((n) => n.code === "CN")?.name).toBe("People's Republic");
+    expect(led.meta.countries.find((c) => c.code === "CN")?.name).toBe("People's Republic");
+  });
+});
