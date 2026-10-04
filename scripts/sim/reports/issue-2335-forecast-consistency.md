@@ -32,6 +32,32 @@ costs are compared directly to production `computeInputsCost`.
 | iron_mining       |              0.6500 |          0.6500 |
 | rare_earth_mining |              0.7200 |          0.7200 |
 
+## Optional sandbox observation capture
+
+Source-qualified investment snapshots at `26a5490b6027e6a74a5e681a089e5f4673f4c14f`
+retain sold commodity mix, recipe prices, deposit capacity, reachable books and
+selector configuration. They distinguish opening from post-turn state, preserve
+the observed book turn, and record a prospective evaluation turn. Qualified
+captures require a sandbox database plus run, seed and full source commit.
+Unpinned captures remain explicitly ineligible. Files and directories use
+permissions 0600 and 0700.
+
+The actual-source capture sweep passes 29 tests in three suites. An isolated
+synthetic Mongo fixture compares the prior collector at `eb1c844d0a` with the
+qualified capture, without executing world turns:
+
+| NPP sectors | Prior reads | Capture reads | Prior reply BSON bytes | Capture reply BSON bytes |
+| ----------: | ----------: | ------------: | ---------------------: | -----------------------: |
+|           1 |           9 |            13 |                  1,621 |                    2,731 |
+|          20 |           9 |            13 |                  7,265 |                    9,363 |
+|          60 |           9 |            13 |                 19,185 |                   23,363 |
+
+The four added reads are projected and shared by the cohort. Off mode skips the
+book; an empty cohort skips both capacity and book reads. Command counts above
+apply to the measured cohort sizes; larger cursors may require pagination.
+Synthetic data was removed and the client closed. These are collector command
+and BSON measurements, not production latency or a realized world trajectory.
+
 ## Limits and remaining qualification
 
 The forecast estimates normalized recipe contribution. Deposit room and lagged
@@ -39,6 +65,12 @@ aggregate sellability are proxies. It does not reproduce individual clearing
 priority, transitional recipes, technology, posture, labor, fixed costs, policy,
 landed-price premiums or financing. It establishes neither profit nor survival.
 
-Before closing #2335, run a paired pinned 48-192-turn world simulation and report
-chosen strategies, delivered units, actual input bills and cash returns, shortage
-duration, and player/NPP competition. Preserve the cooldown and transition guards.
+Before closing #2335, run a pinned 48-192-turn candidate world and compare legacy
+and candidate rankings on identical captured observations. Report actual chosen
+strategies, delivered units, input bills, cash returns, shortage duration and
+player/NPP competition. Post-turn observations cannot reconstruct an earlier
+decision after intervening phases or the first retool pass. Descriptive shadows
+do not establish causal outcome differences; those require matched independent
+worlds. Preserve cooldown and transition guards. The deployed queue currently
+does not expose the optional snapshot argument, so capture transport and the
+realized outcome report remain outstanding.
