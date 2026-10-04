@@ -689,6 +689,8 @@ export default function CentralBankClient({ countryId, apiBasePath, members }: P
                 inflationHistory={data.inflationHistory}
                 primeRate={data.primeRate ?? 0}
                 currentInflation={data.currentInflation ?? 0}
+                neutralPrimeRate={data.neutralPrimeRate}
+                isSharedPolicyArea={data.isSharedPolicyArea ?? false}
               />
 
               <CentralBankSection title="Economic trends">

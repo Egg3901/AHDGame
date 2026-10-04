@@ -1,6 +1,7 @@
 "use client";
 
 import { corridorVerdict, inflationTrendLabel } from "@/lib/centralBank/rateCorridor";
+import { useTranslations } from "next-intl";
 import type { TurnSnapshot } from "./centralBankTypes";
 import { CentralBankSection } from "./CentralBankSection";
 
@@ -19,12 +20,17 @@ export function RateCorridor({
   inflationHistory,
   primeRate,
   currentInflation,
+  neutralPrimeRate,
+  isSharedPolicyArea,
 }: {
   interestRateHistory: TurnSnapshot[];
   inflationHistory: TurnSnapshot[];
   primeRate: number;
   currentInflation: number;
+  neutralPrimeRate?: number;
+  isSharedPolicyArea: boolean;
 }) {
+  const t = useTranslations("centralBank");
   const rates = interestRateHistory.slice(-WINDOW);
   const inflation = inflationHistory.slice(-WINDOW);
   const verdict = corridorVerdict(primeRate, currentInflation);
@@ -128,6 +134,13 @@ export function RateCorridor({
       <p className="mt-3 text-body text-foreground">
         <span className="font-semibold">{verdict.copy}</span>{" "}
         <span className="text-muted">Trend: {trend}.</span>
+      </p>
+      <p className="mt-1 text-body-sm text-muted">
+        {isSharedPolicyArea
+          ? t("rateCorridor.sharedCredibilityNote")
+          : t("rateCorridor.credibilityNote", {
+              neutral: (neutralPrimeRate ?? primeRate).toFixed(2),
+            })}
       </p>
     </CentralBankSection>
   );

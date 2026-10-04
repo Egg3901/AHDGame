@@ -12,8 +12,6 @@ import { getInflationTarget } from "@/lib/budget/inflation";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import { getNationalDocId } from "@/lib/constants/nationalScope";
 import {
-  NPP_CHAIR_INFLATION_COEF,
-  NPP_CHAIR_GROWTH_COEF,
   NPP_CHAIR_STEP_FRACTION,
   NPP_CHAIR_TARGET_GROWTH,
   MAX_RATE_CHANGE_DELTA,
@@ -23,32 +21,9 @@ import {
   snapToPrimeRateGrid,
 } from "@/lib/db/types/centralBank";
 import { chairAlignmentPolicy, type ChairAlignment } from "@/lib/centralBank/chairAlignment";
+import { computeNppChairRateTarget } from "@/lib/nppAutonomy/rules/chairRateTarget";
+export { computeNppChairRateTarget } from "@/lib/nppAutonomy/rules/chairRateTarget";
 import { isBankGovernmentControlled } from "@/lib/centralBank/governance";
-
-/**
- * Taylor-rule target rate for the autonomous chair:
- * neutral + alpha*(inflation - target) + beta*(growth - 2.0).
- *
- * `alignment` (hawk/dove) tilts the weights and the inflation target; omitted ⇒
- * neutral (legacy behavior unchanged).
- */
-export function computeNppChairRateTarget(params: {
-  neutralRate: number;
-  inflationRate: number;
-  targetInflation: number;
-  gdpGrowth: number;
-  alignment?: ChairAlignment | null;
-}): number {
-  const policy = chairAlignmentPolicy(params.alignment);
-  const effectiveTargetInflation = params.targetInflation + policy.targetInflationDelta;
-  return (
-    params.neutralRate +
-    NPP_CHAIR_INFLATION_COEF *
-      policy.inflationCoefMult *
-      (params.inflationRate - effectiveTargetInflation) +
-    NPP_CHAIR_GROWTH_COEF * policy.growthCoefMult * (params.gdpGrowth - NPP_CHAIR_TARGET_GROWTH)
-  );
-}
 
 /**
  * Bounded step toward the target: 0.5x the gap, clamped to [-1.75, +0.75].

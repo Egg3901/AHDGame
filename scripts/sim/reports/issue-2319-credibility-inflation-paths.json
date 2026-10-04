@@ -1,0 +1,1442 @@
+{
+  "issue": 2319,
+  "scope": "Deterministic controlled replay, not an endogenous world simulation. Each baseline/treatment pair holds the same starting CPI, scrutiny, resolve streak, neutral rate, inflation target, prime rate, GDP growth, and other CPI inputs constant; only the correct-stance rule differs.",
+  "inputs": {
+    "neutralRatePct": 3,
+    "targetInflationPct": 2,
+    "turnsPerPath": 12,
+    "scoringUsesExistingTaylorCoefficients": true,
+    "cpiFunction": "calculateInflationWithBreakdown",
+    "scrutinyFunctions": ["computeScrutinyDelta", "capScrutinyGain", "resolveRecoveryDelta"]
+  },
+  "scenarios": [
+    {
+      "name": "neutral rate, on-target CPI",
+      "primeRatePct": 3,
+      "relationToNeutral": "at",
+      "gdpGrowthPct": 2,
+      "baseline": {
+        "scoring": "baseline-corridor",
+        "startingInflationPct": 2,
+        "startingScrutiny": 20,
+        "startingResolveStreak": 2,
+        "turns": [
+          {
+            "turn": 1,
+            "cpiPct": 2.04,
+            "monetaryInflationContributionPp": 0,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 19.02,
+            "relief": 0
+          },
+          {
+            "turn": 2,
+            "cpiPct": 2.06,
+            "monetaryInflationContributionPp": 0,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 18.099,
+            "relief": 0
+          },
+          {
+            "turn": 3,
+            "cpiPct": 2.06,
+            "monetaryInflationContributionPp": 0,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 17.2241,
+            "relief": 0
+          },
+          {
+            "turn": 4,
+            "cpiPct": 2.06,
+            "monetaryInflationContributionPp": 0,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 16.3928,
+            "relief": 0
+          },
+          {
+            "turn": 5,
+            "cpiPct": 2.06,
+            "monetaryInflationContributionPp": 0,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 15.6032,
+            "relief": 0
+          },
+          {
+            "turn": 6,
+            "cpiPct": 2.06,
+            "monetaryInflationContributionPp": 0,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 14.853,
+            "relief": 0
+          },
+          {
+            "turn": 7,
+            "cpiPct": 2.06,
+            "monetaryInflationContributionPp": 0,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 14.1404,
+            "relief": 0
+          },
+          {
+            "turn": 8,
+            "cpiPct": 2.06,
+            "monetaryInflationContributionPp": 0,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 13.4634,
+            "relief": 0
+          },
+          {
+            "turn": 9,
+            "cpiPct": 2.06,
+            "monetaryInflationContributionPp": 0,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 12.8202,
+            "relief": 0
+          },
+          {
+            "turn": 10,
+            "cpiPct": 2.06,
+            "monetaryInflationContributionPp": 0,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 12.2092,
+            "relief": 0
+          },
+          {
+            "turn": 11,
+            "cpiPct": 2.06,
+            "monetaryInflationContributionPp": 0,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 11.6287,
+            "relief": 0
+          },
+          {
+            "turn": 12,
+            "cpiPct": 2.06,
+            "monetaryInflationContributionPp": 0,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 11.0773,
+            "relief": 0
+          }
+        ]
+      },
+      "treatment": {
+        "scoring": "treatment-taylor",
+        "startingInflationPct": 2,
+        "startingScrutiny": 20,
+        "startingResolveStreak": 2,
+        "turns": [
+          {
+            "turn": 1,
+            "cpiPct": 2.04,
+            "monetaryInflationContributionPp": 0,
+            "correctStance": true,
+            "resolveStreak": 0,
+            "scrutiny": 13.02,
+            "relief": 6
+          },
+          {
+            "turn": 2,
+            "cpiPct": 2.06,
+            "monetaryInflationContributionPp": 0,
+            "correctStance": true,
+            "resolveStreak": 1,
+            "scrutiny": 12.399,
+            "relief": 0
+          },
+          {
+            "turn": 3,
+            "cpiPct": 2.06,
+            "monetaryInflationContributionPp": 0,
+            "correctStance": true,
+            "resolveStreak": 2,
+            "scrutiny": 11.809,
+            "relief": 0
+          },
+          {
+            "turn": 4,
+            "cpiPct": 2.06,
+            "monetaryInflationContributionPp": 0,
+            "correctStance": true,
+            "resolveStreak": 0,
+            "scrutiny": 5.2486,
+            "relief": 6
+          },
+          {
+            "turn": 5,
+            "cpiPct": 2.06,
+            "monetaryInflationContributionPp": 0,
+            "correctStance": true,
+            "resolveStreak": 1,
+            "scrutiny": 5.0162,
+            "relief": 0
+          },
+          {
+            "turn": 6,
+            "cpiPct": 2.06,
+            "monetaryInflationContributionPp": 0,
+            "correctStance": true,
+            "resolveStreak": 2,
+            "scrutiny": 4.7954,
+            "relief": 0
+          },
+          {
+            "turn": 7,
+            "cpiPct": 2.06,
+            "monetaryInflationContributionPp": 0,
+            "correctStance": true,
+            "resolveStreak": 0,
+            "scrutiny": 0,
+            "relief": 6
+          },
+          {
+            "turn": 8,
+            "cpiPct": 2.06,
+            "monetaryInflationContributionPp": 0,
+            "correctStance": true,
+            "resolveStreak": 1,
+            "scrutiny": 0.03,
+            "relief": 0
+          },
+          {
+            "turn": 9,
+            "cpiPct": 2.06,
+            "monetaryInflationContributionPp": 0,
+            "correctStance": true,
+            "resolveStreak": 2,
+            "scrutiny": 0.0585,
+            "relief": 0
+          },
+          {
+            "turn": 10,
+            "cpiPct": 2.06,
+            "monetaryInflationContributionPp": 0,
+            "correctStance": true,
+            "resolveStreak": 0,
+            "scrutiny": 0,
+            "relief": 6
+          },
+          {
+            "turn": 11,
+            "cpiPct": 2.06,
+            "monetaryInflationContributionPp": 0,
+            "correctStance": true,
+            "resolveStreak": 1,
+            "scrutiny": 0.03,
+            "relief": 0
+          },
+          {
+            "turn": 12,
+            "cpiPct": 2.06,
+            "monetaryInflationContributionPp": 0,
+            "correctStance": true,
+            "resolveStreak": 2,
+            "scrutiny": 0.0585,
+            "relief": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "below-neutral rate, on-target CPI",
+      "primeRatePct": 2.5,
+      "relationToNeutral": "below",
+      "gdpGrowthPct": 2,
+      "baseline": {
+        "scoring": "baseline-corridor",
+        "startingInflationPct": 2,
+        "startingScrutiny": 20,
+        "startingResolveStreak": 2,
+        "turns": [
+          {
+            "turn": 1,
+            "cpiPct": 2.15,
+            "monetaryInflationContributionPp": 0.184,
+            "correctStance": true,
+            "resolveStreak": 0,
+            "scrutiny": 13.075,
+            "relief": 6
+          },
+          {
+            "turn": 2,
+            "cpiPct": 2.21,
+            "monetaryInflationContributionPp": 0.1895,
+            "correctStance": true,
+            "resolveStreak": 1,
+            "scrutiny": 12.5262,
+            "relief": 0
+          },
+          {
+            "turn": 3,
+            "cpiPct": 2.23,
+            "monetaryInflationContributionPp": 0.19,
+            "correctStance": true,
+            "resolveStreak": 2,
+            "scrutiny": 12.0149,
+            "relief": 0
+          },
+          {
+            "turn": 4,
+            "cpiPct": 2.23,
+            "monetaryInflationContributionPp": 0.1904,
+            "correctStance": true,
+            "resolveStreak": 0,
+            "scrutiny": 5.5292,
+            "relief": 6
+          },
+          {
+            "turn": 5,
+            "cpiPct": 2.24,
+            "monetaryInflationContributionPp": 0.1956,
+            "correctStance": true,
+            "resolveStreak": 1,
+            "scrutiny": 5.3727,
+            "relief": 0
+          },
+          {
+            "turn": 6,
+            "cpiPct": 2.24,
+            "monetaryInflationContributionPp": 0.1957,
+            "correctStance": true,
+            "resolveStreak": 2,
+            "scrutiny": 5.2241,
+            "relief": 0
+          },
+          {
+            "turn": 7,
+            "cpiPct": 2.24,
+            "monetaryInflationContributionPp": 0.1958,
+            "correctStance": true,
+            "resolveStreak": 0,
+            "scrutiny": 0,
+            "relief": 6
+          },
+          {
+            "turn": 8,
+            "cpiPct": 2.24,
+            "monetaryInflationContributionPp": 0.2,
+            "correctStance": true,
+            "resolveStreak": 1,
+            "scrutiny": 0.12,
+            "relief": 0
+          },
+          {
+            "turn": 9,
+            "cpiPct": 2.24,
+            "monetaryInflationContributionPp": 0.1999,
+            "correctStance": true,
+            "resolveStreak": 2,
+            "scrutiny": 0.234,
+            "relief": 0
+          },
+          {
+            "turn": 10,
+            "cpiPct": 2.24,
+            "monetaryInflationContributionPp": 0.1998,
+            "correctStance": true,
+            "resolveStreak": 0,
+            "scrutiny": 0,
+            "relief": 6
+          },
+          {
+            "turn": 11,
+            "cpiPct": 2.24,
+            "monetaryInflationContributionPp": 0.2,
+            "correctStance": true,
+            "resolveStreak": 1,
+            "scrutiny": 0.12,
+            "relief": 0
+          },
+          {
+            "turn": 12,
+            "cpiPct": 2.24,
+            "monetaryInflationContributionPp": 0.1999,
+            "correctStance": true,
+            "resolveStreak": 2,
+            "scrutiny": 0.234,
+            "relief": 0
+          }
+        ]
+      },
+      "treatment": {
+        "scoring": "treatment-taylor",
+        "startingInflationPct": 2,
+        "startingScrutiny": 20,
+        "startingResolveStreak": 2,
+        "turns": [
+          {
+            "turn": 1,
+            "cpiPct": 2.15,
+            "monetaryInflationContributionPp": 0.184,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 19.075,
+            "relief": 0
+          },
+          {
+            "turn": 2,
+            "cpiPct": 2.2,
+            "monetaryInflationContributionPp": 0.1847,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 18.2213,
+            "relief": 0
+          },
+          {
+            "turn": 3,
+            "cpiPct": 2.22,
+            "monetaryInflationContributionPp": 0.1854,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 17.4202,
+            "relief": 0
+          },
+          {
+            "turn": 4,
+            "cpiPct": 2.23,
+            "monetaryInflationContributionPp": 0.1861,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 16.6642,
+            "relief": 0
+          },
+          {
+            "turn": 5,
+            "cpiPct": 2.23,
+            "monetaryInflationContributionPp": 0.1867,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 15.946,
+            "relief": 0
+          },
+          {
+            "turn": 6,
+            "cpiPct": 2.23,
+            "monetaryInflationContributionPp": 0.1872,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 15.2637,
+            "relief": 0
+          },
+          {
+            "turn": 7,
+            "cpiPct": 2.23,
+            "monetaryInflationContributionPp": 0.1878,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 14.6155,
+            "relief": 0
+          },
+          {
+            "turn": 8,
+            "cpiPct": 2.23,
+            "monetaryInflationContributionPp": 0.1883,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 13.9997,
+            "relief": 0
+          },
+          {
+            "turn": 9,
+            "cpiPct": 2.23,
+            "monetaryInflationContributionPp": 0.1888,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 13.4147,
+            "relief": 0
+          },
+          {
+            "turn": 10,
+            "cpiPct": 2.23,
+            "monetaryInflationContributionPp": 0.1893,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 12.859,
+            "relief": 0
+          },
+          {
+            "turn": 11,
+            "cpiPct": 2.23,
+            "monetaryInflationContributionPp": 0.1897,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 12.331,
+            "relief": 0
+          },
+          {
+            "turn": 12,
+            "cpiPct": 2.23,
+            "monetaryInflationContributionPp": 0.1901,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 11.8295,
+            "relief": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "above-neutral rate, on-target CPI",
+      "primeRatePct": 4,
+      "relationToNeutral": "above",
+      "gdpGrowthPct": 2,
+      "baseline": {
+        "scoring": "baseline-corridor",
+        "startingInflationPct": 2,
+        "startingScrutiny": 20,
+        "startingResolveStreak": 2,
+        "turns": [
+          {
+            "turn": 1,
+            "cpiPct": 1.38,
+            "monetaryInflationContributionPp": -1.104,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 18.7313,
+            "relief": 0
+          },
+          {
+            "turn": 2,
+            "cpiPct": 1.18,
+            "monetaryInflationContributionPp": -1.1101,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 17.436,
+            "relief": 0
+          },
+          {
+            "turn": 3,
+            "cpiPct": 1.11,
+            "monetaryInflationContributionPp": -1.1163,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 16.1709,
+            "relief": 0
+          },
+          {
+            "turn": 4,
+            "cpiPct": 1.09,
+            "monetaryInflationContributionPp": -1.1224,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 14.9564,
+            "relief": 0
+          },
+          {
+            "turn": 5,
+            "cpiPct": 1.08,
+            "monetaryInflationContributionPp": -1.1282,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 13.7944,
+            "relief": 0
+          },
+          {
+            "turn": 6,
+            "cpiPct": 1.07,
+            "monetaryInflationContributionPp": -1.1338,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 12.6825,
+            "relief": 0
+          },
+          {
+            "turn": 7,
+            "cpiPct": 1.06,
+            "monetaryInflationContributionPp": -1.1391,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 11.6181,
+            "relief": 0
+          },
+          {
+            "turn": 8,
+            "cpiPct": 1.06,
+            "monetaryInflationContributionPp": -1.1442,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 10.6036,
+            "relief": 0
+          },
+          {
+            "turn": 9,
+            "cpiPct": 1.06,
+            "monetaryInflationContributionPp": -1.1491,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 9.6366,
+            "relief": 0
+          },
+          {
+            "turn": 10,
+            "cpiPct": 1.05,
+            "monetaryInflationContributionPp": -1.1537,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 8.7103,
+            "relief": 0
+          },
+          {
+            "turn": 11,
+            "cpiPct": 1.05,
+            "monetaryInflationContributionPp": -1.1582,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 7.8274,
+            "relief": 0
+          },
+          {
+            "turn": 12,
+            "cpiPct": 1.04,
+            "monetaryInflationContributionPp": -1.1624,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 6.9811,
+            "relief": 0
+          }
+        ]
+      },
+      "treatment": {
+        "scoring": "treatment-taylor",
+        "startingInflationPct": 2,
+        "startingScrutiny": 20,
+        "startingResolveStreak": 2,
+        "turns": [
+          {
+            "turn": 1,
+            "cpiPct": 1.38,
+            "monetaryInflationContributionPp": -1.104,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 18.7313,
+            "relief": 0
+          },
+          {
+            "turn": 2,
+            "cpiPct": 1.18,
+            "monetaryInflationContributionPp": -1.1101,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 17.436,
+            "relief": 0
+          },
+          {
+            "turn": 3,
+            "cpiPct": 1.11,
+            "monetaryInflationContributionPp": -1.1163,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 16.1709,
+            "relief": 0
+          },
+          {
+            "turn": 4,
+            "cpiPct": 1.09,
+            "monetaryInflationContributionPp": -1.1224,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 14.9564,
+            "relief": 0
+          },
+          {
+            "turn": 5,
+            "cpiPct": 1.08,
+            "monetaryInflationContributionPp": -1.1282,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 13.7944,
+            "relief": 0
+          },
+          {
+            "turn": 6,
+            "cpiPct": 1.07,
+            "monetaryInflationContributionPp": -1.1338,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 12.6825,
+            "relief": 0
+          },
+          {
+            "turn": 7,
+            "cpiPct": 1.06,
+            "monetaryInflationContributionPp": -1.1391,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 11.6181,
+            "relief": 0
+          },
+          {
+            "turn": 8,
+            "cpiPct": 1.06,
+            "monetaryInflationContributionPp": -1.1442,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 10.6036,
+            "relief": 0
+          },
+          {
+            "turn": 9,
+            "cpiPct": 1.06,
+            "monetaryInflationContributionPp": -1.1491,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 9.6366,
+            "relief": 0
+          },
+          {
+            "turn": 10,
+            "cpiPct": 1.05,
+            "monetaryInflationContributionPp": -1.1537,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 8.7103,
+            "relief": 0
+          },
+          {
+            "turn": 11,
+            "cpiPct": 1.05,
+            "monetaryInflationContributionPp": -1.1582,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 7.8274,
+            "relief": 0
+          },
+          {
+            "turn": 12,
+            "cpiPct": 1.04,
+            "monetaryInflationContributionPp": -1.1624,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 6.9811,
+            "relief": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "off-target CPI, 5% rate path",
+      "primeRatePct": 5,
+      "relationToNeutral": "above",
+      "gdpGrowthPct": 2,
+      "baseline": {
+        "scoring": "baseline-corridor",
+        "startingInflationPct": 4,
+        "startingScrutiny": 20,
+        "startingResolveStreak": 2,
+        "turns": [
+          {
+            "turn": 1,
+            "cpiPct": 2.5,
+            "monetaryInflationContributionPp": -2.208,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 19.25,
+            "relief": 0
+          },
+          {
+            "turn": 2,
+            "cpiPct": 1,
+            "monetaryInflationContributionPp": -2.2152,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 17.8517,
+            "relief": 0
+          },
+          {
+            "turn": 3,
+            "cpiPct": 0.39,
+            "monetaryInflationContributionPp": -2.2286,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 16.2499,
+            "relief": 0
+          },
+          {
+            "turn": 4,
+            "cpiPct": 0.18,
+            "monetaryInflationContributionPp": -2.244,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 14.626,
+            "relief": 0
+          },
+          {
+            "turn": 5,
+            "cpiPct": 0.11,
+            "monetaryInflationContributionPp": -2.2596,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 13.0418,
+            "relief": 0
+          },
+          {
+            "turn": 6,
+            "cpiPct": 0.08,
+            "monetaryInflationContributionPp": -2.2748,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 11.5132,
+            "relief": 0
+          },
+          {
+            "turn": 7,
+            "cpiPct": 0.06,
+            "monetaryInflationContributionPp": -2.2895,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 10.042,
+            "relief": 0
+          },
+          {
+            "turn": 8,
+            "cpiPct": 0.04,
+            "monetaryInflationContributionPp": -2.3036,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 8.6255,
+            "relief": 0
+          },
+          {
+            "turn": 9,
+            "cpiPct": 0.03,
+            "monetaryInflationContributionPp": -2.3172,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 7.2659,
+            "relief": 0
+          },
+          {
+            "turn": 10,
+            "cpiPct": 0.02,
+            "monetaryInflationContributionPp": -2.3302,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 5.9605,
+            "relief": 0
+          },
+          {
+            "turn": 11,
+            "cpiPct": 0.01,
+            "monetaryInflationContributionPp": -2.3428,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 4.707,
+            "relief": 0
+          },
+          {
+            "turn": 12,
+            "cpiPct": 0,
+            "monetaryInflationContributionPp": -2.3548,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 3.5031,
+            "relief": 0
+          }
+        ]
+      },
+      "treatment": {
+        "scoring": "treatment-taylor",
+        "startingInflationPct": 4,
+        "startingScrutiny": 20,
+        "startingResolveStreak": 2,
+        "turns": [
+          {
+            "turn": 1,
+            "cpiPct": 2.5,
+            "monetaryInflationContributionPp": -2.208,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 19.25,
+            "relief": 0
+          },
+          {
+            "turn": 2,
+            "cpiPct": 1,
+            "monetaryInflationContributionPp": -2.2152,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 17.8517,
+            "relief": 0
+          },
+          {
+            "turn": 3,
+            "cpiPct": 0.39,
+            "monetaryInflationContributionPp": -2.2286,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 16.2499,
+            "relief": 0
+          },
+          {
+            "turn": 4,
+            "cpiPct": 0.18,
+            "monetaryInflationContributionPp": -2.244,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 14.626,
+            "relief": 0
+          },
+          {
+            "turn": 5,
+            "cpiPct": 0.11,
+            "monetaryInflationContributionPp": -2.2596,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 13.0418,
+            "relief": 0
+          },
+          {
+            "turn": 6,
+            "cpiPct": 0.08,
+            "monetaryInflationContributionPp": -2.2748,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 11.5132,
+            "relief": 0
+          },
+          {
+            "turn": 7,
+            "cpiPct": 0.06,
+            "monetaryInflationContributionPp": -2.2895,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 10.042,
+            "relief": 0
+          },
+          {
+            "turn": 8,
+            "cpiPct": 0.04,
+            "monetaryInflationContributionPp": -2.3036,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 8.6255,
+            "relief": 0
+          },
+          {
+            "turn": 9,
+            "cpiPct": 0.03,
+            "monetaryInflationContributionPp": -2.3172,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 7.2659,
+            "relief": 0
+          },
+          {
+            "turn": 10,
+            "cpiPct": 0.02,
+            "monetaryInflationContributionPp": -2.3302,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 5.9605,
+            "relief": 0
+          },
+          {
+            "turn": 11,
+            "cpiPct": 0.01,
+            "monetaryInflationContributionPp": -2.3428,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 4.707,
+            "relief": 0
+          },
+          {
+            "turn": 12,
+            "cpiPct": 0,
+            "monetaryInflationContributionPp": -2.3548,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 3.5031,
+            "relief": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "hot GDP, 4% rate path",
+      "primeRatePct": 4,
+      "relationToNeutral": "above",
+      "gdpGrowthPct": 4,
+      "baseline": {
+        "scoring": "baseline-corridor",
+        "startingInflationPct": 2,
+        "startingScrutiny": 20,
+        "startingResolveStreak": 2,
+        "turns": [
+          {
+            "turn": 1,
+            "cpiPct": 1.62,
+            "monetaryInflationContributionPp": -1.104,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 17.9687,
+            "relief": 0
+          },
+          {
+            "turn": 2,
+            "cpiPct": 1.5,
+            "monetaryInflationContributionPp": -1.1138,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 15.97,
+            "relief": 0
+          },
+          {
+            "turn": 3,
+            "cpiPct": 1.45,
+            "monetaryInflationContributionPp": -1.1233,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 14.0322,
+            "relief": 0
+          },
+          {
+            "turn": 4,
+            "cpiPct": 1.43,
+            "monetaryInflationContributionPp": -1.1326,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 12.1658,
+            "relief": 0
+          },
+          {
+            "turn": 5,
+            "cpiPct": 1.42,
+            "monetaryInflationContributionPp": -1.1416,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 10.3722,
+            "relief": 0
+          },
+          {
+            "turn": 6,
+            "cpiPct": 1.41,
+            "monetaryInflationContributionPp": -1.1502,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 8.6481,
+            "relief": 0
+          },
+          {
+            "turn": 7,
+            "cpiPct": 1.4,
+            "monetaryInflationContributionPp": -1.1585,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 6.9906,
+            "relief": 0
+          },
+          {
+            "turn": 8,
+            "cpiPct": 1.39,
+            "monetaryInflationContributionPp": -1.1664,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 5.3969,
+            "relief": 0
+          },
+          {
+            "turn": 9,
+            "cpiPct": 1.39,
+            "monetaryInflationContributionPp": -1.1741,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 3.869,
+            "relief": 0
+          },
+          {
+            "turn": 10,
+            "cpiPct": 1.38,
+            "monetaryInflationContributionPp": -1.1814,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 2.3994,
+            "relief": 0
+          },
+          {
+            "turn": 11,
+            "cpiPct": 1.37,
+            "monetaryInflationContributionPp": -1.1885,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 0.9854,
+            "relief": 0
+          },
+          {
+            "turn": 12,
+            "cpiPct": 1.37,
+            "monetaryInflationContributionPp": -1.1953,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 0,
+            "relief": 0
+          }
+        ]
+      },
+      "treatment": {
+        "scoring": "treatment-taylor",
+        "startingInflationPct": 2,
+        "startingScrutiny": 20,
+        "startingResolveStreak": 2,
+        "turns": [
+          {
+            "turn": 1,
+            "cpiPct": 1.62,
+            "monetaryInflationContributionPp": -1.104,
+            "correctStance": true,
+            "resolveStreak": 0,
+            "scrutiny": 11.9687,
+            "relief": 6
+          },
+          {
+            "turn": 2,
+            "cpiPct": 1.48,
+            "monetaryInflationContributionPp": -1.1426,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 10.2108,
+            "relief": 0
+          },
+          {
+            "turn": 3,
+            "cpiPct": 1.43,
+            "monetaryInflationContributionPp": -1.151,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 8.5027,
+            "relief": 0
+          },
+          {
+            "turn": 4,
+            "cpiPct": 1.41,
+            "monetaryInflationContributionPp": -1.1592,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 6.856,
+            "relief": 0
+          },
+          {
+            "turn": 5,
+            "cpiPct": 1.4,
+            "monetaryInflationContributionPp": -1.1671,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 5.2726,
+            "relief": 0
+          },
+          {
+            "turn": 6,
+            "cpiPct": 1.39,
+            "monetaryInflationContributionPp": -1.1747,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 3.7498,
+            "relief": 0
+          },
+          {
+            "turn": 7,
+            "cpiPct": 1.38,
+            "monetaryInflationContributionPp": -1.182,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 2.2851,
+            "relief": 0
+          },
+          {
+            "turn": 8,
+            "cpiPct": 1.37,
+            "monetaryInflationContributionPp": -1.189,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 0.8759,
+            "relief": 0
+          },
+          {
+            "turn": 9,
+            "cpiPct": 1.37,
+            "monetaryInflationContributionPp": -1.1958,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 0,
+            "relief": 0
+          },
+          {
+            "turn": 10,
+            "cpiPct": 1.36,
+            "monetaryInflationContributionPp": -1.2,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 0,
+            "relief": 0
+          },
+          {
+            "turn": 11,
+            "cpiPct": 1.36,
+            "monetaryInflationContributionPp": -1.2,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 0,
+            "relief": 0
+          },
+          {
+            "turn": 12,
+            "cpiPct": 1.36,
+            "monetaryInflationContributionPp": -1.2,
+            "correctStance": false,
+            "resolveStreak": 0,
+            "scrutiny": 0,
+            "relief": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "cold GDP, 2% rate path",
+      "primeRatePct": 2,
+      "relationToNeutral": "below",
+      "gdpGrowthPct": 0,
+      "baseline": {
+        "scoring": "baseline-corridor",
+        "startingInflationPct": 2,
+        "startingScrutiny": 20,
+        "startingResolveStreak": 2,
+        "turns": [
+          {
+            "turn": 1,
+            "cpiPct": 2.09,
+            "monetaryInflationContributionPp": 0.368,
+            "correctStance": true,
+            "resolveStreak": 0,
+            "scrutiny": 14.045,
+            "relief": 6
+          },
+          {
+            "turn": 2,
+            "cpiPct": 2.12,
+            "monetaryInflationContributionPp": 0.3775,
+            "correctStance": true,
+            "resolveStreak": 1,
+            "scrutiny": 14.4028,
+            "relief": 0
+          },
+          {
+            "turn": 3,
+            "cpiPct": 2.13,
+            "monetaryInflationContributionPp": 0.377,
+            "correctStance": true,
+            "resolveStreak": 2,
+            "scrutiny": 14.7476,
+            "relief": 0
+          },
+          {
+            "turn": 4,
+            "cpiPct": 2.13,
+            "monetaryInflationContributionPp": 0.3764,
+            "correctStance": true,
+            "resolveStreak": 0,
+            "scrutiny": 9.0752,
+            "relief": 6
+          },
+          {
+            "turn": 5,
+            "cpiPct": 2.14,
+            "monetaryInflationContributionPp": 0.3855,
+            "correctStance": true,
+            "resolveStreak": 1,
+            "scrutiny": 9.6915,
+            "relief": 0
+          },
+          {
+            "turn": 6,
+            "cpiPct": 2.14,
+            "monetaryInflationContributionPp": 0.3845,
+            "correctStance": true,
+            "resolveStreak": 2,
+            "scrutiny": 10.2769,
+            "relief": 0
+          },
+          {
+            "turn": 7,
+            "cpiPct": 2.14,
+            "monetaryInflationContributionPp": 0.3836,
+            "correctStance": true,
+            "resolveStreak": 0,
+            "scrutiny": 4.8331,
+            "relief": 6
+          },
+          {
+            "turn": 8,
+            "cpiPct": 2.15,
+            "monetaryInflationContributionPp": 0.3923,
+            "correctStance": true,
+            "resolveStreak": 1,
+            "scrutiny": 5.6664,
+            "relief": 0
+          },
+          {
+            "turn": 9,
+            "cpiPct": 2.15,
+            "monetaryInflationContributionPp": 0.3909,
+            "correctStance": true,
+            "resolveStreak": 2,
+            "scrutiny": 6.4581,
+            "relief": 0
+          },
+          {
+            "turn": 10,
+            "cpiPct": 2.15,
+            "monetaryInflationContributionPp": 0.3897,
+            "correctStance": true,
+            "resolveStreak": 0,
+            "scrutiny": 1.2102,
+            "relief": 6
+          },
+          {
+            "turn": 11,
+            "cpiPct": 2.15,
+            "monetaryInflationContributionPp": 0.3981,
+            "correctStance": true,
+            "resolveStreak": 1,
+            "scrutiny": 2.2247,
+            "relief": 0
+          },
+          {
+            "turn": 12,
+            "cpiPct": 2.15,
+            "monetaryInflationContributionPp": 0.3964,
+            "correctStance": true,
+            "resolveStreak": 2,
+            "scrutiny": 3.1884,
+            "relief": 0
+          }
+        ]
+      },
+      "treatment": {
+        "scoring": "treatment-taylor",
+        "startingInflationPct": 2,
+        "startingScrutiny": 20,
+        "startingResolveStreak": 2,
+        "turns": [
+          {
+            "turn": 1,
+            "cpiPct": 2.09,
+            "monetaryInflationContributionPp": 0.368,
+            "correctStance": true,
+            "resolveStreak": 0,
+            "scrutiny": 14.045,
+            "relief": 6
+          },
+          {
+            "turn": 2,
+            "cpiPct": 2.12,
+            "monetaryInflationContributionPp": 0.3775,
+            "correctStance": true,
+            "resolveStreak": 1,
+            "scrutiny": 14.4028,
+            "relief": 0
+          },
+          {
+            "turn": 3,
+            "cpiPct": 2.13,
+            "monetaryInflationContributionPp": 0.377,
+            "correctStance": true,
+            "resolveStreak": 2,
+            "scrutiny": 14.7476,
+            "relief": 0
+          },
+          {
+            "turn": 4,
+            "cpiPct": 2.13,
+            "monetaryInflationContributionPp": 0.3764,
+            "correctStance": true,
+            "resolveStreak": 0,
+            "scrutiny": 9.0752,
+            "relief": 6
+          },
+          {
+            "turn": 5,
+            "cpiPct": 2.14,
+            "monetaryInflationContributionPp": 0.3855,
+            "correctStance": true,
+            "resolveStreak": 1,
+            "scrutiny": 9.6915,
+            "relief": 0
+          },
+          {
+            "turn": 6,
+            "cpiPct": 2.14,
+            "monetaryInflationContributionPp": 0.3845,
+            "correctStance": true,
+            "resolveStreak": 2,
+            "scrutiny": 10.2769,
+            "relief": 0
+          },
+          {
+            "turn": 7,
+            "cpiPct": 2.14,
+            "monetaryInflationContributionPp": 0.3836,
+            "correctStance": true,
+            "resolveStreak": 0,
+            "scrutiny": 4.8331,
+            "relief": 6
+          },
+          {
+            "turn": 8,
+            "cpiPct": 2.15,
+            "monetaryInflationContributionPp": 0.3923,
+            "correctStance": true,
+            "resolveStreak": 1,
+            "scrutiny": 5.6664,
+            "relief": 0
+          },
+          {
+            "turn": 9,
+            "cpiPct": 2.15,
+            "monetaryInflationContributionPp": 0.3909,
+            "correctStance": true,
+            "resolveStreak": 2,
+            "scrutiny": 6.4581,
+            "relief": 0
+          },
+          {
+            "turn": 10,
+            "cpiPct": 2.15,
+            "monetaryInflationContributionPp": 0.3897,
+            "correctStance": true,
+            "resolveStreak": 0,
+            "scrutiny": 1.2102,
+            "relief": 6
+          },
+          {
+            "turn": 11,
+            "cpiPct": 2.15,
+            "monetaryInflationContributionPp": 0.3981,
+            "correctStance": true,
+            "resolveStreak": 1,
+            "scrutiny": 2.2247,
+            "relief": 0
+          },
+          {
+            "turn": 12,
+            "cpiPct": 2.15,
+            "monetaryInflationContributionPp": 0.3964,
+            "correctStance": true,
+            "resolveStreak": 2,
+            "scrutiny": 3.1884,
+            "relief": 0
+          }
+        ]
+      }
+    }
+  ]
+}

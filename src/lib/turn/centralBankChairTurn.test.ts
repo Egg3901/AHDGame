@@ -26,7 +26,7 @@ vi.mock("@/lib/constants/countries", async (importOriginal) => {
         ...actual.COUNTRY_CONFIGS.US,
         id: "US",
         governmentType: "presidential",
-        centralBank: { name: "Federal Reserve", defaultPrimeRate: 2.5 },
+        centralBank: { name: "Federal Reserve", defaultPrimeRate: 3 },
       },
     },
   };
@@ -170,6 +170,54 @@ describe("processCentralBankChairTurn", () => {
     const charUpdate = charOps[0].updateOne;
     expect(charUpdate.update.$inc.nationalInfluence).toBe(0.5);
     expect(charUpdate.update.$inc.actions).toBeUndefined();
+  });
+
+  it("pays resolve relief for the modern neutral rate at target CPI", async () => {
+    testBanks = [
+      {
+        _id: "US",
+        countryId: "US",
+        chairCharacterId,
+        primeRate: 3,
+        chairInfamy: 20,
+        resolveStreak: 2,
+      },
+    ];
+
+    await processCentralBankChairTurn(mockDb as never, 100);
+
+    const [bankOps] = getCollectionMock("centralBanks").bulkWrite.mock.calls[0] as [
+      Array<{
+        updateOne: {
+          update: { $set: { chairInfamy: number; resolveStreak: number } };
+        };
+      }>,
+    ];
+    expect(bankOps[0].updateOne.update.$set.resolveStreak).toBe(0);
+    expect(bankOps[0].updateOne.update.$set.chairInfamy).toBeCloseTo(13, 2);
+  });
+
+  it("does not pay resolve relief for a below-neutral rate at target CPI", async () => {
+    testBanks = [
+      {
+        _id: "US",
+        countryId: "US",
+        chairCharacterId,
+        primeRate: 2.5,
+        chairInfamy: 20,
+        resolveStreak: 2,
+      },
+    ];
+    await processCentralBankChairTurn(mockDb as never, 101);
+    const [bankOps] = getCollectionMock("centralBanks").bulkWrite.mock.calls[0] as [
+      Array<{
+        updateOne: {
+          update: { $set: { chairInfamy: number; resolveStreak: number } };
+        };
+      }>,
+    ];
+    expect(bankOps[0].updateOne.update.$set.resolveStreak).toBe(0);
+    expect(bankOps[0].updateOne.update.$set.chairInfamy).toBeCloseTo(19, 2);
   });
 
   it("increases infamy with high inflation", async () => {

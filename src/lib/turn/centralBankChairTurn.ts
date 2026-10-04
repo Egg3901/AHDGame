@@ -281,6 +281,10 @@ export async function processCentralBankChairTurn(
     const nationalMetricsDoc = nationalDocId ? metricsById.get(nationalDocId) : null;
     const gdpGrowth =
       area?.gdpGrowth ?? finiteOr(nationalMetricsDoc?.economic?.gdpGrowth?.value, TARGET_GROWTH);
+    const neutralRate =
+      area?.neutralRate ??
+      getEraMonetaryBaseline(countryId, currentYear)?.neutralPrimeRate ??
+      config.centralBank.defaultPrimeRate;
 
     const currentInfamy = Math.min(100, Math.max(0, finiteOr(bank.chairInfamy, 0)));
 
@@ -298,7 +302,10 @@ export async function processCentralBankChairTurn(
     const correctStance = stanceIsCorrect(
       finiteOr(bank.primeRate, targetInflation),
       inflationRate,
-      targetInflation
+      targetInflation,
+      neutralRate,
+      gdpGrowth,
+      bank.chairMode === "npp" ? bank.chairAlignment : undefined
     );
     const resolve = resolveRecoveryDelta({
       correctStance,
