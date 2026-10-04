@@ -14,6 +14,7 @@ import { migration as industryModelMarketIndexes } from "./entries/2026-10-04-in
 import { migration as mediaDiscriminatorMarketIndexes } from "./entries/2026-10-04-media-discriminator-market-indexes";
 import { migration as constructionServiceLeaseIndex } from "./entries/2026-10-04-construction-service-lease-index";
 import { migration as mediaProductProjectsV1Index } from "./entries/2026-10-04-media-product-projects-v1-index";
+import { migration as manufacturingProductProjectsV2Index } from "./entries/2026-10-04-manufacturing-product-projects-v2-index";
 import { runMigrations, type RunSummary } from "./runner";
 import type { Migration } from "./types";
 
@@ -53,6 +54,8 @@ export const REQUIRED_STARTUP_MIGRATIONS: readonly Migration[] = [
   mediaDiscriminatorMarketIndexes,
   constructionServiceLeaseIndex,
   mediaProductProjectsV1Index,
+  // The active-project uniqueness guard must exist before project creation.
+  manufacturingProductProjectsV2Index,
 ];
 
 export async function runRequiredStartupMigrations(db: Db): Promise<RunSummary> {
