@@ -20,6 +20,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createInMemoryDb, type InMemoryDb } from "@/lib/test-utils/inMemoryDb";
+import { withInjectedCrash, InjectedCrash } from "@/lib/test-utils/faultyDb";
 import { injectBankCapital, upstreamBankCash } from "@/lib/banking/bankCash";
 import { bankBalanceSheet } from "@/lib/banking/balanceSheet";
 import { applyMoneyMove } from "@/lib/banking/moneyMove";
@@ -671,5 +672,85 @@ describe("private banking conserves money", () => {
     const loans = db.collection("interbankLoans").docs as { status: string; outstanding: number }[];
     expect(loans.every((l) => l.status === "defaulted")).toBe(true);
     expect(loans.reduce((sum, l) => sum + l.outstanding, 0)).toBeCloseTo(2_000_000, 6);
+  });
+});
+
+describe("construction admission and deposit-return conservation", () => {
+  it("refuses deposit return while an actual construction funding quote owns the bank", async () => {
+    const memory = makeWorld({ cashReserves: 1_000_000, npcDeposits: 100_000 });
+    const db = memory as unknown as Db;
+    await db.collection("corporations").updateOne(
+      { _id: CORP_ID },
+      {
+        $set: {
+          bankConstructionFunding: {
+            loanId: "construction-loan",
+            charteredTurn: 1,
+            kind: "funding",
+            disbursed: false,
+          },
+        },
+      }
+    );
+    const before = totalMoney(memory);
+    const result = await returnDepositBook(db, CORP_ID, {
+      cause: "charter_switch",
+      turn: 1,
+      releaseResidualToOwner: false,
+    });
+    expect(result.error).toContain("Construction funding");
+    expect(totalMoney(memory)).toBe(before);
+    expect(
+      (await db.collection("corporations").findOne({ _id: CORP_ID }))?.bankCharter.npcDeposits
+    ).toBe(100_000);
+  });
+  it("resumes a crashed deposit return under the original turn before releasing admission", async () => {
+    const memory = makeWorld({ cashReserves: 1_000_000, npcDeposits: 100_000 });
+    const db = memory as unknown as Db;
+    await db
+      .collection<{ _id: string }>("gameConfig")
+      .updateOne({ _id: "default" }, { $set: { bankConstructionFinanceEnabled: true } });
+    const before = totalMoney(memory);
+    const fault = withInjectedCrash(memory, {
+      collection: "corporations",
+      op: "updateOne",
+      onCall: 1,
+      afterWrite: true,
+      matches: (args) =>
+        (args[1] as { $inc?: Record<string, number> }).$inc?.["bankCharter.cashReserves"] ===
+        -100_000,
+    });
+    await expect(
+      returnDepositBook(fault.db, CORP_ID, {
+        cause: "charter_switch",
+        turn: 1,
+        releaseResidualToOwner: false,
+      })
+    ).rejects.toBeInstanceOf(InjectedCrash);
+    expect(
+      (await db.collection("corporations").findOne({ _id: CORP_ID }))?.bankConstructionFunding
+    ).toMatchObject({
+      kind: "returning",
+      depositReturn: { turn: 1 },
+    });
+    expect(
+      (
+        await returnDepositBook(db, CORP_ID, {
+          cause: "charter_switch",
+          turn: 2,
+          releaseResidualToOwner: false,
+        })
+      ).error
+    ).toBeUndefined();
+    const bank = await db.collection("corporations").findOne({ _id: CORP_ID });
+    expect(bank).toMatchObject({ bankCharter: { cashReserves: 900_000, npcDeposits: 0 } });
+    expect(bank?.bankConstructionFunding).toBeUndefined();
+    expect(totalMoney(memory)).toBe(before);
+    expect(memory.collection("bankMoneyMoves").docs.map((row) => row._id)).toContain(
+      `deposit-book-return:${CORP_ID}:charter_switch:1`
+    );
+    expect(memory.collection("bankMoneyMoves").docs.map((row) => row._id)).not.toContain(
+      `deposit-book-return:${CORP_ID}:charter_switch:2`
+    );
   });
 });

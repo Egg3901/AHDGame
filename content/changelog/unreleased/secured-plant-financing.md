@@ -1,13 +1,16 @@
 ---
 date: 2026-10-04
-title: Secured plant construction financing
+title: Construction loan settlement safeguards
 badges: [minor]
 areas: [engine]
 tags: [banking, manufacturing]
 ---
 
-Construction finance underwriting uses the existing bank reserve, borrower
-income and currency checks. Net loan proceeds are earmarked for construction,
-and the borrower covers the remainder and the withheld origination fee.
-The collateral limit follows the existing refundable construction basis.
-Cancellation refunds retire loan principal before any owner refund.
+Construction loans reserve their quoted build and earmark delivered loan and
+borrower cash for one paid construction order. Interrupted funding resumes its
+original receipt; an unfunded abort returns only the delivered contribution.
+Bank charter changes and deposit returns wait for unfinished construction funding.
+
+Final funded repayments release construction security. Defaults retain the
+pledge for recovery. Named loan servicing updates the loan book through its
+receipt, preserving concurrent originations and repayments.

@@ -32,7 +32,7 @@ describe("funded construction pledge release", () => {
     };
     memory.seed("corporations", [
       { _id: borrowerId, liquidCapital: 1000 },
-      { _id: bankId, bankCharter: { cashReserves: 0 } },
+      { _id: bankId, bankCharter: { cashReserves: 0, totalLoans: 100 } },
     ]);
     memory.seed("bankLoans", [loan]);
     memory.seed("corporateSectors", [
@@ -72,6 +72,9 @@ describe("funded construction pledge release", () => {
         .status
     ).toBe("released");
     expect((await db.collection("bankLoans").findOne({ _id: loanId }))?.status).toBe("repaid");
+    expect(
+      (await db.collection("corporations").findOne({ _id: bankId }))?.bankCharter.totalLoans
+    ).toBe(0);
     expect(
       (await db.collection("corporations").findOne({ _id: borrowerId }))?.liquidCapital
     ).toBeCloseTo(1000 - decision.payment);

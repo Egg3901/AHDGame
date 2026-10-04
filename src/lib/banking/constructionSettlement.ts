@@ -12,6 +12,11 @@ import {
 } from "./rules/constructionBuild";
 import { settleAtomicDocumentTransition } from "./atomicDocumentSettlement";
 import { acquireConstructionLoanLock, releaseConstructionLoanLock } from "./constructionLoanLock";
+import {
+  acquireConstructionFundingLease,
+  releaseConstructionFundingLease,
+  abortUnfundedConstruction,
+} from "./constructionFundingLease";
 import { MONEY_MOVE_COLLECTION } from "./moneyMove";
 import { settleTransition, resumeSettlement, type SettlementResult } from "./settlementJournal";
 
@@ -55,6 +60,7 @@ export async function settleReservedConstruction(input: {
       },
       { $unset: { constructionSettlementOwner: "" } }
     );
+    await releaseConstructionFundingLease(db, claim);
     return { ok: true };
   }
 
@@ -74,6 +80,15 @@ export async function settleReservedConstruction(input: {
   const lockKey = `construction:${claim.claimId}:funding`;
   const owned = await acquireConstructionLoanLock(db, loan, lockKey);
   if (!owned) return { ok: false, error: "Another settlement owns construction funding" };
+  if (!(await acquireConstructionFundingLease(db, claim))) {
+    if (await abortUnfundedConstruction(db, claim, sectorId, input.bank.turn))
+      return {
+        ok: false,
+        error: "Unfunded construction was cancelled and its contribution returned",
+      };
+    await releaseConstructionLoanLock(db, loan, lockKey);
+    return { ok: false, error: "The lender is settling another operation or its charter changed" };
+  }
   const fundingKey = `named_loan_disbursement:${claim.bankId}:${claim.loanId}`;
   // An original partial journal owns its quote even if today's bank is no
   // longer eligible. Finish that delivery before evaluating a new command.
@@ -82,12 +97,17 @@ export async function settleReservedConstruction(input: {
     .findOne({ _id: fundingKey }, { projection: { _id: 1 } });
   if (existing) {
     const resumed = await resumeSettlement(db, fundingKey);
-    if (!complete(resumed)) return { ok: false, error: resumed.error ?? "Loan funding is pending" };
+    if (!complete(resumed)) {
+      await abortUnfundedConstruction(db, claim, sectorId, input.bank.turn);
+      return { ok: false, error: resumed.error ?? "Loan funding is pending" };
+    }
   } else if (claim.loanFunded !== true) {
     if (loan.status !== "pending" || loan.constructionDecision !== "approve")
       return { ok: false, error: "Construction is awaiting the lender's decision" };
-    if (input.bank.charter?.charteredTurn !== claim.charteredTurn)
+    if (input.bank.charter?.charteredTurn !== claim.charteredTurn) {
+      await abortUnfundedConstruction(db, claim, sectorId, input.bank.turn);
       return { ok: false, error: "The lender charter changed before construction funding" };
+    }
     const decision = decideBankCommand(
       input.bank,
       {
@@ -102,7 +122,7 @@ export async function settleReservedConstruction(input: {
       { commandId: claim.loanId }
     );
     if (!decision.allowed) {
-      await releaseConstructionLoanLock(db, loan, lockKey);
+      await abortUnfundedConstruction(db, claim, sectorId, input.bank.turn);
       return { ok: false, error: decision.message };
     }
     const contribution = constructionContributionTransition({
@@ -112,9 +132,16 @@ export async function settleReservedConstruction(input: {
       claim,
     });
     if (!contribution.ok) return { ok: false, error: contribution.error };
-    const contributed = await settleTransition(db, contribution.value);
-    if (!complete(contributed))
+    let contributed = await settleTransition(db, contribution.value);
+    if (
+      contributed.status === "partial" ||
+      (contributed.status === "replayed" && contributed.error)
+    )
+      contributed = await resumeSettlement(db, contribution.value.key);
+    if (!complete(contributed)) {
+      await abortUnfundedConstruction(db, claim, sectorId, input.bank.turn);
       return { ok: false, error: contributed.error ?? "Construction contribution is pending" };
+    }
 
     const funding = bindConstructionLoanTransition({
       transition: decision.transition,
@@ -123,9 +150,15 @@ export async function settleReservedConstruction(input: {
       sectorId: sectorId.toHexString(),
       collateralCostLocal: claim.collateralCostLocal,
       constructionCostLocal: claim.constructionCostLocal,
+      fundingLeaseLoanId: claim.loanId,
+      reserveRatio: input.bank.reserveRatio,
+      playerDepositsAreLiabilities: input.bank.playerDepositsAreLiabilities,
     });
     const funded = await settleTransition(db, funding);
-    if (!complete(funded)) return { ok: false, error: funded.error ?? "Loan funding is pending" };
+    if (!complete(funded)) {
+      await abortUnfundedConstruction(db, claim, sectorId, input.bank.turn);
+      return { ok: false, error: funded.error ?? "Loan funding is pending" };
+    }
   }
 
   sector = await sectors.findOne(
@@ -137,6 +170,7 @@ export async function settleReservedConstruction(input: {
     return { ok: false, error: "The reserved construction claim changed" };
   if (paidClaim.status === "building") {
     await releaseConstructionLoanLock(db, loan, lockKey);
+    await releaseConstructionFundingLease(db, claim);
     return { ok: true };
   }
   const paid = constructionPaidBuildTransition({
@@ -151,7 +185,10 @@ export async function settleReservedConstruction(input: {
     identity: { _id: oid(sectorId.toHexString()) },
     guard: paid.value.guard,
   });
-  if (complete(appended)) await releaseConstructionLoanLock(db, loan, lockKey);
+  if (complete(appended)) {
+    await releaseConstructionLoanLock(db, loan, lockKey);
+    await releaseConstructionFundingLease(db, claim);
+  }
   return complete(appended)
     ? { ok: true }
     : { ok: false, error: appended.error ?? "The funded build is awaiting queue settlement" };

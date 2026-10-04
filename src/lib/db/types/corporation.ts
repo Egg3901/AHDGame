@@ -179,6 +179,19 @@ export interface Corporation {
    * at least one financial sector; one bank per corp. See src/lib/db/types/bank.ts.
    */
   bankCharter?: import("./bank").BankCharter;
+  /** Holds an originating epoch until construction cash and its loan book settle. */
+  bankConstructionFunding?: {
+    loanId: string;
+    charteredTurn: number;
+    kind: "funding" | "aborting" | "returning";
+    /** Written with the actual vault debit, never from a quote or cached book. */
+    disbursed: boolean;
+    depositReturn?: {
+      cause: "failure" | "revocation" | "admin_unwind" | "charter_switch";
+      turn: number;
+      releaseResidualToOwner: boolean;
+    };
+  };
   /** Public media editorial position. Missing means neutral for legacy worlds. */
   editorialStance?: { economic: number; social: number };
   /** Funded sale proceeds held here until delivered to the matching charter or insurer. */

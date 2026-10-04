@@ -109,6 +109,65 @@ function theLoan(db: InMemoryDb): BankLoan {
 describe("named loan lifecycle through the banking turn", () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it("preserves an actual origination racing the end-of-turn loan-book stamp", async () => {
+    const { db, bankId, borrowerId } = makeWorld(1_000_000);
+    const native = db as unknown as Db;
+    expect(
+      (
+        await originateLoan(
+          native,
+          bankId,
+          { type: "corporation", id: borrowerId },
+          PRINCIPAL,
+          TERM
+        )
+      ).ok
+    ).toBe(true);
+    const before = money(db);
+    const corporations = db.collection("corporations");
+    const updateOne = corporations.updateOne.bind(corporations);
+    let injected = false;
+    const spy = vi
+      .spyOn(corporations, "updateOne")
+      .mockImplementation(async (filter, update, options) => {
+        if (
+          !injected &&
+          !Array.isArray(update) &&
+          update.$set !== null &&
+          typeof update.$set === "object" &&
+          "bankCharter.lastBankingTurn" in update.$set &&
+          update.$set["bankCharter.lastBankingTurn"] === START + 1
+        ) {
+          injected = true;
+          expect(
+            (
+              await originateLoan(
+                native,
+                bankId,
+                { type: "corporation", id: borrowerId },
+                PRINCIPAL,
+                TERM
+              )
+            ).ok
+          ).toBe(true);
+        }
+        return updateOne(filter, update, options);
+      });
+    await processBankingTurn(native, START + 1);
+    spy.mockRestore();
+    expect(injected).toBe(true);
+    const activeBook = db
+      .collection("bankLoans")
+      .docs.reduce(
+        (sum, loan) =>
+          sum +
+          (["current", "arrears"].includes(String(loan.status)) ? Number(loan.outstanding) : 0),
+        0
+      );
+    expect(corp(db, bankId).bankCharter!.totalLoans).toBeCloseTo(activeBook, 6);
+    expect(money(db)).toBeCloseTo(before, 6);
+  });
+
   it("runs from application to payoff, conserving money and advancing once per turn", async () => {
     const { db, bankId, borrowerId } = makeWorld(1_000_000);
     const { getDb } = await import("@/lib/mongodb");
@@ -245,6 +304,9 @@ describe("construction loan servicing through the banking turn", () => {
           _id: sectorId,
           constructionFinancing: {
             claimId,
+            loanId: String(originated.loan._id),
+            bankId: String(bankId),
+            charteredTurn: originated.loan.charteredTurn,
             status: "building",
             escrowLocal: 0,
             loanFunded: true,

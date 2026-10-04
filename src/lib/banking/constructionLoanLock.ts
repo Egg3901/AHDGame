@@ -2,6 +2,7 @@
 import type { Db } from "mongodb";
 import type { BankLoan } from "@/lib/db/types/bank";
 import type { CorporateSector } from "@/lib/db/types/corporation";
+import { releaseConstructionFundingLease } from "./constructionFundingLease";
 import { resumeSettlement } from "./settlementJournal";
 
 export async function releaseConstructionLoanLock(
@@ -51,6 +52,9 @@ export async function acquireConstructionLoanLock(
     const claim = sector?.constructionFinancing;
     if (
       claim?.claimId !== collateral.claimId ||
+      claim.loanId !== String(current._id) ||
+      claim.bankId !== String(current.bankCorporationId) ||
+      claim.charteredTurn !== current.charteredTurn ||
       claim.status !== "building" ||
       !claim.loanFunded ||
       !claim.borrowerContributionPaid ||
@@ -58,6 +62,7 @@ export async function acquireConstructionLoanLock(
       !["current", "arrears"].includes(current.status)
     )
       return null;
+    await releaseConstructionFundingLease(db, claim);
     await releaseConstructionLoanLock(db, current, previous);
     return acquire();
   }
