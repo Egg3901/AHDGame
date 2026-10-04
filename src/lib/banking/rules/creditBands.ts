@@ -170,6 +170,7 @@ export interface BandOriginationTarget {
 export function bandOriginationTargets(args: {
   fundingCapacity: number;
   lendingRatePercent: number;
+  primeRatePercent?: number;
   profile: LendingProfileId | undefined;
 }): BandOriginationTarget[] {
   const open = new Set(bandsForProfile(args.profile).map((b) => b.id));
@@ -182,7 +183,10 @@ export function bandOriginationTargets(args: {
       band: band.id,
       open: isOpen,
       target: isOpen
-        ? Math.max(0, computeNpcLoanBook(capacity * band.demandShare, rate).volume)
+        ? Math.max(
+            0,
+            computeNpcLoanBook(capacity * band.demandShare, rate, args.primeRatePercent).volume
+          )
         : 0,
       ratePercent: rate,
     };

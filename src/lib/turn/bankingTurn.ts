@@ -874,6 +874,7 @@ async function processOneBank(
     rates.lendingRatePercent,
     {
       loanFundingCapacity,
+      primeRatePercent: cb?.primeRate ?? 0,
       cashReserves,
       totalLoans,
       cbDocId,
@@ -1214,6 +1215,7 @@ async function readBorrowerAvailable(
 }
 
 type NpcBulkState = {
+  primeRatePercent: number;
   /** Total lending capacity from deposits after the reserve requirement. */
   loanFundingCapacity: number;
   cashReserves: number;
@@ -1374,6 +1376,7 @@ async function serviceNpcBulkBook(
   // price still moves volume, it just moves it per band now instead of across
   // the whole book at once.
   const targets = bandOriginationTargets({
+    primeRatePercent: state.primeRatePercent,
     fundingCapacity: npcFundingCapacity,
     lendingRatePercent,
     profile: state.lendingProfile,
