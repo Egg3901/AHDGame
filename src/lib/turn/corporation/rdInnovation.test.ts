@@ -30,7 +30,9 @@ vi.mock("@/lib/notifications", () => ({
 function revenueBoost(operation: RdInnovationResult["sectorBoostOps"][number]): number {
   const update = operation.updateOne.update;
   if (Array.isArray(update)) throw new Error("Expected a legacy revenue update");
-  return update.$inc.revenue;
+  const boost = update.$inc?.revenue;
+  if (typeof boost !== "number") throw new Error("Expected a numeric revenue boost");
+  return boost;
 }
 
 function baseLookups(
