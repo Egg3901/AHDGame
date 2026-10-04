@@ -856,6 +856,46 @@ describe("corporate tax deduction", () => {
     expect(snapshot.taxPaidByCountryForeign.has("US")).toBe(false);
   });
 
+  it("defers only operating cash when the funded Treasury journal owns it", () => {
+    const corp = makeCorp({ headquartersState: "US-CA", countryId: "US", liquidCapital: 1_000 });
+    const sector = makeSector(corp._id, {
+      stateId: "US-CA",
+      countryId: "US",
+      revenue: 24_000,
+      profitMargin: 50,
+      targetGrowthRate: 0,
+      currentGrowthRate: 0,
+    });
+    const lookups = baseLookups([corp], [sector]);
+    lookups.domesticCorpTaxRateByCountry.set("US", 20);
+
+    const result = processSectors(
+      lookups,
+      1,
+      new Date(),
+      false,
+      undefined,
+      undefined,
+      undefined,
+      false,
+      false,
+      false,
+      new Set(),
+      true
+    );
+    const snapshot = result.corpSnapshots[0];
+    const operation = result.corpOps[0];
+    if (!operation || !("updateOne" in operation)) throw new Error("Expected a corp cash update");
+    const cashIncrement = (operation.updateOne.update as { $inc?: { liquidCapital?: number } }).$inc
+      ?.liquidCapital;
+    const incomeLocal = snapshot.operatingCashIncomeLocal ?? 0;
+
+    expect(incomeLocal).toBeGreaterThan(0);
+    expect(snapshot.federalTaxByCountryAnchor?.get("US")).toBeGreaterThan(0);
+    expect(cashIncrement).toBe(0);
+    expect(snapshot.liquidCapital).toBeCloseTo(corp.liquidCapital + incomeLocal);
+  });
+
   it("taxes each sector at its own country's federal rate (cross-border corp)", () => {
     const corp = makeCorp({ headquartersState: "US-CA", countryId: "US" });
     const usSector = makeSector(corp._id, {

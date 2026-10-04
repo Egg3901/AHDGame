@@ -144,7 +144,9 @@ export function processSectors(
   /** gameConfig.privateBankingEnabled — branch/commodity capacity split. */
   privateBankingEnabled: boolean = false,
   /** Currency pools that supersede issuer-funded share-buyback escrow. */
-  equityMarketPoolCurrencies: ReadonlySet<CurrencyCode> = new Set()
+  equityMarketPoolCurrencies: ReadonlySet<CurrencyCode> = new Set(),
+  /** Route modeled operating cash through the durable Treasury cash journal. */
+  treasuryCashLedgerEnabled: boolean = false
 ): SectorCalculationsResult {
   const currentTurn = typeof turn === "number" ? turn : 1;
 
@@ -1046,6 +1048,10 @@ export function processSectors(
       totalCosts: totalCorpCosts,
       incomePreDividends,
       income,
+      operatingCashIncomeLocal: incomeForBalance,
+      operatingCashCurrency: resolvedHomeCurrency,
+      federalTaxByCountryAnchor: new Map(taxPaidByCountry),
+      operatingCashLocalPerAnchor: localFxRate,
       perTurnBondCouponIncome,
       perTurnBondInterestExpense,
       perTurnBondDragOnNetIncome,
@@ -1107,7 +1113,7 @@ export function processSectors(
         filter: { _id: corp._id },
         update: {
           $inc: {
-            liquidCapital: incomeForBalance - escrowFundingMove,
+            liquidCapital: (treasuryCashLedgerEnabled ? 0 : incomeForBalance) - escrowFundingMove,
             ...(escrowFundingMove > 0 ? { shareEscrowBalance: escrowFundingMove } : {}),
             marketingStrength: marketingGrowth,
             logisticsStrength: logisticsDelta,
