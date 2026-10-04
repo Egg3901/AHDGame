@@ -929,7 +929,10 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
       }
       statsStrip={
         <PartyStatsRow>
-          <PartyStat label="Political strength">
+          <PartyStat
+            label="Political strength"
+            detail="Spent on party actions such as building organization; capped"
+          >
             <span className={PARTY_VALUE_CLASS}>{(party.politicalStrength ?? 0).toFixed(1)}</span>
             <span className="ml-1 text-body-sm text-muted">of {party.effectivePsCap}</span>
           </PartyStat>
@@ -955,7 +958,10 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
               className="text-body-lg font-semibold text-foreground"
             />
           </PartyStat>
-          <PartyStat label="Bonus actions">
+          <PartyStat
+            label="Bonus actions"
+            detail="Extra actions for members, from their influence and how close they are to the party"
+          >
             <span className={PARTY_VALUE_CLASS}>+{party.totalBonusActions}</span>
             <span className="ml-1 text-body-sm text-muted">per turn</span>
           </PartyStat>
