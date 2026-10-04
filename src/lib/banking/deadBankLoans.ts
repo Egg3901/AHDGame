@@ -56,7 +56,7 @@ export const ZERO_DEAD_BANK_SUMMARY: DeadBankLoanSummary = {
   recoveredToInsurer: 0,
 };
 
-export type DeadBank = {
+type DeadBank = {
   corporationId: Corporation["_id"];
   name: string;
   currency: CurrencyCode;
@@ -127,6 +127,11 @@ export async function findDeadBanksWithLoans(db: Db): Promise<DeadBank[]> {
       resolved: stageAllows(lifecycleStage(corp.bankCharter), "windDownEstate"),
     }));
   const nameById = new Map(corps.map((corp) => [corp._id.toString(), corp.name]));
+  const liveEstateEpochs = new Set(
+    corps
+      .filter((corp) => corp.bankCharter && corp.bankCharter.status !== "active")
+      .map((corp) => `${corp._id.toString()}:${corp.bankCharter!.charteredTurn}`)
+  );
   deadBanks.push(
     ...history
       .filter((entry) => entry.charter.status === "failed" || entry.charter.status === "revoked")
@@ -137,7 +142,12 @@ export async function findDeadBanksWithLoans(db: Db): Promise<DeadBank[]> {
         charteredTurn: entry.charter.charteredTurn,
         ...nextEpochField(entry.corporationId, entry.charter.charteredTurn),
         historyId: entry._id,
-        resolved: stageAllows(lifecycleStage(entry.charter), "windDownEstate"),
+        // Once replaced, a failed snapshot has no live waterfall to distribute
+        // it. Old deployments could archive before resolution, so use insurance.
+        resolved:
+          !liveEstateEpochs.has(
+            `${entry.corporationId.toString()}:${entry.charter.charteredTurn}`
+          ) || stageAllows(lifecycleStage(entry.charter), "windDownEstate"),
       }))
   );
 
@@ -153,7 +163,9 @@ export async function findDeadBanksWithLoans(db: Db): Promise<DeadBank[]> {
 }
 
 /** Where a payment to this dead bank should land. */
-export function recoveryTargetFor(bank: DeadBank): MoneyTarget {
+export function recoveryTargetFor(
+  bank: Pick<DeadBank, "corporationId" | "name" | "currency" | "resolved" | "historyId">
+): MoneyTarget {
   // An archived snapshot has no active resolution waterfall to distribute its
   // reserve balance. Route these legacy recoveries to the insurer rather than
   // strand cash in a history document no later pass will debit.
@@ -214,7 +226,7 @@ export async function processDeadBankLoans(
     if (loans.length === 0) continue;
 
     const target = recoveryTargetFor(bank);
-    if (bank.resolved) {
+    if (bank.resolved || bank.historyId) {
       // The fund document has to exist before anything is paid into it: a
       // recovery credited to a missing fund is money that silently stops
       // existing, which is the whole class of bug this work is about.
@@ -233,5 +245,3 @@ export async function processDeadBankLoans(
 
   return summary;
 }
-
-export type { DeadBank };

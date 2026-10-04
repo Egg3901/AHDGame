@@ -47,7 +47,7 @@ describe("2026-10-04-bank-loan-charter-epoch migration", () => {
     ]);
 
     const result = await migration.execute(db as unknown as Db, { dryRun: false });
-    const loans = db.collection<BankLoan>("bankLoans").docs;
+    const loans = db.collection("bankLoans").docs as BankLoan[];
     const epochById = new Map(loans.map((loan) => [loan._id.toString(), loan.charteredTurn]));
 
     expect(result.documentsUpdated).toBe(3);
