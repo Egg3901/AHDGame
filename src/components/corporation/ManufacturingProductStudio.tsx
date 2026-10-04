@@ -2,7 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Button, Card, LoadingSpinner } from "@/components/ui";
-import { manufacturingDevelopmentThresholdAnchor } from "@/lib/products/rules/manufacturingRules";
+import {
+  allocatedManufacturingCapitalAnchor,
+  manufacturingDevelopmentThresholdAnchor,
+} from "@/lib/products/rules/manufacturingRules";
 
 interface ProductKind {
   id: string;
@@ -22,6 +25,7 @@ interface ProductPlant {
   industryModel?: string | null;
   strategyId?: string | null;
   capitalStock: number;
+  developmentCapitalAnchor?: number;
   plantCount: number;
   eligibleKindIds: string[];
 }
@@ -120,12 +124,22 @@ export function ManufacturingProductStudio({
   const allocations = legalPlants
     .map((plant) => ({ sectorId: plant.sectorId, share: shares[plant.sectorId] ?? 0 }))
     .filter((allocation) => allocation.share > 0);
-  const allocatedCapacity = legalPlants.reduce(
-    (sum, plant) => sum + plant.capitalStock * (shares[plant.sectorId] ?? 0),
-    0
+  const quotedPlants = legalPlants.flatMap((plant) =>
+    typeof plant.developmentCapitalAnchor === "number" &&
+    Number.isFinite(plant.developmentCapitalAnchor) &&
+    plant.developmentCapitalAnchor >= 0
+      ? [{ sectorId: plant.sectorId, developmentCapitalAnchor: plant.developmentCapitalAnchor }]
+      : []
+  );
+  const allSelectedPlantsQuoted = allocations.every((allocation) =>
+    quotedPlants.some((plant) => plant.sectorId === allocation.sectorId)
   );
   const estimatedDevelopmentCost =
-    allocations.length > 0 ? manufacturingDevelopmentThresholdAnchor(allocatedCapacity) : null;
+    allocations.length > 0 && allSelectedPlantsQuoted
+      ? manufacturingDevelopmentThresholdAnchor(
+          allocatedManufacturingCapitalAnchor(quotedPlants, allocations)
+        )
+      : null;
   const selectedKind = studio.catalog.find((kind) => kind.id === kindId);
 
   async function startProject() {
@@ -307,7 +321,7 @@ export function ManufacturingProductStudio({
                   {estimatedDevelopmentCost != null && (
                     <div>
                       Estimated development cost: {estimatedDevelopmentCost.toLocaleString()} anchor
-                      units (5% of allocated plant capital, one-unit minimum).
+                      units (5% of allocated monetary plant capital, one-unit minimum).
                     </div>
                   )}
                   <div>

@@ -8,10 +8,12 @@ import {
 } from "@/lib/products/manufacturingProject";
 import { selectNppManufacturingProduct } from "@/lib/products/rules/selectNppManufacturingProduct";
 import type { CommodityPriceRatioFn } from "@/lib/turn/npp/marketSignals";
+import { sectorCapacityBookAnchor } from "@/lib/corporations/sectorProfitBasis";
 import type { TechLane } from "@/lib/constants/techTree/nodes";
 import {
   MANUFACTURING_DEVELOPMENT_ELAPSED_TURNS,
   manufacturingDevelopmentThresholdAnchor,
+  allocatedManufacturingCapitalAnchor,
 } from "@/lib/products/rules/manufacturingRules";
 
 export async function loadNppProductProjectsV2(
@@ -95,7 +97,19 @@ export function createNppManufacturingProductProjectV2(input: {
     allocations: selectedProduct.allocations,
     startedTurn: input.turn,
     developmentPaidAnchor: 0,
-    paidThresholdAnchor: manufacturingDevelopmentThresholdAnchor(selectedProduct.capacityStock),
+    paidThresholdAnchor: manufacturingDevelopmentThresholdAnchor(
+      allocatedManufacturingCapitalAnchor(
+        input.sectors.map((sector) => ({
+          sectorId: sector._id.toString(),
+          developmentCapitalAnchor: sectorCapacityBookAnchor(
+            sector,
+            input.currentYear,
+            input.eraUnitScale
+          ),
+        })),
+        selectedProduct.allocations
+      )
+    ),
     elapsedDevelopmentTurns: 0,
     elapsedThresholdTurns: MANUFACTURING_DEVELOPMENT_ELAPSED_TURNS,
   };
