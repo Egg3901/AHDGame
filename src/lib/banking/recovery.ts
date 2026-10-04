@@ -29,6 +29,7 @@ import { recoverPropForexFees } from "./propForexFees";
 import { loadBankingPolicy } from "./policy";
 import type { BankingPolicySnapshot } from "./rules/policy";
 import { recoverConstructionServiceLeases } from "./constructionServiceLease";
+import { recoverConstructionFunding } from "./constructionFinance";
 import { recoverConstructionCancellations } from "./constructionCancellation";
 
 export interface BankingRecoverySummary {
@@ -65,6 +66,9 @@ export async function recoverBankingSettlements(
   };
   const policy = preloadedPolicy ?? (await loadBankingPolicy(db));
   if (policy.constructionFinance) {
+    const funding = await recoverConstructionFunding(db, turn);
+    for (const record of funding)
+      summary.stillPartial.push({ ...record, kind: "construction_funding" });
     const cancellations = await recoverConstructionCancellations(db, turn);
     for (const record of cancellations)
       summary.stillPartial.push({ ...record, kind: "construction_principal_first_refund" });

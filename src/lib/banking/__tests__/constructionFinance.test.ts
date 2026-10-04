@@ -12,6 +12,7 @@ import {
   requestConstructionFinance,
   approveConstructionFinance,
   rejectConstructionFinance,
+  recoverConstructionFunding,
 } from "../constructionFinance";
 
 import { cancelFinancedConstruction } from "../constructionCancellation";
@@ -186,6 +187,52 @@ describe("construction request lifecycle", () => {
     expect(
       (await request.db.collection("corporateSectors").findOne({ _id: sectorId }))?.buildQueue
     ).toHaveLength(1);
+  });
+
+  it("recovers a paid queue after a crash without a player retry", async () => {
+    const { request, memory } = world();
+    const fault = withInjectedCrash(memory, {
+      collection: "corporateSectors",
+      op: "updateOne",
+      onCall: 1,
+      afterWrite: true,
+      matches: (args) =>
+        Array.isArray((args[1] as { $set?: Record<string, unknown> }).$set?.buildQueue),
+    });
+    await expect(requestConstructionFinance({ ...request, db: fault.db })).rejects.toBeInstanceOf(
+      InjectedCrash
+    );
+    expect(await recoverConstructionFunding(request.db, 12)).toEqual([]);
+    expect(
+      memory.collection("corporations").docs.find((doc) => String(doc._id) === String(bankId))
+        ?.bankConstructionFunding
+    ).toBeDefined();
+    expect(await recoverConstructionFunding(request.db, 13)).toEqual([]);
+    expect(await recoverConstructionFunding(request.db, 100)).toEqual([]);
+    expect(memory.collection("corporateSectors").docs[0]).toMatchObject({
+      buildQueue: [expect.objectContaining({ startTurn: 12 })],
+      constructionFinancing: { fundingCleanupCompleted: true, escrowLocal: 0 },
+    });
+    expect(
+      memory.collection("corporations").docs.find((doc) => String(doc._id) === String(bankId))
+        ?.bankConstructionFunding
+    ).toBeUndefined();
+    expect(memory.collection("bankLoans").docs[0]?.constructionSettlementOwner).toBeUndefined();
+  });
+
+  it("does not approve an old pending loan during funding recovery", async () => {
+    const { request, memory } = world(true);
+    expect(await requestConstructionFinance(request)).toMatchObject({ ok: true, pending: true });
+    expect(await recoverConstructionFunding(request.db, 100)).toEqual([]);
+    expect(memory.collection("corporateSectors").docs[0]).toMatchObject({
+      buildQueue: [],
+      constructionFinancing: { status: "awaiting_approval", escrowLocal: 0 },
+    });
+    expect(memory.collection("bankLoans").docs[0]).toMatchObject({ status: "pending" });
+    expect(
+      memory.collection("corporations").docs.find((doc) => String(doc._id) === String(borrowerId))
+        ?.liquidCapital
+    ).toBe(50_000);
   });
 
   it("reserves an approval-required quote without moving cash, then funds it", async () => {

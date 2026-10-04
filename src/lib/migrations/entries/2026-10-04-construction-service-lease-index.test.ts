@@ -28,6 +28,14 @@ describe("construction service recovery index", () => {
         key: { "constructionFinancing.cancellation.turn": 1 },
         sparse: true,
       },
+      {
+        name: "corporateSectors_construction_funding_turn",
+        key: {
+          "constructionFinancing.status": 1,
+          "constructionFinancing.requestTransition.turn": 1,
+        },
+        sparse: true,
+      },
     ]);
   });
 });

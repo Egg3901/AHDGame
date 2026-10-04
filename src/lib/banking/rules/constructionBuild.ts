@@ -38,6 +38,8 @@ export interface ConstructionBuildClaim {
   escrowLocal: number;
   borrowerContributionPaid?: boolean;
   loanFunded?: boolean;
+  /** Written after the paid receipt and both funding leases are released. */
+  fundingCleanupCompleted?: boolean;
   /** Default keeps the pledge in force until an actual funded recovery. */
   defaultedTurn?: number;
   /** The paid build's contractual refund stays pledged until its principal is settled. */
