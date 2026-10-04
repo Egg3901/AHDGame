@@ -48,6 +48,11 @@ const ipoTermsSchema = z
       .min(SUPERSHARE_MIN_MULTIPLIER, `Multiplier must be at least ${SUPERSHARE_MIN_MULTIPLIER}×`)
       .max(SUPERSHARE_MAX_MULTIPLIER, `Multiplier cannot exceed ${SUPERSHARE_MAX_MULTIPLIER}×`)
       .optional(),
+    /** Optional bank selected for a funded founding or late IPO. */
+    underwriterCorporationId: z
+      .string()
+      .regex(/^[0-9a-fA-F]{24}$/)
+      .optional(),
   })
   .refine((v) => v.floatPct <= IPO_MAX_FLOAT_PCT || v.superShareMultiplier !== undefined, {
     message: `Floating more than ${IPO_MAX_FLOAT_PCT}% requires a dual-class supershare structure`,

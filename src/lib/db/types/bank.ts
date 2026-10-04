@@ -255,6 +255,20 @@ export interface BankTreasuryTradeReceipt {
   bondId: ObjectId;
   currency: CurrencyCode;
   side: "buy" | "sell";
+  /** Primary offers reserve unissued units and pay the government directly. */
+  primary?: {
+    countryId: import("@/lib/constants/countries").CountryId;
+    budgetId: string;
+    annualCoupon: number;
+    markPerUnitLocal: number;
+    maxCostLocal: number;
+    localPerAnchor: number;
+    ledgerShadow: boolean;
+    ledgerTurn: number;
+    /** Financial quote guards, preserved with the actual accepted primary intent. */
+    balanceGuard: Record<string, unknown>;
+    cashReservesAtQuote: number;
+  };
   /** Original whole-unit request before cash and pool-depth clamps. */
   requestedUnits: number;
   /** Frozen source lots reserved by a multi-lot sale. */
@@ -308,6 +322,8 @@ export interface BankLoan {
   /** Quoted fee withheld from named-loan proceeds. Absent legacy requests pay no fee. */
   originationFee?: number;
   outstanding: number;
+  /** Actual cash principal recovered from pledged property or build refunds. */
+  collateralRecoveredLocal?: number;
   ratePercent: number;
   originatedTurn: number;
   /** Contract length in turns (required for named player loans). */
@@ -329,6 +345,17 @@ export interface BankLoan {
   arrearsTurns?: number;
   /** Idempotency key for turn processing — standalone Mongo has no transactions. */
   lastProcessedTurn?: number;
+  /** Lender decision lock for a reserved construction claim, before any cash moves. */
+  constructionDecision?: "approve" | "reject";
+  /** One stable cash receipt owns debt quoting until its projections finish. */
+  constructionSettlementOwner?: string;
+  /** Sector pledge attached to a paid build, with principal capped by new construction cost. */
+  constructionCollateral?: {
+    claimId: string;
+    sectorId: ObjectId;
+    quotedCostLocal: number;
+    constructionCostLocal: number;
+  };
 }
 
 /** Collection: depositInsuranceFunds. One per currency; premium-funded, Treasury backstop. */

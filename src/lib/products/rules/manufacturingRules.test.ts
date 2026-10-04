@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   advancePaidDevelopment,
+  allocatedManufacturingCapitalAnchor,
+  manufacturingDevelopmentThresholdAnchor,
   advanceManufacturingProject,
   allocateManufacturingResearchSpend,
   capManufacturingDevelopmentSpendToCash,
@@ -12,6 +14,27 @@ import {
 } from "./manufacturingRules";
 
 describe("manufacturing product line rules", () => {
+  it("quotes development from allocated monetary capital across plants", () => {
+    const plants = [
+      { sectorId: "a", developmentCapitalAnchor: 50_000 },
+      { sectorId: "b", developmentCapitalAnchor: 80_000 },
+    ];
+    const capital = allocatedManufacturingCapitalAnchor(plants, [
+      { sectorId: "a", share: 0.5 },
+      { sectorId: "b", share: 0.25 },
+    ]);
+    expect(capital).toBe(45_000);
+    expect(manufacturingDevelopmentThresholdAnchor(capital)).toBe(2250);
+    expect(allocatedManufacturingCapitalAnchor(plants, [{ sectorId: "a", share: 2 }])).toBe(0);
+    expect(
+      allocatedManufacturingCapitalAnchor(plants, [
+        { sectorId: "a", share: 0.5 },
+        { sectorId: "a", share: 0.5 },
+      ])
+    ).toBe(0);
+    expect(manufacturingDevelopmentThresholdAnchor(0)).toBe(1);
+  });
+
   it("conserves nominal recipe output value while redirecting to one commodity", () => {
     const result = allocateManufacturedOutput({
       outputAnchor: 1000,

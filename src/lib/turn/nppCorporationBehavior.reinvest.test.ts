@@ -139,6 +139,12 @@ function queueWrites(decision: ReturnType<typeof makeNppCorpDecision>) {
   for (const w of writes) {
     expect(w.update.$set).not.toHaveProperty("buildQueue");
     expect(w.update.$set).not.toHaveProperty("constructionInProgressAnchor");
+    expect(w.filter.corporationId).toBeDefined();
+    expect(w.filter.$and?.[0]).toEqual({ constructionPropertyTransition: { $exists: false } });
+    expect(w.filter.$and?.[1]?.$or?.[0]).toEqual({ constructionFinancing: { $exists: false } });
+    expect(w.filter.$and?.[1]?.$or?.[1]?.$and?.[0]).toEqual({
+      "constructionFinancing.status": { $in: ["released", "cancelled"] },
+    });
   }
   return writes;
 }
@@ -577,6 +583,53 @@ describe("NPP capacity reinvestment — the two cash rails", () => {
       [pool({ headroomUnits: 0, revenue: 0 })]
     );
     expect(queueWrites(decision)).toHaveLength(0);
+  });
+
+  it("exposes a priced NPP finance intent without writing an unfunded order or cash debit", () => {
+    const cost = maintenanceCost();
+    const c = corp({ liquidCapital: cost * 3 });
+    const decision = decide(c, [maintOnly()], [pool({ headroomUnits: 0, revenue: 0 })]);
+
+    expect(queueWrites(decision)).toHaveLength(0);
+    expect(decision.reinvestments).toBeUndefined();
+    expect(decision.liquidCapitalDelta).toBe(0);
+    expect(decision.constructionFinanceIntents).toHaveLength(1);
+    expect(decision.constructionFinanceIntents?.[0]).toMatchObject({
+      costLocal: expect.any(Number),
+      order: { startTurn: TURN },
+      cashContributionLimitLocal: c.liquidCapital * 0.25,
+      growthUnits: 0,
+    });
+  });
+
+  it.each<[string, Partial<CorporateSector>]>([
+    [
+      "a listed sector",
+      { forSale: { listedAt: new Date(), priceAnchor: 1_000, npvAnchor: 1_000 } },
+    ],
+    ["a property transition", { constructionPropertyTransition: { key: "sale-1", kind: "sale" } }],
+    [
+      "an active construction claim",
+      {
+        constructionFinancing: {
+          status: "awaiting_approval",
+          escrowLocal: 0,
+          fundingCleanupCompleted: false,
+        } as CorporateSector["constructionFinancing"],
+      },
+    ],
+  ])("does not spend or queue a build on %s", (_label, property) => {
+    const decision = decide(corp(), [sector(property)], [pool()]);
+
+    expect(queueWrites(decision)).toHaveLength(0);
+    expect(decision.reinvestments).toBeUndefined();
+    expect(decision.constructionFinanceIntents).toBeUndefined();
+    expect(decision.liquidCapitalDelta).toBe(0);
+    expect(
+      decision.capacityObservations?.some(
+        (observation) => observation.outcome === "property_unavailable"
+      )
+    ).toBe(true);
   });
 
   it("drops an unaffordable growth leg but still funds maintenance", () => {

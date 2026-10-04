@@ -179,6 +179,66 @@ export interface Corporation {
    * at least one financial sector; one bank per corp. See src/lib/db/types/bank.ts.
    */
   bankCharter?: import("./bank").BankCharter;
+  /** Actual primary cash debit holds its epoch until debt and holdings publish. */
+  bankPrimaryFunding?: { tradeId: string; charteredTurn: number };
+  /** Holds an originating epoch until construction cash and its loan book settle. */
+  bankConstructionFunding?: {
+    loanId: string;
+    charteredTurn: number;
+    kind: "funding" | "aborting" | "returning" | "servicing" | "recovery";
+    /** Written with the actual vault debit, never from a quote or cached book. */
+    disbursed: boolean;
+    service?: { key: string; turn: number; sectorId?: string };
+    depositReturn?: {
+      cause: "failure" | "revocation" | "admin_unwind" | "charter_switch";
+      turn: number;
+      releaseResidualToOwner: boolean;
+    };
+  };
+  /** Issuer-selected primary-market underwriter for future issues. */
+  primaryUnderwritingMandate?: import("@/lib/banking/rules/underwriting").PrimaryUnderwritingMandate;
+  /** Frozen unpaid founding IPO plan. The corporation remains private until its journal publishes it. */
+  foundingIpoUnderwritingPending?: {
+    offer: import("@/lib/banking/rules/underwriting").PrimaryUnderwritingOffer & {
+      instrumentId: ObjectId;
+    };
+    grossPlacedLocal: number;
+    turn: number;
+    instrumentProjection: import("@/lib/banking/rules/boundary").TransitionProjection;
+  } | null;
+  /** Original-epoch lease held only while a funded underwriting claim is settling. */
+  bankUnderwritingFunding?: {
+    key: string;
+    issuerCorporationId: ObjectId;
+    instrumentType: "equity" | "corporate_bond";
+    instrumentId?: ObjectId;
+    charteredTurn: number;
+    offer: import("@/lib/banking/rules/underwriting").PrimaryUnderwritingOffer;
+    currencyCode: CurrencyCode;
+    grossLocal: number;
+    feeLocal: number;
+    issuerNetLocal: number;
+    turn: number;
+    issuerName: string;
+    poolCollection: "equityMarketPools" | "bondMarketPools";
+    instrumentProjection: import("@/lib/banking/rules/boundary").TransitionProjection;
+  };
+  /** Cumulative fees from actually funded primary placements, by native currency. */
+  bankUnderwritingIncomeByCurrency?: Partial<Record<CurrencyCode, number>>;
+  /** Bounded issuer-readable receipts for funded primary underwriting fees. */
+  bankUnderwritingReceipts?: Array<{
+    key: string;
+    issuerCorporationId: ObjectId;
+    issuerName: string;
+    instrumentType: "equity" | "corporate_bond";
+    instrumentId?: ObjectId;
+    currencyCode: CurrencyCode;
+    grossPlacedLocal: number;
+    feeLocal: number;
+    issuerNetLocal: number;
+    turn: number;
+    charteredTurn: number;
+  }>;
   /** Public media editorial position. Missing means neutral for legacy worlds. */
   editorialStance?: { economic: number; social: number };
   /** Funded sale proceeds held here until delivered to the matching charter or insurer. */
@@ -385,6 +445,7 @@ export interface Corporation {
     issuedUpfront?: boolean;
     createdAtTurn: number;
     initialPriceLocal: number;
+    underwriting?: import("@/lib/banking/rules/underwriting").PrimaryUnderwritingOffer;
   };
   /** Dividend payout rate (0, 100%). Income × this % is distributed to shareholders each turn. */
   dividendRate?: number;
@@ -780,6 +841,9 @@ export interface SectorBuildOrder {
    * `src/lib/corporations/buildDelivery.ts`.
    */
   smooth?: boolean;
+  /** Paid, secured construction loan. Absent on ordinary cash-funded orders. */
+  constructionLoanId?: string;
+  constructionClaimId?: string;
 }
 
 export interface CorporateSector {
@@ -1080,6 +1144,9 @@ export interface CorporateSector {
   soldByCommodity?: Partial<Record<string, number>>;
   /** Turn whose clearing pass produced soldFraction and soldByCommodity. */
   soldByCommodityTurn?: number;
+  /** Exact units from that clearing pass; absent for legacy or recording-off turns. */
+  soldUnitsByCommodity?: Partial<Record<string, number>>;
+  soldUnitsByCommodityTurn?: number;
   effectivePosture?: number;
   clearingStartTurn?: number | null;
   /**
@@ -1158,6 +1225,10 @@ export interface CorporateSector {
    * written outside plants mode.
    */
   buildQueue?: SectorBuildOrder[];
+  /** Frozen funded build claim and its cash escrow; absent on legacy sectors. */
+  constructionFinancing?: import("@/lib/banking/rules/constructionBuild").ConstructionBuildClaim;
+  /** A durable owner mutation excludes new construction claims until completion. */
+  constructionPropertyTransition?: { key: string; kind: string };
   /**
    * Plants tier (P3a): construction in progress, in ₳ (anchor), the sum of
    * `costPaidAnchor` across the outstanding `buildQueue` orders (D10).
@@ -1483,6 +1554,8 @@ export interface CorporateSector {
    * if margins shift before purchase.
    */
   forSale?: {
+    foreclosed?: boolean;
+    pledged?: boolean;
     /** When the listing was created */
     listedAt: Date;
     /**

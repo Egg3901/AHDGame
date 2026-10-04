@@ -166,6 +166,14 @@ export interface CorporationDetail {
   typeSwitchCooldownUntilTurn?: number | null;
   typeSwitchTurn?: number | null;
   currentTurn: number;
+  /** Present only for the owning CEO when primary underwriting is enabled. */
+  primaryUnderwritingEnabled?: boolean;
+  primaryUnderwritingMandate?: {
+    bankCorporationId: string;
+    charteredTurn: number;
+    currencyCode: string;
+    feeRate: number;
+  } | null;
   typeLabel: string;
   headquartersState: string;
   headquartersStateName: string;
@@ -697,6 +705,8 @@ export interface SectorDetail {
   wageLevel?: number;
   /** Active for-sale listing — null when not on the secondary market */
   forSale?: {
+    foreclosed?: boolean;
+    pledged?: boolean;
     listedAt: string;
     /** Asking price in ₳ */
     priceAnchor: number;

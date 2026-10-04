@@ -56,6 +56,8 @@ import type { SeedDiagnosticCheck } from "@/lib/admin/seedDiagnostic/types";
 import { presetDefaultsToFoundingPhase } from "@/lib/seeds/presetSelector";
 import type { GameIteration, GameState } from "@/lib/db/types/gameState";
 import { isPresetAnchorDate, type ResetStartDate } from "@/lib/admin/resetStartDate";
+import { getValidatedEnv } from "@/lib/env";
+import { assertResetDatabaseMatchesApplication } from "@/lib/admin/resetPreflight";
 
 export interface ResetAndBootstrapOptions {
   /** 1991 only: leave political offices vacant for player-created parties. */
@@ -98,7 +100,7 @@ export interface ResetAndBootstrapOptions {
    * bootstrap).
    *
    * LEAVE UNSET to get the preset's intended default
-   * (`presetDefaultsToFoundingPhase` — currently 1953-default only). Pass an
+   * (`presetDefaultsToFoundingPhase` — 1953/1979, and 1991 when partyless). Pass an
    * explicit boolean to force it on or off. Forced ON is still ignored for
    * `seedOnly` / `mode: "vacant"` runs, which never spawn the founding races
    * and so would pin the calendar to the era start forever.
@@ -137,6 +139,15 @@ export interface ResetAndBootstrapResult {
 export async function resetAndBootstrapGameWorld(
   options: ResetAndBootstrapOptions
 ): Promise<ResetAndBootstrapResult> {
+  const applicationEnv = getValidatedEnv();
+  if (options.db.databaseName) {
+    assertResetDatabaseMatchesApplication(
+      applicationEnv,
+      options.db.databaseName,
+      "connected database"
+    );
+  }
+
   const {
     db,
     mode = "historical",
@@ -157,15 +168,15 @@ export async function resetAndBootstrapGameWorld(
   // RESOLVED founding race) could never end the phase, pinning the calendar to
   // the era start forever.
   const startingParties = resolveStartingPartiesMode(preset, options.startingParties);
-  const foundingEligible = startingParties !== "none" && !seedOnly && mode === "historical";
+  const foundingEligible = !seedOnly && mode === "historical";
   const atPresetAnchor = isPresetAnchorDate(preset, options.startDate);
-  if (startingParties !== "none" && options.preIteration === true && !atPresetAnchor) {
+  if (options.preIteration === true && !atPresetAnchor) {
     throw new Error("The founding phase can only start at week 1 of an authored era anchor");
   }
   const preIteration =
     foundingEligible &&
     atPresetAnchor &&
-    (options.preIteration ?? presetDefaultsToFoundingPhase(preset));
+    (options.preIteration ?? presetDefaultsToFoundingPhase(preset, startingParties));
   const log = options.log ?? (() => {});
   const logs: string[] = [];
   const collect = (msg: string) => {
@@ -174,7 +185,7 @@ export async function resetAndBootstrapGameWorld(
   };
 
   collect(`Starting parties: ${startingParties}`);
-  if (startingParties === "none") {
+  if (startingParties === "none" && !preIteration) {
     collect(
       "Founding phase disabled: no starting parties; normal player elections advance the calendar."
     );
@@ -268,6 +279,18 @@ export async function resetAndBootstrapGameWorld(
 
     // 2) BUILD. `seedOnly` short-circuits before election + officials spawn.
     phaseReached = "build";
+    // The 1991 taxonomy seed is authorized only for a fresh reference rebuild.
+    // `unownedSectors` is classified as reference data, so resetGameWorld's
+    // runtime sweep intentionally leaves the outgoing market pool in place.
+    // Clear that pool here, after teardown and immediately before bootstrap's
+    // empty-world preflight; seedUnownedSectors rebuilds it from the new state
+    // roster later in the same bootstrap.
+    if (preset === "1991-default" && resetReference) {
+      const cleared = await db.collection("unownedSectors").deleteMany({});
+      collect(
+        `Cleared ${cleared.deletedCount ?? 0} stale unowned market(s) for 1991 reference rebuild`
+      );
+    }
     const bootstrap = await bootstrapGameWorld({
       db,
       mode,
@@ -330,6 +353,20 @@ export async function resetAndBootstrapGameWorld(
     }
 
     if (startingParties === "none") await clearStartingPolitics(db, preset);
+
+    if (preIteration && startingParties === "none") {
+      const { seedPartylessFoundingCandidates } =
+        await import("@/lib/npp/seedPartylessFoundingCandidates");
+      const candidates = await run.step("finalize", "seedPartylessFoundingCandidates", () =>
+        seedPartylessFoundingCandidates(db, preset, collect)
+      );
+      if (candidates) {
+        collect(
+          `Partyless founding candidate pool: ${candidates.nppsCreated} independent NPPs across ` +
+            `${Object.keys(candidates.byCountry).length} player countries`
+        );
+      }
+    }
 
     // 4) Seal the freshly-reset world behind maintenance mode, then run the
     //    seed conformance diagnostic while sealed. Diagnostic failure must NEVER

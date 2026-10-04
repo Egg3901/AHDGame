@@ -53,6 +53,7 @@ export default function ShareIssuanceModal({
   const [ceoShares, setCeoShares] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [resultMessage, setResultMessage] = useState("");
   const [voteError, setVoteError] = useState("");
 
   const corpCurrency = (corporation.liquidCurrencyCode ?? "USD") as CurrencyCode;
@@ -118,6 +119,13 @@ export default function ShareIssuanceModal({
         const data = await res.json();
         if (!res.ok) {
           setError(data.error ?? "Failed to issue shares");
+          return;
+        }
+        if (typeof data.underwritingFeeLocal === "number") {
+          setResultMessage(
+            `Gross funded ${fmtLocalFull(data.grossPlacedLocal)}, underwriting fee ${fmtLocalFull(data.underwritingFeeLocal)}, net proceeds ${fmtLocalFull(data.issuerNetLocal)}.`
+          );
+          onSuccess();
           return;
         }
       } else {
@@ -438,6 +446,11 @@ export default function ShareIssuanceModal({
           )}
 
           {error && <p className="text-xs text-error">{error}</p>}
+          {resultMessage && (
+            <p role="status" className="text-xs text-success">
+              {resultMessage}
+            </p>
+          )}
         </div>
 
         {/* ─── Footer ──────────────────────────────────────────────────────── */}

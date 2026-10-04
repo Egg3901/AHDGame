@@ -204,8 +204,15 @@ export function isEasternBlocEra(preset: string): boolean {
  * Callers treat an explicit `preIteration` option as authoritative; this only
  * supplies the default when the caller says nothing.
  */
-export function presetDefaultsToFoundingPhase(preset: string): boolean {
-  return preset === "1953-default" || preset === "1979-default";
+export function presetDefaultsToFoundingPhase(
+  preset: string,
+  startingParties: "default" | "none" = "default"
+): boolean {
+  return (
+    preset === "1953-default" ||
+    preset === "1979-default" ||
+    (preset === "1991-default" && startingParties === "none")
+  );
 }
 
 /**

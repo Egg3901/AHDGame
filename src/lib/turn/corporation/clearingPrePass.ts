@@ -47,9 +47,9 @@ import { advertisingDeliveredValueByCorp } from "./advertisingDeliveredValue";
 import { mediaAudienceFit } from "@/lib/mediaEditorial/rules";
 import {
   censorshipReachAvailability,
-  mediaAudienceAccessLimitUnitsByOutlet,
+  MEDIA_AUDIENCE_ACCESS_LIMIT_BY_OPTION,
   isFairnessDoctrineBroadcastOutlet,
-  type MediaOutletDelivery,
+  type MediaOwnershipMarket,
   type MediaStateRegulation,
 } from "@/lib/mediaRegulation/rules";
 import {
@@ -176,7 +176,7 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
     // (and every modern world) offer exactly what they offered before.
     const deliveryLimitedBySectorId = new Map<string, number>();
     const deliveryLimitedClassBySectorId = new Map<string, FreightClass | null>();
-    const priorMediaAdOutlets: MediaOutletDelivery[] = [];
+    let mediaOwnership: MediaOwnershipMarket | undefined;
     const sectorTypeBySectorId = new Map<string, string>();
     /**
      * Share of a sector's output its host state could place last turn, 1 when
@@ -276,60 +276,6 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
             lookups.stateResourceCapacityByState.get(sector.stateId)
           ),
         };
-        if (
-          market.mediaRegulationEnabled &&
-          (sector.sectorType === "media" || sector.sectorType === "entertainment") &&
-          (rates.supply.advertising ?? 0) > 0
-        ) {
-          const countryId =
-            lookups.stateCountryMap?.get(sector.stateId) ??
-            (sector as { countryId?: string }).countryId;
-          const outputByCommodity = sector.outputUnitsByCommodity;
-          const measuredUnits = scaleMeasuredProducedUnits({
-            producedUnits: sector.producedUnits,
-            isNatcorp: !!lookups.corpById.get(corpId)?.countryOwnerId,
-            embargoSupplyFactor:
-              embargoSupplyFactorFor(sector) *
-              plannedEconomyMediaSupplyFactor(
-                sector.sectorType,
-                isPlannedEconomy(
-                  (sector as { countryId?: string }).countryId,
-                  currentYear,
-                  commandEconomyEnabled
-                )
-              ),
-            militaryRetainedFraction: 1 - freshMilitaryDiversion(sector, turn ?? 0),
-          });
-          const producedAdvertising =
-            typeof outputByCommodity?.advertising === "number" &&
-            Number.isFinite(outputByCommodity.advertising)
-              ? Math.max(0, outputByCommodity.advertising)
-              : typeof measuredUnits === "number" &&
-                  Number.isFinite(measuredUnits) &&
-                  measuredUnits >= 0
-                ? measuredUnits *
-                  commodityMixWeight(
-                    rates.supply,
-                    eraScaledBasePrices(lookups.eraUnitScale),
-                    "advertising"
-                  )
-                : null;
-          const priorSoldFraction =
-            typeof sector.soldByCommodity?.advertising === "number"
-              ? sector.soldByCommodity.advertising
-              : sector.soldFraction;
-          priorMediaAdOutlets.push({
-            stateId: sector.stateId,
-            countryId: countryId ?? "",
-            corporationId: corpId,
-            deliveredAdvertisingUnits:
-              producedAdvertising != null &&
-              typeof priorSoldFraction === "number" &&
-              Number.isFinite(priorSoldFraction)
-                ? producedAdvertising * Math.max(0, Math.min(1, priorSoldFraction))
-                : null,
-          });
-        }
         const productProject = lookups.productLinesV2Enabled
           ? lookups.manufacturingProductByCorpId?.get(corpId)
           : undefined;
@@ -788,24 +734,30 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
           stateMediaControl: metrics.mediaInformation?.stateMediaControl?.value,
         });
       }
-      const accessLimitUnitsByOutlet = mediaAudienceAccessLimitUnitsByOutlet(
-        priorMediaAdOutlets.filter((outlet) => outlet.countryId === "US"),
-        market.mediaRegulationPolicyOptionIndex ?? 3
-      );
-      const currentAdvertisingUnitsByOutlet = new Map<string, number>();
-      for (const sector of clearingInputs) {
-        const sectorId = sector.sectorId;
-        const sectorType = sectorTypeBySectorId.get(sectorId);
-        if (sectorType !== "media" && sectorType !== "entertainment") continue;
-        const stateId = clearingStateBySector.get(sectorId);
-        const corporationId = sectorCorpId.get(sectorId);
-        if (!stateId || !corporationId) continue;
-        const key = `${stateId}:${corporationId}`;
-        currentAdvertisingUnitsByOutlet.set(
-          key,
-          (currentAdvertisingUnitsByOutlet.get(key) ?? 0) +
-            physicalAdvertisingOfferUnits(sector, market.plantsEnabled, lookups.eraUnitScale)
-        );
+      const shareCap =
+        MEDIA_AUDIENCE_ACCESS_LIMIT_BY_OPTION[market.mediaRegulationPolicyOptionIndex ?? 3];
+      if (shareCap != null) {
+        const stateBySector = new Map<string, string>();
+        const corporationBySector = new Map<string, string>();
+        for (const input of clearingInputs) {
+          const stateId = clearingStateBySector.get(input.sectorId);
+          const corporationId = sectorCorpId.get(input.sectorId);
+          const sectorType = sectorTypeBySectorId.get(input.sectorId);
+          if (
+            !stateId ||
+            !corporationId ||
+            (sectorType !== "media" && sectorType !== "entertainment")
+          )
+            continue;
+          if (
+            lookups.stateCountryMap?.get(stateId) !== "US" ||
+            lookups.corpById.get(corporationId)?.countryOwnerId
+          )
+            continue;
+          stateBySector.set(input.sectorId, stateId);
+          corporationBySector.set(input.sectorId, corporationId);
+        }
+        mediaOwnership = { shareCap, stateBySector, corporationBySector };
       }
       for (const sector of clearingInputs) {
         const sectorId = sector.sectorId;
@@ -814,20 +766,11 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
         const stateId = clearingStateBySector.get(sectorId);
         const corporationId = sectorCorpId.get(sectorId);
         if (!stateId || !corporationId) continue;
-        const key = `${stateId}:${corporationId}`;
-        const offeredUnits = currentAdvertisingUnitsByOutlet.get(key) ?? 0;
-        const accessLimitUnits = accessLimitUnitsByOutlet.get(key);
-        const accessAvailability =
-          accessLimitUnits != null && offeredUnits > accessLimitUnits && offeredUnits > 0
-            ? accessLimitUnits / offeredUnits
-            : 1;
         const censorshipAvailability = censorshipReachAvailability(
           stateConditionsById.get(stateId) ?? {}
         );
         sector.editorialAdvertisingAvailability =
-          (sector.editorialAdvertisingAvailability ?? 1) *
-          accessAvailability *
-          censorshipAvailability;
+          (sector.editorialAdvertisingAvailability ?? 1) * censorshipAvailability;
       }
     }
     // Book-sanity invariant (issue #2054): the diagnostic reports the RAW
@@ -851,6 +794,8 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
     }
     market.clearingBySectorId = computeClearingFactors({
       sectors: clearingInputs,
+      mediaOwnership,
+      recordDelivery: market.mediaRegulationEnabled === true,
       balances: lookups.globalCommodityBalances,
       initializedLaggedBooks: lookups.initializedLaggedBooks,
       // Era worlds: one book per seller home country, scoped to the demand the
@@ -1024,6 +969,7 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
           )
           .map((order) => ({ orderId: order.orderId, plan: order.settlementPlan! })),
         offers: adOffers,
+        mediaOwnership,
         clearingBySectorId: market.clearingBySectorId ?? new Map(),
         clearingEnabled: market.clearingEnabled,
         qualityPremiumEnabled: qualityPremiumPricingEnabled,
@@ -1132,33 +1078,4 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
     buyerDemandByCorpCommodity,
     politicalMediaSettlementPlans,
   };
-}
-
-/** Mirrors the production clearing offer basis for the advertising commodity. */
-function physicalAdvertisingOfferUnits(
-  input: SectorClearingInput,
-  plantsEnabled: boolean,
-  eraUnitScale: number
-): number {
-  if (input.outputUnitsByCommodity != null) {
-    const exactUnits = input.outputUnitsByCommodity.advertising;
-    return typeof exactUnits === "number" && Number.isFinite(exactUnits)
-      ? Math.max(0, exactUnits)
-      : 0;
-  }
-  const rate = input.supplyRates.advertising ?? 0;
-  if (!(rate > 0)) return 0;
-  if (
-    plantsEnabled &&
-    typeof input.producedUnits === "number" &&
-    Number.isFinite(input.producedUnits) &&
-    input.producedUnits >= 0
-  ) {
-    return (
-      input.producedUnits *
-      commodityMixWeight(input.supplyRates, eraScaledBasePrices(eraUnitScale), "advertising")
-    );
-  }
-  const basePrice = eraScaledBasePrices(eraUnitScale).advertising;
-  return basePrice > 0 ? Math.max(0, (input.revenue * rate) / basePrice) : 0;
 }

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
@@ -19,9 +20,14 @@ import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import type { CorporationVote } from "@/lib/db/types/corporationVote";
 import {
   prepareEquityPrimaryPlacement,
+  planEquityPrimaryPlacement,
   refundPreparedEquityPlacement,
 } from "@/lib/equities/primaryMarket";
 import { emitTx } from "@/lib/financialTxLog/emit";
+import { loadBankingPolicy } from "@/lib/banking/policy";
+import { resolvePrimaryUnderwritingOffer } from "@/lib/banking/underwritingOffer";
+import { settlePrimaryUnderwritingFill } from "@/lib/banking/underwritingSettlement";
+import { equityPoolCurrency } from "@/lib/equities/marketPool";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -131,17 +137,37 @@ export async function POST(request: Request, { params }: RouteParams) {
     // The currency pool underwrites a bounded first tranche with real cash.
     // Anything it cannot place remains approved-but-unissued and is paced into
     // the float by the turn processor, exactly like an unsold bond remainder.
-    const placement = await prepareEquityPrimaryPlacement(
-      db,
-      corporation,
-      newShares,
-      executionPrice,
-      now
-    );
+    const underwriting = corporation.primaryUnderwritingMandate
+      ? await resolvePrimaryUnderwritingOffer(
+          db,
+          await loadBankingPolicy(db),
+          corporation,
+          equityPoolCurrency(corporation),
+          "equity",
+          currentTurn
+        )
+      : null;
+    const plannedPlacement = underwriting
+      ? await planEquityPrimaryPlacement(db, corporation, newShares, executionPrice)
+      : null;
+    const legacyPlacement = plannedPlacement?.poolActive
+      ? null
+      : await prepareEquityPrimaryPlacement(db, corporation, newShares, executionPrice, now);
+    const placement = plannedPlacement?.poolActive
+      ? { ...plannedPlacement, paidLocal: plannedPlacement.plannedGrossLocal }
+      : legacyPlacement!;
+    const underwritingFillId = underwriting && placement.poolActive ? new ObjectId() : undefined;
+    const frozenUnderwritingOffer = underwritingFillId
+      ? { ...underwriting!.offer, instrumentId: underwritingFillId }
+      : undefined;
     const placedShares = placement.placedShares;
-    const proceedsInCorpCapital = placement.poolActive
+    const grossProceedsLocal = placement.poolActive
       ? placement.paidLocal
       : newShares * executionPrice;
+    const underwritingFeeLocal = frozenUnderwritingOffer
+      ? Math.round(grossProceedsLocal * frozenUnderwritingOffer.feeRate * 100) / 100
+      : 0;
+    const proceedsInCorpCapital = grossProceedsLocal - underwritingFeeLocal;
     const proceeds = corpLiquidCapitalToAnchor(proceedsInCorpCapital, corporation, corpFxRate);
     const ISSUANCE_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
@@ -157,75 +183,103 @@ export async function POST(request: Request, { params }: RouteParams) {
       ],
     };
 
-    let result;
-    try {
-      result = await db.collection<Corporation>("corporations").findOneAndUpdate(
-        cooldownQuery as never,
-        // Only the underwritten tranche becomes outstanding. Pool cash reaches
-        // the issuer now and is tagged as issuance proceeds so the valuation
-        // model still applies dilution exactly once.
-        [
-          {
-            $set: {
-              totalShares: { $add: [{ $ifNull: ["$totalShares", 0] }, placedShares] },
-              publicFloat: { $add: [{ $ifNull: ["$publicFloat", 0] }, placedShares] },
-              ...(placement.poolActive
-                ? {
-                    liquidCapital: {
-                      $add: [{ $ifNull: ["$liquidCapital", 0] }, placement.paidLocal],
-                    },
-                    shareIssuanceProceeds: {
-                      $add: [{ $ifNull: ["$shareIssuanceProceeds", 0] }, placement.paidLocal],
-                    },
-                  }
-                : {}),
-              sharePrice: {
-                $round: [
-                  {
-                    $multiply: [
-                      { $ifNull: ["$sharePrice", 0] },
-                      issuanceDilutionFactorExpr(placedShares),
-                    ],
-                  },
-                  4,
+    const updatePipeline = [
+      {
+        $set: {
+          totalShares: { $add: [{ $ifNull: ["$totalShares", 0] }, placedShares] },
+          publicFloat: { $add: [{ $ifNull: ["$publicFloat", 0] }, placedShares] },
+          ...(placement.poolActive
+            ? {
+                ...(!frozenUnderwritingOffer
+                  ? {
+                      liquidCapital: {
+                        $add: [{ $ifNull: ["$liquidCapital", 0] }, placement.paidLocal],
+                      },
+                    }
+                  : {}),
+                shareIssuanceProceeds: {
+                  $add: [{ $ifNull: ["$shareIssuanceProceeds", 0] }, proceedsInCorpCapital],
+                },
+              }
+            : {}),
+          sharePrice: {
+            $round: [
+              {
+                $multiply: [
+                  { $ifNull: ["$sharePrice", 0] },
+                  issuanceDilutionFactorExpr(placedShares),
                 ],
               },
-              fundamentalSharePrice: {
-                $round: [
-                  {
-                    $multiply: [
-                      { $ifNull: ["$fundamentalSharePrice", { $ifNull: ["$sharePrice", 0] }] },
-                      issuanceDilutionFactorExpr(placedShares),
-                    ],
-                  },
-                  4,
-                ],
-              },
-              lastShareIssuance: now,
-              ...(placement.unsoldShares > 0
-                ? {
-                    pendingShareIssuance: {
-                      remainingShares: placement.unsoldShares,
-                      requestedShares: newShares,
-                      source: "direct",
-                      createdAtTurn: currentTurn,
-                      initialPriceLocal: executionPrice,
-                    },
-                  }
-                : {}),
-              updatedAt: now,
-            },
+              4,
+            ],
           },
-        ],
-        { returnDocument: "after" }
-      );
+          fundamentalSharePrice: {
+            $round: [
+              {
+                $multiply: [
+                  { $ifNull: ["$fundamentalSharePrice", { $ifNull: ["$sharePrice", 0] }] },
+                  issuanceDilutionFactorExpr(placedShares),
+                ],
+              },
+              4,
+            ],
+          },
+          lastShareIssuance: now,
+          ...(placement.unsoldShares > 0
+            ? {
+                pendingShareIssuance: {
+                  remainingShares: placement.unsoldShares,
+                  requestedShares: newShares,
+                  source: "direct",
+                  createdAtTurn: currentTurn,
+                  initialPriceLocal: executionPrice,
+                  ...(frozenUnderwritingOffer ? { underwriting: frozenUnderwritingOffer } : {}),
+                },
+              }
+            : {}),
+          updatedAt: now,
+        },
+      },
+    ];
+    let result: Corporation | null;
+    try {
+      if (frozenUnderwritingOffer && placedShares > 0 && underwriting) {
+        const settlement = await settlePrimaryUnderwritingFill(db, {
+          bank: underwriting.bank,
+          issuer: { _id: corporation._id, name: corporation.name },
+          issuerCurrencyCode: placement.currency,
+          offer: frozenUnderwritingOffer,
+          instrumentId: underwritingFillId!,
+          grossPlacedLocal: placement.paidLocal,
+          turn: currentTurn,
+          now,
+          poolCollection: "equityMarketPools",
+          instrumentProjection: {
+            collection: "corporations",
+            filter: cooldownQuery,
+            pipelineUpdate: updatePipeline,
+            note: "Publish the funded share issuance and approved pending remainder",
+          },
+        });
+        if (settlement.status !== "applied" && settlement.status !== "replayed") {
+          return NextResponse.json(
+            { error: "The share placement is settling; retry after its journal completes." },
+            { status: settlement.status === "partial" ? 202 : 409 }
+          );
+        }
+        result = corporation;
+      } else {
+        result = await db
+          .collection<Corporation>("corporations")
+          .findOneAndUpdate(cooldownQuery as never, updatePipeline, { returnDocument: "after" });
+      }
     } catch (error) {
-      await refundPreparedEquityPlacement(db, placement, now);
+      if (!frozenUnderwritingOffer) await refundPreparedEquityPlacement(db, placement, now);
       throw error;
     }
 
     if (!result) {
-      await refundPreparedEquityPlacement(db, placement, now);
+      if (!frozenUnderwritingOffer) await refundPreparedEquityPlacement(db, placement, now);
       const elapsed = corporation.lastShareIssuance
         ? Date.now() - new Date(corporation.lastShareIssuance).getTime()
         : 0;
@@ -267,13 +321,20 @@ export async function POST(request: Request, { params }: RouteParams) {
         subjectType: "corporation",
         subjectId: corporation._id,
         subjectName: corporation.name,
-        amount: placement.paidLocal,
+        amount: proceedsInCorpCapital,
         currencyCode: placement.currency,
         meta: {
           sharesPlaced: placedShares,
           sharesRequested: newShares,
           sharesPending: placement.unsoldShares,
           counterparty: "equity_market_pool",
+          ...(underwritingFeeLocal > 0
+            ? {
+                grossPlacedLocal: grossProceedsLocal,
+                underwritingFeeLocal,
+                issuerNetLocal: proceedsInCorpCapital,
+              }
+            : {}),
         },
       });
     }
@@ -287,6 +348,13 @@ export async function POST(request: Request, { params }: RouteParams) {
       pricePerShare: executionPrice,
       newTotalShares,
       dilutedPrice: Math.round(dilutedPrice * 10000) / 10000,
+      ...(underwritingFeeLocal > 0
+        ? {
+            grossPlacedLocal: grossProceedsLocal,
+            underwritingFeeLocal,
+            issuerNetLocal: proceedsInCorpCapital,
+          }
+        : {}),
     });
   } catch (error) {
     return handleRouteError(error);

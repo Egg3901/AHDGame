@@ -4,6 +4,7 @@
  * productQualityForCommodity.
  */
 import { commodityMixWeight, type CommodityType } from "@/lib/constants/commodities";
+import { validateProductAllocations, type ProductPlantAllocation } from "./plantAllocations";
 import { advanceProductLifecycle, type ProductLifecycleStage } from "./productLifecycle";
 
 export type ManufacturingLifecycleStage = ProductLifecycleStage;
@@ -130,9 +131,25 @@ const QUALITY_STAGE_FACTOR: Record<ManufacturingLifecycleStage, number> = {
 const MAX_PAID_DEVELOPMENT_QUALITY = 10;
 export const MANUFACTURING_DEVELOPMENT_ELAPSED_TURNS = 12;
 
-/** Five percent of physical capacity stock, with a one-anchor minimum. */
-export function manufacturingDevelopmentThresholdAnchor(allocatedCapacityStock: number): number {
-  return Math.max(1, finiteNonNegative(allocatedCapacityStock) * 0.05);
+/** Allocates monetary plant capital without treating physical capacity as currency. */
+export function allocatedManufacturingCapitalAnchor(
+  plants: readonly { sectorId: string; developmentCapitalAnchor: number }[],
+  allocations: readonly ProductPlantAllocation[]
+): number {
+  if (!validateProductAllocations(allocations)) return 0;
+  const capitalById = new Map(
+    plants.map((plant) => [plant.sectorId, plant.developmentCapitalAnchor])
+  );
+  return allocations.reduce(
+    (sum, allocation) =>
+      sum + finiteNonNegative(capitalById.get(allocation.sectorId) ?? 0) * allocation.share,
+    0
+  );
+}
+
+/** Five percent of allocated monetary plant capital, with a one-anchor minimum. */
+export function manufacturingDevelopmentThresholdAnchor(allocatedCapitalAnchor: number): number {
+  return Math.max(1, finiteNonNegative(allocatedCapitalAnchor) * 0.05);
 }
 
 function finiteNonNegative(value: number): number {

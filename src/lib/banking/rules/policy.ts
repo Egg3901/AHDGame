@@ -18,9 +18,12 @@ export type SavingsAccountsMode = "off" | "shadow" | "authoritative";
 export interface BankingPolicyConfig {
   privateBankingEnabled?: boolean;
   bankFailurePoliticsEnabled?: boolean;
+  bankConstructionFinanceEnabled?: boolean;
   bankPropTradingEnabled?: boolean;
   bankTreasuryEnabled?: boolean;
+  bankSovereignPrimaryEnabled?: boolean;
   bankPropForexFeesEnabled?: boolean;
+  bankUnderwritingEnabled?: boolean;
   bankContagionEnabled?: boolean;
   lineOfCreditEnabled?: boolean;
   playerAdvancedBankChartersEnabled?: boolean;
@@ -33,9 +36,12 @@ export interface BankingPolicyConfig {
 export const BANKING_POLICY_PROJECTION = Object.freeze({
   privateBankingEnabled: 1,
   bankFailurePoliticsEnabled: 1,
+  bankConstructionFinanceEnabled: 1,
   bankPropTradingEnabled: 1,
   bankTreasuryEnabled: 1,
+  bankSovereignPrimaryEnabled: 1,
   bankPropForexFeesEnabled: 1,
+  bankUnderwritingEnabled: 1,
   bankContagionEnabled: 1,
   lineOfCreditEnabled: 1,
   playerAdvancedBankChartersEnabled: 1,
@@ -49,12 +55,18 @@ export interface BankingPolicySnapshot {
   privateBanking: boolean;
   /** Funded resolution consequences. Off unless explicitly enabled. */
   failurePolitics?: boolean;
+  /** Bank term loans tied to paid capacity builds, explicitly enabled only. */
+  constructionFinance?: boolean;
   /** Prop desks, interbank market, margin line. Requires private banking. */
   propTrading: boolean;
   /** Funded short-sovereign treasury holdings; disabled unless explicitly enabled. */
   bankTreasury: boolean;
+  /** Investment-bank subscriptions to unplaced sovereign offers. Explicit opt-in. */
+  sovereignPrimary?: boolean;
   /** Funded size-priced forex fees. Requires banking and prop trading. */
   propForexFees: boolean;
+  /** Funded corporate equity and bond primary underwriting. Default off. */
+  primaryUnderwriting?: boolean;
   /** Failure contagion between same-currency deposit takers. Requires private banking. */
   contagion: boolean;
   /** Player lines of credit at the central bank. */
@@ -91,12 +103,23 @@ export function resolveBankingPolicy(
   return Object.freeze({
     privateBanking,
     failurePolitics: privateBanking && config?.bankFailurePoliticsEnabled === true,
+    constructionFinance:
+      privateBanking &&
+      config?.treasuryCashLedgerEnabled === true &&
+      config?.bankConstructionFinanceEnabled === true,
     propTrading: privateBanking && config?.bankPropTradingEnabled !== false,
     bankTreasury: privateBanking && config?.bankTreasuryEnabled === true,
+    sovereignPrimary:
+      privateBanking &&
+      config?.bankTreasuryEnabled === true &&
+      config?.bankPropTradingEnabled !== false &&
+      config?.treasuryCashLedgerEnabled === true &&
+      config?.bankSovereignPrimaryEnabled === true,
     propForexFees:
       privateBanking &&
       config?.bankPropTradingEnabled !== false &&
       config?.bankPropForexFeesEnabled === true,
+    primaryUnderwriting: privateBanking && config?.bankUnderwritingEnabled === true,
     contagion: privateBanking && config?.bankContagionEnabled !== false,
     lineOfCredit: config?.lineOfCreditEnabled !== false,
     advancedCharters: privateBanking && config?.playerAdvancedBankChartersEnabled === true,
@@ -113,9 +136,12 @@ export const BANKING_POLICY_OFF: BankingPolicySnapshot = resolveBankingPolicy(nu
 export const BANKING_POLICY_ALL_ON: BankingPolicySnapshot = resolveBankingPolicy({
   privateBankingEnabled: true,
   bankFailurePoliticsEnabled: true,
+  bankConstructionFinanceEnabled: true,
   bankPropTradingEnabled: true,
   bankPropForexFeesEnabled: true,
+  bankUnderwritingEnabled: true,
   bankTreasuryEnabled: true,
+  bankSovereignPrimaryEnabled: true,
   treasuryCashLedgerEnabled: true,
   bankContagionEnabled: true,
   lineOfCreditEnabled: true,

@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
+import type { Corporation } from "@/lib/db/types";
+import { quoteSovereignPrimaryBankPurchase } from "../rules/sovereignPrimary";
+import { resumeSettlement } from "../settlementJournal";
+import { bankTransferConflict } from "../transferCharter";
 import type { Bond } from "@/lib/db/types/bond";
 import { createInMemoryDb, type InMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { resolveBankingPolicy } from "@/lib/banking/rules/policy";
@@ -549,5 +553,325 @@ describe("funded bank treasury settlement", () => {
     expect(after.bond.holders).toEqual([]);
     expect(after.mark).toBe(0);
     expect(after.cash).toBeGreaterThan(90_000);
+  });
+});
+
+const PRIMARY_POLICY = resolveBankingPolicy({
+  privateBankingEnabled: true,
+  bankTreasuryEnabled: true,
+  bankSovereignPrimaryEnabled: true,
+  treasuryCashLedgerEnabled: true,
+  bankPropTradingEnabled: true,
+});
+
+function primaryWorld() {
+  const db = world();
+  const bank = db.collection("corporations").docs[0] as unknown as Corporation;
+  bank.bankCharter!.type = "investment";
+  const bond = db.collection("bonds").docs[0] as unknown as Bond;
+  bond.maturityTurn = TURN + 240;
+  bond.publicFloat = 0;
+  bond.unsoldUnits = 100;
+  bond.totalIssued = 0;
+  db.seed("federalBudget", [
+    {
+      _id: "federal",
+      countryId: "US",
+      currencyCode: "USD",
+      treasuryCashLocal: 0,
+      treasuryBalance: 0,
+      debt: { principal: 0 },
+      spending: { debtInterest: 0, total: 0 },
+      surplus: 0,
+    },
+  ]);
+  db.seed("gameState", [{ _id: "current", currentTurn: TURN, preset: "1991-default" }]);
+  db.seed("exchangeRates", [{ currencyCode: "USD", rate: 1 }]);
+  Object.assign(db.collection("gameConfig").docs[0], {
+    treasuryCashLedgerEnabled: true,
+    bankSovereignPrimaryEnabled: true,
+  });
+  return db;
+}
+
+const primaryTicket = {
+  bankId: BANK,
+  bondId: BOND,
+  side: "buy" as const,
+  units: 5,
+  turn: TURN,
+  policy: PRIMARY_POLICY,
+  primary: true,
+  maxCostLocal: 10_000,
+  tradeId: "primary-investment-subscription",
+};
+
+function primaryState(db: InMemoryDb) {
+  return {
+    bank: db.collection("corporations").docs[0] as unknown as Corporation,
+    bond: db.collection("bonds").docs[0] as unknown as Bond,
+    budget: db.collection("federalBudget").docs[0] as {
+      treasuryCashLocal: number;
+      debt: { principal: number };
+      spending: { debtInterest: number };
+    },
+    pool: db.collection("bondMarketPools").docs[0].cashLocal,
+  };
+}
+
+describe("investment-bank sovereign primary subscriptions", () => {
+  it("does not treat posted capital or borrowed vault cash as additional equity", () => {
+    const db = primaryWorld();
+    const state = primaryState(db);
+    const charter = state.bank.bankCharter!;
+    Object.assign(charter, {
+      cashReserves: 5_000,
+      postedCapital: 1_000_000,
+      npcDeposits: 0,
+      totalDeposits: 0,
+      cbMarginDebt: 4_900,
+    });
+    expect(
+      quoteSovereignPrimaryBankPurchase({
+        charter,
+        bond: state.bond,
+        turn: TURN,
+        requestedUnits: 1,
+        askPerUnit: 1_000,
+        bidPerUnit: 950,
+        maxCostLocal: 1_000,
+        floorLocal: 0,
+        playerDepositsAreLiabilities: false,
+      })
+    ).toMatchObject({ ok: false });
+  });
+
+  it("refuses a changed vault quote rather than funding a newly unsafe book", async () => {
+    const db = primaryWorld();
+    const state = primaryState(db);
+    const crash = withInjectedCrash(db, {
+      collection: "bonds",
+      op: "updateOne",
+      onCall: 1,
+      matches: (args) =>
+        Number((args[1] as { $inc?: { unsoldUnits?: number } }).$inc?.unsoldUnits) < 0,
+      afterWrite: true,
+    });
+    await expect(tradeBankTreasuryBill(crash.db, primaryTicket)).rejects.toThrow("crash");
+    state.bank.bankCharter!.cashReserves = 10_000;
+    expect((await tradeBankTreasuryBill(db as unknown as Db, primaryTicket)).status).toBe(
+      "rejected"
+    );
+    expect(state.bank.bankCharter!.cashReserves).toBe(10_000);
+    expect(state.budget.treasuryCashLocal).toBe(0);
+    expect(state.bond.unsoldUnits).toBe(100);
+    expect(state.bond.totalIssued).toBe(0);
+    expect(state.bank.bankPrimaryFunding).toBeUndefined();
+  });
+
+  it("conserves available primary units under competing bank subscriptions", async () => {
+    const db = primaryWorld();
+    const state = primaryState(db);
+    state.bond.unsoldUnits = 7;
+    const otherBank = new ObjectId("aaaaaaaaaaaaaaaaaaaaaaab");
+    db.collection("corporations").docs.push({
+      ...state.bank,
+      _id: otherBank,
+      bankCharter: { ...state.bank.bankCharter! },
+    });
+    const results = await Promise.all([
+      tradeBankTreasuryBill(db as unknown as Db, primaryTicket),
+      tradeBankTreasuryBill(db as unknown as Db, {
+        ...primaryTicket,
+        bankId: otherBank,
+        tradeId: "primary-competing-bank",
+      }),
+    ]);
+    const issued = results.filter((r) => r.status === "completed").reduce((n, r) => n + r.units, 0);
+    expect(issued).toBeGreaterThan(0);
+    expect(issued).toBeLessThanOrEqual(7);
+    expect(state.bond.unsoldUnits! + issued).toBe(7);
+    expect(state.bond.totalIssued).toBe(issued * 1_000);
+    expect(state.budget.debt.principal).toBe(issued * 1_000);
+    const bankCash = db
+      .collection("corporations")
+      .docs.reduce((n, c) => n + (c.bankCharter as { cashReserves: number }).cashReserves, 0);
+    expect(bankCash + state.budget.treasuryCashLocal).toBe(200_000);
+    expect(state.pool).toBe(100_000);
+  });
+  it("pays the issuer rather than the pool and issues only funded original-epoch debt", async () => {
+    const db = primaryWorld();
+    const result = await tradeBankTreasuryBill(db as unknown as Db, primaryTicket);
+    expect(result).toMatchObject({ status: "completed", units: 5 });
+    const state = primaryState(db);
+    expect(state.bank.bankCharter!.cashReserves! + state.budget.treasuryCashLocal).toBe(100_000);
+    expect(state.pool).toBe(100_000);
+    expect(state.bond).toMatchObject({ publicFloat: 0, unsoldUnits: 95, totalIssued: 5_000 });
+    expect(state.bond.holders).toEqual([
+      expect.objectContaining({
+        bankId: BANK,
+        charteredTurn: 20,
+        units: 5,
+        bankTreasuryLotId: primaryTicket.tradeId,
+      }),
+    ]);
+    expect(state.budget.debt.principal).toBe(5_000);
+    expect(state.budget.spending.debtInterest).toBe(200);
+    expect(state.bank.bankPrimaryFunding).toBeUndefined();
+    const paid = state.budget.treasuryCashLocal;
+    state.bond.marketPrice = 2;
+    await tradeBankTreasuryBill(db as unknown as Db, { ...primaryTicket, turn: TURN + 1 });
+    expect(state.budget.treasuryCashLocal).toBe(paid);
+    expect(state.budget.debt.principal).toBe(5_000);
+    expect(state.bond.holders).toHaveLength(1);
+  });
+
+  it("does no additional database access when primary subscriptions are off", async () => {
+    const db = {
+      collection: vi.fn(() => {
+        throw new Error("unexpected read");
+      }),
+    };
+    const result = await tradeBankTreasuryBill(db as unknown as Db, {
+      ...primaryTicket,
+      policy: POLICY,
+    });
+    expect(result.status).toBe("rejected");
+    expect(db.collection).not.toHaveBeenCalled();
+  });
+
+  it.each(["retail", "currency", "price", "cash", "standing"])(
+    "refuses invalid %s before any issue",
+    async (reason) => {
+      const db = primaryWorld();
+      const state = primaryState(db);
+      let ticket = { ...primaryTicket };
+      if (reason === "retail") state.bank.bankCharter!.type = "retail";
+      if (reason === "currency") state.bond.currencyCode = "GBP";
+      if (reason === "price") ticket = { ...ticket, maxCostLocal: 1 };
+      if (reason === "cash") state.bank.bankCharter!.cashReserves = 50;
+      if (reason === "standing") state.bank.bankCharter!.capitalStanding = "stressed";
+      expect((await tradeBankTreasuryBill(db as unknown as Db, ticket)).status).toBe("rejected");
+      expect(state.budget.treasuryCashLocal).toBe(0);
+      expect(state.budget.debt.principal).toBe(0);
+      expect(state.bond.unsoldUnits).toBe(100);
+      expect(state.bond.holders).toEqual([]);
+    }
+  );
+
+  it("releases reserved unissued units when the original epoch ends before cash", async () => {
+    const db = primaryWorld();
+    const state = primaryState(db);
+    const crash = withInjectedCrash(db, {
+      collection: "bonds",
+      op: "updateOne",
+      onCall: 1,
+      matches: (args) =>
+        Number((args[1] as { $inc?: { unsoldUnits?: number } }).$inc?.unsoldUnits) < 0,
+      afterWrite: true,
+    });
+    await expect(tradeBankTreasuryBill(crash.db, primaryTicket)).rejects.toThrow("crash");
+    state.bank.bankCharter!.charteredTurn = 21;
+    expect((await tradeBankTreasuryBill(db as unknown as Db, primaryTicket)).status).toBe(
+      "rejected"
+    );
+    expect(state.bond.unsoldUnits).toBe(100);
+    expect(state.bond.holders).toEqual([]);
+    expect(state.budget.treasuryCashLocal).toBe(0);
+    expect(state.budget.debt.principal).toBe(0);
+  });
+
+  const boundaries = [
+    { label: "reservation", collection: "bonds", path: "unsoldUnits", positive: false },
+    {
+      label: "bank debit",
+      collection: "corporations",
+      path: "bankCharter.cashReserves",
+      positive: false,
+    },
+    {
+      label: "Treasury credit",
+      collection: "federalBudget",
+      path: "treasuryCashLocal",
+      positive: true,
+    },
+    { label: "issued units", collection: "bonds", path: "totalIssued", positive: true },
+    {
+      label: "debt obligation",
+      collection: "federalBudget",
+      path: "debt.principal",
+      positive: true,
+    },
+  ];
+  it.each(boundaries)(
+    "recovers original quote after $label without duplicate cash or debt",
+    async (boundary) => {
+      const db = primaryWorld();
+      const state = primaryState(db);
+      const crash = withInjectedCrash(db, {
+        collection: boundary.collection,
+        op: "updateOne",
+        onCall: 1,
+        matches: (args) => {
+          const inc = (args[1] as { $inc?: Record<string, number> }).$inc;
+          return (
+            inc?.[boundary.path] !== undefined &&
+            (boundary.positive ? inc[boundary.path]! > 0 : inc[boundary.path]! < 0)
+          );
+        },
+        afterWrite: true,
+      });
+      await expect(tradeBankTreasuryBill(crash.db, primaryTicket)).rejects.toThrow("crash");
+      state.bond.marketPrice = 2;
+      if (state.bank.bankPrimaryFunding) {
+        expect(bankTransferConflict(state.bank, { name: "Buyer" })).toContain("primary funding");
+        const paid = await resumeSettlement(
+          db as unknown as Db,
+          `bank-treasury:${primaryTicket.tradeId}:cash`
+        );
+        expect(["applied", "replayed"]).toContain(paid.status);
+      }
+      const result = await tradeBankTreasuryBill(db as unknown as Db, {
+        ...primaryTicket,
+        turn: TURN + 1,
+      });
+      expect(result.status).toBe("completed");
+      expect(state.bank.bankCharter!.cashReserves! + state.budget.treasuryCashLocal).toBe(100_000);
+      expect(state.pool).toBe(100_000);
+      expect(state.bond.unsoldUnits).toBe(95);
+      expect(state.bond.holders).toHaveLength(1);
+      expect(state.bond.totalIssued).toBe(5_000);
+      expect(state.budget.debt.principal).toBe(5_000);
+      expect(state.budget.spending.debtInterest).toBe(200);
+      expect(state.bank.bankPrimaryFunding).toBeUndefined();
+    }
+  );
+
+  it("finishes a funded obligation through the existing journal after feature switches are off", async () => {
+    const db = primaryWorld();
+    const state = primaryState(db);
+    const crash = withInjectedCrash(db, {
+      collection: "corporations",
+      op: "updateOne",
+      onCall: 1,
+      matches: (args) =>
+        Number((args[1] as { $inc?: Record<string, number> }).$inc?.["bankCharter.cashReserves"]) <
+        0,
+      afterWrite: true,
+    });
+    await expect(tradeBankTreasuryBill(crash.db, primaryTicket)).rejects.toThrow("crash");
+    Object.assign(db.collection("gameConfig").docs[0], {
+      bankSovereignPrimaryEnabled: false,
+      bankTreasuryEnabled: false,
+      treasuryCashLedgerEnabled: false,
+    });
+    const result = await resumeSettlement(
+      db as unknown as Db,
+      `bank-treasury:${primaryTicket.tradeId}:cash`
+    );
+    expect(["applied", "replayed"]).toContain(result.status);
+    expect(state.bank.bankCharter!.cashReserves! + state.budget.treasuryCashLocal).toBe(100_000);
+    expect(state.budget.debt.principal).toBe(5_000);
+    expect(state.bank.bankPrimaryFunding).toBeUndefined();
   });
 });

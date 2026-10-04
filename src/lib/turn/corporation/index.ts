@@ -90,6 +90,8 @@ import {
   emitCorporationTurnTx,
 } from "./corporationTurnPhases";
 import { getGameState } from "@/lib/gameState";
+import { unprotectedConstructionPropertyFilter } from "@/lib/corporations/securedConstructionProperty";
+import { requestConstructionFinance } from "@/lib/banking/constructionFinance";
 import { makeSeededRng } from "@/lib/events/substrate/rng";
 import { logger } from "../../observability/logger";
 import { recordAuditBulk } from "@/lib/audit/recordAudit";
@@ -109,6 +111,7 @@ import {
 import { applyMediaEditorialEffects } from "@/lib/mediaEditorial/applyEffects";
 import { addSettledPoliticalAttention } from "@/lib/mediaOperatingModels/reach";
 import { applyOperatingCashThenDevelopmentCash } from "./manufacturingDevelopmentCashSettlement";
+import { resumeFoundingUnderwritingPlans } from "@/lib/banking/underwritingSettlement";
 
 export type { CorporationTurnResult } from "./corporationTurnRuntime";
 
@@ -184,6 +187,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     getLabourSystemMode(),
   ]);
   mark("preamble");
+  await resumeFoundingUnderwritingPlans(db, now);
   const equityPoolTurn = await processEquityMarketPoolTurn(
     db,
     turn ?? gameState?.currentTurn ?? 0,
@@ -642,6 +646,9 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     foundingCashWitnesses = [],
     reinvestmentCashWitnesses = [],
     manufacturingProductProjects: nppManufacturingProductProjects,
+    constructionFinanceRequests: nppConstructionFinanceRequests,
+    constructionFinanceCandidateCount: nppConstructionFinanceCandidateCount,
+    constructionFinanceBacklogCount: nppConstructionFinanceBacklogCount,
   } = await processNppCorporationDecisions(db, turn ?? 0, now, techTreesEnabled, {
     corporations: lookups.corporations,
     issuerBondsByCorpId: lookups.bondsByCorpId,
@@ -711,7 +718,10 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
 
   // Divest losing NPP sectors, remove from corporateSectors
   if (nppDivestedSectorIds.length > 0) {
-    await db.collection("corporateSectors").deleteMany({ _id: { $in: nppDivestedSectorIds } });
+    await db.collection("corporateSectors").deleteMany({
+      _id: { $in: nppDivestedSectorIds },
+      ...unprotectedConstructionPropertyFilter(),
+    });
   }
 
   // v2: persist the per-state labour wage index (+ v2-3b: automation index) to
@@ -773,6 +783,51 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
             now
           );
         }
+      },
+    });
+  }
+  let constructionFinanceFundedCount = 0;
+  let constructionFinancePendingCount = 0;
+  let constructionFinanceFailedCount = nppConstructionFinanceBacklogCount;
+  for (const candidate of nppConstructionFinanceRequests) {
+    const result = await requestConstructionFinance({
+      db,
+      enabled: true,
+      sector: candidate.sector,
+      corporation: candidate.corporation,
+      bankId: candidate.bankId,
+      requestId: `npp-${turn ?? 0}-${candidate.sector._id.toHexString()}`,
+      principal: candidate.principal,
+      termTurns: candidate.termTurns,
+      constructionCostLocal: candidate.costLocal,
+      collateralCostLocal: candidate.costLocal,
+      maximumCostLocal: candidate.costLocal,
+      order: candidate.order,
+      preloadedFundingContext: candidate.preloadedFundingContext,
+      buildContext: candidate.buildContext,
+    });
+    if (!result.ok) {
+      constructionFinanceFailedCount += 1;
+      continue;
+    }
+    if (result.pending) constructionFinancePendingCount += 1;
+    else constructionFinanceFundedCount += 1;
+  }
+  if (nppConstructionFinanceCandidateCount > 0) {
+    corpAuditEntries.push({
+      source: "turn",
+      category: "corp",
+      action: "corp.npp_construction_finance",
+      phase: "corporationTurn",
+      subject: { type: "corpBatch", name: "NPP private-sector construction" },
+      outcome: "ok",
+      meta: {
+        candidates: nppConstructionFinanceCandidateCount,
+        attempted: nppConstructionFinanceRequests.length,
+        funded: constructionFinanceFundedCount,
+        pendingApproval: constructionFinancePendingCount,
+        deferredOrRejected: constructionFinanceFailedCount,
+        turn,
       },
     });
   }

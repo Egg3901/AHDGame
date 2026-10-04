@@ -15,6 +15,12 @@ import { DOMINANCE_DENSITY_CROWDED_COMPETITORS } from "@/lib/constants/corporati
 // host load arrived as cascading per-test timeouts. `vi.mock` is hoisted
 // above these imports, and no test resets the module registry, so one shared
 // import is behavior-identical to the per-test awaits it replaces.
+import {
+  rejectConstructionFinance,
+  requestConstructionFinance,
+} from "@/lib/banking/constructionFinance";
+import { loadBankingPolicy } from "@/lib/banking/policy";
+import { BANKING_POLICY_ALL_ON, BANKING_POLICY_OFF } from "@/lib/banking/rules/policy";
 import { buildCapacity } from "./buildCapacity";
 import { POST } from "@/app/api/corporations/[id]/sectors/[sectorId]/build/route";
 
@@ -24,6 +30,12 @@ import { POST } from "@/app/api/corporations/[id]/sectors/[sectorId]/build/route
  * the tier.
  */
 
+vi.mock("@/lib/banking/constructionFinance", () => ({
+  requestConstructionFinance: vi.fn(),
+  rejectConstructionFinance: vi.fn(),
+}));
+vi.mock("@/lib/banking/constructionCancellation", () => ({ cancelFinancedConstruction: vi.fn() }));
+vi.mock("@/lib/banking/policy", () => ({ loadBankingPolicy: vi.fn() }));
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/api/requireAuth", () => ({ requireBasicAuth: vi.fn() }));
 vi.mock("@/lib/api/corporations/resolveQuery", () => ({
@@ -44,6 +56,7 @@ vi.mock("@/lib/currency/corporationCapital", () => ({
   corpLiquidCapitalToAnchor: vi.fn((local: number) => local),
 }));
 vi.mock("@/lib/currency/sectorFxSpread", () => ({
+  currencyForCountry: vi.fn().mockReturnValue("USD"),
   corpToSectorCountrySpread: vi.fn().mockReturnValue({ spreadAnchor: 0, from: null, to: null }),
 }));
 vi.mock("@/lib/currency/marketMaker", () => ({
@@ -158,6 +171,167 @@ describe("buildCapacity — build", () => {
     db.collection("gameState");
     db.collection("gameConfig");
     db.collection("unownedSectors");
+  });
+
+  it("routes an explicitly consented term loan to the funded build shell without a cash-only debit", async () => {
+    await wireMocks(sectorDoc());
+    vi.mocked(loadBankingPolicy).mockResolvedValue(BANKING_POLICY_ALL_ON);
+    vi.mocked(requestConstructionFinance).mockResolvedValue({
+      ok: true,
+      pending: true,
+      loanId: "loan",
+      claimId: "claim",
+    });
+    const financing = {
+      bankId: new ObjectId().toHexString(),
+      requestId: "build-quote",
+      principal: 1000,
+      termTurns: 48,
+      maximumCostLocal: 1e12,
+      maximumRatePercent: 5,
+      pledgeConsent: true,
+    };
+    const response = await buildCapacity(request({ action: "build", units: 1000, financing }), {
+      params,
+    });
+    expect(await response.json()).toMatchObject({ success: true, financed: true, pending: true });
+    expect(requestConstructionFinance).toHaveBeenCalledWith(
+      expect.objectContaining({
+        principal: 1000,
+        termTurns: 48,
+        maximumRatePercent: 5,
+        order: expect.objectContaining({ unitsOrdered: 1000 }),
+        buildContext: expect.objectContaining({
+          bucket: expect.objectContaining({ industryModel: undefined }),
+        }),
+      })
+    );
+    expect(db.collectionMocks.corporations.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.corporateSectors.updateOne).not.toHaveBeenCalled();
+  });
+  it("refuses new loan funding while disabled before any lending snapshot or cash writer", async () => {
+    await wireMocks(sectorDoc());
+    vi.mocked(loadBankingPolicy).mockResolvedValue(BANKING_POLICY_OFF);
+    const response = await buildCapacity(
+      request({
+        action: "build",
+        units: 1000,
+        financing: {
+          bankId: new ObjectId().toHexString(),
+          requestId: "build-quote",
+          principal: 1000,
+          termTurns: 48,
+          maximumCostLocal: 1e12,
+          maximumRatePercent: 5,
+          pledgeConsent: true,
+        },
+      }),
+      { params }
+    );
+    expect(response.status).toBe(400);
+    expect(requestConstructionFinance).not.toHaveBeenCalled();
+    expect(db.collectionMocks.corporations.updateOne).not.toHaveBeenCalled();
+  });
+
+  it.each(["awaiting_approval", "funding"])(
+    "refuses cash-only builds during %s without debiting",
+    async (status) => {
+      await wireMocks(sectorDoc({ constructionFinancing: { status } }));
+      const response = await buildCapacity(request({ action: "build", units: 1000 }), { params });
+      expect(response.status).toBe(409);
+      expect(db.collectionMocks.corporations.updateOne).not.toHaveBeenCalled();
+      expect(db.collectionMocks.corporateSectors.updateOne).not.toHaveBeenCalled();
+    }
+  );
+  it("refunds a cash build when a reservation wins after the quote was loaded", async () => {
+    await wireMocks(sectorDoc());
+    db.collectionMocks.corporateSectors.updateOne.mockResolvedValueOnce({
+      matchedCount: 0,
+      modifiedCount: 0,
+    });
+    const response = await buildCapacity(request({ action: "build", units: 1000 }), { params });
+    expect(response.status).toBe(409);
+    const filter = db.collectionMocks.corporateSectors.updateOne.mock.calls[0][0];
+    expect(filter).toMatchObject({
+      corporationId: CORP_ID,
+      forSale: null,
+      constructionPropertyTransition: { $exists: false },
+      "constructionFinancing.status": { $nin: ["awaiting_approval", "funding"] },
+    });
+    const writes = db.collectionMocks.corporations.updateOne.mock.calls;
+    expect(writes).toHaveLength(2);
+    expect(writes[0][1].$inc.liquidCapital + writes[1][1].$inc.liquidCapital).toBe(0);
+    expect(db.collectionMocks.unownedSectors.updateOne).not.toHaveBeenCalled();
+  });
+  it("withdraws only the borrower's exact noncash request, including recovery while new finance is disabled", async () => {
+    const bankId = new ObjectId();
+    const loanId = new ObjectId();
+    await wireMocks(
+      sectorDoc({
+        constructionFinancing: {
+          claimId: "original",
+          borrowerId: CORP_ID.toHexString(),
+          bankId: bankId.toHexString(),
+          loanId: loanId.toHexString(),
+          status: "awaiting_approval",
+        },
+      })
+    );
+    vi.mocked(rejectConstructionFinance).mockResolvedValue({
+      ok: true,
+      pending: false,
+      loanId: loanId.toHexString(),
+      claimId: "original",
+    });
+    const response = await buildCapacity(
+      request({ action: "withdraw_financing", claimId: "original" }),
+      { params }
+    );
+    expect(response.status).toBe(200);
+    expect(rejectConstructionFinance).toHaveBeenCalledWith(
+      db,
+      bankId,
+      loanId,
+      true,
+      "Borrower withdrew the construction request"
+    );
+    expect(loadBankingPolicy).not.toHaveBeenCalled();
+    expect(db.collectionMocks.corporations.updateOne).not.toHaveBeenCalled();
+  });
+  it("refuses withdrawal of a different claim before invoking the financial shell", async () => {
+    await wireMocks(
+      sectorDoc({
+        constructionFinancing: { claimId: "original", borrowerId: CORP_ID.toHexString() },
+      })
+    );
+    const response = await buildCapacity(
+      request({ action: "withdraw_financing", claimId: "other" }),
+      { params }
+    );
+    expect(response.status).toBe(409);
+    expect(rejectConstructionFinance).not.toHaveBeenCalled();
+  });
+  it("reports a withdrawal lost to lender approval without a cash writer", async () => {
+    await wireMocks(
+      sectorDoc({
+        constructionFinancing: {
+          claimId: "original",
+          borrowerId: CORP_ID.toHexString(),
+          bankId: new ObjectId().toHexString(),
+          loanId: new ObjectId().toHexString(),
+        },
+      })
+    );
+    vi.mocked(rejectConstructionFinance).mockResolvedValue({
+      ok: false,
+      error: "Construction approval already owns this request",
+    });
+    const response = await buildCapacity(
+      request({ action: "withdraw_financing", claimId: "original" }),
+      { params }
+    );
+    expect(response.status).toBe(409);
+    expect(db.collectionMocks.corporations.updateOne).not.toHaveBeenCalled();
   });
 
   // ─── unowned-pool drawdown (#1145) ──────────────────────────────────────
@@ -633,6 +807,8 @@ describe("capacity recovery route", () => {
       _id: SECTOR_ID,
       corporationId: CORP_ID,
       forSale: null,
+      constructionPropertyTransition: { $exists: false },
+      "constructionFinancing.status": { $nin: ["awaiting_approval", "funding"] },
     });
   });
 
