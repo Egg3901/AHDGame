@@ -1002,6 +1002,8 @@ export interface CorporateSector {
    * anchors the fade-in ramp.
    */
   pricingPosture?: number | null;
+  /** Optional industrial input-indexed pricing; ignored while explicit plant costs are off. */
+  pricingMode?: "market" | "costPlus";
   clearingFactor?: number;
   soldFraction?: number;
   /**

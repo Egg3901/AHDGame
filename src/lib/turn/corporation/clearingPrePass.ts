@@ -42,6 +42,7 @@ import {
 } from "@/lib/currency/corporationCapital";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 import { advertisingDeliveredValueByCorp } from "./advertisingDeliveredValue";
+import { inputBasketCostIndex, supportsCostPlusPricing } from "@/lib/market/costPlusPricing/rules";
 
 /**
  * Clearing pre-pass for the corporation turn, extracted from index.ts so the
@@ -376,6 +377,22 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
           revenue: revenueAnchor,
           supplyRates: rates.supply ?? {},
           posture: typeof sector.pricingPosture === "number" ? sector.pricingPosture : null,
+          ...(market.plantsEnabled &&
+          market.explicitPlantCostsEnabled === true &&
+          supportsCostPlusPricing(sector.sectorType) &&
+          sector.pricingMode === "costPlus"
+            ? {
+                inputCostIndex: inputBasketCostIndex(
+                  rates.demand ?? {},
+                  lookups.reachableInputPriceRatiosByCountry?.get(sector.countryId ?? "US") ??
+                    lookups.priceRatioByCommodity
+                ),
+                inputCostShare: Object.values(rates.demand ?? {}).reduce(
+                  (sum, rate) => sum + Math.max(0, rate ?? 0),
+                  0
+                ),
+              }
+            : {}),
           // Lagged own fill for autoPosture's feedback loop (NPP/unowned only,
           // ignored when a player posture is posted).
           lastSoldFraction: typeof sector.soldFraction === "number" ? sector.soldFraction : null,

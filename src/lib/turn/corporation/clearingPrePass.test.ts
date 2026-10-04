@@ -83,10 +83,24 @@ function makeSectorWorld() {
     statePriceRatioByState: new Map(),
     reachablePriceRatioByCountry: new Map(),
   } as unknown as Lookups;
-  return { corp, lookups };
+  return { corp, sector, lookups };
 }
 
 describe("runClearingPrePass with clearing enabled", () => {
+  it("does not read the new pricing mode while explicit costs are disabled", () => {
+    const { sector, lookups } = makeSectorWorld();
+    Object.defineProperty(sector, "pricingMode", {
+      get() {
+        throw new Error("disabled mode read");
+      },
+    });
+    const market = {
+      clearingEnabled: true,
+      plantsEnabled: true,
+      explicitPlantCostsEnabled: false,
+    } as MarketContext;
+    expect(() => runClearingPrePass(makeInput({ lookups, market }))).not.toThrow();
+  });
   it("populates clearing results on the market and reports deterministic breaches", () => {
     const { lookups } = makeSectorWorld();
     const market = { clearingEnabled: true, plantsEnabled: false } as MarketContext;

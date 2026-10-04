@@ -120,6 +120,7 @@ export async function buildCorporationLookups(
      * keeps the legacy revenue-based share exactly.
      */
     plantsEnabled?: boolean;
+    explicitPlantCostsEnabled?: boolean;
     /** Target turn for production and the blended recipe; stored turn for read-only callers. */
     productionTurn?: number;
     /**
@@ -210,6 +211,7 @@ export async function buildCorporationLookups(
         {
           projection: {
             plantsPnl: 0,
+            ...(options?.explicitPlantCostsEnabled === true ? {} : { pricingMode: 0 }),
             ...(options?.omitBuildQueue ? { buildQueue: 0 } : {}),
           },
         }

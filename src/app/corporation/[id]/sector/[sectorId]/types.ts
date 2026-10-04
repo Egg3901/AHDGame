@@ -210,6 +210,8 @@ export interface CapitalData {
 }
 
 export interface PricingData {
+  costPlusEnabled?: boolean;
+  pricingMode?: "market" | "costPlus";
   /** CEO-posted posture (−0.2…0.2) or null = automatic. */
   posture: number | null;
   /** Posture actually used last turn (auto sectors included). */

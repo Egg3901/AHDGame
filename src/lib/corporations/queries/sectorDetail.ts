@@ -73,6 +73,7 @@ import {
 } from "@/lib/corporations/queries/extractionOpportunities";
 import type { ExtractableResource } from "@/lib/constants/commodities";
 import { buildSectorCommoditySections } from "@/lib/corporations/queries/sectorDetailCommodities";
+import { supportsCostPlusPricing } from "@/lib/market/costPlusPricing/rules";
 import { sectorEconomicRevenue } from "@/lib/corporations/sectorRevenueBasis";
 import { buildPolicyStackRows } from "@/lib/corporations/plantsPnlBasis";
 import {
@@ -732,16 +733,28 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       // Same governor bounds the turn processor resolves (turn/corporation
       // index.ts), read from gameConfig, not gameState, so the "market support"
       // pill counts down against the ramp the engine is actually applying.
-      const governorConfig = await db
-        .collection<GameConfig>("gameConfig")
-        .findOne(
-          { _id: "default" },
-          { projection: { marketGovernorCap: 1, marketGovernorRampTurns: 1 } }
-        );
+      const governorConfig = await db.collection<GameConfig>("gameConfig").findOne(
+        { _id: "default" },
+        {
+          projection: {
+            marketGovernorCap: 1,
+            marketGovernorRampTurns: 1,
+            explicitPlantCostsEnabled: 1,
+          },
+        }
+      );
       const marketCtx = buildMarketContext(marketMode, {
         cap: governorConfig?.marketGovernorCap,
         rampTurns: governorConfig?.marketGovernorRampTurns,
       });
+      if (
+        pricing &&
+        governorConfig?.explicitPlantCostsEnabled === true &&
+        supportsCostPlusPricing(sector.sectorType)
+      ) {
+        pricing.costPlusEnabled = true;
+        pricing.pricingMode = sector.pricingMode === "costPlus" ? "costPlus" : "market";
+      }
       const primeRate = await resolveCountryPrimeRate(db, sectorCountryId);
       const ceoAcumen =
         (ceo as { stats?: { businessAcumen?: number } } | null)?.stats?.businessAcumen ??
