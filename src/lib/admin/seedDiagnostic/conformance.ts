@@ -51,6 +51,8 @@ import {
 } from "./tolerance";
 import type { SeedDiagnosticCheck, SeedDiagnosticSeverity } from "./types";
 import { check, ok, warn, critical } from "./checkFactory";
+import { wrongEraDefaultParties } from "./rules/partyEra";
+import { partySeedsForPreset } from "@/lib/seeds/partySeedRegistry";
 import { checkRegionDerivedCoverage } from "./regionDerivedCoverage";
 import { regionalMetricCoverage, seedTurnoutScopeFilter } from "./regionalCoverage";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
@@ -1188,7 +1190,37 @@ async function checkPartyRosters(
             )
     );
   }
+  if (expect.preset === "2027-default") checks.push(...(await checkPartyEra(db, expect)));
   return checks;
+}
+
+/** Rejects persisted default parties outside the 2027 effective roster (#2294). */
+async function checkPartyEra(db: Db, expect: SeedExpectations): Promise<SeedDiagnosticCheck[]> {
+  const rosters = new Map<string, Set<string>>();
+  for (const countryId of expect.seededCountryIds) {
+    const seeds = partySeedsForPreset(countryId, expect.preset);
+    if (seeds.length > 0) rosters.set(countryId, new Set(seeds.map((seed) => seed.name)));
+  }
+  const persisted = await db
+    .collection<{ countryId: string; name: string }>("politicalParties")
+    .find({ isDefault: true, countryId: { $in: [...rosters.keys()] } })
+    .project<{ countryId: string; name: string }>({ countryId: 1, name: 1 })
+    .toArray();
+  const wrong = wrongEraDefaultParties(persisted, rosters);
+  if (wrong.length === 0) {
+    return [ok("parties.eraRoster", "global", "wrongEraDefaultParties", 0, 0)];
+  }
+  return [
+    critical(
+      "parties.eraRoster",
+      "global",
+      "wrongEraDefaultParties",
+      0,
+      wrong.length,
+      `parties outside the ${expect.preset} roster: ` +
+        wrong.map((party) => `${party.countryId}:${party.name}`).join("; ")
+    ),
+  ];
 }
 
 async function checkDemographics(db: Db, expect: SeedExpectations): Promise<SeedDiagnosticCheck[]> {
