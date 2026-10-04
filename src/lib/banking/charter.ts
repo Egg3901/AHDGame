@@ -168,6 +168,12 @@ export async function checkCharterEligibility(
   ) {
     reasons.push("A bank can be rechartered starting next turn");
   }
+  if (
+    corporation.bankCharter?.status === "failed" &&
+    typeof corporation.bankCharter.depositorsResolvedTurn !== "number"
+  ) {
+    reasons.push("Resolve the failed bank estate before rechartering");
+  }
 
   // Bank / fund separation: a corporation that sponsors an index fund may not
   // also charter a bank. Creation-time only, so existing dual holders are
@@ -294,9 +300,8 @@ async function issueCharterInner(
   if (prior && prior.status !== "active") {
     await archiveCharter(db, corporationId, prior, charteredTurn, "recharter");
   }
-  // Servicing continues for these named loans and NPC tranches after renewal.
-  // Use the same current/arrears book as the turn, not a stale charter counter;
-  // pending requests and terminal defaults/repaid loans are not funded exposure.
+  // Seed the counter from only this charter's current/arrears epoch, not a
+  // stale charter counter. Pending requests and terminal loans are not exposure.
   const survivingLoans = await db
     .collection<BankLoan>("bankLoans")
     .find(

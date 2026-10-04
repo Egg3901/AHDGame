@@ -361,6 +361,21 @@ describe("banking charter", () => {
         bankCharter: { status: "revoked", charteredTurn: 42 },
       });
     });
+    it("waits for failed estate resolution before rechartering", async () => {
+      const failed: BankCharter = { ...revoked(), status: "failed" };
+      const corp = makeCorp({ bankCharter: failed });
+      const database = charterWorld(corp) as unknown as Db;
+      const { issueCharter } = await importCharter();
+
+      const result = await issueCharter(database, corp._id, "retail", "USD");
+
+      expect(result.ok).toBe(false);
+      if (!result.ok)
+        expect(result.reasons).toContain("Resolve the failed bank estate before rechartering");
+      expect(await database.collection("corporations").findOne({ _id: corp._id })).toMatchObject({
+        bankCharter: { status: "failed", charteredTurn: 10 },
+      });
+    });
     it("rejects a stale reissue quote when a competing issuance and loan land after the book read", async () => {
       const corp = makeCorp({ bankCharter: revoked() });
       const borrower = makeCorp({ liquidCapital: 0 });

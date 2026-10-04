@@ -23,6 +23,9 @@
  *    deposit insurance fund. That is subrogation, and it is the only
  *    destination that does not either strand the money on a dead charter or
  *    hand a windfall to a shareholder who has already been paid out.
+ *  - **If the charter is already archived**, no live resolution pass can
+ *    distribute its snapshot, so recovery goes to the insurer as a safe
+ *    fallback for legacy data that predates the unresolved-estate guard.
  *
  * Both destinations go through the same money primitive under the same per-loan
  * key as a normal servicing pass, so a retried turn cannot charge a borrower
@@ -58,7 +61,7 @@ type DeadBank = {
   name: string;
   currency: CurrencyCode;
   charteredTurn: number;
-  archivedTurn?: number;
+  nextCharteredTurn?: number;
   historyId?: BankCharterHistoryEntry["_id"];
   /** True once the deposit book has been returned and the estate is closed. */
   resolved: boolean;
@@ -68,7 +71,7 @@ type DeadBank = {
 export async function findDeadBanksWithLoans(db: Db): Promise<DeadBank[]> {
   const history = await db
     .collection<BankCharterHistoryEntry>("bankCharterHistory")
-    .find({ "charter.status": { $in: ["failed", "revoked"] } })
+    .find({})
     .toArray();
   const historicalCorporationIds = [
     ...new Map(
@@ -90,6 +93,26 @@ export async function findDeadBanksWithLoans(db: Db): Promise<DeadBank[]> {
       bankCharter: 1,
     })
     .toArray();
+  const turnsByCorporation = new Map<string, Set<number>>();
+  const addEpoch = (corporationId: Corporation["_id"], charteredTurn: number) => {
+    const key = corporationId.toString();
+    const turns = turnsByCorporation.get(key) ?? new Set<number>();
+    turns.add(charteredTurn);
+    turnsByCorporation.set(key, turns);
+  };
+  for (const entry of history) addEpoch(entry.corporationId, entry.charter.charteredTurn);
+  for (const corp of corps) {
+    if (corp.bankCharter) addEpoch(corp._id, corp.bankCharter.charteredTurn);
+  }
+  const nextEpoch = (corporationId: Corporation["_id"], charteredTurn: number) => {
+    return [...(turnsByCorporation.get(corporationId.toString()) ?? [])]
+      .filter((turn) => turn > charteredTurn)
+      .sort((a, b) => a - b)[0];
+  };
+  const nextEpochField = (corporationId: Corporation["_id"], charteredTurn: number) => {
+    const nextCharteredTurn = nextEpoch(corporationId, charteredTurn);
+    return nextCharteredTurn === undefined ? {} : { nextCharteredTurn };
+  };
   const deadBanks = corps
     .filter((corp) => corp.bankCharter && corp.bankCharter.status !== "active")
     .map((corp) => ({
@@ -97,6 +120,7 @@ export async function findDeadBanksWithLoans(db: Db): Promise<DeadBank[]> {
       name: corp.name,
       currency: corp.bankCharter!.currency as CurrencyCode,
       charteredTurn: corp.bankCharter!.charteredTurn,
+      ...nextEpochField(corp._id, corp.bankCharter!.charteredTurn),
       // A revoked charter has already run the waterfall on the way out, so its
       // estate is closed the moment it is revoked. A failed one is closed only
       // once the resolution sweep has stamped it.
@@ -104,15 +128,17 @@ export async function findDeadBanksWithLoans(db: Db): Promise<DeadBank[]> {
     }));
   const nameById = new Map(corps.map((corp) => [corp._id.toString(), corp.name]));
   deadBanks.push(
-    ...history.map((entry) => ({
-      corporationId: entry.corporationId,
-      name: nameById.get(entry.corporationId.toString()) ?? "Former bank",
-      currency: entry.charter.currency as CurrencyCode,
-      charteredTurn: entry.charter.charteredTurn,
-      archivedTurn: entry.archivedTurn,
-      historyId: entry._id,
-      resolved: stageAllows(lifecycleStage(entry.charter), "windDownEstate"),
-    }))
+    ...history
+      .filter((entry) => entry.charter.status === "failed" || entry.charter.status === "revoked")
+      .map((entry) => ({
+        corporationId: entry.corporationId,
+        name: nameById.get(entry.corporationId.toString()) ?? "Former bank",
+        currency: entry.charter.currency as CurrencyCode,
+        charteredTurn: entry.charter.charteredTurn,
+        ...nextEpochField(entry.corporationId, entry.charter.charteredTurn),
+        historyId: entry._id,
+        resolved: stageAllows(lifecycleStage(entry.charter), "windDownEstate"),
+      }))
   );
 
   // Type switches can archive the same charter epoch more than once. Keep one
@@ -128,15 +154,18 @@ export async function findDeadBanksWithLoans(db: Db): Promise<DeadBank[]> {
 
 /** Where a payment to this dead bank should land. */
 export function recoveryTargetFor(bank: DeadBank): MoneyTarget {
+  // An archived snapshot has no active resolution waterfall to distribute its
+  // reserve balance. Route these legacy recoveries to the insurer rather than
+  // strand cash in a history document no later pass will debit.
+  if (bank.historyId) {
+    return {
+      collection: "depositInsuranceFunds",
+      filter: { _id: bank.currency },
+      path: "balance",
+      note: `recovery for ${bank.name}'s archived loan book goes to the insurer`,
+    };
+  }
   if (!bank.resolved) {
-    if (bank.historyId) {
-      return {
-        collection: "bankCharterHistory",
-        filter: { _id: bank.historyId },
-        path: "charter.cashReserves",
-        note: `recovery into ${bank.name}'s archived estate, before it is distributed`,
-      };
-    }
     return {
       collection: "corporations",
       filter: { _id: bank.corporationId },
@@ -179,7 +208,7 @@ export async function processDeadBankLoans(
         bankCorporationId: bank.corporationId,
         status: { $in: ["current", "arrears"] },
         lastProcessedTurn: { $ne: turn },
-        ...loanCharterEpochFilter(bank.charteredTurn, bank.archivedTurn),
+        ...loanCharterEpochFilter(bank.charteredTurn, bank.nextCharteredTurn),
       })
       .toArray();
     if (loans.length === 0) continue;

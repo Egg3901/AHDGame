@@ -16,7 +16,7 @@ areas: [backend, engine]
 ## What changed
 
 - Rechartering starts with an empty loan book for the new epoch. Existing loans
-  retain their originating charter and continue through the estate recovery
-  path after resolution.
+  retain their originating charter. Failed estates must resolve before
+  rechartering; resolved recoveries go to deposit insurance.
 - Legacy loan records receive charter epoch metadata through an idempotent
   migration and remain readable while the backfill is pending.
