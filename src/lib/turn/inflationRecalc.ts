@@ -41,6 +41,7 @@ import { calculateFxInflationPressure } from "@/lib/turn/rules/fxInflationPressu
 import {
   countryTurnTariffInflationExposure,
   loadTurnTariffInflationExposure,
+  measuredTariffInflationRate,
 } from "@/lib/tariffs/tariffInflationExposure";
 
 /**
@@ -384,7 +385,9 @@ export async function recalculateInflationPerTurn(db: Db, turn: number): Promise
             policyStancePressure,
             moneySupplyGrowthPct,
             bwMoneyGrowthCoeff,
-            countryTurnTariffInflationExposure(tariffExposureSnapshot, countryId).tariffRate
+            measuredTariffInflationRate(
+              countryTurnTariffInflationExposure(tariffExposureSnapshot, countryId)
+            )
           );
           // Household prices trail the newly settled CPI, but never feed back
           // into its calculation. This gives inflation a visible purchasing-
@@ -448,10 +451,9 @@ export async function recalculateInflationPerTurn(db: Db, turn: number): Promise
     unbanked.map(async (budget) => {
       const countryId = budget.countryId as CountryId | undefined;
       if (!countryId || !COUNTRY_CONFIGS[countryId]) return;
-      const tariffRate = countryTurnTariffInflationExposure(
-        tariffExposureSnapshot,
-        countryId
-      ).tariffRate;
+      const tariffRate = measuredTariffInflationRate(
+        countryTurnTariffInflationExposure(tariffExposureSnapshot, countryId)
+      );
       const newInflation = await calculateCountryInflation(
         db,
         countryId,

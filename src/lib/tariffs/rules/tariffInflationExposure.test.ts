@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { calculateInflationWithBreakdown } from "@/lib/budget/inflation";
-import { tariffInflationExposure, TARIFF_INFLATION_BASELINE } from "./tariffInflationExposure";
+import {
+  measuredTariffInflationRate,
+  tariffInflationExposure,
+  TARIFF_INFLATION_BASELINE,
+} from "./tariffInflationExposure";
 
 const neutralInflation = (tariffRate: number) =>
   calculateInflationWithBreakdown({
@@ -173,5 +177,17 @@ describe("tariffInflationExposure", () => {
       productionInputTariffPaid: 0,
     });
     expect(result.tariffRate).toBe(3);
+  });
+});
+
+describe("measuredTariffInflationRate", () => {
+  it("passes a measured rate through", () => {
+    expect(measuredTariffInflationRate({ available: true, tariffRate: 4.2 })).toBe(4.2);
+  });
+
+  it("returns undefined for unavailable or shadow exposure so the legacy tariff path runs", () => {
+    expect(
+      measuredTariffInflationRate({ available: false, tariffRate: TARIFF_INFLATION_BASELINE })
+    ).toBeUndefined();
   });
 });

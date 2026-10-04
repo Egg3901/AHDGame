@@ -217,7 +217,8 @@ describe("recalculateInflationPerTurn", () => {
       0,
       undefined,
       undefined,
-      3
+      // No measured sourcing record: the legacy tariff path must still run.
+      undefined
     );
     expect(db.collectionMocks.federalBudget.updateOne).toHaveBeenCalledWith(
       { _id: "UK" },
@@ -228,6 +229,18 @@ describe("recalculateInflationPerTurn", () => {
         }),
       }
     );
+  });
+
+  it("leaves the banked tariff input undefined when sourcing exposure is unavailable", async () => {
+    setupBanks(db, [makeCentralBank("US")]);
+    setupBudget(db, makeBudget("federal"), "federal");
+
+    const { recalculateInflationPerTurn } = await import("./inflationRecalc");
+    await recalculateInflationPerTurn(db as unknown as Db, 100);
+
+    const call = mockCalculateCountryInflation.mock.calls[0]!;
+    expect(call).toHaveLength(10);
+    expect(call[9]).toBeUndefined();
   });
 
   it("forwards the bank's policyInflationPressure into calculateCountryInflation", async () => {
@@ -460,7 +473,7 @@ describe("recalculateInflationPerTurn", () => {
       expect.any(Number),
       expect.any(Number),
       expect.any(Number),
-      3
+      undefined
     );
   });
 

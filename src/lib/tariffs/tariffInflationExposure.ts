@@ -6,6 +6,7 @@ import { SHIPPED_COMMODITIES } from "@/lib/logistics/freightClass";
 import type { CommoditySourcingDoc } from "@/lib/logistics/sourcingLedger";
 import {
   countryTurnTariffInflationExposure,
+  measuredTariffInflationRate,
   qualifyTariffExposureRows,
 } from "./rules/tariffInflationExposure";
 import type {
@@ -13,7 +14,7 @@ import type {
   TurnTariffInflationExposure,
 } from "./rules/tariffInflationExposure";
 
-export { countryTurnTariffInflationExposure };
+export { countryTurnTariffInflationExposure, measuredTariffInflationRate };
 export type { CountryTariffInflationExposure, TurnTariffInflationExposure };
 
 /** Read one turn's projected commodity rows once; no country-specific reads. */

@@ -14,6 +14,7 @@ import { type CountryId } from "@/lib/constants/countries";
 import { getCountryFlagUrlForEra } from "@/lib/constants/flags";
 import { useActivePreset } from "@/contexts/RegisteredCountriesContext";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { Tooltip as HoverTooltip } from "@/components/Tooltip";
 import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 
 /** One leader's response to a multi-responder (global) crisis. */
@@ -681,7 +682,7 @@ export default function CrisisInteractionPanel({ crisisId }: { crisisId: string 
                 </p>
                 {interaction.globalResponseOutcome.civilianLossResult ? (
                   <p className="mt-1 text-[11px] text-muted">
-                    <Tooltip
+                    <HoverTooltip
                       content={
                         interaction.globalResponseOutcome.civilianLossResult.regions
                           .map(
@@ -697,7 +698,7 @@ export default function CrisisInteractionPanel({ crisisId }: { crisisId: string 
                         ).toLocaleString()}{" "}
                         civilian deaths recorded
                       </span>
-                    </Tooltip>
+                    </HoverTooltip>
                   </p>
                 ) : null}
                 {interaction.globalResponseOutcome.campaignStageAfter ? (

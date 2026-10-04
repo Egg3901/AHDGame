@@ -281,3 +281,15 @@ export function countryTurnTariffInflationExposure(
     }
   );
 }
+
+/**
+ * CPI tariff input for one country. Only a measured sourcing record overrides
+ * the legacy tariff, sector and FTA calculation. Unavailable and shadow
+ * exposure carry a baseline placeholder rate, so they return undefined and the
+ * inflation model keeps its own tariff pressure.
+ */
+export function measuredTariffInflationRate(
+  exposure: Pick<TariffInflationExposureResult, "available" | "tariffRate">
+): number | undefined {
+  return exposure.available ? exposure.tariffRate : undefined;
+}

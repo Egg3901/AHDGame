@@ -27,10 +27,32 @@ function fixture() {
       { _id: "origin", population: 100_000 },
       { _id: "federal", population: 1e9 },
     ]);
-  const crisis = {
+  const crisis: Crisis = {
     _id: new ObjectId(),
-    globalResponse: { roleByCountry: { YU: "belligerent" } },
-  } as Crisis;
+    name: "Yugoslav escalation",
+    description: "Test conflict",
+    scope: "global",
+    countryIds: ["YU"],
+    regionIds: ["origin"],
+    status: "active",
+    startTurn: 6,
+    endTurn: null,
+    durationTurns: null,
+    effects: [],
+    wireMessageOnStart: "",
+    wireMessageOnEnd: null,
+    createdBy: null,
+    createdAt: new Date(0),
+    resolvedAt: null,
+    globalResponse: {
+      conflictKey: "yugoslavia",
+      eventKey: "escalation",
+      roleByCountry: { YU: "belligerent" },
+      defaultOptionIdByRole: {},
+      outcomes: [],
+      defaultOutcomeId: "military_escalation",
+    },
+  };
   const interaction = { _id: new ObjectId() } as CrisisInteraction;
   const outcome = {
     outcomeId: "military_escalation",
