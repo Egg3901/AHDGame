@@ -10,8 +10,8 @@ import {
   type ManufacturingLifecycleStage,
 } from "./rules/manufacturingRules";
 
-const CAPITAL_STOCK = 100_000;
-const PROJECT_COST = manufacturingDevelopmentThresholdAnchor(CAPITAL_STOCK);
+const ALLOCATED_CAPITAL_ANCHOR = 100_000;
+const PROJECT_COST = manufacturingDevelopmentThresholdAnchor(ALLOCATED_CAPITAL_ANCHOR);
 const BASELINE = {
   outputAnchor: 100_000,
   supplyRates: { steel: 0.4, building_materials: 0.2 },
@@ -47,7 +47,7 @@ function initialProject(): EvidenceProject {
 }
 
 describe("manufacturing product line balance evidence", () => {
-  it("sets the development threshold to 5% of allocated physical capital stock", () => {
+  it("sets the development threshold to 5% of allocated monetary plant capital", () => {
     expect(PROJECT_COST).toBe(5_000);
     expect(manufacturingDevelopmentThresholdAnchor(10)).toBe(1);
     expect(MANUFACTURING_DEVELOPMENT_ELAPSED_TURNS).toBe(12);
@@ -184,7 +184,7 @@ describe("manufacturing product line balance evidence", () => {
       kindId,
       outputCommodity: "steel" as const,
       allocations: [{ sectorId: "plant", share: 1 }],
-      capacityStock: CAPITAL_STOCK,
+      capacityStock: ALLOCATED_CAPITAL_ANCHOR,
       capacityWeightedMarginPct,
       scarcityPriceRatio,
       supplyMixWeight,
