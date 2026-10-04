@@ -23,6 +23,7 @@ export interface BankingPolicyConfig {
   bankTreasuryEnabled?: boolean;
   bankSovereignPrimaryEnabled?: boolean;
   bankPropForexFeesEnabled?: boolean;
+  bankUnderwritingEnabled?: boolean;
   bankContagionEnabled?: boolean;
   lineOfCreditEnabled?: boolean;
   playerAdvancedBankChartersEnabled?: boolean;
@@ -40,6 +41,7 @@ export const BANKING_POLICY_PROJECTION = Object.freeze({
   bankTreasuryEnabled: 1,
   bankSovereignPrimaryEnabled: 1,
   bankPropForexFeesEnabled: 1,
+  bankUnderwritingEnabled: 1,
   bankContagionEnabled: 1,
   lineOfCreditEnabled: 1,
   playerAdvancedBankChartersEnabled: 1,
@@ -63,6 +65,8 @@ export interface BankingPolicySnapshot {
   sovereignPrimary?: boolean;
   /** Funded size-priced forex fees. Requires banking and prop trading. */
   propForexFees: boolean;
+  /** Funded corporate equity and bond primary underwriting. Default off. */
+  primaryUnderwriting?: boolean;
   /** Failure contagion between same-currency deposit takers. Requires private banking. */
   contagion: boolean;
   /** Player lines of credit at the central bank. */
@@ -115,6 +119,7 @@ export function resolveBankingPolicy(
       privateBanking &&
       config?.bankPropTradingEnabled !== false &&
       config?.bankPropForexFeesEnabled === true,
+    primaryUnderwriting: privateBanking && config?.bankUnderwritingEnabled === true,
     contagion: privateBanking && config?.bankContagionEnabled !== false,
     lineOfCredit: config?.lineOfCreditEnabled !== false,
     advancedCharters: privateBanking && config?.playerAdvancedBankChartersEnabled === true,
@@ -134,6 +139,7 @@ export const BANKING_POLICY_ALL_ON: BankingPolicySnapshot = resolveBankingPolicy
   bankConstructionFinanceEnabled: true,
   bankPropTradingEnabled: true,
   bankPropForexFeesEnabled: true,
+  bankUnderwritingEnabled: true,
   bankTreasuryEnabled: true,
   bankSovereignPrimaryEnabled: true,
   treasuryCashLedgerEnabled: true,

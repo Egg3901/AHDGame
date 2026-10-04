@@ -163,6 +163,7 @@ async function runAgreedAcquisition(
   if (
     bankConflict &&
     (target.bankPropForexFee ||
+      target.bankUnderwritingFunding ||
       hasFundedSovereignEscrow(target) ||
       !(await isOwnInterruptedCharterClaim(db, offer, target, acquirer)))
   ) {
