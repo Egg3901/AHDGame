@@ -147,14 +147,22 @@ describe("runReconcile", () => {
     expect(service.startPatreonGracePeriod).not.toHaveBeenCalled();
   });
 
-  it("expires a supporter whose grace has elapsed", async () => {
+  it("expires a supporter whose linked Patreon record is inactive and grace has elapsed", async () => {
     const userId = new ObjectId();
-    await setMembers([]);
+    await setMembers([
+      {
+        patreonUserId: "expired-patron",
+        email: "expired@example.com",
+        tier: null,
+        active: false,
+      },
+    ]);
     setSupporters(db, [
       {
         _id: userId,
         username: "expired",
         email: "expired@example.com",
+        patreonUserId: "expired-patron",
         patreonTier: "supporter",
         patreonExpiresAt: new Date(Date.now() - DAY),
       },
@@ -168,6 +176,28 @@ describe("runReconcile", () => {
     expect(service.clearExpiredPatreonBenefits).toHaveBeenCalledWith(expect.anything(), userId);
     // Expiry takes priority: not double-counted as a derole.
     expect(res.toDerole).toHaveLength(0);
+  });
+
+  it("never expires an unlinked supporter because Patreon cannot match them", async () => {
+    const userId = new ObjectId();
+    await setMembers([]);
+    setSupporters(db, [
+      {
+        _id: userId,
+        username: "manual-expired",
+        email: "manual@example.com",
+        patreonTier: "supporter",
+        patreonExpiresAt: new Date(Date.now() - DAY),
+      },
+    ]);
+    const service = await import("@/lib/patreon/service");
+
+    const { runReconcile } = await import("./route");
+    const result = await runReconcile(db as unknown as Db, true);
+
+    expect(result.expired).toHaveLength(0);
+    expect(result.unmatchedAhdSupporters).toHaveLength(1);
+    expect(service.clearExpiredPatreonBenefits).not.toHaveBeenCalled();
   });
 
   it("SKIPS a Stripe subscriber absent from Patreon: no derole, no grace, no expiry", async () => {
