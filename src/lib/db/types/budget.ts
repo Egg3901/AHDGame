@@ -475,6 +475,8 @@ export interface BankSovereignClaim {
 export interface FederalBudget {
   treasuryAccrual?: TreasuryAccrualReceipt;
   bankSovereignClaims?: BankSovereignClaim[];
+  /** Frozen, unpaid non-bank sovereign coupon plans for funded Treasury cash. */
+  sovereignCouponClaims?: FundedSovereignCouponClaim[];
   _id: BudgetDocumentId;
   countryId: string;
   fiscalYear: number;
@@ -762,6 +764,25 @@ export interface FederalBudget {
   imfBoardOverrideRateDelta?: number | null;
   imfBoardOverrideCaptureDelta?: number | null;
   imfBoardPublicStatement?: string | null;
+}
+
+export interface FundedSovereignCouponClaim {
+  id: string;
+  bondId: string;
+  dueTurn: number;
+  countryId: string;
+  currencyCode: import("@/lib/constants/currencies").CurrencyCode;
+  amountLocal: number;
+  anchorRate: number;
+  holders: Array<{
+    kind: "publicFloat" | "character" | "imperial" | "corporation" | "fund" | "npp";
+    id?: string;
+    amountLocal: number;
+    amountAnchor: number;
+    currencyCode?: import("@/lib/constants/currencies").CurrencyCode;
+    payeeCurrencyCode?: import("@/lib/constants/currencies").CurrencyCode;
+    payeeLocalPerAnchor?: number;
+  }>;
 }
 
 /** Frozen snapshot of a country's federal budget at a fiscal year boundary. */
