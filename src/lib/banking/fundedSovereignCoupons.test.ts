@@ -1,5 +1,5 @@
 import { ObjectId, type Db } from "mongodb";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createInMemoryDb, type InMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import type { Bond } from "@/lib/db/types/bond";
 import type { FederalBudget } from "@/lib/db/types/budget";
@@ -194,6 +194,7 @@ describe("funded sovereign coupon claims", () => {
           localPerAnchor: 1,
           currencyFieldPresent: true,
           currencyFieldValue: "USD",
+          currencyUsesCountryFallback: false,
         },
       ],
     ]);
