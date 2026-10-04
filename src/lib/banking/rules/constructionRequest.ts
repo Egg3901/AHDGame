@@ -12,6 +12,7 @@ export interface ConstructionFinanceView {
   corporationId: string;
   currency: import("@/lib/constants/currencies").CurrencyCode;
   localPerAnchor: number;
+  pendingRequest?: { claimId: string; status: "awaiting_approval" | "funding" };
 }
 export interface ConstructionFinanceChoice {
   request: ConstructionFinanceRequest | null;
