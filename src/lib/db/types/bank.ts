@@ -329,6 +329,15 @@ export interface BankLoan {
   arrearsTurns?: number;
   /** Idempotency key for turn processing — standalone Mongo has no transactions. */
   lastProcessedTurn?: number;
+  /** Lender decision lock for a reserved construction claim, before any cash moves. */
+  constructionDecision?: "approve" | "reject";
+  /** Security attached only to the capacity paid through this build claim. */
+  constructionCollateral?: {
+    claimId: string;
+    sectorId: ObjectId;
+    quotedCostLocal: number;
+    constructionCostLocal: number;
+  };
 }
 
 /** Collection: depositInsuranceFunds. One per currency; premium-funded, Treasury backstop. */
