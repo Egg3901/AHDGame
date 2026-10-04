@@ -6,6 +6,7 @@ import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { queueUndeliveredCost } from "@/lib/corporations/buildDelivery";
 import { buyListedSector } from "./buyListedSector";
 
+vi.mock("@/lib/banking/constructionSale", () => ({ buySecuredConstructionProperty: vi.fn() }));
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/api/requireAuth", () => ({ requireBasicAuth: vi.fn() }));
 vi.mock("@/lib/api/corporations/resolveQuery", () => ({ resolveCorporation: vi.fn() }));
@@ -257,5 +258,45 @@ describe("buyListedSector — mid-build transfer moves the queue (P3b)", () => {
         $and: expect.any(Array),
       })
     );
+  });
+});
+
+describe("secured sale command routing", () => {
+  it("routes a pledged site through funded recovery before generic property guards or debits", async () => {
+    vi.clearAllMocks();
+    db = createMockDb();
+    db.collection("corporations");
+    db.collection("corporateSectors");
+    db.collection("states");
+    await wireCommonMocks();
+    db.collectionMocks.corporateSectors.findOne.mockResolvedValueOnce({
+      ...sectorBase,
+      constructionFinancing: {
+        borrowerId: String(sellerId),
+        currency: "USD",
+        status: "building",
+        loanFunded: true,
+        escrowLocal: 0,
+      },
+    });
+    const { buySecuredConstructionProperty } = await import("@/lib/banking/constructionSale");
+    vi.mocked(buySecuredConstructionProperty).mockResolvedValue({
+      ok: true,
+      quote: {
+        priceAnchor: 1000,
+        buyerCostLocal: 1000,
+        ownerProceeds: 250,
+        buyerCurrency: "USD",
+        principalRepaid: 750,
+      },
+    } as never);
+    const result = await buyListedSector(makeRequest(), { params });
+    expect(result.status).toBe(200);
+    expect(buySecuredConstructionProperty).toHaveBeenCalledWith(
+      expect.objectContaining({ borrowerId: sellerId, buyerId, sectorId })
+    );
+    const { atomicallyDebitCorpLiquidCapital } =
+      await import("@/lib/financialTxLog/atomicCashGuard");
+    expect(atomicallyDebitCorpLiquidCapital).not.toHaveBeenCalled();
   });
 });

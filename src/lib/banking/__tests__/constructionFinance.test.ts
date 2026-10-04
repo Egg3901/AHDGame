@@ -113,6 +113,20 @@ function world(requireApproval = false) {
 
 beforeEach(() => vi.clearAllMocks());
 describe("construction request lifecycle", () => {
+  it("cannot install a claim over a concurrently reserved property row", async () => {
+    const { request, memory } = world();
+    await request.db
+      .collection("corporateSectors")
+      .updateOne(
+        { _id: request.sector._id },
+        { $set: { constructionPropertyTransition: { key: "relocation", kind: "relocation" } } }
+      );
+    expect(await requestConstructionFinance(request)).toMatchObject({ ok: false });
+    expect(memory.collection("bankLoans").docs).toHaveLength(0);
+    expect(memory.collection("corporations").docs[0].liquidCapital).toBe(50_000);
+    expect(memory.collection("corporateSectors").docs[0].constructionFinancing).toBeUndefined();
+    expect(memory.collection("gameConfig").docs[0].bankConstructionAdmissions).toEqual([]);
+  });
   it("refuses APR drift before reserving the sector or moving cash", async () => {
     const { request, memory } = world();
     expect(await requestConstructionFinance({ ...request, maximumRatePercent: 4 })).toMatchObject({
