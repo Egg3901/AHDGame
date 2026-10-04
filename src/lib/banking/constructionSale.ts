@@ -1,3 +1,4 @@
+import { getCorporateSectorLaneQuery } from "@/lib/corporations/sectorLocation";
 import { ObjectId, type Db } from "mongodb";
 import type { BankLoan } from "@/lib/db/types/bank";
 import type { CentralBank } from "@/lib/db/types/centralBank";
@@ -125,8 +126,7 @@ export async function buySecuredConstructionProperty(input: {
     const collision = await sectors.findOne({
       corporationId: buyerId,
       stateId: sector.stateId,
-      sectorType: sector.sectorType,
-      industryModel: sector.industryModel ?? null,
+      ...getCorporateSectorLaneQuery(sector),
     });
     if (collision)
       return refuse(

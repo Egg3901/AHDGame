@@ -31,9 +31,17 @@ export async function prepareConstructionBuildEffects(input: {
 }): Promise<{ ok: true; value: ConstructionBuildEffects } | { ok: false; error: string }> {
   if (!input.enabled) return { ok: false, error: "Construction finance is not enabled" };
   const { db, sector, claimId, feeLocal } = input;
+  if (
+    input.bucket.stateId !== sector.stateId ||
+    input.bucket.sectorType !== sector.sectorType ||
+    (input.bucket.industryModel ?? null) !== (sector.industryModel ?? null) ||
+    (input.bucket.mediaDiscriminator ?? null) !== (sector.mediaDiscriminator ?? null)
+  )
+    return { ok: false, error: "The construction market identity changed" };
   const countryId = COUNTRY_ORDER.find((candidate) => candidate === input.bucket.countryId);
   if (!countryId) return { ok: false, error: "Construction market country is unavailable" };
   const industryModel = input.bucket.industryModel ?? null;
+  const mediaDiscriminator = input.bucket.mediaDiscriminator ?? null;
   if (industryModel !== null && industryModel !== "vehicles")
     return { ok: false, error: "Construction market model is unavailable" };
   if (!Number.isFinite(feeLocal) || feeLocal < 0 || !ObjectId.isValid(input.borrowerId))
@@ -108,12 +116,14 @@ export async function prepareConstructionBuildEffects(input: {
       stateId: input.bucket.stateId,
       sectorType: input.bucket.sectorType,
       industryModel,
+      mediaDiscriminator,
     },
     {
       $setOnInsert: {
         ...input.bucket,
         countryId,
         industryModel,
+        mediaDiscriminator,
         headroomUnits: 0,
         revenue: 0,
         createdAt: now,

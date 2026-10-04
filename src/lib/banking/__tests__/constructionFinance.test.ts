@@ -67,6 +67,9 @@ function world(requireApproval = false) {
   const sector = {
     _id: sectorId,
     corporationId: borrowerId,
+    stateId: "US-CA",
+    countryId: "US",
+    sectorType: "manufacturing",
     forSale: null,
     strategyId: "standard",
     buildQueue: [],
@@ -113,6 +116,56 @@ function world(requireApproval = false) {
 
 beforeEach(() => vi.clearAllMocks());
 describe("construction request lifecycle", () => {
+  it("consumes only the canonical entertainment headroom bucket", async () => {
+    const { request, memory } = world();
+    request.sector.sectorType = "media";
+    request.sector.mediaDiscriminator = "entertainment";
+    await request.db
+      .collection("corporateSectors")
+      .updateOne(
+        { _id: sectorId },
+        { $set: { sectorType: "media", mediaDiscriminator: "entertainment" } }
+      );
+    const genericId = new ObjectId(),
+      entertainmentId = new ObjectId();
+    memory.seed("unownedSectors", [
+      {
+        _id: genericId,
+        stateId: "US-CA",
+        countryId: "US",
+        sectorType: "media",
+        headroomUnits: 250,
+        revenue: 250_000,
+      },
+      {
+        _id: entertainmentId,
+        stateId: "US-CA",
+        countryId: "US",
+        sectorType: "media",
+        mediaDiscriminator: "entertainment",
+        headroomUnits: 250,
+        revenue: 250_000,
+      },
+    ]);
+    const result = await requestConstructionFinance({
+      ...request,
+      buildContext: {
+        destinationCurrency: "USD",
+        bucket: {
+          stateId: "US-CA",
+          countryId: "US",
+          sectorType: "media",
+          mediaDiscriminator: "entertainment",
+        },
+        eraUnitScale: 1,
+      },
+    });
+    expect(result).toMatchObject({ ok: true, pending: false });
+    expect(memory.collection("unownedSectors").docs).toMatchObject([
+      { _id: genericId, headroomUnits: 250 },
+      { _id: entertainmentId, headroomUnits: 150 },
+    ]);
+  });
   it("cannot install a claim over a concurrently reserved property row", async () => {
     const { request, memory } = world();
     await request.db
@@ -400,6 +453,11 @@ describe("construction request lifecycle", () => {
     "settles native FX recipients and market headroom once after a %s interruption",
     async (point) => {
       const { request, memory } = world();
+      request.sector.stateId = "GB_TEST";
+      request.sector.countryId = "UK";
+      await request.db
+        .collection("corporateSectors")
+        .updateOne({ _id: sectorId }, { $set: { stateId: "GB_TEST", countryId: "UK" } });
       const poolId = new ObjectId();
       memory.seed("centralBanks", [
         { _id: "US", forexRevenue: 0 },

@@ -4,7 +4,6 @@ import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { queueUndeliveredCost } from "@/lib/corporations/buildDelivery";
-import { buyListedSector } from "./buyListedSector";
 
 vi.mock("@/lib/banking/constructionSale", () => ({ buySecuredConstructionProperty: vi.fn() }));
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));

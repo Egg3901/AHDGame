@@ -1,3 +1,4 @@
+import { getCorporateSectorLaneQuery } from "@/lib/corporations/sectorLocation";
 /**
  * Payload-section builders for the sector detail query: apportioned taxes,
  * active-crisis margin penalty, attack/split info, for-sale info, tech
@@ -443,8 +444,7 @@ export async function buildSectorForSaleInfo(
     {
       corporationId: viewerCorporation._id,
       stateId: sector.stateId,
-      sectorType: sector.sectorType,
-      industryModel: sector.industryModel ?? null,
+      ...getCorporateSectorLaneQuery(sector),
     },
     { projection: { _id: 1 } }
   );
