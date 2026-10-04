@@ -19,6 +19,7 @@ import { getHeadOfGovernmentCharacterId } from "@/lib/api/headOfGovernment";
 import { getGameState } from "@/lib/gameState";
 import type { CountryId } from "@/lib/constants/countries";
 import type { EventEffect } from "@/lib/db/types/events";
+import { pickTier } from "@/lib/events/substrate/tiers";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -82,6 +83,17 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (!handler || !handler.options.some((o) => o.id === parsed.data.optionId)) {
       throw badRequest("Invalid option for this event.");
     }
+    const selectedOption = handler.options.find((option) => option.id === parsed.data.optionId)!;
+    const selectedTier = pickTier(selectedOption.outcomeTable, instance.roll);
+    const treasuryCashLedgerEnabled =
+      instance.scope === "country" &&
+      selectedTier.effects.some((effect) => effect.type === "treasuryDelta")
+        ? (
+            await db
+              .collection<{ _id: string; treasuryCashLedgerEnabled?: boolean }>("gameConfig")
+              .findOne({ _id: "default" }, { projection: { treasuryCashLedgerEnabled: 1 } })
+          )?.treasuryCashLedgerEnabled === true
+        : false;
 
     if (instance.scope === "country") {
       const definition = await getEventDefinitionsCollection(db).findOne({ kind: instance.kind });
@@ -97,18 +109,27 @@ export async function POST(request: Request, { params }: RouteParams) {
     let effects: EventEffect[] = [];
     let statAdjustment: { stat: string; label: string; delta: number } | null = null;
     try {
-      await resolveEvent(db, instanceId, parsed.data.optionId, "player", currentTurn, {
-        onResolved: async (resolved, ctx) => {
-          tierLabel = ctx.tier.label;
-          effects = ctx.tier.effects;
-          statAdjustment = ctx.statAdjustment ?? null;
-          if (resolved.scope === "country") {
-            await notifyCountryEventResolved(character.userId, resolved, ctx);
-          } else {
-            await notifyPlayerEventResolved(character.userId, resolved, ctx);
-          }
+      await resolveEvent(
+        db,
+        instanceId,
+        parsed.data.optionId,
+        "player",
+        currentTurn,
+        {
+          onResolved: async (resolved, ctx) => {
+            tierLabel = ctx.tier.label;
+            effects = ctx.tier.effects;
+            statAdjustment = ctx.statAdjustment ?? null;
+            if (resolved.scope === "country") {
+              await notifyCountryEventResolved(character.userId, resolved, ctx);
+            } else {
+              await notifyPlayerEventResolved(character.userId, resolved, ctx);
+            }
+          },
         },
-      });
+        undefined,
+        treasuryCashLedgerEnabled
+      );
     } catch (error) {
       if (error instanceof EventNotResolvableError) {
         throw badRequest("This event can no longer be resolved.");

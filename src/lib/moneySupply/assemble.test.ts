@@ -89,4 +89,26 @@ describe("M2 responds to domestic components", () => {
     expect(agg.externalBroadMoney).toBeCloseTo(seeded);
     expect(agg.m2).toBe(seeded);
   });
+
+  it("records retained central-bank FX cash by denomination without changing M2", () => {
+    const byCurrency = new Map();
+    addCentralBankMoney(byCurrency, [
+      {
+        countryId: "US",
+        externalBroadMoney: 100,
+        reserveBalance: 40,
+        forexRevenue: 25,
+        spreadFeeReserveBalances: { GBP: 50 },
+      },
+    ]);
+
+    const usd = calculateMoneyAggregates(byCurrency.get("USD") ?? emptyComponents());
+    const gbp = calculateMoneyAggregates(byCurrency.get("GBP") ?? emptyComponents());
+
+    expect(usd.centralBankForexRevenue).toBe(25);
+    expect(usd.bankReserves).toBe(40);
+    expect(usd.m2).toBe(100);
+    expect(gbp.centralBankSpreadReserves).toBe(50);
+    expect(gbp.m2).toBe(0);
+  });
 });

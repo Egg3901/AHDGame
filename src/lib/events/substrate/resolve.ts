@@ -23,7 +23,8 @@ export async function resolveEvent(
   reason: "player" | "timeout",
   currentTurn: number,
   hooks?: ResolveEventHooks,
-  preset?: string
+  preset?: string,
+  treasuryCashLedgerEnabled = false
 ): Promise<EventInstance> {
   const coll = getEventInstancesCollection(db);
   const instance = await coll.findOne({ _id: instanceId });
@@ -81,6 +82,7 @@ export async function resolveEvent(
     reason,
     statAdjustment,
     preset: preset ?? (await getGameStatePresetOrDefault(db)),
+    treasuryCashLedgerEnabled,
   };
 
   if (handler.applyEffects) {

@@ -196,6 +196,39 @@ describe("snapshotMoneySupply", () => {
     expect(options.projection).not.toHaveProperty("treasuryBalance");
   });
 
+  it("keeps retained central-bank FX cash visible outside observed M2", async () => {
+    db.collectionMocks.centralBanks.find.mockReturnValue(
+      cursorWith([
+        {
+          _id: "US",
+          countryId: "US",
+          externalBroadMoney: 100,
+          forexRevenue: 25,
+          spreadFeeReserveBalances: { GBP: 50 },
+        },
+        { _id: "UK", countryId: "UK", externalBroadMoney: 200 },
+      ])
+    );
+    db.collectionMocks.states.find.mockReturnValue(cursorWith([]));
+    db.collectionMocks.federalBudget.find.mockReturnValue(cursorWith([]));
+
+    await snapshotMoneySupply(db as unknown as Db, 12);
+
+    const snapshots = db.collectionMocks[
+      MONEY_SUPPLY_SNAPSHOTS_COLLECTION
+    ].replaceOne.mock.calls.map((call) => call[1]);
+    const usd = snapshots.find((snapshot) => snapshot.currencyCode === "USD");
+    const gbp = snapshots.find((snapshot) => snapshot.currencyCode === "GBP");
+    expect(usd).toMatchObject({
+      centralBankForexRevenue: 25,
+      m2: 100,
+    });
+    expect(gbp).toMatchObject({
+      centralBankSpreadReserves: 50,
+      m2: 200,
+    });
+  });
+
   it("counts charter vault and durable bank cash escrows once, excluding noncash bank assets", async () => {
     db.collectionMocks.gameConfig.findOne.mockResolvedValue({
       moneySupplyEnabled: true,
@@ -278,7 +311,8 @@ describe("snapshotMoneySupply", () => {
     db.collectionMocks.corporateSectors.find.mockReturnValue(cursorWith([]));
     db.collectionMocks[MONEY_SUPPLY_SNAPSHOTS_COLLECTION].replaceOne.mockClear();
     await snapshotMoneySupply(db as unknown as Db, 13);
-    const withoutEscrow = db.collectionMocks[MONEY_SUPPLY_SNAPSHOTS_COLLECTION].replaceOne.mock.calls;
+    const withoutEscrow =
+      db.collectionMocks[MONEY_SUPPLY_SNAPSHOTS_COLLECTION].replaceOne.mock.calls;
     expect(usd!.m2 - withoutEscrow.find((call) => call[1].currencyCode === "USD")![1].m2).toBe(40);
     expect(eur!.m2 - withoutEscrow.find((call) => call[1].currencyCode === "EUR")![1].m2).toBe(25);
     const options = db.collectionMocks.corporateSectors.find.mock.calls[0]?.[1] as {

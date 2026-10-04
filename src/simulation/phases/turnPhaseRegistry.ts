@@ -559,7 +559,12 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         // offers/terms, and defaults on repeated non-payment.
         if (await isContractIssuanceEnabled(config)) {
           const settlementResult = await runtime.runPhase("contractSettlement", () =>
-            settleExtractionContracts(context.db, newTurn, context.realNow)
+            settleExtractionContracts(
+              context.db,
+              newTurn,
+              context.realNow,
+              context.config?.treasuryCashLedgerEnabled === true
+            )
           );
           if (settlementResult) {
             (phaseResults as Record<string, unknown>).contractSettlement = settlementResult;
@@ -1075,6 +1080,7 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           processPlayerRandomEventsTurn(db, newTurn, {
             playerRandomEventsEnabled: gameState.playerRandomEventsEnabled,
             rpgStatsEnabled: gameState.rpgStatsEnabled,
+            treasuryCashLedgerEnabled: context.config?.treasuryCashLedgerEnabled === true,
             currentYear: eventsCurrentYear,
           })
         );
