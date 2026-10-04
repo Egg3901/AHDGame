@@ -208,6 +208,14 @@ async function handleStartElection(ctx: ActionContext): Promise<ActionResult> {
   if (existing?.status === "voting") {
     return { success: false, error: "An election is already in progress.", status: 409 };
   }
+  if (existing?.resolution && !existing.resolution.completedAt) {
+    return {
+      success: false,
+      error:
+        "The previous election is still being resolved. Retry ending it before starting another.",
+      status: 409,
+    };
+  }
   const now = new Date();
   const endsAt = new Date(now.getTime() + ELECTION_DURATION_MS);
   const endsOnTurn = (await getGameTime()).currentTurn + ELECTION_DURATION_MS / 3_600_000;
@@ -229,6 +237,7 @@ async function handleStartElection(ctx: ActionContext): Promise<ActionResult> {
         endsOnTurn,
         updatedAt: now,
       },
+      $unset: { resolution: "" },
     },
     { upsert: true }
   );
