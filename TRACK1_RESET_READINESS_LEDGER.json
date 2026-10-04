@@ -2667,7 +2667,7 @@
         {
           "type": "official_source_check",
           "url": "https://www.census.gov/programs-surveys/acs/news/updates/2026.html",
-          "detail": "2026-09-25: Census says 2025 ACS 1-year release date remains undetermined; its API catalog lists data only through 2024. Keep the documented January 2027 education/income projection."
+          "detail": "2026-10-04: Census release notice still leaves the 2025 ACS 1-year date undetermined; API catalog still lists through 2024. The four exact generator 2025 table paths return HTTP 401 to public HEAD requests, while all 2024 controls return HTTP 200. New 2025 data/documentation directories list no downloadable files. Dated evidence: https://github.com/Egg3901/AHDGame/issues/1670#issuecomment-5977086824. Retain the approved January 2027 education/income projection and publication-triggered regeneration/replay."
         },
         {
           "type": "owner_decision",
