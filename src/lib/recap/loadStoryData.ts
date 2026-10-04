@@ -155,19 +155,17 @@ export async function loadStoryData(
 
   // ── Clock ────────────────────────────────────────────────────────────────
   const gs = await section("clock", warn, null, () =>
-    db
-      .collection<GameState>("gameState")
-      .findOne(
-        { _id: "current" },
-        {
-          projection: {
-            startingYear: 1,
-            preIterationTurns: 1,
-            preIteration: 1,
-            lastTurnProcessed: 1,
-          },
-        }
-      )
+    db.collection<GameState>("gameState").findOne(
+      { _id: "current" },
+      {
+        projection: {
+          startingYear: 1,
+          preIterationTurns: 1,
+          preIteration: 1,
+          lastTurnProcessed: 1,
+        },
+      }
+    )
   );
   const turnTimeline = await section("timeline", warn, [] as Array<[number, number]>, async () => {
     const rows = await db

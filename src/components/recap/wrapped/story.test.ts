@@ -95,7 +95,7 @@ describe("guessOptions", () => {
     const r = recap({
       actions: {
         total: 60,
-        byType: { splitSector: 40, campaign: 15, fundraise: 5 },
+        byType: { splitSector: 40, campaign: 15, fundraise: 5 } as never,
         topType: "splitSector" as never,
         rank: null,
       },

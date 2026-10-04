@@ -7,7 +7,7 @@ summary: >-
   closest race, your rival, your signature bill, your fortune, your final
   standings and the season awards you earned.
 tags: [wrapped, recap, seasons]
-badges: [feature]
+badges: [minor]
 areas: [frontend, backend]
 ---
 
