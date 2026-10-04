@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { expectedRegionCount } from "@/lib/admin/seedDiagnostic/regionBundles";
+import { expectedRegionCount, regionBundleFor } from "@/lib/admin/seedDiagnostic/regionBundles";
 import { SHIPPING_PRESETS } from "@/lib/world/eraRoster";
 import type { CountryId } from "./countries";
 import { COUNTRY_READINESS_EXPECTATIONS } from "./countryReadinessExpectations";
@@ -45,14 +45,14 @@ describe("getReadinessExpectations", () => {
         expect(derived.regionCount, where).toBe(eraRegions ?? authored.regionCount);
         expect(derived.demographicsCount, where).toBe(
           preset === "1991-default" && id === "RU"
-            ? 10
+            ? eraRegions
             : eraRegions === null
               ? authored.demographicsCount
               : eraRegions - demographicOffset
         );
         expect(derived.stateMetricsCount, where).toBe(
           preset === "1991-default" && id === "RU"
-            ? 10
+            ? eraRegions
             : eraRegions === null
               ? authored.stateMetricsCount
               : eraRegions - metricsOffset
@@ -79,7 +79,14 @@ describe("getReadinessExpectations", () => {
           de1991 ? 70 : de2027 ? 96 : authored.statePartyOrgMin
         );
         expect(derived.legislationTypesMin, where).toBe(authored.legislationTypesMin);
-        expect(derived.stateMetricsFilter, where).toEqual(authored.stateMetricsFilter);
+        expect(derived.stateMetricsFilter, where).toEqual(
+          ru1991
+            ? {
+                countryId: id,
+                _id: { $in: regionBundleFor(id, preset)!.map((region) => region._id) },
+              }
+            : authored.stateMetricsFilter
+        );
       }
     }
   });
@@ -89,6 +96,13 @@ describe("getReadinessExpectations", () => {
     // correct 1953 seed as incomplete.
     expect(getReadinessExpectations("DE", "1953-default")!.regionCount).toBe(11);
     expect(getReadinessExpectations("DE", "1991-default")!.regionCount).toBe(16);
+  });
+
+  it("requires demographics and metrics for every January 1991 Soviet region", () => {
+    const expectation = getReadinessExpectations("RU", "1991-default")!;
+    expect(expectation.regionCount).toBe(24);
+    expect(expectation.demographicsCount).toBe(expectation.regionCount);
+    expect(expectation.stateMetricsCount).toBe(expectation.regionCount);
   });
 
   it("stops asserting the CPSU in a post-Soviet world", () => {

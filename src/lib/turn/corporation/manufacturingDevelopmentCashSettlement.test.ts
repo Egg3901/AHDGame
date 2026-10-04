@@ -1,6 +1,12 @@
 import { MongoClient, ObjectId, type AnyBulkWriteOperation, type Db } from "mongodb";
 import { describe, expect, it, vi } from "vitest";
 import type { Corporation } from "@/lib/db/types";
+import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
+import {
+  createMediaProductAdvertisingObligation,
+  settleMediaProductAdvertisingObligations,
+} from "@/lib/products/mediaProductAdvertisingSettlement";
+import { productAdvertisingDenominationWitness } from "@/lib/products/rules/productAdvertising";
 import type { CorpSnapshot } from "./types";
 import { applyOperatingCashThenDevelopmentCash } from "./manufacturingDevelopmentCashSettlement";
 
@@ -62,15 +68,73 @@ describe("manufacturing development cash settlement", () => {
       "cash-and-receipt-read",
       "credit-snapshot",
     ]);
-    expect(bulkWrite).toHaveBeenNthCalledWith(1, developmentOps, { ordered: false });
+    expect(bulkWrite).toHaveBeenNthCalledWith(1, developmentOps, {
+      ordered: false,
+    });
     expect(result).toEqual({ paidReceipts: 1, paidAmountAnchor: 250 });
     expect(snapshots.map((item) => item.liquidCapital)).toEqual([750, 1_000]);
     expect(snapshots.map((item) => item.liquidCapitalAnchorAfterIncome)).toEqual([750, 1_000]);
   });
 
+  it("refreshes seller cash snapshots when retry resumes an already published ad receipt", async () => {
+    const buyerId = new ObjectId();
+    const sellerId = new ObjectId();
+    const buyer = corporation(buyerId);
+    const seller = corporation(sellerId);
+    const obligation = createMediaProductAdvertisingObligation({
+      buyerCorporationId: buyerId.toHexString(),
+      projectId: "media-title-snapshot",
+      turn: 5,
+      amountAnchor: 10,
+      buyerCurrencyCode: "USD",
+      buyerLocalPerAnchor: 1,
+      buyerDenomination: productAdvertisingDenominationWitness(buyer),
+      sellers: [
+        {
+          corporationId: sellerId.toHexString(),
+          deliveredValueAnchor: 10,
+          currencyCode: "USD",
+          localPerAnchor: 1,
+          ...productAdvertisingDenominationWitness(seller),
+        },
+      ],
+    });
+    expect(obligation).not.toBeNull();
+    const db = createInMemoryDb();
+    db.seed("corporations", [
+      { ...buyer, liquidCapital: 100, mediaProductAdvertisingObligationsV1: [obligation] },
+      { ...seller, liquidCapital: 50 },
+    ]);
+
+    // Simulate completion of both cash legs and receipt projection followed by
+    // a process crash before the turn refreshes its in-memory snapshots.
+    await settleMediaProductAdvertisingObligations(db as never, [buyerId], 5);
+    const snapshots = [snapshot(buyerId, 100), snapshot(sellerId, 50)];
+
+    const result = await applyOperatingCashThenDevelopmentCash({
+      db: db as never,
+      operations: [],
+      turn: 5,
+      corporations: [buyer, seller],
+      snapshots,
+      exchangeRatesByCurrency: new Map([["USD", 1]]),
+      bondsByCorpId: new Map(),
+      sectorsByCorp: new Map(),
+      mediaProductSlatesEnabled: true,
+      applyOperatingCashWrites: async () => undefined,
+    });
+
+    expect(result).toEqual({ paidReceipts: 0, paidAmountAnchor: 0 });
+    expect(snapshots.map((item) => item.liquidCapital)).toEqual([90, 60]);
+    expect((await db.collection("corporations").findOne({ _id: buyerId }))?.liquidCapital).toBe(90);
+    expect((await db.collection("corporations").findOne({ _id: sellerId }))?.liquidCapital).toBe(
+      60
+    );
+  });
+
   const mongoUri = process.env.AHD_PRODUCT_DEVELOPMENT_MONGO_TEST_URI;
   it.skipIf(!mongoUri)(
-    "guards a concurrent cash loss and a retry after receipt consumption in Mongo",
+    "guards a concurrent cash loss and a retry after development receipt consumption in Mongo",
     async () => {
       const client = new MongoClient(mongoUri!);
       await client.connect();
@@ -86,7 +150,11 @@ describe("manufacturing development cash settlement", () => {
       ];
       try {
         await collection.insertMany([
-          { ...insufficientCorp, liquidCapital: 1_000 },
+          {
+            ...insufficientCorp,
+            liquidCapital: 1_000,
+            operatingCashArrearsByCurrency: { USD: 0 },
+          },
           { ...fundedCorp, liquidCapital: 1_000 },
         ]);
 
@@ -101,26 +169,33 @@ describe("manufacturing development cash settlement", () => {
           bondsByCorpId: new Map(),
           sectorsByCorp: new Map(),
           applyOperatingCashWrites: async () => {
-            await collection.updateOne({ _id: insufficientId }, { $inc: { liquidCapital: -800 } });
+            await collection.updateOne(
+              { _id: insufficientId },
+              {
+                $set: {
+                  liquidCapital: -50,
+                  operatingCashArrearsByCurrency: { USD: 50 },
+                },
+              }
+            );
           },
         });
 
         expect(first).toEqual({ paidReceipts: 1, paidAmountAnchor: 250 });
-        expect(firstSnapshots.map((item) => item.liquidCapital)).toEqual([200, 750]);
+        expect(firstSnapshots.map((item) => item.liquidCapital)).toEqual([-50, 750]);
         expect(
           await collection.findOne({
             _id: insufficientId,
             manufacturingProductDevelopmentReceiptV2: { $exists: true },
           })
         ).toBeNull();
-
         // Simulate a crash after the durable receipt was consumed. The per-turn
         // stamp still rejects a duplicate debit when the same request is retried.
         await collection.updateOne(
           { _id: fundedId },
           { $unset: { manufacturingProductDevelopmentReceiptV2: "" } }
         );
-        const retrySnapshots = [snapshot(insufficientId, 200), snapshot(fundedId, 750)];
+        const retrySnapshots = [snapshot(insufficientId, -50), snapshot(fundedId, 750)];
         const retry = await applyOperatingCashThenDevelopmentCash({
           db,
           operations: [operations[1]],

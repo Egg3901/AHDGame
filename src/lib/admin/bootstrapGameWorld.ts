@@ -682,19 +682,26 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
   const noStartingParties = startingParties === "none";
   const globallyVacant = preset === "2019-no-parties";
   if (noStartingParties && !globallyVacant) mode = "historical";
-  const preIteration = !noStartingParties && (options.preIteration ?? false);
+  const preIteration = options.preIteration ?? false;
   const log = options.log ?? (() => {});
   const { db } = options;
 
   // Model and media-lane unique keys must exist before any seed writer creates
   // overlapping market identities. These migrations also run at hosted startup.
   const marketIdentityIndexes = MIGRATIONS.filter(
-    (migration) =>
-      migration.id === "2026-10-04-industry-model-market-indexes" ||
-      migration.id === "2026-10-04-media-discriminator-market-indexes"
+    (migration) => migration.id === "2026-10-04-media-discriminator-market-indexes"
   );
   if (marketIdentityIndexes.length > 0) {
-    await runMigrations(db, { migrations: marketIdentityIndexes, dryRun: false });
+    // Reset drops the runtime market collections (and their indexes) but keeps
+    // migrationsRun markers. Rebuild these idempotent, metadata-only indexes on
+    // every bootstrap instead of trusting the historical marker to mean the
+    // current collection still exists.
+    await runMigrations(db, {
+      migrations: marketIdentityIndexes,
+      dryRun: false,
+      only: marketIdentityIndexes.map((migration) => migration.id),
+      force: true,
+    });
   }
 
   // This marker is opt-in only from resetAndBootstrapGameWorld. Its first call
@@ -996,7 +1003,7 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
     { _id: "current" },
     {
       $set: { startingPartiesMode: startingParties },
-      ...(noStartingParties ? { $unset: { preIteration: "" as const } } : {}),
+      ...(noStartingParties && !preIteration ? { $unset: { preIteration: "" as const } } : {}),
     }
   );
 

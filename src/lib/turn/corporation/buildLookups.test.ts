@@ -146,8 +146,11 @@ describe("buildCorporationLookups — bond holdings", () => {
       outputAnchorByCommodity: 0,
       productQualityByCommodity: 0,
     });
+    expect(corporationProjection).toHaveProperty("manufacturingProductAdvertisingObligationsV2", 0);
+    expect(corporationProjection).toHaveProperty("manufacturingProductAdvertisingReceiptV2", 0);
     expect(corporationProjection).toHaveProperty("manufacturingProductDevelopmentReceiptV2", 0);
     expect(corporationProjection).toHaveProperty("manufacturingProductDevelopmentPaidTurnV2", 0);
+    expect(corporationProjection).toHaveProperty("mediaProductAdvertisingObligationsV1", 0);
   });
 
   it("projects product output maps only when explicitly enabled", async () => {
@@ -160,8 +163,22 @@ describe("buildCorporationLookups — bond holdings", () => {
     expect(projection).not.toHaveProperty("outputUnitsByCommodity");
     expect(projection).not.toHaveProperty("outputAnchorByCommodity");
     expect(projection).not.toHaveProperty("productQualityByCommodity");
+    expect(corporationProjection).not.toHaveProperty(
+      "manufacturingProductAdvertisingObligationsV2"
+    );
+    expect(corporationProjection).not.toHaveProperty("manufacturingProductAdvertisingReceiptV2");
     expect(corporationProjection).not.toHaveProperty("manufacturingProductDevelopmentReceiptV2");
     expect(corporationProjection).not.toHaveProperty("manufacturingProductDevelopmentPaidTurnV2");
+    expect(corporationProjection).toHaveProperty("mediaProductAdvertisingObligationsV1", 0);
+  });
+
+  it("reads media advertising obligations only when the media slate gate is on", async () => {
+    await buildCorporationLookups(db as unknown as Db, { mediaProductSlatesEnabled: true });
+
+    const corporationProjection =
+      db.collectionMocks.corporations.find.mock.calls[0]?.[1]?.projection;
+    expect(corporationProjection).not.toHaveProperty("mediaProductAdvertisingObligationsV1");
+    expect(corporationProjection).not.toHaveProperty("mediaProductAdvertisingReceiptV1");
   });
 
   it("does not query the v2 product project collection while the gate is off", async () => {
@@ -377,9 +394,9 @@ describe("buildCorporationLookups — sovereign default contagion FX normalizati
     }));
 
     vi.resetModules();
-    const { buildCorporationLookups: buildLookupsWithContagionSpy } =
+    const { buildCorporationLookups: buildIsolatedCorporationLookups } =
       await import("./buildLookups");
-    await buildLookupsWithContagionSpy(db as unknown as Db);
+    await buildIsolatedCorporationLookups(db as unknown as Db);
 
     expect(captureSpy).toHaveBeenCalledTimes(1);
     const args = captureSpy.mock.calls[0][0] as {

@@ -2,7 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Button, Card, LoadingSpinner } from "@/components/ui";
-import { manufacturingDevelopmentThresholdAnchor } from "@/lib/products/rules/manufacturingRules";
+import {
+  allocatedManufacturingCapitalAnchor,
+  manufacturingDevelopmentThresholdAnchor,
+} from "@/lib/products/rules/manufacturingRules";
 
 interface ProductKind {
   id: string;
@@ -22,6 +25,7 @@ interface ProductPlant {
   industryModel?: string | null;
   strategyId?: string | null;
   capitalStock: number;
+  developmentCapitalAnchor?: number;
   plantCount: number;
   eligibleKindIds: string[];
 }
@@ -37,6 +41,10 @@ interface ActiveProductProject {
   paidThresholdAnchor: number;
   elapsedDevelopmentTurns: number;
   elapsedThresholdTurns: number;
+  advertisingAllocationShare?: number;
+  developmentAdvertisingAnchor?: number;
+  developmentAdvertisingTurns?: number;
+  productBrand?: number;
 }
 
 interface ProductResult {
@@ -66,6 +74,7 @@ export function ManufacturingProductStudio({
   const [studio, setStudio] = useState<StudioState | null>(null);
   const [kindId, setKindId] = useState("");
   const [shares, setShares] = useState<Record<string, number>>({});
+  const [advertisingShare, setAdvertisingShare] = useState(0);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -120,12 +129,22 @@ export function ManufacturingProductStudio({
   const allocations = legalPlants
     .map((plant) => ({ sectorId: plant.sectorId, share: shares[plant.sectorId] ?? 0 }))
     .filter((allocation) => allocation.share > 0);
-  const allocatedCapacity = legalPlants.reduce(
-    (sum, plant) => sum + plant.capitalStock * (shares[plant.sectorId] ?? 0),
-    0
+  const quotedPlants = legalPlants.flatMap((plant) =>
+    typeof plant.developmentCapitalAnchor === "number" &&
+    Number.isFinite(plant.developmentCapitalAnchor) &&
+    plant.developmentCapitalAnchor >= 0
+      ? [{ sectorId: plant.sectorId, developmentCapitalAnchor: plant.developmentCapitalAnchor }]
+      : []
+  );
+  const allSelectedPlantsQuoted = allocations.every((allocation) =>
+    quotedPlants.some((plant) => plant.sectorId === allocation.sectorId)
   );
   const estimatedDevelopmentCost =
-    allocations.length > 0 ? manufacturingDevelopmentThresholdAnchor(allocatedCapacity) : null;
+    allocations.length > 0 && allSelectedPlantsQuoted
+      ? manufacturingDevelopmentThresholdAnchor(
+          allocatedManufacturingCapitalAnchor(quotedPlants, allocations)
+        )
+      : null;
   const selectedKind = studio.catalog.find((kind) => kind.id === kindId);
 
   async function startProject() {
@@ -136,7 +155,7 @@ export function ManufacturingProductStudio({
       const response = await fetch(`/api/corporations/${corporationId}/products`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kindId, allocations }),
+        body: JSON.stringify({ kindId, allocations, advertisingAllocationShare: advertisingShare }),
       });
       const data = (await response.json()) as { error?: string };
       if (!response.ok) {
@@ -208,6 +227,13 @@ export function ManufacturingProductStudio({
             {studio.activeProject.paidThresholdAnchor.toLocaleString()} anchor units, with{" "}
             {studio.activeProject.elapsedDevelopmentTurns} of{" "}
             {studio.activeProject.elapsedThresholdTurns} required turns elapsed.
+          </div>
+          <div className="text-sm text-muted">
+            Product brand: {(studio.activeProject.productBrand ?? 0).toLocaleString()} paid
+            advertising anchor units per development turn. Advertising allocation:{" "}
+            {((studio.activeProject.advertisingAllocationShare ?? 0) * 100).toFixed(0)}% of
+            delivered marketing. Brand and paid development support the product quality and premium
+            pricing.
           </div>
           <div className="space-y-1 text-sm text-muted">
             {studio.activeProject.allocations.map((allocation) => {
@@ -307,7 +333,7 @@ export function ManufacturingProductStudio({
                   {estimatedDevelopmentCost != null && (
                     <div>
                       Estimated development cost: {estimatedDevelopmentCost.toLocaleString()} anchor
-                      units (5% of allocated plant capital, one-unit minimum).
+                      units (5% of allocated monetary plant capital, one-unit minimum).
                     </div>
                   )}
                   <div>
@@ -336,6 +362,26 @@ export function ManufacturingProductStudio({
                   </div>
                 </div>
               )}
+              <label className="flex items-center gap-2 text-sm text-muted">
+                Product advertising allocation
+                <input
+                  aria-label="Product advertising allocation"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="5"
+                  value={advertisingShare * 100}
+                  className="w-20 rounded border border-border bg-surface px-2 py-1 text-right text-foreground"
+                  onChange={(event) =>
+                    setAdvertisingShare(Math.max(0, Math.min(1, Number(event.target.value) / 100)))
+                  }
+                />
+                % of delivered marketing during development
+              </label>
+              <p className="text-sm text-muted">
+                Only paid delivered advertising builds product brand. Media and manufacturing
+                products share the existing marketing budget.
+              </p>
               <Button disabled={busy || allocations.length === 0} onClick={startProject}>
                 Start product project
               </Button>

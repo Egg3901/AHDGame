@@ -4,7 +4,14 @@
  * productQualityForCommodity.
  */
 import { commodityMixWeight, type CommodityType } from "@/lib/constants/commodities";
-import { advanceProductLifecycle, type ProductLifecycleStage } from "./productLifecycle";
+import { validateProductAllocations, type ProductPlantAllocation } from "./plantAllocations";
+import {
+  advanceProductLifecycle,
+  averagePaidProductBrandAnchor,
+  paidProductBrandQualityBonus,
+  productQualityForPriceDefense,
+  type ProductLifecycleStage,
+} from "./productLifecycle";
 
 export type ManufacturingLifecycleStage = ProductLifecycleStage;
 
@@ -130,9 +137,25 @@ const QUALITY_STAGE_FACTOR: Record<ManufacturingLifecycleStage, number> = {
 const MAX_PAID_DEVELOPMENT_QUALITY = 10;
 export const MANUFACTURING_DEVELOPMENT_ELAPSED_TURNS = 12;
 
-/** Five percent of physical capacity stock, with a one-anchor minimum. */
-export function manufacturingDevelopmentThresholdAnchor(allocatedCapacityStock: number): number {
-  return Math.max(1, finiteNonNegative(allocatedCapacityStock) * 0.05);
+/** Allocates monetary plant capital without treating physical capacity as currency. */
+export function allocatedManufacturingCapitalAnchor(
+  plants: readonly { sectorId: string; developmentCapitalAnchor: number }[],
+  allocations: readonly ProductPlantAllocation[]
+): number {
+  if (!validateProductAllocations(allocations)) return 0;
+  const capitalById = new Map(
+    plants.map((plant) => [plant.sectorId, plant.developmentCapitalAnchor])
+  );
+  return allocations.reduce(
+    (sum, allocation) =>
+      sum + finiteNonNegative(capitalById.get(allocation.sectorId) ?? 0) * allocation.share,
+    0
+  );
+}
+
+/** Five percent of allocated monetary plant capital, with a one-anchor minimum. */
+export function manufacturingDevelopmentThresholdAnchor(allocatedCapitalAnchor: number): number {
+  return Math.max(1, finiteNonNegative(allocatedCapitalAnchor) * 0.05);
 }
 
 function finiteNonNegative(value: number): number {
@@ -200,6 +223,103 @@ export function advanceManufacturingProject(input: {
     developmentPaidAnchor: progress.developmentPaidAnchor,
     elapsedDevelopmentTurns: progress.elapsedDevelopmentTurns,
     active: progress.active,
+  };
+}
+
+/** Advances the completed-turn clock independently from once-only paid cash evidence. */
+export function tickManufacturingProject(input: {
+  project: Parameters<typeof advanceManufacturingProject>[0]["project"] & {
+    lastDevelopmentReceiptTurn?: number;
+    developmentAdvertisingAnchor?: number;
+    developmentAdvertisingTurns?: number;
+    lastAdvertisingReceiptTurn?: number;
+    productBrand?: number;
+    developmentCompletedTurn?: number;
+  };
+  receipt?: { projectId: string; turn: number; amountAnchor: number };
+  advertisingReceipt?: { projectId: string; turn: number; amountAnchor: number };
+  completedTurn: number;
+}):
+  | (ManufacturingProjectProgress & {
+      lastDevelopmentReceiptTurn: number;
+      developmentAdvertisingAnchor: number;
+      developmentAdvertisingTurns: number;
+      lastAdvertisingReceiptTurn: number;
+      productBrand: number;
+      developmentCompletedTurn?: number;
+    })
+  | null {
+  const project = input.project;
+  // Before a separate cash watermark exists, the old clock was written only
+  // when a cash receipt was consumed. Retain that legacy acknowledgment.
+  const cashWatermark = project.lastDevelopmentReceiptTurn ?? project.lastProcessedTurn ?? 0;
+  if (!Number.isSafeInteger(cashWatermark) || cashWatermark < 0) return null;
+  const receipt = input.receipt;
+  const payableReceipt =
+    receipt &&
+    receipt.projectId === project._id &&
+    Number.isSafeInteger(receipt.turn) &&
+    receipt.turn >= project.startedTurn &&
+    receipt.turn <= input.completedTurn &&
+    receipt.turn > cashWatermark &&
+    Number.isFinite(receipt.amountAnchor) &&
+    receipt.amountAnchor >= 0
+      ? receipt
+      : undefined;
+  const progress = advanceManufacturingProject({
+    project,
+    receipt: {
+      projectId: project._id,
+      turn: input.completedTurn,
+      amountAnchor: payableReceipt?.amountAnchor ?? 0,
+    },
+  });
+  if (!progress) return null;
+  const advertisingReceipt = input.advertisingReceipt;
+  const advertisingWatermark = project.lastAdvertisingReceiptTurn ?? 0;
+  // A delayed funded receipt from the original development window can arrive
+  // after launch. Its cash acknowledgment remains independent of the clock.
+  const developmentWindowEnd =
+    project.stage === "development"
+      ? input.completedTurn
+      : (project.developmentCompletedTurn ?? project.stageStartedTurn);
+  const paidAdvertising =
+    advertisingReceipt &&
+    advertisingReceipt.projectId === project._id &&
+    Number.isSafeInteger(advertisingReceipt.turn) &&
+    advertisingReceipt.turn >= project.startedTurn &&
+    advertisingReceipt.turn <= Math.min(input.completedTurn, developmentWindowEnd) &&
+    advertisingReceipt.turn > advertisingWatermark &&
+    Number.isFinite(advertisingReceipt.amountAnchor) &&
+    advertisingReceipt.amountAnchor >= 0
+      ? advertisingReceipt
+      : undefined;
+  const developmentAdvertisingAnchor = Math.min(
+    1e15,
+    finiteNonNegative(project.developmentAdvertisingAnchor ?? 0) +
+      (paidAdvertising?.amountAnchor ?? 0)
+  );
+  const developmentAdvertisingTurns = Math.max(
+    finiteNonNegative(project.developmentAdvertisingTurns ?? 0),
+    project.stage === "development"
+      ? progress.elapsedDevelopmentTurns
+      : project.elapsedDevelopmentTurns
+  );
+  return {
+    ...progress,
+    lastDevelopmentReceiptTurn: payableReceipt?.turn ?? cashWatermark,
+    developmentAdvertisingAnchor,
+    developmentAdvertisingTurns,
+    lastAdvertisingReceiptTurn: paidAdvertising?.turn ?? advertisingWatermark,
+    ...(project.developmentCompletedTurn !== undefined
+      ? { developmentCompletedTurn: project.developmentCompletedTurn }
+      : project.stage === "development" && progress.stage !== "development"
+        ? { developmentCompletedTurn: input.completedTurn }
+        : {}),
+    productBrand: averagePaidProductBrandAnchor({
+      paidAdvertisingAnchor: developmentAdvertisingAnchor,
+      advertisingTurns: developmentAdvertisingTurns,
+    }),
   };
 }
 
@@ -326,6 +446,8 @@ export function buildManufacturedSectorOutput(input: {
   baseOutputAnchorByCommodity?: Partial<Record<CommodityType, number>>;
   paidDevelopmentAnchor: number;
   paidThresholdAnchor: number;
+  productBrand?: number;
+  elapsedThresholdTurns?: number;
 }): ManufacturedSectorOutput {
   const allocation = allocateManufacturedOutput(input);
   const share = clamp(finiteNonNegative(input.allocationShare), 0, 1);
@@ -373,6 +495,13 @@ export function buildManufacturedSectorOutput(input: {
       paidDevelopmentAnchor: commodity === input.outputCommodity ? input.paidDevelopmentAnchor : 0,
       paidThresholdAnchor: input.paidThresholdAnchor,
       stage: commodity === input.outputCommodity ? input.stage : "development",
+      productBrand: commodity === input.outputCommodity ? input.productBrand : 0,
+      elapsedThresholdTurns: input.elapsedThresholdTurns,
+      productShare:
+        (outputUnitsByCommodity[commodity] ?? 0) > 0
+          ? (allocation.projectOutputUnitsByCommodity[commodity] ?? 0) /
+            (outputUnitsByCommodity[commodity] ?? 1)
+          : 0,
     });
   }
 
@@ -390,6 +519,9 @@ export function productQualityForCommodity(input: {
   paidDevelopmentAnchor: number;
   paidThresholdAnchor: number;
   stage: ManufacturingLifecycleStage;
+  productBrand?: number;
+  elapsedThresholdTurns?: number;
+  productShare?: number;
 }): number {
   const liveQuality = clamp(
     typeof input.currentSectorQuality === "number" && Number.isFinite(input.currentSectorQuality)
@@ -402,5 +534,16 @@ export function productQualityForCommodity(input: {
   const paidRatio =
     threshold > 0 ? clamp(finiteNonNegative(input.paidDevelopmentAnchor) / threshold, 0, 1) : 0;
   const paidContribution = MAX_PAID_DEVELOPMENT_QUALITY * paidRatio;
-  return clamp(liveQuality + paidContribution * QUALITY_STAGE_FACTOR[input.stage], 0, 100);
+  const productShare = clamp(finiteNonNegative(input.productShare ?? 1), 0, 1);
+  const brandBonus = paidProductBrandQualityBonus({
+    averagePaidAdvertisingAnchor: input.productBrand ?? 0,
+    referenceAnchor: Math.max(1, threshold / Math.max(1, input.elapsedThresholdTurns ?? 12)),
+    maximumBonus: 10,
+    coverage: 1,
+  });
+  return productQualityForPriceDefense({
+    baseQuality: liveQuality,
+    paidQualityBonus: paidContribution * QUALITY_STAGE_FACTOR[input.stage] * productShare,
+    brandBonus: brandBonus * QUALITY_STAGE_FACTOR[input.stage] * productShare,
+  });
 }

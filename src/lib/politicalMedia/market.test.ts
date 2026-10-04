@@ -116,7 +116,7 @@ describe("settlePoliticalAdMarket", () => {
   it("caps commercial plus funded political fills at editorially available output", () => {
     const mediaInput: SectorClearingInput = {
       sectorId: "sector-1",
-      revenue: 100,
+      revenue: 24_000,
       supplyRates: { advertising: 1 },
       posture: 0,
       editorialAdvertisingAvailability: 0.75,
@@ -162,6 +162,57 @@ describe("settlePoliticalAdMarket", () => {
     expect(result.clearingBySectorId.get("sector-1")?.soldByCommodity?.advertising).toBeCloseTo(
       0.75
     );
+  });
+
+  it("keeps political fills inside product-reachable output after commercial demand", () => {
+    const mediaInput: SectorClearingInput = {
+      sectorId: "sector-1",
+      revenue: 24_000,
+      supplyRates: { advertising: 1 },
+      posture: 0,
+      offerAvailabilityByCommodity: { advertising: 0.575 },
+    };
+    const realClearing = computeClearingFactors({
+      sectors: [mediaInput],
+      balances: new Map([["advertising", { supply: 100, demand: 20 }]]),
+      priceRatioByCommodity: new Map([["advertising", 1]]),
+      basePrices: { advertising: 240 } as Record<CommodityType, number>,
+      recordDelivery: true,
+    });
+    const commercialSold =
+      realClearing.get("sector-1")!.deliveredUnitsByCommodity?.advertising ?? 0;
+    const result = settlePoliticalAdMarket({
+      orders: [
+        {
+          orderId: "strong-funded-order",
+          countryId: "US",
+          stateId: "CA",
+          createdTurn: 12,
+          budgetAnchor: 10_000,
+        },
+      ],
+      offers: [
+        {
+          ...offer,
+          input: mediaInput,
+          clearing: realClearing.get("sector-1"),
+          basePrice: 240,
+          offeredUnits: 100,
+        },
+      ],
+      clearingBySectorId: realClearing,
+      clearingEnabled: true,
+      qualityPremiumEnabled: false,
+      turn: 12,
+    });
+    const politicalSold = result.allocations[0]?.deliveredUnits ?? 0;
+
+    expect(commercialSold).toBeCloseTo(11.5);
+    expect(politicalSold).toBeCloseTo(46);
+    expect(commercialSold + politicalSold).toBeCloseTo(57.5);
+    expect(
+      result.clearingBySectorId.get("sector-1")?.deliveredUnitsByCommodity?.advertising
+    ).toBeCloseTo(57.5);
   });
 
   it("sells only commercial residuals and updates the sector factor and paid local value", () => {
@@ -325,5 +376,72 @@ describe("settlePoliticalAdMarket", () => {
     expect(realResult.offerFactorByCommodity?.advertising).toBeCloseTo(expectedOfferFactor, 10);
     expect(result.allocations[0]?.deliveredUnits).toBeCloseTo(5, 10);
     expect(result.allocations[0]?.sellers[0]?.amountAnchor).toBeCloseTo(expected * 5, 10);
+  });
+});
+
+describe("political residual delivery under an ownership law", () => {
+  it("shares the owner allowance across outlets and refunds the excluded budget", () => {
+    const offers = [
+      {
+        ...offer,
+        input: { ...input, sectorId: "a1", supplyRates: { advertising: 1 } },
+        corporationId: "a",
+        sellerCurrencyCode: "USD",
+        sellerLocalPerAnchor: 1,
+        offeredUnits: 100,
+        clearing: { ...clearing, soldByCommodity: { advertising: 0.1 } },
+      },
+      {
+        ...offer,
+        input: { ...input, sectorId: "a2", supplyRates: { advertising: 1 } },
+        corporationId: "a",
+        sellerCurrencyCode: "USD",
+        sellerLocalPerAnchor: 1,
+        offeredUnits: 100,
+        clearing: { ...clearing, soldByCommodity: { advertising: 0.1 } },
+      },
+      {
+        ...offer,
+        input: { ...input, sectorId: "b", supplyRates: { advertising: 1 } },
+        corporationId: "b",
+        sellerCurrencyCode: "USD",
+        sellerLocalPerAnchor: 1,
+        offeredUnits: 80,
+        clearing: { ...clearing, soldByCommodity: { advertising: 1 } },
+      },
+    ];
+    const result = settlePoliticalAdMarket({
+      orders: [
+        { orderId: "order", countryId: "US", stateId: "CA", createdTurn: 1, budgetAnchor: 10000 },
+      ],
+      offers,
+      clearingBySectorId: new Map(offers.map((row) => [row.input.sectorId, row.clearing])),
+      clearingEnabled: true,
+      qualityPremiumEnabled: false,
+      turn: 1,
+      mediaOwnership: {
+        shareCap: 0.65,
+        stateBySector: new Map([
+          ["a1", "CA"],
+          ["a2", "CA"],
+          ["b", "CA"],
+        ]),
+        corporationBySector: new Map([
+          ["a1", "a"],
+          ["a2", "a"],
+          ["b", "b"],
+        ]),
+      },
+    });
+    const allocation = result.allocations[0]!;
+    expect(allocation.deliveredUnits).toBeCloseTo(45 / 0.35);
+    expect(
+      (20 + allocation.deliveredUnits) / (100 + allocation.deliveredUnits)
+    ).toBeLessThanOrEqual(0.65 + 1e-12);
+    expect(allocation.deliveredAnchor + allocation.unfilledAnchor).toBe(10000);
+    expect([...result.sellerPayoutLocalByCorpId.values()].reduce((a, b) => a + b, 0)).toBeCloseTo(
+      allocation.deliveredAnchor
+    );
+    expect(result.clearingBySectorId.get("b")!.soldByCommodity!.advertising).toBe(1);
   });
 });

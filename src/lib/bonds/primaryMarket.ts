@@ -14,7 +14,7 @@
  */
 
 import type { Db, ObjectId } from "mongodb";
-import type { Bond, BondMarketPool, CentralBank, FederalBudget } from "@/lib/db/types";
+import type { Bond, BondMarketPool, CentralBank, Corporation, FederalBudget } from "@/lib/db/types";
 import type { CreditRating } from "@/lib/db/types/centralBank";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -44,6 +44,7 @@ import {
 } from "./sovereignPrimarySettlement";
 import { treasuryAdvanceMoneyDelta } from "@/lib/moneySupply/rules/assemble";
 import { ObjectId as MongoObjectId } from "mongodb";
+import { settlePrimaryUnderwritingFill } from "@/lib/banking/underwritingSettlement";
 
 /** Share of the pool's cash one corporate issue may take at issuance. */
 export const CORPORATE_PRIMARY_COMMIT_SHARE = 0.2;
@@ -263,6 +264,53 @@ export async function placeUnsoldBondUnits(
       .filter((bond) => bond.issuerType === "sovereign" && bond.countryId)
       .map((bond) => sovereignPlacementKey(bond._id, turn))
   );
+  const underwrittenBonds = placing.filter(
+    (bond) =>
+      bond.issuerType !== "sovereign" && bond.primaryUnderwriting?.instrumentId?.equals(bond._id)
+  );
+  const bankIds = [
+    ...new Map(
+      underwrittenBonds.map((bond) => [
+        bond.primaryUnderwriting!.bankCorporationId.toHexString(),
+        bond.primaryUnderwriting!.bankCorporationId,
+      ])
+    ).values(),
+  ];
+  const issuerIds = [
+    ...new Map(
+      underwrittenBonds.map((bond) => [bond.corporationId.toHexString(), bond.corporationId])
+    ).values(),
+  ];
+  const [banks, issuers] = await Promise.all([
+    bankIds.length > 0
+      ? db
+          .collection<Corporation>("corporations")
+          .find(
+            { _id: { $in: bankIds } },
+            {
+              projection: {
+                _id: 1,
+                name: 1,
+                countryId: 1,
+                liquidCurrencyCode: 1,
+                bankCharter: 1,
+              },
+            }
+          )
+          .toArray()
+      : Promise.resolve([]),
+    issuerIds.length > 0
+      ? db
+          .collection<Corporation>("corporations")
+          .find(
+            { _id: { $in: issuerIds } },
+            { projection: { _id: 1, name: 1, countryId: 1, liquidCurrencyCode: 1 } }
+          )
+          .toArray()
+      : Promise.resolve([]),
+  ]);
+  const bankById = new Map(banks.map((bank) => [bank._id.toHexString(), bank]));
+  const issuerById = new Map(issuers.map((issuer) => [issuer._id.toHexString(), issuer]));
   const budgetByCurrency = new Map<CurrencyCode, number>();
   // The pool docs read for the budgets double as the quote snapshot for the
   // pass; each placement's debit is mirrored onto them so later quotes see it.
@@ -333,9 +381,44 @@ export async function placeUnsoldBondUnits(
       continue;
     }
 
-    const paid = await debitPoolForPrimary(db, currency, units, price, now);
-    if (paid <= 0) continue;
-    advanceBondPoolSnapshot(poolByCurrency, currency, -paid);
+    const paid = Math.round(units * price * 100) / 100;
+    const underwriting = bond.issuerType !== "sovereign" ? bond.primaryUnderwriting : undefined;
+    if (underwriting?.instrumentId?.equals(bond._id)) {
+      const bank = bankById.get(underwriting.bankCorporationId.toHexString());
+      const issuer = issuerById.get(bond.corporationId.toHexString());
+      if (!bank || !issuer) continue;
+      const face = units * BOND_UNIT_FACE_VALUE;
+      const settlement = await settlePrimaryUnderwritingFill(db, {
+        bank,
+        issuer,
+        issuerCurrencyCode: currency,
+        offer: underwriting,
+        instrumentId: bond._id,
+        grossPlacedLocal: paid,
+        turn,
+        now,
+        poolCollection: BOND_MARKET_POOLS_COLLECTION,
+        instrumentProjection: {
+          collection: "bonds",
+          filter: { _id: bond._id, unsoldUnits: { $gte: units } },
+          update: {
+            $inc: { unsoldUnits: -units, publicFloat: units, totalIssued: face },
+            $set: { updatedAt: now },
+          },
+          note: "Publish bond units only after the primary fill is funded",
+        },
+      });
+      if (settlement.status !== "applied" && settlement.status !== "replayed") continue;
+      advanceBondPoolSnapshot(poolByCurrency, currency, -paid);
+      budgetByCurrency.set(currency, budget - paid);
+      result.bondsTouched++;
+      result.unitsPlaced += units;
+      continue;
+    }
+    const debited = await debitPoolForPrimary(db, currency, units, price, now);
+    if (debited <= 0) continue;
+    const actualPaid = debited;
+    advanceBondPoolSnapshot(poolByCurrency, currency, -actualPaid);
     const face = units * BOND_UNIT_FACE_VALUE;
     const claim = await db.collection<Bond>("bonds").updateOne(
       {
@@ -350,16 +433,17 @@ export async function placeUnsoldBondUnits(
     );
     if (claim.modifiedCount === 0) {
       // Someone else moved the units first; give the pool its cash back.
-      await db
-        .collection<BondMarketPool>(BOND_MARKET_POOLS_COLLECTION)
-        .updateOne(
-          { _id: currency },
-          { $inc: { cashLocal: paid, "lifetime.issuanceOut": -paid }, $set: { updatedAt: now } }
-        );
-      advanceBondPoolSnapshot(poolByCurrency, currency, paid);
+      await db.collection<BondMarketPool>(BOND_MARKET_POOLS_COLLECTION).updateOne(
+        { _id: currency },
+        {
+          $inc: { cashLocal: actualPaid, "lifetime.issuanceOut": -actualPaid },
+          $set: { updatedAt: now },
+        }
+      );
+      advanceBondPoolSnapshot(poolByCurrency, currency, actualPaid);
       continue;
     }
-    budget -= paid;
+    budget -= actualPaid;
     budgetByCurrency.set(currency, budget);
     result.bondsTouched++;
     result.unitsPlaced += units;
@@ -372,7 +456,7 @@ export async function placeUnsoldBondUnits(
     } else {
       const key = bond.corporationId.toString();
       const row = result.corporateProceedsByCorp.get(key) ?? { local: 0, currency };
-      row.local += paid;
+      row.local += actualPaid;
       result.corporateProceedsByCorp.set(key, row);
     }
   }

@@ -49,9 +49,11 @@ export async function loadCorporationDetailView(args: {
 
   const refDataPromise = getTurnReferenceData(db, currentTurn);
   const equityQuotePromise = loadEquityQuote(db, corporation);
-  const bankingPolicyPromise = corporation.bankCharter
-    ? loadBankingPolicy(db)
-    : Promise.resolve(null);
+  const viewerOwnsCorporation = !!viewerUserId && corporation.userId?.toString() === viewerUserId;
+  const bankingPolicyPromise =
+    corporation.bankCharter || viewerOwnsCorporation
+      ? loadBankingPolicy(db)
+      : Promise.resolve(null);
 
   const [openListingsForInvariant, openSellOrdersForInvariant] = await Promise.all([
     db
@@ -221,6 +223,7 @@ export async function loadCorporationDetailView(args: {
   const physical = buildPhysicalPnl(plantsMode, physicalRollups, sectorDetails.length);
 
   const equityQuote = await equityQuotePromise;
+  const underwritingPolicy = await bankingPolicyPromise;
 
   return {
     corporation: {
@@ -247,6 +250,20 @@ export async function loadCorporationDetailView(args: {
       typeSwitchCooldownUntilTurn: corporation.typeSwitchCooldownUntilTurn ?? null,
       typeSwitchTurn: corporation.typeSwitchTurn ?? null,
       currentTurn,
+      ...(viewerOwnsCorporation
+        ? {
+            primaryUnderwritingEnabled: underwritingPolicy?.primaryUnderwriting === true,
+            primaryUnderwritingMandate: corporation.primaryUnderwritingMandate
+              ? {
+                  bankCorporationId:
+                    corporation.primaryUnderwritingMandate.bankCorporationId.toHexString(),
+                  charteredTurn: corporation.primaryUnderwritingMandate.charteredTurn,
+                  currencyCode: corporation.primaryUnderwritingMandate.currencyCode,
+                  feeRate: corporation.primaryUnderwritingMandate.feeRate,
+                }
+              : null,
+          }
+        : {}),
       typeLabel:
         corporation.type === "manufacturing" && corporation.industryModel === "vehicles"
           ? "Vehicle manufacturing"

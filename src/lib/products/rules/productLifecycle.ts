@@ -36,6 +36,91 @@ export interface ProductLifecycleReceipt {
   paidDevelopmentAnchor: number;
 }
 
+export interface PaidProductBrandProgress {
+  paidAdvertisingAnchor: number;
+  advertisingTurns: number;
+  averagePaidAdvertisingAnchor: number;
+}
+
+const MAX_PAID_PRODUCT_ADVERTISING_ANCHOR = 1e15;
+
+export function averagePaidProductBrandAnchor(input: {
+  paidAdvertisingAnchor: number;
+  advertisingTurns: number;
+}): number {
+  const paid = Number.isFinite(input.paidAdvertisingAnchor)
+    ? Math.min(MAX_PAID_PRODUCT_ADVERTISING_ANCHOR, Math.max(0, input.paidAdvertisingAnchor))
+    : 0;
+  const turns = Number.isSafeInteger(input.advertisingTurns)
+    ? Math.max(0, input.advertisingTurns)
+    : 0;
+  return turns > 0 ? paid / turns : 0;
+}
+
+/** Average only settled, positive advertising receipts across the product's development turns. */
+export function accumulatePaidProductBrand(input: {
+  priorPaidAdvertisingAnchor: number;
+  priorAdvertisingTurns: number;
+  paidAdvertisingAnchor: number;
+}): PaidProductBrandProgress {
+  const priorPaid = Number.isFinite(input.priorPaidAdvertisingAnchor)
+    ? Math.min(MAX_PAID_PRODUCT_ADVERTISING_ANCHOR, Math.max(0, input.priorPaidAdvertisingAnchor))
+    : 0;
+  const priorTurns = Number.isSafeInteger(input.priorAdvertisingTurns)
+    ? Math.max(0, input.priorAdvertisingTurns)
+    : 0;
+  const paidThisTurn = Number.isFinite(input.paidAdvertisingAnchor)
+    ? Math.min(MAX_PAID_PRODUCT_ADVERTISING_ANCHOR, Math.max(0, input.paidAdvertisingAnchor))
+    : 0;
+  const paidAdvertisingAnchor = Math.min(
+    MAX_PAID_PRODUCT_ADVERTISING_ANCHOR,
+    priorPaid + paidThisTurn
+  );
+  const advertisingTurns = Math.min(Number.MAX_SAFE_INTEGER, priorTurns + 1);
+  return {
+    paidAdvertisingAnchor,
+    advertisingTurns,
+    averagePaidAdvertisingAnchor: averagePaidProductBrandAnchor({
+      paidAdvertisingAnchor,
+      advertisingTurns,
+    }),
+  };
+}
+
+/** Convert paid promotion into bounded brand quality with its monetary scale explicit. */
+export function paidProductBrandQualityBonus(input: {
+  averagePaidAdvertisingAnchor: number;
+  referenceAnchor: number;
+  maximumBonus: number;
+  coverage: number;
+}): number {
+  const reference = Number.isFinite(input.referenceAnchor) ? Math.max(0, input.referenceAnchor) : 0;
+  const maximum = Number.isFinite(input.maximumBonus) ? Math.max(0, input.maximumBonus) : 0;
+  const paid =
+    Number.isFinite(input.averagePaidAdvertisingAnchor) && input.averagePaidAdvertisingAnchor > 0
+      ? input.averagePaidAdvertisingAnchor
+      : 0;
+  const audience = Number.isFinite(input.coverage) ? Math.max(0, Math.min(1, input.coverage)) : 0;
+  if (paid <= 0 || reference <= 0 || maximum <= 0) return 0;
+  return Math.round(Math.min(maximum, (maximum * paid) / (paid + reference)) * audience * 10) / 10;
+}
+
+/** Add paid product evidence to live four-pillar quality once, with hard game bounds. */
+export function productQualityForPriceDefense(input: {
+  baseQuality: number | null | undefined;
+  paidQualityBonus: number;
+  brandBonus: number;
+}): number {
+  const base = Number.isFinite(input.baseQuality) ? (input.baseQuality as number) : 50;
+  const paidQuality = Number.isFinite(input.paidQualityBonus)
+    ? Math.max(0, input.paidQualityBonus)
+    : 0;
+  const brand = Number.isFinite(input.brandBonus) ? Math.max(0, input.brandBonus) : 0;
+  return Math.round(Math.max(0, Math.min(100, base + paidQuality + brand)) * 10) / 10;
+}
+
+export type ProductLifecycleDurations = Partial<Record<ProductLifecycleStage, number>>;
+
 export interface ProductLifecycleProgress {
   stage: ProductLifecycleStage;
   stageStartedTurn: number;
@@ -63,6 +148,8 @@ export function advanceProductLifecycle(input: {
     elapsedThresholdTurns: number;
   };
   receipt: ProductLifecycleReceipt;
+  /** Optional product-kind cadence. Omitted values preserve industrial defaults. */
+  durations?: ProductLifecycleDurations;
 }): ProductLifecycleProgress | null {
   const { product, receipt } = input;
   const safeNonNegativeInteger = (value: number): boolean =>
@@ -116,7 +203,13 @@ export function advanceProductLifecycle(input: {
     }
   } else {
     const elapsedStageTurns = Math.max(0, receipt.turn - stageStartedTurn + 1);
-    const stageTurns = PRODUCT_LIFECYCLE_STAGE_TURNS[stage];
+    const configuredTurns = input.durations?.[stage];
+    const stageTurns =
+      typeof configuredTurns === "number" &&
+      Number.isSafeInteger(configuredTurns) &&
+      configuredTurns > 0
+        ? configuredTurns
+        : PRODUCT_LIFECYCLE_STAGE_TURNS[stage];
     const next = NEXT_STAGE[stage];
     if (stageTurns != null && next && elapsedStageTurns >= stageTurns) {
       stage = next;

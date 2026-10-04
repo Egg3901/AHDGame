@@ -20,6 +20,20 @@ export type ConsolePayload = {
   bankTreasuryEnabled?: boolean;
   bankTreasury?: BankTreasuryOverview | null;
   bankPropForexFeesEnabled?: boolean;
+  primaryUnderwritingEnabled?: boolean;
+  underwritingReceipts?: Array<{
+    key: string;
+    issuerCorporationId: string;
+    issuerName: string;
+    instrumentType: "equity" | "corporate_bond";
+    instrumentId?: string;
+    currencyCode: string;
+    grossPlacedLocal: number;
+    feeLocal: number;
+    issuerNetLocal: number;
+    turn: number;
+    charteredTurn: number;
+  }>;
   propAssetOptions?: readonly import("@/lib/db/types/bank").PropPosition["asset"][];
   visible: boolean;
   isCeo: boolean;
@@ -122,6 +136,7 @@ export type ConsolePayload = {
     lastBankingDepositInterest: number;
     lastBankingLoanInterest: number;
     lastBankingLoanOriginationFees?: number;
+    lastBankingUnderwritingFees?: number;
     loanOriginationFeesLifetime?: number;
     lastBankingInterbankInterestPaid: number;
     lastBankingInterbankInterestReceived: number;

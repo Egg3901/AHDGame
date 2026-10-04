@@ -236,7 +236,9 @@ function evalExpr(expr: unknown, doc: Doc, variables: Doc = {}): unknown {
   if (typeof expr === "string" && expr.startsWith("$")) return getPath(doc, expr.slice(1));
   if (Array.isArray(expr)) return expr.map((item) => evalExpr(item, doc, variables));
   if (!isPlainObject(expr)) return expr;
-  const [op, rawArgs] = Object.entries(expr)[0];
+  const entry = Object.entries(expr)[0];
+  if (!entry) return expr;
+  const [op, rawArgs] = entry;
   if (op === "$literal") return rawArgs;
   if (op === "$cond" && Array.isArray(rawArgs)) {
     return evalExpr(rawArgs[evalExpr(rawArgs[0], doc, variables) ? 1 : 2], doc, variables);
@@ -288,6 +290,8 @@ function evalExpr(expr: unknown, doc: Doc, variables: Doc = {}): unknown {
     ? rawArgs.map((a) => evalExpr(a, doc, variables))
     : [evalExpr(rawArgs, doc, variables)];
   switch (op) {
+    case "$objectToArray":
+      return isPlainObject(args[0]) ? Object.entries(args[0]).map(([k, v]) => ({ k, v })) : [];
     case "$size":
       if (!Array.isArray(args[0])) throw new Error("inMemoryDb: expected array for $size");
       return args[0].length;

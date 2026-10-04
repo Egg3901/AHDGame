@@ -4,7 +4,7 @@
  */
 import type { AnyBulkWriteOperation, Db } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
-import { advanceManufacturingProject } from "./rules/manufacturingRules";
+import { tickManufacturingProject } from "./rules/manufacturingRules";
 import {
   MANUFACTURING_PRODUCT_ACTIVE_INDEX_V2,
   MANUFACTURING_PRODUCT_PROJECTS_V2,
@@ -35,6 +35,13 @@ export function activeManufacturingProductProjectProjection() {
     allocations: 1,
     startedTurn: 1,
     lastProcessedTurn: 1,
+    lastDevelopmentReceiptTurn: 1,
+    advertisingAllocationShare: 1,
+    developmentAdvertisingAnchor: 1,
+    developmentAdvertisingTurns: 1,
+    lastAdvertisingReceiptTurn: 1,
+    productBrand: 1,
+    developmentCompletedTurn: 1,
     developmentPaidAnchor: 1,
     paidThresholdAnchor: 1,
     elapsedDevelopmentTurns: 1,
@@ -43,126 +50,195 @@ export function activeManufacturingProductProjectProjection() {
 }
 
 /**
- * Applies durable, project-bound R&D receipts once before the next turn can replace them.
- * The project write is a turn CAS; a receipt is cleared only after that write landed.
+ * Advances active projects from completed turns, even with no new cash. Paid
+ * receipts retain their separate acknowledgment until the project CAS lands.
  */
 export async function consumeManufacturingDevelopmentReceiptsV2(input: {
   db: Db;
   corporations: Corporation[];
   projectsByCorporationId: Map<string, ManufacturingProductProject>;
+  completedTurn?: number;
 }): Promise<void> {
-  const receiptByCorporationId = new Map<
-    string,
-    { corporation: Corporation; receipt: ManufacturingDevelopmentCashReceiptV2 }
-  >();
   const projectOps: AnyBulkWriteOperation<ManufacturingProductProject>[] = [];
-  const projectedProgress = new Map<string, ReturnType<typeof advanceManufacturingProject>>();
-  const staleReceipts = new Set<string>();
+  const nextByCorporationId = new Map<string, ManufacturingProductProject>();
+  const receiptsToClear = new Map<
+    string,
+    {
+      corporation: Corporation;
+      receipt: ManufacturingDevelopmentCashReceiptV2;
+    }
+  >();
 
   for (const corporation of input.corporations) {
-    const receipt = corporation.manufacturingProductDevelopmentReceiptV2;
-    if (!receipt) continue;
     const corporationId = corporation._id.toString();
     const project = input.projectsByCorporationId.get(corporationId);
-    if (!project || project._id !== receipt.projectId) {
-      staleReceipts.add(corporationId);
+    const receipt = corporation.manufacturingProductDevelopmentReceiptV2;
+    const completedTurn = input.completedTurn ?? receipt?.turn;
+    if (completedTurn === undefined || !Number.isSafeInteger(completedTurn) || completedTurn < 0)
+      continue;
+    const completedReceipt =
+      receipt && Number.isSafeInteger(receipt.turn) && receipt.turn <= completedTurn
+        ? receipt
+        : undefined;
+    if (!project) {
+      if (completedReceipt)
+        receiptsToClear.set(corporationId, { corporation, receipt: completedReceipt });
       continue;
     }
-    const progress = advanceManufacturingProject({ project, receipt });
-    if (!progress) {
-      staleReceipts.add(corporationId);
-      continue;
+    const cashWatermark = project.lastDevelopmentReceiptTurn ?? project.lastProcessedTurn ?? 0;
+    if (
+      completedReceipt &&
+      (completedReceipt.projectId !== project._id || completedReceipt.turn <= cashWatermark)
+    ) {
+      receiptsToClear.set(corporationId, { corporation, receipt: completedReceipt });
     }
-    receiptByCorporationId.set(corporationId, { corporation, receipt });
-    projectedProgress.set(corporationId, progress);
+    const progress = tickManufacturingProject({
+      project,
+      receipt: completedReceipt,
+      advertisingReceipt: corporation.manufacturingProductAdvertisingReceiptV2,
+      completedTurn,
+    });
+    if (!progress) continue;
+    const { active, ...persistedProgress } = progress;
+    const next = { ...project, ...persistedProgress };
+    if (!active) delete next.activeCorporationId;
+    nextByCorporationId.set(corporationId, next);
     projectOps.push({
       updateOne: {
         filter: {
           _id: project._id,
           activeCorporationId: corporationId,
-          $or: [
-            { lastProcessedTurn: { $exists: false } },
-            { lastProcessedTurn: { $lt: receipt.turn } },
-          ],
+          lastProcessedTurn: project.lastProcessedTurn ?? { $exists: false },
+          lastDevelopmentReceiptTurn: project.lastDevelopmentReceiptTurn ?? { $exists: false },
+          developmentPaidAnchor: project.developmentPaidAnchor,
+          lastAdvertisingReceiptTurn: project.lastAdvertisingReceiptTurn ?? { $exists: false },
         },
         update: {
-          $set: {
-            stage: progress.stage,
-            stageStartedTurn: progress.stageStartedTurn,
-            lastProcessedTurn: progress.lastProcessedTurn,
-            developmentPaidAnchor: progress.developmentPaidAnchor,
-            elapsedDevelopmentTurns: progress.elapsedDevelopmentTurns,
-          },
-          ...(progress.active ? {} : { $unset: { activeCorporationId: 1 } }),
+          $set: persistedProgress,
+          ...(active ? {} : { $unset: { activeCorporationId: 1 } }),
         },
       },
     });
   }
 
-  let landedCorporations = new Set(receiptByCorporationId.keys());
   if (projectOps.length > 0) {
     const result = await input.db
       .collection<ManufacturingProductProject>(MANUFACTURING_PRODUCT_PROJECTS_V2)
       .bulkWrite(projectOps, { ordered: false });
     if (result.matchedCount !== projectOps.length) {
-      const currentProjects = await input.db
+      // A concurrent retirement or clock writer can win. Only the stored
+      // acknowledgment allows its matching paid cash receipt to be cleared.
+      const current = await input.db
         .collection<ManufacturingProductProject>(MANUFACTURING_PRODUCT_PROJECTS_V2)
-        .find<ManufacturingProductProject>({
-          _id: {
-            $in: [...receiptByCorporationId.values()].map(({ receipt }) => receipt.projectId),
-          },
-        })
+        .find({ _id: { $in: [...nextByCorporationId.values()].map((project) => project._id) } })
         .project<ManufacturingProductProject>(activeManufacturingProductProjectProjection())
         .toArray();
-      const currentById = new Map(currentProjects.map((project) => [project._id, project]));
-      landedCorporations = new Set();
-      for (const [corporationId, { receipt }] of receiptByCorporationId) {
-        const project = currentById.get(receipt.projectId);
-        if (project && project.lastProcessedTurn! >= receipt.turn) {
-          landedCorporations.add(corporationId);
-          input.projectsByCorporationId.set(corporationId, project);
-        }
+      const currentById = new Map(current.map((project) => [project._id, project]));
+      for (const [corporationId, next] of nextByCorporationId) {
+        const stored = currentById.get(next._id);
+        if (stored) input.projectsByCorporationId.set(corporationId, stored);
       }
     } else {
-      for (const [corporationId, progress] of projectedProgress) {
-        const previous = input.projectsByCorporationId.get(corporationId);
-        if (!previous || !progress) continue;
-        const updated: ManufacturingProductProject = { ...previous, ...progress };
-        if (!progress.active) delete updated.activeCorporationId;
-        input.projectsByCorporationId.set(corporationId, updated);
-      }
+      for (const [corporationId, next] of nextByCorporationId)
+        input.projectsByCorporationId.set(corporationId, next);
     }
   }
 
-  const clearCorporationIds = new Set([...staleReceipts, ...landedCorporations]);
-  if (clearCorporationIds.size > 0) {
-    await input.db.collection<Corporation>("corporations").bulkWrite(
-      [...clearCorporationIds].flatMap((corporationId) => {
-        const corporation = input.corporations.find(
-          (candidate) => candidate._id.toString() === corporationId
-        );
-        const receipt = corporation?.manufacturingProductDevelopmentReceiptV2;
-        return receipt
-          ? [
-              {
-                updateOne: {
-                  filter: {
-                    _id: corporation!._id,
-                    "manufacturingProductDevelopmentReceiptV2.projectId": receipt.projectId,
-                    "manufacturingProductDevelopmentReceiptV2.turn": receipt.turn,
-                  },
-                  update: { $unset: { manufacturingProductDevelopmentReceiptV2: "" } },
-                },
-              },
-            ]
-          : [];
-      })
-    );
-    for (const corporationId of clearCorporationIds) {
-      const corporation = input.corporations.find(
-        (candidate) => candidate._id.toString() === corporationId
-      );
-      if (corporation) delete corporation.manufacturingProductDevelopmentReceiptV2;
+  for (const corporation of input.corporations) {
+    const receipt = corporation.manufacturingProductDevelopmentReceiptV2;
+    if (!receipt || (input.completedTurn !== undefined && receipt.turn > input.completedTurn))
+      continue;
+    const corporationId = corporation._id.toString();
+    const stored = input.projectsByCorporationId.get(corporationId);
+    const watermark = stored?.lastDevelopmentReceiptTurn ?? stored?.lastProcessedTurn ?? 0;
+    if (stored?._id === receipt.projectId && receipt.turn <= watermark) {
+      receiptsToClear.set(corporationId, { corporation, receipt });
     }
+  }
+
+  const advertisingToClear = input.corporations.flatMap((corporation) => {
+    const receipt = corporation.manufacturingProductAdvertisingReceiptV2;
+    if (!receipt || receipt.turn > (input.completedTurn ?? -1)) return [];
+    const stored = input.projectsByCorporationId.get(corporation._id.toString());
+    const orphan = !stored || stored._id !== receipt.projectId;
+    const acknowledged =
+      stored?._id === receipt.projectId && receipt.turn <= (stored.lastAdvertisingReceiptTurn ?? 0);
+    const outsideWindow =
+      stored &&
+      stored.stage !== "development" &&
+      receipt.turn > (stored.developmentCompletedTurn ?? stored.stageStartedTurn);
+    return orphan || acknowledged || outsideWindow ? [{ corporation, receipt }] : [];
+  });
+  if (advertisingToClear.length > 0) {
+    const cleared = await input.db.collection<Corporation>("corporations").bulkWrite(
+      advertisingToClear.map(({ corporation, receipt }) => ({
+        updateOne: {
+          filter: {
+            _id: corporation._id,
+            "manufacturingProductAdvertisingReceiptV2.projectId": receipt.projectId,
+            "manufacturingProductAdvertisingReceiptV2.turn": receipt.turn,
+            "manufacturingProductAdvertisingReceiptV2.amountAnchor": receipt.amountAnchor,
+          },
+          update: { $unset: { manufacturingProductAdvertisingReceiptV2: "" } },
+        },
+      })),
+      { ordered: false }
+    );
+    let clearedIds = new Set(
+      advertisingToClear.map(({ corporation }) => corporation._id.toString())
+    );
+    if (cleared.matchedCount !== advertisingToClear.length) {
+      const current = await input.db
+        .collection<Corporation>("corporations")
+        .find(
+          { _id: { $in: advertisingToClear.map(({ corporation }) => corporation._id) } },
+          { projection: { _id: 1, manufacturingProductAdvertisingReceiptV2: 1 } }
+        )
+        .toArray();
+      clearedIds = new Set(
+        current
+          .filter((corp) => !corp.manufacturingProductAdvertisingReceiptV2)
+          .map((corp) => corp._id.toString())
+      );
+    }
+    for (const { corporation } of advertisingToClear) {
+      if (clearedIds.has(corporation._id.toString()))
+        delete corporation.manufacturingProductAdvertisingReceiptV2;
+    }
+  }
+  if (receiptsToClear.size === 0) return;
+  const receiptOps: AnyBulkWriteOperation<Corporation>[] = [...receiptsToClear.values()].map(
+    ({ corporation, receipt }) => ({
+      updateOne: {
+        filter: {
+          _id: corporation._id,
+          "manufacturingProductDevelopmentReceiptV2.projectId": receipt.projectId,
+          "manufacturingProductDevelopmentReceiptV2.turn": receipt.turn,
+          "manufacturingProductDevelopmentReceiptV2.amountAnchor": receipt.amountAnchor,
+        },
+        update: { $unset: { manufacturingProductDevelopmentReceiptV2: "" } },
+      },
+    })
+  );
+  const cleared = await input.db
+    .collection<Corporation>("corporations")
+    .bulkWrite(receiptOps, { ordered: false });
+  let clearedIds = new Set(receiptsToClear.keys());
+  if (cleared.matchedCount !== receiptOps.length) {
+    const current = await input.db
+      .collection<Corporation>("corporations")
+      .find(
+        { _id: { $in: [...receiptsToClear.values()].map(({ corporation }) => corporation._id) } },
+        { projection: { _id: 1, manufacturingProductDevelopmentReceiptV2: 1 } }
+      )
+      .toArray();
+    clearedIds = new Set(
+      current
+        .filter((corp) => !corp.manufacturingProductDevelopmentReceiptV2)
+        .map((corp) => corp._id.toString())
+    );
+  }
+  for (const [corporationId, { corporation }] of receiptsToClear) {
+    if (clearedIds.has(corporationId)) delete corporation.manufacturingProductDevelopmentReceiptV2;
   }
 }

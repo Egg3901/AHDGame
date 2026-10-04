@@ -65,9 +65,8 @@ export async function runResetAndBootstrapCli(
       ? false
       : undefined;
   const foundingEffective =
-    startingParties !== "none" &&
     mode === "historical" &&
-    (preIteration ?? presetDefaultsToFoundingPhase(preset));
+    (preIteration ?? presetDefaultsToFoundingPhase(preset, startingParties ?? "default"));
 
   const db = await deps.connectDb(databaseName, applicationEnv.MONGODB_URI);
   try {

@@ -13,7 +13,10 @@ interface MarketFlags {
   brandLoyaltyEnabled: boolean;
   brandLoyaltySliceEnabled: boolean;
   sectorQualityEnabled: boolean;
+  qualityPremiumPricingEnabled: boolean;
   productLinesV2Enabled: boolean;
+  mediaOperatingModelsEnabled: boolean;
+  mediaProductSlatesEnabled: boolean;
   supplyAgreementsEnabled: boolean;
   shortageResponsiveSourcingEnabled: boolean;
   extractionOutputScaleEnabled: boolean;
@@ -23,7 +26,8 @@ const FEATURE_TOGGLES: Array<{
   key: keyof MarketFlags;
   label: string;
   description: string;
-  requires?: keyof MarketFlags;
+  requires?: Array<keyof MarketFlags>;
+  requiresMode?: MarketMode;
 }> = [
   {
     key: "brandLoyaltyEnabled",
@@ -36,7 +40,7 @@ const FEATURE_TOGGLES: Array<{
     label: "Loyalty slice in clearing",
     description:
       "Second-stage gate: loyal customers reserve demand before cheapest-first clearing. Requires brand loyalty on.",
-    requires: "brandLoyaltyEnabled",
+    requires: ["brandLoyaltyEnabled"],
   },
   {
     key: "sectorQualityEnabled",
@@ -45,10 +49,34 @@ const FEATURE_TOGGLES: Array<{
       "Four-pillar quality per sector, rolled up to corp average and commodity propagation.",
   },
   {
+    key: "qualityPremiumPricingEnabled",
+    label: "Quality premium pricing",
+    description: "Pass four-pillar product quality into clearing prices.",
+  },
+  {
     key: "productLinesV2Enabled",
     label: "Manufacturing product lines v2",
     description:
       "One active product project per corporation, allocated across owned plants. During development, paid R&D funds the project until its cost is met.",
+  },
+  {
+    key: "mediaOperatingModelsEnabled",
+    label: "Media operating models",
+    description:
+      "Named newspaper, radio, television, publishing, studio, music, cable, and streaming production recipes. Flag defaults off.",
+  },
+  {
+    key: "mediaProductSlatesEnabled",
+    label: "Media product slates",
+    description:
+      "Paid title development, model-specific coverage and cadence, and bounded quality and brand effects.",
+    requires: [
+      "mediaOperatingModelsEnabled",
+      "brandLoyaltyEnabled",
+      "brandLoyaltySliceEnabled",
+      "qualityPremiumPricingEnabled",
+    ],
+    requiresMode: "clearing",
   },
   {
     key: "supplyAgreementsEnabled",
@@ -99,7 +127,10 @@ export function MarketAdminPanel() {
           brandLoyaltyEnabled: data.brandLoyaltyEnabled === true,
           brandLoyaltySliceEnabled: data.brandLoyaltySliceEnabled === true,
           sectorQualityEnabled: data.sectorQualityEnabled === true,
+          qualityPremiumPricingEnabled: data.qualityPremiumPricingEnabled === true,
           productLinesV2Enabled: data.productLinesV2Enabled === true,
+          mediaOperatingModelsEnabled: data.mediaOperatingModelsEnabled === true,
+          mediaProductSlatesEnabled: data.mediaProductSlatesEnabled === true,
           supplyAgreementsEnabled: data.supplyAgreementsEnabled === true,
           shortageResponsiveSourcingEnabled: data.shortageResponsiveSourcingEnabled === true,
           extractionOutputScaleEnabled: data.extractionOutputScaleEnabled === true,
@@ -260,7 +291,12 @@ export function MarketAdminPanel() {
         <div className="space-y-3">
           {FEATURE_TOGGLES.map((toggle) => {
             const enabled = flags?.[toggle.key] === true;
-            const blocked = toggle.requires && flags?.[toggle.requires] !== true;
+            const missingRequirements =
+              toggle.requires?.filter((requirement) => flags?.[requirement] !== true) ?? [];
+            const modeRequirementMissing =
+              toggle.requiresMode !== undefined &&
+              (mode === null || MODE_ORDER.indexOf(mode) < MODE_ORDER.indexOf(toggle.requiresMode));
+            const blocked = missingRequirements.length > 0 || modeRequirementMissing;
             return (
               <div
                 key={toggle.key}
@@ -271,7 +307,15 @@ export function MarketAdminPanel() {
                   <p className="mt-0.5 text-xs text-muted">{toggle.description}</p>
                   {blocked && (
                     <p className="mt-1 text-[11px] text-warning">
-                      Enable {FEATURE_TOGGLES.find((f) => f.key === toggle.requires)?.label} first.
+                      Enable{" "}
+                      {[
+                        ...missingRequirements.map(
+                          (requirement) =>
+                            FEATURE_TOGGLES.find((feature) => feature.key === requirement)?.label
+                        ),
+                        ...(modeRequirementMissing ? [`${toggle.requiresMode} market tier`] : []),
+                      ].join(", ")}{" "}
+                      first.
                     </p>
                   )}
                 </div>

@@ -179,7 +179,16 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
   // so a flag flipped mid-turn cannot split the pass between two policies.
   const policy = await loadBankingPolicy(db);
   if (!policy.privateBanking) {
-    return { ...ZERO_SUMMARY };
+    const recovered = await recoverBankingSettlements(db, turn, policy);
+    return {
+      ...ZERO_SUMMARY,
+      recovery: {
+        resumedSettlements: recovered.resumedSettlements.length,
+        stillPartial: recovered.stillPartial.length,
+        estatesRecovered: recovered.estatesRecovered.length,
+        estatesStillResolving: recovered.estatesStillResolving.length,
+      },
+    };
   }
   const centralBankPricing = await loadCentralBankPricingAdjustment(db, turn);
 
@@ -911,6 +920,10 @@ async function processOneBank(
   // (f) Recompute aggregates + stamp lastBankingTurn (END of bank pass)
   const finalPlayerDeposits = playerDeposits + playerInterestSettled;
   const totalDeposits = finalPlayerDeposits + npcDeposits;
+  const underwritingFeesForTurn =
+    corp.bankCharter?.lastBankingUnderwritingFeesTurn === turn
+      ? (corp.bankCharter.lastBankingUnderwritingFees ?? 0)
+      : 0;
 
   await db.collection<Corporation>("corporations").updateOne(
     {
@@ -938,7 +951,8 @@ async function processOneBank(
           result.loanOriginationFeesCollected -
           result.depositInterestPaid -
           result.insurancePremiumPaid -
-          result.defaultsWrittenOff,
+          result.defaultsWrittenOff +
+          underwritingFeesForTurn,
         "bankCharter.lastBankingIncomeTurn": turn,
         // The per-turn split behind the net above, so the console can show
         // interest paid vs earned from the ledger instead of estimating.
@@ -947,6 +961,8 @@ async function processOneBank(
         "bankCharter.lastBankingDepositInterest": result.depositInterestPaid,
         "bankCharter.lastBankingLoanInterest": result.loanInterestCollected,
         "bankCharter.lastBankingLoanOriginationFees": result.loanOriginationFeesCollected,
+        "bankCharter.lastBankingUnderwritingFees": underwritingFeesForTurn,
+        "bankCharter.lastBankingUnderwritingFeesTurn": turn,
         "bankCharter.lastBankingInterbankInterestPaid": 0,
         "bankCharter.lastBankingInterbankInterestReceived": 0,
         "bankCharter.lastBankingFacilityInterest": 0,
@@ -962,7 +978,8 @@ async function processOneBank(
     result.loanOriginationFeesCollected -
     result.depositInterestPaid -
     result.insurancePremiumPaid -
-    result.defaultsWrittenOff;
+    result.defaultsWrittenOff +
+    underwritingFeesForTurn;
 
   return result;
 }
@@ -1080,12 +1097,22 @@ async function processLoanBookOnlyBank(
         // end-of-pass snapshot must not overwrite a concurrent origination,
         // repayment or collateral recovery.
         "bankCharter.lastBankingTurn": turn,
-        "bankCharter.lastBankingIncome": serviced.interestCollected - serviced.writtenOff,
+        "bankCharter.lastBankingIncome":
+          serviced.interestCollected -
+          serviced.writtenOff +
+          (charter.lastBankingUnderwritingFeesTurn === turn
+            ? (charter.lastBankingUnderwritingFees ?? 0)
+            : 0),
         "bankCharter.lastBankingIncomeTurn": turn,
         // No deposit base, so no deposit interest and no premium; the loan
         // split still applies for the console breakdown.
         "bankCharter.lastBankingDepositInterest": 0,
         "bankCharter.lastBankingLoanInterest": serviced.interestCollected,
+        "bankCharter.lastBankingUnderwritingFees":
+          charter.lastBankingUnderwritingFeesTurn === turn
+            ? (charter.lastBankingUnderwritingFees ?? 0)
+            : 0,
+        "bankCharter.lastBankingUnderwritingFeesTurn": turn,
         "bankCharter.lastBankingInterbankInterestPaid": 0,
         "bankCharter.lastBankingInterbankInterestReceived": 0,
         "bankCharter.lastBankingFacilityInterest": 0,

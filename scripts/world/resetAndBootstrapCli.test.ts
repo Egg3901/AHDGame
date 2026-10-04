@@ -66,6 +66,48 @@ describe("reset and bootstrap CLI preflight", () => {
     expect(closeDb).toHaveBeenCalledTimes(1);
   });
 
+  it.each([
+    [[], true],
+    [["--no-pre-iteration"], false],
+  ] as const)(
+    "preserves partyless 1991 founding defaults and explicit opt-out (%s)",
+    async (foundingArgs, foundingExpected) => {
+      const reset = vi.fn(async () => ({}));
+      const log = vi.spyOn(console, "log").mockImplementation(() => {});
+      try {
+        await runResetAndBootstrapCli(
+          [
+            "--expect-db=fixture-world",
+            "--preset=1991-default",
+            "--no-starting-parties",
+            ...foundingArgs,
+          ],
+          {
+            validateEnvironment: () => validEnv,
+            connectDb: vi.fn(async () => ({ databaseName: "fixture-world" }) as unknown as Db),
+            closeDb: vi.fn(async () => {}),
+            reset,
+          }
+        );
+        expect(reset).toHaveBeenCalledWith(
+          expect.objectContaining({
+            preset: "1991-default",
+            startingParties: "none",
+            preIteration: foundingExpected ? undefined : false,
+          })
+        );
+        const resetAnnouncement = log.mock.calls.find(([message]) =>
+          String(message).startsWith("Resetting and bootstrapping")
+        );
+        expect(String(resetAnnouncement?.[0]).includes("pre-iteration founding")).toBe(
+          foundingExpected
+        );
+      } finally {
+        log.mockRestore();
+      }
+    }
+  );
+
   it("rejects an incorrect explicit target before connecting", async () => {
     const connectDb = vi.fn(async () => ({ databaseName: "fixture-world" }) as unknown as Db);
 

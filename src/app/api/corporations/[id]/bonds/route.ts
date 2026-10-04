@@ -68,6 +68,9 @@ import { sumNonMaturedBondPrincipal } from "@/lib/bonds/corporateBondDefault";
 import { sumBondAnnualInterestAnchor } from "@/lib/bonds/bondPrincipalSum";
 import { emitTx } from "@/lib/financialTxLog/emit";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import { loadBankingPolicy } from "@/lib/banking/policy";
+import { resolvePrimaryUnderwritingOffer } from "@/lib/banking/underwritingOffer";
+import { settlePrimaryUnderwritingFill } from "@/lib/banking/underwritingSettlement";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -752,6 +755,17 @@ export async function POST(request: Request, { params }: RouteParams) {
     // for this currency (seeds, pre-migration) keeps the old full funding.
     const poolCurrency = bondPoolCurrency({ currencyCode: corpCurrencyCode ?? undefined });
     const pool = await readPoolForPrimary(db, poolCurrency);
+    const underwritingResolution = corporation.primaryUnderwritingMandate
+      ? await resolvePrimaryUnderwritingOffer(
+          db,
+          await loadBankingPolicy(db),
+          corporation,
+          (corpCurrencyCode ?? "USD") as CurrencyCode,
+          "corporate_bond",
+          currentTurn
+        )
+      : null;
+    const underwritingOffer = underwritingResolution?.offer;
     let placedUnits = totalUnits;
     if (pool) {
       const plan = planCorporateUnderwriting({
@@ -763,7 +777,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         pricePerUnitLocal: BOND_UNIT_FACE_VALUE,
       });
       placedUnits = plan.placedUnits;
-      if (placedUnits > 0) {
+      if (placedUnits > 0 && !underwritingOffer) {
         const paid = await debitPoolForPrimary(
           db,
           poolCurrency,
@@ -777,6 +791,11 @@ export async function POST(request: Request, { params }: RouteParams) {
     const unsoldUnits = totalUnits - placedUnits;
     const placedFaceValueLocal = placedUnits * BOND_UNIT_FACE_VALUE;
     const primaryFillRatio = totalUnits > 0 ? placedUnits / totalUnits : 1;
+    const underwrittenBondId = underwritingOffer ? new ObjectId() : undefined;
+    const frozenUnderwritingOffer =
+      underwritingOffer && underwrittenBondId
+        ? { ...underwritingOffer, instrumentId: underwrittenBondId }
+        : undefined;
 
     const bondDoc: Omit<Bond, "_id"> = {
       corporationId: corporation._id,
@@ -790,6 +809,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       publicFloat: placedUnits,
       requestedUnits: totalUnits,
       unsoldUnits,
+      ...(frozenUnderwritingOffer ? { primaryUnderwriting: frozenUnderwritingOffer } : {}),
       primaryFillRatio,
       holders: [],
       defaulted: false,
@@ -808,21 +828,67 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Proceeds for the placed units go to liquidCapital, which is itself LOCAL.
     const faceValueInCorpCapital = placedFaceValueLocal;
 
-    const insertResult = await db.collection("bonds").insertOne(bondDoc);
-    // Serialize the treasury credit against other same-corp money ops (e.g. a
-    // hostile takeover firing on this corp in the same instant) so the two
-    // writes can't interleave and drop one (issue #2949).
-    if (faceValueInCorpCapital > 0) {
-      await withCorpLock(corporation._id, () =>
-        db
-          .collection<Corporation>("corporations")
-          .updateOne(
-            { _id: corporation._id },
-            { $inc: { liquidCapital: faceValueInCorpCapital }, $set: { updatedAt: now } }
-          )
-      );
+    let insertedBondId: ObjectId;
+    let underwritingFill: { gross: number; fee: number; net: number } | null = null;
+    if (underwritingOffer && underwritingResolution && placedUnits > 0 && pool) {
+      insertedBondId = underwrittenBondId!;
+      const frozenOffer = frozenUnderwritingOffer!;
+      const publishedBond = {
+        _id: insertedBondId,
+        ...bondDoc,
+        primaryUnderwriting: frozenOffer,
+      };
+      const settlement = await settlePrimaryUnderwritingFill(db, {
+        bank: underwritingResolution.bank,
+        issuer: corporation,
+        issuerCurrencyCode: (corpCurrencyCode ?? "USD") as CurrencyCode,
+        offer: frozenOffer,
+        instrumentId: insertedBondId,
+        grossPlacedLocal: placedFaceValueLocal,
+        turn: currentTurn,
+        now,
+        poolCollection: "bondMarketPools",
+        instrumentProjection: {
+          collection: "bonds",
+          insert: publishedBond,
+          note: "Publish only the corporate bond units funded by the primary fill",
+        },
+      });
+      if (settlement.status !== "applied" && settlement.status !== "replayed") {
+        return NextResponse.json(
+          {
+            error: "The funded bond placement is settling. Retry after its journal completes.",
+            settlementStatus: settlement.status,
+          },
+          { status: settlement.status === "partial" ? 202 : 409 }
+        );
+      }
+      underwritingFill = {
+        gross: placedFaceValueLocal,
+        fee: Math.round(placedFaceValueLocal * underwritingOffer.feeRate * 100) / 100,
+        net:
+          placedFaceValueLocal -
+          Math.round(placedFaceValueLocal * underwritingOffer.feeRate * 100) / 100,
+      };
+    } else {
+      const insertResult = underwrittenBondId
+        ? await db.collection<Bond>("bonds").insertOne({ _id: underwrittenBondId, ...bondDoc })
+        : await db.collection<Bond>("bonds").insertOne(bondDoc as Bond);
+      insertedBondId = insertResult.insertedId;
+      // Serialize the treasury credit against other same-corp money ops (e.g. a
+      // hostile takeover firing on this corp in the same instant) so the two
+      // writes can't interleave and drop one (issue #2949).
+      if (faceValueInCorpCapital > 0) {
+        await withCorpLock(corporation._id, () =>
+          db
+            .collection<Corporation>("corporations")
+            .updateOne(
+              { _id: corporation._id },
+              { $inc: { liquidCapital: faceValueInCorpCapital }, $set: { updatedAt: now } }
+            )
+        );
+      }
     }
-    const insertedBondId = insertResult.insertedId;
 
     void emitTx(db, {
       type: "bond_issuance",
@@ -831,7 +897,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       subjectType: "corporation",
       subjectId: corporation._id,
       subjectName: corporation.name,
-      amount: faceValueInCorpCapital,
+      amount: underwritingFill?.net ?? faceValueInCorpCapital,
       currencyCode: (corpCurrencyCode ?? "USD") as CurrencyCode,
       meta: {
         bondId: insertedBondId.toString(),
@@ -840,6 +906,13 @@ export async function POST(request: Request, { params }: RouteParams) {
         unsoldUnits,
         couponRate,
         maturityTurns,
+        ...(underwritingFill
+          ? {
+              grossPlacedLocal: underwritingFill.gross,
+              underwritingFeeLocal: underwritingFill.fee,
+              issuerNetLocal: underwritingFill.net,
+            }
+          : {}),
       },
     });
 
@@ -863,7 +936,14 @@ export async function POST(request: Request, { params }: RouteParams) {
       unitsPlaced: placedUnits,
       unitsUnsold: unsoldUnits,
       fillRatio: Math.round(primaryFillRatio * 10_000) / 10_000,
-      proceeds: placedFaceValueLocal,
+      proceeds: underwritingFill?.net ?? placedFaceValueLocal,
+      ...(underwritingFill
+        ? {
+            grossPlacedLocal: underwritingFill.gross,
+            underwritingFeeLocal: underwritingFill.fee,
+            issuerNetLocal: underwritingFill.net,
+          }
+        : {}),
     });
   } catch (error) {
     return handleRouteError(error);

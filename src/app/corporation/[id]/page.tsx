@@ -61,6 +61,7 @@ import {
 import { BankConsoleTab } from "./bank/BankConsoleTab";
 import { EditorialStancePanel } from "@/components/corporation/EditorialStancePanel";
 import { ManufacturingProductStudio } from "@/components/corporation/ManufacturingProductStudio";
+import { MediaProductStudio } from "@/components/corporation/MediaProductStudio";
 import type {
   CorporationDetail,
   CEO,
@@ -1120,6 +1121,10 @@ export default function CorporationDetailPage() {
 
                 {tab === "sectors" && (
                   <div className="space-y-6">
+                    {corporation.mediaProductSlatesEnabled === true &&
+                      sectors.some((sector) => sector.sectorType === "media") && (
+                        <MediaProductStudio corporationId={id} onUpdate={fetchCorporation} />
+                      )}
                     {corporation.productLinesV2Enabled &&
                       sectors.some((sector) =>
                         ["manufacturing", "automobiles"].includes(sector.sectorType)

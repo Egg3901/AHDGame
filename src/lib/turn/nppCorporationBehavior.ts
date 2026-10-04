@@ -2,8 +2,8 @@
  * NPP corporation decisions use shared market and funding observations.
  * processNppCorporationDecisions loads them and prepares corporation and sector writes.
  */
-import { makeNppCorpDecision } from "@/lib/turn/npp/corporationDecision";
-export { makeNppCorpDecision } from "@/lib/turn/npp/corporationDecision";
+import { makeNppCorpDecision } from "@/lib/turn/npp/makeCorpDecision";
+export { makeNppCorpDecision } from "@/lib/turn/npp/makeCorpDecision";
 import {
   buildNppDecisionCashWrites,
   type NppFoundingCashWitness,

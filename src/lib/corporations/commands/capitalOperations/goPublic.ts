@@ -1,16 +1,22 @@
-import type { Db } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
 import { computeIpoIssuance } from "../../ipoIssuance";
 import { IPO_COOLDOWN_TURNS } from "@/lib/constants/corporations";
 import { hasSuperShares, isValidSuperShareMultiplier } from "../../superShares";
 import { recordAudit } from "@/lib/audit/recordAudit";
 import { issuanceDilutionFactorExpr } from "@/lib/corporations/shareConsolidation";
+import { emitTx } from "@/lib/financialTxLog/emit";
 import {
+  planEquityPrimaryPlacement,
   prepareEquityPrimaryPlacement,
   refundPreparedEquityPlacement,
 } from "@/lib/equities/primaryMarket";
-import { emitTx } from "@/lib/financialTxLog/emit";
 import { equityPoolCurrency } from "@/lib/equities/marketPool";
+import {
+  settlePrimaryUnderwritingFill,
+  type PrimaryUnderwritingFillInput,
+} from "@/lib/banking/underwritingSettlement";
+import type { ResolvedPrimaryUnderwritingOffer } from "@/lib/banking/underwritingOffer";
 
 /**
  * True when the corp has any non-CEO character or corporation shareholder
@@ -38,6 +44,8 @@ export interface GoPublicInput {
    * this many votes each, and the float cap rises to SUPERSHARE_IPO_MAX_FLOAT_PCT.
    */
   superShareMultiplier?: number;
+  /** Frozen same-currency investment-bank quote selected by this issuer. */
+  underwriting?: ResolvedPrimaryUnderwritingOffer;
 }
 
 export type GoPublicResult =
@@ -50,6 +58,9 @@ export type GoPublicResult =
       pendingShares: number;
       proceeds: number;
       totalSharesAfter: number;
+      grossPlacedLocal?: number;
+      underwritingFeeLocal?: number;
+      issuerNetLocal?: number;
     };
 
 /**
@@ -63,7 +74,7 @@ export type GoPublicResult =
  * equivalent to founding as a public IPO.
  */
 export async function goPublic(input: GoPublicInput): Promise<GoPublicResult> {
-  const { db, corporation, floatPct, currentTurn, superShareMultiplier } = input;
+  const { db, corporation, floatPct, currentTurn, superShareMultiplier, underwriting } = input;
 
   if (!corporation.isPrivate) {
     return { ok: false, error: "Corporation is already public", status: 400 };
@@ -125,18 +136,145 @@ export async function goPublic(input: GoPublicInput): Promise<GoPublicResult> {
     return { ok: false, error: e instanceof Error ? e.message : "Invalid IPO terms", status: 400 };
   }
   const now = new Date();
-  const placement = await prepareEquityPrimaryPlacement(
-    db,
-    corporation,
-    ipo.newShares,
-    corporation.sharePrice,
-    now
-  );
-  const proceeds = Math.round(placement.poolActive ? placement.paidLocal : ipo.proceeds);
+  const plannedUnderwrittenPlacement = underwriting
+    ? await planEquityPrimaryPlacement(db, corporation, ipo.newShares, corporation.sharePrice)
+    : null;
+  const placement = plannedUnderwrittenPlacement
+    ? {
+        ...plannedUnderwrittenPlacement,
+        paidLocal: plannedUnderwrittenPlacement.plannedGrossLocal,
+      }
+    : await prepareEquityPrimaryPlacement(
+        db,
+        corporation,
+        ipo.newShares,
+        corporation.sharePrice,
+        now
+      );
+  const underwritten = !!underwriting && placement.poolActive && placement.placedShares > 0;
+  if (underwriting && !underwritten) {
+    return {
+      ok: false,
+      error: "The selected underwriter cannot fund an IPO fill from this market pool right now",
+      status: 409,
+    };
+  }
+  const issuedShares = underwritten ? placement.placedShares : ipo.newShares;
+  const pendingShares = underwritten
+    ? ipo.newShares - placement.placedShares
+    : placement.unsoldShares;
+  const underwritingId = underwritten ? new ObjectId() : undefined;
+  const underwritingOffer =
+    underwritingId && underwriting
+      ? { ...underwriting.offer, instrumentId: underwritingId }
+      : undefined;
+  const underwritingFeeLocal = underwritten
+    ? Math.round(placement.paidLocal * underwriting!.offer.feeRate * 100) / 100
+    : 0;
+  const issuerNetLocal = placement.paidLocal - underwritingFeeLocal;
+  const proceeds = underwritten
+    ? issuerNetLocal
+    : Math.round(placement.poolActive ? placement.paidLocal : ipo.proceeds);
 
   let updateRes;
   try {
-    if (!placement.poolActive) {
+    if (underwritten && underwriting && underwritingOffer && underwritingId) {
+      const pending = pendingShares > 0;
+      const shareUpdate = [
+        {
+          $set: {
+            isPrivate: false,
+            hiddenFromExchange: false,
+            lastIpoTurn: currentTurn,
+            totalShares: { $add: [{ $ifNull: ["$totalShares", 0] }, issuedShares] },
+            publicFloat: { $add: [{ $ifNull: ["$publicFloat", 0] }, issuedShares] },
+            shareIssuanceProceeds: {
+              $add: [{ $ifNull: ["$shareIssuanceProceeds", 0] }, placement.paidLocal],
+            },
+            sharePrice: {
+              $round: [
+                {
+                  $multiply: [
+                    { $ifNull: ["$sharePrice", 0] },
+                    issuanceDilutionFactorExpr(issuedShares),
+                  ],
+                },
+                4,
+              ],
+            },
+            fundamentalSharePrice: {
+              $round: [
+                {
+                  $multiply: [
+                    { $ifNull: ["$fundamentalSharePrice", { $ifNull: ["$sharePrice", 0] }] },
+                    issuanceDilutionFactorExpr(issuedShares),
+                  ],
+                },
+                4,
+              ],
+            },
+            ...(pending
+              ? {
+                  pendingShareIssuance: {
+                    remainingShares: pendingShares,
+                    requestedShares: ipo.newShares,
+                    source: "ipo",
+                    issuedUpfront: false,
+                    createdAtTurn: currentTurn,
+                    initialPriceLocal: corporation.sharePrice,
+                    underwriting: underwritingOffer,
+                  },
+                }
+              : {}),
+            updatedAt: now,
+          },
+        },
+      ];
+      const settlementInput: PrimaryUnderwritingFillInput = {
+        bank: underwriting.bank,
+        issuer: corporation,
+        issuerCurrencyCode: underwriting.offer.currencyCode,
+        offer: underwritingOffer,
+        instrumentId: underwritingId,
+        grossPlacedLocal: placement.paidLocal,
+        turn: currentTurn,
+        now,
+        poolCollection: "equityMarketPools",
+        instrumentProjection: {
+          collection: "corporations",
+          filter: { _id: corporation._id, isPrivate: true },
+          pipelineUpdate: shareUpdate,
+          note: "Publish only funded IPO shares and the underwritten pending remainder",
+        },
+      };
+      const settled = await settlePrimaryUnderwritingFill(db, settlementInput);
+      if (settled.status !== "applied" && settled.status !== "replayed") {
+        return {
+          ok: false,
+          error: "The funded IPO is settling; retry after its journal completes",
+          status: settled.status === "partial" ? 202 : 409,
+        };
+      }
+      void emitTx(db, {
+        type: "ipo_proceeds",
+        turn: currentTurn,
+        createdAt: now,
+        subjectType: "corporation",
+        subjectId: corporation._id,
+        subjectName: corporation.name,
+        amount: issuerNetLocal,
+        currencyCode: underwriting.offer.currencyCode,
+        meta: {
+          grossPlacedLocal: placement.paidLocal,
+          underwritingFeeLocal,
+          sharesPlaced: issuedShares,
+          sharesRequested: ipo.newShares,
+          sharesPending: pendingShares,
+          counterparty: "equity_market_pool",
+        },
+      });
+      updateRes = { matchedCount: 1 };
+    } else if (!placement.poolActive) {
       updateRes = await db.collection<Corporation>("corporations").updateOne(
         { _id: corporation._id, isPrivate: true },
         {
@@ -220,16 +358,16 @@ export async function goPublic(input: GoPublicInput): Promise<GoPublicResult> {
         ]);
     }
   } catch (error) {
-    await refundPreparedEquityPlacement(db, placement, now);
+    if (!underwritten) await refundPreparedEquityPlacement(db, placement, now);
     throw error;
   }
 
   if (updateRes.matchedCount === 0) {
-    await refundPreparedEquityPlacement(db, placement, now);
+    if (!underwritten) await refundPreparedEquityPlacement(db, placement, now);
     return { ok: false, error: "Corporation state changed; retry", status: 409 };
   }
 
-  if (placement.poolActive && placement.paidLocal > 0) {
+  if (!underwritten && placement.poolActive && placement.paidLocal > 0) {
     void emitTx(db, {
       type: "ipo_proceeds",
       turn: currentTurn,
@@ -289,9 +427,9 @@ export async function goPublic(input: GoPublicInput): Promise<GoPublicResult> {
     meta: {
       floatPct,
       requestedShares: ipo.newShares,
-      newShares: ipo.newShares,
-      listedShares: placement.placedShares,
-      pendingShares: placement.unsoldShares,
+      newShares: issuedShares,
+      listedShares: issuedShares,
+      pendingShares,
       superShareMultiplier,
     },
   });
@@ -299,10 +437,17 @@ export async function goPublic(input: GoPublicInput): Promise<GoPublicResult> {
   return {
     ok: true,
     newShares: ipo.newShares,
-    listedShares: ipo.newShares,
+    listedShares: issuedShares,
     requestedShares: ipo.newShares,
-    pendingShares: placement.unsoldShares,
+    pendingShares,
     proceeds,
-    totalSharesAfter: corporation.totalShares + ipo.newShares,
+    totalSharesAfter: corporation.totalShares + issuedShares,
+    ...(underwritten
+      ? {
+          grossPlacedLocal: placement.paidLocal,
+          underwritingFeeLocal,
+          issuerNetLocal,
+        }
+      : {}),
   };
 }

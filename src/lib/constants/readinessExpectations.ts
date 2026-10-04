@@ -8,7 +8,7 @@
  * pass `partiesAuthored` by asserting a party whose seeds are gated to 1953 and
  * 1979.
  *
- * Five fields have a genuine per-era source and are derived from it. The rest
+ * Six fields have a genuine per-era source and are derived from it. The rest
  * stay authored, because they are not counts: `seatMin` is a deliberate floor
  * ("RU has no static seedSeats section, so a fresh world legitimately starts at
  * 0"), and deriving it would replace documented judgment with arithmetic.
@@ -30,7 +30,7 @@ import {
   COUNTRY_READINESS_EXPECTATIONS,
   type CountryReadinessExpectations,
 } from "@/lib/constants/countryReadinessExpectations";
-import { expectedRegionCount } from "@/lib/admin/seedDiagnostic/regionBundles";
+import { expectedRegionCount, regionBundleFor } from "@/lib/admin/seedDiagnostic/regionBundles";
 import { partyRosterLabel, partySeedsForPreset } from "@/lib/seeds/partySeedRegistry";
 import { checkGovernmentFormation } from "@/lib/constants/readinessChecks";
 
@@ -75,10 +75,6 @@ const INITIAL_READINESS_BY_PRESET: Partial<
       // roster; it still needs a formed government, but its missing Soviet
       // leader-confidence row is not a defect in that government.
       extras: [(db) => checkGovernmentFormation("RU", db)],
-      // The 1991 bundle contains ten RSFSR economic regions. The authored
-      // Soviet offset of three belongs only to the 1953/1979 union roster.
-      demographicsCount: 10,
-      stateMetricsCount: 10,
       // The 70-person floor describes the USSR's two-chamber delegation and
       // premier roster. January 1991 RSFSR uses a different Congress; no
       // founding NPP/official seeder currently populates those rows, as with
@@ -129,6 +125,11 @@ export function getReadinessExpectations(
   const parties = partySeedsForPreset(countryId, preset);
   const seats = SEAT_MIN_BY_PRESET[preset]?.[countryId];
   const eraOverride = INITIAL_READINESS_BY_PRESET[preset]?.[countryId];
+  // January 1991 seeds the whole Soviet Union: ten Russian economic regions
+  // plus fourteen republics, each with its own demographics and macro vector.
+  // The older Soviet bundles deliberately omit three demographic/metric rows.
+  const fullSovietCoverage = countryId === "RU" && preset === "1991-default";
+  const sovietRegions = fullSovietCoverage ? regionBundleFor(countryId, preset) : null;
 
   return {
     ...authored,
@@ -143,12 +144,18 @@ export function getReadinessExpectations(
       eraOverride?.demographicsCount ??
       (regions === null
         ? authored.demographicsCount
-        : regions - (authored.regionCount - authored.demographicsCount)),
+        : regions - (fullSovietCoverage ? 0 : authored.regionCount - authored.demographicsCount)),
     stateMetricsCount:
       eraOverride?.stateMetricsCount ??
       (regions === null
         ? authored.stateMetricsCount
-        : regions - (authored.regionCount - authored.stateMetricsCount)),
+        : regions - (fullSovietCoverage ? 0 : authored.regionCount - authored.stateMetricsCount)),
+    // Union republic vectors use SU_* identities, while the legacy filter
+    // names only Russian regions and older aggregate rows. Match the roster
+    // that supplies the expected count and exclude national summaries.
+    stateMetricsFilter: sovietRegions
+      ? { countryId, _id: { $in: sovietRegions.map((region) => region._id) } }
+      : authored.stateMetricsFilter,
     // `Math.min` keeps the authored floor as a ceiling on itself: when an era
     // seeds fewer parties than the entry demands, the expectation drops to what
     // the era actually seeds, and it never invents a stricter requirement than

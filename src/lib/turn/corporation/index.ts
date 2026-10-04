@@ -80,7 +80,7 @@ import { processNppSupplyAgreements } from "@/lib/turn/npp/nppSupplyAgreements";
 import { processNppProspecting } from "@/lib/turn/npp/nppProspecting";
 import { processNppCorpTreasury } from "@/lib/turn/npp/nppCorpTreasury";
 import { createNotifications } from "@/lib/notifications";
-import { COMMODITY_LABELS } from "@/lib/constants/commodities";
+import { COMMODITY_LABELS, eraScaledBasePrices } from "@/lib/constants/commodities";
 import { trackFinancialDistress } from "./financialDistressTracking";
 import {
   persistLabourIndices,
@@ -111,6 +111,20 @@ import {
 import { applyMediaEditorialEffects } from "@/lib/mediaEditorial/applyEffects";
 import { addSettledPoliticalAttention } from "@/lib/mediaOperatingModels/reach";
 import { applyOperatingCashThenDevelopmentCash } from "./manufacturingDevelopmentCashSettlement";
+import { resumeFoundingUnderwritingPlans } from "@/lib/banking/underwritingSettlement";
+import {
+  processMediaProductProjectsV1,
+  startNppMediaProductsV1,
+} from "@/lib/products/mediaProductPersistence";
+import {
+  attributeMediaProductSales,
+  paidPoliticalMediaSellerReceipts,
+  reconcileMediaProductDelivery,
+  type PaidPoliticalMediaSellerAmount,
+} from "@/lib/products/rules/mediaProductSales";
+import { persistMediaProductSales } from "@/lib/products/mediaProductSales";
+import { getMediaProductKind } from "@/lib/products/mediaProductCatalog";
+import { aggregateMediaProductSectorEffects } from "@/lib/products/rules/mediaProductRules";
 
 export type { CorporationTurnResult } from "./corporationTurnRuntime";
 
@@ -172,6 +186,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           prospectingEnabled: 1,
           commandEconomyEnabled: 1,
           privateBankingEnabled: 1,
+          bankUnderwritingEnabled: 1,
           interstateMoneyWiringEnabled: 1,
           freightSettlementMode: 1,
           canonicalFreightBillingEnabled: 1,
@@ -186,6 +201,9 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     getLabourSystemMode(),
   ]);
   mark("preamble");
+  if (marketGovernorConfig?.bankUnderwritingEnabled === true) {
+    await resumeFoundingUnderwritingPlans(db, now);
+  }
   const equityPoolTurn = await processEquityMarketPoolTurn(
     db,
     turn ?? gameState?.currentTurn ?? 0,
@@ -217,6 +235,13 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       ?.canonicalFreightBillingEnabled === true;
   const mediaEditorialEnabled = marketGovernorConfig?.mediaEditorialEnabled === true;
   const mediaOperatingModelsEnabled = marketGovernorConfig?.mediaOperatingModelsEnabled === true;
+  const mediaProductSlatesEnabled =
+    marketAtLeast(marketSystemMode, "clearing") &&
+    mediaOperatingModelsEnabled &&
+    marketGovernorConfig?.mediaProductSlatesEnabled === true &&
+    marketGovernorConfig?.brandLoyaltyEnabled === true &&
+    marketGovernorConfig?.brandLoyaltySliceEnabled === true &&
+    marketGovernorConfig?.qualityPremiumPricingEnabled === true;
   const mediaRegulationEnabled =
     marketAtLeast(marketSystemMode, "clearing") &&
     marketGovernorConfig?.mediaRegulationEnabled === true;
@@ -234,6 +259,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
         (mediaRegulationEnabled &&
           typeof gameState?.currentYear === "number" &&
           gameState.currentYear <= 1986),
+      mediaProductSlatesEnabled,
       productLinesV2Enabled:
         plantsEnabledForMarketShare &&
         (marketGovernorConfig as { productLinesV2Enabled?: boolean } | null)
@@ -248,6 +274,30 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           )
       : Promise.resolve(null),
   ]);
+  if (
+    mediaProductSlatesEnabled &&
+    lookups.mediaProductProjectsByCorpId &&
+    typeof gameState?.currentYear === "number"
+  ) {
+    const startedNppProjects = await startNppMediaProductsV1({
+      db,
+      corporations: lookups.corporations,
+      sectorsByCorp: lookups.sectorsByCorp,
+      projectsByCorporationId: lookups.mediaProductProjectsByCorpId,
+      currentYear: gameState.currentYear,
+      currentTurn: turn ?? 1,
+    });
+    for (const project of startedNppProjects) {
+      const development = lookups.mediaProductDevelopmentByCorpId ?? new Map();
+      development.set(project.corporationId, project);
+      lookups.mediaProductDevelopmentByCorpId = development;
+      const bySector = lookups.mediaProductProjectsBySectorId ?? new Map();
+      const sectorProjects = bySector.get(project.sectorId) ?? [];
+      sectorProjects.push(project);
+      bySector.set(project.sectorId, sectorProjects);
+      lookups.mediaProductProjectsBySectorId = bySector;
+    }
+  }
   const politicalMediaMarketEnabled = marketGovernorConfig?.politicalMediaMarketEnabled === true;
   const politicalMediaOrders: PoliticalMediaOrderForClearing[] = politicalMediaMarketEnabled
     ? await loadPoliticalMediaOrdersForClearing(db, turn ?? 0)
@@ -257,6 +307,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       db,
       corporations: lookups.corporations,
       projectsByCorporationId: lookups.manufacturingProductByCorpId,
+      completedTurn: (turn ?? gameState?.currentTurn ?? 0) - 1,
     });
   }
   const currentYear = gameState?.currentYear;
@@ -450,7 +501,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   // Independent of clearing; flag-gated. Display/telemetry only in this phase.
   let qualityCorpUpdates = new Map<string, number>();
   let newCommodityQuality: Map<CommodityType, number> | null = null;
-  if (sectorQualityEnabled || lookups.productLinesV2Enabled) {
+  if (sectorQualityEnabled || lookups.productLinesV2Enabled || mediaProductSlatesEnabled) {
     const laggedQ = new Map<CommodityType, number>();
     const qDocs = await db
       .collection("commodityQuality")
@@ -507,6 +558,60 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       const corp = lookups.corpById.get(corpId);
       if (corp) corp.averageQuality = q;
     }
+  }
+
+  if (mediaProductSlatesEnabled && lookups.mediaProductProjectsByCorpId) {
+    await processMediaProductProjectsV1({
+      db,
+      corporations: lookups.corporations,
+      projectsByCorporationId: lookups.mediaProductProjectsByCorpId,
+      currentTurn: turn ?? 1,
+      sectorQualityBySectorId: lookups.productSectorQualityById ?? new Map(),
+    });
+    const projectsBySectorId = new Map<
+      string,
+      import("@/lib/products/mediaProduct").MediaProductProject[]
+    >();
+    const developmentByCorpId = new Map<
+      string,
+      import("@/lib/products/mediaProduct").MediaProductProject
+    >();
+    for (const [corporationId, projects] of lookups.mediaProductProjectsByCorpId) {
+      for (const project of projects) {
+        const sectorProjects = projectsBySectorId.get(project.sectorId) ?? [];
+        sectorProjects.push(project);
+        projectsBySectorId.set(project.sectorId, sectorProjects);
+        if (project.activeDevelopmentCorporationId) {
+          developmentByCorpId.set(corporationId, project);
+        }
+      }
+    }
+    lookups.mediaProductProjectsBySectorId = projectsBySectorId;
+    lookups.mediaProductDevelopmentByCorpId = developmentByCorpId;
+    const mediaProductQualityBySectorId = new Map<string, number>();
+    const mediaProductLoyaltyBonusBySectorId = new Map<string, number>();
+    for (const sectors of lookups.sectorsByCorp.values()) {
+      for (const sector of sectors) {
+        const sectorId = sector._id.toString();
+        const projects = (projectsBySectorId.get(sectorId) ?? []).flatMap((project) => {
+          const kind = getMediaProductKind(project.kindId);
+          return kind && sector.strategyId === kind.modelId
+            ? [{ project: { ...project, id: project._id }, kind }]
+            : [];
+        });
+        if (projects.length === 0) continue;
+        const effect = aggregateMediaProductSectorEffects({
+          projects,
+          baseQuality: lookups.productSectorQualityById?.get(sectorId) ?? null,
+        });
+        if (effect.quality !== null) mediaProductQualityBySectorId.set(sectorId, effect.quality);
+        if (effect.loyaltyBonus > 0) {
+          mediaProductLoyaltyBonusBySectorId.set(sectorId, effect.loyaltyBonus);
+        }
+      }
+    }
+    lookups.mediaProductQualityBySectorId = mediaProductQualityBySectorId;
+    lookups.mediaProductLoyaltyBonusBySectorId = mediaProductLoyaltyBonusBySectorId;
   }
 
   // Phase 1a2: auto-install NPP caretakers on corps left CEO-less by a hard
@@ -754,6 +859,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     // Product development is capitalized separately, after operating P&L. The
     // explicit sequence keeps its live cash guard from racing unordered corpOps.
     await applyOperatingCashThenDevelopmentCash({
+      productLinesV2Enabled: lookups.productLinesV2Enabled,
       db,
       operations: manufacturingDevelopmentCashOps,
       turn: typeof turn === "number" ? turn : 1,
@@ -762,6 +868,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       exchangeRatesByCurrency: lookups.exchangeRatesByCurrency,
       bondsByCorpId: lookups.bondsByCorpId,
       sectorsByCorp: lookups.sectorsByCorp,
+      mediaProductSlatesEnabled,
       applyOperatingCashWrites: async () => {
         if (corpOps.length === 0) return;
         // bulkWrite op array type does not satisfy AnyBulkWriteOperation narrowing, runtime shape is valid.
@@ -844,6 +951,21 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   mark("sector+corp bulkWrites");
 
   const settledPoliticalMediaOrders = [];
+  const currentTurnNumber = turn ?? gameState?.currentTurn ?? 0;
+  const plannedPoliticalUnitsBySectorId = new Map<string, number>();
+  if (mediaProductSlatesEnabled) {
+    for (const order of politicalMediaOrders) {
+      const plan = order.settlementPlan ?? plannedPoliticalMediaOrders.get(order.orderId);
+      if (plan?.plannedTurn !== currentTurnNumber) continue;
+      for (const seller of plan.sellers) {
+        plannedPoliticalUnitsBySectorId.set(
+          seller.sectorId,
+          (plannedPoliticalUnitsBySectorId.get(seller.sectorId) ?? 0) + seller.units
+        );
+      }
+    }
+  }
+  const paidPoliticalSellerBySectorId = new Map<string, PaidPoliticalMediaSellerAmount>();
   if (politicalMediaMarketEnabled) {
     for (const order of politicalMediaOrders) {
       // New plans were already durably saved before sector P&L writes. The
@@ -852,6 +974,23 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       if (!order.settlementPlan && !plannedPoliticalMediaOrders.has(order.orderId)) continue;
       const results = await settlePoliticalMediaOrder(db, order.orderId, turn ?? 0);
       const plan = order.settlementPlan ?? plannedPoliticalMediaOrders.get(order.orderId);
+      if (mediaProductSlatesEnabled && plan?.plannedTurn === currentTurnNumber) {
+        for (const seller of paidPoliticalMediaSellerReceipts({
+          orderId: order.orderId,
+          sellers: plan.sellers,
+          results,
+          orderAlreadySettled: order.status === "settled",
+        })) {
+          const prior = paidPoliticalSellerBySectorId.get(seller.sectorId) ?? {
+            units: 0,
+            amountAnchor: 0,
+          };
+          paidPoliticalSellerBySectorId.set(seller.sectorId, {
+            units: prior.units + seller.units,
+            amountAnchor: prior.amountAnchor + seller.amountAnchor,
+          });
+        }
+      }
       const settled =
         order.status === "settled" ||
         (results.length > 0 &&
@@ -866,6 +1005,44 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       }
       await applyPoliticalMediaOrderEffect(db, order.orderId);
     }
+  }
+
+  if (mediaProductSlatesEnabled && lookups.mediaProductProjectsBySectorId) {
+    const basePrices = eraScaledBasePrices(lookups.eraUnitScale);
+    const attributions: ReturnType<typeof attributeMediaProductSales> = [];
+    const strategyIdBySectorId = new Map<string, string>();
+    for (const sectors of lookups.sectorsByCorp.values()) {
+      for (const sector of sectors) {
+        if (typeof sector.strategyId === "string") {
+          strategyIdBySectorId.set(sector._id.toString(), sector.strategyId);
+        }
+      }
+    }
+    for (const [sectorId, projects] of lookups.mediaProductProjectsBySectorId) {
+      const clearing = market.clearingBySectorId?.get(sectorId);
+      const strategyId = strategyIdBySectorId.get(sectorId);
+      if (!clearing?.deliveredUnitsByCommodity || !strategyId) continue;
+      const reconciled = reconcileMediaProductDelivery({
+        clearing,
+        plannedPoliticalUnits: plannedPoliticalUnitsBySectorId.get(sectorId) ?? 0,
+        paidPoliticalSeller: paidPoliticalSellerBySectorId.get(sectorId) ?? {
+          units: 0,
+          amountAnchor: 0,
+        },
+      });
+      attributions.push(
+        ...attributeMediaProductSales({
+          projects,
+          clearing: reconciled.clearing,
+          basePrices,
+          turn: currentTurnNumber,
+          strategyId,
+          paidPoliticalUnitsByCommodity: reconciled.paidPoliticalUnitsByCommodity,
+          paidPoliticalRevenueAnchorByCommodity: reconciled.paidPoliticalRevenueAnchorByCommodity,
+        })
+      );
+    }
+    await persistMediaProductSales(db, attributions);
   }
 
   if (mediaEditorialEnabled && mediaOperatingModelsEnabled && market.editorialOutletsByState) {

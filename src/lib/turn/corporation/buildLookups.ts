@@ -41,6 +41,7 @@ import {
   type ManufacturingProductProject,
 } from "@/lib/products/manufacturingProject";
 import { activeManufacturingProductProjectProjection } from "@/lib/products/manufacturingProjectPersistence";
+import { MEDIA_PRODUCT_PROJECTS, type MediaProductProject } from "@/lib/products/mediaProduct";
 import type { TradeEmbargo } from "@/lib/db/types/tradeEmbargo";
 import type { OrganizationMembership } from "@/lib/db/types/internationalOrganization";
 import {
@@ -137,6 +138,8 @@ export async function buildCorporationLookups(
     moneyWiringEnabled?: boolean;
     /** Read product output maps only while the corporation product gate is on. */
     productLinesV2Enabled?: boolean;
+    /** Read durable media projects and receipts only while the feature gate is on. */
+    mediaProductSlatesEnabled?: boolean;
     /** Use lagged freight-delivery availability as a local input constraint. */
     freightSettlementActive?: boolean;
     /**
@@ -208,6 +211,7 @@ export async function buildCorporationLookups(
     activeEmbargoDocs,
     worldPreset,
     activeManufacturingProjects,
+    activeMediaProductProjects,
   ] = await Promise.all([
     db
       .collection<Corporation>("corporations")
@@ -219,8 +223,17 @@ export async function buildCorporationLookups(
             ...(options?.productLinesV2Enabled === true
               ? {}
               : {
+                  manufacturingProductAdvertisingObligationsV2: 0,
+                  manufacturingProductAdvertisingReceiptV2: 0,
                   manufacturingProductDevelopmentReceiptV2: 0,
                   manufacturingProductDevelopmentPaidTurnV2: 0,
+                }),
+            ...(options?.mediaProductSlatesEnabled === true
+              ? {}
+              : {
+                  mediaProductDevelopmentReceiptV1: 0,
+                  mediaProductAdvertisingReceiptV1: 0,
+                  mediaProductAdvertisingObligationsV1: 0,
                 }),
           },
         }
@@ -398,6 +411,35 @@ export async function buildCorporationLookups(
           )
           .toArray()
       : Promise.resolve([] as ManufacturingProductProject[]),
+    options?.mediaProductSlatesEnabled === true
+      ? db
+          .collection<MediaProductProject>(MEDIA_PRODUCT_PROJECTS)
+          .find({ stage: { $in: ["development", "launch", "growth", "mature", "decline"] } })
+          .project<MediaProductProject>({
+            _id: 1,
+            corporationId: 1,
+            activeDevelopmentCorporationId: 1,
+            sectorId: 1,
+            operatingSectorType: 1,
+            kindId: 1,
+            title: 1,
+            allocationShare: 1,
+            stage: 1,
+            startedTurn: 1,
+            stageStartedTurn: 1,
+            lastProcessedTurn: 1,
+            developmentPaidAnchor: 1,
+            paidThresholdAnchor: 1,
+            elapsedDevelopmentTurns: 1,
+            elapsedThresholdTurns: 1,
+            developmentAdvertisingAnchor: 1,
+            developmentAdvertisingTurns: 1,
+            launchQuality: 1,
+            qualityBonus: 1,
+            productBrand: 1,
+          })
+          .toArray()
+      : Promise.resolve([] as MediaProductProject[]),
   ]);
 
   // A split can preserve a player's corporation while its owner chooses a new
@@ -410,6 +452,20 @@ export async function buildCorporationLookups(
   const manufacturingProductByCorpId = new Map<string, ManufacturingProductProject>(
     activeManufacturingProjects.map((project) => [project.corporationId, project])
   );
+  const mediaProductProjectsByCorpId = new Map<string, MediaProductProject[]>();
+  const mediaProductProjectsBySectorId = new Map<string, MediaProductProject[]>();
+  const mediaProductDevelopmentByCorpId = new Map<string, MediaProductProject>();
+  for (const project of activeMediaProductProjects) {
+    const corpProjects = mediaProductProjectsByCorpId.get(project.corporationId) ?? [];
+    corpProjects.push(project);
+    mediaProductProjectsByCorpId.set(project.corporationId, corpProjects);
+    const sectorProjects = mediaProductProjectsBySectorId.get(project.sectorId) ?? [];
+    sectorProjects.push(project);
+    mediaProductProjectsBySectorId.set(project.sectorId, sectorProjects);
+    if (project.activeDevelopmentCorporationId) {
+      mediaProductDevelopmentByCorpId.set(project.corporationId, project);
+    }
+  }
 
   // Backfill countryId on corporations and sectors missing it (pre-migration data)
   const stateCountryMap = new Map(states.map((s) => [s._id, s.countryId]));
@@ -1266,6 +1322,10 @@ export async function buildCorporationLookups(
     sectorsByCorp,
     productLinesV2Enabled: options?.productLinesV2Enabled === true,
     manufacturingProductByCorpId,
+    mediaProductSlatesEnabled: options?.mediaProductSlatesEnabled === true,
+    mediaProductProjectsByCorpId,
+    mediaProductProjectsBySectorId,
+    mediaProductDevelopmentByCorpId,
     corpById,
     editorialAudienceLeanByState:
       options?.mediaEditorialEnabled === true

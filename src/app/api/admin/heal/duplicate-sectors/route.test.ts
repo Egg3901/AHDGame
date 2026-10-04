@@ -78,6 +78,8 @@ describe("POST /api/admin/heal/duplicate-sectors", () => {
         { _id: "KAN", countryId: "JP" },
       ]),
     });
+    // The secured-property transition reserves the duplicate group first; the
+    // heal reports it only after Mongo acknowledges deleting the losing row.
     db.collectionMocks.corporateSectors.deleteMany.mockResolvedValue({ deletedCount: 1 });
 
     const { POST } = await import("./route");

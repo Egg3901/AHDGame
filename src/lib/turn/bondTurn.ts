@@ -404,6 +404,9 @@ export async function processBondTurn(
   // ── Phase 1: Coupon payments ──────────────────────────────────────────────
   for (const bond of activeBonds) {
     if (!bondAccruesCoupon(bond)) continue;
+    // Funded sovereign coupon claims are paid or retained as arrears by
+    // TreasuryTurn. Do not run the legacy unfunded holder and pool credits.
+    if (config?.treasuryCashLedgerEnabled === true && bond.issuerType === "sovereign") continue;
 
     // `perTurnCouponPayment(rate, BOND_UNIT_FACE_VALUE)` returns the coupon in
     // the bond's LOCAL currency (`bond.currencyCode`, post-Task-18B). Downstream

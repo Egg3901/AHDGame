@@ -49,6 +49,8 @@ const patchSchema = z.object({
   // Package B: quality → premium pricing coupling (requires sectorQualityEnabled).
   qualityPremiumPricingEnabled: z.boolean().optional(),
   productLinesV2Enabled: z.boolean().optional(),
+  mediaOperatingModelsEnabled: z.boolean().optional(),
+  mediaProductSlatesEnabled: z.boolean().optional(),
   supplyAgreementsEnabled: z.boolean().optional(),
   shortageResponsiveSourcingEnabled: z.boolean().optional(),
   intervention: economicInterventionPlanSchema.optional(),
@@ -102,6 +104,8 @@ export async function GET() {
           sectorQualityEnabled: 1,
           qualityPremiumPricingEnabled: 1,
           productLinesV2Enabled: 1,
+          mediaOperatingModelsEnabled: 1,
+          mediaProductSlatesEnabled: 1,
           supplyAgreementsEnabled: 1,
           shortageResponsiveSourcingEnabled: 1,
           sovereignIssuanceConsolidationEnabled: 1,
@@ -128,6 +132,8 @@ export async function GET() {
       sectorQualityEnabled: config?.sectorQualityEnabled === true,
       qualityPremiumPricingEnabled: config?.qualityPremiumPricingEnabled === true,
       productLinesV2Enabled: config?.productLinesV2Enabled === true,
+      mediaOperatingModelsEnabled: config?.mediaOperatingModelsEnabled === true,
+      mediaProductSlatesEnabled: config?.mediaProductSlatesEnabled === true,
       supplyAgreementsEnabled: config?.supplyAgreementsEnabled === true,
       shortageResponsiveSourcingEnabled: config?.shortageResponsiveSourcingEnabled === true,
       sovereignIssuanceConsolidationEnabled: config?.sovereignIssuanceConsolidationEnabled === true,
@@ -180,6 +186,8 @@ export async function PATCH(request: Request) {
       sectorQualityEnabled,
       qualityPremiumPricingEnabled,
       productLinesV2Enabled,
+      mediaOperatingModelsEnabled,
+      mediaProductSlatesEnabled,
       supplyAgreementsEnabled,
       shortageResponsiveSourcingEnabled,
       intervention,
@@ -212,6 +220,8 @@ export async function PATCH(request: Request) {
       sectorQualityEnabled?: boolean;
       qualityPremiumPricingEnabled?: boolean;
       productLinesV2Enabled?: boolean;
+      mediaOperatingModelsEnabled?: boolean;
+      mediaProductSlatesEnabled?: boolean;
       supplyAgreementsEnabled?: boolean;
       shortageResponsiveSourcingEnabled?: boolean;
       intervention?: EconomicInterventionPlan;
@@ -249,18 +259,60 @@ export async function PATCH(request: Request) {
     }
 
     const db = await getDb();
+    const gameConfig = db.collection<GameConfig>("gameConfig");
     if (productLinesV2Enabled === true && !marketAtLeast(mode, "plants")) {
       return NextResponse.json(
         { error: "Product lines require the plants market tier." },
         { status: 400 }
       );
     }
-    const gameConfig = db.collection<GameConfig>("gameConfig");
-
+    if (mediaProductSlatesEnabled === true && !marketAtLeast(mode, "clearing")) {
+      return NextResponse.json(
+        { error: "Media product slates require the clearing market tier." },
+        { status: 400 }
+      );
+    }
     const existingConfig = await gameConfig.findOne(
       { _id: "default" },
-      { projection: { marketSystemMode: 1, mediaRegulationEnabled: 1, commandEconomyEnabled: 1 } }
+      {
+        projection: {
+          marketSystemMode: 1,
+          mediaRegulationEnabled: 1,
+          commandEconomyEnabled: 1,
+          mediaOperatingModelsEnabled: 1,
+          mediaProductSlatesEnabled: 1,
+          brandLoyaltyEnabled: 1,
+          brandLoyaltySliceEnabled: 1,
+          qualityPremiumPricingEnabled: 1,
+        },
+      }
     );
+    const effectiveMediaModelsEnabled =
+      mediaOperatingModelsEnabled ?? existingConfig?.mediaOperatingModelsEnabled === true;
+    const effectiveMediaProductSlatesEnabled =
+      mediaProductSlatesEnabled ?? existingConfig?.mediaProductSlatesEnabled === true;
+    if (effectiveMediaProductSlatesEnabled && !effectiveMediaModelsEnabled) {
+      return NextResponse.json(
+        { error: "Media product slates require media operating models." },
+        { status: 400 }
+      );
+    }
+    if (
+      (effectiveMediaProductSlatesEnabled &&
+        !(brandLoyaltyEnabled ?? existingConfig?.brandLoyaltyEnabled)) ||
+      (effectiveMediaProductSlatesEnabled &&
+        !(brandLoyaltySliceEnabled ?? existingConfig?.brandLoyaltySliceEnabled)) ||
+      (effectiveMediaProductSlatesEnabled &&
+        !(qualityPremiumPricingEnabled ?? existingConfig?.qualityPremiumPricingEnabled))
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Media product slates require brand loyalty, loyalty clearing, and quality pricing.",
+        },
+        { status: 400 }
+      );
+    }
     const priorMode = await getMarketSystemMode(existingConfig);
     const effectiveMediaRegulationEnabled =
       mediaRegulationEnabled ?? existingConfig?.mediaRegulationEnabled === true;
@@ -384,6 +436,10 @@ export async function PATCH(request: Request) {
       governorSet.qualityPremiumPricingEnabled = qualityPremiumPricingEnabled;
     if (typeof productLinesV2Enabled === "boolean")
       governorSet.productLinesV2Enabled = productLinesV2Enabled;
+    if (typeof mediaOperatingModelsEnabled === "boolean")
+      governorSet.mediaOperatingModelsEnabled = mediaOperatingModelsEnabled;
+    if (typeof mediaProductSlatesEnabled === "boolean")
+      governorSet.mediaProductSlatesEnabled = mediaProductSlatesEnabled;
     if (typeof supplyAgreementsEnabled === "boolean")
       governorSet.supplyAgreementsEnabled = supplyAgreementsEnabled;
     if (typeof shortageResponsiveSourcingEnabled === "boolean") {
@@ -445,9 +501,16 @@ export async function PATCH(request: Request) {
       commandEconomyEnabled:
         commandEconomyEnabled ?? existingConfig?.commandEconomyEnabled === true,
     });
-    const configUpdate = () =>
-      gameConfig.updateOne(
-        { _id: "default" },
+    const configUpdate = () => {
+      const guard: Record<string, unknown> = { _id: "default" };
+      if (effectiveMediaProductSlatesEnabled) {
+        if (mediaOperatingModelsEnabled !== true) guard.mediaOperatingModelsEnabled = true;
+        if (brandLoyaltyEnabled !== true) guard.brandLoyaltyEnabled = true;
+        if (brandLoyaltySliceEnabled !== true) guard.brandLoyaltySliceEnabled = true;
+        if (qualityPremiumPricingEnabled !== true) guard.qualityPremiumPricingEnabled = true;
+      }
+      return gameConfig.updateOne(
+        guard,
         {
           $set: {
             marketSystemMode: mode,
@@ -457,8 +520,9 @@ export async function PATCH(request: Request) {
             ...governorSet,
           },
         },
-        { upsert: true }
+        { upsert: !effectiveMediaProductSlatesEnabled }
       );
+    };
     const snapshotUpdate = (enabled: boolean) =>
       gameState.updateOne(
         { _id: "current" },
@@ -470,7 +534,17 @@ export async function PATCH(request: Request) {
         // Keep public law gates fail-off while the authoritative turn config
         // and its zero-read route snapshot are synchronized.
         await snapshotUpdate(false);
-        await configUpdate();
+        const configResult = await configUpdate();
+        if (effectiveMediaProductSlatesEnabled && configResult.matchedCount !== 1) {
+          await snapshotUpdate(false);
+          return NextResponse.json(
+            {
+              error:
+                "Media product prerequisites changed. Refresh and enable the required gates first.",
+            },
+            { status: 409 }
+          );
+        }
         await snapshotUpdate(effectiveMediaRegulationEnabled);
       } catch (error) {
         // A partial mirror must never leave regulation half-enabled. Require
@@ -486,7 +560,16 @@ export async function PATCH(request: Request) {
         throw error;
       }
     } else {
-      await configUpdate();
+      const configResult = await configUpdate();
+      if (effectiveMediaProductSlatesEnabled && configResult.matchedCount !== 1) {
+        return NextResponse.json(
+          {
+            error:
+              "Media product prerequisites changed. Refresh and enable the required gates first.",
+          },
+          { status: 409 }
+        );
+      }
       await snapshotUpdate(effectiveMediaRegulationEnabled);
     }
 

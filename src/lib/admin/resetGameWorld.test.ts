@@ -220,7 +220,7 @@ describe("resetGameWorld", () => {
       });
       if (startingParties === "none") {
         const updates = db.collectionMocks.gameState.updateOne.mock.calls;
-        expect(updates.some((call) => call[1].$unset?.preIteration === "")).toBe(true);
+        expect(updates.some((call) => call[1].$set?.preIteration?.active === true)).toBe(true);
       }
     }
   );

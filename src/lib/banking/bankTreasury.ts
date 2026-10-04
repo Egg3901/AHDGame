@@ -1,5 +1,7 @@
 import { ObjectId, type Db } from "mongodb";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
+import type { FederalBudget } from "@/lib/db/types/budget";
 import type { Bond, BondHolder } from "@/lib/db/types/bond";
 import type {
   BankCharter,
@@ -38,6 +40,14 @@ import {
   type SettlementResult,
 } from "@/lib/banking/settlementJournal";
 import { settleAtomicDocumentTransition } from "@/lib/banking/atomicDocumentSettlement";
+import { quoteSovereignPrimaryBankPurchase } from "./rules/sovereignPrimary";
+import { sovereignPrimaryTransition } from "@/lib/bonds/rules/sovereignPrimary";
+import { getNationalBudgetId } from "@/lib/bonds/sovereign";
+import {
+  loadPrimaryAccounting,
+  primaryFinancingRate,
+  primaryDocumentId,
+} from "@/lib/bonds/sovereignPrimarySettlement";
 import { oid, type BankingTransition } from "@/lib/banking/rules/boundary";
 
 export const BANK_TREASURY_TRADES_COLLECTION = "bankTreasuryTrades";
@@ -68,6 +78,8 @@ export interface BankTreasuryOverview {
   markValueLocal: number;
   autoSweep: boolean;
   positions: BankTreasuryPosition[];
+  /** Present only for explicitly enabled investment-bank primary subscriptions. */
+  primaryOffers?: Array<BankTreasuryPosition & { unsoldUnits: number }>;
 }
 
 export type BankTreasuryTradeResult =
@@ -244,6 +256,7 @@ export async function getBankTreasuryOverview(
         {
           $or: [
             { publicFloat: { $gt: 0 } },
+            ...(policy.sovereignPrimary ? [{ unsoldUnits: { $gt: 0 } }] : []),
             { holders: { $elemMatch: { bankId, charteredTurn: charter.charteredTurn } } },
           ],
         },
@@ -259,6 +272,7 @@ export async function getBankTreasuryOverview(
   );
   const cashReserves = Math.max(0, charter.cashReserves ?? 0);
   const positions: BankTreasuryPosition[] = [];
+  const primaryOffers: NonNullable<BankTreasuryOverview["primaryOffers"]> = [];
   for (const bond of bonds) {
     const bondCurrency = bondPoolCurrency(bond);
     if (bondCurrency !== currency) continue;
@@ -275,7 +289,7 @@ export async function getBankTreasuryOverview(
       appetite: quote.appetite,
     });
     const units = activeHolderUnits(bond.holders ?? [], bankId, charter.charteredTurn);
-    positions.push({
+    const position: BankTreasuryPosition = {
       bondId: bond._id.toHexString(),
       issuer: bond.issuerName ?? bond.countryId ?? "Sovereign",
       countryId: String(bond.countryId ?? ""),
@@ -289,7 +303,17 @@ export async function getBankTreasuryOverview(
       executablePoolDepthUnits: quote.depthUnitsAtBid,
       markedValueLocal: roundLocal(units * quote.bidPerUnit, currency),
       eligibleToBuy: pure.eligible,
-    });
+    };
+    if ((bond.publicFloat ?? 0) > 0 || units > 0) positions.push(position);
+    if (
+      policy.sovereignPrimary &&
+      (bond.unsoldUnits ?? 0) > 0 &&
+      ["investment", "universal"].includes(charter.type) &&
+      bond.maturityTurn > turn &&
+      bond.currencyCode === currency &&
+      !bond.sovereignMaturityClaim
+    )
+      primaryOffers.push({ ...position, unsoldUnits: bond.unsoldUnits! });
   }
   positions.sort((a, b) => a.remainingTurns - b.remainingTurns || a.bondId.localeCompare(b.bondId));
   return {
@@ -303,6 +327,7 @@ export async function getBankTreasuryOverview(
     ),
     autoSweep: charter.sovereignTreasuryAutoSweep === true,
     positions,
+    ...(policy.sovereignPrimary ? { primaryOffers } : {}),
   };
 }
 
@@ -348,15 +373,17 @@ function reserveTransition(receipt: BankTreasuryTradeReceipt, bond: Bond): Banki
               : { currencyCode: { $exists: false }, countryId: bond.countryId }),
             maturityTurn: {
               $gt: receipt.turn,
-              $lte: receipt.turn + BANK_TREASURY_MAX_REMAINING_TURNS,
+              ...(receipt.primary
+                ? {}
+                : { $lte: receipt.turn + BANK_TREASURY_MAX_REMAINING_TURNS }),
             },
             matured: { $ne: true },
             defaulted: { $ne: true },
             sovereignMaturityClaim: { $exists: false },
-            publicFloat: { $gte: receipt.units },
+            [receipt.primary ? "unsoldUnits" : "publicFloat"]: { $gte: receipt.units },
           },
           update: {
-            $inc: { publicFloat: -receipt.units },
+            $inc: { [receipt.primary ? "unsoldUnits" : "publicFloat"]: -receipt.units },
             $push: { holders: position },
             $set: { updatedAt: receipt.createdAt },
           },
@@ -441,6 +468,9 @@ function settledInventoryProjections(
         filter: { _id: oid(receipt.bondId.toHexString()) },
         update: {
           $pull: { holders: { bankTreasuryTradeId: receipt._id } },
+          ...(receipt.primary
+            ? { $inc: { totalIssued: receipt.units * BOND_UNIT_FACE_VALUE } }
+            : {}),
           $push: {
             holders: {
               bankId: receipt.bankId,
@@ -495,7 +525,7 @@ function releaseReservationTransition(receipt: BankTreasuryTradeReceipt): Bankin
               holders: { $elemMatch: { bankTreasuryTradeId: receipt._id } },
             },
             update: {
-              $inc: { publicFloat: receipt.units },
+              $inc: { [receipt.primary ? "unsoldUnits" : "publicFloat"]: receipt.units },
               $pull: { holders: { bankTreasuryTradeId: receipt._id } },
               $set: { updatedAt: new Date() },
             },
@@ -563,6 +593,143 @@ function cashTransition(
   bond: Bond,
   floorLocal: number
 ): BankingTransition {
+  if (receipt.primary) {
+    const primary = receipt.primary;
+    const transition = sovereignPrimaryTransition({
+      key: `bank-treasury:${receipt._id}:cash`,
+      turn: receipt.turn,
+      currency: receipt.currency,
+      budgetId: primary.budgetId,
+      poolCash: receipt.amountLocal,
+      monetaryCash: 0,
+      face: receipt.units * BOND_UNIT_FACE_VALUE,
+      annualCoupon: primary.annualCoupon,
+      treasuryCashLedgerEnabled: true,
+    });
+    transition.legs[0] = {
+      kind: "debit",
+      amount: receipt.amountLocal,
+      collection: "corporations",
+      filter: {
+        _id: oid(receipt.bankId.toHexString()),
+        "bankCharter.currency": receipt.currency,
+        "bankCharter.charteredTurn": receipt.charteredTurn,
+        "bankCharter.status": "active",
+        "bankCharter.type": { $in: ["investment", "universal"] },
+        ...primary.balanceGuard,
+        "bankCharter.cashReserves": {
+          $eq: primary.cashReservesAtQuote,
+          $gte: floorLocal + receipt.amountLocal,
+        },
+        bankPrimaryFunding: { $exists: false },
+        bankUnderwritingFunding: { $exists: false },
+        bankConstructionFunding: { $exists: false },
+        bankCharterTransfer: { $exists: false },
+      },
+      path: "bankCharter.cashReserves",
+      set: { bankPrimaryFunding: { tradeId: receipt._id, charteredTurn: receipt.charteredTurn } },
+      note: "Investment bank funds original sovereign primary units above its cash floor",
+    };
+    transition.projections = [
+      ...settledInventoryProjections(receipt),
+      ...transition.projections.filter((p) => p.collection !== BOND_MARKET_POOLS_COLLECTION),
+      {
+        collection: "corporations",
+        filter: {
+          _id: oid(receipt.bankId.toHexString()),
+          "bankPrimaryFunding.tradeId": receipt._id,
+          "bankCharter.charteredTurn": receipt.charteredTurn,
+        },
+        update: {
+          $inc: {
+            "bankCharter.sovereignTreasuryMarkValue": receipt.units * primary.markPerUnitLocal,
+          },
+        },
+        note: "Recognize only funded original-epoch sovereign holdings at executable bid",
+      },
+      {
+        collection: "financialTxLog",
+        insert: {
+          _id: primaryDocumentId(`${transition.key}:receipt`),
+          type: "gov_bond_issuance",
+          turn: receipt.turn,
+          createdAt: receipt.createdAt,
+          subjectType: "government",
+          countryId: primary.countryId,
+          subjectName: `${primary.countryId} Government`,
+          amount: receipt.amountLocal,
+          currencyCode: receipt.currency,
+          anchorAmount: receipt.amountLocal / primary.localPerAnchor,
+          meta: {
+            settlementKey: transition.key,
+            ledgerOwnedBySettlement: true,
+            bankId: receipt.bankId.toHexString(),
+            charteredTurn: receipt.charteredTurn,
+            bondId: receipt.bondId.toHexString(),
+            units: receipt.units,
+          },
+          flagged: false,
+        },
+        note: "Publish the actual bank-funded primary issuer receipt",
+      },
+      ...(primary.ledgerShadow
+        ? [
+            {
+              collection: "ledgerEntries",
+              insert: {
+                _id: primaryDocumentId(`${transition.key}:ledger`),
+                turn: primary.ledgerTurn,
+                createdAt: receipt.createdAt,
+                txType: "gov_bond_issuance",
+                balanced: true,
+                emitSite: "banking/bankTreasury:sovereignPrimary",
+                legs: [
+                  {
+                    account: `bank:${receipt.bankId}:${receipt.currency}`,
+                    amount: -receipt.amountLocal,
+                    currencyCode: receipt.currency,
+                    anchorAmount: -receipt.amountLocal / primary.localPerAnchor,
+                    role: "primary",
+                  },
+                  {
+                    account: `government_cash:${primary.countryId}:${receipt.currency}`,
+                    amount: receipt.amountLocal,
+                    currencyCode: receipt.currency,
+                    anchorAmount: receipt.amountLocal / primary.localPerAnchor,
+                    role: "primary",
+                  },
+                ],
+              },
+              note: "Witness primary cash transfer without a mint or pool counterparty",
+            },
+          ]
+        : []),
+      {
+        collection: BANK_TREASURY_TRADES_COLLECTION,
+        filter: { _id: receipt._id },
+        update: { $set: { status: "completed", updatedAt: receipt.updatedAt } },
+        note: "Acknowledge primary issue after every funded cash and debt projection",
+      },
+      {
+        collection: "corporations",
+        filter: {
+          _id: oid(receipt.bankId.toHexString()),
+          "bankPrimaryFunding.tradeId": receipt._id,
+        },
+        update: { $unset: { bankPrimaryFunding: "" } },
+        note: "Release original bank epoch only after the funded primary issue is acknowledged",
+      },
+    ];
+    transition.event = {
+      kind: "sovereign.primary_placed",
+      command: "bank.sovereign.primary.subscribe",
+      subjectType: "bank",
+      subjectId: receipt.bankId.toHexString(),
+      amount: receipt.amountLocal,
+      meta: { bondId: receipt.bondId.toHexString(), units: receipt.units },
+    };
+    return transition;
+  }
   const pool = {
     collection: BOND_MARKET_POOLS_COLLECTION,
     filter: { _id: receipt.currency },
@@ -916,8 +1083,31 @@ async function runReceipt(
     const cashRecord = await db
       .collection<{ _id: string; status?: string }>("bankMoneyMoves")
       .findOne({ _id: `bank-treasury:${receipt._id}:cash` }, { projection: { status: 1 } });
-    if (reserveRecord?.status === "applied" && !cashRecord) {
-      await finishTransition(db, releaseReservationTransition(receipt));
+    if (reserveRecord && !cashRecord) {
+      // A reservation may have landed before its journal acknowledgement.
+      // Finish that original outcome before returning its unfunded inventory.
+      const originalReserve = await resumeSettlement(db, reserveRecord._id);
+      if (originalReserve.error || originalReserve.status === "partial")
+        return {
+          status: "pending",
+          tradeId: receipt._id,
+          side: receipt.side,
+          units: receipt.units,
+          amountLocal: receipt.amountLocal,
+          error: originalReserve.error,
+        };
+      if (["applied", "replayed"].includes(originalReserve.status)) {
+        const release = await finishTransition(db, releaseReservationTransition(receipt));
+        if (release.error || !["applied", "replayed"].includes(release.status))
+          return {
+            status: "pending",
+            tradeId: receipt._id,
+            side: receipt.side,
+            units: receipt.units,
+            amountLocal: receipt.amountLocal,
+            error: release.error,
+          };
+      }
     } else if (cashRecord?.status === "partial") {
       const resumed = await resumeSettlement(db, cashRecord._id);
       if (resumed.status === "partial" || (resumed.status === "replayed" && resumed.error)) {
@@ -1023,7 +1213,7 @@ async function runReceipt(
     };
   }
 
-  await ensurePoolExists(db, receipt.currency, receipt.createdAt);
+  if (!receipt.primary) await ensurePoolExists(db, receipt.currency, receipt.createdAt);
   const overviewFloor = exactActive
     ? await bankCashFloor(db, charter!, savingsReadsAuthoritative(policy, receipt.currency), bankId)
     : { floorLocal: 0, requiredReserves: 0, withdrawalBufferLocal: 0, nextTurnDueInterest: 0 };
@@ -1122,9 +1312,11 @@ export async function tradeBankTreasuryBill(
     policy: BankingPolicySnapshot;
     tradeId?: string;
     allowFailedEstate?: boolean;
+    primary?: boolean;
+    maxCostLocal?: number;
   }
 ): Promise<BankTreasuryTradeResult> {
-  if (!input.policy.bankTreasury)
+  if (!input.policy.bankTreasury || (input.primary && !input.policy.sovereignPrimary))
     return {
       status: "rejected",
       tradeId: input.tradeId ?? "disabled",
@@ -1152,10 +1344,17 @@ export async function tradeBankTreasuryBill(
       prior.bankId.toString() !== input.bankId.toString() ||
       prior.bondId.toString() !== input.bondId.toString() ||
       prior.side !== input.side ||
-      prior.requestedUnits !== units
+      prior.requestedUnits !== units ||
+      Boolean(prior.primary) !== Boolean(input.primary) ||
+      (prior.primary && prior.primary.maxCostLocal !== input.maxCostLocal)
     )
       throw new Error("Treasury trade key is already bound to a different frozen intent");
     const terminal = terminalTradeResult(prior);
+    if (terminal && prior.primary && prior.status === "completed") {
+      const finished = await resumeSettlement(db, `bank-treasury:${prior._id}:cash`);
+      if (finished.error || !["applied", "replayed"].includes(finished.status))
+        return { ...terminal, status: "pending", error: finished.error };
+    }
     if (terminal) return terminal;
     return runReceipt(db, prior, input.policy);
   }
@@ -1196,7 +1395,7 @@ export async function tradeBankTreasuryBill(
     };
   }
   const quoteState = await loadQuoteForTrade(db, bond, charter.currency, input.turn);
-  if (input.side === "buy" && !quoteState.eligible)
+  if (input.side === "buy" && !input.primary && !quoteState.eligible)
     return {
       status: "rejected",
       tradeId: input.tradeId ?? "ineligible",
@@ -1227,7 +1426,7 @@ export async function tradeBankTreasuryBill(
     const available = Math.max(0, (charter.cashReserves ?? 0) - floor.floorLocal);
     fillUnits = Math.min(
       fillUnits,
-      bond.publicFloat ?? 0,
+      input.primary ? (bond.unsoldUnits ?? 0) : (bond.publicFloat ?? 0),
       Math.floor(available / pricePerUnitLocal)
     );
   } else {
@@ -1250,7 +1449,7 @@ export async function tradeBankTreasuryBill(
           ? "No cash is available above the bank treasury floor"
           : "The pool cannot fund a sale of this size",
     };
-  const amountLocal = roundLocal(fillUnits * pricePerUnitLocal, charter.currency);
+  let amountLocal = roundLocal(fillUnits * pricePerUnitLocal, charter.currency);
   const allocations =
     input.side === "sell"
       ? allocateBankTreasuryHolderLots(
@@ -1273,6 +1472,86 @@ export async function tradeBankTreasuryBill(
       error: "Held lots changed before sale reservation",
     };
   }
+  let primary: BankTreasuryTradeReceipt["primary"];
+  if (input.primary) {
+    if (input.side !== "buy") throw new Error("Primary offers can only be subscribed");
+    const floor = await bankCashFloor(
+      db,
+      charter,
+      savingsReadsAuthoritative(input.policy, charter.currency),
+      input.bankId
+    );
+    const planned = quoteSovereignPrimaryBankPurchase({
+      charter,
+      bond,
+      turn: input.turn,
+      requestedUnits: units,
+      askPerUnit: pricePerUnitLocal,
+      bidPerUnit: quoteState.quote.bidPerUnit,
+      maxCostLocal: input.maxCostLocal ?? 0,
+      floorLocal: floor.floorLocal,
+      playerDepositsAreLiabilities: savingsReadsAuthoritative(input.policy, charter.currency),
+    });
+    if (!planned.ok)
+      return {
+        status: "rejected",
+        tradeId,
+        side: input.side,
+        units: 0,
+        amountLocal: 0,
+        error: planned.error,
+      };
+    fillUnits = planned.units;
+    amountLocal = roundLocal(planned.cost, charter.currency);
+    const budgetId = getNationalBudgetId(bond.countryId!);
+    const budget = await db
+      .collection<FederalBudget>("federalBudget")
+      .findOne({ _id: budgetId }, { projection: { currencyCode: 1 } });
+    if (!budget || budget.currencyCode !== charter.currency)
+      return {
+        status: "rejected",
+        tradeId,
+        side: input.side,
+        units: 0,
+        amountLocal: 0,
+        error: "The issuer has no matching funded Treasury cash account",
+      };
+    const accounting = await loadPrimaryAccounting(db);
+    const localPerAnchor = primaryFinancingRate(accounting, bond.countryId!, charter.currency);
+    if (!localPerAnchor || !Number.isFinite(localPerAnchor) || localPerAnchor <= 0)
+      throw new Error("Missing sovereign primary cash valuation");
+    primary = {
+      countryId: bond.countryId!,
+      budgetId,
+      annualCoupon: planned.annualCoupon,
+      markPerUnitLocal: quoteState.quote.bidPerUnit,
+      maxCostLocal: input.maxCostLocal!,
+      localPerAnchor,
+      ledgerShadow: accounting.ledgerShadow,
+      ledgerTurn: accounting.ledgerTurn ?? input.turn,
+      cashReservesAtQuote: charter.cashReserves!,
+      balanceGuard: Object.fromEntries(
+        [
+          "npcDeposits",
+          "playerDeposits",
+          "totalDeposits",
+          "totalLoans",
+          "propBookMarkValue",
+          "sovereignTreasuryMarkValue",
+          "discountWindowDebt",
+          "discountWindowArrears",
+          "cbMarginDebt",
+          "cbMarginArrears",
+          "interbankDebt",
+          "capitalStanding",
+          "depositOffset",
+        ].map((field) => {
+          const value = charter[field as keyof BankCharter];
+          return [`bankCharter.${field}`, value === undefined ? { $exists: false } : value];
+        })
+      ),
+    };
+  }
   const now = new Date();
   const receipt: BankTreasuryTradeReceipt = {
     _id: tradeId,
@@ -1283,6 +1562,7 @@ export async function tradeBankTreasuryBill(
     side: input.side,
     requestedUnits: units,
     units: fillUnits,
+    ...(primary ? { primary } : {}),
     ...(allocations ? { allocations } : {}),
     ...(allocations ? { holderSnapshot: freezeHolderSnapshot(bond.holders ?? []) } : {}),
     pricePerUnitLocal,
@@ -1312,6 +1592,8 @@ export async function tradeBankTreasuryBill(
       saved.bondId.toString() !== input.bondId.toString() ||
       saved.side !== input.side ||
       saved.requestedUnits !== units ||
+      Boolean(saved.primary) !== Boolean(input.primary) ||
+      (saved.primary && saved.primary.maxCostLocal !== input.maxCostLocal) ||
       saved.charteredTurn !== charter.charteredTurn
     ) {
       throw new Error("Treasury trade key is already bound to a different frozen intent");

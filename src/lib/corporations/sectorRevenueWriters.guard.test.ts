@@ -356,6 +356,14 @@ const ALLOWED_WRITERS: Record<string, WriterEntry> = {
       "(revenue is derived there and restated in host currency every turn), and any " +
       "individual row with `plantsStartTurn` stamped is skipped by the planner.",
   },
+  "src/lib/banking/constructionBuildEffects.ts": {
+    writeSites: 1,
+    status: "plants-gated",
+    reason:
+      "GREP FALSE POSITIVE: the detected revenue literal initializes an `unownedSectors` " +
+      "construction market bucket at zero. The corporateSectors projection only marks " +
+      "construction financing effects as paid and does not write sector revenue.",
+  },
 };
 
 /** Writers in this sweep's territory: these MUST carry a documented plants gate. */

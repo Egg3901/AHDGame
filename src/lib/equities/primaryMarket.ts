@@ -7,6 +7,7 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import { EQUITY_MARKET_POOLS_COLLECTION } from "@/lib/db/types/equityMarketPool";
 import { issuanceDilutionFactorExpr } from "@/lib/corporations/shareConsolidation";
 import { recordShareTrade } from "@/lib/corporations/shareTradeHistory";
+import { settlePrimaryUnderwritingFill } from "@/lib/banking/underwritingSettlement";
 import { corpLiquidCapitalToAnchor, getCorpFxRate } from "@/lib/currency/corporationCapital";
 import { emitTx } from "@/lib/financialTxLog/emit";
 import {
@@ -83,14 +84,22 @@ export interface PreparedEquityPlacement {
   paidLocal: number;
 }
 
-/** Reserve real pool cash before a caller atomically creates primary float. */
-export async function prepareEquityPrimaryPlacement(
+export interface PlannedEquityPlacement {
+  poolActive: boolean;
+  currency: CurrencyCode;
+  requestedShares: number;
+  placedShares: number;
+  unsoldShares: number;
+  plannedGrossLocal: number;
+}
+
+/** Read-only placement quote used when a journal will own the actual debit. */
+export async function planEquityPrimaryPlacement(
   db: Db,
   corporation: Pick<Corporation, "countryId" | "liquidCurrencyCode">,
   requestedShares: number,
-  pricePerShareLocal: number,
-  now: Date
-): Promise<PreparedEquityPlacement> {
+  pricePerShareLocal: number
+): Promise<PlannedEquityPlacement> {
   const requested = wholeShares(requestedShares);
   const currency = equityPoolCurrency(corporation);
   const pool = await readEquityPool(db, currency);
@@ -101,7 +110,7 @@ export async function prepareEquityPrimaryPlacement(
       requestedShares: requested,
       placedShares: requested,
       unsoldShares: 0,
-      paidLocal: 0,
+      plannedGrossLocal: 0,
     };
   }
   const plan = planEquityUnderwriting({
@@ -114,25 +123,64 @@ export async function prepareEquityPrimaryPlacement(
         : undefined,
     pricePerShareLocal,
   });
-  if (plan.placedShares <= 0) {
-    return {
-      poolActive: true,
-      currency,
-      requestedShares: requested,
-      placedShares: 0,
-      unsoldShares: requested,
-      paidLocal: 0,
-    };
-  }
-  const wanted = Math.round(plan.placedShares * pricePerShareLocal * 100) / 100;
-  const debit = await debitEquityPoolGated(db, currency, wanted, "issuanceOut", now);
   return {
     poolActive: true,
     currency,
     requestedShares: requested,
+    placedShares: plan.placedShares,
+    unsoldShares: plan.unsoldShares,
+    plannedGrossLocal: Math.round(plan.placedShares * pricePerShareLocal * 100) / 100,
+  };
+}
+
+/** Reserve real pool cash before a caller atomically creates primary float. */
+export async function prepareEquityPrimaryPlacement(
+  db: Db,
+  corporation: Pick<Corporation, "countryId" | "liquidCurrencyCode">,
+  requestedShares: number,
+  pricePerShareLocal: number,
+  now: Date
+): Promise<PreparedEquityPlacement> {
+  const plan = await planEquityPrimaryPlacement(
+    db,
+    corporation,
+    requestedShares,
+    pricePerShareLocal
+  );
+  if (!plan.poolActive) {
+    return {
+      poolActive: false,
+      currency: plan.currency,
+      requestedShares: plan.requestedShares,
+      placedShares: plan.placedShares,
+      unsoldShares: 0,
+      paidLocal: 0,
+    };
+  }
+  if (plan.placedShares <= 0) {
+    return {
+      poolActive: true,
+      currency: plan.currency,
+      requestedShares: plan.requestedShares,
+      placedShares: 0,
+      unsoldShares: plan.requestedShares,
+      paidLocal: 0,
+    };
+  }
+  const debit = await debitEquityPoolGated(
+    db,
+    plan.currency,
+    plan.plannedGrossLocal,
+    "issuanceOut",
+    now
+  );
+  return {
+    poolActive: true,
+    currency: plan.currency,
+    requestedShares: plan.requestedShares,
     placedShares: debit.ok ? plan.placedShares : 0,
-    unsoldShares: debit.ok ? plan.unsoldShares : requested,
-    paidLocal: debit.ok ? wanted : 0,
+    unsoldShares: debit.ok ? plan.unsoldShares : plan.requestedShares,
+    paidLocal: debit.ok ? plan.plannedGrossLocal : 0,
   };
 }
 
@@ -158,6 +206,33 @@ export async function placePendingShareIssuances(
     .toArray();
   const result = { corporationsTouched: 0, sharesPlaced: 0, paidLocal: 0 };
   const budgetByCurrency = new Map<CurrencyCode, number>();
+  const bankIds = [
+    ...new Map(
+      corporations
+        .map((corporation) => corporation.pendingShareIssuance?.underwriting)
+        .filter((offer) => offer?.instrumentId)
+        .map((offer) => [offer!.bankCorporationId.toHexString(), offer!.bankCorporationId])
+    ).values(),
+  ];
+  const banks =
+    bankIds.length > 0
+      ? await db
+          .collection<Corporation>("corporations")
+          .find(
+            { _id: { $in: bankIds } },
+            {
+              projection: {
+                _id: 1,
+                name: 1,
+                countryId: 1,
+                liquidCurrencyCode: 1,
+                bankCharter: 1,
+              },
+            }
+          )
+          .toArray()
+      : [];
+  const bankById = new Map(banks.map((bank) => [bank._id.toHexString(), bank]));
 
   for (const corporation of corporations) {
     const pending = corporation.pendingShareIssuance;
@@ -198,81 +273,115 @@ export async function placePendingShareIssuances(
         : Math.min(1, wholeShares(pending.remainingShares));
     if (shares <= 0) continue;
     const paidLocal = Math.round(shares * price * 100) / 100;
-    const debit = await debitEquityPoolGated(db, currency, paidLocal, "issuanceOut", now);
-    if (!debit.ok) continue;
-
-    const update = await db.collection<Corporation>("corporations").updateOne(
+    const offer = pending.underwriting;
+    const underwritingBank = offer?.instrumentId
+      ? bankById.get(offer.bankCorporationId.toHexString())
+      : undefined;
+    if (offer && !underwritingBank) continue;
+    const feeLocal = offer ? Math.round(paidLocal * offer.feeRate * 100) / 100 : 0;
+    const issuerNetLocal = paidLocal - feeLocal;
+    const publication = [
       {
-        _id: corporation._id,
-        "pendingShareIssuance.remainingShares": { $gte: shares },
-      },
-      [
-        {
-          $set: {
-            ...(pending.issuedUpfront
-              ? {}
-              : { totalShares: { $add: [{ $ifNull: ["$totalShares", 0] }, shares] } }),
-            ...(pending.issuedUpfront
-              ? {}
-              : { publicFloat: { $add: [{ $ifNull: ["$publicFloat", 0] }, shares] } }),
-            liquidCapital: { $add: [{ $ifNull: ["$liquidCapital", 0] }, paidLocal] },
-            shareIssuanceProceeds: {
-              $add: [{ $ifNull: ["$shareIssuanceProceeds", 0] }, paidLocal],
-            },
-            ...(pending.issuedUpfront
-              ? {}
-              : {
-                  sharePrice: {
-                    $round: [
-                      {
-                        $multiply: [
-                          { $ifNull: ["$sharePrice", 0] },
-                          issuanceDilutionFactorExpr(shares),
-                        ],
-                      },
-                      4,
-                    ],
-                  },
-                }),
-            ...(pending.issuedUpfront
-              ? {}
-              : {
-                  fundamentalSharePrice: {
-                    $round: [
-                      {
-                        $multiply: [
-                          { $ifNull: ["$fundamentalSharePrice", { $ifNull: ["$sharePrice", 0] }] },
-                          issuanceDilutionFactorExpr(shares),
-                        ],
-                      },
-                      4,
-                    ],
-                  },
-                }),
-            pendingShareIssuance: {
-              $cond: [
-                { $lte: ["$pendingShareIssuance.remainingShares", shares] },
-                "$$REMOVE",
-                {
-                  $mergeObjects: [
-                    "$pendingShareIssuance",
+        $set: {
+          ...(pending.issuedUpfront
+            ? {}
+            : { totalShares: { $add: [{ $ifNull: ["$totalShares", 0] }, shares] } }),
+          ...(pending.issuedUpfront
+            ? {}
+            : { publicFloat: { $add: [{ $ifNull: ["$publicFloat", 0] }, shares] } }),
+          ...(!offer
+            ? {
+                liquidCapital: { $add: [{ $ifNull: ["$liquidCapital", 0] }, paidLocal] },
+              }
+            : {}),
+          shareIssuanceProceeds: {
+            $add: [{ $ifNull: ["$shareIssuanceProceeds", 0] }, issuerNetLocal],
+          },
+          ...(pending.issuedUpfront
+            ? {}
+            : {
+                sharePrice: {
+                  $round: [
                     {
-                      remainingShares: {
-                        $subtract: ["$pendingShareIssuance.remainingShares", shares],
-                      },
+                      $multiply: [
+                        { $ifNull: ["$sharePrice", 0] },
+                        issuanceDilutionFactorExpr(shares),
+                      ],
                     },
+                    4,
                   ],
                 },
-              ],
-            },
-            updatedAt: now,
+              }),
+          ...(pending.issuedUpfront
+            ? {}
+            : {
+                fundamentalSharePrice: {
+                  $round: [
+                    {
+                      $multiply: [
+                        { $ifNull: ["$fundamentalSharePrice", { $ifNull: ["$sharePrice", 0] }] },
+                        issuanceDilutionFactorExpr(shares),
+                      ],
+                    },
+                    4,
+                  ],
+                },
+              }),
+          pendingShareIssuance: {
+            $cond: [
+              { $lte: ["$pendingShareIssuance.remainingShares", shares] },
+              "$$REMOVE",
+              {
+                $mergeObjects: [
+                  "$pendingShareIssuance",
+                  {
+                    remainingShares: {
+                      $subtract: ["$pendingShareIssuance.remainingShares", shares],
+                    },
+                  },
+                ],
+              },
+            ],
           },
+          updatedAt: now,
         },
-      ]
-    );
-    if (update.modifiedCount === 0) {
-      await refundEquityPoolDebit(db, currency, paidLocal, "issuanceOut", now);
-      continue;
+      },
+    ];
+    if (offer && underwritingBank && offer.instrumentId) {
+      const settlement = await settlePrimaryUnderwritingFill(db, {
+        bank: underwritingBank,
+        issuer: corporation,
+        issuerCurrencyCode: currency,
+        offer,
+        instrumentId: offer.instrumentId,
+        grossPlacedLocal: paidLocal,
+        turn,
+        now,
+        poolCollection: EQUITY_MARKET_POOLS_COLLECTION,
+        instrumentProjection: {
+          collection: "corporations",
+          filter: {
+            _id: corporation._id,
+            "pendingShareIssuance.remainingShares": { $gte: shares },
+          },
+          pipelineUpdate: publication,
+          note: "Publish the filled share tranche after its cash and underwriting fee settle",
+        },
+      });
+      if (settlement.status !== "applied" && settlement.status !== "replayed") continue;
+    } else {
+      const debit = await debitEquityPoolGated(db, currency, paidLocal, "issuanceOut", now);
+      if (!debit.ok) continue;
+      const update = await db
+        .collection<Corporation>("corporations")
+        .updateOne(
+          { _id: corporation._id, "pendingShareIssuance.remainingShares": { $gte: shares } },
+          publication
+        );
+      if (update.modifiedCount === 0) {
+        await refundEquityPoolDebit(db, currency, paidLocal, "issuanceOut", now);
+        continue;
+      }
     }
     budget -= paidLocal;
     budgetByCurrency.set(currency, budget);
@@ -298,13 +407,14 @@ export async function placePendingShareIssuances(
       subjectType: "corporation",
       subjectId: corporation._id,
       subjectName: corporation.name,
-      amount: paidLocal,
+      amount: issuerNetLocal,
       currencyCode: currency,
       meta: {
         sharesPlaced: shares,
         sharesPending: pending.remainingShares - shares,
         counterparty: "equity_market_pool",
         deferredPlacement: true,
+        ...(offer ? { grossPlacedLocal: paidLocal, underwritingFeeLocal: feeLocal } : {}),
       },
     });
   }

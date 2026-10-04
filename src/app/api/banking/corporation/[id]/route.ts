@@ -177,6 +177,10 @@ async function handleGET(_request: Request, { params }: RouteParams) {
       return NextResponse.json({
         privateBankingEnabled: privateEnabled,
         bankPropTradingEnabled: propTradingEnabled,
+        primaryUnderwritingEnabled: policy.primaryUnderwriting === true,
+        ...(policy.primaryUnderwriting
+          ? { underwritingReceipts: corporation.bankUnderwritingReceipts ?? [] }
+          : {}),
         bankTreasuryEnabled: policy.bankTreasury,
         bankTreasury: null,
         bankPropForexFeesEnabled: policy.propForexFees,
@@ -470,6 +474,10 @@ async function handleGET(_request: Request, { params }: RouteParams) {
     return NextResponse.json({
       privateBankingEnabled: privateEnabled,
       bankPropTradingEnabled: propTradingEnabled,
+      primaryUnderwritingEnabled: policy.primaryUnderwriting === true,
+      ...(policy.primaryUnderwriting
+        ? { underwritingReceipts: corporation.bankUnderwritingReceipts ?? [] }
+        : {}),
       bankTreasuryEnabled: policy.bankTreasury,
       bankTreasury,
       bankPropForexFeesEnabled: policy.propForexFees,
@@ -550,6 +558,7 @@ async function handleGET(_request: Request, { params }: RouteParams) {
               lastBankingDepositInterest: charter.lastBankingDepositInterest ?? 0,
               lastBankingLoanInterest: charter.lastBankingLoanInterest ?? 0,
               lastBankingLoanOriginationFees: charter.lastBankingLoanOriginationFees ?? 0,
+              lastBankingUnderwritingFees: charter.lastBankingUnderwritingFees ?? 0,
               loanOriginationFeesLifetime: charter.loanOriginationFeesLifetime ?? 0,
               lastBankingInterbankInterestPaid: charter.lastBankingInterbankInterestPaid ?? 0,
               lastBankingInterbankInterestReceived:

@@ -153,6 +153,7 @@ export type {
   SectorBuildOrder,
   ShareOrder,
   Shareholder,
+  MediaProductAdvertisingObligationV1,
   SoeMandate,
   CeoTenure,
 } from "./corporation";
