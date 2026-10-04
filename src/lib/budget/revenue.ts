@@ -39,6 +39,8 @@ import { loadFxRatesByCurrency } from "@/lib/currency/corporationCapital";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { SourcingNetworkDoc } from "@/lib/logistics/sourcingLedger";
 import { getCurrentTurn } from "@/lib/currentTurn";
+import { loadSovereignCouponBooks } from "@/lib/bonds/sovereignCouponBook";
+import { sovereignStockAnnualService } from "@/lib/budget/rules/sovereignDebtService";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
 
 /**
@@ -551,7 +553,7 @@ export async function refreshNationalBudgetRevenue(db: Db, budgetIds?: string[])
   // otherwise re-read them per budget. Money wiring (phase B): same hoist -
   // one gameConfig flag check and one sourcingNetworkLoad read for the whole
   // pass, never one per country.
-  const [plantsContext, eraContext, fxByCurrency, moneyWiringConfig, refugeeServiceCosts] =
+  const [plantsContext, eraContext, fxByCurrency, moneyWiringConfig, refugeeServiceCosts, couponBooks] =
     await Promise.all([
       loadPlantsBudgetContext(db),
       getEraContext(db).catch(() => null),
@@ -561,6 +563,8 @@ export async function refreshNationalBudgetRevenue(db: Db, budgetIds?: string[])
         .findOne({ _id: "default" }, { projection: { interstateMoneyWiringEnabled: 1 } }),
       // All countries share this projected obligation load; never one per budget.
       loadRefugeeServiceCosts(db),
+      // Debt interest on the coupons the stock carries (#2089), one read per pass.
+      loadSovereignCouponBooks(db),
     ]);
   const moneyWiringEnabled = moneyWiringConfig?.interstateMoneyWiringEnabled === true;
   const sourcedImportsByCountry = moneyWiringEnabled
@@ -589,7 +593,12 @@ export async function refreshNationalBudgetRevenue(db: Db, budgetIds?: string[])
       const spending = await calculateFederalSpending(
         db,
         { ...budget, revenue },
-        budget.debt.principal * budget.debt.interestRate,
+        sovereignStockAnnualService({
+          principal: budget.debt.principal,
+          book: couponBooks.get(String(countryId)) ?? null,
+          marginalRate: budget.debt.interestRate,
+          imfBailoutActive: budget.imfSovereignBailoutActive,
+        }),
         eraContext ?? undefined,
         refugeeServiceCosts
       );

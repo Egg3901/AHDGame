@@ -19,6 +19,7 @@ import type { GameConfig } from "@/lib/db/types/gameConfig";
 import { calculateFederalSpending, calculateStateSpending } from "./spending";
 import { applyLegacyTrustDelta } from "@/lib/sovereignDefault/sideEffects/trustHit";
 import { processAnnualDebt, triggerDebtCeilingCrisis, getDebtThreshold } from "./debt";
+import { loadSovereignCouponBooks } from "@/lib/bonds/sovereignCouponBook";
 import { processFormulaGrants, updateStateGrantRevenue } from "./grants";
 import { calculateCountryInflation } from "./inflation";
 import {
@@ -117,12 +118,15 @@ export async function processFiscalYear(
   // one FX table, one sourcingNetworkLoad read for the whole annual pass -
   // same hoist-once pattern as `refreshNationalBudgetRevenue`, never one read
   // per country in this per-budget loop.
-  const [moneyWiringConfig, fxByCurrency, tariffExposureSnapshot] = await Promise.all([
+  const [moneyWiringConfig, fxByCurrency, tariffExposureSnapshot, couponBooks] = await Promise.all([
     db
       .collection<GameConfig>("gameConfig")
       .findOne({ _id: "default" }, { projection: { interstateMoneyWiringEnabled: 1 } }),
     loadFxRatesByCurrency(db),
     loadTurnTariffInflationExposure(db, currentTurn),
+    // Debt interest is charged on the coupons the stock carries (#2089): one
+    // projected read for the annual pass, never one per country.
+    loadSovereignCouponBooks(db),
   ]);
   const moneyWiringEnabled = moneyWiringConfig?.interstateMoneyWiringEnabled === true;
   const sourcedImportsByCountry = moneyWiringEnabled
@@ -286,7 +290,12 @@ export async function processFiscalYear(
     }
 
     // Debt-to-GDP uses the SMOOTHED national GDP (not the raw Σ) — default-stability guard.
-    const debtResult = await processAnnualDebt(db, federalBudget, newGdpSmoothed);
+    const debtResult = await processAnnualDebt(
+      db,
+      federalBudget,
+      newGdpSmoothed,
+      couponBooks.get(countryId) ?? null
+    );
     const federalSpending = await calculateFederalSpending(
       db,
       {
