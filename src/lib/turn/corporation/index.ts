@@ -24,6 +24,10 @@ import { buildMarketContext } from "@/lib/market/marketContext";
 import { runClearingPrePass } from "./clearingPrePass";
 import { computeQualityUpdates } from "./brandQualityTurn";
 import { consumeManufacturingDevelopmentReceiptsV2 } from "@/lib/products/manufacturingProjectPersistence";
+import {
+  MANUFACTURING_PRODUCT_PROJECTS_V2,
+  type ManufacturingProductProject,
+} from "@/lib/products/manufacturingProject";
 import { getEffectiveStrategyRates } from "@/lib/constants/sectorStrategies";
 import { settleSupplyAgreements, type SettleableSupplyAgreement } from "./settleSupplyAgreements";
 import type { CommodityType } from "@/lib/constants/commodities";
@@ -595,12 +599,26 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     techLedger: nppTechLedger,
     foundingCashWitnesses = [],
     reinvestmentCashWitnesses = [],
+    manufacturingProductProjects: nppManufacturingProductProjects,
   } = await processNppCorporationDecisions(db, turn ?? 0, now, techTreesEnabled, {
     corporations: lookups.corporations,
     issuerBondsByCorpId: lookups.bondsByCorpId,
     heldBondsByCorpId: lookups.bondsHeldByCorpId,
   });
   mark("nppCorpDecisions");
+
+  for (const project of nppManufacturingProductProjects) {
+    try {
+      await db
+        .collection<ManufacturingProductProject>(MANUFACTURING_PRODUCT_PROJECTS_V2)
+        .insertOne(project);
+    } catch (error) {
+      if (typeof error === "object" && error !== null && "code" in error && error.code === 11000) {
+        continue;
+      }
+      throw error;
+    }
+  }
 
   // Merge NPP corp updates into the main corpOps
   for (const nppUpdate of nppCorpUpdates) {

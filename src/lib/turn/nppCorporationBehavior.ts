@@ -10,6 +10,7 @@ import type {
   StateMetrics,
   GameState,
   ExchangeRate,
+  GameConfig,
 } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { netPerTurnDebtServiceAnchor } from "@/lib/bonds/corpBondCashflows";
@@ -85,10 +86,27 @@ import { foundingStarterUnits, sectorEntryFeeAnchor } from "@/lib/corporations/f
 import { unownedHeadroomUnitsOf } from "@/lib/corporations/marketShare";
 import { buildNppNationalShareResolver } from "@/lib/turn/npp/nationalDominancePricing";
 import { resolvePresetIdFromGameState } from "@/lib/world/countryReadinessContract";
-import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
+import { getMarketSystemMode, marketAtLeast } from "@/lib/market/featureFlag";
 import { buildNppPriceSignals } from "@/lib/turn/npp/priceSignals";
 import type { RelocationPrimeBank } from "@/lib/corporations/issueRelocationBond";
 import { loadNppBankRateSnapshot } from "@/lib/turn/npp/bankRateSnapshot";
+import {
+  MANUFACTURING_PRODUCT_PROJECTS_V2,
+  type ManufacturingProductProject,
+} from "@/lib/products/manufacturingProject";
+import {
+  legalManufacturingProductKinds,
+  isLegalManufacturingProductForPlant,
+  type ManufacturingPlant,
+  type ProductPlantAllocation,
+} from "@/lib/products/manufacturingEligibility";
+import { chooseNppManufacturingProduct } from "@/lib/products/manufacturingNpp";
+import { commodityMixWeight, COMMODITY_BASE_PRICES } from "@/lib/constants/commodities";
+import { getStrategy } from "@/lib/constants/sectorStrategies";
+import {
+  MANUFACTURING_DEVELOPMENT_ELAPSED_TURNS,
+  manufacturingDevelopmentThresholdAnchor,
+} from "@/lib/products/manufacturingRules";
 import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
 import {
   anchorToCorpCapital,
@@ -215,6 +233,7 @@ export async function processNppCorporationDecisions(
   techLedger: TechUnlockLedgerInput[];
   foundingCashWitnesses?: NppFoundingCashWitness[];
   reinvestmentCashWitnesses?: NppReinvestmentCashWitness[];
+  manufacturingProductProjects: ManufacturingProductProject[];
 }> {
   const nppCorps = preloaded
     ? preloaded.corporations.filter((corp) => corp.ceoType === "npp" && corp.suspended !== true)
@@ -242,6 +261,7 @@ export async function processNppCorporationDecisions(
       newSectors,
       divestedSectorIds: allDivestedSectorIds,
       techLedger,
+      manufacturingProductProjects: [],
     };
 
   const corpIds = nppCorps.map((c) => c._id);
@@ -335,8 +355,40 @@ export async function processNppCorporationDecisions(
   // `globalSectors` snapshot: no turn-path reads. See capacityDecisionTelemetry.
   const competitorsByBucket = buildCapacityCompetitorIndex(globalSectors);
 
-  // Resolve the shared plants pricing context once for the cohort.
-  const plantsEnabled = marketAtLeast(await getMarketSystemModeForDb(db), "plants");
+  // Resolve plants and the gated product slot from one shared config snapshot.
+  const nppMarketConfig = await db.collection<GameConfig>("gameConfig").findOne(
+    { _id: "default" },
+    { projection: { marketSystemMode: 1, productLinesV2Enabled: 1 } }
+  );
+  const marketMode = await getMarketSystemMode(nppMarketConfig);
+  const plantsEnabled = marketAtLeast(marketMode, "plants");
+  const productLinesEnabled = plantsEnabled && nppMarketConfig?.productLinesV2Enabled === true;
+  const activeManufacturingProjectByCorpId = new Map<string, ManufacturingProductProject>();
+  if (productLinesEnabled) {
+    const activeProjects = await db
+      .collection<ManufacturingProductProject>(MANUFACTURING_PRODUCT_PROJECTS_V2)
+      .find({ activeCorporationId: { $in: nppCorps.map((corp) => corp._id.toString()) } })
+      .project({
+        _id: 1,
+        corporationId: 1,
+        activeCorporationId: 1,
+        kindId: 1,
+        stage: 1,
+        stageStartedTurn: 1,
+        allocations: 1,
+        startedTurn: 1,
+        lastProcessedTurn: 1,
+        developmentPaidAnchor: 1,
+        paidThresholdAnchor: 1,
+        elapsedDevelopmentTurns: 1,
+        elapsedThresholdTurns: 1,
+      })
+      .toArray();
+    for (const project of activeProjects) {
+      activeManufacturingProjectByCorpId.set(project.corporationId, project);
+    }
+  }
+  const manufacturingProductProjects: ManufacturingProductProject[] = [];
   let plants: NppPlantsContext | undefined;
   let bankRates: RelocationPrimeBank[] | undefined;
   if (plantsEnabled) {
@@ -439,6 +491,84 @@ export async function processNppCorporationDecisions(
 
   for (const corp of nppCorps) {
     const sectors = sectorsByCorp.get(corp._id.toString()) ?? [];
+    if (
+      productLinesEnabled &&
+      !activeManufacturingProjectByCorpId.has(corp._id.toString()) &&
+      plants?.enabled === true
+    ) {
+      const manufacturingPlants: ManufacturingPlant[] = sectors.map((sector) => ({
+        sectorId: sector._id.toString(),
+        corporationId: corp._id.toString(),
+        sectorType: sector.sectorType,
+        strategyId: sector.strategyId,
+        capitalStock: sector.capitalStock ?? 0,
+        plantCount: sector.plantCount ?? 0,
+        mothballed: sector.mothballed,
+      }));
+      const legalKinds = legalManufacturingProductKinds(manufacturingPlants, {
+        currentYear: techCurrentYear > 0 ? techCurrentYear : undefined,
+        techTreesEnabled,
+        unlockedTechNodeIds: corp.unlockedTechNodeIds,
+      });
+      const profits = analyzeSectorProfitability(sectors, true);
+      const marginBySectorId = new Map(
+        profits.map((profit) => [profit.sector._id.toString(), profit.margin])
+      );
+      const productCandidates = legalKinds.flatMap((kind) => {
+        const compatiblePlants = manufacturingPlants.filter((plant) =>
+          isLegalManufacturingProductForPlant(kind.id, plant)
+        );
+        const capacityStock = compatiblePlants.reduce((sum, plant) => sum + plant.capitalStock, 0);
+        if (capacityStock <= 0) return [];
+        const marginWeighted = compatiblePlants.reduce(
+          (sum, plant) => sum + plant.capitalStock * (marginBySectorId.get(plant.sectorId) ?? 0),
+          0
+        );
+        const mixWeight = compatiblePlants.reduce(
+          (sum, plant) =>
+            sum +
+            plant.capitalStock *
+              commodityMixWeight(
+                getStrategy(plant.sectorType, plant.strategyId ?? "standard").supply,
+                COMMODITY_BASE_PRICES,
+                kind.outputCommodity
+              ),
+          0
+        );
+        return [
+          {
+            kindId: kind.id,
+            outputCommodity: kind.outputCommodity,
+            allocations: compatiblePlants.map(
+              (plant): ProductPlantAllocation => ({ sectorId: plant.sectorId, share: 1 })
+            ),
+            capacityStock,
+            capacityWeightedMarginPct: marginWeighted / capacityStock,
+            scarcityPriceRatio: priceRatioOf(kind.outputCommodity),
+            supplyMixWeight: mixWeight / capacityStock,
+          },
+        ];
+      });
+      const selectedProduct = chooseNppManufacturingProduct(productCandidates);
+      if (selectedProduct) {
+        manufacturingProductProjects.push({
+          _id: new ObjectId().toString(),
+          corporationId: corp._id.toString(),
+          activeCorporationId: corp._id.toString(),
+          kindId: selectedProduct.kindId,
+          stage: "development",
+          stageStartedTurn: turn,
+          allocations: selectedProduct.allocations,
+          startedTurn: turn,
+          developmentPaidAnchor: 0,
+          paidThresholdAnchor: manufacturingDevelopmentThresholdAnchor(
+            selectedProduct.capacityStock
+          ),
+          elapsedDevelopmentTurns: 0,
+          elapsedThresholdTurns: MANUFACTURING_DEVELOPMENT_ELAPSED_TURNS,
+        });
+      }
+    }
     const archetype =
       (corp.ceoId && archetypeByNppId.get(corp.ceoId.toString())) || DEFAULT_ARCHETYPE;
     const corpCurrency = resolveCorpLiquidCurrencyCode(corp);
@@ -589,6 +719,7 @@ export async function processNppCorporationDecisions(
     newSectors,
     divestedSectorIds: allDivestedSectorIds,
     techLedger,
+    manufacturingProductProjects,
     ...(foundingCashWitnesses.length ? { foundingCashWitnesses } : {}),
     ...(reinvestmentCashWitnesses.length ? { reinvestmentCashWitnesses } : {}),
   };
