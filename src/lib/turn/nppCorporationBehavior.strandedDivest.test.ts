@@ -130,6 +130,17 @@ describe("NPP stranded-plant divest (section 1b)", () => {
     expect(d.divestedSectorIds ?? []).not.toContainEqual(cold._id);
   });
 
+  it("never sheds a plant while its construction loan remains secured", () => {
+    const pledged = stranded({
+      constructionFinancing: {
+        status: "building",
+        escrowLocal: 0,
+      } as CorporateSector["constructionFinancing"],
+    });
+    const d = decide(corp(), [pledged, sector()]);
+    expect(d.divestedSectorIds ?? []).not.toContainEqual(pledged._id);
+  });
+
   it("never divests the last remaining sector", () => {
     const only = stranded();
     const d = decide(corp(), [only]);

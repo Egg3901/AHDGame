@@ -308,6 +308,8 @@ export interface BankLoan {
   /** Quoted fee withheld from named-loan proceeds. Absent legacy requests pay no fee. */
   originationFee?: number;
   outstanding: number;
+  /** Actual cash principal recovered from pledged property or build refunds. */
+  collateralRecoveredLocal?: number;
   ratePercent: number;
   originatedTurn: number;
   /** Contract length in turns (required for named player loans). */
@@ -329,6 +331,17 @@ export interface BankLoan {
   arrearsTurns?: number;
   /** Idempotency key for turn processing — standalone Mongo has no transactions. */
   lastProcessedTurn?: number;
+  /** Lender decision lock for a reserved construction claim, before any cash moves. */
+  constructionDecision?: "approve" | "reject";
+  /** One stable cash receipt owns debt quoting until its projections finish. */
+  constructionSettlementOwner?: string;
+  /** Sector pledge attached to a paid build, with principal capped by new construction cost. */
+  constructionCollateral?: {
+    claimId: string;
+    sectorId: ObjectId;
+    quotedCostLocal: number;
+    constructionCostLocal: number;
+  };
 }
 
 /** Collection: depositInsuranceFunds. One per currency; premium-funded, Treasury backstop. */

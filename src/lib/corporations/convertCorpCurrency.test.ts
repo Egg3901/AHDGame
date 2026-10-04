@@ -89,6 +89,53 @@ describe("convertCorpCurrency", () => {
     expect(db.collectionMocks.corporations).toBeUndefined();
   });
 
+  it("refuses a currency change before share escrow work when a sector has a secured construction claim", async () => {
+    const corp = makeCorp();
+    const claim = {
+      claimId: "claim-1",
+      loanId: "loan-1",
+      bankId: "bank-1",
+      charteredTurn: 1,
+      borrowerId: corp._id.toHexString(),
+      currency: "JPY",
+      constructionCostLocal: 100,
+      collateralCostLocal: 100,
+      borrowerContributionLocal: 50,
+      principal: 50,
+      proceedsLocal: 50,
+      termTurns: 12,
+      ratePercent: 5,
+      order: { unitsOrdered: 1, costPaidAnchor: 100, startTurn: 1, onlineTurn: 2 },
+      status: "building",
+      escrowLocal: 0,
+    } as CorporateSector["constructionFinancing"];
+    const sector = { _id: new ObjectId(), corporationId: corp._id, constructionFinancing: claim };
+    db.collectionMocks.corporateSectors = db.collection("corporateSectors") as never;
+    db.collectionMocks.corporateSectors.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([sector]),
+    });
+
+    const result = await convertCorpCurrency(
+      db as unknown as Db,
+      corp,
+      "GBP",
+      fxMap([
+        ["JPY", 130],
+        ["GBP", 0.8],
+      ]),
+      new Date(),
+      true
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("secured construction"),
+    });
+    expect(db.collectionMocks.shareOrders).toBeUndefined();
+    expect(db.collectionMocks.shareListings).toBeUndefined();
+    expect(db.collectionMocks.corporations).toBeUndefined();
+  });
+
   it("scales every corp money field by toRate / fromRate (JPY → GBP)", async () => {
     const corp = makeCorp({ liquidCurrencyCode: "JPY" });
     // 130 JPY / ₳, 0.8 GBP / ₳ → scale = 0.8 / 130 ≈ 0.006154
@@ -378,9 +425,12 @@ describe("convertCorpCurrency", () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("unreachable");
     expect(result.rateUnavailable).toBe(true);
-    // The failure aborts before corp and sector writes.
+    // The sector snapshot is read before share-market cleanup so secured
+    // property can refuse a currency flip before unrelated escrow mutations.
+    // The failure still aborts before any corp or sector writes.
     expect(db.collectionMocks.corporations).toBeUndefined();
-    expect(db.collectionMocks.corporateSectors).toBeUndefined();
+    expect(db.collectionMocks.corporateSectors!.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.corporateSectors!.bulkWrite).not.toHaveBeenCalled();
   });
 
   it("transaction success path: corp + sectors commit via withTransaction", async () => {

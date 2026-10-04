@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { ObjectId } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
+import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import {
   buildSectorStrategySection,
+  buildSectorForSaleInfo,
   computeSectorTaxSection,
 } from "@/lib/corporations/queries/sectorDetailSections";
 import type { Corporation, CorporateSector, FederalBudget, StateBudget } from "@/lib/db/types";
@@ -126,5 +128,39 @@ describe("persisted operating model strategy reads", () => {
 
     expect(section.currentStrategyName).toBe("Newspaper");
     expect(section.availableStrategies.some((strategy) => strategy.id === "newspaper")).toBe(false);
+  });
+});
+
+describe("pledged property sale affordability", () => {
+  it("includes actual native FX fees in the buyer quote and refuses a same-market merge", async () => {
+    const memory = createInMemoryDb();
+    const viewer = makeCorp({ liquidCurrencyCode: "EUR", liquidCapital: 300_500 });
+    const sector = makeSector({
+      forSale: { priceAnchor: 150_000, listedAt: new Date(0), npvAnchor: 150_000, pledged: true },
+      constructionFinancing: { currency: "USD" } as CorporateSector["constructionFinancing"],
+    });
+    memory.seed("corporateSectors", []);
+    const args = { sector, viewerCorporation: viewer, isCeo: false, viewerCorpFxRate: 2 };
+    const quote = await buildSectorForSaleInfo(memory as unknown as Db, args);
+    expect(quote).toMatchObject({
+      priceInViewerCapital: 301_500,
+      hasFunds: false,
+      eligible: false,
+    });
+    viewer.liquidCapital = 400_000;
+    memory.seed("corporateSectors", [
+      { ...makeSector({ corporationId: viewer._id, industryModel: "vehicles" }) },
+    ]);
+    expect(await buildSectorForSaleInfo(memory as unknown as Db, args)).toMatchObject({
+      hasFunds: true,
+      conflict: false,
+      eligible: true,
+    });
+    memory.seed("corporateSectors", [{ ...makeSector({ corporationId: viewer._id }) }]);
+    expect(await buildSectorForSaleInfo(memory as unknown as Db, args)).toMatchObject({
+      hasFunds: true,
+      conflict: true,
+      eligible: false,
+    });
   });
 });

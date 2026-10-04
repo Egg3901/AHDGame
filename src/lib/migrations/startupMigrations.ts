@@ -12,6 +12,7 @@ import { migration as politicalMediaOrderIndexes } from "./entries/2026-10-04-po
 import { migration as bankTreasuryTradeIndexes } from "./entries/2026-10-04-bank-treasury-trade-indexes";
 import { migration as industryModelMarketIndexes } from "./entries/2026-10-04-industry-model-market-indexes";
 import { migration as mediaDiscriminatorMarketIndexes } from "./entries/2026-10-04-media-discriminator-market-indexes";
+import { migration as constructionServiceLeaseIndex } from "./entries/2026-10-04-construction-service-lease-index";
 import { runMigrations, type RunSummary } from "./runner";
 import type { Migration } from "./types";
 
@@ -49,6 +50,7 @@ export const REQUIRED_STARTUP_MIGRATIONS: readonly Migration[] = [
   // create a vehicles market beside generic manufacturing.
   industryModelMarketIndexes,
   mediaDiscriminatorMarketIndexes,
+  constructionServiceLeaseIndex,
 ];
 
 export async function runRequiredStartupMigrations(db: Db): Promise<RunSummary> {

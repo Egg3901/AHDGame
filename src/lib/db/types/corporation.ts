@@ -179,6 +179,20 @@ export interface Corporation {
    * at least one financial sector; one bank per corp. See src/lib/db/types/bank.ts.
    */
   bankCharter?: import("./bank").BankCharter;
+  /** Holds an originating epoch until construction cash and its loan book settle. */
+  bankConstructionFunding?: {
+    loanId: string;
+    charteredTurn: number;
+    kind: "funding" | "aborting" | "returning" | "servicing" | "recovery";
+    /** Written with the actual vault debit, never from a quote or cached book. */
+    disbursed: boolean;
+    service?: { key: string; turn: number; sectorId?: string };
+    depositReturn?: {
+      cause: "failure" | "revocation" | "admin_unwind" | "charter_switch";
+      turn: number;
+      releaseResidualToOwner: boolean;
+    };
+  };
   /** Public media editorial position. Missing means neutral for legacy worlds. */
   editorialStance?: { economic: number; social: number };
   /** Funded sale proceeds held here until delivered to the matching charter or insurer. */
@@ -780,6 +794,9 @@ export interface SectorBuildOrder {
    * `src/lib/corporations/buildDelivery.ts`.
    */
   smooth?: boolean;
+  /** Paid, secured construction loan. Absent on ordinary cash-funded orders. */
+  constructionLoanId?: string;
+  constructionClaimId?: string;
 }
 
 export interface CorporateSector {
@@ -1158,6 +1175,10 @@ export interface CorporateSector {
    * written outside plants mode.
    */
   buildQueue?: SectorBuildOrder[];
+  /** Frozen funded build claim and its cash escrow; absent on legacy sectors. */
+  constructionFinancing?: import("@/lib/banking/rules/constructionBuild").ConstructionBuildClaim;
+  /** A durable owner mutation excludes new construction claims until completion. */
+  constructionPropertyTransition?: { key: string; kind: string };
   /**
    * Plants tier (P3a): construction in progress, in ₳ (anchor), the sum of
    * `costPaidAnchor` across the outstanding `buildQueue` orders (D10).
@@ -1483,6 +1504,8 @@ export interface CorporateSector {
    * if margins shift before purchase.
    */
   forSale?: {
+    foreclosed?: boolean;
+    pledged?: boolean;
     /** When the listing was created */
     listedAt: Date;
     /**
