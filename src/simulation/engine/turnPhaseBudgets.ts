@@ -29,7 +29,7 @@ export const DEFAULT_PHASE_ROUND_TRIP_BUDGET = 500;
  * Six entries below were reconciled against production turnLogs for
  * successful turns 1063-1117 (55 turns, 2026-09-25). Their budgets sit about
  * 1.2x the observed phase p95; cadence-gated phases use executed turns only.
- * See DEAD_WEIGHT_PLAN_AUDIT.md section 8 for counts and sample caveats.
+ * Sample counts and caveats are in the 1.10.0 dev changelog.
  */
 export const PHASE_ROUND_TRIP_BUDGETS: Readonly<Record<string, number>> = {
   russianCouncilComposition: 100,

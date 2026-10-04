@@ -28,7 +28,7 @@ Follow the README. `npm run bootstrap:full` creates a complete local world; `npm
 ## The bar for a PR
 
 1. Branch off `development` and target `development` with the PR. One topic per PR, small over large.
-2. Run `npm run verify` for lint, format, typecheck, the architecture audit, and tests. Run `npm run verify:build` for the same Next build CI uses. The architecture audit has known pre-existing findings; new findings from your change are yours, old ones aren't.
+2. Run `npm run verify` for lint, format, typecheck, the architecture audit, and tests. Run `npm run verify:build` for the same Next build CI uses. The architecture audit also runs in CI; new findings from your change are yours to fix.
 3. New or changed API routes need integration tests. Copy the pattern from any `route.test.ts`.
 4. New logic gets unit tests next to it.
 5. Every PR ships a changelog note with the change. Run `npm run changelog:new -- "Title of the change"`; it writes `content/changelog/unreleased/<topic>.md`, named for your branch so it cannot collide with another PR in flight. The note carries no version: a version belongs to a release, and `npm run changelog:release -- <version> --title "..."` folds every unreleased note into one `content/changelog/dev/<version>.md` and drafts the player-facing `content/changelog/public/<version>.md` when the release is actually cut. The generated frontmatter lists the accepted `badges` (`major`, `minor`, `patch`, `hotfix`) and `areas` (`backend`, `frontend`, `fullstack`, `engine`) in a comment; anything else fails the pre-commit hook and CI. Descriptive words for what the change was about go in `tags`, which is free text.
@@ -61,6 +61,6 @@ The UI chrome (navigation, settings, tutorial) is localized with next-intl. Game
 
 ## Review
 
-The maintainer reviews every PR. Balance and economy paths get extra scrutiny and may require a worldsim run. Squash merge only; your PR title becomes the commit message, so write it like one.
+The maintainer reviews every PR. Balance and economy paths get extra scrutiny and may require a worldsim run. Feature PRs squash merge into `development`; your PR title becomes the commit message, so write it like one. The maintainer promotes `development` to `staging` to `main` with merge commits.
 
 By contributing you agree your contribution is licensed under [PolyForm Noncommercial 1.0.0](./LICENSE.md) and that Lakeside Games may use it in the hosted game.
