@@ -188,7 +188,7 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
           bonds: [],
           anchorRate: b.sovereignCouponClaims[0].anchorRate,
           forexEnabled,
-          corporateQuotes,
+          corporateQuotes: corporationQuotes,
         });
       }
       continue;
@@ -213,7 +213,7 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
               ),
               anchorRate: valuation.anchorRate!,
               forexEnabled,
-              corporateQuotes,
+              corporateQuotes: corporationQuotes,
             });
           }
           break;
@@ -379,7 +379,7 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
               ),
               anchorRate: valuation.anchorRate!,
               forexEnabled,
-              corporateQuotes,
+              corporateQuotes: corporationQuotes,
             }
           );
         }
