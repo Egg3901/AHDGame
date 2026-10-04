@@ -1,6 +1,6 @@
 import { getStrategy } from "../../src/lib/constants/sectorStrategies";
 import { getSectorLaborShare } from "../../src/lib/labour/laborCost";
-import { PLANT_OVERHEAD_OUTPUT_SHARE } from "../../src/lib/corporations/plantOverhead";
+import { PLANT_OVERHEAD_OUTPUT_SHARE } from "../../src/lib/corporations/plantCosts/rules";
 import { costPlusPriceFactor } from "../../src/lib/market/clearing";
 import { priceRealizationFactor } from "../../src/lib/market/priceRealization";
 
