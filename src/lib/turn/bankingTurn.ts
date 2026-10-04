@@ -27,12 +27,11 @@ import { MONEY_MOVE_COLLECTION } from "@/lib/banking/moneyMove";
 import { computeNpcDepositShare, equityCappedDepositCeiling } from "@/lib/banking/deposits";
 import { domesticDepositRetention } from "@/lib/centralBank/marketEffects";
 import {
-  computeInsurancePremium,
   computeReserveRatioActual,
-  ensureFund,
   getInsuredCap,
   sumInsuredPlayerDeposits,
 } from "@/lib/banking/insurance";
+import { settleInsurancePremiumForTurn } from "@/lib/banking/insurancePremium";
 import {
   ARREARS_DEFAULT_TURNS,
   MAX_NPC_FLOW_PER_TURN_FRACTION,
@@ -322,28 +321,40 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
   // borrower simply stopped paying and the value never reached the people who
   // lost out when the bank failed.
   const deadBankStarted = Date.now();
-  const deadBankResult = await processDeadBankLoans(db, turn, async (loan, bank, target) => {
-    if (loan.borrowerType === "npcBulk") {
-      const recovered = await serviceDeadNpcBulkLoan(db, turn, loan, bank.currency, target);
-      summary.loanInterestCollected += recovered.interest;
-      summary.loanPrincipalRepaid += recovered.principal;
-      summary.defaultsWrittenOff += recovered.writtenOff;
-      return { collected: recovered.collected };
+  const deadBankResult = await processDeadBankLoans(
+    db,
+    turn,
+    async (loan, bank, target, trackInsuranceRecovery) => {
+      if (loan.borrowerType === "npcBulk") {
+        const recovered = await serviceDeadNpcBulkLoan(
+          db,
+          turn,
+          loan,
+          bank.currency,
+          target,
+          trackInsuranceRecovery
+        );
+        summary.loanInterestCollected += recovered.interest;
+        summary.loanPrincipalRepaid += recovered.principal;
+        summary.defaultsWrittenOff += recovered.writtenOff;
+        return { collected: recovered.collected };
+      }
+      const serviced = await servicePlayerLoan(
+        db,
+        turn,
+        bank.corporationId,
+        loan,
+        bank.currency,
+        bank.name,
+        target,
+        trackInsuranceRecovery
+      );
+      summary.loanInterestCollected += serviced.interestCollected;
+      summary.loanPrincipalRepaid += serviced.principalRepaid;
+      summary.defaultsWrittenOff += serviced.writtenOff;
+      return { collected: serviced.bankCredit };
     }
-    const serviced = await servicePlayerLoan(
-      db,
-      turn,
-      bank.corporationId,
-      loan,
-      bank.currency,
-      bank.name,
-      target
-    );
-    summary.loanInterestCollected += serviced.interestCollected;
-    summary.loanPrincipalRepaid += serviced.principalRepaid;
-    summary.defaultsWrittenOff += serviced.writtenOff;
-    return { collected: serviced.bankCredit };
-  });
+  );
   summary.deadBankLoansServiced = deadBankResult.loansServiced;
   summary.deadBankRecoveredToEstate = deadBankResult.recoveredToEstate;
   summary.deadBankRecoveredToInsurer = deadBankResult.recoveredToInsurer;
@@ -816,60 +827,21 @@ async function processOneBank(
   const depositBaseForRatio = npcDeposits + playerCashDeposits;
   const reserveRatioActual = computeReserveRatioActual(cashReserves, depositBaseForRatio);
   const reserveRatioRequired = await getReserveRequirement(db, currency);
-  const premiumDue = computeInsurancePremium(
+  const premium = await settleInsurancePremiumForTurn(db, {
+    bankId: corp._id,
+    countryId: live.countryId,
+    charteredTurn: live.bankCharter.charteredTurn,
+    currency,
+    turn,
     insuredDeposits,
+    cashReserves,
     reserveRatioActual,
-    reserveRatioRequired
-  );
-  if (premiumDue > 0) {
-    const premiumPaid = Math.min(premiumDue, cashReserves);
-    const shortfall = premiumDue - premiumPaid;
-    if (shortfall > 0) result.premiumShortfall += shortfall;
-    if (premiumPaid > 0) {
-      await ensureFund(db, currency);
-      const premium = await settleTransition(db, {
-        key: turnMoveKey("insurance-premium", bankIdHex, turn),
-        kind: "insurance_premium",
-        turn,
-        currency,
-        legs: [
-          {
-            kind: "debit",
-            amount: premiumPaid,
-            collection: "corporations",
-            filter: { _id: oid(bankIdHex), "bankCharter.status": "active" },
-            path: "bankCharter.cashReserves",
-            note: "insurance premium leaves the bank",
-          },
-          {
-            kind: "credit",
-            amount: premiumPaid,
-            collection: "depositInsuranceFunds",
-            filter: { _id: currency },
-            path: "balance",
-            note: "premium into the currency's insurance fund",
-          },
-        ],
-        projections: [
-          {
-            collection: "depositInsuranceFunds",
-            filter: { _id: currency },
-            update: { $inc: { premiumsCollectedLifetime: premiumPaid } },
-            note: "lifetime premium counter follows the cash",
-          },
-        ],
-        event: {
-          kind: "account.withdrawn",
-          command: "bank.insurance.premium",
-          amount: premiumPaid,
-          meta: { insuredDeposits, reserveRatioActual, reserveRatioRequired },
-        },
-      });
-      if (premium.status === "applied" && premium.appliedLegs.length === 2) {
-        cashReserves = Math.max(0, cashReserves - premiumPaid);
-        result.insurancePremiumPaid += premiumPaid;
-      }
-    }
+    reserveRatioRequired,
+  });
+  result.premiumShortfall += premium.shortfall;
+  if (premium.applied) {
+    cashReserves = Math.max(0, cashReserves - premium.paid);
+    result.insurancePremiumPaid += premium.paid;
   }
 
   stageDone("insurancePremium");
@@ -1143,7 +1115,8 @@ async function servicePlayerLoan(
     filter: { _id: bankCorporationId },
     path: "bankCharter.cashReserves",
     note: "instalment reaches the lending bank",
-  }
+  },
+  trackInsuranceRecovery = false
 ): Promise<LoanServiceResult> {
   const empty: LoanServiceResult = {
     interestCollected: 0,
@@ -1209,6 +1182,7 @@ async function servicePlayerLoan(
       note: creditTarget.note,
     },
     bankId: bankCorporationId.toString(),
+    trackInsuranceRecovery,
   });
   if (decision.outcome === "closed") {
     const closed = await settleTransition(db, transition);
@@ -1702,7 +1676,8 @@ async function serviceDeadNpcBulkLoan(
   turn: number,
   loan: BankLoan,
   currency: CurrencyCode,
-  creditTarget: MoneyTarget
+  creditTarget: MoneyTarget,
+  trackInsuranceRecovery: boolean
 ): Promise<{ collected: number; interest: number; principal: number; writtenOff: number }> {
   const empty = { collected: 0, interest: 0, principal: 0, writtenOff: 0 };
   if (loan.lastProcessedTurn === turn) return empty;
@@ -1770,6 +1745,16 @@ async function serviceDeadNpcBulkLoan(
         },
         note: "the resolved charter's household tranche follows its repayment",
       },
+      ...(trackInsuranceRecovery && creditTarget.collection === "depositInsuranceFunds"
+        ? [
+            {
+              collection: "depositInsuranceFunds",
+              filter: creditTarget.filter,
+              update: { $inc: { measuredRecoveriesSincePricingStart: collected } },
+              note: "Record borrower cash recovered for a measured resolved insurance claim",
+            },
+          ]
+        : []),
     ],
     event: {
       kind: "loan.paid",
