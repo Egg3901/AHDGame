@@ -41,6 +41,9 @@ interface StrategyPanelProps {
   plantsCapacityUnits?: number | null;
   /** The strategy the retool hint points at, marked in the picker. */
   suggestedStrategyId?: string | null;
+  /** Target selected by the shortage hint, reviewed through the existing confirmation. */
+  initialReviewStrategyId?: string | null;
+  onReviewComplete?: () => void;
 }
 
 /**
@@ -106,6 +109,8 @@ export default function StrategyPanel({
   margins,
   plantsCapacityUnits,
   suggestedStrategyId = null,
+  initialReviewStrategyId = null,
+  onReviewComplete,
 }: StrategyPanelProps) {
   const { formatAmount } = useCurrency();
   // strategy.retoolCost / cancelCost are returned in ₳ by the API (see
@@ -113,7 +118,28 @@ export default function StrategyPanel({
   // and honors wallet-pref display via the corp's liquidCurrencyCode.
   const liquidCode = corporation.liquidCurrencyCode as
     import("@/lib/constants/currencies").CurrencyCode | undefined;
-  const [pendingStrategyId, setPendingStrategyId] = useState<string | null>(null);
+  const [pendingStrategyId, setPendingStrategyId] = useState<string | null>(() => {
+    const target = strategy.availableStrategies.find(
+      (option) => option.id === initialReviewStrategyId
+    );
+    if (
+      !isCeo ||
+      strategy.isTransitioning ||
+      strategy.cooldownRemaining > 0 ||
+      !target ||
+      target.locked ||
+      target.id === strategy.currentStrategyId ||
+      (sector.sectorType === "extraction" &&
+        isExtractionStrategyZeroYield(
+          SECTOR_STRATEGIES.extraction.find((candidate) => candidate.id === target.id) ?? {
+            supply: {},
+          },
+          stateResources
+        ))
+    )
+      return null;
+    return target.id;
+  });
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
   const fromStrategyName =
@@ -399,8 +425,12 @@ export default function StrategyPanel({
               onConfirm={() => {
                 onStrategyChange(pendingStrategyId);
                 setPendingStrategyId(null);
+                onReviewComplete?.();
               }}
-              onCancel={() => setPendingStrategyId(null)}
+              onCancel={() => {
+                setPendingStrategyId(null);
+                onReviewComplete?.();
+              }}
             />
           )}
 

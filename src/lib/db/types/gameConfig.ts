@@ -476,6 +476,8 @@ export interface GameConfig {
    * See src/lib/market/clearing.ts (qualityPremiumMultiplier).
    */
   qualityPremiumPricingEnabled?: boolean;
+  /** Funded political advertising orders, settled against unsold media output. */
+  politicalMediaMarketEnabled?: boolean;
   /** Fresh-world explicit plant overhead. Default off preserves legacy residuals. */
   explicitPlantCostsEnabled?: boolean;
   /**
