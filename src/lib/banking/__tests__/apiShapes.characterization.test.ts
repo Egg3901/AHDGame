@@ -253,7 +253,10 @@ describe("GET /api/banking/corporation/[id]", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(sortedKeys(body)).toEqual([
+        "bankPropForexFeesEnabled",
         "bankPropTradingEnabled",
+        "bankTreasury",
+        "bankTreasuryEnabled",
         "blacklistableFunds",
         "canMutate",
         "canRevoke",
@@ -285,6 +288,11 @@ describe("GET /api/banking/corporation/[id]", () => {
         "risk",
         "visible",
       ]);
+      expect(body).toMatchObject({
+        bankPropForexFeesEnabled: false,
+        bankTreasury: null,
+        bankTreasuryEnabled: false,
+      });
       expect(sortedKeys(body.charter)).toEqual([
         "appliedStressLossFraction",
         "blacklist",
@@ -331,6 +339,7 @@ describe("GET /api/banking/corporation/[id]", () => {
         "propBookMarkValue",
         "requireApproval",
         "requiredReserves",
+        "sovereignTreasuryMarkValue",
         "status",
         "stressedCapitalRatio",
         "totalDeposits",
@@ -339,6 +348,7 @@ describe("GET /api/banking/corporation/[id]", () => {
         "upstreamCapacity",
         "warningBand",
       ]);
+      expect(body.charter.sovereignTreasuryMarkValue).toBe(0);
       expect(sortedKeys(body.rates)).toEqual(["depositRatePercent", "lendingRatePercent"]);
       expect(sortedKeys(body.householdBook)).toEqual([
         "blendedExpectedDefaultPercent",
@@ -372,7 +382,10 @@ describe("GET /api/banking/corporation/[id]", () => {
       const body = await res.json();
       expect(body.visible).toBe(false);
       expect(sortedKeys(body)).toEqual([
+        "bankPropForexFeesEnabled",
         "bankPropTradingEnabled",
+        "bankTreasury",
+        "bankTreasuryEnabled",
         "canMutate",
         "canRevoke",
         "capitalRequirement",
@@ -396,6 +409,11 @@ describe("GET /api/banking/corporation/[id]", () => {
         "reserveRatio",
         "visible",
       ]);
+      expect(body).toMatchObject({
+        bankPropForexFeesEnabled: false,
+        bankTreasury: null,
+        bankTreasuryEnabled: false,
+      });
     },
     CONSOLE_TEST_TIMEOUT_MS
   );
