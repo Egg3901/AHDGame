@@ -22,10 +22,14 @@ const MAX_CANDIDATE_POOL = 100;
 // Errors: 403
 async function handleGET(request: Request) {
   try {
-    const blocked = await checkWikiDisabled();
-    if (blocked) return blocked;
     const { searchParams } = new URL(request.url);
     const query = searchParams.get("q") || "";
+    // MongoDB regex patterns cannot contain null bytes.
+    if (query.includes("\u0000")) {
+      return NextResponse.json({ error: "Query contains an invalid character" }, { status: 400 });
+    }
+    const blocked = await checkWikiDisabled();
+    if (blocked) return blocked;
     const tags = searchParams.get("tags")?.split(",").filter(Boolean) || [];
     const rawLimit = parseInt(searchParams.get("limit") || "20", 10);
     const limit = Math.min(Math.max(isNaN(rawLimit) ? 20 : rawLimit, 1), 50);

@@ -41,6 +41,17 @@ beforeEach(async () => {
 });
 
 describe("GET /api/search/universal query length limits", () => {
+  it.each(["\u0000", "election\u0000history"])(
+    "rejects a null byte before auth or database reads (%j)",
+    async (query) => {
+      const res = await GET(req(`q=${encodeURIComponent(query)}`));
+      expect(res.status).toBe(400);
+      expect(await getDbMock()).not.toHaveBeenCalled();
+      const { getAuthUser } = await import("@/lib/auth");
+      expect(getAuthUser).not.toHaveBeenCalled();
+    }
+  );
+
   it("rejects a 201-character query with HTTP 400", async () => {
     const res = await GET(req(`q=${"a".repeat(201)}`));
 
