@@ -12,6 +12,7 @@ import type { Bond } from "@/lib/db/types/bond";
 import type { CentralBank } from "@/lib/db/types/centralBank";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
 import type { GameState } from "@/lib/db/types/gameState";
+import type { Corporation } from "@/lib/db/types/corporation";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
@@ -25,6 +26,11 @@ import { settleBankSovereignClaims } from "@/lib/banking/bankSovereignClaims";
 import { bankCouponClaim, bankCouponPlanForCountry } from "@/lib/banking/rules/sovereignClaims";
 import { settleFundedSovereignCoupons } from "@/lib/banking/fundedSovereignCoupons";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
+import {
+  fxRateForCorpFromMap,
+  resolveCorpLiquidCurrencyCode,
+} from "@/lib/currency/corporationCapital";
+import type { SovereignCouponCorporationQuote } from "@/lib/banking/rules/sovereignCoupons";
 
 /**
  * Per-turn fiscal accrual (spec §4). For each country's federalBudget, move a
@@ -88,6 +94,7 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
       .toArray(),
   ]);
   const rateByCurrency = new Map(rates.map((r) => [r.currencyCode, r.rate]));
+  const forexEnabled = await isForexEnabled();
   const ledgerShadow = config?.ledgerShadow === true;
   const bankTreasuryEnabled = config?.bankTreasuryEnabled === true;
   const treasuryCashLedgerEnabled = config?.treasuryCashLedgerEnabled === true;
@@ -113,6 +120,44 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
           )
           .toArray()
       : [];
+  const corporationIds = [
+    ...new Set(
+      sovereignBonds.flatMap((bond) =>
+        (bond.holders ?? []).flatMap((holder) =>
+          holder.corporationId ? [holder.corporationId] : []
+        )
+      )
+    ),
+  ];
+  const corporationQuotes = new Map<string, SovereignCouponCorporationQuote>();
+  if (corporationIds.length > 0) {
+    const corporations = await db
+      .collection<Corporation>("corporations")
+      .find(
+        { _id: { $in: corporationIds } },
+        { projection: { _id: 1, countryId: 1, liquidCurrencyCode: 1 } }
+      )
+      .toArray();
+    for (const corp of corporations) {
+      const currencyCode = resolveCorpLiquidCurrencyCode(corp);
+      if (!currencyCode || !rateByCurrency.has(currencyCode)) continue;
+      const localPerAnchor = fxRateForCorpFromMap(
+        corp,
+        rateByCurrency as Map<CurrencyCode, number>
+      );
+      if (!Number.isFinite(localPerAnchor) || localPerAnchor <= 0) continue;
+      corporationQuotes.set(corp._id.toHexString(), {
+        id: corp._id.toHexString(),
+        countryId: String(corp.countryId ?? ""),
+        currencyCode,
+        localPerAnchor,
+        hasExplicitCurrency:
+          corp.liquidCurrencyCode !== undefined &&
+          corp.liquidCurrencyCode !== null &&
+          String(corp.liquidCurrencyCode).trim() !== "",
+      });
+    }
+  }
   function valuationFor(
     budget: FederalBudget
   ): Pick<TreasuryAccrualReceipt, "anchorRate" | "anchorRateSource" | "anchorRatePreset"> {
@@ -144,10 +189,8 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
           turn: _turn,
           bonds: [],
           anchorRate: b.sovereignCouponClaims[0].anchorRate,
-          forexEnabled: await isForexEnabled(),
-          fxByCurrency: new Map(
-            [...rateByCurrency].map(([currency, rate]) => [currency as CurrencyCode, rate])
-          ),
+          forexEnabled,
+          corporateQuotes,
         });
       }
       continue;
@@ -171,10 +214,8 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
                 (bond) => String(bond.countryId) === String(b.countryId)
               ),
               anchorRate: valuation.anchorRate!,
-              forexEnabled: await isForexEnabled(),
-              fxByCurrency: new Map(
-                [...rateByCurrency].map(([currency, rate]) => [currency as CurrencyCode, rate])
-              ),
+              forexEnabled,
+              corporateQuotes,
             });
           }
           break;
@@ -334,10 +375,8 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
                 (bond) => String(bond.countryId) === String(b.countryId)
               ),
               anchorRate: valuation.anchorRate!,
-              forexEnabled: await isForexEnabled(),
-              fxByCurrency: new Map(
-                [...rateByCurrency].map(([currency, rate]) => [currency as CurrencyCode, rate])
-              ),
+              forexEnabled,
+              corporateQuotes,
             }
           );
         }

@@ -477,6 +477,8 @@ export interface FederalBudget {
   bankSovereignClaims?: BankSovereignClaim[];
   /** Frozen, unpaid non-bank sovereign coupon plans for funded Treasury cash. */
   sovereignCouponClaims?: FundedSovereignCouponClaim[];
+  /** Highest due turn frozen for each sovereign bond, including already-paid claims. */
+  sovereignCouponFrozenThrough?: Record<string, number>;
   _id: BudgetDocumentId;
   countryId: string;
   fiscalYear: number;
@@ -782,6 +784,9 @@ export interface FundedSovereignCouponClaim {
     currencyCode?: import("@/lib/constants/currencies").CurrencyCode;
     payeeCurrencyCode?: import("@/lib/constants/currencies").CurrencyCode;
     payeeLocalPerAnchor?: number;
+    payeeCountryId?: string;
+    payeeHasExplicitCurrency?: boolean;
+    personalBalancePath?: string;
   }>;
 }
 
