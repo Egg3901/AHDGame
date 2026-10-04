@@ -1,5 +1,6 @@
 import { ObjectId, type Db } from "mongodb";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import type { UnownedPoolBucket } from "@/lib/market/unownedPoolDraw";
 import { getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { isBlockedBorrower } from "@/lib/banking/blacklist";
@@ -42,6 +43,12 @@ export interface NppConstructionFinanceIntent {
 export interface NppConstructionFinanceCandidate extends NppConstructionFinanceIntent {
   corporation: Corporation;
   currency: CurrencyCode;
+  buildContext: {
+    destinationCurrency: CurrencyCode | null;
+    bucket: UnownedPoolBucket;
+    eraUnitScale: number;
+    growthUnits: number;
+  };
 }
 
 export interface NppConstructionFinanceRequest extends NppConstructionFinanceCandidate {

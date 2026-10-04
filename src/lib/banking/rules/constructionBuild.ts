@@ -9,6 +9,8 @@ export interface ConstructionBuildEffects {
     id: string;
     bucket: import("@/lib/market/unownedPoolDraw").UnownedPoolBucket;
     eraUnitScale: number;
+    /** Market-entry share claimed; absent on older claims where all order units were drawn. */
+    units?: number;
   };
   quotedAt: Date;
 }

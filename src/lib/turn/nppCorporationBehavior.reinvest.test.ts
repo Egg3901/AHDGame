@@ -598,6 +598,7 @@ describe("NPP capacity reinvestment — the two cash rails", () => {
       costLocal: expect.any(Number),
       order: { startTurn: TURN },
       cashContributionLimitLocal: c.liquidCapital * 0.25,
+      growthUnits: 0,
     });
   });
 

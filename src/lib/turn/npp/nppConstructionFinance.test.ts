@@ -50,8 +50,19 @@ function candidate(
     order,
     costLocal: 100_000,
     cashContributionLimitLocal: 30_000,
+    growthUnits: 40,
     priority: 1,
     fill: 0.9,
+    buildContext: {
+      destinationCurrency: "USD",
+      bucket: {
+        stateId: "US-CA",
+        countryId: "US",
+        sectorType: "manufacturing",
+      },
+      eraUnitScale: 1,
+      growthUnits: 40,
+    },
     ...overrides,
   };
 }

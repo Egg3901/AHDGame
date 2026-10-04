@@ -157,9 +157,12 @@ describe("nationalizeSectorWide", () => {
     );
     expect(donorCredit?.[1].$inc.liquidCapital).toBe(1000);
     // Full carve removes the donor sector row.
-    expect(db.collectionMocks.corporateSectors.deleteOne).toHaveBeenCalledWith({
-      _id: playerSectorId,
-    });
+    expect(db.collectionMocks.corporateSectors.deleteOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        _id: playerSectorId,
+        "constructionPropertyTransition.key": expect.stringContaining("nationalize-sector-wide"),
+      })
+    );
     // State-owned sector untouched (no delete of it).
     expect(db.collectionMocks.corporateSectors.deleteOne).not.toHaveBeenCalledWith({
       _id: stateSectorId,
@@ -280,7 +283,7 @@ describe("nationalizeSectorWide", () => {
     });
     // Donor shrunk to 60% revenue; not deleted.
     const shrink = db.collectionMocks.corporateSectors.updateOne.mock.calls.find(
-      (c) => c[0]._id?.toString() === playerSectorId.toString()
+      (c) => c[0]._id?.toString() === playerSectorId.toString() && c[1].$set?.revenue !== undefined
     );
     expect(shrink?.[1].$set.revenue).toBe(60); // 100 × 0.6
     expect(db.collectionMocks.corporateSectors.deleteOne).not.toHaveBeenCalled();
@@ -494,9 +497,12 @@ describe("nationalizeSectorWide", () => {
     expect(res.affectedCorps).toBe(1);
     expect(res.sectorsCarved).toBe(1);
     expect(res.unownedCarved).toBe(1);
-    expect(db.collectionMocks.corporateSectors.deleteOne).toHaveBeenCalledWith({
-      _id: nppSectorId,
-    });
+    expect(db.collectionMocks.corporateSectors.deleteOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        _id: nppSectorId,
+        "constructionPropertyTransition.key": expect.stringContaining("nationalize-sector-wide"),
+      })
+    );
     expect(db.collectionMocks.corporateSectors.deleteOne).not.toHaveBeenCalledWith({
       _id: playerSectorId,
     });

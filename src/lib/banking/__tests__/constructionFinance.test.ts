@@ -188,13 +188,18 @@ describe("construction request lifecycle", () => {
           mediaDiscriminator: "entertainment",
         },
         eraUnitScale: 1,
+        growthUnits: 35,
       },
     });
     expect(result).toMatchObject({ ok: true, pending: false });
     expect(memory.collection("unownedSectors").docs).toMatchObject([
       { _id: genericId, headroomUnits: 250 },
-      { _id: entertainmentId, headroomUnits: 150 },
+      { _id: entertainmentId, headroomUnits: 215 },
     ]);
+    expect(
+      (await request.db.collection("corporateSectors").findOne({ _id: sectorId }))
+        ?.constructionFinancing.effects.pool.units
+    ).toBe(35);
   });
   it("cannot install a claim over a concurrently reserved property row", async () => {
     const { request, memory } = world();
@@ -585,6 +590,7 @@ describe("construction request lifecycle", () => {
           destinationCurrency: "GBP" as const,
           bucket: { stateId: "GB_TEST", countryId: "UK", sectorType: "manufacturing" as const },
           eraUnitScale: 1,
+          growthUnits: 100,
         },
       };
       if (point !== "none") {

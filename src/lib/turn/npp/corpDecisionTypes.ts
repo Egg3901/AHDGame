@@ -118,6 +118,8 @@ export interface NppCorpDecision {
     order: SectorBuildOrder;
     costLocal: number;
     cashContributionLimitLocal: number;
+    /** New-market portion of this order; replacements do not consume unowned headroom. */
+    growthUnits: number;
     priority: number;
     fill: number;
   }>;

@@ -802,6 +802,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       maximumCostLocal: candidate.costLocal,
       order: candidate.order,
       preloadedFundingContext: candidate.preloadedFundingContext,
+      buildContext: candidate.buildContext,
     });
     if (!result.ok) {
       constructionFinanceFailedCount += 1;
