@@ -14,7 +14,6 @@ import { settleAtomicDocumentTransition } from "./atomicDocumentSettlement";
 import { acquireConstructionLoanLock, releaseConstructionLoanLock } from "./constructionLoanLock";
 import {
   acquireConstructionFundingLease,
-  releaseConstructionFundingLease,
   abortUnfundedConstruction,
   releaseCompletedConstructionFunding,
 } from "./constructionFundingLease";
@@ -198,8 +197,15 @@ export async function settleReservedConstruction(input: {
     guard: paid.value.guard,
   });
   if (complete(appended)) {
-    await releaseConstructionLoanLock(db, loan, lockKey);
-    await releaseConstructionFundingLease(db, claim);
+    const committed = await sectors.findOne(
+      { _id: sectorId },
+      { projection: { constructionFinancing: 1 } }
+    );
+    if (
+      !committed?.constructionFinancing ||
+      !(await releaseCompletedConstructionFunding(db, committed.constructionFinancing))
+    )
+      return { ok: false, error: "The paid build is awaiting funding cleanup" };
   }
   return complete(appended)
     ? { ok: true }

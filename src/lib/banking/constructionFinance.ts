@@ -365,3 +365,49 @@ export async function rejectConstructionFinance(
     ? { ok: true, pending: false, loanId: claim.loanId, claimId: claim.claimId }
     : { ok: false, error: settled.error ?? "Construction rejection is pending recovery" };
 }
+
+/** Finish approved claims left by earlier turns without approving a new loan. */
+export async function recoverConstructionFunding(
+  db: Db,
+  turn: number
+): Promise<Array<{ key: string; error: string }>> {
+  const sectors = db.collection<CorporateSector>("corporateSectors");
+  const unfinished = await sectors
+    .find(
+      {
+        "constructionFinancing.status": { $in: ["awaiting_approval", "funding", "building"] },
+        "constructionFinancing.requestTransition.turn": { $lt: turn },
+        "constructionFinancing.fundingCleanupCompleted": { $ne: true },
+      },
+      { projection: { constructionFinancing: 1 } }
+    )
+    .limit(200)
+    .toArray();
+  const failures: Array<{ key: string; error: string }> = [];
+  for (const sector of unfinished) {
+    const claim = sector.constructionFinancing;
+    if (!claim || !ObjectId.isValid(claim.loanId) || !ObjectId.isValid(claim.bankId)) continue;
+    const loan = await db
+      .collection<BankLoan>("bankLoans")
+      .findOne({ _id: new ObjectId(claim.loanId) }, { projection: { constructionDecision: 1 } });
+    // A pending lender decision is not authority to disburse.
+    if (loan?.constructionDecision !== "approve") continue;
+    const result = await approveConstructionFinance(
+      db,
+      new ObjectId(claim.bankId),
+      new ObjectId(claim.loanId),
+      true
+    );
+    if (!result.ok) {
+      const current = await sectors.findOne(
+        { _id: sector._id },
+        {
+          projection: { constructionFinancing: 1 },
+        }
+      );
+      if (current?.constructionFinancing?.status !== "cancelled")
+        failures.push({ key: `construction:${claim.claimId}:funding`, error: result.error });
+    }
+  }
+  return failures;
+}
