@@ -9,6 +9,7 @@ let client: MongoClient | null = null;
 let clientUri: string | null = null;
 let connectAttempt: Promise<MongoClient> | null = null;
 let connectAttemptUri: string | null = null;
+let connectAttemptToken: object | null = null;
 let closeAttempt: Promise<void> | null = null;
 
 export async function connectDb(databaseName?: string, uriOverride?: string): Promise<Db> {
@@ -26,9 +27,13 @@ export async function connectDb(databaseName?: string, uriOverride?: string): Pr
 
   if (connectAttempt) {
     assertSameUri(uri, connectAttemptUri);
+    const attemptToken = connectAttemptToken;
+    if (!attemptToken) {
+      throw new Error("MongoDB connection was closed while connecting");
+    }
     const attempt = connectAttempt;
     const connectedClient = await attempt;
-    if (connectAttempt !== attempt || client !== connectedClient) {
+    if (connectAttemptToken !== attemptToken) {
       throw new Error("MongoDB connection was closed while connecting");
     }
     return connectedClient.db(databaseName);
@@ -38,19 +43,21 @@ export async function connectDb(databaseName?: string, uriOverride?: string): Pr
   // connection. Keep a URI identity alongside the shared in-flight attempt so
   // concurrent calls cannot silently reuse a client for another deployment.
   const nextClient = new MongoClient(uri);
+  const attemptToken = {};
   const attempt: Promise<MongoClient> = (async () => {
     try {
       await nextClient.connect();
-      if (connectAttempt === attempt) {
+      if (connectAttemptToken === attemptToken) {
         client = nextClient;
         clientUri = uri;
         console.log("Connected to MongoDB");
       }
       return nextClient;
     } catch (error) {
-      if (connectAttempt === attempt) {
+      if (connectAttemptToken === attemptToken) {
         connectAttempt = null;
         connectAttemptUri = null;
+        connectAttemptToken = null;
       }
       try {
         await nextClient.close();
@@ -62,9 +69,10 @@ export async function connectDb(databaseName?: string, uriOverride?: string): Pr
   })();
   connectAttempt = attempt;
   connectAttemptUri = uri;
+  connectAttemptToken = attemptToken;
 
   const connectedClient = await attempt;
-  if (connectAttempt !== attempt || client !== connectedClient) {
+  if (connectAttemptToken !== attemptToken) {
     throw new Error("MongoDB connection was closed while connecting");
   }
   return connectedClient.db(databaseName);
@@ -79,6 +87,7 @@ export async function closeDb(): Promise<void> {
   clientUri = null;
   connectAttempt = null;
   connectAttemptUri = null;
+  connectAttemptToken = null;
 
   const attempt = (async () => {
     const clientToClose = connectedClient ?? (await pendingConnect?.catch(() => null));
