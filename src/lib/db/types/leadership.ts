@@ -55,6 +55,17 @@ export type LeadershipRole =
  */
 export type NgChamberLeadershipRole = "speaker_ng_reps" | "president_ng_senate";
 
+/** Immutable result selected by the close claim, retained for partial-write recovery. */
+export interface NgChamberLeadershipResolution {
+  id: ObjectId;
+  winner: Pick<
+    NgChamberLeadershipNomination,
+    "_id" | "nomineeId" | "nomineeName" | "nomineeParty" | "nomineeState"
+  > | null;
+  resolvedAt: Date;
+  completedAt?: Date;
+}
+
 /**
  * NG presiding-officer election — one document per role in the shared
  * `ngChamberLeadershipElections` collection (keyed by role, mirroring the
@@ -70,6 +81,7 @@ export interface NgChamberLeadershipElection {
   /** Game turn on which voting closes (freeze-safe deadline). */
   endsOnTurn?: number;
   updatedAt: Date;
+  resolution?: NgChamberLeadershipResolution;
 }
 
 /**
