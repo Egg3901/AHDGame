@@ -33,14 +33,13 @@ import { isStateScopedCommodity, supplyAgreementScopeKey } from "@/lib/market/co
 const STATE_GROUP_PREFIX = "state:";
 const MISSING_STATE_GROUP_PREFIX = "missing-state:";
 
-export const PRICING_POSTURE_MIN = -0.2;
-export const PRICING_POSTURE_MAX = 0.2;
-
-/** Clamp a raw posture input to a valid value in [−0.2, 0.2]. */
-export function clampPricingPosture(value: number): number {
-  if (!Number.isFinite(value)) return 0;
-  return Math.max(PRICING_POSTURE_MIN, Math.min(PRICING_POSTURE_MAX, value));
-}
+export {
+  PRICING_POSTURE_MIN,
+  PRICING_POSTURE_MAX,
+  clampPricingPosture,
+  costPlusPriceFactor,
+} from "./costPlusPricing/rules";
+import { clampPricingPosture, costPlusPriceFactor } from "./costPlusPricing/rules";
 
 /**
  * Own-fill feedback thresholds for autoPosture (clearing collapse remediation,
@@ -128,6 +127,8 @@ export interface ClearingSeller {
   units: number;
   /** Posted price relative to market, −0.2 … 0.2. */
   posture: number;
+  /** Internally resolved quote relative to this book's price; CEO input is still bounded. */
+  quotedPosture?: number;
   /**
    * Plants tier: these units came from the seller's OWN measured output
    * (`producedUnits`), not from the revenue nameplate, so they are exempt from
@@ -224,7 +225,7 @@ export function clearCommodityMarket(
   // ── Cheapest-first over the remaining demand and unreserved units ──────────
   const byPosture = new Map<number, ClearingSeller[]>();
   for (const s of sellers) {
-    const p = clampPricingPosture(s.posture);
+    const p = s.quotedPosture ?? clampPricingPosture(s.posture);
     byPosture.set(p, [...(byPosture.get(p) ?? []), s]);
   }
   for (const posture of [...byPosture.keys()].sort((a, b) => a - b)) {
@@ -263,6 +264,12 @@ export interface SectorClearingInput {
   supplyRates: Partial<Record<CommodityType, number>>;
   /** Posted posture (player-set), or null to auto-position (NPP/unowned). */
   posture: number | null;
+  /** Flag-gated input basket index for cost-plus pricing, otherwise absent. */
+  inputCostIndex?: number;
+  /** Recipe's base material spend as a share of nominal output value. */
+  inputCostShare?: number;
+  /** Recorded payroll, overhead, upkeep and compliance per nominal output value. */
+  fixedCostShare?: number;
   /**
    * The sector's own soldFraction from the PRIOR turn (lagged, like every
    * other clearing input), if known. Feeds autoPosture's own-fill feedback;
@@ -552,6 +559,17 @@ export function computeClearingFactors(args: {
       balances.get(commodity)
     );
   };
+  const realizedPriceFor = (commodity: CommodityType, sectorId: string) => {
+    const stateScope = stateScopeFor(commodity, sectorId);
+    const group = args.groupBySector?.get(sectorId);
+    return priceRealizationFactor(
+      (stateScope != null
+        ? args.stateMarkets?.priceRatios.get(stateScope)?.get(commodity)
+        : undefined) ??
+        (group != null ? args.priceRatioByGroup?.get(group)?.get(commodity) : undefined) ??
+        priceRatioByCommodity.get(commodity)
+    );
+  };
 
   // Loyal-slice lookup (seller id === sectorId), built only when the slice is on.
   const loyaltyBySectorId = args.loyaltySliceEnabled
@@ -596,7 +614,25 @@ export function computeClearingFactors(args: {
       if (units <= 0) continue;
       sellersByCommodity.set(commodity, [
         ...(sellersByCommodity.get(commodity) ?? []),
-        { id: s.sectorId, units, posture, realUnits: plantsUnits != null },
+        {
+          id: s.sectorId,
+          units,
+          posture,
+          realUnits: plantsUnits != null,
+          ...(s.inputCostIndex !== undefined
+            ? {
+                quotedPosture:
+                  costPlusPriceFactor(
+                    s.inputCostIndex,
+                    posture,
+                    s.inputCostShare,
+                    s.fixedCostShare
+                  ) /
+                    realizedPriceFor(commodity, s.sectorId) -
+                  1,
+              }
+            : {}),
+        },
       ]);
     }
   }
@@ -804,6 +840,7 @@ export function computeClearingFactors(args: {
     let rateSum = 0;
     let factorSum = 0;
     let soldSum = 0;
+    let quotedPostureSum = 0;
     const posture = postureBySector.get(s.sectorId) ?? 0;
     // Quality → premium: only a positive (premium) posture is quality-scaled,
     // and only when the caller opted in with a finite quality. The base price
@@ -833,7 +870,12 @@ export function computeClearingFactors(args: {
         stateRatio ?? groupRatios?.get(commodity) ?? priceRatioByCommodity.get(commodity)
       );
       rateSum += rate;
-      factorSum += rate * sold * (1 + effectivePremium) * priceLeg;
+      const offerFactor =
+        s.inputCostIndex !== undefined
+          ? costPlusPriceFactor(s.inputCostIndex, posture, s.inputCostShare, s.fixedCostShare)
+          : (1 + effectivePremium) * priceLeg;
+      factorSum += rate * sold * offerFactor;
+      quotedPostureSum += rate * (offerFactor / priceLeg - 1);
       soldSum += rate * sold;
       soldByCommodity[commodity] = sold;
     }
@@ -842,7 +884,7 @@ export function computeClearingFactors(args: {
       factor: factorSum / rateSum,
       soldFraction: soldSum / rateSum,
       soldByCommodity,
-      effectivePosture: posture,
+      effectivePosture: s.inputCostIndex !== undefined ? quotedPostureSum / rateSum : posture,
     });
   }
   return results;

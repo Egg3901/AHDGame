@@ -231,3 +231,24 @@ describe("resolvePlantsRevenue — governor bounds + P3b legs (#588)", () => {
     expect(diverted.marketHourlyRevenue).toBeCloseTo(clean.marketHourlyRevenue, 10);
   });
 });
+
+describe("absolute cost-plus quotes", () => {
+  it("settles the offered price during the ramp without tech price multiplication", () => {
+    const result = resolvePlantsRevenue(
+      input({
+        costPlusPricingEnabled: true,
+        clearingEnabled: true,
+        clearingFactor: 1.4,
+        clearingStartTurn: CURRENT_TURN,
+        plantsStartTurn: CURRENT_TURN,
+        techEffects: { outputRateMult: {}, priceRealizationBonus: 0.5 },
+      })
+    );
+    expect(result.clearingRevenueLeg).toBe(1.4);
+    expect(result.plantsTechPriceLeg).toBe(1);
+    expect(result.marketHourlyRevenue).toBeCloseTo(
+      ((result.producedUnits * 10) / TURNS_PER_DAY) * 1.4,
+      8
+    );
+  });
+});
