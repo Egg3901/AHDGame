@@ -4,6 +4,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import type {
   Bond,
   CentralBank,
+  Corporation,
   FederalBudget,
   GameConfig,
   MoneySupplySnapshot,
@@ -95,7 +96,7 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
     // Corp-level liquidCapital is the SSOT insolvency keys on and sectorTurn
     // $inc's every turn. CorporateSector has no liquidCapital field.
     db
-      .collection("corporations")
+      .collection<Corporation>("corporations")
       .find(
         {},
         {
