@@ -31,6 +31,7 @@ describe("forex fee cash preview", () => {
             currency="USD"
             positions={[]}
             markValue={0}
+            sovereignTreasuryMarkValue={0}
             cashReserves={1_000_000}
             totalLoans={0}
             borrowings={{}}
