@@ -1,3 +1,4 @@
+import { capDeliveredMediaUnits, type MediaOwnershipMarket } from "@/lib/mediaRegulation/rules";
 import type { CommodityType } from "@/lib/constants/commodities";
 import { commodityMixWeight as mixWeight } from "@/lib/constants/commodities";
 import { priceRealizationFactor } from "@/lib/market/priceRealization";
@@ -437,6 +438,8 @@ export interface SectorClearingResult {
    * restate it; computeClearingFactors always populates it.
    */
   soldByCommodity?: Partial<Record<CommodityType, number>>;
+  /** Exact normalized units delivered, emitted only when recording is enabled. */
+  deliveredUnitsByCommodity?: Partial<Record<CommodityType, number>>;
   /** Posture actually used (player's, or the auto value). */
   effectivePosture: number;
   /** Exact quoted offer factor per output, before sold quantity is applied. */
@@ -455,6 +458,9 @@ export interface SectorClearingResult {
  */
 export function computeClearingFactors(args: {
   sectors: readonly SectorClearingInput[];
+  /** Enabled ownership laws constrain actual advertising fills before receipts. */
+  mediaOwnership?: MediaOwnershipMarket;
+  recordDelivery?: boolean;
   /** Lagged per-commodity aggregate balances (prior turn). */
   balances: ReadonlyMap<CommodityType, { supply: number; demand: number }>;
   /** Lagged price-over-base ratios (prior turn). */
@@ -687,6 +693,7 @@ export function computeClearingFactors(args: {
   //    these sellers is scaled by their share of total supply so the pass
   //    doesn't hand corporate sectors the whole market.
   const soldByCommodityBySector = new Map<CommodityType, Map<string, number>>();
+  const deliveredByCommodityBySector = new Map<CommodityType, Map<string, number>>();
   for (const [commodity, sellers] of sellersByCommodity) {
     // Market partition: split the commodity's sellers into per-group books
     // (seller's home country) and clear each book against ITS reachable
@@ -839,7 +846,33 @@ export function computeClearingFactors(args: {
       );
       for (const [id, f] of groupSold) sold.set(id, f);
     }
+    if (commodity === "advertising" && args.mediaOwnership) {
+      const rows = sellers.flatMap((seller) => {
+        const stateId = args.mediaOwnership!.stateBySector.get(seller.id);
+        const corporationId = args.mediaOwnership!.corporationBySector.get(seller.id);
+        return stateId && corporationId
+          ? [
+              {
+                sectorId: seller.id,
+                stateId,
+                corporationId,
+                units: seller.units * (sold.get(seller.id) ?? 0),
+              },
+            ]
+          : [];
+      });
+      const capped = capDeliveredMediaUnits(rows, args.mediaOwnership.shareCap);
+      for (const seller of sellers) {
+        const units = capped.get(seller.id);
+        if (units !== undefined) sold.set(seller.id, seller.units > 0 ? units / seller.units : 0);
+      }
+    }
     soldByCommodityBySector.set(commodity, sold);
+    if (args.recordDelivery)
+      deliveredByCommodityBySector.set(
+        commodity,
+        new Map(sellers.map((seller) => [seller.id, seller.units * (sold.get(seller.id) ?? 0)]))
+      );
 
     // Production sink: each corp's offered units for this commodity, recorded
     // BEFORE any fill outcome. Under plants these are real produced units.
@@ -898,6 +931,7 @@ export function computeClearingFactors(args: {
     // and any undercut are untouched, so quality can lift or shave the premium
     // but never let a seller charge below market.
     const soldByCommodity: Partial<Record<CommodityType, number>> = {};
+    const deliveredUnitsByCommodity: Partial<Record<CommodityType, number>> = {};
     const offerFactorByCommodity: Partial<Record<CommodityType, number>> = {};
     const sectorGroup = args.groupBySector?.get(s.sectorId);
     const groupRatios = sectorGroup != null ? args.priceRatioByGroup?.get(sectorGroup) : undefined;
@@ -950,6 +984,9 @@ export function computeClearingFactors(args: {
       quotedPostureSum += weight * (offerFactor / priceLeg - 1);
       soldSum += weight * sold;
       soldByCommodity[commodity] = sold;
+      if (args.recordDelivery)
+        deliveredUnitsByCommodity[commodity] =
+          deliveredByCommodityBySector.get(commodity)?.get(s.sectorId) ?? 0;
     }
     if (rateSum <= 0) continue;
     const projectSoldUnitsByCommodity = Object.fromEntries(
@@ -962,6 +999,7 @@ export function computeClearingFactors(args: {
       factor: factorSum / rateSum,
       soldFraction: soldSum / rateSum,
       soldByCommodity,
+      ...(args.recordDelivery ? { deliveredUnitsByCommodity } : {}),
       effectivePosture: s.inputCostIndex !== undefined ? quotedPostureSum / rateSum : posture,
       offerFactorByCommodity,
       ...(s.productProjectId

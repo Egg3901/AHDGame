@@ -1,8 +1,7 @@
 /**
  * Media regulation changes how much advertising a private outlet can deliver.
  * Censorship and ownership laws limit audience access before clearing. The
- * ownership limit is measured against the prior audience budget, not the
- * smaller post-limit delivery total.
+ * ownership limit applies to the final delivered share in each state.
  */
 
 export interface MediaOutletDelivery {
@@ -195,4 +194,63 @@ export function isMediaOwnershipBillAvailable(outlets: readonly MediaOutletDeliv
     if (largestShare > MEDIA_CONCENTRATION_BILL_TRIGGER) return true;
   }
   return false;
+}
+
+export interface MediaOwnershipMarket {
+  shareCap: number;
+  stateBySector: ReadonlyMap<string, string>;
+  corporationBySector: ReadonlyMap<string, string>;
+}
+
+/**
+ * Keep the largest feasible subset of already-cleared delivery under a share
+ * cap. Delivery is reduced, never invented or moved between owners. If too few
+ * owners delivered to satisfy the law, no positive delivery is feasible.
+ */
+export function capDeliveredMediaUnits(
+  rows: readonly { sectorId: string; stateId: string; corporationId: string; units: number }[],
+  shareCap: number
+): Map<string, number> {
+  const safeUnits = (units: number) => (Number.isFinite(units) ? Math.max(0, units) : 0);
+  const result = new Map(rows.map((row) => [row.sectorId, safeUnits(row.units)]));
+  if (!Number.isFinite(shareCap) || shareCap <= 0 || shareCap >= 1) return result;
+  const states = new Map<string, Map<string, number>>();
+  for (const row of rows) {
+    const owners = states.get(row.stateId) ?? new Map<string, number>();
+    const units = Number.isFinite(row.units) ? Math.max(0, row.units) : 0;
+    owners.set(row.corporationId, (owners.get(row.corporationId) ?? 0) + units);
+    states.set(row.stateId, owners);
+  }
+  const scales = new Map<string, number>();
+  for (const [stateId, owners] of states) {
+    const positive = [...owners.values()].filter((units) => units > 0).sort((a, b) => a - b);
+    let total = positive.reduce((sum, units) => sum + units, 0);
+    let prefix = 0;
+    for (let i = 0; i <= positive.length; i++) {
+      const denominator = 1 - (positive.length - i) * shareCap;
+      if (denominator > 0) total = Math.min(total, prefix / denominator);
+      prefix += positive[i] ?? 0;
+    }
+    for (const [owner, units] of owners)
+      scales.set(`${stateId}:${owner}`, units > 0 ? Math.min(1, (shareCap * total) / units) : 0);
+  }
+  for (const row of rows)
+    result.set(
+      row.sectorId,
+      safeUnits(row.units) * (scales.get(`${row.stateId}:${row.corporationId}`) ?? 0)
+    );
+  return result;
+}
+
+/**
+ * Additional political delivery cannot depend on another unpaid seller. This
+ * bound remains valid even when every other political receipt is interrupted.
+ */
+export function mediaPoliticalResidualLimit(
+  ownerCommercialUnits: number,
+  stateCommercialUnits: number,
+  shareCap: number
+): number {
+  if (!Number.isFinite(shareCap) || shareCap <= 0 || shareCap >= 1) return Infinity;
+  return Math.max(0, (shareCap * stateCommercialUnits - ownerCommercialUnits) / (1 - shareCap));
 }
