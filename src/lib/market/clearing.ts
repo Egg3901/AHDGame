@@ -266,6 +266,12 @@ export interface SectorClearingInput {
   revenue: number;
   /** Output rates (strategy supply). */
   supplyRates: Partial<Record<CommodityType, number>>;
+  /** Exact per-commodity physical offers from a product line, when enabled. */
+  outputUnitsByCommodity?: Partial<Record<CommodityType, number>>;
+  /** Conserved nominal output value by commodity, used to weight sector realization. */
+  outputAnchorByCommodity?: Partial<Record<CommodityType, number>>;
+  /** Product quality by output commodity, overriding the legacy corp average for that output. */
+  productQualityByCommodity?: Partial<Record<CommodityType, number>>;
   /** Posted posture (player-set), or null to auto-position (NPP/unowned). */
   posture: number | null;
   /** Flag-gated input basket index for cost-plus pricing, otherwise absent. */
@@ -588,9 +594,16 @@ export function computeClearingFactors(args: {
   const sellersByCommodity = new Map<CommodityType, ClearingSeller[]>();
   const postureBySector = new Map<string, number>();
   for (const s of sectors) {
-    for (const commodity of Object.keys(s.supplyRates) as CommodityType[]) {
+    const commodities = new Set([
+      ...Object.keys(s.supplyRates),
+      ...Object.keys(s.outputUnitsByCommodity ?? {}),
+    ] as CommodityType[]);
+    for (const commodity of commodities) {
       const rate = s.supplyRates[commodity] ?? 0;
-      if (rate <= 0) continue;
+      const hasExactProductOffer = s.outputUnitsByCommodity != null;
+      const productUnits = s.outputUnitsByCommodity?.[commodity];
+      if (hasExactProductOffer && productUnits == null) continue;
+      if (rate <= 0 && productUnits == null) continue;
       // Auto-posture reads the sector's OWN market's balance when partitioned:
       // a seller in a glutted, embargo-walled market must undercut off its
       // reachable book, not off a healthy worldwide aggregate it cannot sell to.
@@ -615,9 +628,11 @@ export function computeClearingFactors(args: {
       // measured quantity, not a revenue proxy, which is why it skips the
       // lagged-supply reconciliation in section 2.
       const plantsUnits =
-        args.plantsEnabled && typeof s.producedUnits === "number" && s.producedUnits >= 0
-          ? s.producedUnits * mixWeight(s.supplyRates, basePrices, commodity)
-          : null;
+        args.plantsEnabled && hasExactProductOffer && typeof productUnits === "number"
+          ? Math.max(0, productUnits)
+          : args.plantsEnabled && typeof s.producedUnits === "number" && s.producedUnits >= 0
+            ? s.producedUnits * mixWeight(s.supplyRates, basePrices, commodity)
+            : null;
       const physicalUnits = plantsUnits ?? (base > 0 ? (s.revenue * rate) / base : 0);
       const availability =
         commodity === "advertising" && Number.isFinite(s.editorialAdvertisingAvailability)
@@ -868,18 +883,20 @@ export function computeClearingFactors(args: {
     // and only when the caller opted in with a finite quality. The base price
     // and any undercut are untouched, so quality can lift or shave the premium
     // but never let a seller charge below market.
-    const premiumMult =
-      args.qualityPremiumEnabled && posture > 0 && s.outputQuality != null
-        ? qualityPremiumMultiplier(s.outputQuality)
-        : 1;
-    const effectivePremium = posture > 0 ? posture * premiumMult : posture;
     const soldByCommodity: Partial<Record<CommodityType, number>> = {};
     const offerFactorByCommodity: Partial<Record<CommodityType, number>> = {};
     const sectorGroup = args.groupBySector?.get(s.sectorId);
     const groupRatios = sectorGroup != null ? args.priceRatioByGroup?.get(sectorGroup) : undefined;
-    for (const commodity of Object.keys(s.supplyRates) as CommodityType[]) {
+    const outputCommodities = new Set([
+      ...Object.keys(s.supplyRates),
+      ...Object.keys(s.outputAnchorByCommodity ?? {}),
+      ...Object.keys(s.outputUnitsByCommodity ?? {}),
+    ] as CommodityType[]);
+    for (const commodity of outputCommodities) {
       const rate = s.supplyRates[commodity] ?? 0;
-      if (rate <= 0) continue;
+      const outputAnchor = s.outputAnchorByCommodity?.[commodity];
+      const weight = typeof outputAnchor === "number" ? Math.max(0, outputAnchor) : rate;
+      if (weight <= 0) continue;
       const offeredSold = soldByCommodityBySector.get(commodity)?.get(s.sectorId) ?? 1;
       const availability =
         commodity === "advertising" && Number.isFinite(s.editorialAdvertisingAvailability)
@@ -897,15 +914,26 @@ export function computeClearingFactors(args: {
       const priceLeg = priceRealizationFactor(
         stateRatio ?? groupRatios?.get(commodity) ?? priceRatioByCommodity.get(commodity)
       );
-      rateSum += rate;
+      const quality = s.productQualityByCommodity?.[commodity] ?? s.outputQuality;
+      const premiumMult =
+        args.qualityPremiumEnabled && posture > 0 && quality != null
+          ? qualityPremiumMultiplier(quality)
+          : 1;
+      const effectivePremium = posture > 0 ? posture * premiumMult : posture;
       const offerFactor =
         s.inputCostIndex !== undefined
-          ? costPlusPriceFactor(s.inputCostIndex, posture, s.inputCostShare, s.fixedCostShare)
+          ? costPlusPriceFactor(
+              s.inputCostIndex,
+              effectivePremium,
+              s.inputCostShare,
+              s.fixedCostShare
+            )
           : (1 + effectivePremium) * priceLeg;
       offerFactorByCommodity[commodity] = offerFactor;
-      factorSum += rate * sold * offerFactor;
-      quotedPostureSum += rate * (offerFactor / priceLeg - 1);
-      soldSum += rate * sold;
+      rateSum += weight;
+      factorSum += weight * sold * offerFactor;
+      quotedPostureSum += weight * (offerFactor / priceLeg - 1);
+      soldSum += weight * sold;
       soldByCommodity[commodity] = sold;
     }
     if (rateSum <= 0) continue;

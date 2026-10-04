@@ -7,7 +7,6 @@ import type {
   Corporation,
   CorporateSector,
   SectorBuildOrder,
-  StateMetrics,
   GameState,
   ExchangeRate,
 } from "@/lib/db/types";
@@ -59,6 +58,7 @@ import {
 import type { CorporationType } from "@/lib/constants/corporations";
 import { partitionOpenMarkets } from "@/lib/economy/queries/privateEnterpriseGate";
 import type { CommodityPrice } from "@/lib/db/types/commodityPrice";
+import type { ManufacturingProductProject } from "@/lib/products/manufacturingProject";
 import {
   STRANDED_DIVEST_TURNS,
   STRANDED_DIVEST_MAX_PER_TURN,
@@ -85,10 +85,14 @@ import { foundingStarterUnits, sectorEntryFeeAnchor } from "@/lib/corporations/f
 import { unownedHeadroomUnitsOf } from "@/lib/corporations/marketShare";
 import { buildNppNationalShareResolver } from "@/lib/turn/npp/nationalDominancePricing";
 import { resolvePresetIdFromGameState } from "@/lib/world/countryReadinessContract";
-import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { buildNppPriceSignals } from "@/lib/turn/npp/priceSignals";
 import type { RelocationPrimeBank } from "@/lib/corporations/issueRelocationBond";
 import { loadNppBankRateSnapshot } from "@/lib/turn/npp/bankRateSnapshot";
+import {
+  buildNppProductProjectsV2,
+  loadNppCostOfLivingByState,
+  loadNppProductProjectsV2,
+} from "@/lib/turn/npp/manufacturingProducts";
 import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
 import {
   anchorToCorpCapital,
@@ -215,6 +219,7 @@ export async function processNppCorporationDecisions(
   techLedger: TechUnlockLedgerInput[];
   foundingCashWitnesses?: NppFoundingCashWitness[];
   reinvestmentCashWitnesses?: NppReinvestmentCashWitness[];
+  manufacturingProductProjects: ManufacturingProductProject[];
 }> {
   const nppCorps = preloaded
     ? preloaded.corporations.filter((corp) => corp.ceoType === "npp" && corp.suspended !== true)
@@ -242,6 +247,7 @@ export async function processNppCorporationDecisions(
       newSectors,
       divestedSectorIds: allDivestedSectorIds,
       techLedger,
+      manufacturingProductProjects: [],
     };
 
   const corpIds = nppCorps.map((c) => c._id);
@@ -335,8 +341,8 @@ export async function processNppCorporationDecisions(
   // `globalSectors` snapshot: no turn-path reads. See capacityDecisionTelemetry.
   const competitorsByBucket = buildCapacityCompetitorIndex(globalSectors);
 
-  // Resolve the shared plants pricing context once for the cohort.
-  const plantsEnabled = marketAtLeast(await getMarketSystemModeForDb(db), "plants");
+  const manufacturingProductProjectState = await loadNppProductProjectsV2(db, nppCorps);
+  const plantsEnabled = manufacturingProductProjectState.plantsEnabled;
   let plants: NppPlantsContext | undefined;
   let bankRates: RelocationPrimeBank[] | undefined;
   if (plantsEnabled) {
@@ -356,17 +362,7 @@ export async function processNppCorporationDecisions(
     const bankSnapshot = await loadNppBankRateSnapshot(db, countryIds);
     bankRates = bankSnapshot.bankRates;
     const primeByCountry = bankSnapshot.primeByCountry;
-    const colDocs = await db
-      .collection<StateMetrics>("macroMetrics")
-      .find({}, { projection: { "economic.costOfLiving": 1 } })
-      .toArray();
-    const colByState = new Map<string, number>();
-    for (const doc of colDocs) {
-      const value = doc.economic?.costOfLiving?.value;
-      if (typeof value === "number" && Number.isFinite(value)) {
-        colByState.set(String(doc._id), value);
-      }
-    }
+    const colByState = await loadNppCostOfLivingByState(db);
     const nationalShareOf = buildNppNationalShareResolver(globalSectors);
     plants = {
       enabled: true,
@@ -399,6 +395,17 @@ export async function processNppCorporationDecisions(
       gs?.currentYear ??
       startingYear + Math.floor(((gs?.currentTurn ?? turn) - 1) / TURNS_PER_YEAR);
   }
+
+  const manufacturingProductProjects = buildNppProductProjectsV2({
+    state: manufacturingProductProjectState,
+    nppCorporations: nppCorps,
+    sectorsByCorp,
+    turn,
+    techCurrentYear,
+    techTreesEnabled,
+    plants,
+    priceRatioOf,
+  });
 
   // Local-per-₳ rates for every live currency, loaded once. NPP money constants
   // are all ₳; `liquidCapital` is not. See `NppCorpDecisionContext.fxRate`.
@@ -589,6 +596,7 @@ export async function processNppCorporationDecisions(
     newSectors,
     divestedSectorIds: allDivestedSectorIds,
     techLedger,
+    manufacturingProductProjects,
     ...(foundingCashWitnesses.length ? { foundingCashWitnesses } : {}),
     ...(reinvestmentCashWitnesses.length ? { reinvestmentCashWitnesses } : {}),
   };

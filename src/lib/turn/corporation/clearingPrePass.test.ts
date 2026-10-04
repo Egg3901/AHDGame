@@ -12,6 +12,8 @@ import { describe, it, expect } from "vitest";
 import { runClearingPrePass, type ClearingPrePassInput } from "./clearingPrePass";
 import type { MarketContext } from "@/lib/market/marketContext";
 import type { buildCorporationLookups } from "./buildLookups";
+import { buildManufacturedSectorOutput } from "@/lib/products/rules/manufacturingRules";
+import { eraScaledBasePrices } from "@/lib/constants/commodities";
 
 type Lookups = Awaited<ReturnType<typeof buildCorporationLookups>>;
 
@@ -151,5 +153,83 @@ describe("runClearingPrePass with clearing enabled", () => {
     expect(result.buyerDemandByCorpCommodity).toBeDefined();
     expect(result.contractedByCorpCommodity).toBeDefined();
     expect(result.contractedByCorpCommodity?.size).toBe(0);
+  });
+
+  it("rebuilds offers from current capacity and project stage instead of stale product maps", () => {
+    const { lookups } = makeSectorWorld();
+    const sector = lookups.sectorsByCorp.get("corp1")![0] as Record<string, unknown>;
+    Object.assign(sector, {
+      capitalStock: 200,
+      plantCount: 1,
+      producedUnits: 100,
+      operatingCapacityUnits: 200,
+      productOutputCapacityUnits: 100,
+      outputUnitsByCommodity: { vehicles: 20 },
+      outputAnchorByCommodity: { vehicles: 5000 },
+      productQualityByCommodity: { vehicles: 72 },
+    });
+    Object.assign(lookups, {
+      productLinesV2Enabled: true,
+      manufacturingProductByCorpId: new Map([
+        [
+          "corp1",
+          {
+            _id: "project-1",
+            corporationId: "corp1",
+            activeCorporationId: "corp1",
+            kindId: "cement",
+            stage: "mature",
+            stageStartedTurn: 1,
+            allocations: [{ sectorId: "sector1", share: 0.5 }],
+            startedTurn: 1,
+            developmentPaidAnchor: 400,
+            paidThresholdAnchor: 500,
+            elapsedDevelopmentTurns: 1,
+            elapsedThresholdTurns: 1,
+          },
+        ],
+      ]),
+      productSectorQualityById: new Map([["sector1", 70]]),
+    });
+    const market = { clearingEnabled: true, plantsEnabled: true } as MarketContext;
+    const producedByCorpCommodity = new Map<string, Map<string, number>>();
+
+    runClearingPrePass(
+      makeInput({
+        lookups,
+        market,
+        producedByCorpCommodity,
+        supplyAgreementsEnabled: true,
+        settleableAgreements: [],
+        contractedByCorpCommodity: new Map(),
+      })
+    );
+
+    const basePrices = eraScaledBasePrices(lookups.eraUnitScale);
+    const expected = buildManufacturedSectorOutput({
+      outputAnchor: 200 * (basePrices.steel! * 0.5 + basePrices.building_materials! * 0.5),
+      supplyRates: { steel: 0.4, building_materials: 0.2 },
+      allocationShare: 0.5,
+      stage: "mature",
+      outputCommodity: "building_materials",
+      basePrices,
+      currentSectorQualityByCommodity: { steel: 70, building_materials: 70 },
+      paidDevelopmentAnchor: 400,
+      paidThresholdAnchor: 500,
+    });
+    expect(market.clearingBySectorId?.get("sector1")?.soldByCommodity).toHaveProperty("steel");
+    expect(market.clearingBySectorId?.get("sector1")?.soldByCommodity).toHaveProperty(
+      "building_materials"
+    );
+    expect(market.clearingBySectorId?.get("sector1")?.soldByCommodity).not.toHaveProperty(
+      "vehicles"
+    );
+    expect(producedByCorpCommodity.get("corp1")?.get("steel")).toBeCloseTo(
+      expected.outputUnitsByCommodity.steel!
+    );
+    expect(producedByCorpCommodity.get("corp1")?.get("building_materials")).toBeCloseTo(
+      expected.outputUnitsByCommodity.building_materials!
+    );
+    expect(producedByCorpCommodity.get("corp1")?.get("vehicles")).toBeUndefined();
   });
 });

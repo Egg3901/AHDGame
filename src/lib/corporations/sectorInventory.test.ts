@@ -75,6 +75,25 @@ describe("advanceSectorInventory", () => {
     expect(r.nextInventory.coal ?? 0).toBeGreaterThan(0);
   });
 
+  it("uses exact product output quantities and nominal value per commodity", () => {
+    const r = advanceSectorInventory(
+      base({
+        producedUnits: 6,
+        soldUnits: 3,
+        soldFraction: 0.5,
+        soldByCommodity: { steel: 0.25, building_materials: 0.75 },
+        outputUnitsByCommodity: { steel: 2, building_materials: 4 },
+        outputAnchorByCommodity: { steel: 200, building_materials: 100 },
+      })
+    );
+
+    expect(r.nextInventory.steel).toBeCloseTo(1.5, 6);
+    expect(r.nextInventory.building_materials).toBeCloseTo(1, 6);
+    expect(r.accruedUnits).toBeCloseTo(2.5, 6);
+    expect(r.heldValueAnchor).toBeCloseTo(175, 6);
+    expect(r.carryCostAnchor).toBeCloseTo(175 * INVENTORY_CARRY_COST_RATE_PER_TURN, 6);
+  });
+
   it("holding forever loses money against selling (carry + spoilage are net-negative EV)", () => {
     // One unit held one turn costs carry + spoilage of its value; selling now
     // yields its value. The hoard EV must be strictly below the sell EV.
