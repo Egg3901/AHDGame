@@ -398,7 +398,7 @@ export async function updateSupplyAgreement(request: Request, corpId: string, ag
         return NextResponse.json(
           {
             error:
-              "This legacy freight proposal cannot be accepted because freight now sells in a state-local market. Ask the supplier to propose it again naming the state.",
+              "This legacy proposal cannot be accepted because this service now sells in a local state market. Ask the supplier to propose it again naming the state.",
           },
           { status: 409 }
         );
@@ -461,7 +461,7 @@ export async function updateSupplyAgreement(request: Request, corpId: string, ag
         return NextResponse.json(
           {
             error:
-              "This legacy freight proposal cannot be countered because freight now sells in a state-local market. Ask the supplier to propose it again naming the state.",
+              "This legacy proposal cannot be countered because this service now sells in a local state market. Ask the supplier to propose it again naming the state.",
           },
           { status: 409 }
         );
