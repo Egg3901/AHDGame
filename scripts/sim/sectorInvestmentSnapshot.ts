@@ -4,6 +4,8 @@ import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { EXTRACTABLE_RESOURCES } from "@/lib/constants/commodities";
 import { SECTOR_STRATEGIES } from "@/lib/constants/sectorStrategies";
+import type { GameConfig } from "@/lib/db/types/gameConfig";
+import type { GameState } from "@/lib/db/types/gameState";
 import { isMarketSystemMode, marketAtLeast } from "@/lib/market/featureFlag";
 
 const NPC_CORPORATION_USER_ID = "000000000000000000000000";
@@ -288,7 +290,7 @@ export async function snapshotSectorInvestment(
   );
   const nppStateIds = [...new Set(nppSectorRows.map((sector) => sector.stateId))];
   const [config, gameState] = await Promise.all([
-    db.collection("gameConfig").findOne(
+    db.collection<GameConfig>("gameConfig").findOne(
       { _id: "default" },
       {
         projection: {
@@ -298,7 +300,7 @@ export async function snapshotSectorInvestment(
         },
       }
     ),
-    db.collection("gameState").findOne(
+    db.collection<GameState>("gameState").findOne(
       { _id: "current" },
       {
         projection: {
@@ -340,8 +342,8 @@ export async function snapshotSectorInvestment(
     collection("corporations"),
     collection("commodityPrices"),
     capacities,
-    config,
-    gameState,
+    config ? { ...config } : null,
+    gameState ? { ...gameState } : null,
     books && typeof books.turn === "number" ? { turn: books.turn, books: books.books } : null,
     observationClass
   );

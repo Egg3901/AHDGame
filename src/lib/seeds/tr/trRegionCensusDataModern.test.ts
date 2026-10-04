@@ -57,7 +57,11 @@ describe("Turkey modern Layer-1 source proxy profile", () => {
     for (const [regionId, profile] of Object.entries(trRegionCensusDataModern)) {
       for (const [dimension, shares] of Object.entries(profile)) {
         expect(Object.values(shares).every(Number.isFinite), `${regionId}/${dimension}`).toBe(true);
-        expect(Object.values(shares).every((value) => value >= 0 && value <= 100)).toBe(true);
+        expect(
+          Object.values(shares).every(
+            (value) => typeof value === "number" && value >= 0 && value <= 100
+          )
+        ).toBe(true);
         expect(sum(shares), `${regionId}/${dimension}`).toBeCloseTo(100, 10);
       }
     }
@@ -105,7 +109,7 @@ describe("Turkey modern Layer-1 source proxy profile", () => {
   it.each(historicalPresets)(
     "preserves effective historical generic census selection: %s",
     (preset, expected) => {
-      expect(TR_GEOGRAPHY.censusBundles[preset]).toBe(expected);
+      expect(TR_GEOGRAPHY.censusBundles?.[preset]).toBe(expected);
       for (const regionId of ids) {
         expect(getRegionCensusData("TR", regionId, preset)).toBe(expected[regionId]);
       }
@@ -115,7 +119,7 @@ describe("Turkey modern Layer-1 source proxy profile", () => {
   it.each(modernPresets)(
     "routes generic and Layer-1 lookup to the modern source for %s",
     (preset) => {
-      expect(TR_GEOGRAPHY.censusBundles[preset]).toBe(trRegionCensusDataModern);
+      expect(TR_GEOGRAPHY.censusBundles?.[preset]).toBe(trRegionCensusDataModern);
       for (const regionId of ids) {
         expect(getRegionCensusData("TR", regionId, preset)).toBe(
           trRegionCensusDataModern[regionId]

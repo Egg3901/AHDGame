@@ -48,7 +48,7 @@ describe("buildTradeFlowSnapshot", () => {
       ...baseInput(balances, new Map([["steel", { US: 2 }]]), new Map(), ["US", "CN"]),
       importCostMultiplierFor: () => 1.25,
     });
-    expect(snapshot.commodities.steel.flow.US.CN).toBeCloseTo(160);
+    expect(snapshot.commodities.steel!.flow.US.CN).toBeCloseTo(160);
     const clearing = clearAllCommodities(
       ["US", "CN"],
       balances,
