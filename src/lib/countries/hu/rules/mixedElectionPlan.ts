@@ -38,14 +38,9 @@ function ballotParty(candidate: { candidateId: string; partyId: string }): strin
 }
 
 /**
- * Model 106 district tallies from the game's six regional candidate tallies.
- * Party candidates' regional vote count is conserved across district ballots;
- * fixed geographic variation produces distinct district races. An independent
- * candidate contests one deterministic district and receives that district's
- * share of the regional tally. The
- * national-list ballot uses party support summed across the same campaign.
- * The game has no separate list campaign choice yet, so list and constituency
- * support have the same regional baseline, as in its German second-vote model.
+ * Count persisted district and national-list ballots when available. Older
+ * worlds predate separate ballot storage, so they retain the deterministic
+ * regional-to-district approximation below until their next election.
  */
 export function buildHuMixedPlan(
   regions: ReadonlyArray<{ id: string; population: number }>,

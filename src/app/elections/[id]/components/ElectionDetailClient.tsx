@@ -287,14 +287,14 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
               body: JSON.stringify({ constituencyId }),
             }
           : (election.hungarianAssemblyRound?.round === 1 ||
-          election.bulgarianFoundingRound?.round === 1 ||
-          Boolean(election.bulgarianFoundingRound?.newNominationDistrictIds?.length)) &&
-        huDistrictId
-          ? {
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ constituencyId: huDistrictId }),
-            }
-          : {}),
+                election.bulgarianFoundingRound?.round === 1 ||
+                Boolean(election.bulgarianFoundingRound?.newNominationDistrictIds?.length)) &&
+              huDistrictId
+            ? {
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ constituencyId: huDistrictId }),
+              }
+            : {}),
       });
       const data = await res.json();
       if (res.ok) {

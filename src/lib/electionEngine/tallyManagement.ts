@@ -874,7 +874,9 @@ export async function accumulateVoteTurn(
       ? accumulateHuBallots(
           stateId,
           enriched.map((ec) => {
-            const filing = candidates.find((candidate) => candidate._id.toString() === ec.candidateId);
+            const filing = candidates.find(
+              (candidate) => candidate._id.toString() === ec.candidateId
+            );
             return {
               candidateId: ec.candidateId,
               partyId: ec.party,
