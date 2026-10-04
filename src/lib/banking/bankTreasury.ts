@@ -110,20 +110,45 @@ function activeHolderUnits(
 }
 
 /** The sale reservation updates one matching Mongo array element at a time. */
-function largestActiveHolderLot(
+function activeHolderLotUnits(
   holders: readonly BondHolder[],
   bankId: ObjectId,
   charteredTurn: number
 ): number {
-  return holders.reduce((largest, holder) => {
+  return holders.reduce((total, holder) => {
     if (
       holder.bankId?.equals(bankId) &&
       holder.charteredTurn === charteredTurn &&
       !holder.bankTreasuryTradeId
     )
-      return Math.max(largest, Math.max(0, holder.units));
-    return largest;
+      return total + Math.max(0, holder.units);
+    return total;
   }, 0);
+}
+
+function allocateActiveLots(
+  holders: readonly BondHolder[],
+  bankId: ObjectId,
+  charteredTurn: number,
+  requested: number
+): Array<{ lotId: string; units: number }> {
+  let remaining = requested;
+  const allocations: Array<{ lotId: string; units: number }> = [];
+  for (const holder of holders) {
+    if (
+      !holder.bankId?.equals(bankId) ||
+      holder.charteredTurn !== charteredTurn ||
+      holder.bankTreasuryTradeId ||
+      !holder.bankTreasuryLotId ||
+      holder.units <= 0
+    )
+      continue;
+    const units = Math.min(remaining, Math.floor(holder.units));
+    if (units > 0) allocations.push({ lotId: holder.bankTreasuryLotId, units });
+    remaining -= units;
+    if (remaining <= 0) break;
+  }
+  return allocations;
 }
 
 function poolSnapshot(pool: BondPoolQuoteSnapshot | undefined): BondPoolQuoteSnapshot {
@@ -308,6 +333,7 @@ function reserveTransition(receipt: BankTreasuryTradeReceipt, bond: Bond): Banki
     units: receipt.units,
     avgCostPerUnit: receipt.pricePerUnitLocal,
     bankTreasuryTradeId: receipt._id,
+    ...(receipt.side === "buy" ? { bankTreasuryLotId: receipt._id } : {}),
   };
   const reserveProjection =
     receipt.side === "buy"
@@ -334,7 +360,7 @@ function reserveTransition(receipt: BankTreasuryTradeReceipt, bond: Bond): Banki
           },
           note: "Reserve sovereign float units for the bank purchase before cash moves",
         }
-      : {
+      : (receipt.allocations ?? []).map((allocation) => ({
           collection: "bonds",
           filter: {
             _id: oid(receipt.bondId.toHexString()),
@@ -342,25 +368,32 @@ function reserveTransition(receipt: BankTreasuryTradeReceipt, bond: Bond): Banki
               $elemMatch: {
                 bankId: receipt.bankId,
                 charteredTurn: receipt.charteredTurn,
-                units: { $gte: receipt.units },
+                bankTreasuryLotId: allocation.lotId,
                 bankTreasuryTradeId: { $exists: false },
+                units: { $gte: allocation.units },
               },
             },
           },
           update: {
-            $inc: { "holders.$.units": -receipt.units },
-            $push: { holders: position },
+            $inc: { "holders.$.units": -allocation.units },
+            $push: {
+              holders: {
+                ...position,
+                bankTreasuryLotId: allocation.lotId,
+                units: allocation.units,
+              },
+            },
             $set: { updatedAt: receipt.createdAt },
           },
-          note: "Reserve bank units for a sale before pool cash moves",
-        };
+          note: `Reserve ${allocation.units} bank units from lot ${allocation.lotId}`,
+        }));
   return {
     key,
     kind: "bank_treasury_trade_reservation",
     turn: receipt.turn,
     currency: receipt.currency,
     legs: [],
-    projections: [reserveProjection],
+    projections: Array.isArray(reserveProjection) ? reserveProjection : [reserveProjection],
     event: {
       kind: "monetary.executed",
       command: `bank.treasury.${receipt.side}.reserve`,
@@ -386,6 +419,7 @@ function settledInventoryProjections(
             holders: {
               bankId: receipt.bankId,
               charteredTurn: receipt.charteredTurn,
+              bankTreasuryLotId: receipt._id,
               units: receipt.units,
               avgCostPerUnit: receipt.pricePerUnitLocal,
             },
@@ -443,16 +477,30 @@ function releaseReservationTransition(receipt: BankTreasuryTradeReceipt): Bankin
           },
         ]
       : [
+          ...(receipt.allocations ?? []).map((allocation) => ({
+            collection: "bonds",
+            filter: {
+              _id: oid(receipt.bondId.toHexString()),
+              holders: {
+                $elemMatch: {
+                  bankId: receipt.bankId,
+                  charteredTurn: receipt.charteredTurn,
+                  bankTreasuryLotId: allocation.lotId,
+                  bankTreasuryTradeId: { $exists: false },
+                },
+              },
+            },
+            update: { $inc: { "holders.$.units": allocation.units } },
+            note: `Restore ${allocation.units} units to bank lot ${allocation.lotId}`,
+          })),
           {
             collection: "bonds",
             filter: {
               _id: oid(receipt.bondId.toHexString()),
               holders: { $elemMatch: { bankTreasuryTradeId: receipt._id } },
             },
-            update: {
-              $pull: { holders: { bankTreasuryTradeId: receipt._id } },
-            },
-            note: "Remove the sale reservation before restoring its bank lot",
+            update: { $pull: { holders: { bankTreasuryTradeId: receipt._id } } },
+            note: "Remove sale reservation after every source lot is restored",
           },
           {
             collection: "bonds",
@@ -461,17 +509,9 @@ function releaseReservationTransition(receipt: BankTreasuryTradeReceipt): Bankin
               $pull: {
                 holders: { bankId: receipt.bankId, charteredTurn: receipt.charteredTurn, units: 0 },
               },
-              $push: {
-                holders: {
-                  bankId: receipt.bankId,
-                  charteredTurn: receipt.charteredTurn,
-                  units: receipt.units,
-                  avgCostPerUnit: receipt.pricePerUnitLocal,
-                },
-              },
               $set: { updatedAt: new Date() },
             },
-            note: "Restore bank units after a sale was refused before pool cash moved",
+            note: "Remove empty bank treasury lots after a refused sale",
           },
         ];
   return {
@@ -1153,12 +1193,12 @@ export async function tradeBankTreasuryBill(
       Math.floor(available / pricePerUnitLocal)
     );
   } else {
-    const availableLot = largestActiveHolderLot(
+    const availableLots = activeHolderLotUnits(
       bond.holders ?? [],
       input.bankId,
       charter.charteredTurn
     );
-    fillUnits = Math.min(fillUnits, availableLot, quoteState.quote.depthUnitsAtBid);
+    fillUnits = Math.min(fillUnits, availableLots, quoteState.quote.depthUnitsAtBid);
   }
   if (fillUnits <= 0)
     return {
@@ -1173,6 +1213,23 @@ export async function tradeBankTreasuryBill(
           : "The pool cannot fund a sale of this size",
     };
   const amountLocal = roundLocal(fillUnits * pricePerUnitLocal, charter.currency);
+  const allocations =
+    input.side === "sell"
+      ? allocateActiveLots(bond.holders ?? [], input.bankId, charter.charteredTurn, fillUnits)
+      : undefined;
+  if (
+    input.side === "sell" &&
+    allocations?.reduce((sum, allocation) => sum + allocation.units, 0) !== fillUnits
+  ) {
+    return {
+      status: "rejected",
+      tradeId,
+      side: input.side,
+      units: 0,
+      amountLocal: 0,
+      error: "Held lots changed before sale reservation",
+    };
+  }
   const now = new Date();
   const receipt: BankTreasuryTradeReceipt = {
     _id: tradeId,
@@ -1183,6 +1240,7 @@ export async function tradeBankTreasuryBill(
     side: input.side,
     requestedUnits: units,
     units: fillUnits,
+    ...(allocations ? { allocations } : {}),
     pricePerUnitLocal,
     amountLocal,
     turn: input.turn,
@@ -1295,10 +1353,10 @@ export async function liquidateFailedBankTreasury(
     while (true) {
       const bond = await db.collection<Bond>("bonds").findOne({ _id: initial._id });
       if (!bond || bond.matured || bond.defaulted) break;
-      const lot = largestActiveHolderLot(bond.holders ?? [], bankId, charter.charteredTurn);
-      if (lot <= 0) break;
+      const lots = activeHolderLotUnits(bond.holders ?? [], bankId, charter.charteredTurn);
+      if (lots <= 0) break;
       const quoteState = await loadQuoteForTrade(db, bond, charter.currency, turn);
-      const units = Math.min(lot, quoteState.quote.depthUnitsAtBid);
+      const units = Math.min(lots, quoteState.quote.depthUnitsAtBid);
       if (units <= 0) break;
       const receiptSequence = await db
         .collection<BankTreasuryTradeReceipt>(BANK_TREASURY_TRADES_COLLECTION)

@@ -837,6 +837,12 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
     }
 
     if (isMatured && !bond.defaulted) {
+      // A journaled bank treasury buy/sale has already reserved units out of
+      // publicFloat or a bank lot. Treasury recovery runs later in BankingTurn;
+      // redeeming this snapshot first would clear the pending inventory before
+      // its funded cash leg can settle. Keep the bond live and retry maturity
+      // on the next turn after the durable trade receipt resolves.
+      if (bond.holders?.some((holder) => holder.bankTreasuryTradeId)) continue;
       // Auto-redeem at maturity: Phase 5 (below) returns face value to every
       // holder from the in-memory `bond.holders` snapshot captured here, then
       // we clear the holdings so the redeemed position does NOT linger. Before

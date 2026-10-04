@@ -244,6 +244,8 @@ export interface BankTreasuryTradeReceipt {
   side: "buy" | "sell";
   /** Original whole-unit request before cash and pool-depth clamps. */
   requestedUnits: number;
+  /** Frozen source lots reserved by a multi-lot sale. */
+  allocations?: Array<{ lotId: string; units: number }>;
   units: number;
   pricePerUnitLocal: number;
   amountLocal: number;

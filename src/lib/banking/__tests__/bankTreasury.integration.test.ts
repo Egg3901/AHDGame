@@ -171,6 +171,40 @@ describe("funded bank treasury settlement", () => {
     ).resolves.toMatchObject({ status: "rejected", error: "Bank treasury bills are disabled" });
   });
 
+  it("sells one requested quantity across multiple purchase lots", async () => {
+    const db = world();
+    for (const [tradeId, units] of [
+      ["treasury-buy-lot-a", 3],
+      ["treasury-buy-lot-b", 4],
+    ] as const) {
+      await expect(
+        tradeBankTreasuryBill(db as unknown as Db, {
+          bankId: BANK,
+          bondId: BOND,
+          side: "buy",
+          units,
+          turn: TURN,
+          policy: POLICY,
+          tradeId,
+        })
+      ).resolves.toMatchObject({ status: "completed", units });
+    }
+    expect(balance(db).bond.holders).toHaveLength(2);
+
+    const sale = await tradeBankTreasuryBill(db as unknown as Db, {
+      bankId: BANK,
+      bondId: BOND,
+      side: "sell",
+      units: 7,
+      turn: TURN,
+      policy: POLICY,
+      tradeId: "treasury-sell-combined-lots",
+    });
+    expect(sale).toMatchObject({ status: "completed", units: 7 });
+    expect(balance(db).bond.publicFloat).toBe(100);
+    expect(balance(db).bond.holders).toEqual([]);
+  });
+
   it("recovers a crash after the bank debit without charging twice", async () => {
     const db = world();
     const initialCash = balance(db).cash;
@@ -307,6 +341,16 @@ describe("funded bank treasury settlement", () => {
       tradeId: "treasury-estate-buy-1",
     });
     expect(buy.status).toBe("completed");
+    const secondBuy = await tradeBankTreasuryBill(db as unknown as Db, {
+      bankId: BANK,
+      bondId: BOND,
+      side: "buy",
+      units: 4,
+      turn: TURN,
+      policy: POLICY,
+      tradeId: "treasury-estate-buy-2",
+    });
+    expect(secondBuy.status).toBe("completed");
     await db
       .collection("corporations")
       .updateOne(

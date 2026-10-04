@@ -77,7 +77,9 @@ export function BankTreasuryPanel({
       showToast(
         result.status === "pending"
           ? "The trade is settling and will be recovered automatically."
-          : `${side === "buy" ? "Bought" : "Sold"} ${result.units} bill units for ${formatBankMoney(result.amountLocal, currency)}.`,
+          : side === "sell" && result.units < count
+            ? `Sold ${result.units} of ${count} requested bill units for ${formatBankMoney(result.amountLocal, currency)}. ${count - result.units} requested units remain unfilled.`
+            : `${side === "buy" ? "Bought" : "Sold"} ${result.units} bill units for ${formatBankMoney(result.amountLocal, currency)}.`,
         result.status === "pending" ? "info" : "success"
       );
       await onChanged();
