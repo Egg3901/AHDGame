@@ -352,6 +352,7 @@ describe("GET /api/banking/corporation/[id]", () => {
         "warningBand",
       ]);
       expect(body.charter.sovereignTreasuryMarkValue).toBe(0);
+      expect(body.charter.lastBankingUnderwritingFees).toBe(0);
       expect(sortedKeys(body.rates)).toEqual(["depositRatePercent", "lendingRatePercent"]);
       expect(sortedKeys(body.householdBook)).toEqual([
         "blendedExpectedDefaultPercent",
