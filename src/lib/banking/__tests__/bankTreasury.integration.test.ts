@@ -10,6 +10,7 @@ import { resolveBankingPolicy } from "@/lib/banking/rules/policy";
 import {
   getBankTreasuryOverview,
   recoverBankTreasuryTrades,
+  sweepBankTreasury,
   tradeBankTreasuryBill,
 } from "../bankTreasury";
 import { returnDepositBook } from "../depositBookReturn";
@@ -151,6 +152,242 @@ describe("funded bank treasury settlement", () => {
     expect(afterSell.bond.publicFloat).toBe(100);
     expect(afterSell.bond.holders).toEqual([]);
     expect(afterSell.mark).toBe(0);
+  });
+
+  it("skips a negative-carry automatic bill while leaving the same bill available manually", async () => {
+    const db = world();
+    await db
+      .collection("corporations")
+      .updateOne({ _id: BANK }, { $set: { "bankCharter.sovereignTreasuryAutoSweep": true } });
+    await db
+      .collection("bonds")
+      .updateOne({ _id: BOND }, { $set: { couponRate: 7, maturityTurn: TURN + 1 } });
+
+    const automatic = await sweepBankTreasury(db as unknown as Db, BANK, POLICY, TURN);
+    expect(automatic).toMatchObject({ trades: 0, completed: 0, pending: 0 });
+    expect(balance(db).bond.publicFloat).toBe(100);
+
+    const manual = await tradeBankTreasuryBill(db as unknown as Db, {
+      bankId: BANK,
+      bondId: BOND,
+      side: "buy",
+      units: 1,
+      turn: TURN,
+      policy: POLICY,
+      tradeId: "manual-negative-carry-remains-allowed",
+    });
+    expect(manual.status).toBe("completed");
+    expect(balance(db).bond.publicFloat).toBe(99);
+  });
+
+  it("does not touch storage when automatic bill buying is disabled", async () => {
+    const collection = vi.fn(() => {
+      throw new Error("disabled treasury read");
+    });
+    const db = { collection } as unknown as Db;
+    const disabled = resolveBankingPolicy({
+      privateBankingEnabled: true,
+      bankTreasuryEnabled: false,
+      savingsAccountsMode: "off",
+    });
+    await expect(sweepBankTreasury(db, BANK, disabled, TURN)).resolves.toEqual({
+      trades: 0,
+      completed: 0,
+      pending: 0,
+    });
+    expect(collection).not.toHaveBeenCalled();
+  });
+
+  it("buys the highest-yield bill first when automatic cash can fund only one", async () => {
+    const db = world();
+    const lowerYieldBondId = new ObjectId("cccccccccccccccccccccccc");
+    await db.collection("corporations").updateOne(
+      { _id: BANK },
+      {
+        $set: {
+          "bankCharter.cashReserves": 1_400,
+          "bankCharter.sovereignTreasuryAutoSweep": true,
+        },
+      }
+    );
+    await db
+      .collection("bonds")
+      .updateOne({ _id: BOND }, { $set: { couponRate: 8, maturityTurn: TURN + 48 } });
+    await db.collection("bonds").insertOne({
+      _id: lowerYieldBondId,
+      issuerType: "sovereign",
+      countryId: "US",
+      issuerName: "United States",
+      currencyCode: "USD",
+      marketPrice: 1,
+      couponRate: 6,
+      maturityTurn: TURN + 48,
+      matured: false,
+      defaulted: false,
+      publicFloat: 100,
+      holders: [],
+    } as unknown as Record<string, unknown>);
+
+    const result = await sweepBankTreasury(db as unknown as Db, BANK, POLICY, TURN);
+    expect(result).toMatchObject({ trades: 1, completed: 1, pending: 0 });
+    expect((db.collection("bonds").docs[0] as unknown as Bond).holders).toEqual([
+      expect.objectContaining({ bankId: BANK, units: 1 }),
+    ]);
+    expect((db.collection("bonds").docs[1] as unknown as Bond).holders).toEqual([]);
+  });
+
+  it("rechecks current carry after the overview quote changes", async () => {
+    const db = world();
+    await db.collection("corporations").updateOne(
+      { _id: BANK },
+      {
+        $set: {
+          "bankCharter.cashReserves": 10_000,
+          "bankCharter.sovereignTreasuryAutoSweep": true,
+        },
+      }
+    );
+    await db
+      .collection("bonds")
+      .updateOne({ _id: BOND }, { $set: { couponRate: 8, maturityTurn: TURN + 48 } });
+    const bonds = db.collection("bonds");
+    const originalFindOne = bonds.findOne.bind(bonds);
+    let changedQuote = false;
+    const dbWithQuoteRace = new Proxy(db as unknown as Db, {
+      get(target, property, receiver) {
+        if (property === "collection")
+          return (name: string) => {
+            const collection = db.collection(name);
+            if (name !== "bonds") return collection;
+            return new Proxy(collection, {
+              get(targetCollection, method, collectionReceiver) {
+                if (method === "findOne")
+                  return async (...args: Parameters<typeof originalFindOne>) => {
+                    if (!changedQuote) {
+                      changedQuote = true;
+                      await db
+                        .collection("bonds")
+                        .updateOne({ _id: BOND }, { $set: { marketPrice: 1.2 } });
+                    }
+                    return originalFindOne(...args);
+                  };
+                const value = Reflect.get(targetCollection, method, collectionReceiver);
+                return typeof value === "function" ? value.bind(targetCollection) : value;
+              },
+            });
+          };
+        return Reflect.get(target, property, receiver);
+      },
+    });
+
+    const result = await sweepBankTreasury(dbWithQuoteRace, BANK, POLICY, TURN);
+    expect(changedQuote).toBe(true);
+    expect(result).toMatchObject({ trades: 1, completed: 0, pending: 0 });
+    expect((db.collection("bonds").docs[0] as unknown as Bond).publicFloat).toBe(100);
+    expect(balance(db).cash).toBe(10_000);
+  });
+
+  it("rechecks the live funding rate after the auto plan is made", async () => {
+    const db = world();
+    await db.collection("corporations").updateOne(
+      { _id: BANK },
+      {
+        $set: {
+          "bankCharter.cashReserves": 10_000,
+          "bankCharter.sovereignTreasuryAutoSweep": true,
+        },
+      }
+    );
+    await db
+      .collection("bonds")
+      .updateOne({ _id: BOND }, { $set: { couponRate: 8, maturityTurn: TURN + 48 } });
+    const centralBanks = db.collection("centralBanks");
+    const originalFindOne = centralBanks.findOne.bind(centralBanks);
+    let fundingLookups = 0;
+    const dbWithRateRace = new Proxy(db as unknown as Db, {
+      get(target, property, receiver) {
+        if (property === "collection")
+          return (name: string) => {
+            const collection = db.collection(name);
+            if (name !== "centralBanks") return collection;
+            return new Proxy(collection, {
+              get(targetCollection, method, collectionReceiver) {
+                if (method === "findOne")
+                  return async (...args: Parameters<typeof originalFindOne>) => {
+                    fundingLookups += 1;
+                    if (fundingLookups === 3)
+                      await db
+                        .collection("centralBanks")
+                        .updateOne({ _id: "US" }, { $set: { primeRate: 15 } });
+                    return originalFindOne(...args);
+                  };
+                const value = Reflect.get(targetCollection, method, collectionReceiver);
+                return typeof value === "function" ? value.bind(targetCollection) : value;
+              },
+            });
+          };
+        return Reflect.get(target, property, receiver);
+      },
+    });
+
+    const result = await sweepBankTreasury(dbWithRateRace, BANK, POLICY, TURN);
+    expect(fundingLookups).toBeGreaterThanOrEqual(3);
+    expect(result).toMatchObject({ trades: 1, completed: 0, pending: 0 });
+    expect((db.collection("bonds").docs[0] as unknown as Bond).publicFloat).toBe(100);
+    expect(balance(db).cash).toBe(10_000);
+  });
+
+  it("rechecks the bank's automatic sweep setting before the trade", async () => {
+    const db = world();
+    await db.collection("corporations").updateOne(
+      { _id: BANK },
+      {
+        $set: {
+          "bankCharter.cashReserves": 10_000,
+          "bankCharter.sovereignTreasuryAutoSweep": true,
+        },
+      }
+    );
+    await db
+      .collection("bonds")
+      .updateOne({ _id: BOND }, { $set: { couponRate: 8, maturityTurn: TURN + 48 } });
+    const corporations = db.collection("corporations");
+    const originalFindOne = corporations.findOne.bind(corporations);
+    let bankLookups = 0;
+    const dbWithPolicyRace = new Proxy(db as unknown as Db, {
+      get(target, property, receiver) {
+        if (property === "collection")
+          return (name: string) => {
+            const collection = db.collection(name);
+            if (name !== "corporations") return collection;
+            return new Proxy(collection, {
+              get(targetCollection, method, collectionReceiver) {
+                if (method === "findOne")
+                  return async (...args: Parameters<typeof originalFindOne>) => {
+                    bankLookups += 1;
+                    if (bankLookups === 4)
+                      await db
+                        .collection("corporations")
+                        .updateOne(
+                          { _id: BANK },
+                          { $set: { "bankCharter.sovereignTreasuryAutoSweep": false } }
+                        );
+                    return originalFindOne(...args);
+                  };
+                const value = Reflect.get(targetCollection, method, collectionReceiver);
+                return typeof value === "function" ? value.bind(targetCollection) : value;
+              },
+            });
+          };
+        return Reflect.get(target, property, receiver);
+      },
+    });
+
+    const result = await sweepBankTreasury(dbWithPolicyRace, BANK, POLICY, TURN);
+    expect(bankLookups).toBeGreaterThanOrEqual(4);
+    expect(result).toMatchObject({ trades: 1, completed: 0, pending: 0 });
+    expect((db.collection("bonds").docs[0] as unknown as Bond).publicFloat).toBe(100);
+    expect(balance(db).cash).toBe(10_000);
   });
 
   it("does not query treasury data when the feature is off", async () => {
