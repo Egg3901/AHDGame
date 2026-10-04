@@ -147,7 +147,8 @@ describe("runPatreonReconcile audit and retry history", () => {
         tier: "supporter-plus",
         provider: "stripe",
         expiresAt: stripeExpiry,
-      })
+      }),
+      expect.objectContaining({ supporterProvider: "stripe", patreonTier: "supporter" })
     );
     expect(user.patreonExpiresAt).toEqual(stripeExpiry);
 

@@ -69,6 +69,11 @@ describe("cron jobs", () => {
     await import("./cron");
   }, 30_000);
 
+  // Module loading has its own setup budget; cron callback assertions keep their timeout.
+  beforeAll(async () => {
+    await import("./cron");
+  }, 30_000);
+
   beforeEach(async () => {
     const cron = await import("node-cron");
     const turnSystem = await import("./turnSystem");
