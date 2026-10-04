@@ -12,7 +12,6 @@ const doc = (
 ): CommoditySourcingDoc =>
   ({
     basis: "buyer_intent_sourcing",
-    commodity: "coal",
     turn: 12,
     demandUnitsIntent: 10,
     intraStateUnits: 10,

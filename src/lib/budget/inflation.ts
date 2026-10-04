@@ -746,7 +746,7 @@ export async function calculateCountryInflation(
             { projection: { corporationId: 1, countryId: 1, sectorType: 1, revenue: 1 } }
           )
           .toArray(),
-    hasMeasuredTariffRate ? Promise.resolve([]) : loadActiveFtaPairs(db),
+    hasMeasuredTariffRate ? Promise.resolve(new Set<string>()) : loadActiveFtaPairs(db),
   ]);
 
   const unemployment = finiteOr(nationalMetrics?.economic?.unemploymentRate?.value, 5.0);
