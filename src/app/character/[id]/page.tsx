@@ -1051,7 +1051,7 @@ export default async function CharacterPage({ params }: PageProps) {
                 maxDonorLevel={maxDonorLevel}
                 campaignFunds={character.currencyBalances?.campaign ?? character.funds ?? 0}
                 cashOnHand={getTotalPersonalLiquidWealth(character, forexEnabled, fxRatesRecord)}
-                currency={getHomeCurrency(character)}
+                currency={getHomeCurrency(character, gamePreset)}
                 donorIncome={{
                   passivePerHour: fundDistribution.donorBaseBonus,
                   perLevelRate: DONOR_BASE_BONUS_PER_LEVEL[populationTier],
