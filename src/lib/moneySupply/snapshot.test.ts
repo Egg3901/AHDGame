@@ -188,6 +188,94 @@ describe("snapshotMoneySupply", () => {
     expect(options.projection).not.toHaveProperty("treasuryBalance");
   });
 
+  it("counts charter vault and durable bank cash escrows once, excluding noncash bank assets", async () => {
+    db.collectionMocks.gameConfig.findOne.mockResolvedValue({
+      moneySupplyEnabled: true,
+      treasuryCashLedgerEnabled: true,
+    });
+    db.collectionMocks.corporations.find.mockReturnValue(
+      cursorWith([
+        {
+          countryId: "US",
+          liquidCurrencyCode: "USD",
+          liquidCapital: 100,
+          bankCharter: {
+            status: "failed",
+            currency: "USD",
+            cashReserves: 200,
+            totalLoans: 900,
+            postedCapital: 800,
+            sovereignTreasuryMarkValue: 700,
+          },
+          bankTreasuryEscrows: {
+            oldCharterSale: { currencyCode: "USD", amountLocal: 30 },
+          },
+          bankSovereignEscrows: {
+            unpaidCoupon: { currencyCode: "USD", amountLocal: 40 },
+          },
+          bankPropForexFee: { currencyCode: "USD", amountLocal: 50 },
+        },
+      ])
+    );
+    db.collectionMocks.states.find.mockReturnValue(cursorWith([]));
+
+    await snapshotMoneySupply(db as unknown as Db, 12);
+
+    const snapshot = db.collectionMocks[MONEY_SUPPLY_SNAPSHOTS_COLLECTION].replaceOne.mock.calls[0][1];
+    expect(snapshot.corporateLiquid).toBe(420);
+    const options = db.collectionMocks.corporations.find.mock.calls[0]?.[1] as {
+      projection: Record<string, unknown>;
+    };
+    expect(options.projection).toHaveProperty("bankCharter.cashReserves", 1);
+    expect(options.projection).toHaveProperty("bankTreasuryEscrows", 1);
+    expect(options.projection).toHaveProperty("bankSovereignEscrows", 1);
+    expect(options.projection).toHaveProperty("bankPropForexFee", 1);
+  });
+
+  it("conserves observed cash when a funded coupon moves from Treasury cash to bank vault", async () => {
+    db.collectionMocks.gameConfig.findOne.mockResolvedValue({
+      moneySupplyEnabled: true,
+      treasuryCashLedgerEnabled: true,
+    });
+    db.collectionMocks.federalBudget.find.mockReturnValue(
+      cursorWith([{ countryId: "US", currencyCode: "USD", treasuryCashLocal: 400 }])
+    );
+    db.collectionMocks.corporations.find.mockReturnValue(
+      cursorWith([
+        {
+          countryId: "US",
+          liquidCurrencyCode: "USD",
+          liquidCapital: 0,
+          bankCharter: { status: "active", currency: "USD", cashReserves: 200 },
+        },
+      ])
+    );
+    db.collectionMocks.states.find.mockReturnValue(cursorWith([]));
+    await snapshotMoneySupply(db as unknown as Db, 12);
+    const before = db.collectionMocks[MONEY_SUPPLY_SNAPSHOTS_COLLECTION].replaceOne.mock.calls[0][1];
+
+    db.collectionMocks.federalBudget.find.mockReturnValue(
+      cursorWith([{ countryId: "US", currencyCode: "USD", treasuryCashLocal: 350 }])
+    );
+    db.collectionMocks.corporations.find.mockReturnValue(
+      cursorWith([
+        {
+          countryId: "US",
+          liquidCurrencyCode: "USD",
+          liquidCapital: 0,
+          bankCharter: { status: "active", currency: "USD", cashReserves: 250 },
+        },
+      ])
+    );
+    db.collectionMocks[MONEY_SUPPLY_SNAPSHOTS_COLLECTION].replaceOne.mockClear();
+    await snapshotMoneySupply(db as unknown as Db, 13);
+    const after = db.collectionMocks[MONEY_SUPPLY_SNAPSHOTS_COLLECTION].replaceOne.mock.calls[0][1];
+
+    expect(after.governmentLiquid + after.corporateLiquid).toBe(
+      before.governmentLiquid + before.corporateLiquid
+    );
+  });
+
   it("does not project the new cash stock when the flag is off", async () => {
     await snapshotMoneySupply(db as unknown as Db, 12);
     const options = db.collectionMocks.federalBudget.find.mock.calls[0]?.[1] as {
@@ -195,6 +283,11 @@ describe("snapshotMoneySupply", () => {
     };
     expect(options.projection).toHaveProperty("treasuryBalance", 1);
     expect(options.projection).not.toHaveProperty("treasuryCashLocal");
+    const corporationOptions = db.collectionMocks.corporations.find.mock.calls[0]?.[1] as {
+      projection: Record<string, unknown>;
+    };
+    expect(corporationOptions.projection).not.toHaveProperty("bankCharter.cashReserves");
+    expect(corporationOptions.projection).not.toHaveProperty("bankTreasuryEscrows");
   });
 
   it("writes a moneySupplySnapshot row for a bank-less command economy (bug: 6 Warsaw-Pact countries had zero rows)", async () => {

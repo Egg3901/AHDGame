@@ -15,6 +15,7 @@ import { seedMoneySupplyBaselines } from "./seed";
 import { isMoneySupplyEnabledFromConfig } from "./featureFlag";
 import {
   addCentralBankMoney,
+  addFundedBankCash,
   addComponent,
   addHouseholdMoneyFromDemography,
   aggregatesForCurrency,
@@ -106,6 +107,14 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
             "bankCharter.currency": 1,
             "bankCharter.npcDeposits": 1,
             "bankCharter.totalLoans": 1,
+            ...(treasuryCashLedgerEnabled
+              ? {
+                  "bankCharter.cashReserves": 1,
+                  bankTreasuryEscrows: 1,
+                  bankSovereignEscrows: 1,
+                  bankPropForexFee: 1,
+                }
+              : {}),
           },
         }
       )
@@ -214,6 +223,7 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
       "corporateLiquid",
       corp.liquidCapital
     );
+  if (treasuryCashLedgerEnabled) addFundedBankCash(byCurrency, corporations);
   for (const party of parties)
     addComponent(
       byCurrency,
