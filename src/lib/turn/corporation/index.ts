@@ -297,6 +297,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       db,
       corporations: lookups.corporations,
       projectsByCorporationId: lookups.manufacturingProductByCorpId,
+      completedTurn: (turn ?? gameState?.currentTurn ?? 0) - 1,
     });
   }
   const currentYear = gameState?.currentYear;
