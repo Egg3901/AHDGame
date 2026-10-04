@@ -235,6 +235,79 @@ describe("deposit insurance", () => {
       };
     }
 
+    it("publishes only a funded epoch event and activates it once after cash settles", async () => {
+      build({ cashReserves: 0, npcDeposits: 100_000, fundBalance: 10_000 });
+      Object.assign(memory.collection("gameConfig").docs[0], {
+        privateBankingEnabled: true,
+        bankFailurePoliticsEnabled: true,
+      });
+      const result = await resolveFailedBankDepositors(memory as unknown as Db, bankId, 77);
+      expect(result.resolved).toBe(true);
+      expect(memory.collection("bankFailurePoliticalEvents").docs).toEqual([
+        expect.objectContaining({
+          _id: `bank-failure:${bankId}:1`,
+          paidTurn: 77,
+          countryId: "US",
+          currency: "USD",
+          depositExposure: 100_000,
+          insurancePaid: 10_000,
+          taxpayerPaid: 90_000,
+          gdp: 1_000_000,
+        }),
+      ]);
+      await resolveFailedBankDepositors(memory as unknown as Db, bankId, 78);
+      expect(memory.collection("bankFailurePoliticalEvents").docs).toHaveLength(1);
+      expect(memory.collection("bankFailurePoliticalEvents").docs[0].paidTurn).toBe(77);
+    });
+
+    it("recovers a crash after cash landed and starts decay only on completed delivery", async () => {
+      build({ cashReserves: 0, npcDeposits: 100_000, fundBalance: 10_000 });
+      Object.assign(memory.collection("gameConfig").docs[0], {
+        privateBankingEnabled: true,
+        bankFailurePoliticsEnabled: true,
+      });
+      vi.spyOn(memory.collection("bankFailurePoliticalEvents"), "insertOne").mockRejectedValueOnce(
+        new Error("interrupted political event publication")
+      );
+      const first = await resolveFailedBankDepositors(memory as unknown as Db, bankId, 77);
+      expect(first.resolved).toBe(false);
+      expect(cbNow()).toBe(1_100_000);
+      expect(memory.collection("bankFailurePoliticalEvents").docs).toHaveLength(0);
+      const { recoverBankingSettlements } = await import("../recovery");
+      await recoverBankingSettlements(memory as unknown as Db, 80);
+      const { loadBankFailureEffects } = await import("../failurePolitics");
+      await loadBankFailureEffects(memory as unknown as Db, 80, true);
+      expect(cbNow()).toBe(1_100_000);
+      expect(memory.collection("bankFailurePoliticalEvents").docs).toHaveLength(1);
+      expect(memory.collection("bankFailurePoliticalEvents").docs[0].paidTurn).toBe(80);
+    });
+
+    it("does not publish political effects while the estate lacks funded backstop cash", async () => {
+      build({
+        cashReserves: 0,
+        npcDeposits: 100_000,
+        fundBalance: 0,
+        treasuryBalance: 0,
+        bondPoolCash: 0,
+      });
+      Object.assign(memory.collection("gameConfig").docs[0], {
+        privateBankingEnabled: true,
+        bankFailurePoliticsEnabled: true,
+      });
+      const result = await resolveFailedBankDepositors(memory as unknown as Db, bankId, 77);
+      expect(result.resolved).toBe(false);
+      expect(memory.collection("bankFailurePoliticalEvents").docs).toHaveLength(0);
+      memory.collection("federalBudget").docs[0].treasuryBalance = 100_000;
+      await resolveFailedBankDepositors(memory as unknown as Db, bankId, 80);
+      expect(memory.collection("bankFailurePoliticalEvents").docs[0].paidTurn).toBe(80);
+    });
+
+    it("leaves the political event collection untouched when its flag is off", async () => {
+      build({ cashReserves: 100_000, npcDeposits: 50_000 });
+      await resolveFailedBankDepositors(memory as unknown as Db, bankId, 77);
+      expect(memory.collection("bankFailurePoliticalEvents").docs).toHaveLength(0);
+    });
+
     it("returns the household book in full and leaves player principal alone", async () => {
       build({ cashReserves: 100_000, npcDeposits: 50_000, playerSavings: [2_000_000, 9_000_000] });
 

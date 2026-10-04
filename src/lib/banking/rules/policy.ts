@@ -17,6 +17,7 @@ export type SavingsAccountsMode = "off" | "shadow" | "authoritative";
 
 export interface BankingPolicyConfig {
   privateBankingEnabled?: boolean;
+  bankFailurePoliticsEnabled?: boolean;
   bankPropTradingEnabled?: boolean;
   bankTreasuryEnabled?: boolean;
   bankPropForexFeesEnabled?: boolean;
@@ -30,6 +31,7 @@ export interface BankingPolicyConfig {
 /** Projection for the one config read the shell performs. */
 export const BANKING_POLICY_PROJECTION = Object.freeze({
   privateBankingEnabled: 1,
+  bankFailurePoliticsEnabled: 1,
   bankPropTradingEnabled: 1,
   bankTreasuryEnabled: 1,
   bankPropForexFeesEnabled: 1,
@@ -43,6 +45,8 @@ export const BANKING_POLICY_PROJECTION = Object.freeze({
 export interface BankingPolicySnapshot {
   /** Private banking as a whole. Off means a read-only freeze, not a drain. */
   privateBanking: boolean;
+  /** Funded resolution consequences. Off unless explicitly enabled. */
+  failurePolitics?: boolean;
   /** Prop desks, interbank market, margin line. Requires private banking. */
   propTrading: boolean;
   /** Funded short-sovereign treasury holdings; disabled unless explicitly enabled. */
@@ -83,6 +87,7 @@ export function resolveBankingPolicy(
       : Object.freeze([]);
   return Object.freeze({
     privateBanking,
+    failurePolitics: privateBanking && config?.bankFailurePoliticsEnabled === true,
     propTrading: privateBanking && config?.bankPropTradingEnabled !== false,
     bankTreasury: privateBanking && config?.bankTreasuryEnabled === true,
     propForexFees:
@@ -103,6 +108,7 @@ export const BANKING_POLICY_OFF: BankingPolicySnapshot = resolveBankingPolicy(nu
 /** Everything on: the snapshot the simulation harness and tests start from. */
 export const BANKING_POLICY_ALL_ON: BankingPolicySnapshot = resolveBankingPolicy({
   privateBankingEnabled: true,
+  bankFailurePoliticsEnabled: true,
   bankPropTradingEnabled: true,
   bankPropForexFeesEnabled: true,
   bankTreasuryEnabled: true,

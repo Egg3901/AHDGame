@@ -4,7 +4,8 @@ import type { ActiveModifier } from "@/lib/utils/approvalModifiers";
 import { buildModifierTitle, toneFor } from "./modifierTitle";
 
 function marginForModifier(modifier: ActiveModifier): number | null {
-  if (modifier.source === "address" || modifier.source === "war") return null;
+  if (modifier.source === "address" || modifier.source === "war" || modifier.source === "banking")
+    return null;
   if (modifier.marginEffect === 0) return null;
   return modifier.marginEffect ?? null;
 }

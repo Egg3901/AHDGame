@@ -221,6 +221,8 @@ export interface GameConfig {
   bankPropForexFeesEnabled?: boolean;
   /** Kill switch: bank-failure contagion cascade. Default on when banking is on. */
   bankContagionEnabled?: boolean;
+  /** Funded bank failures affect approval and consumer confidence. Default off. */
+  bankFailurePoliticsEnabled?: boolean;
   /**
    * Savings account rollout. `off`: legacy character fields only. `shadow`:
    * accounts are materialized from the legacy fields every turn and compared,
