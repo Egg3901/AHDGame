@@ -149,8 +149,18 @@ describe("funded Treasury corporation transfers", () => {
     const first = await settleFundedTreasuryCompensation(db as unknown as Db, input);
     const replay = await settleFundedTreasuryCompensation(db as unknown as Db, input);
 
-    expect(first).toEqual({ donorAmountLocal: 5, treasuryAmountLocal: 5, newlySettled: true });
-    expect(replay).toEqual({ donorAmountLocal: 5, treasuryAmountLocal: 5, newlySettled: false });
+    expect(first).toEqual({
+      donorAmountLocal: 5,
+      treasuryAmountLocal: 5,
+      payoutAnchor: 5,
+      newlySettled: true,
+    });
+    expect(replay).toEqual({
+      donorAmountLocal: 5,
+      treasuryAmountLocal: 5,
+      payoutAnchor: 5,
+      newlySettled: false,
+    });
     expect(db.collection("federalBudget").docs[0]).toMatchObject({
       treasuryCashLocal: 5,
       treasuryBalance: 5,
@@ -197,11 +207,12 @@ describe("funded Treasury corporation transfers", () => {
     expect(db.collection("federalBudget").docs[0]).toMatchObject({ treasuryCashLocal: 5 });
     expect(db.collection("corporations").docs[0]?.liquidCapital).toBe(100);
 
-    await settleFundedTreasuryCompensation(db as unknown as Db, {
+    const resumed = await settleFundedTreasuryCompensation(db as unknown as Db, {
       ...input,
       payoutAnchor: 0,
       fxByCurrency: new Map(),
     });
+    expect(resumed).toMatchObject({ donorAmountLocal: 5, treasuryAmountLocal: 5, payoutAnchor: 5 });
     await settleFundedTreasuryCompensation(db as unknown as Db, input);
 
     expect(db.collection("federalBudget").docs[0]).toMatchObject({

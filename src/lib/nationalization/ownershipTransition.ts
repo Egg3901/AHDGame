@@ -90,6 +90,7 @@ import { writeGovBudgetLocal } from "@/lib/currency/govBudgetFields";
 import { resumeSettlement, settleTransition } from "@/lib/banking/settlementJournal";
 import type { BankingTransition, TransitionLeg } from "@/lib/banking/rules/boundary";
 import {
+  acquireConstructionPropertyTransition,
   hasProtectedConstructionProperty,
   releaseConstructionPropertyTransition,
   reserveSectorsForTransition,
@@ -142,7 +143,8 @@ async function absorbSectorIntoNatCorp(
   now: Date,
   transitionMultiplier: number,
   plantsEnabled: boolean,
-  transitionKey?: string
+  transitionKey?: string,
+  fundedOperationKey?: string
 ): Promise<ObjectId> {
   const sectors = db.collection<CorporateSector>("corporateSectors");
   // Prior-owner provenance — captured from the donor row BEFORE it is re-parented
@@ -249,6 +251,9 @@ async function absorbSectorIntoNatCorp(
       throw badRequest("The National Corporation holding became secured during the taking");
     const remove = await sectors.deleteOne({
       _id: sector._id,
+      ...(fundedOperationKey
+        ? { "pendingFundedNationalization.operationKey": fundedOperationKey }
+        : {}),
       ...(transitionKey
         ? { "constructionPropertyTransition.key": transitionKey }
         : unprotectedConstructionPropertyFilter()),
@@ -265,6 +270,9 @@ async function absorbSectorIntoNatCorp(
     const reparent = await sectors.updateOne(
       {
         _id: sector._id,
+        ...(fundedOperationKey
+          ? { "pendingFundedNationalization.operationKey": fundedOperationKey }
+          : {}),
         ...(transitionKey
           ? { "constructionPropertyTransition.key": transitionKey }
           : unprotectedConstructionPropertyFilter()),
@@ -289,6 +297,14 @@ async function absorbSectorIntoNatCorp(
           nationalizationProvenance: provenance,
           updatedAt: now,
         },
+        ...(fundedOperationKey
+          ? {
+              $unset: {
+                pendingFundedNationalization: "",
+                constructionPropertyTransition: "",
+              },
+            }
+          : {}),
       }
     );
     if (reparent.matchedCount !== 1)
@@ -649,7 +665,7 @@ export async function nationalizeSector(
 
   const sector = await sectors.findOne({ _id: params.sectorId });
   if (!sector) throw new Error("Sector not found");
-  if (hasProtectedConstructionProperty(sector)) {
+  if (hasProtectedConstructionProperty(sector) && !sector.pendingFundedNationalization) {
     throw badRequest("Resolve secured construction before nationalizing this sector");
   }
 
@@ -705,20 +721,46 @@ export async function nationalizeSector(
   // unaffordable payout pushes the treasury into the hole rather than blocking
   // the taking. Seizure (0 payout) moves nothing.
   const compensationKey = `nationalize-sector:${params.countryId}:${sector._id.toString()}:${gameState?.currentTurn ?? 0}`;
-  let priorFundedCompensation = false;
-  let compensationLedger = payoutAnchor > 0 ? await resolveTreasuryCashOptions(db) : undefined;
-  if (payoutAnchor <= 0) {
-    priorFundedCompensation = Boolean(
-      await db
-        .collection<{ _id: string }>("bankMoneyMoves")
-        .findOne({ _id: `treasury-nationalization-compensation:${compensationKey}` })
+  const compensationLedger = await resolveTreasuryCashOptions(db);
+  if (
+    sector.pendingFundedNationalization &&
+    (sector.pendingFundedNationalization.operationKey !== compensationKey ||
+      !compensationLedger?.context?.treasuryCashLedgerEnabled)
+  ) {
+    throw new Error("Funded nationalization retry requires its original Treasury cash mode");
+  }
+  if (compensationLedger?.context?.treasuryCashLedgerEnabled) {
+    if (
+      !(await acquireConstructionPropertyTransition(
+        db,
+        sector,
+        compensationKey,
+        "nationalization",
+        false,
+        true
+      ))
+    ) {
+      throw badRequest("Resolve secured construction before nationalizing this sector");
+    }
+    const reservation = await sectors.updateOne(
+      {
+        _id: sector._id,
+        corporationId: donor._id,
+        $or: [
+          { pendingFundedNationalization: { $exists: false } },
+          { pendingFundedNationalization: { operationKey: compensationKey } },
+        ],
+      },
+      { $set: { pendingFundedNationalization: { operationKey: compensationKey } } }
     );
-    if (priorFundedCompensation) compensationLedger = await resolveTreasuryCashOptions(db);
+    if ((reservation?.matchedCount ?? 0) !== 1)
+      throw new Error("Could not reserve the funded nationalization mode");
   }
   let fundedCompensationLocal: number | undefined;
   let fundedCompensationNewlySettled = false;
   let fundedTreasuryAmountLocal = 0;
-  if (priorFundedCompensation || compensationLedger?.context?.treasuryCashLedgerEnabled) {
+  let fundedPayoutAnchor: number | undefined;
+  if (compensationLedger?.context?.treasuryCashLedgerEnabled) {
     const settled = await settleFundedTreasuryCompensation(db, {
       countryId: params.countryId,
       donor,
@@ -731,6 +773,7 @@ export async function nationalizeSector(
     fundedCompensationLocal = settled.donorAmountLocal;
     fundedCompensationNewlySettled = settled.newlySettled;
     fundedTreasuryAmountLocal = settled.treasuryAmountLocal;
+    fundedPayoutAnchor = settled.payoutAnchor;
   } else {
     await debitTreasuryCompensation(db, params.countryId, payoutAnchor, fxByCurrency, now, {
       flow: "nationalization_compensation",
@@ -738,6 +781,7 @@ export async function nationalizeSector(
       ledger: compensationLedger,
     });
   }
+  const effectivePayoutAnchor = fundedPayoutAnchor ?? payoutAnchor;
 
   // Snapshot the SOCI escalation multiplier at taking time so the transition
   // shock is fixed to today's concentration, not retroactively deepened later.
@@ -761,12 +805,14 @@ export async function nationalizeSector(
     params.consequence.turn,
     now,
     transitionMultiplier,
-    plantsEnabled
+    plantsEnabled,
+    compensationLedger?.context?.treasuryCashLedgerEnabled ? compensationKey : undefined,
+    compensationLedger?.context?.treasuryCashLedgerEnabled ? compensationKey : undefined
   );
 
   // Credit the donor in its own currency (counterparty of the treasury debit).
   let compensationPaid = 0;
-  if (payoutAnchor > 0) {
+  if (payoutAnchor > 0 || (fundedCompensationLocal ?? 0) > 0) {
     compensationPaid =
       fundedCompensationLocal ??
       Math.round(anchorToCorpLiquidCapital(payoutAnchor, donor, donorFxRate));
@@ -818,7 +864,7 @@ export async function nationalizeSector(
     triggers: params.consequence.triggers,
     sectorTypes: [sector.sectorType],
     valuationAnchor,
-    compensationAnchor: payoutAnchor,
+    compensationAnchor: effectivePayoutAnchor,
     foreignOwnerCountryId: donor.countryId !== params.countryId ? donor.countryId : null,
     governingPartyId: params.consequence.governingPartyId ?? null,
     turn: params.consequence.turn,
@@ -835,7 +881,7 @@ export async function nationalizeSector(
       triggers: params.consequence.triggers,
       tier: params.tier,
       valuationAnchor,
-      compensationAnchor: payoutAnchor,
+      compensationAnchor: effectivePayoutAnchor,
       sectorTypes: [sector.sectorType],
       formerCorpName: donor.name,
       foreignOwnerCountryId: donor.countryId !== params.countryId ? donor.countryId : null,
@@ -890,8 +936,27 @@ export async function nationalizeWholeCorp(
     throw new Error("Cannot nationalize a state-owned corporation");
   }
 
-  const targetSectors = await sectors.find({ corporationId: target._id }).toArray();
   const nationalizationOperationKey = `nationalize:${params.countryId}:${target._id.toHexString()}:${params.consequence.turn}`;
+  const buyoutKey = `nationalize-corporation:${params.countryId}:${target._id.toString()}:${params.consequence.turn}`;
+  const ledger: TreasuryCashOptions = { context: await loadTreasuryCashContext(db) };
+  const hasFundedNationalizationMarker =
+    target.pendingFundedNationalization?.operationKey === nationalizationOperationKey;
+  if (
+    (target.pendingFundedNationalization && !hasFundedNationalizationMarker) ||
+    (hasFundedNationalizationMarker && !ledger.context?.treasuryCashLedgerEnabled)
+  ) {
+    throw new Error("Funded nationalization retry requires Treasury cash");
+  }
+
+  const targetSectors = await sectors.find({ corporationId: target._id }).toArray();
+  if (
+    !ledger.context?.treasuryCashLedgerEnabled &&
+    targetSectors.some(
+      (sector) => sector.constructionPropertyTransition?.kind === "nationalization"
+    )
+  ) {
+    throw new Error("Nationalization retry requires its original Treasury cash mode");
+  }
   const transitionKeys = await reserveSectorsForTransition(
     db,
     targetSectors,
@@ -901,6 +966,25 @@ export async function nationalizeWholeCorp(
   );
   if (!transitionKeys) {
     throw badRequest("Resolve secured construction before nationalizing this corporation");
+  }
+  if (ledger.context?.treasuryCashLedgerEnabled) {
+    const marker = await corps.updateOne(
+      {
+        _id: target._id,
+        $or: [
+          { pendingFundedNationalization: { $exists: false } },
+          { pendingFundedNationalization: { operationKey: nationalizationOperationKey } },
+        ],
+      },
+      {
+        $set: {
+          pendingFundedNationalization: { operationKey: nationalizationOperationKey },
+          updatedAt: now,
+        },
+      }
+    );
+    if ((marker?.matchedCount ?? 0) !== 1)
+      throw new Error("Could not reserve the funded nationalization mode");
   }
   const transitionKeyBySectorId = new Map(
     targetSectors.map((sector, index) => [sector._id.toHexString(), transitionKeys[index]])
@@ -988,12 +1072,6 @@ export async function nationalizeWholeCorp(
   // ── 2. Debit the treasury BEFORE any mutation. Unconditional — an unaffordable
   //       taking deepens the treasury's debt rather than being blocked. The pool
   //       passes through the seized corporation, where every holder row settles. ──
-  const ledger: TreasuryCashOptions = {
-    // The consequence turn is the clock on the executive route, so the context
-    // resolves the turn whose snapshot will hold this cash on every path.
-    context: await loadTreasuryCashContext(db),
-  };
-  const buyoutKey = `nationalize-corporation:${params.countryId}:${target._id.toString()}:${params.consequence.turn}`;
   if (ledger.context?.treasuryCashLedgerEnabled) {
     await settleFundedWholeCorpShareholderPool(db, {
       countryId: params.countryId,

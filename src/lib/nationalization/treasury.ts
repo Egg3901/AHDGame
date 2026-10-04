@@ -198,16 +198,20 @@ export async function settleFundedTreasuryCompensation(
 ): Promise<{
   donorAmountLocal: number;
   treasuryAmountLocal: number;
+  payoutAnchor: number;
   newlySettled: boolean;
 }> {
   const settlementKey = `treasury-nationalization-compensation:${input.key}`;
   const prior = await db
     .collection<{
       _id: string;
+      status?: string;
       legs?: { kind: string; amount: number; collection?: string; path?: string }[];
+      event?: { meta?: { payoutAnchor?: number } };
     }>("bankMoneyMoves")
-    .findOne({ _id: settlementKey }, { projection: { legs: 1 } });
+    .findOne({ _id: settlementKey }, { projection: { status: 1, legs: 1, event: 1 } });
   if (prior) {
+    const wasApplied = prior.status === "applied";
     const settled = await resumeSettlement(db, settlementKey);
     if (
       settled.status === "rejected" ||
@@ -228,16 +232,25 @@ export async function settleFundedTreasuryCompensation(
     );
     if (!frozenDebit || !frozenCredit)
       throw new Error("Funded compensation receipt is missing its frozen cash legs");
+    const payoutAnchor = prior.event?.meta?.payoutAnchor;
+    if (typeof payoutAnchor !== "number" || !Number.isFinite(payoutAnchor) || payoutAnchor <= 0)
+      throw new Error("Funded compensation receipt is missing its frozen anchor amount");
     return {
       donorAmountLocal: frozenCredit.amount,
       treasuryAmountLocal: frozenDebit.amount,
-      newlySettled: false,
+      payoutAnchor,
+      newlySettled: !wasApplied && settled.status === "applied",
     };
   }
   if (!Number.isFinite(input.payoutAnchor) || input.payoutAnchor < 0)
     throw new Error("Funded compensation requires a finite nonnegative quote");
   if (input.payoutAnchor === 0)
-    return { donorAmountLocal: 0, treasuryAmountLocal: 0, newlySettled: false };
+    return {
+      donorAmountLocal: 0,
+      treasuryAmountLocal: 0,
+      payoutAnchor: 0,
+      newlySettled: false,
+    };
   const context = input.ledger.context;
   if (!context?.treasuryCashLedgerEnabled)
     throw new Error("Funded compensation requires the Treasury cash ledger");
@@ -333,12 +346,12 @@ export async function settleFundedTreasuryCompensation(
       subjectType: "corporation",
       subjectId: input.donor._id.toString(),
       amount: treasuryAmountLocal,
-      meta: { flow: "nationalization_compensation" },
+      meta: { flow: "nationalization_compensation", payoutAnchor: input.payoutAnchor },
     },
   };
 
   let settled = await settleTransition(db, transition);
-  const newlySettled = settled.status === "applied";
+  let newlySettled = settled.status === "applied";
   if (
     (settled.status === "rejected" &&
       settled.error?.includes("different valued settlement quote")) ||
@@ -347,7 +360,9 @@ export async function settleFundedTreasuryCompensation(
     // A concurrent retry may have won the same operation key with its frozen
     // FX quote, or the original receipt may have stopped between legs. Resume
     // that receipt rather than leaving its debit undelivered.
+    const receiptWasApplied = settled.status === "replayed" && !settled.error;
     settled = await resumeSettlement(db, transition.key);
+    newlySettled = !receiptWasApplied && settled.status === "applied";
   }
   if (
     settled.status === "rejected" ||
@@ -360,9 +375,11 @@ export async function settleFundedTreasuryCompensation(
     const original = await db
       .collection<{
         _id: string;
+        status?: string;
         legs?: { kind: string; amount: number; collection?: string; path?: string }[];
+        event?: { meta?: { payoutAnchor?: number } };
       }>("bankMoneyMoves")
-      .findOne({ _id: transition.key }, { projection: { legs: 1 } });
+      .findOne({ _id: transition.key }, { projection: { status: 1, legs: 1, event: 1 } });
     const frozenDebit = original?.legs?.find(
       (leg) =>
         leg.kind === "debit" &&
@@ -375,13 +392,22 @@ export async function settleFundedTreasuryCompensation(
     );
     if (!frozenDebit || !frozenCredit)
       throw new Error("Funded compensation receipt is missing its frozen cash legs");
+    const payoutAnchor = original?.event?.meta?.payoutAnchor;
+    if (typeof payoutAnchor !== "number" || !Number.isFinite(payoutAnchor) || payoutAnchor <= 0)
+      throw new Error("Funded compensation receipt is missing its frozen anchor amount");
     return {
       donorAmountLocal: frozenCredit.amount,
       treasuryAmountLocal: frozenDebit.amount,
+      payoutAnchor,
       newlySettled: false,
     };
   }
-  return { donorAmountLocal, treasuryAmountLocal, newlySettled: true };
+  return {
+    donorAmountLocal,
+    treasuryAmountLocal,
+    payoutAnchor: input.payoutAnchor,
+    newlySettled: true,
+  };
 }
 
 /**

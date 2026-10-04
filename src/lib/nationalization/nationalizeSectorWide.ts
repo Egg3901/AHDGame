@@ -378,14 +378,28 @@ export async function nationalizeSectorWide(
       // Respect the re-nationalization cooldown (spec §13.4) the whole-corp path
       // honors — a just-privatized corp's holdings can't be swept straight back.
       if (isWithinRenationalizeCooldown(donor, params.consequence.turn)) continue;
-      if (hasProtectedConstructionProperty(sec)) continue;
       const transitionKey = `nationalize-sector-wide:${params.consequence.turn}:${sec._id.toHexString()}`;
+      const compensationKey = `nationalize-sector-wide:${params.countryId}:${sec._id.toString()}:${params.consequence.turn}`;
+      let compensationLedger: Awaited<ReturnType<typeof resolveTreasuryCashOptions>> | undefined;
+      if (sec.pendingFundedNationalization) {
+        compensationLedger = await resolveTreasuryCashOptions(db);
+        if (
+          sec.pendingFundedNationalization.operationKey !== compensationKey ||
+          !compensationLedger?.context?.treasuryCashLedgerEnabled
+        ) {
+          throw new Error("Funded nationalization retry requires its original Treasury cash mode");
+        }
+      }
+      const alreadyOwnsTransition = sec.constructionPropertyTransition?.key === transitionKey;
+      if (hasProtectedConstructionProperty(sec) && !alreadyOwnsTransition) continue;
       if (
         !(await acquireConstructionPropertyTransition(
           db,
           sec,
           transitionKey,
-          "nationalize_sector_wide"
+          "nationalize_sector_wide",
+          false,
+          true
         ))
       )
         continue;
@@ -412,20 +426,27 @@ export async function nationalizeSectorWide(
         }
       );
       const payoutAnchor = applyTier(valuationAnchor, params.tier, { plantsEnabled });
-      const compensationKey = `nationalize-sector-wide:${params.countryId}:${sec._id.toString()}:${params.consequence.turn}`;
-      let compensationLedger = payoutAnchor > 0 ? await resolveTreasuryCashOptions(db) : undefined;
-      const priorFundedCompensation =
-        payoutAnchor <= 0 &&
-        Boolean(
-          await db
-            .collection<{ _id: string }>("bankMoneyMoves")
-            .findOne({ _id: `treasury-nationalization-compensation:${compensationKey}` })
-        );
-      if (priorFundedCompensation) compensationLedger = await resolveTreasuryCashOptions(db);
+      compensationLedger ??= await resolveTreasuryCashOptions(db);
       let fundedCompensationLocal: number | undefined;
       let fundedCompensationNewlySettled = false;
       let fundedTreasuryAmountLocal = 0;
-      if (priorFundedCompensation || compensationLedger?.context?.treasuryCashLedgerEnabled) {
+      let fundedPayoutAnchor: number | undefined;
+      if (compensationLedger?.context?.treasuryCashLedgerEnabled) {
+        if (!sec.pendingFundedNationalization) {
+          const reservation = await sectors.updateOne(
+            {
+              _id: sec._id,
+              corporationId: sec.corporationId,
+              $or: [
+                { pendingFundedNationalization: { $exists: false } },
+                { pendingFundedNationalization: { operationKey: compensationKey } },
+              ],
+            },
+            { $set: { pendingFundedNationalization: { operationKey: compensationKey } } }
+          );
+          if ((reservation?.matchedCount ?? 0) !== 1)
+            throw new Error("Could not reserve the funded nationalization mode");
+        }
         const settled = await settleFundedTreasuryCompensation(db, {
           countryId: params.countryId,
           donor,
@@ -438,6 +459,7 @@ export async function nationalizeSectorWide(
         fundedCompensationLocal = settled.donorAmountLocal;
         fundedCompensationNewlySettled = settled.newlySettled;
         fundedTreasuryAmountLocal = settled.treasuryAmountLocal;
+        fundedPayoutAnchor = settled.payoutAnchor;
       } else {
         await debitTreasuryCompensation(db, params.countryId, payoutAnchor, fxByCurrency, now, {
           flow: "nationalization_compensation",
@@ -445,7 +467,7 @@ export async function nationalizeSectorWide(
           ledger: compensationLedger,
         });
       }
-      if (payoutAnchor > 0) {
+      if (payoutAnchor > 0 || (fundedCompensationLocal ?? 0) > 0) {
         const compLocal =
           fundedCompensationLocal ??
           Math.round(anchorToCorpLiquidCapital(payoutAnchor, donor, donorRate));
@@ -582,6 +604,9 @@ export async function nationalizeSectorWide(
           _id: sec._id,
           corporationId: sec.corporationId,
           "constructionPropertyTransition.key": transitionKey,
+          ...(compensationLedger?.context?.treasuryCashLedgerEnabled
+            ? { "pendingFundedNationalization.operationKey": compensationKey }
+            : {}),
         });
         if (removed.deletedCount !== 1) continue;
       } else {
@@ -590,6 +615,9 @@ export async function nationalizeSectorWide(
             _id: sec._id,
             corporationId: sec.corporationId,
             "constructionPropertyTransition.key": transitionKey,
+            ...(compensationLedger?.context?.treasuryCashLedgerEnabled
+              ? { "pendingFundedNationalization.operationKey": compensationKey }
+              : {}),
           },
           {
             $set: {
@@ -607,12 +635,22 @@ export async function nationalizeSectorWide(
               currentGrowthCost: Math.round((sec.currentGrowthCost ?? 0) * (1 - f)),
               updatedAt: now,
             },
+            ...(compensationLedger?.context?.treasuryCashLedgerEnabled
+              ? {
+                  $unset: {
+                    pendingFundedNationalization: "",
+                    constructionPropertyTransition: "",
+                  },
+                }
+              : {}),
           }
         );
         if (shrunk.matchedCount !== 1) continue;
       }
-      await releaseConstructionPropertyTransition(db, sec._id, transitionKey);
-      totalPayoutAnchor += payoutAnchor;
+      if (f < 1 && !compensationLedger?.context?.treasuryCashLedgerEnabled) {
+        await releaseConstructionPropertyTransition(db, sec._id, transitionKey);
+      }
+      totalPayoutAnchor += fundedPayoutAnchor ?? payoutAnchor;
       sectorsCarved += 1;
       affectedCorpIds.add(donorKey);
     }

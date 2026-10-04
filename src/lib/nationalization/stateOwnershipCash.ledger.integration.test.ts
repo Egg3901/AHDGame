@@ -18,7 +18,8 @@ import { reconcileTurn } from "@/lib/ledger/reconcile";
 import type { LedgerEntry } from "@/lib/ledger/types";
 import type { NationalizationAuction } from "@/lib/db/types";
 import { resetCorpFxRateCacheForTests } from "@/lib/currency/corporationCapital";
-import { nationalizeWholeCorp } from "./ownershipTransition";
+import { nationalizeSector, nationalizeWholeCorp } from "./ownershipTransition";
+import { nationalizeSectorWide } from "./nationalizeSectorWide";
 import { privatizeAsset } from "./privatizeAsset";
 import { placeAuctionBid, resolveNationalizationAuction } from "./privatizationAuction";
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
@@ -329,6 +330,96 @@ for (const native of [false, true]) {
       });
 
       it.skipIf(native)(
+        "reports the original funded compensation when retry valuation has fallen to zero",
+        async () => {
+          const { db, natCorpId } = await world(false, true, true);
+          const donorId = new ObjectId();
+          const sectorId = new ObjectId();
+          await db.collection("corporations").insertOne({
+            _id: donorId,
+            name: "Fixture Sector Donor",
+            countryId: "UK",
+            liquidCapital: 10_000,
+            liquidCurrencyCode: "GBP",
+            totalShares: 100,
+            sharePrice: 100,
+            shareholders: [],
+          });
+          await db.collection("corporateSectors").insertOne({
+            _id: sectorId,
+            corporationId: donorId,
+            countryId: "UK",
+            stateId: "LON",
+            sectorType: "energy",
+            revenue: 1_000_000,
+            profitMargin: 0.5,
+            workers: 10,
+            currentGrowthCost: 0,
+          });
+          const params = {
+            countryId: "UK" as const,
+            sectorId,
+            tier: "fair" as const,
+            consequence: { method: "executive" as const, triggers: [] as [], turn: 2 },
+          };
+          const crashing = withInjectedCrash(db as unknown as InMemoryDb, {
+            collection: "federalBudget",
+            op: "updateOne",
+            onCall: 1,
+            afterWrite: true,
+          });
+
+          await expect(nationalizeSector(crashing.db, params)).rejects.toBeInstanceOf(
+            InjectedCrash
+          );
+          const receipt = await db
+            .collection<{
+              _id: string;
+              legs: { kind: string; amount: number; collection?: string; path?: string }[];
+              event?: { meta?: { payoutAnchor?: number } };
+            }>("bankMoneyMoves")
+            .findOne({
+              _id: `treasury-nationalization-compensation:nationalize-sector:UK:${sectorId.toHexString()}:1`,
+            });
+          const originalAnchor = receipt?.event?.meta?.payoutAnchor;
+          const originalDonorCredit = receipt?.legs.find(
+            (leg) => leg.kind === "credit" && leg.collection === "corporations"
+          )?.amount;
+          expect(originalAnchor).toBeGreaterThan(0);
+          expect(originalDonorCredit).toBeGreaterThan(0);
+
+          const treasuryAfterCrash = await db
+            .collection("federalBudget")
+            .findOne({ countryId: "UK" });
+          await db
+            .collection<{ _id: string; treasuryCashLedgerEnabled?: boolean }>("gameConfig")
+            .updateOne({ _id: "default" }, { $set: { treasuryCashLedgerEnabled: false } });
+          await expect(nationalizeSector(db, params)).rejects.toThrow(
+            "Funded nationalization retry requires its original Treasury cash mode"
+          );
+          expect(
+            (await db.collection("federalBudget").findOne({ countryId: "UK" }))?.treasuryCashLocal
+          ).toBe(treasuryAfterCrash?.treasuryCashLocal);
+          await db
+            .collection<{ _id: string; treasuryCashLedgerEnabled?: boolean }>("gameConfig")
+            .updateOne({ _id: "default" }, { $set: { treasuryCashLedgerEnabled: true } });
+
+          await db
+            .collection("corporateSectors")
+            .updateOne({ _id: sectorId }, { $set: { revenue: 0, profitMargin: 0 } });
+          const result = await nationalizeSector(db, params);
+
+          expect(result.nationalCorporationId).toEqual(natCorpId);
+          expect(result.compensationPaid).toBe(originalDonorCredit);
+          const { applyNationalizationConsequences } = await import("./consequences/apply");
+          expect(vi.mocked(applyNationalizationConsequences)).toHaveBeenLastCalledWith(
+            db,
+            expect.objectContaining({ compensationAnchor: originalAnchor })
+          );
+        }
+      );
+
+      it.skipIf(native)(
         "retries a funded whole-corp taking with its original property reservation and frozen holder cohort",
         async () => {
           const { db, natCorpId } = await world(false, true, true);
@@ -387,6 +478,126 @@ for (const native of [false, true]) {
               _id: `treasury-nationalization-buyout:nationalize-corporation:UK:${ids.target.toHexString()}:2`,
             });
           expect(buyout?.status).toBe("applied");
+        }
+      );
+
+      it.skipIf(native)(
+        "fails closed when a funded whole-corp retry sees the cash ledger disabled",
+        async () => {
+          const { db } = await world(false, true, true);
+          const ids = await seizable(db);
+          const sectorId = new ObjectId();
+          await db.collection("corporateSectors").insertOne({
+            _id: sectorId,
+            corporationId: ids.target,
+            countryId: "UK",
+            stateId: "LON",
+            sectorType: "energy",
+            revenue: 10_000,
+            profitMargin: 0.2,
+            workers: 10,
+            currentGrowthCost: 0,
+          });
+          const params = {
+            countryId: "UK" as const,
+            corporationId: ids.target,
+            tier: "discounted" as const,
+            consequence: { method: "executive" as const, triggers: [] as [], turn: 2 },
+          };
+          const budget = db.collection("federalBudget");
+          const crashing = withInjectedCrash(db as unknown as InMemoryDb, {
+            collection: "corporateSectors",
+            op: "updateOne",
+            onCall: 2,
+          });
+
+          await expect(nationalizeWholeCorp(crashing.db, params)).rejects.toBeInstanceOf(
+            InjectedCrash
+          );
+          const afterFunding = await budget.findOne({ countryId: "UK" });
+          const holder = await db.collection("characters").findOne({ _id: ids.holder });
+          const holderCashAfterFunding = holder?.currencyBalances?.personal?.GBP;
+          await db
+            .collection<{ _id: string; treasuryCashLedgerEnabled?: boolean }>("gameConfig")
+            .updateOne({ _id: "default" }, { $set: { treasuryCashLedgerEnabled: false } });
+
+          await expect(nationalizeWholeCorp(db, params)).rejects.toThrow(
+            "Funded nationalization retry requires Treasury cash"
+          );
+
+          expect((await budget.findOne({ countryId: "UK" }))?.treasuryCashLocal).toBe(
+            afterFunding?.treasuryCashLocal
+          );
+          expect(
+            (await db.collection("characters").findOne({ _id: ids.holder }))?.currencyBalances
+              ?.personal?.GBP
+          ).toBe(holderCashAfterFunding);
+          expect(await db.collection("corporations").countDocuments({ _id: ids.target })).toBe(1);
+        }
+      );
+
+      it.skipIf(native)(
+        "fails closed when a funded sector-sweep retry sees the cash ledger disabled",
+        async () => {
+          const { db } = await world(false, true, true);
+          const donorId = new ObjectId();
+          const sectorId = new ObjectId();
+          await db.collection("corporations").insertOne({
+            _id: donorId,
+            name: "Fixture Sweep Donor",
+            countryId: "UK",
+            liquidCapital: 10_000,
+            liquidCurrencyCode: "GBP",
+            totalShares: 100,
+            sharePrice: 100,
+            shareholders: [],
+          });
+          await db.collection("corporateSectors").insertOne({
+            _id: sectorId,
+            corporationId: donorId,
+            countryId: "UK",
+            stateId: "LON",
+            sectorType: "energy",
+            revenue: 1_000_000,
+            profitMargin: 0.5,
+            workers: 10,
+            currentGrowthCost: 0,
+          });
+          const params = {
+            countryId: "UK" as const,
+            sectorType: "energy",
+            carveFraction: 1,
+            scope: "corporations" as const,
+            tier: "fair" as const,
+            consequence: { method: "executive" as const, triggers: [] as [], turn: 2 },
+          };
+          const crashing = withInjectedCrash(db as unknown as InMemoryDb, {
+            collection: "federalBudget",
+            op: "updateOne",
+            onCall: 1,
+            afterWrite: true,
+          });
+
+          await expect(nationalizeSectorWide(crashing.db, params)).rejects.toBeInstanceOf(
+            InjectedCrash
+          );
+          const afterFunding = await db.collection("federalBudget").findOne({ countryId: "UK" });
+          const heldSector = await db.collection("corporateSectors").findOne({ _id: sectorId });
+          expect(heldSector?.pendingFundedNationalization?.operationKey).toContain(
+            "nationalize-sector-wide:UK:"
+          );
+          await db
+            .collection<{ _id: string; treasuryCashLedgerEnabled?: boolean }>("gameConfig")
+            .updateOne({ _id: "default" }, { $set: { treasuryCashLedgerEnabled: false } });
+
+          await expect(nationalizeSectorWide(db, params)).rejects.toThrow(
+            "Funded nationalization retry requires its original Treasury cash mode"
+          );
+
+          expect(
+            (await db.collection("federalBudget").findOne({ countryId: "UK" }))?.treasuryCashLocal
+          ).toBe(afterFunding?.treasuryCashLocal);
+          expect(await db.collection("corporations").countDocuments({ _id: donorId })).toBe(1);
         }
       );
 
