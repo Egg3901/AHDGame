@@ -179,7 +179,7 @@ export async function approveConstructionFinance(
     return { ok: false, error: "This construction loan is unavailable" };
   const sector = await db
     .collection<CorporateSector>("corporateSectors")
-    .findOne({ _id: collateral.sectorId });
+    .findOne({ _id: collateral.sectorId }, { projection: { constructionFinancing: 1 } });
   const claim = sector?.constructionFinancing;
   if (
     !sector ||
