@@ -1,7 +1,7 @@
 "use client";
 
 import { Tooltip } from "@/components/Tooltip";
-import { formatNum, appealColor } from "../../pollHelpers";
+import { formatNum, formatTimestamp, appealColor, appealBand, appealFill } from "../../pollHelpers";
 import type { StoredPoll } from "../../types";
 
 function weightedGranularTurnout(poll: StoredPoll): number | null {
@@ -12,37 +12,89 @@ function weightedGranularTurnout(poll: StoredPoll): number | null {
   return cells.reduce((s, c) => s + c.share * c.turnout, 0) / share;
 }
 
+/** The poll's lead numbers: appeal first and largest, then the voter counts. */
 export function StatCards({ poll }: { poll: StoredPoll }) {
-  const { overallAppeal, totalEstimatedVoters } = poll;
+  const { overallAppeal, totalEstimatedVoters, totalPotentialVoters } = poll;
   const turnoutPct = weightedGranularTurnout(poll);
+  const reachPct =
+    totalEstimatedVoters > 0 ? (totalPotentialVoters / totalEstimatedVoters) * 100 : null;
 
   return (
-    <div className="mb-4 grid gap-4 sm:grid-cols-2">
-      <div className="rounded-xl border border-card-border bg-card p-4">
-        <div className="text-xs text-muted uppercase tracking-wide mb-1">
-          <Tooltip content="A weighted average of your appeal score (0–50) across every voter group in your state.">
-            Overall Appeal
-          </Tooltip>
-        </div>
-        <div className={`text-2xl font-bold ${appealColor(overallAppeal)}`}>
-          {overallAppeal.toFixed(1)}
-          <span className="text-sm text-muted ml-1">/ 50</span>
-        </div>
-        <div className="text-xs text-muted mt-0.5">Weighted avg across all groups</div>
+    <section
+      aria-labelledby="poll-results-heading"
+      className="rounded-lg border border-card-border bg-card p-5 sm:p-6"
+    >
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <h2 id="poll-results-heading" className="text-heading font-semibold">
+          Poll results
+        </h2>
+        <p className="text-body-sm text-muted">
+          Taken {formatTimestamp(poll.takenAt)}. Commission a new poll to refresh.
+        </p>
       </div>
-      <div className="rounded-xl border border-card-border bg-card p-4">
-        <div className="text-xs text-muted uppercase tracking-wide mb-1">
-          <Tooltip content="Total expected turnout voters across all voter groups.">
-            Est. Total Voters
-          </Tooltip>
+
+      <dl className="mt-5 grid gap-x-12 gap-y-6 sm:grid-cols-[minmax(0,1.3fr)_repeat(2,minmax(0,1fr))]">
+        <div>
+          <dt className="text-body-sm text-muted">
+            <Tooltip content="A weighted average of your appeal score (0 to 50) across every voter group in your state.">
+              Overall appeal
+            </Tooltip>
+          </dt>
+          <dd className="mt-1">
+            <div className="flex items-baseline gap-2">
+              <span className={`text-display font-bold tabular-nums ${appealColor(overallAppeal)}`}>
+                {overallAppeal.toFixed(1)}
+              </span>
+              <span className="text-body text-muted">of 50</span>
+              <span className={`ml-1 text-body font-semibold ${appealColor(overallAppeal)}`}>
+                {appealBand(overallAppeal)}
+              </span>
+            </div>
+            <div
+              className="mt-2 h-2 w-full max-w-xs overflow-hidden rounded-full bg-card-border"
+              role="img"
+              aria-label={`Appeal ${overallAppeal.toFixed(1)} out of 50, ${appealBand(overallAppeal)}`}
+            >
+              <div
+                className={`h-full rounded-full ${appealFill(overallAppeal)}`}
+                style={{ width: `${Math.min(100, (overallAppeal / 50) * 100)}%` }}
+              />
+            </div>
+          </dd>
         </div>
-        <div className="text-2xl font-bold text-foreground">{formatNum(totalEstimatedVoters)}</div>
-        <div className="text-xs text-muted mt-0.5">
-          {turnoutPct != null
-            ? `${turnoutPct.toFixed(1)}% weighted turnout across groups`
-            : "Weighted turnout across groups"}
+        <div>
+          <dt className="text-body-sm text-muted">
+            <Tooltip content="Total expected turnout voters across all voter groups.">
+              Estimated voters
+            </Tooltip>
+          </dt>
+          <dd className="mt-1">
+            <div className="text-heading-lg font-semibold tabular-nums">
+              {formatNum(totalEstimatedVoters)}
+            </div>
+            <div className="mt-1 text-body-sm text-muted">
+              {turnoutPct != null
+                ? `${turnoutPct.toFixed(1)}% weighted turnout`
+                : "Weighted turnout across groups"}
+            </div>
+          </dd>
         </div>
-      </div>
-    </div>
+        <div>
+          <dt className="text-body-sm text-muted">
+            <Tooltip content="Upper bound if you captured 100% of each group. In contested races, your actual share depends on opponents.">
+              Reachable voters
+            </Tooltip>
+          </dt>
+          <dd className="mt-1">
+            <div className="text-heading-lg font-semibold tabular-nums text-secondary">
+              {formatNum(totalPotentialVoters)}
+            </div>
+            <div className="mt-1 text-body-sm text-muted">
+              {reachPct != null ? `${reachPct.toFixed(1)}% of estimated voters` : "Upper bound"}
+            </div>
+          </dd>
+        </div>
+      </dl>
+    </section>
   );
 }

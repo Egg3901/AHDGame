@@ -3,6 +3,7 @@
  * processNppCorporationDecisions loads them and prepares corporation and sector writes.
  */
 import { makeNppCorpDecision } from "@/lib/turn/npp/makeCorpDecision";
+import { strategyStateNeedsPersist } from "@/lib/turn/npp/rules/strategyCadence";
 export { makeNppCorpDecision } from "@/lib/turn/npp/makeCorpDecision";
 import {
   buildNppDecisionCashWrites,
@@ -505,7 +506,9 @@ export async function processNppCorporationDecisions(
       });
     }
 
-    if (decision.strategy) {
+    // Accrual (the score memory) happens every turn inside the decision, but the
+    // stored document only needs rewriting when its meaningful content changed.
+    if (decision.strategy && strategyStateNeedsPersist(corp.nppStrategy, decision.strategy)) {
       corpUpdates.push({
         filter: { _id: corp._id },
         update: { $set: { nppStrategy: decision.strategy, updatedAt: now } },

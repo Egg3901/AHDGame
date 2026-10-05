@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { CDN_LOGO_URL } from "@/lib/images/staticCdnAssets";
 import { Input, Label, Button, SectionLabel } from "@/components/ui";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 export default function ResetPasswordPageClient() {
   const searchParams = useSearchParams();
@@ -39,7 +40,7 @@ export default function ResetPasswordPageClient() {
         if (res.status === 400 && !data.error?.includes("Password")) {
           setTokenRejected(true);
         }
-        throw new Error(data.error || "Reset failed. Please try again.");
+        throw new Error(apiErrorText(data, "Reset failed. Please try again."));
       }
       setSuccess(true);
     } catch (err) {

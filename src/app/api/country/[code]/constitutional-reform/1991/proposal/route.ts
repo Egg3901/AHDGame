@@ -70,8 +70,7 @@ export async function POST(request: Request, { params }: Context) {
     const limit = checkRateLimit(`bg-constitutional-reform:${auth.user.userId}`, 5, 60_000);
     if (!limit.ok) return rateLimitResponse(limit.retryAfter);
     const parsed = await parseJsonBody(request, bodySchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
     const db = await getDb();
     const game = await getGameState(db);
     if (game?.preset !== "1991-default")
@@ -96,16 +95,13 @@ export async function POST(request: Request, { params }: Context) {
         )
       : null;
     if (!official && (parsed.data.action === "endorse" || auth.user.isAdmin !== true))
-      return NextResponse.json(
-        {
-          error:
-            parsed.data.kind === "dissolution1991"
-              ? "A continued deputy, government or President must introduce this motion"
-              : parsed.data.action === "endorse"
-                ? "A seated constituent deputy must endorse this initiative"
-                : "The Bulgarian government or President must introduce this draft",
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        parsed.data.kind === "dissolution1991"
+          ? "A continued deputy, government or President must introduce this motion"
+          : parsed.data.action === "endorse"
+            ? "A seated constituent deputy must endorse this initiative"
+            : "The Bulgarian government or President must introduce this draft"
       );
     const freeze = await checkLegislationFreeze("BG");
     if (!freeze.ok) return freeze.response;

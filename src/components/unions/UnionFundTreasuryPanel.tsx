@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
 import { formatLocalAmountFull } from "@/lib/utils/formatters";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface UnionFundTreasuryPanelProps {
   unionId: string;
@@ -60,7 +61,7 @@ export function UnionFundTreasuryPanel({
         ok: res.ok,
         text: res.ok
           ? `Contributed ${money(Math.floor(amount))} to the treasury.`
-          : (data.error ?? "The contribution failed."),
+          : apiErrorText(data, "The contribution failed."),
       });
       if (res.ok) {
         setAmountDraft("");

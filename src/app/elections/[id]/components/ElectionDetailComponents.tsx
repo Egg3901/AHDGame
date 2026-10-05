@@ -9,6 +9,7 @@ import { PrimaryLineGraph } from "./ElectionDetailCharts";
 import { buildCandidateColorMap } from "@/lib/campaigns/candidateColor";
 import type { CandidateDetail, PartyGroup, SnapshotPoint } from "./ElectionDetailTypes";
 import { NppAbbr } from "@/components/elections/NppAbbr";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 function RemoveCandidateButton({
   candidateId,
@@ -34,7 +35,7 @@ function RemoveCandidateButton({
           });
           const data = await res.json();
           if (res.ok) onRemoveSuccess();
-          else alert(data.error ?? "Failed to remove");
+          else alert(apiErrorText(data, "Failed to remove"));
         } catch {
           alert("Network error");
         } finally {

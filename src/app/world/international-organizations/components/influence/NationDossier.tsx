@@ -13,6 +13,7 @@ import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { parseMoneyAmountInput } from "@/lib/utils/parseMoneyAmountInput";
 import { useFundFormatter } from "../useFundFormatter";
 import { formatFundAmount } from "../fundCurrency";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Props {
   view: OrgInfluenceView;
@@ -281,7 +282,7 @@ function CommitPlayForm({
       );
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(body?.error ?? "Failed to commit the play");
+        throw new Error(apiErrorText(body, "Failed to commit the play"));
       }
       setAmount("");
       onCommitted();

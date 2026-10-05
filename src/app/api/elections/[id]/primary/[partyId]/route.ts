@@ -47,9 +47,9 @@ export async function GET(request: Request, { params }: RouteParams) {
     const resolved = await resolveElectionRouteParam(db, id);
     if (!resolved.ok) {
       const invalid = resolved.reason === "invalid_id";
-      return NextResponse.json(
-        { error: invalid ? "Invalid election id" : "Election not found" },
-        { status: invalid ? 400 : 404 }
+      return errorResponse(
+        invalid ? 400 : 404,
+        invalid ? "Invalid election id" : "Election not found"
       );
     }
 

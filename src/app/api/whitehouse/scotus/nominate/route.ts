@@ -40,8 +40,7 @@ export async function POST(request: Request) {
     if (!limit.ok) return rateLimitResponse(limit.retryAfter);
 
     const parsed = await parseJsonBody(request, nominateSchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
     const { seatNumber, nomineeCharacterId, nppLegalScholarParty } = parsed.data;
 
     if (!nomineeCharacterId && !nppLegalScholarParty) {

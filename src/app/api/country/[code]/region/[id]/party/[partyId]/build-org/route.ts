@@ -300,14 +300,11 @@ export async function POST(request: Request, { params }: RouteParams) {
     scope === "state" ? (spenderRow.treasury ?? 0) : (spenderParty.treasury ?? 0);
   const funding = resolveOrgBuildFunding({ price: quotedPrice, treasury: payingTreasury });
   if (!funding.ok) {
-    return NextResponse.json(
-      {
-        error:
-          scope === "state"
-            ? "This state party cannot afford to organize here. Build Org costs money as well as Political Strength; top up the state treasury or ask the national party for a transfer."
-            : "The national party cannot afford to organize here. Build Org costs money as well as Political Strength; raise funds before building again.",
-      },
-      { status: 400 }
+    return errorResponse(
+      400,
+      scope === "state"
+        ? "This state party cannot afford to organize here. Build Org costs money as well as Political Strength; top up the state treasury or ask the national party for a transfer."
+        : "The national party cannot afford to organize here. Build Org costs money as well as Political Strength; raise funds before building again."
     );
   }
 

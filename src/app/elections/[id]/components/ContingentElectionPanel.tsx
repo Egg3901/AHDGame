@@ -4,7 +4,7 @@ import {
   CONTINGENT_EXCLUDED_HOUSE_STATE,
   HOUSE_CONTINGENT_THRESHOLD,
   SENATE_CONTINGENT_THRESHOLD,
-} from "@/lib/elections/contingentElection";
+} from "@/lib/elections/contingentConstants";
 import type { ContingentElectionDisplay } from "@/lib/elections/presidentialResolutionDisplay";
 import type { CandidateDetail } from "./ElectionDetailTypes";
 

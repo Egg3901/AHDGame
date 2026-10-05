@@ -8,7 +8,7 @@ import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError, forbidden, notFound, badRequest } from "@/lib/api/errors";
+import { handleRouteError, forbidden, notFound, badRequest, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import {
   executeTreasuryReserveTransfer,
@@ -47,7 +47,7 @@ export async function POST(request: Request, context: RouteContext) {
 
     const parsed = await parseJsonBody(request, schema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();

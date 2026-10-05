@@ -51,8 +51,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     const parsed = await parseJsonBody(request, settingSchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const db = await getDb();
     const member = await getCabinetMembersCollection(db).findOne({ countryId, positionId });

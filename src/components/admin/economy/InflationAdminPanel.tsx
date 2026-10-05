@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface InflationBreakdown {
   base: number;
@@ -227,7 +228,7 @@ export function InflationAdminPanel() {
       const res = await fetch("/api/admin/inflation", { cache: "no-store" });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(body.error ?? `HTTP ${res.status}`);
+        throw new Error(apiErrorText(body, `HTTP ${res.status}`));
       }
       const payload = (await res.json()) as DiagnosticsPayload;
       setData(payload);

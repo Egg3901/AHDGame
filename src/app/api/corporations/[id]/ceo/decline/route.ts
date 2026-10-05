@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import type { Corporation } from "@/lib/db/types";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -30,20 +30,14 @@ export async function POST(_request: Request, { params }: RouteParams) {
     const { corporation } = resolved;
 
     if (!corporation.pendingCeoCharacterId) {
-      return NextResponse.json(
-        { error: "No CEO offer is pending for this corporation" },
-        { status: 400 }
-      );
+      return errorResponse(400, "No CEO offer is pending for this corporation");
     }
 
     const myChar = auth.user.character;
 
     // Verify this user is the one being offered the position
     if (corporation.pendingCeoCharacterId.toString() !== myChar._id.toString()) {
-      return NextResponse.json(
-        { error: "You have not been offered the CEO position" },
-        { status: 403 }
-      );
+      return errorResponse(403, "You have not been offered the CEO position");
     }
 
     // Clear pending offer.

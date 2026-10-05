@@ -462,7 +462,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { id } = await params;
     const parsed = await parseJsonBody(request, issueBondSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const { faceValue, maturityTurns } = parsed.data;
@@ -840,12 +840,10 @@ export async function POST(request: Request, { params }: RouteParams) {
         },
       });
       if (settlement.status !== "applied" && settlement.status !== "replayed") {
-        return NextResponse.json(
-          {
-            error: "The funded bond placement is settling. Retry after its journal completes.",
-            settlementStatus: settlement.status,
-          },
-          { status: settlement.status === "partial" ? 202 : 409 }
+        return errorResponse(
+          settlement.status === "partial" ? 202 : 409,
+          "The funded bond placement is settling. Retry after its journal completes.",
+          { extra: { settlementStatus: settlement.status } }
         );
       }
       underwritingFill = {

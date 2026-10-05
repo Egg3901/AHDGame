@@ -6,17 +6,14 @@
  */
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { deriveSeanadComposition } from "@/lib/ireland/seanadComposition";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ code: string }> }) {
   try {
     const { code } = await params;
     if (code.toUpperCase() !== "IE") {
-      return NextResponse.json(
-        { error: "Seanad composition is only available for Ireland" },
-        { status: 404 }
-      );
+      return errorResponse(404, "Seanad composition is only available for Ireland");
     }
     const db = await getDb();
     const composition = await deriveSeanadComposition(db, "IE");

@@ -51,7 +51,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { id } = await params;
     const parsed = await parseJsonBody(request, issueSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
@@ -70,10 +70,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     );
 
     if (!result.ok) {
-      return NextResponse.json(
-        { error: result.reasons[0] ?? "Not eligible to charter", reasons: result.reasons },
-        { status: 400 }
-      );
+      return errorResponse(400, result.reasons[0] ?? "Not eligible to charter", {
+        extra: { reasons: result.reasons },
+      });
     }
 
     return NextResponse.json({
@@ -110,7 +109,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     const { id } = await params;
     const parsed = await parseJsonBody(request, switchSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
@@ -128,10 +127,9 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     );
 
     if (!result.ok) {
-      return NextResponse.json(
-        { error: result.reasons[0] ?? "Cannot switch charter type", reasons: result.reasons },
-        { status: 400 }
-      );
+      return errorResponse(400, result.reasons[0] ?? "Cannot switch charter type", {
+        extra: { reasons: result.reasons },
+      });
     }
 
     return NextResponse.json({
@@ -164,7 +162,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     const { id } = await params;
     const parsed = await parseJsonBody(request, revokeSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();

@@ -11,6 +11,7 @@ import {
   type MatchGroup,
 } from "@/lib/admin/suspiciousGroups";
 import { LocalTime } from "@/components/time/LocalTime";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Counts {
   high: number;
@@ -74,7 +75,7 @@ function BanModal({ entry, onClose, onBanned, apiBase }: BanModalProps) {
       });
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error ?? "Failed to ban user");
+        throw new Error(apiErrorText(data, "Failed to ban user"));
       }
       onBanned(entry._id);
       onClose();
@@ -143,7 +144,7 @@ function DismissModal({ entry, onClose, onDismissed, apiBase, isMod = false }: D
       });
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error ?? "Failed to dismiss");
+        throw new Error(apiErrorText(data, "Failed to dismiss"));
       }
       onDismissed(entry._id);
       onClose();

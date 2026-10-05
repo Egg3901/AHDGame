@@ -5,7 +5,7 @@ import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationAc
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { sellSharesSchema } from "@/lib/api/schemas/corporations";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import { assertCeoTradeNotBlocked } from "@/lib/corporations/commands/privatization/openVoteGuard";
 import type { Character, Corporation, ShareOrder, User } from "@/lib/db/types";
@@ -102,7 +102,7 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
     const { id } = await params;
     const parsed = await parseJsonBody(request, sellSharesSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const { shares, sellAsCorporation, confirmCeoVacate } = parsed.data;
@@ -149,26 +149,26 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
     let issuerBuybackSplit: EscrowDebitSplit | undefined;
     async function gateIssuerBuyback(): Promise<NextResponse | null> {
       if (marketQuote.active && shares > marketQuote.bidDepthShares) {
-        return NextResponse.json(
-          {
-            error: equityPoolDepthMessage(marketQuote.bidDepthShares, marketQuote.currency),
-            marketDepthShares: marketQuote.bidDepthShares,
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          equityPoolDepthMessage(marketQuote.bidDepthShares, marketQuote.currency),
+          { extra: { marketDepthShares: marketQuote.bidDepthShares } }
         );
       }
       const settle = await settleFloatSellDebit(db, corporation, issuerBuyback);
       issuerBuybackSplit = settle.split;
       if (!settle.ok) {
         const sym = CURRENCY_SYMBOLS[issuerCurrency] ?? "$";
-        return NextResponse.json(
+        return errorResponse(
+          400,
+          marketQuote.active
+            ? equityPoolDepthMessage(marketQuote.bidDepthShares, marketQuote.currency)
+            : `${corporation.name}'s treasury can't cover this sale (needs ${sym}${issuerBuyback.toLocaleString(undefined, { maximumFractionDigits: 0 })}). List the shares for sale to a real buyer instead.`,
           {
-            error: marketQuote.active
-              ? equityPoolDepthMessage(marketQuote.bidDepthShares, marketQuote.currency)
-              : `${corporation.name}'s treasury can't cover this sale (needs ${sym}${issuerBuyback.toLocaleString(undefined, { maximumFractionDigits: 0 })}). List the shares for sale to a real buyer instead.`,
-            ...(marketQuote.active ? { marketDepthShares: marketQuote.bidDepthShares } : {}),
-          },
-          { status: 400 }
+            extra: {
+              ...(marketQuote.active ? { marketDepthShares: marketQuote.bidDepthShares } : {}),
+            },
+          }
         );
       }
       return null;
@@ -189,7 +189,7 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
           userId: new ObjectId(basicAuth.user.userId),
         });
         if (!imperial) {
-          return NextResponse.json({ error: "Imperial character not found" }, { status: 404 });
+          return errorResponse(404, "Imperial character not found");
         }
         ceoId = imperial._id;
       } else {
@@ -198,7 +198,7 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
           : { userId: new ObjectId(basicAuth.user.userId) };
         const character = await db.collection<Character>("characters").findOne(characterQuery);
         if (!character) {
-          return NextResponse.json({ error: "Character not found" }, { status: 404 });
+          return errorResponse(404, "Character not found");
         }
         ceoId = character._id;
       }
@@ -207,20 +207,14 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
         .collection<Corporation>("corporations")
         .findOne({ ceoId, ceoVacant: { $ne: true } });
       if (!sellerCorp) {
-        return NextResponse.json(
-          { error: "You must be a CEO to sell shares on behalf of a corporation" },
-          { status: 403 }
-        );
+        return errorResponse(403, "You must be a CEO to sell shares on behalf of a corporation");
       }
 
       const shareholderEntry = corporation.shareholders?.find(
         (sh) => sh.corporationId?.toString() === sellerCorp._id.toString()
       );
       if (!shareholderEntry || shareholderEntry.shares < shares) {
-        return NextResponse.json(
-          { error: `Corporation only owns ${shareholderEntry?.shares ?? 0} shares` },
-          { status: 400 }
-        );
+        return errorResponse(400, `Corporation only owns ${shareholderEntry?.shares ?? 0} shares`);
       }
 
       const buybackGate = await gateIssuerBuyback();
@@ -267,10 +261,7 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
       );
       if (remainingAfterSale < 0) {
         await reverseFloatSellDebit(db, corporation, issuerBuyback, { split: issuerBuybackSplit });
-        return NextResponse.json(
-          { error: "Shares were already sold or reserved by another action" },
-          { status: 409 }
-        );
+        return errorResponse(409, "Shares were already sold or reserved by another action");
       }
 
       // Convert ₳-denominated proceeds into seller corp's home currency.
@@ -389,7 +380,7 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
         userId: new ObjectId(basicAuth.user.userId),
       });
       if (!imperial) {
-        return NextResponse.json({ error: "Imperial character not found" }, { status: 404 });
+        return errorResponse(404, "Imperial character not found");
       }
 
       const shareholderEntry = corporation.shareholders?.find(
@@ -397,7 +388,7 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
       );
       const ownedShares = shareholderEntry?.shares ?? 0;
       if (ownedShares < shares) {
-        return NextResponse.json({ error: `You only own ${ownedShares} shares` }, { status: 400 });
+        return errorResponse(400, `You only own ${ownedShares} shares`);
       }
 
       const shouldVacateCeo =
@@ -405,12 +396,10 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
         imperial._id.equals(corporation.ceoId) &&
         ownedShares === shares;
       if (shouldVacateCeo && !confirmCeoVacate) {
-        return NextResponse.json(
-          {
-            error: `You are the CEO of ${corporation.name}. Selling all ${shares.toLocaleString()} of your remaining shares will remove you as CEO — this can't be undone, and you'd have to be re-appointed to become CEO again.`,
-            requiresCeoVacateConfirm: true,
-          },
-          { status: 409 }
+        return errorResponse(
+          409,
+          `You are the CEO of ${corporation.name}. Selling all ${shares.toLocaleString()} of your remaining shares will remove you as CEO — this can't be undone, and you'd have to be re-appointed to become CEO again.`,
+          { extra: { requiresCeoVacateConfirm: true } }
         );
       }
       // Wash-trade guard (see orderFlowWashGuard): round-trip legs are excluded
@@ -481,10 +470,7 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
       if (forexEnabled) {
         const fxResult = await loadCharacterFxRate(db, imperialHomeCurrency);
         if (!fxResult.ok) {
-          return NextResponse.json(
-            { error: "Exchange rate unavailable, try again shortly" },
-            { status: 503 }
-          );
+          return errorResponse(503, "Exchange rate unavailable, try again shortly");
         }
         imperialFxRate = fxResult.rate;
       }
@@ -531,10 +517,7 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
       );
       if (remainingAfterSale < 0) {
         await reverseFloatSellDebit(db, corporation, issuerBuyback, { split: issuerBuybackSplit });
-        return NextResponse.json(
-          { error: "Shares were already sold or reserved by another action" },
-          { status: 409 }
-        );
+        return errorResponse(409, "Shares were already sold or reserved by another action");
       }
 
       const sellerCredit = await db.collection<ImperialCharacter>("imperialCharacters").updateOne(
@@ -663,11 +646,11 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
       : { userId: new ObjectId(basicAuth.user.userId) };
     const charDoc = await db.collection<Character>("characters").findOne(characterQuery);
     if (!charDoc) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
     const sellTradeLock = await assertCeoTradeNotBlocked(db, corporation, charDoc._id);
     if (sellTradeLock.blocked) {
-      return NextResponse.json({ error: sellTradeLock.error }, { status: sellTradeLock.status });
+      return errorResponse(sellTradeLock.status, sellTradeLock.error);
     }
 
     const shareholderEntry = corporation.shareholders?.find(
@@ -696,22 +679,18 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
     const availableShares = ownedShares - reservedInOrders;
 
     if (availableShares < shares) {
-      return NextResponse.json(
-        {
-          error: `Only ${availableShares.toLocaleString()} shares available (${reservedInOrders.toLocaleString()} reserved in open sell orders)`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Only ${availableShares.toLocaleString()} shares available (${reservedInOrders.toLocaleString()} reserved in open sell orders)`
       );
     }
 
     const shouldVacateCeo = charDoc._id.equals(corporation.ceoId) && availableShares === shares;
     if (shouldVacateCeo && !confirmCeoVacate) {
-      return NextResponse.json(
-        {
-          error: `You are the CEO of ${corporation.name}. Selling all ${shares.toLocaleString()} of your remaining shares will remove you as CEO — this can't be undone, and you'd have to be re-appointed to become CEO again.`,
-          requiresCeoVacateConfirm: true,
-        },
-        { status: 409 }
+      return errorResponse(
+        409,
+        `You are the CEO of ${corporation.name}. Selling all ${shares.toLocaleString()} of your remaining shares will remove you as CEO — this can't be undone, and you'd have to be re-appointed to become CEO again.`,
+        { extra: { requiresCeoVacateConfirm: true } }
       );
     }
     // Wash-trade guard (see orderFlowWashGuard): round-trip legs are excluded
@@ -774,10 +753,7 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
     if (forexEnabled) {
       const fxResult = await loadCharacterFxRate(db, homeCurrency);
       if (!fxResult.ok) {
-        return NextResponse.json(
-          { error: "Exchange rate unavailable, try again shortly" },
-          { status: 503 }
-        );
+        return errorResponse(503, "Exchange rate unavailable, try again shortly");
       }
       charFxRate = fxResult.rate;
     }
@@ -824,10 +800,7 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
     );
     if (remainingAfterSale < 0) {
       await reverseFloatSellDebit(db, corporation, issuerBuyback, { split: issuerBuybackSplit });
-      return NextResponse.json(
-        { error: "Shares were already sold or reserved by another action" },
-        { status: 409 }
-      );
+      return errorResponse(409, "Shares were already sold or reserved by another action");
     }
 
     const sellerCredit = await db.collection<Character>("characters").updateOne(

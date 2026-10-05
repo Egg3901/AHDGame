@@ -94,17 +94,13 @@ export async function GET(request: Request) {
     if (stateIdParam) {
       const st = stateById.get(stateIdParam);
       if (!st) {
-        return NextResponse.json({ error: "State not found", found: false }, { status: 404 });
+        return errorResponse(404, "State not found", { extra: { found: false } });
       }
       const stateCountry = st.countryId;
       if (countryParam && stateCountry !== countryParam) {
-        return NextResponse.json(
-          {
-            error: `State ${stateIdParam} is not in country ${countryParam}`,
-            found: false,
-          },
-          { status: 400 }
-        );
+        return errorResponse(400, `State ${stateIdParam} is not in country ${countryParam}`, {
+          extra: { found: false },
+        });
       }
       scopedStates = [st];
       scopeStateName = st.name;

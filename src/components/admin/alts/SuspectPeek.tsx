@@ -18,6 +18,7 @@ import {
   type AltMemberIdentity,
   type AltMemberRole,
 } from "./altTypes";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 type Suspect = AltMemberIdentity & { role?: AltMemberRole };
 
@@ -105,7 +106,7 @@ function SuspectPeekCard({ member, onClose }: { member: Suspect; onClose: () => 
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error ?? `Request failed (${res.status})`);
+        throw new Error(apiErrorText(data, `Request failed (${res.status})`));
       }
       peek.onMemberBanned(member.userId);
       peek.notify(`Banned ${name}.`, "success");

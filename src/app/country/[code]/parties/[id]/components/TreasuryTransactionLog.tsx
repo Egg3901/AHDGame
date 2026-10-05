@@ -12,6 +12,7 @@ import {
   TREASURY_TRANSACTION_CATEGORIES,
   type TreasuryTransactionCategory,
 } from "@/lib/db/types/treasuryTransaction";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 /**
  * Append-only audit log of treasury inflows and outflows for a party. Reads
@@ -107,7 +108,7 @@ export function TreasuryTransactionLog({ countryCode, partyId }: Props) {
       const res = await fetch(buildUrl(), { cache: "no-store" });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(body.error ?? `Failed to load transactions (${res.status})`);
+        throw new Error(apiErrorText(body, `Failed to load transactions (${res.status})`));
       }
       const json = (await res.json()) as TransactionsResponse;
       setItems(json.items);

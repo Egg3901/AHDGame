@@ -2,28 +2,8 @@
 date: 2026-10-04
 title: Evidence-based bank insurance premiums
 summary: >-
-  Bank insurance premiums can use measured net claims and insured-deposit
-  exposure to price a risk-weighted rate and refill a stated reserve target.
-# Free text. What the change was about: economy, elections, balance, corporations.
-tags: [banking, insurance, economy]
-# How big this change is, which sets how it is grouped in the release post.
-# One of: major | minor | patch | hotfix
+  Bank insurance premiums now adjust to measured claims and insured deposits, between 0.4% and 2% before the bank's own risk weight.
+tags: [banking, insurance]
 badges: [patch]
-# Which part of the codebase moved. Any of: backend | frontend | fullstack | engine
 areas: [backend, engine]
 ---
-
-## What changed
-
-- Premiums start at the existing 0.4% provisional annual rate and move
-  toward a measured rate as evidence accumulates: same-cohort net claims plus
-  refilling a one-year claim reserve over five years. The measured rate is
-  weighted by credibility (ten measured years and three paid claims give full
-  weight), stays between 0.4% and 2% before the bank's existing reserve-ratio
-  risk weight, and never jumps on a single turn.
-- The original bank-turn premium quote is frozen in its settlement receipt.
-  Retries finish that quote even if cash, deposit exposure, or fund evidence
-  has changed, without debiting the bank twice.
-- The accompanying 1991 calibration records current funded-cash and bond-pool
-  constraints. Its neutral and aggressive cases still fail before acceptance;
-  the report does not claim bank viability.

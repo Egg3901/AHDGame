@@ -1,8 +1,9 @@
 ---
 date: 2026-10-05
-title: Research panels for macro, fiscal, trade and securities history
+title: Better simulation and research reporting
+summary: >-
+  Simulation runs now record per-turn macro, fiscal, trade and securities history, forex activity and mining inputs, with a bounded admin export.
+tags: [simulation, research]
+badges: [patch]
+areas: [backend, engine]
 ---
-
-Every turn now records an aligned country row (inflation, policy rate, output gap, unemployment, GDP, fiscal flows, sovereign debt flows, who set the rate) and one whole-market securities row (executed or modeled price, book depth, spread, distributions, bond holder classes). Trade keeps exact country-pair delivered flows and per-destination unmet intent. A bounded admin export serves all four panels, plus an annual debt reconciliation, with explicit missing values, units and paging.
-
-The two research collections are pruned past 504 turns (the 480-turn export cap plus a day), archived to R2 first like other history logs. A whole-market securities row is about 600 bytes per security, so even a very large world stays well under the document size limit, and capture costs seven reads and one write regardless of world size.

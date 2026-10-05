@@ -7,7 +7,7 @@ import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationAc
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { expandSectorSchema } from "@/lib/api/schemas/corporations";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import type {
   Character,
@@ -80,7 +80,7 @@ export async function expandSector(request: Request, { params }: RouteParams) {
     const { id } = await params;
     const parsed = await parseJsonBody(request, expandSectorSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const { stateId, sectorType: requestedSectorType } = parsed.data;
@@ -96,9 +96,9 @@ export async function expandSector(request: Request, { params }: RouteParams) {
     if (ceoCheck) return ceoCheck;
 
     if (corporation.ceoType === "npp") {
-      return NextResponse.json(
-        { error: "Resume player control before building plants for this corporation" },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "Resume player control before building plants for this corporation"
       );
     }
 
@@ -122,7 +122,7 @@ export async function expandSector(request: Request, { params }: RouteParams) {
     // market the expand UI openly offers.
     const state = await db.collection<State>("states").findOne({ _id: stateId });
     if (!state) {
-      return NextResponse.json({ error: "Invalid state" }, { status: 400 });
+      return errorResponse(400, "Invalid state");
     }
 
     // Suggestions already hide these markets, but the write command is the
@@ -132,12 +132,9 @@ export async function expandSector(request: Request, { params }: RouteParams) {
     // as China, so it opens automatically when the canonical model does.
     const blockedCountries = await loadCommandEconomyBlockedCountries(db, [state.countryId]);
     if (blockedCountries.has(state.countryId as CountryId)) {
-      return NextResponse.json(
-        {
-          error:
-            "This market is state-controlled under a command economy and is closed to private sector expansion.",
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "This market is state-controlled under a command economy and is closed to private sector expansion."
       );
     }
 
@@ -154,10 +151,7 @@ export async function expandSector(request: Request, { params }: RouteParams) {
         : { corporationId: corporation._id, stateId }
     );
     if (existingSector) {
-      return NextResponse.json(
-        { error: "You already have operations in this state" },
-        { status: 400 }
-      );
+      return errorResponse(400, "You already have operations in this state");
     }
 
     // Check liquid capital (liquidCapital is in corp home currency; cost is in ₳)
@@ -194,11 +188,9 @@ export async function expandSector(request: Request, { params }: RouteParams) {
       );
       if (retailCapacityExpansionPaused(transition, currentTurn)) {
         const remaining = retailDemandTransitionTurnsRemaining(transition, currentTurn);
-        return NextResponse.json(
-          {
-            error: `New Retail sectors are paused while consumer demand is rebalanced (${remaining} turns remaining).`,
-          },
-          { status: 409 }
+        return errorResponse(
+          409,
+          `New Retail sectors are paused while consumer demand is rebalanced (${remaining} turns remaining).`
         );
       }
     }
@@ -299,16 +291,14 @@ export async function expandSector(request: Request, { params }: RouteParams) {
       corpFxRate
     );
     if (corpCapitalAnchor < totalExpansionCostAnchor) {
-      return NextResponse.json(
-        {
-          error: insufficientCapitalMessage(
-            "Expansion",
-            anchorToCorpLiquidCapital(totalExpansionCostAnchor, corporation, corpFxRate),
-            corporation.liquidCapital,
-            resolveCorpLiquidCurrencyCode(corporation)
-          ),
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        insufficientCapitalMessage(
+          "Expansion",
+          anchorToCorpLiquidCapital(totalExpansionCostAnchor, corporation, corpFxRate),
+          corporation.liquidCapital,
+          resolveCorpLiquidCurrencyCode(corporation)
+        )
       );
     }
 
@@ -407,10 +397,7 @@ export async function expandSector(request: Request, { params }: RouteParams) {
       newSectorId = inserted.insertedId;
     } catch (error) {
       if (isCorporateSectorDuplicateKey(error)) {
-        return NextResponse.json(
-          { error: "You already have operations in this state" },
-          { status: 400 }
-        );
+        return errorResponse(400, "You already have operations in this state");
       }
       throw error;
     }

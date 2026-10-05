@@ -5,6 +5,7 @@ import { Button } from "@/components/ui";
 import { CORPORATION_TYPES, type CorporationType } from "@/lib/constants/corporations";
 import { MAX_STRATEGIC_SECTOR_DESIGNATIONS } from "@/lib/nationalization/constants";
 import type { NatOfficialActions } from "../NationalCorporationView";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 /**
  * Head-of-government strategic-sector designation: arms/disarms the strategic
@@ -40,7 +41,7 @@ export function StrategicSectorPanel({
       });
       const json = await res.json();
       if (!res.ok) {
-        setFeedback({ type: "error", message: json.error ?? "Action failed." });
+        setFeedback({ type: "error", message: apiErrorText(json, "Action failed.") });
       } else {
         setFeedback({ type: "success", message: ok });
         setAddType("");

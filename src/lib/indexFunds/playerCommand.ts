@@ -1,5 +1,6 @@
 import type { ClientSession, Db, Document, ObjectId } from "mongodb";
 import { resumeFundCommandAudit, type FundCommandAudit } from "./playerCommandAudit";
+import { statusResponse } from "@/lib/api/errors";
 
 export interface FundCommandRequest {
   fundId: string;
@@ -20,15 +21,12 @@ interface FundCommand extends Document {
 const COLLECTION = "indexFundCommands";
 
 export function pendingFundCommandResponse(operationId: string): Response {
-  return Response.json(
-    {
-      pending: true,
-      operationId,
-      error:
-        "This fund order has an unconfirmed outcome. Cash or units may already have moved. Retry this same order to check its status; do not place a replacement order. If it remains pending, contact support with the order ID.",
-    },
-    { status: 409 }
-  );
+  return statusResponse(409, {
+    pending: true,
+    operationId,
+    error:
+      "This fund order has an unconfirmed outcome. Cash or units may already have moved. Retry this same order to check its status; do not place a replacement order. If it remains pending, contact support with the order ID.",
+  });
 }
 
 /** Claims never expire: an unknown standalone outcome must not be executed twice. */
@@ -56,17 +54,18 @@ export async function claimFundCommand(
   if (!existing || JSON.stringify(existing.request) !== JSON.stringify(request)) {
     return {
       key,
-      response: Response.json(
-        { error: "This order ID belongs to a different fund order.", pending: true, operationId },
-        { status: 409 }
-      ),
+      response: statusResponse(409, {
+        error: "This order ID belongs to a different fund order.",
+        pending: true,
+        operationId,
+      }),
     };
   }
   if (existing.state === "completed" && existing.response) {
     await resumeFundCommandAudit(db, key);
     return {
       key,
-      response: Response.json(existing.response.body, { status: existing.response.status }),
+      response: statusResponse(existing.response.status, existing.response.body),
     };
   }
   return { key, response: pendingFundCommandResponse(operationId) };

@@ -39,8 +39,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     const parsed = await parseJsonBody(request, bodySchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const { id } = await params;
     const subResolved = await resolveCorporation(db, id);
@@ -54,7 +53,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       turn,
       now: new Date(),
     });
-    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+    if (!result.ok) return errorResponse(result.status, result.error);
 
     return NextResponse.json({ success: true, caretakerDismissed: result.caretakerDismissed });
   } catch (error) {

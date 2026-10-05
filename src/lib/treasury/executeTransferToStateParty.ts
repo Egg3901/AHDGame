@@ -17,7 +17,7 @@ import { NextResponse } from "next/server";
 import type { Db } from "mongodb";
 import { getMongoClient } from "@/lib/mongodb";
 import { runTransactionWithSessionRetry } from "@/lib/db/transactionWithRetry";
-import { badRequest } from "@/lib/api/errors";
+import { badRequest, errorResponse } from "@/lib/api/errors";
 import type { PoliticalParty, StatePartyOrg, State } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import { getSeedCurrencyCode, type CurrencyCode } from "@/lib/constants/currencies";
@@ -90,9 +90,9 @@ export async function executeTransferToStateParty(
       .collection<PoliticalParty>("politicalParties")
       .updateOne({ _id: party._id, treasury: { $gte: amount } }, partyDebit);
     if (debitResult.matchedCount === 0) {
-      return NextResponse.json(
-        { error: `Insufficient treasury balance. Available: $${treasury.toLocaleString()}` },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Insufficient treasury balance. Available: $${treasury.toLocaleString()}`
       );
     }
     try {

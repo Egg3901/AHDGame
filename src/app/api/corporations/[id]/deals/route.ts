@@ -84,7 +84,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, dealsBodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const body = parsed.data;
     const gameState = await getGameState();
@@ -104,7 +104,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         proposerUserId: auth.user.userId ? new ObjectId(auth.user.userId) : undefined,
         currentTurn,
       });
-      if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+      if (!result.ok) return errorResponse(result.status, result.error);
       if (result.autoAccepted) {
         return NextResponse.json({
           ok: true,
@@ -130,9 +130,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         if (!offer.acquirerCorporationId.equals(myCorp._id))
           return errorResponse(403, "Only the offering corporation can withdraw");
         const r = await resolveAcquisitionOfferStatus(db, offer, "withdrawn", currentTurn);
-        return r.ok
-          ? NextResponse.json({ ok: true })
-          : NextResponse.json({ error: r.error }, { status: r.status });
+        return r.ok ? NextResponse.json({ ok: true }) : errorResponse(r.status, r.error);
       }
 
       // accept / reject must be done by the TARGET's CEO
@@ -141,13 +139,11 @@ export async function POST(request: Request, { params }: RouteParams) {
 
       if (body.action === "reject") {
         const r = await resolveAcquisitionOfferStatus(db, offer, "rejected", currentTurn);
-        return r.ok
-          ? NextResponse.json({ ok: true })
-          : NextResponse.json({ error: r.error }, { status: r.status });
+        return r.ok ? NextResponse.json({ ok: true }) : errorResponse(r.status, r.error);
       }
 
       const r = await acceptAcquisitionOffer(db, { offer, currentTurn });
-      if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status });
+      if (!r.ok) return errorResponse(r.status, r.error);
       return NextResponse.json({
         ok: true,
         acquired: true,

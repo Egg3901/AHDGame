@@ -8,7 +8,7 @@ import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -45,7 +45,7 @@ export async function listSectorForSale(_request: Request, { params }: RoutePara
     if (ceoCheck) return ceoCheck;
 
     if (!ObjectId.isValid(sectorId)) {
-      return NextResponse.json({ error: "Invalid sector ID" }, { status: 400 });
+      return errorResponse(400, "Invalid sector ID");
     }
 
     const sector = await db
@@ -53,7 +53,7 @@ export async function listSectorForSale(_request: Request, { params }: RoutePara
       .findOne({ _id: new ObjectId(sectorId), corporationId: corporation._id });
 
     if (!sector) {
-      return NextResponse.json({ error: "Sector not found" }, { status: 404 });
+      return errorResponse(404, "Sector not found");
     }
     if (
       sector.constructionPropertyTransition ||
@@ -62,13 +62,13 @@ export async function listSectorForSale(_request: Request, { params }: RoutePara
         (!["building", "released", "cancelled"].includes(sector.constructionFinancing.status) ||
           sector.constructionFinancing.escrowLocal > 0))
     )
-      return NextResponse.json(
-        { error: "Finish the site's pending construction or secured recovery before listing." },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "Finish the site's pending construction or secured recovery before listing."
       );
 
     if (sector.forSale) {
-      return NextResponse.json({ error: "Sector is already listed for sale" }, { status: 400 });
+      return errorResponse(400, "Sector is already listed for sale");
     }
 
     // State enterprises divest through the nationalization system (privatization),
@@ -76,10 +76,7 @@ export async function listSectorForSale(_request: Request, { params }: RoutePara
     // market would route around that gate entirely. `requireCeo` above blocks most
     // SOEs because they are ceoVacant, but several live RU SOEs do carry a ceoId.
     if (isStateOwned(corporation)) {
-      return NextResponse.json(
-        { error: "State enterprises cannot list production for private sale." },
-        { status: 403 }
-      );
+      return errorResponse(403, "State enterprises cannot list production for private sale.");
     }
 
     const hostFxRate = await getSectorHostFxRate(db, sector, corporation);
@@ -105,10 +102,7 @@ export async function listSectorForSale(_request: Request, { params }: RoutePara
       abortedSale &&
       (listingTurn === null || sector.constructionFinancing!.sale!.turn >= listingTurn)
     )
-      return NextResponse.json(
-        { error: "Retry a refused secured sale after the next turn." },
-        { status: 409 }
-      );
+      return errorResponse(409, "Retry a refused secured sale after the next turn.");
     const valuation = computeSectorListingValuation(
       sector,
       corporation,
@@ -126,13 +120,11 @@ export async function listSectorForSale(_request: Request, { params }: RoutePara
     );
 
     if (valuation.priceAnchor <= 0) {
-      return NextResponse.json(
-        {
-          error: plantsEnabled
-            ? "Cannot list a sector with no capacity and no profitability. Build capacity or improve base margin first."
-            : "Cannot list a sector with no positive profitability. Improve base margin or reduce growth cost first.",
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        plantsEnabled
+          ? "Cannot list a sector with no capacity and no profitability. Build capacity or improve base margin first."
+          : "Cannot list a sector with no positive profitability. Improve base margin or reduce growth cost first."
       );
     }
 
@@ -161,10 +153,7 @@ export async function listSectorForSale(_request: Request, { params }: RoutePara
       }
     );
     if (listed.matchedCount === 0)
-      return NextResponse.json(
-        { error: "The site's owner or secured recovery changed." },
-        { status: 409 }
-      );
+      return errorResponse(409, "The site's owner or secured recovery changed.");
 
     return NextResponse.json({
       success: true,

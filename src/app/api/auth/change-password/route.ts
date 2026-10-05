@@ -28,7 +28,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, changePasswordSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { currentPassword, newPassword } = parsed.data;
 
@@ -44,10 +44,9 @@ export async function POST(request: Request) {
 
     // Credential changes require the uncached account state read above.
     if (!credentialSessionIsCurrent(userId, user, await verifyAuth())) {
-      return NextResponse.json(
-        { error: "Please sign in again before changing your password." },
-        { status: 401, headers: { "Cache-Control": "private, no-store" } }
-      );
+      return errorResponse(401, "Please sign in again before changing your password.", {
+        headers: { "Cache-Control": "private, no-store" },
+      });
     }
 
     // Verify current password
@@ -79,9 +78,10 @@ export async function POST(request: Request) {
     );
 
     if (updated.matchedCount !== 1) {
-      return NextResponse.json(
-        { error: "Your account changed during this request. Please sign in and try again." },
-        { status: 409, headers: { "Cache-Control": "private, no-store" } }
+      return errorResponse(
+        409,
+        "Your account changed during this request. Please sign in and try again.",
+        { headers: { "Cache-Control": "private, no-store" } }
       );
     }
 

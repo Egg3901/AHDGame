@@ -34,7 +34,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { id, voteId } = await params;
     const parsed = await parseJsonBody(request, privatizationVoteSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     if (!ObjectId.isValid(voteId)) {
@@ -72,7 +72,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       currentTurn,
     });
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
+      return errorResponse(result.status, result.error);
     }
 
     if (result.autoResolve) {

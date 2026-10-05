@@ -39,7 +39,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
       return errorResponse(403, "Only the sponsoring corporation's CEO can wind up this fund.");
 
     const result = await beginWindUp(db, fund, await getCurrentTurn(db));
-    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+    if (!result.ok) return errorResponse(result.status, result.error);
 
     return NextResponse.json({
       success: true,

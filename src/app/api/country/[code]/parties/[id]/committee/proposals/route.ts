@@ -299,7 +299,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, createProposalSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const body = parsed.data;
 
@@ -320,12 +320,10 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (body.type === "positionShift") {
       if (isPositionShiftLocked(party, body.axis, nowTurn)) {
         const lock = party.positionShiftCooldowns?.[body.axis];
-        return NextResponse.json(
-          {
-            error: `Position shift on '${body.axis}' is locked until turn ${lock?.lockedUntilTurn}`,
-            lockedUntilTurn: lock?.lockedUntilTurn,
-          },
-          { status: 409 }
+        return errorResponse(
+          409,
+          `Position shift on '${body.axis}' is locked until turn ${lock?.lockedUntilTurn}`,
+          { extra: { lockedUntilTurn: lock?.lockedUntilTurn } }
         );
       }
     } else if (
@@ -338,12 +336,10 @@ export async function POST(request: Request, { params }: RouteParams) {
     ) {
       if (isProposalTypeLocked(party, body.type, nowTurn)) {
         const lock = party.proposalCooldowns?.[body.type];
-        return NextResponse.json(
-          {
-            error: `Proposal type '${body.type}' is locked until turn ${lock?.lockedUntilTurn}`,
-            lockedUntilTurn: lock?.lockedUntilTurn,
-          },
-          { status: 409 }
+        return errorResponse(
+          409,
+          `Proposal type '${body.type}' is locked until turn ${lock?.lockedUntilTurn}`,
+          { extra: { lockedUntilTurn: lock?.lockedUntilTurn } }
         );
       }
     }
@@ -358,15 +354,12 @@ export async function POST(request: Request, { params }: RouteParams) {
       ...(body.type === "positionShift" ? { "positionShift.axis": body.axis } : {}),
     });
     if (duplicateOpen) {
-      return NextResponse.json(
-        {
-          error:
-            body.type === "positionShift"
-              ? `An open positionShift proposal on '${body.axis}' already exists`
-              : `An open '${body.type}' proposal already exists`,
-          existingProposalId: duplicateOpen._id.toString(),
-        },
-        { status: 409 }
+      return errorResponse(
+        409,
+        body.type === "positionShift"
+          ? `An open positionShift proposal on '${body.axis}' already exists`
+          : `An open '${body.type}' proposal already exists`,
+        { extra: { existingProposalId: duplicateOpen._id.toString() } }
       );
     }
 

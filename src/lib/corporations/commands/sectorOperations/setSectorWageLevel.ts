@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { clampWageLevel } from "@/lib/labour/laborCost";
 import { isLabourWagesEnabled } from "@/lib/labour/featureFlag";
@@ -28,7 +28,7 @@ export async function setSectorWageLevel(request: Request, { params }: RoutePara
 
     // Gate: the wage lever only exists when the labour system is on.
     if (!(await isLabourWagesEnabled())) {
-      return NextResponse.json({ error: "The labour system is not enabled." }, { status: 403 });
+      return errorResponse(403, "The labour system is not enabled.");
     }
 
     const rateLimit = checkRateLimit(auth.user.userId, 20, 60000);
@@ -37,7 +37,7 @@ export async function setSectorWageLevel(request: Request, { params }: RoutePara
     const { id, sectorId } = await params;
     const parsed = await parseJsonBody(request, setSectorWageLevelSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const { wageLevel } = parsed.data;
@@ -53,7 +53,7 @@ export async function setSectorWageLevel(request: Request, { params }: RoutePara
 
     // Resolve sector
     if (!ObjectId.isValid(sectorId)) {
-      return NextResponse.json({ error: "Invalid sector ID" }, { status: 400 });
+      return errorResponse(400, "Invalid sector ID");
     }
 
     const sector = await db
@@ -61,7 +61,7 @@ export async function setSectorWageLevel(request: Request, { params }: RoutePara
       .findOne({ _id: new ObjectId(sectorId), corporationId: corporation._id });
 
     if (!sector) {
-      return NextResponse.json({ error: "Sector not found" }, { status: 404 });
+      return errorResponse(404, "Sector not found");
     }
 
     const clamped = clampWageLevel(wageLevel);

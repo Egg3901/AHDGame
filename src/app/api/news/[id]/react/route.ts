@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
@@ -24,7 +24,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     const parsed = await parseJsonBody(request, reactSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const { id } = await params;

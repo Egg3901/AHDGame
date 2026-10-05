@@ -48,8 +48,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (!limit.ok) return rateLimitResponse(limit.retryAfter);
 
     const parsed = await parseJsonBody(request, schema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const { stateId } = parsed.data;
     const { id: electionId } = await params;

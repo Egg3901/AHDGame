@@ -49,7 +49,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       })
     );
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const demandedWageLevel = parsed.data.demandedWageLevel;
 
@@ -62,7 +62,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const result = await setUnionWageDemand(db, character, id, demandedWageLevel);
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
+      return errorResponse(result.status, result.error);
     }
     return NextResponse.json({ success: true, ...result });
   } catch (error) {

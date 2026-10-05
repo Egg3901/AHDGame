@@ -40,7 +40,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
     if (!vote) return errorResponse(404, "Vote not found");
     const forex = await isForexEnabled();
     const result = await cancelPrivatizationVote({ db, vote, forexEnabled: forex });
-    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+    if (!result.ok) return errorResponse(result.status, result.error);
     logWireEvent(
       "corporation_privatization_vote_cancelled",
       wireHeadlineCorpPrivatizationVoteCancelled(corporation.name),

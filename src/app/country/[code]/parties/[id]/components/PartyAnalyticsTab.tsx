@@ -14,6 +14,7 @@ import type {
   PartyAnalyticsSlateItem,
   PartyAnalyticsStateMetric,
 } from "@/lib/partyAnalytics/types";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 function getRiskBadgeColor(riskLabel: PartyAnalyticsRiskItem["riskLabel"]) {
   switch (riskLabel) {
@@ -314,7 +315,7 @@ export function PartyAnalyticsTab({
         const response = await fetch(`${partyApiUrl(countryCode, partyId)}/analytics`);
         if (!response.ok) {
           const body = (await response.json().catch(() => null)) as { error?: string } | null;
-          throw new Error(body?.error ?? "Failed to load analytics");
+          throw new Error(apiErrorText(body, "Failed to load analytics"));
         }
         const body = (await response.json()) as PartyAnalyticsPayload;
         if (!cancelled) setData(body);

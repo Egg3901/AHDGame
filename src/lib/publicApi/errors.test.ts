@@ -5,7 +5,7 @@ describe("publicError", () => {
   it("returns a response with ok:false, the code, and the message", async () => {
     const res = publicError("NOT_FOUND", "Character not found", 404);
     const body = await res.json();
-    expect(body).toEqual({ ok: false, error: "Character not found", code: "NOT_FOUND" });
+    expect(body).toMatchObject({ ok: false, error: "Character not found", code: "NOT_FOUND" });
     expect(res.status).toBe(404);
   });
 

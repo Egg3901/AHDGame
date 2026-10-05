@@ -7,7 +7,10 @@ import { checkRateLimit, rateLimitResponse, BOT_READ_LIMITS } from "@/lib/api/ra
 import { getGameTime } from "@/lib/time/gameTime";
 import { isPrimaryEnded } from "@/lib/elections/phases";
 import { ALL_COUNTRY_IDS, COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
-import { getLiveLowerChamberSeats, getLiveUpperChamberSeats } from "@/lib/turn/lowerChamberSeats";
+import {
+  getLiveLowerChamberSeats,
+  getLiveUpperChamberSeats,
+} from "@/lib/legislature/lowerChamberSeats";
 import { getChamberName, raceToElectionTypes, raceToOfficeType, validRaces } from "./races";
 import type {
   Election,

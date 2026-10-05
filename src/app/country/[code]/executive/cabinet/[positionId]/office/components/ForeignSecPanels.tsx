@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface CurrentSettings {
   targetCountryId: string | null;
@@ -73,7 +74,7 @@ export function ForeignSecPanels({
     });
     if (!res.ok) {
       const json = (await res.json()) as { error?: string };
-      return { ok: false, error: json.error ?? "Failed to save" };
+      return { ok: false, error: apiErrorText(json, "Failed to save") };
     }
     return { ok: true };
   }
@@ -85,7 +86,7 @@ export function ForeignSecPanels({
     try {
       const result = await postSetting({ targetCountryId: selectedCountry || null });
       if (!result.ok) {
-        setCountryFeedback({ type: "error", message: result.error ?? "Failed to save" });
+        setCountryFeedback({ type: "error", message: apiErrorText(result, "Failed to save") });
         return;
       }
       setCountryFeedback({ type: "success", message: "Trade envoy updated." });
@@ -104,7 +105,7 @@ export function ForeignSecPanels({
     try {
       const result = await postSetting({ aidPriority: selectedPriority || null });
       if (!result.ok) {
-        setPriorityFeedback({ type: "error", message: result.error ?? "Failed to save" });
+        setPriorityFeedback({ type: "error", message: apiErrorText(result, "Failed to save") });
         return;
       }
       setPriorityFeedback({ type: "success", message: "Aid priority updated." });

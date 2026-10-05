@@ -112,7 +112,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, OpenVoteSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const body = parsed.data;
     const gameState = await getGameState();
@@ -189,7 +189,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       type: body.type as CorporationVoteType,
       payload,
     });
-    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+    if (!result.ok) return errorResponse(result.status, result.error);
 
     const inserted = await db
       .collection<CorporationVote>("corporationVotes")

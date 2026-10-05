@@ -10,6 +10,7 @@ import type {
   CoalitionPriorityStatus,
   CoalitionPriorityVote,
 } from "../coalitionTypes";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface CoalitionPrioritiesPanelProps {
   effectiveCountry: string;
@@ -60,7 +61,7 @@ export function CoalitionPrioritiesPanel({
       const response = await fetch(route, { cache: "no-store" });
       const payload = await response.json();
       if (!response.ok) {
-        throw new Error(payload.error ?? "Failed to load coalition priorities.");
+        throw new Error(apiErrorText(payload, "Failed to load coalition priorities."));
       }
       setData(payload);
       setDraftPolicyTheme(payload.options.policyThemes[0]?.key ?? "");
@@ -138,7 +139,7 @@ export function CoalitionPrioritiesPanel({
       });
       const payload = await response.json();
       if (!response.ok) {
-        throw new Error(payload.error ?? "Failed to propose coalition priority.");
+        throw new Error(apiErrorText(payload, "Failed to propose coalition priority."));
       }
       resetDraft();
       await load();
@@ -179,7 +180,7 @@ export function CoalitionPrioritiesPanel({
         );
         const payload = await response.json();
         if (!response.ok) {
-          throw new Error(payload.error ?? "Failed to update coalition priority.");
+          throw new Error(apiErrorText(payload, "Failed to update coalition priority."));
         }
         await load();
       } catch (caught) {

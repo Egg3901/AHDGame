@@ -232,7 +232,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, voteSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const { id } = await params;
@@ -258,7 +258,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       new ObjectId(parsed.data.candidateCharacterId)
     );
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
+      return errorResponse(result.status, result.error);
     }
 
     return NextResponse.json({

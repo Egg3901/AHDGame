@@ -117,8 +117,7 @@ export async function POST(request: Request) {
     if (!limit.ok) return rateLimitResponse(limit.retryAfter);
 
     const parsed = await parseJsonBody(request, appointSchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const gated = await gate(request, auth.user.userId);
     if (!gated.ok) return gated.response;

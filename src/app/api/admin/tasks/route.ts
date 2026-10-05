@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAdminOrApiKey } from "@/lib/api/requireAdminOrApiKey";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { getTasksCollection } from "@/lib/db/collections/tasks";
 import { z } from "zod";
@@ -81,7 +81,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, createTaskSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();

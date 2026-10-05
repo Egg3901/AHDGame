@@ -46,7 +46,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { bondId } = await params;
     const parsed = await parseJsonBody(request, buyBondSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const { units } = parsed.data;

@@ -16,6 +16,7 @@ import {
   requiresUnanimity,
   votesNeeded,
 } from "@/lib/internationalOrganizations/resolutionRules";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Props {
   org: OrgSummary;
@@ -89,7 +90,7 @@ export function LegislationPanel({ org, viewer, currentTurn, votingWindowTurns, 
       );
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body?.error ?? "Failed to propose FTA");
+        throw new Error(apiErrorText(body, "Failed to propose FTA"));
       }
       setSelected(new Set());
       setShowForm(false);
@@ -113,7 +114,7 @@ export function LegislationPanel({ org, viewer, currentTurn, votingWindowTurns, 
     );
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      throw new Error(body?.error ?? "Vote failed");
+      throw new Error(apiErrorText(body, "Vote failed"));
     }
     onChange();
   }

@@ -62,8 +62,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
     const auth = await requireBasicAuth();
     if (!auth.ok) return auth.response;
     const parsed = await parseJsonBody(request, mandateSchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
     const { id } = await params;
     const db = await getDb();
     const resolved = await resolveCorporation(db, id);

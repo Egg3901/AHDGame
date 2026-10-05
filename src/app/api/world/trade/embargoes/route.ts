@@ -4,7 +4,7 @@ import { ObjectId, type Filter } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { requireTradeMinister } from "@/lib/api/requireTradeMinister";
-import { handleRouteError, badRequest, notFound } from "@/lib/api/errors";
+import { handleRouteError, badRequest, notFound, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { ZOD_COUNTRY_ENUM, type CountryId } from "@/lib/constants/countries";
@@ -48,7 +48,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, imposeSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const input = parsed.data;
 

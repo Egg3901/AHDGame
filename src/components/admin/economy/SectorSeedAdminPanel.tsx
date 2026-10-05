@@ -3,6 +3,7 @@
 import { InlineError } from "@/components/ui/InlineError";
 import { useState, useEffect } from "react";
 import type { SeedPreviewResponse, SeedPreviewRow } from "@/lib/api/types/sectorSeed";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface SeedResult {
   boostedCount: number;
@@ -85,7 +86,7 @@ export function SectorSeedAdminPanel() {
             : "Auto sector seeding disabled"
         );
       } else {
-        setMessage(data.error ?? "Failed to toggle auto sector seeding");
+        setMessage(apiErrorText(data, "Failed to toggle auto sector seeding"));
       }
     } catch {
       setMessage("Failed to toggle auto sector seeding");
@@ -110,7 +111,7 @@ export function SectorSeedAdminPanel() {
     try {
       const res = await fetch(`/api/admin/corporations/seed-unowned?maxBoost=${maxBoostPct / 100}`);
       const json = (await res.json()) as SeedPreviewResponse & { error?: string };
-      if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
+      if (!res.ok) throw new Error(apiErrorText(json, `HTTP ${res.status}`));
       setPreview(json);
       setAutoSeedEnabled(json.autoSectorSeedEnabled);
     } catch (e) {
@@ -131,7 +132,7 @@ export function SectorSeedAdminPanel() {
         body: JSON.stringify({ maxBoost: maxBoostPct / 100 }),
       });
       const json = (await res.json()) as SeedResult & { error?: string };
-      if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
+      if (!res.ok) throw new Error(apiErrorText(json, `HTTP ${res.status}`));
       setResult(json);
       setConfirming(false);
       setPreview(null);
@@ -149,7 +150,7 @@ export function SectorSeedAdminPanel() {
     try {
       const res = await fetch("/api/admin/corporations/heal-captured-unowned");
       const json = (await res.json()) as FixPreview & { error?: string };
-      if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
+      if (!res.ok) throw new Error(apiErrorText(json, `HTTP ${res.status}`));
       setFixPreview(json);
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "Fix preview failed");
@@ -165,7 +166,7 @@ export function SectorSeedAdminPanel() {
         method: "POST",
       });
       const json = (await res.json()) as FixPreview & { success?: boolean; error?: string };
-      if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
+      if (!res.ok) throw new Error(apiErrorText(json, `HTTP ${res.status}`));
       setFixPreview(json);
       setFixConfirming(false);
       setMessage(

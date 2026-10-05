@@ -5,6 +5,7 @@ import { Skeleton, Slider } from "@/components/ui";
 import { getMessageStyle } from "@/lib/utils/formatters";
 import { US_STATES } from "@/lib/constants";
 import { getOrgLabel, getOrgBarColor } from "@/lib/utils/partyOrg";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Party {
   _id: string;
@@ -107,7 +108,7 @@ export function PartyOrgManager() {
         setMessage(`${data.message}`);
         await fetchPartyOrg(selectedState);
       } else {
-        setMessage(`Error: ${data.error}`);
+        setMessage(`Error: ${apiErrorText(data, "Request failed")}`);
       }
     } catch {
       setMessage("Error: Network error");

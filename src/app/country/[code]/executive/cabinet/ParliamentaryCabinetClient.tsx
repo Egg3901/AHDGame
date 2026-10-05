@@ -16,6 +16,7 @@ import { CabinetTabNav, type CabinetTabKey } from "./CabinetTabNav";
 import { ReshufflePanel } from "./ReshufflePanel";
 import { WhipPanel } from "./WhipPanel";
 import type { ParliamentaryCabinetConfig } from "./parliamentaryCabinetConfig";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Position {
   id: string;
@@ -223,7 +224,7 @@ export default function ParliamentaryCabinetClient({ config }: Props) {
         handleCloseAppointModal();
         await fetchData();
       } else {
-        showToast(data.error || "Failed to appoint minister", "error");
+        showToast(apiErrorText(data, "Failed to appoint minister"), "error");
       }
     } catch {
       showToast("An unexpected error occurred", "error");
@@ -249,9 +250,9 @@ export default function ParliamentaryCabinetClient({ config }: Props) {
         showToast(data.message, "success");
         await fetchData();
       } else if (res.status === 404) {
-        showToast(data.error || "You do not hold this cabinet seat", "error");
+        showToast(apiErrorText(data, "You do not hold this cabinet seat"), "error");
       } else {
-        showToast(data.error || "Failed to resign", "error");
+        showToast(apiErrorText(data, "Failed to resign"), "error");
       }
     } catch {
       showToast("An unexpected error occurred", "error");
@@ -277,7 +278,7 @@ export default function ParliamentaryCabinetClient({ config }: Props) {
         showToast(data.message, "success");
         await fetchData();
       } else {
-        showToast(data.error || "Failed to remove minister", "error");
+        showToast(apiErrorText(data, "Failed to remove minister"), "error");
       }
     } catch {
       showToast("An unexpected error occurred", "error");

@@ -6,6 +6,7 @@ import { getMessageStyle } from "@/lib/utils/formatters";
 import { partyApiUrl } from "@/lib/urls";
 import type { NationalElectionEntry, NationalPosition } from "./types";
 import { getPositionLabels, POSITION_DESC } from "./helpers";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 // Renders "Available in 5h 23m" / "Available in 47m" from a positive
 // remaining-ms value. Used in the Run button's disabled state when the
@@ -63,7 +64,7 @@ export function NationalElectionPanel({
         body: JSON.stringify(body),
       });
       const data = await res.json();
-      setMsg(res.ok ? `✓ ${data.message}` : `✗ ${data.error}`);
+      setMsg(res.ok ? `✓ ${data.message}` : `✗ ${apiErrorText(data, "Request failed")}`);
       if (res.ok) onRefresh();
     } catch {
       setMsg("✗ Network error");

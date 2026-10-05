@@ -134,7 +134,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        alert(data.error || "Retarget failed");
+        alert(apiErrorText(data, "Retarget failed"));
         return;
       }
       await fetchCampaign();

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui";
 import type { JusticeActionDef } from "@/lib/constants/justiceActions";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface JusticeActionPanelProps {
   actions: JusticeActionDef[];
@@ -50,7 +51,11 @@ export function JusticeActionPanel({
       });
       const json = (await response.json()) as { error?: string; message?: string };
       if (!response.ok) {
-        setFeedback({ actionId, type: "error", message: json.error ?? "Failed to take action" });
+        setFeedback({
+          actionId,
+          type: "error",
+          message: apiErrorText(json, "Failed to take action"),
+        });
         return;
       }
       setFeedback({ actionId, type: "success", message: json.message ?? "Action taken." });

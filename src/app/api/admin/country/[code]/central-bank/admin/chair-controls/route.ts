@@ -7,7 +7,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError, notFound } from "@/lib/api/errors";
+import { handleRouteError, notFound, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { CentralBank } from "@/lib/db/types";
 import { createAdminLog } from "@/lib/adminLog";
@@ -36,8 +36,7 @@ export async function POST(request: Request, context: RouteContext) {
       return NextResponse.json(notFound("Country not found").toJson(), { status: 404 });
 
     const parsed = await parseJsonBody(request, schema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const db = await getDb();
     const bankId = getBankId(countryId);
@@ -47,13 +46,11 @@ export async function POST(request: Request, context: RouteContext) {
 
     const previous = bank.chairControlsLocked === true;
     if (previous === parsed.data.locked) {
-      return NextResponse.json(
-        {
-          error: parsed.data.locked
-            ? "Chair controls are already locked"
-            : "Chair controls are already unlocked",
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        parsed.data.locked
+          ? "Chair controls are already locked"
+          : "Chair controls are already unlocked"
       );
     }
 

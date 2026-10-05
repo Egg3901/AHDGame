@@ -11,6 +11,7 @@ import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { useRegisteredCountries } from "@/contexts/RegisteredCountriesContext";
 import { NppEconomyPanel } from "@/components/admin/politics/NppEconomyPanel";
 import { partiesApiUrl } from "@/lib/urls";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 const UK_REGION_IDS = UK_REGIONS.map((r) => r.id);
 const JP_REGION_IDS = JP_REGIONS.map((r) => r.id);
@@ -156,7 +157,7 @@ export function NPPManagement() {
         setNppAutonomyEnabled(data.nppAutonomyEnabled === true);
         setMessage(data.nppAutonomyEnabled ? "✓ NPP autonomy enabled" : "✓ NPP autonomy disabled");
       } else {
-        setMessage(`✗ ${data.error ?? "Failed to toggle NPP autonomy"}`);
+        setMessage(`✗ ${apiErrorText(data, "Failed to toggle NPP autonomy")}`);
       }
     } catch {
       setMessage("✗ Failed to toggle NPP autonomy");
@@ -178,7 +179,7 @@ export function NPPManagement() {
       if (res.ok) {
         setMessage(`✓ ${data.message}`);
         await fetchStats();
-      } else setMessage(`✗ ${data.error}`);
+      } else setMessage(`✗ ${apiErrorText(data, "Request failed")}`);
       return { ok: res.ok, data };
     } catch {
       setMessage("✗ Network error");
@@ -269,7 +270,7 @@ export function NPPManagement() {
       if (res.ok) {
         setMessage(`✓ ${data.message}`);
         await fetchStats();
-      } else setMessage(`✗ ${data.error}`);
+      } else setMessage(`✗ ${apiErrorText(data, "Request failed")}`);
     } catch {
       setMessage("✗ Network error");
     } finally {

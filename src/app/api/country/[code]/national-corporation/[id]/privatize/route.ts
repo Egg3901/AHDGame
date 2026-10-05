@@ -48,7 +48,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, executivePrivatizeSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     for (const sel of parsed.data.selections) {
       if (!ObjectId.isValid(sel.sectorId)) {
@@ -135,10 +135,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       if (err instanceof PrivateEnterpriseBlockedError) {
         return errorResponse(403, err.message);
       }
-      return NextResponse.json(
-        { error: err instanceof Error ? err.message : "Privatization failed" },
-        { status: 400 }
-      );
+      return errorResponse(400, err instanceof Error ? err.message : "Privatization failed");
     }
   } catch (error) {
     return handleRouteError(error);

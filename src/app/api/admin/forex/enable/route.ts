@@ -43,14 +43,10 @@ export async function POST() {
       // know to clear the lock via /api/admin/turn/reset-lock before retrying.
       const lockState = getProcessingLockState(gameState);
       if (lockState.isStale) {
-        return NextResponse.json(
-          {
-            error:
-              "Turn processing lock appears stale (prior turn likely crashed). Reset the lock via Admin → Turn → Reset Lock, then retry forex enable.",
-            lockStale: true,
-            lockLastTouch: lockState.lastTouch?.toISOString() ?? null,
-          },
-          { status: 409 }
+        return errorResponse(
+          409,
+          "Turn processing lock appears stale (prior turn likely crashed). Reset the lock via Admin → Turn → Reset Lock, then retry forex enable.",
+          { extra: { lockStale: true, lockLastTouch: lockState.lastTouch?.toISOString() ?? null } }
         );
       }
       return errorResponse(409, "Turn is currently processing. Wait for it to finish.");

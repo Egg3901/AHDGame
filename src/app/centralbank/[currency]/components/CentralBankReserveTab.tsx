@@ -79,7 +79,7 @@ export function CentralBankReserveTab({ currency }: Props) {
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
-        showToast(json.error ?? "Could not update reserve requirement", "error");
+        showToast(apiErrorText(json, "Could not update reserve requirement"), "error");
         return;
       }
       showToast("Reserve requirement updated", "success");

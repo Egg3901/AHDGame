@@ -4,6 +4,7 @@ import { useState } from "react";
 import { partyApiUrl } from "@/lib/urls";
 import { getPartyRoleLabel } from "@/lib/parties/partyRoleLabels";
 import { MergerNppWarning } from "./MergerNppWarning";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 type ProposalType =
   | "rename"
@@ -244,7 +245,7 @@ export function CreateProposalForm({
       });
       const data = await res.json();
       if (!res.ok) {
-        setMsg(data.error ?? "Failed to create proposal");
+        setMsg(apiErrorText(data, "Failed to create proposal"));
       } else {
         setOpen(false);
         setNewName("");

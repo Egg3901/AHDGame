@@ -103,7 +103,7 @@ export async function POST(request: Request) {
     if (!auth.ok) return auth.response;
     const parsed = await parseJsonBody(request, changeSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const change = parsed.data as RolloutChange;
     if (
@@ -121,10 +121,9 @@ export async function POST(request: Request) {
       evidenceFrom(await buildBankingHealth(db), before.currentTurn)
     );
     if (!decision.allowed) {
-      return NextResponse.json(
-        { error: "Refused by the rollout rules.", reasons: decision.reasons },
-        { status: 409 }
-      );
+      return errorResponse(409, "Refused by the rollout rules.", {
+        extra: { reasons: decision.reasons },
+      });
     }
     if (decision.direction !== "none") {
       await db.collection<GameConfig>("gameConfig").updateOne(

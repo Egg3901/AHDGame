@@ -16,6 +16,7 @@
 import { useState } from "react";
 import type { AltClusterStatus, AltContext, ClusterDetail, ClusterMember } from "./altTypes";
 import { memberInGameName, ROLE_LABEL, STATUS_LABEL } from "./altTypes";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 export type ToastKind = "success" | "error" | "info";
 
@@ -59,7 +60,7 @@ export function ModeratorActions({
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error ?? `Request failed (${res.status})`);
+        throw new Error(apiErrorText(data, `Request failed (${res.status})`));
       }
       notify(`Cluster marked ${STATUS_LABEL[status].toLowerCase()}.`, "success");
     } catch (e) {
@@ -84,7 +85,7 @@ export function ModeratorActions({
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error ?? `Request failed (${res.status})`);
+        throw new Error(apiErrorText(data, `Request failed (${res.status})`));
       }
       onMemberBanned(member.userId);
       notify(`Banned ${memberInGameName(member)}.`, "success");
@@ -111,7 +112,7 @@ export function ModeratorActions({
       );
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error ?? `Request failed (${res.status})`);
+        throw new Error(apiErrorText(data, `Request failed (${res.status})`));
       }
       notify(`Note saved for ${memberInGameName(member)}.`, "success");
       setPending(null);

@@ -36,6 +36,7 @@ import { ProposeLegislationModal } from "./ProposeLegislationModal";
 import { CommonsVacancyPanel } from "@/components/uk/CommonsVacancyPanel";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import type { ExecutiveGovernmentResponse } from "@/lib/government/executiveViewerState";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 const COMMONS_HERO = {
   image:
@@ -310,7 +311,7 @@ function LeadershipTab({
       });
       const data = await res.json();
       if (!res.ok) {
-        showToast(data.error ?? "Failed to propose no-confidence motion.", "error");
+        showToast(apiErrorText(data, "Failed to propose no-confidence motion."), "error");
       } else {
         showToast("No-confidence motion proposed.", "success");
         onRefresh();

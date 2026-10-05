@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import { LocalTime } from "@/components/time/LocalTime";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 const ENDPOINT = "/api/admin/conflicts/npp-offensives/toggle";
 
@@ -71,7 +72,7 @@ export function NppOffensivesToggles() {
         );
         load();
       } else {
-        setMessage(data.error ?? "Failed to update the switch.");
+        setMessage(apiErrorText(data, "Failed to update the switch."));
       }
     } catch {
       setMessage("Failed to update the switch.");

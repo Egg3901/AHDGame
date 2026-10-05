@@ -111,7 +111,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, DirectSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     if (!ObjectId.isValid(parsed.data.fundId)) {
       return errorResponse(400, "Invalid fund ID");
@@ -175,7 +175,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, WithdrawSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     if (!ObjectId.isValid(parsed.data.fundId)) {
       return errorResponse(400, "Invalid fund ID");

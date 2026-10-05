@@ -23,7 +23,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, governmentProspectSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const myChar = auth.user.character;
@@ -46,7 +46,7 @@ export async function POST(request: Request) {
       settings.treasuryCashLedgerEnabled
     );
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
+      return errorResponse(result.status, result.error);
     }
 
     return NextResponse.json({

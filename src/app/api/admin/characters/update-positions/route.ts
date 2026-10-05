@@ -27,7 +27,7 @@ export async function PATCH(request: Request) {
 
     const parsed = await parseJsonBody(request, updatePositionsSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { characterId, economic, social } = parsed.data;
 

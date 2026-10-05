@@ -9,7 +9,7 @@ import {
   providerWriteSnapshotFilter,
 } from "@/lib/auth/providerCredentialWrite";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { withNoStore } from "@/lib/api/withNoStore";
 import type { User } from "@/lib/db/types";
@@ -37,19 +37,17 @@ export const POST = withNoStore(async function POST() {
     // Credential writes require the uncached account state, never the cached grant.
     const account = await usersCollection.findOne({ _id: new ObjectId(userId) });
     if (!account) {
-      return NextResponse.json(
-        { error: "User not found" },
-        { status: 404, headers: { "Cache-Control": "private, no-store" } }
-      );
+      return errorResponse(404, "User not found", {
+        headers: { "Cache-Control": "private, no-store" },
+      });
     }
 
     // Verify the cryptographic cookie payload against the same fresh account
     // so a signed-out, revoked, or banned session cannot unlink a provider.
     if (!credentialSessionIsCurrent(userId, account, await verifyAuth())) {
-      return NextResponse.json(
-        { error: "Please sign in again before changing sign-in methods." },
-        { status: 401, headers: { "Cache-Control": "private, no-store" } }
-      );
+      return errorResponse(401, "Please sign in again before changing sign-in methods.", {
+        headers: { "Cache-Control": "private, no-store" },
+      });
     }
 
     const unlink = decideProviderUnlink(account, "google");
@@ -60,12 +58,10 @@ export const POST = withNoStore(async function POST() {
       );
     }
     if (!unlink.ok) {
-      return NextResponse.json(
-        {
-          error:
-            "Cannot remove your last sign-in method. Set a password or link another account first.",
-        },
-        { status: 400, headers: { "Cache-Control": "private, no-store" } }
+      return errorResponse(
+        400,
+        "Cannot remove your last sign-in method. Set a password or link another account first.",
+        { headers: { "Cache-Control": "private, no-store" } }
       );
     }
 
@@ -95,10 +91,9 @@ export const POST = withNoStore(async function POST() {
         }
       );
     } catch {
-      return NextResponse.json(
-        { error: "Unlink is temporarily unavailable. Please try again." },
-        { status: 503, headers: { "Cache-Control": "private, no-store" } }
-      );
+      return errorResponse(503, "Unlink is temporarily unavailable. Please try again.", {
+        headers: { "Cache-Control": "private, no-store" },
+      });
     } finally {
       // A concurrent read may have repopulated the cache while the write was
       // pending; evict again after the settled write. A write can commit
@@ -107,17 +102,17 @@ export const POST = withNoStore(async function POST() {
       invalidateCachedUser(cacheKey);
     }
     if (write.acknowledged !== true) {
-      return NextResponse.json(
-        { error: "Unlink is temporarily unavailable. Please try again." },
-        { status: 503, headers: { "Cache-Control": "private, no-store" } }
-      );
+      return errorResponse(503, "Unlink is temporarily unavailable. Please try again.", {
+        headers: { "Cache-Control": "private, no-store" },
+      });
     }
     if (write.matchedCount !== 1) {
       // A concurrent provider, password, ban, or revocation write won the
       // snapshot race. Never report success without a confirmed write.
-      return NextResponse.json(
-        { error: "Your account changed during this request. Please sign in and try again." },
-        { status: 409, headers: { "Cache-Control": "private, no-store" } }
+      return errorResponse(
+        409,
+        "Your account changed during this request. Please sign in and try again.",
+        { headers: { "Cache-Control": "private, no-store" } }
       );
     }
 

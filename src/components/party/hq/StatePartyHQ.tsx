@@ -10,6 +10,7 @@ import { StatePartyMap, countryHasMap, type MapColorBy } from "./StatePartyMap";
 import { sumBulkEstimate, type BulkMode, type BulkPreview } from "./bulkEstimate";
 import { orgTier, toneColor } from "./orgTier";
 import { COUNTRY_CURRENCY_MAP, CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 export interface StatePartyHQProps {
   countryId: string;
@@ -203,7 +204,9 @@ export function StatePartyHQ({
       });
       const d = await res.json().catch(() => ({}));
       showToast(
-        res.ok ? (d.message ?? `Transferred ${fmtMoney(amount)}`) : (d.error ?? "Transfer failed"),
+        res.ok
+          ? (d.message ?? `Transferred ${fmtMoney(amount)}`)
+          : apiErrorText(d, "Transfer failed"),
         res.ok ? "success" : "error"
       );
       if (res.ok) await fetchRows();
@@ -225,7 +228,7 @@ export function StatePartyHQ({
       });
       const d = await res.json().catch(() => ({}));
       showToast(
-        res.ok ? "Priority region updated" : (d.error ?? "Could not update priority"),
+        res.ok ? "Priority region updated" : apiErrorText(d, "Could not update priority"),
         res.ok ? "success" : "error"
       );
       if (res.ok) await fetchRows();

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { executeCorporationBondRestructure } from "@/lib/bonds/executeCorporationBondRestructure";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -44,10 +44,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
     if (ceoCheck) return ceoCheck;
 
     if (corporation.countryOwnerId) {
-      return NextResponse.json(
-        { error: "Not available for national corporations" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Not available for national corporations");
     }
 
     // The cure stamp's curedAtTurn and the bond_maturity ledger rows derive from
@@ -55,10 +52,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
     const gameState = await getGameState();
     const cureTurn = gameState?.currentTurn ?? 0;
     if (cureTurn <= 0) {
-      return NextResponse.json(
-        { error: "Game state unavailable; restructuring cannot be processed." },
-        { status: 503 }
-      );
+      return errorResponse(503, "Game state unavailable; restructuring cannot be processed.");
     }
 
     const now = new Date();
@@ -71,10 +65,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
     );
 
     if (!result) {
-      return NextResponse.json(
-        { error: "Bond settlement is already in progress for this corporation" },
-        { status: 409 }
-      );
+      return errorResponse(409, "Bond settlement is already in progress for this corporation");
     }
 
     return NextResponse.json({

@@ -282,7 +282,7 @@ export function GeneralElectionPanel({
             showToast("Endorsement withdrawn", "info");
           } else {
             const data = await res.json();
-            showToast(data.error ?? "Failed to withdraw endorsement", "error");
+            showToast(apiErrorText(data, "Failed to withdraw endorsement"), "error");
           }
         } else {
           const res = await fetch(`/api/elections/${electionId}/endorse`, {
@@ -295,7 +295,7 @@ export function GeneralElectionPanel({
             setEndorsedCandidateId(data.endorsement.candidateId);
             showToast("Endorsement recorded", "success");
           } else {
-            showToast(data.error ?? "Failed to endorse candidate", "error");
+            showToast(apiErrorText(data, "Failed to endorse candidate"), "error");
           }
         }
       } catch {

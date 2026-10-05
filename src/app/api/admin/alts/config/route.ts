@@ -16,7 +16,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireModerator } from "@/lib/api/requireModerator";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { createAdminLog } from "@/lib/adminLog";
 import { resolveAltScoringConfig } from "@/lib/altDetection/config";
@@ -59,7 +59,7 @@ export async function PUT(request: Request) {
 
     const parsed = await parseJsonBody(request, putSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const resolved = resolveAltScoringConfig(parsed.data);

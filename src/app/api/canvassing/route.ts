@@ -68,11 +68,7 @@ export async function GET(req: NextRequest) {
     const db = await getDb();
     const mate = await resolveRunningMateCanvassState(db, auth.user.character);
     const eligibility = mate.ok ? mate : await resolveCanvassState(db, auth.user.character);
-    if (!eligibility.ok)
-      return NextResponse.json(
-        { error: CANVASS_ELIGIBILITY_MESSAGE[eligibility.reason] },
-        { status: 403 }
-      );
+    if (!eligibility.ok) return errorResponse(403, CANVASS_ELIGIBILITY_MESSAGE[eligibility.reason]);
     const stateId = eligibility.stateId;
     const electionId = electionIdSchema.safeParse(
       req.nextUrl.searchParams.get("electionId") ?? undefined
@@ -173,8 +169,7 @@ export async function POST(req: NextRequest) {
     if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
 
     const parsed = await parseJsonBody(req, canvassSchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
     const { stateId, category, group, count, electionId } = parsed.data;
     if (
       category === "__proto__" ||
@@ -219,10 +214,7 @@ export async function POST(req: NextRequest) {
       // candidate hasn't set their travel/primary state yet.
       const eligibility = await resolveCanvassState(db, user.character);
       if (!eligibility.ok) {
-        return NextResponse.json(
-          { error: CANVASS_ELIGIBILITY_MESSAGE[eligibility.reason] },
-          { status: 403 }
-        );
+        return errorResponse(403, CANVASS_ELIGIBILITY_MESSAGE[eligibility.reason]);
       }
       if (eligibility.stateId !== stateId) {
         return errorResponse(403, "You can only canvass in your active campaign state");

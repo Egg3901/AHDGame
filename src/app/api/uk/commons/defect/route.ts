@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { handleRouteError, badRequest } from "@/lib/api/errors";
+import { handleRouteError, badRequest, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -33,10 +33,7 @@ export async function POST(request: Request) {
     const db = await getDb();
     const result = await defectCommonsSeat(db, auth.user.character, parsed.data.toParty);
     if (!result.ok) {
-      return NextResponse.json(
-        { error: result.error },
-        { status: result.status, headers: NO_STORE }
-      );
+      return errorResponse(result.status, result.error, { headers: NO_STORE });
     }
     return NextResponse.json(
       {

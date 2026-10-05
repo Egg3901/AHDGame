@@ -25,6 +25,7 @@ import { MoneyPanel } from "./MoneyPanel";
 import { LinkedAccountsPanel } from "./LinkedAccountsPanel";
 import { RecentActionsPanel } from "./RecentActionsPanel";
 import { accountLabel, type DossierContext, type DossierResponse } from "./dossierTypes";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface AccountDossierProps {
   /** The account under investigation (User._id hex). */
@@ -58,7 +59,7 @@ export default function AccountDossier({ userId, context = "admin" }: AccountDos
         const res = await fetch(`/api/admin/players/${activeUserId}/dossier`);
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
-          throw new Error(body.error ?? `Request failed (${res.status})`);
+          throw new Error(apiErrorText(body, `Request failed (${res.status})`));
         }
         const body: DossierResponse = await res.json();
         if (!cancelled) setDossier(body);

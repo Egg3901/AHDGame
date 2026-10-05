@@ -5,6 +5,7 @@ import { EmptyState } from "@/components/ui";
 import { Pagination } from "../Pagination";
 import type { CountryId } from "@/lib/constants/countries";
 import { LocalTime } from "@/components/time/LocalTime";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface CabinetNominationRow {
   id: string;
@@ -78,7 +79,7 @@ export function AdminCabinetSection({ countryId }: AdminCabinetSectionProps) {
       body: JSON.stringify({ nominationId, action }),
     });
     const d = await res.json();
-    setMessage(res.ok ? d.message : `Error: ${d.error}`);
+    setMessage(res.ok ? d.message : `Error: ${apiErrorText(d, "Request failed")}`);
     if (res.ok) fetchNominations();
   };
 

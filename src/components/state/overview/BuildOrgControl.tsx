@@ -8,6 +8,7 @@ import { regionPartyApiUrl } from "@/lib/urls";
 import { usePsSpendScope } from "@/components/state/politics/orgActions/usePsSpendScope";
 import { useActionPreview } from "@/components/state/politics/orgActions/useActionPreview";
 import { COUNTRY_CURRENCY_MAP, CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 type BuildOrgPreview =
   | {
@@ -126,7 +127,7 @@ export function BuildOrgControl({
       });
       const d = await r.json();
       if (!r.ok) {
-        showToast(d.error ?? "Build Org failed", "error");
+        showToast(apiErrorText(d, "Build Org failed"), "error");
         return;
       }
       const cashCost = d.cashCost as number | undefined;

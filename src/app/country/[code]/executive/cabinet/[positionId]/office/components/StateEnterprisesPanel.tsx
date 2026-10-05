@@ -6,6 +6,7 @@ import { Button } from "@/components/ui";
 import { CORPORATION_TYPE_LABELS, type CorporationType } from "@/lib/constants/corporations";
 import { natMoney } from "@/components/national/natMoney";
 import { formatCompactNumber } from "@/lib/utils/formatters";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface RosterCorp {
   id: string;
@@ -80,7 +81,7 @@ export function StateEnterprisesPanel({
       });
       const json = await res.json();
       if (!res.ok) {
-        setFeedback({ type: "error", message: json.error ?? "Action failed." });
+        setFeedback({ type: "error", message: apiErrorText(json, "Action failed.") });
       } else {
         setFeedback({ type: "success", message: ok });
         reset();

@@ -42,7 +42,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, replaceFounderSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const charterObjectId = new ObjectId(id);
     const outgoing = new ObjectId(parsed.data.outgoingCharacterId);
@@ -90,7 +90,7 @@ export async function POST(request: Request, { params }: RouteParams) {
                       : result.reason === "replacement-not-adjacent"
                         ? "Replacement must live in the anchor founder's home state or a state adjacent to it"
                         : "Replacement character must belong to the charter's country";
-      return NextResponse.json({ error: message, reason: result.reason }, { status });
+      return errorResponse(status, message, { extra: { reason: result.reason } });
     }
 
     return NextResponse.json({ ok: true, status: result.status });

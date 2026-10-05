@@ -156,7 +156,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, awardSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     let sectorObjectId: ObjectId;
@@ -204,21 +204,15 @@ export async function POST(request: Request, { params }: RouteParams) {
     // minister successfully awarded a contract that then never delivered a single lot.
     const fill = resolveFillEligibility({ corp, sector, countryId, currentYear });
     if (!fill.eligible) {
-      return NextResponse.json(
-        { error: FILL_REASON_TEXT[fill.reason ?? "no_materiel_line"] },
-        { status: 400 }
-      );
+      return errorResponse(400, FILL_REASON_TEXT[fill.reason ?? "no_materiel_line"]);
     }
     const components = fill.components;
     const requestedComponent = parsed.data.component;
     if (requestedComponent != null && !components.includes(requestedComponent as UnitDomain)) {
-      return NextResponse.json(
-        {
-          error:
-            `This plant builds ${components.join(", ")}, not ${requestedComponent}. ` +
-            "Retool it or pick a domain it is certified for.",
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `This plant builds ${components.join(", ")}, not ${requestedComponent}. ` +
+          "Retool it or pick a domain it is certified for."
       );
     }
     const component = (requestedComponent ?? components[0]) as UnitDomain;
@@ -240,13 +234,10 @@ export async function POST(request: Request, { params }: RouteParams) {
       stateOwned,
     });
     if (assignedFactories <= 0) {
-      return NextResponse.json(
-        {
-          error:
-            "Every production line at this plant is already committed to another order. " +
-            "Cancel one or pick a different plant.",
-        },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "Every production line at this plant is already committed to another order. " +
+          "Cancel one or pick a different plant."
       );
     }
 
@@ -289,14 +280,11 @@ export async function POST(request: Request, { params }: RouteParams) {
     // appropriation is a private cash tap again.
     const requested = parsed.data.pricePerLot;
     if (requested != null && (requested < band.floor || requested > band.ceiling)) {
-      return NextResponse.json(
-        {
-          error:
-            `A grade-${gradeCeiling} lot from this plant must be priced between ` +
-            `${band.floor.toLocaleString("en-US")} and ${band.ceiling.toLocaleString("en-US")}.`,
-          priceBand: band,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `A grade-${gradeCeiling} lot from this plant must be priced between ` +
+          `${band.floor.toLocaleString("en-US")} and ${band.ceiling.toLocaleString("en-US")}.`,
+        { extra: { priceBand: band } }
       );
     }
     const pricePerLot = Math.round(requested ?? band.suggested);
@@ -310,16 +298,12 @@ export async function POST(request: Request, { params }: RouteParams) {
       stateOwned,
     });
     if (parsed.data.lotsOrdered > availability.maxLots) {
-      return NextResponse.json(
-        {
-          error:
-            availability.maxLots > 0
-              ? `This supplier may receive at most ${availability.maxLots.toLocaleString("en-US")} more lots in the current contracting window.`
-              : "This supplier has no contracting allowance left in the current window.",
-          maximumLots: availability.maxLots,
-          windowEndTurn: availability.window.endTurn,
-        },
-        { status: 409 }
+      return errorResponse(
+        409,
+        availability.maxLots > 0
+          ? `This supplier may receive at most ${availability.maxLots.toLocaleString("en-US")} more lots in the current contracting window.`
+          : "This supplier has no contracting allowance left in the current window.",
+        { extra: { maximumLots: availability.maxLots, windowEndTurn: availability.window.endTurn } }
       );
     }
 
@@ -333,13 +317,10 @@ export async function POST(request: Request, { params }: RouteParams) {
       stateOwned,
     });
     if (!reservation.reserved) {
-      return NextResponse.json(
-        {
-          error: "The contracting allowance changed. Refresh and try a smaller order.",
-          maximumLots: reservation.maxLots,
-          windowEndTurn: reservation.window.endTurn,
-        },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "The contracting allowance changed. Refresh and try a smaller order.",
+        { extra: { maximumLots: reservation.maxLots, windowEndTurn: reservation.window.endTurn } }
       );
     }
 
@@ -361,16 +342,17 @@ export async function POST(request: Request, { params }: RouteParams) {
       await releaseWindow();
       const appropriation = await getDefenseAppropriation(db, countryId);
       const uncommitted = Math.max(0, uncommittedFrom(appropriation));
-      return NextResponse.json(
+      return errorResponse(
+        409,
+        `This order would commit ${Math.round(contractValue).toLocaleString("en-US")} but ` +
+          `only ${Math.round(uncommitted).toLocaleString("en-US")} of the defence ` +
+          `appropriation is uncommitted. Cancel an open contract or order fewer lots.`,
         {
-          error:
-            `This order would commit ${Math.round(contractValue).toLocaleString("en-US")} but ` +
-            `only ${Math.round(uncommitted).toLocaleString("en-US")} of the defence ` +
-            `appropriation is uncommitted. Cancel an open contract or order fewer lots.`,
-          uncommittedAppropriation: uncommitted,
-          maximumLots: pricePerLot > 0 ? Math.floor(uncommitted / pricePerLot) : 0,
-        },
-        { status: 409 }
+          extra: {
+            uncommittedAppropriation: uncommitted,
+            maximumLots: pricePerLot > 0 ? Math.floor(uncommitted / pricePerLot) : 0,
+          },
+        }
       );
     }
 
@@ -525,16 +507,13 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     if (fee > 0) {
       const appropriation = await getDefenseAppropriation(db, countryId);
       if (appropriation.balance < fee) {
-        return NextResponse.json(
-          {
-            error:
-              `Terminating this contract owes the supplier ` +
-              `${fee.toLocaleString("en-US")} in break fees and the defence appropriation ` +
-              `holds ${Math.round(appropriation.balance).toLocaleString("en-US")}. Let the ` +
-              `order run, or wait for the appropriation to accrue.`,
-            terminationFee: fee,
-          },
-          { status: 409 }
+        return errorResponse(
+          409,
+          `Terminating this contract owes the supplier ` +
+            `${fee.toLocaleString("en-US")} in break fees and the defence appropriation ` +
+            `holds ${Math.round(appropriation.balance).toLocaleString("en-US")}. Let the ` +
+            `order run, or wait for the appropriation to accrue.`,
+          { extra: { terminationFee: fee } }
         );
       }
     }

@@ -36,7 +36,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const result = await resignUnionLeadership(db, character, id);
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
+      return errorResponse(result.status, result.error);
     }
     return NextResponse.json({ success: true });
   } catch (error) {

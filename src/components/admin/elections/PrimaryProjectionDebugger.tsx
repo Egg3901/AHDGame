@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface PartyOption {
   sequentialId: number;
@@ -185,7 +186,7 @@ export function PrimaryProjectionDebugger() {
 
       {data && !data.ok && (
         <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
-          {data.message ?? data.error ?? "Unknown error"}
+          {data.message ?? apiErrorText(data, "Unknown error")}
         </div>
       )}
 

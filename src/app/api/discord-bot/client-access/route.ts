@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError, errorResponse } from "@/lib/api/errors";
+import { handleRouteError, errorResponse, statusResponse } from "@/lib/api/errors";
 import { requireBotToken } from "@/lib/api/requireBotToken";
 import { checkRateLimit, rateLimitResponse, BOT_FINANCIAL_LIMITS } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
@@ -40,7 +40,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, schema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { discordId, grantedBy } = parsed.data;
     const days = parsed.data.days ?? DEFAULT_TEMP_SP_ACCESS_DAYS;
@@ -48,13 +48,10 @@ export async function POST(request: Request) {
     const db = await getDb();
     const user = await db.collection<User>("users").findOne({ discordId });
     if (!user) {
-      return NextResponse.json(
-        {
-          found: false,
-          message: "No linked game account for that Discord user.",
-        },
-        { status: 404 }
-      );
+      return statusResponse(404, {
+        found: false,
+        message: "No linked game account for that Discord user.",
+      });
     }
 
     const character = await db.collection<Character>("characters").findOne({ userId: user._id });

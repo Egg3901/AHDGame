@@ -66,7 +66,7 @@ export async function PUT(request: Request) {
 
     const parsed = await parseJsonBody(request, notificationPreferenceActionSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();

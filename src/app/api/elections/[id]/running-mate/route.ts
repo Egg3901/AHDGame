@@ -57,8 +57,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           .transform((v) => (v === "" ? null : v)),
       })
     );
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
     const runningMateId = parsed.data.runningMateId;
 
     const db = await getDb();

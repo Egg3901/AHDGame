@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError, isDuplicateKeyError } from "@/lib/api/errors";
+import { handleRouteError, isDuplicateKeyError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody, schemas } from "@/lib/api/validate";
 import { z } from "zod";
 import { createNotification } from "@/lib/notifications";
@@ -48,7 +48,7 @@ export async function appointActingCabinetMember(
 ): Promise<NextResponse> {
   try {
     if (!actingAppointmentsEnabled(countryId)) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return errorResponse(404, "Not found");
     }
 
     const auth = await requireBasicAuth();
@@ -63,8 +63,7 @@ export async function appointActingCabinetMember(
     if (!limit.ok) return rateLimitResponse(limit.retryAfter);
 
     const parsed = await parseJsonBody(request, actingSchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
     const { positionId, characterId } = parsed.data;
 
     // Country-scoped seat lookup, mirroring the nomination route. A global
@@ -72,7 +71,7 @@ export async function appointActingCabinetMember(
     // country's cabinet.
     const positionDef = getCabinetPositions(countryId).find((p) => p.id === positionId);
     if (!positionDef) {
-      return NextResponse.json({ error: "Invalid positionId" }, { status: 400 });
+      return errorResponse(400, "Invalid positionId");
     }
 
     const db = await getDb();
@@ -82,44 +81,35 @@ export async function appointActingCabinetMember(
     // yearEnabled/yearRetired range does not exist yet and cannot be filled,
     // by confirmation or by an acting appointment.
     if (!isSeatActive(positionDef, await getLiveGameYear(db), await getManuallyEnabledSeats(db))) {
-      return NextResponse.json(
-        { error: "This cabinet position does not exist in the current era" },
-        { status: 400 }
-      );
+      return errorResponse(400, "This cabinet position does not exist in the current era");
     }
 
     const presidentOfficial = await db
       .collection<ElectedOfficial>("electedOfficials")
       .findOne({ countryId, officeType: "president", characterId: { $ne: null } });
     if (!presidentOfficial?.characterId) {
-      return NextResponse.json({ error: "No President in office" }, { status: 400 });
+      return errorResponse(400, "No President in office");
     }
 
     const myCharacter = await db.collection<Character>("characters").findOne({
       userId: new ObjectId(authUser.userId),
     });
     if (!myCharacter || !presidentOfficial.characterId.equals(myCharacter._id)) {
-      return NextResponse.json(
-        { error: "Only the President can make acting appointments" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the President can make acting appointments");
     }
 
     const appointeeOid = new ObjectId(characterId);
     const appointee = await db.collection<Character>("characters").findOne({ _id: appointeeOid });
     if (!appointee) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
     if (!appointee.userId) {
-      return NextResponse.json(
-        { error: "Only player characters can receive acting appointments" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Only player characters can receive acting appointments");
     }
     if (appointee.countryId !== countryId) {
-      return NextResponse.json(
-        { error: "Only politicians of this country can receive its cabinet appointments" },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "Only politicians of this country can receive its cabinet appointments"
       );
     }
 
@@ -129,10 +119,7 @@ export async function appointActingCabinetMember(
     // secretary, which would make confirmation optional.
     const sitting = await members.findOne({ countryId, positionId });
     if (sitting) {
-      return NextResponse.json(
-        { error: "This seat is already filled. Dismiss the current holder first." },
-        { status: 409 }
-      );
+      return errorResponse(409, "This seat is already filled. Dismiss the current holder first.");
     }
 
     const chargeKey: ActingChargeKey = {
@@ -142,12 +129,9 @@ export async function appointActingCabinetMember(
       presidencyStartedAt: presidentOfficial.electedAt ?? null,
     };
     if (!(await hasUnspentActingCharge(db, chargeKey))) {
-      return NextResponse.json(
-        {
-          error:
-            "You have already used your acting appointment for this office. It can only be filled by confirmation now.",
-        },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "You have already used your acting appointment for this office. It can only be filled by confirmation now."
       );
     }
 
@@ -159,10 +143,7 @@ export async function appointActingCabinetMember(
       status: "rejected",
     });
     if (rejected) {
-      return NextResponse.json(
-        { error: "The Senate rejected this nominee for this office." },
-        { status: 409 }
-      );
+      return errorResponse(409, "The Senate rejected this nominee for this office.");
     }
 
     const gameState = await getGameState();
@@ -179,12 +160,9 @@ export async function appointActingCabinetMember(
       await spendActingCharge(db, chargeKey, appointeeOid, currentTurn);
     } catch (error) {
       if ((error as { code?: number }).code === 11000) {
-        return NextResponse.json(
-          {
-            error:
-              "You have already used your acting appointment for this office. It can only be filled by confirmation now.",
-          },
-          { status: 409 }
+        return errorResponse(
+          409,
+          "You have already used your acting appointment for this office. It can only be filled by confirmation now."
         );
       }
       throw error;
@@ -215,9 +193,9 @@ export async function appointActingCabinetMember(
       // A duplicate key IS that lost race (seat filled, or the appointee was
       // just seated elsewhere): a player-visible 409, not a server fault.
       if (isDuplicateKeyError(error)) {
-        return NextResponse.json(
-          { error: "That seat or appointee was just claimed by another appointment." },
-          { status: 409 }
+        return errorResponse(
+          409,
+          "That seat or appointee was just claimed by another appointment."
         );
       }
       throw error;

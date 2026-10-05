@@ -7,6 +7,7 @@ import { natMoney } from "@/components/national/natMoney";
 import { type CountryId } from "@/lib/constants/countries";
 import type { AuctionListing } from "@/lib/nationalization/auctionListing";
 import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 /** The enriched auction shape served by /api/country/[code]/nationalization-auctions. */
 export type Auction = AuctionListing;
@@ -143,7 +144,7 @@ function AuctionRow({
       );
       const json = await res.json();
       if (!res.ok) {
-        setFeedback({ type: "error", message: json.error ?? "Bid failed." });
+        setFeedback({ type: "error", message: apiErrorText(json, "Bid failed.") });
       } else {
         setFeedback({ type: "success", message: "Bid placed." });
         setAmount("");

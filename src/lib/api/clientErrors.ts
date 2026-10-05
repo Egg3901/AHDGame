@@ -1,6 +1,6 @@
 "use client";
 
-import { parseErrorBody } from "@/lib/errors/catalog";
+import { parseErrorBody, apiErrorText } from "@/lib/errors/catalog";
 import { readApiError, type DisplayError } from "@/lib/errors/client";
 
 /** Full {message, code, ref} for a failed response; feed it to <InlineError />. */
@@ -17,7 +17,7 @@ export async function getApiErrorMessage(res: Response): Promise<string> {
     const body = await res.json();
     const { message } = parseErrorBody(body);
     if (message) return message;
-    if (body?.reason) return `${body.error ?? "Error"}: ${body.reason}`;
+    if (body?.reason) return `${apiErrorText(body, "Error")}: ${body.reason}`;
   } catch {
     // Response wasn't JSON
   }

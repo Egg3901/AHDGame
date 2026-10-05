@@ -48,7 +48,7 @@ describe("POST /api/singleplayer/shutdown", () => {
     mocks.command.mockRejectedValueOnce(new Error("not authorized on admin"));
     const response = await POST(request());
     expect(response.status).toBe(500);
-    expect(await response.json()).toEqual({ ok: false, error: "not authorized on admin" });
+    expect(await response.json()).toMatchObject({ ok: false, error: "not authorized on admin" });
   });
 
   it("recognises the driver's ways of saying the server went away", () => {

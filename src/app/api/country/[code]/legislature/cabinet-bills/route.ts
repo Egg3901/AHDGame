@@ -370,7 +370,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
 
     const parsed = await parseJsonBody(request, proposeCabinetBillSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const {
       title,
@@ -635,20 +635,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
         countryId
       );
       if (!natValidation.ok) {
-        return NextResponse.json({ error: natValidation.error }, { status: natValidation.status });
+        return errorResponse(natValidation.status, natValidation.error);
       }
 
       const now = new Date();
       const proposalWarning = await getBillProposalAutoFailWarning(db, countryId, "cabinet", now);
       if (proposalWarning && !confirmElectionRisk) {
-        return NextResponse.json(
-          {
-            error: getBillProposalAutoFailWarningError(proposalWarning),
-            autoFailWarning: proposalWarning,
-            requiresElectionRiskConfirmation: true,
-          },
-          { status: 409 }
-        );
+        return errorResponse(409, getBillProposalAutoFailWarningError(proposalWarning), {
+          extra: { autoFailWarning: proposalWarning, requiresElectionRiskConfirmation: true },
+        });
       }
 
       const npiCost = getProvisionCostTotal(natValidation.provisions.length);
@@ -808,14 +803,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     const now = new Date();
     const proposalWarning = await getBillProposalAutoFailWarning(db, countryId, "cabinet", now);
     if (proposalWarning && !confirmElectionRisk) {
-      return NextResponse.json(
-        {
-          error: getBillProposalAutoFailWarningError(proposalWarning),
-          autoFailWarning: proposalWarning,
-          requiresElectionRiskConfirmation: true,
-        },
-        { status: 409 }
-      );
+      return errorResponse(409, getBillProposalAutoFailWarningError(proposalWarning), {
+        extra: { autoFailWarning: proposalWarning, requiresElectionRiskConfirmation: true },
+      });
     }
 
     // Cost deduction: action points + NPI for the single provision

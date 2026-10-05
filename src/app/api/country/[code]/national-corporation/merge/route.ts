@@ -42,7 +42,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, mergeSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     if (!CORPORATION_TYPES.includes(parsed.data.sectorType as CorporationType)) {
       return errorResponse(400, "Invalid sector type");

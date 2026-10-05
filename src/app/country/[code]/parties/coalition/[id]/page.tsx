@@ -25,6 +25,7 @@ import {
 } from "@/components/party/partyPageStyles";
 import type { CoalitionDetail } from "@/app/country/[code]/parties/coalitionTypes";
 import { normalizeDiscordInviteUrl } from "@/lib/discord/invite";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 type TabId = "overview" | "parties" | "priorities" | "chair-office" | "admin";
 
@@ -279,7 +280,7 @@ function CoalitionDetailContent({ params }: { params: Promise<{ code: string; id
           showToast(data.message ?? "Success", "success");
           fetchCoalition();
         } else {
-          showToast(data.error ?? "Failed", "error");
+          showToast(apiErrorText(data, "Failed"), "error");
         }
       } catch {
         showToast("Network error", "error");
@@ -369,7 +370,7 @@ function CoalitionDetailContent({ params }: { params: Promise<{ code: string; id
         );
         fetchCoalition();
       } else {
-        showToast(data.error ?? "Failed to update Discord link", "error");
+        showToast(apiErrorText(data, "Failed to update Discord link"), "error");
       }
     } catch {
       showToast("Network error", "error");

@@ -51,6 +51,7 @@ import { StatePartyHubBody } from "../../region/[id]/party/[partyId]/components/
 import { getOrgLabel, fmt as stateFmt } from "../../region/[id]/party/[partyId]/components/helpers";
 import type { MainTab as StateMainTab } from "../../region/[id]/party/[partyId]/components/types";
 import type { StatePartyAnalyticsPayload } from "@/lib/partyAnalytics";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 export type PartyHubScope =
   | { kind: "national"; countryCode: string; partyId: string }
@@ -667,7 +668,7 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
       });
       if (!response.ok) {
         const payload = await response.json().catch(() => null);
-        setMsg(`✗ ${payload?.error ?? "Failed to enable Mod View"}`);
+        setMsg(`✗ ${apiErrorText(payload, "Failed to enable Mod View")}`);
         return;
       }
       setModViewEnabled(true);
@@ -692,7 +693,7 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
         body: JSON.stringify(body),
       });
       const d = await r.json();
-      setMsg(r.ok ? `✓ ${d.message}` : `✗ ${d.error}`);
+      setMsg(r.ok ? `✓ ${d.message}` : `✗ ${apiErrorText(d, "Request failed")}`);
       if (r.ok) {
         fetchParty();
         onOk?.(d);

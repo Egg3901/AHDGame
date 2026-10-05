@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { apiErrorText } from "@/lib/errors/catalog";
 import type { DistrictSquares } from "@/lib/db/types/congressionalDistrict";
 import type { Pool } from "@/lib/redistricting/pools";
 import type { RedistrictCaps } from "@/lib/redistricting/caps";
@@ -170,7 +171,7 @@ export function DistrictMapEditor({
       setResult(
         res.ok
           ? { ok: true, text: "Map redrawn. It takes effect at the next House election." }
-          : { ok: false, text: data.violations?.join(" ") ?? data.error ?? "Failed." }
+          : { ok: false, text: data.violations?.join(" ") ?? apiErrorText(data, "Failed.") }
       );
     } catch {
       setResult({ ok: false, text: "Network error." });

@@ -9,6 +9,7 @@ import { NppRecruitSegment } from "@/components/influence/NppRecruitSegment";
 import { NppSlotTierTable } from "@/components/influence/NppSlotTierTable";
 import { formatLocalFunds } from "@/lib/actions";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface NppRecruitmentPanelProps {
   partyId: string;
@@ -111,7 +112,7 @@ export function NppRecruitmentPanel({
           setLoading(false);
           return;
         }
-        throw new Error(body?.error ?? `Failed to load recruitment status (${res.status})`);
+        throw new Error(apiErrorText(body, `Failed to load recruitment status (${res.status})`));
       }
       const data: RecruitmentStatus = await res.json();
       setStatus(data);
@@ -162,7 +163,7 @@ export function NppRecruitmentPanel({
         showToast(`Successfully recruited ${data.npp?.name ?? "new NPP"}!`, "success");
         setSelectedStateId("");
       } else {
-        showToast(data.error ?? "Recruitment failed", "error");
+        showToast(apiErrorText(data, "Recruitment failed"), "error");
       }
       // Always refresh to show current state (funds, cooldown) regardless of outcome
       setRefreshKey((k) => k + 1);
@@ -185,7 +186,7 @@ export function NppRecruitmentPanel({
       showToast(
         res.ok
           ? `Successfully recruited ${d.npp?.name ?? "new NPP"}!`
-          : (d.error ?? "Recruitment failed"),
+          : apiErrorText(d, "Recruitment failed"),
         res.ok ? "success" : "error"
       );
       setRefreshKey((k) => k + 1);

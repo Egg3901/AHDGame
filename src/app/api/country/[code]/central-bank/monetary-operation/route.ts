@@ -45,8 +45,7 @@ export async function POST(request: Request, context: { params: Promise<{ code: 
     const countryId = (await context.params).code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) return errorResponse(404, "Country not found");
     const parsed = await parseJsonBody(request, schema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
     const db = await getDb();
     const [bank, gameState, budget, config] = await Promise.all([
       db.collection<CentralBank>("centralBanks").findOne({ _id: getBankId(countryId) }),

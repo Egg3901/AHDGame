@@ -50,7 +50,7 @@ export default function AppointPMModal({
     fetch(`/api/country/${countryCode}/${endpointPath}`)
       .then(async (res) => {
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error ?? "Failed to load candidates.");
+        if (!res.ok) throw new Error(apiErrorText(data, "Failed to load candidates."));
         return data;
       })
       .then((data) => {

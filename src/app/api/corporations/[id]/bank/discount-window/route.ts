@@ -76,8 +76,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (ceoCheck) return ceoCheck;
 
     const parsed = await parseJsonBody(request, schema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const turn = await getCurrentTurn(db);
     const result =
@@ -85,7 +84,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         ? await drawDiscountWindow(db, resolved.corporation._id, parsed.data.amount, turn)
         : await repayDiscountWindow(db, resolved.corporation._id, parsed.data.amount, turn);
 
-    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+    if (!result.ok) return errorResponse(result.status, result.error);
 
     return NextResponse.json({
       success: true,

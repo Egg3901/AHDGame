@@ -64,7 +64,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
       forexEnabled,
     });
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
+      return errorResponse(result.status, result.error);
     }
 
     if (result.immediate) {

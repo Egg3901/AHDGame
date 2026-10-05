@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { getMessageStyle } from "@/lib/utils/formatters";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Candidate {
   id: string;
@@ -107,7 +108,7 @@ export function PresAdminPanel({
           : {}),
       });
       const data = await res.json();
-      setMsg(section, res.ok ? `✓ ${data.message}` : `✗ ${data.error ?? "Error"}`);
+      setMsg(section, res.ok ? `✓ ${data.message}` : `✗ ${apiErrorText(data, "Error")}`);
       if (res.ok) {
         onSuccess();
         return true;
@@ -169,7 +170,10 @@ export function PresAdminPanel({
         body: JSON.stringify({ candidateId }),
       });
       const data = await res.json();
-      setMsg("candidates", res.ok ? `✓ ${data.message}` : `✗ ${data.error}`);
+      setMsg(
+        "candidates",
+        res.ok ? `✓ ${data.message}` : `✗ ${apiErrorText(data, "Request failed")}`
+      );
       if (res.ok) {
         onSuccess();
         setPlaceOpen(true);

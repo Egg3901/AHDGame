@@ -104,8 +104,7 @@ export async function POST(request: Request, context: RouteContext) {
       );
 
     const parsed = await parseJsonBody(request, schema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
     const { regime, capitalControls, pegTarget } = parsed.data;
 
     if (regime === "peg" && !(pegTarget && pegTarget > 0))

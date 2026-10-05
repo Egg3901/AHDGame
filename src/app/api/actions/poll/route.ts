@@ -46,6 +46,7 @@ import {
 } from "@/lib/campaigns/shiftPrimaryElectorate";
 import type { PoliticalParty } from "@/lib/db/types";
 import { getElectionOpponents } from "@/lib/actions/electionOpponents";
+import { loadPollPartyColors } from "@/lib/actions/pollPartyColors";
 import { buildLiveTurnouts } from "@/lib/electionEngine/resolvedTurnout";
 import { getAllVoterArchetypeIds } from "@/lib/demographics/countryDemographics";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
@@ -228,6 +229,11 @@ async function handleGET(request: NextRequest) {
       ? campaignLocalRate(character.countryId ?? "US", campaignRates)
       : 1;
 
+    const partyColors = await loadPollPartyColors(db, character.countryId ?? "US", [
+      character.party,
+      ...(electionContext?.opponents?.map((o) => o.party) ?? []),
+    ]);
+
     const base = {
       pollType,
       homeState: character.homeState,
@@ -270,6 +276,8 @@ async function handleGET(request: NextRequest) {
         : null,
       electionContext,
       demographicTurnout,
+      partyColors,
+      myParty: character.party ?? null,
     };
 
     return NextResponse.json(base);
@@ -294,7 +302,7 @@ export async function POST(request: NextRequest) {
 
     const parsed = await parseJsonBody(request, pollCommissionSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const pollType = parsed.data.type;
     const actionKey = pollType === "large" ? "pollLarge" : "poll";

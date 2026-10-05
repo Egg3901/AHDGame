@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Fix {
   name: string;
@@ -24,7 +25,7 @@ export function HealCorporationShares() {
       const data = await res.json();
       setResult({
         ok: res.ok,
-        message: data.message ?? data.error ?? "Unknown response",
+        message: data.message ?? apiErrorText(data, "Unknown response"),
         fixes: data.fixes,
       });
     } catch {

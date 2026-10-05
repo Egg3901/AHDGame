@@ -17,6 +17,7 @@ import {
   votesNeeded,
 } from "@/lib/internationalOrganizations/resolutionRules";
 import { useEntityName } from "../useEntityName";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Props {
   org: OrgSummary;
@@ -71,7 +72,7 @@ export function SanctionsPanel({ org, viewer, currentTurn, votingWindowTurns, on
       );
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body?.error ?? "Failed to table sanctions");
+        throw new Error(apiErrorText(body, "Failed to table sanctions"));
       }
       setShowForm(false);
       setTarget("");
@@ -96,7 +97,7 @@ export function SanctionsPanel({ org, viewer, currentTurn, votingWindowTurns, on
     );
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      throw new Error(body?.error ?? "Vote failed");
+      throw new Error(apiErrorText(body, "Vote failed"));
     }
     onChange();
   }

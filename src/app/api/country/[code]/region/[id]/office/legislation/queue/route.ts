@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { requireHumanSessionWithCharacter, requireAuth } from "@/lib/api/requireAuth";
-import { handleRouteError, errorResponse } from "@/lib/api/errors";
+import { handleRouteError, errorResponse, statusResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { getDb } from "@/lib/mongodb";
 import {
@@ -61,7 +61,7 @@ export async function POST(
       })
     );
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const result = await queueBill(db, {
@@ -76,7 +76,7 @@ export async function POST(
       effectDirection: parsed.data.effectDirection,
       provisions: parsed.data.provisions as StateBillProvision[] | undefined,
     });
-    return NextResponse.json(result.body, { status: result.status });
+    return statusResponse(result.status, result.body);
   } catch (error) {
     return handleRouteError(error);
   }

@@ -38,8 +38,7 @@ export async function POST(request: Request) {
     if (!limit.ok) return rateLimitResponse(limit.retryAfter);
 
     const parsed = await parseJsonBody(request, nominateVpSchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
     const { nomineeCharacterId } = parsed.data;
 
     const db = await getDb();

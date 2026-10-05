@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface WikiEditorToolbarProps {
   onInsert: (before: string, after: string, placeholder?: string) => void;
@@ -61,7 +62,7 @@ export function WikiEditorToolbar({ onInsert, onInsertImage }: WikiEditorToolbar
       const res = await fetch("/api/upload/wiki-image", { method: "POST", body: fd });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Upload failed");
+        throw new Error(apiErrorText(data, "Upload failed"));
       }
       const { url } = (await res.json()) as { url: string };
       // Strip characters that would break out of markdown image syntax.

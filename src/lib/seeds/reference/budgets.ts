@@ -1,5 +1,12 @@
 import { NG_1991_NOMINAL_GDP_NGN } from "@/lib/countries/ng/data/ngGdp1991";
 import { rebaseBudgetNominals } from "./rules/rebaseBudgetNominals";
+import { anchorBudget1991 } from "./rules/anchorBudget1991";
+import {
+  FISCAL_ANCHORS_1991,
+  FISCAL_ANCHOR_COUNTRIES_1991,
+  gdp1991LegacyLcu,
+  type FiscalAnchorCountry1991,
+} from "@/lib/constants/fiscalAnchors1991";
 import { POPULATION_TOTALS_1991 } from "./populationTotals1991";
 import { ObjectId } from "mongodb";
 import { calculatePolicyOptionAnnualCost } from "@/lib/budget/costs";
@@ -2516,10 +2523,9 @@ const NATIONAL_BUDGET_SEED_CONFIGS_1991: NationalBudgetSeedConfig[] = [
     },
   },
   // ── France FY1991 — Mitterrand/Rocard budget (francs) ───────────────────────
-  // GDP expressed at the game's 1991 FR rate (4.2 FRF/USD, mirroring the 1979
-  // placeholder in INITIAL_RATES_1991): FFr 5,330B ≈ $1.27T USD-equivalent —
-  // same convention the sibling 1991 configs use (local GDP / rate ≈ real USD
-  // GDP). Spend ~50% of GDP (general-government scope), deficit ~1.6% (real
+  // Nominals are re-anchored at assembly (anchorFiscal1991) to WDI 1991 GDP,
+  // FRF 7,102.9B at 5.642 FRF/USD = $1.26T, and IMF gross debt 37.8% of GDP;
+  // the literals below keep only the authored SHARES. Spend ~50% of GDP (general-government scope), deficit ~1.6% (real
   // 1991 deficit ~2%); debt ~36% of GDP, franc-fort disinflation (~3.2%).
   {
     budgetId: "FR",
@@ -2570,8 +2576,9 @@ const NATIONAL_BUDGET_SEED_CONFIGS_1991: NationalBudgetSeedConfig[] = [
     },
   },
   // ── Italy FY1991 — Andreotti VII pre-Tangentopoli budget (lira) ─────────────
-  // GDP at the game's 1991 IT rate (833 ITL/USD placeholder): ₤1,030,000B ≈
-  // $1.24T USD-equivalent. The defining feature is the historically accurate
+  // Nominals re-anchored at assembly (anchorFiscal1991) to WDI 1991 GDP,
+  // ITL 1,549,584B at 1,240.6 ITL/USD = $1.25T, and IMF gross debt 105.3% of
+  // GDP; the literals keep only the authored shares. The defining feature is the historically accurate
   // ~10%-of-GDP deficit: debt ~98% of GDP at ~11.5% BTP yields makes the
   // interest bill alone ~11% of GDP. Spend ~52%, revenue ~42%.
   {
@@ -2623,8 +2630,9 @@ const NATIONAL_BUDGET_SEED_CONFIGS_1991: NationalBudgetSeedConfig[] = [
     },
   },
   // ── Spain FY1991 — González III expansion budget (pesetas) ──────────────────
-  // GDP at the game's 1991 ES rate (67 ESP/USD placeholder): ₧38,900B ≈ $0.58T
-  // USD-equivalent. Peak post-Franco welfare buildout (universal healthcare
+  // Nominals re-anchored at assembly (anchorFiscal1991) to WDI 1991 GDP,
+  // ESP 59,929B at 103.9 ESP/USD = $0.58T, and IMF gross debt 41.9% of GDP;
+  // the literals keep only the authored shares. Peak post-Franco welfare buildout (universal healthcare
   // 1989, non-contributory pensions 1990) plus the 1992 Expo/Olympics/AVE
   // investment wave. Spend ~42%, deficit ~1.2% of GDP; debt ~44%.
   {
@@ -2676,8 +2684,9 @@ const NATIONAL_BUDGET_SEED_CONFIGS_1991: NationalBudgetSeedConfig[] = [
     },
   },
   // ── Sweden FY1991 — post-tax-reform, pre-crisis budget (kronor) ─────────────
-  // GDP at the game's 1991 SE rate (4.29 SEK/USD placeholder): kr 1,160B ≈
-  // $0.27T USD-equivalent. The 1990/91 "tax reform of the century" traded top
+  // Nominals re-anchored at assembly (anchorFiscal1991) to WDI 1991 GDP,
+  // kr 1,656B at 6.047 SEK/USD = $0.27T; the literals keep only the authored
+  // shares (no IMF 1991 debt series for Sweden). The 1990/91 "tax reform of the century" traded top
   // marginal cuts (~80%→~50%) for a broadened 25% Moms; the folkhem is at its
   // apex while the 1991-93 financial crisis begins. Spend ~52%, deficit ~1%.
   {
@@ -2729,10 +2738,9 @@ const NATIONAL_BUDGET_SEED_CONFIGS_1991: NationalBudgetSeedConfig[] = [
     },
   },
   // ── Turkey FY1991 — Özal-era liberalised-but-statist budget (lira) ──────────
-  // GDP at the game's 1991 TR rate (34.5 TRL/USD placeholder): ₺6,900B ≈ $0.20T
-  // USD-equivalent. (Real 1991 lira nominals were ~100x this after a decade of
-  // ~60% inflation — the game keeps the 1979-continuity unit, same class of
-  // abstraction as BR's PPP-normalised 1991 config.) Small state: spend ~25%
+  // Nominals re-anchored at assembly (anchorFiscal1991) to WDI 1991 GDP in old
+  // lira, TRL 630,117B at 4,171.8 TRL/USD = $0.15T; the literals keep only the
+  // authored shares (no IMF 1991 debt or expenditure series for Turkey). Small state: spend ~25%
   // of GDP, deficit ~1.2% here (real PSBR was far worse); Gulf War shock year.
   {
     budgetId: "TR",
@@ -5630,6 +5638,32 @@ export const NATIONAL_BUDGET_SEED_CONFIGS_1953: NationalBudgetSeedConfig[] = [
 ];
 
 /**
+ * Re-anchors a FR/IT/ES/SE/TR/GR/AT/FI row to the sourced 1991 national
+ * accounts (#3034). Other countries pass through. For the AT/FI/GR carry-forward
+ * the 1991 real growth and CPI inflation replace the 1979 factors, and the
+ * spending lines are derived from the sourced expenditure share. See
+ * fiscalAnchors1991.ts for every source and conversion.
+ */
+function anchorFiscal1991(config: NationalBudgetSeedConfig, carriedFrom1979: boolean) {
+  const country = config.countryId as string;
+  if (!(FISCAL_ANCHOR_COUNTRIES_1991 as readonly string[]).includes(country)) return config;
+  const id = country as FiscalAnchorCountry1991;
+  const anchor = FISCAL_ANCHORS_1991[id];
+  const anchored = anchorBudget1991(config, anchor, gdp1991LegacyLcu(id), {
+    deriveSpendingFromTotal: carriedFrom1979,
+  });
+  if (!carriedFrom1979) return anchored;
+  return {
+    ...anchored,
+    economicFactors: {
+      ...anchored.economicFactors,
+      gdpGrowth: Number(anchor.realGrowthPct.toFixed(1)),
+      inflationRate: Number(anchor.cpiInflationPct.toFixed(1)),
+    },
+  };
+}
+
+/**
  * Returns the preset-appropriate national-budget seed configs. Falls back
  * to the 2019-era bundle for unknown presets.
  */
@@ -5639,17 +5673,26 @@ export function getNationalBudgetSeedConfigsForPreset(preset: string): NationalB
   if (preset === "1991-default") {
     return overlayNationalBudgetConfigs(
       NATIONAL_BUDGET_SEED_CONFIGS_1991.map((config) =>
-        config.countryId === "NG" ? rebaseBudgetNominals(config, NG_1991_NOMINAL_GDP_NGN) : config
+        config.countryId === "NG"
+          ? rebaseBudgetNominals(config, NG_1991_NOMINAL_GDP_NGN)
+          : anchorFiscal1991(config, false)
       ),
       NATIONAL_BUDGET_SEED_CONFIGS_1979.filter((config) =>
         (["AT", "FI", "GR"] as string[]).includes(config.countryId)
-      ).map((config) => ({
-        ...config,
-        fiscalYear: 1991,
-        // Documented fallback (#2076): no 1991-authored row exists for these
-        // countries, so the 1979 calibration carries forward visibly tagged.
-        sourceFiscalYear: config.sourceFiscalYear ?? config.fiscalYear,
-      })),
+      ).map((config) =>
+        anchorFiscal1991(
+          {
+            ...config,
+            fiscalYear: 1991,
+            // Documented fallback (#2076): no 1991-authored row exists for these
+            // countries, so the 1979 calibration (tax bases, rates, wage growth,
+            // spending mix) carries forward visibly tagged. The 1991 aggregates
+            // below are sourced, see anchorFiscal1991.
+            sourceFiscalYear: config.sourceFiscalYear ?? config.fiscalYear,
+          },
+          true
+        )
+      ),
       1991
     );
   }

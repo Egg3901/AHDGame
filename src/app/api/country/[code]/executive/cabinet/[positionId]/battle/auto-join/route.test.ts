@@ -101,7 +101,7 @@ describe("battle auto-join route", () => {
     const { PUT } = await import(ROUTE);
     const res = await PUT(put({ theaterId: "afghan", enabled: true }), call);
     expect(res.status).toBe(400);
-    await expect(res.json()).resolves.toEqual({
+    await expect(res.json()).resolves.toMatchObject({
       error: "Your nation has no side in this conflict",
     });
     expect(db.collectionMocks.theaterState.updateOne).not.toHaveBeenCalled();

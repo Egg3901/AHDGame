@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useToast } from "@/contexts/ToastContext";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface AppointCharacter {
   _id: string;
@@ -45,7 +46,7 @@ export function AdminAppointPmButton({ countryId }: { countryId: string }) {
         // Reload to reflect server component changes
         window.location.reload();
       } else {
-        showToast(json.error ?? "Failed to update appointment", "error");
+        showToast(apiErrorText(json, "Failed to update appointment"), "error");
       }
     } catch {
       showToast("Network error — please try again", "error");

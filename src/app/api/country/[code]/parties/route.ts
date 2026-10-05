@@ -217,7 +217,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
 
     const parsed = await parseJsonBody(request, draftCharterSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { name, abbreviation, platform, foundersCharacterIds, foundingCohort } = parsed.data;
 
@@ -264,7 +264,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
                         : result.reason === "cohort-state-not-adjacent"
                           ? "Founding-cohort states must be your home state or adjacent to it"
                           : "A party or active charter already uses this abbreviation";
-      return NextResponse.json({ error: message, reason: result.reason }, { status: 400 });
+      return errorResponse(400, message, { extra: { reason: result.reason } });
     }
 
     return NextResponse.json(

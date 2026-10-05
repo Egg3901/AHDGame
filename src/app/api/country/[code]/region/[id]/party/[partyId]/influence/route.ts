@@ -156,7 +156,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, partyInfluenceSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     if (!STATE_PARTY_MANAGEMENT_ACTIONS.includes(parsed.data.influenceType)) {

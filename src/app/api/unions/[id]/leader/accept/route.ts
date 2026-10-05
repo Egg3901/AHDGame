@@ -46,7 +46,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
 
     const result = await acceptUnionLeadership(db, character, union);
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
+      return errorResponse(result.status, result.error);
     }
 
     return NextResponse.json({ success: true, unionId: result.unionId.toString() });

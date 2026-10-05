@@ -50,7 +50,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     const parsed = await parseJsonBody(request, actionSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { decision, vetoMessage } = parsed.data;
 
@@ -88,7 +88,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     if (!result.success) {
       const status = result.error === "Bill not found" ? 404 : 409;
-      return NextResponse.json({ error: result.error }, { status });
+      return errorResponse(status, result.error);
     }
 
     await flushServerPosthog();

@@ -72,12 +72,10 @@ export async function POST(request: Request, { params }: RouteParams) {
       partyJoinedAt: authUser.character.partyJoinedAt,
     });
     if (cooldown.blocked) {
-      return NextResponse.json(
-        {
-          error: "New characters can't vote in committee elections for 24 hours. Try again later.",
-          unblockAt: cooldown.unblockAt.toISOString(),
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "New characters can't vote in committee elections for 24 hours. Try again later.",
+        { extra: { unblockAt: cooldown.unblockAt.toISOString() } }
       );
     }
 
@@ -89,8 +87,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         }),
       })
     );
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
     const { candidateIds } = parsed.data;
 
     // Find active election for this party in this country

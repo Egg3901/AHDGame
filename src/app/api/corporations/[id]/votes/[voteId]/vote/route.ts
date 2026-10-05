@@ -51,7 +51,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, CastSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { vote: choice, voterCorporationId } = parsed.data;
 
@@ -131,7 +131,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       voteShares,
       choice,
     });
-    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+    if (!result.ok) return errorResponse(result.status, result.error);
 
     // Re-fetch the vote with the newly cast ballot and check for immediate resolution.
     // Without this, a decisive vote (e.g. 68% YES meeting a 50% threshold) would leave

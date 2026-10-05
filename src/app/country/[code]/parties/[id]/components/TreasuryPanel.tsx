@@ -32,6 +32,7 @@ import {
 import type { NationalTreasuryInsights } from "@/lib/treasury/partyTreasuryInsights";
 import { TreasuryFundingInsightsCard } from "@/components/party/TreasuryFundingInsightsCard";
 import { TreasuryOverrideHistoryCard } from "@/components/party/TreasuryOverrideHistoryCard";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -155,7 +156,7 @@ export function TreasuryPanel({
       });
       const d = await r.json();
       if (!r.ok) {
-        showToast(d.error ?? "Failed to set PS investment", "error");
+        showToast(apiErrorText(d, "Failed to set PS investment"), "error");
       } else {
         showToast(`PS investment set: +${d.expectedPsPerTurn.toFixed(2)} PS / turn`, "success");
         onPartyRefresh();
@@ -267,7 +268,10 @@ export function TreasuryPanel({
           body: JSON.stringify(body),
         });
         const d = await r.json();
-        dispatch({ type: "SET_MSG", payload: r.ok ? `✓ ${d.message}` : `✗ ${d.error}` });
+        dispatch({
+          type: "SET_MSG",
+          payload: r.ok ? `✓ ${d.message}` : `✗ ${apiErrorText(d, "Request failed")}`,
+        });
         if (r.ok) {
           if (options?.successMessage) {
             dispatch({ type: "SET_MSG", payload: `Success: ${options.successMessage}` });

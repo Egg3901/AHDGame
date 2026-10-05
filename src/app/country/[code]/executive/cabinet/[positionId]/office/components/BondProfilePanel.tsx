@@ -5,6 +5,7 @@ import { Button } from "@/components/ui";
 import { COUNTRY_CURRENCY_MAP, CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
 import type { CountryId } from "@/lib/constants/countries";
 import { ActingLockNote, useActingLock } from "./ActingLock";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 const MATURITY_OPTIONS = [
   { turns: 48, label: "1-Year" },
@@ -95,7 +96,7 @@ export function BondProfilePanel({
       );
       const json = (await res.json()) as { error?: string };
       if (!res.ok) {
-        setFeedback({ type: "error", message: json.error ?? "Failed to save" });
+        setFeedback({ type: "error", message: apiErrorText(json, "Failed to save") });
         return;
       }
       setFeedback({ type: "success", message: "Bond profile saved." });

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { isTargetValidForCountry } from "@/lib/demographics/turnoutTargets";
 import { requireHumanSessionWithCharacter, requireAuth } from "@/lib/api/requireAuth";
-import { handleRouteError, errorResponse } from "@/lib/api/errors";
+import { handleRouteError, errorResponse, statusResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { getDb } from "@/lib/mongodb";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -54,7 +54,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       })
     );
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
@@ -89,7 +89,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       targetDemographicGroupId: parsed.data.targetDemographicGroupId,
       adminOverride,
     });
-    return NextResponse.json(result.body, { status: result.status });
+    return statusResponse(result.status, result.body);
   } catch (error) {
     return handleRouteError(error);
   }

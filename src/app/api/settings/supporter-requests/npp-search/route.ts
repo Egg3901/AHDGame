@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import type { NPP } from "@/lib/db/types";
 import { escapeRegex } from "@/lib/utils/escapeRegex";
 
@@ -16,12 +16,7 @@ export async function GET(request: Request) {
 
     const q = new URL(request.url).searchParams.get("q")?.trim() ?? "";
     if (q.length < 2) {
-      return NextResponse.json(
-        { error: "Search query must be at least 2 characters." },
-        {
-          status: 400,
-        }
-      );
+      return errorResponse(400, "Search query must be at least 2 characters.");
     }
 
     const db = await getDb();

@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { z } from "zod";
 import { EXTRACTABLE_RESOURCES } from "@/lib/constants/commodities";
 import type { StateResourceCapacity } from "@/lib/db/types/stateResourceCapacity";
@@ -23,8 +23,7 @@ export async function PATCH(
 
     const { stateId } = await params;
     const parsed = await parseJsonBody(request, schema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const db = await getDb();
     await db

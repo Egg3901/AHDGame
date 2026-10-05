@@ -12,6 +12,7 @@ import type {
   PartyAnalyticsSlateItem,
   StatePartyAnalyticsPayload,
 } from "@/lib/partyAnalytics/types";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 function getRiskBadgeColor(riskLabel: PartyAnalyticsRiskItem["riskLabel"]) {
   switch (riskLabel) {
@@ -229,7 +230,7 @@ export function StatePartyAnalyticsTab({
         );
         if (!response.ok) {
           const body = (await response.json().catch(() => null)) as { error?: string } | null;
-          throw new Error(body?.error ?? "Failed to load analytics");
+          throw new Error(apiErrorText(body, "Failed to load analytics"));
         }
         const body = (await response.json()) as StatePartyAnalyticsPayload;
         if (!cancelled) setData(body);

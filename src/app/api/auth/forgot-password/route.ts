@@ -45,7 +45,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, forgotPasswordBodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const identifier = parsed.data.identifier.toLowerCase().trim();
 

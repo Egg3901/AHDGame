@@ -5,6 +5,7 @@ import { Button } from "@/components/ui";
 import { useGameClock } from "@/contexts/useGameClock";
 import { getCabinetActionCopy } from "./actionCopy";
 import { MINISTERIAL_ACTION_RESET_HINT } from "@/lib/cabinet/ministerialActionHint";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Order {
   id: string;
@@ -85,7 +86,7 @@ export function MinisterialOrderPanel({
         setFeedback({
           orderId,
           type: "error",
-          message: json.error ?? "Failed to issue order",
+          message: apiErrorText(json, "Failed to issue order"),
         });
         return;
       }

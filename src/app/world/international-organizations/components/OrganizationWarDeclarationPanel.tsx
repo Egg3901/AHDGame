@@ -15,6 +15,7 @@ import {
 import type { OrgSummary, OrgViewerInfo } from "../orgTypes";
 import { VoteButtons } from "../VoteButtons";
 import { VoteRoster } from "../VoteRoster";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Props {
   org: OrgSummary;
@@ -63,7 +64,7 @@ export function OrganizationWarDeclarationPanel({
       );
       if (!response.ok) {
         const body = (await response.json().catch(() => ({}))) as { error?: string };
-        throw new Error(body.error ?? "Failed to propose a declaration of war");
+        throw new Error(apiErrorText(body, "Failed to propose a declaration of war"));
       }
       setShowForm(false);
       onChange();
@@ -90,7 +91,7 @@ export function OrganizationWarDeclarationPanel({
     );
     if (!response.ok) {
       const body = (await response.json().catch(() => ({}))) as { error?: string };
-      throw new Error(body.error ?? "Vote failed");
+      throw new Error(apiErrorText(body, "Vote failed"));
     }
     onChange();
   }

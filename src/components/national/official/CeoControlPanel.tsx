@@ -5,6 +5,7 @@ import { Button } from "@/components/ui";
 import { PlayerSelector } from "@/components/PlayerSelector";
 import type { NationalCorporationViewModel } from "@/lib/nationalization/nationalCorporationView";
 import type { NatOfficialActions } from "../NationalCorporationView";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 /**
  * State-official CEO control for a National Corporation: nominate (offer) a CEO
@@ -40,7 +41,7 @@ export function CeoControlPanel({
       );
       const json = await res.json();
       if (!res.ok) {
-        setFeedback({ type: "error", message: json.error ?? "Appointment failed." });
+        setFeedback({ type: "error", message: apiErrorText(json, "Appointment failed.") });
       } else {
         setFeedback({ type: "success", message: "Nomination sent — awaiting acceptance." });
         setNomineeId(null);
@@ -64,7 +65,7 @@ export function CeoControlPanel({
       );
       const json = await res.json();
       if (!res.ok) {
-        setFeedback({ type: "error", message: json.error ?? "Removal failed." });
+        setFeedback({ type: "error", message: apiErrorText(json, "Removal failed.") });
       } else {
         setFeedback({ type: "success", message: "CEO removed; seat vacated." });
         official.onRefresh();

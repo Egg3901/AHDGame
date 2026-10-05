@@ -56,7 +56,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const submitted = parsed.data.conflictAssignments;
 
@@ -104,7 +104,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
 
     // Validate the merged whole: invariants like one-TC-per-conflict span commands.
     const error = validateAssignments(merged, { validGenerals });
-    if (error) return NextResponse.json({ error }, { status: 400 });
+    if (error) return errorResponse(400, error);
 
     await getMilitaryFormationsCollection(db).updateOne(
       { countryId },

@@ -48,7 +48,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, foundUnionSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
@@ -59,7 +59,7 @@ export async function POST(request: Request) {
 
     const result = await foundUnion(db, character, parsed.data);
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
+      return errorResponse(result.status, result.error);
     }
     const { ok: _ok, status: _status, ...payload } = result;
     return NextResponse.json({ success: true, ...payload }, { status: 201 });

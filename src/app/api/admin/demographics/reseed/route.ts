@@ -22,7 +22,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { getDb } from "@/lib/mongodb";
 import type { Db } from "mongodb";
@@ -80,10 +80,7 @@ export async function POST(request: Request) {
 
       const model = getCountryLayer1Model(countryId, era);
       if (!model) {
-        return NextResponse.json(
-          { error: `No Layer-1 model for ${countryId}:${era}` },
-          { status: 400 }
-        );
+        return errorResponse(400, `No Layer-1 model for ${countryId}:${era}`);
       }
 
       const full = layer1Positions ? await loadFullOverride(countryId, era) : null;

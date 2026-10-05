@@ -30,6 +30,7 @@ import {
 import type { BillProposalAutoFailWarning } from "@/lib/legislature/billAutoFailWarning";
 import { useWorldFlags } from "@/hooks/useWorldFlags";
 import { GuidedLegislationModal } from "@/components/legislation/GuidedLegislationModal";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface LegislationPolicyOption {
   id: string;
@@ -193,7 +194,7 @@ function LegacyJPCabinetProposeBillModal({
       });
       if (cancelled) return;
       if (!response.ok) {
-        showToast(data.error ?? "Failed to propose cabinet bill.", "error");
+        showToast(apiErrorText(data, "Failed to propose cabinet bill."), "error");
         return;
       }
       showToast("Cabinet bill proposed for cabinet review.", "success");

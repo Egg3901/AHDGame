@@ -1,7 +1,6 @@
-import { NextResponse } from "next/server";
 import { conditionalJson } from "@/lib/api/conditionalJson";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import type { StockExchangeSnapshot } from "@/lib/db/types";
 import { EXCHANGE_API_KEYS, getExchangeLabel } from "@/lib/constants/exchangeRegistry";
 
@@ -16,9 +15,9 @@ export async function GET(request: Request) {
     const exchange = searchParams.get("exchange")?.toLowerCase();
 
     if (!exchange || !EXCHANGE_API_KEYS.has(exchange)) {
-      return NextResponse.json(
-        { error: `Invalid exchange. Use one of: ${[...EXCHANGE_API_KEYS].join(", ")}` },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Invalid exchange. Use one of: ${[...EXCHANGE_API_KEYS].join(", ")}`
       );
     }
 

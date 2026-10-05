@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireHumanSessionWithCharacter, requireAuth } from "@/lib/api/requireAuth";
-import { handleRouteError, errorResponse } from "@/lib/api/errors";
+import { handleRouteError, errorResponse, statusResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { getDb } from "@/lib/mongodb";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -47,8 +47,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
         adminOverride: z.boolean().optional(),
       })
     );
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const isAdmin = auth.user.isAdmin === true;
     const adminOverride = parsed.data.adminOverride === true && isAdmin;
@@ -69,7 +68,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       scope: "national",
       adminOverride,
     });
-    return NextResponse.json(result.body, { status: result.status });
+    return statusResponse(result.status, result.body);
   } catch (error) {
     return handleRouteError(error);
   }

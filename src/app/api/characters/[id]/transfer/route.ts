@@ -41,7 +41,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, characterTransferSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const transferAmount = parsed.data.amount;
     const { id: targetId } = await params;
@@ -95,12 +95,10 @@ export async function POST(request: Request, { params }: RouteParams) {
       gameTime.effectiveNow.getTime()
     );
     if (barrier.blocked) {
-      return NextResponse.json(
-        {
-          error: `New characters cannot send funds for their first ${NEW_CHARACTER_TRANSFER_BARRIER_TURNS} turns. You can send funds in ${barrier.remainingTurns} turn(s).`,
-          remainingTurns: barrier.remainingTurns,
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        `New characters cannot send funds for their first ${NEW_CHARACTER_TRANSFER_BARRIER_TURNS} turns. You can send funds in ${barrier.remainingTurns} turn(s).`,
+        { extra: { remainingTurns: barrier.remainingTurns } }
       );
     }
 

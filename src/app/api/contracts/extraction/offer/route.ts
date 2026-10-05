@@ -28,7 +28,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, issueContractOfferSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const myChar = auth.user.character;
@@ -46,15 +46,13 @@ export async function POST(request: Request) {
       now
     );
     if (!result.ok) {
-      return NextResponse.json(
-        {
-          error: result.error,
+      return errorResponse(result.status, result.error, {
+        extra: {
           ...(result.remainingHeadroom !== undefined
             ? { remainingHeadroom: result.remainingHeadroom }
             : {}),
         },
-        { status: result.status }
-      );
+      });
     }
 
     recordAudit({

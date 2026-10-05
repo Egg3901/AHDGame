@@ -37,7 +37,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { id } = await params;
     const parsed = await parseJsonBody(request, goPublicSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
@@ -78,7 +78,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     });
 
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
+      return errorResponse(result.status, result.error);
     }
 
     logWireEvent("corporation_ipo", wireHeadlineCorpIpo(corporation.name, parsed.data.floatPct), {

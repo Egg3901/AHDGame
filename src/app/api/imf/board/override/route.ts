@@ -44,7 +44,7 @@ export async function POST(req: Request) {
 
   const parsed = await parseJsonBody(req, bodySchema);
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    return errorResponse(parsed.status, parsed.error);
   }
   const body = parsed.data;
 

@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
 
     const parsed = await parseJsonBody(req, postSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { budgetId, partyId, scope, stateId, gotvBudgetPerTurn } = parsed.data;
 

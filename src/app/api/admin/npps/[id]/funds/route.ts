@@ -25,8 +25,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (!schemas.objectId.safeParse(id).success) return errorResponse(400, "Invalid NPP ID");
 
     const parsed = await parseJsonBody(request, schema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const db = await getDb();
     // amount is in ANCHOR (₳) units (admin tool contract). npp.funds is in

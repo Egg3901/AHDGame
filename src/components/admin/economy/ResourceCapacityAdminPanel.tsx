@@ -11,6 +11,7 @@ import {
 import { type CountryId } from "@/lib/constants/countries";
 import { useRegisteredCountries } from "@/contexts/RegisteredCountriesContext";
 import { Button } from "@/components/ui";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface CapacityRow {
   stateId: string;
@@ -79,7 +80,7 @@ export function ResourceCapacityAdminPanel() {
         body: JSON.stringify({ targets: ["stateResourceCapacity"] }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
+      if (!res.ok) throw new Error(apiErrorText(json, `HTTP ${res.status}`));
       setSeedMsg(json.logs?.join("\n") ?? json.message ?? "Seeded");
       await fetchAll();
     } catch (e) {

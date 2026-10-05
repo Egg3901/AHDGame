@@ -180,10 +180,9 @@ export async function POST(request: Request) {
 
     if (!canUseFree && recentAds.length > 0) {
       const turnsLeft = Math.max(0, recentAds[0].createdTurn + rateLimit.windowTurns - currentTurn);
-      return NextResponse.json(
-        { error: "You have used your ad slots for this period.", turnsUntilEligible: turnsLeft },
-        { status: 429 }
-      );
+      return errorResponse(429, "You have used your ad slots for this period.", {
+        extra: { turnsUntilEligible: turnsLeft },
+      });
     }
 
     const cost = await computeAverageCost(db, forexEnabled);
@@ -196,7 +195,7 @@ export async function POST(request: Request) {
     // Parse multipart form
     const parsed = await parseFormData(request);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const formData = parsed.data;
     const file = formData.get("file");
@@ -366,10 +365,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, adId: ad.insertedId.toString() }, { status: 201 });
   } catch (error) {
     if (error instanceof Error && error.message === "PLAYER_AD_SLOT_UNAVAILABLE") {
-      return NextResponse.json(
-        { error: "You have used your ad slots for this period.", turnsUntilEligible },
-        { status: 429 }
-      );
+      return errorResponse(429, "You have used your ad slots for this period.", {
+        extra: { turnsUntilEligible },
+      });
     }
     if (error instanceof Error && error.message === "PLAYER_AD_FUNDS_CHANGED") {
       return errorResponse(409, "Your available personal funds changed before the ad completed.");

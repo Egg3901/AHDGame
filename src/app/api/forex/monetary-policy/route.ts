@@ -2,7 +2,7 @@
 // Auth: public
 // Errors: 403
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { loadForexMonetaryPolicy } from "@/lib/monetaryPolicy/queries/forexMonetaryPolicy";
 
@@ -11,7 +11,7 @@ export async function GET() {
     const db = await getDb();
     const detail = await loadForexMonetaryPolicy({ db });
     if (!detail.ok) {
-      return NextResponse.json({ error: detail.error }, { status: detail.status });
+      return errorResponse(detail.status, detail.error);
     }
 
     return NextResponse.json(detail.body);

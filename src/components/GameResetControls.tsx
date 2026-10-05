@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ResetSeedReadiness } from "@/lib/admin/resetAndBootstrapGameWorld";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 const MIN_RESET_YEAR = 1953;
 const MAX_RESET_YEAR = 2027;
@@ -578,7 +579,7 @@ export function GameResetControls() {
                   setMessage(`Iteration set to ${iterationType} ${num}`);
                 } else {
                   const data = await res.json();
-                  setMessage(`Error: ${data.error ?? "Failed to set iteration"}`);
+                  setMessage(`Error: ${apiErrorText(data, "Failed to set iteration")}`);
                 }
               } catch {
                 setMessage("Network error setting iteration");

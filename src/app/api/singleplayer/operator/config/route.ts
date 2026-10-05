@@ -41,8 +41,7 @@ export async function PATCH(request: Request) {
     return errorResponse(403, "Singleplayer operator is unavailable");
   try {
     const parsed = await parseJsonBody(request, schema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
     const db = await getDb();
     const current = await getSingleplayerConfig(db);
     if (!current) return errorResponse(409, "No configured local world");

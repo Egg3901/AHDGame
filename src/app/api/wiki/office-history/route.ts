@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError, badRequest } from "@/lib/api/errors";
+import { handleRouteError, badRequest, errorResponse } from "@/lib/api/errors";
 import { checkWikiDisabled } from "@/lib/api/wikiGuard";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { ManualOfficeHistoryEntry } from "@/lib/db/types/manualOfficeHistory";
@@ -49,7 +49,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, officeHistoryBodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { startDate, endDate, ...d } = parsed.data;
     if (!COUNTRY_CONFIGS[d.countryId as CountryId]) {

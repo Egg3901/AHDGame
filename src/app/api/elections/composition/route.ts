@@ -19,7 +19,10 @@ import { isPrimaryEnded } from "@/lib/elections/phases";
 import { getOfficeTypeForChamber } from "@/lib/legislature/chamberOfficeType";
 import { resolveOfficeKeyForElectionType } from "@/lib/elections/officeResolution";
 import { COUNTRY_CONFIGS, type ChamberConfig, type CountryId } from "@/lib/constants/countries";
-import { getLiveLowerChamberSeats, getLiveUpperChamberSeats } from "@/lib/turn/lowerChamberSeats";
+import {
+  getLiveLowerChamberSeats,
+  getLiveUpperChamberSeats,
+} from "@/lib/legislature/lowerChamberSeats";
 import type {
   Election,
   ElectedOfficial,

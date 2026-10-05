@@ -12,6 +12,7 @@ import { formatSlateCapNote, type SlateAssignmentUsage } from "@/lib/slateAssign
 import { getStateMap } from "./slate/stateMapData";
 import { formatSlateLabel } from "./slateFormatting";
 import type { PartyMember as PartyRosterMember } from "./types";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 export function AssignmentPicker({
   countryCode,
@@ -100,7 +101,7 @@ export function AssignmentPicker({
       );
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(body.error ?? `Assignment failed (${res.status})`);
+        throw new Error(apiErrorText(body, `Assignment failed (${res.status})`));
       }
       await onDone();
     } catch (err) {

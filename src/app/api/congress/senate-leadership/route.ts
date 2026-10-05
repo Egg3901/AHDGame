@@ -13,7 +13,7 @@ import { getPartyMap } from "@/lib/db/partyMap";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { getAuthUser } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError, errorResponse } from "@/lib/api/errors";
+import { handleRouteError, errorResponse, statusResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { senateLeadershipActionSchema } from "@/lib/api/schemas/congress";
 
@@ -202,7 +202,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, senateLeadershipActionSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { action, role, nominationId } = parsed.data;
 
@@ -256,11 +256,11 @@ export async function POST(request: Request) {
     if (action === "force_end") {
       if (!authUser.isAdmin) return errorResponse(403, "Admin only");
       const resolved = await resolveLeadershipElection(db, role, leaderRole, "senate", true);
-      return NextResponse.json(
+      return statusResponse(
+        resolved ? 200 : 409,
         resolved
           ? { message: `${roleLabel} election ended. Winner or vacancy is set.` }
-          : { error: "No active election to end." },
-        { status: resolved ? 200 : 409 }
+          : { error: "No active election to end." }
       );
     }
 

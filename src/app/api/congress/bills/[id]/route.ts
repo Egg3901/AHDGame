@@ -10,7 +10,7 @@ import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { getAuthUser } from "@/lib/auth";
 import { resolveBillCountryId } from "@/lib/congress/resolveBillCountryId";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError, errorResponse } from "@/lib/api/errors";
+import { handleRouteError, errorResponse, statusResponse } from "@/lib/api/errors";
 import { checkRateLimit, CONGRESS_LIMITS, rateLimitResponse } from "@/lib/api/rateLimit";
 import { logRequest } from "@/lib/api/requestLog";
 import { billActionSchema } from "@/lib/api/schemas/congress";
@@ -87,7 +87,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const parsed = await parseJsonBody(request, billActionSchema);
     if (!parsed.success) {
       logRequest("POST", path, parsed.status, Date.now() - start);
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const countryId = await resolveBillCountryId(db, bill);
@@ -101,7 +101,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     await flushServerPosthog();
     logRequest("POST", path, result.status, Date.now() - start);
-    return NextResponse.json(result.body, { status: result.status });
+    return statusResponse(result.status, result.body);
   } catch (error) {
     return handleRouteError(error);
   }

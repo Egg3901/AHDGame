@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireHumanSessionWithCharacter } from "@/lib/api/requireAuth";
-import { badRequest, handleRouteError } from "@/lib/api/errors";
+import { badRequest, handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { submitDebateStrategies } from "@/lib/debate/debateSessionLifecycle";
@@ -36,7 +36,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
@@ -49,7 +49,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     );
 
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
+      return errorResponse(result.status, result.error);
     }
 
     return NextResponse.json({
