@@ -59,6 +59,14 @@ describe("isMaintenanceBypassPath", () => {
     expect(isMaintenanceBypassPath("/sitemap.xml")).toBe(true);
   });
 
+  it("keeps account recovery and email confirmation reachable", () => {
+    expect(isMaintenanceBypassPath("/forgot-password")).toBe(true);
+    expect(isMaintenanceBypassPath("/reset-password")).toBe(true);
+    expect(isMaintenanceBypassPath("/confirm-email")).toBe(true);
+    // Exact paths, not prefixes.
+    expect(isMaintenanceBypassPath("/confirm-email/x")).toBe(false);
+  });
+
   it("still gates character creation while maintenance is on", () => {
     // Re-viewing history is allowed; starting a new run is not.
     expect(isMaintenanceBypassPath("/create-character")).toBe(false);

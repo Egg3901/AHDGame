@@ -19,6 +19,7 @@ import {
   type TutorialInterest,
   type TutorialPlan,
 } from "@/lib/onboarding/tutorialPlan";
+import { DEFAULT_TUTORIAL_WORLD, type TutorialWorld } from "@/lib/tutorial/world";
 import {
   COMMUNITY_DISCORD_URL,
   coachCountryContext,
@@ -54,6 +55,8 @@ export interface TutorialChapter {
   title: string;
   /** Message key: one line, shown on the selector card and the hub. */
   blurb: string;
+  /** Per-edition blurb override, for a chapter whose content changes by world. */
+  blurbByEdition?: Partial<Record<TutorialWorld["edition"], string>>;
   /** Rough reading/doing time, so the player can choose informed. */
   estimatedMinutes: number;
   /** Wiki learning path with the long version, if one covers this ground. */
@@ -62,14 +65,19 @@ export interface TutorialChapter {
 }
 
 /* ------------------------------------------------------------------ */
-/* what's new — last for new players, first for returning ones         */
+/* what's new: last for new players, first for returning ones          */
 /* ------------------------------------------------------------------ */
 
 /**
- * Curated highlights of the current iteration. Keep this to about five cards
- * and REWRITE IT each iteration (copy lives in the tutorial catalogs); it does
- * not derive from the changelog at run time. Seeded from
- * content/changelog/public/1.0.0.md.
+ * Curated highlights of the current world, one edition per world launch. Keep
+ * each edition to about six cards and write a NEW edition for each launch (copy
+ * lives in the tutorial catalogs); it does not derive from the changelog at run
+ * time. The edition is picked from the world's preset (see world.ts), so a world
+ * that has not been reset yet keeps the cards that are true for it.
+ *
+ *   "1991":    against the 1953 world. Sources: changelog 1.12.0 and the 1991
+ *              explorer's "versus 1953" list.
+ *   "general": the 1.0.0 launch cards, for every other preset.
  *
  * Runs for everyone, but placement differs (see chapterIdsForPlan): first for a
  * returning player, because it is the only reason they opened the tutorial, and
@@ -77,6 +85,69 @@ export interface TutorialChapter {
  * anything.
  */
 function whatsNewSteps(ctx: CoachCountryContext): CoachStep[] {
+  return ctx.world.edition === "1991" ? whatsNew1991Steps(ctx) : whatsNewGeneralSteps(ctx);
+}
+
+function whatsNew1991Steps(ctx: CoachCountryContext): CoachStep[] {
+  const steps: CoachStep[] = [
+    {
+      id: "whats-new-1991-intro",
+      title: "steps.whatsNew1991Intro.title",
+      body: "steps.whatsNew1991Intro.body",
+      next: "steps.whatsNew1991Intro.next",
+    },
+    {
+      id: "whats-new-1991-fresh-start",
+      title: "steps.whatsNew1991FreshStart.title",
+      body: "steps.whatsNew1991FreshStart.body",
+      next: "steps.whatsNew1991FreshStart.next",
+    },
+    {
+      id: "whats-new-1991-world",
+      title: "steps.whatsNew1991World.title",
+      body: "steps.whatsNew1991World.body",
+      readMore: { label: "steps.whatsNew1991World.readMore", href: "/world/crises" },
+      next: "steps.whatsNew1991World.next",
+    },
+  ];
+  if (ctx.world.noStartingParties) {
+    steps.push({
+      id: "whats-new-1991-parties",
+      title: "steps.whatsNew1991Parties.title",
+      body: "steps.whatsNew1991Parties.body",
+      readMore: { label: "steps.whatsNew1991Parties.readMore", href: partiesUrl(ctx.countryId) },
+      next: "steps.whatsNew1991Parties.next",
+    });
+  }
+  steps.push(
+    {
+      id: "whats-new-1991-founding",
+      title: "steps.whatsNew1991Founding.title",
+      body: "steps.whatsNew1991Founding.body",
+      readMore: {
+        label: "steps.whatsNew1991Founding.readMore",
+        href: countryElectionsUrl(ctx.countryId),
+      },
+      next: "steps.whatsNew1991Founding.next",
+    },
+    {
+      id: "whats-new-1991-prices",
+      title: "steps.whatsNew1991Prices.title",
+      body: "steps.whatsNew1991Prices.body",
+      next: "steps.whatsNew1991Prices.next",
+    },
+    {
+      id: "whats-new-1991-economy",
+      title: "steps.whatsNew1991Economy.title",
+      body: "steps.whatsNew1991Economy.body",
+      readMore: { label: "steps.whatsNew1991Economy.readMore", href: economyUrl(ctx.countryId) },
+      next: "steps.whatsNew1991Economy.next",
+    }
+  );
+  return steps;
+}
+
+function whatsNewGeneralSteps(ctx: CoachCountryContext): CoachStep[] {
   return [
     {
       id: "whats-new-intro",
@@ -145,6 +216,23 @@ function coreSteps(ctx: CoachCountryContext): CoachStep[] {
       next: "steps.howTurnsWork.next",
       fundamental: true,
     },
+    // Only while the founding round runs. Not fundamental: a returning player
+    // needs the dates as much as a new one.
+    ...(ctx.world.founding
+      ? [
+          {
+            id: "founding-round",
+            title: "steps.foundingRound.title",
+            body: "steps.foundingRound.body",
+            readMore: {
+              label: "steps.foundingRound.readMore",
+              href: regionElectionsUrl(ctx.countryId, ctx.homeState),
+            },
+            facts: ["turn", "openSeats"],
+            next: "steps.foundingRound.next",
+          } satisfies CoachStep,
+        ]
+      : []),
     {
       id: "join-discord",
       title: "steps.joinDiscord.title",
@@ -191,18 +279,34 @@ function officeSteps(ctx: CoachCountryContext): CoachStep[] {
       next: "steps.officeIntro.next",
       fundamental: true,
     },
-    {
-      id: "join-party",
-      title: "steps.joinParty.title",
-      body: "steps.joinParty.body",
-      hint: "steps.joinParty.hint",
-      anchor: "nav-parties",
-      link: partiesUrl(ctx.countryId),
-      facts: ["parties"],
-      next: "steps.joinParty.next",
-      waits: true,
-      advanceSignal: "party",
-    },
+    // A world opened with no parties has nothing to join on day one, so the
+    // step becomes "join one players built, or found your own". Same slot,
+    // same signal: joining or ratifying a charter both put you in a party.
+    ctx.world.noStartingParties
+      ? {
+          id: "found-party",
+          title: "steps.foundParty.title",
+          body: "steps.foundParty.body",
+          hint: "steps.foundParty.hint",
+          anchor: "nav-parties",
+          link: partiesUrl(ctx.countryId),
+          facts: ["parties"],
+          next: "steps.foundParty.next",
+          waits: true,
+          advanceSignal: "party",
+        }
+      : {
+          id: "join-party",
+          title: "steps.joinParty.title",
+          body: "steps.joinParty.body",
+          hint: "steps.joinParty.hint",
+          anchor: "nav-parties",
+          link: partiesUrl(ctx.countryId),
+          facts: ["parties"],
+          next: "steps.joinParty.next",
+          waits: true,
+          advanceSignal: "party",
+        },
     {
       id: "actions-what",
       title: "steps.actionsWhat.title",
@@ -473,7 +577,8 @@ export const TUTORIAL_CHAPTERS: Record<TutorialChapterId, TutorialChapter> = {
     id: "whats-new",
     title: "chapters.whatsNew.title",
     blurb: "chapters.whatsNew.blurb",
-    estimatedMinutes: 3,
+    blurbByEdition: { "1991": "chapters.whatsNew.blurb1991" },
+    estimatedMinutes: 4,
     buildSteps: whatsNewSteps,
   },
   core: {
@@ -530,6 +635,23 @@ export const INTEREST_CHAPTERS: TutorialChapter[] = (
   ["invest", "company", "union", "office", "nation"] satisfies TutorialInterest[]
 ).map((id) => TUTORIAL_CHAPTERS[id]);
 
+/** The blurb message key for this chapter in this world. */
+export function chapterBlurb(chapter: TutorialChapter, world: TutorialWorld): string {
+  return chapter.blurbByEdition?.[world.edition] ?? chapter.blurb;
+}
+
+/**
+ * Rough minutes for a plan's whole tour, for the welcome flow's estimate. Reads
+ * the same chapter list the tour runs, so it counts "what changed" and the core
+ * chapter instead of a hardcoded allowance.
+ */
+export function estimateTourMinutes(plan: TutorialPlan): number {
+  return chapterIdsForPlan(plan).reduce(
+    (total, id) => total + TUTORIAL_CHAPTERS[id].estimatedMinutes,
+    0
+  );
+}
+
 /** Guard so a stored progress chapterId from an older build cannot crash a render. */
 export function getChapter(id: string): TutorialChapter | undefined {
   return (TUTORIAL_CHAPTER_IDS as readonly string[]).includes(id)
@@ -548,9 +670,10 @@ export interface ResolvedChapter extends TutorialChapter {
  */
 export function buildTourChapters(
   character: CoachCharacter,
-  plan: TutorialPlan
+  plan: TutorialPlan,
+  world: TutorialWorld = DEFAULT_TUTORIAL_WORLD
 ): ResolvedChapter[] {
-  const ctx = coachCountryContext(character);
+  const ctx = coachCountryContext(character, world);
   return chapterIdsForPlan(plan)
     .map((id) => {
       const chapter = TUTORIAL_CHAPTERS[id];
@@ -579,8 +702,12 @@ function closingStep(chapterCount: number): CoachStep {
  * chapter it came from so the coach can draw its rail and jump between
  * chapters. Empty for a plan whose experience is "skip".
  */
-export function buildTourSteps(character: CoachCharacter, plan: TutorialPlan): TourStep[] {
-  const chapters = buildTourChapters(character, plan);
+export function buildTourSteps(
+  character: CoachCharacter,
+  plan: TutorialPlan,
+  world: TutorialWorld = DEFAULT_TUTORIAL_WORLD
+): TourStep[] {
+  const chapters = buildTourChapters(character, plan, world);
   if (chapters.length === 0) return [];
 
   const steps: TourStep[] = chapters.flatMap((chapter, chapterIndex) =>
@@ -611,10 +738,11 @@ export function buildTourSteps(character: CoachCharacter, plan: TutorialPlan): T
  */
 export function buildChapterTour(
   character: CoachCharacter,
-  chapterId: TutorialChapterId
+  chapterId: TutorialChapterId,
+  world: TutorialWorld = DEFAULT_TUTORIAL_WORLD
 ): TourStep[] {
   const chapter = TUTORIAL_CHAPTERS[chapterId];
-  const ctx = coachCountryContext(character);
+  const ctx = coachCountryContext(character, world);
   const steps: TourStep[] = chapter.buildSteps(ctx).map((step) => ({
     ...step,
     chapterId,

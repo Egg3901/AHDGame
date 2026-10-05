@@ -67,13 +67,17 @@ export function Modal({
 
   if (!open) return null;
 
-  const layoutClass = scrollable ? "items-start py-8 overflow-y-auto" : "items-center";
+  // Vertical padding clears the notch and home indicator when the page runs
+  // edge to edge (viewport-fit=cover); env() resolves to 0 everywhere else.
+  const layoutClass = scrollable
+    ? "items-start overflow-y-auto pt-[max(2rem,env(safe-area-inset-top))] pb-[max(2rem,env(safe-area-inset-bottom))]"
+    : "items-center pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))]";
 
   const renderedBodyClass = bodyClassName ?? "px-5 pb-5";
 
   return (
     <div
-      className={`fixed inset-0 z-[100] flex ${layoutClass} justify-center p-4`}
+      className={`fixed inset-0 z-[100] flex ${layoutClass} justify-center px-4`}
       role="dialog"
       aria-modal
       // Without a name a screen reader announces only "dialog". String titles

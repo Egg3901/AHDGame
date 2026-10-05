@@ -16,4 +16,4 @@ areas: [fullstack]
 
 ## What changed
 
-- 
+-
